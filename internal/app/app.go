@@ -4,6 +4,7 @@
 package app
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,6 +14,16 @@ import (
 
 	"ike/internal/editor"
 	"ike/internal/explorer"
+	"ike/internal/host"
+	"ike/internal/plugin"
+	"ike/internal/registry"
+)
+
+// Context ids the core panes advertise for context-scoped command/keymap
+// resolution. Plugin panes advertise their own via plugin.ContextProvider.
+const (
+	ctxExplorer = "explorer"
+	ctxEditor   = "editor"
 )
 
 // focus identifies which pane currently receives key input.
@@ -36,14 +47,40 @@ type Model struct {
 	focus    focus
 	explorer explorer.Model
 	editor   editor.Model
+	host     *host.Host
+	reg      *registry.Registry
 }
 
-// New returns the initial root model rooted at the working directory.
+// New returns the initial root model rooted at the working directory, wired to
+// the global plugin registry.
 func New() Model {
+	return NewWith(registry.Global(), host.MapConfig{})
+}
+
+// NewWith returns a root model backed by an explicit registry and config. It
+// applies per-plugin enable/disable flags from config keys of the form
+// "plugins.<id>.enabled" before the registry is queried.
+func NewWith(reg *registry.Registry, cfg host.Config) Model {
+	applyPluginConfig(reg, cfg)
 	return Model{
 		focus:    focusExplorer,
 		explorer: explorer.New("."),
 		editor:   editor.New(),
+		host:     host.New(cfg),
+		reg:      reg,
+	}
+}
+
+// applyPluginConfig reads "plugins.<id>.enabled" toggles. Only an explicit
+// "false" disables; everything else leaves the plugin enabled (the default).
+func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
+	if cfg == nil {
+		return
+	}
+	for _, id := range reg.PluginIDs() {
+		if v, ok := cfg.Get("plugins." + id + ".enabled"); ok && v == "false" {
+			reg.SetEnabled(id, false)
+		}
 	}
 }
 
@@ -60,11 +97,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case explorer.OpenFileMsg:
-		if err := m.editor.Load(msg.Path); err == nil {
-			m.focus = focusEditor
-			m.syncFocus()
-		}
-		return m, nil
+		return m.openPath(msg.Path)
+
+	case host.OpenFileRequest:
+		return m.openPath(msg.Path)
 
 	case editor.CloseMsg:
 		m.editor = editor.New()
@@ -79,7 +115,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.editorCapturing() {
 			return m.routeKey(msg)
 		}
-		switch msg.String() {
+		keys := msg.String()
+		// Plugin key bindings resolve before core only when they explicitly
+		// out-prioritise core; otherwise core keys keep precedence.
+		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
+			if k.Priority > plugin.CorePriority || !isCoreKey(keys, m.focus) {
+				return m, k.Action(m.host)
+			}
+		}
+		switch keys {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "q":
@@ -93,6 +137,74 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.routeKey(msg)
 	}
 	return m, nil
+}
+
+// openPath opens path: a registered FileHandler claims it if one matches,
+// otherwise it loads into the editor. EventFileOpened hooks fire either way.
+func (m Model) openPath(path string) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
+	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
+		cmds = append(cmds, h.Open(m.host, path))
+	} else if err := m.editor.Load(path); err == nil {
+		m.focus = focusEditor
+		m.syncFocus()
+	}
+	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
+	return m, tea.Batch(cmds...)
+}
+
+// fireHooks invokes every enabled hook subscribed to event, collecting their
+// commands.
+func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
+	var cmds []tea.Cmd
+	for _, h := range m.reg.Hooks(event) {
+		if c := h.Notify(m.host, payload); c != nil {
+			cmds = append(cmds, c)
+		}
+	}
+	return cmds
+}
+
+// RunCommand looks up and runs a registered command by id, returning its
+// tea.Cmd. It is the seam the command palette (Roadmap 0070) drives.
+func (m Model) RunCommand(id string) tea.Cmd {
+	if c, ok := m.reg.Command(id); ok {
+		return c.Run(m.host)
+	}
+	return nil
+}
+
+// focusContext reports the context id advertised by the focused pane, used for
+// context-scoped command/keymap resolution.
+func (m Model) focusContext() string {
+	if m.focus == focusExplorer {
+		return ctxExplorer
+	}
+	return ctxEditor
+}
+
+// isCoreKey reports whether keys is handled by a core binding in the current
+// focus, so a plugin must out-prioritise it to take over.
+func isCoreKey(keys string, f focus) bool {
+	switch keys {
+	case "ctrl+c", "tab":
+		return true
+	case "q":
+		return f == focusExplorer
+	}
+	return false
+}
+
+// readHead returns the leading bytes of path for content sniffing, or nil.
+func readHead(path string) []byte {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+	buf := make([]byte, 512)
+	n, _ := f.Read(buf)
+	return buf[:n]
 }
 
 // editorCapturing reports whether the editor is focused and in a text-capturing
@@ -193,6 +305,9 @@ func (m Model) statusLine() string {
 
 	if cl := m.editor.CommandLine(); cl != "" {
 		return style.Render(cl)
+	}
+	if s := m.host.Status(); s != "" {
+		return style.Render(" " + s)
 	}
 
 	mode := m.editor.ModeName().String()

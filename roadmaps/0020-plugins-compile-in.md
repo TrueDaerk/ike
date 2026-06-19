@@ -50,15 +50,15 @@ Root model queries the registry at startup to build keymaps, palette, handlers.
 
 ## Milestones
 
-- [ ] `internal/plugin`: define `Plugin` interface + `Command`, `Keymap`, `Pane`, `FileHandler`, `Hook` types.
-- [ ] `Command` carries a `Scope` field (global / pane-context id) — additive, required by the command palette (Roadmap 0070) and keybinding resolution (Roadmap 0080) for context-aware filtering. Define a small pane-context advertisement mechanism so a focused pane reports its context id.
-- [ ] `internal/registry`: `Register`, dedupe/conflict detection, deterministic ordering, lookups.
-- [ ] `internal/host`: `host.API` interface (open file, dispatch msg, set status, read config) + in-process impl.
-- [ ] Root model consumes registry: build command palette, merge keymaps, route file opens through handlers.
-- [ ] `plugins/example`: reference plugin hitting every extension point.
-- [ ] Enable/disable plugins via config (build-time list + runtime on/off flag).
-- [ ] Tests: registration, conflict detection, ordering, dispatch round-trip, handler resolution.
-- [ ] Wiki: document the extension contract under `wiki/`.
+- [x] `internal/plugin`: define `Plugin` interface + `Command`, `Keymap`, `Pane`, `FileHandler`, `Hook` types.
+- [x] `Command` carries a `Scope` field (global / pane-context id) — additive, required by the command palette (Roadmap 0070) and keybinding resolution (Roadmap 0080) for context-aware filtering. Define a small pane-context advertisement mechanism so a focused pane reports its context id.
+- [x] `internal/registry`: `Register`, dedupe/conflict detection, deterministic ordering, lookups.
+- [x] `internal/host`: `host.API` interface (open file, dispatch msg, set status, read config) + in-process impl.
+- [x] Root model consumes registry: build command palette, merge keymaps, route file opens through handlers.
+- [x] `plugins/example`: reference plugin hitting every extension point.
+- [x] Enable/disable plugins via config (build-time list + runtime on/off flag).
+- [x] Tests: registration, conflict detection, ordering, dispatch round-trip, handler resolution.
+- [x] Wiki: document the extension contract under `wiki/`.
 
 ## Out of scope (Roadmap 9900)
 
