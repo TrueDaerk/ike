@@ -7,6 +7,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [01 — Foundation: File Explorer + Vim Editor](0010-foundation.md)
 - [x] [02 — Plugins: Compile-in Registry](0020-plugins-compile-in.md)
 - [x] [03 — Help Overlay (Command & Shortcut Cheat Sheet)](0030-help-overlay.md)
+- [ ] [03.5 — Floating Shell (Reusable Overlay / Modal Component)](0035-floating-shell.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [ ] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
@@ -27,6 +28,10 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - **03** help overlay is a read-only consumer: it joins **02** registry Commands
   with **08** binding strings and renders them responsively. Opened by `?` /
   `:help` (binding/command owned by 08/07). Owns no command or shortcut data.
+- **03.5** floating shell generalises **03**'s one-off overlay into a reusable
+  centered-pane component (`internal/overlay` compositing + `internal/ui.Floating`
+  shell) hosting any `tea.Model`. **03** is refactored to consume it; modals and
+  plugin popups reuse it. Owns no content, only the shell.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
 
