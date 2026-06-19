@@ -72,15 +72,15 @@ read-only and emits no actions other than close.
 
 ## Milestones
 
-- [ ] `internal/help/source.go`: snapshot registry Commands, join with 08 resolver bindings, group by scope/owner, deterministic sort.
-- [ ] `internal/help/layout.go`: width → column-count packing; column-major balanced distribution; min-column-width handling; single-column fallback.
-- [ ] `internal/help/viewport.go`: vertical scrolling (wrap `bubbles/viewport`) when content height exceeds the visible area, with a position indicator.
-- [ ] `internal/help/help.go`: overlay `tea.Model` — open/close, recompute layout on `tea.WindowSizeMsg`, scroll keys, `esc`/`?`/`q` dismiss.
-- [ ] Root-model integration in `internal/app`: host overlay, toggle on `?`, forward size + keys, render on top of the active layout.
-- [ ] `:help` command + `?` binding wired through the registry/resolver (coordinate with 0070/0080; help only consumes them).
-- [ ] Optional config hooks (`internal/config`): min column width, grouping, sort order.
-- [ ] Tests: column-count for several widths, column-major balancing, scroll bounds (top/bottom clamp), command+shortcut join, scope grouping/sort, dismiss behaviour.
-- [ ] Wiki: document the help overlay, responsive column model, and scrolling under `wiki/`.
+- [x] `internal/help/source.go`: snapshot registry Commands, join with 08 resolver bindings, group by scope/owner, deterministic sort.
+- [x] `internal/help/layout.go`: width → column-count packing; column-major balanced distribution; min-column-width handling; single-column fallback.
+- [x] `internal/help/viewport.go`: vertical scrolling (wrap `bubbles/viewport`) when content height exceeds the visible area, with a position indicator.
+- [x] `internal/help/help.go`: overlay `tea.Model` — open/close, recompute layout on `tea.WindowSizeMsg`, scroll keys, `esc`/`?`/`q` dismiss.
+- [x] Root-model integration in `internal/app`: host overlay, toggle on `?`, forward size + keys, render on top of the active layout.
+- [x] `:help` command + `?` binding wired through the registry/resolver (coordinate with 0070/0080; help only consumes them).
+- [x] Optional config hooks (`internal/config`): min column width, grouping, sort order.
+- [x] Tests: column-count for several widths, column-major balancing, scroll bounds (top/bottom clamp), command+shortcut join, scope grouping/sort, dismiss behaviour.
+- [x] Wiki: document the help overlay, responsive column model, and scrolling under `wiki/`.
 
 ## Out of scope
 

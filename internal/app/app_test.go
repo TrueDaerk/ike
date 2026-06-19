@@ -3,9 +3,11 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -179,5 +181,77 @@ func TestQNotQuitWhileTyping(t *testing.T) {
 		if _, ok := cmd().(tea.QuitMsg); ok {
 			t.Fatal("q while typing should not quit")
 		}
+	}
+}
+
+// TestHelpOverlayToggle verifies "?" opens the help overlay, that while open it
+// swallows keys (tab does not switch focus), and that "esc" dismisses it.
+func TestHelpOverlayToggle(t *testing.T) {
+	reg := registry.New()
+	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{
+		{ID: "p.hello", Title: "Hello", Scope: plugin.GlobalScope()},
+	}}})
+	m := NewWith(reg, host.MapConfig{})
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = tm.(Model)
+
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = tm.(Model)
+	if !m.help.IsOpen() {
+		t.Fatal(`"?" should open the help overlay`)
+	}
+	if !strings.Contains(m.View(), "Hello") {
+		t.Fatal("open overlay should render registered command")
+	}
+
+	// While open, tab is consumed by the overlay and must not switch focus.
+	before := m.focus
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m = tm.(Model)
+	if m.focus != before {
+		t.Fatal("overlay should swallow keys; focus changed")
+	}
+
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if m.help.IsOpen() {
+		t.Fatal(`"esc" should dismiss the help overlay`)
+	}
+}
+
+// TestHelpOverlayFloatsCentered verifies the help pane is composited as a
+// centered floating box: the base canvas keeps its full width/height and the
+// overlaid region carries the rounded border, while base content survives at the
+// edges (the pane does not cover the whole screen).
+func TestHelpOverlayFloatsCentered(t *testing.T) {
+	reg := registry.New()
+	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{
+		{ID: "p.hello", Title: "Hello", Scope: plugin.GlobalScope()},
+	}}})
+	m := NewWith(reg, host.MapConfig{})
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	m = tm.(Model)
+
+	v := m.View()
+	lines := strings.Split(v, "\n")
+	if len(lines) != 30 {
+		t.Fatalf("canvas height = %d, want 30", len(lines))
+	}
+	// Every canvas row keeps the full terminal width — the pane is spliced in,
+	// not concatenated.
+	for i, l := range lines {
+		if w := lipgloss.Width(l); w != 100 {
+			t.Fatalf("row %d width = %d, want 100", i, w)
+		}
+	}
+	// Floating, not full-screen: the base layout (EXPLORER pane) survives around
+	// the pane while the help pane and its content appear composited in the middle.
+	if !strings.Contains(v, "EXPLORER") {
+		t.Fatal("base layout should remain visible around the floating pane")
+	}
+	if !strings.Contains(v, "HELP") || !strings.Contains(v, "Hello") {
+		t.Fatal("help pane and its content should be composited onto the canvas")
 	}
 }
