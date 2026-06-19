@@ -6,6 +6,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 
 - [x] [01 — Foundation: File Explorer + Vim Editor](0010-foundation.md)
 - [x] [02 — Plugins: Compile-in Registry](0020-plugins-compile-in.md)
+- [ ] [03 — Help Overlay (Command & Shortcut Cheat Sheet)](0030-help-overlay.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [ ] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
@@ -23,6 +24,9 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - **04** owns config loading + precedence (defaults < user < project). 05/06/08/10 fill
   their own schema sections (`[explorer]`, `[editor]`, `[keymap]`, `[lsp]`); 09 stores
   project history under `[project]`.
+- **03** help overlay is a read-only consumer: it joins **02** registry Commands
+  with **08** binding strings and renders them responsively. Opened by `?` /
+  `:help` (binding/command owned by 08/07). Owns no command or shortcut data.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
 
