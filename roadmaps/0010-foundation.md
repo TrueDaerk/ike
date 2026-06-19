@@ -28,14 +28,14 @@ the root model. The root forwards `tea.Msg` to the focused child and owns layout
 ## Milestones
 
 - [x] Base app: alt-screen, two-pane layout, focus switch, quit.
-- [ ] Explorer: list working-dir entries, arrow/`j`/`k` navigation, enter to descend, `-`/`..` to go up.
-- [ ] Explorer → editor: selecting a file emits an "open file" msg the root routes to the editor.
-- [ ] Editor: load file into a line buffer, render with cursor, scroll on overflow.
-- [ ] Editor normal mode: `h j k l`, `0 $`, `gg G`, `w b`, `x`, `dd`.
-- [ ] Editor insert mode: `i a o O`, text entry, `esc` back to normal.
-- [ ] Save: `:w` writes buffer to disk; `:q` / `:wq` close.
-- [ ] Status line: mode indicator, file name, dirty flag, cursor position.
-- [ ] Tests: explorer navigation, editor motions, modal transitions, save round-trip.
+- [x] Explorer: list working-dir entries, arrow/`j`/`k` navigation, enter to descend, `-`/`..` to go up.
+- [x] Explorer → editor: selecting a file emits an "open file" msg the root routes to the editor.
+- [x] Editor: load file into a line buffer, render with cursor, scroll on overflow.
+- [x] Editor normal mode: `h j k l`, `0 $`, `gg G`, `w b`, `x`, `dd`.
+- [x] Editor insert mode: `i a o O`, text entry, `esc` back to normal.
+- [x] Save: `:w` writes buffer to disk; `:q` / `:wq` close.
+- [x] Status line: mode indicator, file name, dirty flag, cursor position.
+- [x] Tests: explorer navigation, editor motions, modal transitions, save round-trip.
 
 ## Out of scope (later roadmaps)
 

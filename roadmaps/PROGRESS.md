@@ -4,7 +4,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 
 ## Build order
 
-- [ ] [01 — Foundation: File Explorer + Vim Editor](0010-foundation.md)
+- [x] [01 — Foundation: File Explorer + Vim Editor](0010-foundation.md)
 - [ ] [02 — Plugins: Compile-in Registry](0020-plugins-compile-in.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
