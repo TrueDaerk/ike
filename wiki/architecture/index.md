@@ -10,4 +10,5 @@ Component-level concepts for the IKE codebase.
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)
 * [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse divider-resize & title-bar move, per-project persistence (Roadmap 0036)
+* [Session Restore](/architecture/session-restore.md) - per-project workspace persistence: open file + cursor, explorer expansion/hidden/cursor, saved on quit
 * [Themes / Color Schemes](/architecture/themes.md) - planned semantic-slot palette system, built-in themes, the selector & registry (Roadmap 0110)

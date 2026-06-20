@@ -71,7 +71,14 @@ type Model struct {
 	lay layout.Layout
 	// drag is the active mouse gesture (resize or move), nil between drags.
 	drag *dragState
+	// pendingScroll holds an editor viewport offset restored from a session that
+	// must be applied once the editor has been sized (the first layout), since
+	// sizing re-derives Top from the cursor. Cleared after it is applied.
+	pendingScroll *editorScroll
 }
+
+// editorScroll is a restored viewport framing awaiting the first layout.
+type editorScroll struct{ top, left int }
 
 // dragKind distinguishes the two mouse gestures.
 type dragKind int
@@ -130,7 +137,60 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	if t, ok := loadLayout(corePanes()); ok {
 		m.tree = t
 	}
+	m.restoreSession()
 	return m
+}
+
+// restoreSession re-applies the saved workspace: explorer expansion / hidden
+// toggle / cursor, and the editor's open file and cursor position. A missing
+// session leaves the default empty workspace untouched; a file that no longer
+// loads is silently skipped.
+func (m *Model) restoreSession() {
+	s, ok := loadSession()
+	if !ok {
+		return
+	}
+	m.explorer.Restore(explorer.State{
+		Expanded:   s.Explorer.Expanded,
+		ShowHidden: s.Explorer.ShowHidden,
+		Cursor:     s.Explorer.Cursor,
+	})
+	if s.Editor != nil && s.Editor.Path != "" {
+		if err := m.editor.Load(s.Editor.Path); err == nil {
+			m.editor.SetCursor(s.Editor.Line, s.Editor.Col)
+			// Defer the viewport framing until the editor is sized: applying it now
+			// (width/height still zero) would be undone by the first layout's scroll.
+			m.pendingScroll = &editorScroll{top: s.Editor.Top, left: s.Editor.Left}
+			m.explorer.SetActive(s.Editor.Path)
+			m.focus = focusEditor
+		}
+	}
+	m.syncFocus()
+}
+
+// snapshotSession captures the current workspace state for persistence.
+func (m Model) snapshotSession() sessionState {
+	st := m.explorer.Snapshot()
+	s := sessionState{
+		Explorer: explorerSession{
+			Expanded:   st.Expanded,
+			ShowHidden: st.ShowHidden,
+			Cursor:     st.Cursor,
+		},
+	}
+	if m.editor.HasFile() {
+		line, col := m.editor.CursorPos()
+		top, left := m.editor.ScrollOffset()
+		s.Editor = &editorSession{Path: m.editor.Path(), Line: line, Col: col, Top: top, Left: left}
+	}
+	return s
+}
+
+// quit persists the session and returns the program-exit command. All quit
+// paths route through here so the workspace is always saved on a clean exit.
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	saveSession(m.snapshotSession())
+	return m, tea.Quit
 }
 
 // corePanes is the set of pane ids the root currently owns. Layout restore
@@ -279,10 +339,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch keys {
 		case "ctrl+c":
-			return m, tea.Quit
+			return m.quit()
 		case "q":
 			if m.quitKey() {
-				return m, tea.Quit
+				return m.quit()
 			}
 		case "tab":
 			m.toggleFocus()
@@ -427,6 +487,13 @@ func (m *Model) layout() {
 	}
 	if r, ok := m.lay.Panes[ctxEditor]; ok {
 		m.editor.SetSize(paneInterior(r.W), paneInterior(r.H))
+		// Now that the editor is sized, apply a session-restored viewport framing
+		// once. SetSize's scroll() has re-derived Top from the cursor; override it
+		// so the file reopens scrolled exactly as it was left.
+		if m.pendingScroll != nil {
+			m.editor.SetScroll(m.pendingScroll.top, m.pendingScroll.left)
+			m.pendingScroll = nil
+		}
 	}
 	m.syncFocus()
 }

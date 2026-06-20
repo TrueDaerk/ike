@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -160,6 +161,98 @@ func TestQuitFromExplorer(t *testing.T) {
 	}
 	if _, ok := cmd().(tea.QuitMsg); !ok {
 		t.Fatalf("expected QuitMsg, got %T", cmd())
+	}
+}
+
+// TestSessionPersistsAndRestores verifies quitting writes session.json and a
+// fresh model reopens the same file, cursor, focus, and explorer state.
+func TestSessionPersistsAndRestores(t *testing.T) {
+	proj := t.TempDir()
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(proj)
+
+	sub := filepath.Join(proj, "pkg")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(sub, "main.go")
+	if err := os.WriteFile(file, []byte("line0\nline1\nline2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewWith(registry.New(), host.MapConfig{})
+	// Expand the directory so the open file's row is visible, then open it.
+	m.explorer.Restore(explorer.State{Expanded: []string{sub}})
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: file})
+	m = tm.(Model)
+	m.editor.SetCursor(2, 3)
+
+	if _, cmd := m.quit(); cmd == nil {
+		t.Fatal("quit should return a command")
+	}
+	if _, err := os.Stat(filepath.Join(state, "session.json")); err != nil {
+		t.Fatalf("session file not written: %v", err)
+	}
+
+	// A fresh model in the same dirs restores the workspace.
+	m2 := NewWith(registry.New(), host.MapConfig{})
+	if got := m2.editor.Path(); got != file {
+		t.Fatalf("restored editor path = %q, want %q", got, file)
+	}
+	if line, col := m2.editor.CursorPos(); line != 2 || col != 3 {
+		t.Fatalf("restored cursor = (%d,%d), want (2,3)", line, col)
+	}
+	if m2.focus != focusEditor {
+		t.Fatal("restoring an open file should focus the editor")
+	}
+	snap := m2.explorer.Snapshot()
+	if len(snap.Expanded) != 1 || snap.Expanded[0] != sub {
+		t.Fatalf("restored explorer expansion = %v, want [%q]", snap.Expanded, sub)
+	}
+}
+
+// TestSessionRestoresViewportFraming guards against the regression where only
+// the cursor was restored: Top is sticky (not derivable from the cursor), so a
+// file left scrolled with the cursor mid-screen must reopen framed identically —
+// otherwise on-screen rows map to the wrong lines and mouse clicks miss.
+func TestSessionRestoresViewportFraming(t *testing.T) {
+	proj := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Chdir(proj)
+
+	var b strings.Builder
+	for i := 0; i < 60; i++ {
+		b.WriteString("L")
+		b.WriteString(strconv.Itoa(i))
+		b.WriteByte('\n')
+	}
+	file := filepath.Join(proj, "f.txt")
+	if err := os.WriteFile(file, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewWith(registry.New(), host.MapConfig{})
+	if err := m.editor.Load(file); err != nil {
+		t.Fatal(err)
+	}
+	m.focus = focusEditor
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = out.(Model)
+	// Scroll deep, then move the cursor back up so Top stays sticky above it.
+	m.editor.SetCursor(45, 0)
+	m.editor.SetCursor(20, 0)
+	wantTop, wantLeft := m.editor.ScrollOffset()
+	if wantTop == 0 {
+		t.Fatal("test setup: expected a non-zero sticky Top")
+	}
+	m.quit()
+
+	m2 := NewWith(registry.New(), host.MapConfig{})
+	out2, _ := m2.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 = out2.(Model)
+	if top, left := m2.editor.ScrollOffset(); top != wantTop || left != wantLeft {
+		t.Fatalf("restored viewport = (top=%d,left=%d), want (top=%d,left=%d)", top, left, wantTop, wantLeft)
 	}
 }
 

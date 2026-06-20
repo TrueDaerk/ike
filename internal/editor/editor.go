@@ -182,6 +182,18 @@ func (m Model) Capturing() bool { return m.mode.Capturing() }
 // Cursor returns the 1-based line and column for the status line.
 func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col + 1 }
 
+// CursorPos returns the 0-based line and column, for session persistence.
+func (m Model) CursorPos() (line, col int) { return m.cursor.Line, m.cursor.Col }
+
+// SetCursor moves the cursor to a 0-based line/column, clamping to a valid
+// normal-mode position and scrolling it into view. Used to restore a saved
+// session; out-of-range coordinates land on the nearest valid cell.
+func (m *Model) SetCursor(line, col int) {
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: line, Col: col})
+	m.desiredCol = m.cursor.Col
+	m.scroll()
+}
+
 // HasFile reports whether a file is currently open.
 func (m Model) HasFile() bool { return m.path != "" }
 
@@ -283,4 +295,27 @@ func (m *Model) tabText() string {
 		return strings.Repeat(" ", m.tabWidth)
 	}
 	return "\t"
+}
+
+// ScrollOffset returns the 0-based first visible line and column, so a session
+// can restore the exact viewport framing (not just the cursor — Top is sticky
+// and not derivable from the cursor alone).
+func (m Model) ScrollOffset() (top, left int) { return m.view.Top, m.view.Left }
+
+// SetScroll restores the viewport framing saved by ScrollOffset, clamping into
+// the current buffer. Unlike a cursor move it does not re-derive Top from the
+// cursor, so the file reopens scrolled exactly as it was left. Apply it after the
+// editor has been sized.
+func (m *Model) SetScroll(top, left int) {
+	if max := m.buf.LineCount() - 1; top > max {
+		top = max
+	}
+	if top < 0 {
+		top = 0
+	}
+	if left < 0 {
+		left = 0
+	}
+	m.view.Top = top
+	m.view.Left = left
 }

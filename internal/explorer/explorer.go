@@ -130,8 +130,15 @@ func (m *Model) applyScan(msg ScanDoneMsg) {
 		return
 	}
 	m.err = nil
-	children := make([]*node, 0, len(msg.Entries))
-	for _, e := range msg.Entries {
+	m.setChildren(n, msg.Entries)
+	m.rebuild()
+}
+
+// setChildren installs sorted child nodes on n from a scan's entries. It is
+// shared by the async scan path and the synchronous session-restore path.
+func (m *Model) setChildren(n *node, entries []scanEntry) {
+	children := make([]*node, 0, len(entries))
+	for _, e := range entries {
 		children = append(children, &node{
 			name:  e.name,
 			path:  filepath.Join(n.path, e.name),
@@ -146,7 +153,6 @@ func (m *Model) applyScan(msg ScanDoneMsg) {
 		return children[i].name < children[j].name
 	})
 	n.children = children
-	m.rebuild()
 }
 
 // nodeByPath finds the node with the given path in the subtree rooted at n.
@@ -220,8 +226,15 @@ func (m *Model) SetSize(width, height int) {
 // SetFocused toggles whether this pane receives key input.
 func (m *Model) SetFocused(f bool) { m.focused = f }
 
-// Init implements tea.Model: it kicks off the root directory scan.
-func (m Model) Init() tea.Cmd { return scanCmd(m.root.path) }
+// Init implements tea.Model: it kicks off the root directory scan, unless a
+// restored session already loaded the root synchronously (an async re-scan would
+// replace the children and discard the restored expansion state).
+func (m Model) Init() tea.Cmd {
+	if m.root.loaded {
+		return nil
+	}
+	return scanCmd(m.root.path)
+}
 
 // Update handles navigation/expand keys, scan results, and explorer command
 // messages. It returns a Cmd for any work that must run off the update loop
@@ -423,7 +436,11 @@ func (m *Model) parentOf(target *node) *node {
 	return find(m.root)
 }
 
-// clampScroll keeps the cursor within the visible window.
+// clampScroll keeps the cursor within the visible window and the scroll offset
+// within the renderable range. Clamping to maxOff is essential: View() clamps a
+// stale offset only for display, but MouseClick and hover hit-testing read the
+// raw offset, so an offset past the last page would make clicks land on rows far
+// below the ones actually shown.
 func (m *Model) clampScroll() {
 	_, textH, _, _, _ := m.viewport()
 	if textH <= 0 {
@@ -434,6 +451,9 @@ func (m *Model) clampScroll() {
 	}
 	if m.cursor >= m.offset+textH {
 		m.offset = m.cursor - textH + 1
+	}
+	if maxOff := len(m.rows) - textH; m.offset > maxOff {
+		m.offset = maxOff
 	}
 	if m.offset < 0 {
 		m.offset = 0

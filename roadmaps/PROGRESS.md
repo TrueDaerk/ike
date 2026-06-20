@@ -16,6 +16,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [ ] [07 — Command Palette](0070-command-palette.md)
 - [ ] [08 — Keybindings & Shortcuts](0080-keybindings.md)
 - [ ] [09 — Project Switching](0090-project-switching.md)
+- [x] [09.5 — Session Restore (Workspace State Persistence)](0095-session-restore.md)
 - [ ] [10 — LSP Support](0100-lsp.md)
 - [ ] [11 — Themes / Color Schemes](0110-themes.md)
 - [ ] [99 — Plugins: WASM (Runtime, Sandboxed)](9900-plugins-wasm.md)

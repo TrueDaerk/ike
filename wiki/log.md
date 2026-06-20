@@ -2,6 +2,26 @@
 
 ## 2026-06-20
 
+- Fixed explorer mouse-click desync after restoring a session with expanded
+  directories: `clampScroll` now also clamps `offset` to `len(rows)-textH`.
+  Restore runs at height 0 and parked an offset past the last page; `View`
+  clamped it for display but `MouseClick`/hover read the raw offset, so clicks
+  landed on rows far below the ones shown until the user scrolled.
+
+- Session restore now also persists the editor's **viewport framing** (scroll
+  `top`/`left`), not just the cursor. `Top` is sticky during editing, so cursor-
+  only restore reframed the file and made mouse clicks land on the wrong lines.
+  Saved offset is applied after the editor is first sized (`Model.pendingScroll`
+  → `editor.SetScroll`). New `editor.ScrollOffset`/`SetScroll`.
+
+- Added **session restore**: a per-project `session.json` (beside `layout.json`,
+  same `IKE_CONFIG_DIR`/`.ike` discovery) saves the open file + cursor and the
+  explorer's expanded dirs + show-hidden + cursor on quit, reapplied on launch.
+  Explorer restore loads directories synchronously and `Init` skips its async
+  scan once the root is restored. New `internal/app/session.go`,
+  `internal/explorer/state.go`, `editor.SetCursor`/`CursorPos`,
+  `app.quit()`/`restoreSession`. See `/architecture/session-restore.md`.
+
 - `q` now quits the app from the editor too, when it is focused in normal mode
   (previously only from the explorer). Insert/command mode still routes `q` to
   the buffer. See `app.quitKey`/`app.isCoreKey`.
