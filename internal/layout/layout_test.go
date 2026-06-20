@@ -80,7 +80,12 @@ func TestHitDividerTitlePane(t *testing.T) {
 		t.Fatalf("expected divider hit, got %v", h.Kind)
 	}
 	if h := l.Hit(2, 0); h.Kind != HitTitle || h.Pane != "explorer" {
-		t.Fatalf("expected explorer title, got %+v", h)
+		t.Fatalf("expected explorer title (border row), got %+v", h)
+	}
+	// The visible title text sits one row below the top border; grabbing it must
+	// also start a move.
+	if h := l.Hit(2, 1); h.Kind != HitTitle || h.Pane != "explorer" {
+		t.Fatalf("expected explorer title (text row), got %+v", h)
 	}
 	if h := l.Hit(2, 5); h.Kind != HitPane || h.Pane != "explorer" {
 		t.Fatalf("expected explorer pane, got %+v", h)

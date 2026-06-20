@@ -25,8 +25,14 @@ type Hit struct {
 	Divider *Divider // set for HitDivider (points into the Layout's slice)
 }
 
+// TitleBarRows is the height of a pane's title-bar move handle: the top border
+// row plus the title text row rendered just inside it. A press anywhere in this
+// band starts a move, so grabbing the visible title (not just the 1-pixel
+// border) works.
+const TitleBarRows = 2
+
 // Hit classifies cell (x,y): a divider takes precedence (gutters never overlap
-// pane interiors), then a pane — its first row is the title-bar move handle.
+// pane interiors), then a pane — its top TitleBarRows are the move handle.
 func (l *Layout) Hit(x, y int) Hit {
 	for i := range l.Dividers {
 		if l.Dividers[i].Rect.Contains(x, y) {
@@ -35,7 +41,7 @@ func (l *Layout) Hit(x, y int) Hit {
 	}
 	for pane, r := range l.Panes {
 		if r.Contains(x, y) {
-			if y == r.Y {
+			if y < r.Y+TitleBarRows {
 				return Hit{Kind: HitTitle, Pane: pane}
 			}
 			return Hit{Kind: HitPane, Pane: pane}
