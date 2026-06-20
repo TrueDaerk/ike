@@ -11,14 +11,15 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/help"
 	"ike/internal/host"
+	"ike/internal/overlay"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/ui"
 )
 
 // Context ids the core panes advertise for context-scoped command/keymap
@@ -52,6 +53,10 @@ type Model struct {
 	host     *host.Host
 	reg      *registry.Registry
 	help     *help.Help
+	// shell is the single active floating overlay (Roadmap 0035). It hosts the
+	// help cheat sheet today and any tea.Model-shaped content (modals, plugin
+	// popups) tomorrow; v1 is single-level (one open shell at a time).
+	shell *ui.Floating
 }
 
 // New returns the initial root model rooted at the working directory, wired to
@@ -73,8 +78,38 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		reg:      reg,
 		// help is a read-only consumer of the registry; the 0080 keymap resolver
 		// is not wired yet, so commands render title-only (nil resolver).
-		help: help.New(reg, nil, helpMinCol(cfg)),
+		help:  help.New(reg, nil, helpMinCol(cfg)),
+		shell: ui.New(shellConfig(cfg)),
 	}
+}
+
+// shellConfig builds the floating shell configuration, reading optional tuning
+// keys (margin, max width/height fraction) from cfg. The help dismiss set keeps
+// the established esc/?/q so the cheat sheet behaves exactly as before.
+func shellConfig(cfg host.Config) ui.Config {
+	c := ui.Config{
+		DismissKeys: []string{"esc", "?", "q"},
+		Accent:      "69",
+	}
+	if cfg == nil {
+		return c
+	}
+	if v, ok := cfg.Get("overlay.margin"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Margin = n
+		}
+	}
+	if v, ok := cfg.Get("overlay.max_width_fraction"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.MaxWidthFrac = f
+		}
+	}
+	if v, ok := cfg.Get("overlay.max_height_fraction"); ok {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.MaxHeightFrac = f
+		}
+	}
+	return c
 }
 
 // helpMinCol reads the optional help.min_column_width config value; 0 (the
@@ -114,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
-		m.help.SetSize(m.width, m.height)
+		m.shell.SetSize(m.width, m.height)
 		return m, nil
 
 	case explorer.OpenFileMsg:
@@ -122,6 +157,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case host.OpenFileRequest:
 		return m.openPath(msg.Path)
+
+	case host.OpenModalRequest:
+		// A plugin asked to present content as a floating modal; host it in the
+		// single active shell. v1 is single-level, so this replaces any open shell.
+		m.shell.SetContent(ui.ModelContent{Heading: msg.Title, Body: msg.View})
+		m.shell.SetSize(m.width, m.height)
+		m.shell.Open()
+		return m, nil
 
 	case editor.CloseMsg:
 		m.editor = editor.New()
@@ -131,10 +174,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// The help overlay, when open, consumes every key (scroll + dismiss) and
+		// The floating shell, when open, consumes every key (scroll + dismiss) and
 		// shadows all other routing.
-		if m.help.IsOpen() {
-			m.help.Update(msg)
+		if m.shell.IsOpen() {
+			m.shell.Update(msg)
 			return m, nil
 		}
 		// Global keys take priority, but only when the editor is not actively
@@ -146,8 +189,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// "?" opens the help overlay (binding/command ownership moves to 0070/0080
 		// once they land; help only consumes it).
 		if keys == "?" {
-			m.help.SetSize(m.width, m.height)
-			m.help.Open(m.focusContext())
+			m.help.Snapshot(m.focusContext())
+			m.shell.SetContent(m.help)
+			m.shell.SetSize(m.width, m.height)
+			m.shell.Open()
 			return m, nil
 		}
 		// Plugin key bindings resolve before core only when they explicitly
@@ -315,8 +360,8 @@ func (m Model) View() string {
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top, explorerPane, editorPane)
 	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
-	if m.help.IsOpen() {
-		return overlayCenter(base, m.help.View(), m.width, m.height)
+	if m.shell.IsOpen() {
+		return overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
 	return base
 }
@@ -386,53 +431,3 @@ func pane(title, content string, width, height int, focused bool) string {
 }
 
 func baseName(path string) string { return filepath.Base(path) }
-
-// overlayCenter composites the floating pane `top` centered over `base`, a
-// canvas w columns by h rows. Each overlaid row is spliced into the base row by
-// visual column, preserving the ANSI styling on both sides of the pane. base is
-// returned unchanged if the pane does not fit.
-func overlayCenter(base, top string, w, h int) string {
-	if top == "" {
-		return base
-	}
-	topLines := strings.Split(top, "\n")
-	topH := len(topLines)
-	topW := 0
-	for _, l := range topLines {
-		if lw := ansi.StringWidth(l); lw > topW {
-			topW = lw
-		}
-	}
-	if topW > w || topH > h {
-		return base // does not fit; leave the base untouched
-	}
-
-	baseLines := strings.Split(base, "\n")
-	// Pad the canvas to h rows so centering math is stable.
-	for len(baseLines) < h {
-		baseLines = append(baseLines, "")
-	}
-	x := (w - topW) / 2
-	y := (h - topH) / 2
-
-	for i, tl := range topLines {
-		row := y + i
-		if row < 0 || row >= len(baseLines) {
-			continue
-		}
-		baseLines[row] = spliceLine(baseLines[row], tl, x, topW, w)
-	}
-	return strings.Join(baseLines, "\n")
-}
-
-// spliceLine overwrites `line` with `top` (visual width topW) starting at visual
-// column x, keeping the styled remainder of `line` to the right. canvasW is the
-// full row width used to right-pad short base lines.
-func spliceLine(line, top string, x, topW, canvasW int) string {
-	left := ansi.Truncate(line, x, "")
-	if pad := x - ansi.StringWidth(left); pad > 0 {
-		left += strings.Repeat(" ", pad)
-	}
-	right := ansi.TruncateLeft(line, x+topW, "")
-	return left + "\x1b[0m" + top + "\x1b[0m" + right
-}

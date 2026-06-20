@@ -197,7 +197,7 @@ func TestHelpOverlayToggle(t *testing.T) {
 
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
 	m = tm.(Model)
-	if !m.help.IsOpen() {
+	if !m.shell.IsOpen() {
 		t.Fatal(`"?" should open the help overlay`)
 	}
 	if !strings.Contains(m.View(), "Hello") {
@@ -214,8 +214,36 @@ func TestHelpOverlayToggle(t *testing.T) {
 
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m = tm.(Model)
-	if m.help.IsOpen() {
+	if m.shell.IsOpen() {
 		t.Fatal(`"esc" should dismiss the help overlay`)
+	}
+}
+
+// TestOpenModalRequestFloatsPluginContent verifies the additive plugin seam:
+// dispatching host.OpenModalRequest hosts arbitrary content in the floating
+// shell, composited centered over the base layout.
+func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(host.OpenModalRequest{
+		Title: "PLUGIN MODAL",
+		View:  func() string { return "modal body" },
+	})
+	m = tm.(Model)
+	if !m.shell.IsOpen() {
+		t.Fatal("OpenModalRequest should open the floating shell")
+	}
+	v := m.View()
+	if !strings.Contains(v, "PLUGIN MODAL") || !strings.Contains(v, "modal body") {
+		t.Fatalf("modal content should be composited onto the canvas: %q", v)
+	}
+	if !strings.Contains(v, "EXPLORER") {
+		t.Fatal("base layout should remain visible around the modal")
+	}
+	// The shell swallows keys and esc dismisses it.
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = tm.(Model)
+	if m.shell.IsOpen() {
+		t.Fatal("esc should dismiss the modal")
 	}
 }
 

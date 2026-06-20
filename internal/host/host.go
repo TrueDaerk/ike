@@ -33,6 +33,16 @@ type Config interface {
 // the concrete explorer/editor message types.
 type OpenFileRequest struct{ Path string }
 
+// OpenModalRequest asks the root model to present arbitrary content in the
+// floating shell (Roadmap 0035). A plugin dispatches it (h.Dispatch) to show its
+// pane as a modal popup: View renders the body, Title is the heading. It is an
+// additive in-process seam — it adds no plugin contract field and needs no new
+// API method; the host hosts the existing tea.Model/Pane shape via ui.Floating.
+type OpenModalRequest struct {
+	Title string
+	View  func() string
+}
+
 // MapConfig is a trivial in-memory Config used until Roadmap 0040 lands real
 // configuration loading.
 type MapConfig map[string]string

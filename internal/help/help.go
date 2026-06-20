@@ -2,133 +2,63 @@ package help
 
 import (
 	"github.com/charmbracelet/lipgloss"
-
-	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Help is the read-only overlay model. It snapshots commands on open, lays them
-// out in width-responsive columns, and scrolls vertically when the content
-// overflows. It executes nothing: the only thing it emits is its own dismissal,
-// signalled through Open().
+// maxColumns caps the cheat sheet at two columns wide regardless of how much
+// horizontal room the shell offers.
+const maxColumns = 2
+
+// Help is the read-only help content: it snapshots commands and lays them out
+// in width-responsive columns. It is a ui.Content provider — the floating shell
+// owns the chrome, sizing, scrolling and dismissal; Help owns only the command
+// snapshot, grouping, and column layout. It executes nothing.
 type Help struct {
 	src    CommandSource
 	res    BindingResolver
 	minCol int // configured minimum column width (0 -> default)
 
-	open   bool
-	ctxID  string // pane context captured at open time
+	ctxID  string // pane context captured at the last snapshot
 	groups []Group
-	width  int
-	height int
-	scroll scroller
 }
 
-// New returns a closed overlay reading commands from src and shortcuts from res
+// New returns help content reading commands from src and shortcuts from res
 // (res may be nil for title-only rendering). minCol is the configured minimum
 // column width; 0 selects the built-in default.
 func New(src CommandSource, res BindingResolver, minCol int) *Help {
-	return &Help{src: src, res: res, minCol: minCol, scroll: newScroller(0, 0)}
+	return &Help{src: src, res: res, minCol: minCol}
 }
 
-// IsOpen reports whether the overlay is currently shown.
-func (h *Help) IsOpen() bool { return h.open }
-
-// Open snapshots the registry for pane context ctxID and shows the overlay. It
-// is idempotent: re-opening re-snapshots so newly registered commands appear.
-func (h *Help) Open(ctxID string) {
-	h.open = true
+// Snapshot re-reads the registry for pane context ctxID. It is idempotent:
+// re-snapshotting picks up newly registered commands. Call it each time the
+// shell is opened so the cheat sheet reflects the current registry.
+func (h *Help) Snapshot(ctxID string) {
 	h.ctxID = ctxID
 	h.groups = Snapshot(h.src, h.res, ctxID)
-	h.relayout()
 }
 
-// Close hides the overlay.
-func (h *Help) Close() { h.open = false }
+// Title implements ui.Content.
+func (h *Help) Title() string { return "HELP — commands & shortcuts" }
 
-// SetSize records the available terminal size and recomputes the layout.
-func (h *Help) SetSize(width, height int) {
-	h.width, h.height = width, height
-	h.relayout()
-}
-
-// Update handles overlay keys while open: esc/?/q dismiss, everything else is a
-// scroll key. It returns whether the message was consumed by the overlay, so
-// the root model can suppress further routing.
-func (h *Help) Update(msg tea.Msg) bool {
-	if !h.open {
-		return false
+// Render implements ui.Content: it lays the snapshotted groups out into at most
+// maxColumns columns that fit within width, returning the body for the shell to
+// scroll and frame.
+func (h *Help) Render(width int) string {
+	if width < 1 {
+		width = 1
 	}
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		h.SetSize(msg.Width, msg.Height)
-		return true
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "esc", "?", "q":
-			h.Close()
-			return true
-		default:
-			h.scroll.Update(msg)
-			return true
-		}
-	}
-	return true
-}
-
-// Overlay chrome and floating-pane bounds.
-const (
-	// maxColumns caps the cheat sheet at two columns wide regardless of how much
-	// horizontal room the terminal offers.
-	maxColumns = 2
-	// margin is the minimum gap kept between the floating pane and each terminal
-	// edge, so the pane never bleeds to the very border.
-	margin = 2
-	// frameH/frameV are the box chrome: border (2) + padding (2+2 horizontal,
-	// 1+1 vertical).
-	frameH = 6
-	frameV = 4
-)
-
-// relayout sizes the floating pane to its content — at most maxColumns wide and
-// never larger than the terminal minus a margin — and feeds the laid-out body
-// to the scroller. Safe to call before a size is known (it no-ops).
-func (h *Help) relayout() {
-	if h.width <= 0 || h.height <= 0 {
-		return
-	}
-	// Budget for the content area, reserving the margin, box chrome, and the
-	// title line.
-	availW := h.width - 2*margin - frameH
-	availH := h.height - 2*margin - frameV - 1
-	if availW < 1 {
-		availW = 1
-	}
-	if availH < 1 {
-		availH = 1
-	}
-
 	colW := MinColumnWidth(h.allCells(), h.minCol)
-	if colW > availW {
-		colW = availW
+	if colW > width {
+		colW = width
 	}
-	cols := ColumnCount(availW, colW)
+	cols := ColumnCount(width, colW)
 	if cols > maxColumns {
 		cols = maxColumns
 	}
-
-	body := h.renderBody(colW, cols)
-	bodyW := lipgloss.Width(body)
-	viewH := lipgloss.Height(body)
-	if viewH > availH {
-		viewH = availH // content overflows -> scroll within the budget
-	}
-
-	h.scroll.SetSize(bodyW, viewH)
-	h.scroll.SetContent(body)
+	return h.renderBody(colW, cols)
 }
 
 // allCells renders every entry across all groups, used to derive a shared
-// column width so the floating pane's columns line up.
+// column width so the columns line up.
 func (h *Help) allCells() []string {
 	var cells []string
 	for _, g := range h.groups {
@@ -163,25 +93,6 @@ func (h *Help) renderBody(colW, cols int) string {
 		return "no commands registered"
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
-}
-
-// View renders the floating pane, sized to its content, or empty when closed.
-// The caller composites it centered on top of the active layout.
-func (h *Help) View() string {
-	if !h.open || h.width <= 0 {
-		return ""
-	}
-	titleStyle := lipgloss.NewStyle().Bold(true)
-	title := titleStyle.Render("HELP — commands & shortcuts") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("   (esc/?/q to close)")
-
-	box := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("69")).
-		Padding(1, 3)
-
-	content := lipgloss.JoinVertical(lipgloss.Left, title, h.scroll.View())
-	return box.Render(content)
 }
 
 // renderEntry formats one command row: "title … shortcut", or just the title

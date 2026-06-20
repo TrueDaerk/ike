@@ -7,7 +7,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [01 — Foundation: File Explorer + Vim Editor](0010-foundation.md)
 - [x] [02 — Plugins: Compile-in Registry](0020-plugins-compile-in.md)
 - [x] [03 — Help Overlay (Command & Shortcut Cheat Sheet)](0030-help-overlay.md)
-- [ ] [03.5 — Floating Shell (Reusable Overlay / Modal Component)](0035-floating-shell.md)
+- [x] [03.5 — Floating Shell (Reusable Overlay / Modal Component)](0035-floating-shell.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [ ] [06 — Vim-Like Editor (full)](0060-vim-editor.md)

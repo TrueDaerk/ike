@@ -1,23 +1,27 @@
 ---
 type: concept
 title: Help Overlay
-description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, scrolls vertically.
+description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-06-19T00:00:00Z
+timestamp: 2026-06-20T00:00:00Z
 ---
 
 # Help Overlay
 
 Roadmap 0030. A discoverable, self-documenting window: pressing `?` opens an
 overlay listing every registered **Command** with its bound **shortcut**. It is
-a pure **consumer** — it owns no command or binding store. It snapshots the
-plugin registry (roadmap 0020) on open and joins each command with its shortcut
-from a binding resolver (the roadmap 0080 keymap resolver, consumed through a
-narrow interface so help builds before 08 lands). It renders as a **floating
-pane** centered over the active layout — sized to its content, never covering
-the whole TUI — and **scrolls vertically** when taller than the viewport. The
-body packs entries into **at most two columns**.
+a pure **consumer** — it owns no command or binding store, and (since roadmap
+0035) no chrome. It snapshots the plugin registry (roadmap 0020) on open and
+joins each command with its shortcut from a binding resolver (the roadmap 0080
+keymap resolver, consumed through a narrow interface so help builds before 08
+lands). The body packs entries into **at most two columns**.
+
+The cheat sheet is rendered inside the reusable **floating shell**
+(`internal/ui.Floating`, roadmap 0035) — `Help` is just a `ui.Content` provider.
+The shell owns the centered floating box, content sizing, vertical scroll, and
+`esc/?/q` dismissal; Help owns only the snapshot and column layout. See
+[Floating Shell](/architecture/floating-shell.md).
 
 ## Structure
 
@@ -25,16 +29,14 @@ body packs entries into **at most two columns**.
 internal/help/
   source.go    snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort
   layout.go    width -> column count; column-major balanced packing; min-column-width; single-column fallback
-  viewport.go  vertical scroll (wraps bubbles/viewport) + position indicator; adds g/G to the built-in keys
-  help.go      overlay tea.Model: open/close, recompute on resize, scroll keys, esc/?/q dismiss, render-on-top
+  help.go      ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
 ```
 
-The root model (`internal/app`) holds a `*help.Help`, sizes it on
-`tea.WindowSizeMsg`, opens it on `?`, and while open forwards every key to it —
-the overlay swallows all input (scroll + dismiss) and shadows other routing.
-`View` composites the pane centered over the base layout via `overlayCenter`,
-an ANSI-aware splice (`x/ansi`) that overwrites the middle rows while preserving
-the styled base content on both sides — the base stays visible around the pane.
+The root model (`internal/app`) holds a single `*ui.Floating`. On `?` it calls
+`help.Snapshot(ctx)`, sets the `*help.Help` as the shell's content, and opens the
+shell; while open the shell swallows all input and the root composites it
+centered via `overlay.Center`. Scrolling, chrome, sizing, and dismissal now live
+in the shell, not in help.
 
 ## Source of truth
 
@@ -66,18 +68,18 @@ terminals.
 - `Pack(cells, cols)` distributes entries **column-major** with
   `rows = ceil(n/cols)`, so columns differ in height by at most one (balanced).
 
-The pane sizes itself to its content within a terminal-minus-margin budget. The
-column count is `min(2, ColumnCount(...))` — capped at **two columns** — and a
-single shared column width keeps every group's columns aligned. When the body
-exceeds the available height it scrolls; otherwise the pane hugs the content.
+`Render(width)` lays the snapshot out to the width budget the shell supplies.
+The column count is `min(2, ColumnCount(...))` — capped at **two columns** — and
+a single shared column width keeps every group's columns aligned. The shell
+handles fitting the result to the terminal and scrolling on overflow.
 
 ## Scrolling
 
-`viewport.go` wraps `bubbles/viewport`. When the content is taller than the
-visible area the user scrolls with `↑`/`↓`, `pgup`/`pgdn`, `ctrl+u`/`ctrl+d`,
-and `g`/`G` (top/bottom, added on top of the viewport's own key map). Offsets
-clamp at both ends. A position indicator line (`▲ … ▼  NN%`) shows there is more
-off-screen and where the view sits.
+Scrolling is owned by the floating shell (`internal/ui/scroll.go`), not by help.
+When the body is taller than the visible area the user scrolls with `↑`/`↓`,
+`pgup`/`pgdn`, `ctrl+u`/`ctrl+d`, and `g`/`G` (top/bottom); offsets clamp at both
+ends and a position indicator (`▲ … ▼  NN%`) shows there is more off-screen. See
+[Floating Shell](/architecture/floating-shell.md).
 
 ## Design rules
 

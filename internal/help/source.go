@@ -1,11 +1,11 @@
-// Package help implements the read-only help overlay: a self-documenting cheat
+// Package help implements the read-only help content: a self-documenting cheat
 // sheet that lists every registered Command with its bound shortcut. It is a
-// pure consumer — it owns no command or binding store. source.go snapshots
-// Commands from the plugin registry (Roadmap 0020) and joins each with its
-// shortcut from a BindingResolver (the Roadmap 0080 keymap resolver, consumed
-// through a narrow interface so help builds before 08 lands). layout.go packs
-// entries into width-responsive columns; viewport.go scrolls when content is
-// taller than the viewport; help.go is the tea.Model the root toggles.
+// pure consumer — it owns no command or binding store, and no chrome. source.go
+// snapshots Commands from the plugin registry (Roadmap 0020) and joins each with
+// its shortcut from a BindingResolver (the Roadmap 0080 keymap resolver,
+// consumed through a narrow interface so help builds before 08 lands). layout.go
+// packs entries into width-responsive columns; help.go is the ui.Content the
+// floating shell (Roadmap 0035) hosts, sizes, scrolls, and dismisses.
 package help
 
 import (

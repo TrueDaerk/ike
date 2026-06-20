@@ -1,5 +1,21 @@
 # Log
 
+## 2026-06-20
+
+- Roadmap 0035 (Floating Shell) implemented: extracted the one-off help overlay
+  chrome into a reusable component. New `internal/overlay` (pure ANSI-aware
+  `Center` compositing, moved out of `internal/app`) and `internal/ui`
+  (`Floating` shell hosting any `ui.Content`; `sizing.go` content budget;
+  `scroll.go` generalised scroller wrapping `bubbles/viewport`; `ModelContent`
+  adapter to float a view-only model). `internal/help` refactored to a
+  `ui.Content` provider (snapshot + column layout only); its local chrome,
+  sizing, and scroll deleted. Root model now hosts one active `*ui.Floating`,
+  forwards size + keys, and composites via `overlay.Center`. Added an additive
+  in-process plugin seam, `host.OpenModalRequest{Title, View}`, so a plugin can
+  present its pane as a floating modal; optional `overlay.*` config tuning
+  (margin, max width/height fraction). Added the Floating Shell concept doc and
+  updated Help Overlay.
+
 ## 2026-06-19
 
 - Roadmap 0030 (Help Overlay) implemented: `internal/help` (`source.go` snapshot

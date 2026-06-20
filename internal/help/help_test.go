@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"ike/internal/plugin"
@@ -150,85 +149,22 @@ func TestMinColumnWidth(t *testing.T) {
 	}
 }
 
-func TestOverlayOpenCloseDismiss(t *testing.T) {
-	h := New(testRegistry(), nil, 0)
-	h.SetSize(100, 40)
-	if h.IsOpen() {
-		t.Fatal("overlay should start closed")
-	}
-	h.Open("editor")
-	if !h.IsOpen() {
-		t.Fatal("overlay should be open after Open")
-	}
-	if h.View() == "" {
-		t.Fatal("open overlay should render non-empty")
-	}
-	dismiss := []struct {
-		name string
-		msg  tea.KeyMsg
-	}{
-		{"esc", tea.KeyMsg{Type: tea.KeyEsc}},
-		{"?", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")}},
-		{"q", tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")}},
-	}
-	for _, d := range dismiss {
-		h.Open("editor")
-		if !h.Update(d.msg) {
-			t.Fatalf("key %q not consumed", d.name)
-		}
-		if h.IsOpen() {
-			t.Fatalf("key %q did not dismiss overlay", d.name)
-		}
-	}
-}
-
-func TestOverlayUpdateIgnoredWhenClosed(t *testing.T) {
-	h := New(testRegistry(), nil, 0)
-	if h.Update(tea.KeyMsg{Type: tea.KeyEsc}) {
-		t.Fatal("closed overlay should not consume keys")
-	}
-}
-
-func TestScrollBoundsClamp(t *testing.T) {
-	s := newScroller(20, 3)
-	s.SetContent(strings.Repeat("line\n", 50))
-	if !s.scrollable() {
-		t.Fatal("content taller than viewport should be scrollable")
-	}
-	if !s.vp.AtTop() {
-		t.Fatal("SetContent should reset to top")
-	}
-	// scroll up at the top stays clamped at top
-	s.Update(tea.KeyMsg{Type: tea.KeyUp})
-	if !s.vp.AtTop() {
-		t.Fatal("scroll up at top should clamp")
-	}
-	// G jumps to bottom
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
-	if !s.vp.AtBottom() {
-		t.Fatal("G should jump to bottom")
-	}
-	// scrolling down at the bottom stays clamped
-	s.Update(tea.KeyMsg{Type: tea.KeyDown})
-	if !s.vp.AtBottom() {
-		t.Fatal("scroll down at bottom should clamp")
-	}
-	// g jumps back to top
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
-	if !s.vp.AtTop() {
-		t.Fatal("g should jump to top")
-	}
-}
-
-func TestViewContainsTitlesAndShortcuts(t *testing.T) {
+func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 	h := New(testRegistry(), MapResolver{"core.quit": "ctrl+c"}, 0)
-	h.SetSize(120, 40)
-	h.Open("editor")
-	view := h.View()
+	h.Snapshot("editor")
+	body := h.Render(120)
 	for _, want := range []string{"Quit", "Save", "ctrl+c", "Global", "Editor"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("view missing %q", want)
+		if !strings.Contains(body, want) {
+			t.Errorf("body missing %q", want)
 		}
+	}
+}
+
+func TestRenderEmptyWhenNoCommands(t *testing.T) {
+	h := New(registry.New(), nil, 0)
+	h.Snapshot("")
+	if got := h.Render(80); got != "no commands registered" {
+		t.Fatalf("empty render = %q", got)
 	}
 }
 
@@ -241,30 +177,16 @@ func TestRenderNeverExceedsTwoColumns(t *testing.T) {
 	}
 	r.Add(stubPlugin{id: "g", cmd: cmds})
 	h := New(r, nil, 0)
-	h.SetSize(400, 60) // very wide terminal
-	h.Open("")
-	// With 40 entries capped at two columns, the body packs column-major into
-	// rows = ceil(40/2) = 20 — so the pane stays tall and narrow rather than
-	// spreading across the 400-col terminal. Its width must not exceed what two
-	// command columns plus chrome need (the title sets the floor).
-	v := h.View()
-	w := lipgloss.Width(v)
+	h.Snapshot("")
+	// With 40 entries capped at two columns, even given a very wide budget the
+	// body packs column-major into rows = ceil(40/2) = 20 — so it stays tall and
+	// narrow rather than spreading across the budget.
+	body := h.Render(400)
 	colW := MinColumnWidth(h.allCells(), 0)
-	if limit := 2*colW + gutter + frameH; w > limit && w > 60 {
-		t.Fatalf("pane width %d exceeds two-column bound %d (title floor 60)", w, limit)
+	if w, limit := lipgloss.Width(body), 2*colW+gutter; w > limit {
+		t.Fatalf("body width %d exceeds two-column bound %d", w, limit)
 	}
-	if hgt := lipgloss.Height(v); hgt < 20 {
+	if hgt := lipgloss.Height(body); hgt < 20 {
 		t.Fatalf("two-column body should stack ~20 rows tall, got height %d", hgt)
-	}
-}
-
-func TestPaneFitsWithinTerminal(t *testing.T) {
-	r := testRegistry()
-	h := New(r, nil, 0)
-	h.SetSize(80, 24)
-	h.Open("editor")
-	v := h.View()
-	if lipgloss.Width(v) > 80 || lipgloss.Height(v) > 24 {
-		t.Fatalf("pane %dx%d overflows 80x24 terminal", lipgloss.Width(v), lipgloss.Height(v))
 	}
 }

@@ -72,16 +72,16 @@ The split is deliberate:
 
 ## Milestones
 
-- [ ] `internal/overlay/overlay.go`: extract `Center` (+ row splice) from `internal/app`, export, ANSI-aware, with unit tests (fit/no-fit, centering math, style preservation).
-- [ ] `internal/ui/sizing.go`: content-size within terminal-minus-margin; max width/height clamps; reserve title + indicator rows.
-- [ ] `internal/ui/scroll.go`: vertical scroll wrapping `bubbles/viewport` with a position indicator (generalised from the help scroller).
-- [ ] `internal/ui/floating.go`: `Floating` shell — host a child view, chrome, open/close, `IsOpen`, key-swallow, configurable dismiss keys, recompute on `tea.WindowSizeMsg`.
-- [ ] Refactor `internal/help` to render its content inside `Floating`; delete the help-local chrome/sizing/scroll now owned by the shell. Behaviour and tests stay green.
-- [ ] Root-model integration in `internal/app`: host a single active `Floating`, forward size + keys, composite via `overlay.Center`.
-- [ ] Plugin seam: a plugin can present its `plugin.Pane` as a floating modal (host helper / request message); document the additive hook if one is needed.
-- [ ] Optional config hooks (`internal/config`): default margin, max width/height fraction, dismiss key set.
-- [ ] Tests: overlay centering + fit bounds, content sizing/clamping, scroll bounds, dismiss + key-swallow, child-view hosting, help-still-works regression.
-- [ ] Wiki: document the floating shell, the overlay/shell/content split, and how modals + plugin popups reuse it under `wiki/`.
+- [x] `internal/overlay/overlay.go`: extract `Center` (+ row splice) from `internal/app`, export, ANSI-aware, with unit tests (fit/no-fit, centering math, style preservation).
+- [x] `internal/ui/sizing.go`: content-size within terminal-minus-margin; max width/height clamps; reserve title + indicator rows.
+- [x] `internal/ui/scroll.go`: vertical scroll wrapping `bubbles/viewport` with a position indicator (generalised from the help scroller).
+- [x] `internal/ui/floating.go`: `Floating` shell — host a child view, chrome, open/close, `IsOpen`, key-swallow, configurable dismiss keys, recompute on `tea.WindowSizeMsg`.
+- [x] Refactor `internal/help` to render its content inside `Floating`; delete the help-local chrome/sizing/scroll now owned by the shell. Behaviour and tests stay green.
+- [x] Root-model integration in `internal/app`: host a single active `Floating`, forward size + keys, composite via `overlay.Center`.
+- [x] Plugin seam: a plugin can present its `plugin.Pane` as a floating modal (host helper / request message); document the additive hook if one is needed.
+- [x] Optional config hooks (`internal/config`): default margin, max width/height fraction, dismiss key set.
+- [x] Tests: overlay centering + fit bounds, content sizing/clamping, scroll bounds, dismiss + key-swallow, child-view hosting, help-still-works regression.
+- [x] Wiki: document the floating shell, the overlay/shell/content split, and how modals + plugin popups reuse it under `wiki/`.
 
 ## Out of scope
 

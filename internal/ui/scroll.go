@@ -1,4 +1,4 @@
-package help
+package ui
 
 import (
 	"strconv"
@@ -9,10 +9,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// scroller wraps bubbles/viewport to scroll the help body vertically when its
-// content is taller than the visible area. It adds g/G (top/bottom) on top of
-// the viewport's built-in ↑/↓, pgup/pgdn, and ctrl+u/ctrl+d bindings, and
-// renders a position indicator so the user knows there is more off-screen.
+// indicatorColor is the dim foreground used for the scroll position bar.
+const indicatorColor = "240"
+
+// scroller wraps bubbles/viewport to scroll body content vertically when it is
+// taller than the visible area. It adds g/G (top/bottom) on top of the
+// viewport's built-in ↑/↓, pgup/pgdn, and ctrl+u/ctrl+d bindings, and renders a
+// position indicator so the user knows there is more off-screen. It is the
+// reusable scroller shared by every Floating shell (generalised from the help
+// overlay's one-off scroller).
 type scroller struct {
 	vp viewport.Model
 }
@@ -76,7 +81,7 @@ func (s *scroller) indicator() string {
 	}
 	pct := strconv.Itoa(int(s.vp.ScrollPercent()*100)) + "%"
 	dashes := strings.Repeat("─", maxInt(s.vp.Width-len(pct)-5, 0))
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color(indicatorColor))
 	return style.Render(up + " " + dashes + " " + down + " " + pct)
 }
 
