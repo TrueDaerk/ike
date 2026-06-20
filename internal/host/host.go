@@ -5,7 +5,11 @@
 // plugin code.
 package host
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	tea "github.com/charmbracelet/bubbletea"
+
+	"ike/internal/config"
+)
 
 // API is everything a plugin may ask of the host. It intentionally stays small
 // and message-oriented so it ports to an out-of-process/Wasm bridge later.
@@ -43,14 +47,25 @@ type OpenModalRequest struct {
 	View  func() string
 }
 
-// MapConfig is a trivial in-memory Config used until Roadmap 0040 lands real
-// configuration loading.
+// MapConfig is a trivial in-memory Config, handy for tests and for plugins that
+// need a few literal keys without the full typed schema.
 type MapConfig map[string]string
 
 // Get implements Config.
 func (c MapConfig) Get(key string) (string, bool) {
 	v, ok := c[key]
 	return v, ok
+}
+
+// FromConfig adapts a typed *config.Config (Roadmap 0040) to the read-only
+// key/value Config plugins see. It flattens the schema once via Config.Flat, so
+// the typed structs stay the single source of truth and host never re-derives
+// key names. A nil c yields an empty configuration.
+func FromConfig(c *config.Config) Config {
+	if c == nil {
+		return MapConfig{}
+	}
+	return MapConfig(c.Flat())
 }
 
 // Host is the in-process implementation of API.

@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/help"
@@ -90,9 +91,14 @@ type dragState struct {
 }
 
 // New returns the initial root model rooted at the working directory, wired to
-// the global plugin registry.
+// the global plugin registry. It loads the merged configuration (defaults < user
+// < project) from the working directory and backs the host with it. Non-fatal
+// config diagnostics never block startup; they are dropped here until a status
+// surface consumes them.
 func New() Model {
-	return NewWith(registry.Global(), host.MapConfig{})
+	cfg, _ := config.Load(config.Discover("."))
+	config.Set(cfg)
+	return NewWith(registry.Global(), host.FromConfig(cfg))
 }
 
 // NewWith returns a root model backed by an explicit registry and config. It

@@ -2,6 +2,22 @@
 
 ## 2026-06-20
 
+- Roadmap 0040 (Settings / Configuration) implemented: new leaf-level
+  `internal/config` package — typed `Config` sections (`schema.go`), in-code
+  defaults (`defaults.go`), `~/.ike` + `{root}/.ike` discovery with
+  `IKE_CONFIG_DIR` override (`discovery.go`), TOML decode isolated behind the
+  package (`load.go`), deep map merge with scalar-replace / table-merge /
+  list-replace semantics (`merge.go`), clamp-and-warn validation with non-fatal
+  `Diagnostic`s and parse-error layer isolation (`validate.go`), an idempotent
+  `Extension` registration hook (`extend.go`), `Load`/`Get`/`Set` accessors plus
+  `Config.Flat` (`config.go`), a `ConfigReloadedMsg` reload seam (`watch.go`),
+  and a typed setter seam `PushHistory` (`write.go`). `internal/host` now depends
+  on `internal/config` via `host.FromConfig` (flat read-only view backing the
+  plugin API); `internal/app.New` loads the merged config at startup. Backed by
+  `BurntSushi/toml`. Tests cover precedence, table/list merge, clamp-and-warn,
+  parse-error isolation, and extend round-trip (config 87% coverage).
+
+
 - Roadmap 0036 (Pane Drag) implemented: new pure `internal/layout` split-tree
   (`tree.go` types + `Compute`/`Rects` exact tiling, `rect.go` hit-testing +
   drop zones, `resize.go` clamped divider drag, `move.go` drop-zone re-parent,

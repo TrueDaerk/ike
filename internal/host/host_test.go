@@ -1,6 +1,30 @@
 package host
 
-import "testing"
+import (
+	"testing"
+
+	"ike/internal/config"
+)
+
+func TestFromConfigFlattensTypedSchema(t *testing.T) {
+	c, _ := config.Load(config.Options{})
+	cfg := FromConfig(c)
+	if v, ok := cfg.Get("editor.tab_width"); !ok || v != "4" {
+		t.Errorf("editor.tab_width = %q (%v), want 4", v, ok)
+	}
+	if v, ok := cfg.Get("keymap.preset"); !ok || v != "jetbrains" {
+		t.Errorf("keymap.preset = %q (%v), want jetbrains", v, ok)
+	}
+	if _, ok := cfg.Get("does.not.exist"); ok {
+		t.Error("unknown key should report missing")
+	}
+}
+
+func TestFromConfigNilSafe(t *testing.T) {
+	if _, ok := FromConfig(nil).Get("anything"); ok {
+		t.Error("nil config should report missing keys")
+	}
+}
 
 func TestOpenFileRequest(t *testing.T) {
 	h := New(nil)

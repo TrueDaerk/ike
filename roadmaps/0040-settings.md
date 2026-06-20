@@ -108,18 +108,18 @@ Concrete defaults this roadmap can commit to now:
 
 ## Milestones
 
-- [ ] `internal/config` skeleton: root `Config` + section structs (`Editor`, `Explorer`, `Keymap`, `LSP`, `Theme`, `Project`) with the schema slots above.
-- [ ] `defaults.go`: built-in default layer with the concrete baseline values listed.
-- [ ] `discovery.go`: locate `~/.ike/settings.toml` and `{project_root}/.ike/settings.toml`; honor `IKE_CONFIG_DIR` / explicit-path override.
-- [ ] `load.go`: TOML decode behind an internal boundary (no TOML types exported).
-- [ ] `merge.go`: layered merge (defaults < user < project) with documented scalar/table/list semantics.
-- [ ] `validate.go`: clamp-and-warn validation, per-field defaults fallback, non-fatal diagnostics.
-- [ ] Typed accessor: `config.Get()` / `config.Load(...)` returning the merged, validated `*Config`.
-- [ ] `extend.go`: registration hook so other roadmaps add a named section + defaults; document the contract.
-- [ ] Back `host.API` read-config: wire `internal/host` to `internal/config`.
-- [ ] (Optional) `watch.go`: file watch emitting a `ConfigReloadedMsg` `tea.Msg` the root model can route.
-- [ ] Tests: discovery precedence, scalar/table/list merge, clamp-and-warn validation, parse-error isolation, extend-registration round-trip.
-- [ ] Wiki: document config locations, precedence, the baseline schema, and the section-extension hook under `wiki/`.
+- [x] `internal/config` skeleton: root `Config` + section structs (`Editor`, `Explorer`, `Keymap`, `LSP`, `Theme`, `Project`) with the schema slots above.
+- [x] `defaults.go`: built-in default layer with the concrete baseline values listed.
+- [x] `discovery.go`: locate `~/.ike/settings.toml` and `{project_root}/.ike/settings.toml`; honor `IKE_CONFIG_DIR` / explicit-path override.
+- [x] `load.go`: TOML decode behind an internal boundary (no TOML types exported).
+- [x] `merge.go`: layered merge (defaults < user < project) with documented scalar/table/list semantics.
+- [x] `validate.go`: clamp-and-warn validation, per-field defaults fallback, non-fatal diagnostics.
+- [x] Typed accessor: `config.Get()` / `config.Load(...)` returning the merged, validated `*Config`.
+- [x] `extend.go`: registration hook so other roadmaps add a named section + defaults; document the contract.
+- [x] Back `host.API` read-config: wire `internal/host` to `internal/config`.
+- [~] (Optional) `watch.go`: reload seam present — `ConfigReloadedMsg` `tea.Msg` + `Reload(opts)` cmd the root model can route; actual fs-watching deferred to its owning roadmap.
+- [x] Tests: discovery precedence, scalar/table/list merge, clamp-and-warn validation, parse-error isolation, extend-registration round-trip.
+- [x] Wiki: document config locations, precedence, the baseline schema, and the section-extension hook under `wiki/`.
 
 ## Out of scope
 
