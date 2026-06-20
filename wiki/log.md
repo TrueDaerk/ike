@@ -2,6 +2,12 @@
 
 ## 2026-06-20
 
+- Help: command shortcuts now render. `plugin.Keymap` gained a `CommandID`
+  field; `*registry.Registry` implements `help.BindingResolver` via a new
+  `Binding(cmdID)` reverse-lookup, and the root wires it (was `nil`). Explorer
+  default keymaps link to their command ids, so the cheat sheet shows e.g.
+  `Explorer: Toggle Hidden Files  .`. Full keymap layer still owned by 0080.
+
 - Explorer (Roadmap 0050): config-driven per-filetype colours (`colors.go`,
   glob→ext→`dir`/`default` resolution from `[explorer.colors]`), italic hidden
   entries with a `explorer.toggleHidden` runtime toggle (default off via

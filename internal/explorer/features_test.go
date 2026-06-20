@@ -138,6 +138,10 @@ func TestCommandsRegistered(t *testing.T) {
 	if _, ok := r.ResolveKey(".", ctxID); !ok {
 		t.Error("toggleHidden key not bound in explorer context")
 	}
+	// and the binding is discoverable by command id, so help can show the key.
+	if got, ok := r.Binding("explorer.toggleHidden"); !ok || got != "." {
+		t.Errorf("Binding(toggleHidden) = %q,%v want \".\",true", got, ok)
+	}
 }
 
 func TestConfigureReadsExplorerSection(t *testing.T) {

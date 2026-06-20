@@ -46,9 +46,12 @@ in the shell, not in help.
   plus those scoped to the focused pane's context (editor / explorer). No
   parallel command list.
 - **Shortcuts** come from a `BindingResolver` (`Binding(id) (string, ok)`). The
-  resolver is the seam onto roadmap 0080. It is not wired yet, so the root passes
-  `nil` and commands render **title-only** — graceful degradation, no hardcoded
-  keys. `MapResolver` is a test/stand-in implementation.
+  root now passes the `*registry.Registry` itself: it resolves a command's key by
+  matching the command id against keymaps that declare a `CommandID`
+  (`plugin.Keymap.CommandID`). Bindings that don't set a `CommandID` (e.g. raw
+  message keymaps) stay title-only — graceful degradation, no hardcoded keys. The
+  full keymap layer (preset + overrides) is still owned by roadmap 0080; this is
+  the minimal command→shortcut seam. `MapResolver` remains a test stand-in.
 
 Entries group by **scope label** (`global`, `editor`, `explorer`) with a heading
 per group; ordering is deterministic (global first, then alphabetical; entries

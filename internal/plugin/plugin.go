@@ -67,10 +67,14 @@ type Command struct {
 // Keymap binds a key sequence to an action. Bindings are layered: a plugin
 // binding never shadows a core binding unless its Priority is strictly higher.
 type Keymap struct {
-	Keys     string // bubbletea key string, e.g. "ctrl+p"
-	Scope    Scope
-	Priority int // higher wins; core bindings sit at CorePriority
-	Action   func(h host.API) tea.Cmd
+	Keys  string // bubbletea key string, e.g. "ctrl+p"
+	Scope Scope
+	// CommandID optionally links this binding to the Command it triggers, so the
+	// help sheet can show a command's shortcut. Empty when the binding is not a
+	// command alias.
+	CommandID string
+	Priority  int // higher wins; core bindings sit at CorePriority
+	Action    func(h host.API) tea.Cmd
 }
 
 // CorePriority is the priority assigned to core (non-plugin) key bindings.

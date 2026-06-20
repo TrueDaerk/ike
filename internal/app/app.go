@@ -117,9 +117,10 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		editor:   editor.New(),
 		host:     host.New(cfg),
 		reg:      reg,
-		// help is a read-only consumer of the registry; the 0080 keymap resolver
-		// is not wired yet, so commands render title-only (nil resolver).
-		help:  help.New(reg, nil, helpMinCol(cfg)),
+		// help reads commands from the registry and resolves each command's
+		// shortcut through the registry's CommandID-linked keymaps (the full 0080
+		// keymap layer supersedes this later).
+		help:  help.New(reg, reg, helpMinCol(cfg)),
 		shell: ui.New(shellConfig(cfg)),
 	}
 	// Restore a saved per-project layout if one matches the live pane set; an

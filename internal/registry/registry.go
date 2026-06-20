@@ -163,6 +163,21 @@ func (r *Registry) Keymaps() []OwnedKeymap {
 	return out
 }
 
+// Binding returns the shortcut bound to command cmdID, if any. Keymaps are
+// priority-sorted, so the first match is the winning binding. It satisfies the
+// help package's BindingResolver, letting the cheat sheet show command keys.
+func (r *Registry) Binding(cmdID string) (string, bool) {
+	if cmdID == "" {
+		return "", false
+	}
+	for _, k := range r.Keymaps() {
+		if k.CommandID == cmdID {
+			return k.Keys, true
+		}
+	}
+	return "", false
+}
+
 // ResolveKey returns the winning binding for keys in the given pane context, if
 // any. The highest-priority scope-matching binding wins.
 func (r *Registry) ResolveKey(keys, ctxID string) (OwnedKeymap, bool) {

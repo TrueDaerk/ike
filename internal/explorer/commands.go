@@ -33,9 +33,9 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.reveal", "Explorer: Reveal Open File", RevealMsg{}),
 		},
 		Keymaps: []plugin.Keymap{
-			keymap(".", ToggleHiddenMsg{}),
-			keymap("r", RefreshMsg{}),
-			keymap("c", CollapseAllMsg{}),
+			keymap(".", "explorer.toggleHidden", ToggleHiddenMsg{}),
+			keymap("r", "explorer.refresh", RefreshMsg{}),
+			keymap("c", "explorer.collapseAll", CollapseAllMsg{}),
 		},
 	}
 }
@@ -50,12 +50,14 @@ func cmd(id, title string, msg tea.Msg) plugin.Command {
 	}
 }
 
-// keymap builds a default, explorer-scoped Keymap that dispatches msg.
-func keymap(keys string, msg tea.Msg) plugin.Keymap {
+// keymap builds a default, explorer-scoped Keymap that dispatches msg and links
+// to cmdID so the help sheet can show the shortcut.
+func keymap(keys, cmdID string, msg tea.Msg) plugin.Keymap {
 	return plugin.Keymap{
-		Keys:     keys,
-		Scope:    plugin.PaneScope(ctxID),
-		Priority: plugin.CorePriority,
-		Action:   func(h host.API) tea.Cmd { return h.Dispatch(msg) },
+		Keys:      keys,
+		Scope:     plugin.PaneScope(ctxID),
+		CommandID: cmdID,
+		Priority:  plugin.CorePriority,
+		Action:    func(h host.API) tea.Cmd { return h.Dispatch(msg) },
 	}
 }
