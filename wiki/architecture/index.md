@@ -8,3 +8,4 @@ Component-level concepts for the IKE codebase.
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)
+* [Themes / Color Schemes](/architecture/themes.md) - planned semantic-slot palette system, built-in themes, the selector & registry (Roadmap 0110)

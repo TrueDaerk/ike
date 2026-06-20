@@ -2,6 +2,11 @@
 
 ## 2026-06-20
 
+- Roadmap 0110 (Themes) planned: added `roadmaps/0110-themes.md` and a stub
+  concept doc `architecture/themes.md`. Semantic-slot theme model mirroring
+  sqlit/Textual; built-in palettes (tokyo-night, nord, gruvbox, rose-pine,
+  catppuccin); selector behind 0040's `[theme]`, registration via 0020. Stub is
+  marked planned — not implemented yet.
 - Roadmap 0035 (Floating Shell) implemented: extracted the one-off help overlay
   chrome into a reusable component. New `internal/overlay` (pure ANSI-aware
   `Center` compositing, moved out of `internal/app`) and `internal/ui`

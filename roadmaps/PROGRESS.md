@@ -16,6 +16,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [ ] [08 — Keybindings & Shortcuts](0080-keybindings.md)
 - [ ] [09 — Project Switching](0090-project-switching.md)
 - [ ] [10 — LSP Support](0100-lsp.md)
+- [ ] [11 — Themes / Color Schemes](0110-themes.md)
 - [ ] [99 — Plugins: WASM (Runtime, Sandboxed)](9900-plugins-wasm.md)
 
 ## Dependency notes
@@ -41,6 +42,13 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
   the tiling. Reuses **04**'s discovery/write seam for the store when present.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
+- **11** owns the palette behind **04**'s `[theme]` selector. `internal/theme` is
+  leaf-level (lipgloss only). Themes register through **02** as an additive
+  `Capabilities.Themes []Theme` capability (built-ins are a compile-in plugin);
+  renderers in app/explorer/editor/help/ui/overlay drop their color literals and
+  read a `*theme.Palette`. Live re-theme rides **04**'s `ConfigReloadedMsg`.
+  Syntax-token slot *names* live here; their tree-sitter/LSP wiring stays in **06**.
+  Model mirrors sqlit/Textual's semantic-slot `Theme`.
 
 ## Known gaps / future roadmaps
 
