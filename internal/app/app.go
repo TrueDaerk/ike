@@ -109,9 +109,11 @@ func New() Model {
 // "plugins.<id>.enabled" before the registry is queried.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	applyPluginConfig(reg, cfg)
+	exp := explorer.New(".")
+	exp.Configure(cfg)
 	m := Model{
 		focus:    focusExplorer,
-		explorer: explorer.New("."),
+		explorer: exp,
 		editor:   editor.New(),
 		host:     host.New(cfg),
 		reg:      reg,
@@ -191,7 +193,7 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+func (m Model) Init() tea.Cmd { return m.explorer.Init() }
 
 // Update owns global keys (quit, focus switch), routes open/close messages, and
 // forwards everything else to the focused pane.
@@ -208,6 +210,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path)
+
+	case explorer.Msg:
+		// Scan results and explorer command messages (toggle hidden, refresh,
+		// collapse-all, reveal) are routed back into the tree's own Update.
+		var cmd tea.Cmd
+		m.explorer, cmd = m.explorer.Update(msg)
+		return m, cmd
 
 	case host.OpenFileRequest:
 		return m.openPath(msg.Path)

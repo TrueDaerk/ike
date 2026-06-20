@@ -30,6 +30,7 @@ type node struct {
 	depth    int
 	expanded bool
 	loaded   bool
+	loading  bool // a scan Cmd is in flight for this directory
 	children []*node
 }
 
@@ -46,46 +47,95 @@ type Model struct {
 	height  int
 	focused bool
 	err     error
+
+	showHidden bool       // render dot-entries; toggled by explorer.toggleHidden
+	indent     int        // spaces per depth level (config explorer.tree_indent)
+	sort       string     // ordering within a level (config explorer.sort)
+	colors     colorTable // per-filetype colour resolution
 }
 
-// New creates an explorer rooted at dir. The root is expanded immediately so its
-// children are visible. A read error is retained and shown in place of the tree.
+// New creates an explorer rooted at dir. The root is marked expanded and a scan
+// of its children is kicked off by Init; until the scan result arrives the tree
+// shows just the root row. A read error is retained and shown in place of the
+// tree.
 func New(dir string) Model {
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		abs = dir
 	}
 	root := &node{
-		name:  filepath.Base(abs),
-		path:  abs,
-		isDir: true,
-		depth: 0,
+		name:     filepath.Base(abs),
+		path:     abs,
+		isDir:    true,
+		depth:    0,
+		expanded: true,
+		loading:  true,
 	}
-	m := Model{root: root, hover: -1}
-	m.expand(root)
+	m := Model{
+		root:   root,
+		hover:  -1,
+		indent: 2,
+		sort:   "name",
+		colors: defaultColors,
+	}
 	m.rebuild()
 	return m
 }
 
-// loadChildren reads a directory node's entries once, sorted directories-first
-// then alphabetically.
-func (m *Model) loadChildren(n *node) {
-	if n.loaded || !n.isDir {
+// ScanDoneMsg carries the result of a directory scan back into the model. It is
+// dispatched by the Cmd expand/refresh return; the root model routes it here.
+type ScanDoneMsg struct {
+	Path    string
+	Entries []scanEntry
+	Err     error
+}
+
+func (ScanDoneMsg) explorerMsg() {}
+
+// scanEntry is the minimal directory entry a scan reports; node construction
+// (depth, sort) happens on the update thread, not in the Cmd.
+type scanEntry struct {
+	name  string
+	isDir bool
+}
+
+// scanCmd reads path's entries off the update loop and returns them as a
+// ScanDoneMsg, so a slow or huge directory never blocks the UI.
+func scanCmd(path string) tea.Cmd {
+	return func() tea.Msg {
+		des, err := os.ReadDir(path)
+		if err != nil {
+			return ScanDoneMsg{Path: path, Err: err}
+		}
+		es := make([]scanEntry, len(des))
+		for i, de := range des {
+			es[i] = scanEntry{name: de.Name(), isDir: de.IsDir()}
+		}
+		return ScanDoneMsg{Path: path, Entries: es}
+	}
+}
+
+// applyScan installs a completed scan's children onto the matching node and
+// rebuilds the visible rows. Unknown paths (a node collapsed/refreshed before
+// the scan returned) are ignored.
+func (m *Model) applyScan(msg ScanDoneMsg) {
+	n := nodeByPath(m.root, msg.Path)
+	if n == nil {
 		return
 	}
+	n.loading = false
 	n.loaded = true
-	des, err := os.ReadDir(n.path)
-	if err != nil {
-		m.err = err
+	if msg.Err != nil {
+		m.err = msg.Err
 		return
 	}
 	m.err = nil
-	children := make([]*node, 0, len(des))
-	for _, de := range des {
+	children := make([]*node, 0, len(msg.Entries))
+	for _, e := range msg.Entries {
 		children = append(children, &node{
-			name:  de.Name(),
-			path:  filepath.Join(n.path, de.Name()),
-			isDir: de.IsDir(),
+			name:  e.name,
+			path:  filepath.Join(n.path, e.name),
+			isDir: e.isDir,
 			depth: n.depth + 1,
 		})
 	}
@@ -96,15 +146,34 @@ func (m *Model) loadChildren(n *node) {
 		return children[i].name < children[j].name
 	})
 	n.children = children
+	m.rebuild()
 }
 
-// expand opens a directory node, loading its children on first use.
-func (m *Model) expand(n *node) {
-	if !n.isDir {
-		return
+// nodeByPath finds the node with the given path in the subtree rooted at n.
+func nodeByPath(n *node, path string) *node {
+	if n.path == path {
+		return n
 	}
-	m.loadChildren(n)
+	for _, c := range n.children {
+		if found := nodeByPath(c, path); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+// expand opens a directory node, dispatching a scan Cmd on first use. The
+// returned Cmd is nil when nothing needs scanning (leaf, or already loaded).
+func (m *Model) expand(n *node) tea.Cmd {
+	if !n.isDir {
+		return nil
+	}
 	n.expanded = true
+	if n.loaded || n.loading {
+		return nil
+	}
+	n.loading = true
+	return scanCmd(n.path)
 }
 
 // rebuild flattens the visible tree into m.rows and clamps the cursor.
@@ -121,15 +190,22 @@ func (m *Model) rebuild() {
 }
 
 // appendVisible walks the tree depth-first, emitting each node and recursing into
-// expanded directories.
+// expanded directories. Hidden (dot-prefixed) entries are skipped unless
+// showHidden is on; the root is always emitted.
 func (m *Model) appendVisible(n *node) {
 	m.rows = append(m.rows, n)
 	if n.isDir && n.expanded {
 		for _, c := range n.children {
+			if !m.showHidden && isHidden(c.name) {
+				continue
+			}
 			m.appendVisible(c)
 		}
 	}
 }
+
+// isHidden reports whether name is a hidden (dot-prefixed) entry.
+func isHidden(name string) bool { return strings.HasPrefix(name, ".") }
 
 // Root returns the fixed project base directory.
 func (m Model) Root() string { return m.root.path }
@@ -144,27 +220,42 @@ func (m *Model) SetSize(width, height int) {
 // SetFocused toggles whether this pane receives key input.
 func (m *Model) SetFocused(f bool) { m.focused = f }
 
-// Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return nil }
+// Init implements tea.Model: it kicks off the root directory scan.
+func (m Model) Init() tea.Cmd { return scanCmd(m.root.path) }
 
-// Update handles navigation/expand keys and returns an OpenFileMsg command when a
-// file is opened.
+// Update handles navigation/expand keys, scan results, and explorer command
+// messages. It returns a Cmd for any work that must run off the update loop
+// (directory scans) or be routed onward (OpenFileMsg).
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
-	key, ok := msg.(tea.KeyMsg)
-	if !ok {
+	switch msg := msg.(type) {
+	case ScanDoneMsg:
+		m.applyScan(msg)
 		return m, nil
-	}
-	switch key.String() {
-	case "down", "j":
-		m.moveCursor(1)
-	case "up", "k":
-		m.moveCursor(-1)
-	case "enter":
-		return m.activate()
-	case "l", "right":
-		return m.expandOrOpen()
-	case "h", "left":
-		m.collapseOrParent()
+	case ToggleHiddenMsg:
+		m.showHidden = !m.showHidden
+		m.rebuild()
+		return m, nil
+	case CollapseAllMsg:
+		m.collapseAll()
+		return m, nil
+	case RefreshMsg:
+		return m, m.refresh()
+	case RevealMsg:
+		m.reveal()
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "down", "j":
+			m.moveCursor(1)
+		case "up", "k":
+			m.moveCursor(-1)
+		case "enter":
+			return m.activate()
+		case "l", "right":
+			return m.expandOrOpen()
+		case "h", "left":
+			m.collapseOrParent()
+		}
 	}
 	return m, nil
 }
@@ -197,13 +288,14 @@ func (m Model) activate() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if n.isDir {
+		var cmd tea.Cmd
 		if n.expanded {
 			n.expanded = false
 		} else {
-			m.expand(n)
+			cmd = m.expand(n)
 		}
 		m.rebuild()
-		return m, nil
+		return m, cmd
 	}
 	return m, openCmd(n.path)
 }
@@ -219,9 +311,9 @@ func (m Model) expandOrOpen() (Model, tea.Cmd) {
 		return m, openCmd(n.path)
 	}
 	if !n.expanded {
-		m.expand(n)
+		cmd := m.expand(n)
 		m.rebuild()
-		return m, nil
+		return m, cmd
 	}
 	if len(n.children) > 0 {
 		m.cursor++ // first child is the next visible row
@@ -261,6 +353,76 @@ func openCmd(path string) tea.Cmd {
 	return func() tea.Msg { return OpenFileMsg{Path: path} }
 }
 
+// collapseAll folds the whole tree back to the root and parks the cursor there.
+func (m *Model) collapseAll() {
+	collapse(m.root)
+	m.root.expanded = true // the root stays open; the tree is anchored to it
+	m.cursor = 0
+	m.offset = 0
+	m.rebuild()
+}
+
+func collapse(n *node) {
+	n.expanded = false
+	for _, c := range n.children {
+		collapse(c)
+	}
+}
+
+// refresh invalidates the selected directory's cache (or its parent's, when a
+// file is selected) and re-scans it, so external changes show up. Expansion
+// state is preserved; the scan repopulates children in place.
+func (m *Model) refresh() tea.Cmd {
+	n := m.current()
+	if n == nil {
+		n = m.root
+	}
+	if !n.isDir {
+		n = m.parentOf(n)
+	}
+	if n == nil {
+		n = m.root
+	}
+	n.loaded = false
+	n.loading = true
+	n.children = nil
+	m.rebuild()
+	return scanCmd(n.path)
+}
+
+// reveal moves the cursor onto the row of the currently open file, if it is
+// visible in the tree. (Auto-expanding collapsed ancestors is left to a later
+// pass; today it locates an already-visible active row.)
+func (m *Model) reveal() {
+	if m.active == "" {
+		return
+	}
+	for i, n := range m.rows {
+		if n.path == m.active {
+			m.cursor = i
+			m.clampScroll()
+			return
+		}
+	}
+}
+
+// parentOf returns the parent node of target, or nil for the root / not found.
+func (m *Model) parentOf(target *node) *node {
+	var find func(n *node) *node
+	find = func(n *node) *node {
+		for _, c := range n.children {
+			if c == target {
+				return n
+			}
+			if p := find(c); p != nil {
+				return p
+			}
+		}
+		return nil
+	}
+	return find(m.root)
+}
+
 // clampScroll keeps the cursor within the visible window.
 func (m *Model) clampScroll() {
 	_, textH, _, _, _ := m.viewport()
@@ -278,30 +440,41 @@ func (m *Model) clampScroll() {
 	}
 }
 
-// text is the plain (unstyled) content of a row: depth indent, an expand marker,
-// and the name (directories gain a trailing slash). It is the single source of
-// truth for both width measurement and rendering.
-func (n *node) text() string {
-	marker := "  "
-	if n.isDir {
-		if n.expanded {
-			marker = "▾ "
-		} else {
-			marker = "▸ "
-		}
+// rowText is the plain (unstyled) content of a row: indent guides for each
+// ancestor level, an expand marker, and the name (directories gain a trailing
+// slash). It is the single source of truth for both width measurement and
+// rendering, so clipping and the scrollbars agree.
+func (m Model) rowText(n *node) string {
+	var b strings.Builder
+	for d := 0; d < n.depth; d++ {
+		b.WriteString("│")
+		b.WriteString(strings.Repeat(" ", maxz(m.indent-1)))
 	}
-	label := n.name
+	b.WriteString(marker(n))
+	b.WriteString(n.name)
 	if n.isDir {
-		label += "/"
+		b.WriteString("/")
 	}
-	return strings.Repeat("  ", n.depth) + marker + label
+	return b.String()
+}
+
+// marker is the two-cell expand glyph for a row: a caret for directories, blank
+// for files.
+func marker(n *node) string {
+	if !n.isDir {
+		return "  "
+	}
+	if n.expanded {
+		return "▾ "
+	}
+	return "▸ "
 }
 
 // contentWidth is the display width of the widest visible row.
 func (m Model) contentWidth() int {
 	w := 0
 	for _, n := range m.rows {
-		if cw := ansi.StringWidth(n.text()); cw > w {
+		if cw := ansi.StringWidth(m.rowText(n)); cw > w {
 			w = cw
 		}
 	}
@@ -476,15 +649,26 @@ func clamp(v, lo, hi int) int {
 }
 
 // Scrollbar styling: a dim track with a brighter, heavier thumb, in the spirit
-// of table TUIs that surface overflow on the right and bottom edges.
+// of table TUIs that surface overflow on the right and bottom edges. Highlight
+// styles overlay the per-filetype colour: the cursor and open-file rows replace
+// it, the hover keeps the foreground colour and adds a background.
 var (
 	barTrack    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	barThumb    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	selStyle    = lipgloss.NewStyle().Background(lipgloss.Color("69")).Foreground(lipgloss.Color("231")).Bold(true)
-	hoverStyle  = lipgloss.NewStyle().Background(lipgloss.Color("236"))
 	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("215")).Bold(true)
-	dirStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	hoverBg     = lipgloss.Color("236")
 )
+
+// nodeStyle is a row's base style: its per-filetype colour, plus italics for
+// hidden (dot-prefixed) entries.
+func (m Model) nodeStyle(n *node) lipgloss.Style {
+	s := m.colors.style(n)
+	if isHidden(n.name) {
+		s = s.Italic(true)
+	}
+	return s
+}
 
 // View renders the tree, clipping each row to the horizontal window and drawing
 // vertical/horizontal scrollbars whenever the content overflows the pane.
@@ -507,11 +691,20 @@ func (m Model) View() string {
 		var line string
 		if i < len(m.rows) {
 			n := m.rows[i]
-			vis := ansi.Cut(n.text(), offX, offX+textW)
+			vis := ansi.Cut(m.rowText(n), offX, offX+textW)
 			if pad := textW - ansi.StringWidth(vis); pad > 0 {
 				vis += strings.Repeat(" ", pad)
 			}
-			line = styleFor(m.rowKind(i)).Render(vis)
+			switch m.rowKind(i) {
+			case rowSelected:
+				line = selStyle.Render(vis)
+			case rowActive:
+				line = activeStyle.Render(vis)
+			case rowHover:
+				line = m.nodeStyle(n).Background(hoverBg).Render(vis)
+			default:
+				line = m.nodeStyle(n).Render(vis)
+			}
 		} else {
 			line = strings.Repeat(" ", textW)
 		}
@@ -564,21 +757,6 @@ func (m Model) rowKind(i int) rowKind {
 		return rowDir
 	default:
 		return rowPlain
-	}
-}
-
-func styleFor(k rowKind) lipgloss.Style {
-	switch k {
-	case rowSelected:
-		return selStyle
-	case rowHover:
-		return hoverStyle
-	case rowActive:
-		return activeStyle
-	case rowDir:
-		return dirStyle
-	default:
-		return lipgloss.NewStyle()
 	}
 }
 

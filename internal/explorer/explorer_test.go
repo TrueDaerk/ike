@@ -38,10 +38,41 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+// pumpScans drives the async scan loop to quiescence: it runs cmd, feeds any
+// ScanDoneMsg straight back into Update (so directory children load), and stops
+// at the first non-scan message, returning a Cmd that re-emits it so callers can
+// still inspect an OpenFileMsg. Directory scans are a tea.Cmd now, so tests must
+// pump them to observe loaded children.
+func pumpScans(m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+	for cmd != nil {
+		msg := cmd()
+		if msg == nil {
+			return m, nil
+		}
+		if sd, ok := msg.(ScanDoneMsg); ok {
+			m, cmd = m.Update(sd)
+			continue
+		}
+		return m, func() tea.Msg { return msg }
+	}
+	return m, nil
+}
+
+// mounted builds an explorer rooted at dir, sizes it, and drains the initial
+// root scan so the children are visible.
+func mounted(t *testing.T, dir string, w, h int) Model {
+	t.Helper()
+	m := New(dir)
+	m.SetSize(w, h)
+	m, _ = pumpScans(m, m.Init())
+	return m
+}
+
 func send(m Model, keys ...tea.KeyMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, k := range keys {
 		m, cmd = m.Update(k)
+		m, cmd = pumpScans(m, cmd)
 	}
 	return m, cmd
 }
@@ -57,8 +88,7 @@ func names(m Model) []string {
 
 func TestRootExpandedWithChildren(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	// row 0 = root, then sub/ (dir first), a.txt, b.txt
 	want := []string{filepath.Base(root), "sub", "a.txt", "b.txt"}
 	got := names(m)
@@ -74,8 +104,7 @@ func TestRootExpandedWithChildren(t *testing.T) {
 
 func TestExpandCollapseDirInPlace(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
 	// cursor on "sub" (index 1), expand it: c.txt appears beneath, root unchanged
 	m, _ = send(m, key("j"), key("enter"))
@@ -98,8 +127,7 @@ func TestExpandCollapseDirInPlace(t *testing.T) {
 
 func TestNeverAscendsAboveRoot(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
 	// h on the root node must not change the root or move anywhere illegal
 	m, _ = send(m, key("h"), key("h"), key("h"))
@@ -113,8 +141,7 @@ func TestNeverAscendsAboveRoot(t *testing.T) {
 
 func TestCollapseWithH(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
 	// expand sub, then h on c.txt jumps to parent (sub), h again collapses sub
 	m, _ = send(m, key("j"), key("l")) // sub expanded
@@ -147,8 +174,7 @@ func tall(t *testing.T, n int) string {
 
 func TestMouseClickSelectsRow(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
 	// rows: root(0) sub(1) a.txt(2) b.txt(3); click local y=2 selects a.txt.
 	m, cmd := m.MouseClick(0, 2)
@@ -165,11 +191,11 @@ func TestMouseClickSelectsRow(t *testing.T) {
 
 func TestMouseClickTogglesDir(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
-	// click "sub" (y=1) expands it in place; c.txt appears beneath.
-	m, _ = m.MouseClick(0, 1)
+	// click "sub" (y=1) expands it in place; c.txt appears beneath (scan is async).
+	m, c := m.MouseClick(0, 1)
+	m, _ = pumpScans(m, c)
 	if got := names(m); len(got) != 5 || got[2] != "c.txt" {
 		t.Fatalf("after click rows = %v", names(m))
 	}
@@ -182,8 +208,7 @@ func TestMouseClickTogglesDir(t *testing.T) {
 
 func TestWheelScrollsWithoutMovingCursor(t *testing.T) {
 	root := tall(t, 30)
-	m := New(root)
-	m.SetSize(30, 8) // 31 rows into 8 → vertical overflow
+	m := mounted(t, root, 30, 8) // 31 rows into 8 → vertical overflow
 	cur := m.cursor
 	m.ScrollBy(5)
 	if m.offset != 5 {
@@ -201,21 +226,19 @@ func TestWheelScrollsWithoutMovingCursor(t *testing.T) {
 
 func TestVerticalScrollbarRendersOnOverflow(t *testing.T) {
 	root := tall(t, 30)
-	m := New(root)
-	m.SetSize(30, 8)
+	m := mounted(t, root, 30, 8)
 	_, _, needV, _, _ := m.viewport()
 	if !needV {
 		t.Fatal("expected vertical overflow")
 	}
-	if !strings.ContainsAny(m.View(), "┃│") {
-		t.Fatalf("vertical scrollbar glyphs missing:\n%s", m.View())
+	if !strings.Contains(m.View(), "┃") { // the heavy thumb glyph (│ also appears as an indent guide)
+		t.Fatalf("vertical scrollbar thumb missing:\n%s", m.View())
 	}
 }
 
 func TestScrollbarHiddenWhenFits(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(40, 20)
+	m := mounted(t, root, 40, 20)
 	if _, _, needV, needH, _ := m.viewport(); needV || needH {
 		t.Fatalf("no scrollbars expected for small tree: V=%v H=%v", needV, needH)
 	}
@@ -223,8 +246,7 @@ func TestScrollbarHiddenWhenFits(t *testing.T) {
 
 func TestClickVerticalScrollbarJumps(t *testing.T) {
 	root := tall(t, 30)
-	m := New(root)
-	m.SetSize(30, 8)
+	m := mounted(t, root, 30, 8)
 	textW, textH, needV, _, _ := m.viewport()
 	if !needV {
 		t.Fatal("need vertical bar")
@@ -239,8 +261,7 @@ func TestClickVerticalScrollbarJumps(t *testing.T) {
 
 func TestHoverHighlightsRowUnderPointer(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetHoverAt(0, 2) // a.txt
 	if m.hover != 2 {
 		t.Fatalf("hover = %d want 2", m.hover)
@@ -259,8 +280,7 @@ func TestHoverHighlightsRowUnderPointer(t *testing.T) {
 
 func TestActiveFileHighlighted(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(false) // active highlight is independent of focus
 	// rows: root(0) sub(1) a.txt(2) b.txt(3)
 	m.SetActive(filepath.Join(root, "a.txt"))
@@ -278,8 +298,7 @@ func TestActiveFileHighlighted(t *testing.T) {
 
 func TestHighlightPrecedence(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
 	m.SetActive(filepath.Join(root, "a.txt"))
 	// a.txt is row 2: active by file, hover by pointer, selected by cursor.
@@ -302,8 +321,7 @@ func TestHorizontalScrollClampsAndShowsBar(t *testing.T) {
 	root := t.TempDir()
 	long := "this_is_a_very_long_file_name_that_overflows_the_pane.txt"
 	mustWrite(t, filepath.Join(root, long), "x")
-	m := New(root)
-	m.SetSize(12, 20) // narrower than the long name
+	m := mounted(t, root, 12, 20) // narrower than the long name
 	if _, _, _, needH, _ := m.viewport(); !needH {
 		t.Fatal("expected horizontal overflow")
 	}
@@ -327,8 +345,7 @@ func TestHorizontalScrollClampsAndShowsBar(t *testing.T) {
 
 func TestOpenFileEmitsMsg(t *testing.T) {
 	root := tree(t)
-	m := New(root)
-	m.SetSize(30, 20)
+	m := mounted(t, root, 30, 20)
 	// move down to a.txt (root, sub, a.txt = index 2) and open
 	m, _ = send(m, key("j"), key("j"))
 	if m.current().name != "a.txt" {

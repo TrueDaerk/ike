@@ -2,6 +2,16 @@
 
 ## 2026-06-20
 
+- Explorer (Roadmap 0050): config-driven per-filetype colours (`colors.go`,
+  glob→ext→`dir`/`default` resolution from `[explorer.colors]`), italic hidden
+  entries with a `explorer.toggleHidden` runtime toggle (default off via
+  `explorer.show_hidden`), indent guides sized by `explorer.tree_indent`, and
+  async directory scans (`scanCmd`/`ScanDoneMsg`, no blocking IO in `Update`).
+  Added registry commands + default keymaps (`toggleHidden` `.`, `refresh` `r`,
+  `collapseAll` `c`, `reveal`) that dispatch explorer `Msg`s the root routes
+  back. `host.Config` gained `Keys()` so the explorer can enumerate the dynamic
+  `[explorer.colors]` section. Only the optional file-ops milestone remains.
+
 - Explorer: hover highlight (mouse motion), an "open file" highlight distinct
   from cursor/hover (`SetActive`, set on open and cleared on editor close), and
   shift-wheel / horizontal-wheel sideways scrolling (`ScrollXBy`). Row styling is

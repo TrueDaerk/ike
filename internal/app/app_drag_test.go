@@ -21,7 +21,18 @@ func sized(t *testing.T, w, h int) Model {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
-	return out.(Model)
+	m = out.(Model)
+	// Drain the explorer's async root scan so the tree has visible rows.
+	for cmd := m.Init(); cmd != nil; {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		out, _ := m.Update(msg)
+		m = out.(Model)
+		cmd = nil
+	}
+	return m
 }
 
 func press(x, y int) tea.MouseMsg {

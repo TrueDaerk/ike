@@ -78,16 +78,19 @@ over that flat slice. File opening dispatches the registry's open-file flow via
 
 This roadmap owns these keys (consumed via `internal/config`):
 
+The concrete key names are owned by the `internal/config` schema (Roadmap 0040);
+the explorer consumes them through the merged config. As implemented:
+
 ```toml
 [explorer]
-showHidden   = false   # initial hidden-file visibility (toggleable at runtime)
-sortDirsFirst = true   # directories before files within a level
-indentWidth  = 2       # spaces per depth level
-showIcons    = false   # reserve; nerd-font glyphs may arrive later
+show_hidden = false   # initial hidden-file visibility (toggleable at runtime)
+tree_indent = 2       # spaces per depth level
+sort        = "name"  # ordering within a level (directories are always first)
+git_status  = true    # reserved for git decorations (later)
 
 # extension/glob -> colour. Keys are bare extensions ("go") or globs
-# ("*.test.go"); values are theme colour names or hex. "dir" and "default"
-# are required fallbacks.
+# ("*.test.go"); values are colour names or hex. "dir" and "default" are the
+# required fallbacks.
 [explorer.colors]
 dir     = "blue"
 default = "white"
@@ -100,22 +103,23 @@ lock    = "gray"
 ```
 
 Globs are matched before bare extensions; `dir` styles directory rows; anything
-unmatched falls back to `default`.
+unmatched falls back to `default`. Directories are always sorted first; `sort`
+selects the within-level ordering (`name` today).
 
 ## Milestones
 
-- [ ] Tree model: root `Node`, lazy child load + cache, expand/collapse state.
-- [ ] Flatten + navigation: `j`/`k` + up/down over the visible flat list, cursor clamping, scroll on overflow.
-- [ ] Enter behaviour: toggle on a directory, open via registry `FileHandler` on a file; `h`/left collapses (no `..` row).
-- [ ] Directory scan as `tea.Cmd`: dirs-first sort, name sort, no UI blocking.
-- [ ] Hidden-file toggle: `showHidden` default from config + runtime `explorer.toggleHidden`.
-- [ ] Per-filetype colours: parse `[explorer.colors]`, glob-then-extension-then-fallback resolution in `colors.go`.
-- [ ] Rendering: indent guides, expand/collapse glyphs, colour applied, selected-row highlight.
-- [ ] Registry commands + default keymaps: `reveal`, `refresh`, `collapseAll`, `toggleHidden` registered via `internal/registry`.
+- [x] Tree model: root `Node`, lazy child load + cache, expand/collapse state.
+- [x] Flatten + navigation: `j`/`k` + up/down over the visible flat list, cursor clamping, scroll on overflow.
+- [x] Enter behaviour: toggle on a directory, open via registry `FileHandler` on a file; `h`/left collapses (no `..` row).
+- [x] Directory scan as `tea.Cmd`: dirs-first sort, name sort, no UI blocking.
+- [x] Hidden-file toggle: `showHidden` default from config + runtime `explorer.toggleHidden`.
+- [x] Per-filetype colours: parse `[explorer.colors]`, glob-then-extension-then-fallback resolution in `colors.go`.
+- [x] Rendering: indent guides, expand/collapse glyphs, colour applied, selected-row highlight.
+- [x] Registry commands + default keymaps: `reveal`, `refresh`, `collapseAll`, `toggleHidden` registered via `internal/registry`.
 - [ ] File operations (optional): `newFile`, `rename`, `delete` as commands with confirmation msgs; refresh affected subtree afterward.
-- [ ] Refresh: invalidate cache for selected subtree (or root) and re-scan, preserving expansion where possible.
-- [ ] Tests: navigation, expand/collapse, flatten correctness, no-`..` invariant, hidden toggle, colour resolution (glob/ext/fallback), command registration, file-op round-trips.
-- [ ] Wiki: add/refresh the explorer concept doc under `wiki/` (frontmatter `type`, `resource: internal/explorer`), document the `[explorer]` config keys, bump `timestamp`, add a `log.md` entry.
+- [x] Refresh: invalidate cache for selected subtree (or root) and re-scan, preserving expansion where possible.
+- [x] Tests: navigation, expand/collapse, flatten correctness, no-`..` invariant, hidden toggle, colour resolution (glob/ext/fallback), command registration, file-op round-trips. *(file-op tests deferred with the optional file-ops milestone)*
+- [x] Wiki: add/refresh the explorer concept doc under `wiki/` (frontmatter `type`, `resource: internal/explorer`), document the `[explorer]` config keys, bump `timestamp`, add a `log.md` entry.
 
 ## Out of scope
 

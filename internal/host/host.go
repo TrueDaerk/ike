@@ -30,6 +30,9 @@ type API interface {
 // Config is read-only key/value configuration access for plugins.
 type Config interface {
 	Get(key string) (value string, ok bool)
+	// Keys lists every configuration key, so a consumer can enumerate a dynamic
+	// section (e.g. all "explorer.colors.*" entries) it cannot name in advance.
+	Keys() []string
 }
 
 // OpenFileRequest is emitted by API.OpenFile. The root model handles it by
@@ -55,6 +58,15 @@ type MapConfig map[string]string
 func (c MapConfig) Get(key string) (string, bool) {
 	v, ok := c[key]
 	return v, ok
+}
+
+// Keys implements Config.
+func (c MapConfig) Keys() []string {
+	keys := make([]string, 0, len(c))
+	for k := range c {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 // FromConfig adapts a typed *config.Config (Roadmap 0040) to the read-only
