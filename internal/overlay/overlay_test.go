@@ -86,3 +86,33 @@ func TestCenterPreservesStyledBaseAroundBox(t *testing.T) {
 		}
 	}
 }
+
+func TestPlacePutsBoxAtPosition(t *testing.T) {
+	base := baseCanvas('.', 10, 5)
+	out := Place(base, "AB", 3, 1, 10, 5)
+	lines := strings.Split(out, "\n")
+	if ansi.Strip(lines[0]) != ".........." {
+		t.Fatalf("row 0 should be untouched: %q", lines[0])
+	}
+	if ansi.Strip(lines[1]) != "...AB....." {
+		t.Fatalf("box not placed at (3,1): %q", ansi.Strip(lines[1]))
+	}
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w != 10 {
+			t.Fatalf("row width = %d, want 10", w)
+		}
+	}
+}
+
+func TestPlaceClipsOffCanvasRows(t *testing.T) {
+	base := baseCanvas('.', 6, 3)
+	// A two-line box placed on the last row: the second line is clipped.
+	out := Place(base, "X\nY", 0, 2, 6, 3)
+	lines := strings.Split(out, "\n")
+	if len(lines) != 3 {
+		t.Fatalf("canvas grew to %d rows", len(lines))
+	}
+	if s := ansi.Strip(lines[2]); s[:1] != "X" {
+		t.Fatalf("row 2 should start with X: %q", s)
+	}
+}

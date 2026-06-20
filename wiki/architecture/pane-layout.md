@@ -60,8 +60,13 @@ draggable. Wheel events are ignored by the drag machine.
 tinted (and prefixed with `⤴`), the pane under the cursor is tinted as the drop
 target with its title showing the resolved zone (`◧ left` / `right ◨` / `⬒ top`
 / `⬓ bottom`), and the status line narrates `MOVE <src> → <zone> of <target>`.
-Resize feedback is the divider tracking the cursor in real time as the ratio
-updates per motion frame.
+On top of that a **translucent ghost box** (a matte, dimmed shade of the
+drop-target accent) is composited over the exact region the pane would occupy on
+release — the relevant half of the target pane per the resolved zone — labelled
+with the dragged pane. It is drawn with `overlay.Place`, the arbitrary-position
+sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
+seam). Resize feedback is the divider tracking the cursor in real time as the
+ratio updates per motion frame.
 
 ## Persistence
 

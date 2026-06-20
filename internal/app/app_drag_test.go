@@ -97,6 +97,36 @@ func TestMoveDragShowsFeedback(t *testing.T) {
 	}
 }
 
+func TestMoveDragShowsGhostBox(t *testing.T) {
+	m := sized(t, 100, 40)
+	m = step(m, press(2, 0))
+	edRect := m.lay.Panes[ctxEditor]
+	// hover the right half of the editor → ghost on its right half.
+	hx, hy := edRect.X+edRect.W-2, edRect.Y+edRect.H/2
+	m = step(m, motion(hx, hy))
+
+	box, gx, gy, ok := m.moveGhost()
+	if !ok {
+		t.Fatal("expected a ghost box over a valid drop target")
+	}
+	if !strings.Contains(box, "EXPLORER") {
+		t.Fatalf("ghost box should label the dragged pane:\n%s", box)
+	}
+	// Right zone → ghost sits in the right half of the editor pane.
+	if gx <= edRect.X+edRect.W/2-1 {
+		t.Fatalf("ghost x=%d not in editor's right half (pane x=%d w=%d)", gx, edRect.X, edRect.W)
+	}
+	if gy != edRect.Y {
+		t.Fatalf("ghost y=%d, want pane top %d", gy, edRect.Y)
+	}
+	// No ghost when the cursor is over the source pane itself.
+	exRect := m.lay.Panes[ctxExplorer]
+	m = step(m, motion(exRect.X+1, exRect.Y+exRect.H/2))
+	if _, _, _, ok := m.moveGhost(); ok {
+		t.Fatal("no ghost expected while hovering the source pane")
+	}
+}
+
 func TestDragPersistsAndRestores(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)

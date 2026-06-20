@@ -451,10 +451,63 @@ func (m Model) View() string {
 	}
 	body := m.renderNode(m.tree, m.bodyRect())
 	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
+	// During a move, draw a translucent ghost box over the region the pane would
+	// occupy on release, so the drop is previewed in place.
+	if box, x, y, ok := m.moveGhost(); ok {
+		base = overlay.Place(base, box, x, y, m.width, m.height)
+	}
 	if m.shell.IsOpen() {
 		return overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
 	return base
+}
+
+// moveGhost computes the preview box for an in-flight move: the drop region of
+// the pane under the cursor and a matte box labelled with the dragged pane. It
+// reports ok=false when no move is active or the cursor is not over a valid drop
+// target.
+func (m Model) moveGhost() (box string, x, y int, ok bool) {
+	d := m.drag
+	if d == nil || d.kind != dragMove {
+		return "", 0, 0, false
+	}
+	tgt, found := m.lay.PaneAt(d.curX, d.curY)
+	if !found || tgt == d.srcPane {
+		return "", 0, 0, false
+	}
+	gr := dropRect(m.lay.Panes[tgt], layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY))
+	if gr.W < 3 || gr.H < 3 {
+		return "", 0, 0, false
+	}
+	return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane)), gr.X, gr.Y, true
+}
+
+// dropRect is the sub-rectangle of r the dragged pane would occupy for zone z:
+// a half of r along the zone's axis.
+func dropRect(r layout.Rect, z layout.Zone) layout.Rect {
+	switch z {
+	case layout.ZoneLeft:
+		return layout.Rect{X: r.X, Y: r.Y, W: r.W / 2, H: r.H}
+	case layout.ZoneRight:
+		w := r.W / 2
+		return layout.Rect{X: r.X + r.W - w, Y: r.Y, W: w, H: r.H}
+	case layout.ZoneTop:
+		return layout.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H / 2}
+	default: // ZoneBottom
+		h := r.H / 2
+		return layout.Rect{X: r.X, Y: r.Y + r.H - h, W: r.W, H: h}
+	}
+}
+
+// ghostBox renders the matte drop-preview box at size w×h with a centered label.
+func ghostBox(w, h int, label string) string {
+	inner := lipgloss.Place(w-2, h-2, lipgloss.Center, lipgloss.Center,
+		lipgloss.NewStyle().Foreground(lipgloss.Color(colorGhost)).Render("⤴ "+label))
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(colorGhost)).
+		Faint(true).
+		Render(inner)
 }
 
 // renderNode walks the layout tree, rendering each leaf into its rectangle and
@@ -482,6 +535,9 @@ const (
 	colorPaneBlur   = "240" // unfocused pane border
 	colorMoveSource = "203" // the pane currently being moved
 	colorDropTarget = "220" // the pane a release would drop onto
+	// Muted variants used for the translucent ghost preview box drawn at the
+	// drop region during a move — a dimmer shade of the drop-target accent.
+	colorGhost = "136" // matte gold, the drop-preview box
 )
 
 // renderPane renders a single leaf at its outer rectangle, mapping the pane id
