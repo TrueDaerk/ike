@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/registry"
@@ -36,6 +37,50 @@ func release(x, y int) tea.MouseMsg {
 func step(m Model, msg tea.Msg) Model {
 	out, _ := m.Update(msg)
 	return out.(Model)
+}
+
+func TestMouseClickFocusesExplorer(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.toggleFocus() // move focus to the editor
+	if m.focus != focusEditor {
+		t.Fatal("setup: focus should be editor")
+	}
+	r := m.lay.Panes[ctxExplorer]
+	// press the first content cell (inside border, padding, and title row).
+	m = step(m, press(r.X+paneContentX, r.Y+paneContentY))
+	if m.focus != focusExplorer {
+		t.Fatalf("click did not focus explorer: focus=%v", m.focus)
+	}
+}
+
+func TestMouseHoverHighlightsExplorerRow(t *testing.T) {
+	m := sized(t, 100, 40)
+	r := m.lay.Panes[ctxExplorer]
+	// move (no button) over the second content row.
+	hover := tea.MouseMsg{X: r.X + paneContentX, Y: r.Y + paneContentY + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
+	m = step(m, hover)
+	if got := m.explorer.HoverRow(); got != 1 {
+		t.Fatalf("hover row = %d want 1", got)
+	}
+	// moving off the pane clears it.
+	off := tea.MouseMsg{X: r.X + r.W + 5, Y: r.Y + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
+	m = step(m, off)
+	if got := m.explorer.HoverRow(); got != -1 {
+		t.Fatalf("hover row = %d want -1 after leaving pane", got)
+	}
+}
+
+func TestOpenFileMarksActiveInExplorer(t *testing.T) {
+	m := sized(t, 100, 40)
+	abs, err := filepath.Abs("app.go") // a real, visible root-level file (cwd is this pkg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: abs})
+	m = out.(Model)
+	if got := m.explorer.Active(); got != abs {
+		t.Fatalf("explorer active = %q want %q", got, abs)
+	}
 }
 
 func TestDragResizeWidensExplorer(t *testing.T) {

@@ -2,6 +2,20 @@
 
 ## 2026-06-20
 
+- Explorer: hover highlight (mouse motion), an "open file" highlight distinct
+  from cursor/hover (`SetActive`, set on open and cleared on editor close), and
+  shift-wheel / horizontal-wheel sideways scrolling (`ScrollXBy`). Row styling is
+  now resolved through a testable `rowKind` precedence: cursor > hover > active >
+  dir > plain.
+
+- Explorer (Roadmap 0050, partial): mouse navigation and scrollbars. The root
+  model forwards in-pane mouse events to the explorer — left-press selects/
+  activates a row, wheel scrolls without moving the cursor, scrollbar-track press
+  jumps an axis. The explorer gained a horizontal scroll offset and renders
+  conditional right/bottom scrollbars (dim track + heavier thumb, sized by
+  `scrollThumb`) whenever content overflows the pane; rows are clipped with
+  `ansi.Cut` so long names scroll sideways instead of wrapping.
+
 - Roadmap 0040 (Settings / Configuration) implemented: new leaf-level
   `internal/config` package — typed `Config` sections (`schema.go`), in-code
   defaults (`defaults.go`), `~/.ike` + `{root}/.ike` discovery with

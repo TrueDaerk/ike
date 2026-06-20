@@ -43,6 +43,9 @@ const (
 	explorerWidth = 30 // outer width of the explorer pane (border included)
 	statusHeight  = 1
 	paneChrome    = 4 // border (2) + padding (2) per pane, horizontal and vertical-ish
+	paneContentX  = 2 // left border (1) + left padding (1) before pane content
+	paneContentY  = 2 // top border (1) + title row (1) before pane content
+	wheelLines    = 3 // rows a single mouse-wheel notch scrolls
 )
 
 // Model is the root model.
@@ -221,6 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.editor = editor.New()
 		m.layout()
 		m.focus = focusExplorer
+		m.explorer.SetActive("")
 		m.syncFocus()
 		return m, nil
 
@@ -277,6 +281,7 @@ func (m Model) openPath(path string) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else if err := m.editor.Load(path); err == nil {
 		m.focus = focusEditor
+		m.explorer.SetActive(path)
 		m.syncFocus()
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
@@ -412,7 +417,29 @@ func paneInterior(outer int) int {
 // and release commits and persists. Wheel events and any mouse activity while a
 // shell overlay is open are ignored (overlays are not draggable).
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	if m.shell.IsOpen() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+	if m.shell.IsOpen() {
+		return m, nil
+	}
+	// A wheel notch scrolls the pane under the cursor (the explorer tree for now),
+	// independent of any in-flight drag or the focused pane. Shift (or the wheel's
+	// own horizontal buttons) scrolls sideways, as is conventional.
+	if isWheel(msg.Button) {
+		if pane, ok := m.lay.PaneAt(msg.X, msg.Y); ok && pane == ctxExplorer {
+			switch {
+			case msg.Button == tea.MouseButtonWheelLeft:
+				m.explorer.ScrollXBy(-wheelLines)
+			case msg.Button == tea.MouseButtonWheelRight:
+				m.explorer.ScrollXBy(wheelLines)
+			case msg.Button == tea.MouseButtonWheelUp && msg.Shift:
+				m.explorer.ScrollXBy(-wheelLines)
+			case msg.Button == tea.MouseButtonWheelDown && msg.Shift:
+				m.explorer.ScrollXBy(wheelLines)
+			case msg.Button == tea.MouseButtonWheelUp:
+				m.explorer.ScrollBy(-wheelLines)
+			case msg.Button == tea.MouseButtonWheelDown:
+				m.explorer.ScrollBy(wheelLines)
+			}
+		}
 		return m, nil
 	}
 	switch msg.Action {
@@ -423,9 +450,15 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.drag = &dragState{kind: dragResize, divider: *hit.Divider, curX: msg.X, curY: msg.Y}
 		case layout.HitTitle:
 			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
+		case layout.HitPane:
+			if hit.Pane == ctxExplorer {
+				return m.explorerClick(msg)
+			}
 		}
 	case tea.MouseActionMotion:
 		if m.drag == nil {
+			// No gesture in flight: track the explorer hover highlight.
+			m.updateHover(msg)
 			return m, nil
 		}
 		m.drag.curX, m.drag.curY = msg.X, msg.Y
@@ -448,6 +481,43 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		saveLayout(m.tree)
 	}
 	return m, nil
+}
+
+// isWheel reports whether a mouse button is one of the four wheel directions.
+func isWheel(b tea.MouseButton) bool {
+	return b == tea.MouseButtonWheelUp || b == tea.MouseButtonWheelDown ||
+		b == tea.MouseButtonWheelLeft || b == tea.MouseButtonWheelRight
+}
+
+// updateHover sets (or clears) the explorer's hover highlight based on whether
+// the pointer is over the explorer's content area.
+func (m *Model) updateHover(msg tea.MouseMsg) {
+	r, ok := m.lay.Panes[ctxExplorer]
+	if !ok {
+		return
+	}
+	if pane, in := m.lay.PaneAt(msg.X, msg.Y); in && pane == ctxExplorer {
+		m.explorer.SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
+		return
+	}
+	m.explorer.ClearHover()
+}
+
+// explorerClick focuses the explorer and forwards a left-press to it, translating
+// the absolute mouse cell into the tree's content-local coordinate space (inside
+// the pane's border, padding, and title row).
+func (m Model) explorerClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	r, ok := m.lay.Panes[ctxExplorer]
+	if !ok {
+		return m, nil
+	}
+	m.focus = focusExplorer
+	m.syncFocus()
+	localX := msg.X - (r.X + paneContentX)
+	localY := msg.Y - (r.Y + paneContentY)
+	var cmd tea.Cmd
+	m.explorer, cmd = m.explorer.MouseClick(localX, localY)
+	return m, cmd
 }
 
 // View implements tea.Model.
