@@ -78,11 +78,15 @@ const (
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
-// divider being dragged; for a move it carries the source pane id.
+// divider being dragged; for a move it carries the source pane id. curX/curY
+// track the latest mouse cell so the move can render live feedback (which pane
+// and drop zone the release would target).
 type dragState struct {
 	kind    dragKind
 	divider layout.Divider
 	srcPane string
+	curX    int
+	curY    int
 }
 
 // New returns the initial root model rooted at the working directory, wired to
@@ -410,12 +414,16 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		hit := m.lay.Hit(msg.X, msg.Y)
 		switch hit.Kind {
 		case layout.HitDivider:
-			m.drag = &dragState{kind: dragResize, divider: *hit.Divider}
+			m.drag = &dragState{kind: dragResize, divider: *hit.Divider, curX: msg.X, curY: msg.Y}
 		case layout.HitTitle:
-			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane}
+			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
 		}
 	case tea.MouseActionMotion:
-		if m.drag != nil && m.drag.kind == dragResize {
+		if m.drag == nil {
+			return m, nil
+		}
+		m.drag.curX, m.drag.curY = msg.X, msg.Y
+		if m.drag.kind == dragResize {
 			m.drag.divider.ResizeTo(msg.X, msg.Y)
 			m.layout()
 		}
@@ -467,17 +475,59 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	return ""
 }
 
+// Pane border colors. The drag colors give live feedback during a move: the
+// pane being carried and the pane it would drop onto are tinted distinctly.
+const (
+	colorPaneFocus  = "69"  // focused pane border
+	colorPaneBlur   = "240" // unfocused pane border
+	colorMoveSource = "203" // the pane currently being moved
+	colorDropTarget = "220" // the pane a release would drop onto
+)
+
 // renderPane renders a single leaf at its outer rectangle, mapping the pane id
-// to its title, content, and focus state. Unknown ids (future plugin panes)
-// render an empty titled box rather than crashing.
+// to its title, content, and focus state. During a move drag the source pane and
+// the hovered drop target are recolored and the target's title shows the drop
+// zone, so the gesture is visible. Unknown ids (future plugin panes) render an
+// empty titled box rather than crashing.
 func (m Model) renderPane(id string, r layout.Rect) string {
+	var title, content string
+	var focused bool
 	switch id {
 	case ctxExplorer:
-		return pane("EXPLORER", m.explorer.View(), r.W, r.H, m.focus == focusExplorer)
+		title, content, focused = "EXPLORER", m.explorer.View(), m.focus == focusExplorer
 	case ctxEditor:
-		return pane(m.editorTitle(), m.editor.View(), r.W, r.H, m.focus == focusEditor)
+		title, content, focused = m.editorTitle(), m.editor.View(), m.focus == focusEditor
 	default:
-		return pane(strings.ToUpper(id), "", r.W, r.H, false)
+		title = strings.ToUpper(id)
+	}
+
+	border := colorPaneBlur
+	if focused {
+		border = colorPaneFocus
+	}
+	if d := m.drag; d != nil && d.kind == dragMove {
+		if id == d.srcPane {
+			border = colorMoveSource
+			title = "⤴ " + title
+		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == id && tgt != d.srcPane {
+			border = colorDropTarget
+			title = title + "  " + zoneArrow(layout.DropZone(r, d.curX, d.curY))
+		}
+	}
+	return paneBox(title, content, r.W, r.H, border)
+}
+
+// zoneArrow is the short drop-zone marker shown in a target pane's title.
+func zoneArrow(z layout.Zone) string {
+	switch z {
+	case layout.ZoneLeft:
+		return "◧ left"
+	case layout.ZoneRight:
+		return "right ◨"
+	case layout.ZoneTop:
+		return "⬒ top"
+	default:
+		return "⬓ bottom"
 	}
 }
 
@@ -513,6 +563,17 @@ func (m Model) statusLine() string {
 		Background(lipgloss.Color("236")).
 		Foreground(lipgloss.Color("252"))
 
+	// During a move drag the status line narrates the gesture and its target.
+	if d := m.drag; d != nil && d.kind == dragMove {
+		hint := "MOVE " + m.paneLabel(d.srcPane)
+		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
+			hint += " → " + zoneArrow(layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY)) + " of " + m.paneLabel(tgt)
+		} else {
+			hint += "  (drop on another pane)"
+		}
+		return style.Foreground(lipgloss.Color(colorDropTarget)).Render(" " + hint)
+	}
+
 	if cl := m.editor.CommandLine(); cl != "" {
 		return style.Render(cl)
 	}
@@ -539,22 +600,25 @@ func (m Model) statusLine() string {
 	return style.Render(left + strings.Repeat(" ", gap) + right)
 }
 
-// pane renders a titled bordered box around content; the focused pane gets a
-// brighter border.
-func pane(title, content string, width, height int, focused bool) string {
-	border := lipgloss.RoundedBorder()
+// paneBox renders a titled bordered box around content with the given border
+// color (focus state and drag feedback are decided by the caller).
+func paneBox(title, content string, width, height int, borderColor string) string {
 	style := lipgloss.NewStyle().
-		Border(border).
+		Border(lipgloss.RoundedBorder()).
 		Width(width-2).
 		Height(height-2).
-		Padding(0, 1)
-	if focused {
-		style = style.BorderForeground(lipgloss.Color("69"))
-	} else {
-		style = style.BorderForeground(lipgloss.Color("240"))
-	}
+		Padding(0, 1).
+		BorderForeground(lipgloss.Color(borderColor))
 	titleStyle := lipgloss.NewStyle().Bold(true)
 	return style.Render(lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(title), content))
 }
 
 func baseName(path string) string { return filepath.Base(path) }
+
+// paneLabel is the human label for a pane id used in the drag status hint.
+func (m Model) paneLabel(id string) string {
+	if id == ctxEditor {
+		return m.editorTitle()
+	}
+	return strings.ToUpper(id)
+}

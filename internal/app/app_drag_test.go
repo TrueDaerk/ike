@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -76,6 +77,23 @@ func TestDragMoveSwapsPanes(t *testing.T) {
 	}
 	if s.A.(*layout.Leaf).Pane != ctxEditor || s.B.(*layout.Leaf).Pane != ctxExplorer {
 		t.Fatalf("panes not swapped: A=%+v B=%+v", s.A, s.B)
+	}
+}
+
+func TestMoveDragShowsFeedback(t *testing.T) {
+	m := sized(t, 100, 40)
+	m = step(m, press(2, 0)) // grab explorer title
+	edRect := m.lay.Panes[ctxEditor]
+	m = step(m, motion(edRect.X+edRect.W-2, edRect.Y+edRect.H/2)) // hover editor right half
+	view := m.View()
+	if !strings.Contains(view, "MOVE EXPLORER") {
+		t.Fatalf("status line missing move hint:\n%s", view)
+	}
+	if !strings.Contains(view, "⤴") {
+		t.Fatal("source pane missing move marker")
+	}
+	if !strings.Contains(view, "right ◨") {
+		t.Fatal("drop target missing right-zone marker")
 	}
 }
 

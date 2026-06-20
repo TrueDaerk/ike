@@ -55,6 +55,14 @@ One gesture is active at a time. While a floating shell (Roadmap 0035) is open,
 mouse input is ignored — overlays are composited above the tiling and are not
 draggable. Wheel events are ignored by the drag machine.
 
+**Live feedback.** During a move the drag tracks the latest mouse cell
+(`dragState.curX/curY`, updated on every motion). The pane being carried is
+tinted (and prefixed with `⤴`), the pane under the cursor is tinted as the drop
+target with its title showing the resolved zone (`◧ left` / `right ◨` / `⬒ top`
+/ `⬓ bottom`), and the status line narrates `MOVE <src> → <zone> of <target>`.
+Resize feedback is the divider tracking the cursor in real time as the ratio
+updates per motion frame.
+
 ## Persistence
 
 Layout is runtime UI state, not user configuration, so it lives in its own
