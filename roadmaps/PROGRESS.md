@@ -9,6 +9,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [03 — Help Overlay (Command & Shortcut Cheat Sheet)](0030-help-overlay.md)
 - [x] [03.5 — Floating Shell (Reusable Overlay / Modal Component)](0035-floating-shell.md)
 - [x] [03.6 — Pane Drag: Mouse Move, Resize & Layout Persistence](0036-pane-drag-layout.md)
+- [ ] [03.7 — Pane Splitting, Multiple Editors & Open-in-New-Pane](0037-pane-splitting-multi-editor.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [ ] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
@@ -40,6 +41,17 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
   layout **state store** (not `settings.toml`). It is the first step of the
   broader pane manager **03.5** deferred; **03.5** overlays still composite above
   the tiling. Reuses **04**'s discovery/write seam for the store when present.
+- **03.7** completes the pane manager **03.5/03.6** deferred: the *create/close*
+  half. It extends **03.6**'s pure `internal/layout` tree (new `Split`/`Close` ops
+  reusing `insert`/`remove`) and its layout state store (richer per-leaf identity:
+  kind + file, restored best-effort). It replaces the root's two hard-coded
+  component fields with a `internal/pane` registry of N instances and turns focus
+  into "the focused leaf"; multiple editors tile side by side. Open-in-new-pane
+  rides an additive `OpenTarget` on `explorer.OpenFileMsg` / `host.OpenFileRequest`
+  / `host.API` (defaults to today's replace, so **02**'s `FileHandler` contract
+  stays compatible). Split/close/focus-move are binding-agnostic ops **08** binds
+  later (mirroring **03.6**'s resize/move); **04** supplies optional tuning
+  read-only. **03.5** overlays still composite above the tiling.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
 - **11** owns the palette behind **04**'s `[theme]` selector. `internal/theme` is
