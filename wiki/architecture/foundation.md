@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-06-19T00:00:00Z
+timestamp: 2026-06-20T00:00:00Z
 ---
 
 # Foundation Slice
@@ -23,7 +23,9 @@ internal/editor/    line buffer + modal vim state machine
 
 Each pane is a `tea.Model`-shaped component (Init/Update/View) embedded in the
 root `app.Model`. The root forwards `tea.Msg` to the focused child and owns
-layout.
+layout. Layout geometry itself is no longer hard-coded: the root drives a pure
+split tree (see [Pane Layout & Drag](/architecture/pane-layout.md)) that computes
+each pane's rectangle and supports mouse divider-resize and title-bar move.
 
 ## Message routing
 

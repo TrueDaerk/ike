@@ -2,6 +2,16 @@
 
 ## 2026-06-20
 
+- Roadmap 0036 (Pane Drag) implemented: new pure `internal/layout` split-tree
+  (`tree.go` types + `Compute`/`Rects` exact tiling, `rect.go` hit-testing +
+  drop zones, `resize.go` clamped divider drag, `move.go` drop-zone re-parent,
+  `state.go` tolerant encode/decode). `internal/app` replaces hard-coded
+  `explorerWidth`/`JoinHorizontal` with tree-driven `Rects`, adds a `tea.MouseMsg`
+  drag state machine (press hit-test → resize/move, release commit), and a
+  per-project layout store (`store.go`, `IKE_CONFIG_DIR`/`.ike/layout.json`,
+  save-on-release, default fallback on stale state). `cmd/ike` enables
+  `tea.WithMouseCellMotion`. New concept doc `architecture/pane-layout.md`.
+
 - Roadmap 0110 (Themes) planned: added `roadmaps/0110-themes.md` and a stub
   concept doc `architecture/themes.md`. Semantic-slot theme model mirroring
   sqlit/Textual; built-in palettes (tokyo-night, nord, gruvbox, rose-pine,

@@ -16,6 +16,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/help"
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/overlay"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -57,6 +58,31 @@ type Model struct {
 	// help cheat sheet today and any tea.Model-shaped content (modals, plugin
 	// popups) tomorrow; v1 is single-level (one open shell at a time).
 	shell *ui.Floating
+	// tree is the pure split-tree layout (Roadmap 0036). It is loaded from the
+	// per-project store or built as a default on first window size, and drives
+	// both pane sizing and the View placement.
+	tree layout.Node
+	// lay caches the rectangles + dividers computed from tree for the current
+	// viewport, so mouse hit-testing and rendering share one geometry.
+	lay layout.Layout
+	// drag is the active mouse gesture (resize or move), nil between drags.
+	drag *dragState
+}
+
+// dragKind distinguishes the two mouse gestures.
+type dragKind int
+
+const (
+	dragResize dragKind = iota // dragging a divider to change a split ratio
+	dragMove                   // dragging a pane title bar to relocate it
+)
+
+// dragState holds the in-flight mouse gesture. For a resize it carries the
+// divider being dragged; for a move it carries the source pane id.
+type dragState struct {
+	kind    dragKind
+	divider layout.Divider
+	srcPane string
 }
 
 // New returns the initial root model rooted at the working directory, wired to
@@ -70,7 +96,7 @@ func New() Model {
 // "plugins.<id>.enabled" before the registry is queried.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	applyPluginConfig(reg, cfg)
-	return Model{
+	m := Model{
 		focus:    focusExplorer,
 		explorer: explorer.New("."),
 		editor:   editor.New(),
@@ -81,6 +107,18 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		help:  help.New(reg, nil, helpMinCol(cfg)),
 		shell: ui.New(shellConfig(cfg)),
 	}
+	// Restore a saved per-project layout if one matches the live pane set; an
+	// unknown or stale layout is dropped and the default is built on first size.
+	if t, ok := loadLayout(corePanes()); ok {
+		m.tree = t
+	}
+	return m
+}
+
+// corePanes is the set of pane ids the root currently owns. Layout restore
+// validates a saved tree against it so a stale file can never hide a pane.
+func corePanes() map[string]bool {
+	return map[string]bool{ctxExplorer: true, ctxEditor: true}
 }
 
 // shellConfig builds the floating shell configuration, reading optional tuning
@@ -151,6 +189,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout()
 		m.shell.SetSize(m.width, m.height)
 		return m, nil
+
+	case tea.MouseMsg:
+		return m.handleMouse(msg)
 
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path)
@@ -321,30 +362,78 @@ func (m *Model) syncFocus() {
 	m.editor.SetFocused(m.focus == focusEditor)
 }
 
-// layout recomputes child pane sizes from the current terminal size.
+// bodyRect is the viewport the layout tree tiles: the full width and every row
+// above the status line.
+func (m *Model) bodyRect() layout.Rect {
+	return layout.Rect{X: 0, Y: 0, W: m.width, H: m.height - statusHeight}
+}
+
+// layout recomputes the layout geometry from the current terminal size and
+// pushes the resulting interior size into each pane. The tree is built lazily on
+// the first real window size so a default ratio can key off the actual width.
 func (m *Model) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
-	bodyHeight := m.height - statusHeight
-	contentHeight := bodyHeight - paneChrome
-	if contentHeight < 1 {
-		contentHeight = 1
+	if m.tree == nil {
+		m.tree = layout.Default(m.width, explorerWidth)
 	}
-
-	expContent := explorerWidth - paneChrome
-	if expContent < 1 {
-		expContent = 1
+	m.lay = layout.Compute(m.tree, m.bodyRect())
+	if r, ok := m.lay.Panes[ctxExplorer]; ok {
+		m.explorer.SetSize(paneInterior(r.W), paneInterior(r.H))
 	}
-	editorWidth := m.width - explorerWidth
-	edContent := editorWidth - paneChrome
-	if edContent < 1 {
-		edContent = 1
+	if r, ok := m.lay.Panes[ctxEditor]; ok {
+		m.editor.SetSize(paneInterior(r.W), paneInterior(r.H))
 	}
-
-	m.explorer.SetSize(expContent, contentHeight)
-	m.editor.SetSize(edContent, contentHeight)
 	m.syncFocus()
+}
+
+// paneInterior maps an outer pane dimension to the content area inside the
+// border + padding chrome, never dropping below one cell.
+func paneInterior(outer int) int {
+	if v := outer - paneChrome; v >= 1 {
+		return v
+	}
+	return 1
+}
+
+// handleMouse runs the drag state machine: press hit-tests the layout to start a
+// resize (divider) or move (title bar), motion updates the in-flight gesture,
+// and release commits and persists. Wheel events and any mouse activity while a
+// shell overlay is open are ignored (overlays are not draggable).
+func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	if m.shell.IsOpen() || msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+		return m, nil
+	}
+	switch msg.Action {
+	case tea.MouseActionPress:
+		hit := m.lay.Hit(msg.X, msg.Y)
+		switch hit.Kind {
+		case layout.HitDivider:
+			m.drag = &dragState{kind: dragResize, divider: *hit.Divider}
+		case layout.HitTitle:
+			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane}
+		}
+	case tea.MouseActionMotion:
+		if m.drag != nil && m.drag.kind == dragResize {
+			m.drag.divider.ResizeTo(msg.X, msg.Y)
+			m.layout()
+		}
+	case tea.MouseActionRelease:
+		if m.drag == nil {
+			return m, nil
+		}
+		if m.drag.kind == dragMove {
+			if target, ok := m.lay.PaneAt(msg.X, msg.Y); ok && target != m.drag.srcPane {
+				zone := layout.DropZone(m.lay.Panes[target], msg.X, msg.Y)
+				m.tree = layout.Move(m.tree, m.drag.srcPane, target, zone)
+				m.layout()
+			}
+		}
+		m.drag = nil
+		saveLayout(m.tree)
+	}
+	return m, nil
 }
 
 // View implements tea.Model.
@@ -352,18 +441,56 @@ func (m Model) View() string {
 	if m.width == 0 {
 		return "starting ike…"
 	}
-	bodyHeight := m.height - statusHeight
-
-	explorerPane := pane("EXPLORER", m.explorer.View(), explorerWidth, bodyHeight, m.focus == focusExplorer)
-	editorWidth := m.width - explorerWidth
-	editorPane := pane(m.editorTitle(), m.editor.View(), editorWidth, bodyHeight, m.focus == focusEditor)
-
-	body := lipgloss.JoinHorizontal(lipgloss.Top, explorerPane, editorPane)
+	body := m.renderNode(m.tree, m.bodyRect())
 	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
 	if m.shell.IsOpen() {
 		return overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
 	return base
+}
+
+// renderNode walks the layout tree, rendering each leaf into its rectangle and
+// joining splits with a one-cell divider, mirroring Compute's geometry exactly.
+func (m Model) renderNode(n layout.Node, r layout.Rect) string {
+	switch t := n.(type) {
+	case *layout.Leaf:
+		return m.renderPane(t.Pane, r)
+	case *layout.Split:
+		a, _, b := t.Children(r)
+		if t.Orient == layout.Horizontal {
+			return lipgloss.JoinHorizontal(lipgloss.Top,
+				m.renderNode(t.A, a), dividerV(r.H), m.renderNode(t.B, b))
+		}
+		return lipgloss.JoinVertical(lipgloss.Left,
+			m.renderNode(t.A, a), dividerH(r.W), m.renderNode(t.B, b))
+	}
+	return ""
+}
+
+// renderPane renders a single leaf at its outer rectangle, mapping the pane id
+// to its title, content, and focus state. Unknown ids (future plugin panes)
+// render an empty titled box rather than crashing.
+func (m Model) renderPane(id string, r layout.Rect) string {
+	switch id {
+	case ctxExplorer:
+		return pane("EXPLORER", m.explorer.View(), r.W, r.H, m.focus == focusExplorer)
+	case ctxEditor:
+		return pane(m.editorTitle(), m.editor.View(), r.W, r.H, m.focus == focusEditor)
+	default:
+		return pane(strings.ToUpper(id), "", r.W, r.H, false)
+	}
+}
+
+// dividerV renders the vertical gutter between two horizontally-arranged panes.
+func dividerV(h int) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	return style.Render(strings.TrimRight(strings.Repeat("│\n", h), "\n"))
+}
+
+// dividerH renders the horizontal gutter between two vertically-stacked panes.
+func dividerH(w int) string {
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	return style.Render(strings.Repeat("─", w))
 }
 
 // editorTitle returns the editor pane title: file basename with a dirty marker.

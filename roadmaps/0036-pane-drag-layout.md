@@ -118,17 +118,17 @@ launch ─► state.Load ─► *layout.Tree (fallback: built-in default tree)
 
 ## Milestones
 
-- [ ] `internal/layout/tree.go`: split-tree types (`Leaf`/`Split`), default tree, `Rects(viewport)` exact tiling with divider + status reservation.
-- [ ] `internal/layout/rect.go`: `Rect` + hit-testing (point → pane / divider / title-bar handle), table-tested.
-- [ ] `internal/layout/resize.go`: divider drag → ratio update, clamped to per-pane minimums.
-- [ ] `internal/layout/move.go`: pane drag → drop-zone resolution → leaf re-parent (swap/reorder).
-- [ ] `internal/layout/state.go`: tree ⇄ plain data; tolerant decode (drop unknown/invalid pane ids, fall back to default).
-- [ ] `cmd/ike`: enable mouse reporting (`tea.WithMouseCellMotion`).
-- [ ] `internal/app`: replace hard-coded `explorerWidth`/`JoinHorizontal` with tree-driven `Rects`; render each pane into its rect.
-- [ ] `internal/app`: mouse drag state machine — press hit-test, motion update, release commit; resize vs. move dispatch.
-- [ ] Persistence wiring: per-project layout store with `Load`/`Save`, save-on-release; safe fallback on missing/stale state.
-- [ ] Tests: tiling exactness, hit-testing, resize clamp, move re-parent, state round-trip + tolerant decode, app drag-to-resize/move regression, default-on-stale.
-- [ ] Wiki: document the layout tree, mouse drag model, and the layout state store / persistence under `wiki/`.
+- [x] `internal/layout/tree.go`: split-tree types (`Leaf`/`Split`), default tree, `Rects(viewport)` exact tiling with divider + status reservation.
+- [x] `internal/layout/rect.go`: `Rect` + hit-testing (point → pane / divider / title-bar handle), table-tested.
+- [x] `internal/layout/resize.go`: divider drag → ratio update, clamped to per-pane minimums.
+- [x] `internal/layout/move.go`: pane drag → drop-zone resolution → leaf re-parent (swap/reorder).
+- [x] `internal/layout/state.go`: tree ⇄ plain data; tolerant decode (drop unknown/invalid pane ids, fall back to default).
+- [x] `cmd/ike`: enable mouse reporting (`tea.WithMouseCellMotion`).
+- [x] `internal/app`: replace hard-coded `explorerWidth`/`JoinHorizontal` with tree-driven `Rects`; render each pane into its rect.
+- [x] `internal/app`: mouse drag state machine — press hit-test, motion update, release commit; resize vs. move dispatch.
+- [x] Persistence wiring: per-project layout store with `Load`/`Save`, save-on-release; safe fallback on missing/stale state.
+- [x] Tests: tiling exactness, hit-testing, resize clamp, move re-parent, state round-trip + tolerant decode, app drag-to-resize/move regression, default-on-stale.
+- [x] Wiki: document the layout tree, mouse drag model, and the layout state store / persistence under `wiki/`.
 
 ## Out of scope
 

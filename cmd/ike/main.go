@@ -14,7 +14,9 @@ import (
 )
 
 func main() {
-	p := tea.NewProgram(app.New(), tea.WithAltScreen())
+	// Mouse cell motion reporting drives the pane drag/resize layout (Roadmap
+	// 0036); mouse is additive — every action stays reachable without it.
+	p := tea.NewProgram(app.New(), tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "ike: %v\n", err)
 		os.Exit(1)

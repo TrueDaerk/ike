@@ -1,0 +1,6 @@
+# Per-project runtime UI state (layout geometry, Roadmap 0036)
+.ike/
+
+# Editor / IDE metadata
+.idea/
+*.iml
