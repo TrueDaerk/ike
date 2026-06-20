@@ -4,7 +4,7 @@ Component-level concepts for the IKE codebase.
 
 * [Foundation Slice](/architecture/foundation.md) - root model, layout, focus, message routing
 * [File Explorer](/architecture/explorer.md) - directory tree pane
-* [Editor](/architecture/editor.md) - modal vim-like text editor pane
+* [Editor](/architecture/editor.md) - vim-like modal editor: buffer, motions, operators, text objects, registers, undo/redo, search, viewport (Roadmap 0060)
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Configuration System](/architecture/config.md) - typed TOML config, defaults < user < project merge, validation, extension hook, host integration (Roadmap 0040)
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll

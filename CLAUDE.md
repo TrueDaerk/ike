@@ -28,7 +28,7 @@ for progressive disclosure by humans and agents. The format is specified at
 <https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md>.
 
 Rules that matter when reading or writing the wiki:
-√
+
 - **Concept documents** (every `.md` that is not a reserved file) MUST have parseable YAML frontmatter
   with a non-empty `type` field. Also include the recommended fields: `title`,
   `description` (one-line summary), and where the concept is backed by source, `resource`

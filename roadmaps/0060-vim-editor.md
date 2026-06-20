@@ -110,33 +110,33 @@ to render. `commands.go` is the single bridge to `internal/registry`.
 
 ## Milestones
 
-- [ ] Buffer model in `internal/editor/buffer` (line slice + rune/byte position
+- [x] Buffer model in `internal/editor/buffer` (line slice + rune/byte position
       mapping, `Insert`/`Delete`/`Replace` over a `Range`), justified as above.
-- [ ] Mode state machine: Normal, Insert, Visual (charwise), Visual-Line,
+- [x] Mode state machine: Normal, Insert, Visual (charwise), Visual-Line,
       Visual-Block, Command-Line, Replace — with the pending-operator/count/register
       sub-state.
-- [ ] Motions: `h j k l`, `w b e` (+ `W B E`), `0 ^ $`, `gg G`, `{ }`,
+- [x] Motions: `h j k l`, `w b e` (+ `W B E`), `0 ^ $`, `gg G`, `{ }`,
       `f t F T` with `; ,`, `%` bracket match.
-- [ ] Search: `/` and `?` incremental, `n` / `N`, literal-vs-regex toggle.
-- [ ] Operators: `d c y p` (+ `gp`), doubled `dd cc yy`, with charwise/linewise/
+- [x] Search: `/` and `?` incremental, `n` / `N`, literal-vs-regex toggle.
+- [x] Operators: `d c y p` (+ `gp`), doubled `dd cc yy`, with charwise/linewise/
       blockwise application.
-- [ ] Operator + motion + count composition (e.g. `3dd`, `d2w`, `c$`).
-- [ ] Text objects: `iw aw`, pairs `i( a( i" a" i{ a[ i<` … wired into operators
+- [x] Operator + motion + count composition (e.g. `3dd`, `d2w`, `c$`).
+- [x] Text objects: `iw aw`, pairs `i( a( i" a" i{ a[ i<` … wired into operators
       (`di(`, `ci"`, `daw`).
-- [ ] Registers: unnamed `"`, named `"a`-`"z`, yank `"0`, small-delete `"-`, and a
+- [x] Registers: unnamed `"`, named `"a`-`"z`, yank `"0`, small-delete `"-`, and a
       system-clipboard seam (`"+`).
-- [ ] Undo/redo (linear now, tree-ready API) and repeat (`.`). Marks optional.
-- [ ] Viewport: vertical/horizontal scrolling, `scrolloff`, cursor management,
+- [x] Undo/redo (linear now, tree-ready API) and repeat (`.`). Marks optional.
+- [x] Viewport: vertical/horizontal scrolling, `scrolloff`, cursor management,
       gutter with absolute / relative line numbers driven by `[editor]` config.
-- [ ] Save / dirty tracking and ex-commands `:w :q :wq :q! :e`, each registered as
+- [x] Save / dirty tracking and ex-commands `:w :q :wq :q! :e`, each registered as
       a registry `Command` via `commands.go`.
-- [ ] Editor actions exposed as registry `Command`s (stable IDs) so palette (07)
+- [x] Editor actions exposed as registry `Command`s (stable IDs) so palette (07)
       and keybindings (08) reach them; verify no parallel dispatch path exists.
-- [ ] LSP seam in `events.go`: emit on-change, cursor-move, and completion-trigger
+- [x] LSP seam in `events.go`: emit on-change, cursor-move, and completion-trigger
       hooks (no LSP behavior implemented).
-- [ ] Tests: table-driven coverage for buffer, motions, operators, text objects,
+- [x] Tests: table-driven coverage for buffer, motions, operators, text objects,
       registers, undo/redo, search, and viewport scrolling math.
-- [ ] Wiki: add/refresh the editor concept doc(s) under `wiki/` (frontmatter with
+- [x] Wiki: add/refresh the editor concept doc(s) under `wiki/` (frontmatter with
       `type`, `title`, `description`, `resource` -> `internal/editor`), refresh
       `timestamp`, and add a `log.md` entry.
 

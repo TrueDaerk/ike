@@ -2,6 +2,28 @@
 
 ## 2026-06-20
 
+- Editor follow-ups: the visual selection is now rendered (per-cell highlight in
+  `view.go`, cursor wins on overlap) and visual mode gained `i`/`a` text-object
+  selection, `>`/`<` indent, and register-replace `p`. Added word navigation on
+  `Shift+←/→` (+ `Ctrl+←/→`), paragraph jumps on `Shift+↑/↓`, page scrolling via
+  `PgUp`/`PgDn` + `Ctrl-f/b/d/u`, screen jumps `H M L`, plus `~` toggle-case and
+  `*`/`#` word search. Arrow/Home/End and the new motions also work mid-insert.
+  Mouse click focuses the editor and positions the cursor.
+
+- Editor (Roadmap 0060): the foundation's minimal modal editor is rebuilt into a
+  full vim-like editor across focused sub-packages under `internal/editor/`:
+  `buffer` (line slice + rune/byte `Position` + reversible `Apply(Edit)`),
+  `mode`, `motion` (`h j k l w b e W B E 0 ^ $ gg G { } f t F T ; , %`),
+  `textobject` (`iw aw`, bracket/quote pairs), `operator` (`d c y p gp`, doubled
+  `dd cc yy`, `Compose`), `register` (`" a-z 0 - 1-9 +`), `history` (undo/redo +
+  `.` repeat), `viewport` (scroll/scrolloff/gutter), `search` (`/ ? n N`, `\v`
+  regex), and `excmd` (`:w :q :wq :q! :e`, `:<n>`). The `editor.Model` keeps its
+  pane API (so the root is unchanged but for routing `ActionMsg` and using
+  `Capturing()`); `commands.go` registers actions/ex-commands as plugin
+  `Command`s dispatched via a single `ActionMsg` path; `events.go` is the LSP
+  hook seam. `[editor]` config (tab width, expandtab, line numbers, scrolloff…)
+  is read live via `Configure`.
+
 - Help: command shortcuts now render. `plugin.Keymap` gained a `CommandID`
   field; `*registry.Registry` implements `help.BindingResolver` via a new
   `Binding(cmdID)` reverse-lookup, and the root wires it (was `nil`). Explorer

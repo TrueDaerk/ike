@@ -111,10 +111,12 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	applyPluginConfig(reg, cfg)
 	exp := explorer.New(".")
 	exp.Configure(cfg)
+	ed := editor.New()
+	ed.Configure(cfg)
 	m := Model{
 		focus:    focusExplorer,
 		explorer: exp,
-		editor:   editor.New(),
+		editor:   ed,
 		host:     host.New(cfg),
 		reg:      reg,
 		// help reads commands from the registry and resolves each command's
@@ -230,8 +232,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shell.Open()
 		return m, nil
 
+	case editor.ActionMsg:
+		// A registry command (commands.go) drives the editor through this single
+		// message path; there is no parallel editor command dispatch.
+		var cmd tea.Cmd
+		m.editor, cmd = m.editor.Update(msg)
+		return m, cmd
+
 	case editor.CloseMsg:
 		m.editor = editor.New()
+		m.editor.Configure(m.host.Config())
 		m.layout()
 		m.focus = focusExplorer
 		m.explorer.SetActive("")
@@ -358,8 +368,7 @@ func (m Model) editorCapturing() bool {
 	if m.focus != focusEditor {
 		return false
 	}
-	mode := m.editor.ModeName()
-	return mode == editor.Insert || mode == editor.Command
+	return m.editor.Capturing()
 }
 
 // routeKey forwards a key to the focused pane.
@@ -461,8 +470,11 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case layout.HitTitle:
 			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
 		case layout.HitPane:
-			if hit.Pane == ctxExplorer {
+			switch hit.Pane {
+			case ctxExplorer:
 				return m.explorerClick(msg)
+			case ctxEditor:
+				return m.editorClick(msg)
 			}
 		}
 	case tea.MouseActionMotion:
@@ -528,6 +540,21 @@ func (m Model) explorerClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.explorer, cmd = m.explorer.MouseClick(localX, localY)
 	return m, cmd
+}
+
+// editorClick focuses the editor and moves its cursor to the clicked cell,
+// translating the absolute mouse position into the pane's content-local space
+// (inside border, padding, and title row). Clicking an unfocused editor focuses
+// it; clicking the focused editor repositions the cursor.
+func (m Model) editorClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	r, ok := m.lay.Panes[ctxEditor]
+	if !ok {
+		return m, nil
+	}
+	m.focus = focusEditor
+	m.syncFocus()
+	m.editor.MouseClick(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
+	return m, nil
 }
 
 // View implements tea.Model.
