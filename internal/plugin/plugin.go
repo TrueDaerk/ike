@@ -60,6 +60,11 @@ type Command struct {
 	ID    string // unique across plugins, e.g. "example.hello"
 	Title string // human-facing label
 	Scope Scope
+	// Shortcut is an optional documentation-only hint shown in the help sheet
+	// when the command has no registry Keymap to resolve (e.g. vim ex-commands
+	// like ":w" or modal keys handled outside the keymap layer). A real Keymap
+	// binding, when present, takes precedence over this hint.
+	Shortcut string
 	// Run produces the tea.Cmd to execute when the command is invoked.
 	Run func(h host.API) tea.Cmd
 }

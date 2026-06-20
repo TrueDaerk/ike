@@ -17,7 +17,6 @@ type Help struct {
 	res    BindingResolver
 	minCol int // configured minimum column width (0 -> default)
 
-	ctxID  string // pane context captured at the last snapshot
 	groups []Group
 }
 
@@ -28,12 +27,11 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 	return &Help{src: src, res: res, minCol: minCol}
 }
 
-// Snapshot re-reads the registry for pane context ctxID. It is idempotent:
-// re-snapshotting picks up newly registered commands. Call it each time the
-// shell is opened so the cheat sheet reflects the current registry.
-func (h *Help) Snapshot(ctxID string) {
-	h.ctxID = ctxID
-	h.groups = Snapshot(h.src, h.res, ctxID)
+// Snapshot re-reads every registered command. It is idempotent: re-snapshotting
+// picks up newly registered commands. Call it each time the shell is opened so
+// the cheat sheet reflects the current registry.
+func (h *Help) Snapshot() {
+	h.groups = Snapshot(h.src, h.res)
 }
 
 // Title implements ui.Content.
@@ -92,7 +90,16 @@ func (h *Help) renderBody(colW, cols int) string {
 	if len(blocks) == 0 {
 		return "no commands registered"
 	}
-	return lipgloss.JoinVertical(lipgloss.Left, blocks...)
+	// Separate groups (Global, Editor, Explorer, …) with a blank line so the
+	// sections read as distinct clusters rather than one continuous list.
+	spaced := make([]string, 0, len(blocks)*2-1)
+	for i, b := range blocks {
+		if i > 0 {
+			spaced = append(spaced, "")
+		}
+		spaced = append(spaced, b)
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, spaced...)
 }
 
 // renderEntry formats one command row: "title … shortcut", or just the title

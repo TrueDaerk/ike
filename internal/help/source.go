@@ -48,23 +48,32 @@ type Group struct {
 	Entries []Entry
 }
 
-// CommandSource is the read-only registry view help needs: the commands that
-// apply for a given pane context. *registry.Registry satisfies it.
+// CommandSource is the read-only registry view help needs: every registered
+// command, regardless of focus. The cheat sheet is a full reference — it lists
+// all scopes (Global, Editor, Explorer, …) at once, not just the focused pane's.
+// *registry.Registry satisfies it.
 type CommandSource interface {
-	CommandsForContext(ctxID string) []registry.OwnedCommand
+	Commands() []registry.OwnedCommand
 }
 
-// Snapshot pulls the commands applicable in pane context ctxID from src, joins
-// each with its shortcut from res, groups them by scope label, and returns the
-// groups in deterministic order. A nil res simply yields title-only entries.
-func Snapshot(src CommandSource, res BindingResolver, ctxID string) []Group {
+// Snapshot pulls every registered command from src, joins each with its shortcut
+// from res, groups them by scope label, and returns the groups in deterministic
+// order. A command with no resolver binding falls back to its documentation-only
+// Shortcut hint (plugin.Command.Shortcut); a nil res leaves resolver lookups out
+// but the doc hints still apply.
+func Snapshot(src CommandSource, res BindingResolver) []Group {
 	byLabel := map[string][]Entry{}
-	for _, c := range src.CommandsForContext(ctxID) {
+	for _, c := range src.Commands() {
 		e := Entry{ID: c.ID, Title: c.Title}
 		if res != nil {
 			if s, ok := res.Binding(c.ID); ok {
 				e.Shortcut = s
 			}
+		}
+		// Fall back to the command's own documentation hint when no live binding
+		// resolved (vim ex-commands and modal keys live outside the keymap layer).
+		if e.Shortcut == "" {
+			e.Shortcut = c.Shortcut
 		}
 		label := groupLabel(c.Scope)
 		byLabel[label] = append(byLabel[label], e)

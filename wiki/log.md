@@ -5,6 +5,13 @@
 - `F1` now opens the help overlay as an alias for `?`, and dismisses it as well
   (added to the floating shell's dismiss key set).
 
+- Help overlay is now a **full reference**: it snapshots every registered command
+  (`registry.Commands()`) regardless of focus, so the Editor section shows
+  alongside Global and Explorer. Added a documentation-only `plugin.Command.Shortcut`
+  hint — help falls back to it when no keymap resolves — so the editor's vim
+  ex-commands (`:w`/`:q`/`:wq`) and modal keys (`u`/`ctrl+r`) display their
+  shortcuts. Scope groups are now separated by a blank line for readability.
+
 - Fixed explorer mouse-click desync after restoring a session with expanded
   directories: `clampScroll` now also clamps `offset` to `len(rows)-textH`.
   Restore runs at height 0 and parked an offset past the last page; `View`

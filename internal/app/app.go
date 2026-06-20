@@ -324,7 +324,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// "?" (and F1) open the help overlay (binding/command ownership moves to
 		// 0070/0080 once they land; help only consumes it).
 		if keys == "?" || keys == "f1" {
-			m.help.Snapshot(m.focusContext())
+			m.help.Snapshot()
 			m.shell.SetContent(m.help)
 			m.shell.SetSize(m.width, m.height)
 			m.shell.Open()

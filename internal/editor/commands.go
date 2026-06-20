@@ -18,11 +18,15 @@ const ContextID = "editor"
 // keybindings (08) invoke these by id — the editor grows no parallel dispatch.
 
 // action builds a registry Command that runs a named editor action via ActionMsg.
-func action(id, title, name string) plugin.Command {
+// shortcut is the documentation hint shown in the help sheet: the editor's vim
+// keys (ex-commands like ":w", modal keys like "u") are handled directly in the
+// editor, not through the keymap layer, so they are surfaced as doc hints.
+func action(id, title, name, shortcut string) plugin.Command {
 	return plugin.Command{
-		ID:    id,
-		Title: title,
-		Scope: plugin.PaneScope(ContextID),
+		ID:       id,
+		Title:    title,
+		Scope:    plugin.PaneScope(ContextID),
+		Shortcut: shortcut,
 		Run: func(h host.API) tea.Cmd {
 			return h.Dispatch(ActionMsg{Action: name})
 		},
@@ -40,11 +44,11 @@ func (editorPlugin) ID() string { return "editor" }
 func (editorPlugin) Capabilities() plugin.Capabilities {
 	return plugin.Capabilities{
 		Commands: []plugin.Command{
-			action("editor.write", "Save File", "write"),
-			action("editor.quit", "Close Editor", "quit"),
-			action("editor.write_quit", "Save and Close", "write_quit"),
-			action("editor.undo", "Undo", "undo"),
-			action("editor.redo", "Redo", "redo"),
+			action("editor.write", "Save File", "write", ":w"),
+			action("editor.quit", "Close Editor", "quit", ":q"),
+			action("editor.write_quit", "Save and Close", "write_quit", ":wq"),
+			action("editor.undo", "Undo", "undo", "u"),
+			action("editor.redo", "Redo", "redo", "ctrl+r"),
 		},
 	}
 }

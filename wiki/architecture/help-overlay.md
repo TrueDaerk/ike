@@ -4,7 +4,7 @@ title: Help Overlay
 description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-06-20T12:00:00Z
+timestamp: 2026-06-20T13:00:00Z
 ---
 
 # Help Overlay
@@ -13,10 +13,16 @@ Roadmap 0030. A discoverable, self-documenting window: pressing `?` (or `F1`)
 opens an overlay listing every registered **Command** with its bound
 **shortcut**. It is
 a pure **consumer** — it owns no command or binding store, and (since roadmap
-0035) no chrome. It snapshots the plugin registry (roadmap 0020) on open and
-joins each command with its shortcut from a binding resolver (the roadmap 0080
-keymap resolver, consumed through a narrow interface so help builds before 08
-lands). The body packs entries into **at most two columns**.
+0035) no chrome. It snapshots **every** registered command from the plugin
+registry (roadmap 0020) on open — the full reference, not just the focused
+pane's scope — and joins each command with its shortcut from a binding resolver
+(the roadmap 0080 keymap resolver, consumed through a narrow interface so help
+builds before 08 lands). Commands handled outside the keymap layer (the editor's
+vim ex-commands `:w`/`:q`/`:wq` and modal keys `u`/`ctrl+r`) carry a
+documentation-only `Shortcut` hint on the `plugin.Command` that help shows when
+no live binding resolves. The body packs entries into **at most two columns**,
+and the scope groups (Global, Editor, Explorer, …) are separated by a blank
+line.
 
 The cheat sheet is rendered inside the reusable **floating shell**
 (`internal/ui.Floating`, roadmap 0035) — `Help` is just a `ui.Content` provider.
@@ -34,25 +40,29 @@ internal/help/
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. On `?`/`F1` it calls
-`help.Snapshot(ctx)`, sets the `*help.Help` as the shell's content, and opens the
+`help.Snapshot()`, sets the `*help.Help` as the shell's content, and opens the
 shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. Scrolling, chrome, sizing, and dismissal now live
 in the shell, not in help.
 
 ## Source of truth
 
-`Snapshot(src, res, ctxID)` is the join:
+`Snapshot(src, res)` is the join:
 
-- **Commands** come from `registry.CommandsForContext(ctxID)` — global commands
-  plus those scoped to the focused pane's context (editor / explorer). No
-  parallel command list.
+- **Commands** come from `registry.Commands()` — **every** registered command,
+  regardless of focus, so the sheet is a full reference covering all scopes at
+  once (global / editor / explorer). No parallel command list.
 - **Shortcuts** come from a `BindingResolver` (`Binding(id) (string, ok)`). The
   root now passes the `*registry.Registry` itself: it resolves a command's key by
   matching the command id against keymaps that declare a `CommandID`
-  (`plugin.Keymap.CommandID`). Bindings that don't set a `CommandID` (e.g. raw
-  message keymaps) stay title-only — graceful degradation, no hardcoded keys. The
-  full keymap layer (preset + overrides) is still owned by roadmap 0080; this is
-  the minimal command→shortcut seam. `MapResolver` remains a test stand-in.
+  (`plugin.Keymap.CommandID`). When no keymap resolves, help falls back to the
+  command's own documentation-only `Shortcut` hint (`plugin.Command.Shortcut`) —
+  this is how the editor's vim ex-commands (`:w`, `:q`, `:wq`) and modal keys
+  (`u`, `ctrl+r`), which live outside the keymap layer, still show a shortcut. A
+  command with neither stays title-only — graceful degradation, no hardcoded
+  keys. The full keymap layer (preset + overrides) is still owned by roadmap
+  0080; this is the minimal command→shortcut seam. `MapResolver` remains a test
+  stand-in.
 
 Entries group by **scope label** (`global`, `editor`, `explorer`) with a heading
 per group; ordering is deterministic (global first, then alphabetical; entries

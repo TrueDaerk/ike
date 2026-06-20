@@ -34,20 +34,18 @@ func TestSnapshotJoinsBindingsAndGroups(t *testing.T) {
 	r := testRegistry()
 	res := MapResolver{"core.quit": "ctrl+c", "editor.save": ":w"}
 
-	groups := Snapshot(r, res, "editor")
+	groups := Snapshot(r, res)
 
-	// editor context => global commands + editor-scoped, but not explorer-scoped.
+	// The cheat sheet lists every scope at once: global first, then the rest
+	// alphabetically (editor, explorer) — independent of focus.
 	var labels []string
 	byLabel := map[string][]Entry{}
 	for _, g := range groups {
 		labels = append(labels, g.Label)
 		byLabel[g.Label] = g.Entries
 	}
-	if got, want := strings.Join(labels, ","), "global,editor"; got != want {
+	if got, want := strings.Join(labels, ","), "global,editor,explorer"; got != want {
 		t.Fatalf("group order = %q, want %q", got, want)
-	}
-	if _, ok := byLabel["explorer"]; ok {
-		t.Fatalf("explorer-scoped command leaked into editor context")
 	}
 
 	// shortcut join
@@ -68,10 +66,58 @@ func TestSnapshotJoinsBindingsAndGroups(t *testing.T) {
 	}
 }
 
+// TestSnapshotFallsBackToDocShortcut verifies a command with no resolver
+// binding still shows its documentation-only Shortcut hint (vim ex-commands).
+func TestSnapshotFallsBackToDocShortcut(t *testing.T) {
+	r := registry.New()
+	r.Add(stubPlugin{id: "editor", cmd: []plugin.Command{
+		{ID: "editor.write", Title: "Save File", Scope: plugin.PaneScope("editor"), Shortcut: ":w"},
+	}})
+	groups := Snapshot(r, nil) // nil resolver -> only the doc hint can apply
+	if len(groups) != 1 || len(groups[0].Entries) != 1 {
+		t.Fatalf("unexpected groups %+v", groups)
+	}
+	if got := groups[0].Entries[0].Shortcut; got != ":w" {
+		t.Fatalf("doc-hint shortcut = %q, want :w", got)
+	}
+}
+
+// TestSnapshotResolverWinsOverDocShortcut verifies a live keymap binding takes
+// precedence over the documentation hint.
+func TestSnapshotResolverWinsOverDocShortcut(t *testing.T) {
+	r := registry.New()
+	r.Add(stubPlugin{id: "p", cmd: []plugin.Command{
+		{ID: "p.do", Title: "Do", Scope: plugin.GlobalScope(), Shortcut: "doc"},
+	}})
+	groups := Snapshot(r, MapResolver{"p.do": "ctrl+x"})
+	if got := groups[0].Entries[0].Shortcut; got != "ctrl+x" {
+		t.Fatalf("resolver shortcut = %q, want ctrl+x", got)
+	}
+}
+
+// TestRenderSeparatesGroupsWithBlankLine verifies a blank line sits between the
+// section blocks (Global, Editor, …) so they read as distinct clusters.
+func TestRenderSeparatesGroupsWithBlankLine(t *testing.T) {
+	h := New(testRegistry(), nil, 0)
+	h.Snapshot()
+	body := h.Render(120)
+	lines := strings.Split(body, "\n")
+	blank := false
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			blank = true
+			break
+		}
+	}
+	if !blank {
+		t.Fatalf("expected a blank separator line between groups:\n%s", body)
+	}
+}
+
 func TestSnapshotDeterministicEntryOrder(t *testing.T) {
 	r := testRegistry()
-	a := Snapshot(r, nil, "")
-	b := Snapshot(r, nil, "")
+	a := Snapshot(r, nil)
+	b := Snapshot(r, nil)
 	if len(a) != len(b) {
 		t.Fatalf("group count differs between snapshots")
 	}
@@ -151,7 +197,7 @@ func TestMinColumnWidth(t *testing.T) {
 
 func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 	h := New(testRegistry(), MapResolver{"core.quit": "ctrl+c"}, 0)
-	h.Snapshot("editor")
+	h.Snapshot()
 	body := h.Render(120)
 	for _, want := range []string{"Quit", "Save", "ctrl+c", "Global", "Editor"} {
 		if !strings.Contains(body, want) {
@@ -162,7 +208,7 @@ func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 
 func TestRenderEmptyWhenNoCommands(t *testing.T) {
 	h := New(registry.New(), nil, 0)
-	h.Snapshot("")
+	h.Snapshot()
 	if got := h.Render(80); got != "no commands registered" {
 		t.Fatalf("empty render = %q", got)
 	}
@@ -177,7 +223,7 @@ func TestRenderNeverExceedsTwoColumns(t *testing.T) {
 	}
 	r.Add(stubPlugin{id: "g", cmd: cmds})
 	h := New(r, nil, 0)
-	h.Snapshot("")
+	h.Snapshot()
 	// With 40 entries capped at two columns, even given a very wide budget the
 	// body packs column-major into rows = ceil(40/2) = 20 — so it stays tall and
 	// narrow rather than spreading across the budget.
