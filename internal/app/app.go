@@ -201,10 +201,10 @@ func corePanes() map[string]bool {
 
 // shellConfig builds the floating shell configuration, reading optional tuning
 // keys (margin, max width/height fraction) from cfg. The help dismiss set keeps
-// the established esc/?/q so the cheat sheet behaves exactly as before.
+// the established esc/?/f1/q so the cheat sheet behaves exactly as before.
 func shellConfig(cfg host.Config) ui.Config {
 	c := ui.Config{
-		DismissKeys: []string{"esc", "?", "q"},
+		DismissKeys: []string{"esc", "?", "f1", "q"},
 		Accent:      "69",
 	}
 	if cfg == nil {
@@ -321,9 +321,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.routeKey(msg)
 		}
 		keys := msg.String()
-		// "?" opens the help overlay (binding/command ownership moves to 0070/0080
-		// once they land; help only consumes it).
-		if keys == "?" {
+		// "?" (and F1) open the help overlay (binding/command ownership moves to
+		// 0070/0080 once they land; help only consumes it).
+		if keys == "?" || keys == "f1" {
 			m.help.Snapshot(m.focusContext())
 			m.shell.SetContent(m.help)
 			m.shell.SetSize(m.width, m.height)

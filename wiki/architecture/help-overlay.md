@@ -4,13 +4,14 @@ title: Help Overlay
 description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-06-20T12:00:00Z
 ---
 
 # Help Overlay
 
-Roadmap 0030. A discoverable, self-documenting window: pressing `?` opens an
-overlay listing every registered **Command** with its bound **shortcut**. It is
+Roadmap 0030. A discoverable, self-documenting window: pressing `?` (or `F1`)
+opens an overlay listing every registered **Command** with its bound
+**shortcut**. It is
 a pure **consumer** — it owns no command or binding store, and (since roadmap
 0035) no chrome. It snapshots the plugin registry (roadmap 0020) on open and
 joins each command with its shortcut from a binding resolver (the roadmap 0080
@@ -20,7 +21,7 @@ lands). The body packs entries into **at most two columns**.
 The cheat sheet is rendered inside the reusable **floating shell**
 (`internal/ui.Floating`, roadmap 0035) — `Help` is just a `ui.Content` provider.
 The shell owns the centered floating box, content sizing, vertical scroll, and
-`esc/?/q` dismissal; Help owns only the snapshot and column layout. See
+`esc/?/f1/q` dismissal; Help owns only the snapshot and column layout. See
 [Floating Shell](/architecture/floating-shell.md).
 
 ## Structure
@@ -32,7 +33,7 @@ internal/help/
   help.go      ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
 ```
 
-The root model (`internal/app`) holds a single `*ui.Floating`. On `?` it calls
+The root model (`internal/app`) holds a single `*ui.Floating`. On `?`/`F1` it calls
 `help.Snapshot(ctx)`, sets the `*help.Help` as the shell's content, and opens the
 shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. Scrolling, chrome, sizing, and dismissal now live

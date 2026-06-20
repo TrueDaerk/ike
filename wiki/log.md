@@ -2,6 +2,9 @@
 
 ## 2026-06-20
 
+- `F1` now opens the help overlay as an alias for `?`, and dismisses it as well
+  (added to the floating shell's dismiss key set).
+
 - Fixed explorer mouse-click desync after restoring a session with expanded
   directories: `clampScroll` now also clamps `offset` to `len(rows)-textH`.
   Restore runs at height 0 and parked an offset past the last page; `View`

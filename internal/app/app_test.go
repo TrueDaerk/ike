@@ -333,6 +333,13 @@ func TestHelpOverlayToggle(t *testing.T) {
 	if m.shell.IsOpen() {
 		t.Fatal(`"esc" should dismiss the help overlay`)
 	}
+
+	// F1 is an alias for "?" and opens the same overlay.
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	m = tm.(Model)
+	if !m.shell.IsOpen() {
+		t.Fatal(`F1 should open the help overlay`)
+	}
 }
 
 // TestOpenModalRequestFloatsPluginContent verifies the additive plugin seam:
