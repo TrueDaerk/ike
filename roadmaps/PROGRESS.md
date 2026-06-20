@@ -8,6 +8,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [02 — Plugins: Compile-in Registry](0020-plugins-compile-in.md)
 - [x] [03 — Help Overlay (Command & Shortcut Cheat Sheet)](0030-help-overlay.md)
 - [x] [03.5 — Floating Shell (Reusable Overlay / Modal Component)](0035-floating-shell.md)
+- [ ] [03.6 — Pane Drag: Mouse Move, Resize & Layout Persistence](0036-pane-drag-layout.md)
 - [ ] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [ ] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
@@ -32,6 +33,12 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
   centered-pane component (`internal/overlay` compositing + `internal/ui.Floating`
   shell) hosting any `tea.Model`. **03** is refactored to consume it; modals and
   plugin popups reuse it. Owns no content, only the shell.
+- **03.6** pane drag lifts the root's hard-coded tiling into a pure layout tree
+  (`internal/layout`) driven by `tea.MouseMsg`: divider drag resizes, title-bar
+  drag moves/swaps panes. Geometry/structure persist per project in a dedicated
+  layout **state store** (not `settings.toml`). It is the first step of the
+  broader pane manager **03.5** deferred; **03.5** overlays still composite above
+  the tiling. Reuses **04**'s discovery/write seam for the store when present.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
 
