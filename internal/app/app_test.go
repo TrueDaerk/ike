@@ -163,6 +163,29 @@ func TestQuitFromExplorer(t *testing.T) {
 	}
 }
 
+// When the editor is focused in normal mode, "q" quits the app like it does
+// from the explorer.
+func TestQuitFromEditorNormalMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	if m.focus != focusEditor {
+		t.Fatal("opening a file should focus the editor")
+	}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	if cmd == nil {
+		t.Fatal("q in editor normal mode should quit")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected QuitMsg, got %T", cmd())
+	}
+}
+
 // When the editor is in insert mode, a literal "q" must reach the buffer rather
 // than quitting the app.
 func TestQNotQuitWhileTyping(t *testing.T) {

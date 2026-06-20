@@ -273,7 +273,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Plugin key bindings resolve before core only when they explicitly
 		// out-prioritise core; otherwise core keys keep precedence.
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
-			if k.Priority > plugin.CorePriority || !isCoreKey(keys, m.focus) {
+			if k.Priority > plugin.CorePriority || !m.isCoreKey(keys) {
 				return m, k.Action(m.host)
 			}
 		}
@@ -281,7 +281,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		case "q":
-			if m.focus == focusExplorer {
+			if m.quitKey() {
 				return m, tea.Quit
 			}
 		case "tab":
@@ -340,14 +340,23 @@ func (m Model) focusContext() string {
 
 // isCoreKey reports whether keys is handled by a core binding in the current
 // focus, so a plugin must out-prioritise it to take over.
-func isCoreKey(keys string, f focus) bool {
+func (m Model) isCoreKey(keys string) bool {
 	switch keys {
 	case "ctrl+c", "tab":
 		return true
 	case "q":
-		return f == focusExplorer
+		return m.quitKey()
 	}
 	return false
+}
+
+// quitKey reports whether "q" should quit in the current focus: from the
+// explorer, or from the editor while in normal mode (not typing into a file).
+func (m Model) quitKey() bool {
+	if m.focus == focusExplorer {
+		return true
+	}
+	return m.focus == focusEditor && m.editor.ModeName() == editor.Normal
 }
 
 // readHead returns the leading bytes of path for content sniffing, or nil.

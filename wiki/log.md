@@ -2,6 +2,10 @@
 
 ## 2026-06-20
 
+- `q` now quits the app from the editor too, when it is focused in normal mode
+  (previously only from the explorer). Insert/command mode still routes `q` to
+  the buffer. See `app.quitKey`/`app.isCoreKey`.
+
 - Editor follow-ups: the visual selection is now rendered (per-cell highlight in
   `view.go`, cursor wins on overlap) and visual mode gained `i`/`a` text-object
   selection, `>`/`<` indent, and register-replace `p`. Added word navigation on

@@ -36,10 +36,11 @@ each pane's rectangle and supports mouse divider-resize and title-bar move.
 
 ## Focus and global keys
 
-`Tab` toggles focus between panes. `Ctrl+C` always quits; `q` quits only when
-the explorer is focused. While the editor is capturing text (insert or command
-mode), global single-letter keys are suppressed so typed characters reach the
-buffer (`app.editorCapturing`).
+`Tab` toggles focus between panes. `Ctrl+C` always quits; `q` quits when the
+explorer is focused or when the editor is focused in normal mode
+(`app.quitKey`). While the editor is capturing text (insert or command mode),
+global single-letter keys are suppressed so typed characters reach the buffer
+(`app.editorCapturing`).
 
 ## Status line
 
