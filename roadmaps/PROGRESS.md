@@ -13,7 +13,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [04 — Settings / Configuration](0040-settings.md)
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [x] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
-- [ ] [07 — Command Palette](0070-command-palette.md)
+- [x] [07 — Command Palette](0070-command-palette.md)
 - [ ] [08 — Keybindings & Shortcuts](0080-keybindings.md)
 - [ ] [09 — Project Switching](0090-project-switching.md)
 - [x] [09.5 — Session Restore (Workspace State Persistence)](0095-session-restore.md)

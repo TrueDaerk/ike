@@ -14,6 +14,7 @@ type Config struct {
 	LSP      LSP      `toml:"lsp"`
 	Theme    Theme    `toml:"theme"`
 	Project  Project  `toml:"project"`
+	Palette  Palette  `toml:"palette"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).
@@ -68,4 +69,16 @@ type Project struct {
 	History     []string `toml:"history"`
 	MaxHistory  int      `toml:"max_history"`
 	RestoreLast bool     `toml:"restore_last"`
+}
+
+// Palette tunes the command palette overlay (Roadmap 0070). DefaultMode is the
+// prefix used when the query has no recognised one (":" commands or "@" files).
+// OffContext selects how command mode treats commands scoped to a different pane
+// context: "rank" lists them last, "hide" omits them. ToggleKey is the default
+// key that opens the palette (Roadmap 0080 owns the final keymap).
+type Palette struct {
+	MaxResults  int    `toml:"max_results"`
+	DefaultMode string `toml:"default_mode"`
+	OffContext  string `toml:"off_context"`
+	ToggleKey   string `toml:"toggle_key"`
 }

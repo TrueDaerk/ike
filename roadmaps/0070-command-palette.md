@@ -69,17 +69,17 @@ file) through `host.API`; the root applies it and closes the overlay.
 
 ## Milestones
 
-- [ ] `internal/fuzzy`: scoring matcher returning score + matched index spans for highlighting.
-- [ ] `internal/palette`: overlay `tea.Model` — open/close, input line, result list, keyboard nav, esc-to-dismiss.
-- [ ] `internal/palette` `Mode` interface + prefix dispatch (prefix-agnostic core, extensible).
-- [ ] Propose + apply additive `Scope` field on `plugin.Command` (coordinate with Roadmap 0020).
-- [ ] Pane context resolution: focused pane reports a context id; `context.go` maps it for ranking.
-- [ ] `:` command mode: snapshot registry, context-filter/rank, execute selection via `host.API` on enter.
-- [ ] `@` file mode: fuzzy file finder over the project tree; selection emits the 01 "open file" `tea.Msg`.
-- [ ] Root-model integration in `internal/app`: host overlay, toggle, forward keys, render on top.
-- [ ] Optional config hooks (`internal/config`): fuzzy behaviour, max results, off-context visibility, recents.
-- [ ] Tests: fuzzy scoring + spans, mode prefix routing, context ranking, command execution dispatch, file-mode open msg, esc/nav behaviour.
-- [ ] Wiki: document the palette, mode/prefix model, and the `Command.Scope` extension under `wiki/`.
+- [x] `internal/fuzzy`: scoring matcher returning score + matched index spans for highlighting.
+- [x] `internal/palette`: overlay `tea.Model` — open/close, input line, result list, keyboard nav, esc-to-dismiss.
+- [x] `internal/palette` `Mode` interface + prefix dispatch (prefix-agnostic core, extensible).
+- [x] Propose + apply additive `Scope` field on `plugin.Command` (coordinate with Roadmap 0020).
+- [x] Pane context resolution: focused pane reports a context id; `context.go` maps it for ranking.
+- [x] `:` command mode: snapshot registry, context-filter/rank, execute selection via `host.API` on enter.
+- [x] `@` file mode: fuzzy file finder over the project tree; selection emits the 01 "open file" `tea.Msg`.
+- [x] Root-model integration in `internal/app`: host overlay, toggle, forward keys, render on top.
+- [x] Optional config hooks (`internal/config`): fuzzy behaviour, max results, off-context visibility, recents.
+- [x] Tests: fuzzy scoring + spans, mode prefix routing, context ranking, command execution dispatch, file-mode open msg, esc/nav behaviour.
+- [x] Wiki: document the palette, mode/prefix model, and the `Command.Scope` extension under `wiki/`.
 
 ## Out of scope
 

@@ -23,6 +23,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/overlay"
+	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -61,6 +62,11 @@ type Model struct {
 	help         *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
+	// palette is the command palette overlay (Roadmap 0070): a modal input that
+	// fronts registered commands (":") and file search ("@"). paletteKey is the
+	// default key that opens it (the final binding is Roadmap 0080's).
+	palette    *palette.Palette
+	paletteKey string
 	// tree is the pure split-tree layout (Roadmap 0036/0037). Leaves are instance
 	// keys resolved through panes.
 	tree layout.Node
@@ -136,6 +142,8 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		reg:          reg,
 		help:         help.New(reg, reg, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
+		palette:      buildPalette(reg, cfg),
+		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
 	}
@@ -357,6 +365,70 @@ func focusKeys(cfg host.Config) map[string]Direction {
 	return out
 }
 
+// buildPalette wires the command palette: a ":" command mode reading the registry
+// and an "@" file finder, tuned by the optional palette.* config keys.
+func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
+	pcfg := palette.Config{
+		MaxResults:    paletteMaxResults(cfg),
+		DefaultPrefix: paletteDefaultPrefix(cfg),
+		Accent:        colorPaneFocus,
+	}
+	cmd := palette.NewCommandMode(reg, reg, paletteHideOff(cfg))
+	file := palette.NewFileMode()
+	return palette.New(pcfg, cmd, file)
+}
+
+// paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
+func paletteMaxResults(cfg host.Config) int {
+	if cfg == nil {
+		return 0
+	}
+	if v, ok := cfg.Get("palette.max_results"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return 0
+}
+
+// paletteDefaultPrefix reads palette.default_mode and returns its first rune, or
+// 0 to let the palette default to its first mode.
+func paletteDefaultPrefix(cfg host.Config) rune {
+	if cfg == nil {
+		return 0
+	}
+	if v, ok := cfg.Get("palette.default_mode"); ok {
+		if r := []rune(strings.TrimSpace(v)); len(r) > 0 {
+			return r[0]
+		}
+	}
+	return 0
+}
+
+// paletteHideOff reports whether command mode hides off-context commands
+// (palette.off_context == "hide") rather than ranking them last.
+func paletteHideOff(cfg host.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	if v, ok := cfg.Get("palette.off_context"); ok {
+		return strings.EqualFold(strings.TrimSpace(v), "hide")
+	}
+	return false
+}
+
+// paletteToggleKey reads palette.toggle_key, defaulting to ctrl+p.
+func paletteToggleKey(cfg host.Config) string {
+	if cfg != nil {
+		if v, ok := cfg.Get("palette.toggle_key"); ok {
+			if k := strings.TrimSpace(v); k != "" {
+				return k
+			}
+		}
+	}
+	return "ctrl+p"
+}
+
 // helpMinCol reads the optional help.min_column_width config value.
 func helpMinCol(cfg host.Config) int {
 	if cfg == nil {
@@ -398,6 +470,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
 		m.shell.SetSize(m.width, m.height)
+		m.palette.SetSize(m.width, m.height)
 		return m, nil
 
 	case tea.MouseMsg:
@@ -414,6 +487,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case host.OpenFileRequest:
 		return m.openPath(msg.Path, msg.NewPane)
+
+	case palette.RunCommandMsg:
+		return m, m.RunCommand(msg.ID)
+
+	case palette.OpenFileMsg:
+		return m.openPath(msg.Path, false)
 
 	case host.OpenModalRequest:
 		m.shell.SetContent(ui.ModelContent{Heading: msg.Title, Body: msg.View})
@@ -435,14 +514,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.palette.IsOpen() {
+			return m, m.palette.Update(msg)
+		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)
+			return m, nil
+		}
+		keys := msg.String()
+		if keys == m.paletteKey {
+			m.openPalette()
 			return m, nil
 		}
 		if m.editorCapturing() {
 			return m.routeKey(msg)
 		}
-		keys := msg.String()
 		if keys == "?" || keys == "f1" {
 			m.help.Snapshot()
 			m.shell.SetContent(m.help)
@@ -521,6 +607,13 @@ func (m Model) RunCommand(id string) tea.Cmd {
 		return c.Run(m.host)
 	}
 	return nil
+}
+
+// openPalette shows the command palette for the focused pane's context, rooted
+// at the working directory for file search.
+func (m *Model) openPalette() {
+	m.palette.SetSize(m.width, m.height)
+	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})
 }
 
 // focusContext reports the context id advertised by the focused pane.
@@ -996,6 +1089,9 @@ func (m Model) View() string {
 	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
+	}
+	if m.palette.IsOpen() {
+		return overlay.Center(base, m.palette.View(), m.width, m.height)
 	}
 	if m.shell.IsOpen() {
 		return overlay.Center(base, m.shell.View(), m.width, m.height)

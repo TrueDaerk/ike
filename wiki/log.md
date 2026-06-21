@@ -2,6 +2,19 @@
 
 ## 2026-06-21
 
+- **Command palette (Roadmap 0070).** New `internal/palette` overlay fronts every
+  action: a leading prefix rune selects a `Mode` — `:` runs registry commands
+  (snapshot per open, ranked context-first/global/off-context), `@` fuzzy-finds
+  files by relative path (directory segments included). New `internal/fuzzy`
+  matcher returns an optimal-alignment score + matched rune spans shared by
+  ranking and highlighting. The palette is its own modal tea-model (the read-only
+  floating shell can't take typed input); it dispatches `RunCommandMsg` /
+  `OpenFileMsg` and executes nothing. Root model hosts it, toggles on `ctrl+p`
+  (config `palette.toggle_key`), forwards keys, composites it centered. New
+  `[palette]` config section (`max_results`, `default_mode`, `off_context`,
+  `toggle_key`). The `plugin.Command.Scope` field it ranks by was already present.
+  New concept doc [Command Palette](/architecture/command-palette.md).
+
 - **Pane splitting & multiple editors (Roadmap 0037).** The fixed two-component
   root becomes a dynamic pane set. New `internal/pane` registry maps each layout
   leaf to a live instance (explorer singleton + N editors); focus is now the

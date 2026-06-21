@@ -46,5 +46,11 @@ func defaults() *Config {
 			MaxHistory:  20,
 			RestoreLast: false,
 		},
+		Palette: Palette{
+			MaxResults:  12,
+			DefaultMode: ":",
+			OffContext:  "rank",
+			ToggleKey:   "ctrl+p",
+		},
 	}
 }
