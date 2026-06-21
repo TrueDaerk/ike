@@ -2,6 +2,12 @@
 
 ## 2026-06-21
 
+- **Editor: expand tabs when rendering.** `renderLine` now budgets by display
+  cells and expands each tab to `tab_width` spaces. Previously it emitted raw
+  tabs counted as one rune each; the terminal expanded them past the line's width
+  budget, wrapping the line and pushing a split editor pane's bottom border off
+  screen. Fixes the "split pane has no bottom border" bug on tab-indented files.
+
 - **Command palette refinements (Roadmap 0070).** Box is now compact (half-width
   centered / pane-width anchored, each with a floor). Key bindings render as a
   highlighted chip pinned right of each row (title truncates first). Two new entry

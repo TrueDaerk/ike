@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-06-21T16:00:00Z
 ---
 
 # Editor
@@ -38,7 +38,11 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   cursor before/after); linear today, with parent/seq fields reserved for an
   undo tree. `.` repeat lives in the editor (`dotCommand`).
 - **viewport** — vertical/horizontal scroll with `scroll_off`, plus the
-  absolute/relative line-number gutter.
+  absolute/relative line-number gutter. The line renderer budgets by **display
+  cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered
+  width matches the terminal and stays inside its pane (a raw tab would be
+  expanded by the terminal past the budget and wrap, pushing the pane's bottom
+  border off screen).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
 - **excmd** — parses the `:` line (`:w :q :wq :q! :e`, `:<n>` line jump) into a

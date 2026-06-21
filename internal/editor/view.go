@@ -82,7 +82,11 @@ func (m Model) View() string {
 
 // renderLine renders one buffer line within the horizontal window, overlaying
 // the visual selection and the cursor cell (the cursor wins on overlap). It
-// stops at the end of meaningful content so trailing blanks are not emitted.
+// budgets by display cells, not runes: a tab expands to tabWidth spaces so the
+// rendered width matches what the terminal shows, which keeps the line inside its
+// pane (a raw tab would otherwise be expanded by the terminal past the budget and
+// wrap, pushing the pane's bottom border off screen). It stops at the end of
+// meaningful content so trailing blanks are not emitted.
 func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style) string {
 	runes := []rune(m.buf.Line(line))
 	left := m.view.Left
@@ -90,24 +94,40 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 	isCursorLine := line == m.cursor.Line && m.focused
 
 	var b strings.Builder
-	for col := left; col < left+width; col++ {
-		ch := " "
-		if col < len(runes) {
-			ch = string(runes[col])
-		}
+	disp := 0 // display cells emitted so far
+	for col := left; disp < width; col++ {
 		cursorHere := isCursorLine && col == m.cursor.Col
 		selected := hasSel && col >= selStart && col <= selEnd
 		if col >= len(runes) && !cursorHere && !selected {
 			break // nothing meaningful left on this line
 		}
-		switch {
-		case cursorHere:
-			b.WriteString(cursorStyle.Render(ch))
-		case selected:
-			b.WriteString(selStyle.Render(ch))
-		default:
-			b.WriteString(ch)
+
+		cell, cells := " ", 1
+		if col < len(runes) {
+			if runes[col] == '\t' {
+				cell, cells = strings.Repeat(" ", m.tabWidth), m.tabWidth
+			} else {
+				cell = string(runes[col])
+			}
 		}
+		if disp+cells > width { // clamp a tab straddling the right edge
+			cells = width - disp
+			cell = strings.Repeat(" ", cells)
+		}
+
+		switch {
+		case cursorHere && cells > 1:
+			// Cursor on a tab: highlight only the first cell, leave the rest plain.
+			b.WriteString(cursorStyle.Render(" "))
+			b.WriteString(strings.Repeat(" ", cells-1))
+		case cursorHere:
+			b.WriteString(cursorStyle.Render(cell))
+		case selected:
+			b.WriteString(selStyle.Render(cell))
+		default:
+			b.WriteString(cell)
+		}
+		disp += cells
 	}
 	return b.String()
 }
