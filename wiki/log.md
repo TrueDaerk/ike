@@ -2,6 +2,14 @@
 
 ## 2026-06-21
 
+- **Command palette refinements (Roadmap 0070).** Box is now compact (half-width
+  centered / pane-width anchored, each with a floor). Key bindings render as a
+  highlighted chip pinned right of each row (title truncates first). Two new entry
+  points: **esc-esc** opens the centered palette from a non-capturing context, and
+  **`@` in an editor's normal mode** opens a slimmed, file-only palette *anchored*
+  over the editor pane (`OpenAnchored` + `overlay.Place`, locked to `@` so no mode
+  switching).
+
 - **Command palette (Roadmap 0070).** New `internal/palette` overlay fronts every
   action: a leading prefix rune selects a `Mode` — `:` runs registry commands
   (snapshot per open, ranked context-first/global/off-context), `@` fuzzy-finds

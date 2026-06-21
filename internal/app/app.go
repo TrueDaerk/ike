@@ -67,6 +67,9 @@ type Model struct {
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette    *palette.Palette
 	paletteKey string
+	// lastEsc records that the previous key was an esc in a non-capturing context,
+	// so a second esc opens the palette (esc-esc toggle).
+	lastEsc bool
 	// tree is the pure split-tree layout (Roadmap 0036/0037). Leaves are instance
 	// keys resolved through panes.
 	tree layout.Node
@@ -523,7 +526,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		keys := msg.String()
 		if keys == m.paletteKey {
+			m.lastEsc = false
 			m.openPalette()
+			return m, nil
+		}
+		// esc-esc opens the palette from a non-capturing context; the first esc is
+		// still forwarded (clears selection, etc.).
+		if keys == "esc" && !m.editorCapturing() {
+			if m.lastEsc {
+				m.lastEsc = false
+				m.openPalette()
+				return m, nil
+			}
+			m.lastEsc = true
+			return m.routeKey(msg)
+		}
+		m.lastEsc = false
+		// "@" in an editor's normal mode opens a slimmed, file-only palette floated
+		// over that editor pane.
+		if keys == "@" && m.editorNormalMode() {
+			m.openFilePaletteAnchored()
 			return m, nil
 		}
 		if m.editorCapturing() {
@@ -609,11 +631,33 @@ func (m Model) RunCommand(id string) tea.Cmd {
 	return nil
 }
 
-// openPalette shows the command palette for the focused pane's context, rooted
-// at the working directory for file search.
+// openPalette shows the centered command palette for the focused pane's context,
+// rooted at the working directory for file search.
 func (m *Model) openPalette() {
 	m.palette.SetSize(m.width, m.height)
 	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})
+}
+
+// openFilePaletteAnchored opens the slimmed file-only palette floated over the
+// focused editor pane (its top-left interior), falling back to the centered
+// palette if the pane has no computed rectangle yet.
+func (m *Model) openFilePaletteAnchored() {
+	m.palette.SetSize(m.width, m.height)
+	r, ok := m.lay.Panes[m.panes.Focused()]
+	if !ok {
+		m.openPalette()
+		return
+	}
+	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	m.palette.OpenAnchored(cx, '@', r.X+1, r.Y+1, r.W-2)
+}
+
+// editorNormalMode reports whether the focused pane is an editor in normal mode
+// (not capturing text), the context in which "@" opens the file finder.
+func (m Model) editorNormalMode() bool {
+	inst := m.panes.FocusedInstance()
+	return inst != nil && inst.Kind() == pane.KindEditor &&
+		inst.Editor().ModeName() == editor.Normal
 }
 
 // focusContext reports the context id advertised by the focused pane.
@@ -1091,7 +1135,12 @@ func (m Model) View() string {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
 	if m.palette.IsOpen() {
-		return overlay.Center(base, m.palette.View(), m.width, m.height)
+		v := m.palette.View()
+		if m.palette.Anchored() {
+			x, y := m.palette.AnchorPos()
+			return overlay.Place(base, v, x, y, m.width, m.height)
+		}
+		return overlay.Center(base, v, m.width, m.height)
 	}
 	if m.shell.IsOpen() {
 		return overlay.Center(base, m.shell.View(), m.width, m.height)

@@ -63,6 +63,37 @@ func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
 	}
 }
 
+func TestEscEscOpensPalette(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.cycleFocus() // focus the editor (normal mode, not capturing)
+	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("a single esc should not open the palette")
+	}
+	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("esc-esc should open the palette")
+	}
+	if m.palette.Anchored() {
+		t.Fatal("esc-esc opens the centered palette, not anchored")
+	}
+}
+
+func TestAtKeyOpensAnchoredFileFinder(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.cycleFocus() // focus the editor in normal mode
+	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("@ in editor normal mode should open the file finder")
+	}
+	if !m.palette.Anchored() {
+		t.Fatal("the editor file finder should be anchored to the pane")
+	}
+}
+
 func TestPaletteOpenFileMsgOpensPath(t *testing.T) {
 	m := sized(t, 100, 40)
 	dir := t.TempDir()

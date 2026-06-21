@@ -28,6 +28,10 @@ const (
 	defaultAccent     = "69"
 	dimColor          = "240"
 	selectedBg        = "236"
+	keyCapBg          = "238" // background of the right-aligned key-binding chip
+	keyCapFg          = "252" // foreground of the key-binding chip
+	minBoxWidth       = 36    // floor for the centered box
+	minAnchorWidth    = 20    // floor for an editor-anchored box
 )
 
 // Palette is the overlay model. It holds the open/closed state, the raw query
@@ -45,6 +49,15 @@ type Palette struct {
 	selected int
 	top      int // first visible row (scroll window into items)
 	cx       Context
+
+	// locked, when non-nil, pins the palette to a single mode (no prefix
+	// switching): a slimmed file-only palette opened from the editor uses this.
+	locked Mode
+	// anchored renders the box at (anchorX, anchorY) sized to anchorW instead of
+	// centered, so a palette opened from a pane floats over that pane.
+	anchored         bool
+	anchorX, anchorY int
+	anchorW          int
 
 	width, height int
 	maxResults    int
@@ -83,16 +96,46 @@ func New(cfg Config, modes ...Mode) *Palette {
 // IsOpen reports whether the palette is currently shown.
 func (p *Palette) IsOpen() bool { return p.open }
 
-// Open shows the palette for context cx with an empty query, recomputing the
-// initial result list (the default mode's full listing).
+// Open shows the centered palette for context cx with an empty query, recomputing
+// the initial result list (the default mode's full listing). It clears any lock
+// or anchor from a prior open.
 func (p *Palette) Open(cx Context) {
+	p.reset(cx)
+	p.locked = nil
+	p.anchored = false
+	p.recompute()
+}
+
+// OpenAnchored shows a slimmed palette pinned to the mode with the given prefix
+// (no mode switching), floated at (x, y) sized to w. It is how the editor opens a
+// file-only finder over its own pane. An unknown prefix falls back to the default
+// centered palette.
+func (p *Palette) OpenAnchored(cx Context, prefix rune, x, y, w int) {
+	m, ok := p.byPrefix[prefix]
+	if !ok {
+		p.Open(cx)
+		return
+	}
+	p.reset(cx)
+	p.locked = m
+	p.anchored = true
+	p.anchorX, p.anchorY, p.anchorW = x, y, w
+	p.recompute()
+}
+
+// reset clears the per-open transient state.
+func (p *Palette) reset(cx Context) {
 	p.open = true
 	p.query = ""
 	p.selected = 0
 	p.top = 0
 	p.cx = cx
-	p.recompute()
 }
+
+// Anchored reports whether the box should be placed at its anchor rather than
+// centered. AnchorPos returns that placement.
+func (p *Palette) Anchored() bool        { return p.anchored }
+func (p *Palette) AnchorPos() (int, int) { return p.anchorX, p.anchorY }
 
 // Close hides the palette without side effects.
 func (p *Palette) Close() { p.open = false }
@@ -173,6 +216,9 @@ func (p *Palette) move(delta int) {
 // rune that names a registered mode selects it; otherwise the default mode ranks
 // the whole query.
 func (p *Palette) mode() (Mode, string) {
+	if p.locked != nil {
+		return p.locked, p.query // pinned mode: the whole query is the body
+	}
 	if p.query != "" {
 		r := []rune(p.query)
 		if m, ok := p.byPrefix[r[0]]; ok {
@@ -234,6 +280,9 @@ func (p *Palette) View() string {
 // promptGlyph is the leading glyph echoing the active mode: the mode's prefix
 // rune when one is typed, else a generic ">".
 func (p *Palette) promptGlyph() string {
+	if p.locked != nil {
+		return string(p.locked.Prefix())
+	}
 	if p.query != "" {
 		r := []rune(p.query)
 		if _, ok := p.byPrefix[r[0]]; ok {
@@ -274,23 +323,39 @@ func (p *Palette) list(width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
-// row renders a single result line: a selection marker, the highlighted title,
-// and a right-aligned dim detail, all clamped to width.
+// row renders a single result line: a selection marker, the highlighted title on
+// the left, and the key binding (Detail) as a highlighted chip pinned to the
+// right. The title is truncated first so the binding chip is never dropped.
 func (p *Palette) row(it Item, selected bool, width int) string {
+	const markerW = 2
 	marker := "  "
 	if selected {
 		marker = lipgloss.NewStyle().Foreground(lipgloss.Color(p.accent)).Render("❯ ")
 	}
-	avail := width - 2 // marker columns
-	title := highlight(it.Title, it.Spans, p.accent, selected)
-	line := marker + title
+
+	detail, detailW := "", 0
 	if it.Detail != "" {
-		detail := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render(it.Detail)
-		gap := avail - ansi.StringWidth(it.Title) - ansi.StringWidth(it.Detail)
-		if gap >= 1 {
-			line = marker + title + strings.Repeat(" ", gap) + detail
-		}
+		detail = lipgloss.NewStyle().
+			Background(lipgloss.Color(keyCapBg)).
+			Foreground(lipgloss.Color(keyCapFg)).
+			Bold(true).
+			Render(" " + it.Detail + " ")
+		detailW = ansi.StringWidth(it.Detail) + 2
 	}
+
+	avail := width - markerW
+	titleMax := avail - detailW - 1 // keep at least one space before the chip
+	if titleMax < 1 {
+		titleMax = 1
+	}
+	title, titleW := highlight(it.Title, it.Spans, p.accent, titleMax)
+
+	gap := avail - titleW - detailW
+	if gap < 1 {
+		gap = 1
+	}
+	line := marker + title + strings.Repeat(" ", gap) + detail
+
 	style := lipgloss.NewStyle().MaxWidth(width)
 	if selected {
 		style = style.Background(lipgloss.Color(selectedBg)).Width(width)
@@ -299,10 +364,15 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 }
 
 // highlight renders title with the matched rune spans emphasised in the accent
-// colour. spans index runes of title; out-of-range indices are ignored.
-func highlight(title string, spans []int, accent string, selected bool) string {
-	if len(spans) == 0 {
-		return title
+// colour, truncated to at most maxW display cells (with an ellipsis). It returns
+// the styled string and its display width. Spans index runes of the full title;
+// indices past the truncation point are dropped.
+func highlight(title string, spans []int, accent string, maxW int) (string, int) {
+	runes := []rune(title)
+	truncated := false
+	if maxW >= 1 && len(runes) > maxW {
+		runes = runes[:maxW-1]
+		truncated = true
 	}
 	hit := make(map[int]bool, len(spans))
 	for _, s := range spans {
@@ -310,25 +380,36 @@ func highlight(title string, spans []int, accent string, selected bool) string {
 	}
 	matchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(accent)).Bold(true)
 	var b strings.Builder
-	for i, r := range []rune(title) {
+	for i, r := range runes {
 		if hit[i] {
 			b.WriteString(matchStyle.Render(string(r)))
 		} else {
 			b.WriteRune(r)
 		}
 	}
-	return b.String()
+	w := len(runes)
+	if truncated {
+		b.WriteString("…")
+		w++
+	}
+	return b.String(), w
 }
 
-// boxWidth is the outer width of the palette box: 60% of the terminal, clamped to
-// a readable floor and the terminal minus a margin.
+// boxWidth is the outer width of the palette box. Anchored, it tracks the host
+// pane's width; centered, it is half the terminal, both clamped to a readable
+// floor and the space actually available.
 func (p *Palette) boxWidth() int {
-	w := p.width * 6 / 10
-	if w < 40 {
-		w = 40
+	var w, floor, room int
+	if p.anchored {
+		w, floor, room = p.anchorW, minAnchorWidth, p.width-p.anchorX
+	} else {
+		w, floor, room = p.width/2, minBoxWidth, p.width-4
 	}
-	if w > p.width-4 {
-		w = p.width - 4
+	if w < floor {
+		w = floor
+	}
+	if w > room {
+		w = room
 	}
 	if w < 1 {
 		w = 1

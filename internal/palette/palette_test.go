@@ -181,6 +181,32 @@ func TestNavigation(t *testing.T) {
 	}
 }
 
+func TestLockedFileModeNoSwitching(t *testing.T) {
+	fm := fileMode("a.go", "b.txt")
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fm)
+	p.SetSize(80, 24)
+	p.OpenAnchored(Context{Root: "."}, '@', 5, 5, 40)
+
+	if !p.Anchored() {
+		t.Fatal("OpenAnchored should anchor the box")
+	}
+	if x, y := p.AnchorPos(); x != 5 || y != 5 {
+		t.Fatalf("anchor = (%d,%d), want (5,5)", x, y)
+	}
+	if m, _ := p.mode(); m != Mode(fm) {
+		t.Fatal("should be locked to file mode")
+	}
+	// A leading ":" must not switch modes while locked — it is part of the query.
+	p.Update(runes(":x"))
+	m, body := p.mode()
+	if m != Mode(fm) {
+		t.Fatal("locked mode must not switch on ':'")
+	}
+	if body != ":x" {
+		t.Fatalf("locked body = %q, want \":x\"", body)
+	}
+}
+
 func TestNoResults(t *testing.T) {
 	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fileMode())
 	p.SetSize(80, 24)

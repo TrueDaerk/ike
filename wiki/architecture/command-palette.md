@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-06-21T12:00:00Z
+timestamp: 2026-06-21T15:00:00Z
 ---
 
 # Command Palette
@@ -36,12 +36,29 @@ internal/palette/
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
 ```
 
-The root model (`internal/app`) holds a `*palette.Palette`. On the toggle key it
-calls `Open(Context{ContextID, Root})` with the focused pane's context id; while
-open it forwards every key to `palette.Update` and composites `palette.View()`
-centered via `overlay.Center`. On **enter** the palette returns a `tea.Cmd`
-emitting the mode's result message and closes; the root applies it:
-`RunCommandMsg` → `RunCommand(id)`, `OpenFileMsg` → the normal open-file path.
+The root model (`internal/app`) holds a `*palette.Palette`. While open it forwards
+every key to `palette.Update` and composites `palette.View()` on top. On **enter**
+the palette returns a `tea.Cmd` emitting the mode's result message and closes; the
+root applies it: `RunCommandMsg` → `RunCommand(id)`, `OpenFileMsg` → the normal
+open-file path.
+
+### Opening
+
+Three entry points, all from a non-capturing context:
+
+- **Toggle key** (config `palette.toggle_key`, default `ctrl+p`) — `Open` centered
+  for the focused pane's context.
+- **esc-esc** — two consecutive `esc` presses outside a text-capturing editor
+  mode open the centered palette (the first esc is still forwarded, so it keeps
+  its normal-mode meaning); any other key resets the pending state.
+- **`@` in an editor's normal mode** — opens a slimmed, **file-only** palette
+  *anchored* over the editor pane via `OpenAnchored(cx, '@', x, y, w)`. The root
+  composites it with `overlay.Place` at the pane's interior top-left rather than
+  `overlay.Center`.
+
+A palette can be **locked** to a single mode (no prefix switching): the anchored
+editor finder is locked to `@`, so a typed `:` is part of the query, not a mode
+switch. The centered palette is unlocked and switches freely.
 
 ## Modes & prefix dispatch
 
@@ -91,6 +108,15 @@ binds to word-boundary and consecutive runs when they exist rather than to the
 earliest positions. Scoring rewards, strongest first, boundary matches, then
 consecutive runs, then a start anchor; it penalises gaps and a long unmatched
 lead. An empty pattern matches everything with a zero score.
+
+## Rendering
+
+The box is compact: centered it is half the terminal width clamped to a readable
+floor (`minBoxWidth`); anchored it tracks the host pane's width down to a smaller
+floor (`minAnchorWidth`). Each result row shows the highlighted title on the left
+and the command's key binding as a **highlighted chip pinned to the right** (a
+key-cap style, distinct from the dim matched-character accent). The title is
+truncated first, so the binding chip is never dropped on a narrow box.
 
 ## Configuration
 
