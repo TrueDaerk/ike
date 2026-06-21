@@ -16,9 +16,13 @@ import (
 )
 
 // OpenFileMsg is emitted when the user selects a file to open. The root model
-// listens for it and forwards the path to the editor.
+// listens for it and forwards the path to the editor. NewPane carries the
+// open-target intent (Roadmap 0037): the plain open action leaves it false
+// (replace the active editor), a modified open action sets it true (open in a
+// fresh split). The explorer only states the intent; the root decides layout.
 type OpenFileMsg struct {
-	Path string
+	Path    string
+	NewPane bool
 }
 
 // node is one entry in the tree. Directory children are loaded lazily the first
@@ -268,6 +272,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m.expandOrOpen()
 		case "h", "left":
 			m.collapseOrParent()
+		case "o":
+			// Modified open: request the file in a fresh split rather than replacing
+			// the active editor. A no-op on directories. The concrete binding is
+			// owned by Roadmap 0080; "o" is the placeholder.
+			return m.openInSplit()
 		}
 	}
 	return m, nil
@@ -362,8 +371,22 @@ func (m *Model) jumpToParent() {
 	}
 }
 
+// openInSplit opens the file under the cursor in a new pane (NewPane intent). It
+// is a no-op on a directory or an empty tree.
+func (m Model) openInSplit() (Model, tea.Cmd) {
+	n := m.current()
+	if n == nil || n.isDir {
+		return m, nil
+	}
+	return m, openSplitCmd(n.path)
+}
+
 func openCmd(path string) tea.Cmd {
 	return func() tea.Msg { return OpenFileMsg{Path: path} }
+}
+
+func openSplitCmd(path string) tea.Cmd {
+	return func() tea.Msg { return OpenFileMsg{Path: path, NewPane: true} }
 }
 
 // collapseAll folds the whole tree back to the root and parks the cursor there.

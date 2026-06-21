@@ -72,6 +72,44 @@ func Decode(data []byte, valid map[string]bool) (root Node, ok bool) {
 	return node, true
 }
 
+// DecodeTree parses data into a tree, validating only structural well-formedness
+// and leaf-id uniqueness — it does not check the leaves against a fixed pane set.
+// On success it returns the tree and its leaf ids in walk order, so a dynamic
+// host (Roadmap 0037) can apply its own identity rules (explorer singleton,
+// well-formed editor keys, best-effort file reload). Malformed structure or a
+// duplicate leaf id returns ok=false so the caller falls back to the default.
+func DecodeTree(data []byte) (root Node, leaves []string, ok bool) {
+	var d nodeData
+	if err := json.Unmarshal(data, &d); err != nil {
+		return nil, nil, false
+	}
+	node, structOK := fromData(&d)
+	if !structOK {
+		return nil, nil, false
+	}
+	seen := map[string]bool{}
+	dup := false
+	var walk func(Node)
+	walk = func(n Node) {
+		switch t := n.(type) {
+		case *Leaf:
+			if seen[t.Pane] {
+				dup = true
+			}
+			seen[t.Pane] = true
+			leaves = append(leaves, t.Pane)
+		case *Split:
+			walk(t.A)
+			walk(t.B)
+		}
+	}
+	walk(node)
+	if dup {
+		return nil, nil, false
+	}
+	return node, leaves, true
+}
+
 // fromData rebuilds a Node, rejecting malformed shapes (a node that is neither a
 // well-formed leaf nor a split with two valid children).
 func fromData(d *nodeData) (Node, bool) {

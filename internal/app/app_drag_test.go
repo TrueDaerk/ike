@@ -11,6 +11,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/layout"
+	"ike/internal/pane"
 	"ike/internal/registry"
 )
 
@@ -52,15 +53,15 @@ func step(m Model, msg tea.Msg) Model {
 
 func TestMouseClickFocusesExplorer(t *testing.T) {
 	m := sized(t, 100, 40)
-	m.toggleFocus() // move focus to the editor
-	if m.focus != focusEditor {
+	m.cycleFocus() // move focus to the editor
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("setup: focus should be editor")
 	}
 	r := m.lay.Panes[ctxExplorer]
 	// press the first content cell (inside border, padding, and title row).
 	m = step(m, press(r.X+paneContentX, r.Y+paneContentY))
-	if m.focus != focusExplorer {
-		t.Fatalf("click did not focus explorer: focus=%v", m.focus)
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+		t.Fatalf("click did not focus explorer: focus=%v", m.panes.Focused())
 	}
 }
 
@@ -70,13 +71,13 @@ func TestMouseHoverHighlightsExplorerRow(t *testing.T) {
 	// move (no button) over the second content row.
 	hover := tea.MouseMsg{X: r.X + paneContentX, Y: r.Y + paneContentY + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
 	m = step(m, hover)
-	if got := m.explorer.HoverRow(); got != 1 {
+	if got := m.explorer().HoverRow(); got != 1 {
 		t.Fatalf("hover row = %d want 1", got)
 	}
 	// moving off the pane clears it.
 	off := tea.MouseMsg{X: r.X + r.W + 5, Y: r.Y + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
 	m = step(m, off)
-	if got := m.explorer.HoverRow(); got != -1 {
+	if got := m.explorer().HoverRow(); got != -1 {
 		t.Fatalf("hover row = %d want -1 after leaving pane", got)
 	}
 }
@@ -89,7 +90,7 @@ func TestOpenFileMarksActiveInExplorer(t *testing.T) {
 	}
 	out, _ := m.Update(explorer.OpenFileMsg{Path: abs})
 	m = out.(Model)
-	if got := m.explorer.Active(); got != abs {
+	if got := m.explorer().Active(); got != abs {
 		t.Fatalf("explorer active = %q want %q", got, abs)
 	}
 }
@@ -175,11 +176,12 @@ func TestMoveDragShowsGhostBox(t *testing.T) {
 	if gy != edRect.Y {
 		t.Fatalf("ghost y=%d, want pane top %d", gy, edRect.Y)
 	}
-	// No ghost when the cursor is over the source pane itself.
+	// No ghost when the cursor is over the source pane's interior (center): a
+	// self-drop there is a no-op, not a spawn.
 	exRect := m.lay.Panes[ctxExplorer]
-	m = step(m, motion(exRect.X+1, exRect.Y+exRect.H/2))
+	m = step(m, motion(exRect.X+exRect.W/2, exRect.Y+exRect.H/2))
 	if _, _, _, ok := m.moveGhost(); ok {
-		t.Fatal("no ghost expected while hovering the source pane")
+		t.Fatal("no ghost expected while hovering the source pane interior")
 	}
 }
 

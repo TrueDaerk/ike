@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
@@ -51,7 +52,7 @@ func TestOpenRoutesThroughHandlerAndHooks(t *testing.T) {
 	if got := out.(Model).host.Status(); got != "handled b.special | hook" {
 		t.Fatalf("handler+hook chain wrong: %q", got)
 	}
-	if out.(Model).editor.HasFile() {
+	if out.(Model).activeEditor().HasFile() {
 		t.Fatal("editor should not load a handler-claimed file")
 	}
 }
@@ -107,12 +108,12 @@ func newSized() Model {
 
 func TestTabSwitchesFocus(t *testing.T) {
 	m := newSized()
-	if m.focus != focusExplorer {
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("should start focused on explorer")
 	}
 	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = tm.(Model)
-	if m.focus != focusEditor {
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("tab should focus editor")
 	}
 }
@@ -126,10 +127,10 @@ func TestOpenFileRoutesToEditor(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	if !m.editor.HasFile() {
+	if !m.activeEditor().HasFile() {
 		t.Fatal("editor should have loaded the file")
 	}
-	if m.focus != focusEditor {
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("opening a file should focus the editor")
 	}
 }
@@ -145,10 +146,12 @@ func TestCloseMsgResetsToExplorer(t *testing.T) {
 	m = tm.(Model)
 	tm, _ = m.Update(editor.CloseMsg{})
 	m = tm.(Model)
-	if m.editor.HasFile() {
-		t.Fatal("close should detach the file")
+	// :q closes the focused editor leaf entirely (Roadmap 0037): the editor pane is
+	// gone, the explorer (sole remaining leaf) takes focus, and no editor is open.
+	if m.activeEditor() != nil {
+		t.Fatal("close should remove the editor pane")
 	}
-	if m.focus != focusExplorer {
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("close should focus explorer")
 	}
 }
@@ -183,10 +186,10 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 
 	m := NewWith(registry.New(), host.MapConfig{})
 	// Expand the directory so the open file's row is visible, then open it.
-	m.explorer.Restore(explorer.State{Expanded: []string{sub}})
+	m.explorer().Restore(explorer.State{Expanded: []string{sub}})
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: file})
 	m = tm.(Model)
-	m.editor.SetCursor(2, 3)
+	m.activeEditor().SetCursor(2, 3)
 
 	if _, cmd := m.quit(); cmd == nil {
 		t.Fatal("quit should return a command")
@@ -197,16 +200,16 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 
 	// A fresh model in the same dirs restores the workspace.
 	m2 := NewWith(registry.New(), host.MapConfig{})
-	if got := m2.editor.Path(); got != file {
+	if got := m2.activeEditor().Path(); got != file {
 		t.Fatalf("restored editor path = %q, want %q", got, file)
 	}
-	if line, col := m2.editor.CursorPos(); line != 2 || col != 3 {
+	if line, col := m2.activeEditor().CursorPos(); line != 2 || col != 3 {
 		t.Fatalf("restored cursor = (%d,%d), want (2,3)", line, col)
 	}
-	if m2.focus != focusEditor {
+	if m2.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("restoring an open file should focus the editor")
 	}
-	snap := m2.explorer.Snapshot()
+	snap := m2.explorer().Snapshot()
 	if len(snap.Expanded) != 1 || snap.Expanded[0] != sub {
 		t.Fatalf("restored explorer expansion = %v, want [%q]", snap.Expanded, sub)
 	}
@@ -233,16 +236,16 @@ func TestSessionRestoresViewportFraming(t *testing.T) {
 	}
 
 	m := NewWith(registry.New(), host.MapConfig{})
-	if err := m.editor.Load(file); err != nil {
+	if err := m.activeEditor().Load(file); err != nil {
 		t.Fatal(err)
 	}
-	m.focus = focusEditor
+	m.setFocus(m.activeEditorKey())
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = out.(Model)
 	// Scroll deep, then move the cursor back up so Top stays sticky above it.
-	m.editor.SetCursor(45, 0)
-	m.editor.SetCursor(20, 0)
-	wantTop, wantLeft := m.editor.ScrollOffset()
+	m.activeEditor().SetCursor(45, 0)
+	m.activeEditor().SetCursor(20, 0)
+	wantTop, wantLeft := m.activeEditor().ScrollOffset()
 	if wantTop == 0 {
 		t.Fatal("test setup: expected a non-zero sticky Top")
 	}
@@ -251,7 +254,7 @@ func TestSessionRestoresViewportFraming(t *testing.T) {
 	m2 := NewWith(registry.New(), host.MapConfig{})
 	out2, _ := m2.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m2 = out2.(Model)
-	if top, left := m2.editor.ScrollOffset(); top != wantTop || left != wantLeft {
+	if top, left := m2.activeEditor().ScrollOffset(); top != wantTop || left != wantLeft {
 		t.Fatalf("restored viewport = (top=%d,left=%d), want (top=%d,left=%d)", top, left, wantTop, wantLeft)
 	}
 }
@@ -267,7 +270,7 @@ func TestQuitFromEditorNormalMode(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	if m.focus != focusEditor {
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("opening a file should focus the editor")
 	}
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
@@ -321,10 +324,10 @@ func TestHelpOverlayToggle(t *testing.T) {
 	}
 
 	// While open, tab is consumed by the overlay and must not switch focus.
-	before := m.focus
+	before := m.panes.Focused()
 	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
 	m = tm.(Model)
-	if m.focus != before {
+	if m.panes.Focused() != before {
 		t.Fatal("overlay should swallow keys; focus changed")
 	}
 

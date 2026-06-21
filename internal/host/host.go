@@ -16,8 +16,14 @@ import (
 type API interface {
 	// OpenFile asks the host to open path in the editor. It returns a tea.Cmd
 	// the caller hands back to bubbletea; the host routes the resulting request
-	// through its registered file handlers.
+	// through its registered file handlers. It defaults to replacing the active
+	// editor's buffer (today's behaviour).
 	OpenFile(path string) tea.Cmd
+	// OpenFileIn is OpenFile with an explicit open-target: newPane=true splits off
+	// a fresh editor and loads path there instead of replacing the active buffer.
+	// OpenFile is exactly OpenFileIn(path, false), kept so existing plugins stay
+	// source-compatible.
+	OpenFileIn(path string, newPane bool) tea.Cmd
 	// Dispatch turns an arbitrary message into a tea.Cmd that re-injects it into
 	// the program's Update loop.
 	Dispatch(msg tea.Msg) tea.Cmd
@@ -35,10 +41,16 @@ type Config interface {
 	Keys() []string
 }
 
-// OpenFileRequest is emitted by API.OpenFile. The root model handles it by
-// resolving a file handler and opening the file, keeping plugins decoupled from
-// the concrete explorer/editor message types.
-type OpenFileRequest struct{ Path string }
+// OpenFileRequest is emitted by API.OpenFile / OpenFileIn. The root model handles
+// it by resolving a file handler and opening the file, keeping plugins decoupled
+// from the concrete explorer/editor message types. NewPane carries the additive
+// open-target intent: false (the zero value) replaces the active editor, true
+// splits off a fresh editor. It is a primitive flag rather than a pane.OpenTarget
+// so host stays free of an import cycle with internal/pane.
+type OpenFileRequest struct {
+	Path    string
+	NewPane bool
+}
 
 // OpenModalRequest asks the root model to present arbitrary content in the
 // floating shell (Roadmap 0035). A plugin dispatches it (h.Dispatch) to show its
@@ -96,7 +108,12 @@ func New(cfg Config) *Host {
 
 // OpenFile implements API.
 func (h *Host) OpenFile(path string) tea.Cmd {
-	return func() tea.Msg { return OpenFileRequest{Path: path} }
+	return h.OpenFileIn(path, false)
+}
+
+// OpenFileIn implements API.
+func (h *Host) OpenFileIn(path string, newPane bool) tea.Cmd {
+	return func() tea.Msg { return OpenFileRequest{Path: path, NewPane: newPane} }
 }
 
 // Dispatch implements API.

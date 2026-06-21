@@ -362,4 +362,35 @@ func TestOpenFileEmitsMsg(t *testing.T) {
 	if msg.Path != filepath.Join(root, "a.txt") {
 		t.Fatalf("path = %q", msg.Path)
 	}
+	if msg.NewPane {
+		t.Fatal("plain open should leave NewPane false")
+	}
+}
+
+// TestModifiedOpenRequestsNewPane verifies the "o" action emits an open with the
+// NewPane intent set, while a directory yields no command.
+func TestModifiedOpenRequestsNewPane(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 30, 20)
+	m, _ = send(m, key("j"), key("j")) // onto a.txt
+	if m.current().name != "a.txt" {
+		t.Fatalf("cursor on %q want a.txt", m.current().name)
+	}
+	_, cmd := send(m, key("o"))
+	if cmd == nil {
+		t.Fatal("o on a file should emit a command")
+	}
+	msg, ok := cmd().(OpenFileMsg)
+	if !ok || !msg.NewPane {
+		t.Fatalf("want OpenFileMsg{NewPane:true}, got %#v", cmd())
+	}
+	// On a directory "o" is a no-op.
+	m2 := mounted(t, root, 30, 20)
+	m2, _ = send(m2, key("k")) // park on the root directory
+	if !m2.current().isDir {
+		t.Skip("setup: cursor not on a directory")
+	}
+	if _, cmd := send(m2, key("o")); cmd != nil {
+		t.Fatal("o on a directory should be a no-op")
+	}
 }

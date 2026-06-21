@@ -259,21 +259,21 @@ is new is **per-leaf identity** so a restored editor reopens its file:
 
 ## Milestones
 
-- [ ] `internal/layout/split.go`: `Split(root, target, newPane, zone)` grows a leaf into a split with a fresh leaf, reusing `insert`/`splitFor`.
-- [ ] `internal/layout/split.go`: `Close(root, pane)` first-class leaf removal (sibling collapses up; no-op on the last leaf), promoting `remove`.
-- [ ] `internal/pane/instance.go`: `Instance` wrapping an explorer/editor component, dispatching `Update`/`View`/`SetSize`/`SetFocused` and advertising its context id by kind.
-- [ ] `internal/pane/registry.go`: `Registry` with `Add`/`Get`/`Close`/`Focused`/`SetFocused`/`Keys` and monotonic unique key allocation (explorer singleton keeps key `"explorer"`).
-- [ ] `internal/pane/target.go`: `OpenTarget` enum (`Replace`/`NewPane`) + optional `Zone` hint.
-- [ ] `internal/app`: replace `m.explorer`/`m.editor`/`focus` with `*pane.Registry` + focused-key; `renderPane` maps a leaf key to its instance; `syncFocus`/`routeKey`/`editorCapturing`/`focusContext` consult the registry.
-- [ ] `internal/app`: `SplitFocused(zone)`, `CloseFocused()`, `FocusDir(dir)` and focus-cycle (tab) binding-agnostic ops; reroute `editor.CloseMsg` to close that leaf.
-- [ ] `internal/app`: mouse spawn — drag-to-own-edge spawns a split (vs. 0036 move-to-other-pane); release-time spawn-vs-move decision; click-to-focus.
-- [ ] `internal/host`: add `Target` to `OpenFileRequest`; add `OpenFileIn(path, target)` (or options variant) to `API`, defaulting `OpenFile` to `Replace`.
-- [ ] `internal/explorer`: add `Target` to `OpenFileMsg`; a modified open action emits `NewPane` while the plain open stays `Replace`.
-- [ ] `internal/app`: `openPath` honours `OpenTarget` — `Replace` into the active editor, `NewPane` via `Add`+`layout.Split`; `FileHandler` resolution and `EventFileOpened` hooks unchanged.
-- [ ] `internal/layout/state.go` + store: persist the per-leaf identity side table (kind + path); generalise validation (explorer singleton; editor keys structural; best-effort file reload).
-- [ ] Persistence: restore — rebuild the registry from identities, reload editor files best-effort (missing file → empty editor), fall back to the default tree on structural breakage.
-- [ ] Tests: `layout` split/close (incl. last-leaf no-op); `pane` registry lifecycle + key allocation + close-refocus; `app` split/close/focus-move regression; open-in-new-pane (Replace vs NewPane); state round-trip with multi-editor + missing-file restore + tolerant decode.
-- [ ] Wiki: document the pane registry / instance lifecycle, the split/close layout ops, the focused-leaf focus model, and open-in-new-pane intent + persistence under `wiki/`; refresh timestamps and add a `log.md` entry.
+- [x] `internal/layout/split.go`: `Split(root, target, newPane, zone)` grows a leaf into a split with a fresh leaf, reusing `insert`/`splitFor`.
+- [x] `internal/layout/split.go`: `Close(root, pane)` first-class leaf removal (sibling collapses up; no-op on the last leaf), promoting `remove`.
+- [x] `internal/pane/instance.go`: `Instance` wrapping an explorer/editor component, dispatching `Update`/`View`/`SetSize`/`SetFocused` and advertising its context id by kind.
+- [x] `internal/pane/registry.go`: `Registry` with `Add`/`Get`/`Close`/`Focused`/`SetFocused`/`Keys` and monotonic unique key allocation (explorer singleton keeps key `"explorer"`).
+- [x] `internal/pane/target.go`: `OpenTarget` enum (`Replace`/`NewPane`) + optional `Zone` hint.
+- [x] `internal/app`: replace `m.explorer`/`m.editor`/`focus` with `*pane.Registry` + focused-key; `renderPane` maps a leaf key to its instance; `syncFocus`/`routeKey`/`editorCapturing`/`focusContext` consult the registry.
+- [x] `internal/app`: `SplitFocused(zone)`, `CloseFocused()`, `FocusDir(dir)` and focus-cycle (tab) binding-agnostic ops; reroute `editor.CloseMsg` to close that leaf.
+- [x] `internal/app`: mouse spawn — drag-to-own-edge spawns a split (vs. 0036 move-to-other-pane); release-time spawn-vs-move decision; click-to-focus.
+- [x] `internal/host`: add `Target` to `OpenFileRequest`; add `OpenFileIn(path, target)` (or options variant) to `API`, defaulting `OpenFile` to `Replace`.
+- [x] `internal/explorer`: add `Target` to `OpenFileMsg`; a modified open action emits `NewPane` while the plain open stays `Replace`.
+- [x] `internal/app`: `openPath` honours `OpenTarget` — `Replace` into the active editor, `NewPane` via `Add`+`layout.Split`; `FileHandler` resolution and `EventFileOpened` hooks unchanged.
+- [x] `internal/layout/state.go` + store: persist the per-leaf identity side table (kind + path); generalise validation (explorer singleton; editor keys structural; best-effort file reload).
+- [x] Persistence: restore — rebuild the registry from identities, reload editor files best-effort (missing file → empty editor), fall back to the default tree on structural breakage.
+- [x] Tests: `layout` split/close (incl. last-leaf no-op); `pane` registry lifecycle + key allocation + close-refocus; `app` split/close/focus-move regression; open-in-new-pane (Replace vs NewPane); state round-trip with multi-editor + missing-file restore + tolerant decode.
+- [x] Wiki: document the pane registry / instance lifecycle, the split/close layout ops, the focused-leaf focus model, and open-in-new-pane intent + persistence under `wiki/`; refresh timestamps and add a `log.md` entry.
 
 ## Out of scope
 

@@ -33,6 +33,14 @@ func TestOpenFileRequest(t *testing.T) {
 	if !ok || r.Path != "foo.go" {
 		t.Fatalf("OpenFile did not produce request, got %#v", msg)
 	}
+	if r.NewPane {
+		t.Fatal("OpenFile should default to Replace (NewPane false)")
+	}
+	// OpenFileIn carries the explicit open-target intent.
+	in := h.OpenFileIn("bar.go", true)().(OpenFileRequest)
+	if in.Path != "bar.go" || !in.NewPane {
+		t.Fatalf("OpenFileIn request wrong: %#v", in)
+	}
 }
 
 func TestStatusAndConfig(t *testing.T) {

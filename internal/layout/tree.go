@@ -151,6 +151,24 @@ func Panes(root Node) map[string]bool {
 	return out
 }
 
+// Leaves returns the leaf pane ids in left-to-right / top-to-bottom walk order
+// (A before B at every split), so callers have a stable focus-cycle ordering.
+func Leaves(root Node) []string {
+	var out []string
+	var walk func(Node)
+	walk = func(n Node) {
+		switch t := n.(type) {
+		case *Leaf:
+			out = append(out, t.Pane)
+		case *Split:
+			walk(t.A)
+			walk(t.B)
+		}
+	}
+	walk(root)
+	return out
+}
+
 func clampInt(v, lo, hi int) int {
 	if v < lo {
 		return lo

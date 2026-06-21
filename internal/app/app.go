@@ -1,6 +1,9 @@
-// Package app wires the root bubbletea model for IKE: a two-pane layout that
-// hosts the file explorer and the editor, owns focus and layout, routes the
-// explorer's open-file message to the editor, and renders the status line.
+// Package app wires the root bubbletea model for IKE: a dynamic tiled workspace
+// that hosts the file explorer and N editor panes, owns focus and layout, routes
+// the explorer's open-file message to the active editor (or a fresh split), and
+// renders the status line. The pane set itself is dynamic (Roadmap 0037): a
+// pane.Registry maps each layout leaf key to a live component instance, and focus
+// is "the focused leaf" rather than a two-value enum.
 package app
 
 import (
@@ -11,6 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
 	"ike/internal/editor"
@@ -19,6 +23,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/overlay"
+	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 	"ike/internal/ui"
@@ -29,14 +34,6 @@ import (
 const (
 	ctxExplorer = "explorer"
 	ctxEditor   = "editor"
-)
-
-// focus identifies which pane currently receives key input.
-type focus int
-
-const (
-	focusExplorer focus = iota
-	focusEditor
 )
 
 const (
@@ -50,21 +47,22 @@ const (
 
 // Model is the root model.
 type Model struct {
-	width    int
-	height   int
-	focus    focus
-	explorer explorer.Model
-	editor   editor.Model
-	host     *host.Host
-	reg      *registry.Registry
-	help     *help.Help
-	// shell is the single active floating overlay (Roadmap 0035). It hosts the
-	// help cheat sheet today and any tea.Model-shaped content (modals, plugin
-	// popups) tomorrow; v1 is single-level (one open shell at a time).
+	width  int
+	height int
+	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
+	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
+	// the registry's focused key, which always names a layout leaf.
+	panes *pane.Registry
+	// recentEditor is the key of the most-recently-focused editor, used as the
+	// Replace open-target when the explorer (not an editor) holds focus.
+	recentEditor string
+	host         *host.Host
+	reg          *registry.Registry
+	help         *help.Help
+	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
-	// tree is the pure split-tree layout (Roadmap 0036). It is loaded from the
-	// per-project store or built as a default on first window size, and drives
-	// both pane sizing and the View placement.
+	// tree is the pure split-tree layout (Roadmap 0036/0037). Leaves are instance
+	// keys resolved through panes.
 	tree layout.Node
 	// lay caches the rectangles + dividers computed from tree for the current
 	// viewport, so mouse hit-testing and rendering share one geometry.
@@ -72,26 +70,33 @@ type Model struct {
 	// drag is the active mouse gesture (resize or move), nil between drags.
 	drag *dragState
 	// pendingScroll holds an editor viewport offset restored from a session that
-	// must be applied once the editor has been sized (the first layout), since
-	// sizing re-derives Top from the cursor. Cleared after it is applied.
+	// must be applied once the editor has been sized (the first layout). Cleared
+	// after it is applied. It targets the focused editor at restore time.
 	pendingScroll *editorScroll
+	// splitZone is the default orientation SplitFocused and explorer "open in new
+	// pane" use, read once from config.
+	splitZone layout.Zone
 }
 
 // editorScroll is a restored viewport framing awaiting the first layout.
-type editorScroll struct{ top, left int }
+type editorScroll struct {
+	key  string
+	top  int
+	left int
+}
 
 // dragKind distinguishes the two mouse gestures.
 type dragKind int
 
 const (
 	dragResize dragKind = iota // dragging a divider to change a split ratio
-	dragMove                   // dragging a pane title bar to relocate it
+	dragMove                   // dragging a pane title bar to relocate or spawn
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
-// divider being dragged; for a move it carries the source pane id. curX/curY
+// divider being dragged; for a move it carries the source leaf key. curX/curY
 // track the latest mouse cell so the move can render live feedback (which pane
-// and drop zone the release would target).
+// and drop zone the release would target, and whether it spawns or relocates).
 type dragState struct {
 	kind    dragKind
 	divider layout.Divider
@@ -102,9 +107,7 @@ type dragState struct {
 
 // New returns the initial root model rooted at the working directory, wired to
 // the global plugin registry. It loads the merged configuration (defaults < user
-// < project) from the working directory and backs the host with it. Non-fatal
-// config diagnostics never block startup; they are dropped here until a status
-// surface consumes them.
+// < project) from the working directory and backs the host with it.
 func New() Model {
 	cfg, _ := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -112,65 +115,137 @@ func New() Model {
 }
 
 // NewWith returns a root model backed by an explicit registry and config. It
-// applies per-plugin enable/disable flags from config keys of the form
-// "plugins.<id>.enabled" before the registry is queried.
+// applies per-plugin enable/disable flags before the registry is queried, builds
+// the pane registry (explorer singleton + one editor), then restores any saved
+// layout and session.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	applyPluginConfig(reg, cfg)
-	exp := explorer.New(".")
-	exp.Configure(cfg)
-	ed := editor.New()
-	ed.Configure(cfg)
+	panes := pane.NewRegistry(cfg)
+	panes.AddExplorer()
+	edKey := panes.AddEditor()
+	panes.SetFocused(pane.ExplorerKey)
 	m := Model{
-		focus:    focusExplorer,
-		explorer: exp,
-		editor:   ed,
-		host:     host.New(cfg),
-		reg:      reg,
-		// help reads commands from the registry and resolves each command's
-		// shortcut through the registry's CommandID-linked keymaps (the full 0080
-		// keymap layer supersedes this later).
-		help:  help.New(reg, reg, helpMinCol(cfg)),
-		shell: ui.New(shellConfig(cfg)),
+		panes:        panes,
+		recentEditor: edKey,
+		host:         host.New(cfg),
+		reg:          reg,
+		help:         help.New(reg, reg, helpMinCol(cfg)),
+		shell:        ui.New(shellConfig(cfg)),
+		splitZone:    splitZone(cfg),
 	}
-	// Restore a saved per-project layout if one matches the live pane set; an
-	// unknown or stale layout is dropped and the default is built on first size.
-	if t, ok := loadLayout(corePanes()); ok {
-		m.tree = t
-	}
+	// Restore a saved per-project layout if one is structurally sound; an unknown
+	// or stale layout is dropped and the default is built on first size.
+	m.restoreLayout(cfg)
 	m.restoreSession()
 	return m
 }
 
+// restoreLayout rebuilds the registry and tree from the saved layout store. A
+// valid save with the explorer present exactly once replaces the default
+// explorer+editor set: every non-explorer leaf becomes an editor whose file is
+// reloaded best-effort (a missing file restores as an empty editor). Any
+// structural breakage or a missing/duplicate explorer leaves the default intact.
+func (m *Model) restoreLayout(cfg host.Config) {
+	tree, ids, ok := loadLayout()
+	if !ok {
+		return
+	}
+	leaves := layout.Leaves(tree)
+	explorers := 0
+	for _, key := range leaves {
+		if key == pane.ExplorerKey {
+			explorers++
+		} else if !isEditorKey(key) {
+			return // unknown leaf kind / malformed key: fall back to default
+		}
+	}
+	if explorers != 1 {
+		return // explorer must be present exactly once
+	}
+	// The default set is replaced: a fresh registry with the explorer plus one
+	// editor per non-explorer leaf, each loading its remembered file.
+	panes := pane.NewRegistry(cfg)
+	panes.AddExplorer()
+	for _, key := range leaves {
+		if key == pane.ExplorerKey {
+			continue
+		}
+		inst := panes.AddEditorKey(key)
+		if id, hasID := ids[key]; hasID && id.Path != "" {
+			_ = inst.Editor().Load(id.Path) // best-effort: missing file → empty editor
+		}
+	}
+	panes.SetFocused(pane.ExplorerKey)
+	m.panes = panes
+	m.recentEditor = firstEditorKey(leaves)
+	m.tree = tree
+}
+
+// firstEditorKey returns the first editor leaf key in walk order, or "".
+func firstEditorKey(leaves []string) string {
+	for _, key := range leaves {
+		if key != pane.ExplorerKey {
+			return key
+		}
+	}
+	return ""
+}
+
 // restoreSession re-applies the saved workspace: explorer expansion / hidden
-// toggle / cursor, and the editor's open file and cursor position. A missing
-// session leaves the default empty workspace untouched; a file that no longer
-// loads is silently skipped.
+// toggle / cursor, and the active editor's open file and cursor position. When
+// the layout restore already reopened editors, the session only refocuses the
+// editor holding the saved file and re-applies its cursor framing; otherwise it
+// loads the saved file into the default editor (the 0095 single-editor path).
 func (m *Model) restoreSession() {
 	s, ok := loadSession()
 	if !ok {
 		return
 	}
-	m.explorer.Restore(explorer.State{
+	m.explorer().Restore(explorer.State{
 		Expanded:   s.Explorer.Expanded,
 		ShowHidden: s.Explorer.ShowHidden,
 		Cursor:     s.Explorer.Cursor,
 	})
 	if s.Editor != nil && s.Editor.Path != "" {
-		if err := m.editor.Load(s.Editor.Path); err == nil {
-			m.editor.SetCursor(s.Editor.Line, s.Editor.Col)
-			// Defer the viewport framing until the editor is sized: applying it now
-			// (width/height still zero) would be undone by the first layout's scroll.
-			m.pendingScroll = &editorScroll{top: s.Editor.Top, left: s.Editor.Left}
-			m.explorer.SetActive(s.Editor.Path)
-			m.focus = focusEditor
+		key := m.editorWithFile(s.Editor.Path)
+		if key == "" {
+			// No layout-restored editor holds the file: load it into the active
+			// editor (fresh launch, the common case).
+			key = m.activeEditorKey()
+			if key == "" {
+				key = m.spawnEditor()
+			}
+			if err := m.panes.Get(key).Editor().Load(s.Editor.Path); err != nil {
+				key = ""
+			}
+		}
+		if key != "" {
+			ed := m.panes.Get(key).Editor()
+			ed.SetCursor(s.Editor.Line, s.Editor.Col)
+			// Defer the viewport framing until the editor is sized.
+			m.pendingScroll = &editorScroll{key: key, top: s.Editor.Top, left: s.Editor.Left}
+			m.explorer().SetActive(s.Editor.Path)
+			m.setFocus(key)
 		}
 	}
 	m.syncFocus()
 }
 
-// snapshotSession captures the current workspace state for persistence.
+// editorWithFile returns the key of an editor instance currently holding path,
+// or "" if none does.
+func (m Model) editorWithFile(path string) string {
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
+			return key
+		}
+	}
+	return ""
+}
+
+// snapshotSession captures the active editor + explorer state for persistence.
 func (m Model) snapshotSession() sessionState {
-	st := m.explorer.Snapshot()
+	st := m.explorer().Snapshot()
 	s := sessionState{
 		Explorer: explorerSession{
 			Expanded:   st.Expanded,
@@ -178,30 +253,28 @@ func (m Model) snapshotSession() sessionState {
 			Cursor:     st.Cursor,
 		},
 	}
-	if m.editor.HasFile() {
-		line, col := m.editor.CursorPos()
-		top, left := m.editor.ScrollOffset()
-		s.Editor = &editorSession{Path: m.editor.Path(), Line: line, Col: col, Top: top, Left: left}
+	if key := m.activeEditorKey(); key != "" {
+		ed := m.panes.Get(key).Editor()
+		if ed.HasFile() {
+			line, col := ed.CursorPos()
+			top, left := ed.ScrollOffset()
+			s.Editor = &editorSession{Path: ed.Path(), Line: line, Col: col, Top: top, Left: left}
+		}
 	}
 	return s
 }
 
-// quit persists the session and returns the program-exit command. All quit
-// paths route through here so the workspace is always saved on a clean exit.
+// quit persists the session and layout and returns the program-exit command.
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	saveSession(m.snapshotSession())
+	if m.tree != nil {
+		saveLayout(m.tree, m.panes)
+	}
 	return m, tea.Quit
 }
 
-// corePanes is the set of pane ids the root currently owns. Layout restore
-// validates a saved tree against it so a stale file can never hide a pane.
-func corePanes() map[string]bool {
-	return map[string]bool{ctxExplorer: true, ctxEditor: true}
-}
-
 // shellConfig builds the floating shell configuration, reading optional tuning
-// keys (margin, max width/height fraction) from cfg. The help dismiss set keeps
-// the established esc/?/f1/q so the cheat sheet behaves exactly as before.
+// keys (margin, max width/height fraction) from cfg.
 func shellConfig(cfg host.Config) ui.Config {
 	c := ui.Config{
 		DismissKeys: []string{"esc", "?", "f1", "q"},
@@ -228,8 +301,25 @@ func shellConfig(cfg host.Config) ui.Config {
 	return c
 }
 
-// helpMinCol reads the optional help.min_column_width config value; 0 (the
-// default) lets the overlay pick its built-in minimum.
+// splitZone reads the default split orientation (config "panes.split_zone":
+// left/right/top/bottom), defaulting to a split-right.
+func splitZone(cfg host.Config) layout.Zone {
+	if cfg != nil {
+		if v, ok := cfg.Get("panes.split_zone"); ok {
+			switch strings.ToLower(v) {
+			case "left":
+				return layout.ZoneLeft
+			case "top":
+				return layout.ZoneTop
+			case "bottom":
+				return layout.ZoneBottom
+			}
+		}
+	}
+	return layout.ZoneRight
+}
+
+// helpMinCol reads the optional help.min_column_width config value.
 func helpMinCol(cfg host.Config) int {
 	if cfg == nil {
 		return 0
@@ -242,8 +332,7 @@ func helpMinCol(cfg host.Config) int {
 	return 0
 }
 
-// applyPluginConfig reads "plugins.<id>.enabled" toggles. Only an explicit
-// "false" disables; everything else leaves the plugin enabled (the default).
+// applyPluginConfig reads "plugins.<id>.enabled" toggles.
 func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 	if cfg == nil {
 		return
@@ -255,8 +344,13 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 	}
 }
 
+// explorer returns the singleton explorer model.
+func (m Model) explorer() *explorer.Model {
+	return m.panes.Get(pane.ExplorerKey).Explorer()
+}
+
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return m.explorer.Init() }
+func (m Model) Init() tea.Cmd { return m.explorer().Init() }
 
 // Update owns global keys (quit, focus switch), routes open/close messages, and
 // forwards everything else to the focused pane.
@@ -272,57 +366,45 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleMouse(msg)
 
 	case explorer.OpenFileMsg:
-		return m.openPath(msg.Path)
+		return m.openPath(msg.Path, msg.NewPane)
 
 	case explorer.Msg:
-		// Scan results and explorer command messages (toggle hidden, refresh,
-		// collapse-all, reveal) are routed back into the tree's own Update.
+		exp := m.explorer()
 		var cmd tea.Cmd
-		m.explorer, cmd = m.explorer.Update(msg)
+		*exp, cmd = exp.Update(msg)
 		return m, cmd
 
 	case host.OpenFileRequest:
-		return m.openPath(msg.Path)
+		return m.openPath(msg.Path, msg.NewPane)
 
 	case host.OpenModalRequest:
-		// A plugin asked to present content as a floating modal; host it in the
-		// single active shell. v1 is single-level, so this replaces any open shell.
 		m.shell.SetContent(ui.ModelContent{Heading: msg.Title, Body: msg.View})
 		m.shell.SetSize(m.width, m.height)
 		m.shell.Open()
 		return m, nil
 
 	case editor.ActionMsg:
-		// A registry command (commands.go) drives the editor through this single
-		// message path; there is no parallel editor command dispatch.
-		var cmd tea.Cmd
-		m.editor, cmd = m.editor.Update(msg)
-		return m, cmd
+		// A registry command drives the focused editor through this message path.
+		if key := m.activeEditorKey(); key != "" {
+			cmd := m.panes.Get(key).Update(msg)
+			return m, cmd
+		}
+		return m, nil
 
 	case editor.CloseMsg:
-		m.editor = editor.New()
-		m.editor.Configure(m.host.Config())
-		m.layout()
-		m.focus = focusExplorer
-		m.explorer.SetActive("")
-		m.syncFocus()
+		// :q / :wq closes the focused editor leaf, mirroring CloseFocused.
+		m.closeFocused()
 		return m, nil
 
 	case tea.KeyMsg:
-		// The floating shell, when open, consumes every key (scroll + dismiss) and
-		// shadows all other routing.
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)
 			return m, nil
 		}
-		// Global keys take priority, but only when the editor is not actively
-		// capturing text (insert/command mode), so typing "q" into a file works.
 		if m.editorCapturing() {
 			return m.routeKey(msg)
 		}
 		keys := msg.String()
-		// "?" (and F1) open the help overlay (binding/command ownership moves to
-		// 0070/0080 once they land; help only consumes it).
 		if keys == "?" || keys == "f1" {
 			m.help.Snapshot()
 			m.shell.SetContent(m.help)
@@ -330,8 +412,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.shell.Open()
 			return m, nil
 		}
-		// Plugin key bindings resolve before core only when they explicitly
-		// out-prioritise core; otherwise core keys keep precedence.
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
 			if k.Priority > plugin.CorePriority || !m.isCoreKey(keys) {
 				return m, k.Action(m.host)
@@ -345,7 +425,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m.quit()
 			}
 		case "tab":
-			m.toggleFocus()
+			m.cycleFocus()
+			return m, nil
+		case "ctrl+w":
+			// Close the focused editor pane (no-op on the explorer / last leaf).
+			// Roadmap 0080 owns the final keymap; this is the default binding.
+			m.CloseFocused()
 			return m, nil
 		}
 		return m.routeKey(msg)
@@ -353,23 +438,31 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// openPath opens path: a registered FileHandler claims it if one matches,
-// otherwise it loads into the editor. EventFileOpened hooks fire either way.
-func (m Model) openPath(path string) (tea.Model, tea.Cmd) {
+// openPath opens path honouring the open target: a registered FileHandler claims
+// it first regardless of target; otherwise Replace loads into the active editor
+// and NewPane splits off a fresh editor and loads there. EventFileOpened hooks
+// fire either way.
+func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
 		cmds = append(cmds, h.Open(m.host, path))
-	} else if err := m.editor.Load(path); err == nil {
-		m.focus = focusEditor
-		m.explorer.SetActive(path)
-		m.syncFocus()
+	} else {
+		key := m.activeEditorKey()
+		if newPane || key == "" {
+			key = m.spawnEditor()
+		}
+		if err := m.panes.Get(key).Editor().Load(path); err == nil {
+			m.explorer().SetActive(path)
+			m.setFocus(key)
+			m.layout()
+			saveLayout(m.tree, m.panes)
+		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 	return m, tea.Batch(cmds...)
 }
 
-// fireHooks invokes every enabled hook subscribed to event, collecting their
-// commands.
+// fireHooks invokes every enabled hook subscribed to event.
 func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 	var cmds []tea.Cmd
 	for _, h := range m.reg.Hooks(event) {
@@ -380,8 +473,7 @@ func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 	return cmds
 }
 
-// RunCommand looks up and runs a registered command by id, returning its
-// tea.Cmd. It is the seam the command palette (Roadmap 0070) drives.
+// RunCommand looks up and runs a registered command by id.
 func (m Model) RunCommand(id string) tea.Cmd {
 	if c, ok := m.reg.Command(id); ok {
 		return c.Run(m.host)
@@ -389,20 +481,19 @@ func (m Model) RunCommand(id string) tea.Cmd {
 	return nil
 }
 
-// focusContext reports the context id advertised by the focused pane, used for
-// context-scoped command/keymap resolution.
+// focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
-	if m.focus == focusExplorer {
-		return ctxExplorer
+	if inst := m.panes.FocusedInstance(); inst != nil {
+		return inst.ContextID()
 	}
-	return ctxEditor
+	return ctxExplorer
 }
 
 // isCoreKey reports whether keys is handled by a core binding in the current
 // focus, so a plugin must out-prioritise it to take over.
 func (m Model) isCoreKey(keys string) bool {
 	switch keys {
-	case "ctrl+c", "tab":
+	case "ctrl+c", "tab", "ctrl+w":
 		return true
 	case "q":
 		return m.quitKey()
@@ -411,12 +502,13 @@ func (m Model) isCoreKey(keys string) bool {
 }
 
 // quitKey reports whether "q" should quit in the current focus: from the
-// explorer, or from the editor while in normal mode (not typing into a file).
+// explorer, or from an editor while in normal mode (not typing into a file).
 func (m Model) quitKey() bool {
-	if m.focus == focusExplorer {
+	inst := m.panes.FocusedInstance()
+	if inst == nil || inst.Kind() == pane.KindExplorer {
 		return true
 	}
-	return m.focus == focusEditor && m.editor.ModeName() == editor.Normal
+	return inst.Editor().ModeName() == editor.Normal
 }
 
 // readHead returns the leading bytes of path for content sniffing, or nil.
@@ -431,49 +523,237 @@ func readHead(path string) []byte {
 	return buf[:n]
 }
 
-// editorCapturing reports whether the editor is focused and in a text-capturing
-// mode, in which case global single-letter keys must not be intercepted.
+// editorCapturing reports whether the focused pane is an editor in a
+// text-capturing mode, in which case global single-letter keys are not stolen.
 func (m Model) editorCapturing() bool {
-	if m.focus != focusEditor {
+	inst := m.panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindEditor {
 		return false
 	}
-	return m.editor.Capturing()
+	return inst.Editor().Capturing()
 }
 
 // routeKey forwards a key to the focused pane.
 func (m Model) routeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-	if m.focus == focusExplorer {
-		m.explorer, cmd = m.explorer.Update(msg)
-	} else {
-		m.editor, cmd = m.editor.Update(msg)
+	inst := m.panes.FocusedInstance()
+	if inst == nil {
+		return m, nil
 	}
+	cmd := inst.Update(msg)
 	return m, cmd
 }
 
-func (m *Model) toggleFocus() {
-	if m.focus == focusExplorer {
-		m.focus = focusEditor
-	} else {
-		m.focus = focusExplorer
+// activeEditorKey returns the editor that should receive a Replace open or an
+// editor action: the focused editor, else the most-recent editor, else the first
+// editor in tree order, else "".
+func (m Model) activeEditorKey() string {
+	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+		return m.panes.Focused()
 	}
-	m.syncFocus()
+	if m.recentEditor != "" {
+		if inst := m.panes.Get(m.recentEditor); inst != nil && inst.Kind() == pane.KindEditor {
+			return m.recentEditor
+		}
+	}
+	for _, key := range m.leafOrder() {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+			return key
+		}
+	}
+	return ""
 }
 
-func (m *Model) syncFocus() {
-	m.explorer.SetFocused(m.focus == focusExplorer)
-	m.editor.SetFocused(m.focus == focusEditor)
+// leafOrder returns the leaf keys in tree walk order, falling back to registry
+// insertion order before the tree exists (e.g. during construction).
+func (m Model) leafOrder() []string {
+	if m.tree != nil {
+		return layout.Leaves(m.tree)
+	}
+	return m.panes.Keys()
 }
 
-// bodyRect is the viewport the layout tree tiles: the full width and every row
-// above the status line.
+// setFocus focuses key and remembers it as the recent editor when it is one.
+func (m *Model) setFocus(key string) {
+	m.panes.SetFocused(key)
+	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+		m.recentEditor = key
+	}
+}
+
+// syncFocus re-asserts the registry's focus marking across all instances.
+func (m *Model) syncFocus() { m.panes.SetFocused(m.panes.Focused()) }
+
+// cycleFocus moves focus to the next leaf in tree order (tab).
+func (m *Model) cycleFocus() {
+	order := m.leafOrder()
+	if len(order) == 0 {
+		return
+	}
+	cur := m.panes.Focused()
+	idx := 0
+	for i, k := range order {
+		if k == cur {
+			idx = (i + 1) % len(order)
+			break
+		}
+	}
+	m.setFocus(order[idx])
+}
+
+// SplitFocused adds a new editor instance and splits the focused leaf toward
+// zone, moving focus to the new pane. It is a binding-agnostic op (Roadmap 0080
+// binds keys; the mouse reaches it too).
+func (m *Model) SplitFocused(zone layout.Zone) {
+	target := m.panes.Focused()
+	if target == "" || m.tree == nil {
+		return
+	}
+	newKey := m.panes.AddEditor()
+	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	if !ok {
+		m.panes.Close(newKey)
+		return
+	}
+	m.tree = tree
+	m.setFocus(newKey)
+	m.layout()
+	saveLayout(m.tree, m.panes)
+}
+
+// spawnEditor splits the active editor's leaf toward the default zone, returning
+// the new editor's key. Used by open-in-new-pane and Replace-with-no-editor. The
+// split target is the active editor (so opening from the explorer lands the new
+// pane in the editor area, not beside the explorer); only when no editor exists
+// does it fall back to the focused leaf.
+func (m *Model) spawnEditor() string {
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
+	newKey := m.panes.AddEditor()
+	if m.tree == nil || target == "" {
+		// Pre-layout: no tree to split yet; the default tree will adopt the key on
+		// first layout only if it is the canonical first editor. Otherwise leave the
+		// instance registered and let layout() build around it.
+		return newKey
+	}
+	tree, ok := layout.SplitLeaf(m.tree, target, newKey, m.splitZone)
+	if !ok {
+		// Target not in the tree (e.g. focused leaf already gone): drop the spare.
+		m.panes.Close(newKey)
+		return m.panes.Focused()
+	}
+	m.tree = tree
+	return newKey
+}
+
+// CloseFocused closes the focused editor leaf, collapsing its sibling up and
+// refocusing it. It is a no-op on the explorer (a singleton) and on the last
+// leaf, so the workspace never empties and context resolution never loses its
+// explorer.
+func (m *Model) CloseFocused() { m.closeFocused() }
+
+func (m *Model) closeFocused() {
+	key := m.panes.Focused()
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() == pane.KindExplorer || m.tree == nil {
+		return
+	}
+	tree, ok := layout.Close(m.tree, key)
+	if !ok {
+		return // last leaf: never empty the workspace
+	}
+	m.tree = tree
+	m.panes.Close(key)
+	if m.recentEditor == key {
+		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
+	}
+	// Focus the leaf that now occupies the closed pane's position: the first leaf
+	// in walk order is a safe, always-present choice (explorer at minimum).
+	m.setFocus(m.focusAfterClose())
+	m.layout()
+	saveLayout(m.tree, m.panes)
+}
+
+// focusAfterClose picks the leaf to focus once the focused one is gone: the
+// recent editor if it survived, else the first remaining leaf.
+func (m *Model) focusAfterClose() string {
+	leaves := layout.Leaves(m.tree)
+	if m.recentEditor != "" && m.panes.Has(m.recentEditor) {
+		return m.recentEditor
+	}
+	if len(leaves) > 0 {
+		return leaves[0]
+	}
+	return pane.ExplorerKey
+}
+
+// FocusDir moves focus to the leaf spatially adjacent to the focused one in the
+// given direction, using the computed rectangles. A binding-agnostic op for 0080.
+func (m *Model) FocusDir(dir Direction) {
+	cur, ok := m.lay.Panes[m.panes.Focused()]
+	if !ok {
+		return
+	}
+	cx, cy := cur.X+cur.W/2, cur.Y+cur.H/2
+	best := ""
+	bestDist := 1 << 30
+	for key, r := range m.lay.Panes {
+		if key == m.panes.Focused() {
+			continue
+		}
+		tx, ty := r.X+r.W/2, r.Y+r.H/2
+		if !inDirection(dir, cx, cy, tx, ty) {
+			continue
+		}
+		d := abs(tx-cx) + abs(ty-cy)
+		if d < bestDist {
+			bestDist, best = d, key
+		}
+	}
+	if best != "" {
+		m.setFocus(best)
+	}
+}
+
+// Direction is a spatial focus-move direction for FocusDir.
+type Direction int
+
+const (
+	DirLeft Direction = iota
+	DirRight
+	DirUp
+	DirDown
+)
+
+func inDirection(dir Direction, cx, cy, tx, ty int) bool {
+	switch dir {
+	case DirLeft:
+		return tx < cx
+	case DirRight:
+		return tx > cx
+	case DirUp:
+		return ty < cy
+	default: // DirDown
+		return ty > cy
+	}
+}
+
+func abs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// bodyRect is the viewport the layout tree tiles.
 func (m *Model) bodyRect() layout.Rect {
 	return layout.Rect{X: 0, Y: 0, W: m.width, H: m.height - statusHeight}
 }
 
-// layout recomputes the layout geometry from the current terminal size and
-// pushes the resulting interior size into each pane. The tree is built lazily on
-// the first real window size so a default ratio can key off the actual width.
+// layout recomputes the layout geometry and pushes each leaf's interior size
+// into its instance. The tree is built lazily on the first real window size so a
+// default ratio can key off the actual width.
 func (m *Model) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
@@ -482,24 +762,21 @@ func (m *Model) layout() {
 		m.tree = layout.Default(m.width, explorerWidth)
 	}
 	m.lay = layout.Compute(m.tree, m.bodyRect())
-	if r, ok := m.lay.Panes[ctxExplorer]; ok {
-		m.explorer.SetSize(paneInterior(r.W), paneInterior(r.H))
-	}
-	if r, ok := m.lay.Panes[ctxEditor]; ok {
-		m.editor.SetSize(paneInterior(r.W), paneInterior(r.H))
-		// Now that the editor is sized, apply a session-restored viewport framing
-		// once. SetSize's scroll() has re-derived Top from the cursor; override it
-		// so the file reopens scrolled exactly as it was left.
-		if m.pendingScroll != nil {
-			m.editor.SetScroll(m.pendingScroll.top, m.pendingScroll.left)
+	for key, r := range m.lay.Panes {
+		inst := m.panes.Get(key)
+		if inst == nil {
+			continue
+		}
+		inst.SetSize(paneInterior(r.W), paneInterior(r.H))
+		if inst.Kind() == pane.KindEditor && m.pendingScroll != nil && m.pendingScroll.key == key {
+			inst.Editor().SetScroll(m.pendingScroll.top, m.pendingScroll.left)
 			m.pendingScroll = nil
 		}
 	}
 	m.syncFocus()
 }
 
-// paneInterior maps an outer pane dimension to the content area inside the
-// border + padding chrome, never dropping below one cell.
+// paneInterior maps an outer pane dimension to the content area.
 func paneInterior(outer int) int {
 	if v := outer - paneChrome; v >= 1 {
 		return v
@@ -508,31 +785,28 @@ func paneInterior(outer int) int {
 }
 
 // handleMouse runs the drag state machine: press hit-tests the layout to start a
-// resize (divider) or move (title bar), motion updates the in-flight gesture,
-// and release commits and persists. Wheel events and any mouse activity while a
-// shell overlay is open are ignored (overlays are not draggable).
+// resize (divider) or move (title bar), motion updates the in-flight gesture, and
+// release commits and persists. A title drag onto another pane relocates it
+// (0036); a drag to the source pane's own edge spawns a fresh split there (0037).
 func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.shell.IsOpen() {
 		return m, nil
 	}
-	// A wheel notch scrolls the pane under the cursor (the explorer tree for now),
-	// independent of any in-flight drag or the focused pane. Shift (or the wheel's
-	// own horizontal buttons) scrolls sideways, as is conventional.
 	if isWheel(msg.Button) {
-		if pane, ok := m.lay.PaneAt(msg.X, msg.Y); ok && pane == ctxExplorer {
+		if p, ok := m.lay.PaneAt(msg.X, msg.Y); ok && p == pane.ExplorerKey {
 			switch {
 			case msg.Button == tea.MouseButtonWheelLeft:
-				m.explorer.ScrollXBy(-wheelLines)
+				m.explorer().ScrollXBy(-wheelLines)
 			case msg.Button == tea.MouseButtonWheelRight:
-				m.explorer.ScrollXBy(wheelLines)
+				m.explorer().ScrollXBy(wheelLines)
 			case msg.Button == tea.MouseButtonWheelUp && msg.Shift:
-				m.explorer.ScrollXBy(-wheelLines)
+				m.explorer().ScrollXBy(-wheelLines)
 			case msg.Button == tea.MouseButtonWheelDown && msg.Shift:
-				m.explorer.ScrollXBy(wheelLines)
+				m.explorer().ScrollXBy(wheelLines)
 			case msg.Button == tea.MouseButtonWheelUp:
-				m.explorer.ScrollBy(-wheelLines)
+				m.explorer().ScrollBy(-wheelLines)
 			case msg.Button == tea.MouseButtonWheelDown:
-				m.explorer.ScrollBy(wheelLines)
+				m.explorer().ScrollBy(wheelLines)
 			}
 		}
 		return m, nil
@@ -546,16 +820,10 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case layout.HitTitle:
 			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
 		case layout.HitPane:
-			switch hit.Pane {
-			case ctxExplorer:
-				return m.explorerClick(msg)
-			case ctxEditor:
-				return m.editorClick(msg)
-			}
+			return m.paneClick(hit.Pane, msg)
 		}
 	case tea.MouseActionMotion:
 		if m.drag == nil {
-			// No gesture in flight: track the explorer hover highlight.
 			m.updateHover(msg)
 			return m, nil
 		}
@@ -569,16 +837,64 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.drag.kind == dragMove {
-			if target, ok := m.lay.PaneAt(msg.X, msg.Y); ok && target != m.drag.srcPane {
-				zone := layout.DropZone(m.lay.Panes[target], msg.X, msg.Y)
-				m.tree = layout.Move(m.tree, m.drag.srcPane, target, zone)
-				m.layout()
-			}
+			m.commitMove(msg.X, msg.Y)
 		}
 		m.drag = nil
-		saveLayout(m.tree)
+		saveLayout(m.tree, m.panes)
 	}
 	return m, nil
+}
+
+// commitMove applies a title-bar drag release: onto another pane it relocates the
+// source (0036 move/swap); onto the source pane's own edge it spawns a fresh
+// editor split there (0037); a drop in the source pane's interior is a no-op.
+func (m *Model) commitMove(x, y int) {
+	target, ok := m.lay.PaneAt(x, y)
+	if !ok {
+		return
+	}
+	if target != m.drag.srcPane {
+		zone := layout.DropZone(m.lay.Panes[target], x, y)
+		m.tree = layout.Move(m.tree, m.drag.srcPane, target, zone)
+		m.layout()
+		return
+	}
+	// Dropped on the source pane: spawn a split only when near an edge.
+	if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
+		newKey := m.panes.AddEditor()
+		if tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone); ok {
+			m.tree = tree
+			m.setFocus(newKey)
+			m.layout()
+		} else {
+			m.panes.Close(newKey)
+		}
+	}
+}
+
+// edgeBand is the fraction of a pane's span near an edge that, when a self-drop
+// lands in it, spawns a split rather than being ignored.
+const edgeBand = 0.30
+
+// edgeZone reports the drop zone for (x,y) within r and whether the point lies in
+// the outer edgeBand of that zone's axis (so a center drop does not spawn).
+func edgeZone(r layout.Rect, x, y int) (layout.Zone, bool) {
+	if r.W <= 0 || r.H <= 0 {
+		return layout.ZoneRight, false
+	}
+	fx := (float64(x-r.X) + 0.5) / float64(r.W)
+	fy := (float64(y-r.Y) + 0.5) / float64(r.H)
+	z := layout.DropZone(r, x, y)
+	switch z {
+	case layout.ZoneLeft:
+		return z, fx <= edgeBand
+	case layout.ZoneRight:
+		return z, fx >= 1-edgeBand
+	case layout.ZoneTop:
+		return z, fy <= edgeBand
+	default:
+		return z, fy >= 1-edgeBand
+	}
 }
 
 // isWheel reports whether a mouse button is one of the four wheel directions.
@@ -587,49 +903,42 @@ func isWheel(b tea.MouseButton) bool {
 		b == tea.MouseButtonWheelLeft || b == tea.MouseButtonWheelRight
 }
 
-// updateHover sets (or clears) the explorer's hover highlight based on whether
-// the pointer is over the explorer's content area.
+// updateHover sets (or clears) the explorer's hover highlight.
 func (m *Model) updateHover(msg tea.MouseMsg) {
-	r, ok := m.lay.Panes[ctxExplorer]
+	r, ok := m.lay.Panes[pane.ExplorerKey]
 	if !ok {
 		return
 	}
-	if pane, in := m.lay.PaneAt(msg.X, msg.Y); in && pane == ctxExplorer {
-		m.explorer.SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
+	if p, in := m.lay.PaneAt(msg.X, msg.Y); in && p == pane.ExplorerKey {
+		m.explorer().SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
 		return
 	}
-	m.explorer.ClearHover()
+	m.explorer().ClearHover()
 }
 
-// explorerClick focuses the explorer and forwards a left-press to it, translating
-// the absolute mouse cell into the tree's content-local coordinate space (inside
-// the pane's border, padding, and title row).
-func (m Model) explorerClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	r, ok := m.lay.Panes[ctxExplorer]
+// paneClick focuses the clicked leaf and forwards the interior click to it,
+// translating the absolute mouse cell into the pane's content-local space.
+func (m Model) paneClick(key string, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+	r, ok := m.lay.Panes[key]
 	if !ok {
 		return m, nil
 	}
-	m.focus = focusExplorer
-	m.syncFocus()
+	inst := m.panes.Get(key)
+	if inst == nil {
+		return m, nil
+	}
+	m.setFocus(key)
 	localX := msg.X - (r.X + paneContentX)
 	localY := msg.Y - (r.Y + paneContentY)
-	var cmd tea.Cmd
-	m.explorer, cmd = m.explorer.MouseClick(localX, localY)
-	return m, cmd
-}
-
-// editorClick focuses the editor and moves its cursor to the clicked cell,
-// translating the absolute mouse position into the pane's content-local space
-// (inside border, padding, and title row). Clicking an unfocused editor focuses
-// it; clicking the focused editor repositions the cursor.
-func (m Model) editorClick(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	r, ok := m.lay.Panes[ctxEditor]
-	if !ok {
-		return m, nil
+	switch inst.Kind() {
+	case pane.KindExplorer:
+		var cmd tea.Cmd
+		exp := inst.Explorer()
+		*exp, cmd = exp.MouseClick(localX, localY)
+		return m, cmd
+	case pane.KindEditor:
+		inst.Editor().MouseClick(localX, localY)
 	}
-	m.focus = focusEditor
-	m.syncFocus()
-	m.editor.MouseClick(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
 	return m, nil
 }
 
@@ -640,8 +949,6 @@ func (m Model) View() string {
 	}
 	body := m.renderNode(m.tree, m.bodyRect())
 	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
-	// During a move, draw a translucent ghost box over the region the pane would
-	// occupy on release, so the drop is previewed in place.
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
@@ -651,18 +958,27 @@ func (m Model) View() string {
 	return base
 }
 
-// moveGhost computes the preview box for an in-flight move: the drop region of
-// the pane under the cursor and a matte box labelled with the dragged pane. It
-// reports ok=false when no move is active or the cursor is not over a valid drop
-// target.
+// moveGhost computes the preview box for an in-flight move. Onto another pane it
+// previews the relocation; onto the source pane's own edge it previews the spawn.
 func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	d := m.drag
 	if d == nil || d.kind != dragMove {
 		return "", 0, 0, false
 	}
 	tgt, found := m.lay.PaneAt(d.curX, d.curY)
-	if !found || tgt == d.srcPane {
+	if !found {
 		return "", 0, 0, false
+	}
+	if tgt == d.srcPane {
+		zone, near := edgeZone(m.lay.Panes[tgt], d.curX, d.curY)
+		if !near {
+			return "", 0, 0, false
+		}
+		gr := dropRect(m.lay.Panes[tgt], zone)
+		if gr.W < 3 || gr.H < 3 {
+			return "", 0, 0, false
+		}
+		return ghostBox(gr.W, gr.H, "new pane"), gr.X, gr.Y, true
 	}
 	gr := dropRect(m.lay.Panes[tgt], layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY))
 	if gr.W < 3 || gr.H < 3 {
@@ -671,8 +987,7 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane)), gr.X, gr.Y, true
 }
 
-// dropRect is the sub-rectangle of r the dragged pane would occupy for zone z:
-// a half of r along the zone's axis.
+// dropRect is the sub-rectangle of r the dragged pane would occupy for zone z.
 func dropRect(r layout.Rect, z layout.Zone) layout.Rect {
 	switch z {
 	case layout.ZoneLeft:
@@ -682,7 +997,7 @@ func dropRect(r layout.Rect, z layout.Zone) layout.Rect {
 		return layout.Rect{X: r.X + r.W - w, Y: r.Y, W: w, H: r.H}
 	case layout.ZoneTop:
 		return layout.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H / 2}
-	default: // ZoneBottom
+	default:
 		h := r.H / 2
 		return layout.Rect{X: r.X, Y: r.Y + r.H - h, W: r.W, H: h}
 	}
@@ -699,8 +1014,7 @@ func ghostBox(w, h int, label string) string {
 		Render(inner)
 }
 
-// renderNode walks the layout tree, rendering each leaf into its rectangle and
-// joining splits with a one-cell divider, mirroring Compute's geometry exactly.
+// renderNode walks the layout tree, rendering each leaf into its rectangle.
 func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	switch t := n.(type) {
 	case *layout.Leaf:
@@ -717,33 +1031,33 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	return ""
 }
 
-// Pane border colors. The drag colors give live feedback during a move: the
-// pane being carried and the pane it would drop onto are tinted distinctly.
+// Pane border colors.
 const (
 	colorPaneFocus  = "69"  // focused pane border
 	colorPaneBlur   = "240" // unfocused pane border
 	colorMoveSource = "203" // the pane currently being moved
 	colorDropTarget = "220" // the pane a release would drop onto
-	// Muted variants used for the translucent ghost preview box drawn at the
-	// drop region during a move — a dimmer shade of the drop-target accent.
-	colorGhost = "136" // matte gold, the drop-preview box
+	colorGhost      = "136" // matte gold, the drop-preview box
 )
 
-// renderPane renders a single leaf at its outer rectangle, mapping the pane id
-// to its title, content, and focus state. During a move drag the source pane and
-// the hovered drop target are recolored and the target's title shows the drop
-// zone, so the gesture is visible. Unknown ids (future plugin panes) render an
-// empty titled box rather than crashing.
-func (m Model) renderPane(id string, r layout.Rect) string {
+// renderPane renders a single leaf at its outer rectangle, resolving its key to
+// an instance for title, content, and focus state. During a move drag the source
+// pane and the hovered drop target are recolored. An unknown key (no instance)
+// renders an empty titled box rather than crashing.
+func (m Model) renderPane(key string, r layout.Rect) string {
+	inst := m.panes.Get(key)
 	var title, content string
 	var focused bool
-	switch id {
-	case ctxExplorer:
-		title, content, focused = "EXPLORER", m.explorer.View(), m.focus == focusExplorer
-	case ctxEditor:
-		title, content, focused = m.editorTitle(), m.editor.View(), m.focus == focusEditor
-	default:
-		title = strings.ToUpper(id)
+	if inst == nil {
+		title = strings.ToUpper(key)
+	} else {
+		focused = m.panes.Focused() == key
+		switch inst.Kind() {
+		case pane.KindExplorer:
+			title, content = "EXPLORER", inst.View()
+		case pane.KindEditor:
+			title, content = m.editorTitle(inst.Editor()), inst.View()
+		}
 	}
 
 	border := colorPaneBlur
@@ -751,10 +1065,10 @@ func (m Model) renderPane(id string, r layout.Rect) string {
 		border = colorPaneFocus
 	}
 	if d := m.drag; d != nil && d.kind == dragMove {
-		if id == d.srcPane {
+		if key == d.srcPane {
 			border = colorMoveSource
 			title = "⤴ " + title
-		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == id && tgt != d.srcPane {
+		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == key && tgt != d.srcPane {
 			border = colorDropTarget
 			title = title + "  " + zoneArrow(layout.DropZone(r, d.curX, d.curY))
 		}
@@ -788,54 +1102,60 @@ func dividerH(w int) string {
 	return style.Render(strings.Repeat("─", w))
 }
 
-// editorTitle returns the editor pane title: file basename with a dirty marker.
-func (m Model) editorTitle() string {
-	if !m.editor.HasFile() {
+// editorTitle returns an editor pane title: file basename with a dirty marker.
+func (m Model) editorTitle(ed *editor.Model) string {
+	if !ed.HasFile() {
 		return "EDITOR"
 	}
-	name := baseName(m.editor.Path())
-	if m.editor.Dirty() {
+	name := baseName(ed.Path())
+	if ed.Dirty() {
 		name += " *"
 	}
 	return name
 }
 
 // statusLine renders the bottom status bar: mode, file, dirty flag, cursor, and
-// any active command line.
+// any active command line, reflecting the active editor.
 func (m Model) statusLine() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
 		Background(lipgloss.Color("236")).
 		Foreground(lipgloss.Color("252"))
 
-	// During a move drag the status line narrates the gesture and its target.
 	if d := m.drag; d != nil && d.kind == dragMove {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
 		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
 			hint += " → " + zoneArrow(layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY)) + " of " + m.paneLabel(tgt)
+		} else if zone, near := m.selfDropZone(d); near {
+			hint += " → split " + zoneArrow(zone)
 		} else {
-			hint += "  (drop on another pane)"
+			hint += "  (drop on a pane or this pane's edge)"
 		}
 		return style.Foreground(lipgloss.Color(colorDropTarget)).Render(" " + hint)
 	}
 
-	if cl := m.editor.CommandLine(); cl != "" {
-		return style.Render(cl)
+	ed := m.activeEditor()
+	if ed != nil {
+		if cl := ed.CommandLine(); cl != "" {
+			return style.Render(cl)
+		}
 	}
 	if s := m.host.Status(); s != "" {
 		return style.Render(" " + s)
 	}
 
-	mode := m.editor.ModeName().String()
-	file := "no file"
-	if m.editor.HasFile() {
-		file = baseName(m.editor.Path())
+	mode, file, dirty := "NORMAL", "no file", ""
+	line, col := 1, 1
+	if ed != nil {
+		mode = ed.ModeName().String()
+		if ed.HasFile() {
+			file = baseName(ed.Path())
+		}
+		if ed.Dirty() {
+			dirty = " [+]"
+		}
+		line, col = ed.Cursor()
 	}
-	dirty := ""
-	if m.editor.Dirty() {
-		dirty = " [+]"
-	}
-	line, col := m.editor.Cursor()
 	left := " " + mode + " │ " + file + dirty
 	right := "Ln " + strconv.Itoa(line) + ", Col " + strconv.Itoa(col) + " "
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
@@ -845,13 +1165,40 @@ func (m Model) statusLine() string {
 	return style.Render(left + strings.Repeat(" ", gap) + right)
 }
 
+// selfDropZone reports the spawn zone (and proximity) for a self-drop during a
+// move drag, for the status hint.
+func (m Model) selfDropZone(d *dragState) (layout.Zone, bool) {
+	if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == d.srcPane {
+		return edgeZone(m.lay.Panes[tgt], d.curX, d.curY)
+	}
+	return layout.ZoneRight, false
+}
+
+// activeEditor returns the active editor model, or nil when no editor exists.
+func (m Model) activeEditor() *editor.Model {
+	if key := m.activeEditorKey(); key != "" {
+		return m.panes.Get(key).Editor()
+	}
+	return nil
+}
+
 // paneBox renders a titled bordered box around content with the given border
-// color (focus state and drag feedback are decided by the caller).
+// color. It hard-clamps to exactly width×height: the title is truncated to the
+// interior so it never wraps, and MaxWidth/MaxHeight cap the rendered box so a
+// narrow pane can never overflow its rectangle and push the whole tiling off
+// screen (the layout assigns each leaf an exact rect; the renderer must honour it).
 func paneBox(title, content string, width, height int, borderColor string) string {
+	// Interior text width = outer width minus the two border columns and the two
+	// padding columns. Truncate the title to it so it stays on one row.
+	if inner := width - 4; inner >= 1 {
+		title = ansi.Truncate(title, inner, "…")
+	}
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		Width(width-2).
 		Height(height-2).
+		MaxWidth(width).
+		MaxHeight(height).
 		Padding(0, 1).
 		BorderForeground(lipgloss.Color(borderColor))
 	titleStyle := lipgloss.NewStyle().Bold(true)
@@ -860,10 +1207,11 @@ func paneBox(title, content string, width, height int, borderColor string) strin
 
 func baseName(path string) string { return filepath.Base(path) }
 
-// paneLabel is the human label for a pane id used in the drag status hint.
-func (m Model) paneLabel(id string) string {
-	if id == ctxEditor {
-		return m.editorTitle()
+// paneLabel is the human label for a leaf key used in the drag status hint.
+func (m Model) paneLabel(key string) string {
+	inst := m.panes.Get(key)
+	if inst != nil && inst.Kind() == pane.KindEditor {
+		return m.editorTitle(inst.Editor())
 	}
-	return strings.ToUpper(id)
+	return strings.ToUpper(strings.SplitN(key, ":", 2)[0])
 }

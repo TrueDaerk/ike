@@ -3,8 +3,8 @@ type: concept
 title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
-tags: [architecture, layout, panes, mouse, drag, resize, persistence, bubbletea]
-timestamp: 2026-06-20T00:00:00Z
+tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
+timestamp: 2026-06-21T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -21,8 +21,10 @@ hides a pane.
 `internal/layout` is **pure**: geometry and tree structure only, no bubbletea and
 no I/O, so it is fully unit-testable.
 
-- A **leaf** (`Leaf{Pane}`) is a single pane id (`"explorer"`, `"editor"`, later
-  any plugin pane). A **split** (`Split{Orient, Ratio, A, B}`) divides a region
+- A **leaf** (`Leaf{Pane}`) carries an opaque string. Under Roadmap 0036 that was
+  a global pane id; Roadmap 0037 reinterprets it as a **pane instance key** (see
+  [Pane Registry](./pane-registry.md)) — the layout package stays oblivious to
+  what a leaf means. A **split** (`Split{Orient, Ratio, A, B}`) divides a region
   between two children at a ratio in `(0,1)`: `Horizontal` puts A left / B right
   with a one-column vertical divider; `Vertical` stacks A top / B bottom with a
   one-row horizontal divider.
@@ -55,6 +57,33 @@ One gesture is active at a time. While a floating shell (Roadmap 0035) is open,
 mouse input is ignored — overlays are composited above the tiling and are not
 draggable. Wheel events are ignored by the drag machine.
 
+**Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
+relocates (above). A drag dropped on the **source pane's own edge** — within an
+outer band (`edgeBand`) of the resolved zone — instead **spawns** a fresh editor
+split there via `layout.SplitLeaf`, so a pane can be cloned by dragging it to its
+own side. A drop in the source pane's interior is a no-op. The release-time
+spawn-vs-move decision is `commitMove`; the ghost preview labels it `new pane`.
+
+## Create / close ops (Roadmap 0037)
+
+`split.go` adds the **create/close half** of the pane manager, both reusing
+0036's `insert`/`remove`:
+
+- `SplitLeaf(root, target, newPane, zone)` grows the `target` leaf into a split
+  pairing it with a brand-new `Leaf{newPane}`, ordered by `zone` — structurally
+  identical to the second half of `Move`, but the inserted leaf is fresh rather
+  than removed from elsewhere. (Named `SplitLeaf`, not `Split`, because `Split`
+  is the split-node type.)
+- `Close(root, pane)` promotes `move.remove` to a first-class op: the leaf is
+  detached and its parent split collapses so the sibling takes its place. Closing
+  the **only** leaf returns the tree unchanged with `ok=false`, upholding the
+  never-empty invariant.
+
+The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
+`CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds
+keys and the mouse reaches the same methods. `Leaves(root)` returns the leaf keys
+in walk order for the focus cycle.
+
 **Live feedback.** During a move the drag tracks the latest mouse cell
 (`dragState.curX/curY`, updated on every motion). The pane being carried is
 tinted (and prefixed with `⤴`), the pane under the cursor is tinted as the drop
@@ -77,15 +106,26 @@ per-project state file rather than `settings.toml`:
   mirrors what Roadmap 0040 will expose: `IKE_CONFIG_DIR` overrides the location
   (used by tests to redirect writes); otherwise it lives under the project's
   `.ike/` directory.
-- `state.go` converts the tree to/from plain JSON (`Encode`/`Decode`). **Decode
-  is tolerant**: it accepts a saved tree only when its leaves are exactly the
-  live pane set (no unknown ids, duplicates, or missing panes), otherwise the
-  caller falls back to the default. A stale layout is silently dropped.
-- Save is **debounced to drag release**, never written per motion frame.
+- `state.go` converts the tree to/from plain JSON (`Encode`/`Decode`). The
+  original `Decode(data, valid)` accepts a tree only when its leaves are exactly
+  a fixed pane set. Roadmap 0037 adds `DecodeTree(data)` which validates only
+  **structural** soundness and leaf-id uniqueness and returns the leaf ids, so a
+  dynamic host applies its own identity rules.
+- With dynamic panes the store grows from a bare tree to a `{tree, panes}`
+  wrapper: alongside the encoded tree, a **per-leaf identity table** maps each
+  instance key to `{kind, path}` so a restored editor reopens its file. Old
+  bare-tree files still load — their leaves are inferred (`explorer` → the
+  explorer, everything else → a file-less editor).
+- **Tolerant restore** (`internal/app`): the explorer must be present exactly
+  once and every other leaf must be a well-formed editor key, else the default
+  layout is rebuilt. A saved editor whose **file no longer exists** restores as an
+  *empty* editor at that leaf — the split is preserved, never dropped.
+- Save is **debounced to op/drag commit** (split, close, move, resize,
+  open-in-new-pane), never written per motion frame.
 
-## Out of scope (v1)
+## Out of scope
 
-Creating/destroying splits, detached/floating windows, tabbed pane groups,
-keyboard-driven resize/move (a planned additive once Roadmap 0080 owns the
-keymap; the geometry ops here are binding-agnostic and reusable by it), and drag
-animations.
+Detached/floating OS windows, tabbed pane groups within one leaf, cross-pane
+shared buffers, maximise/zoom, named layout presets, keyboard binding *choices*
+for split/close/focus-move (Roadmap 0080 owns the keymap; the ops here are
+binding-agnostic), and drag animations.

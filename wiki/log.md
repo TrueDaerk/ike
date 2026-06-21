@@ -1,5 +1,29 @@
 # Log
 
+## 2026-06-21
+
+- **Pane splitting & multiple editors (Roadmap 0037).** The fixed two-component
+  root becomes a dynamic pane set. New `internal/pane` registry maps each layout
+  leaf to a live instance (explorer singleton + N editors); focus is now the
+  focused leaf. `internal/layout` gains `SplitLeaf`/`Close` (the create/close
+  half, reusing `insert`/`remove`) and `DecodeTree`/`Leaves`. Binding-agnostic
+  ops `SplitFocused`/`CloseFocused`/`FocusDir` + tab focus-cycle; mouse self-edge
+  drag spawns a split. Open-in-new-pane rides an additive `NewPane` flag on
+  `explorer.OpenFileMsg` / `host.OpenFileRequest` (+ `host.API.OpenFileIn`),
+  defaulting to Replace. The layout store grows a per-leaf identity table
+  (`{kind, path}`) so editors restore their files best-effort (missing file →
+  empty editor); old bare-tree files still load. New concept doc
+  [Pane Registry & Multiple Editors](/architecture/pane-registry.md); Pane Layout
+  doc updated.
+
+- **Pane-split rendering fixes.** `paneBox` now hard-clamps to its rect
+  (`MaxWidth`/`MaxHeight` + title truncation) so a narrow split column can no
+  longer wrap its title and overflow by a row — the overflow had pushed the whole
+  tiling up (cut-off pane titles) and desynced mouse hit-testing from `m.lay`.
+  Open-in-new-pane now splits the **active editor's** leaf rather than the focused
+  explorer, so a file opened from the explorer lands in the editor area instead of
+  shrinking the explorer.
+
 ## 2026-06-20
 
 - `F1` now opens the help overlay as an alias for `?`, and dismisses it as well
