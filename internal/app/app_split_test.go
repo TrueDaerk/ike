@@ -105,6 +105,47 @@ func TestFocusDirMovesSpatially(t *testing.T) {
 	}
 }
 
+// TestFocusKeysCtrlArrowDefault verifies the default Ctrl+arrow bindings move
+// focus spatially through Update (not just the FocusDir method).
+func TestFocusKeysCtrlArrowDefault(t *testing.T) {
+	m := sized(t, 100, 40) // explorer left, editor right
+	if m.panes.Focused() != pane.ExplorerKey {
+		t.Fatal("setup: explorer should start focused")
+	}
+	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	m = tm.(Model)
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+		t.Fatal("ctrl+right should move focus to the editor")
+	}
+	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlLeft})
+	m = tm.(Model)
+	if m.panes.Focused() != pane.ExplorerKey {
+		t.Fatal("ctrl+left should move focus back to the explorer")
+	}
+}
+
+// TestFocusKeysConfigurable verifies keymap.bindings.focus_* overrides the
+// default key, and that an empty override disables a direction.
+func TestFocusKeysConfigurable(t *testing.T) {
+	keys := focusKeys(host.MapConfig{
+		"keymap.bindings.focus_right": "alt+l",
+		"keymap.bindings.focus_left":  "",
+	})
+	if dir, ok := keys["alt+l"]; !ok || dir != DirRight {
+		t.Fatalf("focus_right override not applied: %v", keys)
+	}
+	if _, ok := keys["ctrl+right"]; ok {
+		t.Fatal("overridden direction should drop its default key")
+	}
+	if _, ok := keys["ctrl+left"]; ok {
+		t.Fatal("empty override should disable that direction")
+	}
+	// Untouched directions keep their Ctrl+arrow defaults.
+	if keys["ctrl+up"] != DirUp || keys["ctrl+down"] != DirDown {
+		t.Fatalf("default vertical bindings lost: %v", keys)
+	}
+}
+
 // TestOpenInNewPaneSplits verifies the NewPane open target spawns a fresh editor
 // rather than replacing the active one.
 func TestOpenInNewPaneSplits(t *testing.T) {

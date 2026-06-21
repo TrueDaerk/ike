@@ -24,6 +24,13 @@
   explorer, so a file opened from the explorer lands in the editor area instead of
   shrinking the explorer.
 
+- **Pane focus/close keybinds.** `Ctrl+W` closes the focused editor pane
+  (`CloseFocused`; no-op on the explorer / last leaf). Spatial focus moves
+  (`FocusDir`) get default **Ctrl+arrow** bindings, overridable via
+  `keymap.bindings.focus_{left,right,up,down}`. Cmd is intentionally avoided —
+  terminals don't deliver it to a TUI. Both are core keys; Roadmap 0080 owns the
+  final keymap.
+
 ## 2026-06-20
 
 - `F1` now opens the help overlay as an alias for `?`, and dismisses it as well

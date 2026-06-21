@@ -76,6 +76,11 @@ type Model struct {
 	// splitZone is the default orientation SplitFocused and explorer "open in new
 	// pane" use, read once from config.
 	splitZone layout.Zone
+	// focusKeys maps a key string to the focus-move direction it triggers, built
+	// once from config (keymap.bindings.focus_{left,right,up,down}) with Ctrl+arrow
+	// defaults. Roadmap 0080 owns the final keymap; this is the binding-agnostic op
+	// wired to a configurable default.
+	focusKeys map[string]Direction
 }
 
 // editorScroll is a restored viewport framing awaiting the first layout.
@@ -132,6 +137,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		help:         help.New(reg, reg, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
 		splitZone:    splitZone(cfg),
+		focusKeys:    focusKeys(cfg),
 	}
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
@@ -319,6 +325,38 @@ func splitZone(cfg host.Config) layout.Zone {
 	return layout.ZoneRight
 }
 
+// focusKeys builds the key→direction map for spatial focus moves. Defaults are
+// Ctrl+arrows (which terminals reliably deliver, unlike Cmd); each is overridable
+// via keymap.bindings.focus_{left,right,up,down}. An empty override disables that
+// direction's binding.
+func focusKeys(cfg host.Config) map[string]Direction {
+	defaults := map[Direction]string{
+		DirLeft:  "ctrl+left",
+		DirRight: "ctrl+right",
+		DirUp:    "ctrl+up",
+		DirDown:  "ctrl+down",
+	}
+	names := map[Direction]string{
+		DirLeft:  "keymap.bindings.focus_left",
+		DirRight: "keymap.bindings.focus_right",
+		DirUp:    "keymap.bindings.focus_up",
+		DirDown:  "keymap.bindings.focus_down",
+	}
+	out := map[string]Direction{}
+	for dir, def := range defaults {
+		key := def
+		if cfg != nil {
+			if v, ok := cfg.Get(names[dir]); ok {
+				key = strings.TrimSpace(v)
+			}
+		}
+		if key != "" {
+			out[key] = dir
+		}
+	}
+	return out
+}
+
 // helpMinCol reads the optional help.min_column_width config value.
 func helpMinCol(cfg host.Config) int {
 	if cfg == nil {
@@ -417,6 +455,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, k.Action(m.host)
 			}
 		}
+		if dir, ok := m.focusKeys[keys]; ok {
+			m.FocusDir(dir)
+			return m, nil
+		}
 		switch keys {
 		case "ctrl+c":
 			return m.quit()
@@ -492,6 +534,9 @@ func (m Model) focusContext() string {
 // isCoreKey reports whether keys is handled by a core binding in the current
 // focus, so a plugin must out-prioritise it to take over.
 func (m Model) isCoreKey(keys string) bool {
+	if _, ok := m.focusKeys[keys]; ok {
+		return true
+	}
 	switch keys {
 	case "ctrl+c", "tab", "ctrl+w":
 		return true

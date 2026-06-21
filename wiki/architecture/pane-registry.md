@@ -54,8 +54,10 @@ fields with a `*pane.Registry` plus a `recentEditor` key:
   `setFocus` marks it and remembers it as `recentEditor` when it is an editor.
 - **Tab** (`cycleFocus`) advances to the next leaf in tree-walk order
   (`layout.Leaves`). `FocusDir(dir)` moves focus to the spatially adjacent leaf
-  using the computed rectangles. A mouse click in a pane interior focuses that
-  leaf (`paneClick`).
+  using the computed rectangles, bound by default to **Ctrl+arrows** and
+  overridable via `keymap.bindings.focus_{left,right,up,down}` (Cmd is not used —
+  most terminals never deliver it to a TUI). A mouse click in a pane interior
+  focuses that leaf (`paneClick`). `Ctrl+W` closes the focused editor pane.
 - **Routing.** `routeKey`, `editorCapturing`, and the quit/`q` logic consult the
   focused instance's kind instead of an enum. An editor still captures text in
   insert/command mode and shadows global single-letter keys.
