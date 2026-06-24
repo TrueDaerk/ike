@@ -2,6 +2,18 @@
 
 ## 2026-06-24
 
+- **Keybindings layer (Roadmap 0080).** New `internal/keymap` package: a
+  chord/key model (`Key` + `Mod` bitset, multi-step `Chord`), canonical
+  parse/format, the JetBrains-flavoured default set as data, context-scoped
+  resolution (pane-scoped shadows Global), build-time conflict detection,
+  platform normalisation (Cmd→Ctrl off macOS), a `tea.KeyMsg` adapter, a
+  partial-chord resolver with 600ms timeout, and a cheatsheet view. Wired into
+  `internal/app` dispatch: IDE-level chords resolve to registered command ids
+  before pane routing (only modified chords in a capturing editor); inert/unbound
+  chords fall through. Bindings reference command ids owned elsewhere and define
+  no commands; `vcs.*` ids stay inert pending a future VCS roadmap. See
+  [Keybindings & Shortcuts](/architecture/keybindings.md).
+
 - **Pane focus: directional, geometry-aware.** `FocusDir` (Ctrl+arrow) now routes
   through a pure `focusTarget` scorer over the computed leaf rectangles. It ranks
   candidates in the travel direction by perpendicular-span overlap, then travel-

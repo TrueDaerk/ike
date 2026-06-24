@@ -1,0 +1,253 @@
+package keymap
+
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
+
+func TestChordParseFormatRoundTrip(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string // canonical form
+	}{
+		{"cmd+k cmd+c", "cmd+k cmd+c"},
+		{"shift shift", "shift shift"},
+		{"esc", "esc"},
+		{"cmd+shift+a", "cmd+shift+a"},
+		{"shift+cmd+a", "cmd+shift+a"}, // reordered to canonical
+		{"alt+f7", "alt+f7"},
+		{"cmd+left-bracket", "cmd+left-bracket"},
+		{"A", "shift+a"}, // bare uppercase folds to base+shift
+		{"escape", "esc"},
+	}
+	for _, c := range cases {
+		got, err := ParseChord(c.in)
+		if err != nil {
+			t.Fatalf("ParseChord(%q): %v", c.in, err)
+		}
+		if got.String() != c.want {
+			t.Errorf("ParseChord(%q).String() = %q, want %q", c.in, got.String(), c.want)
+		}
+		// Idempotent canonical round-trip.
+		again := MustParseChord(got.String())
+		if again.String() != got.String() {
+			t.Errorf("round-trip not idempotent for %q: %q vs %q", c.in, got.String(), again.String())
+		}
+	}
+}
+
+func TestParseChordErrors(t *testing.T) {
+	for _, s := range []string{"", "   ", "bogus+a", "cmd+"} {
+		if _, err := ParseChord(s); err == nil {
+			t.Errorf("ParseChord(%q): expected error", s)
+		}
+	}
+}
+
+func TestPlatformNormalisation(t *testing.T) {
+	k := MustParseChord("cmd+s").Steps[0]
+	// On macOS Cmd stays Meta.
+	if got := NormalizeKey(k, "darwin"); !got.Has(ModMeta) || got.Has(ModCtrl) {
+		t.Errorf("darwin: cmd+s = %q, want meta kept", got)
+	}
+	// Off macOS Cmd folds to Ctrl.
+	if got := NormalizeKey(k, "linux"); got.Has(ModMeta) || !got.Has(ModCtrl) {
+		t.Errorf("linux: cmd+s = %q, want ctrl", got)
+	}
+	// Idempotent.
+	once := NormalizeKey(k, "windows")
+	if NormalizeKey(once, "windows") != once {
+		t.Errorf("normalisation not idempotent")
+	}
+}
+
+func TestBuildTableLookupContextPrecedence(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	// cmd+s → ctrl+s in Editor context.
+	chord := NormalizeChord(MustParseChord("cmd+s"), "linux")
+	if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "editor.save" {
+		t.Errorf("editor cmd+s lookup = %+v ok=%v, want editor.save", b, ok)
+	}
+	// Editor-scoped binding does not resolve in Explorer context.
+	if _, ok := table.Lookup(chord, Explorer); ok {
+		t.Errorf("editor-scoped cmd+s must not resolve in explorer context")
+	}
+	// Global binding resolves in any context.
+	g := NormalizeChord(MustParseChord("cmd+shift+a"), "linux")
+	if b, ok := table.Lookup(g, Explorer); !ok || b.Command != "palette.searchEverywhere" {
+		t.Errorf("global cmd+shift+a in explorer = %+v ok=%v", b, ok)
+	}
+}
+
+func TestPaneScopeShadowsGlobal(t *testing.T) {
+	defs := []Binding{
+		{Chord: MustParseChord("ctrl+g"), Command: "global.cmd", Context: Global, Layer: LayerDefault},
+		{Chord: MustParseChord("ctrl+g"), Command: "editor.cmd", Context: Editor, Layer: LayerDefault},
+	}
+	table := BuildTable(defs, nil, "linux")
+	c := MustParseChord("ctrl+g")
+	if b, _ := table.Lookup(c, Editor); b.Command != "editor.cmd" {
+		t.Errorf("editor context should prefer pane-scoped binding, got %q", b.Command)
+	}
+	if b, _ := table.Lookup(c, Explorer); b.Command != "global.cmd" {
+		t.Errorf("explorer context should fall to global binding, got %q", b.Command)
+	}
+}
+
+func TestOverrideRebindAndUnbind(t *testing.T) {
+	overrides := map[string]string{
+		"cmd+d":      "editor.somethingElse", // rebind existing
+		"cmd+s":      "",                     // unbind
+		"ctrl+y":     "custom.thing",         // brand-new binding
+		"focus_left": "ctrl+left",            // stopgap non-chord key, ignored
+	}
+	table := BuildTable(Defaults(PresetJetBrains), overrides, "linux")
+	dup := NormalizeChord(MustParseChord("cmd+d"), "linux")
+	if b, ok := table.Lookup(dup, Editor); !ok || b.Command != "editor.somethingElse" || b.Layer != LayerUser {
+		t.Errorf("rebind cmd+d = %+v ok=%v", b, ok)
+	}
+	save := NormalizeChord(MustParseChord("cmd+s"), "linux")
+	if _, ok := table.Lookup(save, Editor); ok {
+		t.Errorf("cmd+s should be unbound")
+	}
+	if b, ok := table.Lookup(MustParseChord("ctrl+y"), Global); !ok || b.Command != "custom.thing" {
+		t.Errorf("new binding ctrl+y = %+v ok=%v", b, ok)
+	}
+	// The non-chord stopgap key must be ignored as a diagnostic, not crash.
+	foundDiag := false
+	for _, d := range table.Diagnostics() {
+		if contains(d, "focus_left") {
+			foundDiag = true
+		}
+	}
+	if !foundDiag {
+		t.Errorf("expected diagnostic for ignored override key focus_left; got %v", table.Diagnostics())
+	}
+}
+
+func TestConflictDetection(t *testing.T) {
+	defs := []Binding{
+		{Chord: MustParseChord("ctrl+x"), Command: "a.cmd", Context: Global, Layer: LayerDefault},
+		{Chord: MustParseChord("ctrl+x"), Command: "b.cmd", Context: Global, Layer: LayerUser},
+	}
+	table := BuildTable(defs, nil, "linux")
+	if len(table.Conflicts()) != 1 {
+		t.Fatalf("expected 1 conflict, got %d", len(table.Conflicts()))
+	}
+	// Highest layer (user) wins.
+	if b, _ := table.Lookup(MustParseChord("ctrl+x"), Global); b.Command != "b.cmd" {
+		t.Errorf("conflict winner = %q, want b.cmd (higher layer)", b.Command)
+	}
+}
+
+func TestMultiStepChordAndTimeout(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	r := NewResolver(table)
+	// First step ctrl+k (cmd+k normalised) is both an exact binding (vcs.commit)
+	// and a prefix of ctrl+k ctrl+c / ctrl+k ctrl+s → must wait.
+	res := r.Feed(Key{Base: "k", Mods: ModCtrl}, Editor)
+	if res.Status != Pending {
+		t.Fatalf("after ctrl+k: status=%v, want Pending", res.Status)
+	}
+	// Second step ctrl+c completes the editor.commentLine chord.
+	res = r.Feed(Key{Base: "c", Mods: ModCtrl}, Editor)
+	if res.Status != Resolved || res.Command != "editor.commentLine" {
+		t.Fatalf("ctrl+k ctrl+c = %+v, want editor.commentLine", res)
+	}
+	// Timeout path: ctrl+k then nothing → exact match vcs.commit resolves.
+	res = r.Feed(Key{Base: "k", Mods: ModCtrl}, Global)
+	if res.Status != Pending {
+		t.Fatalf("ctrl+k pending expected, got %v", res.Status)
+	}
+	res = r.Timeout(Global)
+	if res.Status != Resolved || res.Command != "vcs.commit" {
+		t.Fatalf("timeout resolve = %+v, want vcs.commit", res)
+	}
+}
+
+func TestResolverNoMatchFallsThrough(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	r := NewResolver(table)
+	res := r.Feed(Key{Base: "j"}, Editor) // plain j: no global binding
+	if res.Status != NoMatch {
+		t.Errorf("plain j = %v, want NoMatch", res.Status)
+	}
+	if r.Pending() {
+		t.Errorf("resolver should hold no partial state after NoMatch")
+	}
+}
+
+func TestResolverAbortedPrefixRestarts(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	r := NewResolver(table)
+	r.Feed(Key{Base: "k", Mods: ModCtrl}, Global) // pending ctrl+k
+	// A key that neither extends ctrl+k nor matches restarts fresh: f1 resolves.
+	res := r.Feed(Key{Base: "f1"}, Global)
+	if res.Status != Resolved || res.Command != "palette.keymapHelp" {
+		t.Errorf("aborted-prefix restart f1 = %+v, want palette.keymapHelp", res)
+	}
+}
+
+func TestFromKeyMsg(t *testing.T) {
+	cases := []struct {
+		msg  tea.KeyMsg
+		base string
+		mods Mod
+	}{
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, "a", 0},
+		{tea.KeyMsg{Type: tea.KeyCtrlA}, "a", ModCtrl},
+		{tea.KeyMsg{Type: tea.KeyEsc}, "esc", 0},
+		{tea.KeyMsg{Type: tea.KeyF7}, "f7", 0},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A")}, "a", ModShift},
+		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "a", ModAlt},
+	}
+	for _, c := range cases {
+		k, ok := FromKeyMsg(c.msg)
+		if !ok {
+			t.Errorf("FromKeyMsg(%v): ok=false", c.msg)
+			continue
+		}
+		if k.Base != c.base || k.Mods != c.mods {
+			t.Errorf("FromKeyMsg(%v) = %+v, want base=%q mods=%d", c.msg, k, c.base, c.mods)
+		}
+	}
+}
+
+func TestInertBindingMetadataPreserved(t *testing.T) {
+	// vcs.* commands have no owner yet; the binding must still exist (inert) so
+	// the help sheet can show it. Resolution returns the id regardless of whether
+	// a command is registered — that check is the caller's.
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	commit := NormalizeChord(MustParseChord("cmd+k"), "linux")
+	if b, ok := table.Lookup(commit, Global); !ok || b.Command != "vcs.commit" {
+		t.Errorf("inert vcs.commit binding = %+v ok=%v", b, ok)
+	}
+}
+
+func TestHelpGroupsSorted(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	groups := table.Help()
+	if len(groups) == 0 {
+		t.Fatal("no help groups")
+	}
+	if groups[0].Context != Global {
+		t.Errorf("first help group = %q, want global", groups[0].Label)
+	}
+	for _, g := range groups {
+		for i := 1; i < len(g.Entries); i++ {
+			if g.Entries[i-1].Chord > g.Entries[i].Chord {
+				t.Errorf("group %q entries not sorted by chord", g.Label)
+			}
+		}
+	}
+}
+
+func contains(s, sub string) bool {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return true
+		}
+	}
+	return false
+}

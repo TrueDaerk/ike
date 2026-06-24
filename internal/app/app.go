@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,6 +22,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/help"
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/layout"
 	"ike/internal/overlay"
 	"ike/internal/palette"
@@ -90,6 +92,10 @@ type Model struct {
 	// defaults. Roadmap 0080 owns the final keymap; this is the binding-agnostic op
 	// wired to a configurable default.
 	focusKeys map[string]Direction
+	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
+	// IDE-level chords (in the focused pane's context) to registered command ids;
+	// unbound or inert chords fall through to the existing dispatch.
+	keys *keymap.Resolver
 }
 
 // editorScroll is a restored viewport framing awaiting the first layout.
@@ -149,6 +155,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
+		keys:         buildKeymap(cfg),
 	}
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
@@ -368,6 +375,57 @@ func focusKeys(cfg host.Config) map[string]Direction {
 	return out
 }
 
+// keymapTimeoutMsg fires when a held partial multi-step chord exceeds the
+// resolver timeout, so the root model can resolve or discard it.
+type keymapTimeoutMsg struct{}
+
+// resolveKeymap feeds one key to the keybinding resolver in the focused context.
+// It returns (cmd, true) when the key is consumed by the keymap layer — either a
+// resolved command to run or a partial chord to wait on — and (nil, false) when
+// the key should fall through to the existing dispatch (no match, or an inert
+// binding whose command id is not registered).
+func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
+	res := m.keys.Feed(k, keymap.Context(m.focusContext()))
+	switch res.Status {
+	case keymap.Pending:
+		// Hold the partial chord and arm the timeout; swallow the key meanwhile.
+		return tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
+			return keymapTimeoutMsg{}
+		}), true
+	case keymap.Resolved:
+		if c, ok := m.reg.Command(res.Command); ok {
+			return c.Run(m.host), true
+		}
+	}
+	return nil, false
+}
+
+// buildKeymap constructs the keybinding resolver from config: the preset
+// (keymap.preset, default JetBrains) overlaid by keymap.bindings.* overrides.
+// Non-chord override keys (the focus_* stopgap sharing the same map) are ignored
+// by the table builder.
+func buildKeymap(cfg host.Config) *keymap.Resolver {
+	preset := keymap.PresetJetBrains
+	overrides := map[string]string{}
+	if cfg != nil {
+		if v, ok := cfg.Get("keymap.preset"); ok {
+			if p := strings.TrimSpace(v); p != "" {
+				preset = p
+			}
+		}
+		const pfx = "keymap.bindings."
+		for _, key := range cfg.Keys() {
+			if strings.HasPrefix(key, pfx) {
+				if v, ok := cfg.Get(key); ok {
+					overrides[strings.TrimPrefix(key, pfx)] = v
+				}
+			}
+		}
+	}
+	table := keymap.BuildTable(keymap.Defaults(preset), overrides, keymap.GOOS)
+	return keymap.NewResolver(table)
+}
+
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
 func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
@@ -516,6 +574,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closeFocused()
 		return m, nil
 
+	case keymapTimeoutMsg:
+		// A held partial chord timed out: resolve it as an exact binding if one
+		// exists (e.g. cmd+k alone → vcs.commit), else discard it.
+		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
+			if c, ok := m.reg.Command(res.Command); ok {
+				return m, c.Run(m.host)
+			}
+		}
+		return m, nil
+
 	case tea.KeyMsg:
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
@@ -547,6 +615,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if keys == "@" && m.editorNormalMode() {
 			m.openFilePaletteAnchored()
 			return m, nil
+		}
+		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
+		// commands before pane dispatch. In a text-capturing editor only modified
+		// chords (or a chord already in progress) are eligible; plain letters always
+		// reach the editor. Inert/unbound chords fall through unchanged.
+		if k, ok := keymap.FromKeyMsg(msg); ok {
+			eligible := !m.editorCapturing() ||
+				k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta) ||
+				m.keys.Pending()
+			if eligible {
+				if cmd, handled := m.resolveKeymap(k); handled {
+					return m, cmd
+				}
+			}
 		}
 		if m.editorCapturing() {
 			return m.routeKey(msg)

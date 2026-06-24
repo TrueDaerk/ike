@@ -167,20 +167,20 @@ palette/leader fallback.
 
 ## Milestones
 
-- [ ] `key.go` + `chord.go`: `Key` (base + modifier set) and `Chord` (ordered steps) types.
-- [ ] `parse.go`: parse/format chord strings (`"cmd+k cmd+c"`, `"shift shift"`) with canonical round-trip.
-- [ ] `platform.go`: logical-modifier normalisation (Cmd→Ctrl off macOS) applied once at build time.
-- [ ] `fromkeymsg.go`: adapt bubbletea `tea.KeyMsg` (key names + modifiers) into the `Key` model.
-- [ ] `context.go`: `Context`/scope values + most-specific-first matching, shared with palette (07).
-- [ ] `binding.go` + `table.go`: `Binding` type and `BindingTable` built from defaults + merged `[keymap]` overrides (unbind via empty value).
-- [ ] `defaults.go`: the JetBrains-like default binding set above, expressed as data with owners/contexts/fragile flags.
-- [ ] `conflict.go`: build-time detection of same-chord-same-context clashes; report source layers, keep highest precedence, emit diagnostics.
-- [ ] `resolver.go`: feed `tea.KeyMsg`, track partial multi-step chord state with timeout, resolve against the context stack to a command id.
-- [ ] Root-model integration (01/02): wire the resolver into `internal/app` dispatch; on resolve, fire the registered Command via `host.API`; unresolved keys fall through to the focused pane.
-- [ ] Leader-key / palette fallback: optional leader prefix for terminal-reserved chords; ensure every bound action is reachable from the palette.
-- [ ] `help.go`: cheatsheet data grouped by context (drives an overlay/palette help view; `palette.keymapHelp`).
-- [ ] Tests: chord parse/format round-trip, platform normalisation, multi-step chord + timeout, context precedence + pane shadowing, layered override + unbind, conflict detection, inert-binding-on-missing-command, KeyMsg adapter mapping.
-- [ ] Wiki: add a `keymap` concept doc under `wiki/` (frontmatter `type`, `resource: internal/keymap`), documenting the binding model, default table, context/scope, platform/terminal constraints + leader fallback; bump `timestamp` and add a `log.md` entry.
+- [x] `key.go` + `chord.go`: `Key` (base + modifier set) and `Chord` (ordered steps) types.
+- [x] `parse.go`: parse/format chord strings (`"cmd+k cmd+c"`, `"shift shift"`) with canonical round-trip.
+- [x] `platform.go`: logical-modifier normalisation (Cmd→Ctrl off macOS) applied once at build time.
+- [x] `fromkeymsg.go`: adapt bubbletea `tea.KeyMsg` (key names + modifiers) into the `Key` model.
+- [x] `context.go`: `Context`/scope values + most-specific-first matching, shared with palette (07).
+- [x] `binding.go` + `table.go`: `Binding` type and `BindingTable` built from defaults + merged `[keymap]` overrides (unbind via empty value).
+- [x] `defaults.go`: the JetBrains-like default binding set above, expressed as data with owners/contexts/fragile flags.
+- [x] `conflict.go`: build-time detection of same-chord-same-context clashes; report source layers, keep highest precedence, emit diagnostics.
+- [x] `resolver.go`: feed `tea.KeyMsg`, track partial multi-step chord state with timeout, resolve against the context stack to a command id.
+- [x] Root-model integration (01/02): wire the resolver into `internal/app` dispatch; on resolve, fire the registered Command via `host.API`; unresolved keys fall through to the focused pane.
+- [x] Leader-key / palette fallback: optional leader prefix for terminal-reserved chords; ensure every bound action is reachable from the palette.
+- [x] `help.go`: cheatsheet data grouped by context (drives an overlay/palette help view; `palette.keymapHelp`).
+- [x] Tests: chord parse/format round-trip, platform normalisation, multi-step chord + timeout, context precedence + pane shadowing, layered override + unbind, conflict detection, inert-binding-on-missing-command, KeyMsg adapter mapping.
+- [x] Wiki: add a `keymap` concept doc under `wiki/` (frontmatter `type`, `resource: internal/keymap`), documenting the binding model, default table, context/scope, platform/terminal constraints + leader fallback; bump `timestamp` and add a `log.md` entry.
 
 ## Out of scope
 

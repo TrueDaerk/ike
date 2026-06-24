@@ -14,7 +14,9 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [ ] [05 — File Explorer (full)](0050-file-explorer.md)
 - [x] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
 - [x] [07 — Command Palette](0070-command-palette.md)
-- [ ] [08 — Keybindings & Shortcuts](0080-keybindings.md)
+- [x] [08 — Keybindings & Shortcuts](0080-keybindings.md)
+- [ ] [08.1 — Keybinding Audit & User-Friendly Activation](0081-keybindings-audit/index.md)
+- [ ] [08.2 — Per-Keybinding Usability Review](0082-keybinding-usability/index.md)
 - [ ] [09 — Project Switching](0090-project-switching.md)
 - [x] [09.5 — Session Restore (Workspace State Persistence)](0095-session-restore.md)
 - [ ] [10 — LSP Support](0100-lsp.md)
@@ -55,6 +57,23 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
   read-only. **03.5** overlays still composite above the tiling.
 - **07** palette is the shared fuzzy-list UI; **09** reuses it for the project picker.
 - **08** binds keys to commands owned elsewhere; vim normal-mode keys stay inside **06**.
+- **08.1** is a controlled audit of **08**'s bindings: it consumes `internal/keymap`
+  (no new engine) and makes each binding genuinely usable — a terminal-reachability
+  probe (which chords actually arrive), command-id reconciliation/registration
+  (kill inert presses), a leader key (`space` outside the editor, `Ctrl+K …`
+  universal) for fragile/intercepted chords, discoverability (live cheatsheet,
+  which-key, palette shortcut column), and a per-binding verification matrix.
+  Real semantic commands stay owned by 05/06/07/09/VCS; 08.1 owns the *binding
+  experience* and records blocked-by dependencies. Lives as a directory roadmap
+  (`0081-keybindings-audit/`).
+- **08.2** is a directory roadmap with one file per existing keybinding
+  (`0082-keybinding-usability/01-undo.md` … `30-revert-file.md`). Each file
+  reviews the *usability of the action behind the chord* — search-field behavior,
+  picker UX, confirm prompts, feedback — via a per-binding checklist + manual test
+  protocol. Verdicts are filled by the user ("OK passt" / change requests); a
+  binding is done when its verdict is OK. Blocked commands are spec'd for intended
+  UX now, verified once their owner roadmap lands. Feeds concrete change requests
+  back to 05/06/07/09/VCS.
 - **11** owns the palette behind **04**'s `[theme]` selector. `internal/theme` is
   leaf-level (lipgloss only). Themes register through **02** as an additive
   `Capabilities.Themes []Theme` capability (built-ins are a compile-in plugin);
