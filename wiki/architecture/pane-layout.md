@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-06-21T00:00:00Z
+timestamp: 2026-06-24T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -83,6 +83,15 @@ The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
 `CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds
 keys and the mouse reaches the same methods. `Leaves(root)` returns the leaf keys
 in walk order for the focus cycle.
+
+**Directional focus.** `FocusDir(dir)` (default Ctrl+arrow) resolves the target
+through `focusTarget`, which scores every other pane by the computed
+`layout.Compute` rectangles — *not* tree order. A candidate must lie in the
+travel direction (centre past the current centre); among those it ranks panes
+whose **perpendicular span overlaps** the current pane first, then nearest along
+the travel axis, then best perpendicular alignment. The overlap rank stops a
+tall full-width pane below from stealing a focus-right that should land on the
+pane directly to the side.
 
 **Live feedback.** During a move the drag tracks the latest mouse cell
 (`dragState.curX/curY`, updated on every motion). The pane being carried is

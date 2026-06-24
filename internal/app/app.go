@@ -870,32 +870,59 @@ func (m *Model) focusAfterClose() string {
 	return pane.ExplorerKey
 }
 
-// FocusDir moves focus to the leaf spatially adjacent to the focused one in the
-// given direction, using the computed rectangles. A binding-agnostic op for 0080.
+// FocusDir moves focus to the pane neighbouring the current one in dir, using
+// the computed rectangles. A binding-agnostic op for 0080.
 func (m *Model) FocusDir(dir Direction) {
-	cur, ok := m.lay.Panes[m.panes.Focused()]
+	if best := focusTarget(m.lay.Panes, m.panes.Focused(), dir); best != "" {
+		m.setFocus(best)
+	}
+}
+
+// focusTarget picks the pane to focus when moving from focused in dir. Among the
+// panes lying in that direction it prefers those whose perpendicular span
+// overlaps the current pane (so a focus-right from a top-left pane lands on the
+// pane directly to its right, not a tall full-width pane below), then the
+// nearest along the travel axis, then the best perpendicular alignment. Returns
+// "" when there is no pane in that direction.
+func focusTarget(panes map[string]layout.Rect, focused string, dir Direction) string {
+	cur, ok := panes[focused]
 	if !ok {
-		return
+		return ""
 	}
 	cx, cy := cur.X+cur.W/2, cur.Y+cur.H/2
 	best := ""
-	bestDist := 1 << 30
-	for key, r := range m.lay.Panes {
-		if key == m.panes.Focused() {
+	bestScore := [3]int{1 << 30, 1 << 30, 1 << 30}
+	for key, r := range panes {
+		if key == focused {
 			continue
 		}
 		tx, ty := r.X+r.W/2, r.Y+r.H/2
 		if !inDirection(dir, cx, cy, tx, ty) {
 			continue
 		}
-		d := abs(tx-cx) + abs(ty-cy)
-		if d < bestDist {
-			bestDist, best = d, key
+		// rank 0 = perpendicular spans overlap, 1 = not. primary = distance
+		// along the travel axis; perp = perpendicular centre offset.
+		rank, primary, perp := 1, 0, 0
+		switch dir {
+		case DirLeft, DirRight:
+			if cur.Y < r.Y+r.H && r.Y < cur.Y+cur.H {
+				rank = 0
+			}
+			primary, perp = abs(tx-cx), abs(ty-cy)
+		default: // DirUp, DirDown
+			if cur.X < r.X+r.W && r.X < cur.X+cur.W {
+				rank = 0
+			}
+			primary, perp = abs(ty-cy), abs(tx-cx)
+		}
+		score := [3]int{rank, primary, perp}
+		if score[0] < bestScore[0] ||
+			(score[0] == bestScore[0] && score[1] < bestScore[1]) ||
+			(score[0] == bestScore[0] && score[1] == bestScore[1] && score[2] < bestScore[2]) {
+			bestScore, best = score, key
 		}
 	}
-	if best != "" {
-		m.setFocus(best)
-	}
+	return best
 }
 
 // Direction is a spatial focus-move direction for FocusDir.

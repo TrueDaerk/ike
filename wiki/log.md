@@ -1,5 +1,14 @@
 # Log
 
+## 2026-06-24
+
+- **Pane focus: directional, geometry-aware.** `FocusDir` (Ctrl+arrow) now routes
+  through a pure `focusTarget` scorer over the computed leaf rectangles. It ranks
+  candidates in the travel direction by perpendicular-span overlap, then travel-
+  axis distance, then perpendicular alignment — so focus-right lands on the pane
+  beside you, not a wide full-width pane below whose centre happened to be closer
+  by raw Manhattan distance.
+
 ## 2026-06-21
 
 - **Editor: expand tabs when rendering.** `renderLine` now budgets by display

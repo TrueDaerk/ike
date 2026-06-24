@@ -105,6 +105,42 @@ func TestFocusDirMovesSpatially(t *testing.T) {
 	}
 }
 
+// TestFocusTargetPrefersAxisOverlap reproduces the screenshot grid: a tall
+// explorer on the left, two stacked panes in the middle and right columns, and
+// a full-width pane along the bottom. Directional moves must follow geometry,
+// not land on the wide bottom pane just because its centre is close.
+func TestFocusTargetPrefersAxisOverlap(t *testing.T) {
+	// Columns: explorer [0,30), middle [30,60), right [60,100).
+	// Rows: top [0,20), bottom [20,38) for the columns; floating spans
+	// [0,100) over [38,40).
+	panes := map[string]layout.Rect{
+		"explorer": {X: 0, Y: 0, W: 30, H: 38},
+		"progress": {X: 30, Y: 0, W: 30, H: 20},  // middle-top
+		"host":     {X: 30, Y: 20, W: 30, H: 18}, // middle-bottom
+		"extend":   {X: 60, Y: 0, W: 40, H: 20},  // right-top
+		"colors":   {X: 60, Y: 20, W: 40, H: 18}, // right-bottom
+		"floating": {X: 0, Y: 38, W: 100, H: 2},  // full-width bottom band
+	}
+	cases := []struct {
+		from string
+		dir  Direction
+		want string
+	}{
+		{"explorer", DirRight, "progress"}, // explorer -> middle-top
+		{"progress", DirRight, "extend"},   // not the wide bottom pane
+		{"extend", DirDown, "colors"},      // right-top -> right-bottom
+		{"colors", DirDown, "floating"},    // right-bottom -> bottom band
+		{"progress", DirDown, "host"},      // middle-top -> middle-bottom
+		{"extend", DirLeft, "progress"},    // right-top -> middle-top
+		{"floating", DirUp, "host"},        // bottom band -> nearest above
+	}
+	for _, c := range cases {
+		if got := focusTarget(panes, c.from, c.dir); got != c.want {
+			t.Errorf("focusTarget(%s, %v) = %q, want %q", c.from, c.dir, got, c.want)
+		}
+	}
+}
+
 // TestFocusKeysCtrlArrowDefault verifies the default Ctrl+arrow bindings move
 // focus spatially through Update (not just the FocusDir method).
 func TestFocusKeysCtrlArrowDefault(t *testing.T) {
