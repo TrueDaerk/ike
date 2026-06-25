@@ -86,6 +86,122 @@ func names(m Model) []string {
 	return out
 }
 
+func TestNewFileCreatesAndSelects(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewFileMsg{}) // cursor on root -> create inside root
+	m, _ = pumpScans(m, cmd)
+	if !m.Prompting() {
+		t.Fatal("expected name prompt to open")
+	}
+	m, _ = send(m, key("new.txt"), key("enter"))
+	if m.Prompting() {
+		t.Fatal("prompt should close on submit")
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.txt")); err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	if c := m.current(); c == nil || c.name != "new.txt" {
+		t.Fatalf("cursor not on new file: %v", names(m))
+	}
+}
+
+func TestNewFolderCreates(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewDirMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("pkg"), key("enter"))
+	info, err := os.Stat(filepath.Join(root, "pkg"))
+	if err != nil || !info.IsDir() {
+		t.Fatalf("folder not created: %v", err)
+	}
+}
+
+func TestDeleteMovesToTrashAndUndoRestores(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // root, sub, a.txt
+	if c := m.current(); c == nil || c.name != "a.txt" {
+		t.Fatalf("cursor not on a.txt: %v", names(m))
+	}
+	m, cmd := m.Update(DeleteMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("y")) // confirm delete
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); !os.IsNotExist(err) {
+		t.Fatalf("a.txt should be deleted, err=%v", err)
+	}
+	m, cmd = m.Update(UndoMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("y")) // confirm restore
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("a.txt should be restored: %v", err)
+	}
+}
+
+func TestUndoCreateDeletesFile(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewFileMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("tmp.txt"), key("enter"))
+	if _, err := os.Stat(filepath.Join(root, "tmp.txt")); err != nil {
+		t.Fatalf("create failed: %v", err)
+	}
+	m, cmd = m.Update(UndoMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("y")) // confirm undo-create
+	if _, err := os.Stat(filepath.Join(root, "tmp.txt")); !os.IsNotExist(err) {
+		t.Fatalf("tmp.txt should be removed by undo, err=%v", err)
+	}
+}
+
+func TestDeleteCancelKeepsFile(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(DeleteMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("n")) // decline
+	if m.Prompting() {
+		t.Fatal("prompt should close on decline")
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("a.txt must survive a cancelled delete: %v", err)
+	}
+}
+
+func TestNewFileEscCancels(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewFileMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("ab"))
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.Prompting() {
+		t.Fatal("esc should cancel the name prompt")
+	}
+	if _, err := os.Stat(filepath.Join(root, "ab")); !os.IsNotExist(err) {
+		t.Fatal("no file should be created on cancel")
+	}
+}
+
+func TestUndoEmptyIsNoOp(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = m.Update(UndoMsg{})
+	if m.Prompting() {
+		t.Fatal("undo with empty stack must not open a prompt")
+	}
+}
+
 func TestRootExpandedWithChildren(t *testing.T) {
 	root := tree(t)
 	m := mounted(t, root, 30, 20)

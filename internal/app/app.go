@@ -540,6 +540,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
 
+	case explorer.FileDeletedMsg:
+		// The explorer removed a path; close any editor still showing it so a
+		// deleted file does not linger in an open pane.
+		m.closeEditorsForPath(msg.Path, msg.IsDir)
+		return m, nil
+
 	case explorer.Msg:
 		exp := m.explorer()
 		var cmd tea.Cmd
@@ -591,6 +597,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)
 			return m, nil
+		}
+		// A focused explorer with an open prompt (new-file name entry, delete/undo
+		// confirmation) captures every key, ahead of the keymap and global layers,
+		// so typed names and y/n answers reach the prompt intact.
+		if m.explorerCapturing() {
+			return m.routeKey(msg)
 		}
 		keys := msg.String()
 		if keys == m.paletteKey {
@@ -797,6 +809,16 @@ func (m Model) editorCapturing() bool {
 	return inst.Editor().Capturing()
 }
 
+// explorerCapturing reports whether the focused pane is the explorer with an
+// open modal prompt, in which case keys go straight to it (see Update).
+func (m Model) explorerCapturing() bool {
+	inst := m.panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindExplorer {
+		return false
+	}
+	return inst.Explorer().Prompting()
+}
+
 // routeKey forwards a key to the focused pane.
 func (m Model) routeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	inst := m.panes.FocusedInstance()
@@ -918,23 +940,62 @@ func (m *Model) spawnEditor() string {
 func (m *Model) CloseFocused() { m.closeFocused() }
 
 func (m *Model) closeFocused() {
-	key := m.panes.Focused()
+	if m.closeKey(m.panes.Focused()) {
+		// Focus the leaf that now occupies the closed pane's position: the first
+		// leaf in walk order is a safe, always-present choice (explorer at minimum).
+		m.setFocus(m.focusAfterClose())
+		m.layout()
+		saveLayout(m.tree, m.panes)
+	}
+}
+
+// closeKey removes the editor leaf named key from the layout and registry,
+// reporting whether it closed one. It never closes the explorer or the last
+// leaf, and leaves focus/layout/persistence to the caller (so a batch close can
+// relayout once). recentEditor is repaired here since it is bookkeeping local to
+// the close.
+func (m *Model) closeKey(key string) bool {
 	inst := m.panes.Get(key)
 	if inst == nil || inst.Kind() == pane.KindExplorer || m.tree == nil {
-		return
+		return false
 	}
 	tree, ok := layout.Close(m.tree, key)
 	if !ok {
-		return // last leaf: never empty the workspace
+		return false // last leaf: never empty the workspace
 	}
 	m.tree = tree
 	m.panes.Close(key)
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
 	}
-	// Focus the leaf that now occupies the closed pane's position: the first leaf
-	// in walk order is a safe, always-present choice (explorer at minimum).
-	m.setFocus(m.focusAfterClose())
+	return true
+}
+
+// closeEditorsForPath closes every editor leaf showing path (or, when isDir,
+// any file beneath it), so deleting a file in the explorer does not leave a
+// stale editor open on it. It relayouts and persists once if anything closed,
+// and refocuses only when the focused leaf itself was removed.
+func (m *Model) closeEditorsForPath(path string, isDir bool) {
+	prefix := path + string(os.PathSeparator)
+	closed := false
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor || !inst.Editor().HasFile() {
+			continue
+		}
+		ep := inst.Editor().Path()
+		if ep == path || (isDir && strings.HasPrefix(ep, prefix)) {
+			if m.closeKey(key) {
+				closed = true
+			}
+		}
+	}
+	if !closed {
+		return
+	}
+	if !m.panes.Has(m.panes.Focused()) {
+		m.setFocus(m.focusAfterClose())
+	}
 	m.layout()
 	saveLayout(m.tree, m.panes)
 }

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-06-21T16:00:00Z
+timestamp: 2026-06-24T00:00:00Z
 ---
 
 # Editor
@@ -61,7 +61,10 @@ motions, `Shift+↑/↓` paragraph jumps — these work in normal, visual and in
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
-`Home`/`End` and the word/page keys move the caret mid-insert.
+`Home`/`End` and the word/page keys move the caret mid-insert. An `undo`/`redo`
+requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
+insert session**, so it reverts the whole typed run as one unit and behaves
+identically from insert and normal mode.
 
 Visual, V-Line and V-Block extend a selection that `View` highlights cell by
 cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and

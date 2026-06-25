@@ -35,7 +35,11 @@ var jetbrainsRows = []row{
 	{"cmd+c", "editor.copy", "Copy", Editor, "Editor (06)", false},
 	{"cmd+x", "editor.cut", "Cut", Editor, "Editor (06)", false},
 	{"cmd+v", "editor.paste", "Paste", Editor, "Editor (06)", false},
-	{"cmd+z", "editor.undo", "Undo", Editor, "Editor (06)", false},
+	// Undo binds to ctrl+z, not cmd+z: macOS terminals never forward the Cmd
+	// modifier to a TUI, so a cmd+z chord is undeliverable there. ctrl+z arrives
+	// as a normal key (raw mode disables the suspend signal) on every platform.
+	{"ctrl+z", "editor.undo", "Undo", Editor, "Editor (06)", false},
+	{"ctrl+z", "explorer.undo", "Undo file operation", Explorer, "Explorer (05)", false},
 	{"cmd+shift+z", "editor.redo", "Redo", Editor, "Editor (06)", false},
 	{"cmd+f", "editor.find", "Find in file", Editor, "Editor (06)", false},
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)", false},

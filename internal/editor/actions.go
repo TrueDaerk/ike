@@ -269,7 +269,13 @@ func (m *Model) joinLines(count int) {
 }
 
 // undo reverts the last change and moves the cursor to its recorded position.
+// An undo requested mid-insert (Cmd+Z while typing) first commits the open insert
+// session so the whole typed run becomes one undoable unit, then reverts it —
+// undo therefore behaves the same from insert and normal mode.
 func (m *Model) undo() {
+	if m.insert.active {
+		m.commitInsert()
+	}
 	if cur, ok := m.hist.Undo(m.buf); ok {
 		m.cursor = m.buf.ClampCursor(cur)
 		m.desiredCol = m.cursor.Col
@@ -277,8 +283,12 @@ func (m *Model) undo() {
 	}
 }
 
-// redo re-applies the last undone change.
+// redo re-applies the last undone change. Like undo, it first commits any open
+// insert session so the redo stack is well defined regardless of mode.
 func (m *Model) redo() {
+	if m.insert.active {
+		m.commitInsert()
+	}
 	if cur, ok := m.hist.Redo(m.buf); ok {
 		m.cursor = m.buf.ClampCursor(cur)
 		m.desiredCol = m.cursor.Col

@@ -359,6 +359,20 @@ func TestUndoInsertIsOneUnit(t *testing.T) {
 	}
 }
 
+func TestUndoFromInsertModeFlushesAndReverts(t *testing.T) {
+	m, _ := loaded(t, "x\n")
+	m = typeKeys(m, "A")
+	m = typeKeys(m, "abc") // typing, still in insert mode (no Esc)
+	// Cmd+Z arrives as an editor.undo action while the insert session is open.
+	m, _ = m.Update(ActionMsg{Action: "undo"})
+	if line(m, 0) != "x" {
+		t.Fatalf("undo mid-insert=%q want x (whole run reverted)", line(m, 0))
+	}
+	if m.mode != Normal {
+		t.Fatalf("undo mid-insert mode=%v want Normal", m.mode)
+	}
+}
+
 func TestDotRepeatsDelete(t *testing.T) {
 	m, _ := loaded(t, "aaaa\n")
 	m = typeKeys(m, "x")

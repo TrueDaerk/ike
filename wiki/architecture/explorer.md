@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-06-24T00:00:00Z
 ---
 
 # File Explorer
@@ -93,10 +93,45 @@ these are defaults.
 | `explorer.refresh` | `r` | invalidate + re-scan the selected subtree (`RefreshMsg`) |
 | `explorer.collapseAll` | `c` | fold the tree back to the root (`CollapseAllMsg`) |
 | `explorer.reveal` | — | move the cursor to the open file (`RevealMsg`) |
+| `explorer.newFile` | `a` | prompt for a name, create an empty file (`NewFileMsg`) |
+| `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
+| `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
+| `explorer.undo` | `Ctrl+Z` | reverse the last file operation after confirmation (`UndoMsg`) |
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
 rebuilds (no re-scan), since all children — hidden included — are cached on the
 node.
+
+## File operations
+
+`fileops.go` adds create / delete / undo on top of navigation. Each step that
+mutates the filesystem is gated behind a **modal prompt** (`Model.prompt`):
+`promptInput` reads a filename (Enter accepts, Esc cancels), `promptConfirm`
+reads a yes/no answer (`y`/Enter accept, anything else cancels). While a prompt
+is open `Prompting()` is true, and the root model routes every key straight to
+the explorer (ahead of the keymap and global layers) so typed names and answers
+are not stolen by other bindings.
+
+New entries are created next to the selection — inside the selected directory, or
+beside the selected file. Deletes do not `os.Remove`; they move the entry into a
+hidden, same-filesystem trash directory (`.ike-trash/` under the project root, so
+the rename never crosses devices), which is what makes an undo able to restore
+it. Completed operations are pushed onto a linear undo stack (`ops`):
+
+- **Undo of a create** removes the entry it added.
+- **Undo of a delete** moves the trashed entry back to its original path.
+
+Removing a path (a delete, or undo of a create) emits `FileDeletedMsg`, which the
+root model handles by closing any editor still open on that file (or, for a
+directory, any file beneath it) — so a deleted file never lingers in an open
+pane. Unlike the other explorer messages, `FileDeletedMsg` is handled by the app,
+not routed back into the explorer, so it deliberately does not implement `Msg`.
+
+`Ctrl+Z` in the explorer context resolves to `explorer.undo`, mirroring the
+editor's `Ctrl+Z` text undo but operating on files. After any operation the
+affected directory is re-scanned (`refreshDir`) and `pendingSel` snaps the cursor
+onto the new or restored entry once it reappears. This file-op undo stack is
+entirely separate from the editor's text history.
 
 ## Scrolling & scrollbars
 

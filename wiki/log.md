@@ -2,6 +2,24 @@
 
 ## 2026-06-24
 
+- **Editor undo fixed for insert mode.** `editor.undo`/`redo` now flush an open
+  insert session before walking history, so `Ctrl+Z` while typing reverts the
+  whole typed run as one unit and behaves the same from insert and normal mode
+  (previously it ran against history with the in-progress insert still
+  uncommitted, so it no-opped or desynced). See
+  [Editor](/architecture/editor.md).
+
+- **Explorer file operations (create / delete / undo).** New `fileops.go` adds
+  `explorer.newFile` (`a`), `explorer.newFolder` (`A`), `explorer.delete` (`d`),
+  and `explorer.undo` (`Ctrl+Z`). Every destructive step is gated behind a
+  modal prompt; deletes move entries to a same-filesystem `.ike-trash/` so undo
+  can restore them, and a linear op stack reverses the last create (delete it) or
+  delete (restore it). The root model routes keys straight to a prompting
+  explorer so typed names/answers are not stolen by other bindings. Removing a
+  file (delete or undo-create) emits `FileDeletedMsg`, which the app handles by
+  closing any editor still open on that path. See
+  [File Explorer](/architecture/explorer.md).
+
 - **Keybindings layer (Roadmap 0080).** New `internal/keymap` package: a
   chord/key model (`Key` + `Mod` bitset, multi-step `Chord`), canonical
   parse/format, the JetBrains-flavoured default set as data, context-scoped

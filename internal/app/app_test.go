@@ -106,6 +106,72 @@ func newSized() Model {
 	return tm.(Model)
 }
 
+// drainKey feeds a key into the app and runs the single Cmd it produces (a
+// keymap-resolved command dispatches an ActionMsg/Msg back into Update), so a
+// test sees the end-to-end effect of a key press.
+func drainKey(m Model, k tea.KeyMsg) Model {
+	tm, cmd := m.Update(k)
+	m = tm.(Model)
+	for cmd != nil {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		tm, cmd = m.Update(msg)
+		m = tm.(Model)
+	}
+	return m
+}
+
+// TestCtrlZUndoesInEditor guards the deliverable undo binding: ctrl+z (cmd+z is
+// undeliverable in a macOS terminal) must resolve through the keymap layer to
+// editor.undo and revert the last edit.
+func TestCtrlZUndoesInEditor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	// Delete the first rune in normal mode: "hello" -> "ello".
+	m = drainKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	if strings.Contains(m.activeEditor().View(), "hello") {
+		t.Fatalf("edit did not apply: %q", m.activeEditor().View())
+	}
+	// ctrl+z restores it.
+	m = drainKey(m, tea.KeyMsg{Type: tea.KeyCtrlZ})
+	if !strings.Contains(m.activeEditor().View(), "hello") {
+		t.Fatalf("ctrl+z did not undo: %q", m.activeEditor().View())
+	}
+}
+
+// TestDeletingFileClosesItsEditor guards that removing a file in the explorer
+// (delete, or undo of a create) closes any editor still showing it, rather than
+// leaving a stale pane open on a gone file.
+func TestDeletingFileClosesItsEditor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "gone.txt")
+	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	if m.editorWithFile(path) == "" {
+		t.Fatal("precondition: editor should be open on the file")
+	}
+	tm, _ = m.Update(explorer.FileDeletedMsg{Path: path})
+	m = tm.(Model)
+	if m.editorWithFile(path) != "" {
+		t.Fatal("editor should close when its file is deleted")
+	}
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+		t.Fatal("focus should fall back to the explorer after the editor closes")
+	}
+}
+
 func TestTabSwitchesFocus(t *testing.T) {
 	m := newSized()
 	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {

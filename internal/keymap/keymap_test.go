@@ -141,6 +141,22 @@ func TestConflictDetection(t *testing.T) {
 	}
 }
 
+// TestUndoBindsToCtrlZ guards that undo is reachable via ctrl+z — a key the
+// terminal actually delivers — on every platform, including darwin where cmd+z
+// is undeliverable. The chord resolves per context: editor.undo in the editor,
+// explorer.undo in the explorer.
+func TestUndoBindsToCtrlZ(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		if res := r.Feed(Key{Base: "z", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "editor.undo" {
+			t.Fatalf("%s: ctrl+z in editor = %+v, want editor.undo", goos, res)
+		}
+		if res := r.Feed(Key{Base: "z", Mods: ModCtrl}, Explorer); res.Status != Resolved || res.Command != "explorer.undo" {
+			t.Fatalf("%s: ctrl+z in explorer = %+v, want explorer.undo", goos, res)
+		}
+	}
+}
+
 func TestMultiStepChordAndTimeout(t *testing.T) {
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
 	r := NewResolver(table)

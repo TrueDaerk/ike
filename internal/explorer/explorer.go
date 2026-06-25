@@ -13,6 +13,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/overlay"
 )
 
 // OpenFileMsg is emitted when the user selects a file to open. The root model
@@ -56,6 +58,16 @@ type Model struct {
 	indent     int        // spaces per depth level (config explorer.tree_indent)
 	sort       string     // ordering within a level (config explorer.sort)
 	colors     colorTable // per-filetype colour resolution
+
+	// File-operation state (fileops.go). prompt is the active modal (new-file
+	// name entry, or a delete/undo confirmation); ops is the undo stack of
+	// completed create/delete operations; trashDir holds deleted entries so a
+	// delete can be reversed. See fileops.go.
+	prompt     *prompt
+	ops        []fileOp
+	trashDir   string
+	trashSeq   int
+	pendingSel string // path to put the cursor on once the next scan rebuilds rows
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -186,10 +198,21 @@ func (m *Model) expand(n *node) tea.Cmd {
 	return scanCmd(n.path)
 }
 
-// rebuild flattens the visible tree into m.rows and clamps the cursor.
+// rebuild flattens the visible tree into m.rows and clamps the cursor. A pending
+// selection (set by a file op before its re-scan) snaps the cursor onto the new
+// or restored entry once it becomes visible.
 func (m *Model) rebuild() {
 	m.rows = m.rows[:0]
 	m.appendVisible(m.root)
+	if m.pendingSel != "" {
+		for i, n := range m.rows {
+			if n.path == m.pendingSel {
+				m.cursor = i
+				m.pendingSel = ""
+				break
+			}
+		}
+	}
 	if m.cursor >= len(m.rows) {
 		m.cursor = len(m.rows) - 1
 	}
@@ -260,7 +283,24 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RevealMsg:
 		m.reveal()
 		return m, nil
+	case NewFileMsg:
+		m.promptNewEntry(false)
+		return m, nil
+	case NewDirMsg:
+		m.promptNewEntry(true)
+		return m, nil
+	case DeleteMsg:
+		m.promptDelete()
+		return m, nil
+	case UndoMsg:
+		m.promptUndo()
+		return m, nil
 	case tea.KeyMsg:
+		// A modal prompt captures every key (filename entry, y/n, esc) until it
+		// is accepted or cancelled, ahead of any navigation binding.
+		if m.prompt != nil {
+			return m, m.handlePromptKey(msg)
+		}
 		switch msg.String() {
 		case "down", "j":
 			m.moveCursor(1)
@@ -770,7 +810,11 @@ func (m Model) View() string {
 		lines = append(lines, row)
 	}
 
-	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+	out := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	if m.prompt != nil {
+		out = overlay.Center(out, m.promptBox(), m.width, m.height)
+	}
+	return out
 }
 
 // rowKind classifies how visible row i is highlighted. Precedence, strongest

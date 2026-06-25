@@ -31,11 +31,18 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.refresh", "Explorer: Refresh", RefreshMsg{}),
 			cmd("explorer.collapseAll", "Explorer: Collapse All", CollapseAllMsg{}),
 			cmd("explorer.reveal", "Explorer: Reveal Open File", RevealMsg{}),
+			cmd("explorer.newFile", "Explorer: New File", NewFileMsg{}),
+			cmd("explorer.newFolder", "Explorer: New Folder", NewDirMsg{}),
+			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
+			cmd("explorer.undo", "Explorer: Undo File Operation", UndoMsg{}),
 		},
 		Keymaps: []plugin.Keymap{
 			keymap(".", "explorer.toggleHidden", ToggleHiddenMsg{}),
 			keymap("r", "explorer.refresh", RefreshMsg{}),
 			keymap("c", "explorer.collapseAll", CollapseAllMsg{}),
+			keymap("a", "explorer.newFile", NewFileMsg{}),
+			keymap("A", "explorer.newFolder", NewDirMsg{}),
+			keymap("d", "explorer.delete", DeleteMsg{}),
 		},
 	}
 }
