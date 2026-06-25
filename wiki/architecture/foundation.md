@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-06-25T00:00:00Z
 ---
 
 # Foundation Slice
@@ -15,11 +15,19 @@ the tree, open a file, edit it with vim controls, save it.
 ## Structure
 
 ```
-cmd/ike/main.go     entrypoint, tea.NewProgram(app.New(), WithAltScreen)
+cmd/ike/main.go     entrypoint, tea.NewProgram(app.New())
 internal/app/       root model: layout + focus + global keys + routing
 internal/explorer/  file tree pane
 internal/editor/    line buffer + modal vim state machine
 ```
+
+IKE runs on **Bubble Tea v2** (`charm.land/bubbletea/v2`; see
+[Roadmap 0085](../../roadmaps/0085-bubbletea-v2.md)). Under v2, alt-screen, mouse mode
+and the kitty keyboard enhancements are declared on the root model's `View()` (which
+returns a `tea.View` struct), not passed as `tea.NewProgram` options. The root dispatches
+`tea.KeyPressMsg` only, ignoring `tea.KeyReleaseMsg`, and normalises the four v2 mouse
+messages (`MouseClickMsg`/`MouseReleaseMsg`/`MouseWheelMsg`/`MouseMotionMsg`) into one
+internal `mouseEvent` for the drag handler.
 
 Each pane is a `tea.Model`-shaped component (Init/Update/View) embedded in the
 root `app.Model`. The root forwards `tea.Msg` to the focused child and owns

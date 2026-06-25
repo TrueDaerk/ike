@@ -3,7 +3,7 @@ package keymap
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestChordParseFormatRoundTrip(t *testing.T) {
@@ -207,16 +207,16 @@ func TestResolverAbortedPrefixRestarts(t *testing.T) {
 
 func TestFromKeyMsg(t *testing.T) {
 	cases := []struct {
-		msg  tea.KeyMsg
+		msg  tea.KeyPressMsg
 		base string
 		mods Mod
 	}{
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")}, "a", 0},
-		{tea.KeyMsg{Type: tea.KeyCtrlA}, "a", ModCtrl},
-		{tea.KeyMsg{Type: tea.KeyEsc}, "esc", 0},
-		{tea.KeyMsg{Type: tea.KeyF7}, "f7", 0},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A")}, "a", ModShift},
-		{tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a"), Alt: true}, "a", ModAlt},
+		{tea.KeyPressMsg{Text: "a", Code: 'a'}, "a", 0},
+		{tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl}, "a", ModCtrl},
+		{tea.KeyPressMsg{Code: tea.KeyEscape}, "esc", 0},
+		{tea.KeyPressMsg{Code: tea.KeyF7}, "f7", 0},
+		{tea.KeyPressMsg{Text: "A", Code: 'a', Mod: tea.ModShift}, "a", ModShift},
+		{tea.KeyPressMsg{Code: 'a', Mod: tea.ModAlt}, "a", ModAlt},
 	}
 	for _, c := range cases {
 		k, ok := FromKeyMsg(c.msg)

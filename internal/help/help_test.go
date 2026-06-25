@@ -4,7 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -198,7 +199,9 @@ func TestMinColumnWidth(t *testing.T) {
 func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 	h := New(testRegistry(), MapResolver{"core.quit": "ctrl+c"}, 0)
 	h.Snapshot()
-	body := h.Render(120)
+	// lipgloss v2 always emits styling escapes (it no longer detects the
+	// terminal); strip them so assertions match the logical text.
+	body := ansi.Strip(h.Render(120))
 	for _, want := range []string{"Quit", "Save", "ctrl+c", "Global", "Editor"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("body missing %q", want)

@@ -10,7 +10,7 @@ import (
 	"os"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
@@ -220,7 +220,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ActionMsg:
 		return m.runAction(msg.Action)
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		var cmd tea.Cmd
 		switch m.mode {
 		case Insert, Replace:

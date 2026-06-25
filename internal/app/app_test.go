@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -67,7 +68,7 @@ func TestPluginKeymapOverridesCore(t *testing.T) {
 	}}}})
 	m := NewWith(reg, host.MapConfig{})
 
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	out, _ := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if s := out.(Model).host.Status(); s != "plugin-q" {
 		t.Fatalf("high-priority plugin binding should fire, status=%q", s)
 	}
@@ -109,7 +110,7 @@ func newSized() Model {
 // drainKey feeds a key into the app and runs the single Cmd it produces (a
 // keymap-resolved command dispatches an ActionMsg/Msg back into Update), so a
 // test sees the end-to-end effect of a key press.
-func drainKey(m Model, k tea.KeyMsg) Model {
+func drainKey(m Model, k tea.KeyPressMsg) Model {
 	tm, cmd := m.Update(k)
 	m = tm.(Model)
 	for cmd != nil {
@@ -135,14 +136,16 @@ func TestCtrlZUndoesInEditor(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	// Delete the first rune in normal mode: "hello" -> "ello".
-	m = drainKey(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
-	if strings.Contains(m.activeEditor().View(), "hello") {
+	// Delete the first rune in normal mode: "hello" -> "ello". The focused editor
+	// highlights the cursor cell with reverse-video escapes (and lipgloss v2 always
+	// emits them), so strip ANSI before matching the logical text.
+	m = drainKey(m, tea.KeyPressMsg{Text: "x", Code: 'x'})
+	if strings.Contains(ansi.Strip(m.activeEditor().View()), "hello") {
 		t.Fatalf("edit did not apply: %q", m.activeEditor().View())
 	}
 	// ctrl+z restores it.
-	m = drainKey(m, tea.KeyMsg{Type: tea.KeyCtrlZ})
-	if !strings.Contains(m.activeEditor().View(), "hello") {
+	m = drainKey(m, tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	if !strings.Contains(ansi.Strip(m.activeEditor().View()), "hello") {
 		t.Fatalf("ctrl+z did not undo: %q", m.activeEditor().View())
 	}
 }
@@ -177,7 +180,7 @@ func TestTabSwitchesFocus(t *testing.T) {
 	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("should start focused on explorer")
 	}
-	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = tm.(Model)
 	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("tab should focus editor")
@@ -224,7 +227,7 @@ func TestCloseMsgResetsToExplorer(t *testing.T) {
 
 func TestQuitFromExplorer(t *testing.T) {
 	m := newSized()
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if cmd == nil {
 		t.Fatal("q in explorer should quit")
 	}
@@ -339,7 +342,7 @@ func TestQuitFromEditorNormalMode(t *testing.T) {
 	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("opening a file should focus the editor")
 	}
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if cmd == nil {
 		t.Fatal("q in editor normal mode should quit")
 	}
@@ -359,9 +362,9 @@ func TestQNotQuitWhileTyping(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")}) // insert mode
+	tm, _ = m.Update(tea.KeyPressMsg{Text: "i", Code: 'i'}) // insert mode
 	m = tm.(Model)
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if cmd != nil {
 		if _, ok := cmd().(tea.QuitMsg); ok {
 			t.Fatal("q while typing should not quit")
@@ -380,31 +383,31 @@ func TestHelpOverlayToggle(t *testing.T) {
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
 
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	tm, _ = m.Update(tea.KeyPressMsg{Text: "?", Code: '?'})
 	m = tm.(Model)
 	if !m.shell.IsOpen() {
 		t.Fatal(`"?" should open the help overlay`)
 	}
-	if !strings.Contains(m.View(), "Hello") {
+	if !strings.Contains(m.render(), "Hello") {
 		t.Fatal("open overlay should render registered command")
 	}
 
 	// While open, tab is consumed by the overlay and must not switch focus.
 	before := m.panes.Focused()
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = tm.(Model)
 	if m.panes.Focused() != before {
 		t.Fatal("overlay should swallow keys; focus changed")
 	}
 
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
 	if m.shell.IsOpen() {
 		t.Fatal(`"esc" should dismiss the help overlay`)
 	}
 
 	// F1 is an alias for "?" and opens the same overlay.
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyF1})
 	m = tm.(Model)
 	if !m.shell.IsOpen() {
 		t.Fatal(`F1 should open the help overlay`)
@@ -424,7 +427,7 @@ func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
 	if !m.shell.IsOpen() {
 		t.Fatal("OpenModalRequest should open the floating shell")
 	}
-	v := m.View()
+	v := m.render()
 	if !strings.Contains(v, "PLUGIN MODAL") || !strings.Contains(v, "modal body") {
 		t.Fatalf("modal content should be composited onto the canvas: %q", v)
 	}
@@ -432,7 +435,7 @@ func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
 		t.Fatal("base layout should remain visible around the modal")
 	}
 	// The shell swallows keys and esc dismisses it.
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
 	if m.shell.IsOpen() {
 		t.Fatal("esc should dismiss the modal")
@@ -451,10 +454,10 @@ func TestHelpOverlayFloatsCentered(t *testing.T) {
 	m := NewWith(reg, host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("?")})
+	tm, _ = m.Update(tea.KeyPressMsg{Text: "?", Code: '?'})
 	m = tm.(Model)
 
-	v := m.View()
+	v := m.render()
 	lines := strings.Split(v, "\n")
 	if len(lines) != 30 {
 		t.Fatalf("canvas height = %d, want 30", len(lines))

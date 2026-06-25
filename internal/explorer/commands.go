@@ -6,7 +6,7 @@
 package explorer
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 	"ike/internal/plugin"

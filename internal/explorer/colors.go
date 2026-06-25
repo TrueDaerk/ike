@@ -1,11 +1,12 @@
 package explorer
 
 import (
+	"image/color"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // colorTable maps extension/glob keys to colour names (or hex). It is built from
@@ -46,7 +47,7 @@ var namedColors = map[string]string{
 
 // color resolves a config colour token (name, hex, or ANSI index) to a lipgloss
 // colour.
-func (t colorTable) color(token string) lipgloss.Color {
+func (t colorTable) color(token string) color.Color {
 	if v, ok := namedColors[strings.ToLower(token)]; ok {
 		return lipgloss.Color(v)
 	}

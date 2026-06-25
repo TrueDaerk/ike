@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -37,13 +37,13 @@ func sized(t *testing.T, w, h int) Model {
 }
 
 func press(x, y int) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
 }
 func motion(x, y int) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft}
+	return tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft}
 }
 func release(x, y int) tea.MouseMsg {
-	return tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionRelease, Button: tea.MouseButtonLeft}
+	return tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}
 }
 
 func step(m Model, msg tea.Msg) Model {
@@ -69,13 +69,13 @@ func TestMouseHoverHighlightsExplorerRow(t *testing.T) {
 	m := sized(t, 100, 40)
 	r := m.lay.Panes[ctxExplorer]
 	// move (no button) over the second content row.
-	hover := tea.MouseMsg{X: r.X + paneContentX, Y: r.Y + paneContentY + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
+	hover := tea.MouseMotionMsg{X: r.X + paneContentX, Y: r.Y + paneContentY + 1, Button: tea.MouseNone}
 	m = step(m, hover)
 	if got := m.explorer().HoverRow(); got != 1 {
 		t.Fatalf("hover row = %d want 1", got)
 	}
 	// moving off the pane clears it.
-	off := tea.MouseMsg{X: r.X + r.W + 5, Y: r.Y + 1, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone}
+	off := tea.MouseMotionMsg{X: r.X + r.W + 5, Y: r.Y + 1, Button: tea.MouseNone}
 	m = step(m, off)
 	if got := m.explorer().HoverRow(); got != -1 {
 		t.Fatalf("hover row = %d want -1 after leaving pane", got)
@@ -142,7 +142,7 @@ func TestMoveDragShowsFeedback(t *testing.T) {
 	m = step(m, press(2, 0)) // grab explorer title
 	edRect := m.lay.Panes[ctxEditor]
 	m = step(m, motion(edRect.X+edRect.W-2, edRect.Y+edRect.H/2)) // hover editor right half
-	view := m.View()
+	view := m.render()
 	if !strings.Contains(view, "MOVE EXPLORER") {
 		t.Fatalf("status line missing move hint:\n%s", view)
 	}
@@ -234,7 +234,7 @@ func TestStaleLayoutFallsBackToDefault(t *testing.T) {
 func TestMouseIgnoredWhenShellOpen(t *testing.T) {
 	m := sized(t, 100, 40)
 	// open help shell
-	m = step(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	m = step(m, tea.KeyPressMsg{Text: "?", Code: '?'})
 	if !m.shell.IsOpen() {
 		t.Fatal("shell should be open")
 	}

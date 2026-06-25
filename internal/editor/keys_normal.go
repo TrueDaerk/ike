@@ -1,7 +1,7 @@
 package editor
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
@@ -13,7 +13,7 @@ import (
 
 // updateNormal handles a key in normal mode, driving the pending-operator /
 // count / register / await-secondary-key state machine.
-func (m Model) updateNormal(key tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	s := key.String()
 	r, hasRune := firstRune(key)
 
@@ -375,13 +375,11 @@ func findKey(s string) (motion.FindKind, bool) {
 	return 0, false
 }
 
-// firstRune returns the single rune of a printable key, if it is one.
-func firstRune(key tea.KeyMsg) (rune, bool) {
-	if key.Type == tea.KeyRunes && len(key.Runes) == 1 {
-		return key.Runes[0], true
-	}
-	if key.Type == tea.KeySpace {
-		return ' ', true
+// firstRune returns the single rune of a printable key, if it is one. A bare
+// space arrives as Text == " ".
+func firstRune(key tea.KeyPressMsg) (rune, bool) {
+	if r := []rune(key.Text); len(r) == 1 {
+		return r[0], true
 	}
 	return 0, false
 }

@@ -1,45 +1,44 @@
 package editor
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 )
 
 // updateInsert handles a key in insert or replace mode, applying every edit
 // through the open insert-session recorder so the whole insert is one undo unit.
-func (m *Model) updateInsert(key tea.KeyMsg) {
-	switch key.Type {
-	case tea.KeyEsc:
+func (m *Model) updateInsert(key tea.KeyPressMsg) {
+	switch {
+	case key.Code == tea.KeyEscape:
 		m.commitInsert()
-	case tea.KeyEnter:
+	case key.Code == tea.KeyEnter:
 		indent := ""
 		if m.autoIndent {
 			indent = m.indentOf(m.cursor.Line)
 		}
 		m.insertText("\n" + indent)
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
-	case tea.KeyTab:
+	case key.Code == tea.KeyTab:
 		m.insertText(m.tabText())
-	case tea.KeyLeft:
+	case key.Code == tea.KeyLeft:
 		m.insertMove(0, -1)
-	case tea.KeyRight:
+	case key.Code == tea.KeyRight:
 		m.insertMove(0, 1)
-	case tea.KeyUp:
+	case key.Code == tea.KeyUp:
 		m.insertMove(-1, 0)
-	case tea.KeyDown:
+	case key.Code == tea.KeyDown:
 		m.insertMove(1, 0)
-	case tea.KeyHome:
+	case key.Code == tea.KeyHome:
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: 0}
 		m.desiredCol = 0
-	case tea.KeyEnd:
+	case key.Code == tea.KeyEnd:
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
 		m.desiredCol = m.cursor.Col
-	case tea.KeySpace:
-		m.writeRunes(" ")
-	case tea.KeyRunes:
-		m.writeRunes(string(key.Runes))
+	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+		// Printable input, including a bare space (Text == " ").
+		m.writeRunes(key.Text)
 	default:
 		// Shift+arrows (word nav), PgUp/PgDn and Ctrl motions also work mid-insert.
 		if res, ok := m.resolveMotion(key.String(), 0, 1); ok {

@@ -1,5 +1,20 @@
 # Log
 
+## 2026-06-25
+
+- **Upgraded to Bubble Tea v2 (Roadmap 0085).** The whole charm stack moved to
+  `charm.land/bubbletea/v2 v2.0.7`, `charm.land/lipgloss/v2 v2.0.4`, and
+  `charm.land/bubbles/v2 v2.1.0`. The driver is the **kitty keyboard protocol**:
+  keyboard enhancements are now requested on the root model's `tea.View`
+  (`ReportEventTypes`), unlocking disambiguated chords (ctrl+i vs tab, shift+enter).
+  Key handling moved from `key.Type`/`key.Runes` to `key.Code`/`key.Text`/`key.Mod`
+  (the in-house keymap still funnels everything through `fromkeymsg.go`'s `String()`);
+  the single `tea.MouseMsg` split into four messages normalised into one `mouseEvent`;
+  `Model.View()` now returns a `tea.View` (alt-screen/mouse declared there, not via
+  program options); and lipgloss v2 is "pure" so rendered-output tests `ansi.Strip`
+  first. See [Foundation](/architecture/foundation.md) and
+  [Keybindings](/architecture/keybindings.md).
+
 ## 2026-06-24
 
 - **Editor undo fixed for insert mode.** `editor.undo`/`redo` now flush an open

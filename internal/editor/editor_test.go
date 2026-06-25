@@ -5,20 +5,25 @@ import (
 	"path/filepath"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 )
 
-// key builds a tea.KeyMsg for a single rune.
-func key(r rune) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}} }
+// key builds a key press for a single printable rune.
+func key(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Text: string(r), Code: r} }
 
-// special builds a tea.KeyMsg for a non-rune key.
-func special(t tea.KeyType) tea.KeyMsg { return tea.KeyMsg{Type: t} }
+// special builds a key press for a non-printable key identified by its code.
+func special(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
+
+// modKey builds a key press for a code combined with modifiers.
+func modKey(code rune, mod tea.KeyMod) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: code, Mod: mod}
+}
 
 // keys builds a sequence of single-rune key messages from a string.
-func keys(s string) []tea.KeyMsg {
-	var out []tea.KeyMsg
+func keys(s string) []tea.KeyPressMsg {
+	var out []tea.KeyPressMsg
 	for _, r := range s {
 		out = append(out, key(r))
 	}
@@ -26,7 +31,7 @@ func keys(s string) []tea.KeyMsg {
 }
 
 // send applies a sequence of keys and returns the resulting model.
-func send(m Model, ks ...tea.KeyMsg) Model {
+func send(m Model, ks ...tea.KeyPressMsg) Model {
 	for _, k := range ks {
 		m, _ = m.Update(k)
 	}
@@ -339,7 +344,7 @@ func TestUndoRedo(t *testing.T) {
 	if line(m, 0) != "hello" {
 		t.Fatalf("undo=%q want hello", line(m, 0))
 	}
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlR}) // redo
+	m, _ = m.Update(modKey('r', tea.ModCtrl)) // redo
 	if line(m, 0) != "ello" {
 		t.Fatalf("redo=%q want ello", line(m, 0))
 	}
@@ -492,11 +497,11 @@ func TestVisualPasteReplacesSelection(t *testing.T) {
 
 func TestShiftArrowWordNav(t *testing.T) {
 	m, _ := loaded(t, "foo bar baz\n")
-	m = send(m, special(tea.KeyShiftRight))
+	m = send(m, modKey(tea.KeyRight, tea.ModShift))
 	if m.cursor.Col != 4 {
 		t.Fatalf("shift+right col=%d want 4", m.cursor.Col)
 	}
-	m = send(m, special(tea.KeyShiftLeft))
+	m = send(m, modKey(tea.KeyLeft, tea.ModShift))
 	if m.cursor.Col != 0 {
 		t.Fatalf("shift+left col=%d want 0", m.cursor.Col)
 	}

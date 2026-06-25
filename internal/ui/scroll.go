@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // indicatorColor is the dim foreground used for the scroll position bar.
@@ -24,14 +24,14 @@ type scroller struct {
 
 // newScroller returns a scroller sized to width x height.
 func newScroller(width, height int) scroller {
-	return scroller{vp: viewport.New(width, height)}
+	return scroller{vp: viewport.New(viewport.WithWidth(width), viewport.WithHeight(height))}
 }
 
 // SetSize resizes the viewport, clamping the offset to the new bounds.
 func (s *scroller) SetSize(width, height int) {
-	s.vp.Width = width
-	s.vp.Height = height
-	s.vp.SetYOffset(s.vp.YOffset) // re-clamp against the new max offset
+	s.vp.SetWidth(width)
+	s.vp.SetHeight(height)
+	s.vp.SetYOffset(s.vp.YOffset()) // re-clamp against the new max offset
 }
 
 // SetContent replaces the scrolled text and resets to the top.
@@ -43,7 +43,7 @@ func (s *scroller) SetContent(content string) {
 // Update routes a scroll key. g/G jump to the extremes; every other key is
 // delegated to the viewport's own key map.
 func (s *scroller) Update(msg tea.Msg) {
-	if km, ok := msg.(tea.KeyMsg); ok {
+	if km, ok := msg.(tea.KeyPressMsg); ok {
 		switch km.String() {
 		case "g", "home":
 			s.vp.GotoTop()
@@ -57,7 +57,7 @@ func (s *scroller) Update(msg tea.Msg) {
 }
 
 // scrollable reports whether the content overflows the viewport.
-func (s *scroller) scrollable() bool { return s.vp.TotalLineCount() > s.vp.Height }
+func (s *scroller) scrollable() bool { return s.vp.TotalLineCount() > s.vp.Height() }
 
 // View renders the visible slice with a trailing position indicator line when
 // the content overflows.
@@ -80,7 +80,7 @@ func (s *scroller) indicator() string {
 		down = "▼"
 	}
 	pct := strconv.Itoa(int(s.vp.ScrollPercent()*100)) + "%"
-	dashes := strings.Repeat("─", maxInt(s.vp.Width-len(pct)-5, 0))
+	dashes := strings.Repeat("─", maxInt(s.vp.Width()-len(pct)-5, 0))
 	style := lipgloss.NewStyle().Foreground(lipgloss.Color(indicatorColor))
 	return style.Render(up + " " + dashes + " " + down + " " + pct)
 }

@@ -1,6 +1,6 @@
 package config
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // watch.go is the only place config touches bubbletea. It defines the message
 // the root model routes when configuration changes, and a command that re-runs

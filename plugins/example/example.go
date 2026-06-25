@@ -6,8 +6,8 @@
 package example
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/host"
 	"ike/internal/plugin"
@@ -81,5 +81,7 @@ type panel struct{}
 
 func (panel) Init() tea.Cmd                         { return nil }
 func (p panel) Update(tea.Msg) (tea.Model, tea.Cmd) { return p, nil }
-func (panel) View() string                          { return lipgloss.NewStyle().Render("example panel") }
-func (panel) ContextID() string                     { return "example.panel" }
+func (panel) View() tea.View {
+	return tea.NewView(lipgloss.NewStyle().Render("example panel"))
+}
+func (panel) ContextID() string { return "example.panel" }

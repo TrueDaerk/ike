@@ -17,6 +17,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [08 — Keybindings & Shortcuts](0080-keybindings.md)
 - [ ] [08.1 — Keybinding Audit & User-Friendly Activation](0081-keybindings-audit/index.md)
 - [ ] [08.2 — Per-Keybinding Usability Review](0082-keybinding-usability/index.md)
+- [x] [08.5 — Bubble Tea v2 Upgrade (Kitty Keyboard Protocol)](0085-bubbletea-v2.md)
 - [ ] [09 — Project Switching](0090-project-switching.md)
 - [x] [09.5 — Session Restore (Workspace State Persistence)](0095-session-restore.md)
 - [ ] [10 — LSP Support](0100-lsp.md)

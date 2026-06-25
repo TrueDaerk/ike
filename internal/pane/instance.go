@@ -1,7 +1,7 @@
 package pane
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor"
 	"ike/internal/explorer"

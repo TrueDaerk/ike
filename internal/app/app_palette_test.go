@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 	"ike/internal/palette"
@@ -33,13 +33,13 @@ func TestPaletteToggleKeyOpens(t *testing.T) {
 	if m.palette.IsOpen() {
 		t.Fatal("palette should start closed")
 	}
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	m = out.(Model)
 	if !m.palette.IsOpen() {
 		t.Fatal("ctrl+p should open the palette")
 	}
 	// A key while open is consumed by the palette, not routed to panes.
-	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if m.palette.IsOpen() {
 		t.Fatal("esc should close the palette")
@@ -66,12 +66,12 @@ func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
 func TestEscEscOpensPalette(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor (normal mode, not capturing)
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if m.palette.IsOpen() {
 		t.Fatal("a single esc should not open the palette")
 	}
-	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if !m.palette.IsOpen() {
 		t.Fatal("esc-esc should open the palette")
@@ -84,7 +84,7 @@ func TestEscEscOpensPalette(t *testing.T) {
 func TestAtKeyOpensAnchoredFileFinder(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor in normal mode
-	out, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@")})
+	out, _ := m.Update(tea.KeyPressMsg{Text: "@", Code: '@'})
 	m = out.(Model)
 	if !m.palette.IsOpen() {
 		t.Fatal("@ in editor normal mode should open the file finder")

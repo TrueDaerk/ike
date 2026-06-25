@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 	"ike/internal/plugin"
@@ -37,7 +37,7 @@ func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
 
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("ctrl+y should fire the bound command")
 	}
@@ -59,7 +59,7 @@ func TestKeymapInertBindingFallsThrough(t *testing.T) {
 
 	// Should not panic and should not consume into a command; the explorer just
 	// ignores ctrl+y. We assert the model is unchanged enough to keep running.
-	out, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlY})
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	if _, ok := out.(Model); !ok {
 		t.Fatal("inert binding should leave a usable model")
 	}

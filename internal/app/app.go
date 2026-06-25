@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
@@ -534,8 +534,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.SetSize(m.width, m.height)
 		return m, nil
 
-	case tea.MouseMsg:
-		return m.handleMouse(msg)
+	case tea.MouseClickMsg:
+		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mousePress})
+	case tea.MouseReleaseMsg:
+		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseRelease})
+	case tea.MouseMotionMsg:
+		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseMotion})
+	case tea.MouseWheelMsg:
+		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseWheel})
 
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
@@ -590,7 +596,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
 		}
@@ -820,7 +826,7 @@ func (m Model) explorerCapturing() bool {
 }
 
 // routeKey forwards a key to the focused pane.
-func (m Model) routeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	inst := m.panes.FocusedInstance()
 	if inst == nil {
 		return m, nil
@@ -1140,31 +1146,32 @@ func paneInterior(outer int) int {
 // resize (divider) or move (title bar), motion updates the in-flight gesture, and
 // release commits and persists. A title drag onto another pane relocates it
 // (0036); a drag to the source pane's own edge spawns a fresh split there (0037).
-func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	if m.shell.IsOpen() {
 		return m, nil
 	}
-	if isWheel(msg.Button) {
+	shift := msg.Mod&tea.ModShift != 0
+	if msg.action == mouseWheel {
 		if p, ok := m.lay.PaneAt(msg.X, msg.Y); ok && p == pane.ExplorerKey {
 			switch {
-			case msg.Button == tea.MouseButtonWheelLeft:
+			case msg.Button == tea.MouseWheelLeft:
 				m.explorer().ScrollXBy(-wheelLines)
-			case msg.Button == tea.MouseButtonWheelRight:
+			case msg.Button == tea.MouseWheelRight:
 				m.explorer().ScrollXBy(wheelLines)
-			case msg.Button == tea.MouseButtonWheelUp && msg.Shift:
+			case msg.Button == tea.MouseWheelUp && shift:
 				m.explorer().ScrollXBy(-wheelLines)
-			case msg.Button == tea.MouseButtonWheelDown && msg.Shift:
+			case msg.Button == tea.MouseWheelDown && shift:
 				m.explorer().ScrollXBy(wheelLines)
-			case msg.Button == tea.MouseButtonWheelUp:
+			case msg.Button == tea.MouseWheelUp:
 				m.explorer().ScrollBy(-wheelLines)
-			case msg.Button == tea.MouseButtonWheelDown:
+			case msg.Button == tea.MouseWheelDown:
 				m.explorer().ScrollBy(wheelLines)
 			}
 		}
 		return m, nil
 	}
-	switch msg.Action {
-	case tea.MouseActionPress:
+	switch msg.action {
+	case mousePress:
 		hit := m.lay.Hit(msg.X, msg.Y)
 		switch hit.Kind {
 		case layout.HitDivider:
@@ -1174,7 +1181,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 		case layout.HitPane:
 			return m.paneClick(hit.Pane, msg)
 		}
-	case tea.MouseActionMotion:
+	case mouseMotion:
 		if m.drag == nil {
 			m.updateHover(msg)
 			return m, nil
@@ -1184,7 +1191,7 @@ func (m Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 			m.drag.divider.ResizeTo(msg.X, msg.Y)
 			m.layout()
 		}
-	case tea.MouseActionRelease:
+	case mouseRelease:
 		if m.drag == nil {
 			return m, nil
 		}
@@ -1249,14 +1256,27 @@ func edgeZone(r layout.Rect, x, y int) (layout.Zone, bool) {
 	}
 }
 
-// isWheel reports whether a mouse button is one of the four wheel directions.
-func isWheel(b tea.MouseButton) bool {
-	return b == tea.MouseButtonWheelUp || b == tea.MouseButtonWheelDown ||
-		b == tea.MouseButtonWheelLeft || b == tea.MouseButtonWheelRight
+// mouseAction is the kind of mouse event, recovered from the concrete v2 mouse
+// message type (bubbletea v2 split the single MouseMsg into four types).
+type mouseAction int
+
+const (
+	mousePress mouseAction = iota
+	mouseRelease
+	mouseMotion
+	mouseWheel
+)
+
+// mouseEvent normalises the four v2 mouse messages into one value the drag state
+// machine consumes: the embedded tea.Mouse carries X/Y/Button/Mod, and action
+// records which message type it came from.
+type mouseEvent struct {
+	tea.Mouse
+	action mouseAction
 }
 
 // updateHover sets (or clears) the explorer's hover highlight.
-func (m *Model) updateHover(msg tea.MouseMsg) {
+func (m *Model) updateHover(msg mouseEvent) {
 	r, ok := m.lay.Panes[pane.ExplorerKey]
 	if !ok {
 		return
@@ -1270,7 +1290,7 @@ func (m *Model) updateHover(msg tea.MouseMsg) {
 
 // paneClick focuses the clicked leaf and forwards the interior click to it,
 // translating the absolute mouse cell into the pane's content-local space.
-func (m Model) paneClick(key string, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
+func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	r, ok := m.lay.Panes[key]
 	if !ok {
 		return m, nil
@@ -1294,8 +1314,22 @@ func (m Model) paneClick(key string, msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View implements tea.Model.
-func (m Model) View() string {
+// View implements tea.Model. Under bubbletea v2 the alternate screen, mouse mode
+// and keyboard enhancements (the kitty keyboard protocol) are declared on the
+// View rather than via program options. Basic key disambiguation is requested by
+// default; ReportEventTypes asks the terminal for key repeat and release events,
+// which we deliberately ignore in Update (only KeyPressMsg is dispatched).
+func (m Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	v.KeyboardEnhancements.ReportEventTypes = true
+	return v
+}
+
+// render composes the full frame as a styled string: the pane tree, the status
+// line, and any floating overlay (move ghost, palette, modal shell) on top.
+func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
 	}

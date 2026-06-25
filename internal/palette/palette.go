@@ -10,8 +10,8 @@ package palette
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -148,35 +148,32 @@ func (p *Palette) SetSize(width, height int) { p.width, p.height = width, height
 // up/down/ctrl+p/ctrl+n navigate; backspace/ctrl+u edit; typed runes extend the
 // query. The root model calls this only while IsOpen, and the palette consumes
 // every key (the overlay is modal).
-func (p *Palette) Update(msg tea.KeyMsg) tea.Cmd {
-	switch msg.Type {
-	case tea.KeyEsc:
+func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case msg.Code == tea.KeyEscape:
 		p.Close()
 		return nil
-	case tea.KeyEnter:
+	case msg.Code == tea.KeyEnter:
 		return p.activate()
-	case tea.KeyUp, tea.KeyCtrlP:
+	case msg.Code == tea.KeyUp, msg.Code == 'p' && msg.Mod == tea.ModCtrl:
 		p.move(-1)
 		return nil
-	case tea.KeyDown, tea.KeyCtrlN:
+	case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
 		p.move(1)
 		return nil
-	case tea.KeyBackspace:
+	case msg.Code == tea.KeyBackspace:
 		if r := []rune(p.query); len(r) > 0 {
 			p.query = string(r[:len(r)-1])
 			p.recompute()
 		}
 		return nil
-	case tea.KeyCtrlU:
+	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 		p.query = ""
 		p.recompute()
 		return nil
-	case tea.KeySpace:
-		p.query += " "
-		p.recompute()
-		return nil
-	case tea.KeyRunes:
-		p.query += string(msg.Runes)
+	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+		// Printable input, including a bare space (Text == " ").
+		p.query += msg.Text
 		p.recompute()
 		return nil
 	}

@@ -1,6 +1,6 @@
 package help
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // gutter is the blank space inserted between adjacent columns.
 const gutter = 2

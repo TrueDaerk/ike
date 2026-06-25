@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/overlay"
@@ -295,7 +295,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case UndoMsg:
 		m.promptUndo()
 		return m, nil
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		// A modal prompt captures every key (filename entry, y/n, esc) until it
 		// is accepted or cancelled, ahead of any navigation binding.
 		if m.prompt != nil {

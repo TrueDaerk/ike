@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestScrollBoundsClamp(t *testing.T) {
@@ -17,22 +17,22 @@ func TestScrollBoundsClamp(t *testing.T) {
 		t.Fatal("SetContent should reset to top")
 	}
 	// scroll up at the top stays clamped at top
-	s.Update(tea.KeyMsg{Type: tea.KeyUp})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if !s.vp.AtTop() {
 		t.Fatal("scroll up at top should clamp")
 	}
 	// G jumps to bottom
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("G")})
+	s.Update(tea.KeyPressMsg{Text: "G", Code: 'G'})
 	if !s.vp.AtBottom() {
 		t.Fatal("G should jump to bottom")
 	}
 	// scrolling down at the bottom stays clamped
-	s.Update(tea.KeyMsg{Type: tea.KeyDown})
+	s.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if !s.vp.AtBottom() {
 		t.Fatal("scroll down at bottom should clamp")
 	}
 	// g jumps back to top
-	s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("g")})
+	s.Update(tea.KeyPressMsg{Text: "g", Code: 'g'})
 	if !s.vp.AtTop() {
 		t.Fatal("g should jump to top")
 	}

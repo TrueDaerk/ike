@@ -6,15 +6,15 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
-func key(s string) tea.KeyMsg {
+func key(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
-		return tea.KeyMsg{Type: tea.KeyEnter}
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	default:
-		return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
+		return tea.KeyPressMsg{Text: s}
 	}
 }
 
@@ -68,7 +68,7 @@ func mounted(t *testing.T, dir string, w, h int) Model {
 	return m
 }
 
-func send(m Model, keys ...tea.KeyMsg) (Model, tea.Cmd) {
+func send(m Model, keys ...tea.KeyPressMsg) (Model, tea.Cmd) {
 	var cmd tea.Cmd
 	for _, k := range keys {
 		m, cmd = m.Update(k)
@@ -183,7 +183,7 @@ func TestNewFileEscCancels(t *testing.T) {
 	m, cmd := m.Update(NewFileMsg{})
 	m, _ = pumpScans(m, cmd)
 	m, _ = send(m, key("ab"))
-	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.Prompting() {
 		t.Fatal("esc should cancel the name prompt")
 	}

@@ -1,20 +1,31 @@
 package explorer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/host"
 	"ike/internal/registry"
 )
 
-// fg returns a style's foreground colour value as a plain string.
+// fg returns a style's foreground colour as the ANSI index string the colour
+// table encodes (lipgloss v2 resolves "4" to a typed ANSI colour value rather
+// than a bare string).
 func fg(s lipgloss.Style) string {
-	c, _ := s.GetForeground().(lipgloss.Color)
-	return string(c)
+	switch c := s.GetForeground().(type) {
+	case ansi.BasicColor:
+		return strconv.Itoa(int(c))
+	case lipgloss.ANSIColor:
+		return strconv.Itoa(int(c))
+	default:
+		return fmt.Sprintf("%v", c)
+	}
 }
 
 func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {

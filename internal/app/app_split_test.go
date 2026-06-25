@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -66,14 +66,14 @@ func TestCtrlWClosesFocusedPane(t *testing.T) {
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
 	newKey := m.panes.Focused()
-	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
 	m = tm.(Model)
 	if m.panes.Has(newKey) {
 		t.Fatal("ctrl+w should close the focused editor pane")
 	}
 	// ctrl+w on the explorer is a no-op.
 	m.setFocus(pane.ExplorerKey)
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlW})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
 	m = tm.(Model)
 	if !m.panes.Has(pane.ExplorerKey) {
 		t.Fatal("ctrl+w must never close the explorer")
@@ -148,12 +148,12 @@ func TestFocusKeysCtrlArrowDefault(t *testing.T) {
 	if m.panes.Focused() != pane.ExplorerKey {
 		t.Fatal("setup: explorer should start focused")
 	}
-	tm, _ := m.Update(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
 	m = tm.(Model)
 	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("ctrl+right should move focus to the editor")
 	}
-	tm, _ = m.Update(tea.KeyMsg{Type: tea.KeyCtrlLeft})
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
 	m = tm.(Model)
 	if m.panes.Focused() != pane.ExplorerKey {
 		t.Fatal("ctrl+left should move focus back to the explorer")
@@ -290,7 +290,7 @@ func TestViewNeverOverflowsRect(t *testing.T) {
 		for _, z := range zones {
 			m.SplitFocused(z)
 		}
-		lines := strings.Split(m.View(), "\n")
+		lines := strings.Split(m.render(), "\n")
 		if len(lines) != h {
 			t.Fatalf("%dx%d: View height = %d, want %d", w, h, len(lines), h)
 		}
@@ -336,9 +336,9 @@ func TestClickAlignedAfterSplit(t *testing.T) {
 	}
 	// Hover the third content row of the (relocated) explorer pane.
 	wantRow := 2
-	hover := tea.MouseMsg{
+	hover := tea.MouseMotionMsg{
 		X: r.X + paneContentX, Y: r.Y + paneContentY + wantRow,
-		Action: tea.MouseActionMotion, Button: tea.MouseButtonNone,
+		Button: tea.MouseNone,
 	}
 	m = step(m, hover)
 	if got := m.explorer().HoverRow(); got != wantRow {

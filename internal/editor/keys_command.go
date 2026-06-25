@@ -3,7 +3,7 @@ package editor
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/excmd"
@@ -41,13 +41,13 @@ func opposite(d search.Direction) search.Direction {
 }
 
 // updateCommandLine handles typing on the ":" / "/" / "?" line.
-func (m Model) updateCommandLine(key tea.KeyMsg) (Model, tea.Cmd) {
-	switch key.Type {
-	case tea.KeyEsc:
+func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
+	switch {
+	case key.Code == tea.KeyEscape:
 		m.mode = Normal
 		m.cmdline = ""
 		m.searching = false
-	case tea.KeyEnter:
+	case key.Code == tea.KeyEnter:
 		if m.searching {
 			m.commitSearch()
 			m.mode = Normal
@@ -56,17 +56,16 @@ func (m Model) updateCommandLine(key tea.KeyMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.runExLine()
-	case tea.KeyBackspace, tea.KeyCtrlH:
+	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		if r := []rune(m.cmdline); len(r) > 0 {
 			m.cmdline = string(r[:len(r)-1])
 		} else {
 			m.mode = Normal
 			m.searching = false
 		}
-	case tea.KeySpace:
-		m.cmdline += " "
-	case tea.KeyRunes:
-		m.cmdline += string(key.Runes)
+	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+		// Printable input, including a bare space (Text == " ").
+		m.cmdline += key.Text
 	}
 	return m, nil
 }

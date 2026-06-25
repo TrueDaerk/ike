@@ -3,7 +3,7 @@ package editor
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
 )

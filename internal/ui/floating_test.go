@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // stubContent is a fixed-body Content used to drive the shell in tests. body is
@@ -56,14 +56,14 @@ func TestFloatingDefaultDismissAndSwallow(t *testing.T) {
 	f.Open()
 
 	// A non-dismiss key is swallowed (consumed) but does not close.
-	if !f.Update(tea.KeyMsg{Type: tea.KeyTab}) {
+	if !f.Update(tea.KeyPressMsg{Code: tea.KeyTab}) {
 		t.Fatal("open shell should consume all keys")
 	}
 	if !f.IsOpen() {
 		t.Fatal("non-dismiss key should not close the shell")
 	}
 	// esc dismisses.
-	if !f.Update(tea.KeyMsg{Type: tea.KeyEsc}) {
+	if !f.Update(tea.KeyPressMsg{Code: tea.KeyEscape}) {
 		t.Fatal("esc should be consumed")
 	}
 	if f.IsOpen() {
@@ -76,9 +76,9 @@ func TestFloatingConfigurableDismissKeys(t *testing.T) {
 	f.SetContent(&stubContent{heading: "T", body: "b"})
 	f.SetSize(80, 24)
 
-	for _, key := range []tea.KeyMsg{
-		{Type: tea.KeyRunes, Runes: []rune("q")},
-		{Type: tea.KeyEsc},
+	for _, key := range []tea.KeyPressMsg{
+		{Text: "q", Code: 'q'},
+		{Code: tea.KeyEscape},
 	} {
 		f.Open()
 		f.Update(key)
@@ -95,7 +95,7 @@ func TestFloatingConfigurableDismissKeys(t *testing.T) {
 
 func TestFloatingUpdateIgnoredWhenClosed(t *testing.T) {
 	f := New(Config{})
-	if f.Update(tea.KeyMsg{Type: tea.KeyEsc}) {
+	if f.Update(tea.KeyPressMsg{Code: tea.KeyEscape}) {
 		t.Fatal("closed shell should not consume keys")
 	}
 }

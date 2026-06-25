@@ -1,7 +1,7 @@
 package help
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // maxColumns caps the cheat sheet at two columns wide regardless of how much

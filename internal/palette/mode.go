@@ -1,6 +1,6 @@
 package palette
 
-import tea "github.com/charmbracelet/bubbletea"
+import tea "charm.land/bubbletea/v2"
 
 // Item is one ranked result row produced by a Mode. Title is the primary label
 // the palette renders and highlights; Spans are the rune indices within Title

@@ -3,7 +3,7 @@ package palette
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -18,7 +18,7 @@ func owned(id, title string, scope plugin.Scope) registry.OwnedCommand {
 	return registry.OwnedCommand{Owner: "test", Command: plugin.Command{ID: id, Title: title, Scope: scope}}
 }
 
-func runes(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+func runes(s string) tea.KeyPressMsg { return tea.KeyPressMsg{Text: s} }
 
 // fileMode returns an "@" mode backed by a fixed file list (no disk walk).
 func fileMode(paths ...string) *FileMode {
@@ -98,7 +98,7 @@ func TestCommandActivateDispatch(t *testing.T) {
 
 	// Filter down to "hello".
 	p.Update(runes(":hello"))
-	cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter should emit a command")
 	}
@@ -122,7 +122,7 @@ func TestFileOpenMsg(t *testing.T) {
 	p.Open(Context{ContextID: "editor", Root: "."})
 
 	p.Update(runes("@app/app"))
-	cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("enter should emit an open-file command")
 	}
@@ -139,7 +139,7 @@ func TestEscCloses(t *testing.T) {
 	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode())
 	p.SetSize(80, 24)
 	p.Open(Context{})
-	if cmd := p.Update(tea.KeyMsg{Type: tea.KeyEsc}); cmd != nil {
+	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEscape}); cmd != nil {
 		t.Fatal("esc should not emit a command")
 	}
 	if p.IsOpen() {
@@ -160,17 +160,17 @@ func TestNavigation(t *testing.T) {
 	if p.selected != 0 {
 		t.Fatalf("initial selection = %d, want 0", p.selected)
 	}
-	p.Update(tea.KeyMsg{Type: tea.KeyDown})
-	p.Update(tea.KeyMsg{Type: tea.KeyDown})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if p.selected != 2 {
 		t.Fatalf("after two downs selection = %d, want 2", p.selected)
 	}
 	// Clamp at the bottom.
-	p.Update(tea.KeyMsg{Type: tea.KeyDown})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if p.selected != 2 {
 		t.Fatalf("selection should clamp at 2, got %d", p.selected)
 	}
-	p.Update(tea.KeyMsg{Type: tea.KeyUp})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if p.selected != 1 {
 		t.Fatalf("after up selection = %d, want 1", p.selected)
 	}
@@ -212,7 +212,7 @@ func TestNoResults(t *testing.T) {
 	p.SetSize(80, 24)
 	p.Open(Context{ContextID: "editor"})
 	p.Update(runes(":zzz"))
-	if cmd := p.Update(tea.KeyMsg{Type: tea.KeyEnter}); cmd != nil {
+	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
 		t.Fatal("enter with no results should be a no-op")
 	}
 	if !p.IsOpen() {

@@ -1,7 +1,7 @@
 package editor
 
 import (
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
@@ -18,11 +18,11 @@ func (m *Model) enterVisual(md mode.Mode) {
 
 // updateVisual handles keys while a selection is active. Motions extend the
 // selection; d/c/y act on it; v/V/ctrl+v toggle or switch the visual variant.
-func (m Model) updateVisual(key tea.KeyMsg) (Model, tea.Cmd) {
+func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	s := key.String()
 	r, hasRune := firstRune(key)
 
-	if key.Type == tea.KeyEsc {
+	if key.Code == tea.KeyEscape {
 		m.mode = Normal
 		m.wait = awaitNone
 		return m, nil

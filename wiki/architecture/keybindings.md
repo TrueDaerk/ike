@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-06-24T12:00:00Z
+timestamp: 2026-06-25T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -75,12 +75,17 @@ multi-step state. Each `Feed(key, context)` returns:
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
 
-`fromkeymsg.go` adapts a bubbletea `tea.KeyMsg` into a `Key`.
+`fromkeymsg.go` adapts a Bubble Tea v2 `tea.KeyPressMsg` into a `Key`. It reads the
+press purely through `String()` — v2 still encodes modifiers as `ctrl+/alt+/shift+`
+tokens and names specials (`esc`, `space`, `f7`, `left`, …) — so the same code that
+parses authored chords (`ParseKey`) parses live keys. (See
+[Roadmap 0085](../../roadmaps/0085-bubbletea-v2.md) for the v1→v2 key-model change:
+`key.Type`/`key.Runes` became `key.Code`/`key.Text`/`key.Mod`.)
 
 ## Root-model integration
 
 `internal/app` builds the resolver from config (`buildKeymap`) and, in its
-`tea.KeyMsg` path, attempts resolution before pane dispatch (`resolveKeymap`):
+`tea.KeyPressMsg` path, attempts resolution before pane dispatch (`resolveKeymap`):
 
 - In a text-capturing editor (insert mode) only **modified** chords — or a chord
   already in progress — are eligible; plain letters always reach the editor.
