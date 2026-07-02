@@ -1,5 +1,29 @@
 # Log
 
+## 2026-06-28
+
+- **LSP + syntax highlighting (Roadmap 0100, MVP slice).** IKE gained language
+  intelligence for **Go / PHP / Python**. A pure-Go JSON-RPC 2.0 client
+  (`internal/lsp/{jsonrpc,transport,protocol,client,manager}`) speaks LSP over a
+  server's stdio; a `manager` maps each `(language, workspace root)` to one server,
+  spawns lazily, routes ops, and recovers from crashes (backoff respawn + re-open
+  tracked docs). Editor edits flow out through the existing `Emitter` seam — now
+  forwarded via a new `host.EditorEmitter` + `host.Send` (async injection wired
+  from `main.go`'s `program.Send`) — and the `plugins/lsp` compile-in plugin drives
+  `didOpen`/`didChange`/`didSave`/`didClose`. Results return as `tea.Msg`s
+  (`DiagnosticsMsg`/`CompletionMsg`/`HoverMsg`/`DefinitionMsg`/`ServerStatusMsg`)
+  routed by path to the owning editor leaf: diagnostics colour the gutter + underline
+  inline + count in the status line; completion shows a cursor-anchored, prefix-
+  filtered popup; hover shows a popup; go-to-definition navigates. `lsp.hover` /
+  `lsp.definition` / `lsp.restart` are registry commands. Server defaults
+  (gopls/intelephense/pyright) ship via `config/extend.go`; a missing binary is a
+  graceful no-op. Separately, **Tree-sitter syntax highlighting** (`internal/highlight`)
+  parses Go/PHP/Python off the event loop into theme-coloured spans applied per cell
+  in `renderLine`; it is CGo, isolated behind a build tag with a no-op stub so
+  `CGO_ENABLED=0` still builds. Deferred to a later increment: references, rename,
+  formatting, code actions, signature help, and the LSP semantic-token overlay. See
+  [LSP](/architecture/lsp.md) and [Syntax Highlighting](/architecture/highlighting.md).
+
 ## 2026-06-25
 
 - **Upgraded to Bubble Tea v2 (Roadmap 0085).** The whole charm stack moved to

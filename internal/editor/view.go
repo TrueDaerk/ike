@@ -70,7 +70,13 @@ func (m Model) View() string {
 
 	var out []string
 	for i := m.view.Top; i < bottom; i++ {
-		gutter := gutterStyle.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
+		gs := gutterStyle
+		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
+		// the cheap sign-column indicator that keeps the gutter width unchanged.
+		if sev, ok := m.worstSeverityOnLine(i); ok {
+			gs = lipgloss.NewStyle().Foreground(diagColor(sev))
+		}
+		gutter := gs.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
 		body := m.renderLine(i, textWidth, cursorStyle, selStyle)
 		out = append(out, gutter+body)
 	}
@@ -125,7 +131,18 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 		case selected:
 			b.WriteString(selStyle.Render(cell))
 		default:
-			b.WriteString(cell)
+			st, styled := m.styleAt(line, col)
+			if sev, ok := m.diagSeverityAt(line, col); ok {
+				// Diagnostic underline composes over the syntax colour (syntax base <
+				// diagnostic underline); cursor/selection already won above.
+				st = st.Underline(true).UnderlineColor(diagColor(sev))
+				styled = true
+			}
+			if styled {
+				b.WriteString(st.Render(cell))
+			} else {
+				b.WriteString(cell)
+			}
 		}
 		disp += cells
 	}

@@ -9,6 +9,14 @@ import (
 // updateInsert handles a key in insert or replace mode, applying every edit
 // through the open insert-session recorder so the whole insert is one undo unit.
 func (m *Model) updateInsert(key tea.KeyPressMsg) {
+	// While the completion popup is open it intercepts navigation/accept keys
+	// first; anything else (typing, backspace) falls through to normal insert
+	// handling and then re-filters the list below.
+	if m.comp != nil {
+		if m.completionKey(key) {
+			return
+		}
+	}
 	switch {
 	case key.Code == tea.KeyEscape:
 		m.commitInsert()
@@ -47,6 +55,31 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 			m.emit(EventCursorMove)
 		}
 	}
+	// After typing/backspace, drop the popup if nothing matches the new prefix.
+	if m.comp != nil && len(m.filteredCompletion()) == 0 {
+		m.comp = nil
+	}
+}
+
+// completionKey handles a key while the completion popup is open, returning true
+// if it consumed the key (navigation / accept / dismiss). Typing and backspace
+// return false so normal insert handling proceeds and the list re-filters.
+func (m *Model) completionKey(key tea.KeyPressMsg) bool {
+	switch {
+	case key.Code == tea.KeyDown, key.Code == 'n' && key.Mod == tea.ModCtrl:
+		m.completionMove(1)
+		return true
+	case key.Code == tea.KeyUp, key.Code == 'p' && key.Mod == tea.ModCtrl:
+		m.completionMove(-1)
+		return true
+	case key.Code == tea.KeyEnter, key.Code == tea.KeyTab:
+		m.completionAccept()
+		return true
+	case key.Code == tea.KeyEscape:
+		m.completionCancel()
+		return true
+	}
+	return false
 }
 
 // insertMove nudges the cursor in insert mode, allowing the one-past-end column

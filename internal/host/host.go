@@ -27,11 +27,43 @@ type API interface {
 	// Dispatch turns an arbitrary message into a tea.Cmd that re-injects it into
 	// the program's Update loop.
 	Dispatch(msg tea.Msg) tea.Cmd
+	// Send injects a message into the Update loop from any goroutine. Unlike
+	// Dispatch (which returns a tea.Cmd for the caller to hand back from Update),
+	// Send is for background workers — async LSP results, server notifications —
+	// that have no Cmd to return. It is a no-op until the program is running.
+	Send(msg tea.Msg)
 	// SetStatus replaces the transient status-line text shown to the user.
 	SetStatus(text string)
+	// SetEditorEmitter registers the sink for editor lifecycle events (the LSP
+	// bridge, Roadmap 0100). The host forwards every editor change/cursor/
+	// completion signal to it; passing nil disables forwarding.
+	SetEditorEmitter(e EditorEmitter)
 	// Config exposes read-only configuration access.
 	Config() Config
 }
+
+// EditorEvent is a lifecycle signal from the editor the LSP bridge consumes. It
+// mirrors editor.Event but lives in host so the host (and the plugin contract)
+// carries no internal/editor import. Kind is one of the Editor* constants below;
+// Text holds the full buffer content and is populated only on EditorChange so
+// cursor moves stay cheap.
+type EditorEvent struct {
+	Kind int
+	Path string
+	Line int
+	Col  int
+	Text string
+}
+
+// EditorEvent kinds.
+const (
+	EditorChange = iota
+	EditorCursorMove
+	EditorCompletionTrigger
+)
+
+// EditorEmitter receives editor lifecycle events. Implementations must not block.
+type EditorEmitter interface{ Emit(EditorEvent) }
 
 // Config is read-only key/value configuration access for plugins.
 type Config interface {
@@ -94,8 +126,10 @@ func FromConfig(c *config.Config) Config {
 
 // Host is the in-process implementation of API.
 type Host struct {
-	cfg    Config
-	status string
+	cfg       Config
+	status    string
+	send      func(tea.Msg)
+	edEmitter EditorEmitter
 }
 
 // New returns a Host backed by cfg. A nil cfg yields an empty configuration.
@@ -104,6 +138,28 @@ func New(cfg Config) *Host {
 		cfg = MapConfig{}
 	}
 	return &Host{cfg: cfg}
+}
+
+// SetSender wires the program's Send so background workers can inject messages.
+// main.go calls this once after tea.NewProgram, before Run.
+func (h *Host) SetSender(send func(tea.Msg)) { h.send = send }
+
+// Send implements API.
+func (h *Host) Send(msg tea.Msg) {
+	if h.send != nil {
+		h.send(msg)
+	}
+}
+
+// SetEditorEmitter implements API.
+func (h *Host) SetEditorEmitter(e EditorEmitter) { h.edEmitter = e }
+
+// EmitEditor forwards an editor event to the registered emitter (the app's
+// editor-emitter adapter calls this; the host fans it out to the LSP bridge).
+func (h *Host) EmitEditor(ev EditorEvent) {
+	if h.edEmitter != nil {
+		h.edEmitter.Emit(ev)
+	}
 }
 
 // OpenFile implements API.

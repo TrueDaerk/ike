@@ -21,9 +21,11 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/help"
+	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/layout"
+	ilsp "ike/internal/lsp"
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -161,7 +163,46 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
 	m.restoreSession()
+	m.wireEditorEmitters()
 	return m
+}
+
+// SetSender wires the program's Send into the host so background workers (the LSP
+// bridge) can inject async results. main.go calls it once after tea.NewProgram.
+func (m Model) SetSender(send func(tea.Msg)) { m.host.SetSender(send) }
+
+// editorEmitter adapts editor lifecycle events into host editor events, which the
+// host fans out to the LSP bridge (registered via host.SetEditorEmitter). One
+// stateless adapter is installed on every editor instance; it is a no-op when no
+// bridge is registered.
+type editorEmitter struct{ host *host.Host }
+
+// Emit implements editor.Emitter. The editor and host event-kind constants share
+// the same iota ordering (change/cursor/completion), so the kind maps directly.
+func (e editorEmitter) Emit(ev editor.Event) {
+	e.host.EmitEditor(host.EditorEvent{
+		Kind: int(ev.Kind),
+		Path: ev.Path,
+		Line: ev.Line,
+		Col:  ev.Col,
+		Text: ev.Text,
+	})
+}
+
+// wireEditorEmitters installs the editor-emitter adapter on every editor pane, so
+// edits flow to the LSP bridge. It is idempotent and re-run whenever editors are
+// created.
+func (m *Model) wireEditorEmitters() {
+	for _, key := range m.panes.Keys() {
+		m.installEmitter(key)
+	}
+}
+
+// installEmitter wires the editor-emitter adapter onto one editor pane.
+func (m *Model) installEmitter(key string) {
+	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+		inst.Editor().SetEmitter(editorEmitter{host: m.host})
+	}
 }
 
 // restoreLayout rebuilds the registry and tree from the saved layout store. A
@@ -521,7 +562,18 @@ func (m Model) explorer() *explorer.Model {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd { return m.explorer().Init() }
+func (m Model) Init() tea.Cmd {
+	cmds := []tea.Cmd{m.explorer().Init()}
+	// Highlight any files restored from the previous session at startup, before
+	// the user edits them.
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() {
+			cmds = append(cmds, inst.Editor().Reparse())
+		}
+	}
+	return tea.Batch(cmds...)
+}
 
 // Update owns global keys (quit, focus switch), routes open/close messages, and
 // forwards everything else to the focused pane.
@@ -579,6 +631,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.panes.Get(key).Update(msg)
 			return m, cmd
 		}
+		return m, nil
+
+	case highlight.SpansMsg:
+		// Async Tree-sitter parse results route to the editor leaf owning the path
+		// (which may be a background pane, so target by path, not focus).
+		if key := m.editorKeyForPath(msg.Path); key != "" {
+			return m, m.panes.Get(key).Update(msg)
+		}
+		return m, nil
+
+	case ilsp.DiagnosticsMsg:
+		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.CompletionMsg:
+		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.HoverMsg:
+		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.DefinitionMsg:
+		// Navigate to a definition target and place the cursor there.
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+	case ilsp.ServerStatusMsg:
+		m.host.SetStatus(msg.Text)
 		return m, nil
 
 	case editor.CloseMsg:
@@ -706,6 +779,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 			m.setFocus(key)
 			m.layout()
 			saveLayout(m.tree, m.panes)
+			cmds = append(cmds, m.panes.Get(key).Editor().Reparse())
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
@@ -901,6 +975,7 @@ func (m *Model) SplitFocused(zone layout.Zone) {
 		return
 	}
 	newKey := m.panes.AddEditor()
+	m.installEmitter(newKey)
 	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
 	if !ok {
 		m.panes.Close(newKey)
@@ -923,6 +998,7 @@ func (m *Model) spawnEditor() string {
 		target = m.panes.Focused()
 	}
 	newKey := m.panes.AddEditor()
+	m.installEmitter(newKey)
 	if m.tree == nil || target == "" {
 		// Pre-layout: no tree to split yet; the default tree will adopt the key on
 		// first layout only if it is the canonical first editor. Otherwise leave the
@@ -981,6 +1057,42 @@ func (m *Model) closeKey(key string) bool {
 // any file beneath it), so deleting a file in the explorer does not leave a
 // stale editor open on it. It relayouts and persists once if anything closed,
 // and refocuses only when the focused leaf itself was removed.
+// editorKeyForPath returns the key of the editor leaf currently showing path, or
+// "" if none is open. Used to route async LSP/highlight results to the owning
+// pane regardless of focus.
+func (m Model) editorKeyForPath(path string) string {
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
+			return key
+		}
+	}
+	return ""
+}
+
+// routeToEditor forwards an LSP result message to the editor leaf owning path,
+// or drops it if no editor shows that file.
+func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
+	if key := m.editorKeyForPath(path); key != "" {
+		return m.panes.Get(key).Update(msg)
+	}
+	return nil
+}
+
+// openPathAt opens path (reusing the standard open flow) and places the cursor at
+// the 0-based line/col — the navigation half of go-to-definition.
+func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
+	model, cmd := m.openPath(path, false)
+	mm, ok := model.(Model)
+	if !ok {
+		return model, cmd
+	}
+	if key := mm.editorKeyForPath(path); key != "" {
+		mm.panes.Get(key).Editor().SetCursor(line, col)
+	}
+	return mm, cmd
+}
+
 func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	prefix := path + string(os.PathSeparator)
 	closed := false
@@ -1221,6 +1333,7 @@ func (m *Model) commitMove(x, y int) {
 	// Dropped on the source pane: spawn a split only when near an edge.
 	if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
 		newKey := m.panes.AddEditor()
+		m.installEmitter(newKey)
 		if tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone); ok {
 			m.tree = tree
 			m.setFocus(newKey)
@@ -1327,6 +1440,40 @@ func (m Model) View() tea.View {
 	return v
 }
 
+// compositeLSPPopups overlays the focused editor's completion or hover popup at
+// the cursor cell. Only the editor knows the buffer-relative anchor; only the app
+// knows the absolute screen geometry, so the placement is computed here.
+func (m Model) compositeLSPPopups(base string) string {
+	key := m.panes.Focused()
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return base
+	}
+	r, ok := m.lay.Panes[key]
+	if !ok {
+		return base
+	}
+	ed := inst.Editor()
+	top, left := ed.ScrollOffset()
+	gw := ed.GutterWidth()
+	contentX := r.X + paneContentX
+	contentY := r.Y + paneContentY
+	place := func(view string, col, line int) string {
+		x := contentX + gw + (col - left)
+		y := contentY + (line - top) + 1 // one row below the cursor
+		return overlay.Place(base, view, x, y, m.width, m.height)
+	}
+	if ed.CompletionOpen() {
+		col, line := ed.CompletionAnchor()
+		return place(ed.CompletionView(), col, line)
+	}
+	if ed.HoverOpen() {
+		col, line := ed.HoverAnchor()
+		return place(ed.HoverView(), col, line)
+	}
+	return base
+}
+
 // render composes the full frame as a styled string: the pane tree, the status
 // line, and any floating overlay (move ghost, palette, modal shell) on top.
 func (m Model) render() string {
@@ -1338,6 +1485,7 @@ func (m Model) render() string {
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
+	base = m.compositeLSPPopups(base)
 	if m.palette.IsOpen() {
 		v := m.palette.View()
 		if m.palette.Anchored() {
@@ -1538,7 +1686,7 @@ func (m Model) statusLine() string {
 		return style.Render(" " + s)
 	}
 
-	mode, file, dirty := "NORMAL", "no file", ""
+	mode, file, dirty, diag := "NORMAL", "no file", "", ""
 	line, col := 1, 1
 	if ed != nil {
 		mode = ed.ModeName().String()
@@ -1548,9 +1696,12 @@ func (m Model) statusLine() string {
 		if ed.Dirty() {
 			dirty = " [+]"
 		}
+		if errs, warns := ed.DiagnosticCounts(); errs > 0 || warns > 0 {
+			diag = " │ " + strconv.Itoa(errs) + "E " + strconv.Itoa(warns) + "W"
+		}
 		line, col = ed.Cursor()
 	}
-	left := " " + mode + " │ " + file + dirty
+	left := " " + mode + " │ " + file + dirty + diag
 	right := "Ln " + strconv.Itoa(line) + ", Col " + strconv.Itoa(col) + " "
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -1587,10 +1738,15 @@ func paneBox(title, content string, width, height int, borderColor string) strin
 	if inner := width - 4; inner >= 1 {
 		title = ansi.Truncate(title, inner, "…")
 	}
+	// lipgloss v2 makes Width/Height border-inclusive totals, so the box must be
+	// sized to the full rect (width × height). The content area is then
+	// width-2(border)-2(padding) = width-4, which matches paneInterior(); using
+	// width-2 here (the v1 convention) renders the box two columns too narrow and
+	// wraps full-width pane lines, doubling their height.
 	style := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		Width(width-2).
-		Height(height-2).
+		Width(width).
+		Height(height).
 		MaxWidth(width).
 		MaxHeight(height).
 		Padding(0, 1).

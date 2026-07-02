@@ -22,12 +22,15 @@ const (
 )
 
 // Event is one emitted signal. Line/Col are 0-based; Path is the buffer's file.
+// Text carries the full buffer content, populated only on EventChange so the LSP
+// bridge can drive full-document sync without a separate read-back seam.
 type Event struct {
 	Kind EventKind
 	Path string
 	Line int
 	Col  int
 	Mode mode.Mode
+	Text string
 }
 
 // Emitter receives editor events. Implementations must not block.
@@ -44,16 +47,25 @@ func (f EmitterFunc) Emit(e Event) { f(e) }
 // SetEmitter installs the LSP event sink. Passing nil disables emission.
 func (m *Model) SetEmitter(e Emitter) { m.emitter = e }
 
-// emit sends an event when an emitter is installed.
+// emit sends an event when an emitter is installed. A buffer change also bumps
+// the document version (independent of any emitter) so the syntax highlighter can
+// tag and order async parse results.
 func (m *Model) emit(kind EventKind) {
+	if kind == EventChange {
+		m.docVersion++
+	}
 	if m.emitter == nil {
 		return
 	}
-	m.emitter.Emit(Event{
+	ev := Event{
 		Kind: kind,
 		Path: m.path,
 		Line: m.cursor.Line,
 		Col:  m.cursor.Col,
 		Mode: m.mode,
-	})
+	}
+	if kind == EventChange {
+		ev.Text = m.buf.String()
+	}
+	m.emitter.Emit(ev)
 }

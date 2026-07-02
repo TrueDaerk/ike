@@ -14,4 +14,6 @@ Component-level concepts for the IKE codebase.
 * [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse divider-resize & title-bar move, split/close ops, per-project persistence (Roadmap 0036/0037)
 * [Pane Registry & Multiple Editors](/architecture/pane-registry.md) - instance registry behind layout leaves, N editors, focused-leaf focus model, open-in-new-pane intent (Roadmap 0037)
 * [Session Restore](/architecture/session-restore.md) - per-project workspace persistence: open file + cursor, explorer expansion/hidden/cursor, saved on quit
+* [LSP & Language Intelligence](/architecture/lsp.md) - JSON-RPC client over a server's stdio, manager per (language, root), editor-driven sync, diagnostics/completion/hover/go-to-definition (Roadmap 0100)
+* [Syntax Highlighting](/architecture/highlighting.md) - Tree-sitter lexical layer: per-language grammars parsed off-loop into theme-coloured spans, applied per cell (Roadmap 0100)
 * [Themes / Color Schemes](/architecture/themes.md) - planned semantic-slot palette system, built-in themes, the selector & registry (Roadmap 0110)

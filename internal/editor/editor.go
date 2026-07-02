@@ -19,7 +19,9 @@ import (
 	"ike/internal/editor/register"
 	"ike/internal/editor/search"
 	"ike/internal/editor/viewport"
+	"ike/internal/highlight"
 	"ike/internal/host"
+	ilsp "ike/internal/lsp"
 )
 
 // Mode is re-exported from the mode package so callers (app, tests) keep using
@@ -94,6 +96,22 @@ type Model struct {
 	cfg     host.Config
 	emitter Emitter
 
+	// Syntax highlighting (Roadmap 0100). docVersion is a monotonic document
+	// version bumped on every buffer change; it tags async parse results so stale
+	// spans (a newer edit already landed) are dropped. hlIndex caches the spans
+	// for the current version; hlTheme resolves capture names to colours.
+	docVersion int
+	hlVersion  int
+	hlIndex    highlight.Index
+	hlTheme    highlight.Theme
+
+	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
+	// popup, and the hover popup. See lsp_state.go.
+	diags      []ilsp.Diagnostic
+	diagByLine map[int][]ilsp.Diagnostic
+	comp       *completionState
+	hover      *hoverState
+
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.
 	tabWidth           int
@@ -112,6 +130,7 @@ func New() Model {
 		hist:               history.New(),
 		tabWidth:           4,
 		insertFinalNewline: true,
+		hlTheme:            highlight.NewTheme(nil),
 	}
 	m.view.LineNumbers = false
 	return m
@@ -121,6 +140,9 @@ func New() Model {
 // later changes are re-read live. Unset keys keep their built-in defaults.
 func (m *Model) Configure(cfg host.Config) {
 	m.cfg = cfg
+	if cfg != nil {
+		m.hlTheme = highlight.NewTheme(cfg.Get)
+	}
 	m.applyConfig()
 }
 
@@ -162,6 +184,8 @@ func (m *Model) Load(path string) error {
 	m.searching = false
 	m.dirty = false
 	m.hist = history.New()
+	m.docVersion++
+	m.hlIndex = highlight.Index{}
 	m.scroll()
 	return nil
 }
@@ -218,9 +242,36 @@ func (m Model) Init() tea.Cmd { return nil }
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	m.applyConfig()
 	switch msg := msg.(type) {
+	case highlight.SpansMsg:
+		// Accept a parse result only if it matches the current document and
+		// version; a newer edit since the parse was scheduled drops it.
+		if msg.Path == m.path && msg.Version == m.docVersion {
+			m.hlIndex = highlight.NewIndex(msg.Spans)
+			m.hlVersion = msg.Version
+		}
+		return m, nil
+	case ilsp.DiagnosticsMsg:
+		if msg.Path == m.path {
+			m.setDiagnostics(msg.Diagnostics)
+		}
+		return m, nil
+	case ilsp.CompletionMsg:
+		if msg.Path == m.path {
+			m.openCompletion(msg)
+		}
+		return m, nil
+	case ilsp.HoverMsg:
+		if msg.Path == m.path && msg.Contents != "" {
+			m.hover = &hoverState{lines: strings.Split(msg.Contents, "\n")}
+		}
+		return m, nil
 	case ActionMsg:
-		return m.runAction(msg.Action)
+		before := m.docVersion
+		m, cmd := m.runAction(msg.Action)
+		return m.maybeReparse(before, cmd)
 	case tea.KeyPressMsg:
+		m.dismissHover() // any key dismisses a hover popup
+		before := m.docVersion
 		var cmd tea.Cmd
 		switch m.mode {
 		case Insert, Replace:
@@ -235,7 +286,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			}
 		}
 		m.scroll()
-		return m, cmd
+		return m.maybeReparse(before, cmd)
 	}
 	return m, nil
 }
@@ -296,6 +347,10 @@ func (m *Model) tabText() string {
 	}
 	return "\t"
 }
+
+// GutterWidth returns the current gutter width in cells, so the app can place a
+// cursor-anchored popup (completion/hover) at the right screen column.
+func (m Model) GutterWidth() int { return m.view.GutterWidth(m.buf.LineCount()) }
 
 // ScrollOffset returns the 0-based first visible line and column, so a session
 // can restore the exact viewport framing (not just the cursor — Top is sticky
