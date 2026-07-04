@@ -12,6 +12,12 @@ import (
 	// here to change the build-time plugin set.
 	_ "ike/plugins/example"
 	_ "ike/plugins/lsp"
+
+	// Language plugins register their grammar + LSP server + toolchain in the
+	// lang registry. Adding a language to IKE = adding a package here.
+	_ "ike/plugins/languages/go"
+	_ "ike/plugins/languages/php"
+	_ "ike/plugins/languages/python"
 )
 
 func main() {

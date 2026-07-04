@@ -21,6 +21,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [ ] [09 — Project Switching](0090-project-switching.md)
 - [x] [09.5 — Session Restore (Workspace State Persistence)](0095-session-restore.md)
 - [ ] [10 — LSP Support](0100-lsp.md)
+- [x] [10.5 — Extensible Language System (Registry + Toolchain)](0105-language-registry.md)
 - [ ] [11 — Themes / Color Schemes](0110-themes.md)
 - [ ] [99 — Plugins: WASM (Runtime, Sandboxed)](9900-plugins-wasm.md)
 

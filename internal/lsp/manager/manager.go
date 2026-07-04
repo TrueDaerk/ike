@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"ike/internal/editor/buffer"
+	langreg "ike/internal/lang"
 	"ike/internal/lsp"
 	"ike/internal/lsp/client"
 	"ike/internal/lsp/jsonrpc"
@@ -272,6 +273,7 @@ func (m *Manager) Shutdown() {
 // ensureServer returns the running server for (lang, root), spawning + initialising
 // it on first use.
 func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server, error) {
+	spec = withToolchain(lang, root, spec)
 	k := key(lang, root)
 	m.mu.Lock()
 	if srv, ok := m.servers[k]; ok {
@@ -373,18 +375,61 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 	}
 	switch method {
 	case "workspace/configuration":
+		// Answer each requested section from the server's merged settings (which
+		// include toolchain-detected values like the Python interpreter path); an
+		// absent section returns null, as before.
 		var p struct {
-			Items []any `json:"items"`
+			Items []struct {
+				Section string `json:"section"`
+			} `json:"items"`
 		}
 		_ = json.Unmarshal(params, &p)
-		nulls := make([]any, len(p.Items))
-		_ = srv.cl.Respond(id, nulls, nil)
+		out := make([]any, len(p.Items))
+		for i, it := range p.Items {
+			out[i] = settingsSection(srv.spec.Settings, it.Section)
+		}
+		_ = srv.cl.Respond(id, out, nil)
 	default:
 		_ = srv.cl.Respond(id, nil, nil)
 	}
 }
 
 func (s *server) key() string { return key(s.lang, s.root) }
+
+// withToolchain merges any toolchain-detected settings (e.g. the resolved Python
+// interpreter path) into the spec before initialize. The language's detector runs
+// against the workspace root; an explicit user setting in the same key wins over a
+// detected one. Languages without a Toolchain pass through unchanged.
+func withToolchain(langID, root string, spec lsp.ServerSpec) lsp.ServerSpec {
+	l, ok := langreg.ByID(langID)
+	if !ok || l.Toolchain == nil {
+		return spec
+	}
+	extra, ok := l.Toolchain.Detect(root)
+	if !ok {
+		return spec
+	}
+	spec.Settings = langreg.MergeSettings(extra, spec.Settings)
+	return spec
+}
+
+// settingsSection resolves a (possibly dotted) configuration section from a
+// settings map, e.g. "python" or "python.analysis". It returns the whole map for
+// an empty section and nil when a path segment is missing.
+func settingsSection(s map[string]any, section string) any {
+	if section == "" {
+		return s
+	}
+	var cur any = s
+	for _, part := range strings.Split(section, ".") {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur = mm[part]
+	}
+	return cur
+}
 
 // status forwards a status line update when a callback is set.
 func (m *Manager) status(lang, text string) {

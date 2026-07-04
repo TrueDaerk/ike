@@ -9,8 +9,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
-	"ike/internal/highlight"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
@@ -64,7 +64,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	switch ev.Kind {
 	case host.EditorChange:
 		b.setCur(ev.Path, ev.Line, ev.Col)
-		if b.manager() != nil && highlight.Lang(ev.Path) != "" {
+		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
 			_ = b.manager().Change(ev.Path, ev.Text)
 		}
 	case host.EditorCursorMove:
@@ -82,8 +82,8 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 // text. Open blocks on the initialize handshake, so it runs on a goroutine.
 func (b *bridge) fileOpened(h host.API, path string) {
 	b.ensure(h)
-	lang := highlight.Lang(path)
-	if lang == "" {
+	l, ok := lang.ByPath(path)
+	if !ok || l.Server == nil {
 		return
 	}
 	data, err := os.ReadFile(path)
@@ -91,7 +91,7 @@ func (b *bridge) fileOpened(h host.API, path string) {
 		return
 	}
 	mgr := b.manager()
-	go func() { _ = mgr.Open(path, lang, string(data)) }()
+	go func() { _ = mgr.Open(path, l.ID, string(data)) }()
 }
 
 func (b *bridge) fileSaved(h host.API, path string) {

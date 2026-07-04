@@ -3,76 +3,32 @@
 package highlight
 
 import (
-	_ "embed"
 	"strings"
-	"sync"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
-	tsgo "github.com/tree-sitter/tree-sitter-go/bindings/go"
-	tsphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
-	tspy "github.com/tree-sitter/tree-sitter-python/bindings/go"
+
+	"ike/internal/lang"
 )
 
-//go:embed queries/go.scm
-var goQuery string
-
-//go:embed queries/python.scm
-var pythonQuery string
-
-//go:embed queries/php.scm
-var phpQuery string
-
-// grammar bundles a compiled language and its highlight query. Languages and
-// queries are read-only once built, so they are compiled once and shared across
-// parse goroutines; only the Parser and QueryCursor (created per call) are
-// stateful.
-type grammar struct {
-	lang  *ts.Language
-	query *ts.Query
-}
-
-var (
-	grammarOnce sync.Once
-	grammars    map[string]*grammar
-)
-
-// initGrammars compiles each language + query exactly once. A query that fails
-// to compile (grammar/query version skew) disables that language rather than
-// crashing — the editor falls back to plain text for it.
-func initGrammars() {
-	grammars = make(map[string]*grammar)
-	specs := []struct {
-		id    string
-		lang  *ts.Language
-		query string
-	}{
-		{"go", ts.NewLanguage(tsgo.Language()), goQuery},
-		{"python", ts.NewLanguage(tspy.Language()), pythonQuery},
-		{"php", ts.NewLanguage(tsphp.LanguagePHP()), phpQuery},
+// parse runs the grammar's Tree-sitter language + query over the joined lines and
+// returns highlight spans in editor rune coordinates. It runs off the Update
+// goroutine (inside a tea.Cmd), so the CGo work never blocks the event loop. g is
+// the opaque token built by NewGrammar; a non-*grammarImpl or an uncompilable
+// query yields no spans.
+func parse(g lang.Grammar, lines []string) []Span {
+	gi, ok := g.(*grammarImpl)
+	if !ok {
+		return nil
 	}
-	for _, s := range specs {
-		q, qerr := ts.NewQuery(s.lang, s.query)
-		if qerr != nil {
-			continue // skip a language whose query won't compile
-		}
-		grammars[s.id] = &grammar{lang: s.lang, query: q}
-	}
-}
-
-// parse runs Tree-sitter over the joined lines and returns highlight spans in
-// editor rune coordinates. It runs off the Update goroutine (inside a tea.Cmd),
-// so the CGo work never blocks the event loop.
-func parse(lang string, lines []string) []Span {
-	grammarOnce.Do(initGrammars)
-	g := grammars[lang]
-	if g == nil {
+	tsLang, query, ok := gi.compiled()
+	if !ok {
 		return nil
 	}
 
 	src := []byte(strings.Join(lines, "\n"))
 	parser := ts.NewParser()
 	defer parser.Close()
-	if err := parser.SetLanguage(g.lang); err != nil {
+	if err := parser.SetLanguage(tsLang); err != nil {
 		return nil
 	}
 	tree := parser.Parse(src, nil)
@@ -86,10 +42,10 @@ func parse(lang string, lines []string) []Span {
 
 	cursor := ts.NewQueryCursor()
 	defer cursor.Close()
-	names := g.query.CaptureNames()
+	names := query.CaptureNames()
 
 	var spans []Span
-	captures := cursor.Captures(g.query, tree.RootNode(), src)
+	captures := cursor.Captures(query, tree.RootNode(), src)
 	for {
 		match, idx := captures.Next()
 		if match == nil {

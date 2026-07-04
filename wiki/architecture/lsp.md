@@ -34,14 +34,18 @@ internal/lsp/
   client/    one Client per server: initialize/initialized/shutdown handshake,
              cached + feature-gated ServerCapabilities, typed request/notify calls.
   manager/   owns every server: maps (language, workspace root) -> Client, detects
-             roots from config root_markers, spawns lazily, routes ops, recovers
-             from crashes (restart.go: backoff respawn + re-open tracked docs).
-  config.go  resolves the [lsp.servers.<lang>] table into a typed ServerSpec.
+             roots from root_markers, spawns lazily, routes ops, recovers from
+             crashes (restart.go), and injects toolchain settings at spawn.
+  config.go  ServerSpec (aliased from the lang registry) + Overlay: parse the
+             [lsp.servers.<id>] config overlay onto the language's baseline.
   messages.go editor-facing tea.Msg types + protocol->editor conversion helpers.
 ```
 
-The `plugins/lsp` compile-in plugin is the wiring layer: it registers the `[lsp]`
-config defaults, owns the `manager.Manager`, installs the editor-event bridge, and
+Server baselines (command, args, root markers) come from the [language
+registry](./languages.md) — each language plugin's `lang.Language.Server` — not
+from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
+compile-in plugin is the wiring layer: it enables the subsystem, owns the
+`manager.Manager`, installs the editor-event bridge, and
 exposes `lsp.hover` / `lsp.definition` / `lsp.restart` as registry commands.
 
 ## Data flow
@@ -81,9 +85,15 @@ app (navigate + place cursor).
 - **Actions are registry commands.** Hover/definition/restart are plain
   `plugin.Command`s reached by the palette (07) and keybindings (08) by id — no
   parallel dispatch path.
-- **Config is content, mechanism is 04.** The plugin seeds the `[lsp.servers]`
-  table (command, args, root_markers) via `config/extend.go`; the loader and
-  precedence (defaults < user < project) belong to `internal/config`.
+- **Baselines live with the language, config overlays.** Server command/args/root
+  markers come from each language plugin's `lang.Language.Server`; `[lsp.servers.<id>]`
+  overrides per field. Loader precedence (defaults < user < project) stays in
+  `internal/config`.
+- **Version awareness = detect + delegate.** A language's `Toolchain` detects the
+  project interpreter (venv, `.python-version`, …); the manager merges its result
+  into the server settings and answers `workspace/configuration` from them, so a
+  version-aware server (pyright) checks against the project's real toolchain. IKE
+  never reimplements the server's version logic. See [Language Registry](./languages.md).
 
 ## Configuration
 

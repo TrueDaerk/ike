@@ -9,11 +9,13 @@ timestamp: 2026-06-28T00:00:00Z
 
 # Syntax Highlighting
 
-Roadmap 0100. The fast lexical base layer that colours code in the editor, built
-on [Tree-sitter](https://tree-sitter.github.io/). It is independent of the
-[LSP client](./lsp.md) — it works with no language server running — and ships
-grammars for **Go**, **PHP** and **Python**. An optional LSP semantic-token
-overlay is deferred to a later increment.
+Roadmap 0100 (engine); Roadmap 0105 made the language set extensible. The fast
+lexical base layer that colours code in the editor, built on
+[Tree-sitter](https://tree-sitter.github.io/). It is independent of the
+[LSP client](./lsp.md) — it works with no language server running. `internal/highlight`
+is now a pure **engine**: it owns no language list. Grammars come from the
+[language registry](./languages.md); the built-in **Go/PHP/Python** grammars live in
+`plugins/languages/*`. An optional LSP semantic-token overlay is deferred.
 
 ## How it works
 
@@ -25,13 +27,19 @@ layered over built-in defaults by the `[theme.captures.*]` config keys.
 
 ```
 internal/highlight/
-  span.go        Span model + a per-line Index for O(spans-on-line) cell lookup.
-  theme.go       capture-name -> lipgloss style, from [theme] over built-in defaults.
-  highlight.go   language detection by extension; Highlight(path, lines) dispatch.
-  parse_cgo.go   //go:build cgo — the real Tree-sitter parser + embedded queries.
-  parse_stub.go  //go:build !cgo — a no-op so CGO_ENABLED=0 still builds.
-  queries/*.scm  vendored highlight queries for go / python / php.
+  span.go         Span model + a per-line Index for O(spans-on-line) cell lookup.
+  theme.go        capture-name -> lipgloss style, from [theme] over built-in defaults.
+  highlight.go    Lang/Supported/Highlight — delegate to the lang registry (ByPath).
+  grammar_cgo.go  //go:build cgo — NewGrammar(tsLang, query) builds the opaque token.
+  grammar_stub.go //go:build !cgo — NewGrammar returns nil (highlighting off).
+  parse_cgo.go    //go:build cgo — the real Tree-sitter parser over a grammar.
+  parse_stub.go   //go:build !cgo — a no-op so CGO_ENABLED=0 still builds.
 ```
+
+A language's grammar is an opaque `lang.Grammar` built by `highlight.NewGrammar`
+in the language plugin's cgo file; the query (`highlights.scm`) is embedded there
+too. `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
+its grammar, and parses — the engine knows no specific language.
 
 ## CGo isolation
 

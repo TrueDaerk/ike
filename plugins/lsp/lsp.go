@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -86,43 +87,57 @@ func (Plugin) Capabilities() plugin.Capabilities {
 	}
 }
 
-// applyDefaults seeds the [lsp] server table for Go, PHP and Python. A user can
-// override any field (or disable a server) via their settings.toml; these are the
-// lowest-precedence baseline. Servers are external binaries the user installs.
+// applyDefaults enables the LSP subsystem. Server baselines (command, args, root
+// markers) now come from each language plugin's lang.Language.Server, not from a
+// hardcoded table here; the [lsp.servers.<id>] config section only carries user
+// overrides. Servers are external binaries the user installs.
 func applyDefaults(c *config.Config) {
 	c.LSP.Enabled = true
 	if c.LSP.Servers == nil {
 		c.LSP.Servers = map[string]map[string]any{}
 	}
-	defaults := map[string]map[string]any{
-		"go": {
-			"command":      "gopls",
-			"root_markers": []any{"go.mod", "go.work", ".git"},
-		},
-		"php": {
-			"command":      "intelephense",
-			"args":         []any{"--stdio"},
-			"root_markers": []any{"composer.json", ".git"},
-		},
-		"python": {
-			"command":      "pyright-langserver",
-			"args":         []any{"--stdio"},
-			"root_markers": []any{"pyproject.toml", "setup.py", "setup.cfg", ".git"},
-		},
-	}
-	for lang, spec := range defaults {
-		if _, exists := c.LSP.Servers[lang]; !exists {
-			c.LSP.Servers[lang] = spec
-		}
-	}
 }
 
-// resolveSpec maps a language to its configured ServerSpec, honouring the global
-// enable flag. It reads the live merged config so user overrides apply.
-func resolveSpec(lang string) (ilsp.ServerSpec, bool) {
+// resolveSpec resolves a language's effective ServerSpec: the language plugin's
+// baseline (lang.ByID) overlaid with the user's [lsp.servers.<id>] config
+// (per-field override). ok=false when LSP is disabled or no command is resolved
+// (e.g. a language with a grammar but no server).
+func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 	c := config.Get()
 	if c == nil || !c.LSP.Enabled {
 		return ilsp.ServerSpec{}, false
 	}
-	return ilsp.SpecFor(c.LSP.Servers, lang)
+	var spec ilsp.ServerSpec
+	if l, ok := lang.ByID(langID); ok && l.Server != nil {
+		spec = *l.Server
+	}
+	if ov, ok := ilsp.Overlay(c.LSP.Servers, langID); ok {
+		spec = mergeSpec(spec, ov)
+	}
+	spec.Language = langID
+	if spec.Command == "" {
+		return ilsp.ServerSpec{}, false
+	}
+	return spec, true
+}
+
+// mergeSpec overlays a config spec onto a baseline: each field the config sets
+// wins; unset fields keep the baseline. Settings deep-merge (user keys win).
+func mergeSpec(base, ov ilsp.ServerSpec) ilsp.ServerSpec {
+	if ov.Command != "" {
+		base.Command = ov.Command
+	}
+	if ov.Args != nil {
+		base.Args = ov.Args
+	}
+	if ov.Env != nil {
+		base.Env = ov.Env
+	}
+	if ov.RootMarkers != nil {
+		base.RootMarkers = ov.RootMarkers
+	}
+	if ov.Settings != nil {
+		base.Settings = lang.MergeSettings(base.Settings, ov.Settings)
+	}
+	return base
 }

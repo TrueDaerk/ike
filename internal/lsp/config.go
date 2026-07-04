@@ -5,50 +5,30 @@
 // typed ServerSpec keyed by language.
 package lsp
 
-import "encoding/json"
+import "ike/internal/lang"
 
-// ServerSpec is one language server's launch + behaviour configuration, parsed
-// from a `[lsp.servers.<lang>]` table.
-type ServerSpec struct {
-	Language    string
-	Command     string
-	Args        []string
-	Env         []string
-	RootMarkers []string
-	Settings    map[string]any // forwarded as initializationOptions
-}
+// ServerSpec is re-exported from internal/lang: the language registry owns the
+// server description (each language plugin supplies its baseline), and this file
+// only parses the user's `[lsp.servers.<id>]` config *overlay* onto it.
+type ServerSpec = lang.ServerSpec
 
-// SettingsJSON encodes Settings as initializationOptions, or nil when empty.
-func (s ServerSpec) SettingsJSON() json.RawMessage {
-	if len(s.Settings) == 0 {
-		return nil
-	}
-	b, err := json.Marshal(s.Settings)
-	if err != nil {
-		return nil
-	}
-	return b
-}
-
-// SpecFor resolves the server spec for a language from the [lsp.servers] table.
-// It returns ok=false when the language has no entry or no command.
-func SpecFor(servers map[string]map[string]any, lang string) (ServerSpec, bool) {
-	raw, ok := servers[lang]
+// Overlay parses a `[lsp.servers.<id>]` config entry into a ServerSpec. Unlike a
+// full spec it does not require a command — config only overrides the fields the
+// user actually sets, on top of the language plugin's baseline. ok=false means the
+// language has no config entry at all, so the baseline stands unchanged.
+func Overlay(servers map[string]map[string]any, langID string) (ServerSpec, bool) {
+	raw, ok := servers[langID]
 	if !ok {
 		return ServerSpec{}, false
 	}
-	spec := ServerSpec{
-		Language:    lang,
+	return ServerSpec{
+		Language:    langID,
 		Command:     asString(raw["command"]),
 		Args:        asStringSlice(raw["args"]),
 		Env:         asStringSlice(raw["env"]),
 		RootMarkers: asStringSlice(raw["root_markers"]),
 		Settings:    asMap(raw["settings"]),
-	}
-	if spec.Command == "" {
-		return ServerSpec{}, false
-	}
-	return spec, true
+	}, true
 }
 
 // asString coerces a TOML scalar to a string.

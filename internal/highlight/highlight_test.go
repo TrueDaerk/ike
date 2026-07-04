@@ -2,23 +2,10 @@ package highlight
 
 import "testing"
 
-func TestLang(t *testing.T) {
-	cases := map[string]string{
-		"main.go":     "go",
-		"app.py":      "python",
-		"stub.pyi":    "python",
-		"index.php":   "php",
-		"page.phtml":  "php",
-		"README.md":   "",
-		"noext":       "",
-		"DIR/Main.GO": "go", // case-insensitive
-	}
-	for path, want := range cases {
-		if got := Lang(path); got != want {
-			t.Errorf("Lang(%q) = %q, want %q", path, got, want)
-		}
-	}
-}
+// Note: language detection (Lang/Supported) now lives in the internal/lang
+// registry and is tested there; the real per-grammar highlighting is tested in
+// each language plugin (plugins/languages/*). This file covers the engine bits
+// that carry no language knowledge: the span index and the theme.
 
 func TestIndexCaptureAt(t *testing.T) {
 	ix := NewIndex([]Span{

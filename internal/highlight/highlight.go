@@ -1,37 +1,35 @@
+// Package highlight is the syntax-highlighting engine. It no longer knows any
+// specific language: the set of languages lives in the internal/lang registry,
+// populated by per-language plugins (plugins/languages/*). This package compiles
+// and runs Tree-sitter grammars (behind the cgo build tag) and resolves capture
+// names to theme colours; a language's grammar is an opaque lang.Grammar token
+// built via NewGrammar.
 package highlight
 
-import (
-	"path/filepath"
-	"strings"
-)
+import "ike/internal/lang"
 
-// langByExt maps a file extension (no dot, lower-case) to a grammar language id.
-var langByExt = map[string]string{
-	"go":    "go",
-	"py":    "python",
-	"pyi":   "python",
-	"php":   "php",
-	"phtml": "php",
-}
-
-// Lang returns the grammar language id for a path ("go", "python", "php"), or ""
-// when the extension is not supported.
+// Lang returns the language id for a path, or "" when no language matches.
 func Lang(path string) string {
-	ext := strings.TrimPrefix(strings.ToLower(filepath.Ext(path)), ".")
-	return langByExt[ext]
+	if l, ok := lang.ByPath(path); ok {
+		return l.ID
+	}
+	return ""
 }
 
-// Supported reports whether a path has a grammar (and therefore whether parsing
-// is worth scheduling).
-func Supported(path string) bool { return Lang(path) != "" }
+// Supported reports whether a path has a language with a highlighting grammar, so
+// the editor only schedules a parse when it will produce spans.
+func Supported(path string) bool {
+	l, ok := lang.ByPath(path)
+	return ok && l.Grammar != nil
+}
 
-// Highlight parses lines for the grammar matching path and returns the spans.
-// It returns nil when the language is unsupported or when the build has CGo
+// Highlight parses lines with the grammar for path and returns the spans. It
+// returns nil when the path has no language, no grammar, or the build has CGo
 // disabled (the stub). The actual parse lives in parse_cgo.go / parse_stub.go.
 func Highlight(path string, lines []string) []Span {
-	lang := Lang(path)
-	if lang == "" {
+	l, ok := lang.ByPath(path)
+	if !ok || l.Grammar == nil {
 		return nil
 	}
-	return parse(lang, lines)
+	return parse(l.Grammar, lines)
 }

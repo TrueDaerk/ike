@@ -1,5 +1,27 @@
 # Log
 
+## 2026-07-02
+
+- **Extensible language system (Roadmap 0105).** The hardcoded three-language set
+  became a plugin registry. New leaf package `internal/lang` is the single source
+  of truth for a language: `Language{ID, Extensions, Filenames, Grammar, Server,
+  Toolchain}`, registered from a plugin's `init()` like `registry.Register`. The
+  highlight engine (`internal/highlight`) no longer knows any language — it exposes
+  `NewGrammar(tsLang, query)` (cgo) and resolves grammars via `lang.ByPath`; the
+  Go/PHP/Python grammars + `highlights.scm` queries moved into
+  `plugins/languages/{go,php,python}` (grammar behind a cgo build tag, nil stub for
+  `CGO_ENABLED=0`). LSP server baselines now come from each language's
+  `Language.Server`; `[lsp.servers.<id>]` config only *overlays* them
+  (`resolveSpec` merge; `applyDefaults` no longer hardcodes servers). New
+  `lang.Toolchain` seam: `manager.ensureServer` runs the language's detector against
+  the workspace root and merges the result into server settings, and the manager now
+  answers `workspace/configuration` from those settings — so the Python detector's
+  resolved interpreter (`$VIRTUAL_ENV` → `.venv` → `.python-version` → PATH) reaches
+  pyright as `python.defaultInterpreterPath`, giving version-aware diagnostics
+  without IKE reimplementing any version logic. Tree-sitter highlighting stays
+  version-agnostic. Adding a language = new `plugins/languages/<lang>/` package + a
+  blank import in `cmd/ike/main.go`. See [Language Registry](/architecture/languages.md).
+
 ## 2026-06-28
 
 - **LSP + syntax highlighting (Roadmap 0100, MVP slice).** IKE gained language
