@@ -270,7 +270,7 @@ func (p *Palette) View() string {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(accent).
 		Padding(0, 1).
-		Width(inner)
+		Width(boxW) // Width is the outer, bordered width here, not the content width
 	return box.Render(body)
 }
 
