@@ -25,13 +25,13 @@ type Config struct {
 
 const (
 	defaultMaxResults = 12
-	defaultAccent     = "69"
-	dimColor          = "240"
-	selectedBg        = "236"
-	keyCapBg          = "238" // background of the right-aligned key-binding chip
-	keyCapFg          = "252" // foreground of the key-binding chip
-	minBoxWidth       = 36    // floor for the centered box
-	minAnchorWidth    = 20    // floor for an editor-anchored box
+	defaultAccent     = "#5f87ff"
+	dimColor          = "#585858"
+	selectedBg        = "#303030"
+	keyCapBg          = "#444444" // background of the right-aligned key-binding chip
+	keyCapFg          = "#d0d0d0" // foreground of the key-binding chip
+	minBoxWidth       = 36        // floor for the centered box
+	minAnchorWidth    = 20        // floor for an editor-anchored box
 )
 
 // Palette is the overlay model. It holds the open/closed state, the raw query

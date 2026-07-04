@@ -70,7 +70,7 @@ func TestCenterEmptyTopIsNoOp(t *testing.T) {
 func TestCenterPreservesStyledBaseAroundBox(t *testing.T) {
 	// A styled base row: the colour on both sides of the box must survive the
 	// splice (the reset sequences isolate the box from the base styling).
-	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Render(strings.Repeat("x", 20))
+	styled := lipgloss.NewStyle().Foreground(lipgloss.Color("#ff0000")).Render(strings.Repeat("x", 20))
 	base := strings.Join([]string{styled, styled, styled, styled, styled}, "\n")
 	out := Center(base, "BB", 20, 5)
 	if !strings.Contains(out, "\x1b[") {

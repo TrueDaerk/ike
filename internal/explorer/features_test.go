@@ -4,28 +4,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/host"
 	"ike/internal/registry"
 )
 
-// fg returns a style's foreground colour as the ANSI index string the colour
-// table encodes (lipgloss v2 resolves "4" to a typed ANSI colour value rather
-// than a bare string).
+// fg returns a style's foreground colour as a "#rrggbb" hex string, regardless
+// of the concrete lipgloss colour type it resolved to.
 func fg(s lipgloss.Style) string {
-	switch c := s.GetForeground().(type) {
-	case ansi.BasicColor:
-		return strconv.Itoa(int(c))
-	case lipgloss.ANSIColor:
-		return strconv.Itoa(int(c))
-	default:
-		return fmt.Sprintf("%v", c)
-	}
+	r, g, b, _ := s.GetForeground().RGBA()
+	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 }
 
 func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
@@ -41,11 +32,11 @@ func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
 		isDir bool
 		want  string // resolved foreground (lipgloss color value)
 	}{
-		{"main.go", false, "6"},      // ext "go" -> cyan
-		{"main.test.go", false, "5"}, // glob "*.test.go" wins over ext "go" -> magenta
-		{"sub", true, "4"},           // dir -> blue
-		{"README", false, "7"},       // no ext, no glob -> default white
-		{"notes.txt", false, "7"},    // unknown ext -> default white
+		{"main.go", false, "#008080"},      // ext "go" -> cyan
+		{"main.test.go", false, "#800080"}, // glob "*.test.go" wins over ext "go" -> magenta
+		{"sub", true, "#000080"},           // dir -> blue
+		{"README", false, "#c0c0c0"},       // no ext, no glob -> default white
+		{"notes.txt", false, "#c0c0c0"},    // unknown ext -> default white
 	}
 	for _, c := range cases {
 		n := &node{name: c.name, isDir: c.isDir}
@@ -171,7 +162,7 @@ func TestConfigureReadsExplorerSection(t *testing.T) {
 	if m.indent != 4 {
 		t.Errorf("indent = %d want 4", m.indent)
 	}
-	if got := fg(m.colors.style(&node{name: "x.go"})); got != "1" {
-		t.Errorf("go colour = %q want 1 (red)", got)
+	if got := fg(m.colors.style(&node{name: "x.go"})); got != "#800000" {
+		t.Errorf("go colour = %q want #800000 (red)", got)
 	}
 }

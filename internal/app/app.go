@@ -1575,11 +1575,11 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 
 // Pane border colors.
 const (
-	colorPaneFocus  = "69"  // focused pane border
-	colorPaneBlur   = "240" // unfocused pane border
-	colorMoveSource = "203" // the pane currently being moved
-	colorDropTarget = "220" // the pane a release would drop onto
-	colorGhost      = "136" // matte gold, the drop-preview box
+	colorPaneFocus  = "#5f87ff" // focused pane border
+	colorPaneBlur   = "#585858" // unfocused pane border
+	colorMoveSource = "#ff5f5f" // the pane currently being moved
+	colorDropTarget = "#ffd700" // the pane a release would drop onto
+	colorGhost      = "#af8700" // matte gold, the drop-preview box
 )
 
 // renderPane renders a single leaf at its outer rectangle, resolving its key to
@@ -1634,13 +1634,13 @@ func zoneArrow(z layout.Zone) string {
 
 // dividerV renders the vertical gutter between two horizontally-arranged panes.
 func dividerV(h int) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
 	return style.Render(strings.TrimRight(strings.Repeat("│\n", h), "\n"))
 }
 
 // dividerH renders the horizontal gutter between two vertically-stacked panes.
 func dividerH(w int) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
 	return style.Render(strings.Repeat("─", w))
 }
 
@@ -1661,8 +1661,8 @@ func (m Model) editorTitle(ed *editor.Model) string {
 func (m Model) statusLine() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
-		Background(lipgloss.Color("236")).
-		Foreground(lipgloss.Color("252"))
+		Background(lipgloss.Color("#303030")).
+		Foreground(lipgloss.Color("#d0d0d0"))
 
 	if d := m.drag; d != nil && d.kind == dragMove {
 		hint := "MOVE " + m.paneLabel(d.srcPane)

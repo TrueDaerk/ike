@@ -72,7 +72,7 @@ func (h *Help) allCells() []string {
 func (h *Help) renderBody(colW, cols int) string {
 	// Headings are set apart by weight and an underline, not colour alone, so the
 	// grouping reads even on monochrome terminals.
-	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("69"))
+	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#5f87ff"))
 	var blocks []string
 	for _, g := range h.groups {
 		cells := make([]string, len(g.Entries))
@@ -108,7 +108,7 @@ func renderEntry(e Entry) string {
 	if e.Shortcut == "" {
 		return e.Title
 	}
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("215"))
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f"))
 	return e.Title + "  " + keyStyle.Render(e.Shortcut)
 }
 

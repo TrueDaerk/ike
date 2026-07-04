@@ -33,16 +33,16 @@ var defaultColors = colorTable{
 // values. Anything not found here is passed to lipgloss verbatim, so hex
 // ("#1f6feb") and raw ANSI indices ("39") work too.
 var namedColors = map[string]string{
-	"black":   "0",
-	"red":     "1",
-	"green":   "2",
-	"yellow":  "3",
-	"blue":    "4",
-	"magenta": "5",
-	"cyan":    "6",
-	"white":   "7",
-	"gray":    "240",
-	"grey":    "240",
+	"black":   "#000000",
+	"red":     "#800000",
+	"green":   "#008000",
+	"yellow":  "#808000",
+	"blue":    "#000080",
+	"magenta": "#800080",
+	"cyan":    "#008080",
+	"white":   "#c0c0c0",
+	"gray":    "#585858",
+	"grey":    "#585858",
 }
 
 // color resolves a config colour token (name, hex, or ANSI index) to a lipgloss

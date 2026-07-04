@@ -736,11 +736,11 @@ func clamp(v, lo, hi int) int {
 // styles overlay the per-filetype colour: the cursor and open-file rows replace
 // it, the hover keeps the foreground colour and adds a background.
 var (
-	barTrack    = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	barThumb    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	selStyle    = lipgloss.NewStyle().Background(lipgloss.Color("69")).Foreground(lipgloss.Color("231")).Bold(true)
-	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("215")).Bold(true)
-	hoverBg     = lipgloss.Color("236")
+	barTrack    = lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+	barThumb    = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
+	selStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#5f87ff")).Foreground(lipgloss.Color("#ffffff")).Bold(true)
+	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f")).Bold(true)
+	hoverBg     = lipgloss.Color("#303030")
 )
 
 // nodeStyle is a row's base style: its per-filetype colour, plus italics for

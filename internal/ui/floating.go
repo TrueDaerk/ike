@@ -12,7 +12,7 @@ import (
 )
 
 // defaultAccent is the border/title colour when Config.Accent is empty.
-const defaultAccent = "69"
+const defaultAccent = "#5f87ff"
 
 // Content is the body a Floating shell hosts. The shell owns all chrome,
 // sizing, scrolling and dismissal; content only supplies a heading and renders

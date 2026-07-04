@@ -300,7 +300,7 @@ func (m Model) promptBox() string {
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("69")).
+		BorderForeground(lipgloss.Color("#5f87ff")).
 		Padding(0, 1).
 		Render(body)
 }

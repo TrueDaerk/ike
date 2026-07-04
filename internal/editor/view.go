@@ -66,7 +66,7 @@ func (m Model) View() string {
 	cursorStyle := lipgloss.NewStyle().Reverse(true)
 	textWidth := m.view.TextWidth(lineCount)
 
-	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("238"))
+	selStyle := lipgloss.NewStyle().Background(lipgloss.Color("#444444"))
 
 	var out []string
 	for i := m.view.Top; i < bottom; i++ {

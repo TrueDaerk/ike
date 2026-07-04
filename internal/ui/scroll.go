@@ -10,7 +10,7 @@ import (
 )
 
 // indicatorColor is the dim foreground used for the scroll position bar.
-const indicatorColor = "240"
+const indicatorColor = "#585858"
 
 // scroller wraps bubbles/viewport to scroll body content vertically when it is
 // taller than the visible area. It adds g/G (top/bottom) on top of the

@@ -244,8 +244,8 @@ func (m Model) CompletionView() string {
 		width = 40
 	}
 
-	normal := lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
-	selected := lipgloss.NewStyle().Background(lipgloss.Color("24")).Foreground(lipgloss.Color("231"))
+	normal := lipgloss.NewStyle().Background(lipgloss.Color("#303030")).Foreground(lipgloss.Color("#d0d0d0"))
+	selected := lipgloss.NewStyle().Background(lipgloss.Color("#005f87")).Foreground(lipgloss.Color("#ffffff"))
 	var rows []string
 	for i := start; i < endIdx; i++ {
 		label := completionLabel(items[i])
@@ -296,7 +296,7 @@ func (m Model) HoverView() string {
 	if m.hover == nil {
 		return ""
 	}
-	box := lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252")).Padding(0, 1)
+	box := lipgloss.NewStyle().Background(lipgloss.Color("#303030")).Foreground(lipgloss.Color("#d0d0d0")).Padding(0, 1)
 	const maxLines = 12
 	lines := m.hover.lines
 	if len(lines) > maxLines {
@@ -316,12 +316,12 @@ func (m *Model) dismissHover() { m.hover = nil }
 func diagColor(severity int) color.Color {
 	switch severity {
 	case 1:
-		return lipgloss.Color("1")
+		return lipgloss.Color("#800000")
 	case 2:
-		return lipgloss.Color("3")
+		return lipgloss.Color("#808000")
 	case 3:
-		return lipgloss.Color("4")
+		return lipgloss.Color("#000080")
 	default:
-		return lipgloss.Color("6")
+		return lipgloss.Color("#008080")
 	}
 }
