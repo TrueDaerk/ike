@@ -2,6 +2,25 @@
 
 ## 2026-07-06
 
+- Explorer UX pass (four features). **Open-file marking:** every file open in
+  any editor pane renders its name underlined + italic (`Model.SetOpen`, kept
+  current by `app.syncExplorerOpen` on open/close/restore; a stale `active`
+  mark is cleared; `rowParts` keeps guides/padding undecorated). The active
+  accent is muted (no bold) and tracks the **focused** editor's file
+  (`app.setFocus` → `SetActive`), so switching panes moves the highlight. **Double-click to open:** a single mouse press now only selects a
+  row; opening a file / toggling a directory takes a double-click (400ms
+  window, injectable clock) — except a single click on a directory's expand
+  caret, which still toggles. **Auto-refresh:** directory mtimes are polled
+  every 2s off-thread (`schedulePoll`/`pollMsg`); only changed directories are
+  re-scanned, and `setChildren` now merges by path so any re-scan (auto or
+  manual `r`, which also became a deep re-scan of expanded children) preserves
+  expansion state. Disable with `explorer.auto_refresh = "false"`.
+  **Undo/redo:** file operations gained a redo stack (`explorer.redo`,
+  `Ctrl+Shift+Z`/`Cmd+Shift+Z`) and rename is now undoable; undo of a create
+  moves the entry to `.ike-trash/` instead of removing it, so undo/redo apply
+  instantly without confirmation prompts. `editor.redo` additionally binds
+  `ctrl+shift+z`, which — unlike `cmd+shift+z` — macOS terminals can deliver.
+
 - Editor: mouse wheel now scrolls the viewport (`editor.ScrollBy`, wired in
   `app.handleMouse`'s `mouseWheel` case for `pane.KindEditor`), independent of
   vim mode — it moves `view.Top` directly instead of the cursor, so it works

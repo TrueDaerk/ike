@@ -40,7 +40,13 @@ var jetbrainsRows = []row{
 	// as a normal key (raw mode disables the suspend signal) on every platform.
 	{"ctrl+z", "editor.undo", "Undo", Editor, "Editor (06)", false},
 	{"ctrl+z", "explorer.undo", "Undo file operation", Explorer, "Explorer (05)", false},
+	// Redo gets both chords: cmd+shift+z matches JetBrains where the terminal
+	// can deliver it, ctrl+shift+z is the everywhere-deliverable fallback
+	// (mirroring the ctrl+z story above).
 	{"cmd+shift+z", "editor.redo", "Redo", Editor, "Editor (06)", false},
+	{"ctrl+shift+z", "editor.redo", "Redo", Editor, "Editor (06)", false},
+	{"cmd+shift+z", "explorer.redo", "Redo file operation", Explorer, "Explorer (05)", false},
+	{"ctrl+shift+z", "explorer.redo", "Redo file operation", Explorer, "Explorer (05)", false},
 	{"cmd+f", "editor.find", "Find in file", Editor, "Editor (06)", false},
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)", false},
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)", false},

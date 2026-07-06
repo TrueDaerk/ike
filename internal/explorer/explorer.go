@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -38,6 +39,7 @@ type node struct {
 	loaded   bool
 	loading  bool // a scan Cmd is in flight for this directory
 	children []*node
+	modTime  time.Time // directory mtime at last scan; drives auto-refresh polling
 }
 
 // Model is the file-explorer pane: an expandable tree rooted at a fixed base.
@@ -48,11 +50,24 @@ type Model struct {
 	offset  int     // first visible row (vertical scroll)
 	offsetX int     // first visible column (horizontal scroll)
 	hover   int     // row index under the mouse pointer, -1 when none
-	active  string  // path of the file currently open in the editor, "" when none
+	active  string  // path of the file focused in the editor, "" when none
 	width   int
 	height  int
 	focused bool
 	err     error
+
+	open map[string]bool // paths currently open in any editor pane
+
+	// Double-click detection: a single click only selects a row; activating
+	// (opening a file, toggling a directory) needs a second click on the same row
+	// within doubleClickWindow. now is injectable so tests control the clock.
+	lastClickRow int
+	lastClickAt  time.Time
+	now          func() time.Time
+
+	autoRefresh bool          // poll expanded directories for external changes
+	pollEvery   time.Duration // interval between auto-refresh polls
+	polling     bool          // a poll loop is running (or armed by Restore)
 
 	showHidden bool       // render dot-entries; toggled by explorer.toggleHidden
 	indent     int        // spaces per depth level (config explorer.tree_indent)
@@ -60,11 +75,12 @@ type Model struct {
 	colors     colorTable // per-filetype colour resolution
 
 	// File-operation state (fileops.go). prompt is the active modal (new-file
-	// name entry, or a delete/undo confirmation); ops is the undo stack of
-	// completed create/delete operations; trashDir holds deleted entries so a
-	// delete can be reversed. See fileops.go.
+	// name entry, or a delete confirmation); ops/redoOps are the undo and redo
+	// stacks of completed create/delete/rename operations; trashDir holds
+	// trashed entries so any operation can be reversed. See fileops.go.
 	prompt     *prompt
 	ops        []fileOp
+	redoOps    []fileOp
 	trashDir   string
 	trashSeq   int
 	pendingSel string // path to put the cursor on once the next scan rebuilds rows
@@ -88,11 +104,15 @@ func New(dir string) Model {
 		loading:  true,
 	}
 	m := Model{
-		root:   root,
-		hover:  -1,
-		indent: 2,
-		sort:   "name",
-		colors: defaultColors,
+		root:         root,
+		hover:        -1,
+		indent:       2,
+		sort:         "name",
+		colors:       defaultColors,
+		lastClickRow: -1,
+		now:          time.Now,
+		autoRefresh:  true,
+		pollEvery:    2 * time.Second,
 	}
 	m.rebuild()
 	return m
@@ -103,6 +123,7 @@ func New(dir string) Model {
 type ScanDoneMsg struct {
 	Path    string
 	Entries []scanEntry
+	ModTime time.Time // the directory's mtime at scan time (auto-refresh baseline)
 	Err     error
 }
 
@@ -127,7 +148,11 @@ func scanCmd(path string) tea.Cmd {
 		for i, de := range des {
 			es[i] = scanEntry{name: de.Name(), isDir: de.IsDir()}
 		}
-		return ScanDoneMsg{Path: path, Entries: es}
+		var mod time.Time
+		if fi, err := os.Stat(path); err == nil {
+			mod = fi.ModTime()
+		}
+		return ScanDoneMsg{Path: path, Entries: es, ModTime: mod}
 	}
 }
 
@@ -146,18 +171,31 @@ func (m *Model) applyScan(msg ScanDoneMsg) {
 		return
 	}
 	m.err = nil
+	n.modTime = msg.ModTime
 	m.setChildren(n, msg.Entries)
 	m.rebuild()
 }
 
 // setChildren installs sorted child nodes on n from a scan's entries. It is
 // shared by the async scan path and the synchronous session-restore path.
+// Existing child nodes are reused (matched by path and kind), so a re-scan
+// preserves expansion state and already-loaded subtrees instead of collapsing
+// everything back to fresh nodes.
 func (m *Model) setChildren(n *node, entries []scanEntry) {
+	prev := make(map[string]*node, len(n.children))
+	for _, c := range n.children {
+		prev[c.path] = c
+	}
 	children := make([]*node, 0, len(entries))
 	for _, e := range entries {
+		path := filepath.Join(n.path, e.name)
+		if old, ok := prev[path]; ok && old.isDir == e.isDir {
+			children = append(children, old)
+			continue
+		}
 		children = append(children, &node{
 			name:  e.name,
-			path:  filepath.Join(n.path, e.name),
+			path:  path,
 			isDir: e.isDir,
 			depth: n.depth + 1,
 		})
@@ -255,10 +293,12 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 
 // Init implements tea.Model: it kicks off the root directory scan, unless a
 // restored session already loaded the root synchronously (an async re-scan would
-// replace the children and discard the restored expansion state).
+// replace the children and discard the restored expansion state) — in that case
+// it starts the auto-refresh poll loop instead, which the fresh-scan path starts
+// on its first ScanDoneMsg (see startPoll).
 func (m Model) Init() tea.Cmd {
 	if m.root.loaded {
-		return nil
+		return m.schedulePoll() // armed by Restore; nil when auto-refresh is off
 	}
 	return scanCmd(m.root.path)
 }
@@ -270,7 +310,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ScanDoneMsg:
 		m.applyScan(msg)
-		return m, nil
+		return m, m.startPoll()
+	case pollMsg:
+		return m, m.applyPoll(msg)
 	case ToggleHiddenMsg:
 		m.showHidden = !m.showHidden
 		m.rebuild()
@@ -296,8 +338,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.promptRename()
 		return m, nil
 	case UndoMsg:
-		m.promptUndo()
-		return m, nil
+		return m, m.undo()
+	case RedoMsg:
+		return m, m.redo()
 	case tea.KeyPressMsg:
 		// A modal prompt captures every key (filename entry, y/n, esc) until it
 		// is accepted or cancelled, ahead of any navigation binding.
@@ -448,9 +491,10 @@ func collapse(n *node) {
 	}
 }
 
-// refresh invalidates the selected directory's cache (or its parent's, when a
-// file is selected) and re-scans it, so external changes show up. Expansion
-// state is preserved; the scan repopulates children in place.
+// refresh re-scans the selected directory (or its parent, when a file is
+// selected) and every expanded directory beneath it, so external changes show
+// up. Children are merged in place (setChildren reuses matching nodes), so
+// expansion state survives the refresh.
 func (m *Model) refresh() tea.Cmd {
 	n := m.current()
 	if n == nil {
@@ -462,11 +506,123 @@ func (m *Model) refresh() tea.Cmd {
 	if n == nil {
 		n = m.root
 	}
-	n.loaded = false
-	n.loading = true
-	n.children = nil
-	m.rebuild()
-	return scanCmd(n.path)
+	return m.rescanSubtree(n)
+}
+
+// rescanSubtree dispatches scans for n and every expanded, already-loaded
+// directory below it. Existing children stay visible until each scan result
+// merges over them.
+func (m *Model) rescanSubtree(n *node) tea.Cmd {
+	var cmds []tea.Cmd
+	var walk func(d *node)
+	walk = func(d *node) {
+		if !d.isDir || !d.loaded {
+			return
+		}
+		d.loading = true
+		cmds = append(cmds, scanCmd(d.path))
+		for _, c := range d.children {
+			if c.expanded {
+				walk(c)
+			}
+		}
+	}
+	if n.isDir && !n.loaded {
+		// A never-loaded directory (collapsed ancestor): scan just it.
+		n.loading = true
+		return scanCmd(n.path)
+	}
+	walk(n)
+	return tea.Batch(cmds...)
+}
+
+// dirStamp pairs a directory path with the mtime it had at its last scan; the
+// poll Cmd compares the two off the update loop.
+type dirStamp struct {
+	path string
+	mod  time.Time
+}
+
+// pollMsg reports directories whose mtime changed since their last scan. It is
+// the auto-refresh heartbeat: handling it re-scans the changed directories and
+// schedules the next poll.
+type pollMsg struct {
+	changed []string
+}
+
+func (pollMsg) explorerMsg() {}
+
+// startPoll begins the auto-refresh loop once, on the first completed scan.
+// Later scans see the polling flag set and return nil, so only one loop runs.
+func (m *Model) startPoll() tea.Cmd {
+	if !m.autoRefresh || m.polling {
+		return nil
+	}
+	m.polling = true
+	return m.schedulePoll()
+}
+
+// schedulePoll snapshots the mtimes of every visible loaded directory and
+// returns a Cmd that re-checks them after the poll interval. Returns nil when
+// auto-refresh is disabled.
+func (m *Model) schedulePoll() tea.Cmd {
+	if !m.autoRefresh {
+		return nil
+	}
+	var stamps []dirStamp
+	var walk func(n *node)
+	walk = func(n *node) {
+		if !n.isDir || !n.loaded {
+			return
+		}
+		stamps = append(stamps, dirStamp{path: n.path, mod: n.modTime})
+		if !n.expanded {
+			return
+		}
+		for _, c := range n.children {
+			walk(c)
+		}
+	}
+	walk(m.root)
+	interval := m.pollEvery
+	return func() tea.Msg {
+		time.Sleep(interval)
+		var changed []string
+		for _, s := range stamps {
+			fi, err := os.Stat(s.path)
+			if err != nil {
+				// The directory vanished: its parent's listing changed.
+				changed = append(changed, filepath.Dir(s.path))
+				continue
+			}
+			if !fi.ModTime().Equal(s.mod) {
+				changed = append(changed, s.path)
+			}
+		}
+		return pollMsg{changed: changed}
+	}
+}
+
+// applyPoll re-scans every changed directory still present in the tree and
+// schedules the next poll tick.
+func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
+	m.polling = true
+	var cmds []tea.Cmd
+	seen := map[string]bool{}
+	for _, p := range msg.changed {
+		if seen[p] {
+			continue
+		}
+		seen[p] = true
+		n := nodeByPath(m.root, p)
+		if n == nil || !n.isDir || !n.loaded || n.loading {
+			continue
+		}
+		n.loading = true
+		cmds = append(cmds, scanCmd(n.path))
+	}
+	cmds = append(cmds, m.schedulePoll())
+	return tea.Batch(cmds...)
 }
 
 // reveal moves the cursor onto the row of the currently open file, if it is
@@ -526,22 +682,30 @@ func (m *Model) clampScroll() {
 	}
 }
 
-// rowText is the plain (unstyled) content of a row: indent guides for each
-// ancestor level, an expand marker, and the name (directories gain a trailing
-// slash). It is the single source of truth for both width measurement and
-// rendering, so clipping and the scrollbars agree.
-func (m Model) rowText(n *node) string {
+// rowParts is the plain (unstyled) content of a row, split where styling
+// differs: the prefix (indent guides for each ancestor level plus the expand
+// marker) and the name (directories gain a trailing slash). The split lets
+// View decorate just the name (the open-file underline) without underlining
+// guides or padding.
+func (m Model) rowParts(n *node) (prefix, name string) {
 	var b strings.Builder
 	for d := 0; d < n.depth; d++ {
 		b.WriteString("│")
 		b.WriteString(strings.Repeat(" ", maxz(m.indent-1)))
 	}
 	b.WriteString(marker(n))
-	b.WriteString(n.name)
+	name = n.name
 	if n.isDir {
-		b.WriteString("/")
+		name += "/"
 	}
-	return b.String()
+	return b.String(), name
+}
+
+// rowText is the full plain content of a row. It is the single source of truth
+// for width measurement, so clipping and the scrollbars agree with rendering.
+func (m Model) rowText(n *node) string {
+	prefix, name := m.rowParts(n)
+	return prefix + name
 }
 
 // marker is the two-cell expand glyph for a row: a caret for directories, blank
@@ -668,6 +832,22 @@ func (m *Model) ScrollXBy(delta int) {
 // highlighted distinctly from the cursor and hover. Pass "" to clear it.
 func (m *Model) SetActive(path string) { m.active = path }
 
+// SetOpen replaces the set of files currently open in any editor pane. Open
+// rows render underlined and italic (in addition to any cursor/hover/active
+// highlight). A stale active path not in the set is cleared.
+func (m *Model) SetOpen(paths []string) {
+	m.open = make(map[string]bool, len(paths))
+	for _, p := range paths {
+		m.open[p] = true
+	}
+	if m.active != "" && !m.open[m.active] {
+		m.active = ""
+	}
+}
+
+// IsOpen reports whether path is marked open in an editor.
+func (m Model) IsOpen(path string) bool { return m.open[path] }
+
 // SetHoverAt records the row under the mouse at content-local coordinates, or
 // clears the hover when the pointer is off a content row.
 func (m *Model) SetHoverAt(x, y int) {
@@ -692,9 +872,15 @@ func (m Model) HoverRow() int { return m.hover }
 // Active returns the path of the file currently marked open, or "" when none.
 func (m Model) Active() string { return m.active }
 
+// doubleClickWindow is the maximum delay between two clicks on the same row for
+// the pair to count as a double-click.
+const doubleClickWindow = 400 * time.Millisecond
+
 // MouseClick handles a left-press at content-local coordinates (0-based from the
-// top-left of the tree area). A press on a scrollbar jumps that axis; a press on
-// a row selects it and activates it (toggling a directory, opening a file).
+// top-left of the tree area). A press on a scrollbar jumps that axis. A single
+// press on a row only selects it; activating (opening a file, toggling a
+// directory) takes a double-click — except on a directory's expand caret, which
+// toggles on a single click.
 func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	if len(m.rows) == 0 || x < 0 || y < 0 {
 		return m, nil
@@ -721,7 +907,35 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.cursor = i
-	return m.activate()
+	m.clampScroll()
+
+	n := m.rows[i]
+	if n.isDir && m.onMarker(n, x) {
+		// The expand caret answers to a single click, like the IDE tree it mimics.
+		m.resetClick()
+		return m.activate()
+	}
+	clickAt := m.now()
+	if i == m.lastClickRow && clickAt.Sub(m.lastClickAt) <= doubleClickWindow {
+		m.resetClick()
+		return m.activate()
+	}
+	m.lastClickRow, m.lastClickAt = i, clickAt
+	return m, nil
+}
+
+// onMarker reports whether content-local column x (before horizontal scroll)
+// falls on n's two-cell expand marker.
+func (m Model) onMarker(n *node, x int) bool {
+	cx := x + m.offsetX
+	start := n.depth * (1 + maxz(m.indent-1))
+	return cx >= start && cx < start+2
+}
+
+// resetClick clears the pending single-click state after an activation.
+func (m *Model) resetClick() {
+	m.lastClickRow = -1
+	m.lastClickAt = time.Time{}
 }
 
 func clamp(v, lo, hi int) int {
@@ -739,10 +953,12 @@ func clamp(v, lo, hi int) int {
 // styles overlay the per-filetype colour: the cursor and open-file rows replace
 // it, the hover keeps the foreground colour and adds a background.
 var (
-	barTrack    = lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
-	barThumb    = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
-	selStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#5f87ff")).Foreground(lipgloss.Color("#ffffff")).Bold(true)
-	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f")).Bold(true)
+	barTrack = lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+	barThumb = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
+	selStyle = lipgloss.NewStyle().Background(lipgloss.Color("#5f87ff")).Foreground(lipgloss.Color("#ffffff")).Bold(true)
+	// The focused editor's file gets a muted warm accent — visible next to the
+	// per-filetype colours without shouting (no bold, desaturated tone).
+	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d7af87"))
 	hoverBg     = lipgloss.Color("#303030")
 )
 
@@ -777,20 +993,30 @@ func (m Model) View() string {
 		var line string
 		if i < len(m.rows) {
 			n := m.rows[i]
-			vis := ansi.Cut(m.rowText(n), offX, offX+textW)
-			if pad := textW - ansi.StringWidth(vis); pad > 0 {
-				vis += strings.Repeat(" ", pad)
-			}
+			var style lipgloss.Style
 			switch m.rowKind(i) {
 			case rowSelected:
-				line = selStyle.Render(vis)
+				style = selStyle
 			case rowActive:
-				line = activeStyle.Render(vis)
+				style = activeStyle
 			case rowHover:
-				line = m.nodeStyle(n).Background(hoverBg).Render(vis)
+				style = m.nodeStyle(n).Background(hoverBg)
 			default:
-				line = m.nodeStyle(n).Render(vis)
+				style = m.nodeStyle(n)
 			}
+			nameStyle := style
+			if m.open[n.path] {
+				// Every file open in an editor reads underlined + italic — on the
+				// name only, so indent guides and padding stay clean.
+				nameStyle = nameStyle.Underline(true).Italic(true)
+			}
+			prefix, name := m.rowParts(n)
+			styled := style.Render(prefix) + nameStyle.Render(name)
+			vis := ansi.Cut(styled, offX, offX+textW)
+			if pad := textW - ansi.StringWidth(vis); pad > 0 {
+				vis += style.Render(strings.Repeat(" ", pad))
+			}
+			line = vis
 		} else {
 			line = strings.Repeat(" ", textW)
 		}

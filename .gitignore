@@ -1,6 +1,9 @@
 # Per-project runtime UI state (layout geometry, Roadmap 0036)
 .ike/
 
+# Explorer session trash (deleted entries kept for undo, fileops.go)
+.ike-trash/
+
 # Editor / IDE metadata
 .idea/
 *.iml

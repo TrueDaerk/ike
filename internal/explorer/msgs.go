@@ -33,9 +33,12 @@ type DeleteMsg struct{}
 // (explorer.rename).
 type RenameMsg struct{}
 
-// UndoMsg reverses the last file operation, after confirmation: it deletes the
-// last created entry or restores the last deleted one (explorer.undo).
+// UndoMsg reverses the last file operation instantly: a create is moved to the
+// trash, a delete is restored, a rename is renamed back (explorer.undo).
 type UndoMsg struct{}
+
+// RedoMsg re-applies the most recently undone file operation (explorer.redo).
+type RedoMsg struct{}
 
 // FileDeletedMsg announces that the explorer removed a path (a delete, or the
 // undo of a create) so the root model can close any editor still showing it. It
@@ -55,3 +58,4 @@ func (NewDirMsg) explorerMsg()       {}
 func (DeleteMsg) explorerMsg()       {}
 func (RenameMsg) explorerMsg()       {}
 func (UndoMsg) explorerMsg()         {}
+func (RedoMsg) explorerMsg()         {}

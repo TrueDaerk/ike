@@ -9,10 +9,11 @@ import (
 
 // Config keys consumed from the merged [explorer] section (see internal/config).
 const (
-	cfgShowHidden = "explorer.show_hidden"
-	cfgTreeIndent = "explorer.tree_indent"
-	cfgSort       = "explorer.sort"
-	cfgColorsPfx  = "explorer.colors."
+	cfgShowHidden  = "explorer.show_hidden"
+	cfgTreeIndent  = "explorer.tree_indent"
+	cfgSort        = "explorer.sort"
+	cfgColorsPfx   = "explorer.colors."
+	cfgAutoRefresh = "explorer.auto_refresh"
 )
 
 // Configure applies the [explorer] configuration section to the model: initial
@@ -33,6 +34,9 @@ func (m *Model) Configure(cfg host.Config) {
 	}
 	if v, ok := cfg.Get(cfgSort); ok && v != "" {
 		m.sort = v
+	}
+	if v, ok := cfg.Get(cfgAutoRefresh); ok {
+		m.autoRefresh = v != "false"
 	}
 	if colors := readColors(cfg); len(colors) > 0 {
 		// Start from the defaults so the required "dir"/"default" fallbacks always

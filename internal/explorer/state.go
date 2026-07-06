@@ -68,6 +68,10 @@ func (m *Model) Restore(s State) {
 		m.loadSync(n)
 	}
 
+	// The synchronous load means Init issues no scan, so no ScanDoneMsg will
+	// start the auto-refresh loop; arm it here and let Init schedule it.
+	m.polling = true
+
 	m.rebuild()
 	if s.Cursor != "" {
 		for i, n := range m.rows {
@@ -92,6 +96,9 @@ func (m *Model) loadSync(n *node) {
 	des, err := os.ReadDir(n.path)
 	if err != nil {
 		return
+	}
+	if fi, err := os.Stat(n.path); err == nil {
+		n.modTime = fi.ModTime()
 	}
 	entries := make([]scanEntry, len(des))
 	for i, de := range des {

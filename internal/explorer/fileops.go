@@ -1,11 +1,12 @@
 package explorer
 
 // fileops.go implements the explorer's file operations: create a file/folder,
-// delete an entry, and undo the last operation. Every destructive step is gated
-// behind a modal confirmation; creating an entry prompts for its name. Deletes
+// rename, delete, and undo/redo. Deleting is gated behind a modal confirmation;
+// creating and renaming prompt for a name. Deletes (and the undo of a create)
 // move the entry into a per-session trash directory rather than removing it, so
-// an undo can move it back. The undo stack is linear (create/delete only); it is
-// independent of the editor's text undo.
+// every operation is reversible without data loss — which is why undo and redo
+// apply instantly, with no confirmation prompt. The undo/redo stacks are linear
+// (create/delete/rename) and independent of the editor's text undo.
 
 import (
 	"fmt"
@@ -40,19 +41,21 @@ type prompt struct {
 	accept func(m *Model, input string) tea.Cmd
 }
 
-// opKind distinguishes the two reversible file operations.
+// opKind distinguishes the reversible file operations.
 type opKind int
 
 const (
-	opCreate opKind = iota // created path; undo deletes it
+	opCreate opKind = iota // created path; undo moves it to the trash
 	opDelete               // moved path to trashPath; undo moves it back
+	opRename               // renamed path to newPath; undo renames it back
 )
 
-// fileOp is one entry on the undo stack.
+// fileOp is one entry on the undo/redo stacks.
 type fileOp struct {
 	kind      opKind
 	path      string // the entry's location in the tree
-	trashPath string // where a deleted entry now lives (opDelete only)
+	newPath   string // the entry's location after a rename (opRename only)
+	trashPath string // where a trashed entry lives (opDelete; opCreate after undo)
 	isDir     bool
 }
 
@@ -172,7 +175,7 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 		m.err = err
 		return nil
 	}
-	m.ops = append(m.ops, fileOp{kind: opCreate, path: path, isDir: isDir})
+	m.pushOp(fileOp{kind: opCreate, path: path, isDir: isDir})
 	m.pendingSel = path
 	return m.refreshDir(dir)
 }
@@ -206,7 +209,7 @@ func (m *Model) deleteEntry(path string, isDir bool) tea.Cmd {
 		m.err = err
 		return nil
 	}
-	m.ops = append(m.ops, fileOp{kind: opDelete, path: path, trashPath: tp, isDir: isDir})
+	m.pushOp(fileOp{kind: opDelete, path: path, trashPath: tp, isDir: isDir})
 	return tea.Batch(m.refreshDir(filepath.Dir(path)), deletedCmd(path, isDir))
 }
 
@@ -274,85 +277,110 @@ func (m *Model) renameEntry(path, name string, isDir bool) tea.Cmd {
 		m.err = err
 		return nil
 	}
+	m.pushOp(fileOp{kind: opRename, path: path, newPath: newPath, isDir: isDir})
 	m.pendingSel = newPath
 	return tea.Batch(m.refreshDir(dir), deletedCmd(path, isDir))
 }
 
-// promptUndo opens a confirmation for reversing the last file operation: delete
-// the last created entry, or restore the last deleted one. It is a no-op when the
-// undo stack is empty.
-func (m *Model) promptUndo() {
+// pushOp records a freshly completed operation on the undo stack. A new
+// operation invalidates the redo history, exactly like a text editor's undo.
+func (m *Model) pushOp(op fileOp) {
+	m.ops = append(m.ops, op)
+	m.redoOps = nil
+}
+
+// undo reverses the last file operation instantly (no confirmation — every
+// operation is recoverable via redo): a create moves the entry to the trash, a
+// delete restores it, a rename renames back. A no-op on an empty stack; on
+// failure (e.g. the entry changed externally) the op stays put and the error is
+// shown.
+func (m *Model) undo() tea.Cmd {
 	if len(m.ops) == 0 {
 		m.err = nil
-		return
+		return nil
 	}
 	op := m.ops[len(m.ops)-1]
+	var cmd tea.Cmd
 	switch op.kind {
 	case opCreate:
-		m.prompt = &prompt{
-			kind:  promptConfirm,
-			title: fmt.Sprintf("Undo: delete %q?", filepath.Base(op.path)),
-			accept: func(mm *Model, _ string) tea.Cmd {
-				return mm.undoCreate(op)
-			},
+		tp, err := m.toTrash(op.path)
+		if err != nil {
+			m.err = err
+			return nil
 		}
+		op.trashPath = tp
+		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
 	case opDelete:
-		m.prompt = &prompt{
-			kind:  promptConfirm,
-			title: fmt.Sprintf("Undo: restore %q?", filepath.Base(op.path)),
-			accept: func(mm *Model, _ string) tea.Cmd {
-				return mm.undoDelete(op)
-			},
+		if err := os.Rename(op.trashPath, op.path); err != nil {
+			m.err = err
+			return nil
 		}
+		m.pendingSel = op.path
+		cmd = m.refreshDir(filepath.Dir(op.path))
+	case opRename:
+		if err := os.Rename(op.newPath, op.path); err != nil {
+			m.err = err
+			return nil
+		}
+		m.pendingSel = op.path
+		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.newPath, op.isDir))
 	}
+	m.ops = m.ops[:len(m.ops)-1]
+	m.redoOps = append(m.redoOps, op)
+	m.err = nil
+	return cmd
 }
 
-// undoCreate removes the entry a create added and pops the op.
-func (m *Model) undoCreate(op fileOp) tea.Cmd {
-	var err error
-	if op.isDir {
-		err = os.RemoveAll(op.path)
-	} else {
-		err = os.Remove(op.path)
-	}
-	if err != nil {
-		m.err = err
+// redo re-applies the most recently undone operation and pushes it back onto
+// the undo stack. A no-op on an empty redo stack.
+func (m *Model) redo() tea.Cmd {
+	if len(m.redoOps) == 0 {
+		m.err = nil
 		return nil
 	}
-	m.popOp()
-	return tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
-}
-
-// undoDelete moves a trashed entry back to its original location and pops the op.
-func (m *Model) undoDelete(op fileOp) tea.Cmd {
-	if err := os.Rename(op.trashPath, op.path); err != nil {
-		m.err = err
-		return nil
+	op := m.redoOps[len(m.redoOps)-1]
+	var cmd tea.Cmd
+	switch op.kind {
+	case opCreate:
+		if err := os.Rename(op.trashPath, op.path); err != nil {
+			m.err = err
+			return nil
+		}
+		op.trashPath = ""
+		m.pendingSel = op.path
+		cmd = m.refreshDir(filepath.Dir(op.path))
+	case opDelete:
+		if err := os.Rename(op.path, op.trashPath); err != nil {
+			m.err = err
+			return nil
+		}
+		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
+	case opRename:
+		if err := os.Rename(op.path, op.newPath); err != nil {
+			m.err = err
+			return nil
+		}
+		m.pendingSel = op.newPath
+		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
 	}
-	m.popOp()
-	m.pendingSel = op.path
-	return m.refreshDir(filepath.Dir(op.path))
-}
-
-// popOp drops the most recent operation from the undo stack.
-func (m *Model) popOp() {
-	if len(m.ops) > 0 {
-		m.ops = m.ops[:len(m.ops)-1]
-	}
+	m.redoOps = m.redoOps[:len(m.redoOps)-1]
+	m.ops = append(m.ops, op)
+	m.err = nil
+	return cmd
 }
 
 // refreshDir expands and re-scans dir so a just-changed directory reloads in
-// place. It falls back to the standard refresh when dir is not a node in the
-// current tree (e.g. a collapsed ancestor).
+// place. Existing children stay put until the scan result merges over them
+// (setChildren reuses matching nodes), so expanded subdirectories survive. It
+// falls back to the standard refresh when dir is not a node in the current
+// tree (e.g. a collapsed ancestor).
 func (m *Model) refreshDir(dir string) tea.Cmd {
 	n := nodeByPath(m.root, dir)
 	if n == nil {
 		return m.refresh()
 	}
 	n.expanded = true
-	n.loaded = false
 	n.loading = true
-	n.children = nil
 	m.rebuild()
 	return scanCmd(dir)
 }

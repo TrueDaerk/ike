@@ -248,3 +248,30 @@ func TestMouseIgnoredWhenShellOpen(t *testing.T) {
 		t.Fatal("tree should be untouched while shell open")
 	}
 }
+
+func TestActiveFollowsFocusedEditor(t *testing.T) {
+	m := sized(t, 100, 40)
+	a, err := filepath.Abs("app.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := filepath.Abs("session.go")
+	if err != nil {
+		b = a // fallback; any second real file works
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: a})
+	m = out.(Model)
+	out, _ = m.Update(explorer.OpenFileMsg{Path: b, NewPane: true})
+	m = out.(Model)
+	if got := m.explorer().Active(); got != b {
+		t.Fatalf("active = %q want %q after opening in split", got, b)
+	}
+	if !m.explorer().IsOpen(a) || !m.explorer().IsOpen(b) {
+		t.Fatal("both files should be in the explorer's open set")
+	}
+	// Focus back on the first editor: the accent must follow.
+	m.setFocus(m.editorKeyForPath(a))
+	if got := m.explorer().Active(); got != a {
+		t.Fatalf("active = %q want %q after refocusing", got, a)
+	}
+}

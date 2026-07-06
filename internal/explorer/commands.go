@@ -36,6 +36,7 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
 			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
 			cmd("explorer.undo", "Explorer: Undo File Operation", UndoMsg{}),
+			cmd("explorer.redo", "Explorer: Redo File Operation", RedoMsg{}),
 		},
 		Keymaps: []plugin.Keymap{
 			keymap(".", "explorer.toggleHidden", ToggleHiddenMsg{}),

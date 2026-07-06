@@ -294,6 +294,7 @@ func (m *Model) restoreSession() {
 			m.setFocus(key)
 		}
 	}
+	m.syncExplorerOpen()
 	m.syncFocus()
 }
 
@@ -777,6 +778,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		}
 		if err := m.panes.Get(key).Editor().Load(path); err == nil {
 			m.explorer().SetActive(path)
+			m.syncExplorerOpen()
 			m.setFocus(key)
 			m.layout()
 			saveLayout(m.tree, m.panes)
@@ -785,6 +787,20 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 	return m, tea.Batch(cmds...)
+}
+
+// syncExplorerOpen refreshes the explorer's set of open files (every editor
+// pane holding a file), so their rows render underlined + italic. Called after
+// anything that opens or closes an editor.
+func (m *Model) syncExplorerOpen() {
+	var open []string
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() {
+			open = append(open, inst.Editor().Path())
+		}
+	}
+	m.explorer().SetOpen(open)
 }
 
 // fireHooks invokes every enabled hook subscribed to event.
@@ -944,6 +960,11 @@ func (m *Model) setFocus(key string) {
 	m.panes.SetFocused(key)
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		m.recentEditor = key
+		// The explorer's accent always tracks the focused editor's file, so
+		// switching panes (click, focus cycling) moves the highlight with it.
+		if inst.Editor().HasFile() {
+			m.explorer().SetActive(inst.Editor().Path())
+		}
 	}
 }
 
@@ -1027,6 +1048,7 @@ func (m *Model) closeFocused() {
 		// Focus the leaf that now occupies the closed pane's position: the first
 		// leaf in walk order is a safe, always-present choice (explorer at minimum).
 		m.setFocus(m.focusAfterClose())
+		m.syncExplorerOpen()
 		m.layout()
 		saveLayout(m.tree, m.panes)
 	}
@@ -1115,6 +1137,7 @@ func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	if !m.panes.Has(m.panes.Focused()) {
 		m.setFocus(m.focusAfterClose())
 	}
+	m.syncExplorerOpen()
 	m.layout()
 	saveLayout(m.tree, m.panes)
 }

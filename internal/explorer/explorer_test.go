@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -70,13 +71,23 @@ func pumpScans(m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 }
 
 // mounted builds an explorer rooted at dir, sizes it, and drains the initial
-// root scan so the children are visible.
+// root scan so the children are visible. Auto-refresh is disabled: its poll Cmd
+// sleeps for the poll interval, which would stall every test that pumps Cmds.
 func mounted(t *testing.T, dir string, w, h int) Model {
 	t.Helper()
 	m := New(dir)
+	m.autoRefresh = false
 	m.SetSize(w, h)
 	m, _ = pumpScans(m, m.Init())
 	return m
+}
+
+// clickAt simulates a mouse press with a controlled clock so tests can produce
+// exact single- and double-clicks. gap is the delay since the previous click.
+func clickAt(m Model, x, y int, gap time.Duration) (Model, tea.Cmd) {
+	now := m.now().Add(gap)
+	m.now = func() time.Time { return now }
+	return m.MouseClick(x, y)
 }
 
 func send(m Model, keys ...tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -145,11 +156,23 @@ func TestDeleteMovesToTrashAndUndoRestores(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(root, "a.txt")); !os.IsNotExist(err) {
 		t.Fatalf("a.txt should be deleted, err=%v", err)
 	}
-	m, cmd = m.Update(UndoMsg{})
+	m, cmd = m.Update(UndoMsg{}) // undo applies instantly, no confirmation
 	m, _ = pumpScans(m, cmd)
-	m, _ = send(m, key("y")) // confirm restore
+	if m.Prompting() {
+		t.Fatal("undo must not open a confirmation prompt")
+	}
 	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
 		t.Fatalf("a.txt should be restored: %v", err)
+	}
+	m, cmd = m.Update(RedoMsg{}) // redo re-deletes
+	m, _ = pumpScans(m, cmd)
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); !os.IsNotExist(err) {
+		t.Fatalf("a.txt should be re-deleted by redo, err=%v", err)
+	}
+	m, cmd = m.Update(UndoMsg{}) // and undo restores again
+	pumpScans(m, cmd)
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("a.txt should be restored again: %v", err)
 	}
 }
 
@@ -165,9 +188,60 @@ func TestUndoCreateDeletesFile(t *testing.T) {
 	}
 	m, cmd = m.Update(UndoMsg{})
 	m, _ = pumpScans(m, cmd)
-	m, _ = send(m, key("y")) // confirm undo-create
 	if _, err := os.Stat(filepath.Join(root, "tmp.txt")); !os.IsNotExist(err) {
 		t.Fatalf("tmp.txt should be removed by undo, err=%v", err)
+	}
+	// The undone create sits in the trash, so redo can bring it back.
+	m, cmd = m.Update(RedoMsg{})
+	pumpScans(m, cmd)
+	if _, err := os.Stat(filepath.Join(root, "tmp.txt")); err != nil {
+		t.Fatalf("tmp.txt should be restored by redo: %v", err)
+	}
+}
+
+func TestUndoRedoRename(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	for range len("a.txt") {
+		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m, _ = send(m, key("z.txt"), key("enter"))
+	if _, err := os.Stat(filepath.Join(root, "z.txt")); err != nil {
+		t.Fatalf("rename failed: %v", err)
+	}
+	m, cmd = m.Update(UndoMsg{})
+	m, _ = pumpScans(m, cmd)
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("undo should rename back to a.txt: %v", err)
+	}
+	m, cmd = m.Update(RedoMsg{})
+	pumpScans(m, cmd)
+	if _, err := os.Stat(filepath.Join(root, "z.txt")); err != nil {
+		t.Fatalf("redo should rename to z.txt again: %v", err)
+	}
+}
+
+func TestNewOperationClearsRedo(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewFileMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("one.txt"), key("enter"))
+	m, cmd = m.Update(UndoMsg{})
+	m, _ = pumpScans(m, cmd)
+	if len(m.redoOps) != 1 {
+		t.Fatalf("redo stack = %d want 1", len(m.redoOps))
+	}
+	m, cmd = m.Update(NewFileMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("two.txt"), key("enter"))
+	if len(m.redoOps) != 0 {
+		t.Fatal("a new operation must clear the redo stack")
 	}
 }
 
@@ -442,37 +516,72 @@ func tall(t *testing.T, n int) string {
 	return root
 }
 
-func TestMouseClickSelectsRow(t *testing.T) {
+func TestMouseSingleClickOnlySelects(t *testing.T) {
 	root := tree(t)
 	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
-	// rows: root(0) sub(1) a.txt(2) b.txt(3); click local y=2 selects a.txt.
-	m, cmd := m.MouseClick(0, 2)
+	// rows: root(0) sub(1) a.txt(2) b.txt(3); a single click on a.txt selects it
+	// without opening it.
+	m, cmd := clickAt(m, 5, 2, 0)
 	if m.current().name != "a.txt" {
 		t.Fatalf("cursor on %q want a.txt", m.current().name)
 	}
+	if cmd != nil {
+		t.Fatalf("single click must not open a file, got %#v", cmd())
+	}
+	// Two slow clicks (past the double-click window) still only select.
+	m, cmd = clickAt(m, 5, 2, doubleClickWindow+time.Millisecond)
+	if cmd != nil {
+		t.Fatalf("slow second click must not open a file, got %#v", cmd())
+	}
+}
+
+func TestMouseDoubleClickOpensFile(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 30, 20)
+	m.SetFocused(true)
+	m, _ = clickAt(m, 5, 2, 0)
+	m, cmd := clickAt(m, 5, 2, doubleClickWindow/2)
 	if cmd == nil {
-		t.Fatal("clicking a file should emit an open command")
+		t.Fatal("double-clicking a file should emit an open command")
 	}
 	if msg, ok := cmd().(OpenFileMsg); !ok || msg.Path != filepath.Join(root, "a.txt") {
 		t.Fatalf("open msg = %#v", cmd())
 	}
 }
 
-func TestMouseClickTogglesDir(t *testing.T) {
+func TestMouseDoubleClickTogglesDir(t *testing.T) {
 	root := tree(t)
 	m := mounted(t, root, 30, 20)
 	m.SetFocused(true)
-	// click "sub" (y=1) expands it in place; c.txt appears beneath (scan is async).
-	m, c := m.MouseClick(0, 1)
+	// double-click "sub" (y=1, off the caret) expands it; c.txt appears beneath.
+	m, _ = clickAt(m, 5, 1, 0)
+	m, c := clickAt(m, 5, 1, doubleClickWindow/2)
 	m, _ = pumpScans(m, c)
 	if got := names(m); len(got) != 5 || got[2] != "c.txt" {
-		t.Fatalf("after click rows = %v", names(m))
+		t.Fatalf("after double-click rows = %v", names(m))
 	}
-	// click again collapses.
-	m, _ = m.MouseClick(0, 1)
+	// a second double-click collapses.
+	m, _ = clickAt(m, 5, 1, time.Second)
+	m, _ = clickAt(m, 5, 1, doubleClickWindow/2)
 	if len(m.rows) != 4 {
-		t.Fatalf("after second click rows = %v", names(m))
+		t.Fatalf("after second double-click rows = %v", names(m))
+	}
+}
+
+func TestMouseCaretClickTogglesDirInstantly(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 30, 20)
+	m.SetFocused(true)
+	// "sub" sits at depth 1 with indent 2: its caret occupies columns 2-3.
+	m, c := clickAt(m, 2, 1, 0)
+	m, _ = pumpScans(m, c)
+	if got := names(m); len(got) != 5 || got[2] != "c.txt" {
+		t.Fatalf("after caret click rows = %v", names(m))
+	}
+	m, _ = clickAt(m, 2, 1, time.Second)
+	if len(m.rows) != 4 {
+		t.Fatalf("after second caret click rows = %v", names(m))
 	}
 }
 
@@ -662,5 +771,81 @@ func TestModifiedOpenRequestsNewPane(t *testing.T) {
 	}
 	if _, cmd := send(m2, key("o")); cmd != nil {
 		t.Fatal("o on a directory should be a no-op")
+	}
+}
+
+func TestRefreshPreservesExpansion(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("l")) // expand sub
+	if got := names(m); len(got) != 5 {
+		t.Fatalf("setup: sub not expanded: %v", got)
+	}
+	// A file appears externally; a manual refresh from the root must pick it up
+	// without collapsing sub.
+	mustWrite(t, filepath.Join(root, "sub", "d.txt"), "d")
+	m, _ = send(m, key("k")) // back on root
+	m, cmd := m.Update(RefreshMsg{})
+	m, _ = pumpScans(m, cmd)
+	got := names(m)
+	if len(got) != 6 || got[3] != "d.txt" {
+		t.Fatalf("refresh lost expansion or the new file: %v", got)
+	}
+}
+
+func TestPollDetectsExternalChanges(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.autoRefresh = true
+	m.pollEvery = time.Millisecond
+	cmd := m.startPoll()
+	if cmd == nil {
+		t.Fatal("startPoll should schedule a poll")
+	}
+	mustWrite(t, filepath.Join(root, "fresh.txt"), "x")
+	msg, ok := cmd().(pollMsg)
+	if !ok {
+		t.Fatalf("poll cmd returned %#v", msg)
+	}
+	found := false
+	for _, p := range msg.changed {
+		if p == root {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("poll missed the root change: %v", msg.changed)
+	}
+	m, cmd = m.Update(msg)
+	m, _ = pumpScans(m, cmd)
+	for _, n := range names(m) {
+		if n == "fresh.txt" {
+			return
+		}
+	}
+	t.Fatalf("fresh.txt not visible after poll refresh: %v", names(m))
+}
+
+func TestSetOpenClearsStaleActive(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	a := filepath.Join(root, "a.txt")
+	b := filepath.Join(root, "b.txt")
+	m.SetActive(a)
+	m.SetOpen([]string{a, b})
+	if !m.IsOpen(a) || !m.IsOpen(b) {
+		t.Fatal("both files should be marked open")
+	}
+	if m.Active() != a {
+		t.Fatalf("active = %q want %q", m.Active(), a)
+	}
+	// a closes: it drops from the open set, and the stale active mark clears.
+	m.SetOpen([]string{b})
+	if m.IsOpen(a) {
+		t.Fatal("a.txt should no longer be open")
+	}
+	if m.Active() != "" {
+		t.Fatalf("stale active = %q want cleared", m.Active())
 	}
 }

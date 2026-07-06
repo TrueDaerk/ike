@@ -133,6 +133,7 @@ func TestRestoreThenSizeKeepsClicksAligned(t *testing.T) {
 func TestInitSkipsScanAfterRestore(t *testing.T) {
 	root := buildTree(t)
 	m := New(root)
+	m.autoRefresh = false // the poll Cmd would otherwise mask the nil check
 	if m.Init() == nil {
 		t.Fatal("fresh explorer should scan on Init")
 	}

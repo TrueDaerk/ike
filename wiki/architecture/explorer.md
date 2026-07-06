@@ -19,6 +19,22 @@ Scans never block the update loop: expanding a directory dispatches a `scanCmd`
 `tea.Cmd` that reads the directory off-thread and returns a `ScanDoneMsg`;
 `applyScan` then installs the children and rebuilds. `Init` kicks off the root
 scan, so the tree is empty for one frame and fills in on the first message.
+Re-scans **merge**: `setChildren` reuses existing child nodes (matched by path
+and kind), so a refresh preserves expansion state and already-loaded subtrees
+instead of collapsing everything.
+
+## Auto-refresh
+
+The tree keeps itself in sync with the filesystem without a manual `r`. Each
+scan records the directory's mtime on its node; a poll loop (`schedulePoll`)
+snapshots the mtimes of every visible loaded directory, sleeps
+`pollEvery` (2s) off-thread, re-stats them, and reports drift as a `pollMsg`.
+`applyPoll` re-scans only the changed directories (merging in place) and
+schedules the next tick. A vanished directory reports its parent instead, so
+external deletes fold away cleanly. The loop starts on the first `ScanDoneMsg`
+(`startPoll`, guarded by `polling` so only one loop ever runs) — or is armed by
+`Restore`, whose synchronous load means no scan message would ever arrive, and
+started by `Init`. `explorer.auto_refresh = "false"` disables it.
 
 The visible tree is flattened into `rows` (rebuilt on every expand/collapse) for
 cursor navigation; each node carries its `depth` for indentation.
@@ -34,6 +50,7 @@ cursor navigation; each node carries its `depth` for indentation.
 | `explorer.tree_indent` | spaces per depth level (indent-guide width) |
 | `explorer.sort` | within-level ordering (`name`); directories are always first |
 | `explorer.colors.<ext\|glob>` | per-filetype colour; `dir` and `default` are required fallbacks |
+| `explorer.auto_refresh` | poll for external filesystem changes (default `true`; `"false"` disables) |
 
 Colours (`colors.go`) resolve a node by checking, in order: an exact **glob**
 match (globs sorted for determinism), the `dir` fallback for directories, a bare
@@ -60,8 +77,12 @@ The root model forwards mouse events that land in the explorer pane, translating
 the absolute cell into the tree's content-local space (inside the pane border,
 padding, and title row) before calling the explorer:
 
-- **Left press** on a row (`MouseClick`) selects it and activates it — toggling a
-  directory or opening a file — mirroring `enter`.
+- **Left press** on a row (`MouseClick`) only **selects** it. Activating —
+  opening a file or toggling a directory, mirroring `enter` — takes a
+  **double-click** (two presses on the same row within `doubleClickWindow`,
+  400ms; the clock is injectable via `Model.now` for tests). Exception: a
+  single press on a directory's two-cell expand caret toggles it immediately,
+  like the IDE tree it mimics.
 - **Motion** over a row (`SetHoverAt` / `ClearHover`) sets a transient hover
   highlight; leaving the pane clears it.
 - **Wheel** over the pane scrolls without moving the cursor, like a real
@@ -75,10 +96,20 @@ A row's **base** style is its per-filetype colour (`nodeStyle` → `colors.style
 plus italics for hidden (dot-prefixed) entries. `rowKind` then classifies how the
 row is highlighted, strongest first: the focused **cursor** (`selStyle`, blue
 background) → the mouse **hover** (base colour + grey background) → the **open
-file** (`activeStyle`, accent — the editor's current file, set via `SetActive` on
-open, cleared on editor close) → otherwise the base style (directory or plain
+file** (`activeStyle`, a muted warm accent, deliberately not bold — the
+**focused editor's** file: `app.setFocus` calls `SetActive` whenever focus lands
+on an editor pane, so the accent follows pane clicks and focus cycling; it is
+cleared when the file closes) → otherwise the base style (directory or plain
 file colour). The classification lives in `rowKind` so it is testable independent
 of the terminal colour profile.
+
+Independently of `rowKind`, **every** file open in any editor pane renders its
+**name underlined + italic** (the row's indent guides and padding stay
+undecorated: `rowParts` splits prefix from name so `View` can style them
+separately) on top of whatever highlight the row carries. The app maintains
+that set via `SetOpen` (`syncExplorerOpen` in `internal/app` collects each
+editor pane's file after every open/close/restore); `SetOpen` also clears a
+stale `active` mark whose file is no longer open.
 
 ## Commands
 
@@ -97,7 +128,8 @@ these are defaults.
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
-| `explorer.undo` | `Ctrl+Z` | reverse the last file operation after confirmation (`UndoMsg`) |
+| `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
+| `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
 rebuilds (no re-scan), since all children — hidden included — are cached on the
@@ -137,14 +169,21 @@ New entries are created next to the selection — inside the selected directory,
 beside the selected file. Deletes do not `os.Remove`; they move the entry into a
 hidden, same-filesystem trash directory (`.ike-trash/` under the project root, so
 the rename never crosses devices), which is what makes an undo able to restore
-it. Completed operations are pushed onto a linear undo stack (`ops`):
+it. Completed operations are pushed onto a linear undo stack (`ops`) with a
+matching redo stack (`redoOps`; a fresh operation clears it, like a text
+editor's history):
 
-- **Undo of a create** removes the entry it added.
-- **Undo of a delete** moves the trashed entry back to its original path.
+- **Undo of a create** moves the entry to the trash (never `os.Remove`, so a
+  redo — or a mistaken undo — loses nothing); redo moves it back.
+- **Undo of a delete** moves the trashed entry back to its original path; redo
+  re-trashes it.
+- **Undo of a rename** renames the entry back; redo re-applies the new name.
 
-Rename (`promptRename` / `renameEntry`) is a plain `os.Rename` within the same
-directory, prompted with the current name pre-filled; it is not on the undo
-stack (rename it back to undo). The root is never renameable, mirroring delete.
+Because every direction is recoverable, undo and redo apply **instantly** — no
+confirmation prompt (only `explorer.delete` still confirms). Rename
+(`promptRename` / `renameEntry`) is an `os.Rename` within the same directory,
+prompted with the current name pre-filled. The root is never renameable,
+mirroring delete.
 
 Removing a path (a delete, a rename, or undo of a create) emits `FileDeletedMsg`,
 which the root model handles by closing any editor still open on that file (or,
@@ -153,8 +192,10 @@ lingers in an open pane (the editor has no way to follow a rename in place).
 Unlike the other explorer messages, `FileDeletedMsg` is handled by the app, not
 routed back into the explorer, so it deliberately does not implement `Msg`.
 
-`Ctrl+Z` in the explorer context resolves to `explorer.undo`, mirroring the
-editor's `Ctrl+Z` text undo but operating on files. After any operation the
+`Ctrl+Z` in the explorer context resolves to `explorer.undo`, and
+`Ctrl+Shift+Z` (plus `Cmd+Shift+Z` where the terminal delivers it) to
+`explorer.redo`, mirroring the editor's text undo/redo but operating on files.
+After any operation the
 affected directory is re-scanned (`refreshDir`) and `pendingSel` snaps the cursor
 onto the new or restored entry once it reappears. This file-op undo stack is
 entirely separate from the editor's text history.
