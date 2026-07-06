@@ -76,13 +76,17 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
   binding is done when its verdict is OK. Blocked commands are spec'd for intended
   UX now, verified once their owner roadmap lands. Feeds concrete change requests
   back to 05/06/07/09/VCS.
-- **11** owns the palette behind **04**'s `[theme]` selector. `internal/theme` is
-  leaf-level (lipgloss only). Themes register through **02** as an additive
-  `Capabilities.Themes []Theme` capability (built-ins are a compile-in plugin);
-  renderers in app/explorer/editor/help/ui/overlay drop their color literals and
-  read a `*theme.Palette`. Live re-theme rides **04**'s `ConfigReloadedMsg`.
-  Syntax-token slot *names* live here; their tree-sitter/LSP wiring stays in **06**.
-  Model mirrors sqlit/Textual's semantic-slot `Theme`.
+- **11** activates **04**'s inert `[theme].name`: a named palette recolors
+  syntax, explorer, and chrome in one move. New leaf `internal/theme` (lipgloss
+  only; **not** `internal/palette`, which is **07**'s command palette) holds the
+  built-in palettes + one shared color resolver, collapsing the duplicated
+  `namedColors`/resolver in **10**'s `highlight` and **05**'s explorer. A palette
+  bundles ui slots + capture defaults + file-color defaults; it feeds the
+  **defaults** of the existing `highlight.Theme` and explorer `colorTable` while
+  `theme.captures.*` / `[explorer.colors]` still override. Chrome literals in
+  app/explorer/editor move onto ui slots. Themes register via **02**
+  (`Capabilities.Themes []Theme`, compile-in plugin); live re-theme rides **04**'s
+  `ConfigReloadedMsg`. Model mirrors sqlit/Textual's semantic-slot `Theme`.
 
 ## Known gaps / future roadmaps
 

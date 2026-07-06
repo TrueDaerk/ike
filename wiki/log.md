@@ -1,5 +1,24 @@
 # Log
 
+## 2026-07-06
+
+- Roadmap 0110 (Themes) reworked to match landed reality. Syntax highlight (0100)
+  and explorer file colors (0050) already ship config-driven color models with
+  duplicated resolvers, and `[theme].name` is inert. 0110 now: activate
+  `[theme].name` so a **named palette** recolors syntax + explorer + chrome at
+  once; new leaf `internal/theme` holds built-in palettes + one shared color
+  resolver (collapsing the `highlight`/`explorer` copies) and feeds the
+  **defaults** of the existing `highlight.Theme` / explorer `colorTable` (per-key
+  config still overrides); chrome hex literals move onto ui slots. Naming caution
+  recorded: color pkg is `internal/theme`, not `internal/palette` (that's 0070's
+  command palette). Also captured the **background-bleed bug**: `app.render`
+  paints `appBackground` once around the whole screen (`app.go:1512`), so pane
+  interiors, the floating shell, the palette, and LSP popups still show the raw
+  terminal background (lipgloss won't repaint occupied cells). 0110 mandates
+  painting backgrounds **per surface** (pane bodies fill `surface` + pad to full
+  size; overlays paint an opaque surface before compositing). Updated
+  `roadmaps/0110-themes.md` + `architecture/themes.md`.
+
 ## 2026-07-02
 
 - **Extensible language system (Roadmap 0105).** The hardcoded three-language set

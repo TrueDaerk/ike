@@ -1,129 +1,147 @@
 # Roadmap 0110 — Themes / Color Schemes
 
-Give IKE a single, typed **theme** system so every pane reads its colors from a
-shared palette instead of hard-coding lipgloss color literals. A user selects a
-theme by name in `settings.toml`; switching it re-colors the whole IDE without a
-restart. We ship a set of well-known community palettes and follow an existing,
-proven model rather than inventing one.
+Give IKE **named color schemes**. Today `[theme].name` exists in config but is
+**inert** — nothing reads it. Colors are set three separate ways: syntax capture
+colors via `[theme].captures.*` (Roadmap 0100, `internal/highlight/theme.go`),
+explorer file colors via `[explorer.colors]` (Roadmap 0050,
+`internal/explorer/colors.go`), and a pile of hard-coded hex literals for chrome
+(borders, status bar, selection, scrollbars) scattered across `internal/app`,
+`internal/explorer`, and `internal/editor`. Each color subsystem also carries its
+**own duplicated** `namedColors` map + token resolver.
 
-**Standard we follow.** We mirror the theme model used by
-[sqlit](https://github.com/Maxteabag/sqlit), which itself reuses
+This roadmap makes `[theme].name` mean something: selecting a **named palette**
+(e.g. `tokyo-night`) recolors *all three* groups coherently in one move, and
+unifies the duplicated color-token machinery into one leaf package.
+
+**Standard we follow.** Palettes mirror the theme model of
+[sqlit](https://github.com/Maxteabag/sqlit), which reuses
 [Textual's `Theme`](https://textual.textualize.io/guide/design/): a small flat
-set of **semantic color slots** plus a `variables` extension map and a `dark`
-flag — *not* a per-widget color sheet. Concretely a theme is:
+set of **semantic color slots** (`primary/secondary/accent/foreground/background/
+surface/panel/border/success/warning/error` + `dark`), not a per-widget sheet.
+Their built-in palettes (tokyo-night, nord, gruvbox, rose-pine, catppuccin, …)
+port over near-verbatim.
 
-```
-name        string         // unique id, e.g. "tokyo-night"
-primary     color          // main brand / selection / active accent
-secondary   color          // secondary accent
-accent      color          // links, focus rings, highlights
-foreground  color          // default text
-background  color          // app background
-surface     color          // panel / pane body background
-panel       color          // raised panel (title bars, status bar)
-border      color          // pane borders, dividers
-success     color
-warning     color
-error       color
-dark        bool           // is this a dark theme?
-variables   map[string]string  // extra named slots for downstream roadmaps
-```
+## What already exists (do not rebuild)
 
-This is deliberately the same slot set as sqlit's built-ins (sqlit, gruvbox,
-nord, tokyo-night, rose-pine, catppuccin, …), so their palettes port over almost
-verbatim and users coming from sqlit/Textual find the names familiar.
+- **`[theme].name` + `[theme].dark`** — the selector slot (Roadmap 0040,
+  `config/schema.go`). `name` is currently read by nothing; `dark` is advisory.
+- **`internal/highlight` `Theme`** (0100) — resolves Tree-sitter capture names to
+  lipgloss styles from `defaultCaptures` layered under `theme.captures.<name>`
+  config keys. **Syntax highlighting works today** (see the running editor).
+- **`internal/explorer` `colorTable`** (0050) — resolves file globs/extensions to
+  colors from `defaultColors` layered under `[explorer.colors]`.
+- Both packages carry a near-identical `namedColors` map + a `resolveColor`/
+  `color` token resolver — the duplication this roadmap collapses.
+
+**Known background bug this roadmap must fix.** `app.render` wraps the *whole
+screen* in one `Background(appBackground)` style (`app.go:1512`), but pane bodies
+(editor, explorer), the floating shell (`Esc Esc`), the command palette, and LSP
+popups render their cells with **no background set**. lipgloss won't repaint
+cells inner content already occupies, so only the frame/borders look dark — pane
+interiors and overlays show the raw **terminal background**. Painting once at the
+root is structurally insufficient; each surface must fill its own rectangle (see
+the surface-fill rule below).
+
+> **Naming caution:** `internal/palette` is already the **command palette**
+> (Roadmap 0070). The color package is **`internal/theme`**; its resolved type is
+> `theme.Palette` (package `theme`, so no import clash) — never a new
+> `internal/palette`.
 
 ## Prerequisites / Dependencies
 
-- **0040 Settings** — owns the `[theme]` section and its selector
-  (`name = "default"`, `dark = true`). This roadmap fills the **content** behind
-  that selector: it does not own config loading, only registers theme defaults
-  and reads `config.Get().Theme.Name`. A theme change surfaces as a `tea.Msg`
-  (re-using 0040's `ConfigReloadedMsg` path) so the root model re-themes live.
-- **0020 Plugins** — `internal/plugin` `Capabilities` and `internal/registry`.
-  Themes are registered like every other capability (additive
-  `Capabilities.Themes []Theme` field, same pattern `Command.Scope` set for
-  07/08). Built-in palettes ship as a compile-in plugin; third-party plugins can
-  add their own. `internal/registry` exposes a theme lookup by name.
-- **0010 Foundation** — the root model in `internal/app` hosts every pane and is
-  where the active `*theme.Theme` is threaded down. Re-theme is a routed
-  `tea.Msg`, consistent with how the foundation routes other model updates.
-
-Downstream **consumers** (do not block this roadmap, they adopt the palette):
-all rendering code currently holding literals — `internal/app`,
-`internal/explorer`, `internal/editor`, `internal/help`, `internal/ui`,
-`internal/overlay`.
+- **0040 Settings** — owns `[theme]` (`name`, `dark`) and the reload seam. This
+  roadmap fills the **content** behind the name and reads
+  `config.Get().Theme.Name`. Live re-theme rides the existing
+  `config.ConfigReloadedMsg` / `Reload` cmd (`config/watch.go`) — no new plumbing.
+- **0100 Highlight** — `highlight.NewTheme(get)` already layers config over
+  built-in capture defaults. This roadmap feeds those **defaults from the selected
+  palette** instead of the hard-coded `defaultCaptures`; the config-override path
+  is unchanged.
+- **0050 Explorer** — same relationship with `explorer` `colorTable` /
+  `defaultColors` and `[explorer.colors]`.
+- **0020 Plugins** — palettes register like any capability: additive
+  `Capabilities.Themes []Theme`. Built-ins ship as a compile-in theme plugin;
+  third-party plugins add their own. `internal/registry` exposes name→palette.
+- **0010 Foundation** — the `internal/app` root resolves the active palette and
+  threads it into panes; re-theme is a routed `tea.Msg`.
 
 ## Architecture
 
 ```
 internal/theme/
-  theme.go         Theme struct (semantic slots + variables + dark) + Color type
-  palette.go       resolved Palette handed to renderers (lipgloss styles cached)
-  builtins.go      built-in themes (default, tokyo-night, nord, gruvbox,
-                   rose-pine, catppuccin-mocha, … ) ported from the sqlit set
-  registry.go      name -> Theme lookup; merges registry-provided themes
-  syntax.go        editor/TextArea syntax slot map (keyword/string/comment/…)
-  load.go          (optional) decode a user theme file into a Theme
-  theme_test.go    table tests: every builtin defines every required slot,
-                   name lookup, fallback-to-default, contrast sanity
+  theme.go      Theme (semantic slots + captures + explorer colors + dark) + Palette
+  resolve.go    ONE color-token resolver (name/hex/ANSI) — replaces the copies in
+                highlight/theme.go and explorer/colors.go
+  builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
+                catppuccin-mocha(+latte)
+  registry.go   name -> Theme lookup; merges plugin-registered themes; fallback
+  theme_test.go slot completeness, name lookup, fallback, override precedence
 ```
 
-Data flow:
+A built-in `Theme` bundles the three color groups so one name sets everything:
 
 ```
-builtins.go ─┐
-plugin themes ┼─► registry (by name) ─► theme.Resolve(name) ─► *Palette ─┐
-user theme   ┘                                                           │
-                                                                         ▼
-config.Theme.Name ───────────────────────► internal/app root model ► panes
-                                              (ReThemeMsg on change)
+name        "tokyo-night"
+dark        true
+ui          semantic chrome slots (background, surface, panel, border,
+            selection, accent, foreground, success/warning/error, scrollbar …)
+captures    map[capture]color   defaults for internal/highlight (keyword, string …)
+files       map[glob|ext]color  defaults for internal/explorer (dir, go, md …)
 ```
 
-- `internal/theme` is **leaf-level** — it depends on lipgloss and nothing else
-  in IKE, so any pane package can import it without a cycle (same rule as
-  `internal/config`).
-- Renderers receive a `*theme.Palette` (or pull semantic colors from it); they
-  **never** write `lipgloss.Color("69")` literals anymore. The palette caches
-  the lipgloss styles so re-render is cheap.
-- Theme names cross the plugin/Wasm boundary as plain data (just the palette
-  map), keeping 9900's Wasm bridge trivial.
+Resolution / precedence (lowest → highest):
+
+```
+palette (named theme)  <  user config  <  project config
+   ui.*                    (future chrome keys)
+   captures.*        <     theme.captures.<name>
+   files.*           <     [explorer.colors]
+```
+
+- `internal/theme` is **leaf-level** (lipgloss only) so `highlight`, `explorer`,
+  `app`, `editor` all import it without a cycle — same rule as `internal/config`.
+- `highlight.NewTheme` / explorer `colorTable` keep their config-override APIs;
+  only their **default source** changes to the active palette's `captures`/`files`.
 
 ## Design rules
 
-- **Semantic, not literal.** Code asks for `palette.Accent()` /
-  `palette.Border()`, never a raw color number. The current hard-coded literals
-  (`"69"`, `"236"`, `"240"`, `"39"`, `"215"`, …) map onto semantic slots during
-  the migration; the literal disappears.
-- **Every theme defines every required slot.** A theme missing a required slot
-  is a validation error → it falls back to `default` with a non-fatal
-  diagnostic (bad theme must never crash the IDE — mirrors 0040's clamp-and-warn
-  rule). `variables` are optional extras; a missing variable falls back to a
-  sensible base slot.
-- **One selector, lower-cased names.** `[theme] name = "tokyo-night"`. Unknown
-  name → `default` + warning. `dark` in config is advisory; the resolved theme's
-  own `dark` flag wins for any light/dark-dependent decision.
-- **24-bit with graceful degradation.** Palettes are authored as hex
-  (`#1A1B26`); lipgloss adapts to the terminal's color depth. Do not pre-bake
-  256-color fallbacks by hand.
-- **Live switch, no restart.** Changing the theme (config reload or a future
-  command) emits a re-theme `tea.Msg`; the root rebuilds the palette once and
-  re-threads it. No global mutable singleton read mid-render.
-- **Extension without edits.** New palettes are added by registering a `Theme`
-  through the plugin registry, not by editing `builtins.go`. Built-ins are just
-  the first registered provider.
-- **Syntax colors are a sub-slot, not a second system.** Editor token colors
-  (keyword/string/comment/number/type/function) live in `syntax.go` as a named
-  slot group derived from the active theme, so a theme switch recolors syntax
-  too. Concrete tree-sitter/LSP token wiring stays with the editor roadmap (0060)
-  — this roadmap owns the slot names + default mapping only.
+- **One name, coherent recolor.** `[theme].name = "nord"` sets ui + captures +
+  files defaults together. Per-key config (`theme.captures.*`, `[explorer.colors]`)
+  still wins on top, so existing user overrides keep working unchanged.
+- **Unknown name → `default` + non-fatal warning.** A bad/missing palette must
+  never crash or blank the IDE (mirrors 0040's clamp-and-warn).
+- **One resolver.** Collapse the duplicated `namedColors` + `resolveColor`/`color`
+  into `theme.resolve`; `highlight` and `explorer` call it. Named tokens, hex, and
+  raw ANSI indices all keep working.
+- **Chrome reads slots, not literals.** The scattered hex (`#121212`, `#585858`,
+  `#303030`, `#5f87ff`, `#ffaf5f`, `#005f87`, diagnostic colors, …) maps onto
+  semantic ui slots and disappears. `app.appBackground`/`appForeground` become the
+  palette's `background`/`foreground`.
+- **Backgrounds are painted per surface, never once at the root.** A single outer
+  `Background(...)` wrapper does **not** color pane interiors or overlays —
+  lipgloss leaves already-rendered inner cells at their default background, so the
+  terminal background bleeds through (the bug above). Every surface fills its own
+  rectangle with the palette background/surface: each pane body (editor, explorer)
+  paints `surface`; dividers/gaps paint `background`; every overlay (floating
+  shell, command palette, LSP popups, ghost/move preview) paints an opaque
+  `surface`/`panel` before compositing, so nothing shows the terminal background.
+  Pane bodies must pad every line to full width/height so no cell is left unpainted.
+- **24-bit, graceful degrade.** Palettes authored as hex; lipgloss adapts to the
+  terminal's depth. No hand-rolled 256-color fallbacks.
+- **Live switch, no restart.** A config reload emits the existing
+  `ConfigReloadedMsg`; the root rebuilds the palette once and re-threads it. No
+  global mutable color singleton read mid-render.
+- **Extension without edits.** New palettes register through the plugin registry,
+  not by editing `builtins.go`. Built-ins are just the first provider.
+- **`dark` follows the palette.** The resolved theme's own `dark` flag wins over
+  the advisory config `dark` for any light/dark decision.
 
 ## Built-in palettes (initial set)
 
-Port from the proven sqlit / Textual set so users get good defaults day one:
+Ported from the proven sqlit / Textual set so users get good defaults day one:
 
-- `default` — IKE's current colors, re-expressed as semantic slots (the
-  migration target; visually unchanged).
+- `default` — today's colors (current `defaultCaptures`, `defaultColors`, and the
+  chrome literals) re-expressed as one palette; visually unchanged.
 - `tokyo-night` (dark) — bg `#1A1B26`, surface `#24283B`, panel `#414868`,
   fg `#a9b1d6`, accent `#7FA1DE`.
 - `nord` (dark).
@@ -131,27 +149,28 @@ Port from the proven sqlit / Textual set so users get good defaults day one:
 - `rose-pine` (dark) + `rose-pine-dawn` (light).
 - `catppuccin-mocha` (dark) + `catppuccin-latte` (light).
 
-Each is one `Theme{}` literal in `builtins.go`; hex values taken from the
-upstream palette definitions.
+Each is one `Theme{}` literal in `builtins.go` supplying ui + captures + files.
 
 ## Milestones
 
-- [ ] `internal/theme` skeleton: `Theme` struct (semantic slots + `variables` + `dark`) and a `Color`/`Palette` type with cached lipgloss styles.
-- [ ] `builtins.go`: `default` theme expressing today's literal colors as semantic slots — visually identical to current IKE.
-- [ ] Additional built-ins: `tokyo-night`, `nord`, `gruvbox`(+light), `rose-pine`(+dawn), `catppuccin-mocha`(+latte), ported from the sqlit/Textual palettes.
-- [ ] `registry.go`: name→`Theme` lookup with fallback-to-`default`; merge themes registered via the plugin registry.
-- [ ] Plugin contract: add additive `Capabilities.Themes []Theme`; ship built-ins as a compile-in theme plugin registered in `init()`.
-- [ ] Wire selection: read `config.Get().Theme.Name`, resolve to a `*Palette`, thread it from the `internal/app` root into every pane.
-- [ ] Migrate renderers off literals: `internal/app`, `internal/explorer`, `internal/editor`, `internal/help`, `internal/ui`, `internal/overlay` consume `*Palette`.
-- [ ] Live re-theme: emit/route a re-theme `tea.Msg` on config reload; root rebuilds the palette once and re-renders.
-- [ ] `syntax.go`: editor syntax slot group (keyword/string/comment/number/type/function) derived from the active theme; default mapping committed.
-- [ ] Validation: every built-in defines every required slot; missing slot → fallback + non-fatal diagnostic. Table-driven tests.
-- [ ] Wiki: document the theme model (semantic slots, the sqlit/Textual lineage), how to select a theme, the built-in list, and how a plugin registers a custom theme.
+- [ ] `internal/theme` skeleton: `Theme` (ui slots + `captures` + `files` + `dark`) and a `Palette` type with cached lipgloss styles.
+- [ ] `resolve.go`: single color-token resolver (name/hex/ANSI); delete the duplicated `namedColors`+resolver from `highlight/theme.go` and `explorer/colors.go`, route both through it.
+- [ ] `default` palette: capture today's `defaultCaptures`, `defaultColors`, and chrome literals verbatim — pixel-identical to current IKE.
+- [ ] Additional built-ins: `tokyo-night`, `nord`, `gruvbox`(+light), `rose-pine`(+dawn), `catppuccin-mocha`(+latte).
+- [ ] `registry.go`: name→`Theme` lookup with fallback-to-`default`+warning; merge plugin-registered themes.
+- [ ] Plugin contract: additive `Capabilities.Themes []Theme`; ship built-ins as a compile-in theme plugin registered in `init()`.
+- [ ] Wire the selector: read `config.Get().Theme.Name`, resolve a `*Palette`, thread from `internal/app` into panes.
+- [ ] Feed existing color models: `highlight.NewTheme` and explorer `colorTable` take their **defaults** from the palette's `captures`/`files`; `theme.captures.*` and `[explorer.colors]` still override.
+- [ ] Migrate chrome off literals: `internal/app`, `internal/explorer`, `internal/editor` (status bar, borders, selection, scrollbars, LSP popups/diagnostics) read ui slots.
+- [ ] Fix the background bleed: paint each surface's own rectangle — pane bodies fill `surface` and pad lines to full width/height; dividers/gaps fill `background`; the floating shell, command palette, and LSP popups paint an opaque `surface`/`panel` before compositing. No cell shows the terminal background.
+- [ ] Live re-theme: rebuild the palette on `ConfigReloadedMsg` and re-render.
+- [ ] Validation + tests: every built-in defines every required ui slot; missing → fallback + diagnostic. Table tests for lookup, fallback, and override precedence (palette < config).
+- [ ] Wiki: update `architecture/themes.md` — model, sqlit/Textual lineage, the three color groups, selection, built-in list, plugin registration.
 
 ## Out of scope
 
-- Per-language tree-sitter / LSP token classification and highlight wiring — **Roadmap 0060** (this roadmap owns the syntax *slot names* + default mapping only).
-- A theme-picker UI / live preview palette in the command palette — a later UX pass (palette infra is 0070); selection here is config-driven.
-- User-authored theme files on disk as a first-class feature (`load.go` is a thin optional hook); the supported path is config name + registered palettes.
-- Writing the selected theme back to config — config write path lives with 0040/0090.
-- Image/true-color terminal capability detection beyond what lipgloss already provides.
+- Tree-sitter grammar / capture *classification* and the highlight pipeline — owned by **0100/0105**; this roadmap only supplies capture-color **defaults**.
+- Explorer file-color *resolution logic* (glob/ext ordering) — owned by **0050**; this roadmap only supplies file-color **defaults** + the shared resolver.
+- A theme-picker UI / live preview in the command palette (0070) — later UX pass; selection here is config-driven.
+- User-authored theme files on disk as a first-class feature; supported path is a config name + registered palettes.
+- Writing the selected theme back to config — write path lives with 0040/0090.

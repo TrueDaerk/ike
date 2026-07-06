@@ -1437,6 +1437,15 @@ func (m Model) View() tea.View {
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
 	v.KeyboardEnhancements.ReportEventTypes = true
+	// Set the screen-wide default background/foreground at the renderer level.
+	// A pane body's inner styled spans (syntax colors, selection) emit a full SGR
+	// reset ("\x1b[m") after each span, which clears any background set by an
+	// enclosing lipgloss style — so wrapping the composed frame in a Background
+	// style leaves pane interiors, overlays, and the floating shell showing the
+	// raw terminal background. Setting it here makes the terminal's *default*
+	// background equal appBackground, so every reset falls back to it instead.
+	v.BackgroundColor = lipgloss.Color(appBackground)
+	v.ForegroundColor = lipgloss.Color(appForeground)
 	return v
 }
 
@@ -1476,6 +1485,16 @@ func (m Model) compositeLSPPopups(base string) string {
 
 // render composes the full frame as a styled string: the pane tree, the status
 // line, and any floating overlay (move ghost, palette, modal shell) on top.
+// appBackground and appForeground are the default colors painted behind and
+// under the whole screen, regardless of the terminal's own theme: a dark
+// background keeps ike legible on light-themed terminals, and an explicit
+// light foreground keeps unstyled text readable against it (nested styles
+// elsewhere still win over these defaults).
+const (
+	appBackground = "#121212"
+	appForeground = "#d0d0d0"
+)
+
 func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
@@ -1486,18 +1505,25 @@ func (m Model) render() string {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
 	base = m.compositeLSPPopups(base)
-	if m.palette.IsOpen() {
+	result := base
+	switch {
+	case m.palette.IsOpen():
 		v := m.palette.View()
 		if m.palette.Anchored() {
 			x, y := m.palette.AnchorPos()
-			return overlay.Place(base, v, x, y, m.width, m.height)
+			result = overlay.Place(base, v, x, y, m.width, m.height)
+		} else {
+			result = overlay.Center(base, v, m.width, m.height)
 		}
-		return overlay.Center(base, v, m.width, m.height)
+	case m.shell.IsOpen():
+		result = overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
-	if m.shell.IsOpen() {
-		return overlay.Center(base, m.shell.View(), m.width, m.height)
-	}
-	return base
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(appBackground)).
+		Foreground(lipgloss.Color(appForeground)).
+		Width(m.width).
+		Height(m.height).
+		Render(result)
 }
 
 // moveGhost computes the preview box for an in-flight move. Onto another pane it

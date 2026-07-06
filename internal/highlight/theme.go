@@ -9,18 +9,20 @@ import (
 
 // namedColors maps the human colour names the config accepts to lipgloss colour
 // values. Anything not found here is passed to lipgloss verbatim, so hex
-// ("#1f6feb") and raw ANSI indices ("39") work too. Mirrors explorer/colors.go.
+// ("#1f6feb") and raw ANSI indices ("39") work too. Mirrors explorer/colors.go:
+// bright, high-contrast tones since these sit on the app's dark default
+// background (see internal/app.appBackground).
 var namedColors = map[string]string{
 	"black":   "#000000",
-	"red":     "#800000",
-	"green":   "#008000",
-	"yellow":  "#808000",
-	"blue":    "#000080",
-	"magenta": "#800080",
-	"cyan":    "#008080",
-	"white":   "#c0c0c0",
-	"gray":    "#585858",
-	"grey":    "#585858",
+	"red":     "#ff5555",
+	"green":   "#5fd75f",
+	"yellow":  "#ffd75f",
+	"blue":    "#5fafff",
+	"magenta": "#d787ff",
+	"cyan":    "#5fd7d7",
+	"white":   "#e4e4e4",
+	"gray":    "#8a8a8a",
+	"grey":    "#8a8a8a",
 	"orange":  "#ff8700",
 }
 

@@ -32,11 +32,11 @@ func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
 		isDir bool
 		want  string // resolved foreground (lipgloss color value)
 	}{
-		{"main.go", false, "#008080"},      // ext "go" -> cyan
-		{"main.test.go", false, "#800080"}, // glob "*.test.go" wins over ext "go" -> magenta
-		{"sub", true, "#000080"},           // dir -> blue
-		{"README", false, "#c0c0c0"},       // no ext, no glob -> default white
-		{"notes.txt", false, "#c0c0c0"},    // unknown ext -> default white
+		{"main.go", false, "#5fd7d7"},      // ext "go" -> cyan
+		{"main.test.go", false, "#d787ff"}, // glob "*.test.go" wins over ext "go" -> magenta
+		{"sub", true, "#5fafff"},           // dir -> blue
+		{"README", false, "#e4e4e4"},       // no ext, no glob -> default white
+		{"notes.txt", false, "#e4e4e4"},    // unknown ext -> default white
 	}
 	for _, c := range cases {
 		n := &node{name: c.name, isDir: c.isDir}
@@ -162,7 +162,7 @@ func TestConfigureReadsExplorerSection(t *testing.T) {
 	if m.indent != 4 {
 		t.Errorf("indent = %d want 4", m.indent)
 	}
-	if got := fg(m.colors.style(&node{name: "x.go"})); got != "#800000" {
-		t.Errorf("go colour = %q want #800000 (red)", got)
+	if got := fg(m.colors.style(&node{name: "x.go"})); got != "#ff5555" {
+		t.Errorf("go colour = %q want #ff5555 (red)", got)
 	}
 }
