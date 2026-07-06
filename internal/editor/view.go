@@ -39,6 +39,14 @@ func (m *Model) MouseClick(x, y int) {
 	m.emit(EventCursorMove)
 }
 
+// ScrollBy moves the viewport by delta lines (positive down, negative up)
+// without moving the cursor, clamped to the buffer — a mouse-wheel scroll,
+// independent of mode. Vertical only; horizontal scroll rides the cursor via
+// MouseClick/motions.
+func (m *Model) ScrollBy(delta int) {
+	m.SetScroll(m.view.Top+delta, m.view.Left)
+}
+
 // CommandLine returns the text shown on the command line: ":cmd" in ex mode or
 // "/pat" / "?pat" while searching. It is "" outside command mode.
 func (m Model) CommandLine() string {

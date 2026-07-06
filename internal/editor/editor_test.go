@@ -3,6 +3,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -313,6 +314,45 @@ func TestMouseClickClampsToLineInNormal(t *testing.T) {
 	m.MouseClick(50, 0)    // far past line end
 	if m.cursor.Col != 1 { // normal mode snaps onto last rune
 		t.Fatalf("normal click col=%d want 1", m.cursor.Col)
+	}
+}
+
+func TestScrollByMovesViewportNotCursor(t *testing.T) {
+	lines := strings.Repeat("x\n", 100)
+	m, _ := loaded(t, lines)
+	m.SetSize(80, 10)
+	cursorBefore := m.cursor
+	m.ScrollBy(5)
+	if m.view.Top != 5 {
+		t.Fatalf("Top = %d want 5", m.view.Top)
+	}
+	if m.cursor != cursorBefore {
+		t.Fatalf("cursor moved to %v, wheel scroll must not move it", m.cursor)
+	}
+	m.ScrollBy(-100) // cannot scroll above the top
+	if m.view.Top != 0 {
+		t.Fatalf("Top = %d want 0", m.view.Top)
+	}
+	m.ScrollBy(1000) // clamps to the last line
+	if m.view.Top != m.buf.LineCount()-1 {
+		t.Fatalf("Top = %d want %d (max)", m.view.Top, m.buf.LineCount()-1)
+	}
+}
+
+func TestScrollByWorksInInsertMode(t *testing.T) {
+	lines := strings.Repeat("x\n", 100)
+	m, _ := loaded(t, lines)
+	m.SetSize(80, 10)
+	m, _ = m.Update(key('i')) // enter insert mode
+	if m.ModeName() != Insert {
+		t.Fatal("setup: expected insert mode")
+	}
+	m.ScrollBy(5)
+	if m.view.Top != 5 {
+		t.Fatalf("Top = %d want 5 (scroll must work regardless of mode)", m.view.Top)
+	}
+	if m.ModeName() != Insert {
+		t.Fatal("scrolling must not leave insert mode")
 	}
 }
 

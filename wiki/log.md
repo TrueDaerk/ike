@@ -2,6 +2,11 @@
 
 ## 2026-07-06
 
+- Editor: mouse wheel now scrolls the viewport (`editor.ScrollBy`, wired in
+  `app.handleMouse`'s `mouseWheel` case for `pane.KindEditor`), independent of
+  vim mode — it moves `view.Top` directly instead of the cursor, so it works
+  the same in Normal/Insert/Visual/etc. Previously only the explorer pane
+  handled the wheel.
 - Roadmap 0050 (File Explorer) file-operations milestone completed: added
   `explorer.rename` (prompt prefilled with the current name, `R` default key) to
   the existing create/delete/undo set. Rename is not on the undo stack (rename

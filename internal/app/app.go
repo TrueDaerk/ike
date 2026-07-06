@@ -1266,7 +1266,16 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	shift := msg.Mod&tea.ModShift != 0
 	if msg.action == mouseWheel {
-		if p, ok := m.lay.PaneAt(msg.X, msg.Y); ok && p == pane.ExplorerKey {
+		key, ok := m.lay.PaneAt(msg.X, msg.Y)
+		if !ok {
+			return m, nil
+		}
+		inst := m.panes.Get(key)
+		if inst == nil {
+			return m, nil
+		}
+		switch inst.Kind() {
+		case pane.KindExplorer:
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
 				m.explorer().ScrollXBy(-wheelLines)
@@ -1280,6 +1289,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.explorer().ScrollBy(-wheelLines)
 			case msg.Button == tea.MouseWheelDown:
 				m.explorer().ScrollBy(wheelLines)
+			}
+		case pane.KindEditor:
+			// Scrolls the viewport regardless of mode (normal, insert,
+			// visual, …); the cursor stays put until the user clicks or moves.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Editor().ScrollBy(-wheelLines)
+			case tea.MouseWheelDown:
+				inst.Editor().ScrollBy(wheelLines)
 			}
 		}
 		return m, nil

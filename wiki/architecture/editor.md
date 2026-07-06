@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-06-24T00:00:00Z
+timestamp: 2026-07-06T00:00:00Z
 ---
 
 # Editor
@@ -71,7 +71,10 @@ cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and
 `d c y` `>` `<` and `p` (replace selection from a register) consume it.
 
 Mouse: clicking the editor focuses it and `MouseClick` maps the cell — through
-the gutter width and scroll offsets — to the cursor.
+the gutter width and scroll offsets — to the cursor. The wheel scrolls the
+viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
+buffer) without touching the cursor or mode — it works the same in Normal,
+Insert, Visual, etc., unlike the vim-motion scroll commands.
 
 ## Config
 
