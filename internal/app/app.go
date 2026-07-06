@@ -44,7 +44,8 @@ const (
 const (
 	explorerWidth = 30 // outer width of the explorer pane (border included)
 	statusHeight  = 1
-	paneChrome    = 4 // border (2) + padding (2) per pane, horizontal and vertical-ish
+	paneChromeW   = 4 // horizontal: left+right border (2) + left+right padding (2)
+	paneChromeH   = 3 // vertical: top+bottom border (2) + title row (1); no vertical padding
 	paneContentX  = 2 // left border (1) + left padding (1) before pane content
 	paneContentY  = 2 // top border (1) + title row (1) before pane content
 	wheelLines    = 3 // rows a single mouse-wheel notch scrolls
@@ -1237,7 +1238,7 @@ func (m *Model) layout() {
 		if inst == nil {
 			continue
 		}
-		inst.SetSize(paneInterior(r.W), paneInterior(r.H))
+		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH))
 		if inst.Kind() == pane.KindEditor && m.pendingScroll != nil && m.pendingScroll.key == key {
 			inst.Editor().SetScroll(m.pendingScroll.top, m.pendingScroll.left)
 			m.pendingScroll = nil
@@ -1246,9 +1247,10 @@ func (m *Model) layout() {
 	m.syncFocus()
 }
 
-// paneInterior maps an outer pane dimension to the content area.
-func paneInterior(outer int) int {
-	if v := outer - paneChrome; v >= 1 {
+// paneInterior maps an outer pane dimension to the content area, subtracting the
+// chrome for that axis (paneChromeW horizontally, paneChromeH vertically).
+func paneInterior(outer, chrome int) int {
+	if v := outer - chrome; v >= 1 {
 		return v
 	}
 	return 1
