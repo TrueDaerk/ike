@@ -131,7 +131,7 @@ func TestRefreshPicksUpNewFile(t *testing.T) {
 func TestCommandsRegistered(t *testing.T) {
 	r := registry.New()
 	r.Add(corePlugin{})
-	for _, id := range []string{"explorer.toggleHidden", "explorer.refresh", "explorer.collapseAll", "explorer.reveal"} {
+	for _, id := range []string{"explorer.toggleHidden", "explorer.refresh", "explorer.collapseAll", "explorer.reveal", "explorer.newFile", "explorer.newFolder", "explorer.delete", "explorer.rename", "explorer.undo"} {
 		if _, ok := r.Command(id); !ok {
 			t.Errorf("command %q not registered", id)
 		}
@@ -139,6 +139,9 @@ func TestCommandsRegistered(t *testing.T) {
 	// the default keymaps resolve within the explorer context.
 	if _, ok := r.ResolveKey(".", ctxID); !ok {
 		t.Error("toggleHidden key not bound in explorer context")
+	}
+	if _, ok := r.ResolveKey("R", ctxID); !ok {
+		t.Error("rename key not bound in explorer context")
 	}
 	// and the binding is discoverable by command id, so help can show the key.
 	if got, ok := r.Binding("explorer.toggleHidden"); !ok || got != "." {

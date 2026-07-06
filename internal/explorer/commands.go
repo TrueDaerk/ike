@@ -34,6 +34,7 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.newFile", "Explorer: New File", NewFileMsg{}),
 			cmd("explorer.newFolder", "Explorer: New Folder", NewDirMsg{}),
 			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
+			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
 			cmd("explorer.undo", "Explorer: Undo File Operation", UndoMsg{}),
 		},
 		Keymaps: []plugin.Keymap{
@@ -43,6 +44,7 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("a", "explorer.newFile", NewFileMsg{}),
 			keymap("A", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
+			keymap("R", "explorer.rename", RenameMsg{}),
 		},
 	}
 }

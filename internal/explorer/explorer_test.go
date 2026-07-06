@@ -44,13 +44,24 @@ func mustWrite(t *testing.T, path, content string) {
 // still inspect an OpenFileMsg. Directory scans are a tea.Cmd now, so tests must
 // pump them to observe loaded children.
 func pumpScans(m Model, cmd tea.Cmd) (Model, tea.Cmd) {
-	for cmd != nil {
+	pending := []tea.Cmd{cmd}
+	for len(pending) > 0 {
+		cmd, pending = pending[0], pending[1:]
+		if cmd == nil {
+			continue
+		}
 		msg := cmd()
 		if msg == nil {
-			return m, nil
+			continue
+		}
+		if batch, ok := msg.(tea.BatchMsg); ok {
+			pending = append(pending, batch...)
+			continue
 		}
 		if sd, ok := msg.(ScanDoneMsg); ok {
-			m, cmd = m.Update(sd)
+			var next tea.Cmd
+			m, next = m.Update(sd)
+			pending = append(pending, next)
 			continue
 		}
 		return m, func() tea.Msg { return msg }
@@ -157,6 +168,149 @@ func TestUndoCreateDeletesFile(t *testing.T) {
 	m, _ = send(m, key("y")) // confirm undo-create
 	if _, err := os.Stat(filepath.Join(root, "tmp.txt")); !os.IsNotExist(err) {
 		t.Fatalf("tmp.txt should be removed by undo, err=%v", err)
+	}
+}
+
+func TestRenamePrefillsAndRenames(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if !m.Prompting() {
+		t.Fatal("expected rename prompt to open")
+	}
+	if m.prompt.input != "a.txt" {
+		t.Fatalf("prompt input = %q want prefilled %q", m.prompt.input, "a.txt")
+	}
+	// clear the prefilled name and type a new one.
+	for range "a.txt" {
+		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m, _ = send(m, key("renamed.txt"), key("enter"))
+	if m.Prompting() {
+		t.Fatal("prompt should close on submit")
+	}
+	if _, err := os.Stat(filepath.Join(root, "renamed.txt")); err != nil {
+		t.Fatalf("renamed.txt not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); !os.IsNotExist(err) {
+		t.Fatalf("a.txt should no longer exist, err=%v", err)
+	}
+	if c := m.current(); c == nil || c.name != "renamed.txt" {
+		t.Fatalf("cursor not on renamed file: %v", names(m))
+	}
+}
+
+func TestRenameArrowKeysMoveCursor(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if m.prompt.pos != len("a.txt") {
+		t.Fatalf("pos = %d want %d (end)", m.prompt.pos, len("a.txt"))
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if m.prompt.pos != len("a.txt")-2 {
+		t.Fatalf("pos after 2x left = %d want %d", m.prompt.pos, len("a.txt")-2)
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	if m.prompt.pos != 0 {
+		t.Fatalf("pos after Home = %d want 0", m.prompt.pos)
+	}
+	// typing at pos 0 inserts before the existing text.
+	m, _ = send(m, key("x"))
+	if m.prompt.input != "xa.txt" || m.prompt.pos != 1 {
+		t.Fatalf("input = %q pos = %d, want %q pos 1", m.prompt.input, m.prompt.pos, "xa.txt")
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	if m.prompt.pos != len("xa.txt") {
+		t.Fatalf("pos after End = %d want %d", m.prompt.pos, len("xa.txt"))
+	}
+	// forward-delete at End is a no-op; Left then Delete removes "t".
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if m.prompt.input != "xa.tx" {
+		t.Fatalf("input after Left+Delete = %q want %q", m.prompt.input, "xa.tx")
+	}
+}
+
+func TestPromptMouseClickMovesCursor(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	bx, by, _, _, ok := m.promptBoxOrigin()
+	if !ok {
+		t.Fatal("expected prompt box to fit the pane")
+	}
+	inputRow := by + 2
+	textX := bx + 2 + len(promptInputPrefix)
+	m.PromptMouseClick(textX+2, inputRow)
+	if m.prompt.pos != 2 {
+		t.Fatalf("pos after click at col 2 = %d want 2", m.prompt.pos)
+	}
+	// clicking past the end of the text clamps to the text length.
+	m.PromptMouseClick(textX+999, inputRow)
+	if m.prompt.pos != len("a.txt") {
+		t.Fatalf("pos after far click = %d want %d", m.prompt.pos, len("a.txt"))
+	}
+	// clicking off the input row is a no-op.
+	m.PromptMouseClick(textX+2, inputRow+1)
+	if m.prompt.pos != len("a.txt") {
+		t.Fatalf("click off input row should not move cursor, pos = %d", m.prompt.pos)
+	}
+}
+
+func TestRenameEscCancels(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.Prompting() {
+		t.Fatal("esc should cancel the rename prompt")
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("a.txt must survive a cancelled rename: %v", err)
+	}
+}
+
+func TestRenameToExistingNameErrors(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	for range "a.txt" {
+		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m, _ = send(m, key("b.txt"), key("enter"))
+	if m.err == nil {
+		t.Fatal("expected an error renaming onto an existing name")
+	}
+	if _, err := os.Stat(filepath.Join(root, "a.txt")); err != nil {
+		t.Fatalf("a.txt should be untouched: %v", err)
+	}
+}
+
+func TestRenameRootIsNoOp(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = m.Update(RenameMsg{}) // cursor starts on root
+	if m.Prompting() {
+		t.Fatal("renaming the root should be a no-op")
 	}
 }
 

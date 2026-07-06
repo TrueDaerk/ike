@@ -116,9 +116,9 @@ selects the within-level ordering (`name` today).
 - [x] Per-filetype colours: parse `[explorer.colors]`, glob-then-extension-then-fallback resolution in `colors.go`.
 - [x] Rendering: indent guides, expand/collapse glyphs, colour applied, selected-row highlight.
 - [x] Registry commands + default keymaps: `reveal`, `refresh`, `collapseAll`, `toggleHidden` registered via `internal/registry`.
-- [ ] File operations (optional): `newFile`, `rename`, `delete` as commands with confirmation msgs; refresh affected subtree afterward.
+- [x] File operations (optional): `newFile`, `rename`, `delete` as commands with confirmation msgs; refresh affected subtree afterward.
 - [x] Refresh: invalidate cache for selected subtree (or root) and re-scan, preserving expansion where possible.
-- [x] Tests: navigation, expand/collapse, flatten correctness, no-`..` invariant, hidden toggle, colour resolution (glob/ext/fallback), command registration, file-op round-trips. *(file-op tests deferred with the optional file-ops milestone)*
+- [x] Tests: navigation, expand/collapse, flatten correctness, no-`..` invariant, hidden toggle, colour resolution (glob/ext/fallback), command registration, file-op round-trips.
 - [x] Wiki: add/refresh the explorer concept doc under `wiki/` (frontmatter `type`, `resource: internal/explorer`), document the `[explorer]` config keys, bump `timestamp`, add a `log.md` entry.
 
 ## Out of scope

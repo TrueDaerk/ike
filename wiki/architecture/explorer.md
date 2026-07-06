@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-06-24T00:00:00Z
+timestamp: 2026-07-06T00:00:00Z
 ---
 
 # File Explorer
@@ -96,6 +96,7 @@ these are defaults.
 | `explorer.newFile` | `a` | prompt for a name, create an empty file (`NewFileMsg`) |
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
+| `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation after confirmation (`UndoMsg`) |
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
@@ -104,13 +105,33 @@ node.
 
 ## File operations
 
-`fileops.go` adds create / delete / undo on top of navigation. Each step that
+`fileops.go` adds create / rename / delete / undo on top of navigation. Each step that
 mutates the filesystem is gated behind a **modal prompt** (`Model.prompt`):
 `promptInput` reads a filename (Enter accepts, Esc cancels), `promptConfirm`
 reads a yes/no answer (`y`/Enter accept, anything else cancels). While a prompt
 is open `Prompting()` is true, and the root model routes every key straight to
 the explorer (ahead of the keymap and global layers) so typed names and answers
 are not stolen by other bindings.
+
+A `promptInput`'s text carries a rune-index cursor (`prompt.pos`), not just
+append/backspace at the end: `Left`/`Right` step it, `Home`/`End` jump it,
+`Delete` removes forward, and typed text/`Backspace` act at `pos` rather than
+always at the string's end (rename starts with `pos` at the end of the
+prefilled name). The cursor cell itself is reverse-video (`promptCursorStyle`)
+over the rune already there (a blank cell past the last rune), not an inserted
+caret glyph — so it never shifts the surrounding text as it moves.
+
+`View` overlays the box via `overlay.Center(out, m.promptBox(), m.width,
+m.height)` — the explorer's **own** `m.width`/`m.height` (its pane content
+area), not the full terminal, since `out` here is the explorer's own rendered
+tree. So the box is centered within the pane, not the screen. Mouse clicks
+must land in the same content-local space `MouseClick` uses:
+`promptBoxOrigin()` recomputes that centering math with the model's own
+dimensions, and `PromptMouseClick(x, y)` maps a content-local click on the
+input row to a `pos`. The app computes those content-local coordinates itself
+(pane rect + `paneContentX`/`paneContentY`, same as a normal pane click) and
+routes mouse presses there instead of through the normal pane hit-test
+whenever `explorerCapturing()` is true (explorer focused with a prompt open).
 
 New entries are created next to the selection — inside the selected directory, or
 beside the selected file. Deletes do not `os.Remove`; they move the entry into a
@@ -121,11 +142,16 @@ it. Completed operations are pushed onto a linear undo stack (`ops`):
 - **Undo of a create** removes the entry it added.
 - **Undo of a delete** moves the trashed entry back to its original path.
 
-Removing a path (a delete, or undo of a create) emits `FileDeletedMsg`, which the
-root model handles by closing any editor still open on that file (or, for a
-directory, any file beneath it) — so a deleted file never lingers in an open
-pane. Unlike the other explorer messages, `FileDeletedMsg` is handled by the app,
-not routed back into the explorer, so it deliberately does not implement `Msg`.
+Rename (`promptRename` / `renameEntry`) is a plain `os.Rename` within the same
+directory, prompted with the current name pre-filled; it is not on the undo
+stack (rename it back to undo). The root is never renameable, mirroring delete.
+
+Removing a path (a delete, a rename, or undo of a create) emits `FileDeletedMsg`,
+which the root model handles by closing any editor still open on that file (or,
+for a directory, any file beneath it) — so a deleted or renamed-away path never
+lingers in an open pane (the editor has no way to follow a rename in place).
+Unlike the other explorer messages, `FileDeletedMsg` is handled by the app, not
+routed back into the explorer, so it deliberately does not implement `Msg`.
 
 `Ctrl+Z` in the explorer context resolves to `explorer.undo`, mirroring the
 editor's `Ctrl+Z` text undo but operating on files. After any operation the

@@ -11,9 +11,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // promptKind selects how a prompt reads input: a free-text line, or a yes/no
@@ -27,11 +29,14 @@ const (
 
 // prompt is the explorer's modal overlay. accept runs on acceptance with the
 // trimmed input (empty for confirmations) and returns any Cmd the action needs
-// (typically a re-scan of the affected directory).
+// (typically a re-scan of the affected directory). pos is the cursor's rune
+// index into input (promptInput only); it starts at the end of any prefilled
+// text and can be moved with the arrow keys or a click.
 type prompt struct {
 	kind   promptKind
 	title  string
 	input  string
+	pos    int
 	accept func(m *Model, input string) tea.Cmd
 }
 
@@ -80,13 +85,33 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		return p.accept(m, name)
 	case msg.Code == tea.KeyEscape:
 		m.prompt = nil
+	case msg.Code == tea.KeyLeft:
+		if p.pos > 0 {
+			p.pos--
+		}
+	case msg.Code == tea.KeyRight:
+		if r := []rune(p.input); p.pos < len(r) {
+			p.pos++
+		}
+	case msg.Code == tea.KeyHome:
+		p.pos = 0
+	case msg.Code == tea.KeyEnd:
+		p.pos = len([]rune(p.input))
 	case msg.Code == tea.KeyBackspace:
-		if r := []rune(p.input); len(r) > 0 {
-			p.input = string(r[:len(r)-1])
+		if r := []rune(p.input); p.pos > 0 {
+			p.input = string(append(r[:p.pos-1:p.pos-1], r[p.pos:]...))
+			p.pos--
+		}
+	case msg.Code == tea.KeyDelete:
+		if r := []rune(p.input); p.pos < len(r) {
+			p.input = string(append(r[:p.pos:p.pos], r[p.pos+1:]...))
 		}
 	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		// Printable input, including a bare space (Text == " ").
-		p.input += msg.Text
+		// Printable input, including a bare space (Text == " "), inserted at pos.
+		r := []rune(p.input)
+		ins := []rune(msg.Text)
+		p.input = string(append(append(append([]rune{}, r[:p.pos]...), ins...), r[p.pos:]...))
+		p.pos += len(ins)
 	}
 	return nil
 }
@@ -209,6 +234,50 @@ func (m *Model) toTrash(path string) (string, error) {
 	return tp, nil
 }
 
+// promptRename opens the name prompt for renaming the selected entry, prefilled
+// with its current name. The root is never renameable.
+func (m *Model) promptRename() {
+	n := m.current()
+	if n == nil || n == m.root {
+		return
+	}
+	what := "file"
+	if n.isDir {
+		what = "folder"
+	}
+	path, isDir := n.path, n.isDir
+	m.prompt = &prompt{
+		kind:  promptInput,
+		title: fmt.Sprintf("Rename %s %q to:", what, n.name),
+		input: n.name,
+		pos:   len([]rune(n.name)),
+		accept: func(mm *Model, name string) tea.Cmd {
+			return mm.renameEntry(path, name, isDir)
+		},
+	}
+}
+
+// renameEntry moves path to a new name within the same directory and re-scans
+// it. Renaming a path with an editor open on it closes that editor, since the
+// editor has no way to follow the path change in place.
+func (m *Model) renameEntry(path, name string, isDir bool) tea.Cmd {
+	dir := filepath.Dir(path)
+	newPath := filepath.Join(dir, name)
+	if newPath == path {
+		return nil
+	}
+	if _, err := os.Lstat(newPath); err == nil {
+		m.err = fmt.Errorf("already exists: %s", name)
+		return nil
+	}
+	if err := os.Rename(path, newPath); err != nil {
+		m.err = err
+		return nil
+	}
+	m.pendingSel = newPath
+	return tea.Batch(m.refreshDir(dir), deletedCmd(path, isDir))
+}
+
 // promptUndo opens a confirmation for reversing the last file operation: delete
 // the last created entry, or restore the last deleted one. It is a no-op when the
 // undo stack is empty.
@@ -288,13 +357,31 @@ func (m *Model) refreshDir(dir string) tea.Cmd {
 	return scanCmd(dir)
 }
 
+// promptInputPrefix precedes the typed text on a promptInput's input row; its
+// width locates the text column for both rendering and click hit-testing.
+const promptInputPrefix = "> "
+
+// promptCursorStyle highlights the rune the input cursor sits on (reverse
+// video) rather than inserting a separate caret glyph, so the cursor overlays
+// a cell instead of pushing the text sideways as it moves.
+var promptCursorStyle = lipgloss.NewStyle().Reverse(true)
+
 // promptBox renders the active prompt as a bordered box for View to overlay.
+// The input row's cursor is drawn at p.pos by reverse-video-ing that cell,
+// keeping the line the same length as the text (no inserted caret rune).
 func (m Model) promptBox() string {
 	p := m.prompt
 	body := p.title
 	switch p.kind {
 	case promptInput:
-		body += "\n> " + p.input + "▏"
+		r := []rune(p.input)
+		before, after := string(r[:p.pos]), ""
+		cur := " " // past the last rune: a blank cursor cell
+		if p.pos < len(r) {
+			cur = string(r[p.pos])
+			after = string(r[p.pos+1:])
+		}
+		body += "\n" + promptInputPrefix + before + promptCursorStyle.Render(cur) + after
 	default:
 		body += "\n[y]es  [n]o"
 	}
@@ -303,6 +390,51 @@ func (m Model) promptBox() string {
 		BorderForeground(lipgloss.Color("#5f87ff")).
 		Padding(0, 1).
 		Render(body)
+}
+
+// promptBoxOrigin returns the content-local cell of the prompt box's
+// upper-left corner (border included), mirroring the centring math View uses
+// to overlay it via overlay.Center — which places it within the explorer's
+// own m.width/m.height, i.e. the pane's content area, not the full terminal.
+// ok is false when the box does not fit that area, in which case it is not
+// actually shown (Center falls back to the bare base).
+func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
+	box := m.promptBox()
+	lines := strings.Split(box, "\n")
+	h = len(lines)
+	for _, l := range lines {
+		if lw := ansi.StringWidth(l); lw > w {
+			w = lw
+		}
+	}
+	if box == "" || w > m.width || h > m.height {
+		return 0, 0, 0, 0, false
+	}
+	return (m.width - w) / 2, (m.height - h) / 2, w, h, true
+}
+
+// PromptMouseClick moves the text cursor of an open promptInput to the column
+// under a content-local click (the same coordinate space as MouseClick),
+// clamped to the input's text bounds. It is a no-op for promptConfirm (no
+// movable cursor), a click outside the input row, or when no prompt is open.
+func (m *Model) PromptMouseClick(x, y int) {
+	p := m.prompt
+	if p == nil || p.kind != promptInput {
+		return
+	}
+	bx, by, _, _, ok := m.promptBoxOrigin()
+	if !ok {
+		return
+	}
+	// border(1) + title line(1) = the input row; border(1) + padding(1) +
+	// the "> " prefix reach the text column.
+	inputRow := by + 2
+	textX := bx + 2 + len(promptInputPrefix)
+	if y != inputRow {
+		return
+	}
+	r := []rune(p.input)
+	p.pos = clamp(x-textX, 0, len(r))
 }
 
 // trimSpace trims leading/trailing ASCII spaces and tabs from a filename without

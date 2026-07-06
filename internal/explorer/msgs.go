@@ -29,6 +29,10 @@ type NewDirMsg struct{}
 // (explorer.delete).
 type DeleteMsg struct{}
 
+// RenameMsg prompts for a new name for the selected entry
+// (explorer.rename).
+type RenameMsg struct{}
+
 // UndoMsg reverses the last file operation, after confirmation: it deletes the
 // last created entry or restores the last deleted one (explorer.undo).
 type UndoMsg struct{}
@@ -49,4 +53,5 @@ func (RevealMsg) explorerMsg()       {}
 func (NewFileMsg) explorerMsg()      {}
 func (NewDirMsg) explorerMsg()       {}
 func (DeleteMsg) explorerMsg()       {}
+func (RenameMsg) explorerMsg()       {}
 func (UndoMsg) explorerMsg()         {}

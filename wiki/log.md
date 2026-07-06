@@ -2,6 +2,15 @@
 
 ## 2026-07-06
 
+- Roadmap 0050 (File Explorer) file-operations milestone completed: added
+  `explorer.rename` (prompt prefilled with the current name, `R` default key) to
+  the existing create/delete/undo set. Rename is not on the undo stack (rename
+  back to undo); it reuses `FileDeletedMsg` for the old path so the app closes any
+  editor open on it, since the editor can't follow a path change in place. Along
+  the way fixed a latent test-helper bug: `pumpScans` didn't unwrap `tea.BatchMsg`
+  (used by delete/rename's `tea.Batch(refreshDir, deletedCmd)`), so it silently
+  skipped the rescan — invisible before because no test asserted post-delete
+  row/cursor state. Roadmap 0050 is now fully checked off.
 - Roadmap 0110 (Themes) reworked to match landed reality. Syntax highlight (0100)
   and explorer file colors (0050) already ship config-driven color models with
   duplicated resolvers, and `[theme].name` is inert. 0110 now: activate

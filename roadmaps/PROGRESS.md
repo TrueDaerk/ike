@@ -11,7 +11,7 @@ One box per roadmap. Tick a roadmap once all its milestones are done.
 - [x] [03.6 — Pane Drag: Mouse Move, Resize & Layout Persistence](0036-pane-drag-layout.md)
 - [x] [03.7 — Pane Splitting, Multiple Editors & Open-in-New-Pane](0037-pane-splitting-multi-editor.md)
 - [x] [04 — Settings / Configuration](0040-settings.md)
-- [ ] [05 — File Explorer (full)](0050-file-explorer.md)
+- [x] [05 — File Explorer (full)](0050-file-explorer.md)
 - [x] [06 — Vim-Like Editor (full)](0060-vim-editor.md)
 - [x] [07 — Command Palette](0070-command-palette.md)
 - [x] [08 — Keybindings & Shortcuts](0080-keybindings.md)

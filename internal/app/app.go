@@ -1286,6 +1286,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	switch msg.action {
 	case mousePress:
+		if m.explorerCapturing() {
+			// The prompt floats centered within the explorer pane's own
+			// content area, so it reads the same content-local coordinates
+			// as a normal row click.
+			if r, ok := m.lay.Panes[pane.ExplorerKey]; ok {
+				m.explorer().PromptMouseClick(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
+			}
+			return m, nil
+		}
 		hit := m.lay.Hit(msg.X, msg.Y)
 		switch hit.Kind {
 		case layout.HitDivider:

@@ -292,6 +292,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case DeleteMsg:
 		m.promptDelete()
 		return m, nil
+	case RenameMsg:
+		m.promptRename()
+		return m, nil
 	case UndoMsg:
 		m.promptUndo()
 		return m, nil
