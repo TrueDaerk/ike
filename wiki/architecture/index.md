@@ -8,6 +8,7 @@ Component-level concepts for the IKE codebase.
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Configuration System](/architecture/config.md) - typed TOML config, defaults < user < project merge, validation, extension hook, host integration (Roadmap 0040)
 * [Help Overlay](/architecture/help-overlay.md) - command & shortcut cheat sheet, responsive columns, vertical scroll
+* [Notifications](/architecture/notifications.md) - toast notifications: severities, expiry, stacking, Esc dismissal
 * [Command Palette](/architecture/command-palette.md) - centered overlay fronting every action: ":" registry commands (context-ranked) + "@" fuzzy file finder, prefix-dispatched modes (Roadmap 0070)
 * [Keybindings & Shortcuts](/architecture/keybindings.md) - chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords + timeout, conflict detection, platform normalisation, cheatsheet (Roadmap 0080)
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)

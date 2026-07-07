@@ -66,6 +66,10 @@ type Model struct {
 	recentEditor string
 	host         *host.Host
 	reg          *registry.Registry
+	// toasts is the active notification stack (Roadmap 0130): drained from the
+	// host after every Update pass, rendered bottom-right above the status line.
+	toasts   []toast
+	toastSeq int
 	help         *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
@@ -596,7 +600,23 @@ func (m Model) Init() tea.Cmd {
 
 // Update owns global keys (quit, focus switch), routes open/close messages, and
 // forwards everything else to the focused pane.
+// Update handles one message and then drains any notifications the handling
+// raised (command Runs and routed updates call host.Notify synchronously), so
+// a toast appears in the very frame its event produced. updateMsg holds the
+// actual dispatch switch.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	tm, cmd := m.updateMsg(msg)
+	mm, ok := tm.(Model)
+	if !ok {
+		return tm, cmd
+	}
+	if tick := mm.drainNotifications(); tick != nil {
+		cmd = tea.Batch(cmd, tick)
+	}
+	return mm, cmd
+}
+
+func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -734,6 +754,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.closeFocused()
 		return m, nil
 
+	case toastExpireMsg:
+		m.expireToast(msg.id)
+		return m, nil
+
 	case keymapTimeoutMsg:
 		// A held partial chord timed out: resolve it as an exact binding if one
 		// exists (e.g. cmd+k alone → vcs.commit), else discard it.
@@ -745,6 +769,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// Esc dismisses persistent error toasts but keeps its normal meaning
+		// (pass-through) so it never costs an extra press elsewhere.
+		if msg.Code == tea.KeyEscape {
+			m.dismissErrorToasts()
+		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
 		}
@@ -1655,6 +1684,7 @@ func (m Model) render() string {
 	case m.shell.IsOpen():
 		result = overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
+	result = m.compositeToasts(result)
 	return lipgloss.NewStyle().
 		Background(m.pal().Background).
 		Foreground(m.pal().Foreground).

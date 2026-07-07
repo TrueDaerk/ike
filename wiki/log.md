@@ -2,6 +2,12 @@
 
 ## 2026-07-07
 
+- Notification toasts (#77, roadmap 0130): `host.Notify(severity, text)` queues
+  event messages the root model drains each Update pass and renders as
+  severity-colored toasts bottom-right above the status line — info/warn expire
+  (`notifications.timeout_seconds`, default 4s), errors persist until Esc
+  (pass-through). New concept doc `architecture/notifications.md`.
+
 - Language registry comment metadata (#74, roadmap 0120): `lang.Language` grows
   `LineComment`/`BlockComment`, `lang.Comments(path)` resolves the syntax per
   buffer path; go/php declare `//` + `/* */`, python `#`. Consumed by the

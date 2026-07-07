@@ -6,10 +6,28 @@
 package host
 
 import (
+	"sync"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
 )
+
+// Severity classifies a notification (Roadmap 0130). Info and Warn toasts
+// expire on their own; Error toasts persist until dismissed.
+type Severity int
+
+const (
+	Info Severity = iota
+	Warn
+	Error
+)
+
+// Notification is one Notify payload, drained and rendered by the root model.
+type Notification struct {
+	Severity Severity
+	Text     string
+}
 
 // API is everything a plugin may ask of the host. It intentionally stays small
 // and message-oriented so it ports to an out-of-process/Wasm bridge later.
@@ -34,6 +52,12 @@ type API interface {
 	Send(msg tea.Msg)
 	// SetStatus replaces the transient status-line text shown to the user.
 	SetStatus(text string)
+	// Notify raises a toast notification (Roadmap 0130): a short, event-like
+	// message with a severity. Info/Warn toasts expire on their own; Error
+	// toasts persist until the user dismisses them. Use Notify for events
+	// ("saved 3 files", "server crashed") and SetStatus only for persistent
+	// state segments.
+	Notify(sev Severity, text string)
 	// SetEditorEmitter registers the sink for editor lifecycle events (the LSP
 	// bridge, Roadmap 0100). The host forwards every editor change/cursor/
 	// completion signal to it; passing nil disables forwarding.
@@ -130,6 +154,11 @@ type Host struct {
 	status    string
 	send      func(tea.Msg)
 	edEmitter EditorEmitter
+
+	// Queued notifications awaiting the root model's drain. Guarded by mu:
+	// background workers (LSP goroutines) may Notify while Update drains.
+	mu            sync.Mutex
+	notifications []Notification
 }
 
 // New returns a Host backed by cfg. A nil cfg yields an empty configuration.
@@ -179,6 +208,27 @@ func (h *Host) Dispatch(msg tea.Msg) tea.Cmd {
 
 // SetStatus implements API.
 func (h *Host) SetStatus(text string) { h.status = text }
+
+// Notify implements API: it queues the notification for the root model, which
+// drains the queue after every Update pass (rendering and expiry live there).
+func (h *Host) Notify(sev Severity, text string) {
+	h.mu.Lock()
+	h.notifications = append(h.notifications, Notification{Severity: sev, Text: text})
+	h.mu.Unlock()
+}
+
+// DrainNotifications returns and clears the queued notifications, for the root
+// model. Safe to call from the Update loop while background workers Notify.
+func (h *Host) DrainNotifications() []Notification {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if len(h.notifications) == 0 {
+		return nil
+	}
+	out := h.notifications
+	h.notifications = nil
+	return out
+}
 
 // Config implements API.
 func (h *Host) Config() Config { return h.cfg }
