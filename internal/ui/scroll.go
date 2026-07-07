@@ -1,16 +1,16 @@
 package ui
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/viewport"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-)
 
-// indicatorColor is the dim foreground used for the scroll position bar.
-const indicatorColor = "#585858"
+	"ike/internal/theme"
+)
 
 // scroller wraps bubbles/viewport to scroll body content vertically when it is
 // taller than the visible area. It adds g/G (top/bottom) on top of the
@@ -20,6 +20,9 @@ const indicatorColor = "#585858"
 // overlay's one-off scroller).
 type scroller struct {
 	vp viewport.Model
+	// dim is the indicator foreground, set from the theme's Border slot; nil
+	// falls back to the default palette.
+	dim color.Color
 }
 
 // newScroller returns a scroller sized to width x height.
@@ -81,7 +84,11 @@ func (s *scroller) indicator() string {
 	}
 	pct := strconv.Itoa(int(s.vp.ScrollPercent()*100)) + "%"
 	dashes := strings.Repeat("─", maxInt(s.vp.Width()-len(pct)-5, 0))
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color(indicatorColor))
+	dim := s.dim
+	if dim == nil {
+		dim = theme.DefaultPalette().Border
+	}
+	style := lipgloss.NewStyle().Foreground(dim)
 	return style.Render(up + " " + dashes + " " + down + " " + pct)
 }
 

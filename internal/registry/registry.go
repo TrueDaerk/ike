@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"ike/internal/plugin"
+	"ike/internal/theme"
 )
 
 // Registry holds registered plugins and resolves their capabilities.
@@ -203,6 +204,25 @@ func (r *Registry) Panes() []OwnedPane {
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// Themes returns the themes contributed by enabled plugins, in plugin order
+// (Roadmap 0110). Duplicate names are dropped, first owner by sorted plugin
+// order wins — mirroring every other capability. Built-ins are not included
+// here; theme.Select layers these over theme.Builtins.
+func (r *Registry) Themes() []theme.Theme {
+	seen := map[string]bool{}
+	var out []theme.Theme
+	for _, p := range r.activePlugins() {
+		for _, t := range p.Capabilities().Themes {
+			if t.Name == "" || seen[t.Name] {
+				continue
+			}
+			seen[t.Name] = true
+			out = append(out, t)
+		}
+	}
 	return out
 }
 

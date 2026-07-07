@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/overlay"
+	"ike/internal/theme"
 )
 
 // OpenFileMsg is emitted when the user selects a file to open. The root model
@@ -69,10 +70,12 @@ type Model struct {
 	pollEvery   time.Duration // interval between auto-refresh polls
 	polling     bool          // a poll loop is running (or armed by Restore)
 
-	showHidden bool       // render dot-entries; toggled by explorer.toggleHidden
-	indent     int        // spaces per depth level (config explorer.tree_indent)
-	sort       string     // ordering within a level (config explorer.sort)
-	colors     colorTable // per-filetype colour resolution
+	showHidden bool           // render dot-entries; toggled by explorer.toggleHidden
+	indent     int            // spaces per depth level (config explorer.tree_indent)
+	sort       string         // ordering within a level (config explorer.sort)
+	colors     colorTable     // per-filetype colour resolution
+	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
+	cfgColors  colorTable     // [explorer.colors] overrides retained for re-theming
 
 	// File-operation state (fileops.go). prompt is the active modal (new-file
 	// name entry, or a delete confirmation); ops/redoOps are the undo and redo
@@ -108,7 +111,7 @@ func New(dir string) Model {
 		hover:        -1,
 		indent:       2,
 		sort:         "name",
-		colors:       defaultColors,
+		colors:       defaultColors(),
 		lastClickRow: -1,
 		now:          time.Now,
 		autoRefresh:  true,
@@ -948,19 +951,36 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// theme returns the active palette, defaulting when none was threaded in
+// (tests, zero values), so chrome renderers never nil-check.
+func (m Model) theme() *theme.Palette {
+	if m.pal != nil {
+		return m.pal
+	}
+	return theme.DefaultPalette()
+}
+
 // Scrollbar styling: a dim track with a brighter, heavier thumb, in the spirit
 // of table TUIs that surface overflow on the right and bottom edges. Highlight
 // styles overlay the per-filetype colour: the cursor and open-file rows replace
 // it, the hover keeps the foreground colour and adds a background.
-var (
-	barTrack = lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
-	barThumb = lipgloss.NewStyle().Foreground(lipgloss.Color("#8a8a8a"))
-	selStyle = lipgloss.NewStyle().Background(lipgloss.Color("#5f87ff")).Foreground(lipgloss.Color("#ffffff")).Bold(true)
-	// The focused editor's file gets a muted warm accent — visible next to the
-	// per-filetype colours without shouting (no bold, desaturated tone).
-	activeStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#d7af87"))
-	hoverBg     = lipgloss.Color("#303030")
-)
+func (m Model) barTrack() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack)
+}
+
+func (m Model) barThumb() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb)
+}
+
+func (m Model) selStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText).Bold(true)
+}
+
+// activeStyle marks the focused editor's file with the theme accent — visible
+// next to the per-filetype colours without shouting (no bold).
+func (m Model) activeStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(m.theme().Accent)
+}
 
 // nodeStyle is a row's base style: its per-filetype colour, plus italics for
 // hidden (dot-prefixed) entries.
@@ -996,11 +1016,11 @@ func (m Model) View() string {
 			var style lipgloss.Style
 			switch m.rowKind(i) {
 			case rowSelected:
-				style = selStyle
+				style = m.selStyle()
 			case rowActive:
-				style = activeStyle
+				style = m.activeStyle()
 			case rowHover:
-				style = m.nodeStyle(n).Background(hoverBg)
+				style = m.nodeStyle(n).Background(m.theme().Panel)
 			default:
 				style = m.nodeStyle(n)
 			}
@@ -1021,7 +1041,7 @@ func (m Model) View() string {
 			line = strings.Repeat(" ", textW)
 		}
 		if needV {
-			line += bar("│", "┃", k >= vStart && k < vStart+vLen)
+			line += m.bar("│", "┃", k >= vStart && k < vStart+vLen)
 		}
 		lines = append(lines, line)
 	}
@@ -1030,11 +1050,11 @@ func (m Model) View() string {
 		hStart, hLen := scrollThumb(textW, contentW, textW, offX)
 		var b strings.Builder
 		for k := 0; k < textW; k++ {
-			b.WriteString(bar("─", "━", k >= hStart && k < hStart+hLen))
+			b.WriteString(m.bar("─", "━", k >= hStart && k < hStart+hLen))
 		}
 		row := b.String()
 		if needV {
-			row += barTrack.Render("╯")
+			row += m.barTrack().Render("╯")
 		}
 		lines = append(lines, row)
 	}
@@ -1077,11 +1097,11 @@ func (m Model) rowKind(i int) rowKind {
 }
 
 // bar renders one scrollbar cell, picking the thumb glyph over the track glyph.
-func bar(track, thumb string, isThumb bool) string {
+func (m Model) bar(track, thumb string, isThumb bool) string {
 	if isThumb {
-		return barThumb.Render(thumb)
+		return m.barThumb().Render(thumb)
 	}
-	return barTrack.Render(track)
+	return m.barTrack().Render(track)
 }
 
 func maxz(v int) int {

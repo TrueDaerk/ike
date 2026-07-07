@@ -27,7 +27,7 @@ func TestIndexCaptureAt(t *testing.T) {
 }
 
 func TestThemeFallback(t *testing.T) {
-	th := NewTheme(nil)
+	th := NewTheme(nil, nil)
 	// Dotted capture inherits its head colour.
 	if _, ok := th.Style("function.builtin"); !ok {
 		t.Error("function.builtin should resolve via function fallback")
@@ -50,8 +50,35 @@ func TestThemeOverride(t *testing.T) {
 		}
 		return "", false
 	}
-	th := NewTheme(get)
+	th := NewTheme(nil, get)
 	if _, ok := th.Style("keyword"); !ok {
 		t.Error("overridden keyword should resolve")
+	}
+}
+
+func TestThemePaletteDefaults(t *testing.T) {
+	// Palette captures replace the built-in defaults (Roadmap 0110)…
+	th := NewTheme(map[string]string{"keyword": "#bb9af7"}, nil)
+	if _, ok := th.Style("keyword"); !ok {
+		t.Error("palette-supplied keyword should resolve")
+	}
+	if _, ok := th.Style("string"); ok {
+		t.Error("capture absent from palette defaults should not resolve")
+	}
+	// …and per-key config still wins over the palette.
+	get := func(key string) (string, bool) {
+		if key == "theme.captures.keyword" {
+			return "red", true
+		}
+		return "", false
+	}
+	over := NewTheme(map[string]string{"keyword": "#bb9af7"}, get)
+	st, ok := over.Style("keyword")
+	if !ok {
+		t.Fatal("keyword should resolve")
+	}
+	want, _ := NewTheme(map[string]string{"keyword": "red"}, nil).Style("keyword")
+	if st.GetForeground() != want.GetForeground() {
+		t.Error("config override should win over palette default")
 	}
 }

@@ -1,12 +1,13 @@
 package explorer
 
 import (
-	"image/color"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/theme"
 )
 
 // colorTable maps extension/glob keys to colour names (or hex). It is built from
@@ -15,46 +16,11 @@ import (
 // ("*.test.go").
 type colorTable map[string]string
 
-// defaultColors is the built-in fallback used when no [explorer.colors] config
-// is supplied. It mirrors the roadmap's example table so the tree is never
-// monochrome out of the box.
-var defaultColors = colorTable{
-	"dir":     "blue",
-	"default": "white",
-	"go":      "cyan",
-	"md":      "green",
-	"toml":    "yellow",
-	"json":    "yellow",
-	"yaml":    "yellow",
-	"lock":    "gray",
-}
-
-// namedColors maps the human colour names the config accepts to lipgloss colour
-// values. Anything not found here is passed to lipgloss verbatim, so hex
-// ("#1f6feb") and raw ANSI indices ("39") work too. The values favour bright,
-// high-contrast tones over classic dark ANSI ones, since the app paints a dark
-// default background (see internal/app.appBackground) and these are foreground
-// colours shown on top of it.
-var namedColors = map[string]string{
-	"black":   "#000000",
-	"red":     "#ff5555",
-	"green":   "#5fd75f",
-	"yellow":  "#ffd75f",
-	"blue":    "#5fafff",
-	"magenta": "#d787ff",
-	"cyan":    "#5fd7d7",
-	"white":   "#e4e4e4",
-	"gray":    "#8a8a8a",
-	"grey":    "#8a8a8a",
-}
-
-// color resolves a config colour token (name, hex, or ANSI index) to a lipgloss
-// colour.
-func (t colorTable) color(token string) color.Color {
-	if v, ok := namedColors[strings.ToLower(token)]; ok {
-		return lipgloss.Color(v)
-	}
-	return lipgloss.Color(token)
+// defaultColors returns the file-color table of the built-in default theme,
+// used when no palette has been threaded in yet (Roadmap 0110); the tree is
+// never monochrome out of the box.
+func defaultColors() colorTable {
+	return colorTable(theme.Default().Files)
 }
 
 // style resolves a node to its base lipgloss style. Resolution order matches the
@@ -64,22 +30,22 @@ func (t colorTable) style(n *node) lipgloss.Style {
 	base := lipgloss.NewStyle()
 	for _, pat := range t.globs() {
 		if ok, _ := filepath.Match(pat, n.name); ok {
-			return base.Foreground(t.color(t[pat]))
+			return base.Foreground(theme.Resolve(t[pat]))
 		}
 	}
 	if n.isDir {
 		if c, ok := t["dir"]; ok {
-			return base.Foreground(t.color(c))
+			return base.Foreground(theme.Resolve(c))
 		}
 		return base
 	}
 	if ext := strings.TrimPrefix(filepath.Ext(n.name), "."); ext != "" {
 		if c, ok := t[ext]; ok {
-			return base.Foreground(t.color(c))
+			return base.Foreground(theme.Resolve(c))
 		}
 	}
 	if c, ok := t["default"]; ok {
-		return base.Foreground(t.color(c))
+		return base.Foreground(theme.Resolve(c))
 	}
 	return base
 }

@@ -7,6 +7,7 @@
 package app
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -31,6 +32,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/theme"
 	"ike/internal/ui"
 )
 
@@ -72,6 +74,10 @@ type Model struct {
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette    *palette.Palette
 	paletteKey string
+	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
+	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
+	// at construction and on config reloads.
+	themePal *theme.Palette
 	// lastEsc records that the previous key was an esc in a non-capturing context,
 	// so a second esc opens the palette (esc-esc toggle).
 	lastEsc bool
@@ -143,7 +149,9 @@ func New() Model {
 // layout and session.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	applyPluginConfig(reg, cfg)
+	themePal, themeWarning := resolveTheme(reg, cfg)
 	panes := pane.NewRegistry(cfg)
+	panes.SetPalette(themePal)
 	panes.AddExplorer()
 	edKey := panes.AddEditor()
 	panes.SetFocused(pane.ExplorerKey)
@@ -152,6 +160,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		recentEditor: edKey,
 		host:         host.New(cfg),
 		reg:          reg,
+		themePal:     themePal,
 		help:         help.New(reg, reg, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
 		palette:      buildPalette(reg, cfg),
@@ -165,6 +174,9 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	m.restoreLayout(cfg)
 	m.restoreSession()
 	m.wireEditorEmitters()
+	if themeWarning != "" {
+		m.host.SetStatus(themeWarning)
+	}
 	return m
 }
 
@@ -475,7 +487,6 @@ func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
-		Accent:        colorPaneFocus,
 	}
 	cmd := palette.NewCommandMode(reg, reg, paletteHideOff(cfg))
 	file := palette.NewFileMode()
@@ -614,6 +625,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case host.OpenFileRequest:
 		return m.openPath(msg.Path, msg.NewPane)
+
+	case SelectThemeMsg:
+		// Session-only theme switch from the palette's "Theme: <name>" commands.
+		m.selectTheme(msg.Name)
+		return m, nil
+
+	case config.ConfigReloadedMsg:
+		// Live re-theme (Roadmap 0110): publish the fresh config and re-resolve
+		// the palette so a [theme].name change lands without a restart.
+		m.reloadConfig(msg.Config)
+		return m, nil
 
 	case palette.RunCommandMsg:
 		return m, m.RunCommand(msg.ID)
@@ -1495,9 +1517,10 @@ func (m Model) View() tea.View {
 	// enclosing lipgloss style — so wrapping the composed frame in a Background
 	// style leaves pane interiors, overlays, and the floating shell showing the
 	// raw terminal background. Setting it here makes the terminal's *default*
-	// background equal appBackground, so every reset falls back to it instead.
-	v.BackgroundColor = lipgloss.Color(appBackground)
-	v.ForegroundColor = lipgloss.Color(appForeground)
+	// background equal the palette background, so every reset falls back to it
+	// instead of the terminal's own theme.
+	v.BackgroundColor = m.pal().Background
+	v.ForegroundColor = m.pal().Foreground
 	return v
 }
 
@@ -1535,18 +1558,21 @@ func (m Model) compositeLSPPopups(base string) string {
 	return base
 }
 
+// pal returns the active theme palette. A model built without NewWith (tests,
+// zero values) falls back to the resolved default theme so chrome renderers
+// never nil-check.
+func (m Model) pal() *theme.Palette {
+	if m.themePal != nil {
+		return m.themePal
+	}
+	return theme.DefaultPalette()
+}
+
 // render composes the full frame as a styled string: the pane tree, the status
 // line, and any floating overlay (move ghost, palette, modal shell) on top.
-// appBackground and appForeground are the default colors painted behind and
-// under the whole screen, regardless of the terminal's own theme: a dark
-// background keeps ike legible on light-themed terminals, and an explicit
-// light foreground keeps unstyled text readable against it (nested styles
-// elsewhere still win over these defaults).
-const (
-	appBackground = "#121212"
-	appForeground = "#d0d0d0"
-)
-
+// The palette's background/foreground are painted behind and under the whole
+// screen, regardless of the terminal's own theme, so unstyled text stays
+// readable (nested styles elsewhere still win over these defaults).
 func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
@@ -1571,8 +1597,8 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
 	return lipgloss.NewStyle().
-		Background(lipgloss.Color(appBackground)).
-		Foreground(lipgloss.Color(appForeground)).
+		Background(m.pal().Background).
+		Foreground(m.pal().Foreground).
 		Width(m.width).
 		Height(m.height).
 		Render(result)
@@ -1598,13 +1624,13 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 		if gr.W < 3 || gr.H < 3 {
 			return "", 0, 0, false
 		}
-		return ghostBox(gr.W, gr.H, "new pane"), gr.X, gr.Y, true
+		return ghostBox(gr.W, gr.H, "new pane", m.pal().Ghost), gr.X, gr.Y, true
 	}
 	gr := dropRect(m.lay.Panes[tgt], layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY))
 	if gr.W < 3 || gr.H < 3 {
 		return "", 0, 0, false
 	}
-	return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane)), gr.X, gr.Y, true
+	return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane), m.pal().Ghost), gr.X, gr.Y, true
 }
 
 // dropRect is the sub-rectangle of r the dragged pane would occupy for zone z.
@@ -1624,12 +1650,12 @@ func dropRect(r layout.Rect, z layout.Zone) layout.Rect {
 }
 
 // ghostBox renders the matte drop-preview box at size w×h with a centered label.
-func ghostBox(w, h int, label string) string {
+func ghostBox(w, h int, label string, ghost color.Color) string {
 	inner := lipgloss.Place(w-2, h-2, lipgloss.Center, lipgloss.Center,
-		lipgloss.NewStyle().Foreground(lipgloss.Color(colorGhost)).Render("⤴ "+label))
+		lipgloss.NewStyle().Foreground(ghost).Render("⤴ "+label))
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(colorGhost)).
+		BorderForeground(ghost).
 		Faint(true).
 		Render(inner)
 }
@@ -1643,22 +1669,13 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 		a, _, b := t.Children(r)
 		if t.Orient == layout.Horizontal {
 			return lipgloss.JoinHorizontal(lipgloss.Top,
-				m.renderNode(t.A, a), dividerV(r.H), m.renderNode(t.B, b))
+				m.renderNode(t.A, a), m.dividerV(r.H), m.renderNode(t.B, b))
 		}
 		return lipgloss.JoinVertical(lipgloss.Left,
-			m.renderNode(t.A, a), dividerH(r.W), m.renderNode(t.B, b))
+			m.renderNode(t.A, a), m.dividerH(r.W), m.renderNode(t.B, b))
 	}
 	return ""
 }
-
-// Pane border colors.
-const (
-	colorPaneFocus  = "#5f87ff" // focused pane border
-	colorPaneBlur   = "#585858" // unfocused pane border
-	colorMoveSource = "#ff5f5f" // the pane currently being moved
-	colorDropTarget = "#ffd700" // the pane a release would drop onto
-	colorGhost      = "#af8700" // matte gold, the drop-preview box
-)
 
 // renderPane renders a single leaf at its outer rectangle, resolving its key to
 // an instance for title, content, and focus state. During a move drag the source
@@ -1680,16 +1697,16 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		}
 	}
 
-	border := colorPaneBlur
+	border := m.pal().Border
 	if focused {
-		border = colorPaneFocus
+		border = m.pal().BorderFocus
 	}
 	if d := m.drag; d != nil && d.kind == dragMove {
 		if key == d.srcPane {
-			border = colorMoveSource
+			border = m.pal().MoveSource
 			title = "⤴ " + title
 		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == key && tgt != d.srcPane {
-			border = colorDropTarget
+			border = m.pal().DropTarget
 			title = title + "  " + zoneArrow(layout.DropZone(r, d.curX, d.curY))
 		}
 	}
@@ -1711,14 +1728,14 @@ func zoneArrow(z layout.Zone) string {
 }
 
 // dividerV renders the vertical gutter between two horizontally-arranged panes.
-func dividerV(h int) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+func (m Model) dividerV(h int) string {
+	style := lipgloss.NewStyle().Foreground(m.pal().Border).Background(m.pal().Background)
 	return style.Render(strings.TrimRight(strings.Repeat("│\n", h), "\n"))
 }
 
 // dividerH renders the horizontal gutter between two vertically-stacked panes.
-func dividerH(w int) string {
-	style := lipgloss.NewStyle().Foreground(lipgloss.Color("#585858"))
+func (m Model) dividerH(w int) string {
+	style := lipgloss.NewStyle().Foreground(m.pal().Border).Background(m.pal().Background)
 	return style.Render(strings.Repeat("─", w))
 }
 
@@ -1739,8 +1756,8 @@ func (m Model) editorTitle(ed *editor.Model) string {
 func (m Model) statusLine() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
-		Background(lipgloss.Color("#303030")).
-		Foreground(lipgloss.Color("#d0d0d0"))
+		Background(m.pal().Panel).
+		Foreground(m.pal().Foreground)
 
 	if d := m.drag; d != nil && d.kind == dragMove {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
@@ -1751,7 +1768,7 @@ func (m Model) statusLine() string {
 		} else {
 			hint += "  (drop on a pane or this pane's edge)"
 		}
-		return style.Foreground(lipgloss.Color(colorDropTarget)).Render(" " + hint)
+		return style.Foreground(m.pal().DropTarget).Render(" " + hint)
 	}
 
 	ed := m.activeEditor()
@@ -1810,7 +1827,7 @@ func (m Model) activeEditor() *editor.Model {
 // interior so it never wraps, and MaxWidth/MaxHeight cap the rendered box so a
 // narrow pane can never overflow its rectangle and push the whole tiling off
 // screen (the layout assigns each leaf an exact rect; the renderer must honour it).
-func paneBox(title, content string, width, height int, borderColor string) string {
+func paneBox(title, content string, width, height int, borderColor color.Color) string {
 	// Interior text width = outer width minus the two border columns and the two
 	// padding columns. Truncate the title to it so it stays on one row.
 	if inner := width - 4; inner >= 1 {
@@ -1828,7 +1845,7 @@ func paneBox(title, content string, width, height int, borderColor string) strin
 		MaxWidth(width).
 		MaxHeight(height).
 		Padding(0, 1).
-		BorderForeground(lipgloss.Color(borderColor))
+		BorderForeground(borderColor)
 	titleStyle := lipgloss.NewStyle().Bold(true)
 	return style.Render(lipgloss.JoinVertical(lipgloss.Left, titleStyle.Render(title), content))
 }

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/theme"
 )
 
 // Plugin is the unit of extension. Implementations are typically compiled in
@@ -30,6 +31,10 @@ type Capabilities struct {
 	Panes        []Pane
 	FileHandlers []FileHandler
 	Hooks        []Hook
+	// Themes are named color schemes (Roadmap 0110), additive like every other
+	// capability: built-ins ship as a compile-in theme plugin, third-party
+	// plugins register more. Selection is by [theme].name in config.
+	Themes []theme.Theme
 }
 
 // Scope constrains where a Command or Keymap applies. A global capability is

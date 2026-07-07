@@ -1,59 +1,17 @@
 package highlight
 
 import (
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/theme"
 )
 
-// namedColors maps the human colour names the config accepts to lipgloss colour
-// values. Anything not found here is passed to lipgloss verbatim, so hex
-// ("#1f6feb") and raw ANSI indices ("39") work too. Mirrors explorer/colors.go:
-// bright, high-contrast tones since these sit on the app's dark default
-// background (see internal/app.appBackground).
-var namedColors = map[string]string{
-	"black":   "#000000",
-	"red":     "#ff5555",
-	"green":   "#5fd75f",
-	"yellow":  "#ffd75f",
-	"blue":    "#5fafff",
-	"magenta": "#d787ff",
-	"cyan":    "#5fd7d7",
-	"white":   "#e4e4e4",
-	"gray":    "#8a8a8a",
-	"grey":    "#8a8a8a",
-	"orange":  "#ff8700",
-}
-
-// defaultCaptures is the built-in capture→colour table so code is never
-// monochrome out of the box. Keys are Tree-sitter capture names; lookup falls
-// back from a dotted name ("function.builtin") to its head ("function").
-var defaultCaptures = map[string]string{
-	"keyword":          "magenta",
-	"operator":         "white",
-	"string":           "green",
-	"number":           "orange",
-	"comment":          "gray",
-	"function":         "blue",
-	"type":             "cyan",
-	"constant":         "orange",
-	"constant.builtin": "orange",
-	"variable":         "white",
-	"variable.builtin": "red",
-	"property":         "white",
-	"label":            "magenta",
-	"attribute":        "yellow",
-	"punctuation":      "gray",
-	"escape":           "orange",
-	"boolean":          "orange",
-	"tag":              "red",
-	"embedded":         "white",
-}
-
-// Theme resolves Tree-sitter capture names to lipgloss styles. It is built from
-// the [theme] config (theme.captures.<name> keys) layered over the built-in
-// defaults, then memoises resolved styles.
+// Theme resolves Tree-sitter capture names to lipgloss styles. It is built
+// from capture-color defaults (the active theme palette's captures, Roadmap
+// 0110) layered under `theme.captures.<name>` config keys, then memoises
+// resolved styles.
 type Theme struct {
 	colors map[string]string
 	cache  map[string]styleHit
@@ -66,15 +24,20 @@ type styleHit struct {
 	ok    bool
 }
 
-// NewTheme builds a theme. get reads a config key (theme.captures.keyword, …);
-// pass nil to use only the built-in defaults.
-func NewTheme(get func(key string) (string, bool)) Theme {
-	colors := make(map[string]string, len(defaultCaptures))
-	for k, v := range defaultCaptures {
+// NewTheme builds a theme from defaults layered under config. defaults is the
+// capture→color table of the active palette; nil uses the built-in default
+// palette's captures. get reads a config key (theme.captures.keyword, …); pass
+// nil to use only the defaults.
+func NewTheme(defaults map[string]string, get func(key string) (string, bool)) Theme {
+	if defaults == nil {
+		defaults = theme.Default().Captures
+	}
+	colors := make(map[string]string, len(defaults))
+	for k, v := range defaults {
 		colors[k] = v
 	}
 	if get != nil {
-		for k := range defaultCaptures {
+		for k := range defaults {
 			if v, ok := get("theme.captures." + k); ok && v != "" {
 				colors[k] = v
 			}
@@ -96,7 +59,7 @@ func (t Theme) Style(capture string) (lipgloss.Style, bool) {
 	name := capture
 	for {
 		if tok, ok := t.colors[name]; ok {
-			st := lipgloss.NewStyle().Foreground(resolveColor(tok))
+			st := lipgloss.NewStyle().Foreground(theme.Resolve(tok))
 			t.cache[capture] = styleHit{style: st, ok: true}
 			return st, true
 		}
@@ -108,13 +71,4 @@ func (t Theme) Style(capture string) (lipgloss.Style, bool) {
 	}
 	t.cache[capture] = styleHit{ok: false}
 	return lipgloss.Style{}, false
-}
-
-// resolveColor resolves a config colour token (name, hex, or ANSI index) to a
-// lipgloss colour.
-func resolveColor(token string) color.Color {
-	if v, ok := namedColors[strings.ToLower(token)]; ok {
-		return lipgloss.Color(v)
-	}
-	return lipgloss.Color(token)
 }

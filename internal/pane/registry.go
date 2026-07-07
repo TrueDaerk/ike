@@ -4,6 +4,7 @@ import (
 	"strconv"
 
 	"ike/internal/host"
+	"ike/internal/theme"
 )
 
 // ExplorerKey is the stable key of the singleton explorer instance. It never
@@ -20,6 +21,7 @@ const editorKeyBase = "editor"
 // persistence never disagree on identity.
 type Registry struct {
 	cfg       host.Config
+	pal       *theme.Palette
 	instances map[string]*Instance
 	order     []string // insertion order, for stable iteration
 	focused   string   // key of the focused instance
@@ -32,6 +34,27 @@ func NewRegistry(cfg host.Config) *Registry {
 	return &Registry{cfg: cfg, instances: map[string]*Instance{}}
 }
 
+// SetPalette records the active theme palette and threads it into every
+// existing instance; new instances pick it up at construction. Call again on a
+// theme change (config reload) to re-theme live.
+func (r *Registry) SetPalette(p *theme.Palette) {
+	r.pal = p
+	for _, key := range r.order {
+		r.instances[key].setPalette(p)
+	}
+}
+
+// Reconfigure replaces the registry's config and re-applies it — together with
+// the current palette — to every instance, used on live config reloads.
+func (r *Registry) Reconfigure(cfg host.Config) {
+	r.cfg = cfg
+	for _, key := range r.order {
+		inst := r.instances[key]
+		inst.setPalette(r.pal)
+		inst.configure(cfg)
+	}
+}
+
 // AddExplorer creates the singleton explorer instance under ExplorerKey and
 // returns its key. Calling it twice is a programming error; the second call
 // returns the existing key without creating a duplicate.
@@ -39,7 +62,7 @@ func (r *Registry) AddExplorer() string {
 	if _, ok := r.instances[ExplorerKey]; ok {
 		return ExplorerKey
 	}
-	r.put(newInstance(ExplorerKey, KindExplorer, r.cfg))
+	r.put(newInstance(ExplorerKey, KindExplorer, r.cfg, r.pal))
 	return ExplorerKey
 }
 
@@ -47,7 +70,7 @@ func (r *Registry) AddExplorer() string {
 // and returns that key.
 func (r *Registry) AddEditor() string {
 	key := r.mintEditorKey()
-	r.put(newInstance(key, KindEditor, r.cfg))
+	r.put(newInstance(key, KindEditor, r.cfg, r.pal))
 	return key
 }
 
@@ -55,7 +78,7 @@ func (r *Registry) AddEditor() string {
 // to rebuild the saved pane set. The minting counter is advanced past any
 // numeric suffix so future AddEditor calls never collide with a restored key.
 func (r *Registry) AddEditorKey(key string) *Instance {
-	inst := newInstance(key, KindEditor, r.cfg)
+	inst := newInstance(key, KindEditor, r.cfg, r.pal)
 	r.put(inst)
 	r.advancePast(key)
 	return inst

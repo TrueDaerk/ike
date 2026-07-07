@@ -244,8 +244,8 @@ func (m Model) CompletionView() string {
 		width = 40
 	}
 
-	normal := lipgloss.NewStyle().Background(lipgloss.Color("#303030")).Foreground(lipgloss.Color("#d0d0d0"))
-	selected := lipgloss.NewStyle().Background(lipgloss.Color("#005f87")).Foreground(lipgloss.Color("#ffffff"))
+	normal := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Foreground)
+	selected := lipgloss.NewStyle().Background(m.theme().Primary).Foreground(m.theme().SelectionText)
 	var rows []string
 	for i := start; i < endIdx; i++ {
 		label := completionLabel(items[i])
@@ -296,7 +296,7 @@ func (m Model) HoverView() string {
 	if m.hover == nil {
 		return ""
 	}
-	box := lipgloss.NewStyle().Background(lipgloss.Color("#303030")).Foreground(lipgloss.Color("#d0d0d0")).Padding(0, 1)
+	box := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Foreground).Padding(0, 1)
 	const maxLines = 12
 	lines := m.hover.lines
 	if len(lines) > maxLines {
@@ -311,17 +311,17 @@ func (m Model) HoverAnchor() (col, line int) { return m.cursor.Col, m.cursor.Lin
 // dismissHover clears any hover popup (called on the next key).
 func (m *Model) dismissHover() { m.hover = nil }
 
-// diagColor maps a diagnostic severity to a colour: error red, warning yellow,
-// info blue, hint cyan.
-func diagColor(severity int) color.Color {
+// diagColor maps a diagnostic severity to the theme's diagnostic slots:
+// error, warning, info, hint.
+func (m Model) diagColor(severity int) color.Color {
 	switch severity {
 	case 1:
-		return lipgloss.Color("#800000")
+		return m.theme().Error
 	case 2:
-		return lipgloss.Color("#808000")
+		return m.theme().Warning
 	case 3:
-		return lipgloss.Color("#000080")
+		return m.theme().Info
 	default:
-		return lipgloss.Color("#008080")
+		return m.theme().Hint
 	}
 }

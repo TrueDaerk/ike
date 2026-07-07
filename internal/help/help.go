@@ -2,6 +2,8 @@ package help
 
 import (
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/theme"
 )
 
 // maxColumns caps the cheat sheet at two columns wide regardless of how much
@@ -15,9 +17,22 @@ const maxColumns = 2
 type Help struct {
 	src    CommandSource
 	res    BindingResolver
-	minCol int // configured minimum column width (0 -> default)
+	minCol int            // configured minimum column width (0 -> default)
+	pal    *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	groups []Group
+}
+
+// SetPalette threads the active theme palette in (Roadmap 0110); headings and
+// shortcut keys derive their colours from its ui slots.
+func (h *Help) SetPalette(p *theme.Palette) { h.pal = p }
+
+// theme returns the active palette, defaulting when none was threaded in.
+func (h *Help) theme() *theme.Palette {
+	if h.pal != nil {
+		return h.pal
+	}
+	return theme.DefaultPalette()
 }
 
 // New returns help content reading commands from src and shortcuts from res
@@ -61,7 +76,7 @@ func (h *Help) allCells() []string {
 	var cells []string
 	for _, g := range h.groups {
 		for _, e := range g.Entries {
-			cells = append(cells, renderEntry(e))
+			cells = append(cells, h.renderEntry(e))
 		}
 	}
 	return cells
@@ -72,12 +87,12 @@ func (h *Help) allCells() []string {
 func (h *Help) renderBody(colW, cols int) string {
 	// Headings are set apart by weight and an underline, not colour alone, so the
 	// grouping reads even on monochrome terminals.
-	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(lipgloss.Color("#5f87ff"))
+	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(h.theme().BorderFocus)
 	var blocks []string
 	for _, g := range h.groups {
 		cells := make([]string, len(g.Entries))
 		for i, e := range g.Entries {
-			cells[i] = renderEntry(e)
+			cells[i] = h.renderEntry(e)
 		}
 		packed := Pack(cells, cols)
 		block := lipgloss.JoinVertical(
@@ -104,11 +119,11 @@ func (h *Help) renderBody(colW, cols int) string {
 
 // renderEntry formats one command row: "title … shortcut", or just the title
 // when unbound.
-func renderEntry(e Entry) string {
+func (h *Help) renderEntry(e Entry) string {
 	if e.Shortcut == "" {
 		return e.Title
 	}
-	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffaf5f"))
+	keyStyle := lipgloss.NewStyle().Foreground(h.theme().Secondary)
 	return e.Title + "  " + keyStyle.Render(e.Shortcut)
 }
 

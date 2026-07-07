@@ -6,6 +6,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/theme"
 )
 
 // Kind is the type of component an Instance wraps. The explorer is a singleton;
@@ -119,15 +120,37 @@ func (i *Instance) Init() tea.Cmd {
 // newInstance builds an instance of the given kind, configuring it against cfg.
 // The explorer is rooted at the working directory; editors start with an empty
 // scratch buffer.
-func newInstance(key string, kind Kind, cfg host.Config) *Instance {
+func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette) *Instance {
 	i := &Instance{key: key, kind: kind}
 	switch kind {
 	case KindExplorer:
 		i.exp = explorer.New(".")
+		i.exp.SetPalette(pal)
 		i.exp.Configure(cfg)
 	case KindEditor:
 		i.ed = editor.New()
+		i.ed.SetPalette(pal)
 		i.ed.Configure(cfg)
 	}
 	return i
+}
+
+// setPalette re-threads the active theme palette into the wrapped component.
+func (i *Instance) setPalette(p *theme.Palette) {
+	switch i.kind {
+	case KindExplorer:
+		i.exp.SetPalette(p)
+	case KindEditor:
+		i.ed.SetPalette(p)
+	}
+}
+
+// configure re-applies configuration to the wrapped component.
+func (i *Instance) configure(cfg host.Config) {
+	switch i.kind {
+	case KindExplorer:
+		i.exp.Configure(cfg)
+	case KindEditor:
+		i.ed.Configure(cfg)
+	}
 }

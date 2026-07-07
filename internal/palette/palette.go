@@ -8,11 +8,14 @@
 package palette
 
 import (
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/theme"
 )
 
 // Config tunes a Palette. Zero values select sensible defaults, so the empty
@@ -20,18 +23,13 @@ import (
 type Config struct {
 	MaxResults    int    // result rows shown; <=0 selects defaultMaxResults
 	DefaultPrefix rune   // mode used when the query has no recognised prefix; 0 selects the first mode
-	Accent        string // border/highlight colour; "" selects defaultAccent
+	Accent        string // border/highlight colour override; "" follows the theme
 }
 
 const (
 	defaultMaxResults = 12
-	defaultAccent     = "#5f87ff"
-	dimColor          = "#585858"
-	selectedBg        = "#303030"
-	keyCapBg          = "#444444" // background of the right-aligned key-binding chip
-	keyCapFg          = "#d0d0d0" // foreground of the key-binding chip
-	minBoxWidth       = 36        // floor for the centered box
-	minAnchorWidth    = 20        // floor for an editor-anchored box
+	minBoxWidth       = 36 // floor for the centered box
+	minAnchorWidth    = 20 // floor for an editor-anchored box
 )
 
 // Palette is the overlay model. It holds the open/closed state, the raw query
@@ -61,7 +59,29 @@ type Palette struct {
 
 	width, height int
 	maxResults    int
-	accent        string
+	accent        string         // config override; "" follows the theme
+	pal           *theme.Palette // active theme (Roadmap 0110); nil = default
+}
+
+// SetPalette threads the active theme palette in (Roadmap 0110); chrome colors
+// (accent, dim, selection, key chips) derive from its ui slots.
+func (p *Palette) SetPalette(pal *theme.Palette) { p.pal = pal }
+
+// theme returns the active palette, defaulting when none was threaded in.
+func (p *Palette) theme() *theme.Palette {
+	if p.pal != nil {
+		return p.pal
+	}
+	return theme.DefaultPalette()
+}
+
+// accentColor is the border/highlight colour: the config override when set,
+// else the theme's focused-border slot.
+func (p *Palette) accentColor() color.Color {
+	if p.accent != "" {
+		return lipgloss.Color(p.accent)
+	}
+	return p.theme().BorderFocus
 }
 
 // New builds a palette from cfg and the ordered modes (first is the default when
@@ -75,9 +95,6 @@ func New(cfg Config, modes ...Mode) *Palette {
 	}
 	if p.maxResults <= 0 {
 		p.maxResults = defaultMaxResults
-	}
-	if p.accent == "" {
-		p.accent = defaultAccent
 	}
 	for _, m := range modes {
 		p.byPrefix[m.Prefix()] = m
@@ -259,8 +276,8 @@ func (p *Palette) View() string {
 		inner = 1
 	}
 
-	accent := lipgloss.Color(p.accent)
-	dim := lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor))
+	accent := p.accentColor()
+	dim := lipgloss.NewStyle().Foreground(p.theme().Border)
 
 	prompt := dim.Render(p.promptGlyph()) + " " + p.queryView(inner-2)
 	sep := dim.Render(strings.Repeat("─", inner))
@@ -298,7 +315,7 @@ func (p *Palette) queryView(width int) string {
 		if m, _ := p.mode(); m != nil {
 			ph = m.Placeholder()
 		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render(ph)
+		return lipgloss.NewStyle().Foreground(p.theme().Border).Render(ph)
 	}
 	return ansi.Truncate(body+"▏", width, "…")
 }
@@ -307,7 +324,7 @@ func (p *Palette) queryView(width int) string {
 // a dim "no results" line when the query matched nothing.
 func (p *Palette) list(width int) string {
 	if len(p.items) == 0 {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color(dimColor)).Render("no results")
+		return lipgloss.NewStyle().Foreground(p.theme().Border).Render("no results")
 	}
 	end := p.top + p.maxResults
 	if end > len(p.items) {
@@ -327,14 +344,14 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 	const markerW = 2
 	marker := "  "
 	if selected {
-		marker = lipgloss.NewStyle().Foreground(lipgloss.Color(p.accent)).Render("❯ ")
+		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
 	}
 
 	detail, detailW := "", 0
 	if it.Detail != "" {
 		detail = lipgloss.NewStyle().
-			Background(lipgloss.Color(keyCapBg)).
-			Foreground(lipgloss.Color(keyCapFg)).
+			Background(p.theme().SelectionMuted).
+			Foreground(p.theme().Foreground).
 			Bold(true).
 			Render(" " + it.Detail + " ")
 		detailW = ansi.StringWidth(it.Detail) + 2
@@ -345,7 +362,7 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 	if titleMax < 1 {
 		titleMax = 1
 	}
-	title, titleW := highlight(it.Title, it.Spans, p.accent, titleMax)
+	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
 
 	gap := avail - titleW - detailW
 	if gap < 1 {
@@ -355,7 +372,7 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 
 	style := lipgloss.NewStyle().MaxWidth(width)
 	if selected {
-		style = style.Background(lipgloss.Color(selectedBg)).Width(width)
+		style = style.Background(p.theme().Panel).Width(width)
 	}
 	return style.Render(line)
 }
@@ -364,7 +381,7 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 // colour, truncated to at most maxW display cells (with an ellipsis). It returns
 // the styled string and its display width. Spans index runes of the full title;
 // indices past the truncation point are dropped.
-func highlight(title string, spans []int, accent string, maxW int) (string, int) {
+func highlight(title string, spans []int, accent color.Color, maxW int) (string, int) {
 	runes := []rune(title)
 	truncated := false
 	if maxW >= 1 && len(runes) > maxW {
@@ -375,7 +392,7 @@ func highlight(title string, spans []int, accent string, maxW int) (string, int)
 	for _, s := range spans {
 		hit[s] = true
 	}
-	matchStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(accent)).Bold(true)
+	matchStyle := lipgloss.NewStyle().Foreground(accent).Bold(true)
 	var b strings.Builder
 	for i, r := range runes {
 		if hit[i] {

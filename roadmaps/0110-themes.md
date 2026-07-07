@@ -153,19 +153,20 @@ Each is one `Theme{}` literal in `builtins.go` supplying ui + captures + files.
 
 ## Milestones
 
-- [ ] `internal/theme` skeleton: `Theme` (ui slots + `captures` + `files` + `dark`) and a `Palette` type with cached lipgloss styles.
-- [ ] `resolve.go`: single color-token resolver (name/hex/ANSI); delete the duplicated `namedColors`+resolver from `highlight/theme.go` and `explorer/colors.go`, route both through it.
-- [ ] `default` palette: capture today's `defaultCaptures`, `defaultColors`, and chrome literals verbatim — pixel-identical to current IKE.
-- [ ] Additional built-ins: `tokyo-night`, `nord`, `gruvbox`(+light), `rose-pine`(+dawn), `catppuccin-mocha`(+latte).
-- [ ] `registry.go`: name→`Theme` lookup with fallback-to-`default`+warning; merge plugin-registered themes.
-- [ ] Plugin contract: additive `Capabilities.Themes []Theme`; ship built-ins as a compile-in theme plugin registered in `init()`.
-- [ ] Wire the selector: read `config.Get().Theme.Name`, resolve a `*Palette`, thread from `internal/app` into panes.
-- [ ] Feed existing color models: `highlight.NewTheme` and explorer `colorTable` take their **defaults** from the palette's `captures`/`files`; `theme.captures.*` and `[explorer.colors]` still override.
-- [ ] Migrate chrome off literals: `internal/app`, `internal/explorer`, `internal/editor` (status bar, borders, selection, scrollbars, LSP popups/diagnostics) read ui slots.
-- [ ] Fix the background bleed: paint each surface's own rectangle — pane bodies fill `surface` and pad lines to full width/height; dividers/gaps fill `background`; the floating shell, command palette, and LSP popups paint an opaque `surface`/`panel` before compositing. No cell shows the terminal background.
-- [ ] Live re-theme: rebuild the palette on `ConfigReloadedMsg` and re-render.
-- [ ] Validation + tests: every built-in defines every required ui slot; missing → fallback + diagnostic. Table tests for lookup, fallback, and override precedence (palette < config).
-- [ ] Wiki: update `architecture/themes.md` — model, sqlit/Textual lineage, the three color groups, selection, built-in list, plugin registration.
+- [x] `internal/theme` skeleton: `Theme` (ui slots + `captures` + `files` + `dark`) and a `Palette` type with cached lipgloss styles.
+- [x] `resolve.go`: single color-token resolver (name/hex/ANSI); delete the duplicated `namedColors`+resolver from `highlight/theme.go` and `explorer/colors.go`, route both through it.
+- [x] `default` palette: capture today's `defaultCaptures`, `defaultColors`, and chrome literals verbatim — pixel-identical to current IKE.
+- [x] Additional built-ins: `tokyo-night`, `nord`, `gruvbox`(+light), `rose-pine`(+dawn), `catppuccin-mocha`(+latte).
+- [x] `registry.go`: name→`Theme` lookup with fallback-to-`default`+warning; merge plugin-registered themes.
+- [x] Plugin contract: additive `Capabilities.Themes []Theme`; ship built-ins as a compile-in theme plugin registered in `init()`.
+- [x] Wire the selector: read `config.Get().Theme.Name`, resolve a `*Palette`, thread from `internal/app` into panes.
+- [x] Feed existing color models: `highlight.NewTheme` and explorer `colorTable` take their **defaults** from the palette's `captures`/`files`; `theme.captures.*` and `[explorer.colors]` still override.
+- [x] Migrate chrome off literals: `internal/app`, `internal/explorer`, `internal/editor` (status bar, borders, selection, scrollbars, LSP popups/diagnostics) read ui slots.
+- [x] Fix the background bleed: paint each surface's own rectangle — pane bodies fill `surface` and pad lines to full width/height; dividers/gaps fill `background`; the floating shell, command palette, and LSP popups paint an opaque `surface`/`panel` before compositing. No cell shows the terminal background.
+  *(Implemented via bubbletea v2's renderer-level defaults instead: `tea.View.BackgroundColor/ForegroundColor` come from the palette, so every SGR reset falls back to the palette background and no cell can show the terminal background. Raised surfaces — status bar, popups, hover/selected rows — additionally paint their own `panel`/`selection` backgrounds. See `wiki/architecture/themes.md` § Background painting.)*
+- [x] Live re-theme: rebuild the palette on `ConfigReloadedMsg` and re-render.
+- [x] Validation + tests: every built-in defines every required ui slot; missing → fallback + diagnostic. Table tests for lookup, fallback, and override precedence (palette < config).
+- [x] Wiki: update `architecture/themes.md` — model, sqlit/Textual lineage, the three color groups, selection, built-in list, plugin registration.
 
 ## Out of scope
 

@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"ike/internal/host"
+	"ike/internal/theme"
 )
 
 // Config keys consumed from the merged [explorer] section (see internal/config).
@@ -38,18 +39,34 @@ func (m *Model) Configure(cfg host.Config) {
 	if v, ok := cfg.Get(cfgAutoRefresh); ok {
 		m.autoRefresh = v != "false"
 	}
-	if colors := readColors(cfg); len(colors) > 0 {
-		// Start from the defaults so the required "dir"/"default" fallbacks always
-		// exist, then overlay the configured entries.
-		merged := colorTable{}
-		for k, v := range defaultColors {
-			merged[k] = v
-		}
-		for k, v := range colors {
-			merged[k] = v
-		}
-		m.colors = merged
+	m.cfgColors = readColors(cfg)
+	m.mergeColors()
+}
+
+// SetPalette threads the active theme palette in (Roadmap 0110): its file
+// colors become the defaults under any [explorer.colors] overrides, and chrome
+// (selection, scrollbar, hover) reads its ui slots.
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	m.mergeColors()
+}
+
+// mergeColors rebuilds the colour table: the palette's file colors (default
+// theme when none is set) overlaid with the retained [explorer.colors] config
+// entries, so per-key config always wins over the named theme.
+func (m *Model) mergeColors() {
+	merged := colorTable{}
+	base := theme.Default().Files
+	if m.pal != nil {
+		base = m.pal.Files
 	}
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range m.cfgColors {
+		merged[k] = v
+	}
+	m.colors = merged
 }
 
 // readColors collects every "explorer.colors.<key>" entry into a colour table.

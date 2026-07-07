@@ -1,5 +1,29 @@
 # Log
 
+## 2026-07-07
+
+- Theme switching from the command palette: the `themes` plugin now registers
+  one global command per built-in scheme (`themes.select.<name>`, "Theme:
+  <name>"), dispatching `app.SelectThemeMsg` → `selectTheme` (resolve over
+  built-ins + plugin themes, re-thread via `applyTheme`, status confirmation).
+  Session-only; config persistence stays with 0040/0090.
+
+- Roadmap 0110 (Themes / Color Schemes) implemented: new leaf package
+  `internal/theme` (semantic `UI` slots + `Captures` + `Files` per Textual/
+  sqlit model, `Palette` with resolved colors, single `theme.Resolve` token
+  resolver, `theme.Select` lookup with fallback-to-default). Built-ins:
+  `default` (pixel-identical to the old hard-coded colors), `tokyo-night`,
+  `nord`, `gruvbox`(+light), `rose-pine`(+dawn), `catppuccin-mocha`/`-latte`,
+  shipped via the compile-in `themes` plugin (`Capabilities.Themes`, merged by
+  `registry.Themes()`). `[theme].name` now selects the palette;
+  `highlight.NewTheme` and the explorer color table take their defaults from
+  it (per-key `theme.captures.*` / `[explorer.colors]` still win). Every hex
+  chrome literal in `app`, `editor`, `explorer`, `ui`, `palette`, and `help`
+  was replaced by a palette slot; the screen background/foreground are set at
+  the renderer level from the palette. Live re-theme: the app now consumes
+  `config.ConfigReloadedMsg` (re-resolve palette, re-thread, reconfigure
+  panes). Updated the Themes concept doc from planned to implemented.
+
 ## 2026-07-06
 
 - Explorer UX pass (four features). **Open-file marking:** every file open in

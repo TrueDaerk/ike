@@ -22,6 +22,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
+	"ike/internal/theme"
 )
 
 // Mode is re-exported from the mode package so callers (app, tests) keep using
@@ -104,6 +105,7 @@ type Model struct {
 	hlVersion  int
 	hlIndex    highlight.Index
 	hlTheme    highlight.Theme
+	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
 	// popup, and the hover popup. See lsp_state.go.
@@ -130,7 +132,7 @@ func New() Model {
 		hist:               history.New(),
 		tabWidth:           4,
 		insertFinalNewline: true,
-		hlTheme:            highlight.NewTheme(nil),
+		hlTheme:            highlight.NewTheme(nil, nil),
 	}
 	m.view.LineNumbers = false
 	return m
@@ -140,10 +142,39 @@ func New() Model {
 // later changes are re-read live. Unset keys keep their built-in defaults.
 func (m *Model) Configure(cfg host.Config) {
 	m.cfg = cfg
-	if cfg != nil {
-		m.hlTheme = highlight.NewTheme(cfg.Get)
-	}
+	m.rebuildTheme()
 	m.applyConfig()
+}
+
+// SetPalette threads the active theme palette in (Roadmap 0110): its captures
+// become the highlight defaults under any theme.captures.* overrides, and
+// chrome (selection, LSP popups, diagnostics) reads its ui slots.
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	m.rebuildTheme()
+}
+
+// theme returns the active palette, defaulting when none was threaded in
+// (tests, zero values), so chrome renderers never nil-check.
+func (m Model) theme() *theme.Palette {
+	if m.pal != nil {
+		return m.pal
+	}
+	return theme.DefaultPalette()
+}
+
+// rebuildTheme re-derives the capture→style table from the palette defaults
+// layered under the retained config, so per-key config wins over the theme.
+func (m *Model) rebuildTheme() {
+	var captures map[string]string
+	if m.pal != nil {
+		captures = m.pal.Captures
+	}
+	var get func(string) (string, bool)
+	if m.cfg != nil {
+		get = m.cfg.Get
+	}
+	m.hlTheme = highlight.NewTheme(captures, get)
 }
 
 // applyConfig refreshes settings from the retained config reference.

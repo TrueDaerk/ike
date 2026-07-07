@@ -7,12 +7,13 @@
 package ui
 
 import (
+	"image/color"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-)
 
-// defaultAccent is the border/title colour when Config.Accent is empty.
-const defaultAccent = "#5f87ff"
+	"ike/internal/theme"
+)
 
 // Content is the body a Floating shell hosts. The shell owns all chrome,
 // sizing, scrolling and dismissal; content only supplies a heading and renders
@@ -53,7 +54,7 @@ type Config struct {
 	MaxWidthFrac  float64  // pane outer width clamp as a fraction of the terminal; 0 = no clamp
 	MaxHeightFrac float64  // pane outer height clamp as a fraction of the terminal; 0 = no clamp
 	DismissKeys   []string // keys that close the shell; empty selects {"esc"}
-	Accent        string   // border/title colour; "" selects the default
+	Accent        string   // border/title colour override; "" follows the theme
 }
 
 // Floating is the stateful shell. It hosts a Content child, owns the box chrome,
@@ -63,6 +64,7 @@ type Config struct {
 type Floating struct {
 	cfg     Config
 	dismiss map[string]bool
+	pal     *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	content Content
 	open    bool
@@ -82,6 +84,21 @@ func New(cfg Config) *Floating {
 		dismiss[k] = true
 	}
 	return &Floating{cfg: cfg, dismiss: dismiss, scroll: newScroller(0, 0)}
+}
+
+// SetPalette threads the active theme palette in (Roadmap 0110); the border
+// accent and dim hint colours derive from its ui slots.
+func (f *Floating) SetPalette(p *theme.Palette) {
+	f.pal = p
+	f.scroll.dim = f.theme().Border
+}
+
+// theme returns the active palette, defaulting when none was threaded in.
+func (f *Floating) theme() *theme.Palette {
+	if f.pal != nil {
+		return f.pal
+	}
+	return theme.DefaultPalette()
 }
 
 // IsOpen reports whether the shell is currently shown.
@@ -154,17 +171,17 @@ func (f *Floating) View() string {
 	if !f.open || f.width <= 0 || f.content == nil {
 		return ""
 	}
-	accent := f.cfg.Accent
-	if accent == "" {
-		accent = defaultAccent
+	var accent color.Color = f.theme().BorderFocus
+	if f.cfg.Accent != "" {
+		accent = lipgloss.Color(f.cfg.Accent)
 	}
 	titleStyle := lipgloss.NewStyle().Bold(true)
-	hintStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(indicatorColor))
+	hintStyle := lipgloss.NewStyle().Foreground(f.theme().Border)
 	title := titleStyle.Render(f.content.Title()) + hintStyle.Render("   ("+f.hint()+" to close)")
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color(accent)).
+		BorderForeground(accent).
 		Padding(padV, padH)
 
 	inner := lipgloss.JoinVertical(lipgloss.Left, title, f.scroll.View())
