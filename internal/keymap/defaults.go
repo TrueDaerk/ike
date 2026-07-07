@@ -56,6 +56,8 @@ var jetbrainsRows = []row{
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)", false},
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)", false},
 	{"cmd+shift+r", "project.replaceInPath", "Replace in path", Global, "Project (09)", false},
+	{"cmd+left", "editor.lineStart", "Move to line start", Editor, "Editor (06)", false},
+	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)", false},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)", false},
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)", false},
 	{"cmd+b", "editor.gotoDeclaration", "Go to declaration", Editor, "Editor (06)/LSP (10)", false},

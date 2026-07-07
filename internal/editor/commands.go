@@ -49,6 +49,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.write_quit", "Save and Close", "write_quit", ":wq"),
 			action("editor.undo", "Undo", "undo", "u"),
 			action("editor.redo", "Redo", "redo", "ctrl+r"),
+			action("editor.copy", "Copy", "copy", "y"),
+			action("editor.cut", "Cut", "cut", "d"),
+			action("editor.paste", "Paste", "paste", "p"),
+			action("editor.lineStart", "Move to Line Start", "line_start", "0"),
+			action("editor.lineEnd", "Move to Line End", "line_end", "$"),
 		},
 	}
 }

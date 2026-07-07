@@ -3,6 +3,7 @@ package pane
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/clipboard"
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -131,6 +132,9 @@ func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette) *In
 		i.ed = editor.New()
 		i.ed.SetPalette(pal)
 		i.ed.Configure(cfg)
+		if c := clipboard.System(); c != nil {
+			i.ed.SetClipboard(c)
+		}
 	}
 	return i
 }

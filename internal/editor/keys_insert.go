@@ -30,13 +30,15 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		m.insertBackspace()
 	case key.Code == tea.KeyTab:
 		m.insertText(m.tabText())
-	case key.Code == tea.KeyLeft:
+	// Plain (or Shift-modified) arrows move the cursor; Alt/Ctrl chords fall
+	// through to resolveMotion below for word/paragraph navigation.
+	case key.Code == tea.KeyLeft && key.Mod&^tea.ModShift == 0:
 		m.insertMove(0, -1)
-	case key.Code == tea.KeyRight:
+	case key.Code == tea.KeyRight && key.Mod&^tea.ModShift == 0:
 		m.insertMove(0, 1)
-	case key.Code == tea.KeyUp:
+	case key.Code == tea.KeyUp && key.Mod&^tea.ModShift == 0:
 		m.insertMove(-1, 0)
-	case key.Code == tea.KeyDown:
+	case key.Code == tea.KeyDown && key.Mod&^tea.ModShift == 0:
 		m.insertMove(1, 0)
 	case key.Code == tea.KeyHome:
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: 0}
@@ -48,7 +50,7 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		// Printable input, including a bare space (Text == " ").
 		m.writeRunes(key.Text)
 	default:
-		// Shift+arrows (word nav), PgUp/PgDn and Ctrl motions also work mid-insert.
+		// Alt/Ctrl+arrows (word nav), PgUp/PgDn and Ctrl motions also work mid-insert.
 		if res, ok := m.resolveMotion(key.String(), 0, 1); ok {
 			m.cursor = m.buf.Clamp(res.Pos)
 			m.desiredCol = m.cursor.Col

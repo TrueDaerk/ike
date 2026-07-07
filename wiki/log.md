@@ -2,6 +2,14 @@
 
 ## 2026-07-07
 
+- Conventional selection & clipboard (#47): word navigation moved from
+  `shift+←/→` to `alt/option+←/→` (paragraph jumps to `alt+↑/↓`; ctrl variants
+  stay); `shift+arrows` now start/extend a charwise visual selection;
+  `editor.copy/cut/paste` registered (cmd+c/x/v live, acting on the selection
+  or current line through the system clipboard — new `internal/clipboard`
+  package wired into `register.SetClipboard`); `cmd+left`/`cmd+right` bound to
+  new `editor.lineStart`/`editor.lineEnd` commands.
+
 - Cheatsheet, pane switcher, go-to-file as registered commands (#44, #45, #46):
   `palette.keymapHelp` (f1 / cmd+k cmd+s) opens the help overlay via the new
   `openHelp` helper (hardcoded `?`/`f1` kept as fallback), `pane.switcher`

@@ -123,6 +123,14 @@ as the registry-less fallback), `pane.switcher` (`ctrl+tab`, still flagged
 fragile; same cycle as the hardcoded `tab`), and `project.goToFile`
 (`cmd+shift+o`, the centered palette locked to the `@` file mode).
 
+Editor clipboard and line navigation are live default bindings: `cmd+c` /
+`cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
+`editor.paste` commands (visual selection or current line, through the system
+clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
+`editor.lineStart` / `editor.lineEnd`. Word/paragraph navigation
+(`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` selection are
+vim-layer keys handled inside the editor, not rows in this table.
+
 ## Boundaries
 
 Vim-internal keymaps inside the editor (normal/insert/visual motions, operators,

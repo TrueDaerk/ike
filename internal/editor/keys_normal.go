@@ -90,6 +90,16 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Shift+arrows start a charwise selection: enter visual mode anchored at the
+	// cursor and apply the plain arrow motion (updateVisual extends it further).
+	if plain, ok := shiftSelectKey(s); ok && !m.pending.HasOperator() {
+		m.enterVisual(Visual)
+		if res, ok := m.resolveMotion(plain, 0, count); ok {
+			m.applyMotionOrOperator(res, count)
+		}
+		return m, nil
+	}
+
 	// Motions (also serve as operator targets).
 	if res, ok := m.resolveMotion(s, r, count); ok {
 		m.applyMotionOrOperator(res, count)
@@ -182,14 +192,16 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 		}
 		return motion.Result{}, false
 
-	// Word navigation with Shift+Left/Right; paragraph jumps with Shift+Up/Down.
-	case "shift+right", "ctrl+right":
+	// Word navigation with Option/Alt+Left/Right; paragraph jumps with
+	// Alt+Up/Down. Ctrl variants are the everywhere-deliverable fallback.
+	// Shift+arrows are selection keys, handled before motion resolution.
+	case "alt+right", "ctrl+right":
 		return motion.WordForward(m.buf, m.cursor, count), true
-	case "shift+left", "ctrl+left":
+	case "alt+left", "ctrl+left":
 		return motion.WordBackward(m.buf, m.cursor, count), true
-	case "shift+down":
+	case "alt+down", "ctrl+down":
 		return motion.ParagraphForward(m.buf, m.cursor, count), true
-	case "shift+up":
+	case "alt+up", "ctrl+up":
 		return motion.ParagraphBackward(m.buf, m.cursor, count), true
 
 	// Page and half-page scrolling.
@@ -212,6 +224,26 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 		return motion.Result{Pos: buffer.Position{Line: mid}, Kind: motion.Linewise}, true
 	}
 	return motion.Result{}, false
+}
+
+// shiftSelectKey maps a Shift+arrow chord to the plain motion key a selection
+// extends with; ok is false for every other key.
+func shiftSelectKey(s string) (string, bool) {
+	switch s {
+	case "shift+left":
+		return "left", true
+	case "shift+right":
+		return "right", true
+	case "shift+up":
+		return "up", true
+	case "shift+down":
+		return "down", true
+	case "shift+home":
+		return "home", true
+	case "shift+end":
+		return "end", true
+	}
+	return "", false
 }
 
 // pageMotion computes a vertical jump of a full or half page in the given

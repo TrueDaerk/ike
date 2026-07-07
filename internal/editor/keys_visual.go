@@ -37,6 +37,11 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// Shift+arrows extend the selection like their plain counterparts.
+	if plain, ok := shiftSelectKey(s); ok {
+		s = plain
+	}
+
 	// Motions move the cursor end of the selection.
 	if res, ok := m.resolveMotion(s, r, 1); ok {
 		if res.Kind == motion.Linewise {
@@ -67,7 +72,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "<":
 		m.visualIndent(-1)
 	case "p", "P":
-		m.visualPaste()
+		m.visualPaste(0)
 	case "i":
 		m.around = false
 		m.wait = awaitObject
@@ -106,10 +111,11 @@ func (m *Model) visualIndent(dir int) {
 	m.indentTarget(target, dir)
 }
 
-// visualPaste replaces the selection with the unnamed register's contents
-// (vim's visual-mode put), leaving the replaced text in the unnamed register.
-func (m *Model) visualPaste() {
-	e := m.regs.Get(0)
+// visualPaste replaces the selection with reg's contents (vim's visual-mode
+// put; reg 0 is the unnamed register), leaving the replaced text in the
+// unnamed register.
+func (m *Model) visualPaste(reg rune) {
+	e := m.regs.Get(reg)
 	target := m.visualSelection()
 	start := target.Range.Start
 	m.mode = Normal
@@ -152,10 +158,15 @@ func (m *Model) visualSelection() operator.Target {
 	return operator.Compose(m.buf, m.anchor, m.cursor, motion.Inclusive)
 }
 
-// visualOperate applies op to the selection and leaves visual mode.
-func (m *Model) visualOperate(op rune) {
+// visualOperate applies op to the selection with the pending register and
+// leaves visual mode.
+func (m *Model) visualOperate(op rune) { m.visualOperateReg(op, m.pending.Register) }
+
+// visualOperateReg applies op to the selection targeting reg explicitly (the
+// clipboard actions use `+`) and leaves visual mode.
+func (m *Model) visualOperateReg(op, reg rune) {
 	target := m.visualSelection()
 	m.mode = Normal
-	m.runOperator(op, target, m.pending.Register)
+	m.runOperator(op, target, reg)
 	m.pending.Reset()
 }
