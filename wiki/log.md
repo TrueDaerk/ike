@@ -2,6 +2,13 @@
 
 ## 2026-07-07
 
+- Config write-back layer (#89, roadmap 0160): `config.WriteKey`/`RemoveKey`
+  persist one dotted key to the user or project settings file via a TOML
+  round-trip (unknown keys survive; broken files are refused, never
+  destroyed); `DefaultScope` routes keys to their conventional layer;
+  `WriteAndReload`/`RemoveAndReload` chain into the existing reload path so
+  changes apply live. Foundation for the 0160 settings UI.
+
 - File-watcher service (#80, roadmap 0140): new `internal/watch` — fsnotify on
   the project root (recursive, `.git` skipped), ~100ms debounce with per-path
   coalescing, `watch.EventMsg` routed to the owning editor / explorer.

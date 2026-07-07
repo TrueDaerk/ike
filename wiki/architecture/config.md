@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Configuration System
@@ -78,7 +78,30 @@ the *entries*.
 - `watch.go` defines `ConfigReloadedMsg` (a `tea.Msg`) and `Reload(opts)` — the
   reload seam; actual file-watching is left to its owning roadmap.
 - `write.go` exposes the typed setter seam (e.g. `PushHistory`) with the bounded
-  semantics; persisting back to disk is Roadmap 0090's job.
+  semantics.
+
+## Write-back (Roadmap 0160, #89)
+
+`write.go` also persists single keys back to disk — the layer every settings-UI
+control writes through:
+
+- `WriteKey(opts, scope, key, value)` / `RemoveKey(opts, scope, key)` set or
+  delete one dotted key (`"editor.tab_width"`) in the **user** or **project**
+  settings file, creating it (and `.ike/`) when missing. The file round-trips
+  through the TOML parser: unknown keys survive untouched (comments are not
+  preserved — the library re-emits the document). A file that no longer parses
+  is left alone and the error returned; write-back never destroys a
+  recoverable config.
+- **Scope model:** `DefaultScope(key)` names the conventional layer —
+  `project.*`, `lsp.servers.*` and `toolchain.*` are project-scoped, everything
+  else (theme, keymap, editor look & feel) user-scoped. Callers may pass an
+  explicit scope.
+- **Reset to default** = `RemoveKey`: the value falls back through
+  defaults < user < project; emptied sections are pruned.
+- `WriteAndReload` / `RemoveAndReload` (watch.go) chain the write with the
+  normal `Load` pipeline and deliver `ConfigReloadedMsg` — a UI change applies
+  through exactly the flow a manual file edit takes; write failures surface as
+  a `Diagnostic` on the message.
 
 ## Host integration
 

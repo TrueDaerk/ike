@@ -25,3 +25,30 @@ func Reload(opts Options) tea.Cmd {
 		return ConfigReloadedMsg{Config: c, Diags: diags}
 	}
 }
+
+// WriteAndReload persists key=value to scope's layer (WriteKey) and then runs
+// the normal reload pipeline, so a settings-UI change applies through exactly
+// the flow a manual file edit takes. A write failure surfaces as a Diagnostic
+// on the reloaded message rather than an error — the UI shows it, the app
+// keeps running on the prior values.
+func WriteAndReload(opts Options, scope Scope, key string, value any) tea.Cmd {
+	return applyAndReload(opts, key, func() error { return WriteKey(opts, scope, key, value) })
+}
+
+// RemoveAndReload removes key from scope's layer ('reset to default') and
+// reloads, mirroring WriteAndReload.
+func RemoveAndReload(opts Options, scope Scope, key string) tea.Cmd {
+	return applyAndReload(opts, key, func() error { return RemoveKey(opts, scope, key) })
+}
+
+// applyAndReload runs one write-back mutation and always follows with Load.
+func applyAndReload(opts Options, key string, fn func() error) tea.Cmd {
+	return func() tea.Msg {
+		werr := fn()
+		c, diags := Load(opts)
+		if werr != nil {
+			diags = append(diags, Diagnostic{Field: key, Message: werr.Error()})
+		}
+		return ConfigReloadedMsg{Config: c, Diags: diags}
+	}
+}
