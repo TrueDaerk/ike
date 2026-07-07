@@ -18,6 +18,11 @@ import (
 type sessionState struct {
 	Editor   *editorSession  `json:"editor,omitempty"`
 	Explorer explorerSession `json:"explorer"`
+	// Theme is the color scheme selected at runtime (the palette "Theme: <name>"
+	// commands). It is runtime UI state — the last explicit choice — so it lives
+	// here beside layout/session, not in settings.toml; on restore it overrides
+	// the config-derived theme. Empty means "no runtime override, follow config".
+	Theme string `json:"theme,omitempty"`
 }
 
 type editorSession struct {

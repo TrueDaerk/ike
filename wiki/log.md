@@ -6,7 +6,11 @@
   one global command per built-in scheme (`themes.select.<name>`, "Theme:
   <name>"), dispatching `app.SelectThemeMsg` → `selectTheme` (resolve over
   built-ins + plugin themes, re-thread via `applyTheme`, status confirmation).
-  Session-only; config persistence stays with 0040/0090.
+  The runtime pick persists in the session store (`session.json` `theme` field,
+  `Model.themeOverride`) and is re-applied on restore, overriding the
+  config-derived theme; only explicit picks are recorded, so `settings.toml`
+  stays untouched and config edits keep working until a runtime pick overrides.
+  `settings.toml` write-back remains with 0040/0090.
 
 - Roadmap 0110 (Themes / Color Schemes) implemented: new leaf package
   `internal/theme` (semantic `UI` slots + `Captures` + `Files` per Textual/

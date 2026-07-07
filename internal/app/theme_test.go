@@ -89,3 +89,24 @@ func TestSelectThemeCommand(t *testing.T) {
 		t.Errorf("unknown name: theme = %q, want %s", m.pal().Name, theme.DefaultName)
 	}
 }
+
+// TestThemeOverridePersists: a runtime theme selection is snapshotted into the
+// session and re-applied on restore, surviving a restart.
+func TestThemeOverridePersists(t *testing.T) {
+	m := NewWith(themeReg(), host.MapConfig{})
+	// No runtime pick yet: nothing persisted, so config still wins next launch.
+	if got := m.snapshotSession().Theme; got != "" {
+		t.Errorf("fresh session theme = %q, want empty", got)
+	}
+	next, _ := m.Update(SelectThemeMsg{Name: "nord"})
+	m = next.(Model)
+	if got := m.snapshotSession().Theme; got != "nord" {
+		t.Fatalf("session theme = %q, want nord", got)
+	}
+	// A fresh model restoring that session lands on nord, not the config default.
+	m2 := NewWith(themeReg(), host.MapConfig{})
+	m2.restoreTheme("nord")
+	if m2.pal().Name != "nord" {
+		t.Errorf("restored theme = %q, want nord", m2.pal().Name)
+	}
+}

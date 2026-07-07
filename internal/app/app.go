@@ -78,6 +78,10 @@ type Model struct {
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
 	// at construction and on config reloads.
 	themePal *theme.Palette
+	// themeOverride is the theme name chosen at runtime via a palette command,
+	// "" when the theme still follows config. It persists in the session so the
+	// choice survives a restart; a config edit only wins again once it is cleared.
+	themeOverride string
 	// lastEsc records that the previous key was an esc in a non-capturing context,
 	// so a second esc opens the palette (esc-esc toggle).
 	lastEsc bool
@@ -279,6 +283,7 @@ func (m *Model) restoreSession() {
 	if !ok {
 		return
 	}
+	m.restoreTheme(s.Theme)
 	m.explorer().Restore(explorer.State{
 		Expanded:   s.Explorer.Expanded,
 		ShowHidden: s.Explorer.ShowHidden,
@@ -326,6 +331,7 @@ func (m Model) editorWithFile(path string) string {
 func (m Model) snapshotSession() sessionState {
 	st := m.explorer().Snapshot()
 	s := sessionState{
+		Theme: m.themeOverride,
 		Explorer: explorerSession{
 			Expanded:   st.Expanded,
 			ShowHidden: st.ShowHidden,

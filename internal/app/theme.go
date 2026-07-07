@@ -83,11 +83,24 @@ func (m *Model) applyTheme(p *theme.Palette) {
 func (m *Model) selectTheme(name string) {
 	sel, found := theme.Select(name, m.reg.Themes())
 	m.applyTheme(theme.NewPalette(sel))
+	m.themeOverride = sel.Name // persisted in the session so the choice sticks
 	if !found {
 		m.host.SetStatus("unknown theme " + strconvQuote(name) + ", using " + theme.DefaultName)
 		return
 	}
 	m.host.SetStatus("theme: " + sel.Name)
+}
+
+// restoreTheme re-applies a session-persisted runtime theme override, if any,
+// so a palette-selected scheme survives a restart. It threads the palette
+// without touching the status line (startup should be quiet).
+func (m *Model) restoreTheme(name string) {
+	if name == "" {
+		return
+	}
+	sel, _ := theme.Select(name, m.reg.Themes())
+	m.applyTheme(theme.NewPalette(sel))
+	m.themeOverride = sel.Name
 }
 
 // reloadConfig applies a reloaded configuration (config.ConfigReloadedMsg):

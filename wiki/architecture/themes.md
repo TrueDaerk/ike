@@ -126,9 +126,16 @@ name = "tokyo-night"
 The `themes` plugin registers one global palette command per built-in
 (`themes.select.<name>`, shown as "Theme: <name>" under `:`). It dispatches
 `app.SelectThemeMsg`; the root resolves the name (built-ins + plugin themes)
-and re-threads the palette via `applyTheme` — **session-only**, nothing is
-written back to config (the write path belongs to Roadmap 0040/0090). An
-unknown name falls back to `default` with a status warning.
+and re-threads the palette via `applyTheme`. An unknown name falls back to
+`default` with a status warning.
+
+The runtime choice is **persisted in the session store** (`session.json`,
+field `theme`), not in `settings.toml` — it is runtime UI state like the
+layout, so `settings.toml` stays untouched (that write path belongs to Roadmap
+0040/0090). `restoreSession` re-applies it on the next launch, overriding the
+config-derived theme. Only an *explicit* palette pick is recorded
+(`Model.themeOverride`); a purely config-driven theme leaves the field empty,
+so editing `[theme].name` keeps working until a runtime pick overrides it.
 
 ## Boundaries
 
