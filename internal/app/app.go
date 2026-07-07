@@ -638,6 +638,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.CloseFocused()
 		return m, nil
 
+	case ShowKeymapHelpMsg:
+		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
+		m.openHelp()
+		return m, nil
+
+	case CyclePaneFocusMsg:
+		// pane.switcher (ctrl+tab / palette): same cycle as the hardcoded tab.
+		m.cycleFocus()
+		return m, nil
+
+	case GoToFileMsg:
+		// project.goToFile (cmd+shift+o / palette): the centered fuzzy file
+		// finder, locked to the "@" mode, from any context.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+		return m, nil
+
 	case SelectThemeMsg:
 		// Session-only theme switch from the palette's "Theme: <name>" commands.
 		m.selectTheme(msg.Name)
@@ -760,11 +777,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.editorCapturing() {
 			return m.routeKey(msg)
 		}
+		// "?" stays a plain non-capturing key outside the chord table; f1
+		// normally resolves through the keymap layer above (palette.keymapHelp)
+		// and only lands here when that command is not registered.
 		if keys == "?" || keys == "f1" {
-			m.help.Snapshot()
-			m.shell.SetContent(m.help)
-			m.shell.SetSize(m.width, m.height)
-			m.shell.Open()
+			m.openHelp()
 			return m, nil
 		}
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
@@ -854,6 +871,14 @@ func (m Model) RunCommand(id string) tea.Cmd {
 		return c.Run(m.host)
 	}
 	return nil
+}
+
+// openHelp shows the keymap cheatsheet overlay in the modal shell.
+func (m *Model) openHelp() {
+	m.help.Snapshot()
+	m.shell.SetContent(m.help)
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
 }
 
 // openPalette shows the centered command palette for the focused pane's context,

@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-06-21T15:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Command Palette
@@ -44,7 +44,7 @@ open-file path.
 
 ### Opening
 
-Three entry points, all from a non-capturing context:
+Four entry points, all from a non-capturing context:
 
 - **Toggle key** (config `palette.toggle_key`, default `ctrl+p`) — `Open` centered
   for the focused pane's context.
@@ -55,10 +55,15 @@ Three entry points, all from a non-capturing context:
   *anchored* over the editor pane via `OpenAnchored(cx, '@', x, y, w)`. The root
   composites it with `overlay.Place` at the pane's interior top-left rather than
   `overlay.Center`.
+- **`project.goToFile`** (default `cmd+shift+o`, or from the palette itself) —
+  opens the **centered** palette locked to the `@` file mode via
+  `OpenLocked(cx, '@')`, so go-to-file works from any context, not just an
+  editor pane.
 
 A palette can be **locked** to a single mode (no prefix switching): the anchored
-editor finder is locked to `@`, so a typed `:` is part of the query, not a mode
-switch. The centered palette is unlocked and switches freely.
+editor finder and the go-to-file open are locked to `@`, so a typed `:` is part
+of the query, not a mode switch. The plain centered palette is unlocked and
+switches freely.
 
 ## Modes & prefix dispatch
 

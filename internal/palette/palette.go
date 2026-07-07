@@ -140,6 +140,21 @@ func (p *Palette) OpenAnchored(cx Context, prefix rune, x, y, w int) {
 	p.recompute()
 }
 
+// OpenLocked shows the centered palette pinned to the mode with the given
+// prefix (no mode switching) — how project.goToFile opens the file finder from
+// anywhere. An unknown prefix falls back to the default centered palette.
+func (p *Palette) OpenLocked(cx Context, prefix rune) {
+	m, ok := p.byPrefix[prefix]
+	if !ok {
+		p.Open(cx)
+		return
+	}
+	p.reset(cx)
+	p.locked = m
+	p.anchored = false
+	p.recompute()
+}
+
 // reset clears the per-open transient state.
 func (p *Palette) reset(cx Context) {
 	p.open = true

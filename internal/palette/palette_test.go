@@ -207,6 +207,30 @@ func TestLockedFileModeNoSwitching(t *testing.T) {
 	}
 }
 
+func TestOpenLockedCenteredFileMode(t *testing.T) {
+	fm := fileMode("a.go", "b.txt")
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fm)
+	p.SetSize(80, 24)
+	p.OpenLocked(Context{Root: "."}, '@')
+
+	if p.Anchored() {
+		t.Fatal("OpenLocked should stay centered, not anchored")
+	}
+	if m, _ := p.mode(); m != Mode(fm) {
+		t.Fatal("should be locked to file mode")
+	}
+	// A leading ":" must not switch modes while locked — it is part of the query.
+	p.Update(runes(":x"))
+	if m, _ := p.mode(); m != Mode(fm) {
+		t.Fatal("locked mode must not switch on ':'")
+	}
+	// An unknown prefix falls back to the default centered palette, unlocked.
+	p.OpenLocked(Context{Root: "."}, '!')
+	if p.locked != nil {
+		t.Fatal("unknown prefix should fall back to the unlocked palette")
+	}
+}
+
 func TestNoResults(t *testing.T) {
 	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fileMode())
 	p.SetSize(80, 24)

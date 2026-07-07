@@ -2,6 +2,12 @@
 
 ## 2026-07-07
 
+- Cheatsheet, pane switcher, go-to-file as registered commands (#44, #45, #46):
+  `palette.keymapHelp` (f1 / cmd+k cmd+s) opens the help overlay via the new
+  `openHelp` helper (hardcoded `?`/`f1` kept as fallback), `pane.switcher`
+  (ctrl+tab, fragile) cycles focus like the hardcoded tab, and
+  `project.goToFile` (cmd+shift+o) opens the centered palette locked to the `@`
+  file mode via the new `palette.OpenLocked`.
 - Cmd+W closes the focused tab (#43): new compile-in `app` plugin
   (`internal/app/commands.go`) exposes root-model actions as registry commands;
   `editor.closeTab` dispatches `CloseTabMsg` → `CloseFocused`, so the default

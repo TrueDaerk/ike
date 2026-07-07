@@ -208,6 +208,53 @@ func TestCmdWClosesTabThroughKeymap(t *testing.T) {
 	}
 }
 
+// TestF1OpensCheatsheetThroughKeymap guards palette.keymapHelp: f1 must resolve
+// through the keymap layer to the registered app-level command and open the
+// help overlay (the hardcoded "?" shares the same helper).
+func TestF1OpensCheatsheetThroughKeymap(t *testing.T) {
+	m := newSized()
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyF1})
+	if !m.shell.IsOpen() {
+		t.Fatal("f1 should open the keymap cheatsheet overlay")
+	}
+}
+
+// TestCtrlTabCyclesFocusThroughKeymap guards pane.switcher: ctrl+tab must
+// resolve through the keymap layer to the registered app-level command and
+// cycle pane focus, like the hardcoded tab.
+func TestCtrlTabCyclesFocusThroughKeymap(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+		t.Fatal("precondition: editor focused after open")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl})
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+		t.Fatal("ctrl+tab should cycle focus to the explorer")
+	}
+}
+
+// TestGoToFileOpensLockedFilePalette guards project.goToFile: the command must
+// open the centered palette locked to the fuzzy file mode from any context
+// (here: the explorer, where the "@" editor key is unavailable).
+func TestGoToFileOpensLockedFilePalette(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(GoToFileMsg{})
+	m = tm.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("project.goToFile should open the palette")
+	}
+	if m.palette.Anchored() {
+		t.Fatal("go-to-file palette should be centered, not anchored")
+	}
+}
+
 // TestDeletingFileClosesItsEditor guards that removing a file in the explorer
 // (delete, or undo of a create) closes any editor still showing it, rather than
 // leaving a stale pane open on a gone file.
@@ -464,9 +511,9 @@ func TestHelpOverlayToggle(t *testing.T) {
 		t.Fatal(`"esc" should dismiss the help overlay`)
 	}
 
-	// F1 is an alias for "?" and opens the same overlay.
-	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyF1})
-	m = tm.(Model)
+	// F1 is an alias for "?" and opens the same overlay (here via the hardcoded
+	// fallback — this test's registry does not register palette.keymapHelp).
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyF1})
 	if !m.shell.IsOpen() {
 		t.Fatal(`F1 should open the help overlay`)
 	}

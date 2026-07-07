@@ -4,7 +4,7 @@ title: Help Overlay
 description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-06-20T13:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Help Overlay
@@ -39,10 +39,13 @@ internal/help/
   help.go      ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
 ```
 
-The root model (`internal/app`) holds a single `*ui.Floating`. On `?`/`F1` it calls
-`help.Snapshot()`, sets the `*help.Help` as the shell's content, and opens the
-shell; while open the shell swallows all input and the root composites it
-centered via `overlay.Center`. Scrolling, chrome, sizing, and dismissal now live
+The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
+calls `help.Snapshot()`, sets the `*help.Help` as the shell's content, and opens
+the shell; while open the shell swallows all input and the root composites it
+centered via `overlay.Center`. It is reached three ways: the registered
+`palette.keymapHelp` command (default `f1` / `cmd+k cmd+s`, also
+palette-invokable), the plain `?` key, and a hardcoded `f1` fallback for
+registries without the app plugin. Scrolling, chrome, sizing, and dismissal now live
 in the shell, not in help.
 
 ## Source of truth

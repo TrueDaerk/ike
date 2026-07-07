@@ -117,7 +117,11 @@ modified chords stay eligible for the keymap layer.
 Root-model actions are exposed as registry commands by the compile-in `app`
 plugin (`internal/app/commands.go`), so their default bindings are live and the
 palette can invoke them: `editor.closeTab` (`cmd+w`, same behavior as the
-hardcoded `ctrl+w` / the editor's `:q`).
+hardcoded `ctrl+w` / the editor's `:q`), `palette.keymapHelp` (`f1`,
+`cmd+k cmd+s` — the cheatsheet overlay; the hardcoded `?`/`f1` branch remains
+as the registry-less fallback), `pane.switcher` (`ctrl+tab`, still flagged
+fragile; same cycle as the hardcoded `tab`), and `project.goToFile`
+(`cmd+shift+o`, the centered palette locked to the `@` file mode).
 
 ## Boundaries
 
