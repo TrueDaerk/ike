@@ -60,7 +60,10 @@ var jetbrainsRows = []row{
 	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)", false},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)", false},
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)", false},
-	{"cmd+b", "editor.gotoDeclaration", "Go to declaration", Editor, "Editor (06)/LSP (10)", false},
+	// Reconciled (0081/20): the LSP plugin registers goto-definition as
+	// lsp.definition; the table uses the registered id rather than forking an
+	// editor.gotoDeclaration alias.
+	{"cmd+b", "lsp.definition", "Go to declaration", Editor, "LSP (0100)", false},
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)", true},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)", true},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)", false},
