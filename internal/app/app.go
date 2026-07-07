@@ -648,6 +648,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cycleFocus()
 		return m, nil
 
+	case SaveAllMsg:
+		// editor.saveAll (cmd+shift+s / palette): write every dirty editor.
+		var cmds []tea.Cmd
+		for _, key := range m.panes.Keys() {
+			if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().Dirty() {
+				cmds = append(cmds, inst.Update(editor.ActionMsg{Action: "write"}))
+			}
+		}
+		return m, tea.Batch(cmds...)
+
+	case ToggleExplorerFocusMsg:
+		// explorer.toggle (cmd+1 / palette): focus the tree, or jump back to the
+		// active editor when the tree already holds focus.
+		if m.panes.Focused() == pane.ExplorerKey {
+			if key := m.activeEditorKey(); key != "" {
+				m.setFocus(key)
+			}
+		} else if m.panes.Has(pane.ExplorerKey) {
+			m.setFocus(pane.ExplorerKey)
+		}
+		return m, nil
+
 	case GoToFileMsg:
 		// project.goToFile (cmd+shift+o / palette): the centered fuzzy file
 		// finder, locked to the "@" mode, from any context.

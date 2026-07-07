@@ -10,6 +10,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/operator"
+	"ike/internal/editor/search"
 )
 
 // ActionMsg requests a named editor action. It is the single path the plugin
@@ -348,6 +349,16 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.lineStart()
 	case "line_end":
 		m.lineEnd()
+	case "find":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.beginSearch(search.Forward)
+	case "duplicate_line":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.duplicateLine()
 	}
 	m.scroll()
 	return m, nil
@@ -390,6 +401,19 @@ func (m *Model) clipboardPaste() {
 		return
 	}
 	m.paste('+', false, 1, false)
+}
+
+// duplicateLine inserts a copy of the current line below it and moves the
+// cursor onto the copy, keeping its column (JetBrains Cmd+D). Dot-repeatable.
+func (m *Model) duplicateLine() {
+	line := m.buf.Line(m.cursor.Line)
+	at := buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
+	col := m.cursor.Col
+	m.mutate(func(rec *history.Recorder) buffer.Position {
+		rec.Apply(buffer.Insert(at, "\n"+line))
+		return buffer.Position{Line: at.Line + 1, Col: col}
+	})
+	m.dot = &dotCommand{run: func(mm *Model) { mm.duplicateLine() }}
 }
 
 // lineStart moves the cursor to column 0 (Cmd+Left).

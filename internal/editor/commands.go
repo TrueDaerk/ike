@@ -54,6 +54,8 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.paste", "Paste", "paste", "p"),
 			action("editor.lineStart", "Move to Line Start", "line_start", "0"),
 			action("editor.lineEnd", "Move to Line End", "line_end", "$"),
+			action("editor.find", "Find in File", "find", "/"),
+			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
 		},
 	}
 }

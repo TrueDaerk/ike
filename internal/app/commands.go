@@ -25,6 +25,16 @@ type CyclePaneFocusMsg struct{}
 // mode ("@"), from any context. Dispatched by project.goToFile.
 type GoToFileMsg struct{}
 
+// SaveAllMsg asks the root model to save every dirty editor pane. Dispatched
+// by editor.saveAll.
+type SaveAllMsg struct{}
+
+// ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
+// back to the active editor when the explorer already holds focus (the
+// terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
+// by explorer.toggle.
+type ToggleExplorerFocusMsg struct{}
+
 // appCommands is the compile-in plugin exposing root-model actions as registry
 // commands, so the default keybindings (Roadmap 0080/0081) and the palette can
 // drive them; the root model owns the behavior, this file only names it.
@@ -52,6 +62,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
+			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 		},
 	}
 }

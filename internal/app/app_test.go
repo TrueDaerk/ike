@@ -255,6 +255,55 @@ func TestGoToFileOpensLockedFilePalette(t *testing.T) {
 	}
 }
 
+// TestSaveAllWritesDirtyEditors guards editor.saveAll: SaveAllMsg must write
+// every dirty editor pane to disk.
+func TestSaveAllWritesDirtyEditors(t *testing.T) {
+	m := newSized()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+	// Type "iX<esc>" into the focused editor to dirty the buffer.
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'i', Text: "i"},
+		{Code: 'X', Text: "X"},
+		{Code: tea.KeyEscape},
+	} {
+		m = drainKey(m, k)
+	}
+	tm, _ = m.Update(SaveAllMsg{})
+	m = tm.(Model)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "Xone") {
+		t.Fatalf("save-all wrote %q, want it to start with Xone", data)
+	}
+}
+
+// TestToggleExplorerFocus guards explorer.toggle: focus flips from the
+// explorer to the active editor and back.
+func TestToggleExplorerFocus(t *testing.T) {
+	m := newSized()
+	if m.panes.Focused() != pane.ExplorerKey {
+		t.Fatalf("precondition: explorer focused, got %q", m.panes.Focused())
+	}
+	tm, _ := m.Update(ToggleExplorerFocusMsg{})
+	m = tm.(Model)
+	if got := m.panes.Focused(); got == pane.ExplorerKey {
+		t.Fatal("toggle should move focus off the explorer")
+	}
+	tm, _ = m.Update(ToggleExplorerFocusMsg{})
+	m = tm.(Model)
+	if got := m.panes.Focused(); got != pane.ExplorerKey {
+		t.Fatalf("second toggle should focus the explorer again, got %q", got)
+	}
+}
+
 // TestDeletingFileClosesItsEditor guards that removing a file in the explorer
 // (delete, or undo of a create) closes any editor still showing it, rather than
 // leaving a stale pane open on a gone file.

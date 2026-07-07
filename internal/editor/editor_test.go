@@ -627,6 +627,26 @@ func TestLineStartEndActions(t *testing.T) {
 	}
 }
 
+func TestDuplicateLineAction(t *testing.T) {
+	m, _ := loaded(t, "foo bar\nsecond\n")
+	m = typeKeys(m, "ll") // cursor at col 2
+	m, _ = m.Update(ActionMsg{Action: "duplicate_line"})
+	if line(m, 0) != "foo bar" || line(m, 1) != "foo bar" || line(m, 2) != "second" {
+		t.Fatalf("duplicate_line lines=%q,%q,%q", line(m, 0), line(m, 1), line(m, 2))
+	}
+	if m.cursor.Line != 1 || m.cursor.Col != 2 {
+		t.Fatalf("duplicate_line cursor=%v want line 1 col 2", m.cursor)
+	}
+}
+
+func TestFindActionOpensSearch(t *testing.T) {
+	m, _ := loaded(t, "foo\n")
+	m, _ = m.Update(ActionMsg{Action: "find"})
+	if !m.searching {
+		t.Fatal("find action should enter search input")
+	}
+}
+
 // fakeClipboard captures writes and serves reads for clipboard action tests.
 type fakeClipboard struct{ text string }
 
