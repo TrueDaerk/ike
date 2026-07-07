@@ -66,6 +66,10 @@ func (m Model) CommandLine() string {
 // vertically scrolled text, and the cursor cell highlighted when focused.
 func (m Model) View() string {
 	if m.path == "" && m.buf.LineCount() == 1 && m.buf.Line(0) == "" {
+		// The command line must show even on the empty scratch buffer (":q").
+		if cl := m.commandLineRow(); cl != "" {
+			return cl
+		}
 		return lipgloss.NewStyle().Faint(true).Render("(no file open)")
 	}
 	lineCount := m.buf.LineCount()
@@ -88,10 +92,35 @@ func (m Model) View() string {
 		body := m.renderLine(i, textWidth, cursorStyle, selStyle)
 		out = append(out, gutter+body)
 	}
+	// An active ":" / "/" / "?" input renders as the pane's bottom row
+	// (vim-style), padding short files down so the line sits at the bottom.
+	if cl := m.commandLineRow(); cl != "" {
+		h := m.view.Height()
+		if h < 1 {
+			h = 1
+		}
+		if len(out) >= h {
+			out = out[:h-1]
+		}
+		for len(out) < h-1 {
+			out = append(out, "")
+		}
+		out = append(out, cl)
+	}
 	if len(out) == 0 {
 		return ""
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, out...)
+}
+
+// commandLineRow renders the active command-line input with a block cursor,
+// or "" when no ":" / "/" / "?" input is open.
+func (m Model) commandLineRow() string {
+	cl := m.CommandLine()
+	if cl == "" {
+		return ""
+	}
+	return cl + lipgloss.NewStyle().Reverse(true).Render(" ")
 }
 
 // renderLine renders one buffer line within the horizontal window, overlaying

@@ -647,6 +647,32 @@ func TestFindActionOpensSearch(t *testing.T) {
 	}
 }
 
+func TestCommandLineRendersInEditorView(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\n")
+	m.SetSize(40, 10)
+	m = typeKeys(m, ":wq")
+	view := m.View()
+	lines := strings.Split(view, "\n")
+	if !strings.Contains(lines[len(lines)-1], ":wq") {
+		t.Fatalf("command line missing from the view's bottom row:\n%s", view)
+	}
+	// Search input renders the same way.
+	m = send(m, special(tea.KeyEscape))
+	m = typeKeys(m, "/foo")
+	if !strings.Contains(m.View(), "/foo") {
+		t.Fatal("search input missing from the view")
+	}
+}
+
+func TestCommandLineOnEmptyScratchBuffer(t *testing.T) {
+	m := New()
+	m.SetSize(40, 5)
+	m = typeKeys(m, ":q")
+	if !strings.Contains(m.View(), ":q") {
+		t.Fatal("command line must render on the empty scratch buffer")
+	}
+}
+
 // fakeClipboard captures writes and serves reads for clipboard action tests.
 type fakeClipboard struct{ text string }
 

@@ -1860,12 +1860,9 @@ func (m Model) statusLine() string {
 		return style.Foreground(m.pal().DropTarget).Render(" " + hint)
 	}
 
+	// The ":" / "/" command line renders inside the editor pane (vim-style),
+	// not here — the status line keeps its segments while typing a command.
 	ed := m.activeEditor()
-	if ed != nil {
-		if cl := ed.CommandLine(); cl != "" {
-			return style.Render(cl)
-		}
-	}
 	if s := m.host.Status(); s != "" {
 		return style.Render(" " + s)
 	}
