@@ -11,7 +11,6 @@ var blockedDefaults = map[string]string{
 	"vcs.commit":               "VCS integration (idea #28)",
 	"vcs.updateProject":        "VCS integration (idea #28)",
 	"vcs.revertFile":           "VCS integration (idea #28)",
-	"editor.commentBlock":      "comment toggling via the language registry (epic #70, sub #76)",
 	"editor.replace":           "in-file replace UI (idea #49)",
 	"editor.findUsages":        "LSP find references (#5)",
 	"editor.rename":            "LSP rename (#6)",

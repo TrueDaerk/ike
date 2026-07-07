@@ -2,6 +2,12 @@
 
 ## 2026-07-07
 
+- Block-comment toggling (#76, closes epic #70 / roadmap 0120):
+  `editor.commentBlock` (cmd+shift+7) wraps a charwise selection inline
+  (`/* sel */`), a linewise selection or the current line on its own marker
+  lines; exactly-wrapped targets unwrap; python falls back to line comments.
+  One undo unit, dot-repeatable. Blocked-ledger entry removed.
+
 - Line-comment toggling (#75, roadmap 0120): `editor.commentLine` (cmd+7,
   cmd+k cmd+c) toggles the registry language's line marker on the current line
   or visual selection at the minimal indent — mixed ranges comment the

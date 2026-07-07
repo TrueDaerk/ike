@@ -100,6 +100,16 @@ every line of the visual selection, JetBrains-style (`comment.go`):
 - A buffer without comment syntax is a no-op that raises an info toast via
   `editor.NoticeMsg` (the editor stays host-free; the root model notifies).
 
+`editor.commentBlock` (cmd+shift+7) wraps in the language's block pair:
+
+- A **charwise** selection wraps inline (`/* sel */`); toggling an exactly
+  wrapped selection unwraps it (one replace edit).
+- A **linewise** selection — or the current line — gets marker lines above and
+  below at the first line's indent; selecting a block whose first/last lines
+  are exactly the markers removes the pair.
+- Languages without a block pair (python) fall back to line-comment toggling.
+- One undo unit, `.`-repeatable; visual mode ends after the toggle.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads

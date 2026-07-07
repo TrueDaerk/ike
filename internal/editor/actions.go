@@ -363,6 +363,10 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		cmd := m.commentLine()
 		m.scroll()
 		return m, cmd
+	case "comment_block":
+		cmd := m.commentBlock()
+		m.scroll()
+		return m, cmd
 	}
 	m.scroll()
 	return m, nil
