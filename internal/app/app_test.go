@@ -14,6 +14,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -175,6 +176,35 @@ func TestCtrlSSavesInEditor(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "hihello") {
 		t.Fatalf("ctrl+s did not save the edit; file = %q", got)
+	}
+}
+
+// TestCmdWClosesTabThroughKeymap guards the editor.closeTab command: cmd+w must
+// resolve through the keymap layer to the registered app-level command and
+// close the focused editor pane (falling back to the explorer), like the
+// hardcoded ctrl+w. GOOS is pinned to darwin so the table keeps the meta chord
+// the test feeds, regardless of the build platform.
+func TestCmdWClosesTabThroughKeymap(t *testing.T) {
+	oldGOOS := keymap.GOOS
+	keymap.GOOS = "darwin"
+	defer func() { keymap.GOOS = oldGOOS }()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	if m.activeEditor() == nil {
+		t.Fatal("precondition: editor should be open")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: 'w', Mod: tea.ModMeta})
+	if m.activeEditor() != nil {
+		t.Fatal("cmd+w should close the focused editor pane")
+	}
+	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+		t.Fatal("focus should fall back to the explorer")
 	}
 }
 

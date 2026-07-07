@@ -114,6 +114,11 @@ flow control, so `ctrl+s` arrives as a normal key). Save targets `editor.write`,
 the command the editor registers for `:w`, and works from insert mode because
 modified chords stay eligible for the keymap layer.
 
+Root-model actions are exposed as registry commands by the compile-in `app`
+plugin (`internal/app/commands.go`), so their default bindings are live and the
+palette can invoke them: `editor.closeTab` (`cmd+w`, same behavior as the
+hardcoded `ctrl+w` / the editor's `:q`).
+
 ## Boundaries
 
 Vim-internal keymaps inside the editor (normal/insert/visual motions, operators,

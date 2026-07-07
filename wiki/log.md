@@ -2,6 +2,11 @@
 
 ## 2026-07-07
 
+- Cmd+W closes the focused tab (#43): new compile-in `app` plugin
+  (`internal/app/commands.go`) exposes root-model actions as registry commands;
+  `editor.closeTab` dispatches `CloseTabMsg` → `CloseFocused`, so the default
+  `cmd+w` binding is live and the action is palette-invokable.
+
 - Ctrl/Cmd+S saves the file (#42): the default `cmd+s` binding now targets
   `editor.write` (the registered `:w` command) instead of the never-registered
   `editor.save`, and a `ctrl+s` fallback chord was added because macOS terminals

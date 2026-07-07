@@ -632,6 +632,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case host.OpenFileRequest:
 		return m.openPath(msg.Path, msg.NewPane)
 
+	case CloseTabMsg:
+		// editor.closeTab (cmd+w / palette): close the focused editor pane; a
+		// no-op on the explorer / last leaf, matching the hardcoded ctrl+w.
+		m.CloseFocused()
+		return m, nil
+
 	case SelectThemeMsg:
 		// Session-only theme switch from the palette's "Theme: <name>" commands.
 		m.selectTheme(msg.Name)
