@@ -2,6 +2,13 @@
 
 ## 2026-07-07
 
+- Ctrl/Cmd+S saves the file (#42): the default `cmd+s` binding now targets
+  `editor.write` (the registered `:w` command) instead of the never-registered
+  `editor.save`, and a `ctrl+s` fallback chord was added because macOS terminals
+  never forward `Cmd` — mirroring the undo/redo pattern. Works from insert mode
+  (modified chords stay keymap-eligible). `cmd+shift+s`/`editor.saveAll` stays
+  inert until a save-all command exists (#11/#19).
+
 - Planning moved from the `roadmaps/` directory to GitHub issues on
   `TrueDaerk/ike`: specs live verbatim in epic issues #37–#41 (0090 Project
   Switching, 0100 LSP deferred, 0081 Keybinding Audit, 0082 Usability Review,

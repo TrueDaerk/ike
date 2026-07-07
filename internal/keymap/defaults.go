@@ -30,7 +30,12 @@ var jetbrainsRows = []row{
 	{"shift+f6", "editor.rename", "Rename symbol", Editor, "Editor (06)/LSP (10)", false},
 	{"cmd+/", "editor.commentLine", "Comment line", Editor, "Editor (06)", false},
 	{"cmd+shift+/", "editor.commentBlock", "Comment block", Editor, "Editor (06)", false},
-	{"cmd+s", "editor.save", "Save", Editor, "Editor (06)", false},
+	// Save gets both chords, mirroring the redo story below: cmd+s matches
+	// JetBrains where the terminal can deliver it, ctrl+s is the
+	// everywhere-deliverable fallback (raw mode disables XOFF flow control, so
+	// ctrl+s arrives as a normal key).
+	{"cmd+s", "editor.write", "Save", Editor, "Editor (06)", false},
+	{"ctrl+s", "editor.write", "Save", Editor, "Editor (06)", false},
 	{"cmd+shift+s", "editor.saveAll", "Save all", Global, "Editor (06)", false},
 	{"cmd+c", "editor.copy", "Copy", Editor, "Editor (06)", false},
 	{"cmd+x", "editor.cut", "Cut", Editor, "Editor (06)", false},

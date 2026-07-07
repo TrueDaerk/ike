@@ -66,8 +66,8 @@ func TestBuildTableLookupContextPrecedence(t *testing.T) {
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
 	// cmd+s → ctrl+s in Editor context.
 	chord := NormalizeChord(MustParseChord("cmd+s"), "linux")
-	if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "editor.save" {
-		t.Errorf("editor cmd+s lookup = %+v ok=%v, want editor.save", b, ok)
+	if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "editor.write" {
+		t.Errorf("editor cmd+s lookup = %+v ok=%v, want editor.write", b, ok)
 	}
 	// Editor-scoped binding does not resolve in Explorer context.
 	if _, ok := table.Lookup(chord, Explorer); ok {
@@ -138,6 +138,19 @@ func TestConflictDetection(t *testing.T) {
 	// Highest layer (user) wins.
 	if b, _ := table.Lookup(MustParseChord("ctrl+x"), Global); b.Command != "b.cmd" {
 		t.Errorf("conflict winner = %q, want b.cmd (higher layer)", b.Command)
+	}
+}
+
+// TestSaveBindsToCtrlS guards that save is reachable via ctrl+s — a key the
+// terminal actually delivers — on every platform, including darwin where cmd+s
+// is undeliverable. The target id is editor.write, the command the editor
+// actually registers (the ex-command ":w").
+func TestSaveBindsToCtrlS(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		if res := r.Feed(Key{Base: "s", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "editor.write" {
+			t.Fatalf("%s: ctrl+s in editor = %+v, want editor.write", goos, res)
+		}
 	}
 }
 

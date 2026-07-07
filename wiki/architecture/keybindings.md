@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-06-25T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -106,6 +106,13 @@ reachable from the command palette (07), the universal escape hatch.
 The JetBrains-flavoured defaults live in `defaults.go` as data (chord, command id,
 title, context, owner, fragile). `help.go` groups the effective bindings by
 context (Global first) for the `palette.keymapHelp` cheatsheet.
+
+Actions whose JetBrains chord uses `Cmd` — undeliverable in macOS terminals —
+additionally get an everywhere-deliverable `Ctrl` chord: undo (`ctrl+z`), redo
+(`ctrl+shift+z`), and save (`ctrl+s`, alongside `cmd+s`; raw mode disables XOFF
+flow control, so `ctrl+s` arrives as a normal key). Save targets `editor.write`,
+the command the editor registers for `:w`, and works from insert mode because
+modified chords stay eligible for the keymap layer.
 
 ## Boundaries
 

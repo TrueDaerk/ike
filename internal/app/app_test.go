@@ -150,6 +150,34 @@ func TestCtrlZUndoesInEditor(t *testing.T) {
 	}
 }
 
+// TestCtrlSSavesInEditor guards the deliverable save binding: ctrl+s (cmd+s is
+// undeliverable in a macOS terminal) must resolve through the keymap layer to
+// editor.write and persist the buffer — from insert mode too, since modifier
+// chords stay eligible for the keymap layer while the editor captures text.
+func TestCtrlSSavesInEditor(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	// Enter insert mode and type: "hello" -> "hihello".
+	m = drainKey(m, tea.KeyPressMsg{Text: "i", Code: 'i'})
+	m = drainKey(m, tea.KeyPressMsg{Text: "h", Code: 'h'})
+	m = drainKey(m, tea.KeyPressMsg{Text: "i", Code: 'i'})
+	// ctrl+s from insert mode writes the buffer to disk.
+	m = drainKey(m, tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "hihello") {
+		t.Fatalf("ctrl+s did not save the edit; file = %q", got)
+	}
+}
+
 // TestDeletingFileClosesItsEditor guards that removing a file in the explorer
 // (delete, or undo of a create) closes any editor still showing it, rather than
 // leaving a stale pane open on a gone file.
