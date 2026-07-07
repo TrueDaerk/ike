@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-08
+
+- Menu bar (#90, roadmap 0160): new `internal/menu` — File · Edit · View ·
+  Navigate · Tools · Settings · Help above the panes (`ui.menu_bar`, default
+  true). Menus are data over the command registry: entries show cheatsheet
+  shortcuts, unregistered ids render disabled with their dependency hint;
+  selection dispatches `menu.RunMsg` → `RunCommand`. f10 toggles; arrows/
+  enter/esc navigate; mouse clicks open/run. New concept doc
+  `architecture/settings-ui.md`.
+
 ## 2026-07-07
 
 - Config write-back layer (#89, roadmap 0160): `config.WriteKey`/`RemoveKey`

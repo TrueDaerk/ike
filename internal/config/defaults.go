@@ -59,5 +59,8 @@ func defaults() *Config {
 		Files: Files{
 			Watch: true,
 		},
+		UI: UI{
+			MenuBar: true,
+		},
 	}
 }

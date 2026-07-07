@@ -73,6 +73,7 @@ var jetbrainsRows = []row{
 	{"cmd+k cmd+c", "editor.commentLine", "Comment (chord example)", Editor, "Editor (06)", false},
 	{"cmd+k cmd+s", "palette.keymapHelp", "Show keymap cheatsheet", Global, "Keymap (08)", false},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)", false},
+	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)", false},
 }
 
 // Defaults returns the default binding set for the named preset. Unknown presets

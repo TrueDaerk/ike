@@ -17,6 +17,12 @@ type Config struct {
 	Palette       Palette       `toml:"palette"`
 	Notifications Notifications `toml:"notifications"`
 	Files         Files         `toml:"files"`
+	UI            UI            `toml:"ui"`
+}
+
+// UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.
+type UI struct {
+	MenuBar bool `toml:"menu_bar"`
 }
 
 // Files holds external-file-change behaviour (Roadmap 0140). Watch enables the

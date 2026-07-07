@@ -29,6 +29,10 @@ type GoToFileMsg struct{}
 // by editor.saveAll.
 type SaveAllMsg struct{}
 
+// ToggleMenuMsg asks the root model to open (or close) the menu bar's first
+// dropdown (Roadmap 0160). Dispatched by menu.open (f10).
+type ToggleMenuMsg struct{}
+
 // ShowNotificationHistoryMsg asks the root model to open the notification
 // history list in the floating shell (Roadmap 0130). Dispatched by
 // notifications.history.
@@ -70,6 +74,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
+			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 		},
 	}
 }
