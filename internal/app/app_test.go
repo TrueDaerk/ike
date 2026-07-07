@@ -304,6 +304,20 @@ func TestToggleExplorerFocus(t *testing.T) {
 	}
 }
 
+// TestDisplayPathRelativeInsideProject guards the status-line file segment:
+// project files render relative to the working directory, outside files
+// render absolute.
+func TestDisplayPathRelativeInsideProject(t *testing.T) {
+	cwd, _ := os.Getwd()
+	if got := displayPath(filepath.Join(cwd, "internal", "app", "app.go")); got != filepath.Join("internal", "app", "app.go") {
+		t.Fatalf("inside project: got %q", got)
+	}
+	outside := filepath.Join(t.TempDir(), "x.go")
+	if got := displayPath(outside); got != outside {
+		t.Fatalf("outside project should stay absolute, got %q", got)
+	}
+}
+
 // TestDeletingFileClosesItsEditor guards that removing a file in the explorer
 // (delete, or undo of a create) closes any editor still showing it, rather than
 // leaving a stale pane open on a gone file.

@@ -2,6 +2,11 @@
 
 ## 2026-07-07
 
+- Command line moved into the editor pane (#99): the ":" / "/" / "?" input
+  renders as the pane's bottom row (vim-style) instead of replacing the app
+  status line. Status line shows the focused file's project-relative path
+  (absolute outside the project) instead of just the base name (#100).
+
 - Notification toasts (#77, roadmap 0130): `host.Notify(severity, text)` queues
   event messages the root model drains each Update pass and renders as
   severity-colored toasts bottom-right above the status line — info/warn expire

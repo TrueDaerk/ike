@@ -1872,7 +1872,7 @@ func (m Model) statusLine() string {
 	if ed != nil {
 		mode = ed.ModeName().String()
 		if ed.HasFile() {
-			file = baseName(ed.Path())
+			file = displayPath(ed.Path())
 		}
 		if ed.Dirty() {
 			dirty = " [+]"
@@ -1937,6 +1937,24 @@ func paneBox(title, content string, width, height int, borderColor color.Color) 
 }
 
 func baseName(path string) string { return filepath.Base(path) }
+
+// displayPath renders a file path for the status line: relative to the project
+// root (the working directory) when inside it, absolute when outside.
+func displayPath(path string) string {
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return abs
+	}
+	rel, err := filepath.Rel(cwd, abs)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return abs
+	}
+	return rel
+}
 
 // paneLabel is the human label for a leaf key used in the drag status hint.
 func (m Model) paneLabel(key string) string {
