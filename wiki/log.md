@@ -2,6 +2,13 @@
 
 ## 2026-07-07
 
+- Command coverage & id reconciliation, no inert bindings (#11): new blocked
+  ledger (`keymap/blocked.go`) documents every intentionally-unregistered
+  default binding with its unblocking dependency; thin commands registered for
+  `editor.find`, `editor.duplicateLine`, `editor.saveAll` and
+  `explorer.toggle`; `cmd+b` reconciled onto the registered `lsp.definition`
+  id; coverage test `TestNoSilentlyDeadDefaultBindings` guards the invariant.
+
 - Conventional selection & clipboard (#47): word navigation moved from
   `shift+←/→` to `alt/option+←/→` (paragraph jumps to `alt+↑/↓`; ctrl variants
   stay); `shift+arrows` now start/extend a charwise visual selection;

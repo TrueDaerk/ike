@@ -123,6 +123,16 @@ as the registry-less fallback), `pane.switcher` (`ctrl+tab`, still flagged
 fragile; same cycle as the hardcoded `tab`), and `project.goToFile`
 (`cmd+shift+o`, the centered palette locked to the `@` file mode).
 
+Every default binding's command id is either **registered** (live) or listed in
+the **blocked ledger** (`blocked.go`) with the dependency that unblocks it —
+the coverage test in `internal/app` (`TestNoSilentlyDeadDefaultBindings`) fails
+on ids that are neither (silently dead) or both (stale ledger entry). Live
+since the 0081/20 reconciliation: `editor.find` (`cmd+f`, opens the vim `/`
+search), `editor.duplicateLine` (`cmd+d`), `editor.saveAll` (`cmd+shift+s`),
+`explorer.toggle` (`cmd+1`, focus flip between tree and editor), and `cmd+b`
+reconciled onto the registered `lsp.definition` id (instead of the forked
+`editor.gotoDeclaration`).
+
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
 `editor.paste` commands (visual selection or current line, through the system
