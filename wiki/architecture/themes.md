@@ -146,4 +146,4 @@ so editing `[theme].name` keeps working until a runtime pick overrides it.
 - A dedicated picker UI with live preview is a later UX pass; today's runtime
   switching is plain palette commands (see above), persistence is config-only.
 
-See `roadmaps/0110-themes.md` for the original plan and milestones.
+The original plan and milestones lived in the former `roadmaps/0110-themes.md` (planning moved to GitHub issues; the file remains in git history).

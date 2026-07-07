@@ -2,6 +2,12 @@
 
 ## 2026-07-07
 
+- Planning moved from the `roadmaps/` directory to GitHub issues on
+  `TrueDaerk/ike`: specs live verbatim in epic issues #37–#41 (0090 Project
+  Switching, 0100 LSP deferred, 0081 Keybinding Audit, 0082 Usability Review,
+  9900 WASM Plugins), work items are sub-issues tracked via one milestone per
+  epic. `roadmaps/` was deleted (history remains in git); wiki links to roadmap
+  files were rewritten as "former Roadmap NNNN" notes.
 - Theme switching from the command palette: the `themes` plugin now registers
   one global command per built-in scheme (`themes.select.<name>`, "Theme:
   <name>"), dispatching `app.SelectThemeMsg` → `selectTheme` (resolve over

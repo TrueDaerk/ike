@@ -22,7 +22,7 @@ internal/editor/    line buffer + modal vim state machine
 ```
 
 IKE runs on **Bubble Tea v2** (`charm.land/bubbletea/v2`; see
-[Roadmap 0085](../../roadmaps/0085-bubbletea-v2.md)). Under v2, alt-screen, mouse mode
+former Roadmap 0085 — planning moved to GitHub issues, spec in git history). Under v2, alt-screen, mouse mode
 and the kitty keyboard enhancements are declared on the root model's `View()` (which
 returns a `tea.View` struct), not passed as `tea.NewProgram` options. The root dispatches
 `tea.KeyPressMsg` only, ignoring `tea.KeyReleaseMsg`, and normalises the four v2 mouse

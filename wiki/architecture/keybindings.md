@@ -79,7 +79,7 @@ multi-step state. Each `Feed(key, context)` returns:
 press purely through `String()` — v2 still encodes modifiers as `ctrl+/alt+/shift+`
 tokens and names specials (`esc`, `space`, `f7`, `left`, …) — so the same code that
 parses authored chords (`ParseKey`) parses live keys. (See
-[Roadmap 0085](../../roadmaps/0085-bubbletea-v2.md) for the v1→v2 key-model change:
+former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 `key.Type`/`key.Runes` became `key.Code`/`key.Text`/`key.Mod`.)
 
 ## Root-model integration
