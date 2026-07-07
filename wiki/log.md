@@ -2,6 +2,11 @@
 
 ## 2026-07-07
 
+- Language registry comment metadata (#74, roadmap 0120): `lang.Language` grows
+  `LineComment`/`BlockComment`, `lang.Comments(path)` resolves the syntax per
+  buffer path; go/php declare `//` + `/* */`, python `#`. Consumed by the
+  upcoming comment-toggle actions (#75/#76).
+
 - Command coverage & id reconciliation, no inert bindings (#11): new blocked
   ledger (`keymap/blocked.go`) documents every intentionally-unregistered
   default binding with its unblocking dependency; thin commands registered for

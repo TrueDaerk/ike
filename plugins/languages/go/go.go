@@ -23,5 +23,7 @@ func init() {
 			Command:     "gopls",
 			RootMarkers: []string{"go.mod", "go.work", ".git"},
 		},
+		LineComment:  "//",
+		BlockComment: [2]string{"/*", "*/"},
 	})
 }

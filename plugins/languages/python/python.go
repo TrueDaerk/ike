@@ -25,6 +25,7 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"pyproject.toml", "setup.py", "setup.cfg", ".git"},
 		},
-		Toolchain: toolchain{},
+		Toolchain:   toolchain{},
+		LineComment: "#",
 	})
 }

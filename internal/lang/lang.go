@@ -34,6 +34,12 @@ type Language struct {
 	Grammar    Grammar  // highlighting grammar, or nil
 	Server     *ServerSpec
 	Toolchain  Toolchain
+
+	// Comment syntax for toggling (Roadmap 0120). LineComment is the marker
+	// placed before a line ("//", "#"); BlockComment is the open/close pair
+	// ("/*", "*/"). Empty strings mean the language has no such syntax.
+	LineComment  string
+	BlockComment [2]string
 }
 
 var (
@@ -89,6 +95,17 @@ func ByPath(path string) (Language, bool) {
 	}
 	mu.RUnlock()
 	return ByExt(filepath.Ext(path))
+}
+
+// Comments returns the comment syntax for path's language. ok is false when no
+// language matches the path or the matched language declares no comment syntax
+// at all; callers treat that as "comment toggling unavailable".
+func Comments(path string) (line string, block [2]string, ok bool) {
+	l, found := ByPath(path)
+	if !found {
+		return "", [2]string{}, false
+	}
+	return l.LineComment, l.BlockComment, l.LineComment != "" || l.BlockComment[0] != ""
 }
 
 // All returns every registered language, sorted by id (stable for tests/listing).

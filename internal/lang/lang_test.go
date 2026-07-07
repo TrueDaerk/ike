@@ -27,6 +27,35 @@ func TestRegisterAndLookup(t *testing.T) {
 	}
 }
 
+func TestComments(t *testing.T) {
+	Register(Language{
+		ID:           "commented",
+		Extensions:   []string{"cmt"},
+		LineComment:  "//",
+		BlockComment: [2]string{"/*", "*/"},
+	})
+	Register(Language{
+		ID:          "lineonly",
+		Extensions:  []string{"lo"},
+		LineComment: "#",
+	})
+	Register(Language{ID: "bare", Extensions: []string{"bare"}})
+
+	if line, block, ok := Comments("x.cmt"); !ok || line != "//" || block != [2]string{"/*", "*/"} {
+		t.Fatalf("Comments(x.cmt) = %q %v %v", line, block, ok)
+	}
+	if line, _, ok := Comments("x.lo"); !ok || line != "#" {
+		t.Fatalf("Comments(x.lo) = %q %v", line, ok)
+	}
+	// A language without any comment syntax and an unknown path both report !ok.
+	if _, _, ok := Comments("x.bare"); ok {
+		t.Fatal("Comments(x.bare) should be !ok (no syntax declared)")
+	}
+	if _, _, ok := Comments("x.unknown-ext"); ok {
+		t.Fatal("Comments on unknown language should be !ok")
+	}
+}
+
 func TestMergeSettings(t *testing.T) {
 	base := map[string]any{
 		"python": map[string]any{"defaultInterpreterPath": "/detected/python", "extra": 1},

@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Language Registry
@@ -28,12 +28,21 @@ type Language struct {
     Grammar    Grammar      // opaque highlight token, or nil
     Server     *ServerSpec  // LSP launch config, or nil
     Toolchain  Toolchain    // project interpreter detector, or nil
+
+    LineComment  string     // "//", "#" — comment-toggle marker (0120)
+    BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
 func ByPath(path string) (Language, bool)   // exact base name, then extension
+func Comments(path string) (line string, block [2]string, ok bool)
 func All() []Language
 ```
+
+`Comments` resolves the comment syntax for a buffer path (0120 comment
+toggling); `ok` is false when no language matches or the language declares no
+comment syntax at all (plain text) — the editor treats that as "toggling
+unavailable". Go and PHP declare `//` + `/* */`, Python declares `#` only.
 
 `Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
 `highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so
