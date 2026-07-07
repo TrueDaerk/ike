@@ -28,8 +28,10 @@ var jetbrainsRows = []row{
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)", false},
 	{"alt+f7", "editor.findUsages", "Find usages", Editor, "Editor (06)/LSP (10)", false},
 	{"shift+f6", "editor.rename", "Rename symbol", Editor, "Editor (06)/LSP (10)", false},
-	{"cmd+/", "editor.commentLine", "Comment line", Editor, "Editor (06)", false},
-	{"cmd+shift+/", "editor.commentBlock", "Comment block", Editor, "Editor (06)", false},
+	// Comment toggling binds cmd+7, not the JetBrains cmd+/: on a German layout
+	// "/" lives on shift+7, so a cmd+/ chord is untypable there (idea #48).
+	{"cmd+7", "editor.commentLine", "Comment line", Editor, "Editor (idea #48)", false},
+	{"cmd+shift+7", "editor.commentBlock", "Comment block", Editor, "Editor (idea #48)", false},
 	// Save gets both chords, mirroring the redo story below: cmd+s matches
 	// JetBrains where the terminal can deliver it, ctrl+s is the
 	// everywhere-deliverable fallback (raw mode disables XOFF flow control, so
