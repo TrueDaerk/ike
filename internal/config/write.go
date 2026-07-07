@@ -44,6 +44,42 @@ func DefaultScope(key string) Scope {
 	return UserScope
 }
 
+// Origin reports which layer supplies key's effective value: "project" when
+// the project file sets it, else "user", else "default". It reads the layer
+// files directly (unparseable layers count as absent), mirroring Load's
+// precedence.
+func Origin(opts Options, key string) string {
+	if hasKey(layerPath(opts, ProjectScope), key) {
+		return "project"
+	}
+	if hasKey(layerPath(opts, UserScope), key) {
+		return "user"
+	}
+	return "default"
+}
+
+// hasKey reports whether the TOML file at path sets the dotted key.
+func hasKey(path, key string) bool {
+	if path == "" {
+		return false
+	}
+	raw, err := decodeFile(path)
+	if err != nil || raw == nil {
+		return false
+	}
+	parts := strings.Split(key, ".")
+	cur := raw
+	for _, p := range parts[:len(parts)-1] {
+		child, ok := cur[p].(map[string]any)
+		if !ok {
+			return false
+		}
+		cur = child
+	}
+	_, ok := cur[parts[len(parts)-1]]
+	return ok
+}
+
 // layerPath resolves the file a scope writes to. An empty result means the
 // layer is not addressable (no home dir / no project root).
 func layerPath(opts Options, scope Scope) string {

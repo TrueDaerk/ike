@@ -29,6 +29,10 @@ type GoToFileMsg struct{}
 // by editor.saveAll.
 type SaveAllMsg struct{}
 
+// OpenSettingsMsg asks the root model to open the settings panel (Roadmap
+// 0160). Dispatched by settings.open (cmd+, / menu bar / palette).
+type OpenSettingsMsg struct{}
+
 // ToggleMenuMsg asks the root model to open (or close) the menu bar's first
 // dropdown (Roadmap 0160). Dispatched by menu.open (f10).
 type ToggleMenuMsg struct{}
@@ -75,6 +79,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
+			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
 		},
 	}
 }

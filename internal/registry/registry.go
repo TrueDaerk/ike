@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"ike/internal/plugin"
+	"ike/internal/settings"
 	"ike/internal/theme"
 )
 
@@ -104,6 +105,16 @@ type OwnedHandler struct {
 type OwnedHook struct {
 	Owner string
 	plugin.Hook
+}
+
+// SettingsPages returns every enabled plugin's settings-panel pages, in
+// deterministic (sorted-plugin) order (Roadmap 0160).
+func (r *Registry) SettingsPages() []settings.Page {
+	var out []settings.Page
+	for _, p := range r.activePlugins() {
+		out = append(out, p.Capabilities().SettingsPages...)
+	}
+	return out
 }
 
 // Commands returns enabled commands, ordered by id. Conflicting duplicates are

@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/settings"
 	"ike/internal/theme"
 )
 
@@ -35,6 +36,10 @@ type Capabilities struct {
 	// capability: built-ins ship as a compile-in theme plugin, third-party
 	// plugins register more. Selection is by [theme].name in config.
 	Themes []theme.Theme
+	// SettingsPages are settings-panel categories (Roadmap 0160): schema-driven
+	// page descriptors the panel renders alongside the built-in pages (used by
+	// the toolchain page and future plugin settings).
+	SettingsPages []settings.Page
 }
 
 // Scope constrains where a Command or Keymap applies. A global capability is
