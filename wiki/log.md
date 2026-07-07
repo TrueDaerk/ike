@@ -2,6 +2,14 @@
 
 ## 2026-07-07
 
+- Line-comment toggling (#75, roadmap 0120): `editor.commentLine` (cmd+7,
+  cmd+k cmd+c) toggles the registry language's line marker on the current line
+  or visual selection at the minimal indent — mixed ranges comment the
+  uncommented lines, fully commented ranges uncomment, blank lines skipped.
+  Single-line toggle advances the cursor (JetBrains); selections survive the
+  toggle. One undo unit, dot-repeatable; buffers without comment syntax raise
+  an info toast (`editor.NoticeMsg`). Blocked-ledger entry removed.
+
 - Notification history (#78, closes epic #71 / roadmap 0130): ring of the
   newest 100 notifications with timestamp + severity; `notifications.history`
   palette command lists them in the floating shell. New typed config section

@@ -85,6 +85,21 @@ viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
 buffer) without touching the cursor or mode — it works the same in Normal,
 Insert, Visual, etc., unlike the vim-motion scroll commands.
 
+## Comment toggling (Roadmap 0120)
+
+`editor.commentLine` (cmd+7, alias `cmd+k cmd+c`) toggles the language's line
+comment — resolved per buffer path via `lang.Comments` — on the current line or
+every line of the visual selection, JetBrains-style (`comment.go`):
+
+- Markers land at the range's **minimal indent**; blank lines are skipped.
+- A **mixed** range comments its uncommented lines; a fully commented range
+  uncomments.
+- A single-line toggle advances the cursor one line; a selection is preserved
+  (visual mode stays active).
+- One undo unit, `.`-repeatable; an open insert session commits first.
+- A buffer without comment syntax is a no-op that raises an info toast via
+  `editor.NoticeMsg` (the editor stays host-free; the root model notifies).
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads

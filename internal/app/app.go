@@ -777,6 +777,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editor.NoticeMsg:
+		// Editor action feedback ("no comment syntax for this file") → toast.
+		m.host.Notify(host.Info, msg.Text)
+		return m, nil
+
 	case editor.CloseMsg:
 		// :q / :wq closes the focused editor leaf, mirroring CloseFocused.
 		m.closeFocused()
