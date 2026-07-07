@@ -25,8 +25,9 @@ func (d Diagnostic) String() string {
 }
 
 var (
-	sortModes = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
-	logLevels = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
+	sortModes  = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
+	logLevels  = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
+	severities = map[string]bool{"info": true, "warn": true, "error": true}
 )
 
 // validate clamps c in place against the baseline rules and returns one
@@ -48,6 +49,11 @@ func validate(c *Config) []Diagnostic {
 	if !sortModes[c.Explorer.Sort] {
 		diags = append(diags, Diagnostic{Field: "explorer.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Explorer.Sort)})
 		c.Explorer.Sort = "name"
+	}
+	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)
+	if !severities[c.Notifications.MinSeverity] {
+		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})
+		c.Notifications.MinSeverity = "info"
 	}
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})

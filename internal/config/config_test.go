@@ -111,6 +111,30 @@ func TestValidateClampAndWarn(t *testing.T) {
 	}
 }
 
+// TestNotificationsSection guards the 0130 config keys: defaults, clamp on the
+// timeout and severity fallback (#78).
+func TestNotificationsSection(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Notifications.TimeoutSeconds != 4 || c.Notifications.MinSeverity != "info" {
+		t.Fatalf("unexpected defaults: %+v", c.Notifications)
+	}
+
+	proj := writeProject(t, "[notifications]\ntimeout_seconds = 0\nmin_severity = \"whisper\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Notifications.TimeoutSeconds != 1 {
+		t.Errorf("timeout_seconds should clamp to 1, got %d", c.Notifications.TimeoutSeconds)
+	}
+	if c.Notifications.MinSeverity != "info" {
+		t.Errorf("bad min_severity should fall back to info, got %q", c.Notifications.MinSeverity)
+	}
+	if len(diags) != 2 {
+		t.Errorf("expected 2 diagnostics, got %v", diags)
+	}
+	if flat := c.Flat(); flat["notifications.min_severity"] != "info" || flat["notifications.timeout_seconds"] != "1" {
+		t.Errorf("notifications keys missing from Flat: %v", flat)
+	}
+}
+
 func TestHistoryTruncatedToMax(t *testing.T) {
 	proj := writeProject(t, "[project]\nmax_history = 2\nhistory = [\"/a\", \"/b\", \"/c\", \"/d\"]\n")
 	c, diags := Load(Options{ProjectRoot: proj})

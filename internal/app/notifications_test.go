@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
+	"ike/internal/registry"
 )
 
 // notify raises a notification and runs one Update pass so the root model
@@ -162,6 +164,62 @@ func TestThemeSelectNotifies(t *testing.T) {
 	}
 	if m.host.Status() != "" {
 		t.Fatalf("theme selection must not write the status line, got %q", m.host.Status())
+	}
+}
+
+// TestHistoryCapturesNewestFirstAndCaps guards the #78 ring: every
+// notification is recorded newest-first with its severity, capped at
+// historyCap entries.
+func TestHistoryCapturesNewestFirstAndCaps(t *testing.T) {
+	m := newSized()
+	for i := 0; i < historyCap+5; i++ {
+		m, _ = notify(m, host.Info, "n"+strconv.Itoa(i))
+	}
+	if len(m.history) != historyCap {
+		t.Fatalf("history = %d entries, want cap %d", len(m.history), historyCap)
+	}
+	if m.history[0].text != "n"+strconv.Itoa(historyCap+4) {
+		t.Fatalf("newest first, got %q", m.history[0].text)
+	}
+	if m.history[0].at.IsZero() {
+		t.Fatal("history entries must carry a timestamp")
+	}
+}
+
+// TestMinSeverityFiltersToastsNotHistory guards notifications.min_severity:
+// below-floor notifications are history-only, at/above-floor still toast.
+func TestMinSeverityFiltersToastsNotHistory(t *testing.T) {
+	m := NewWith(registry.New(), host.MapConfig{"notifications.min_severity": "warn"})
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = tm.(Model)
+	m, _ = notify(m, host.Info, "quiet")
+	if len(m.toasts) != 0 {
+		t.Fatal("info below the warn floor must not toast")
+	}
+	m, _ = notify(m, host.Warn, "loud")
+	if len(m.toasts) != 1 || m.toasts[0].text != "loud" {
+		t.Fatalf("warn at the floor must toast, toasts=%+v", m.toasts)
+	}
+	if len(m.history) != 2 || m.history[1].text != "quiet" {
+		t.Fatalf("both notifications belong in the history, got %+v", m.history)
+	}
+}
+
+// TestNotificationHistoryCommand guards the notifications.history command: it
+// is registered and opens the floating shell with the recorded entries.
+func TestNotificationHistoryCommand(t *testing.T) {
+	m := newSized()
+	m, _ = notify(m, host.Error, "server exploded")
+	if _, ok := m.reg.Command("notifications.history"); !ok {
+		t.Fatal("notifications.history must be a registry command")
+	}
+	tm, _ := m.Update(ShowNotificationHistoryMsg{})
+	m = tm.(Model)
+	if !m.shell.IsOpen() {
+		t.Fatal("history command should open the floating shell")
+	}
+	if v := m.shell.View(); !strings.Contains(v, "server exploded") {
+		t.Fatalf("history view missing the entry: %q", v)
 	}
 }
 

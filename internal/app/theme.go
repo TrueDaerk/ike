@@ -112,6 +112,7 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	}
 	config.Set(cfg)
 	hcfg := host.FromConfig(cfg)
+	m.host.SetConfig(hcfg)
 	pal, warning := resolveTheme(m.reg, hcfg)
 	m.applyTheme(pal)
 	m.panes.Reconfigure(hcfg)

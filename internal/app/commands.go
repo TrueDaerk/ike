@@ -29,6 +29,11 @@ type GoToFileMsg struct{}
 // by editor.saveAll.
 type SaveAllMsg struct{}
 
+// ShowNotificationHistoryMsg asks the root model to open the notification
+// history list in the floating shell (Roadmap 0130). Dispatched by
+// notifications.history.
+type ShowNotificationHistoryMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -64,6 +69,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
+			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 		},
 	}
 }

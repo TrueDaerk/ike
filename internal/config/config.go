@@ -126,6 +126,9 @@ func (c *Config) Flat() map[string]string {
 	put("project.restore_last", c.Project.RestoreLast)
 	put("project.history", strings.Join(c.Project.History, ","))
 
+	put("notifications.timeout_seconds", c.Notifications.TimeoutSeconds)
+	put("notifications.min_severity", c.Notifications.MinSeverity)
+
 	put("palette.max_results", c.Palette.MaxResults)
 	put("palette.default_mode", c.Palette.DefaultMode)
 	put("palette.off_context", c.Palette.OffContext)

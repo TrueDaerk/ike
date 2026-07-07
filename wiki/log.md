@@ -2,6 +2,13 @@
 
 ## 2026-07-07
 
+- Notification history (#78, closes epic #71 / roadmap 0130): ring of the
+  newest 100 notifications with timestamp + severity; `notifications.history`
+  palette command lists them in the floating shell. New typed config section
+  `[notifications]` (`timeout_seconds`, `min_severity` — below the floor is
+  history-only, no toast), live-reloaded; the host's config view now refreshes
+  on config reload (`Host.SetConfig`).
+
 - Event-like `SetStatus` call sites migrated to `Notify` (#79, closes roadmap
   0130's migration milestone): example plugin messages, save-all ("saved N
   files"), theme select/warnings and transient LSP events (crashed → warn,

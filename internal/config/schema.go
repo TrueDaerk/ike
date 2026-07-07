@@ -8,13 +8,14 @@ package config
 // Config is the root configuration document. It is the only type the rest of
 // IKE reads; no TOML types leak past this package.
 type Config struct {
-	Editor   Editor   `toml:"editor"`
-	Explorer Explorer `toml:"explorer"`
-	Keymap   Keymap   `toml:"keymap"`
-	LSP      LSP      `toml:"lsp"`
-	Theme    Theme    `toml:"theme"`
-	Project  Project  `toml:"project"`
-	Palette  Palette  `toml:"palette"`
+	Editor        Editor        `toml:"editor"`
+	Explorer      Explorer      `toml:"explorer"`
+	Keymap        Keymap        `toml:"keymap"`
+	LSP           LSP           `toml:"lsp"`
+	Theme         Theme         `toml:"theme"`
+	Project       Project       `toml:"project"`
+	Palette       Palette       `toml:"palette"`
+	Notifications Notifications `toml:"notifications"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).
@@ -69,6 +70,14 @@ type Project struct {
 	History     []string `toml:"history"`
 	MaxHistory  int      `toml:"max_history"`
 	RestoreLast bool     `toml:"restore_last"`
+}
+
+// Notifications tunes the toast system (Roadmap 0130). TimeoutSeconds is the
+// info/warn toast lifetime; MinSeverity ("info", "warn", "error") is the toast
+// floor — notifications below it are recorded in the history but never toast.
+type Notifications struct {
+	TimeoutSeconds int    `toml:"timeout_seconds"`
+	MinSeverity    string `toml:"min_severity"`
 }
 
 // Palette tunes the command palette overlay (Roadmap 0070). DefaultMode is the

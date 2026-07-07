@@ -2,6 +2,7 @@ package app
 
 import (
 	"strconv"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,6 +25,9 @@ const maxVisibleToasts = 3
 // defaultToastTimeout applies when notifications.timeout_seconds is unset.
 const defaultToastTimeout = 4 * time.Second
 
+// historyCap bounds the notification history ring (#78): the newest 100 stay.
+const historyCap = 100
+
 // toast is one active notification.
 type toast struct {
 	id   int
@@ -31,10 +35,18 @@ type toast struct {
 	text string
 }
 
+// histEntry is one recorded notification in the history ring.
+type histEntry struct {
+	at   time.Time
+	sev  host.Severity
+	text string
+}
+
 // toastExpireMsg removes the identified toast when its timeout elapses.
 type toastExpireMsg struct{ id int }
 
-// drainNotifications moves host-queued notifications onto the toast stack
+// drainNotifications records host-queued notifications in the history ring,
+// moves those at or above notifications.min_severity onto the toast stack
 // (newest first) and returns the batched expiry ticks for non-error entries.
 func (m *Model) drainNotifications() tea.Cmd {
 	pending := m.host.DrainNotifications()
@@ -42,8 +54,16 @@ func (m *Model) drainNotifications() tea.Cmd {
 		return nil
 	}
 	timeout := m.toastTimeout()
+	floor := m.minSeverity()
 	var ticks []tea.Cmd
 	for _, n := range pending {
+		m.history = append([]histEntry{{at: time.Now(), sev: n.Severity, text: n.Text}}, m.history...)
+		if len(m.history) > historyCap {
+			m.history = m.history[:historyCap]
+		}
+		if n.Severity < floor {
+			continue // below the toast floor: history only
+		}
 		m.toastSeq++
 		m.toasts = append([]toast{{id: m.toastSeq, sev: n.Severity, text: n.Text}}, m.toasts...)
 		if n.Severity != host.Error {
@@ -86,6 +106,37 @@ func (m Model) toastTimeout() time.Duration {
 		}
 	}
 	return defaultToastTimeout
+}
+
+// minSeverity reads notifications.min_severity, the toast floor (default info:
+// everything toasts). Below-floor notifications land in the history only.
+func (m Model) minSeverity() host.Severity {
+	if v, ok := m.host.Config().Get("notifications.min_severity"); ok {
+		switch v {
+		case "warn":
+			return host.Warn
+		case "error":
+			return host.Error
+		}
+	}
+	return host.Info
+}
+
+// historyView renders the history ring for the floating shell: newest first,
+// severity-colored, timestamped.
+func (m Model) historyView() string {
+	if len(m.history) == 0 {
+		return "no notifications yet"
+	}
+	var b strings.Builder
+	for i, e := range m.history {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		line := e.at.Format("15:04:05") + " ● " + e.text
+		b.WriteString(lipgloss.NewStyle().Foreground(m.toastColor(e.sev)).Render(line))
+	}
+	return b.String()
 }
 
 // toastColor maps a severity to its palette color.
