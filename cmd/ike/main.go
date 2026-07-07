@@ -30,6 +30,9 @@ func main() {
 	// can inject async results. The host is shared by pointer with the program's
 	// model copy, so this takes effect for the running model.
 	m.SetSender(p.Send)
+	// Watch the project root for external file changes (Roadmap 0140); events
+	// arrive through the host's Send as watch.EventMsg.
+	m.StartWatcher(".")
 	if _, err := p.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "ike: %v\n", err)
 		os.Exit(1)

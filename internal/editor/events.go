@@ -19,6 +19,10 @@ const (
 	// EventCompletionTrigger fires when a key likely warrants completion (e.g.
 	// a "." typed in insert mode). LSP decides what to do with it.
 	EventCompletionTrigger
+	// EventSave fires after the buffer was written to disk (Roadmap 0140: the
+	// watcher records a save epoch so IKE's own writes are not reported back as
+	// external changes; LSP didSave hangs off the same signal).
+	EventSave
 )
 
 // Event is one emitted signal. Line/Col are 0-based; Path is the buffer's file.

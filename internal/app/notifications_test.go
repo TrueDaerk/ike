@@ -12,6 +12,7 @@ import (
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/registry"
+	"ike/internal/watch"
 )
 
 // notify raises a notification and runs one Update pass so the root model
@@ -221,6 +222,38 @@ func TestNotificationHistoryCommand(t *testing.T) {
 	if v := m.shell.View(); !strings.Contains(v, "server exploded") {
 		t.Fatalf("history view missing the entry: %q", v)
 	}
+}
+
+// TestSaveStampsWatcherEpoch guards the 0140 self-event suppression wiring:
+// an editor save flows through the emitter adapter into watcher.MarkSaved, so
+// IKE's own writes never report back as external changes.
+func TestSaveStampsWatcherEpoch(t *testing.T) {
+	m := newSized()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "w.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'i', Text: "i"},
+		{Code: 'X', Text: "X"},
+		{Code: tea.KeyEscape},
+	} {
+		m = drainKey(m, k)
+	}
+	tm, _ = m.Update(SaveAllMsg{})
+	m = tm.(Model)
+	if !m.watcher.SavedRecently(path) {
+		t.Fatal("editor save must stamp the watcher's save epoch")
+	}
+	// Routing smoke: watch events dispatch without panicking whether or not a
+	// pane consumes them yet (#81-#83).
+	tm, _ = m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: path})
+	m = tm.(Model)
+	tm, _ = m.Update(watch.EventMsg{Kind: watch.DirChanged, Path: dir})
+	_ = tm
 }
 
 func TestToastNeverCoversStatusLine(t *testing.T) {

@@ -86,6 +86,7 @@ const (
 	EditorChange = iota
 	EditorCursorMove
 	EditorCompletionTrigger
+	EditorSave
 )
 
 // EditorEmitter receives editor lifecycle events. Implementations must not block.

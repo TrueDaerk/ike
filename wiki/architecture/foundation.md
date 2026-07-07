@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-06-25T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Foundation Slice
@@ -41,6 +41,29 @@ each pane's rectangle and supports mouse divider-resize and title-bar move.
   calls `editor.Load(path)` and moves focus to the editor.
 - `editor.CloseMsg{}` — emitted by `:q` / `:wq`; the root replaces the editor
   with a fresh empty one and returns focus to the explorer.
+
+## External file changes (Roadmap 0140)
+
+`internal/watch` is the file-watcher service (#80): fsnotify on the project
+root, recursive (skipping `.git`, watching newly created directories),
+debounced ~100ms with per-path coalescing (removal wins; create survives a
+follow-up write). It emits `watch.EventMsg{Kind, Path}` — `FileChanged` /
+`FileCreated` / `FileRemoved` / `DirChanged` — through `host.Send`; the root
+model routes file kinds to the editor leaf owning the path
+(`editorKeyForPath`) and `DirChanged` to the explorer (consumers land in
+#81–#83).
+
+- **Self-event suppression:** the editor emits `EventSave` after every disk
+  write; the app's emitter adapter stamps `watcher.MarkSaved(path)`, and
+  events for that path within 500ms are dropped — IKE's own saves never
+  round-trip as external changes.
+- **Poll fallback:** for filesystems where fsnotify under-reports (network
+  mounts), open buffers are `Track`ed and `Poll()` compares mtime+size,
+  hashing on suspicion (an mtime-only touch never reports), behind the same
+  message shape.
+- **Config:** `files.watch = true|false` (default true). `main.go` starts the
+  watcher after wiring `Send`; a project switch (Roadmap 0090) calls
+  `StartWatcher` again, which restarts on the new root.
 
 ## Focus and global keys
 

@@ -16,6 +16,13 @@ type Config struct {
 	Project       Project       `toml:"project"`
 	Palette       Palette       `toml:"palette"`
 	Notifications Notifications `toml:"notifications"`
+	Files         Files         `toml:"files"`
+}
+
+// Files holds external-file-change behaviour (Roadmap 0140). Watch enables the
+// fsnotify project watcher.
+type Files struct {
+	Watch bool `toml:"watch"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).

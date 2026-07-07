@@ -2,6 +2,13 @@
 
 ## 2026-07-07
 
+- File-watcher service (#80, roadmap 0140): new `internal/watch` — fsnotify on
+  the project root (recursive, `.git` skipped), ~100ms debounce with per-path
+  coalescing, `watch.EventMsg` routed to the owning editor / explorer.
+  Self-event suppression via a save epoch (new editor `EventSave` → emitter
+  adapter → `MarkSaved`); mtime+size poll fallback with hash-on-suspicion for
+  tracked (open) files; config `files.watch` (default true).
+
 - Block-comment toggling (#76, closes epic #70 / roadmap 0120):
   `editor.commentBlock` (cmd+shift+7) wraps a charwise selection inline
   (`/* sel */`), a linewise selection or the current line on its own marker

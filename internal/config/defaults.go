@@ -56,5 +56,8 @@ func defaults() *Config {
 			TimeoutSeconds: 4,
 			MinSeverity:    "info",
 		},
+		Files: Files{
+			Watch: true,
+		},
 	}
 }
