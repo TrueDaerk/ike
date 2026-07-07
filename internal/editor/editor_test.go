@@ -535,17 +535,103 @@ func TestVisualPasteReplacesSelection(t *testing.T) {
 	}
 }
 
-func TestShiftArrowWordNav(t *testing.T) {
+func TestAltArrowWordNav(t *testing.T) {
 	m, _ := loaded(t, "foo bar baz\n")
-	m = send(m, modKey(tea.KeyRight, tea.ModShift))
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt))
 	if m.cursor.Col != 4 {
-		t.Fatalf("shift+right col=%d want 4", m.cursor.Col)
+		t.Fatalf("alt+right col=%d want 4", m.cursor.Col)
 	}
-	m = send(m, modKey(tea.KeyLeft, tea.ModShift))
+	m = send(m, modKey(tea.KeyLeft, tea.ModAlt))
 	if m.cursor.Col != 0 {
-		t.Fatalf("shift+left col=%d want 0", m.cursor.Col)
+		t.Fatalf("alt+left col=%d want 0", m.cursor.Col)
 	}
 }
+
+func TestShiftArrowStartsAndExtendsSelection(t *testing.T) {
+	m, _ := loaded(t, "foo bar baz\n")
+	m = send(m, modKey(tea.KeyRight, tea.ModShift))
+	if !m.mode.IsVisual() {
+		t.Fatalf("shift+right mode=%v want visual", m.mode)
+	}
+	if m.anchor.Col != 0 || m.cursor.Col != 1 {
+		t.Fatalf("selection anchor=%d cursor=%d want 0/1", m.anchor.Col, m.cursor.Col)
+	}
+	m = send(m, modKey(tea.KeyRight, tea.ModShift), modKey(tea.KeyRight, tea.ModShift))
+	if m.anchor.Col != 0 || m.cursor.Col != 3 {
+		t.Fatalf("extended selection anchor=%d cursor=%d want 0/3", m.anchor.Col, m.cursor.Col)
+	}
+	m = send(m, special(tea.KeyEscape))
+	if m.mode.IsVisual() {
+		t.Fatal("escape should leave visual mode")
+	}
+}
+
+func TestClipboardCopyCutPaste(t *testing.T) {
+	clip := &fakeClipboard{}
+	m, _ := loaded(t, "foo bar\n")
+	m.SetClipboard(clip)
+
+	// Copy the selection "foo" and paste it over "bar".
+	m = send(m, modKey(tea.KeyRight, tea.ModShift), modKey(tea.KeyRight, tea.ModShift))
+	m, _ = m.runAction("copy")
+	if clip.text != "foo" {
+		t.Fatalf("copy clipboard=%q want foo", clip.text)
+	}
+	if m.mode.IsVisual() {
+		t.Fatal("copy should leave visual mode")
+	}
+
+	// Cut without a selection removes the whole line into the clipboard.
+	m, _ = m.runAction("cut")
+	if clip.text != "foo bar\n" {
+		t.Fatalf("cut clipboard=%q want whole line", clip.text)
+	}
+	if line(m, 0) != "" {
+		t.Fatalf("cut left line %q, want empty buffer line", line(m, 0))
+	}
+
+	// Paste inserts the clipboard text.
+	clip.text = "hi"
+	m, _ = m.runAction("paste")
+	if line(m, 0) != "hi" {
+		t.Fatalf("paste line=%q want hi", line(m, 0))
+	}
+}
+
+func TestClipboardPasteReplacesSelection(t *testing.T) {
+	clip := &fakeClipboard{text: "XY"}
+	m, _ := loaded(t, "foo\n")
+	m.SetClipboard(clip)
+	m = send(m, modKey(tea.KeyRight, tea.ModShift)) // select "fo"
+	m, _ = m.runAction("paste")
+	if line(m, 0) != "XYo" {
+		t.Fatalf("visual paste line=%q want XYo", line(m, 0))
+	}
+}
+
+func TestLineStartEndActions(t *testing.T) {
+	m, _ := loaded(t, "foo bar\n")
+	m, _ = m.runAction("line_end")
+	if m.cursor.Col != 6 {
+		t.Fatalf("line_end col=%d want 6", m.cursor.Col)
+	}
+	m, _ = m.runAction("line_start")
+	if m.cursor.Col != 0 {
+		t.Fatalf("line_start col=%d want 0", m.cursor.Col)
+	}
+	// Mid-insert, line end goes one past the last rune so typing continues there.
+	m = typeKeys(m, "i")
+	m, _ = m.runAction("line_end")
+	if m.cursor.Col != 7 {
+		t.Fatalf("insert line_end col=%d want 7", m.cursor.Col)
+	}
+}
+
+// fakeClipboard captures writes and serves reads for clipboard action tests.
+type fakeClipboard struct{ text string }
+
+func (f *fakeClipboard) Read() (string, error) { return f.text, nil }
+func (f *fakeClipboard) Write(s string) error  { f.text = s; return nil }
 
 func TestPageDownMovesCursor(t *testing.T) {
 	var sb string

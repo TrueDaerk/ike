@@ -338,7 +338,74 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.undo()
 	case "redo":
 		m.redo()
+	case "copy":
+		m.clipboardCopy()
+	case "cut":
+		m.clipboardCut()
+	case "paste":
+		m.clipboardPaste()
+	case "line_start":
+		m.lineStart()
+	case "line_end":
+		m.lineEnd()
 	}
 	m.scroll()
 	return m, nil
+}
+
+// clipboardCopy yanks the visual selection — or the current line when nothing
+// is selected — into the system-clipboard register `+` (Cmd+C).
+func (m *Model) clipboardCopy() {
+	if m.mode.IsVisual() {
+		m.visualOperateReg('y', '+')
+		return
+	}
+	m.runOperator('y', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
+}
+
+// clipboardCut deletes the visual selection — or the current line — into the
+// system-clipboard register `+` (Cmd+X).
+func (m *Model) clipboardCut() {
+	if m.mode.IsVisual() {
+		m.visualOperateReg('d', '+')
+		return
+	}
+	m.runOperator('d', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
+}
+
+// clipboardPaste inserts the system clipboard at the cursor (Cmd+V): it
+// replaces the selection in visual mode and, mid-insert, splices through the
+// open insert session so the paste joins the same undo unit.
+func (m *Model) clipboardPaste() {
+	if m.mode.IsVisual() {
+		m.visualPaste('+')
+		return
+	}
+	e := m.regs.Get('+')
+	if e.Text == "" {
+		return
+	}
+	if m.insert.active {
+		m.insertText(e.Text)
+		return
+	}
+	m.paste('+', false, 1, false)
+}
+
+// lineStart moves the cursor to column 0 (Cmd+Left).
+func (m *Model) lineStart() {
+	m.moveTo(buffer.Position{Line: m.cursor.Line, Col: 0})
+}
+
+// lineEnd moves the cursor to the line end (Cmd+Right): one past the last rune
+// while an insert session is open, on the last rune otherwise.
+func (m *Model) lineEnd() {
+	col := m.buf.RuneLen(m.cursor.Line)
+	if m.insert.active {
+		m.cursor = buffer.Position{Line: m.cursor.Line, Col: col}
+		m.desiredCol = col
+		m.emit(EventCursorMove)
+		return
+	}
+	m.moveTo(buffer.Position{Line: m.cursor.Line, Col: col})
 }

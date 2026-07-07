@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # Editor
@@ -33,7 +33,13 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   register store and records edits through a `history.Recorder`.
 - **register** — unnamed `"`, named `"a`-`"z` (uppercase appends), yank `"0`,
   small-delete `"-`, the numbered ring `"1`-`"9`, and a system-clipboard seam
-  (`"+`/`"*`, injected via `SetClipboard`).
+  (`"+`/`"*`, injected via `SetClipboard`). `internal/clipboard` provides the
+  real implementation (pbcopy/pbpaste on macOS, wl-copy/xclip/xsel on
+  Linux/BSD), wired in by the pane registry when an editor is created; without
+  a utility on PATH the registers fall back to the built-in no-op clipboard.
+  `Cmd+C/X/V` (keymap commands `editor.copy/cut/paste`) yank / delete the
+  visual selection — or the current line without one — through `"+`, and paste
+  from it (mid-insert the paste joins the open insert session's undo unit).
 - **history** — undo/redo as `Change` records (forward edits + inverses +
   cursor before/after); linear today, with parent/seq fields reserved for an
   undo tree. `.` repeat lives in the editor (`dotCommand`).
@@ -56,8 +62,11 @@ motion / text object before committing. Secondary-key states (`awaitG`,
 Beyond the core motions it also binds `~` (toggle case), `*`/`#` (search the
 word under the cursor), indent operators `>`/`<` (and `>>`/`<<`), `H M L`
 (screen top/middle/bottom), and screen scrolling via `Ctrl-f/b` (page),
-`Ctrl-d/u` (half page) and `PgUp`/`PgDn`. `Shift+←/→` (and `Ctrl+←/→`) are word
-motions, `Shift+↑/↓` paragraph jumps — these work in normal, visual and insert.
+`Ctrl-d/u` (half page) and `PgUp`/`PgDn`. `Alt/Option+←/→` (and `Ctrl+←/→`) are
+word motions, `Alt+↑/↓` (and `Ctrl+↑/↓`) paragraph jumps — these work in normal,
+visual and insert. `Shift+arrows` (plus `Shift+Home/End`) are selection keys:
+in normal mode they enter charwise visual mode anchored at the cursor and move;
+in visual mode they extend the selection like their plain counterparts.
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
@@ -87,7 +96,8 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 
 `commands.go` registers editor actions and ex-commands as plugin `Command`s
 (`editor.write`, `editor.quit`, `editor.write_quit`, `editor.undo`,
-`editor.redo`). Each `Run` dispatches an `ActionMsg`, which the root routes back
+`editor.redo`, `editor.copy`, `editor.cut`, `editor.paste`, `editor.lineStart`,
+`editor.lineEnd`). Each `Run` dispatches an `ActionMsg`, which the root routes back
 into the focused editor's `Update` — the single dispatch path the palette (07)
 and keybindings (08) reach. `events.go` emits on-change / cursor-move /
 completion-trigger `Event`s through an injectable `Emitter` (nil by default); no
