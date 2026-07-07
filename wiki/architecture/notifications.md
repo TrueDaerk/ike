@@ -38,7 +38,29 @@ produced.
 - **Theming:** severity → palette slots (`Info`/`Warning`/`Error`) on the
   `Surface` background — light/dark aware without new theme slots.
 
+## Call-site migration (#79)
+
+Every `SetStatus` call site was audited and classified. `SetStatus` now renders
+as **one more segment** on the status line (after mode/file/diagnostics) — it
+never replaces the line, fixing the sticky-message defect observed with the
+example plugin's hook.
+
+| Call site | Classification | Now |
+|---|---|---|
+| Example plugin (hello / handler opened / saw open) | event | `Notify(Info, …)` |
+| Save-all (`SaveAllMsg`) | event | `Notify(Info, "saved N files")` (silent when nothing is dirty) |
+| Theme select confirm / unknown-theme warning / reload warning | event | `Notify(Info/Warn, …)` |
+| Startup theme warning | event | `Notify(Warn, …)` |
+| LSP server ready / disabled / binary missing | persistent state | `SetStatus` (status-line segment) |
+| LSP server crashed | event | `Notify(Warn, …)` |
+| LSP server restarted (auto or `lsp.restart`) | event | `Notify(Info, …)` |
+| LSP launch error / disabled after repeated crashes | event | `Notify(Error, …)` |
+
+LSP classification travels with the message: `lsp.ServerStatusMsg` carries a
+`ServerStatusKind` (`ServerState`, `ServerEventInfo/Warn/Error`) assigned where
+the status originates (`internal/lsp/manager`); the root model routes state to
+`SetStatus` and events to `Notify`.
+
 ## Later increments (epic #71)
 
-History ring + list view and config keys beyond the timeout (#78); migration
-of event-like `SetStatus` call sites (#79).
+History ring + list view and config keys beyond the timeout (#78).

@@ -161,7 +161,7 @@ func (b *bridge) restart(h host.API) tea.Cmd {
 	if mgr := b.manager(); mgr != nil {
 		mgr.Shutdown()
 	}
-	h.Send(ilsp.ServerStatusMsg{Text: "LSP servers restarted"})
+	h.Send(ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo})
 	return nil
 }
 
@@ -191,9 +191,9 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	b.h.Send(ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)})
 }
 
-func (b *bridge) onStatus(lang, text string) {
+func (b *bridge) onStatus(lang, text string, kind ilsp.ServerStatusKind) {
 	if b.h != nil {
-		b.h.Send(ilsp.ServerStatusMsg{Text: text})
+		b.h.Send(ilsp.ServerStatusMsg{Text: text, Kind: kind})
 	}
 }
 

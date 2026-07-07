@@ -2,6 +2,14 @@
 
 ## 2026-07-07
 
+- Event-like `SetStatus` call sites migrated to `Notify` (#79, closes roadmap
+  0130's migration milestone): example plugin messages, save-all ("saved N
+  files"), theme select/warnings and transient LSP events (crashed → warn,
+  restarted → info, launch failure / disabled after repeated crashes → error)
+  are toasts now; `lsp.ServerStatusMsg` carries a `ServerStatusKind` assigned in
+  the manager. Persistent LSP server state stays on the status line, which
+  renders `SetStatus` as an extra segment instead of replacing the whole line.
+
 - Command line moved into the editor pane (#99): the ":" / "/" / "?" input
   renders as the pane's bottom row (vim-style) instead of replacing the app
   status line. Status line shows the focused file's project-relative path

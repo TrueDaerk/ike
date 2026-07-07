@@ -4,6 +4,7 @@ import (
 	"strings"
 	"time"
 
+	"ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 )
 
@@ -25,7 +26,10 @@ func (m *Manager) restart(old *server, docs []*document) {
 	m.mu.Unlock()
 
 	if n > maxRestarts {
-		m.status(old.lang, old.lang+" language server disabled after repeated crashes")
+		// Persistent state for the status line, plus an error toast so the user
+		// notices the subsystem went away.
+		m.status(old.lang, old.lang+" language server disabled", lsp.ServerState)
+		m.status(old.lang, old.lang+" language server disabled after repeated crashes", lsp.ServerEventError)
 		return
 	}
 
@@ -33,7 +37,8 @@ func (m *Manager) restart(old *server, docs []*document) {
 
 	srv, err := m.ensureServer(old.lang, old.root, old.spec)
 	if err != nil {
-		m.status(old.lang, statusForErr(old.spec.Command, err))
+		text, kind := statusForErr(old.spec.Command, err)
+		m.status(old.lang, text, kind)
 		return
 	}
 
@@ -52,7 +57,7 @@ func (m *Manager) restart(old *server, docs []*document) {
 			},
 		})
 	}
-	m.status(old.lang, old.lang+" language server restarted")
+	m.status(old.lang, old.lang+" language server restarted", lsp.ServerEventInfo)
 }
 
 // backoff grows linearly with the attempt count, capped at 5s.

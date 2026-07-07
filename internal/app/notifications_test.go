@@ -1,12 +1,15 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	ilsp "ike/internal/lsp"
 )
 
 // notify raises a notification and runs one Update pass so the root model
@@ -64,6 +67,101 @@ func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
 	}
 	if strings.Contains(frame, "● one ") {
 		t.Fatal("fourth-oldest toast must not render (cap 3)")
+	}
+}
+
+// TestServerStatusRouting guards the 0130 call-site migration: persistent
+// server state lands on the status line, transient events become toasts of the
+// matching severity.
+func TestServerStatusRouting(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(ilsp.ServerStatusMsg{Text: "go language server ready", Kind: ilsp.ServerState})
+	m = tm.(Model)
+	if got := m.host.Status(); got != "go language server ready" {
+		t.Fatalf("persistent state should hit the status line, got %q", got)
+	}
+	if len(m.toasts) != 0 {
+		t.Fatalf("persistent state must not toast, have %d toasts", len(m.toasts))
+	}
+
+	events := []struct {
+		kind ilsp.ServerStatusKind
+		sev  host.Severity
+	}{
+		{ilsp.ServerEventInfo, host.Info},
+		{ilsp.ServerEventWarn, host.Warn},
+		{ilsp.ServerEventError, host.Error},
+	}
+	for _, ev := range events {
+		tm, _ = m.Update(ilsp.ServerStatusMsg{Text: "event", Kind: ev.kind})
+		m = tm.(Model)
+		if len(m.toasts) == 0 || m.toasts[0].sev != ev.sev {
+			t.Fatalf("kind %d should raise a severity-%d toast", ev.kind, ev.sev)
+		}
+	}
+	if got := m.host.Status(); got != "go language server ready" {
+		t.Fatalf("events must not overwrite the persistent segment, got %q", got)
+	}
+}
+
+// TestStatusLineKeepsSegmentsWithHostStatus guards the 0130 defect fix: a
+// persistent host status renders as one more segment, never replacing the
+// mode/cursor segments.
+func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
+	m := newSized()
+	m.host.SetStatus("go language server ready")
+	line := m.statusLine()
+	if !strings.Contains(line, "NORMAL") || !strings.Contains(line, "Ln 1") {
+		t.Fatalf("host status must not cover the mode/cursor segments: %q", line)
+	}
+	if !strings.Contains(line, "go language server ready") {
+		t.Fatalf("persistent host status missing from the status line: %q", line)
+	}
+}
+
+// TestSaveAllNotifiesSavedCount guards the save-all migration: SaveAllMsg
+// reports 'saved N files' as an info toast, and stays silent with nothing to
+// save.
+func TestSaveAllNotifiesSavedCount(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(SaveAllMsg{})
+	if m = tm.(Model); len(m.toasts) != 0 {
+		t.Fatal("save-all with no dirty editors must not toast")
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ = m.openPath(path, false)
+	m = tm.(Model)
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'i', Text: "i"},
+		{Code: 'X', Text: "X"},
+		{Code: tea.KeyEscape},
+	} {
+		m = drainKey(m, k)
+	}
+	tm, _ = m.Update(SaveAllMsg{})
+	m = tm.(Model)
+	if len(m.toasts) != 1 || m.toasts[0].text != "saved 1 file" || m.toasts[0].sev != host.Info {
+		t.Fatalf("expected a 'saved 1 file' info toast, toasts=%+v", m.toasts)
+	}
+}
+
+// TestThemeSelectNotifies guards the theme migration: selecting a theme
+// confirms via toast (warn on unknown names) and leaves the persistent status
+// segment untouched.
+func TestThemeSelectNotifies(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(SelectThemeMsg{Name: "no-such-theme"})
+	m = tm.(Model)
+	if len(m.toasts) != 1 || m.toasts[0].sev != host.Warn {
+		t.Fatalf("unknown theme should raise a warn toast, toasts=%+v", m.toasts)
+	}
+	if m.host.Status() != "" {
+		t.Fatalf("theme selection must not write the status line, got %q", m.host.Status())
 	}
 }
 

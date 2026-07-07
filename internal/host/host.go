@@ -50,7 +50,9 @@ type API interface {
 	// Send is for background workers — async LSP results, server notifications —
 	// that have no Cmd to return. It is a no-op until the program is running.
 	Send(msg tea.Msg)
-	// SetStatus replaces the transient status-line text shown to the user.
+	// SetStatus replaces the persistent status-line segment (e.g. LSP server
+	// state). It is rendered until overwritten; event-like messages belong in
+	// Notify instead.
 	SetStatus(text string)
 	// Notify raises a toast notification (Roadmap 0130): a short, event-like
 	// message with a severity. Info/Warn toasts expire on their own; Error

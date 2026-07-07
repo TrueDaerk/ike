@@ -79,16 +79,16 @@ func (m *Model) applyTheme(p *theme.Palette) {
 
 // selectTheme switches the active color scheme by name for this session:
 // resolve against built-ins + plugin themes, re-thread everywhere, and confirm
-// (or warn) on the status line. It does not write the choice back to config.
+// (or warn) with a toast. It does not write the choice back to config.
 func (m *Model) selectTheme(name string) {
 	sel, found := theme.Select(name, m.reg.Themes())
 	m.applyTheme(theme.NewPalette(sel))
 	m.themeOverride = sel.Name // persisted in the session so the choice sticks
 	if !found {
-		m.host.SetStatus("unknown theme " + strconvQuote(name) + ", using " + theme.DefaultName)
+		m.host.Notify(host.Warn, "unknown theme "+strconvQuote(name)+", using "+theme.DefaultName)
 		return
 	}
-	m.host.SetStatus("theme: " + sel.Name)
+	m.host.Notify(host.Info, "theme: "+sel.Name)
 }
 
 // restoreTheme re-applies a session-persisted runtime theme override, if any,
@@ -116,6 +116,6 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	m.applyTheme(pal)
 	m.panes.Reconfigure(hcfg)
 	if warning != "" {
-		m.host.SetStatus(warning)
+		m.host.Notify(host.Warn, warning)
 	}
 }

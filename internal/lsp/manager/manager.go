@@ -36,15 +36,16 @@ const requestTimeout = 5 * time.Second
 type Connector func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (cl *client.Client, stop func(), err error)
 
 // Callbacks deliver async server output and status to the host (the bridge wires
-// these to host.Dispatch / SetStatus). All run on manager goroutines and must
-// not block.
+// these to host.Send). All run on manager goroutines and must not block.
 type Callbacks struct {
 	// Diagnostics delivers a publishDiagnostics for path, with the document's
 	// current lines and the server's position encoding so the receiver can map to
 	// editor coordinates.
 	Diagnostics func(path string, params protocol.PublishDiagnosticsParams, lines []string, enc string)
 	// Status reports a human-readable server state change (started, crashed, …).
-	Status func(lang, text string)
+	// kind classifies it: persistent state stays on the status line, transient
+	// events become toast notifications (Roadmap 0130).
+	Status func(lang, text string, kind lsp.ServerStatusKind)
 }
 
 // Manager coordinates servers and open documents.
@@ -129,9 +130,8 @@ func (m *Manager) Open(path, lang, text string) error {
 	root := detectRoot(path, spec.RootMarkers)
 	srv, err := m.ensureServer(lang, root, spec)
 	if err != nil {
-		if m.cb.Status != nil {
-			m.cb.Status(lang, statusForErr(spec.Command, err))
-		}
+		text, kind := statusForErr(spec.Command, err)
+		m.status(lang, text, kind)
 		return err
 	}
 
@@ -312,9 +312,7 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	m.servers[k] = srv
 	m.mu.Unlock()
 
-	if m.cb.Status != nil {
-		m.cb.Status(lang, lang+" language server ready")
-	}
+	m.status(lang, lang+" language server ready", lsp.ServerState)
 	go m.watchExit(srv)
 	return srv, nil
 }
@@ -333,7 +331,7 @@ func (m *Manager) watchExit(srv *server) {
 	if deliberate {
 		return
 	}
-	m.status(srv.lang, srv.lang+" language server crashed")
+	m.status(srv.lang, srv.lang+" language server crashed", lsp.ServerEventWarn)
 	go m.restart(srv, docs)
 }
 
@@ -431,10 +429,10 @@ func settingsSection(s map[string]any, section string) any {
 	return cur
 }
 
-// status forwards a status line update when a callback is set.
-func (m *Manager) status(lang, text string) {
+// status forwards a status update when a callback is set.
+func (m *Manager) status(lang, text string, kind lsp.ServerStatusKind) {
 	if m.cb.Status != nil {
-		m.cb.Status(lang, text)
+		m.cb.Status(lang, text, kind)
 	}
 }
 
@@ -464,12 +462,14 @@ func (m *Manager) docServer(path string) (*server, *document, bool) {
 	return srv, doc, true
 }
 
-// statusForErr renders a launch failure as a user-facing status string.
-func statusForErr(command string, err error) string {
+// statusForErr renders a launch failure as a user-facing status string plus its
+// classification: a missing binary is persistent state (LSP stays off for the
+// language), any other launch failure is a transient error event.
+func statusForErr(command string, err error) (string, lsp.ServerStatusKind) {
 	if isNotFound(err) {
-		return command + " not found (LSP disabled for this language)"
+		return command + " not found (LSP disabled for this language)", lsp.ServerState
 	}
-	return command + ": " + err.Error()
+	return command + ": " + err.Error(), lsp.ServerEventError
 }
 
 func splitLines(text string) []string { return strings.Split(text, "\n") }
