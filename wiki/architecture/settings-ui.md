@@ -62,6 +62,22 @@ opened via `settings.open` (cmd+, / menu bar / palette).
   `Capabilities.SettingsPages`; the app appends `reg.SettingsPages()` to the
   built-in `settings.BasePages()` (the toolchain page #94 uses this).
 
+## Page catalog (#92)
+
+`settings.BasePages(themes)` ships the core pages; every entry carries a
+description (the panel doubles as settings documentation), and a test fails on
+any entry whose key the typed schema does not expose (no dead keys).
+
+- **Editor** — tab width, use spaces, auto indent, trim trailing whitespace,
+  insert final newline, line numbers (+relative), scroll offset, soft wrap,
+  show whitespace: every key `applyConfig` reads live.
+- **Appearance** — theme (enum fed from the registry's theme list; writing
+  `theme.name` hot-reloads, so selection previews immediately), menu bar
+  on/off, command-palette chord.
+- **Files & Session** — restore last project, `files.watch`. Grows with 0140's
+  `files.auto_reload` and auto-save (#54) as they land.
+- **Notifications** — toast timeout, severity floor.
+
 ## Later sub-issues
 
-Core pages (#92), keymap editor (#93), toolchain page (#94).
+Keymap editor (#93), toolchain page (#94).
