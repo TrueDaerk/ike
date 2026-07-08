@@ -1,0 +1,427 @@
+// Package finder is the find-in-path overlay (Roadmap 0150, #85): a centered
+// modal with a query input, case/word/regex toggles, include/exclude glob
+// fields, query history, and a live-streamed results list (the reusable
+// locations component). It drives internal/search directly — each edit starts
+// a new scan (the service cancels the previous one) — and consumes the
+// generation-tagged result messages the root model routes back in. Selecting
+// a match dispatches OpenLocationMsg; the results survive closing, so
+// next/prev-match commands keep working without the overlay.
+package finder
+
+import (
+	"strconv"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"ike/internal/locations"
+	"ike/internal/search"
+	"ike/internal/theme"
+)
+
+// OpenLocationMsg asks the root model to open Path at the (1-based) Line and
+// (0-based rune) Col of a selected match.
+type OpenLocationMsg struct {
+	Path string
+	Line int
+	Col  int
+}
+
+// field enumerates the focusable inputs; tab cycles through them.
+type field int
+
+const (
+	fieldQuery field = iota
+	fieldInclude
+	fieldExclude
+	fieldCount
+)
+
+const maxHistory = 50
+
+// Model is the overlay state. The root model routes keys here while open and
+// feeds search.BatchMsg/DoneMsg through Apply.
+type Model struct {
+	svc  *search.Service
+	root string
+
+	open  bool
+	focus field
+
+	query   string
+	include string // comma-separated include globs
+	exclude string // comma-separated exclude globs
+
+	caseSensitive bool
+	wholeWord     bool
+	regex         bool
+
+	hist    []string
+	histIdx int // -1 = editing live, otherwise index into hist (newest first)
+
+	gen       int // generation of the scan whose results we accept
+	scanning  bool
+	truncated bool
+	errText   string
+
+	list locations.List
+
+	width, height int
+	pal           *theme.Palette
+
+	// displayPath shortens result paths for the group headers (the root model
+	// injects its project-relative formatter).
+	displayPath func(string) string
+}
+
+// New returns a closed finder driving svc.
+func New(svc *search.Service) *Model {
+	return &Model{svc: svc, histIdx: -1}
+}
+
+// SetPalette threads the active theme in.
+func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+
+// SetDisplayPath injects the header path formatter.
+func (m *Model) SetDisplayPath(f func(string) string) { m.displayPath = f }
+
+// SetSize records the terminal size.
+func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
+
+// Open shows the finder rooted at root, keeping the previous query and
+// toggles (JetBrains re-opens with the last search) but clearing results.
+func (m *Model) Open(root string) {
+	m.open = true
+	m.root = root
+	m.focus = fieldQuery
+	m.histIdx = -1
+	m.errText = ""
+	m.rescan()
+}
+
+// Close hides the overlay. Results are kept for next/prev-match.
+func (m *Model) Close() {
+	m.open = false
+	m.svc.Cancel()
+	m.scanning = false
+}
+
+// IsOpen reports whether the overlay is shown.
+func (m *Model) IsOpen() bool { return m.open }
+
+// HasResults reports whether a past scan left navigable matches.
+func (m *Model) HasResults() bool { return m.list.Total() > 0 }
+
+// Advance moves the retained result cursor by delta (wrapping) and returns
+// the match — the next/prev-match seam that works with the overlay closed.
+func (m *Model) Advance(delta int) (locations.Item, bool) { return m.list.Advance(delta) }
+
+// Query returns the current query text (replace-in-path builds on it, #86).
+func (m *Model) Query() string { return m.query }
+
+// theme returns the active palette, defaulting when none was threaded in.
+func (m *Model) theme() *theme.Palette {
+	if m.pal != nil {
+		return m.pal
+	}
+	return theme.DefaultPalette()
+}
+
+// Apply consumes one streamed scan message, dropping stale generations.
+func (m *Model) Apply(msg tea.Msg) {
+	switch msg := msg.(type) {
+	case search.BatchMsg:
+		if msg.Gen != m.gen {
+			return
+		}
+		items := make([]locations.Item, len(msg.Matches))
+		for i, hit := range msg.Matches {
+			items[i] = locations.Item{
+				Path:     hit.Path,
+				Line:     hit.Line,
+				StartCol: hit.StartCol,
+				EndCol:   hit.EndCol,
+				Text:     hit.Text,
+			}
+		}
+		m.list.Append(items)
+	case search.DoneMsg:
+		if msg.Gen != m.gen {
+			return
+		}
+		m.scanning = false
+		m.truncated = msg.Truncated
+		if msg.Err != nil {
+			m.errText = msg.Err.Error()
+		}
+	}
+}
+
+// rescan restarts the scan for the current inputs (or clears on an empty
+// query).
+func (m *Model) rescan() {
+	m.list.Reset()
+	m.truncated = false
+	m.errText = ""
+	if strings.TrimSpace(m.query) == "" {
+		m.svc.Cancel()
+		m.scanning = false
+		return
+	}
+	m.scanning = true
+	m.gen = m.svc.Scan(search.Query{
+		Pattern:       m.query,
+		Root:          m.root,
+		CaseSensitive: m.caseSensitive,
+		WholeWord:     m.wholeWord,
+		Regex:         m.regex,
+		Include:       splitGlobs(m.include),
+		Exclude:       splitGlobs(m.exclude),
+	})
+}
+
+// splitGlobs turns a comma-separated field into a glob slice.
+func splitGlobs(s string) []string {
+	var out []string
+	for _, g := range strings.Split(s, ",") {
+		if g = strings.TrimSpace(g); g != "" {
+			out = append(out, g)
+		}
+	}
+	return out
+}
+
+// Update handles one key while the overlay is open.
+func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "esc":
+		m.Close()
+		return nil
+	case "enter":
+		if it, ok := m.list.Current(); ok {
+			m.commitHistory()
+			m.Close()
+			return func() tea.Msg {
+				return OpenLocationMsg{Path: it.Path, Line: it.Line, Col: it.StartCol}
+			}
+		}
+		return nil
+	case "tab":
+		m.focus = (m.focus + 1) % fieldCount
+		return nil
+	case "shift+tab":
+		m.focus = (m.focus + fieldCount - 1) % fieldCount
+		return nil
+	case "down":
+		if m.list.Total() > 0 {
+			m.list.Move(1)
+		} else {
+			m.history(-1) // toward older is up; down walks back to newer
+		}
+		return nil
+	case "up":
+		if m.list.Total() > 0 {
+			m.list.Move(-1)
+		} else {
+			m.history(1)
+		}
+		return nil
+	case "pgdown":
+		m.list.Move(10)
+		return nil
+	case "pgup":
+		m.list.Move(-10)
+		return nil
+	case "alt+c":
+		m.caseSensitive = !m.caseSensitive
+		m.rescan()
+		return nil
+	case "alt+w":
+		m.wholeWord = !m.wholeWord
+		m.rescan()
+		return nil
+	case "alt+x":
+		m.regex = !m.regex
+		m.rescan()
+		return nil
+	case "alt+up":
+		m.history(1)
+		return nil
+	case "alt+down":
+		m.history(-1)
+		return nil
+	case "backspace":
+		f := m.focused()
+		if r := []rune(*f); len(r) > 0 {
+			*f = string(r[:len(r)-1])
+			m.editedField()
+		}
+		return nil
+	}
+	if msg.Text != "" && !strings.ContainsAny(msg.Text, "\n\r") {
+		f := m.focused()
+		*f = *f + msg.Text
+		m.editedField()
+	}
+	return nil
+}
+
+// focused returns the field the cursor edits.
+func (m *Model) focused() *string {
+	switch m.focus {
+	case fieldInclude:
+		return &m.include
+	case fieldExclude:
+		return &m.exclude
+	}
+	return &m.query
+}
+
+// editedField reacts to a text change: any input change restarts the scan;
+// editing the query leaves history-recall mode.
+func (m *Model) editedField() {
+	if m.focus == fieldQuery {
+		m.histIdx = -1
+	}
+	m.rescan()
+}
+
+// history walks the recall list: dir>0 moves to older entries, dir<0 back
+// toward the live query.
+func (m *Model) history(dir int) {
+	if len(m.hist) == 0 || m.focus != fieldQuery {
+		return
+	}
+	next := m.histIdx + dir
+	if next < -1 {
+		next = -1
+	}
+	if next >= len(m.hist) {
+		next = len(m.hist) - 1
+	}
+	if next == m.histIdx {
+		return
+	}
+	m.histIdx = next
+	if next == -1 {
+		m.query = ""
+	} else {
+		m.query = m.hist[next]
+	}
+	m.rescan()
+}
+
+// commitHistory records the current query at the front of the recall list.
+func (m *Model) commitHistory() {
+	q := strings.TrimSpace(m.query)
+	if q == "" {
+		return
+	}
+	out := []string{q}
+	for _, h := range m.hist {
+		if h != q {
+			out = append(out, h)
+		}
+	}
+	if len(out) > maxHistory {
+		out = out[:maxHistory]
+	}
+	m.hist = out
+}
+
+// View renders the centered overlay box.
+func (m *Model) View() string {
+	if !m.open || m.width <= 0 {
+		return ""
+	}
+	pal := m.theme()
+	boxW := m.width - 12
+	if boxW > 100 {
+		boxW = 100
+	}
+	if boxW < 40 {
+		boxW = min(40, m.width-2)
+	}
+	innerW := boxW - 4 // border + padding
+
+	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("Find in Path")
+	rows := []string{title, ""}
+	rows = append(rows, m.inputRow("Search ", m.query, fieldQuery, innerW))
+	rows = append(rows, m.togglesRow())
+	rows = append(rows, m.inputRow("Include", m.include, fieldInclude, innerW))
+	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
+	rows = append(rows, "")
+
+	listH := m.height/2 - 9
+	if listH < 4 {
+		listH = 4
+	}
+	if body := m.list.Render(innerW, listH, pal, m.displayPath); body != "" {
+		rows = append(rows, body)
+	}
+	rows = append(rows, "", m.statusRow(innerW))
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.BorderFocus).
+		Padding(0, 1).
+		Width(boxW - 2)
+	return box.Render(strings.Join(rows, "\n"))
+}
+
+// inputRow renders one labelled input line with a block cursor on the focused
+// field.
+func (m *Model) inputRow(label, value string, f field, width int) string {
+	pal := m.theme()
+	lab := lipgloss.NewStyle().Faint(true).Render(label + " ")
+	text := value
+	if m.focus == f {
+		text += lipgloss.NewStyle().Reverse(true).Render(" ")
+	}
+	row := lab + text
+	if m.focus == f {
+		row = lipgloss.NewStyle().Foreground(pal.Foreground).Render(lab) + text
+	}
+	return lipgloss.NewStyle().MaxWidth(width).Render(row)
+}
+
+// togglesRow renders the three match-mode toggles with their alt-key hints.
+func (m *Model) togglesRow() string {
+	pal := m.theme()
+	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
+	off := lipgloss.NewStyle().Faint(true)
+	part := func(label string, active bool) string {
+		if active {
+			return on.Render("[x] " + label)
+		}
+		return off.Render("[ ] " + label)
+	}
+	return "        " + part("Case (alt+c)", m.caseSensitive) +
+		"  " + part("Word (alt+w)", m.wholeWord) +
+		"  " + part("Regex (alt+x)", m.regex)
+}
+
+// statusRow summarizes the scan: live progress, counts, truncation, errors.
+func (m *Model) statusRow(width int) string {
+	pal := m.theme()
+	dim := lipgloss.NewStyle().Faint(true)
+	switch {
+	case m.errText != "":
+		return lipgloss.NewStyle().Foreground(pal.Error).Render(
+			lipgloss.NewStyle().MaxWidth(width).Render("error: " + m.errText))
+	case strings.TrimSpace(m.query) == "":
+		return dim.Render("type to search — enter opens, esc closes, tab cycles fields")
+	case m.scanning && m.list.Total() == 0:
+		return dim.Render("searching…")
+	case m.list.Total() == 0:
+		return dim.Render("no matches")
+	}
+	s := strconv.Itoa(m.list.Total()) + " matches in " + strconv.Itoa(m.list.Files()) + " files"
+	if m.truncated {
+		s += " (truncated)"
+	} else if m.scanning {
+		s += "…"
+	}
+	return dim.Render(s)
+}

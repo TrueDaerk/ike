@@ -84,6 +84,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.themePal = p
 	m.panes.SetPalette(p)
 	m.palette.SetPalette(p)
+	m.finder.SetPalette(p)
 	m.shell.SetPalette(p)
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)

@@ -47,6 +47,15 @@ type ToggleMenuMsg struct{}
 // notifications.history.
 type ShowNotificationHistoryMsg struct{}
 
+// OpenFindInPathMsg asks the root model to open the find-in-path overlay
+// (Roadmap 0150). Dispatched by project.findInPath (cmd+shift+f / palette).
+type OpenFindInPathMsg struct{}
+
+// MatchStepMsg asks the root model to jump to the next (Delta 1) or previous
+// (Delta -1) retained find-in-path match, without the overlay open.
+// Dispatched by search.nextMatch / search.prevMatch.
+type MatchStepMsg struct{ Delta int }
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -80,6 +89,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
+			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
+			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
