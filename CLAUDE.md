@@ -22,6 +22,11 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
 - **Language:** write all code, comments, doc strings, descriptions, and commit messages in **English**,
   unless explicitly asked otherwise. (Conversational replies may be in the user's language.)
 - **Testing & coverage:** new code should ship with tests.
+- **Issue-first workflow:** every new piece of work starts with a GitHub issue — first check whether
+  one already exists (see "Before creating an issue"), otherwise create it. When the task is done,
+  commit on the issue branch, push, open a PR whose body says `Closes #<number>`, and **merge the PR**
+  — merging closes the issue and finishes the task. Don't leave PRs open or issues dangling after
+  the work is done.
 
 ## GitHub issues
 
