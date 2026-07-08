@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Project-search scanner engine (#84, Roadmap 0150): `internal/search` streams
+  matches in batches with generation-based cancellation and a truncation
+  bound; `rg --json` backend (with `--no-require-git`) and a pure-Go
+  walker+matcher fallback with a small gitignore matcher, guarded by a
+  backend-parity test. UI lands with #85.
+
 - Shared documents (#142): the same file open in several panes is one document
   with multiple views — shared buffer and undo stack, per-pane cursor/scroll;
   unsaved edits, dirty/stale flags, saves and reloads mirror live across the
