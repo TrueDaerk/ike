@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
@@ -28,6 +29,10 @@ type GoToFileMsg struct{}
 // SaveAllMsg asks the root model to save every dirty editor pane. Dispatched
 // by editor.saveAll.
 type SaveAllMsg struct{}
+
+// SplitFocusedMsg asks the root model to split the focused leaf toward Zone
+// with a fresh empty editor (#114). Dispatched by pane.splitDown / pane.splitUp.
+type SplitFocusedMsg struct{ Zone layout.Zone }
 
 // OpenSettingsMsg asks the root model to open the settings panel (Roadmap
 // 0160). Dispatched by settings.open (cmd+, / menu bar / palette).
@@ -80,6 +85,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
+			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
+			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 		},
 	}
 }

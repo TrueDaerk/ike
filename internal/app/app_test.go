@@ -15,6 +15,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/keymap"
+	"ike/internal/layout"
 	"ike/internal/menu"
 	"ike/internal/pane"
 	"ike/internal/plugin"
@@ -128,6 +129,42 @@ func TestMenuBarToggleAndDispatch(t *testing.T) {
 	}
 	if hidden.bodyRect().Y != 0 {
 		t.Fatal("hidden menu bar must not reserve a row")
+	}
+}
+
+// TestSplitFocusedCommands guards #114: pane.splitDown/up split the focused
+// editor leaf with a fresh empty editor and move focus onto it.
+func TestSplitFocusedCommands(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
+	m = tm.(Model)
+	before := m.panes.Focused()
+	editors := len(m.panes.Keys())
+
+	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneBottom})
+	m = tm.(Model)
+	if len(m.panes.Keys()) != editors+1 {
+		t.Fatalf("split must add one editor pane, have %d", len(m.panes.Keys()))
+	}
+	after := m.panes.Focused()
+	if after == before || after == "" {
+		t.Fatal("focus must move to the new editor")
+	}
+	rb, ok := m.lay.Panes[before]
+	ra, ok2 := m.lay.Panes[after]
+	if !ok || !ok2 {
+		t.Fatal("both panes must lay out")
+	}
+	if ra.Y <= rb.Y {
+		t.Fatalf("ZoneBottom must place the new pane below (new y=%d, old y=%d)", ra.Y, rb.Y)
+	}
+
+	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneTop})
+	m = tm.(Model)
+	top := m.panes.Focused()
+	rt := m.lay.Panes[top]
+	if rt.Y >= m.lay.Panes[after].Y {
+		t.Fatalf("ZoneTop must place the new pane above (new y=%d, old y=%d)", rt.Y, m.lay.Panes[after].Y)
 	}
 }
 

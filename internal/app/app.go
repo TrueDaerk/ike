@@ -743,6 +743,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.Deliver(msg)
 		return m, nil
 
+	case SplitFocusedMsg:
+		// pane.splitDown / pane.splitUp (cmd+k down / cmd+k up): split the
+		// focused leaf with a fresh empty editor, no drag or file open needed.
+		m.SplitFocused(msg.Zone)
+		return m, nil
+
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the full-window settings panel.
 		m.settings.SetSize(m.width, m.height-statusHeight)

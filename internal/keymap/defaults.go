@@ -72,6 +72,8 @@ var jetbrainsRows = []row{
 	{"cmd+shift+t", "vcs.revertFile", "Revert file", Global, "VCS (future)", false},
 	{"cmd+k cmd+c", "editor.commentLine", "Comment (chord example)", Editor, "Editor (06)", false},
 	{"cmd+k cmd+s", "palette.keymapHelp", "Show keymap cheatsheet", Global, "Keymap (08)", false},
+	{"cmd+k down", "pane.splitDown", "Split down", Global, "App (01)", false},
+	{"cmd+k up", "pane.splitUp", "Split up", Global, "App (01)", false},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)", false},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)", false},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)", false},

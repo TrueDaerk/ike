@@ -2,6 +2,11 @@
 
 ## 2026-07-08
 
+- Split keybindings (#114): `pane.splitDown` / `pane.splitUp` (cmd+k down /
+  cmd+k up) split the focused leaf with a fresh empty editor and move focus
+  onto it — no drag or file open needed (wires the existing
+  `Model.SplitFocused`).
+
 - Toolchain settings page (#94, closes epic #87 / roadmap 0160): per-language
   interpreter rows with source badge and async version probe; discovery
   pickers (Python: venv/.venv/uv/pyenv/PATH; PHP: PATH + install locations) +
