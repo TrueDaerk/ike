@@ -27,6 +27,7 @@ import (
 	"ike/internal/keymap"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
+	"ike/internal/menu"
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -78,7 +79,10 @@ type Model struct {
 	// constructed with the model (so save epochs record from the start) but
 	// only started by main.go via StartWatcher, keeping tests watcher-free.
 	watcher *watch.Service
-	help    *help.Help
+	// menu is the menu bar (Roadmap 0160, #90), rendered above the panes when
+	// ui.menu_bar is enabled.
+	menu *menu.Model
+	help *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
@@ -186,6 +190,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		keys:         buildKeymap(cfg),
 	}
 	m.watcher = watch.New(m.host.Send)
+	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
@@ -651,6 +656,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout()
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
+		m.menu.SetWidth(m.width)
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -711,6 +717,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
 		}
 		return m, tea.Batch(cmds...)
+
+	case ToggleMenuMsg:
+		// menu.open (f10 / palette): open the first menu, or close an open one.
+		if m.menuEnabled() {
+			m.menu.Toggle()
+		}
+		return m, nil
+
+	case menu.RunMsg:
+		return m, m.RunCommand(msg.Command)
 
 	case ShowNotificationHistoryMsg:
 		// notifications.history (palette): the history ring in the floating shell.
@@ -846,6 +862,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
 			m.dismissErrorToasts()
+		}
+		// An open menu dropdown owns the keyboard (arrows/enter/esc).
+		if m.menu.IsOpen() {
+			return m, m.menu.Update(msg)
 		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
@@ -1424,9 +1444,46 @@ func abs(v int) int {
 	return v
 }
 
-// bodyRect is the viewport the layout tree tiles.
+// bodyRect is the viewport the layout tree tiles: below the menu bar (when
+// enabled), above the status line.
 func (m *Model) bodyRect() layout.Rect {
-	return layout.Rect{X: 0, Y: 0, W: m.width, H: m.height - statusHeight}
+	top := m.menuHeight()
+	return layout.Rect{X: 0, Y: top, W: m.width, H: m.height - statusHeight - top}
+}
+
+// menuHeight is the rows the menu bar occupies (0 when hidden via ui.menu_bar).
+func (m Model) menuHeight() int {
+	if m.menuEnabled() {
+		return 1
+	}
+	return 0
+}
+
+// menuEnabled reads ui.menu_bar (default true).
+func (m Model) menuEnabled() bool {
+	v, ok := m.host.Config().Get("ui.menu_bar")
+	return !ok || v != "false"
+}
+
+// commandInfo builds the menu's command-id resolver: registered ids are
+// runnable and carry the same shortcut the cheatsheet shows; unregistered ids
+// render disabled with the blocked-ledger dependency (or a generic hint) as
+// the reason.
+func (m Model) commandInfo(reg *registry.Registry) menu.InfoFunc {
+	return func(id string) menu.Info {
+		if c, ok := reg.Command(id); ok {
+			info := menu.Info{Runnable: true, Shortcut: c.Shortcut}
+			if s, ok := reg.Binding(id); ok {
+				info.Shortcut = s
+			}
+			return info
+		}
+		hint := "not available yet"
+		if reason, ok := keymap.BlockedReason(id); ok {
+			hint = reason
+		}
+		return menu.Info{Hint: hint}
+	}
 }
 
 // layout recomputes the layout geometry and pushes each leaf's interior size
@@ -1470,6 +1527,29 @@ func paneInterior(outer, chrome int) int {
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	if m.shell.IsOpen() {
 		return m, nil
+	}
+	// Menu bar (Roadmap 0160): clicks on the bar row open/switch menus; with a
+	// dropdown open, a click runs the entry under it or closes the menu.
+	if m.menuEnabled() && msg.action == mousePress && msg.Button == tea.MouseLeft {
+		if m.menu.IsOpen() {
+			if idx, ok := m.menu.ItemAt(msg.X, msg.Y); ok {
+				return m, m.menu.Invoke(idx)
+			}
+			if msg.Y == 0 {
+				if i, ok := m.menu.TitleAt(msg.X); ok {
+					m.menu.OpenMenu(i)
+					return m, nil
+				}
+			}
+			m.menu.Close()
+			return m, nil
+		}
+		if msg.Y == 0 {
+			if i, ok := m.menu.TitleAt(msg.X); ok {
+				m.menu.OpenMenu(i)
+			}
+			return m, nil
+		}
 	}
 	shift := msg.Mod&tea.ModShift != 0
 	if msg.action == mouseWheel {
@@ -1740,7 +1820,14 @@ func (m Model) render() string {
 		return "starting ike…"
 	}
 	body := m.renderNode(m.tree, m.bodyRect())
-	base := lipgloss.JoinVertical(lipgloss.Left, body, m.statusLine())
+	rows := []string{body, m.statusLine()}
+	if m.menuEnabled() {
+		rows = append([]string{m.menu.Bar()}, rows...)
+	}
+	base := lipgloss.JoinVertical(lipgloss.Left, rows...)
+	if m.menu.IsOpen() {
+		base = overlay.Place(base, m.menu.Dropdown(), m.menu.DropdownX(), 1, m.width, m.height)
+	}
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}

@@ -125,7 +125,7 @@ func TestDragResizeClampsMinimum(t *testing.T) {
 func TestDragMoveSwapsPanes(t *testing.T) {
 	m := sized(t, 100, 40)
 	// press explorer title bar (top row), release on right half of editor.
-	m = step(m, press(2, 0))
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	edRect := m.lay.Panes[ctxEditor]
 	m = step(m, release(edRect.X+edRect.W-2, edRect.Y+edRect.H/2))
 	s, ok := m.tree.(*layout.Split)
@@ -139,7 +139,7 @@ func TestDragMoveSwapsPanes(t *testing.T) {
 
 func TestMoveDragShowsFeedback(t *testing.T) {
 	m := sized(t, 100, 40)
-	m = step(m, press(2, 0)) // grab explorer title
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y)) // grab explorer title
 	edRect := m.lay.Panes[ctxEditor]
 	m = step(m, motion(edRect.X+edRect.W-2, edRect.Y+edRect.H/2)) // hover editor right half
 	view := m.render()
@@ -156,7 +156,7 @@ func TestMoveDragShowsFeedback(t *testing.T) {
 
 func TestMoveDragShowsGhostBox(t *testing.T) {
 	m := sized(t, 100, 40)
-	m = step(m, press(2, 0))
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	edRect := m.lay.Panes[ctxEditor]
 	// hover the right half of the editor → ghost on its right half.
 	hx, hy := edRect.X+edRect.W-2, edRect.Y+edRect.H/2
@@ -239,7 +239,7 @@ func TestMouseIgnoredWhenShellOpen(t *testing.T) {
 		t.Fatal("shell should be open")
 	}
 	before := m.tree
-	m = step(m, press(2, 0))
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	m = step(m, release(50, 20))
 	if m.drag != nil {
 		t.Fatal("drag should not start while shell open")

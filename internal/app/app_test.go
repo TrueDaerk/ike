@@ -15,6 +15,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/keymap"
+	"ike/internal/menu"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -85,6 +86,48 @@ func TestPluginConfigDisable(t *testing.T) {
 	NewWith(reg, host.MapConfig{"plugins.p.enabled": "false"})
 	if _, ok := reg.ResolveKey("ctrl+e", ""); ok {
 		t.Fatal("disabled plugin keymap should not resolve")
+	}
+}
+
+// TestMenuBarToggleAndDispatch guards the #90 wiring: f10's ToggleMenuMsg
+// opens the menu, an open menu owns the keys, and menu.RunMsg routes into
+// RunCommand. ui.menu_bar=false hides the bar and disables the toggle.
+func TestMenuBarToggleAndDispatch(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(ToggleMenuMsg{})
+	m = tm.(Model)
+	if !m.menu.IsOpen() {
+		t.Fatal("ToggleMenuMsg must open the menu")
+	}
+	if !strings.Contains(m.render(), "File") {
+		t.Fatal("menu bar missing from the frame")
+	}
+	// Esc closes via the menu's key ownership.
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m = tm.(Model); m.menu.IsOpen() {
+		t.Fatal("esc must close the dropdown")
+	}
+	// RunMsg routes through the registry (unknown ids are a silent no-op).
+	tm, cmd := m.Update(menu.RunMsg{Command: "editor.saveAll"})
+	m = tm.(Model)
+	for cmd != nil {
+		msg := cmd()
+		if msg == nil {
+			break
+		}
+		tm, cmd = m.Update(msg)
+		m = tm.(Model)
+	}
+
+	hidden := NewWith(registry.New(), host.MapConfig{"ui.menu_bar": "false"})
+	tm, _ = hidden.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	hidden = tm.(Model)
+	tm, _ = hidden.Update(ToggleMenuMsg{})
+	if hidden = tm.(Model); hidden.menu.IsOpen() {
+		t.Fatal("hidden menu bar must not open")
+	}
+	if hidden.bodyRect().Y != 0 {
+		t.Fatal("hidden menu bar must not reserve a row")
 	}
 }
 
