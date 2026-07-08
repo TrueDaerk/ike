@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- Find-in-path UI (#85, Roadmap 0150): `project.findInPath` (cmd+shift+f) is
+  live — modal overlay with query, case/word/regex toggles, include/exclude
+  globs, query history, and live-streamed results grouped by file (the new
+  reusable `internal/locations` list). Enter jumps to the match;
+  `search.nextMatch`/`prevMatch` step retained results with the overlay
+  closed. Blocked-ledger entry for the binding removed.
+
 - Project-search scanner engine (#84, Roadmap 0150): `internal/search` streams
   matches in batches with generation-based cancellation and a truncation
   bound; `rg --json` backend (with `--no-require-git`) and a pure-Go

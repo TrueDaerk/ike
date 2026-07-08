@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-08T12:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -54,10 +54,34 @@ prefixes, scoped per declaring directory as the walker descends. Negation
 (`!pattern`) is unsupported — when the fallback and rg disagree on an exotic
 pattern, rg is right.
 
-## Consumers
+## Find-in-path overlay (#85)
 
-- **#85 Find-in-path UI:** query input + toggles in the floating shell,
-  results pane grouped by file, navigation via the definition-jump path.
-- **#86 Replace in path:** the same matches drive previewed replacements —
-  through open dirty buffers (one undo unit per file), directly on disk
-  otherwise.
+`internal/finder` is the modal UI over the engine, opened by
+`project.findInPath` (cmd+shift+f, palette, or the menu-reachable command
+table). It owns the keyboard while open (routed by the root model ahead of
+the palette):
+
+- **Inputs:** the query plus include/exclude glob fields (comma-separated);
+  `tab`/`shift+tab` cycle field focus. Every edit restarts the scan — the
+  service's generation counter cancels the superseded one, and `Apply` drops
+  stale-generation messages.
+- **Toggles:** case (`alt+c`), whole word (`alt+w`), regex (`alt+x`).
+- **Query history:** committed on enter; recalled with `alt+up`/`alt+down`
+  (and plain `up`/`down` while the result list is empty — with results those
+  keys move the selection).
+- **Results:** the reusable `internal/locations` list — items grouped by
+  file (headers show per-file counts), match ranges highlighted, cursor row
+  selected, scrolled into view; the status row shows live counts, `…` while
+  streaming, `(truncated)` at the result bound, and scan errors. The
+  component is consumer-agnostic: the Problems window (#33) and TODO index
+  (#61) are its planned next hosts.
+- **Navigation:** `enter` opens the file at the match via the
+  definition-jump path (`openPathAt`) and closes the overlay; the results
+  survive closing, so `search.nextMatch` / `search.prevMatch` (palette
+  commands) keep stepping matches — wrapping across files — without the
+  overlay.
+
+## Replace in path (#86, next)
+
+The same matches will drive previewed replacements — through open dirty
+buffers (one undo unit per file), directly on disk otherwise.

@@ -21,6 +21,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/explorer"
+	"ike/internal/finder"
 	"ike/internal/help"
 	"ike/internal/highlight"
 	"ike/internal/host"
@@ -33,6 +34,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/search"
 	"ike/internal/settings"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -93,6 +95,10 @@ type Model struct {
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
+	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
+	// streaming scan service it drives.
+	finder   *finder.Model
+	searcher *search.Service
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
@@ -198,6 +204,10 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		keys:         buildKeymap(cfg),
 	}
 	m.watcher = watch.New(m.host.Send)
+	m.searcher = search.New(m.host.Send)
+	m.finder = finder.New(m.searcher)
+	m.finder.SetPalette(themePal)
+	m.finder.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
 	pages := settings.BasePages(themeNames(reg))
@@ -704,6 +714,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.layout()
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
+		m.finder.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
 			w, h := m.settingsSize()
@@ -722,6 +733,31 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
+
+	case OpenFindInPathMsg:
+		// project.findInPath (cmd+shift+f / palette): the find-in-path overlay
+		// (Roadmap 0150), rooted at the working directory like the explorer.
+		m.finder.SetSize(m.width, m.height)
+		m.finder.Open(".")
+		return m, nil
+
+	case search.BatchMsg, search.DoneMsg:
+		// Streamed scan results (generation-filtered inside the finder).
+		m.finder.Apply(msg)
+		return m, nil
+
+	case finder.OpenLocationMsg:
+		// A selected match: open the file with the cursor on the hit
+		// (OpenLocationMsg lines are 1-based, openPathAt takes 0-based).
+		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
+
+	case MatchStepMsg:
+		// search.nextMatch / search.prevMatch: walk the retained results
+		// without the overlay open.
+		if it, ok := m.finder.Advance(msg.Delta); ok {
+			return m.openPathAt(it.Path, it.Line-1, it.StartCol)
+		}
+		return m, nil
 
 	case explorer.FileDeletedMsg:
 		// The explorer removed a path; close any editor still showing it so a
@@ -975,6 +1011,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// An open menu dropdown owns the keyboard (arrows/enter/esc).
 		if m.menu.IsOpen() {
 			return m, m.menu.Update(msg)
+		}
+		if m.finder.IsOpen() {
+			// The find-in-path overlay owns the keyboard like the palette.
+			return m, m.finder.Update(msg)
 		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
@@ -2052,6 +2092,8 @@ func (m Model) render() string {
 	base = m.compositeLSPPopups(base)
 	result := base
 	switch {
+	case m.finder.IsOpen():
+		result = overlay.Center(base, m.finder.View(), m.width, m.height)
 	case m.palette.IsOpen():
 		v := m.palette.View()
 		if m.palette.Anchored() {

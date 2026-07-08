@@ -17,7 +17,6 @@ var blockedDefaults = map[string]string{
 	"palette.searchEverywhere": "search-everywhere palette mode (idea #50)",
 	"palette.recentFiles":      "recent-files palette mode (idea #50)",
 	"project.goToClass":        "document symbols / structure view (idea #31)",
-	"project.findInPath":       "project-wide search & replace (epic #73, sub #85)",
 	"project.replaceInPath":    "project-wide search & replace (epic #73, sub #86)",
 	"nav.back":                 "editor navigation history (idea #51)",
 	"nav.forward":              "editor navigation history (idea #51)",
