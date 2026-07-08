@@ -129,6 +129,8 @@ func (c *Config) Flat() map[string]string {
 	put("notifications.timeout_seconds", c.Notifications.TimeoutSeconds)
 	put("notifications.min_severity", c.Notifications.MinSeverity)
 
+	put("files.watch", c.Files.Watch)
+
 	put("palette.max_results", c.Palette.MaxResults)
 	put("palette.default_mode", c.Palette.DefaultMode)
 	put("palette.off_context", c.Palette.OffContext)

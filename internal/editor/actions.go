@@ -322,6 +322,7 @@ func (m *Model) saveAs(path string) error {
 	}
 	m.path = path
 	m.dirty = false
+	m.emit(EventSave)
 	return nil
 }
 

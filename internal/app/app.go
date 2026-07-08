@@ -34,6 +34,7 @@ import (
 	"ike/internal/registry"
 	"ike/internal/theme"
 	"ike/internal/ui"
+	"ike/internal/watch"
 )
 
 // Context ids the core panes advertise for context-scoped command/keymap
@@ -73,6 +74,10 @@ type Model struct {
 	// history is the notification ring (#78): the newest historyCap entries,
 	// newest first, browsable via the notifications.history command.
 	history []histEntry
+	// watcher is the external-file-change service (Roadmap 0140). It is
+	// constructed with the model (so save epochs record from the start) but
+	// only started by main.go via StartWatcher, keeping tests watcher-free.
+	watcher *watch.Service
 	help    *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
@@ -180,6 +185,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		focusKeys:    focusKeys(cfg),
 		keys:         buildKeymap(cfg),
 	}
+	m.watcher = watch.New(m.host.Send)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
@@ -195,15 +201,34 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 // bridge) can inject async results. main.go calls it once after tea.NewProgram.
 func (m Model) SetSender(send func(tea.Msg)) { m.host.SetSender(send) }
 
+// StartWatcher starts the external-file-change watcher on root when
+// files.watch is enabled (Roadmap 0140). main.go calls it once after
+// SetSender; a project switch (Roadmap 0090) re-calls it with the new root,
+// which restarts the watcher there.
+func (m Model) StartWatcher(root string) {
+	if v, ok := m.host.Config().Get("files.watch"); ok && v == "false" {
+		return
+	}
+	_ = m.watcher.Start(root)
+}
+
 // editorEmitter adapts editor lifecycle events into host editor events, which the
 // host fans out to the LSP bridge (registered via host.SetEditorEmitter). One
 // stateless adapter is installed on every editor instance; it is a no-op when no
-// bridge is registered.
-type editorEmitter struct{ host *host.Host }
+// bridge is registered. Save events additionally stamp the file watcher's save
+// epoch (Roadmap 0140) so IKE's own writes never report as external changes.
+type editorEmitter struct {
+	host    *host.Host
+	watcher *watch.Service
+}
 
 // Emit implements editor.Emitter. The editor and host event-kind constants share
-// the same iota ordering (change/cursor/completion), so the kind maps directly.
+// the same iota ordering (change/cursor/completion/save), so the kind maps
+// directly.
 func (e editorEmitter) Emit(ev editor.Event) {
+	if ev.Kind == editor.EventSave && e.watcher != nil {
+		e.watcher.MarkSaved(ev.Path)
+	}
 	e.host.EmitEditor(host.EditorEvent{
 		Kind: int(ev.Kind),
 		Path: ev.Path,
@@ -225,7 +250,7 @@ func (m *Model) wireEditorEmitters() {
 // installEmitter wires the editor-emitter adapter onto one editor pane.
 func (m *Model) installEmitter(key string) {
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		inst.Editor().SetEmitter(editorEmitter{host: m.host})
+		inst.Editor().SetEmitter(editorEmitter{host: m.host, watcher: m.watcher})
 	}
 }
 
@@ -777,6 +802,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case watch.EventMsg:
+		// External file changes (Roadmap 0140): directory events refresh the
+		// explorer, file events go to the editor leaf owning the path. The
+		// receivers consume these in later 0140 sub-issues (#81-#83).
+		if msg.Kind == watch.DirChanged {
+			if m.panes.Has(pane.ExplorerKey) {
+				return m, m.panes.Get(pane.ExplorerKey).Update(msg)
+			}
+			return m, nil
+		}
+		if key := m.editorKeyForPath(msg.Path); key != "" {
+			return m, m.panes.Get(key).Update(msg)
+		}
+		return m, nil
+
 	case editor.NoticeMsg:
 		// Editor action feedback ("no comment syntax for this file") → toast.
 		m.host.Notify(host.Info, msg.Text)
@@ -912,6 +952,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 			key = m.spawnEditor()
 		}
 		if err := m.panes.Get(key).Editor().Load(path); err == nil {
+			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
 			m.setFocus(key)
