@@ -124,6 +124,86 @@ func TestCommentLineNoSyntaxNotifies(t *testing.T) {
 	}
 }
 
+func TestCommentBlockCharwiseWrapUnwrap(t *testing.T) {
+	m := loadedExt(t, "ctest", "alpha bravo charlie\n")
+	// Select "bravo" charwise: w, v, e.
+	m = send(m, key('w'), key('v'), key('e'))
+	m, _ = m.runAction("comment_block")
+	if got := line(m, 0); got != "alpha /* bravo */ charlie" {
+		t.Fatalf("wrap: %q", got)
+	}
+	if m.mode != Normal {
+		t.Fatalf("block toggle should leave visual mode, mode=%v", m.mode)
+	}
+	// Re-select the exact wrapped text and toggle again → unwrap.
+	m = send(m, key('0'), key('w'), key('v'), key('e'), key('e'), key('e')) // through "/* bravo */"
+	m, _ = m.runAction("comment_block")
+	if got := line(m, 0); got != "alpha bravo charlie" {
+		t.Fatalf("unwrap: %q", got)
+	}
+}
+
+func TestCommentBlockLinewiseWrapUnwrapAndUndo(t *testing.T) {
+	m := loadedExt(t, "ctest", "\tone\n\ttwo\nthree\n")
+	m = send(m, key('V'), key('j'))
+	m, _ = m.runAction("comment_block")
+	want := []string{"\t/*", "\tone", "\ttwo", "\t*/", "three"}
+	for i, w := range want {
+		if line(m, i) != w {
+			t.Fatalf("wrap line %d: %q, want %q (all: %q)", i, line(m, i), w, m.buf.Lines())
+		}
+	}
+	// One undo unit reverts the whole wrap.
+	m = send(m, key('u'))
+	if line(m, 0) != "\tone" || m.buf.LineCount() != 3 {
+		t.Fatalf("undo: %q", m.buf.Lines())
+	}
+	// Wrap again, then select the wrapped block including markers → unwrap.
+	m = typeKeys(m, "gg")
+	m = send(m, key('V'), key('j'))
+	m, _ = m.runAction("comment_block")
+	m = typeKeys(m, "gg")
+	m = send(m, key('V'), key('j'), key('j'), key('j'))
+	m, _ = m.runAction("comment_block")
+	if line(m, 0) != "\tone" || line(m, 1) != "\ttwo" || line(m, 2) != "three" {
+		t.Fatalf("unwrap: %q", m.buf.Lines())
+	}
+}
+
+func TestCommentBlockCurrentLineWrap(t *testing.T) {
+	m := loadedExt(t, "ctest", "only\n")
+	m, _ = m.runAction("comment_block")
+	if line(m, 0) != "/*" || line(m, 1) != "only" || line(m, 2) != "*/" {
+		t.Fatalf("current-line wrap: %q", m.buf.Lines())
+	}
+	if m.cursor.Line != 1 {
+		t.Fatalf("cursor should stay on the content line, line=%d", m.cursor.Line)
+	}
+}
+
+func TestCommentBlockFallsBackToLineComments(t *testing.T) {
+	m := loadedExt(t, "ctestnb", "one\n") // '#' line marker, no block pair
+	m, _ = m.runAction("comment_block")
+	if got := line(m, 0); got != "# one" {
+		t.Fatalf("fallback: %q", got)
+	}
+}
+
+func TestCommentBlockDotRepeat(t *testing.T) {
+	m := loadedExt(t, "ctest", "one\ntwo\n")
+	m, _ = m.runAction("comment_block")
+	// Cursor sits on "one" (line 1 after wrap); move to "two" and repeat.
+	m = typeKeys(m, "G")
+	m = send(m, key('.'))
+	got := m.buf.Lines()
+	want := []string{"/*", "one", "*/", "/*", "two", "*/"}
+	for i, w := range want {
+		if i >= len(got) || got[i] != w {
+			t.Fatalf("dot repeat: %q, want %q", got, want)
+		}
+	}
+}
+
 func TestCommentLineSkipsBlankLines(t *testing.T) {
 	m := loadedExt(t, "ctestnb", "one\n\ntwo\n")
 	m = send(m, key('V'), key('j'), key('j'))

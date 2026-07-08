@@ -57,6 +57,7 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.find", "Find in File", "find", "/"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
+			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 		},
 	}
 }
