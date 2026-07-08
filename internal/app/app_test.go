@@ -123,7 +123,9 @@ func TestMenuBarToggleAndDispatch(t *testing.T) {
 	if !m.menu.IsOpen() {
 		t.Fatal("ToggleMenuMsg must open the menu")
 	}
-	if !strings.Contains(m.render(), "File") {
+	// The underlined letter-jump hint styles the title's first rune separately,
+	// so match on stripped text.
+	if !strings.Contains(ansi.Strip(m.render()), "File") {
 		t.Fatal("menu bar missing from the frame")
 	}
 	// Esc closes via the menu's key ownership.

@@ -9,6 +9,7 @@ package menu
 
 import (
 	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -112,8 +113,31 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.move(1)
 	case "enter":
 		return m.invoke(m.sel)
+	default:
+		// A menu title's first letter jumps to (and opens) that menu — the
+		// underlined hints in the bar. Duplicate letters cycle forward.
+		if i, ok := m.menuForLetter(key.String()); ok {
+			m.OpenMenu(i)
+		}
 	}
 	return nil
+}
+
+// menuForLetter finds the next menu (searching forward from the active one,
+// wrapping) whose title starts with the given letter, case-insensitively.
+func (m *Model) menuForLetter(s string) (int, bool) {
+	r := []rune(strings.ToLower(s))
+	if len(r) != 1 || !unicode.IsLetter(r[0]) {
+		return 0, false
+	}
+	for off := 1; off <= len(m.menus); off++ {
+		i := (m.active + off) % len(m.menus)
+		t := []rune(strings.ToLower(m.menus[i].Title))
+		if len(t) > 0 && t[0] == r[0] {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // move advances the selection by dir, skipping disabled entries (wrapping).
@@ -169,13 +193,14 @@ func (m *Model) TitleAt(x int) (int, bool) {
 }
 
 // ItemAt hit-tests the open dropdown at absolute cell (x, y), with the bar on
-// row 0 and the dropdown starting on row 1.
+// row 0, the dropdown's top border on row 1, and its first entry on row 2. The
+// entry cells sit one column inside the border.
 func (m *Model) ItemAt(x, y int) (int, bool) {
 	if !m.open {
 		return 0, false
 	}
-	x0 := m.DropdownX()
-	row := y - 1
+	x0 := m.DropdownX() + 1
+	row := y - 2
 	if row < 0 || row >= len(m.menus[m.active].Items) {
 		return 0, false
 	}
@@ -187,6 +212,18 @@ func (m *Model) ItemAt(x, y int) (int, bool) {
 
 // Invoke runs the entry at idx of the open menu (the mouse-click path).
 func (m *Model) Invoke(idx int) tea.Cmd { return m.invoke(idx) }
+
+// Hover moves the selection to entry idx (the mouse-motion path); disabled
+// entries are ignored so hover mirrors keyboard navigation.
+func (m *Model) Hover(idx int) {
+	items := m.menus[m.active].Items
+	if idx < 0 || idx >= len(items) {
+		return
+	}
+	if m.info(items[idx].Command).Runnable {
+		m.sel = idx
+	}
+}
 
 // titleSpan returns the [start, end) columns of menu i's title cell in the bar.
 func (m *Model) titleSpan(i int) (int, int) {
@@ -219,25 +256,38 @@ func (m *Model) theme() *theme.Palette {
 }
 
 // Bar renders the top row: every menu title, the active one highlighted while
-// its dropdown is open.
+// its dropdown is open. While open, each title's first letter is underlined as
+// a hint that pressing it jumps to that menu.
 func (m *Model) Bar() string {
 	pal := m.theme()
 	bar := lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Foreground)
 	activeStyle := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.Foreground).Bold(true)
 	var b strings.Builder
 	for i := range m.menus {
-		cell := m.titleCell(i)
+		style := bar
 		if m.open && i == m.active {
-			b.WriteString(activeStyle.Render(cell))
-		} else {
-			b.WriteString(bar.Render(cell))
+			style = activeStyle
 		}
+		b.WriteString(m.renderTitleCell(style, m.menus[i].Title))
 	}
 	return bar.Width(m.width).Render(b.String())
 }
 
-// Dropdown renders the open menu's entry list (no chrome, one entry per row,
-// shortcuts right-aligned, disabled entries dimmed with their hint).
+// renderTitleCell renders one padded bar segment (" File "), underlining the
+// title's first letter while a dropdown is open (the letter-jump hint).
+func (m *Model) renderTitleCell(style lipgloss.Style, title string) string {
+	if !m.open || title == "" {
+		return style.Render(" " + title + " ")
+	}
+	r := []rune(title)
+	return style.Render(" ") +
+		style.Underline(true).Render(string(r[0])) +
+		style.Render(string(r[1:])+" ")
+}
+
+// Dropdown renders the open menu's entry list — one entry per row, shortcuts
+// right-aligned, disabled entries dimmed with their hint — framed by a rounded
+// border so the dropdown separates from whatever it floats over.
 func (m *Model) Dropdown() string {
 	if !m.open {
 		return ""
@@ -246,7 +296,10 @@ func (m *Model) Dropdown() string {
 	for i := range m.menus[m.active].Items {
 		lines[i] = m.dropdownLine(i)
 	}
-	return strings.Join(lines, "\n")
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme().BorderFocus)
+	return box.Render(strings.Join(lines, "\n"))
 }
 
 // dropdownLine renders one entry row at the dropdown's shared width.
