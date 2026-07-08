@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Core settings pages (#92, roadmap 0160): Editor (all live `applyConfig`
+  keys), Appearance (theme enum from the registry with immediate preview,
+  menu bar, palette chord), Files & Session (restore-last, files.watch) and
+  Notifications. No-dead-keys test guards every entry against the typed
+  schema.
+
 - Settings panel framework (#91, roadmap 0160): new `internal/settings` —
   full-window panel (cmd+, / `settings.open`), left category list, right
   schema-driven form (bool/int/string/enum/path/chord). Apply-on-change

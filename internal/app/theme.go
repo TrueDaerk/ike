@@ -42,6 +42,17 @@ func (themeProvider) Capabilities() plugin.Capabilities {
 
 func init() { registry.Register(themeProvider{}) }
 
+// themeNames lists every registered theme name for the Appearance settings
+// enum, sorted by the registry's deterministic theme order.
+func themeNames(reg *registry.Registry) []string {
+	themes := reg.Themes()
+	names := make([]string, len(themes))
+	for i, t := range themes {
+		names[i] = t.Name
+	}
+	return names
+}
+
 // resolveTheme resolves [theme].name against the built-ins plus every
 // plugin-registered theme and returns the ready-to-render palette. An unknown
 // name falls back to the default theme with a non-fatal status warning rather

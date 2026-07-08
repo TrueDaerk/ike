@@ -44,13 +44,35 @@ type Page struct {
 	Entries []Entry
 }
 
-// BasePages returns the built-in framework pages. The core pages (Editor,
-// Appearance, Files & Session) land with #92; the framework ships with the
-// interface/chrome page so the panel is functional on its own.
-func BasePages() []Page {
+// BasePages returns the built-in core pages (#92). themes is the registry's
+// theme-name list for the Appearance enum (live preview: writing theme.name
+// hot-reloads through the normal pipeline). Pages grow as features land;
+// schema entries live next to their feature's config keys, and every key must
+// exist in the typed schema (guarded by the no-dead-keys test).
+func BasePages(themes []string) []Page {
 	return []Page{
-		{Title: "Interface", Entries: []Entry{
+		{Title: "Editor", Entries: []Entry{
+			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
+			{Key: "editor.use_spaces", Type: Bool, Title: "Use spaces", Description: "Indent with spaces instead of tab characters", Scope: config.UserScope},
+			{Key: "editor.auto_indent", Type: Bool, Title: "Auto indent", Description: "Carry the current line's indentation into new lines", Scope: config.UserScope},
+			{Key: "editor.trim_trailing_whitespace", Type: Bool, Title: "Trim trailing whitespace", Description: "Strip line-end whitespace on save", Scope: config.UserScope},
+			{Key: "editor.insert_final_newline", Type: Bool, Title: "Insert final newline", Description: "End every saved file with a newline", Scope: config.UserScope},
+			{Key: "editor.line_numbers", Type: Bool, Title: "Line numbers", Description: "Show the line-number gutter", Scope: config.UserScope},
+			{Key: "editor.relative_line_numbers", Type: Bool, Title: "Relative line numbers", Description: "Count gutter lines away from the cursor (vim-style)", Scope: config.UserScope},
+			{Key: "editor.scroll_off", Type: Int, Title: "Scroll offset", Description: "Minimum lines kept visible above and below the cursor", Scope: config.UserScope, Min: 0, Max: 50},
+			{Key: "editor.wrap", Type: Bool, Title: "Soft wrap", Description: "Wrap long lines at the pane edge", Scope: config.UserScope},
+			{Key: "editor.show_whitespace", Type: Bool, Title: "Show whitespace", Description: "Render spaces and tabs visibly", Scope: config.UserScope},
+		}},
+		{Title: "Appearance", Entries: []Entry{
+			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
+			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
+		}},
+		{Title: "Files & Session", Entries: []Entry{
+			{Key: "project.restore_last", Type: Bool, Title: "Restore last project", Description: "Reopen the previous project's workspace on start", Scope: config.UserScope},
+			{Key: "files.watch", Type: Bool, Title: "Watch files", Description: "Report external file changes (fsnotify on the project root)", Scope: config.UserScope},
+		}},
+		{Title: "Notifications", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
 		}},
