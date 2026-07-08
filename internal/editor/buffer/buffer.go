@@ -119,6 +119,14 @@ func (b *Buffer) Slice(r Range) string {
 	return sb.String()
 }
 
+// ReplaceAll swaps the whole content for s (same normalization as FromString),
+// mutating the buffer in place. Callers that share the buffer across views
+// (Roadmap 0140 reload, shared documents) use this instead of allocating a new
+// Buffer, so every alias sees the new text.
+func (b *Buffer) ReplaceAll(s string) {
+	b.lines = FromString(s).lines
+}
+
 // setLines replaces the entire backing store; helper for edit application.
 func (b *Buffer) setLines(lines []string) {
 	if len(lines) == 0 {

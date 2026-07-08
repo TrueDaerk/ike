@@ -146,6 +146,29 @@ git checkout) is downgraded to a content change and reloads normally.
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
 
+## Shared documents (#142)
+
+Two editor panes showing the same file are two **views of one document**
+(JetBrains/vim-split semantics), not divergent copies. `share.go`:
+
+- Opening a path another pane already shows makes the new pane a second view
+  via `ShareDocumentWith`: `*buffer.Buffer` and `*history.History` are aliased
+  (one text, one undo stack), while cursor, scroll, mode, and registers stay
+  per pane. Session restore deduplicates the same way.
+- After an edit, undo, save, or reload in one view, the emitter adapter (which
+  knows its pane key) broadcasts `editor.SyncMsg{Path, FromKey, Dirty, Stale}`
+  through `host.Send`; the root model routes it to every *other* pane showing
+  the path. Receivers clamp cursor/scroll into the mutated buffer, mirror the
+  dirty/stale flags, bump `docVersion` and reparse — no text is copied, the
+  buffer is shared. `applySync` never re-emits, so syncs cannot ping-pong.
+- External reload mutates the document **in place** (`Buffer.ReplaceAll`,
+  `History.Reset`) so the aliases survive; async per-path messages (highlight
+  spans, LSP results, watch events) route to **all** panes owning the path
+  (`editorKeysForPath`), each filtering by its own document version.
+- Known edge: `:e` inside a pane loads a fresh copy and leaves any prior
+  sharing (it re-points that pane's document); `:w otherfile` re-targets only
+  the saving view's path.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads

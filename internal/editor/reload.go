@@ -6,8 +6,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/editor/buffer"
-	"ike/internal/editor/history"
 	"ike/internal/highlight"
 	"ike/internal/watch"
 )
@@ -74,8 +72,10 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	}
 	line, col := m.cursor.Line, m.cursor.Col
 	top, left := m.view.Top, m.view.Left
-	m.buf = buffer.FromString(string(data))
-	m.hist = history.New()
+	// Mutate the document in place (not fresh pointers): other panes sharing
+	// it (#142) must see the reloaded text and the cleared undo stack too.
+	m.buf.ReplaceAll(string(data))
+	m.hist.Reset()
 	m.dirty = false
 	m.stale = false
 	m.hlIndex = highlight.Index{}

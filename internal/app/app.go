@@ -247,6 +247,7 @@ func (m Model) StartWatcher(root string) {
 type editorEmitter struct {
 	host    *host.Host
 	watcher *watch.Service
+	key     string // pane key of the editor this emitter is installed on
 }
 
 // Emit implements editor.Emitter. The editor and host event-kind constants share
@@ -255,6 +256,16 @@ type editorEmitter struct {
 func (e editorEmitter) Emit(ev editor.Event) {
 	if ev.Kind == editor.EventSave && e.watcher != nil {
 		e.watcher.MarkSaved(ev.Path)
+	}
+	if ev.Kind == editor.EventChange || ev.Kind == editor.EventSave {
+		// Shared documents (#142): tell the other views of this file that the
+		// document changed. Emit runs synchronously inside Update, and sending
+		// into the program's own message loop from there deadlocks — so the
+		// send goes through a goroutine. Flags are NOT carried here: delivery
+		// order between goroutines is not guaranteed, so the root model reads
+		// dirty/stale fresh from the originating pane when the message lands.
+		msg := editor.SyncMsg{Path: ev.Path, FromKey: e.key}
+		go e.host.Send(msg)
 	}
 	e.host.EmitEditor(host.EditorEvent{
 		Kind: int(ev.Kind),
@@ -277,7 +288,7 @@ func (m *Model) wireEditorEmitters() {
 // installEmitter wires the editor-emitter adapter onto one editor pane.
 func (m *Model) installEmitter(key string) {
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		inst.Editor().SetEmitter(editorEmitter{host: m.host, watcher: m.watcher})
+		inst.Editor().SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, key: key})
 	}
 }
 
@@ -307,13 +318,22 @@ func (m *Model) restoreLayout(cfg host.Config) {
 	// editor per non-explorer leaf, each loading its remembered file.
 	panes := pane.NewRegistry(cfg)
 	panes.AddExplorer()
+	first := map[string]*pane.Instance{} // path → first restored editor, for sharing
 	for _, key := range leaves {
 		if key == pane.ExplorerKey {
 			continue
 		}
 		inst := panes.AddEditorKey(key)
 		if id, hasID := ids[key]; hasID && id.Path != "" {
-			_ = inst.Editor().Load(id.Path) // best-effort: missing file → empty editor
+			if prev, ok := first[id.Path]; ok {
+				// The same file across several leaves restores as one shared
+				// document (#142), not divergent copies.
+				inst.Editor().ShareDocumentWith(prev.Editor())
+				continue
+			}
+			if err := inst.Editor().Load(id.Path); err == nil { // best-effort: missing file → empty editor
+				first[id.Path] = inst
+			}
 		}
 	}
 	panes.SetFocused(pane.ExplorerKey)
@@ -837,12 +857,30 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case highlight.SpansMsg:
-		// Async Tree-sitter parse results route to the editor leaf owning the path
-		// (which may be a background pane, so target by path, not focus).
-		if key := m.editorKeyForPath(msg.Path); key != "" {
-			return m, m.panes.Get(key).Update(msg)
+		// Async Tree-sitter parse results route to every editor leaf owning the
+		// path (background panes and shared-document views included); each pane
+		// filters by its own document version.
+		return m, m.routeToEditor(msg.Path, msg)
+
+	case editor.SyncMsg:
+		// A shared document changed in one pane (#142): every other view of the
+		// same file re-clamps and mirrors the flags. Dirty/stale are read from
+		// the originating pane *now* (not at emit time), so late or reordered
+		// broadcasts always converge on the current document state.
+		if origin := m.panes.Get(msg.FromKey); origin != nil && origin.Kind() == pane.KindEditor {
+			msg.Dirty = origin.Editor().Dirty()
+			msg.Stale = origin.Editor().Stale()
 		}
-		return m, nil
+		var cmds []tea.Cmd
+		for _, key := range m.editorKeysForPath(msg.Path) {
+			if key == msg.FromKey {
+				continue
+			}
+			if cmd := m.panes.Get(key).Update(msg); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case ilsp.DiagnosticsMsg:
 		return m, m.routeToEditor(msg.Path, msg)
@@ -892,10 +930,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
-		if key := m.editorKeyForPath(msg.Path); key != "" {
-			return m, m.panes.Get(key).Update(msg)
-		}
-		return m, nil
+		return m, m.routeToEditor(msg.Path, msg)
 
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
@@ -1050,7 +1085,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		if newPane || key == "" {
 			key = m.spawnEditor()
 		}
-		if err := m.panes.Get(key).Editor().Load(path); err == nil {
+		if err := m.loadOrShare(key, path); err == nil {
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
@@ -1062,6 +1097,21 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 	return m, tea.Batch(cmds...)
+}
+
+// loadOrShare fills the editor pane key with path: when another editor pane
+// already shows that file, the new pane becomes a second view of the same
+// document (shared buffer + undo stack, #142) instead of loading a divergent
+// copy; otherwise the file is read from disk.
+func (m *Model) loadOrShare(key, path string) error {
+	target := m.panes.Get(key).Editor()
+	for _, other := range m.editorKeysForPath(path) {
+		if other != key {
+			target.ShareDocumentWith(m.panes.Get(other).Editor())
+			return nil
+		}
+	}
+	return target.Load(path)
 }
 
 // syncExplorerOpen refreshes the explorer's set of open files (every editor
@@ -1368,22 +1418,39 @@ func (m *Model) closeKey(key string) bool {
 // "" if none is open. Used to route async LSP/highlight results to the owning
 // pane regardless of focus.
 func (m Model) editorKeyForPath(path string) string {
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
-		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
-			return key
-		}
+	if keys := m.editorKeysForPath(path); len(keys) > 0 {
+		return keys[0]
 	}
 	return ""
 }
 
-// routeToEditor forwards an LSP result message to the editor leaf owning path,
-// or drops it if no editor shows that file.
-func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
-	if key := m.editorKeyForPath(path); key != "" {
-		return m.panes.Get(key).Update(msg)
+// editorKeysForPath returns every editor leaf currently showing path. Multiple
+// panes can view the same (shared, #142) document, so async per-path messages
+// must reach all of them, not just the first.
+func (m Model) editorKeysForPath(path string) []string {
+	var keys []string
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
+			keys = append(keys, key)
+		}
 	}
-	return nil
+	return keys
+}
+
+// routeToEditor forwards an LSP/highlight result message to every editor leaf
+// owning path, or drops it if no editor shows that file.
+func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, key := range m.editorKeysForPath(path) {
+		if cmd := m.panes.Get(key).Update(msg); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // openPathAt opens path (reusing the standard open flow) and places the cursor at
