@@ -49,21 +49,26 @@ type Group struct {
 }
 
 // CommandSource is the read-only registry view help needs: every registered
-// command, regardless of focus. The cheat sheet is a full reference — it lists
-// all scopes (Global, Editor, Explorer, …) at once, not just the focused pane's.
-// *registry.Registry satisfies it.
+// command, regardless of focus. Snapshot narrows the set to the focused pane's
+// context afterwards. *registry.Registry satisfies it.
 type CommandSource interface {
 	Commands() []registry.OwnedCommand
 }
 
 // Snapshot pulls every registered command from src, joins each with its shortcut
 // from res, groups them by scope label, and returns the groups in deterministic
-// order. A command with no resolver binding falls back to its documentation-only
+// order. contextID narrows the sheet to what applies to the focused pane —
+// global commands plus that context's own; an empty contextID lists every scope.
+// A command with no resolver binding falls back to its documentation-only
 // Shortcut hint (plugin.Command.Shortcut); a nil res leaves resolver lookups out
 // but the doc hints still apply.
-func Snapshot(src CommandSource, res BindingResolver) []Group {
+func Snapshot(src CommandSource, res BindingResolver, contextID string) []Group {
 	byLabel := map[string][]Entry{}
 	for _, c := range src.Commands() {
+		label := groupLabel(c.Scope)
+		if contextID != "" && label != "global" && label != contextID {
+			continue
+		}
 		e := Entry{ID: c.ID, Title: c.Title}
 		if res != nil {
 			if s, ok := res.Binding(c.ID); ok {
@@ -75,7 +80,6 @@ func Snapshot(src CommandSource, res BindingResolver) []Group {
 		if e.Shortcut == "" {
 			e.Shortcut = c.Shortcut
 		}
-		label := groupLabel(c.Scope)
 		byLabel[label] = append(byLabel[label], e)
 	}
 

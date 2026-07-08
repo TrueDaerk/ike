@@ -35,10 +35,10 @@ func TestSnapshotJoinsBindingsAndGroups(t *testing.T) {
 	r := testRegistry()
 	res := MapResolver{"core.quit": "ctrl+c", "editor.save": ":w"}
 
-	groups := Snapshot(r, res)
+	groups := Snapshot(r, res, "")
 
-	// The cheat sheet lists every scope at once: global first, then the rest
-	// alphabetically (editor, explorer) — independent of focus.
+	// An empty contextID lists every scope at once: global first, then the rest
+	// alphabetically (editor, explorer).
 	var labels []string
 	byLabel := map[string][]Entry{}
 	for _, g := range groups {
@@ -67,6 +67,19 @@ func TestSnapshotJoinsBindingsAndGroups(t *testing.T) {
 	}
 }
 
+// TestSnapshotFiltersToFocusedContext verifies a non-empty contextID narrows
+// the sheet to global commands plus the focused context's own group.
+func TestSnapshotFiltersToFocusedContext(t *testing.T) {
+	groups := Snapshot(testRegistry(), nil, "editor")
+	var labels []string
+	for _, g := range groups {
+		labels = append(labels, g.Label)
+	}
+	if got, want := strings.Join(labels, ","), "global,editor"; got != want {
+		t.Fatalf("filtered groups = %q, want %q", got, want)
+	}
+}
+
 // TestSnapshotFallsBackToDocShortcut verifies a command with no resolver
 // binding still shows its documentation-only Shortcut hint (vim ex-commands).
 func TestSnapshotFallsBackToDocShortcut(t *testing.T) {
@@ -74,7 +87,7 @@ func TestSnapshotFallsBackToDocShortcut(t *testing.T) {
 	r.Add(stubPlugin{id: "editor", cmd: []plugin.Command{
 		{ID: "editor.write", Title: "Save File", Scope: plugin.PaneScope("editor"), Shortcut: ":w"},
 	}})
-	groups := Snapshot(r, nil) // nil resolver -> only the doc hint can apply
+	groups := Snapshot(r, nil, "") // nil resolver -> only the doc hint can apply
 	if len(groups) != 1 || len(groups[0].Entries) != 1 {
 		t.Fatalf("unexpected groups %+v", groups)
 	}
@@ -90,7 +103,7 @@ func TestSnapshotResolverWinsOverDocShortcut(t *testing.T) {
 	r.Add(stubPlugin{id: "p", cmd: []plugin.Command{
 		{ID: "p.do", Title: "Do", Scope: plugin.GlobalScope(), Shortcut: "doc"},
 	}})
-	groups := Snapshot(r, MapResolver{"p.do": "ctrl+x"})
+	groups := Snapshot(r, MapResolver{"p.do": "ctrl+x"}, "")
 	if got := groups[0].Entries[0].Shortcut; got != "ctrl+x" {
 		t.Fatalf("resolver shortcut = %q, want ctrl+x", got)
 	}
@@ -100,7 +113,7 @@ func TestSnapshotResolverWinsOverDocShortcut(t *testing.T) {
 // section blocks (Global, Editor, …) so they read as distinct clusters.
 func TestRenderSeparatesGroupsWithBlankLine(t *testing.T) {
 	h := New(testRegistry(), nil, 0)
-	h.Snapshot()
+	h.Snapshot("")
 	body := h.Render(120)
 	lines := strings.Split(body, "\n")
 	blank := false
@@ -117,8 +130,8 @@ func TestRenderSeparatesGroupsWithBlankLine(t *testing.T) {
 
 func TestSnapshotDeterministicEntryOrder(t *testing.T) {
 	r := testRegistry()
-	a := Snapshot(r, nil)
-	b := Snapshot(r, nil)
+	a := Snapshot(r, nil, "")
+	b := Snapshot(r, nil, "")
 	if len(a) != len(b) {
 		t.Fatalf("group count differs between snapshots")
 	}
@@ -198,7 +211,7 @@ func TestMinColumnWidth(t *testing.T) {
 
 func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 	h := New(testRegistry(), MapResolver{"core.quit": "ctrl+c"}, 0)
-	h.Snapshot()
+	h.Snapshot("")
 	// lipgloss v2 always emits styling escapes (it no longer detects the
 	// terminal); strip them so assertions match the logical text.
 	body := ansi.Strip(h.Render(120))
@@ -209,9 +222,28 @@ func TestRenderContainsTitlesAndShortcuts(t *testing.T) {
 	}
 }
 
+// TestRenderEntryRightAlignsShortcut verifies the shortcut is pushed to the
+// right edge of the column so the keys line up as their own column.
+func TestRenderEntryRightAlignsShortcut(t *testing.T) {
+	h := New(registry.New(), nil, 0)
+	got := ansi.Strip(h.renderEntry(Entry{Title: "Quit", Shortcut: "ctrl+c"}, 20))
+	if got != "Quit          ctrl+c" {
+		t.Fatalf("entry = %q, want shortcut right-aligned to width 20", got)
+	}
+	// A clamped column keeps at least the minimum gap between title and key.
+	tight := ansi.Strip(h.renderEntry(Entry{Title: "Quit", Shortcut: "ctrl+c"}, 5))
+	if tight != "Quit  ctrl+c" {
+		t.Fatalf("clamped entry = %q, want minimum two-space gap", tight)
+	}
+	// Unbound commands render title-only.
+	if got := h.renderEntry(Entry{Title: "Open"}, 20); got != "Open" {
+		t.Fatalf("unbound entry = %q, want title only", got)
+	}
+}
+
 func TestRenderEmptyWhenNoCommands(t *testing.T) {
 	h := New(registry.New(), nil, 0)
-	h.Snapshot()
+	h.Snapshot("")
 	if got := h.Render(80); got != "no commands registered" {
 		t.Fatalf("empty render = %q", got)
 	}
@@ -226,12 +258,12 @@ func TestRenderNeverExceedsTwoColumns(t *testing.T) {
 	}
 	r.Add(stubPlugin{id: "g", cmd: cmds})
 	h := New(r, nil, 0)
-	h.Snapshot()
+	h.Snapshot("")
 	// With 40 entries capped at two columns, even given a very wide budget the
 	// body packs column-major into rows = ceil(40/2) = 20 — so it stays tall and
 	// narrow rather than spreading across the budget.
 	body := h.Render(400)
-	colW := MinColumnWidth(h.allCells(), 0)
+	colW := MinColumnWidth(h.allCells(), 0) + colSlack
 	if w, limit := lipgloss.Width(body), 2*colW+gutter; w > limit {
 		t.Fatalf("body width %d exceeds two-column bound %d", w, limit)
 	}

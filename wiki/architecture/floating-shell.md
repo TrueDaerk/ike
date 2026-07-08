@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-06-20T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Floating Shell
@@ -39,7 +39,8 @@ The split is deliberate:
   base and the base's styling survives around the box. Returns the base
   untouched when the box does not fit.
 - **`internal/ui.Floating`** is the stateful shell: rounded border + padding
-  chrome, a title row with a dismiss hint, content sizing, scroll-on-overflow,
+  chrome, an underlined title row with a dismiss hint followed by a blank
+  spacer row, content sizing, scroll-on-overflow,
   `esc` (and a configurable dismiss set) to close, `IsOpen`, and key-swallow. It
   is content-agnostic.
 - **`internal/help`** keeps only its command snapshot, grouping, and column
@@ -65,7 +66,8 @@ is the seam that lets a plugin float its `plugin.Pane` as a modal for free.
 ## Sizing & scrolling
 
 - `budget(termW, termH, margin, maxWFrac, maxHFrac)` reserves `2*margin`, the box
-  chrome (`frameH`/`frameV` = border + padding both axes), and one title row,
+  chrome (`frameH`/`frameV` = border + padding both axes), and two title rows
+  (the heading plus its blank spacer, `titleRows`),
   then clamps by the optional max width/height fraction, flooring at 1.
 - Overflowing content **scrolls, never truncates**: the scroller wraps
   `bubbles/viewport` (↑/↓, pgup/pgdn, ctrl+u/ctrl+d, plus g/G for top/bottom) and

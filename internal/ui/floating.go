@@ -175,7 +175,7 @@ func (f *Floating) View() string {
 	if f.cfg.Accent != "" {
 		accent = lipgloss.Color(f.cfg.Accent)
 	}
-	titleStyle := lipgloss.NewStyle().Bold(true)
+	titleStyle := lipgloss.NewStyle().Bold(true).Underline(true)
 	hintStyle := lipgloss.NewStyle().Foreground(f.theme().Border)
 	title := titleStyle.Render(f.content.Title()) + hintStyle.Render("   ("+f.hint()+" to close)")
 
@@ -184,7 +184,9 @@ func (f *Floating) View() string {
 		BorderForeground(accent).
 		Padding(padV, padH)
 
-	inner := lipgloss.JoinVertical(lipgloss.Left, title, f.scroll.View())
+	// A blank spacer row separates the heading from the body (accounted for in
+	// budget via titleRows).
+	inner := lipgloss.JoinVertical(lipgloss.Left, title, "", f.scroll.View())
 	return box.Render(inner)
 }
 

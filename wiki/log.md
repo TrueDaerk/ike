@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- Help overlay polish: the cheat sheet is now scoped to the focused pane
+  (global commands plus the focused context's group; `Snapshot` takes a
+  context id), shortcuts are right-aligned to the column edge, columns carry a
+  fixed slack beyond their widest cell so the pane is wider than its text, and
+  the floating shell's title row is underlined with a blank spacer row beneath
+  it (budget reserves `titleRows = 2`).
+
 - Settings mouse control (#127): category clicks switch pages, form-entry
   clicks select, a second click activates (enter semantics — bool toggles,
   enum cycles, text opens the inline edit).

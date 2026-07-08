@@ -1,6 +1,8 @@
 package help
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/theme"
@@ -9,6 +11,10 @@ import (
 // maxColumns caps the cheat sheet at two columns wide regardless of how much
 // horizontal room the shell offers.
 const maxColumns = 2
+
+// colSlack widens each column beyond its widest cell so the pane gets some
+// breathing room and the right-aligned shortcuts sit clear of the titles.
+const colSlack = 8
 
 // Help is the read-only help content: it snapshots commands and lays them out
 // in width-responsive columns. It is a ui.Content provider — the floating shell
@@ -42,11 +48,12 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 	return &Help{src: src, res: res, minCol: minCol}
 }
 
-// Snapshot re-reads every registered command. It is idempotent: re-snapshotting
-// picks up newly registered commands. Call it each time the shell is opened so
-// the cheat sheet reflects the current registry.
-func (h *Help) Snapshot() {
-	h.groups = Snapshot(h.src, h.res)
+// Snapshot re-reads the registered commands that apply to contextID (global
+// ones plus that context's own; empty lists every scope). It is idempotent:
+// re-snapshotting picks up newly registered commands. Call it each time the
+// shell is opened so the cheat sheet reflects the current registry and focus.
+func (h *Help) Snapshot(contextID string) {
+	h.groups = Snapshot(h.src, h.res, contextID)
 }
 
 // Title implements ui.Content.
@@ -59,7 +66,7 @@ func (h *Help) Render(width int) string {
 	if width < 1 {
 		width = 1
 	}
-	colW := MinColumnWidth(h.allCells(), h.minCol)
+	colW := MinColumnWidth(h.allCells(), h.minCol) + colSlack
 	if colW > width {
 		colW = width
 	}
@@ -70,13 +77,13 @@ func (h *Help) Render(width int) string {
 	return h.renderBody(colW, cols)
 }
 
-// allCells renders every entry across all groups, used to derive a shared
-// column width so the columns line up.
+// allCells renders every entry across all groups at its natural width, used to
+// derive a shared column width so the columns line up.
 func (h *Help) allCells() []string {
 	var cells []string
 	for _, g := range h.groups {
 		for _, e := range g.Entries {
-			cells = append(cells, h.renderEntry(e))
+			cells = append(cells, h.renderEntry(e, 0))
 		}
 	}
 	return cells
@@ -92,7 +99,7 @@ func (h *Help) renderBody(colW, cols int) string {
 	for _, g := range h.groups {
 		cells := make([]string, len(g.Entries))
 		for i, e := range g.Entries {
-			cells[i] = h.renderEntry(e)
+			cells[i] = h.renderEntry(e, colW)
 		}
 		packed := Pack(cells, cols)
 		block := lipgloss.JoinVertical(
@@ -117,14 +124,25 @@ func (h *Help) renderBody(colW, cols int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, spaced...)
 }
 
-// renderEntry formats one command row: "title … shortcut", or just the title
-// when unbound.
-func (h *Help) renderEntry(e Entry) string {
+// minKeyGap is the smallest run of spaces kept between a title and its
+// shortcut, so the two never touch even in a clamped column.
+const minKeyGap = 2
+
+// renderEntry formats one command row: the title left-aligned and the shortcut
+// pushed to the right edge of a colW-wide cell so the keys line up as their own
+// column. colW <= 0 renders at natural width (title, minimum gap, shortcut) —
+// the form used to derive the shared column width. Unbound commands render
+// title-only.
+func (h *Help) renderEntry(e Entry, colW int) string {
 	if e.Shortcut == "" {
 		return e.Title
 	}
+	gap := colW - lipgloss.Width(e.Title) - lipgloss.Width(e.Shortcut)
+	if gap < minKeyGap {
+		gap = minKeyGap
+	}
 	keyStyle := lipgloss.NewStyle().Foreground(h.theme().Secondary)
-	return e.Title + "  " + keyStyle.Render(e.Shortcut)
+	return e.Title + strings.Repeat(" ", gap) + keyStyle.Render(e.Shortcut)
 }
 
 // groupTitle is the human-facing heading for a scope label.
