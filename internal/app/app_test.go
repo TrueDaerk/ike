@@ -192,6 +192,20 @@ func TestSplitFocusedCommands(t *testing.T) {
 	if rt.Y >= m.lay.Panes[after].Y {
 		t.Fatalf("ZoneTop must place the new pane above (new y=%d, old y=%d)", rt.Y, m.lay.Panes[after].Y)
 	}
+
+	// The horizontal pair (#121): right lands right of, left lands left of.
+	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneRight})
+	m = tm.(Model)
+	right := m.panes.Focused()
+	if m.lay.Panes[right].X <= rt.X {
+		t.Fatalf("ZoneRight must place the new pane to the right (new x=%d, old x=%d)", m.lay.Panes[right].X, rt.X)
+	}
+	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneLeft})
+	m = tm.(Model)
+	left := m.panes.Focused()
+	if m.lay.Panes[left].X >= m.lay.Panes[right].X {
+		t.Fatalf("ZoneLeft must place the new pane to the left (new x=%d, old x=%d)", m.lay.Panes[left].X, m.lay.Panes[right].X)
+	}
 }
 
 // TestClickOutsideDismissesOverlays guards #116: a mouse press outside an

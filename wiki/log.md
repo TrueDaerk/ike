@@ -11,10 +11,10 @@
   rounded-border box (capped ~110×32) above the workspace instead of covering
   the whole terminal; overlong form rows clip instead of wrapping the frame.
 
-- Split keybindings (#114): `pane.splitDown` / `pane.splitUp` (cmd+k down /
-  cmd+k up) split the focused leaf with a fresh empty editor and move focus
-  onto it — no drag or file open needed (wires the existing
-  `Model.SplitFocused`).
+- Split keybindings (#114, #121): `pane.splitDown` / `pane.splitUp` /
+  `pane.splitRight` / `pane.splitLeft` (cmd+k + arrow) split the focused leaf
+  with a fresh empty editor and move focus onto it — no drag or file open
+  needed (wires the existing `Model.SplitFocused`).
 
 - Toolchain settings page (#94, closes epic #87 / roadmap 0160): per-language
   interpreter rows with source badge and async version probe; discovery
