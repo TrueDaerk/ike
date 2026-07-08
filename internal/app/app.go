@@ -676,7 +676,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
-		m.settings.SetSize(m.width, m.height-statusHeight)
+		{
+			w, h := m.settingsSize()
+			m.settings.SetSize(w, h)
+		}
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -750,8 +753,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case OpenSettingsMsg:
-		// settings.open (cmd+, / menu / palette): the full-window settings panel.
-		m.settings.SetSize(m.width, m.height-statusHeight)
+		// settings.open (cmd+, / menu / palette): the floating settings panel.
+		w, h := m.settingsSize()
+		m.settings.SetSize(w, h)
 		m.settings.Open()
 		return m, nil
 
@@ -1492,6 +1496,20 @@ func (m *Model) bodyRect() layout.Rect {
 	return layout.Rect{X: 0, Y: top, W: m.width, H: m.height - statusHeight - top}
 }
 
+// settingsSize bounds the floating settings panel: most of the terminal, but
+// never full-screen (capped like a JetBrains dialog) and never overflowing.
+func (m Model) settingsSize() (w, h int) {
+	w = m.width - 6
+	if w > 110 {
+		w = 110
+	}
+	h = m.height - 4
+	if h > 32 {
+		h = 32
+	}
+	return w, h
+}
+
 // menuHeight is the rows the menu bar occupies (0 when hidden via ui.menu_bar).
 func (m Model) menuHeight() int {
 	if m.menuEnabled() {
@@ -1870,9 +1888,8 @@ func (m Model) render() string {
 		base = overlay.Place(base, m.menu.Dropdown(), m.menu.DropdownX(), 1, m.width, m.height)
 	}
 	if m.settings.IsOpen() {
-		// The settings panel is a full-window modal above everything but the
-		// status line.
-		base = overlay.Place(base, m.settings.View(), 0, 0, m.width, m.height)
+		// The settings panel floats centered above the workspace (#115).
+		base = overlay.Center(base, m.settings.View(), m.width, m.height)
 	}
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
