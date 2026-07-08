@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -140,6 +140,27 @@ clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
 `editor.lineStart` / `editor.lineEnd`. Word/paragraph navigation
 (`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` selection are
 vim-layer keys handled inside the editor, not rows in this table.
+
+## Keymap editor (Roadmap 0160, #93)
+
+The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
+`settings.PageModel`) edits this table interactively:
+
+- It lists the **effective** bindings — chord, command, context, source layer
+  (`@default`/`@user`) — rebuilt from the live config on every render;
+  blocked-ledger ids render disabled with their unblocking reason (the page
+  shows the whole default table truthfully); fragile chords carry ⚠. Typing
+  filters; enter starts a **capture**: each key press appends a chord step
+  (`keymap.FromKeyMsg` + platform normalisation, multi-step supported), enter
+  confirms, esc cancels.
+- On confirm the capture runs conflict detection against the effective table;
+  a collision names the other command and waits — enter overrides, any other
+  key cancels. Capturing a cmd chord (or ctrl+tab/i/m) raises the 0081 honesty
+  warning.
+- A rebind writes `keymap.bindings.<new-chord> = <command>` and unbinds the
+  old chord (`= ""`) in one write-back + reload; `u` unbinds, `r` resets to
+  the preset (removes the override). The root model rebuilds its resolver on
+  `ConfigReloadedMsg`, so edits re-resolve live.
 
 ## Boundaries
 

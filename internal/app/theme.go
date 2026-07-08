@@ -129,6 +129,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	pal, warning := resolveTheme(m.reg, hcfg)
 	m.applyTheme(pal)
 	m.panes.Reconfigure(hcfg)
+	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
+	// page, #93) re-resolve live, like every other config change.
+	m.keys = buildKeymap(hcfg)
 	if warning != "" {
 		m.host.Notify(host.Warn, warning)
 	}

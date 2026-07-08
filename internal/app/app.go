@@ -197,7 +197,12 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	m.watcher = watch.New(m.host.Send)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
-	m.settings = settings.New(append(settings.BasePages(themeNames(reg)), reg.SettingsPages()...), m.cfgOpts)
+	pages := settings.BasePages(themeNames(reg))
+	pages = append(pages, settings.Page{Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
+		_, ok := reg.Command(id)
+		return ok
+	})})
+	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)

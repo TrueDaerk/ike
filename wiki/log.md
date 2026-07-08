@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- Keymap editor page (#93, roadmap 0160): settings pages can now be custom
+  models (`settings.PageModel`); the Keymap page lists the effective binding
+  table (layer badges, blocked-with-reason, fragile ⚠, type-to-filter) and
+  rebinds by chord capture — conflict confirmation, cmd-chord honesty warning,
+  `u` unbind, `r` reset-to-preset — all as `keymap.bindings.*` overrides via
+  write-back; the app rebuilds its resolver on config reload so edits apply
+  live.
+
 - Core settings pages (#92, roadmap 0160): Editor (all live `applyConfig`
   keys), Appearance (theme enum from the registry with immediate preview,
   menu bar, palette chord), Files & Session (restore-last, files.watch) and

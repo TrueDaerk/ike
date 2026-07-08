@@ -78,6 +78,14 @@ any entry whose key the typed schema does not expose (no dead keys).
   `files.auto_reload` and auto-save (#54) as they land.
 - **Notifications** — toast timeout, severity floor.
 
+## Keymap page (#93)
+
+A custom `PageModel` (the framework's seam for self-rendered pages, forwarded
+every key while focused — verbatim during chord capture). See
+[Keybindings](./keybindings.md) for the full editor behavior: effective-table
+listing with layer badges and blocked/fragile flags, capture-based rebinding
+with conflict confirmation, unbind and reset-to-preset.
+
 ## Later sub-issues
 
-Keymap editor (#93), toolchain page (#94).
+Toolchain page (#94).
