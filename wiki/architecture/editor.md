@@ -124,8 +124,21 @@ to an ordinary edit. **Undo history restarts on reload**: the old change records
 describe positions in text that no longer exists, so replaying them could
 corrupt the buffer; losing the stack is the documented trade-off.
 
-Dirty buffers are never silently reloaded — stale marking and the save conflict
-guard are #82. Config: `files.auto_reload = clean|never` (default `clean`).
+A **dirty** buffer is never silently reloaded (#82): the external change marks
+it *stale* (`Stale()`), shown as `!` after the tab title's dirty `*` and a
+`[disk changed]` status-line segment. Every save entry point (`:w`,
+`editor.write`, save-all) goes through `saveGuarded`: saving a stale buffer to
+its own file yields an `editor.ConflictMsg` instead of writing (`:w other`
+bypasses the guard — a different path clobbers nothing). The root model answers
+it with a floating prompt (`internal/app/conflict.go`): **keep mine** (`k`,
+force-save — clears staleness; the save event stamps the watcher's epoch so the
+overwrite doesn't echo back), **reload** (`r`, discard edits via the
+clean-reload path; local history #35 will snapshot before the discard once it
+lands), or **cancel** (`esc`, buffer stays dirty + stale). A 'show diff' choice
+joins once the diff viewer (#60) exists.
+
+Config: `files.auto_reload = clean|never` (default `clean`; affects clean
+buffers only — stale marking is unconditional).
 
 ## Config
 

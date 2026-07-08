@@ -90,6 +90,9 @@ type Model struct {
 	help     *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
+	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
+	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
+	conflictKey string
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
@@ -880,6 +883,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case editor.ConflictMsg:
+		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
+		// the external change.
+		m.openConflictPrompt(msg.Path)
+		return m, nil
+
 	case editor.NoticeMsg:
 		// Editor action feedback ("no comment syntax for this file") → toast.
 		m.host.Notify(host.Info, msg.Text)
@@ -920,6 +929,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
+		}
+		// The save-conflict prompt owns the keyboard ahead of the generic shell
+		// handling: k / r / esc answer it, everything else is swallowed.
+		if m.conflictOpen() {
+			return m.updateConflict(msg)
 		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)
@@ -2121,6 +2135,9 @@ func (m Model) editorTitle(ed *editor.Model) string {
 	if ed.Dirty() {
 		name += " *"
 	}
+	if ed.Stale() {
+		name += "!" // file changed on disk while dirty (Roadmap 0140)
+	}
 	return name
 }
 
@@ -2156,6 +2173,9 @@ func (m Model) statusLine() string {
 		}
 		if ed.Dirty() {
 			dirty = " [+]"
+		}
+		if ed.Stale() {
+			dirty += " [disk changed]"
 		}
 		if errs, warns := ed.DiagnosticCounts(); errs > 0 || warns > 0 {
 			diag = " │ " + strconv.Itoa(errs) + "E " + strconv.Itoa(warns) + "W"

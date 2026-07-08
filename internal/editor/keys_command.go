@@ -93,11 +93,15 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 	m.cmdline = ""
 	switch cmd.Kind {
 	case excmd.Write:
-		_ = m.saveAs(orDefault(cmd.Arg, m.path))
+		if c := m.saveGuarded(orDefault(cmd.Arg, m.path)); c != nil {
+			return m, c
+		}
 	case excmd.Quit:
 		return m, func() tea.Msg { return CloseMsg{} }
 	case excmd.WriteQuit:
-		_ = m.saveAs(orDefault(cmd.Arg, m.path))
+		if c := m.saveGuarded(orDefault(cmd.Arg, m.path)); c != nil {
+			return m, c // conflict: prompt first, keep the pane open
+		}
 		return m, func() tea.Msg { return CloseMsg{} }
 	case excmd.Edit:
 		if cmd.Arg != "" {

@@ -330,11 +330,15 @@ func (m *Model) saveAs(path string) error {
 func (m Model) runAction(action string) (Model, tea.Cmd) {
 	switch action {
 	case "write":
-		_ = m.save()
+		if cmd := m.saveGuarded(m.path); cmd != nil {
+			return m, cmd
+		}
 	case "quit":
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "write_quit":
-		_ = m.save()
+		if cmd := m.saveGuarded(m.path); cmd != nil {
+			return m, cmd // conflict: prompt first, keep the pane open
+		}
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "undo":
 		m.undo()
