@@ -130,6 +130,7 @@ func (c *Config) Flat() map[string]string {
 	put("notifications.min_severity", c.Notifications.MinSeverity)
 
 	put("files.watch", c.Files.Watch)
+	put("files.auto_reload", c.Files.AutoReload)
 
 	put("ui.menu_bar", c.UI.MenuBar)
 

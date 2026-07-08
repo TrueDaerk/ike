@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Clean-buffer auto-reload (#81, Roadmap 0140): a non-dirty editor buffer whose
+  file changed on disk reloads in place, preserving cursor and scroll (clamped
+  like session restore); undo history restarts; highlighting and LSP re-sync
+  via the ordinary change event. Config `files.auto_reload = clean|never`
+  (default `clean`). Dirty buffers stay untouched until #82.
+
 - Menu bar polish (#137): the open dropdown gets a rounded border, mouse
   hover selects entries (disabled ones skipped), and a title's first letter
   jumps to that menu while open — the bar underlines each first letter as

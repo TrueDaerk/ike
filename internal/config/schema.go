@@ -31,9 +31,11 @@ type UI struct {
 }
 
 // Files holds external-file-change behaviour (Roadmap 0140). Watch enables the
-// fsnotify project watcher.
+// fsnotify project watcher; AutoReload ("clean" or "never") controls whether a
+// clean editor buffer reloads in place when its file changes on disk.
 type Files struct {
-	Watch bool `toml:"watch"`
+	Watch      bool   `toml:"watch"`
+	AutoReload string `toml:"auto_reload"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).

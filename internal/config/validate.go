@@ -25,9 +25,10 @@ func (d Diagnostic) String() string {
 }
 
 var (
-	sortModes  = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
-	logLevels  = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
-	severities = map[string]bool{"info": true, "warn": true, "error": true}
+	sortModes   = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
+	logLevels   = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
+	reloadModes = map[string]bool{"clean": true, "never": true}
+	severities  = map[string]bool{"info": true, "warn": true, "error": true}
 )
 
 // validate clamps c in place against the baseline rules and returns one
@@ -54,6 +55,10 @@ func validate(c *Config) []Diagnostic {
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})
 		c.Notifications.MinSeverity = "info"
+	}
+	if !reloadModes[c.Files.AutoReload] {
+		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})
+		c.Files.AutoReload = "clean"
 	}
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})

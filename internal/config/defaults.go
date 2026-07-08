@@ -57,7 +57,8 @@ func defaults() *Config {
 			MinSeverity:    "info",
 		},
 		Files: Files{
-			Watch: true,
+			Watch:      true,
+			AutoReload: "clean",
 		},
 		UI: UI{
 			MenuBar: true,
