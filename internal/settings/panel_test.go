@@ -66,6 +66,23 @@ func testPages() []Page {
 	}
 }
 
+// TestViewIsBoundedFloatingBox guards #115: the panel renders as a bordered
+// box of exactly the configured size, not a full-screen sheet.
+func TestViewIsBoundedFloatingBox(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(80, 18)
+	m.Open()
+	v := m.View()
+	lines := strings.Split(v, "\n")
+	if len(lines) != 18 {
+		t.Fatalf("box height = %d lines, want 18", len(lines))
+	}
+	if !strings.Contains(lines[0], "╭") || !strings.Contains(lines[len(lines)-1], "╰") {
+		t.Fatalf("box must carry a rounded border, first line %q", lines[0])
+	}
+}
+
 func TestSchemaRendersValuesAndLayer(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))

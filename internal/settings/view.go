@@ -20,34 +20,41 @@ func (m *Model) theme() *theme.Palette {
 	return theme.DefaultPalette()
 }
 
-// View renders the full-window panel.
+// View renders the panel as a floating box: a rounded border around the title
+// row, the two-column body and the hint row. m.width/m.height are the box's
+// outer dimensions; the app centers the result above the workspace (#115).
 func (m *Model) View() string {
-	if !m.open || m.width < 20 || m.height < 6 {
+	if !m.open || m.width < 24 || m.height < 8 {
 		return ""
 	}
 	pal := m.theme()
-	inner := m.height - 2 // top title row + bottom hint row
+	innerW := m.width - 2 // content columns inside the border (v2 sizes outer)
+	inner := m.height - 4 // border rows + title row + hint row
 
 	left := m.renderCategories(inner)
+	rightW := innerW - catWidth - 3
 	var right string
 	if page := m.customPage(); page != nil && m.filter == "" {
-		right = page.View(m.width-catWidth-3, inner)
+		right = page.View(rightW, inner)
 	} else {
-		right = m.renderForm(m.width-catWidth-3, inner)
+		right = m.renderForm(rightW, inner)
 	}
+	right = lipgloss.NewStyle().MaxWidth(rightW).Render(right)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ") + m.renderFilter()
 	hint := lipgloss.NewStyle().Foreground(pal.Secondary).
 		Render(" ↑↓/jk navigate · tab column · enter edit · r reset · / filter · esc close")
 
-	frame := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
+	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
 	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.BorderFocus).
 		Background(pal.Surface).
 		Foreground(pal.Foreground).
 		Width(m.width).
 		Height(m.height).
-		Render(frame)
+		Render(content)
 }
 
 // renderFilter shows the live filter input on the title row.
@@ -99,9 +106,10 @@ func (m *Model) renderForm(w, h int) string {
 	if len(rows) == 0 {
 		return lipgloss.NewStyle().Foreground(pal.Secondary).Render("no matching settings")
 	}
+	clip := lipgloss.NewStyle().MaxWidth(w)
 	var lines []string
 	for i, r := range rows {
-		lines = append(lines, m.renderEntry(r, i == m.sel, w))
+		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, w)))
 		if i == m.sel {
 			detail := "   " + r.entry.Description + "  (" + r.entry.Key + ")"
 			if m.invalid != "" {
@@ -111,7 +119,7 @@ func (m *Model) renderForm(w, h int) string {
 			if m.invalid != "" {
 				style = style.Foreground(pal.Error)
 			}
-			lines = append(lines, style.Render(detail))
+			lines = append(lines, clip.Render(style.Render(detail)))
 		}
 	}
 	if len(lines) > h {

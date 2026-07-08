@@ -2,6 +2,10 @@
 
 ## 2026-07-08
 
+- Settings panel floats (#115): the settings window renders as a centered
+  rounded-border box (capped ~110×32) above the workspace instead of covering
+  the whole terminal; overlong form rows clip instead of wrapping the frame.
+
 - Split keybindings (#114): `pane.splitDown` / `pane.splitUp` (cmd+k down /
   cmd+k up) split the focused leaf with a fresh empty editor and move focus
   onto it — no drag or file open needed (wires the existing

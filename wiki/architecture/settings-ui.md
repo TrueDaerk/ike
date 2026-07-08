@@ -37,8 +37,9 @@ lower; `ui.menu_bar = false` hides it and returns the row).
 
 ## Settings panel framework (#91)
 
-`internal/settings` is the full-window panel: category list left, form right,
-opened via `settings.open` (cmd+, / menu bar / palette).
+`internal/settings` is a centered **floating panel** (#115): a rounded-border
+box capped at ~110×32 cells above the workspace, category list left, form
+right, opened via `settings.open` (cmd+, / menu bar / palette).
 
 - **Schema-driven.** A `Page` is a titled list of `Entry` descriptors — config
   key, control type (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`), write scope,
