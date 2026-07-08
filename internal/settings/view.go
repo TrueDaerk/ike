@@ -29,7 +29,12 @@ func (m *Model) View() string {
 	inner := m.height - 2 // top title row + bottom hint row
 
 	left := m.renderCategories(inner)
-	right := m.renderForm(m.width-catWidth-3, inner)
+	var right string
+	if page := m.customPage(); page != nil && m.filter == "" {
+		right = page.View(m.width-catWidth-3, inner)
+	} else {
+		right = m.renderForm(m.width-catWidth-3, inner)
+	}
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ") + m.renderFilter()

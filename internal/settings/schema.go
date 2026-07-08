@@ -38,10 +38,12 @@ type Entry struct {
 	Min, Max    int          // Int: inclusive bounds; both zero = unbounded
 }
 
-// Page is one category: a titled list of entries.
+// Page is one category: a titled list of entries, or — when Custom is set — a
+// self-rendered page model (the keymap editor #93) the panel hosts.
 type Page struct {
 	Title   string
 	Entries []Entry
+	Custom  PageModel
 }
 
 // BasePages returns the built-in core pages (#92). themes is the registry's

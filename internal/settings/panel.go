@@ -11,6 +11,18 @@ import (
 	"ike/internal/theme"
 )
 
+// PageModel is a self-rendered settings page. The panel hosts it on the form
+// side and forwards keys while it is focused; tab and esc stay with the panel
+// unless the page is capturing raw input (a chord rebind).
+type PageModel interface {
+	Update(key tea.KeyPressMsg) tea.Cmd
+	View(width, height int) string
+	SetPalette(p *theme.Palette)
+	// Capturing reports the page wants every key verbatim (no panel chrome
+	// keys) — chord capture must be able to record esc/tab too.
+	Capturing() bool
+}
+
 // column names the focused panel column.
 type column int
 
@@ -53,8 +65,15 @@ func New(pages []Page, opts config.Options) *Model {
 	return &Model{pages: pages, opts: opts}
 }
 
-// SetPalette threads the active theme palette.
-func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+// SetPalette threads the active theme palette (into custom pages too).
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	for _, page := range m.pages {
+		if page.Custom != nil {
+			page.Custom.SetPalette(p)
+		}
+	}
+}
 
 // SetSize sets the full-window render size.
 func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
@@ -74,8 +93,17 @@ func (m *Model) Open() {
 // Close hides the panel.
 func (m *Model) Close() { m.open = false }
 
+// customPage returns the active page's PageModel, if it has one.
+func (m *Model) customPage() PageModel {
+	if m.cat >= 0 && m.cat < len(m.pages) {
+		return m.pages[m.cat].Custom
+	}
+	return nil
+}
+
 // rows returns the visible form lines: the active page's entries, or — with a
-// filter — every matching entry across all pages.
+// filter — every matching entry across all pages. Custom pages own their rows
+// and are skipped here.
 func (m *Model) rows() []row {
 	var out []row
 	if m.filter == "" {
@@ -88,6 +116,9 @@ func (m *Model) rows() []row {
 	}
 	needle := strings.ToLower(m.filter)
 	for pi, p := range m.pages {
+		if p.Custom != nil {
+			continue
+		}
 		for _, e := range p.Entries {
 			hay := strings.ToLower(p.Title + " " + e.Title + " " + e.Key)
 			if strings.Contains(hay, needle) {
@@ -123,6 +154,24 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	}
 	if m.filtering {
 		return m.updateFilter(key)
+	}
+	// A custom page in capture mode gets every key verbatim; otherwise it gets
+	// everything but the panel's own chrome keys (tab / esc).
+	if page := m.customPage(); page != nil && m.filter == "" {
+		if page.Capturing() {
+			return page.Update(key)
+		}
+		if m.focus == formColumn {
+			switch key.String() {
+			case "tab":
+				m.focus = catColumn
+				return nil
+			case "esc":
+				m.Close()
+				return nil
+			}
+			return page.Update(key)
+		}
 	}
 	switch key.String() {
 	case "esc":
