@@ -870,13 +870,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watch.EventMsg:
 		// External file changes (Roadmap 0140): directory events refresh the
-		// explorer, file events go to the editor leaf owning the path. The
-		// receivers consume these in later 0140 sub-issues (#81-#83).
+		// explorer, file events go to the editor leaf owning the path.
 		if msg.Kind == watch.DirChanged {
 			if m.panes.Has(pane.ExplorerKey) {
 				return m, m.panes.Get(pane.ExplorerKey).Update(msg)
 			}
 			return m, nil
+		}
+		if msg.Kind == watch.FileRemoved {
+			if _, err := os.Stat(msg.Path); err == nil {
+				// The file is back: a replace-in-place (write temp + rename,
+				// git checkout) coalesced remove over create — a content change.
+				msg.Kind = watch.FileChanged
+			} else if key := m.editorKeyForPath(msg.Path); key != "" {
+				if ed := m.panes.Get(key).Editor(); !ed.Dirty() {
+					// Externally deleted, nothing unsaved: same as the
+					// explorer's delete flow — close the pane (#83). A dirty
+					// buffer instead stays open, marked stale by the editor.
+					m.closeEditorsForPath(msg.Path, false)
+					return m, nil
+				}
+			}
 		}
 		if key := m.editorKeyForPath(msg.Path); key != "" {
 			return m, m.panes.Get(key).Update(msg)

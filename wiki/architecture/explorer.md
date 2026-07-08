@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # File Explorer
@@ -25,8 +25,22 @@ instead of collapsing everything.
 
 ## Auto-refresh
 
-The tree keeps itself in sync with the filesystem without a manual `r`. Each
-scan records the directory's mtime on its node; a poll loop (`schedulePoll`)
+The tree keeps itself in sync with the filesystem without a manual `r`
+(which stays as the escape hatch). Two mechanisms feed it:
+
+**Watcher events (Roadmap 0140, #83).** The root model routes the file
+watcher's `watch.EventMsg{Kind: DirChanged}` to the explorer;
+`externalRefresh` re-scans just the affected directory — not a full re-scan.
+The `setChildren` merge preserves expansion state and loaded subtrees, and
+`pendingSel` keeps the cursor on its entry across the rebuild (even when rows
+above it vanish). Absent, never-loaded, or already-scanning nodes are skipped
+(a collapsed directory picks changes up when first expanded); the hidden-files
+filter applies as always at `rebuild`. Files deleted externally close their
+editor pane like the explorer's own delete flow — unless the buffer is dirty,
+in which case it survives, marked stale (see [editor](./editor.md)).
+
+**mtime polling (fallback).** For filesystems where fsnotify under-reports:
+each scan records the directory's mtime on its node; a poll loop (`schedulePoll`)
 snapshots the mtimes of every visible loaded directory, sleeps
 `pollEvery` (2s) off-thread, re-stats them, and reports drift as a `pollMsg`.
 `applyPoll` re-scans only the changed directories (merging in place) and
