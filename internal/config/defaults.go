@@ -52,5 +52,9 @@ func defaults() *Config {
 			OffContext:  "rank",
 			ToggleKey:   "ctrl+p",
 		},
+		Notifications: Notifications{
+			TimeoutSeconds: 4,
+			MinSeverity:    "info",
+		},
 	}
 }

@@ -70,7 +70,10 @@ type Model struct {
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
 	toastSeq int
-	help     *help.Help
+	// history is the notification ring (#78): the newest historyCap entries,
+	// newest first, browsable via the notifications.history command.
+	history []histEntry
+	help    *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
@@ -683,6 +686,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
 		}
 		return m, tea.Batch(cmds...)
+
+	case ShowNotificationHistoryMsg:
+		// notifications.history (palette): the history ring in the floating shell.
+		body := m.historyView()
+		m.shell.SetContent(ui.ModelContent{Heading: "NOTIFICATIONS", Body: func() string { return body }})
+		m.shell.SetSize(m.width, m.height)
+		m.shell.Open()
+		return m, nil
 
 	case ToggleExplorerFocusMsg:
 		// explorer.toggle (cmd+1 / palette): focus the tree, or jump back to the

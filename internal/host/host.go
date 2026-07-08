@@ -175,6 +175,15 @@ func New(cfg Config) *Host {
 // main.go calls this once after tea.NewProgram, before Run.
 func (h *Host) SetSender(send func(tea.Msg)) { h.send = send }
 
+// SetConfig replaces the configuration the host exposes; the root model calls
+// it on a live config reload so plugins (and the host's own consumers) read
+// fresh values. A nil cfg is ignored.
+func (h *Host) SetConfig(cfg Config) {
+	if cfg != nil {
+		h.cfg = cfg
+	}
+}
+
 // Send implements API.
 func (h *Host) Send(msg tea.Msg) {
 	if h.send != nil {

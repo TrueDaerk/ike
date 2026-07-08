@@ -38,6 +38,20 @@ produced.
 - **Theming:** severity → palette slots (`Info`/`Warning`/`Error`) on the
   `Surface` background — light/dark aware without new theme slots.
 
+## History & config (#78)
+
+Every notification (toast-worthy or not) is recorded in a **ring of the newest
+100** entries with timestamp and severity. The `notifications.history` registry
+command (palette) opens the ring in the floating shell: newest first,
+severity-colored, `HH:MM:SS` timestamps.
+
+Config (typed section `[notifications]`, live-reloaded — the root model
+re-feeds the host's config view on `ConfigReloadedMsg`):
+
+- `notifications.timeout_seconds` (default 4, min 1) — info/warn toast lifetime.
+- `notifications.min_severity` (`info` | `warn` | `error`, default `info`) —
+  the toast floor: notifications below it go to the history only, never toast.
+
 ## Call-site migration (#79)
 
 Every `SetStatus` call site was audited and classified. `SetStatus` now renders
@@ -61,6 +75,3 @@ LSP classification travels with the message: `lsp.ServerStatusMsg` carries a
 the status originates (`internal/lsp/manager`); the root model routes state to
 `SetStatus` and events to `Notify`.
 
-## Later increments (epic #71)
-
-History ring + list view and config keys beyond the timeout (#78).
