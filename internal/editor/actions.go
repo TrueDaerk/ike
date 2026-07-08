@@ -359,6 +359,10 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.duplicateLine()
+	case "comment_line":
+		cmd := m.commentLine()
+		m.scroll()
+		return m, cmd
 	}
 	m.scroll()
 	return m, nil

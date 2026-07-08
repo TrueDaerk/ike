@@ -56,6 +56,7 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.lineEnd", "Move to Line End", "line_end", "$"),
 			action("editor.find", "Find in File", "find", "/"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
+			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 		},
 	}
 }
