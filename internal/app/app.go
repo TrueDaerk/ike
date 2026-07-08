@@ -70,7 +70,7 @@ type Model struct {
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
 	toastSeq int
-	help         *help.Help
+	help     *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
@@ -183,7 +183,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	m.restoreSession()
 	m.wireEditorEmitters()
 	if themeWarning != "" {
-		m.host.SetStatus(themeWarning)
+		m.host.Notify(host.Warn, themeWarning)
 	}
 	return m
 }
@@ -676,6 +676,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, inst.Update(editor.ActionMsg{Action: "write"}))
 			}
 		}
+		switch n := len(cmds); {
+		case n == 1:
+			m.host.Notify(host.Info, "saved 1 file")
+		case n > 1:
+			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
+		}
 		return m, tea.Batch(cmds...)
 
 	case ToggleExplorerFocusMsg:
@@ -746,7 +752,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Navigate to a definition target and place the cursor there.
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 	case ilsp.ServerStatusMsg:
-		m.host.SetStatus(msg.Text)
+		// Persistent server state stays on the status line; transient events
+		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).
+		switch msg.Kind {
+		case ilsp.ServerEventInfo:
+			m.host.Notify(host.Info, msg.Text)
+		case ilsp.ServerEventWarn:
+			m.host.Notify(host.Warn, msg.Text)
+		case ilsp.ServerEventError:
+			m.host.Notify(host.Error, msg.Text)
+		default:
+			m.host.SetStatus(msg.Text)
+		}
 		return m, nil
 
 	case editor.CloseMsg:
@@ -1863,10 +1880,6 @@ func (m Model) statusLine() string {
 	// The ":" / "/" command line renders inside the editor pane (vim-style),
 	// not here — the status line keeps its segments while typing a command.
 	ed := m.activeEditor()
-	if s := m.host.Status(); s != "" {
-		return style.Render(" " + s)
-	}
-
 	mode, file, dirty, diag := "NORMAL", "no file", "", ""
 	line, col := 1, 1
 	if ed != nil {
@@ -1883,6 +1896,11 @@ func (m Model) statusLine() string {
 		line, col = ed.Cursor()
 	}
 	left := " " + mode + " │ " + file + dirty + diag
+	// Persistent host status (LSP server state) is one more segment; it never
+	// replaces the mode/file/cursor segments (Roadmap 0130).
+	if s := m.host.Status(); s != "" {
+		left += " │ " + s
+	}
 	right := "Ln " + strconv.Itoa(line) + ", Col " + strconv.Itoa(col) + " "
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {

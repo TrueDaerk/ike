@@ -38,7 +38,8 @@ sleep 2
 - The hardware cursor position (`display-message '#{cursor_x}'`) is
   unreliable; verify cursor motions by inserting a marker char (`i X Escape`
   or `a X Escape`) and reading the buffer, then `u` to undo.
-- The bottom status line (`NORMAL │ … Ln, Col`) is often covered by the
-  example plugin's "example saw open:" notification — don't rely on it.
+- The bottom status line (`NORMAL │ … Ln, Col`) is always present; event
+  messages (e.g. the example plugin's "example saw open:") render as toasts
+  above it and expire after ~4s.
 - Clipboard flows are real on macOS: back up with `pbpaste > backup` first,
   assert with `pbpaste`, restore afterwards.

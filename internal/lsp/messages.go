@@ -60,9 +60,30 @@ type DefinitionMsg struct {
 	Col  int
 }
 
-// ServerStatusMsg drives the status line (server ready / crashed / disabled).
+// ServerStatusKind classifies a server status update (Roadmap 0130):
+// persistent server state belongs on the status line, transient events surface
+// as toast notifications of the matching severity.
+type ServerStatusKind int
+
+const (
+	// ServerState is persistent server state ("ready", "disabled"), rendered as
+	// a status-line segment.
+	ServerState ServerStatusKind = iota
+	// ServerEventInfo is a transient event ("restarted"), raised as an info toast.
+	ServerEventInfo
+	// ServerEventWarn is a transient recoverable failure ("crashed", recovery
+	// follows automatically), raised as a warn toast.
+	ServerEventWarn
+	// ServerEventError is a transient unrecoverable failure (launch error,
+	// disabled after repeated crashes), raised as a persistent error toast.
+	ServerEventError
+)
+
+// ServerStatusMsg reports server state (ready / crashed / disabled). Kind
+// decides whether it lands on the status line or as a toast.
 type ServerStatusMsg struct {
 	Text string
+	Kind ServerStatusKind
 }
 
 // ConvertDiagnostics maps protocol diagnostics to editor coordinates using the

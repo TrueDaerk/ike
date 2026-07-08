@@ -30,7 +30,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 			Title: "Example: Say Hello",
 			Scope: plugin.GlobalScope(),
 			Run: func(h host.API) tea.Cmd {
-				h.SetStatus("hello from the example plugin")
+				h.Notify(host.Info, "hello from the example plugin")
 				return nil
 			},
 		}},
@@ -55,7 +55,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				return len(head) >= 7 && string(head[:7]) == "EXAMPLE"
 			},
 			Open: func(h host.API, path string) tea.Cmd {
-				h.SetStatus("example handler opened " + path)
+				h.Notify(host.Info, "example handler opened "+path)
 				return nil
 			},
 		}},
@@ -64,7 +64,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 			Event: plugin.EventFileOpened,
 			Notify: func(h host.API, payload any) tea.Cmd {
 				if p, ok := payload.(string); ok {
-					h.SetStatus("example saw open: " + p)
+					h.Notify(host.Info, "example saw open: "+p)
 				}
 				return nil
 			},

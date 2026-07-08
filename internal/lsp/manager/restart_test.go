@@ -58,7 +58,7 @@ func TestManagerRestartsAfterCrash(t *testing.T) {
 	statusCh := make(chan string, 16)
 	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
 	m := New(resolver(spec), crashOnceConnector(&connects), Callbacks{
-		Status: func(lang, text string) { statusCh <- text },
+		Status: func(lang, text string, kind lsp.ServerStatusKind) { statusCh <- text },
 	})
 	defer m.Shutdown()
 

@@ -28,7 +28,7 @@ func TestSmokeGoplsDiagnosticsAndCompletion(t *testing.T) {
 		Diagnostics: func(path string, p protocol.PublishDiagnosticsParams, lines []string, enc string) {
 			diagCh <- p.Diagnostics
 		},
-		Status: func(lang, text string) { t.Logf("status: %s", text) },
+		Status: func(lang, text string, kind lsp.ServerStatusKind) { t.Logf("status: %s", text) },
 	})
 	defer m.Shutdown()
 

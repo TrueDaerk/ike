@@ -3,6 +3,7 @@ package example
 import (
 	"testing"
 
+	"ike/internal/host"
 	"ike/internal/plugin"
 )
 
@@ -24,6 +25,21 @@ func TestExerciseEveryExtensionPoint(t *testing.T) {
 	}
 	if len(c.Hooks) == 0 {
 		t.Error("missing Hook")
+	}
+}
+
+// TestHookNotifiesInsteadOfStatus guards the 0130 migration: the file-opened
+// hook raises an info toast and no longer writes the persistent status line
+// (which used to stick forever and cover the mode/cursor segments).
+func TestHookNotifiesInsteadOfStatus(t *testing.T) {
+	h := host.New(nil)
+	Plugin{}.Capabilities().Hooks[0].Notify(h, "/tmp/x.go")
+	if h.Status() != "" {
+		t.Fatalf("hook must not write the status line, got %q", h.Status())
+	}
+	ns := h.DrainNotifications()
+	if len(ns) != 1 || ns[0].Severity != host.Info || ns[0].Text != "example saw open: /tmp/x.go" {
+		t.Fatalf("expected one info notification, got %+v", ns)
 	}
 }
 

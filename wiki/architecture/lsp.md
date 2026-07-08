@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-06-28T00:00:00Z
+timestamp: 2026-07-07T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -81,7 +81,12 @@ app (navigate + place cursor).
   no-op with a status message, never an error popup.
 - **Crashes are recoverable.** `restart.go` detects an unexpected exit, respawns
   with linear backoff, re-initialises, and re-opens tracked documents; after
-  repeated crashes the server is disabled with a status message.
+  repeated crashes the server is disabled.
+- **Status is classified (0130).** Every manager status carries a
+  `lsp.ServerStatusKind`: persistent server state (ready, disabled, missing
+  binary) renders as a status-line segment; transient events (crashed → warn,
+  restarted → info, launch error / disabled-after-crashes → error) surface as
+  toast notifications. See [Notifications](./notifications.md).
 - **Actions are registry commands.** Hover/definition/restart are plain
   `plugin.Command`s reached by the palette (07) and keybindings (08) by id — no
   parallel dispatch path.
