@@ -40,6 +40,38 @@ func TestResolveSpecMergesBaselineAndOverride(t *testing.T) {
 	}
 }
 
+// interpTC maps an explicit interpreter into settings (the python shape).
+type interpTC struct{}
+
+func (interpTC) Detect(string) (map[string]any, bool) { return nil, false }
+func (interpTC) Explicit(p string) map[string]any {
+	return map[string]any{"x": map[string]any{"path": p}}
+}
+
+// TestResolveSpecInjectsExplicitInterpreter guards the #94 seam: an explicit
+// [lang.<id>] interpreter flows into the server settings via the toolchain's
+// Explicit mapping and wins over colliding overlay settings.
+func TestResolveSpecInjectsExplicitInterpreter(t *testing.T) {
+	lang.Register(lang.Language{
+		ID:        "interptest",
+		Server:    &lang.ServerSpec{Language: "interptest", Command: "cmd"},
+		Toolchain: interpTC{},
+	})
+	c := &config.Config{}
+	c.LSP.Enabled = true
+	c.Lang = map[string]map[string]string{"interptest": {"interpreter": "/proj/bin/x"}}
+	config.Set(c)
+
+	spec, ok := resolveSpec("interptest")
+	if !ok {
+		t.Fatal("expected a resolved spec")
+	}
+	x, _ := spec.Settings["x"].(map[string]any)
+	if x == nil || x["path"] != "/proj/bin/x" {
+		t.Fatalf("explicit interpreter missing from settings: %v", spec.Settings)
+	}
+}
+
 func TestResolveSpecDisabledWhenLSPOff(t *testing.T) {
 	c := &config.Config{}
 	c.LSP.Enabled = false

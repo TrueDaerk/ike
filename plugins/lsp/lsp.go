@@ -114,6 +114,17 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 	if ov, ok := ilsp.Overlay(c.LSP.Servers, langID); ok {
 		spec = mergeSpec(spec, ov)
 	}
+	// An explicitly configured interpreter ([lang.<id>] interpreter, Roadmap
+	// 0160) flows into the server settings like a detected one — and wins over
+	// detection, because spec.Settings takes precedence in the manager's
+	// toolchain merge.
+	if interp := c.Lang[langID]["interpreter"]; interp != "" {
+		if l, ok := lang.ByID(langID); ok && l.Toolchain != nil {
+			if ec, ok := l.Toolchain.(lang.ExplicitSettings); ok {
+				spec.Settings = lang.MergeSettings(spec.Settings, ec.Explicit(interp))
+			}
+		}
+	}
 	spec.Language = langID
 	if spec.Command == "" {
 		return ilsp.ServerSpec{}, false

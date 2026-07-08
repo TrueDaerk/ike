@@ -133,6 +133,12 @@ func (c *Config) Flat() map[string]string {
 
 	put("ui.menu_bar", c.UI.MenuBar)
 
+	for id, kv := range c.Lang {
+		for k, v := range kv {
+			put("lang."+id+"."+k, v)
+		}
+	}
+
 	put("palette.max_results", c.Palette.MaxResults)
 	put("palette.default_mode", c.Palette.DefaultMode)
 	put("palette.off_context", c.Palette.OffContext)

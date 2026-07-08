@@ -143,6 +143,16 @@ func value(key string) string {
 	return config.Get().Flat()[key]
 }
 
+// Deliver forwards a non-key message (async probe results) to every custom
+// page that consumes messages.
+func (m *Model) Deliver(msg tea.Msg) {
+	for _, page := range m.pages {
+		if r, ok := page.Custom.(MsgReceiver); ok {
+			r.Receive(msg)
+		}
+	}
+}
+
 // Update handles one key while the panel is open. Returned commands carry
 // write-back reloads.
 func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {

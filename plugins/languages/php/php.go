@@ -22,6 +22,7 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"composer.json", ".git"},
 		},
+		Toolchain:    toolchain{},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 	})
