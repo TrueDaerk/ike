@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,6 +22,27 @@ import (
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
+
+// TestMain redirects the layout/session store and user-config discovery to a
+// throwaway directory: several tests persist state (saveLayout on file opens,
+// splits and drags; saveSession on quit) and New() restores it, so without
+// isolation one test's artifacts leak into the next run — and into the
+// developer's real .ike. newSized additionally rotates to a fresh subdirectory
+// per model, so tests never see each other's persisted state either.
+var testStoreRoot string
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "ike-app-test")
+	if err == nil {
+		testStoreRoot = dir
+		os.Setenv("IKE_CONFIG_DIR", dir)
+	}
+	code := m.Run()
+	if err == nil {
+		os.RemoveAll(dir)
+	}
+	os.Exit(code)
+}
 
 type fakePlugin struct {
 	id   string
@@ -135,6 +157,9 @@ func TestMenuBarToggleAndDispatch(t *testing.T) {
 // TestSplitFocusedCommands guards #114: pane.splitDown/up split the focused
 // editor leaf with a fresh empty editor and move focus onto it.
 func TestSplitFocusedCommands(t *testing.T) {
+	// SplitFocused persists the layout; redirect the store so the multi-pane
+	// tree never leaks into later tests (which restore it at New()).
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
 	m = tm.(Model)
@@ -182,7 +207,14 @@ func TestRunCommand(t *testing.T) {
 	}
 }
 
+var testStoreSeq atomic.Int64
+
+// newSized builds a freshly isolated, sized model: each call rotates the state
+// store to an empty directory so persisted layouts/sessions never couple tests.
 func newSized() Model {
+	if testStoreRoot != "" {
+		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, strconv.FormatInt(testStoreSeq.Add(1), 10)))
+	}
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
