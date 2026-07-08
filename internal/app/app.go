@@ -657,7 +657,13 @@ func (m Model) Init() tea.Cmd {
 // a toast appears in the very frame its event produced. updateMsg holds the
 // actual dispatch switch.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	start := time.Now()
 	tm, cmd := m.updateMsg(msg)
+	if took := time.Since(start); took > slowUpdateThreshold {
+		// A stalled Update pass freezes the whole UI (#123); leave a trace so
+		// the culprit is attributable after the fact (#125).
+		logSlowUpdate(msg, took)
+	}
 	mm, ok := tm.(Model)
 	if !ok {
 		return tm, cmd
