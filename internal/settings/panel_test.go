@@ -169,6 +169,55 @@ func TestResetRemovesOverride(t *testing.T) {
 	}
 }
 
+// TestMouseClicksDriveThePanel guards #127: category clicks switch pages,
+// entry clicks select, and a second click on the selection activates (enter
+// semantics — a bool toggle returns the write command).
+func TestMouseClicksDriveThePanel(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+
+	// Row 3 in the category column = second page ("Appearance", body top is 2).
+	if cmd := m.Click(2, 3); cmd != nil || m.cat != 1 {
+		t.Fatalf("category click must switch to page 1, cat=%d", m.cat)
+	}
+	// Back to Editor-page equivalent (page 0).
+	m.Click(2, 2)
+	if m.cat != 0 {
+		t.Fatalf("category click must switch back, cat=%d", m.cat)
+	}
+
+	// Click the second entry row in the form column: selection has a detail
+	// line under it, so with sel=0 the second entry renders on body row 2.
+	formX := 1 + catWidth + 4
+	if cmd := m.Click(formX, 2+2); cmd != nil {
+		t.Fatal("first click must only select")
+	}
+	if m.sel != 1 || m.focus != formColumn {
+		t.Fatalf("entry click must select row 1, sel=%d focus=%v", m.sel, m.focus)
+	}
+	// Second click on the now-selected row (it moved up to body row 1... it is
+	// row index 1 → line 1 since the selection sits below row 0's line).
+	// Row 1 is the Int entry (tab width): activation opens an inline edit.
+	m.Click(formX, 2+1)
+	if !m.editing {
+		t.Fatal("second click must activate the entry")
+	}
+
+	// Bool activation via double click returns the write command.
+	m.editing = false
+	m.Click(formX, 2+0) // select row 0 (bool)
+	wcmd := m.Click(formX, 2+0)
+	if wcmd == nil {
+		t.Fatal("activating the bool entry must return the write command")
+	}
+	apply(t, wcmd)
+	if config.Get().UI.MenuBar {
+		t.Fatal("bool click-activation must toggle the value")
+	}
+}
+
 func TestFilterSpansAllPages(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
