@@ -87,6 +87,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
 			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
+			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),
+			appCommand("pane.splitLeft", "Split Left", SplitFocusedMsg{Zone: layout.ZoneLeft}),
 		},
 	}
 }
