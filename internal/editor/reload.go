@@ -24,10 +24,19 @@ import (
 // place save (write temp + rename) coalesces to FileCreated, so both kinds
 // count as "changed".
 func (m Model) handleExternalChange(msg watch.EventMsg) (Model, tea.Cmd) {
-	if msg.Kind != watch.FileChanged && msg.Kind != watch.FileCreated {
+	if !m.HasFile() || !samePath(m.path, msg.Path) {
 		return m, nil
 	}
-	if !m.HasFile() || !samePath(m.path, msg.Path) {
+	if msg.Kind == watch.FileRemoved {
+		// Externally deleted while dirty (the root model closes clean editors
+		// before routing here): the buffer is the only copy left — keep it,
+		// marked stale so the next save goes through the conflict prompt.
+		if m.dirty {
+			m.stale = true
+		}
+		return m, nil
+	}
+	if msg.Kind != watch.FileChanged && msg.Kind != watch.FileCreated {
 		return m, nil
 	}
 	if m.dirty {

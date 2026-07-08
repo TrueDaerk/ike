@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Explorer auto-refresh on watcher events (#83, Roadmap 0140): directory
+  events re-scan just the affected subtree, preserving expansion state and
+  cursor; externally deleted files close their editor pane (dirty buffers
+  survive, marked stale); manual `r` and the mtime poll stay as fallbacks.
+  This completes epic #72.
+
 - Stale marking + save conflict guard (#82, Roadmap 0140): an external change
   to a dirty buffer marks it stale (tab `!`, status `[disk changed]`) instead
   of reloading; saving a stale buffer opens a floating prompt — keep mine /

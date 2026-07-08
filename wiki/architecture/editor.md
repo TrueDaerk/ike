@@ -137,6 +137,12 @@ clean-reload path; local history #35 will snapshot before the discard once it
 lands), or **cancel** (`esc`, buffer stays dirty + stale). A 'show diff' choice
 joins once the diff viewer (#60) exists.
 
+External **deletes** (#83): the root model closes a clean editor whose file was
+removed (the explorer's delete-closes-editor flow); a dirty one survives with
+its buffer as the only copy, marked stale so the next save prompts. A
+`FileRemoved` whose path still exists (replace-in-place: write temp + rename,
+git checkout) is downgraded to a content change and reloads normally.
+
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
 

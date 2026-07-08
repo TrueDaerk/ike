@@ -17,6 +17,7 @@ import (
 
 	"ike/internal/overlay"
 	"ike/internal/theme"
+	"ike/internal/watch"
 )
 
 // OpenFileMsg is emitted when the user selects a file to open. The root model
@@ -316,6 +317,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, m.startPoll()
 	case pollMsg:
 		return m, m.applyPoll(msg)
+	case watch.EventMsg:
+		// External directory change (Roadmap 0140, #83): the watcher replaces
+		// most manual `r` refreshes; `r` stays as the escape hatch.
+		if msg.Kind == watch.DirChanged {
+			return m, m.externalRefresh(msg.Path)
+		}
+		return m, nil
 	case ToggleHiddenMsg:
 		m.showHidden = !m.showHidden
 		m.rebuild()
@@ -537,6 +545,24 @@ func (m *Model) rescanSubtree(n *node) tea.Cmd {
 	}
 	walk(n)
 	return tea.Batch(cmds...)
+}
+
+// externalRefresh re-scans one directory the watcher reported changed — just
+// the affected subtree entry, not a full re-scan. setChildren's merge keeps
+// expansion state and loaded subtrees; pendingSel keeps the cursor on its
+// entry across the rebuild. A node that is absent, never loaded, or already
+// scanning is skipped (a collapsed directory picks the change up when first
+// expanded).
+func (m *Model) externalRefresh(path string) tea.Cmd {
+	n := nodeByPath(m.root, path)
+	if n == nil || !n.isDir || !n.loaded || n.loading {
+		return nil
+	}
+	if cur := m.current(); cur != nil {
+		m.pendingSel = cur.path
+	}
+	n.loading = true
+	return scanCmd(n.path)
 }
 
 // dirStamp pairs a directory path with the mtime it had at its last scan; the
