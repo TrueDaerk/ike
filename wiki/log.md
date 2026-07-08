@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- Slow-update diagnostics (#125): Update passes over 200ms log message type +
+  duration to `.ike/debug.log`, so UI stalls (like the #123 restart deadlock)
+  are attributable after the fact. Fixed #123 itself: `lsp.restart` now runs
+  Shutdown asynchronously and returns its status message instead of calling
+  `host.Send` from the Update goroutine (which deadlocks bubbletea's
+  unbuffered message channel).
+
 - Click-outside dismiss (#116): a mouse press outside an open floating
   overlay — settings panel, floating shell (help/modals/history), command
   palette (centered and anchored) — closes it; clicks inside never leak to

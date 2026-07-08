@@ -65,6 +65,14 @@ model routes file kinds to the editor leaf owning the path
   watcher after wiring `Send`; a project switch (Roadmap 0090) calls
   `StartWatcher` again, which restarts on the new root.
 
+## Slow-update diagnostics (#125)
+
+Anything that stalls the root model's `Update` freezes the whole UI (the #123
+deadlock was invisible until it hung). Every Update pass over 200ms appends a
+timestamped line — message type + duration — to the per-project state log
+(`.ike/debug.log`, `IKE_CONFIG_DIR`-aware like the layout store). Logging is
+best-effort; a failed write never affects the editor.
+
 ## Focus and global keys
 
 `Tab` toggles focus between panes. `Ctrl+C` always quits; `q` quits when the
