@@ -3,8 +3,13 @@ package lsp
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/config"
+	"ike/internal/host"
 	"ike/internal/lang"
+	ilsp "ike/internal/lsp"
+	"ike/internal/plugin"
 )
 
 // resolveSpec must merge the language plugin's baseline with the user's config
@@ -69,6 +74,40 @@ func TestResolveSpecInjectsExplicitInterpreter(t *testing.T) {
 	x, _ := spec.Settings["x"].(map[string]any)
 	if x == nil || x["path"] != "/proj/bin/x" {
 		t.Fatalf("explicit interpreter missing from settings: %v", spec.Settings)
+	}
+}
+
+// TestRestartRunsAsyncWithoutSynchronousSend guards #123: lsp.restart's Run
+// resolves on the Update goroutine, so it must neither block on Shutdown nor
+// call host.Send there — bubbletea's Send writes to an unbuffered channel only
+// the event loop drains, so a synchronous Send from Update deadlocks the IDE.
+func TestRestartRunsAsyncWithoutSynchronousSend(t *testing.T) {
+	var restart plugin.Command
+	for _, c := range (Plugin{}).Capabilities().Commands {
+		if c.ID == "lsp.restart" {
+			restart = c
+		}
+	}
+	if restart.Run == nil {
+		t.Fatal("lsp.restart must be registered")
+	}
+	h := host.New(nil)
+	sent := 0
+	h.SetSender(func(tea.Msg) { sent++ })
+
+	cmd := restart.Run(h)
+	if sent != 0 {
+		t.Fatal("Run must not Send synchronously (deadlocks the Update loop)")
+	}
+	if cmd == nil {
+		t.Fatal("Run must return the async restart command")
+	}
+	msg, ok := cmd().(ilsp.ServerStatusMsg)
+	if !ok || msg.Kind != ilsp.ServerEventInfo {
+		t.Fatalf("expected an info ServerStatusMsg from the command, got %#v", msg)
+	}
+	if sent != 0 {
+		t.Fatal("the status must be returned as a message, never Sent")
 	}
 }
 

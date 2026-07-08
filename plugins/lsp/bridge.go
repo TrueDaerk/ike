@@ -156,13 +156,20 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 }
 
 // restart stops every server; they respawn lazily on the next file open/edit.
+// The work happens inside the returned tea.Cmd: a command's Run resolves on
+// the Update goroutine, where a blocking Shutdown would stall the UI and a
+// host.Send would deadlock outright (bubbletea's Send writes to an unbuffered
+// channel only the — then busy — event loop drains). The status message is
+// therefore returned, never Sent.
 func (b *bridge) restart(h host.API) tea.Cmd {
 	b.ensure(h)
-	if mgr := b.manager(); mgr != nil {
-		mgr.Shutdown()
+	mgr := b.manager()
+	return func() tea.Msg {
+		if mgr != nil {
+			mgr.Shutdown()
+		}
+		return ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo}
 	}
-	h.Send(ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo})
-	return nil
 }
 
 // requestCompletion fires a completion request on a goroutine and sends the
