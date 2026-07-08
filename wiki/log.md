@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Shared documents (#142): the same file open in several panes is one document
+  with multiple views — shared buffer and undo stack, per-pane cursor/scroll;
+  unsaved edits, dirty/stale flags, saves and reloads mirror live across the
+  views via an emitter-driven SyncMsg broadcast. Async per-path messages
+  (highlight, LSP, watch) now route to all owning panes.
+
 - Explorer auto-refresh on watcher events (#83, Roadmap 0140): directory
   events re-scan just the affected subtree, preserving expansion state and
   cursor; externally deleted files close their editor pane (dirty buffers

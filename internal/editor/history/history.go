@@ -31,6 +31,14 @@ type History struct {
 // New returns an empty history.
 func New() *History { return &History{} }
 
+// Reset drops all past and future changes in place. Callers that share the
+// history across views (shared documents) use this instead of allocating a new
+// History, so every alias sees the cleared stack.
+func (h *History) Reset() {
+	h.past = h.past[:0]
+	h.future = h.future[:0]
+}
+
 // Push records a committed change and clears the redo stack (a new edit after an
 // undo abandons the redone-away future, as in vim's linear undo).
 func (h *History) Push(c Change) {
