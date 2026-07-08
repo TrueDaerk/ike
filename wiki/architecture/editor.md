@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Editor
@@ -109,6 +109,23 @@ every line of the visual selection, JetBrains-style (`comment.go`):
   are exactly the markers removes the pair.
 - Languages without a block pair (python) fall back to line-comment toggling.
 - One undo unit, `.`-repeatable; visual mode ends after the toggle.
+
+## External file changes (Roadmap 0140)
+
+The watcher service (`internal/watch`, see [foundation](./foundation.md))
+reports external changes as `watch.EventMsg`s that the root model routes to the
+editor leaf owning the path. `reload.go` consumes them: a **clean** buffer whose
+file changed on disk (kinds `FileChanged` and `FileCreated` — a write-temp-and-
+rename save coalesces to the latter) is reloaded in place. Cursor and scroll are
+preserved, clamped to the new content exactly like session restore
+(`SetCursor` + `SetScroll`). The reload emits `EventChange`, so `docVersion`
+bumps, Tree-sitter reparses, and the LSP bridge sends the new text — identical
+to an ordinary edit. **Undo history restarts on reload**: the old change records
+describe positions in text that no longer exists, so replaying them could
+corrupt the buffer; losing the stack is the documented trade-off.
+
+Dirty buffers are never silently reloaded — stale marking and the save conflict
+guard are #82. Config: `files.auto_reload = clean|never` (default `clean`).
 
 ## Config
 

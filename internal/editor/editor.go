@@ -23,6 +23,7 @@ import (
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
+	"ike/internal/watch"
 )
 
 // Mode is re-exported from the mode package so callers (app, tests) keep using
@@ -296,6 +297,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.hover = &hoverState{lines: strings.Split(msg.Contents, "\n")}
 		}
 		return m, nil
+	case watch.EventMsg:
+		// External change of the open file (Roadmap 0140): reload.go decides
+		// whether to reload in place (clean buffer) or leave it alone.
+		return m.handleExternalChange(msg)
 	case ActionMsg:
 		before := m.docVersion
 		m, cmd := m.runAction(msg.Action)

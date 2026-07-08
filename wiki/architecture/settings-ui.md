@@ -86,8 +86,8 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Appearance** — theme (enum fed from the registry's theme list; writing
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.
-- **Files & Session** — restore last project, `files.watch`. Grows with 0140's
-  `files.auto_reload` and auto-save (#54) as they land.
+- **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
+  (clean|never, #81). Grows with auto-save (#54) when it lands.
 - **Notifications** — toast timeout, severity floor.
 
 ## Keymap page (#93)
