@@ -51,6 +51,11 @@ type ShowNotificationHistoryMsg struct{}
 // (Roadmap 0150). Dispatched by project.findInPath (cmd+shift+f / palette).
 type OpenFindInPathMsg struct{}
 
+// OpenReplaceInPathMsg asks the root model to open the find-in-path overlay
+// in replace mode (Roadmap 0150, #86). Dispatched by project.replaceInPath
+// (cmd+shift+r / palette).
+type OpenReplaceInPathMsg struct{}
+
 // MatchStepMsg asks the root model to jump to the next (Delta 1) or previous
 // (Delta -1) retained find-in-path match, without the overlay open.
 // Dispatched by search.nextMatch / search.prevMatch.
@@ -90,6 +95,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
+			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),

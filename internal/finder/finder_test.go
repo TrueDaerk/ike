@@ -171,6 +171,88 @@ func TestQueryHistoryRecall(t *testing.T) {
 	}
 }
 
+// openedReplace builds an open replace-mode finder with three matches in two
+// files.
+func openedReplace(t *testing.T) *Model {
+	t.Helper()
+	m := New(search.New(nil))
+	m.SetSize(100, 40)
+	m.OpenReplace(t.TempDir())
+	typeText(m, "needle")
+	feed(m, match("a.go", 1), match("a.go", 5), match("b.go", 2))
+	return m
+}
+
+func TestReplaceModeEnterReplacesCurrentMatch(t *testing.T) {
+	m := openedReplace(t)
+	m.Update(key("tab")) // focus the replace field
+	typeText(m, "thread")
+	cmd := m.Update(key("enter"))
+	if cmd == nil {
+		t.Fatal("enter must dispatch a replace request")
+	}
+	req, ok := cmd().(ReplaceRequestMsg)
+	if !ok || len(req.Items) != 1 || req.Replacement != "thread" {
+		t.Fatalf("unexpected request: %+v", req)
+	}
+	if req.Items[0].Path != "a.go" || req.Items[0].Line != 1 {
+		t.Fatalf("wrong match replaced: %+v", req.Items[0])
+	}
+	if m.list.Total() != 2 || !m.IsOpen() {
+		t.Fatal("the applied match leaves the list; the overlay stays open")
+	}
+}
+
+func TestReplaceModeAltFReplacesFile(t *testing.T) {
+	m := openedReplace(t)
+	cmd := m.Update(tea.KeyPressMsg{Code: 'f', Mod: tea.ModAlt})
+	req := cmd().(ReplaceRequestMsg)
+	if len(req.Items) != 2 || req.Items[0].Path != "a.go" {
+		t.Fatalf("alt+f must batch the selected file's matches: %+v", req.Items)
+	}
+	if m.list.Total() != 1 || m.list.Files() != 1 {
+		t.Fatalf("applied file must leave the list: %d in %d files", m.list.Total(), m.list.Files())
+	}
+}
+
+func TestReplaceModeAltAReplacesAll(t *testing.T) {
+	m := openedReplace(t)
+	cmd := m.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModAlt})
+	req := cmd().(ReplaceRequestMsg)
+	if len(req.Items) != 3 {
+		t.Fatalf("alt+a must batch every match: %+v", req.Items)
+	}
+	if m.list.Total() != 0 {
+		t.Fatal("replace-all must clear the list")
+	}
+}
+
+func TestReplaceModePreviewShowsBeforeAfter(t *testing.T) {
+	m := openedReplace(t)
+	m.Update(key("tab"))
+	typeText(m, "thread")
+	v := m.View()
+	if !strings.Contains(v, "- needle text") || !strings.Contains(v, "+ thread text") {
+		t.Fatalf("preview rows missing:\n%s", v)
+	}
+}
+
+func TestReplaceModeAltEnterOpensInstead(t *testing.T) {
+	m := openedReplace(t)
+	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt})
+	if _, ok := cmd().(OpenLocationMsg); !ok {
+		t.Fatal("alt+enter must navigate, not replace")
+	}
+}
+
+func TestFindModeHasNoReplaceField(t *testing.T) {
+	m := opened(t)
+	m.Update(key("tab"))
+	if m.focus == fieldReplace {
+		t.Fatal("find mode must skip the replace field in the tab cycle")
+	}
+}
+
 func TestEndToEndScanAgainstDisk(t *testing.T) {
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "hit.txt"), []byte("the needle is here\n"), 0o644); err != nil {

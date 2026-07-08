@@ -99,6 +99,82 @@ func (l *List) Advance(delta int) (Item, bool) {
 	return l.Current()
 }
 
+// All returns every item in display order (replace-all consumes this).
+func (l *List) All() []Item {
+	out := make([]Item, 0, l.total)
+	for _, g := range l.groups {
+		out = append(out, g.items...)
+	}
+	return out
+}
+
+// CurrentGroup returns the cursor's file and all of its items.
+func (l *List) CurrentGroup() (string, []Item) {
+	i := l.cursor
+	for _, g := range l.groups {
+		if i < len(g.items) {
+			return g.path, g.items
+		}
+		i -= len(g.items)
+	}
+	return "", nil
+}
+
+// RemoveCurrent drops the item under the cursor (its group too when it
+// empties), keeping the cursor on the next item.
+func (l *List) RemoveCurrent() (Item, bool) {
+	it, ok := l.Current()
+	if !ok {
+		return Item{}, false
+	}
+	i := l.cursor
+	for gi := range l.groups {
+		g := &l.groups[gi]
+		if i < len(g.items) {
+			g.items = append(g.items[:i], g.items[i+1:]...)
+			if len(g.items) == 0 {
+				l.groups = append(l.groups[:gi], l.groups[gi+1:]...)
+			}
+			break
+		}
+		i -= len(g.items)
+	}
+	l.total--
+	if l.cursor >= l.total {
+		l.cursor = l.total - 1
+	}
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+	return it, true
+}
+
+// RemoveGroup drops every item of path, adjusting the cursor.
+func (l *List) RemoveGroup(path string) {
+	itemsBefore := 0
+	for gi, g := range l.groups {
+		if g.path == path {
+			l.total -= len(g.items)
+			if l.cursor >= itemsBefore {
+				if l.cursor < itemsBefore+len(g.items) {
+					l.cursor = itemsBefore // was inside: land on the successor
+				} else {
+					l.cursor -= len(g.items)
+				}
+			}
+			l.groups = append(l.groups[:gi], l.groups[gi+1:]...)
+			break
+		}
+		itemsBefore += len(g.items)
+	}
+	if l.cursor >= l.total {
+		l.cursor = l.total - 1
+	}
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+}
+
 // rowOfCursor maps the cursor's item index to its render row (accounting for
 // the header row above each group).
 func (l *List) rowOfCursor() int {

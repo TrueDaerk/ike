@@ -81,7 +81,30 @@ the palette):
   commands) keep stepping matches — wrapping across files — without the
   overlay.
 
-## Replace in path (#86, next)
+## Replace in path (#86)
 
-The same matches will drive previewed replacements — through open dirty
-buffers (one undo unit per file), directly on disk otherwise.
+`project.replaceInPath` (cmd+shift+r) opens the same overlay in replace mode:
+a replacement-template input joins the field cycle, and a before/after
+preview for the selected match renders under the results (`- old` / `+ new`).
+Apply keys: `enter` replaces the selected match (and steps on), `alt+f` the
+selected file's matches, `alt+a` everything; `alt+enter` navigates instead.
+Applied matches leave the list; the overlay stays open.
+
+Application (`internal/app/replace.go`) routes per file:
+
+- **Dirty open buffer:** matches become `editor.Replacement`s applied through
+  the buffer as **one undo unit per file** (a single `u` reverts the batch);
+  the file on disk keeps only the user's saved state. The change event drives
+  LSP/highlight/shared-document sync as usual.
+- **Everything else:** the file is rewritten on disk. A clean open buffer
+  picks the write up through the 0140 watcher path (external change →
+  auto-reload) — deliberately the same flow as any external edit.
+- **Staleness guard:** a match applies only while the line's prefix up to the
+  match end still reads as scanned (prefix, not whole-line, so several
+  matches on one line stay valid while applying right-to-left). Skipped
+  matches are counted in the summary notification
+  (`N replacements in M files (K stale matches skipped)`).
+- **Capture groups:** regex replacements expand `$1`/`${name}` via
+  `search.RewriteRange` (Go regexp Expand semantics; the whole-word wrapper
+  is non-capturing, so user group numbers are stable). Literal replacements
+  never expand.

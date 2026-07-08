@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- Replace in path (#86, Roadmap 0150): `project.replaceInPath` (cmd+shift+r)
+  adds a replacement input + before/after preview to the finder; enter/alt+f/
+  alt+a apply per match/file/all. Dirty buffers are edited in place (one undo
+  unit per file), other files rewritten on disk (clean open buffers reload
+  via the 0140 watcher); stale lines are skipped and counted; `$1` capture
+  groups expand. Epic #73 (Find in Path) is complete.
+
 - Find-in-path UI (#85, Roadmap 0150): `project.findInPath` (cmd+shift+f) is
   live — modal overlay with query, case/word/regex toggles, include/exclude
   globs, query history, and live-streamed results grouped by file (the new

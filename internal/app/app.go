@@ -741,6 +741,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finder.Open(".")
 		return m, nil
 
+	case OpenReplaceInPathMsg:
+		// project.replaceInPath (cmd+shift+r / palette): find-in-path plus the
+		// replacement input, preview and apply keys (#86).
+		m.finder.SetSize(m.width, m.height)
+		m.finder.OpenReplace(".")
+		return m, nil
+
+	case finder.ReplaceRequestMsg:
+		// Apply replacements: through open dirty buffers, on disk otherwise;
+		// reports the summary notification.
+		m.applyReplace(msg)
+		return m, nil
+
 	case search.BatchMsg, search.DoneMsg:
 		// Streamed scan results (generation-filtered inside the finder).
 		m.finder.Apply(msg)

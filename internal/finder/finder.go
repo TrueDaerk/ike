@@ -28,11 +28,23 @@ type OpenLocationMsg struct {
 	Col  int
 }
 
-// field enumerates the focusable inputs; tab cycles through them.
+// ReplaceRequestMsg asks the root model to apply Replacement to the given
+// matches (Roadmap 0150, #86): through the open dirty buffer where one holds
+// the file, directly on disk otherwise. Query carries the flags capture-group
+// expansion needs.
+type ReplaceRequestMsg struct {
+	Items       []locations.Item
+	Replacement string
+	Query       search.Query
+}
+
+// field enumerates the focusable inputs; tab cycles through them (the replace
+// field only exists in replace mode).
 type field int
 
 const (
 	fieldQuery field = iota
+	fieldReplace
 	fieldInclude
 	fieldExclude
 	fieldCount
@@ -50,8 +62,16 @@ type Model struct {
 	focus field
 
 	query   string
+	replace string // replacement template (replace mode only)
 	include string // comma-separated include globs
 	exclude string // comma-separated exclude globs
+
+	// replaceMode adds the replacement input, the before/after preview, and
+	// the apply keys (project.replaceInPath); off is plain find-in-path.
+	replaceMode bool
+	// lastQuery is the search.Query of the current scan, retained so apply
+	// requests carry the exact flags the matches were produced with.
+	lastQuery search.Query
 
 	caseSensitive bool
 	wholeWord     bool
@@ -93,11 +113,19 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 // toggles (JetBrains re-opens with the last search) but clearing results.
 func (m *Model) Open(root string) {
 	m.open = true
+	m.replaceMode = false
 	m.root = root
 	m.focus = fieldQuery
 	m.histIdx = -1
 	m.errText = ""
 	m.rescan()
+}
+
+// OpenReplace shows the finder in replace mode (#86): find-in-path plus the
+// replacement input, preview, and apply keys.
+func (m *Model) OpenReplace(root string) {
+	m.Open(root)
+	m.replaceMode = true
 }
 
 // Close hides the overlay. Results are kept for next/prev-match.
@@ -170,7 +198,7 @@ func (m *Model) rescan() {
 		return
 	}
 	m.scanning = true
-	m.gen = m.svc.Scan(search.Query{
+	m.lastQuery = search.Query{
 		Pattern:       m.query,
 		Root:          m.root,
 		CaseSensitive: m.caseSensitive,
@@ -178,7 +206,8 @@ func (m *Model) rescan() {
 		Regex:         m.regex,
 		Include:       splitGlobs(m.include),
 		Exclude:       splitGlobs(m.exclude),
-	})
+	}
+	m.gen = m.svc.Scan(m.lastQuery)
 }
 
 // splitGlobs turns a comma-separated field into a glob slice.
@@ -199,19 +228,43 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		m.Close()
 		return nil
 	case "enter":
-		if it, ok := m.list.Current(); ok {
-			m.commitHistory()
-			m.Close()
-			return func() tea.Msg {
-				return OpenLocationMsg{Path: it.Path, Line: it.Line, Col: it.StartCol}
+		// Replace mode: enter applies the selected match and steps on;
+		// find mode (and alt+enter below): open the file at the match.
+		if m.replaceMode {
+			if it, ok := m.list.RemoveCurrent(); ok {
+				m.commitHistory()
+				return m.replaceCmd([]locations.Item{it})
+			}
+			return nil
+		}
+		return m.openCurrent()
+	case "alt+enter":
+		return m.openCurrent()
+	case "alt+f":
+		// Replace every match of the selected file.
+		if m.replaceMode {
+			if path, items := m.list.CurrentGroup(); len(items) > 0 {
+				m.commitHistory()
+				batch := append([]locations.Item(nil), items...)
+				m.list.RemoveGroup(path)
+				return m.replaceCmd(batch)
 			}
 		}
 		return nil
+	case "alt+a":
+		// Replace all matches.
+		if m.replaceMode && m.list.Total() > 0 {
+			m.commitHistory()
+			batch := m.list.All()
+			m.list.Reset()
+			return m.replaceCmd(batch)
+		}
+		return nil
 	case "tab":
-		m.focus = (m.focus + 1) % fieldCount
+		m.focus = m.nextField(1)
 		return nil
 	case "shift+tab":
-		m.focus = (m.focus + fieldCount - 1) % fieldCount
+		m.focus = m.nextField(-1)
 		return nil
 	case "down":
 		if m.list.Total() > 0 {
@@ -267,9 +320,41 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// openCurrent dispatches the selected match as a navigation and closes.
+func (m *Model) openCurrent() tea.Cmd {
+	it, ok := m.list.Current()
+	if !ok {
+		return nil
+	}
+	m.commitHistory()
+	m.Close()
+	return func() tea.Msg {
+		return OpenLocationMsg{Path: it.Path, Line: it.Line, Col: it.StartCol}
+	}
+}
+
+// replaceCmd dispatches an apply request for the given matches.
+func (m *Model) replaceCmd(items []locations.Item) tea.Cmd {
+	req := ReplaceRequestMsg{Items: items, Replacement: m.replace, Query: m.lastQuery}
+	return func() tea.Msg { return req }
+}
+
+// nextField cycles input focus, skipping the replace field in find mode.
+func (m *Model) nextField(dir int) field {
+	f := m.focus
+	for {
+		f = (f + field(dir) + fieldCount) % fieldCount
+		if f != fieldReplace || m.replaceMode {
+			return f
+		}
+	}
+}
+
 // focused returns the field the cursor edits.
 func (m *Model) focused() *string {
 	switch m.focus {
+	case fieldReplace:
+		return &m.replace
 	case fieldInclude:
 		return &m.include
 	case fieldExclude:
@@ -278,9 +363,13 @@ func (m *Model) focused() *string {
 	return &m.query
 }
 
-// editedField reacts to a text change: any input change restarts the scan;
-// editing the query leaves history-recall mode.
+// editedField reacts to a text change: query/glob changes restart the scan
+// (editing the query also leaves history-recall mode); the replacement
+// template only changes the preview, never the match set.
 func (m *Model) editedField() {
+	if m.focus == fieldReplace {
+		return
+	}
 	if m.focus == fieldQuery {
 		m.histIdx = -1
 	}
@@ -345,9 +434,16 @@ func (m *Model) View() string {
 	}
 	innerW := boxW - 4 // border + padding
 
-	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("Find in Path")
+	heading := "Find in Path"
+	if m.replaceMode {
+		heading = "Replace in Path"
+	}
+	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(heading)
 	rows := []string{title, ""}
 	rows = append(rows, m.inputRow("Search ", m.query, fieldQuery, innerW))
+	if m.replaceMode {
+		rows = append(rows, m.inputRow("Replace", m.replace, fieldReplace, innerW))
+	}
 	rows = append(rows, m.togglesRow())
 	rows = append(rows, m.inputRow("Include", m.include, fieldInclude, innerW))
 	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
@@ -359,6 +455,10 @@ func (m *Model) View() string {
 	}
 	if body := m.list.Render(innerW, listH, pal, m.displayPath); body != "" {
 		rows = append(rows, body)
+	}
+	if pre := m.previewRows(innerW); len(pre) > 0 {
+		rows = append(rows, "")
+		rows = append(rows, pre...)
 	}
 	rows = append(rows, "", m.statusRow(innerW))
 
@@ -402,6 +502,30 @@ func (m *Model) togglesRow() string {
 		"  " + part("Regex (alt+x)", m.regex)
 }
 
+// previewRows renders the before/after preview for the selected match in
+// replace mode: the current line and what applying the template makes of it.
+func (m *Model) previewRows(width int) []string {
+	if !m.replaceMode {
+		return nil
+	}
+	it, ok := m.list.Current()
+	if !ok {
+		return nil
+	}
+	after, valid := search.RewriteRange(it.Text, it.StartCol, it.EndCol, m.lastQuery, m.replace)
+	if !valid {
+		return nil
+	}
+	pal := m.theme()
+	clip := lipgloss.NewStyle().MaxWidth(width)
+	del := lipgloss.NewStyle().Foreground(pal.Error)
+	add := lipgloss.NewStyle().Foreground(pal.Success)
+	return []string{
+		clip.Render(del.Render("- " + strings.TrimRight(it.Text, " \t"))),
+		clip.Render(add.Render("+ " + strings.TrimRight(after, " \t"))),
+	}
+}
+
 // statusRow summarizes the scan: live progress, counts, truncation, errors.
 func (m *Model) statusRow(width int) string {
 	pal := m.theme()
@@ -411,6 +535,9 @@ func (m *Model) statusRow(width int) string {
 		return lipgloss.NewStyle().Foreground(pal.Error).Render(
 			lipgloss.NewStyle().MaxWidth(width).Render("error: " + m.errText))
 	case strings.TrimSpace(m.query) == "":
+		if m.replaceMode {
+			return dim.Render("type to search — enter replaces match, alt+f file, alt+a all, alt+enter opens")
+		}
 		return dim.Render("type to search — enter opens, esc closes, tab cycles fields")
 	case m.scanning && m.list.Total() == 0:
 		return dim.Render("searching…")
