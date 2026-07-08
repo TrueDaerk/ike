@@ -143,6 +143,53 @@ func value(key string) string {
 	return config.Get().Flat()[key]
 }
 
+// Click handles a mouse press at panel-local coordinates (0,0 = the box's
+// top-left border cell, #127): a category row selects that page; a form row
+// selects its entry, and a press on the already-selected entry activates it —
+// the same semantics as enter.
+func (m *Model) Click(x, y int) tea.Cmd {
+	if !m.open || m.editing || m.filtering {
+		return nil
+	}
+	const bodyTop = 2 // border row + title row
+	row := y - bodyTop
+	if row < 0 || row >= m.height-4 {
+		return nil
+	}
+	// Category column.
+	if x >= 1 && x < 1+catWidth && m.filter == "" {
+		if row < len(m.pages) {
+			m.cat, m.sel, m.focus = row, 0, catColumn
+		}
+		return nil
+	}
+	// Form column (schema-driven pages only; custom pages stay keyboard-driven).
+	if m.customPage() != nil && m.filter == "" {
+		return nil
+	}
+	if x < 1+catWidth+3 {
+		return nil
+	}
+	// Recreate renderForm's row layout: the selected entry carries one extra
+	// detail line that shifts everything below it.
+	rows := m.rows()
+	line := 0
+	for i := range rows {
+		if line == row {
+			if i == m.sel && m.focus == formColumn {
+				return m.activate()
+			}
+			m.sel, m.focus = i, formColumn
+			return nil
+		}
+		line++
+		if i == m.sel {
+			line++ // the detail line under the selection
+		}
+	}
+	return nil
+}
+
 // Deliver forwards a non-key message (async probe results) to every custom
 // page that consumes messages.
 func (m *Model) Deliver(msg tea.Msg) {

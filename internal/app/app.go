@@ -1610,6 +1610,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	if m.settings.IsOpen() {
 		if clickOutside(msg, m.settings.View(), m.width, m.height) {
 			m.settings.Close()
+			return m, nil
+		}
+		if msg.action == mousePress && msg.Button == tea.MouseLeft {
+			// Translate to panel-local coordinates (the box is centered).
+			v := m.settings.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.settings.Click(msg.X-bx, msg.Y-by)
 		}
 		return m, nil
 	}

@@ -2,6 +2,10 @@
 
 ## 2026-07-08
 
+- Settings mouse control (#127): category clicks switch pages, form-entry
+  clicks select, a second click activates (enter semantics — bool toggles,
+  enum cycles, text opens the inline edit).
+
 - Slow-update diagnostics (#125): Update passes over 200ms log message type +
   duration to `.ike/debug.log`, so UI stalls (like the #123 restart deadlock)
   are attributable after the fact. Fixed #123 itself: `lsp.restart` now runs

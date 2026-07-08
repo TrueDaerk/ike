@@ -59,6 +59,10 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   closes the panel.
 - **Keys.** ↑↓/jk navigate, tab switches columns, enter edits, esc
   cancels/closes.
+- **Mouse (#127).** Clicking a category selects that page; clicking a form
+  entry selects it, and a second click on the selection activates it (enter
+  semantics). Clicks outside the panel dismiss it (#116); custom pages stay
+  keyboard-driven for row interaction.
 - **Registry seam.** Plugins contribute pages via
   `Capabilities.SettingsPages`; the app appends `reg.SettingsPages()` to the
   built-in `settings.BasePages()` (the toolchain page #94 uses this).
