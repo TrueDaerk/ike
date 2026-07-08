@@ -1639,7 +1639,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	// Menu bar (Roadmap 0160): clicks on the bar row open/switch menus; with a
+	// Menu bar (Roadmap 0160): with a dropdown open, moving the mouse over an
+	// entry selects it (hover follows focus, like keyboard navigation).
+	if m.menuEnabled() && m.menu.IsOpen() && msg.action == mouseMotion {
+		if idx, ok := m.menu.ItemAt(msg.X, msg.Y); ok {
+			m.menu.Hover(idx)
+		}
+		return m, nil
+	}
+	// Clicks on the bar row open/switch menus; with a
 	// dropdown open, a click runs the entry under it or closes the menu.
 	if m.menuEnabled() && msg.action == mousePress && msg.Button == tea.MouseLeft {
 		if m.menu.IsOpen() {

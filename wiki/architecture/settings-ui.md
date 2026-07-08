@@ -29,11 +29,18 @@ lower; `ui.menu_bar = false` hides it and returns the row).
   the root model feeds into `RunCommand`.
 - **Keyboard:** `f10` (command `menu.open`) toggles the first menu; while a
   dropdown is open the menu owns the keys — ←/→ switch menus, ↑/↓ navigate
-  (skipping disabled entries, wrapping), enter runs, esc closes.
+  (skipping disabled entries, wrapping), enter runs, esc closes. Pressing a
+  title's first letter jumps to (and opens) that menu, case-insensitively
+  (duplicate letters cycle forward); while open, the bar underlines each
+  title's first letter as the hint.
 - **Mouse:** clicking a title on the bar row opens/switches that menu; clicking
-  an entry runs it; clicking elsewhere closes the dropdown.
-- **Rendering:** the dropdown is a plain overlay (`overlay.Place`) below the
-  bar, never disturbing the pane layout.
+  an entry runs it; clicking elsewhere closes the dropdown. Moving the mouse
+  over a dropdown entry selects it (hover follows focus; disabled entries are
+  skipped, like keyboard navigation).
+- **Rendering:** the dropdown is an overlay (`overlay.Place`) below the bar,
+  framed by a rounded border so it separates from the content it floats over,
+  never disturbing the pane layout. Hit-testing accounts for the border: the
+  first entry sits on row 2, one column inside the frame.
 
 ## Settings panel framework (#91)
 

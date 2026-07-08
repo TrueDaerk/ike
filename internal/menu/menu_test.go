@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // testInfo marks "blocked.*" ids disabled with a hint and gives "editor.write"
@@ -118,7 +119,9 @@ func TestDropdownRendersShortcutAndDisabledHint(t *testing.T) {
 	if !strings.Contains(v, "lands with #99") {
 		t.Fatalf("disabled entry must show its dependency hint:\n%s", v)
 	}
-	bar := m.Bar()
+	// The letter-jump hint underlines each title's first rune separately, so
+	// match on stripped text.
+	bar := ansi.Strip(m.Bar())
 	if !strings.Contains(bar, "File") || !strings.Contains(bar, "Edit") {
 		t.Fatalf("bar missing titles: %q", bar)
 	}
@@ -138,15 +141,76 @@ func TestMouseHitTesting(t *testing.T) {
 		t.Fatal("TitleAt far right must miss")
 	}
 	m.OpenMenu(0)
-	// Row 1 is the first entry; x within the dropdown width.
-	if idx, ok := m.ItemAt(m.DropdownX()+1, 1); !ok || idx != 0 {
+	// Row 1 is the top border, row 2 the first entry; x one column inside the
+	// left border.
+	if idx, ok := m.ItemAt(m.DropdownX()+2, 2); !ok || idx != 0 {
 		t.Fatalf("ItemAt first row = %d,%v", idx, ok)
 	}
-	if _, ok := m.ItemAt(m.DropdownX()+1, 10); ok {
+	if _, ok := m.ItemAt(m.DropdownX()+2, 1); ok {
+		t.Fatal("ItemAt on the top border must miss")
+	}
+	if _, ok := m.ItemAt(m.DropdownX()+2, 10); ok {
 		t.Fatal("ItemAt below the dropdown must miss")
 	}
 	// Enter on a disabled row via Invoke is a no-op.
 	if cmd := m.Invoke(1); cmd != nil {
 		t.Fatal("invoking a disabled entry must be a no-op")
+	}
+}
+
+// TestHoverMovesSelection verifies mouse hover selects runnable entries and
+// ignores disabled ones.
+func TestHoverMovesSelection(t *testing.T) {
+	m := New(testMenus(), testInfo)
+	m.OpenMenu(0)
+	m.Hover(2) // Close
+	cmd := m.Update(key("enter"))
+	if run := cmd().(RunMsg); run.Command != "editor.closeTab" {
+		t.Fatalf("hover must move the selection, got %s", run.Command)
+	}
+	m.OpenMenu(0)
+	m.Hover(1) // blocked.future — disabled, selection stays on Save
+	cmd = m.Update(key("enter"))
+	if run := cmd().(RunMsg); run.Command != "editor.write" {
+		t.Fatalf("hover on a disabled entry must not move the selection, got %s", run.Command)
+	}
+}
+
+// TestLetterJumpsToMenu verifies a title's first letter opens that menu while
+// a dropdown is open, case-insensitively.
+func TestLetterJumpsToMenu(t *testing.T) {
+	m := New(testMenus(), testInfo)
+	m.Toggle() // File
+	m.Update(key("e"))
+	cmd := m.Update(key("enter"))
+	if run := cmd().(RunMsg); run.Command != "editor.undo" {
+		t.Fatalf("'e' must jump to Edit, got %s", run.Command)
+	}
+	m.Toggle()
+	m.Update(key("right")) // Edit
+	m.Update(key("F"))     // uppercase jumps too
+	cmd = m.Update(key("enter"))
+	if run := cmd().(RunMsg); run.Command != "editor.write" {
+		t.Fatalf("'F' must jump back to File, got %s", run.Command)
+	}
+	m.Toggle()
+	m.Update(key("x")) // no match: stays on File, stays open
+	if !m.IsOpen() {
+		t.Fatal("an unmatched letter must not close the menu")
+	}
+	cmd = m.Update(key("enter"))
+	if run := cmd().(RunMsg); run.Command != "editor.write" {
+		t.Fatalf("unmatched letter must not switch menus, got %s", run.Command)
+	}
+}
+
+// TestDropdownHasBorder verifies the open dropdown is framed so it separates
+// from the content it floats over.
+func TestDropdownHasBorder(t *testing.T) {
+	m := New(testMenus(), testInfo)
+	m.Toggle()
+	v := m.Dropdown()
+	if !strings.Contains(v, "╭") || !strings.Contains(v, "╰") {
+		t.Fatalf("dropdown missing border frame:\n%s", v)
 	}
 }

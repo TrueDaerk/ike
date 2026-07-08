@@ -2,6 +2,11 @@
 
 ## 2026-07-08
 
+- Menu bar polish (#137): the open dropdown gets a rounded border, mouse
+  hover selects entries (disabled ones skipped), and a title's first letter
+  jumps to that menu while open — the bar underlines each first letter as
+  the hint.
+
 - Help overlay polish: the cheat sheet is now scoped to the focused pane
   (global commands plus the focused context's group; `Snapshot` takes a
   context id), shortcuts are right-aligned to the column edge, columns carry a
