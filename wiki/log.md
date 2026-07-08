@@ -2,6 +2,13 @@
 
 ## 2026-07-08
 
+- Settings panel framework (#91, roadmap 0160): new `internal/settings` —
+  full-window panel (cmd+, / `settings.open`), left category list, right
+  schema-driven form (bool/int/string/enum/path/chord). Apply-on-change
+  through the write-back layer + live reload; per-entry layer badge
+  (`config.Origin`) and `r` reset-to-default; `/` filter across all pages;
+  plugin-contributable pages via `Capabilities.SettingsPages`.
+
 - Menu bar (#90, roadmap 0160): new `internal/menu` — File · Edit · View ·
   Navigate · Tools · Settings · Help above the panes (`ui.menu_bar`, default
   true). Menus are data over the command registry: entries show cheatsheet

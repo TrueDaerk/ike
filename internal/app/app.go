@@ -33,6 +33,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/settings"
 	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/watch"
@@ -82,7 +83,11 @@ type Model struct {
 	// menu is the menu bar (Roadmap 0160, #90), rendered above the panes when
 	// ui.menu_bar is enabled.
 	menu *menu.Model
-	help *help.Help
+	// settings is the full-window settings panel (Roadmap 0160, #91); cfgOpts
+	// names the layer files its edits write back to.
+	settings *settings.Model
+	cfgOpts  config.Options
+	help     *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
@@ -191,6 +196,8 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	}
 	m.watcher = watch.New(m.host.Send)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
+	m.cfgOpts = config.Discover(".")
+	m.settings = settings.New(append(settings.BasePages(), reg.SettingsPages()...), m.cfgOpts)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
@@ -657,6 +664,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
+		m.settings.SetSize(m.width, m.height-statusHeight)
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -717,6 +725,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
 		}
 		return m, tea.Batch(cmds...)
+
+	case OpenSettingsMsg:
+		// settings.open (cmd+, / menu / palette): the full-window settings panel.
+		m.settings.SetSize(m.width, m.height-statusHeight)
+		m.settings.Open()
+		return m, nil
 
 	case ToggleMenuMsg:
 		// menu.open (f10 / palette): open the first menu, or close an open one.
@@ -862,6 +876,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
 			m.dismissErrorToasts()
+		}
+		// The settings panel is a full-window modal: it owns the keyboard.
+		if m.settings.IsOpen() {
+			return m, m.settings.Update(msg)
 		}
 		// An open menu dropdown owns the keyboard (arrows/enter/esc).
 		if m.menu.IsOpen() {
@@ -1827,6 +1845,11 @@ func (m Model) render() string {
 	base := lipgloss.JoinVertical(lipgloss.Left, rows...)
 	if m.menu.IsOpen() {
 		base = overlay.Place(base, m.menu.Dropdown(), m.menu.DropdownX(), 1, m.width, m.height)
+	}
+	if m.settings.IsOpen() {
+		// The settings panel is a full-window modal above everything but the
+		// status line.
+		base = overlay.Place(base, m.settings.View(), 0, 0, m.width, m.height)
 	}
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)

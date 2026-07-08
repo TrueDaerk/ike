@@ -76,6 +76,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.shell.SetPalette(p)
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)
+	m.settings.SetPalette(p)
 }
 
 // selectTheme switches the active color scheme by name for this session:
