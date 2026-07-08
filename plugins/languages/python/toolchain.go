@@ -31,6 +31,21 @@ func (toolchain) Detect(root string) (map[string]any, bool) {
 	}, true
 }
 
+// Interpreter implements lang.InterpreterDetector (Roadmap 0160): it exposes
+// the same resolution Detect uses, for the settings page and terminal shims.
+func (toolchain) Interpreter(root string) (string, bool) { return interpreter(root) }
+
+// Explicit implements lang.ExplicitSettings: an explicitly configured
+// interpreter takes the exact settings shape a detected one would.
+func (toolchain) Explicit(path string) map[string]any {
+	return map[string]any{
+		"python": map[string]any{
+			"pythonPath":             path,
+			"defaultInterpreterPath": path,
+		},
+	}
+}
+
 // interpreter resolves the Python interpreter path in priority order: an active
 // virtualenv, a project-local venv, a pyenv .python-version pin, then any python
 // on PATH. ok=false means "let pyright pick its own default".

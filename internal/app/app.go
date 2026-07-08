@@ -202,6 +202,13 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		_, ok := reg.Command(id)
 		return ok
 	})})
+	pages = append(pages, settings.Page{Title: "Toolchain", Custom: settings.NewToolchainPage(m.cfgOpts, ".", func() tea.Cmd {
+		// An interpreter change respawns the servers against the new value.
+		if c, ok := reg.Command("lsp.restart"); ok {
+			return c.Run(m.host)
+		}
+		return nil
+	})})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
@@ -730,6 +737,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
 		}
 		return m, tea.Batch(cmds...)
+
+	case settings.VersionMsg:
+		// Async interpreter version probes land in the toolchain page's cache.
+		m.settings.Deliver(msg)
+		return m, nil
 
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the full-window settings panel.

@@ -38,6 +38,7 @@ func DefaultScope(key string) Scope {
 	switch {
 	case strings.HasPrefix(key, "project."),
 		strings.HasPrefix(key, "lsp.servers."),
+		strings.HasPrefix(key, "lang."),
 		strings.HasPrefix(key, "toolchain."):
 		return ProjectScope
 	}

@@ -18,6 +18,11 @@ type Config struct {
 	Notifications Notifications `toml:"notifications"`
 	Files         Files         `toml:"files"`
 	UI            UI            `toml:"ui"`
+	// Lang holds per-language settings as a free-form slot (Roadmap 0160,
+	// mirrors LSP.Servers): [lang.python] interpreter = "/path/to/python".
+	// The toolchain settings page writes it; lang.Interpreter resolution and
+	// the LSP spec overlay read it.
+	Lang map[string]map[string]string `toml:"lang"`
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.

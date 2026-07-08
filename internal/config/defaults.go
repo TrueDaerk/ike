@@ -62,5 +62,6 @@ func defaults() *Config {
 		UI: UI{
 			MenuBar: true,
 		},
+		Lang: map[string]map[string]string{},
 	}
 }

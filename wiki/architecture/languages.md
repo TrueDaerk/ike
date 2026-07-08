@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Language Registry
@@ -92,7 +92,26 @@ e.g. the resolved `python.defaultInterpreterPath` reaches pyright.
 The **Python** detector (`plugins/languages/python/toolchain.go`) resolves the
 interpreter in priority order: active `$VIRTUAL_ENV` → project `.venv`/`venv` →
 `.python-version` (pyenv) → `python3` on `PATH`. Go relies on gopls reading
-`go.mod`; PHP ships without a detector for now.
+`go.mod`; **PHP** ships a PATH/install-location detector (no server injection).
+
+## Explicit interpreters (Roadmap 0160, #94)
+
+`[lang.<id>] interpreter = "<path>"` in the **project** config pins the
+interpreter explicitly. Resolution is one function — the single source of
+truth the settings page, the LSP overlay and 0170's terminal shims all share:
+
+```go
+lang.Interpreter(langID, root, explicit) (path, source) // source: config | detected
+```
+
+Two optional `Toolchain` extensions power it: `InterpreterDetector` exposes
+the detected binary (python: the Detect resolution; php: PATH + common install
+locations), and `ExplicitSettings` maps an explicit path into the same
+settings shape `Detect` produces. The LSP plugin's `resolveSpec` injects the
+explicit value into `ServerSpec.Settings`, where it wins over detection (the
+manager's merge keeps spec settings on top); the settings **Toolchain page**
+writes the key and triggers `lsp.restart` so servers respawn against it. See
+[Settings UI](./settings-ui.md).
 
 ## Why compile-in
 

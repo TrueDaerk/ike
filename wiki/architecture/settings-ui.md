@@ -86,6 +86,14 @@ every key while focused — verbatim during chord capture). See
 listing with layer badges and blocked/fragile flags, capture-based rebinding
 with conflict confirmation, unbind and reset-to-preset.
 
-## Later sub-issues
+## Toolchain page (#94)
 
-Toolchain page (#94).
+A custom `PageModel` listing every registered language with a server or
+toolchain: effective interpreter (`lang.Interpreter` — explicit `[lang.<id>]
+interpreter` beats detection), source badge (`@config`/`@detected`) and an
+async version probe (`p`, `python --version` / `php -v` as `tea.Cmd`s routed
+back via `settings.VersionMsg` → `Model.Deliver`). Enter opens the discovery
+picker — Python: active venv, project `.venv`/`venv`, `uv python list`, pyenv
+shims, PATH; PHP: PATH + common install locations — plus a validated custom
+path input. A choice writes the **project** config and triggers `lsp.restart`
+so servers respawn against the new interpreter; `r` resets to detection.

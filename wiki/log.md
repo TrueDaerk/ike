@@ -2,6 +2,14 @@
 
 ## 2026-07-08
 
+- Toolchain settings page (#94, closes epic #87 / roadmap 0160): per-language
+  interpreter rows with source badge and async version probe; discovery
+  pickers (Python: venv/.venv/uv/pyenv/PATH; PHP: PATH + install locations) +
+  custom path; choices land in the project config (`[lang.<id>] interpreter`)
+  and trigger an LSP restart. New `lang.Interpreter` resolution (explicit
+  beats detection) with `InterpreterDetector`/`ExplicitSettings` toolchain
+  extensions — the single source of truth 0170's terminal shims will reuse.
+
 - Keymap editor page (#93, roadmap 0160): settings pages can now be custom
   models (`settings.PageModel`); the Keymap page lists the effective binding
   table (layer badges, blocked-with-reason, fragile ⚠, type-to-filter) and
