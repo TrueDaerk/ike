@@ -2,6 +2,11 @@
 
 ## 2026-07-08
 
+- Click-outside dismiss (#116): a mouse press outside an open floating
+  overlay — settings panel, floating shell (help/modals/history), command
+  palette (centered and anchored) — closes it; clicks inside never leak to
+  the panes below. The menu dropdown already behaved this way.
+
 - Settings panel floats (#115): the settings window renders as a centered
   rounded-border box (capped ~110×32) above the workspace instead of covering
   the whole terminal; overlong form rows clip instead of wrapping the frame.

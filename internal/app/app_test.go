@@ -18,6 +18,7 @@ import (
 	"ike/internal/keymap"
 	"ike/internal/layout"
 	"ike/internal/menu"
+	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -190,6 +191,50 @@ func TestSplitFocusedCommands(t *testing.T) {
 	rt := m.lay.Panes[top]
 	if rt.Y >= m.lay.Panes[after].Y {
 		t.Fatalf("ZoneTop must place the new pane above (new y=%d, old y=%d)", rt.Y, m.lay.Panes[after].Y)
+	}
+}
+
+// TestClickOutsideDismissesOverlays guards #116: a mouse press outside an
+// open floating overlay closes it, a press inside keeps it open (and never
+// falls through to the panes below).
+func TestClickOutsideDismissesOverlays(t *testing.T) {
+	press := func(x, y int) tea.MouseClickMsg {
+		return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
+	}
+	// Settings panel: inside keeps, outside closes.
+	m := newSized()
+	tm, _ := m.Update(OpenSettingsMsg{})
+	m = tm.(Model)
+	tm, _ = m.Update(press(m.width/2, m.height/2)) // dead center = inside
+	if m = tm.(Model); !m.settings.IsOpen() {
+		t.Fatal("click inside must keep the settings panel open")
+	}
+	tm, _ = m.Update(press(0, m.height-1)) // corner = outside
+	if m = tm.(Model); m.settings.IsOpen() {
+		t.Fatal("click outside must close the settings panel")
+	}
+
+	// Floating shell (help overlay).
+	tm, _ = m.Update(ShowKeymapHelpMsg{})
+	m = tm.(Model)
+	if !m.shell.IsOpen() {
+		t.Fatal("precondition: shell open")
+	}
+	tm, _ = m.Update(press(m.width/2, m.height/2))
+	if m = tm.(Model); !m.shell.IsOpen() {
+		t.Fatal("click inside must keep the shell open")
+	}
+	tm, _ = m.Update(press(0, m.height-1))
+	if m = tm.(Model); m.shell.IsOpen() {
+		t.Fatal("click outside must close the shell")
+	}
+
+	// Command palette (centered).
+	m.palette.SetSize(m.width, m.height)
+	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})
+	tm, _ = m.Update(press(0, m.height-1))
+	if m = tm.(Model); m.palette.IsOpen() {
+		t.Fatal("click outside must close the palette")
 	}
 }
 

@@ -1496,6 +1496,21 @@ func (m *Model) bodyRect() layout.Rect {
 	return layout.Rect{X: 0, Y: top, W: m.width, H: m.height - statusHeight - top}
 }
 
+// clickOutside reports a mouse press landing outside a centered overlay view
+// (mirroring overlay.Center's placement). Non-press events never dismiss.
+func clickOutside(msg mouseEvent, view string, tw, th int) bool {
+	if msg.action != mousePress || view == "" {
+		return false
+	}
+	w, h := lipgloss.Width(view), lipgloss.Height(view)
+	return !inRect(msg.X, msg.Y, (tw-w)/2, (th-h)/2, w, h)
+}
+
+// inRect reports whether the cell (px, py) lies inside the rect at (x, y).
+func inRect(px, py, x, y, w, h int) bool {
+	return px >= x && px < x+w && py >= y && py < y+h
+}
+
 // settingsSize bounds the floating settings panel: most of the terminal, but
 // never full-screen (capped like a JetBrains dialog) and never overflowing.
 func (m Model) settingsSize() (w, h int) {
@@ -1584,7 +1599,30 @@ func paneInterior(outer, chrome int) int {
 // release commits and persists. A title drag onto another pane relocates it
 // (0036); a drag to the source pane's own edge spawns a fresh split there (0037).
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
+	// Floating overlays (#116): a click outside an open overlay dismisses it,
+	// a click inside stays with the overlay (never leaks to the panes below).
+	if m.settings.IsOpen() {
+		if clickOutside(msg, m.settings.View(), m.width, m.height) {
+			m.settings.Close()
+		}
+		return m, nil
+	}
 	if m.shell.IsOpen() {
+		if clickOutside(msg, m.shell.View(), m.width, m.height) {
+			m.shell.Close()
+		}
+		return m, nil
+	}
+	if m.palette.IsOpen() {
+		if m.palette.Anchored() {
+			ax, ay := m.palette.AnchorPos()
+			v := m.palette.View()
+			if msg.action == mousePress && !inRect(msg.X, msg.Y, ax, ay, lipgloss.Width(v), lipgloss.Height(v)) {
+				m.palette.Close()
+			}
+		} else if clickOutside(msg, m.palette.View(), m.width, m.height) {
+			m.palette.Close()
+		}
 		return m, nil
 	}
 	// Menu bar (Roadmap 0160): clicks on the bar row open/switch menus; with a
