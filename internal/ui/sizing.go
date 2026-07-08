@@ -12,8 +12,9 @@ const (
 	frameH = borderH + 2*padH
 	frameV = borderV + 2*padV
 
-	// titleRow is the heading line reserved at the top of the inner content.
-	titleRow = 1
+	// titleRows covers the heading line plus the blank spacer row beneath it,
+	// both reserved at the top of the inner content.
+	titleRows = 2
 
 	// defaultMargin is the gap kept between the pane and each terminal edge so
 	// the floating box never bleeds to the very border.
@@ -28,7 +29,7 @@ func budget(termW, termH, margin int, maxWFrac, maxHFrac float64) (w, h int) {
 		margin = 0
 	}
 	w = termW - 2*margin - frameH
-	h = termH - 2*margin - frameV - titleRow
+	h = termH - 2*margin - frameV - titleRows
 
 	if maxWFrac > 0 {
 		if c := int(float64(termW)*maxWFrac) - frameH; c < w {
@@ -36,7 +37,7 @@ func budget(termW, termH, margin int, maxWFrac, maxHFrac float64) (w, h int) {
 		}
 	}
 	if maxHFrac > 0 {
-		if c := int(float64(termH)*maxHFrac) - frameV - titleRow; c < h {
+		if c := int(float64(termH)*maxHFrac) - frameV - titleRows; c < h {
 			h = c
 		}
 	}

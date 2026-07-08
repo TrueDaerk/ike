@@ -1069,9 +1069,10 @@ func (m Model) RunCommand(id string) tea.Cmd {
 	return nil
 }
 
-// openHelp shows the keymap cheatsheet overlay in the modal shell.
+// openHelp shows the keymap cheatsheet overlay in the modal shell, scoped to
+// the focused pane's context (global commands plus that context's own).
 func (m *Model) openHelp() {
-	m.help.Snapshot()
+	m.help.Snapshot(m.focusContext())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()

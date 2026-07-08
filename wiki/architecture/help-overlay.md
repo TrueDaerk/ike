@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Help Overlay
-description: Read-only command & shortcut cheat sheet — snapshots the plugin registry, joins bindings, packs entries into width-responsive columns, hosted in the reusable floating shell.
+description: Read-only command & shortcut cheat sheet — snapshots the plugin registry scoped to the focused pane, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-08T00:00:00Z
 ---
 
 # Help Overlay
@@ -13,16 +13,20 @@ Roadmap 0030. A discoverable, self-documenting window: pressing `?` (or `F1`)
 opens an overlay listing every registered **Command** with its bound
 **shortcut**. It is
 a pure **consumer** — it owns no command or binding store, and (since roadmap
-0035) no chrome. It snapshots **every** registered command from the plugin
-registry (roadmap 0020) on open — the full reference, not just the focused
-pane's scope — and joins each command with its shortcut from a binding resolver
+0035) no chrome. It snapshots the registered commands from the plugin
+registry (roadmap 0020) on open
+and joins each command with its shortcut from a binding resolver
 (the roadmap 0080 keymap resolver, consumed through a narrow interface so help
-builds before 08 lands). Commands handled outside the keymap layer (the editor's
+builds before 08 lands). The snapshot is **scoped to the focused pane**: it
+lists the global commands plus the focused context's own group (an empty
+context id lists every scope, the degradation path). Commands handled outside
+the keymap layer (the editor's
 vim ex-commands `:w`/`:q`/`:wq` and modal keys `u`/`ctrl+r`) carry a
 documentation-only `Shortcut` hint on the `plugin.Command` that help shows when
-no live binding resolves. The body packs entries into **at most two columns**,
-and the scope groups (Global, Editor, Explorer, …) are separated by a blank
-line.
+no live binding resolves. The body packs entries into **at most two columns**
+with each shortcut right-aligned to its column's edge (titles left, keys right,
+never closer than a two-space gap), and the scope groups (Global, Editor,
+Explorer, …) are separated by a blank line.
 
 The cheat sheet is rendered inside the reusable **floating shell**
 (`internal/ui.Floating`, roadmap 0035) — `Help` is just a `ui.Content` provider.
@@ -40,7 +44,7 @@ internal/help/
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
-calls `help.Snapshot()`, sets the `*help.Help` as the shell's content, and opens
+calls `help.Snapshot(focusContext)`, sets the `*help.Help` as the shell's content, and opens
 the shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. It is reached three ways: the registered
 `palette.keymapHelp` command (default `f1` / `cmd+k cmd+s`, also
@@ -50,11 +54,12 @@ in the shell, not in help.
 
 ## Source of truth
 
-`Snapshot(src, res)` is the join:
+`Snapshot(src, res, contextID)` is the join:
 
-- **Commands** come from `registry.Commands()` — **every** registered command,
-  regardless of focus, so the sheet is a full reference covering all scopes at
-  once (global / editor / explorer). No parallel command list.
+- **Commands** come from `registry.Commands()`, narrowed to the scopes that
+  apply to the focused pane: the `global` group plus the group whose label
+  matches `contextID` (empty `contextID` keeps every scope). No parallel
+  command list.
 - **Shortcuts** come from a `BindingResolver` (`Binding(id) (string, ok)`). The
   root now passes the `*registry.Registry` itself: it resolves a command's key by
   matching the command id against keymaps that declare a `CommandID`
@@ -87,7 +92,12 @@ terminals.
 
 `Render(width)` lays the snapshot out to the width budget the shell supplies.
 The column count is `min(2, ColumnCount(...))` — capped at **two columns** — and
-a single shared column width keeps every group's columns aligned. The shell
+a single shared column width keeps every group's columns aligned. Each column
+carries a fixed slack (`colSlack`) beyond its widest cell so the pane gets
+breathing room rather than hugging the text. Within a
+cell the title sits left and the shortcut is padded out to the column's right
+edge, so the keys line up as their own visual column; a minimum two-space gap
+is kept even when the column is clamped narrower than the entry. The shell
 handles fitting the result to the terminal and scrolling on overflow.
 
 ## Scrolling

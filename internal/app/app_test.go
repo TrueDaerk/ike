@@ -766,7 +766,8 @@ func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
 	if !m.shell.IsOpen() {
 		t.Fatal("OpenModalRequest should open the floating shell")
 	}
-	v := m.render()
+	// The underlined shell title styles every rune, so match on stripped text.
+	v := ansi.Strip(m.render())
 	if !strings.Contains(v, "PLUGIN MODAL") || !strings.Contains(v, "modal body") {
 		t.Fatalf("modal content should be composited onto the canvas: %q", v)
 	}
@@ -810,10 +811,12 @@ func TestHelpOverlayFloatsCentered(t *testing.T) {
 	}
 	// Floating, not full-screen: the base layout (EXPLORER pane) survives around
 	// the pane while the help pane and its content appear composited in the middle.
-	if !strings.Contains(v, "EXPLORER") {
+	// The underlined shell title styles every rune, so match on stripped text.
+	stripped := ansi.Strip(v)
+	if !strings.Contains(stripped, "EXPLORER") {
 		t.Fatal("base layout should remain visible around the floating pane")
 	}
-	if !strings.Contains(v, "HELP") || !strings.Contains(v, "Hello") {
+	if !strings.Contains(stripped, "HELP") || !strings.Contains(stripped, "Hello") {
 		t.Fatal("help pane and its content should be composited onto the canvas")
 	}
 }

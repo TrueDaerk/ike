@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // stubContent is a fixed-body Content used to drive the shell in tests. body is
@@ -39,7 +40,8 @@ func TestFloatingOpenCloseAndView(t *testing.T) {
 	if !f.IsOpen() {
 		t.Fatal("shell should be open after Open")
 	}
-	v := f.View()
+	// The underlined title styles every rune, so match on stripped text.
+	v := ansi.Strip(f.View())
 	if !strings.Contains(v, "TITLE") || !strings.Contains(v, "hello world") {
 		t.Fatalf("view missing title or body: %q", v)
 	}
