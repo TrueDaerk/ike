@@ -12,11 +12,12 @@ import (
 	"ike/internal/watch"
 )
 
-// reload.go is the clean-buffer half of Roadmap 0140 (external file changes):
-// when the watcher reports that the open file changed on disk and the buffer
-// has no unsaved edits, the editor reloads it in place, preserving cursor and
-// scroll (clamped like session restore). Dirty buffers are never touched here —
-// stale marking and the save conflict guard are the dirty-buffer half (#82).
+// reload.go handles external file changes (Roadmap 0140). A clean buffer whose
+// file changed on disk reloads in place, preserving cursor and scroll (clamped
+// like session restore). A dirty buffer is never silently reloaded: it is
+// marked stale (tab + status indicator), and the next save is intercepted by
+// the conflict guard — a ConflictMsg asks the root model to prompt keep mine /
+// reload / cancel.
 
 // handleExternalChange consumes one watcher event routed to this editor by the
 // root model. Only content changes of the open file are acted on; a rename-in-
@@ -30,7 +31,8 @@ func (m Model) handleExternalChange(msg watch.EventMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.dirty {
-		return m, nil // never silently reload unsaved edits (#82 marks stale)
+		m.stale = true // never silently reload unsaved edits; guard the next save
+		return m, nil
 	}
 	if !m.autoReload() {
 		return m, nil
@@ -66,11 +68,52 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	m.buf = buffer.FromString(string(data))
 	m.hist = history.New()
 	m.dirty = false
+	m.stale = false
 	m.hlIndex = highlight.Index{}
 	m.SetCursor(line, col)
 	m.SetScroll(top, left)
 	m.emit(EventChange)
 	return m, m.parseCmd()
+}
+
+// ConflictMsg asks the root model to open the save-conflict prompt: the user
+// tried to save a stale buffer (its file changed externally since the edits).
+type ConflictMsg struct{ Path string }
+
+// conflictCmd produces the ConflictMsg for the current buffer.
+func (m Model) conflictCmd() tea.Cmd {
+	path := m.path
+	return func() tea.Msg { return ConflictMsg{Path: path} }
+}
+
+// saveGuarded is the conflict-guarded save every save entry point (":w",
+// editor.write, save-all) goes through: writing target over a stale buffer's
+// own file would clobber the external change, so it yields the prompt instead.
+// Saving to a different path (":w other") is not a conflict.
+func (m *Model) saveGuarded(target string) tea.Cmd {
+	if m.stale && samePath(target, m.path) {
+		return m.conflictCmd()
+	}
+	_ = m.saveAs(target)
+	return nil
+}
+
+// ResolveConflictKeepMine resolves the save conflict by overwriting the
+// external change with the buffer. The save emits EventSave, which stamps the
+// watcher's save epoch, so the overwrite does not echo back as a new external
+// change.
+func (m *Model) ResolveConflictKeepMine() {
+	m.stale = false
+	_ = m.save()
+}
+
+// ResolveConflictReload resolves the save conflict by discarding the buffer's
+// edits in favour of the on-disk content (the clean-reload path). Local
+// history (#35), once it lands, snapshots the buffer here before the discard.
+func (m *Model) ResolveConflictReload() tea.Cmd {
+	nm, cmd := m.reloadFromDisk()
+	*m = nm
+	return cmd
 }
 
 // samePath reports whether two paths name the same file, tolerating the

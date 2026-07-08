@@ -2,6 +2,12 @@
 
 ## 2026-07-08
 
+- Stale marking + save conflict guard (#82, Roadmap 0140): an external change
+  to a dirty buffer marks it stale (tab `!`, status `[disk changed]`) instead
+  of reloading; saving a stale buffer opens a floating prompt — keep mine /
+  reload (discard edits) / cancel. Keep-mine stamps the watcher's save epoch;
+  reload reuses the clean-reload path.
+
 - Clean-buffer auto-reload (#81, Roadmap 0140): a non-dirty editor buffer whose
   file changed on disk reloads in place, preserving cursor and scroll (clamped
   like session restore); undo history restarts; highlighting and LSP re-sync

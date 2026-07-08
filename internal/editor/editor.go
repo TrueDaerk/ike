@@ -91,6 +91,7 @@ type Model struct {
 	dot    *dotCommand
 
 	dirty   bool
+	stale   bool // file changed on disk while dirty (Roadmap 0140, #82)
 	focused bool
 	width   int
 	height  int
@@ -215,6 +216,7 @@ func (m *Model) Load(path string) error {
 	m.cmdline = ""
 	m.searching = false
 	m.dirty = false
+	m.stale = false
 	m.hist = history.New()
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
@@ -225,8 +227,17 @@ func (m *Model) Load(path string) error {
 // Path returns the loaded file path ("" when no file is open).
 func (m Model) Path() string { return m.path }
 
+// Text returns the full buffer content (host-side consumers: tests, the
+// upcoming diff viewer #60).
+func (m Model) Text() string { return m.buf.String() }
+
 // Dirty reports whether the buffer has unsaved changes.
 func (m Model) Dirty() bool { return m.dirty }
+
+// Stale reports whether the file changed on disk while the buffer holds
+// unsaved edits (Roadmap 0140): the tab and status line show an indicator and
+// the next save opens the conflict prompt.
+func (m Model) Stale() bool { return m.stale }
 
 // ModeName returns the current modal state.
 func (m Model) ModeName() Mode { return m.mode }
