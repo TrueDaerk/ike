@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered document list with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, shared-documents, close]
-timestamp: 2026-07-09T12:00:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Editor Tabs
@@ -83,8 +83,34 @@ with a settings-page toggle) the tab list does:
   hidden tabs are marked with `…` at that end, and a lone oversized active
   label truncates.
 
+## Commands & keybindings (#158)
+
+Tab operations are registered `Command` capabilities (`internal/app/commands.go`,
+handlers in `internal/app/tabs.go`), so the palette, the cheatsheet and the
+keymap all see them; they act on the focused editor pane (else the most recent
+one):
+
+| Command | Default chord | Behaviour |
+|---|---|---|
+| `editor.tab.next` / `editor.tab.prev` | `alt+right` / `alt+left` | cycle the active tab, wrapping |
+| `editor.tab.select1…9` | `alt+1`…`alt+9` | jump straight to tab N |
+| `editor.tab.moveLeft` / `editor.tab.moveRight` | `alt+shift+left/right` | reorder the active tab |
+| `editor.tab.reopenClosed` | `alt+shift+t` | pop the reopen ring |
+| `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
+
+Chords follow the 0081 rules: arrows and digits sit identically on QWERTZ
+(layout-safe), everything is terminal-deliverable, and tab cycling is distinct
+from the `ctrl+tab` pane switcher. The alt+arrow rows are marked *fragile* —
+delivery depends on the terminal's option-as-meta setting.
+
+The **reopen ring** keeps the last 10 closed tabs (path + caret), fed by both
+tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping
+files deleted since, and restores the caret via the standard open flow. A
+"Reopen Closed Tab" item joins the File menu.
+
 ## Deferred to sibling issues
 
-Tab commands & keybindings (#158), mouse support on the bar (#159), and
-per-pane tab persistence in `session.json`/`layout.json` (#160). Until #160
-lands, the layout store keeps recording only each pane's active document.
+Mouse support on the bar (#159) and per-pane tab persistence in
+`session.json`/`layout.json` (#160). Until #160 lands, the layout store keeps
+recording only each pane's active document — and the reopen ring is
+session-local.

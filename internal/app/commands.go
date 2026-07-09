@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strconv"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
@@ -9,10 +11,27 @@ import (
 	"ike/internal/registry"
 )
 
-// CloseTabMsg asks the root model to close the focused editor pane, the same
-// behavior as the hardcoded ctrl+w / the editor's :q. Dispatched by the
-// editor.closeTab command.
+// CloseTabMsg asks the root model to close the focused editor pane's active
+// tab — the pane itself only when its last tab goes (#156) — the same behavior
+// as the hardcoded ctrl+w / the editor's :q. Dispatched by the editor.closeTab
+// command.
 type CloseTabMsg struct{}
+
+// TabStepMsg cycles the active editor pane's tabs by Delta, wrapping around
+// (0190, #158). Dispatched by editor.tab.next / editor.tab.prev.
+type TabStepMsg struct{ Delta int }
+
+// TabSelectMsg activates the active editor pane's tab at Index (0-based); out
+// of range is a no-op. Dispatched by editor.tab.select1 … editor.tab.select9.
+type TabSelectMsg struct{ Index int }
+
+// TabMoveMsg reorders the active tab by Delta positions within its pane.
+// Dispatched by editor.tab.moveLeft / editor.tab.moveRight.
+type TabMoveMsg struct{ Delta int }
+
+// TabReopenMsg reopens the most recently closed tab, restoring its file and
+// cursor from the closed-tab ring. Dispatched by editor.tab.reopenClosed.
+type TabReopenMsg struct{}
 
 // ShowKeymapHelpMsg asks the root model to open the keymap cheatsheet overlay,
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
@@ -99,9 +118,20 @@ func appCommand(id, title string, msg tea.Msg) plugin.Command {
 }
 
 func (appCommands) Capabilities() plugin.Capabilities {
+	cmds := []plugin.Command{
+		appCommand("editor.closeTab", "Close Tab", CloseTabMsg{}),
+		appCommand("editor.tab.next", "Next Tab", TabStepMsg{Delta: 1}),
+		appCommand("editor.tab.prev", "Previous Tab", TabStepMsg{Delta: -1}),
+		appCommand("editor.tab.moveLeft", "Move Tab Left", TabMoveMsg{Delta: -1}),
+		appCommand("editor.tab.moveRight", "Move Tab Right", TabMoveMsg{Delta: 1}),
+		appCommand("editor.tab.reopenClosed", "Reopen Closed Tab", TabReopenMsg{}),
+	}
+	for i := 1; i <= 9; i++ {
+		n := strconv.Itoa(i)
+		cmds = append(cmds, appCommand("editor.tab.select"+n, "Go to Tab "+n, TabSelectMsg{Index: i - 1}))
+	}
 	return plugin.Capabilities{
-		Commands: []plugin.Command{
-			appCommand("editor.closeTab", "Close Tab", CloseTabMsg{}),
+		Commands: append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
@@ -120,7 +150,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),
 			appCommand("pane.splitLeft", "Split Left", SplitFocusedMsg{Zone: layout.ZoneLeft}),
-		},
+		),
 	}
 }
 

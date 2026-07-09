@@ -73,6 +73,24 @@ var jetbrainsRows = []row{
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)", true},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)", true},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)", false},
+	// Editor tabs (0190, #158). Tab cycling gets alt+arrows — distinct from the
+	// ctrl+tab pane switcher — and alt+digits jump straight to a tab; both are
+	// layout-safe (arrows and digits sit identically on QWERTZ). Alt+arrow
+	// delivery depends on the terminal's option-as-meta setting, hence fragile.
+	{"alt+right", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)", true},
+	{"alt+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)", true},
+	{"alt+shift+right", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)", true},
+	{"alt+shift+left", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)", true},
+	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)", false},
+	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)", false},
+	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)", false},
+	{"alt+3", "editor.tab.select3", "Go to tab 3", Global, "Editor tabs (0190)", false},
+	{"alt+4", "editor.tab.select4", "Go to tab 4", Global, "Editor tabs (0190)", false},
+	{"alt+5", "editor.tab.select5", "Go to tab 5", Global, "Editor tabs (0190)", false},
+	{"alt+6", "editor.tab.select6", "Go to tab 6", Global, "Editor tabs (0190)", false},
+	{"alt+7", "editor.tab.select7", "Go to tab 7", Global, "Editor tabs (0190)", false},
+	{"alt+8", "editor.tab.select8", "Go to tab 8", Global, "Editor tabs (0190)", false},
+	{"alt+9", "editor.tab.select9", "Go to tab 9", Global, "Editor tabs (0190)", false},
 	{"cmd+shift+t", "vcs.revertFile", "Revert file", Global, "VCS (future)", false},
 	{"cmd+k cmd+c", "editor.commentLine", "Comment (chord example)", Editor, "Editor (06)", false},
 	{"cmd+k cmd+s", "palette.keymapHelp", "Show keymap cheatsheet", Global, "Keymap (08)", false},

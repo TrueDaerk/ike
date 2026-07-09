@@ -70,8 +70,11 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
-	host         *host.Host
-	reg          *registry.Registry
+	// closedTabs is the reopen ring (0190, #158): the last few closed tabs'
+	// paths and carets, newest last, popped by editor.tab.reopenClosed.
+	closedTabs []closedTab
+	host       *host.Host
+	reg        *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
@@ -851,10 +854,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openPath(msg.Path, msg.NewPane)
 
 	case CloseTabMsg:
-		// editor.closeTab (cmd+w / palette): close the focused editor pane; a
-		// no-op on the explorer / last leaf, matching the hardcoded ctrl+w.
+		// editor.closeTab (cmd+w / palette): close the focused editor pane's
+		// active tab, the pane itself on its last tab (#156); a no-op on the
+		// explorer / last leaf, matching the hardcoded ctrl+w.
 		m.CloseFocused()
 		return m, nil
+
+	case TabStepMsg:
+		// editor.tab.next / editor.tab.prev (alt+right / alt+left, #158).
+		m.stepTab(msg.Delta)
+		return m, nil
+	case TabSelectMsg:
+		// editor.tab.select1…9 (alt+1…alt+9): jump straight to a tab.
+		m.selectTab(msg.Index)
+		return m, nil
+	case TabMoveMsg:
+		// editor.tab.moveLeft / editor.tab.moveRight (alt+shift+arrows).
+		m.moveTab(msg.Delta)
+		return m, nil
+	case TabReopenMsg:
+		// editor.tab.reopenClosed (alt+shift+t): pop the reopen ring.
+		return m.reopenClosedTab()
 
 	case ShowKeymapHelpMsg:
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
@@ -1626,6 +1646,9 @@ func (m *Model) closeKey(key string) bool {
 	if !ok {
 		return false // last leaf: never empty the workspace
 	}
+	for _, ed := range inst.Editors() {
+		m.rememberClosedTab(ed)
+	}
 	m.backupDropOnClose(inst, key)
 	m.tree = tree
 	m.panes.Close(key)
@@ -1645,6 +1668,7 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 	if ed == nil || inst.TabCount() <= 1 {
 		return
 	}
+	m.rememberClosedTab(ed)
 	m.backupDropOnCloseTab(ed, inst.Key())
 	inst.CloseTab(idx)
 	m.syncExplorerOpen()
