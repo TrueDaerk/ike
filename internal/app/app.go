@@ -2459,6 +2459,11 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title, content = "EXPLORER", inst.View()
 		case pane.KindEditor:
 			title, content = m.editorTitle(inst.Editor()), inst.View()
+			// The tab bar takes over the title row once the pane holds
+			// multiple tabs (#157); paneBox draws it like any title.
+			if bar, ok := m.tabBar(inst, r.W-paneChromeW); ok {
+				title = bar
+			}
 		}
 	}
 

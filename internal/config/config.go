@@ -98,6 +98,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.trim_trailing_whitespace", c.Editor.TrimTrailingWhitespace)
 	put("editor.insert_final_newline", c.Editor.InsertFinalNewline)
 	put("editor.show_whitespace", c.Editor.ShowWhitespace)
+	put("editor.tabs.always_show", c.Editor.Tabs.AlwaysShow)
 
 	put("explorer.show_hidden", c.Explorer.ShowHidden)
 	put("explorer.git_status", c.Explorer.GitStatus)

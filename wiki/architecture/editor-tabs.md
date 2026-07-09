@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered document list with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, shared-documents, close]
-timestamp: 2026-07-09T00:00:00Z
+timestamp: 2026-07-09T12:00:00Z
 ---
 
 # Editor Tabs
@@ -64,9 +64,27 @@ its crash-backup snapshot (#165) is dropped unless another tab or pane still
 shows the document. Externally deleted files close their tab (the pane survives
 while other tabs remain); moved files re-path every tab that holds them.
 
+## Tab bar rendering (#157)
+
+The bar occupies the **pane's top row** — the same line the single-document
+title used (`internal/app/tabbar.go`, hooked in `renderPane`), so showing tabs
+costs no editor row. With one tab the classic title renders; with two or more
+(or `editor.tabs.always_show = true` under `[editor.tabs]`, live-reloadable,
+with a settings-page toggle) the tab list does:
+
+- **Labels**: file basename (`untitled` for scratch tabs); duplicates
+  disambiguate with the display-relative directory (`main.go — cmd/ike`); a
+  dirty tab carries ` ●`, a stale one `!` (file changed on disk while dirty,
+  0140 — externally deleted dirty files surface the same way).
+- **Highlighting** reuses theme slots: the active tab renders `Accent` + bold,
+  inactive tabs `Foreground`, separators (`│`) and end ellipses `Border`.
+- **Overflow** never wraps: `tabWindow` grows a run of tabs around the active
+  one (rightward, then leftward) while separators and end ellipses still fit;
+  hidden tabs are marked with `…` at that end, and a lone oversized active
+  label truncates.
+
 ## Deferred to sibling issues
 
-Tab bar rendering (#157), tab commands & keybindings (#158), mouse support
-(#159), and per-pane tab persistence in `session.json`/`layout.json` (#160).
-Until #160 lands, the layout store keeps recording only each pane's active
-document.
+Tab commands & keybindings (#158), mouse support on the bar (#159), and
+per-pane tab persistence in `session.json`/`layout.json` (#160). Until #160
+lands, the layout store keeps recording only each pane's active document.
