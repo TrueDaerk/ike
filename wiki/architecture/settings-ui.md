@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-09T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -80,14 +80,15 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 description (the panel doubles as settings documentation), and a test fails on
 any entry whose key the typed schema does not expose (no dead keys).
 
-- **Editor** — tab width, use spaces, auto indent, trim trailing whitespace,
-  insert final newline, line numbers (+relative), scroll offset, soft wrap,
-  show whitespace: every key `applyConfig` reads live.
+- **Editor** — tab width, use spaces, auto indent, auto save (focus|off,
+  #174), trim trailing whitespace, insert final newline, line numbers
+  (+relative), scroll offset, soft wrap, show whitespace: every key
+  `applyConfig` reads live.
 - **Appearance** — theme (enum fed from the registry's theme list; writing
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.
 - **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
-  (clean|never, #81). Grows with auto-save (#54) when it lands.
+  (clean|never, #81).
 - **Notifications** — toast timeout, severity floor.
 
 ## Keymap page (#93)

@@ -107,6 +107,19 @@ func (m *Model) saveGuarded(target string) tea.Cmd {
 	return nil
 }
 
+// Autosave writes the buffer when focus leaves the pane or its document is
+// about to be replaced (editor.auto_save = "focus", #174). It goes through the
+// normal save path, so EventSave fires (watcher suppression, LSP didSave,
+// shared-view sync) and undo history is untouched. A stale buffer is skipped —
+// auto-save must never clobber an external change; the conflict guard handles
+// the next explicit save. It reports whether a write happened.
+func (m *Model) Autosave() bool {
+	if !m.dirty || m.stale || m.path == "" {
+		return false
+	}
+	return m.saveAs(m.path) == nil
+}
+
 // ResolveConflictKeepMine resolves the save conflict by overwriting the
 // external change with the buffer. The save emits EventSave, which stamps the
 // watcher's save epoch, so the overwrite does not echo back as a new external

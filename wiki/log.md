@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-09
+
+- Auto-save on focus switch (#174): `editor.auto_save = focus` (default; `off`
+  disables) saves a dirty buffer when focus leaves its pane or its document is
+  replaced by opening another file. Saves ride the normal path (watcher epoch,
+  LSP didSave, shared-view sync); undo history is untouched, and undo/redo now
+  re-dirty the buffer so post-save undos persist on the next blur. Stale
+  buffers are skipped (conflict guard unchanged). Settings entry under Editor.
+
 ## 2026-07-08
 
 - Replace in path (#86, Roadmap 0150): `project.replaceInPath` (cmd+shift+r)
