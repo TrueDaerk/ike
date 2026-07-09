@@ -82,9 +82,15 @@ type Model struct {
 	searching bool
 	searchDir search.Direction
 	query     search.Query
+	cmdMsg    string // transient ":"-line message (errors, reports); shown while idle
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
+
+	// Last visual selection line bounds (0-based) for the '< / '> ex addresses;
+	// -1 when no selection has been made this session.
+	visualStart int
+	visualEnd   int
 
 	// Insert-session recording for "." repeat.
 	insert insertSession
@@ -135,6 +141,8 @@ func New() Model {
 		tabWidth:           4,
 		insertFinalNewline: true,
 		hlTheme:            highlight.NewTheme(nil, nil),
+		visualStart:        -1,
+		visualEnd:          -1,
 	}
 	m.view.LineNumbers = false
 	return m

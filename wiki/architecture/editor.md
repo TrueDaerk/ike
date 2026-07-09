@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-09T00:00:00Z
+timestamp: 2026-07-09T18:00:00Z
 ---
 
 # Editor
@@ -51,8 +51,16 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   border off screen).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
-- **excmd** — parses the `:` line (`:w :q :wq :q! :e`, `:<n>` line jump) into a
-  structured intent the editor executes.
+- **excmd** — parses the `:` line into a typed `Command{Range, Name, Bang, Args}`
+  AST and resolves its range. The grammar is `[range] name[!] [args]`: a range is
+  one or two comma-separated *addresses* (or `%` = whole file), and an address is
+  a base — a line number, `.` (current), `$` (last), `'<` / `'>` (visual bounds),
+  `/pat/` or `?pat?` (pattern search) — plus an optional signed offset (`.+2`,
+  `$-1`). `Parse` is pure; `Range.Resolve` maps addresses onto 0-based buffer
+  lines given a `Resolver` (cursor line, visual bounds, a line-search hook). The
+  editor executes recognised names (`:w :q :wq :q! :e`, plus a bare range as a
+  line jump); `:g` / `:v` / `:s` are reserved and report *not implemented*. See
+  [command line](#command-line-ex-commands-roadmap-0200).
 
 ## Modes & keys
 
@@ -84,6 +92,34 @@ the gutter width and scroll offsets — to the cursor. The wheel scrolls the
 viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
 buffer) without touching the cursor or mode — it works the same in Normal,
 Insert, Visual, etc., unlike the vim-motion scroll commands.
+
+## Command line (ex commands, Roadmap 0200)
+
+`:` opens the command line (`keys_command.go`). On `Enter`, `runExLine` calls
+`excmd.Parse`, which returns a typed `Command{Range, Name, Bang, Args}`. Parsing
+is pure and table-tested; execution stays in the editor model, which maps a
+`Name` onto its save / close / open actions.
+
+The grammar is `[range] name[!] [args]`:
+
+- **Ranges** are one or two comma-separated addresses, or `%` (the whole file).
+  An **address** is a base plus an optional signed offset: line number `N`, `.`
+  (current line), `$` (last line), `'<` / `'>` (the last visual selection's first
+  / last line), and pattern searches `/pat/` (next matching line) and `?pat?`
+  (previous). Offsets stack: `.+2`, `$-1`, `.-2,.+2`.
+- **One resolver** (`Range.Resolve`) turns any command's range into a 0-based
+  `[start, end]` span. It consults an `excmd.Resolver` the editor fills from live
+  state — cursor line, visual bounds, and `exSearchLine` (a regex line search
+  that wraps around the buffer) — clamps to the buffer, and swaps a reversed
+  span. A bare range with no name (`:42`, `:1,5`, `:$`) jumps to the range's last
+  line.
+- **Entering `:` from Visual** pre-fills `'<,'>` and records the selection bounds,
+  matching vim; those bounds back the `'<` / `'>` addresses.
+- **Reserved:** `:g` / `:v` (global) and `:s` (substitute) parse but report *not
+  implemented yet* — landing in Roadmap 0200's later sub-issues. Unknown names
+  and unresolvable addresses (missing selection, pattern not found) surface a
+  transient `E:` message on the command-line row (`m.cmdMsg`), cleared by the next
+  normal-mode key.
 
 ## Comment toggling (Roadmap 0120)
 

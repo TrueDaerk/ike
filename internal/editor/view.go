@@ -113,11 +113,14 @@ func (m Model) View() string {
 	return lipgloss.JoinVertical(lipgloss.Left, out...)
 }
 
-// commandLineRow renders the active command-line input with a block cursor,
-// or "" when no ":" / "/" / "?" input is open.
+// commandLineRow renders the active command-line input with a block cursor, or
+// the last ex-command message while idle, or "" when neither is present.
 func (m Model) commandLineRow() string {
 	cl := m.CommandLine()
 	if cl == "" {
+		if m.mode != Command && m.cmdMsg != "" {
+			return m.cmdMsg
+		}
 		return ""
 	}
 	return cl + lipgloss.NewStyle().Reverse(true).Render(" ")

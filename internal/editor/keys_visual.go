@@ -80,8 +80,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.around = true
 		m.wait = awaitObject
 	case ":":
+		// Remember the selection line bounds for '< / '> and pre-fill the range,
+		// mirroring vim's ":'<,'>" when entering the command line from Visual.
+		lo, hi := m.anchor.Line, m.cursor.Line
+		if lo > hi {
+			lo, hi = hi, lo
+		}
+		m.visualStart, m.visualEnd = lo, hi
 		m.mode = Command
-		m.cmdline = ""
+		m.cmdline = "'<,'>"
 	default:
 		_ = hasRune
 	}
