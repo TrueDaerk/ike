@@ -322,10 +322,13 @@ func (m *Model) wireEditorEmitters() {
 	}
 }
 
-// installEmitter wires the editor-emitter adapter onto one editor pane.
+// installEmitter wires the editor-emitter adapter onto every tab of one editor
+// pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		inst.Editor().SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, key: key})
+		for _, ed := range inst.Editors() {
+			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, key: key})
+		}
 	}
 }
 
@@ -431,12 +434,16 @@ func (m *Model) restoreSession() {
 	m.syncFocus()
 }
 
-// editorWithFile returns the key of an editor instance currently holding path,
-// or "" if none does.
+// editorWithFile returns the key of an editor instance holding path in any of
+// its tabs, activating that tab, or "" if none does.
 func (m Model) editorWithFile(path string) string {
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
+		if inst.Kind() != pane.KindEditor {
+			continue
+		}
+		if idx := inst.TabForPath(path); idx >= 0 {
+			inst.ActivateTab(idx)
 			return key
 		}
 	}
@@ -705,8 +712,13 @@ func (m Model) Init() tea.Cmd {
 	// the user edits them.
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() {
-			cmds = append(cmds, inst.Editor().Reparse())
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() {
+				cmds = append(cmds, ed.Reparse())
+			}
 		}
 	}
 	return tea.Batch(cmds...)
@@ -855,11 +867,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case SaveAllMsg:
-		// editor.saveAll (cmd+shift+s / palette): write every dirty editor.
+		// editor.saveAll (cmd+shift+s / palette): write every dirty editor,
+		// background tabs included.
 		var cmds []tea.Cmd
 		for _, key := range m.panes.Keys() {
-			if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().Dirty() {
-				cmds = append(cmds, inst.Update(editor.ActionMsg{Action: "write"}))
+			inst := m.panes.Get(key)
+			if inst == nil || inst.Kind() != pane.KindEditor {
+				continue
+			}
+			for i := 0; i < inst.TabCount(); i++ {
+				if inst.TabEditor(i).Dirty() {
+					cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
+				}
 			}
 		}
 		switch n := len(cmds); {
@@ -967,21 +986,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same file re-clamps and mirrors the flags. Dirty/stale are read from
 		// the originating pane *now* (not at emit time), so late or reordered
 		// broadcasts always converge on the current document state.
+		var skip *editor.Model
 		if origin := m.panes.Get(msg.FromKey); origin != nil && origin.Kind() == pane.KindEditor {
-			msg.Dirty = origin.Editor().Dirty()
-			msg.Stale = origin.Editor().Stale()
+			if ed := origin.EditorForPath(msg.Path); ed != nil {
+				skip = ed
+				msg.Dirty = ed.Dirty()
+				msg.Stale = ed.Stale()
+			}
 		}
 		var cmds []tea.Cmd
 		// Crash-recovery write side (#167): the same seam drives the snapshot
 		// debounce — dirty (re)arms it, clean cancels and drops the snapshot.
-		if c := m.backupOnSync(msg.FromKey); c != nil {
+		if c := m.backupOnSync(msg.FromKey, msg.Path); c != nil {
 			cmds = append(cmds, c)
 		}
+		// Deliver to every other view of the document — other panes and this
+		// pane's background tabs alike; only the originating tab is skipped.
 		for _, key := range m.editorKeysForPath(msg.Path) {
-			if key == msg.FromKey {
-				continue
-			}
-			if cmd := m.panes.Get(key).Update(msg); cmd != nil {
+			if cmd := m.panes.Get(key).UpdateForPath(msg.Path, skip, msg); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -1025,8 +1047,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// The file is back: a replace-in-place (write temp + rename,
 				// git checkout) coalesced remove over create — a content change.
 				msg.Kind = watch.FileChanged
-			} else if key := m.editorKeyForPath(msg.Path); key != "" {
-				if ed := m.panes.Get(key).Editor(); !ed.Dirty() {
+			} else if ed := m.editorForPath(msg.Path); ed != nil {
+				if !ed.Dirty() {
 					// Externally deleted, nothing unsaved: same as the
 					// explorer's delete flow — close the pane (#83). A dirty
 					// buffer instead stays open, marked stale by the editor.
@@ -1198,9 +1220,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 // openPath opens path honouring the open target: a registered FileHandler claims
-// it first regardless of target; otherwise Replace loads into the active editor
-// and NewPane splits off a fresh editor and loads there. EventFileOpened hooks
-// fire either way.
+// it first regardless of target; otherwise the file lands in the active editor's
+// tab list (#156) — activating an existing tab, appending a new one, or filling
+// a scratch tab — and NewPane splits off a fresh editor and loads there.
+// EventFileOpened hooks fire either way.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
@@ -1209,11 +1232,8 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		key := m.activeEditorKey()
 		if newPane || key == "" {
 			key = m.spawnEditor()
-		} else if m.autosaveEnabled() {
-			// Replacing the active editor's document counts as leaving it (#174).
-			m.panes.Get(key).Editor().Autosave()
 		}
-		if err := m.loadOrShare(key, path); err == nil {
+		if m.openInTab(key, path) {
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
@@ -1227,17 +1247,58 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-// loadOrShare fills the editor pane key with path: when another editor pane
-// already shows that file, the new pane becomes a second view of the same
-// document (shared buffer + undo stack, #142) instead of loading a divergent
-// copy; otherwise the file is read from disk.
+// openInTab lands path in the editor pane key's tab list (#156): a tab already
+// showing the file is activated; a pathless scratch tab is filled in place
+// (fresh panes keep today's behavior); otherwise a new tab is appended after
+// autosaving the document being left (#174). It reports whether the file is
+// now open and active in the pane.
+func (m *Model) openInTab(key, path string) bool {
+	inst := m.panes.Get(key)
+	if idx := inst.TabForPath(path); idx >= 0 {
+		m.activateTab(inst, idx)
+		return true
+	}
+	added := false
+	if inst.Editor().HasFile() {
+		if m.autosaveEnabled() {
+			// Leaving the active tab's document counts as leaving it (#174).
+			inst.Editor().Autosave()
+		}
+		inst.AddTab()
+		m.installEmitter(key)
+		added = true
+	}
+	if err := m.loadOrShare(key, path); err != nil {
+		if added {
+			// The freshly appended tab never held the file: drop it again.
+			inst.CloseTab(inst.ActiveTab())
+		}
+		return false
+	}
+	return true
+}
+
+// activateTab switches pane inst to tab idx, autosaving the document being
+// left — a tab switch leaves the document just like a focus switch (#174).
+func (m *Model) activateTab(inst *pane.Instance, idx int) {
+	if idx == inst.ActiveTab() {
+		return
+	}
+	if m.autosaveEnabled() {
+		inst.Editor().Autosave()
+	}
+	inst.ActivateTab(idx)
+}
+
+// loadOrShare fills the active tab of editor pane key with path: when another
+// tab — in this pane or any other — already shows that file, the tab becomes a
+// second view of the same document (shared buffer + undo stack, #142) instead
+// of loading a divergent copy; otherwise the file is read from disk.
 func (m *Model) loadOrShare(key, path string) error {
 	target := m.panes.Get(key).Editor()
-	for _, other := range m.editorKeysForPath(path) {
-		if other != key {
-			target.ShareDocumentWith(m.panes.Get(other).Editor())
-			return nil
-		}
+	if src := m.editorForPath(path); src != nil && src != target {
+		target.ShareDocumentWith(src)
+		return nil
 	}
 	return target.Load(path)
 }
@@ -1249,8 +1310,13 @@ func (m *Model) syncExplorerOpen() {
 	var open []string
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() {
-			open = append(open, inst.Editor().Path())
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() {
+				open = append(open, ed.Path())
+			}
 		}
 	}
 	m.explorer().SetOpen(open)
@@ -1524,13 +1590,18 @@ func (m *Model) spawnEditor() string {
 	return newKey
 }
 
-// CloseFocused closes the focused editor leaf, collapsing its sibling up and
-// refocusing it. It is a no-op on the explorer (a singleton) and on the last
-// leaf, so the workspace never empties and context resolution never loses its
-// explorer.
+// CloseFocused closes the focused editor pane's active tab; the pane itself
+// closes — collapsing its sibling up and refocusing it — only when its last
+// tab goes (#156), preserving today's cmd+w feel for single-tab panes. It is
+// a no-op on the explorer (a singleton) and on the last leaf, so the workspace
+// never empties and context resolution never loses its explorer.
 func (m *Model) CloseFocused() { m.closeFocused() }
 
 func (m *Model) closeFocused() {
+	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor && inst.TabCount() > 1 {
+		m.closeTab(inst, inst.ActiveTab())
+		return
+	}
 	if m.closeKey(m.panes.Focused()) {
 		// Focus the leaf that now occupies the closed pane's position: the first
 		// leaf in walk order is a safe, always-present choice (explorer at minimum).
@@ -1564,6 +1635,25 @@ func (m *Model) closeKey(key string) bool {
 	return true
 }
 
+// closeTab closes tab idx of editor pane inst, applying the same unsaved-
+// changes guard as a pane close: the crash-backup snapshot is dropped unless
+// another tab or pane still shows the document (#156). The caller guarantees
+// the pane holds more than one tab; the pane's chrome, explorer accent and
+// persisted layout follow the tab that takes over.
+func (m *Model) closeTab(inst *pane.Instance, idx int) {
+	ed := inst.TabEditor(idx)
+	if ed == nil || inst.TabCount() <= 1 {
+		return
+	}
+	m.backupDropOnCloseTab(ed, inst.Key())
+	inst.CloseTab(idx)
+	m.syncExplorerOpen()
+	if next := inst.Editor(); next.HasFile() && inst.Key() == m.panes.Focused() {
+		m.explorer().SetActive(next.Path())
+	}
+	saveLayout(m.tree, m.panes)
+}
+
 // closeEditorsForPath closes every editor leaf showing path (or, when isDir,
 // any file beneath it), so deleting a file in the explorer does not leave a
 // stale editor open on it. It relayouts and persists once if anything closed,
@@ -1578,26 +1668,65 @@ func (m Model) editorKeyForPath(path string) string {
 	return ""
 }
 
-// editorKeysForPath returns every editor leaf currently showing path. Multiple
-// panes can view the same (shared, #142) document, so async per-path messages
-// must reach all of them, not just the first.
+// editorKeysForPath returns every editor leaf holding path in any tab. Multiple
+// panes and tabs can view the same (shared, #142) document, so async per-path
+// messages must reach all of them, not just the first.
 func (m Model) editorKeysForPath(path string) []string {
 	var keys []string
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst != nil && inst.Kind() == pane.KindEditor && inst.Editor().HasFile() && inst.Editor().Path() == path {
+		if inst != nil && inst.Kind() == pane.KindEditor && inst.TabForPath(path) >= 0 {
 			keys = append(keys, key)
 		}
 	}
 	return keys
 }
 
-// routeToEditor forwards an LSP/highlight result message to every editor leaf
-// owning path, or drops it if no editor shows that file.
+// editorForPath returns the editor model of a tab showing path, preferring the
+// active editor pane's tab, then the first match in pane order. nil when the
+// file is open nowhere.
+func (m Model) editorForPath(path string) *editor.Model {
+	if key := m.activeEditorKey(); key != "" {
+		if ed := m.panes.Get(key).EditorForPath(path); ed != nil {
+			return ed
+		}
+	}
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		if ed := inst.EditorForPath(path); ed != nil {
+			return ed
+		}
+	}
+	return nil
+}
+
+// editorViewsForPath returns every tab's editor model showing path, across all
+// panes — the per-view fan-out shared documents (#142) and tabs (#156) need.
+func (m Model) editorViewsForPath(path string) []*editor.Model {
+	var out []*editor.Model
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() && ed.Path() == path {
+				out = append(out, ed)
+			}
+		}
+	}
+	return out
+}
+
+// routeToEditor forwards an LSP/highlight result message to every tab owning
+// path — background tabs included — or drops it if no editor shows that file.
 func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.editorKeysForPath(path) {
-		if cmd := m.panes.Get(key).Update(msg); cmd != nil {
+		if cmd := m.panes.Get(key).UpdateForPath(path, nil, msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -1615,25 +1744,37 @@ func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return model, cmd
 	}
-	if key := mm.editorKeyForPath(path); key != "" {
-		mm.panes.Get(key).Editor().SetCursor(line, col)
+	if ed := mm.editorForPath(path); ed != nil {
+		ed.SetCursor(line, col)
 	}
 	return mm, cmd
 }
 
 func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	prefix := path + string(os.PathSeparator)
+	match := func(ed *editor.Model) bool {
+		if !ed.HasFile() {
+			return false
+		}
+		ep := ed.Path()
+		return ep == path || (isDir && strings.HasPrefix(ep, prefix))
+	}
 	closed := false
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindEditor || !inst.Editor().HasFile() {
+		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
-		ep := inst.Editor().Path()
-		if ep == path || (isDir && strings.HasPrefix(ep, prefix)) {
-			if m.closeKey(key) {
+		// Close matching tabs first (highest index first, so indexes stay
+		// valid); the pane itself goes when its last tab matches too.
+		for i := inst.TabCount() - 1; i >= 0 && inst.TabCount() > 1; i-- {
+			if match(inst.TabEditor(i)) {
+				m.closeTab(inst, i)
 				closed = true
 			}
+		}
+		if match(inst.Editor()) && m.closeKey(key) {
+			closed = true
 		}
 	}
 	if !closed {

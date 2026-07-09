@@ -14,11 +14,17 @@ import (
 // answers it with a floating prompt: keep mine / reload / cancel. 'show diff'
 // joins the choices once the diff viewer (#60) lands.
 
-// openConflictPrompt shows the prompt for the editor pane owning path.
+// openConflictPrompt shows the prompt for the editor pane owning path. The
+// conflicted tab is activated so the prompt's answers act on the document it
+// names (a save from a background tab can raise the conflict too).
 func (m *Model) openConflictPrompt(path string) {
 	key := m.editorKeyForPath(path)
 	if key == "" {
 		return
+	}
+	inst := m.panes.Get(key)
+	if idx := inst.TabForPath(path); idx >= 0 {
+		inst.ActivateTab(idx)
 	}
 	m.conflictKey = key
 	m.shell.SetContent(ui.ModelContent{

@@ -68,10 +68,11 @@ func backupMaxAge(cfg host.Config) time.Duration {
 	return time.Duration(days) * 24 * time.Hour
 }
 
-// backupOnSync is the change-seam hook: the originating pane's dirty flag
+// backupOnSync is the change-seam hook: the originating tab's dirty flag
 // decides — dirty (re)arms the debounce, clean (just saved or reverted)
-// cancels it and drops the snapshot.
-func (m *Model) backupOnSync(fromKey string) tea.Cmd {
+// cancels it and drops the snapshot. The tab is resolved by path, since a
+// background tab (e.g. replace-in-buffer) can emit changes too.
+func (m *Model) backupOnSync(fromKey, path string) tea.Cmd {
 	if m.backupDeb == nil || !m.backupEnabled() {
 		return nil
 	}
@@ -79,7 +80,10 @@ func (m *Model) backupOnSync(fromKey string) tea.Cmd {
 	if origin == nil || origin.Kind() != pane.KindEditor {
 		return nil
 	}
-	ed := origin.Editor()
+	ed := origin.EditorForPath(path)
+	if ed == nil {
+		ed = origin.Editor() // pathless scratch buffer
+	}
 	key := backupKey(ed, fromKey)
 	if ed.Dirty() {
 		m.backupDeb.Mark(key, time.Now())
@@ -143,26 +147,38 @@ func (m *Model) snapshotDueBackups(now time.Time) tea.Cmd {
 // titled buffers, by pane key for untitled ones. nil when the buffer is gone.
 func (m *Model) backupEditorFor(key string) *editor.Model {
 	if pk, ok := strings.CutPrefix(key, untitledPrefix); ok {
-		if inst := m.panes.Get(pk); inst != nil && inst.Kind() == pane.KindEditor && !inst.Editor().HasFile() {
-			return inst.Editor()
+		if inst := m.panes.Get(pk); inst != nil && inst.Kind() == pane.KindEditor {
+			for _, ed := range inst.Editors() {
+				if !ed.HasFile() {
+					return ed
+				}
+			}
 		}
 		return nil
 	}
-	if ek := m.editorKeyForPath(key); ek != "" {
-		return m.panes.Get(ek).Editor()
-	}
-	return nil
+	return m.editorForPath(key)
 }
 
-// backupDropOnClose removes the snapshot and pending mark of a closing editor
-// pane — close-with-discard must not resurrect discarded edits at next launch.
-// A shared document still shown in another pane keeps its snapshot.
+// backupDropOnClose removes the snapshots and pending marks of a closing editor
+// pane's tabs — close-with-discard must not resurrect discarded edits at next
+// launch. A shared document still shown in another tab or pane keeps its
+// snapshot.
 func (m *Model) backupDropOnClose(inst *pane.Instance, paneKey string) {
-	if m.backupDeb == nil || inst.Kind() != pane.KindEditor {
+	if inst.Kind() != pane.KindEditor {
 		return
 	}
-	ed := inst.Editor()
-	if ed.HasFile() && len(m.editorKeysForPath(ed.Path())) > 1 {
+	for _, ed := range inst.Editors() {
+		m.backupDropOnCloseTab(ed, paneKey)
+	}
+}
+
+// backupDropOnCloseTab removes one closing tab's snapshot and pending mark,
+// unless another tab — in this pane or any other — still shows the document.
+func (m *Model) backupDropOnCloseTab(ed *editor.Model, paneKey string) {
+	if m.backupDeb == nil {
+		return
+	}
+	if ed.HasFile() && len(m.editorViewsForPath(ed.Path())) > 1 {
 		return
 	}
 	key := backupKey(ed, paneKey)
@@ -178,8 +194,12 @@ func (m *Model) backupCleanShutdown() {
 		return
 	}
 	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-			_ = m.backupSvc.Remove(backupKey(inst.Editor(), key))
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			_ = m.backupSvc.Remove(backupKey(ed, key))
 		}
 	}
 }

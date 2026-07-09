@@ -118,7 +118,7 @@ func TestBackupSaveRemovesSnapshot(t *testing.T) {
 	if m.panes.Get(key).Editor().Dirty() {
 		t.Fatal("write action must clean the buffer")
 	}
-	if cmd := m.backupOnSync(key); cmd != nil {
+	if cmd := m.backupOnSync(key, file); cmd != nil {
 		cmd()
 	}
 	if remainingSnapshots(t) != 0 {
