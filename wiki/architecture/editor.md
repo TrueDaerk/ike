@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-09T00:00:00Z
 ---
 
 # Editor
@@ -145,6 +145,20 @@ git checkout) is downgraded to a content change and reloads normally.
 
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
+
+## Auto-save (#174)
+
+With `editor.auto_save = focus` (the default; `off` disables, an `idle` mode
+is reserved for #54), a dirty buffer saves itself when focus leaves its pane
+— every focus transition funnels through the root model's `setFocus`, so one
+hook covers Ctrl+arrows, the pane switcher, mouse clicks and the explorer
+toggle — and when its document is about to be replaced by opening another
+file into the pane. `editor.Autosave` goes through the normal `saveAs` path:
+`EventSave` fires (watcher epoch, LSP didSave, shared-view sync), and **undo
+history is untouched** — returning to the pane, undo/redo work as usual, and
+an undo past the saved state re-dirties the buffer so the next blur persists
+it. A **stale** buffer is never auto-saved: it stays dirty for the explicit-
+save conflict prompt above. Cmd+S remains the explicit save.
 
 ## Shared documents (#142)
 

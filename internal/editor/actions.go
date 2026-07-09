@@ -280,6 +280,10 @@ func (m *Model) undo() {
 	if cur, ok := m.hist.Undo(m.buf); ok {
 		m.cursor = m.buf.ClampCursor(cur)
 		m.desiredCol = m.cursor.Col
+		// An undo mutates the buffer away from what was last written, so the
+		// document is dirty again — without this, undoing past a save (or an
+		// auto-save, #174) would leave changes that never get persisted.
+		m.dirty = true
 		m.emit(EventChange)
 	}
 }
@@ -293,6 +297,7 @@ func (m *Model) redo() {
 	if cur, ok := m.hist.Redo(m.buf); ok {
 		m.cursor = m.buf.ClampCursor(cur)
 		m.desiredCol = m.cursor.Col
+		m.dirty = true
 		m.emit(EventChange)
 	}
 }

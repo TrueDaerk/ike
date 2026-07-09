@@ -28,6 +28,7 @@ var (
 	sortModes   = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
 	logLevels   = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
 	reloadModes = map[string]bool{"clean": true, "never": true}
+	saveModes   = map[string]bool{"off": true, "focus": true}
 	severities  = map[string]bool{"info": true, "warn": true, "error": true}
 )
 
@@ -55,6 +56,10 @@ func validate(c *Config) []Diagnostic {
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})
 		c.Notifications.MinSeverity = "info"
+	}
+	if !saveModes[c.Editor.AutoSave] {
+		diags = append(diags, Diagnostic{Field: "editor.auto_save", Message: fmt.Sprintf("unknown mode %q, using \"focus\"", c.Editor.AutoSave)})
+		c.Editor.AutoSave = "focus"
 	}
 	if !reloadModes[c.Files.AutoReload] {
 		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})

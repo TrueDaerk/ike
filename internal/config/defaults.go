@@ -10,6 +10,7 @@ package config
 func defaults() *Config {
 	return &Config{
 		Editor: Editor{
+			AutoSave:               "focus",
 			TabWidth:               4,
 			UseSpaces:              true,
 			LineNumbers:            true,

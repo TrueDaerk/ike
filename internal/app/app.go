@@ -1137,6 +1137,9 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		key := m.activeEditorKey()
 		if newPane || key == "" {
 			key = m.spawnEditor()
+		} else if m.autosaveEnabled() {
+			// Replacing the active editor's document counts as leaving it (#174).
+			m.panes.Get(key).Editor().Autosave()
 		}
 		if err := m.loadOrShare(key, path); err == nil {
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
@@ -1344,6 +1347,7 @@ func (m Model) leafOrder() []string {
 
 // setFocus focuses key and remembers it as the recent editor when it is one.
 func (m *Model) setFocus(key string) {
+	m.autosaveOnBlur(key)
 	m.panes.SetFocused(key)
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		m.recentEditor = key
@@ -1353,6 +1357,30 @@ func (m *Model) setFocus(key string) {
 			m.explorer().SetActive(inst.Editor().Path())
 		}
 	}
+}
+
+// autosaveOnBlur saves the editor pane focus is leaving (#174): every focus
+// transition funnels through setFocus, so one hook covers Ctrl+arrows, the
+// pane switcher, mouse clicks and the explorer toggle. Autosave itself skips
+// clean, stale and pathless buffers.
+func (m *Model) autosaveOnBlur(next string) {
+	if !m.autosaveEnabled() {
+		return
+	}
+	old := m.panes.Focused()
+	if old == "" || old == next {
+		return
+	}
+	if inst := m.panes.Get(old); inst != nil && inst.Kind() == pane.KindEditor {
+		inst.Editor().Autosave()
+	}
+}
+
+// autosaveEnabled reads editor.auto_save live from the config ("focus" unless
+// explicitly "off"), so a settings change applies without restart.
+func (m *Model) autosaveEnabled() bool {
+	v, ok := m.host.Config().Get("editor.auto_save")
+	return !ok || v != "off"
 }
 
 // syncFocus re-asserts the registry's focus marking across all instances.
