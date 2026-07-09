@@ -2,6 +2,16 @@
 
 ## 2026-07-09
 
+- Restore flow (#166, Roadmap 0210): crash recovery reads leftover snapshots at
+  launch (`internal/app/recovery.go`). `scanRecovery` runs in the constructor;
+  once the window is sized, `maybeOpenRecovery` shows a floating prompt (reusing
+  the save-conflict UX) listing every recoverable file with a per-file
+  base-changed warning. `r` restores the recovered text as a dirty buffer (new
+  `editor.RestoreText`: onto the base file for titled buffers, a fresh untitled
+  editor otherwise), `d` discards, `s` skips, `esc` skips all. Base-change
+  detection compares the on-disk hash/mtime against the snapshot header. Crash-
+  simulated tests (`recovery_test.go`). Wiki updated.
+
 - Backup service (#165, Roadmap 0210): new `internal/backup` subsystem for
   crash recovery — `Service` writes/reads/removes one full-text snapshot per
   dirty buffer (`<sha256(key)>.ikebak`: magic + header with key/path/base

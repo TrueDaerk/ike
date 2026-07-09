@@ -234,6 +234,25 @@ func (m *Model) Load(path string) error {
 	return nil
 }
 
+// RestoreText installs crash-recovered text into the buffer and marks it dirty
+// (Roadmap 0210). Undo history resets to the recovered content — recovery is a
+// fresh starting point, not a continuation of the dead session's history. The
+// path is left as-is, so the caller can Load the base file first (titled restore)
+// or leave it empty (untitled restore).
+func (m *Model) RestoreText(text string) {
+	m.buf = buffer.FromString(text)
+	m.cursor = buffer.Position{}
+	m.desiredCol = 0
+	m.mode = Normal
+	m.pending.Reset()
+	m.wait = awaitNone
+	m.hist = history.New()
+	m.dirty = true
+	m.docVersion++
+	m.hlIndex = highlight.Index{}
+	m.scroll()
+}
+
 // Path returns the loaded file path ("" when no file is open).
 func (m Model) Path() string { return m.path }
 

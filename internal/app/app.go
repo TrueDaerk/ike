@@ -18,6 +18,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/backup"
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -95,6 +96,11 @@ type Model struct {
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
+	// recovery holds the crash-recovery restore prompt (Roadmap 0210, #166) while
+	// the shell shows it; recoveryPending carries snapshots found at startup until
+	// the window is sized and the prompt can open. Both nil/empty when idle.
+	recovery        *recoveryState
+	recoveryPending []backup.Snapshot
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
@@ -236,6 +242,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
 	m.restoreSession()
+	m.scanRecovery()
 	m.wireEditorEmitters()
 	if themeWarning != "" {
 		m.host.Notify(host.Warn, themeWarning)
@@ -730,6 +737,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			w, h := m.settingsSize()
 			m.settings.SetSize(w, h)
 		}
+		// Now that the window is sized, surface any crash-recovery snapshots found
+		// at startup (Roadmap 0210, #166).
+		m.maybeOpenRecovery()
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -1060,6 +1070,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
+		}
+		// The crash-recovery prompt (Roadmap 0210, #166) owns the keyboard at
+		// startup: r / d / s decide the highlighted file, j / k move, esc skips.
+		if m.recoveryOpen() {
+			return m.updateRecovery(msg)
 		}
 		// The save-conflict prompt owns the keyboard ahead of the generic shell
 		// handling: k / r / esc answer it, everything else is swallowed.

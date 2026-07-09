@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-07-09T20:00:00Z
+timestamp: 2026-07-09T20:30:00Z
 ---
 
 # Crash Recovery
@@ -68,15 +68,35 @@ A snapshot's life is tied to the dirty flag:
 - **Created / refreshed** while a buffer is dirty, debounced after the last edit.
 - **Removed** on save, on close-with-discard, and on clean shutdown (the quit
   path already walks open buffers).
-- **Leftover on startup ⇒ the previous session died**: the restore flow (#166)
-  lists them before session restore opens files and prompts *Restore* / *Discard*
-  / *Skip* per file, then age-based GC prunes the rest (#167).
+- **Leftover on startup ⇒ the previous session died**: the restore flow lists
+  them at launch and prompts per file, then age-based GC prunes the rest (#167).
 
-The app wires these into its event loop: `Mark` on the editor change seam (the
-same seam LSP text sync uses), snapshot due buffers off the Update loop as a
-`tea.Cmd`, and `Cancel` + `Remove` on save / discard / quit. That app
-integration and the restore UI land with #166 / #167; this concept documents the
-service subsystem (#165).
+The write side (marking a buffer on the change seam, snapshotting due buffers off
+the Update loop as a `tea.Cmd`, and `Cancel` + `Remove` on save / discard / quit)
+is the app's event-loop integration; this concept documents the service subsystem
+(#165) plus the restore flow (#166).
+
+## Restore flow (#166, `internal/app/recovery.go`)
+
+At launch the root model scans the snapshot directory (`scanRecovery`, in the
+constructor). If any snapshots are found, once the window is sized it opens a
+floating prompt (`maybeOpenRecovery`) that reuses the save-conflict UX — a modal
+that owns the keyboard until dismissed. The prompt lists every recoverable file
+with a cursor and a per-file base-changed warning:
+
+- **`r` restore** — opens the recovered text as a **dirty** buffer (`RestoreText`
+  on the editor): onto the base file for a titled buffer (Load establishes the
+  path, then the recovered text overwrites it), or into a fresh untitled editor
+  for a "no base file" snapshot. The snapshot is then removed.
+- **`d` discard** — deletes the snapshot without opening it.
+- **`s` skip** — leaves the snapshot for the next launch.
+- **`j`/`k`** move the cursor; **`esc`** skips all remaining (keeps them).
+
+**Base-changed detection** (`baseChanged`) compares the on-disk file's current
+hash (mtime as a fallback) against the snapshot's `base_hash` / `base_mtime`; a
+mismatch — or a missing base file — is flagged inline so the user knows the file
+moved on under the recovered edits. A diff option joins once the diff viewer
+(#60) lands.
 
 ## Configuration & privacy
 
