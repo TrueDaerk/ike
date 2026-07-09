@@ -36,8 +36,8 @@ func (m *Model) applyReplace(msg finder.ReplaceRequestMsg) {
 	for _, path := range order {
 		items := byFile[path]
 		var n int
-		if key := m.dirtyEditorForPath(path); key != "" {
-			n = m.replaceInBuffer(key, items, msg)
+		if ed := m.dirtyEditorForPath(path); ed != nil {
+			n = m.replaceInBuffer(ed, items, msg)
 		} else {
 			n = m.replaceOnDisk(path, items, msg)
 		}
@@ -55,19 +55,19 @@ func (m *Model) applyReplace(msg finder.ReplaceRequestMsg) {
 	m.host.Notify(host.Info, summary)
 }
 
-// dirtyEditorForPath returns an editor pane holding path with unsaved edits,
-// or "" (shared documents mirror the dirty flag, so the first hit decides).
-func (m *Model) dirtyEditorForPath(path string) string {
-	for _, key := range m.editorKeysForPath(path) {
-		if m.panes.Get(key).Editor().Dirty() {
-			return key
+// dirtyEditorForPath returns a tab's editor holding path with unsaved edits,
+// or nil (shared documents mirror the dirty flag, so the first hit decides).
+func (m *Model) dirtyEditorForPath(path string) *editor.Model {
+	for _, ed := range m.editorViewsForPath(path) {
+		if ed.Dirty() {
+			return ed
 		}
 	}
-	return ""
+	return nil
 }
 
 // replaceInBuffer applies one file's matches through its open dirty buffer.
-func (m *Model) replaceInBuffer(key string, items []locations.Item, msg finder.ReplaceRequestMsg) int {
+func (m *Model) replaceInBuffer(ed *editor.Model, items []locations.Item, msg finder.ReplaceRequestMsg) int {
 	reps := make([]editor.Replacement, 0, len(items))
 	for _, it := range items {
 		after, ok := search.RewriteRange(it.Text, it.StartCol, it.EndCol, msg.Query, msg.Replacement)
@@ -85,7 +85,7 @@ func (m *Model) replaceInBuffer(key string, items []locations.Item, msg finder.R
 			Expect:   it.Text,
 		})
 	}
-	return m.panes.Get(key).Editor().ApplyReplacements(reps)
+	return ed.ApplyReplacements(reps)
 }
 
 // replaceOnDisk rewrites one unopened (or clean) file in place, verifying

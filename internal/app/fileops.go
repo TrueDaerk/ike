@@ -183,26 +183,30 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindEditor || !inst.Editor().HasFile() {
+		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
-		ed := inst.Editor()
-		ep := ed.Path()
-		var np string
-		switch {
-		case ep == msg.Old:
-			np = msg.New
-		case msg.IsDir && strings.HasPrefix(ep, prefix):
-			np = msg.New + ep[len(msg.Old):]
-		default:
-			continue
+		for _, ed := range inst.Editors() {
+			if !ed.HasFile() {
+				continue
+			}
+			ep := ed.Path()
+			var np string
+			switch {
+			case ep == msg.Old:
+				np = msg.New
+			case msg.IsDir && strings.HasPrefix(ep, prefix):
+				np = msg.New + ep[len(msg.Old):]
+			default:
+				continue
+			}
+			m.watcher.MarkSaved(ep)
+			m.watcher.MarkSaved(np)
+			if cmd := ed.SetPath(np); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			m.watcher.Track(np)
 		}
-		m.watcher.MarkSaved(ep)
-		m.watcher.MarkSaved(np)
-		if cmd := ed.SetPath(np); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		m.watcher.Track(np)
 	}
 	if key := m.activeEditorKey(); key != "" {
 		if ed := m.panes.Get(key).Editor(); ed.HasFile() {

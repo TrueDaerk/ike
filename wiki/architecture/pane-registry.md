@@ -4,7 +4,7 @@ title: Pane Registry & Multiple Editors
 description: The registry mapping layout-leaf instance keys to live pane components — the explorer singleton plus N editors — with focus as the focused leaf and open-in-new-pane intent.
 resource: internal/pane/registry.go
 tags: [architecture, panes, registry, editors, focus, open-target, persistence]
-timestamp: 2026-06-21T00:00:00Z
+timestamp: 2026-07-09T00:00:00Z
 ---
 
 # Pane Registry & Multiple Editors
@@ -18,8 +18,9 @@ key** resolved through the registry.
 
 ## Instances
 
-An `Instance` wraps one component — an `explorer.Model` or an `editor.Model`,
-selected by `Kind` — behind a uniform surface. It dispatches `Update`, `View`,
+An `Instance` wraps one component — an `explorer.Model`, or for editors an
+ordered **tab list** of `editor.Model`s with one active tab (see
+[Editor Tabs](./editor-tabs.md)) — behind a uniform surface. It dispatches `Update`, `View`,
 `SetSize`, `SetFocused`, and `Init` by kind, and advertises its **context id**
 (`explorer` panes → `explorer`, editors → `editor`) so the root's
 context-scoped command/keymap resolution (`focusContext`) keeps working

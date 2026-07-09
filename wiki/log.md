@@ -2,6 +2,21 @@
 
 ## 2026-07-09
 
+- Editor tabs — tab model (#156, Roadmap 0190): each editor pane
+  (`pane.Instance`) now hosts an **ordered tab list** (`[]*editor.Model`) with
+  one active index; `Editor()` stays the active tab so the pane surface is
+  unchanged. New ops `AddTab`/`ActivateTab`/`MoveTab`/`CloseTab` (+
+  `TabForPath`, `Editors`, `UpdateForPath`, `UpdateTab`). `openPath` routes all
+  open seams into the focused pane's tab list (`openInTab`): activate an
+  existing tab, fill a scratch tab in place, else append a tab (autosaving the
+  document being left, #174); open-in-new-pane keeps splitting. Shared
+  documents (#142) span tabs: `loadOrShare`/sync/highlight/LSP routing reach
+  background tabs. `editor.closeTab` (cmd+w, `:q`) closes the active tab and
+  the pane only on its last tab; backup snapshots (#165), save-all, external
+  delete/move, conflicts and replace-in-buffer are all tab-aware. New concept
+  doc [Editor Tabs](/architecture/editor-tabs.md); tests in
+  `internal/pane/tabs_test.go` and `internal/app/tabs_test.go`.
+
 - Backup config & GC (#167, Roadmap 0210): new `[backup]` config section —
   `enable` (default true; `false` fully disables the subsystem and **purges**
   existing snapshots, at startup and on live reload), `debounce_ms` (default
