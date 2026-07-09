@@ -227,6 +227,22 @@ func (m *Model) Load(path string) error {
 // Path returns the loaded file path ("" when no file is open).
 func (m Model) Path() string { return m.path }
 
+// SetPath re-points the editor at a new location of the same file after a
+// rename or move (#175): buffer, cursor, mode and — crucially — undo history
+// stay exactly as they are; only the path changes. Highlighting restarts (a
+// new extension can mean a new grammar); the returned command runs the
+// reparse. The emitted change event carries the new path, so the LSP bridge
+// syncs the document under it.
+func (m *Model) SetPath(path string) tea.Cmd {
+	if path == m.path || m.path == "" {
+		return nil
+	}
+	m.path = path
+	m.hlIndex = highlight.Index{}
+	m.emit(EventChange)
+	return m.parseCmd()
+}
+
 // Text returns the full buffer content (host-side consumers: tests, the
 // upcoming diff viewer #60).
 func (m Model) Text() string { return m.buf.String() }

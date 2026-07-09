@@ -348,6 +348,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RenameMsg:
 		m.promptRename()
 		return m, nil
+	case RenamePathMsg:
+		info, err := os.Lstat(msg.Path)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, m.renameEntry(msg.Path, msg.Name, info.IsDir())
+	case MoveToMsg:
+		info, err := os.Lstat(msg.Path)
+		if err != nil {
+			m.err = err
+			return m, nil
+		}
+		return m, m.moveEntry(msg.Path, msg.TargetDir, info.IsDir())
 	case UndoMsg:
 		return m, m.undo()
 	case RedoMsg:
@@ -377,6 +391,17 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// Selected returns the selected entry's path and kind, for app commands that
+// act on the explorer's selection (file.move, #175). ok is false with an empty
+// tree or when the root itself is selected — the root is never movable.
+func (m *Model) Selected() (path string, isDir bool, ok bool) {
+	n := m.current()
+	if n == nil || n == m.root {
+		return "", false, false
+	}
+	return n.path, n.isDir, true
 }
 
 func (m *Model) current() *node {

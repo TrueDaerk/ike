@@ -33,6 +33,22 @@ type DeleteMsg struct{}
 // (explorer.rename).
 type RenameMsg struct{}
 
+// RenamePathMsg renames the entry at Path to Name within its directory,
+// without requiring it to be the explorer's selection — the app's file.rename
+// command (shift+f6 with an editor focused, #175) targets the focused file.
+type RenamePathMsg struct {
+	Path string
+	Name string
+}
+
+// MoveToMsg moves the entry at Path into TargetDir (file.move, f6, #175). The
+// target comes from the palette's directory picker; the operation lands on the
+// explorer's undo/redo stack like a rename.
+type MoveToMsg struct {
+	Path      string
+	TargetDir string
+}
+
 // UndoMsg reverses the last file operation instantly: a create is moved to the
 // trash, a delete is restored, a rename is renamed back (explorer.undo).
 type UndoMsg struct{}
@@ -49,6 +65,16 @@ type FileDeletedMsg struct {
 	IsDir bool
 }
 
+// FileMovedMsg announces that a path changed location or name (a rename, a
+// move, or their undo/redo) so the root model can re-point any editor still
+// showing it — open buffers follow the path instead of closing (#175). Like
+// FileDeletedMsg it is handled by the app and does not implement Msg.
+type FileMovedMsg struct {
+	Old   string
+	New   string
+	IsDir bool
+}
+
 func (ToggleHiddenMsg) explorerMsg() {}
 func (CollapseAllMsg) explorerMsg()  {}
 func (RefreshMsg) explorerMsg()      {}
@@ -57,5 +83,7 @@ func (NewFileMsg) explorerMsg()      {}
 func (NewDirMsg) explorerMsg()       {}
 func (DeleteMsg) explorerMsg()       {}
 func (RenameMsg) explorerMsg()       {}
+func (RenamePathMsg) explorerMsg()   {}
+func (MoveToMsg) explorerMsg()       {}
 func (UndoMsg) explorerMsg()         {}
 func (RedoMsg) explorerMsg()         {}

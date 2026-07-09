@@ -2,6 +2,15 @@
 
 ## 2026-07-09
 
+- F6 move / Shift+F6 rename (#175): `file.move` (f6) moves the explorer
+  selection or the focused editor's file into a folder picked from a new
+  palette directory mode; `file.rename` (shift+f6) renames it (explorer inline
+  prompt, or a shell prompt for the focused editor). Renames/moves now emit
+  `FileMovedMsg` and open editors **follow the new path** (buffer, cursor,
+  undo history intact) instead of being closed; undo/redo of the operation
+  re-points them back. shift+f6 was reclaimed from the blocked LSP
+  rename-symbol placeholder (#6 needs a new chord when it lands).
+
 - Auto-save on focus switch (#174): `editor.auto_save = focus` (default; `off`
   disables) saves a dirty buffer when focus leaves its pane or its document is
   replaced by opening another file. Saves ride the normal path (watcher epoch,

@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-09T00:00:00Z
 ---
 
 # File Explorer
@@ -191,20 +191,31 @@ editor's history):
   redo — or a mistaken undo — loses nothing); redo moves it back.
 - **Undo of a delete** moves the trashed entry back to its original path; redo
   re-trashes it.
-- **Undo of a rename** renames the entry back; redo re-applies the new name.
+- **Undo of a rename or move** relocates the entry back; redo re-applies it.
 
 Because every direction is recoverable, undo and redo apply **instantly** — no
 confirmation prompt (only `explorer.delete` still confirms). Rename
-(`promptRename` / `renameEntry`) is an `os.Rename` within the same directory,
-prompted with the current name pre-filled. The root is never renameable,
-mirroring delete.
+(`promptRename` / `renameEntry`) and move (`moveEntry`, #175) share one core,
+`relocateEntry`: a single `os.Rename` from the old to the new path, guarded
+against name collisions and against moving a folder into itself, recorded as
+one `opRename` on the undo stack, with both affected parent directories
+re-scanned. The root is never renameable or movable, mirroring delete.
+Rename/move can also be requested for an explicit path (`RenamePathMsg`,
+`MoveToMsg`) — the app's `file.rename` (shift+f6) and `file.move` (f6)
+commands use these to act on the focused editor's file; the move target comes
+from the palette's directory picker mode.
 
-Removing a path (a delete, a rename, or undo of a create) emits `FileDeletedMsg`,
-which the root model handles by closing any editor still open on that file (or,
-for a directory, any file beneath it) — so a deleted or renamed-away path never
-lingers in an open pane (the editor has no way to follow a rename in place).
-Unlike the other explorer messages, `FileDeletedMsg` is handled by the app, not
-routed back into the explorer, so it deliberately does not implement `Msg`.
+Removing a path (a delete, or undo of a create) emits `FileDeletedMsg`, which
+the root model handles by closing any editor still open on that file (or, for
+a directory, any file beneath it). Renames and moves instead emit
+`FileMovedMsg{Old, New, IsDir}` (#175): the root model **re-points** every
+editor on the old path (or under an old directory prefix) via
+`editor.SetPath` — buffer, cursor and undo history survive; only the path
+changes, highlighting reparses (the extension may select a new grammar), and
+both ends are stamped as own writes so the watcher's echo of the rename never
+marks the followed buffers stale. Unlike the other explorer messages, these
+two are handled by the app, not routed back into the explorer, so they
+deliberately do not implement `Msg`.
 
 `Ctrl+Z` in the explorer context resolves to `explorer.undo`, and
 `Ctrl+Shift+Z` (plus `Cmd+Shift+Z` where the terminal delivers it) to

@@ -261,16 +261,29 @@ func (m *Model) promptRename() {
 }
 
 // renameEntry moves path to a new name within the same directory and re-scans
-// it. Renaming a path with an editor open on it closes that editor, since the
-// editor has no way to follow the path change in place.
+// it. Editors open on the path follow the change via FileMovedMsg (#175).
 func (m *Model) renameEntry(path, name string, isDir bool) tea.Cmd {
-	dir := filepath.Dir(path)
-	newPath := filepath.Join(dir, name)
+	return m.relocateEntry(path, filepath.Join(filepath.Dir(path), name), isDir)
+}
+
+// moveEntry moves path into targetDir, keeping its base name (file.move, #175).
+func (m *Model) moveEntry(path, targetDir string, isDir bool) tea.Cmd {
+	return m.relocateEntry(path, filepath.Join(targetDir, filepath.Base(path)), isDir)
+}
+
+// relocateEntry is the shared core of rename and move: one os.Rename from path
+// to newPath, recorded on the undo stack, with both affected directories
+// re-scanned and a FileMovedMsg so open editors re-point instead of closing.
+func (m *Model) relocateEntry(path, newPath string, isDir bool) tea.Cmd {
 	if newPath == path {
 		return nil
 	}
+	if isDir && strings.HasPrefix(newPath, path+string(filepath.Separator)) {
+		m.err = fmt.Errorf("cannot move a folder into itself")
+		return nil
+	}
 	if _, err := os.Lstat(newPath); err == nil {
-		m.err = fmt.Errorf("already exists: %s", name)
+		m.err = fmt.Errorf("already exists: %s", filepath.Base(newPath))
 		return nil
 	}
 	if err := os.Rename(path, newPath); err != nil {
@@ -279,7 +292,22 @@ func (m *Model) renameEntry(path, name string, isDir bool) tea.Cmd {
 	}
 	m.pushOp(fileOp{kind: opRename, path: path, newPath: newPath, isDir: isDir})
 	m.pendingSel = newPath
-	return tea.Batch(m.refreshDir(dir), deletedCmd(path, isDir))
+	return tea.Batch(m.refreshDirs(path, newPath), movedCmd(path, newPath, isDir))
+}
+
+// refreshDirs re-scans the parent directories of both ends of a relocation,
+// once when they coincide (a plain rename).
+func (m *Model) refreshDirs(path, newPath string) tea.Cmd {
+	from, to := filepath.Dir(path), filepath.Dir(newPath)
+	if from == to {
+		return m.refreshDir(from)
+	}
+	return tea.Batch(m.refreshDir(from), m.refreshDir(to))
+}
+
+// movedCmd announces a relocated path so the app can re-point editors on it.
+func movedCmd(old, new string, isDir bool) tea.Cmd {
+	return func() tea.Msg { return FileMovedMsg{Old: old, New: new, IsDir: isDir} }
 }
 
 // pushOp records a freshly completed operation on the undo stack. A new
@@ -323,7 +351,7 @@ func (m *Model) undo() tea.Cmd {
 			return nil
 		}
 		m.pendingSel = op.path
-		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.newPath, op.isDir))
+		cmd = tea.Batch(m.refreshDirs(op.path, op.newPath), movedCmd(op.newPath, op.path, op.isDir))
 	}
 	m.ops = m.ops[:len(m.ops)-1]
 	m.redoOps = append(m.redoOps, op)
@@ -361,7 +389,7 @@ func (m *Model) redo() tea.Cmd {
 			return nil
 		}
 		m.pendingSel = op.newPath
-		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
+		cmd = tea.Batch(m.refreshDirs(op.path, op.newPath), movedCmd(op.path, op.newPath, op.isDir))
 	}
 	m.redoOps = m.redoOps[:len(m.redoOps)-1]
 	m.ops = append(m.ops, op)
