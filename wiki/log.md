@@ -2,6 +2,11 @@
 
 ## 2026-07-09
 
+- Range companions (#164, Roadmap 0200): `internal/editor/excmd_ops.go` adds
+  `:[range]d [reg]` (delete into register), `:[range]y [reg]` (yank; cursor
+  stays), and `:[range]>` / `:[range]<` (indent/outdent, `:>>` repeats) over the
+  shared #161 resolver, reusing the operator/register/indent logic. Each is one
+  undo unit with vim-matching cursor behavior (verified against vim).
 - `:substitute` core (#162, Roadmap 0200): `internal/editor/substitute.go`
   implements `:[range]s/pat/repl/[flags]` on top of the #161 parser/resolver —
   flags `g`/`i`/`I`/`n`, any delimiter (`:s#a#b#`), pattern via the search-regex
