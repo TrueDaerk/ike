@@ -61,6 +61,17 @@ type OpenReplaceInPathMsg struct{}
 // Dispatched by search.nextMatch / search.prevMatch.
 type MatchStepMsg struct{ Delta int }
 
+// RenameFileMsg asks the root model to rename a file (#175, shift+f6):
+// with the explorer focused it opens the explorer's inline rename prompt on
+// the selection; with an editor focused it prompts for the focused file's new
+// name. Dispatched by file.rename.
+type RenameFileMsg struct{}
+
+// MoveFileMsg asks the root model to move a file into another folder (#175,
+// f6): the explorer's selection or the focused editor's file, with the target
+// picked from the palette's directory mode. Dispatched by file.move.
+type MoveFileMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -99,6 +110,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
+			appCommand("file.rename", "Rename File", RenameFileMsg{}),
+			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),

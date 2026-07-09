@@ -95,6 +95,15 @@ type Model struct {
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
+	// renamePath is the file being renamed by the file.rename prompt (#175)
+	// while the shell shows it; renameInput/renamePos are the typed name and
+	// its cursor. "" when no rename prompt is open.
+	renamePath  string
+	renameInput string
+	renamePos   int
+	// movePending is the file whose move target the palette's directory picker
+	// is currently asking for (file.move, #175); "" when no move is pending.
+	movePending string
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -585,7 +594,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
 	}
 	cmd := palette.NewCommandMode(reg, reg, paletteHideOff(cfg))
 	file := palette.NewFileMode()
-	return palette.New(pcfg, cmd, file)
+	dir := palette.NewDirMode()
+	return palette.New(pcfg, cmd, file, dir)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -777,6 +787,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// deleted file does not linger in an open pane.
 		m.closeEditorsForPath(msg.Path, msg.IsDir)
 		return m, nil
+
+	case explorer.FileMovedMsg:
+		// A rename/move (or its undo/redo): open editors follow the new path
+		// instead of closing (#175).
+		return m, m.followMovedFile(msg)
+
+	case RenameFileMsg:
+		// file.rename (shift+f6 / palette): explorer prompt on the selection,
+		// or the shell prompt for the focused editor's file.
+		return m, m.startRenameFile()
+
+	case MoveFileMsg:
+		// file.move (f6 / palette): pick a target folder for the selection /
+		// focused file via the palette's directory mode.
+		m.startMoveFile()
+		return m, nil
+
+	case palette.MoveTargetMsg:
+		return m, m.finishMoveFile(msg.Dir)
 
 	case explorer.Msg:
 		exp := m.explorer()
@@ -1036,6 +1065,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// handling: k / r / esc answer it, everything else is swallowed.
 		if m.conflictOpen() {
 			return m.updateConflict(msg)
+		}
+		// The rename prompt (#175) owns the keyboard the same way: typed
+		// characters build the new name, enter applies, esc cancels.
+		if m.renameOpen() {
+			return m.updateRenamePrompt(msg)
 		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)

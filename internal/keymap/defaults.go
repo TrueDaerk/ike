@@ -27,7 +27,11 @@ var jetbrainsRows = []row{
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)", false},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)", false},
 	{"alt+f7", "editor.findUsages", "Find usages", Editor, "Editor (06)/LSP (10)", false},
-	{"shift+f6", "editor.rename", "Rename symbol", Editor, "Editor (06)/LSP (10)", false},
+	// shift+f6 renames the *file* (explorer selection or focused editor's
+	// file, #175). LSP rename-symbol (#6) needs its own chord or a
+	// context-aware dispatch when it lands.
+	{"shift+f6", "file.rename", "Rename file", Global, "App (#175)", false},
+	{"f6", "file.move", "Move file", Global, "App (#175)", false},
 	// Comment toggling binds cmd+7, not the JetBrains cmd+/: on a German layout
 	// "/" lives on shift+7, so a cmd+/ chord is untypable there (idea #48).
 	{"cmd+7", "editor.commentLine", "Comment line", Editor, "Editor (idea #48)", false},

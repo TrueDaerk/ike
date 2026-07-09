@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-09T00:00:00Z
 ---
 
 # Command Palette
@@ -12,7 +12,10 @@ timestamp: 2026-07-07T00:00:00Z
 Roadmap 0070. A single modal overlay that fronts every action in IKE. It opens
 centered over the layout (default `ctrl+p`) and reads a leading **prefix rune**
 that selects a **Mode**: `:` runs registered **Commands**, `@` fuzzy-finds
-**files**. The chosen result is dispatched as a `tea.Msg` the root model applies;
+**files**, and a locked-only **directory mode** (`dir_mode.go`, no user-facing
+prefix) is the target picker behind `file.move` (#175), emitting a
+`MoveTargetMsg` the root model combines with the pending source path.
+The chosen result is dispatched as a `tea.Msg` the root model applies;
 the palette executes nothing itself. The prefix system is built to grow — adding
 a mode is registering one more `Mode`, the core stays prefix-agnostic.
 
