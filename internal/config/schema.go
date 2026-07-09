@@ -56,16 +56,24 @@ type Files struct {
 // reserved for later (#54).
 type Editor struct {
 	AutoSave               string `toml:"auto_save"`
-	TabWidth               int  `toml:"tab_width"`
-	UseSpaces              bool `toml:"use_spaces"`
-	LineNumbers            bool `toml:"line_numbers"`
-	RelativeLineNumbers    bool `toml:"relative_line_numbers"`
-	Wrap                   bool `toml:"wrap"`
-	ScrollOff              int  `toml:"scroll_off"`
-	AutoIndent             bool `toml:"auto_indent"`
-	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`
-	InsertFinalNewline     bool `toml:"insert_final_newline"`
-	ShowWhitespace         bool `toml:"show_whitespace"`
+	TabWidth               int    `toml:"tab_width"`
+	UseSpaces              bool   `toml:"use_spaces"`
+	LineNumbers            bool   `toml:"line_numbers"`
+	RelativeLineNumbers    bool   `toml:"relative_line_numbers"`
+	Wrap                   bool   `toml:"wrap"`
+	ScrollOff              int    `toml:"scroll_off"`
+	AutoIndent             bool   `toml:"auto_indent"`
+	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
+	InsertFinalNewline     bool   `toml:"insert_final_newline"`
+	ShowWhitespace         bool   `toml:"show_whitespace"`
+	Tabs                   Tabs   `toml:"tabs"`
+}
+
+// Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
+// pane's tab bar even when it holds a single tab; by default the bar only
+// appears with two or more tabs.
+type Tabs struct {
+	AlwaysShow bool `toml:"always_show"`
 }
 
 // Explorer holds file-tree behaviour. Colors is a per-filetype color-name slot

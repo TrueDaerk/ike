@@ -2,6 +2,16 @@
 
 ## 2026-07-09
 
+- Editor tabs — tab bar rendering (#157, Roadmap 0190): editor panes with ≥ 2
+  tabs render a tab bar on the pane's top row, replacing the single-document
+  title (zero extra vertical cost; `internal/app/tabbar.go`). Labels show the
+  basename with directory disambiguation for duplicates, a dirty ● and stale
+  `!` marker; the active tab is highlighted via theme slots (Accent/bold,
+  separators in Border). Overflow elides around the active tab with `…` at the
+  hidden end — never wraps. New config key `editor.tabs.always_show` (default
+  false, `[editor.tabs]`, settings-page toggle) forces the bar for single-tab
+  panes. Tests in `internal/app/tabbar_test.go`; wiki concept doc updated.
+
 - Editor tabs — tab model (#156, Roadmap 0190): each editor pane
   (`pane.Instance`) now hosts an **ordered tab list** (`[]*editor.Model`) with
   one active index; `Editor()` stays the active tab so the pane surface is

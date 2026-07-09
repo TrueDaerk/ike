@@ -65,6 +65,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.scroll_off", Type: Int, Title: "Scroll offset", Description: "Minimum lines kept visible above and below the cursor", Scope: config.UserScope, Min: 0, Max: 50},
 			{Key: "editor.wrap", Type: Bool, Title: "Soft wrap", Description: "Wrap long lines at the pane edge", Scope: config.UserScope},
 			{Key: "editor.show_whitespace", Type: Bool, Title: "Show whitespace", Description: "Render spaces and tabs visibly", Scope: config.UserScope},
+			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 		}},
 		{Title: "Appearance", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},
