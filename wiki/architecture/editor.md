@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-09T18:30:00Z
+timestamp: 2026-07-09T19:00:00Z
 ---
 
 # Editor
@@ -138,6 +138,20 @@ last substitute) as its pattern. Any non-alphanumeric delimiter works
   single `mutate`, so a single `u` reverts the whole run; the cursor lands on the
   last changed line. A bare `:s` (optionally with a range) repeats the last
   substitute. The outcome is reported as *N substitutions on M lines*.
+
+### Range companions (`excmd_ops.go`)
+
+Line-range commands that reuse the existing operator / register / indent logic,
+each over the shared resolver and each a single undo unit:
+
+- `:[range]d [reg]` deletes the range's lines into a register (unnamed by
+  default), leaving the cursor on the line that takes the range's place — the
+  `dd` cursor rule.
+- `:[range]y [reg]` yanks into a register; like vim, the cursor does not move.
+- `:[range]>` / `:[range]<` indent / outdent through the same tab-unit / dedent
+  logic as the normal-mode `>`/`<` operators; a repeated verb (`:>>`) shifts that
+  many times, and the cursor lands on the range's last line at its first
+  non-blank.
 
 ## Comment toggling (Roadmap 0120)
 

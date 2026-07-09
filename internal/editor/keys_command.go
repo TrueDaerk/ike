@@ -131,7 +131,17 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 		m.cmdMsg = "E: :" + cmd.Name + " is not implemented yet"
 	case "s", "substitute":
 		return m.substitute(cmd), nil
+	case "d", "delete":
+		return m.exDelete(cmd), nil
+	case "y", "yank":
+		return m.exYank(cmd), nil
 	default:
+		switch {
+		case isRun(cmd.Name, '>'):
+			return m.exIndent(cmd, len(cmd.Name)), nil
+		case isRun(cmd.Name, '<'):
+			return m.exIndent(cmd, -len(cmd.Name)), nil
+		}
 		m.cmdMsg = "E: not an editor command: " + cmd.Name
 	}
 	return m, nil
