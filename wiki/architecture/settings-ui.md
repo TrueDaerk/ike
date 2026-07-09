@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-09T00:00:00Z
+timestamp: 2026-07-09T22:30:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -89,6 +89,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   on/off, command-palette chord.
 - **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
   (clean|never, #81).
+- **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
+  snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
+  (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
 - **Notifications** — toast timeout, severity floor.
 
 ## Keymap page (#93)

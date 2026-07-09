@@ -45,9 +45,16 @@ func backupDir() string {
 func backupService() *backup.Service { return backup.New(backupDir(), nil) }
 
 // scanRecovery loads any leftover snapshots at startup. They are held until the
-// first window size arrives, then shown as a prompt.
+// first window size arrives, then shown as a prompt. With [backup] disabled the
+// subsystem is fully off: no prompt, and existing snapshots (they hold file
+// contents) are purged instead.
 func (m *Model) scanRecovery() {
-	snaps, err := backupService().List()
+	svc := backupService()
+	if !m.backupEnabled() {
+		_, _ = svc.Purge()
+		return
+	}
+	snaps, err := svc.List()
 	if err != nil || len(snaps) == 0 {
 		return
 	}
@@ -150,10 +157,14 @@ func (m Model) dropRecoveryItem() tea.Model {
 }
 
 // closeRecovery dismisses the prompt, leaving any undecided snapshots on disk so
-// they are offered again next launch.
+// they are offered again next launch. The prompt has had its say now, so the
+// age-based GC (#167) may prune what remains — never silently before it.
 func (m Model) closeRecovery() tea.Model {
 	m.recovery = nil
 	m.shell.Close()
+	if m.backupEnabled() {
+		_, _ = backupService().Prune(backupMaxAge(m.host.Config()))
+	}
 	return m
 }
 

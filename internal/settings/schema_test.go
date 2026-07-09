@@ -62,6 +62,12 @@ func TestCorePagesPresent(t *testing.T) {
 			t.Errorf("Files & Session page missing %s", k)
 		}
 	}
+	bk := keys("Backup")
+	for _, k := range []string{"backup.enable", "backup.debounce_ms", "backup.max_age_days"} {
+		if !bk[k] {
+			t.Errorf("Backup page missing %s", k)
+		}
+	}
 	// The theme enum carries the registry's theme list.
 	for _, e := range byTitle["Appearance"] {
 		if e.Key == "theme.name" && len(e.Options) != 2 {

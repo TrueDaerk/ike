@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-07-09T20:30:00Z
+timestamp: 2026-07-09T22:30:00Z
 ---
 
 # Crash Recovery
@@ -69,12 +69,20 @@ A snapshot's life is tied to the dirty flag:
 - **Removed** on save, on close-with-discard, and on clean shutdown (the quit
   path already walks open buffers).
 - **Leftover on startup ⇒ the previous session died**: the restore flow lists
-  them at launch and prompts per file, then age-based GC prunes the rest (#167).
+  them at launch and prompts per file, then age-based GC prunes the rest.
 
-The write side (marking a buffer on the change seam, snapshotting due buffers off
-the Update loop as a `tea.Cmd`, and `Cancel` + `Remove` on save / discard / quit)
-is the app's event-loop integration; this concept documents the service subsystem
-(#165) plus the restore flow (#166).
+The write side (#167, `internal/app/backup.go`) rides the shared-document sync
+seam: `editor.SyncMsg` fires on every buffer change and save, and the
+originating pane's dirty flag decides — dirty `Mark`s the buffer on the
+debouncer (key = file path, or a pane-scoped `untitled:` token for pathless
+buffers), clean `Cancel`s the mark and removes the snapshot. One armed
+`tea.Tick` wakes the model at the earliest deadline; the tick captures the due
+buffers' text and writes the snapshots off the Update loop as a `tea.Cmd`,
+re-arming while marks remain. Close-with-discard removes the closing pane's
+snapshot (unless another pane still shows the shared document), and a clean
+quit removes the snapshots of every open buffer — so a leftover at startup
+always means a crash. Snapshots skipped at the restore prompt belong to no
+open pane and survive the quit.
 
 ## Restore flow (#166, `internal/app/recovery.go`)
 
@@ -100,7 +108,20 @@ moved on under the recovered edits. A diff option joins once the diff viewer
 
 ## Configuration & privacy
 
-A `[backup]` config section (#167) will expose `enable`, `debounce_ms`, and
-`max_age_days` (default 7, pruned at startup after the restore prompt).
-**Privacy:** snapshots contain file contents; `enable=false` turns the subsystem
-fully off and purges existing snapshots.
+The `[backup]` config section (#167) tunes the subsystem; edits apply live
+through the settings panel's **Backup** page (hot-reload, no restart):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `backup.enable` | `true` | Turns the subsystem on. Disabling it — in config or live — also **purges existing snapshots**. |
+| `backup.debounce_ms` | `2000` | Quiet interval after the last edit before a dirty buffer is snapshotted (clamped to ≥ 100). |
+| `backup.max_age_days` | `7` | Snapshots older than this are pruned by the startup GC (clamped to ≥ 1). |
+
+**GC ordering:** the age-based GC (`Service.Prune`) runs only after the restore
+prompt has closed — every leftover snapshot is offered first, never silently
+pruned. With no leftover snapshots there is nothing to prune and no prompt.
+
+**Privacy:** snapshots contain full file contents (they live under the project
+state dir, outside the project tree). `enable = false` turns the subsystem
+fully off and purges everything on disk — at startup and immediately on a live
+config reload.

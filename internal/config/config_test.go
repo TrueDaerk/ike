@@ -274,3 +274,30 @@ func TestPushHistoryBoundedAndDeduped(t *testing.T) {
 		}
 	}
 }
+
+func TestBackupDefaults(t *testing.T) {
+	c, diags := Load(Options{})
+	if len(diags) != 0 {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if !c.Backup.Enable || c.Backup.DebounceMs != 2000 || c.Backup.MaxAgeDays != 7 {
+		t.Errorf("backup defaults wrong: %+v", c.Backup)
+	}
+}
+
+func TestBackupClampAndOverride(t *testing.T) {
+	proj := writeProject(t, "[backup]\nenable = false\ndebounce_ms = 5\nmax_age_days = 0\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Backup.Enable {
+		t.Errorf("enable = false should stick")
+	}
+	if c.Backup.DebounceMs != 100 {
+		t.Errorf("debounce_ms should clamp to 100, got %d", c.Backup.DebounceMs)
+	}
+	if c.Backup.MaxAgeDays != 1 {
+		t.Errorf("max_age_days should clamp to 1, got %d", c.Backup.MaxAgeDays)
+	}
+	if len(diags) != 2 {
+		t.Errorf("expected one diagnostic per clamp, got %v", diags)
+	}
+}

@@ -2,6 +2,20 @@
 
 ## 2026-07-09
 
+- Backup config & GC (#167, Roadmap 0210): new `[backup]` config section —
+  `enable` (default true; `false` fully disables the subsystem and **purges**
+  existing snapshots, at startup and on live reload), `debounce_ms` (default
+  2000, clamped ≥ 100), `max_age_days` (default 7, clamped ≥ 1) — plus the
+  write-side wiring (`internal/app/backup.go`): the `editor.SyncMsg` change
+  seam marks dirty buffers on the `Debouncer`, one armed `tea.Tick` snapshots
+  the quiet ones off the Update loop, and save / close-with-discard / clean
+  quit remove their snapshots. Age-based GC (`Service.Prune`) runs at startup
+  only after the restore prompt closes. New settings **Backup** page
+  (`backup.enable` / `backup.debounce_ms` / `backup.max_age_days`). Tests
+  across `internal/backup`, `internal/config`, `internal/settings`,
+  `internal/app`. Wiki updated (crash-recovery config table + privacy note,
+  config schema/clamps, settings pages).
+
 - Restore flow (#166, Roadmap 0210): crash recovery reads leftover snapshots at
   launch (`internal/app/recovery.go`). `scanRecovery` runs in the constructor;
   once the window is sized, `maybeOpenRecovery` shows a floating prompt (reusing

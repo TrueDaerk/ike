@@ -18,6 +18,7 @@ type Config struct {
 	Notifications Notifications `toml:"notifications"`
 	Files         Files         `toml:"files"`
 	UI            UI            `toml:"ui"`
+	Backup        Backup        `toml:"backup"`
 	// Lang holds per-language settings as a free-form slot (Roadmap 0160,
 	// mirrors LSP.Servers): [lang.python] interpreter = "/path/to/python".
 	// The toolchain settings page writes it; lang.Interpreter resolution and
@@ -28,6 +29,17 @@ type Config struct {
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.
 type UI struct {
 	MenuBar bool `toml:"menu_bar"`
+}
+
+// Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns
+// the subsystem on; disabling it also purges existing snapshots (they contain
+// file contents). DebounceMs is the quiet interval after the last edit before a
+// dirty buffer is snapshotted. MaxAgeDays bounds snapshot age: older leftovers
+// are pruned at startup, after the restore prompt has run.
+type Backup struct {
+	Enable     bool `toml:"enable"`
+	DebounceMs int  `toml:"debounce_ms"`
+	MaxAgeDays int  `toml:"max_age_days"`
 }
 
 // Files holds external-file-change behaviour (Roadmap 0140). Watch enables the
