@@ -17,6 +17,10 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	s := key.String()
 	r, hasRune := firstRune(key)
 
+	// Any normal-mode key clears a lingering ex-command message (vim leaves the
+	// last ":"-line message up until the next key).
+	m.cmdMsg = ""
+
 	// Secondary-key states resolve before anything else.
 	switch m.wait {
 	case awaitG:

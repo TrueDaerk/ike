@@ -2,6 +2,14 @@
 
 ## 2026-07-09
 
+- Ex parser & range resolver (#161, Roadmap 0200): `internal/editor/excmd` now
+  parses the `:` line into a typed `Command{Range, Name, Bang, Args}` AST with a
+  full address grammar — `%`, line numbers, `.`, `$`, `'<` / `'>`, `/pat/` /
+  `?pat?`, and signed offsets — and a single `Range.Resolve` shared by all
+  range-taking commands. Existing `:w :q :wq :e` and bare line jumps keep
+  working; `:g` / `:v` / `:s` are reserved with a *not implemented* message.
+  Entering `:` from Visual pre-fills `'<,'>`. Ex-command errors/reports now show
+  on a transient command-line message row.
 - F6 move / Shift+F6 rename (#175): `file.move` (f6) moves the explorer
   selection or the focused editor's file into a folder picked from a new
   palette directory mode; `file.rename` (shift+f6) renames it (explorer inline

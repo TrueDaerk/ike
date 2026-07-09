@@ -91,30 +91,86 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 	cmd := excmd.Parse(m.cmdline)
 	m.mode = Normal
 	m.cmdline = ""
-	switch cmd.Kind {
-	case excmd.Write:
-		if c := m.saveGuarded(orDefault(cmd.Arg, m.path)); c != nil {
+	m.cmdMsg = ""
+	if cmd.Err != "" {
+		m.cmdMsg = "E: " + cmd.Err
+		return m, nil
+	}
+
+	// A bare range with no command name jumps to the last line of the range.
+	if cmd.Name == "" {
+		if cmd.Range.Count == 0 {
+			return m, nil
+		}
+		_, end, err := cmd.Range.Resolve(m.exResolver(), m.cursor.Line)
+		if err != "" {
+			m.cmdMsg = "E: " + err
+			return m, nil
+		}
+		m.moveTo(buffer.Position{Line: end, Col: 0})
+		return m, nil
+	}
+
+	switch cmd.Name {
+	case "w", "write":
+		if c := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
 			return m, c
 		}
-	case excmd.Quit:
+	case "q", "quit":
 		return m, func() tea.Msg { return CloseMsg{} }
-	case excmd.WriteQuit:
-		if c := m.saveGuarded(orDefault(cmd.Arg, m.path)); c != nil {
+	case "wq", "x", "xit":
+		if c := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
 			return m, c // conflict: prompt first, keep the pane open
 		}
 		return m, func() tea.Msg { return CloseMsg{} }
-	case excmd.Edit:
-		if cmd.Arg != "" {
-			_ = m.Load(cmd.Arg)
+	case "e", "edit":
+		if cmd.Args != "" {
+			_ = m.Load(cmd.Args)
 		}
-	case excmd.Goto:
-		line := cmd.Line - 1
-		if line > m.buf.LineCount()-1 {
-			line = m.buf.LineCount() - 1
-		}
-		m.moveTo(buffer.Position{Line: line, Col: 0})
+	case "g", "global", "v", "vglobal":
+		m.cmdMsg = "E: :" + cmd.Name + " is not implemented yet"
+	case "s", "substitute":
+		m.cmdMsg = "E: :substitute is not implemented yet"
+	default:
+		m.cmdMsg = "E: not an editor command: " + cmd.Name
 	}
 	return m, nil
+}
+
+// exResolver captures the editor state the ex range resolver consults: the
+// cursor line, the last visual selection bounds, and a line-search hook for
+// pattern addresses.
+func (m Model) exResolver() excmd.Resolver {
+	return excmd.Resolver{
+		Buf:         m.buf,
+		Current:     m.cursor.Line,
+		VisualStart: m.visualStart,
+		VisualEnd:   m.visualEnd,
+		Search:      m.exSearchLine,
+	}
+}
+
+// exSearchLine finds the next line (0-based) matching pat as a regex, searching
+// from the line after/before `from` and wrapping around the buffer ends. It
+// backs the "/pat/" and "?pat?" ex addresses.
+func (m Model) exSearchLine(pat string, from int, forward bool) (int, bool) {
+	q := search.Compile(pat, true)
+	if q.Empty() {
+		return 0, false
+	}
+	n := m.buf.LineCount()
+	for i := 1; i <= n; i++ {
+		var l int
+		if forward {
+			l = (from + i) % n
+		} else {
+			l = ((from-i)%n + n) % n
+		}
+		if len(q.LineMatches(m.buf, l)) > 0 {
+			return l, true
+		}
+	}
+	return 0, false
 }
 
 // orDefault returns s when non-empty, else def.
