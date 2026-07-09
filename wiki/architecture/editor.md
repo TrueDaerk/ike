@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-09T19:00:00Z
+timestamp: 2026-07-09T19:30:00Z
 ---
 
 # Editor
@@ -130,7 +130,8 @@ last substitute) as its pattern. Any non-alphanumeric delimiter works
 
 - **Flags:** `g` (every match per line, not just the first), `i` / `I`
   (case-insensitive / -sensitive), `n` (report the count without changing
-  anything). An unknown flag is an error.
+  anything), `c` (confirm each match interactively — see below). An unknown flag
+  is an error.
 - **Replacement** is vim-style: `&` / `\0` is the whole match, `\1`-`\9` the
   capture groups, `\&` and `\\` literal `&` / `\` (Go's `$name` syntax is *not*
   used — `$` is literal).
@@ -138,6 +139,23 @@ last substitute) as its pattern. Any non-alphanumeric delimiter works
   single `mutate`, so a single `u` reverts the whole run; the cursor lands on the
   last changed line. A bare `:s` (optionally with a range) repeats the last
   substitute. The outcome is reported as *N substitutions on M lines*.
+
+### Confirm mode (`substitute_confirm.go`)
+
+The `c` flag (`:s/pat/repl/gc`) turns substitution into an interactive walk
+instead of a batch replace. It runs as a sub-state of the mode machine — no new
+pane — driven by `m.subConfirm`: the editor precomputes every match over the
+range, jumps to the first with it highlighted (reusing the selection highlight),
+and shows `replace (y/n/a/q/l)?` on the command-line row.
+
+- `y` replaces and advances, `n` skips, `a` replaces this and every remaining
+  match, `q` quits, `l` replaces this one then quits; `Esc` cancels. Any other
+  key waits.
+- Accepted replacements accumulate in one open `history.Recorder`, so the whole
+  interaction is a **single undo unit** and cancelling keeps what was already
+  applied. A per-line rune-column delta maps each precomputed match's original
+  span onto the shifted buffer, so multiple matches on one line stay aligned as
+  earlier replacements change the line's length.
 
 ### Range companions (`excmd_ops.go`)
 

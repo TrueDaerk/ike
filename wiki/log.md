@@ -2,6 +2,13 @@
 
 ## 2026-07-09
 
+- Substitute confirm mode (#163, Roadmap 0200): the `c` flag
+  (`:s/pat/repl/gc`) drives an interactive match-by-match walk in a mode-machine
+  sub-state (`internal/editor/substitute_confirm.go`) — `y`/`n`/`a`/`q`/`l`
+  (+ `Esc`), the current match highlighted, the prompt on the command-line row.
+  Accepted replacements share one open recorder (a single undo unit; cancel keeps
+  what was applied), and a per-line rune-delta keeps multiple matches on a line
+  aligned as lengths change. Completes epic 0200.
 - Range companions (#164, Roadmap 0200): `internal/editor/excmd_ops.go` adds
   `:[range]d [reg]` (delete into register), `:[range]y [reg]` (yank; cursor
   stays), and `:[range]>` / `:[range]<` (indent/outdent, `:>>` repeats) over the
