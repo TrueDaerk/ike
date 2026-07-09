@@ -82,7 +82,8 @@ type Model struct {
 	searching bool
 	searchDir search.Direction
 	query     search.Query
-	cmdMsg    string // transient ":"-line message (errors, reports); shown while idle
+	cmdMsg    string          // transient ":"-line message (errors, reports); shown while idle
+	lastSub   lastSubstitute  // last :substitute, for a bare ":s" repeat
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position

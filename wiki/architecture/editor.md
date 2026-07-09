@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-09T18:00:00Z
+timestamp: 2026-07-09T18:30:00Z
 ---
 
 # Editor
@@ -115,11 +115,29 @@ The grammar is `[range] name[!] [args]`:
   line.
 - **Entering `:` from Visual** pre-fills `'<,'>` and records the selection bounds,
   matching vim; those bounds back the `'<` / `'>` addresses.
-- **Reserved:** `:g` / `:v` (global) and `:s` (substitute) parse but report *not
-  implemented yet* — landing in Roadmap 0200's later sub-issues. Unknown names
-  and unresolvable addresses (missing selection, pattern not found) surface a
-  transient `E:` message on the command-line row (`m.cmdMsg`), cleared by the next
-  normal-mode key.
+- **Errors:** unknown names and unresolvable addresses (missing selection,
+  pattern not found) surface a transient `E:` message on the command-line row
+  (`m.cmdMsg`), cleared by the next normal-mode key. `:g` / `:v` (global) parse
+  but report *not implemented yet* (a later Roadmap 0200 sub-issue).
+
+### `:substitute` (`substitute.go`)
+
+`:[range]s/pat/repl/[flags]` rewrites lines over the resolved range (default: the
+current line). The pattern follows the search-layer convention — literal by
+default, `\v` prefix for regex — so `:s//bar/` reuses the last search (then the
+last substitute) as its pattern. Any non-alphanumeric delimiter works
+(`:s#a#b#`), and `\<delim>` is a literal delimiter.
+
+- **Flags:** `g` (every match per line, not just the first), `i` / `I`
+  (case-insensitive / -sensitive), `n` (report the count without changing
+  anything). An unknown flag is an error.
+- **Replacement** is vim-style: `&` / `\0` is the whole match, `\1`-`\9` the
+  capture groups, `\&` and `\\` literal `&` / `\` (Go's `$name` syntax is *not*
+  used — `$` is literal).
+- **One undo unit:** all replacements of one invocation are applied inside a
+  single `mutate`, so a single `u` reverts the whole run; the cursor lands on the
+  last changed line. A bare `:s` (optionally with a range) repeats the last
+  substitute. The outcome is reported as *N substitutions on M lines*.
 
 ## Comment toggling (Roadmap 0120)
 
