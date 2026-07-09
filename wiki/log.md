@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-10
+
+- Editor tabs — commands & keybindings (#158, Roadmap 0190): new registry
+  commands `editor.tab.next`/`prev` (alt+right/left, wrapping),
+  `editor.tab.select1…9` (alt+1…9), `editor.tab.moveLeft`/`moveRight`
+  (alt+shift+arrows) and `editor.tab.reopenClosed` (alt+shift+t) — handlers in
+  `internal/app/tabs.go`, acting on the focused (else most recent) editor
+  pane. A 10-entry reopen ring records path + caret of closed tabs (tab and
+  pane closes both feed it); reopen skips files deleted since and restores the
+  caret. Chords are QWERTZ-safe and distinct from the ctrl+tab pane switcher;
+  alt+arrow rows are marked fragile (option-as-meta). "Reopen Closed Tab"
+  joins the File menu; palette/cheatsheet entries come via the registry.
+  Tests in `internal/app/tabcommands_test.go`; wiki concept doc updated.
+
 ## 2026-07-09
 
 - Editor tabs — tab bar rendering (#157, Roadmap 0190): editor panes with ≥ 2

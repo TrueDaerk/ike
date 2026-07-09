@@ -9,6 +9,7 @@ func Defaults() []Menu {
 			{Title: "Save", Command: "editor.write"},
 			{Title: "Save All", Command: "editor.saveAll"},
 			{Title: "Close Tab", Command: "editor.closeTab"},
+			{Title: "Reopen Closed Tab", Command: "editor.tab.reopenClosed"},
 			{Title: "Switch Project", Command: "project.switch"},
 		}},
 		{Title: "Edit", Items: []Item{
