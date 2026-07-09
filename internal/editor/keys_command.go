@@ -130,7 +130,7 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 	case "g", "global", "v", "vglobal":
 		m.cmdMsg = "E: :" + cmd.Name + " is not implemented yet"
 	case "s", "substitute":
-		m.cmdMsg = "E: :substitute is not implemented yet"
+		return m.substitute(cmd), nil
 	default:
 		m.cmdMsg = "E: not an editor command: " + cmd.Name
 	}

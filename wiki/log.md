@@ -2,6 +2,14 @@
 
 ## 2026-07-09
 
+- `:substitute` core (#162, Roadmap 0200): `internal/editor/substitute.go`
+  implements `:[range]s/pat/repl/[flags]` on top of the #161 parser/resolver —
+  flags `g`/`i`/`I`/`n`, any delimiter (`:s#a#b#`), pattern via the search-regex
+  convention (`\v`, empty pattern reuses the last search), vim-style capture-group
+  replacements (`&`, `\0`-`\9`). All replacements form a single undo unit, the
+  cursor lands on the last changed line, and the result is reported as *N
+  substitutions on M lines* (or a clear error for unknown flags / pattern not
+  found).
 - Ex parser & range resolver (#161, Roadmap 0200): `internal/editor/excmd` now
   parses the `:` line into a typed `Command{Range, Name, Bang, Args}` AST with a
   full address grammar — `%`, line numbers, `.`, `$`, `'<` / `'>`, `/pat/` /
