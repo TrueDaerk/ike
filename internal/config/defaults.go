@@ -64,6 +64,11 @@ func defaults() *Config {
 		UI: UI{
 			MenuBar: true,
 		},
+		Backup: Backup{
+			Enable:     true,
+			DebounceMs: 2000,
+			MaxAgeDays: 7,
+		},
 		Lang: map[string]map[string]string{},
 	}
 }

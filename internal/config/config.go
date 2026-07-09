@@ -133,6 +133,10 @@ func (c *Config) Flat() map[string]string {
 	put("files.watch", c.Files.Watch)
 	put("files.auto_reload", c.Files.AutoReload)
 
+	put("backup.enable", c.Backup.Enable)
+	put("backup.debounce_ms", c.Backup.DebounceMs)
+	put("backup.max_age_days", c.Backup.MaxAgeDays)
+
 	put("ui.menu_bar", c.UI.MenuBar)
 
 	for id, kv := range c.Lang {

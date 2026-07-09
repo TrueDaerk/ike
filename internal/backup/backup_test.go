@@ -161,3 +161,74 @@ func TestBaseInfo(t *testing.T) {
 		t.Fatal("missing file should be ok=false")
 	}
 }
+
+func TestPruneRemovesOnlyOldSnapshots(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)
+
+	old := New(dir, fixedClock(now.Add(-8*24*time.Hour)))
+	if err := old.Snapshot(Doc{Key: "old", Text: "stale"}); err != nil {
+		t.Fatal(err)
+	}
+	fresh := New(dir, fixedClock(now.Add(-time.Hour)))
+	if err := fresh.Snapshot(Doc{Key: "fresh", Text: "recent"}); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := New(dir, fixedClock(now))
+	pruned, err := svc.Prune(7 * 24 * time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pruned != 1 {
+		t.Fatalf("pruned = %d, want 1", pruned)
+	}
+	snaps, err := svc.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snaps) != 1 || snaps[0].Key != "fresh" {
+		t.Fatalf("prune must keep the fresh snapshot only, got %+v", snaps)
+	}
+}
+
+func TestPurgeRemovesEverySnapshot(t *testing.T) {
+	dir := t.TempDir()
+	svc := New(dir, fixedClock(time.Date(2026, 7, 9, 12, 0, 0, 0, time.UTC)))
+	for _, k := range []string{"a", "b"} {
+		if err := svc.Snapshot(Doc{Key: k, Text: k}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// A malformed .ikebak must go too — purge means nothing left behind.
+	if err := os.WriteFile(filepath.Join(dir, "junk.ikebak"), []byte("not a snapshot"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	purged, err := svc.Purge()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if purged != 3 {
+		t.Fatalf("purged = %d, want 3", purged)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".ikebak") {
+			t.Fatalf("purge left %s behind", e.Name())
+		}
+	}
+}
+
+func TestPruneAndPurgeOnMissingDir(t *testing.T) {
+	svc := New(filepath.Join(t.TempDir(), "nope"), nil)
+	if n, err := svc.Prune(time.Hour); err != nil || n != 0 {
+		t.Fatalf("prune on missing dir: n=%d err=%v", n, err)
+	}
+	if n, err := svc.Purge(); err != nil || n != 0 {
+		t.Fatalf("purge on missing dir: n=%d err=%v", n, err)
+	}
+}

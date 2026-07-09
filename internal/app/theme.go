@@ -130,6 +130,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	pal, warning := resolveTheme(m.reg, hcfg)
 	m.applyTheme(pal)
 	m.panes.Reconfigure(hcfg)
+	// [backup] edits apply live too: interval changes re-arm, disabling purges
+	// existing snapshots (Roadmap 0210, #167).
+	m.reconfigureBackup(hcfg)
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg)

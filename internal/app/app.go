@@ -101,6 +101,14 @@ type Model struct {
 	// the window is sized and the prompt can open. Both nil/empty when idle.
 	recovery        *recoveryState
 	recoveryPending []backup.Snapshot
+	// backupSvc/backupDeb are the crash-recovery write side (Roadmap 0210,
+	// #167): the change seam marks dirty buffers, one armed tick
+	// (backupTickArmed) snapshots the ones that went quiet. backupIv caches the
+	// debounce interval so a live reload can detect a change.
+	backupSvc       *backup.Service
+	backupDeb       *backup.Debouncer
+	backupTickArmed bool
+	backupIv        time.Duration
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
@@ -219,6 +227,9 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 		keys:         buildKeymap(cfg),
 	}
 	m.watcher = watch.New(m.host.Send)
+	m.backupSvc = backupService()
+	m.backupIv = backupInterval(cfg)
+	m.backupDeb = backup.NewDebouncer(m.backupIv)
 	m.searcher = search.New(m.host.Send)
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
@@ -460,6 +471,7 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.tree != nil {
 		saveLayout(m.tree, m.panes)
 	}
+	m.backupCleanShutdown()
 	return m, tea.Quit
 }
 
@@ -960,6 +972,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			msg.Stale = origin.Editor().Stale()
 		}
 		var cmds []tea.Cmd
+		// Crash-recovery write side (#167): the same seam drives the snapshot
+		// debounce — dirty (re)arms it, clean cancels and drops the snapshot.
+		if c := m.backupOnSync(msg.FromKey); c != nil {
+			cmds = append(cmds, c)
+		}
 		for _, key := range m.editorKeysForPath(msg.Path) {
 			if key == msg.FromKey {
 				continue
@@ -1035,6 +1052,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// :q / :wq closes the focused editor leaf, mirroring CloseFocused.
 		m.closeFocused()
 		return m, nil
+
+	case backupTickMsg:
+		// A debounce deadline elapsed: snapshot the quiet dirty buffers and
+		// re-arm while marks remain (Roadmap 0210, #167).
+		m.backupTickArmed = false
+		return m, tea.Batch(m.snapshotDueBackups(time.Now()), m.armBackupTick())
 
 	case toastExpireMsg:
 		m.expireToast(msg.id)
@@ -1532,6 +1555,7 @@ func (m *Model) closeKey(key string) bool {
 	if !ok {
 		return false // last leaf: never empty the workspace
 	}
+	m.backupDropOnClose(inst, key)
 	m.tree = tree
 	m.panes.Close(key)
 	if m.recentEditor == key {

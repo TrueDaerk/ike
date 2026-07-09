@@ -52,6 +52,8 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "explorer.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Explorer.Sort)})
 		c.Explorer.Sort = "name"
 	}
+	clampMin("backup.debounce_ms", &c.Backup.DebounceMs, 100)
+	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})

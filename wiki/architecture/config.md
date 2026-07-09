@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-09T22:30:00Z
 ---
 
 # Configuration System
@@ -44,7 +44,8 @@ emitting a non-fatal `Diagnostic`**. Bad config must never crash the IDE. Only a
 TOML *parse* error hard-fails a single file — its layer is dropped and the lower
 layers still apply, reported as a file-sourced diagnostic. Clamped today:
 `editor.tab_width >= 1`, `editor.scroll_off >= 0`, `explorer.tree_indent >= 0`,
-`project.max_history >= 0`, `explorer.sort` ∈ {name,type,size,modified},
+`project.max_history >= 0`, `backup.debounce_ms >= 100`,
+`backup.max_age_days >= 1`, `explorer.sort` ∈ {name,type,size,modified},
 `lsp.log_level` ∈ {error,warn,info,debug}, and `project.history` truncated to
 `max_history`.
 
@@ -60,6 +61,8 @@ Sections and their default-bearing slots (`schema.go`):
 - `[lsp]` — enabled, log-level + an empty `[lsp.servers]` slot (Roadmap 0100).
 - `[theme]` — `name`, `dark` (the selector; palettes owned by Roadmap 0110).
 - `[project]` — history list, `max_history`, `restore_last` (UX in Roadmap 0090).
+- `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
+  snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
 
 ## Extension hook
 

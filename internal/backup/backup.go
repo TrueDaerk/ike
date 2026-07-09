@@ -132,6 +132,51 @@ func (s *Service) List() ([]Snapshot, error) {
 	return out, nil
 }
 
+// Prune removes every snapshot older than maxAge (against the service clock)
+// and returns how many it removed. Age-based GC (#167) runs at startup, only
+// after the restore prompt has had its say, so nothing is pruned unseen.
+func (s *Service) Prune(maxAge time.Duration) (int, error) {
+	snaps, err := s.List()
+	if err != nil {
+		return 0, err
+	}
+	cutoff := s.clock().Add(-maxAge)
+	pruned := 0
+	for _, snap := range snaps {
+		if snap.Timestamp.Before(cutoff) {
+			if err := os.Remove(snap.File); err != nil && !errors.Is(err, os.ErrNotExist) {
+				return pruned, err
+			}
+			pruned++
+		}
+	}
+	return pruned, nil
+}
+
+// Purge removes every snapshot file, malformed ones included, and returns how
+// many it removed. Disabling the subsystem calls it: snapshots hold file
+// contents, so [backup] enable = false must not leave any behind.
+func (s *Service) Purge() (int, error) {
+	entries, err := os.ReadDir(s.dir)
+	if errors.Is(err, os.ErrNotExist) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	purged := 0
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ext) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(s.dir, e.Name())); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return purged, err
+		}
+		purged++
+	}
+	return purged, nil
+}
+
 // BaseInfo stats and hashes the on-disk file at path for a snapshot's base
 // header. ok is false for an empty path (untitled buffer) or an unreadable file.
 func BaseInfo(path string) (mtime time.Time, hash string, ok bool) {
