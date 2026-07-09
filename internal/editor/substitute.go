@@ -65,7 +65,7 @@ func (m Model) substitute(cmd excmd.Command) Model {
 		pat, repl, flags, regex = m.lastSub.pattern, m.lastSub.repl, m.lastSub.flags, m.lastSub.regex
 	}
 
-	global, ci, countOnly, ferr := parseSubFlags(flags)
+	global, ci, countOnly, confirm, ferr := parseSubFlags(flags)
 	if ferr != "" {
 		m.cmdMsg = "E: " + ferr
 		return m
@@ -78,6 +78,12 @@ func (m Model) substitute(cmd excmd.Command) Model {
 	}
 	if hasBody {
 		m.lastSub = lastSubstitute{pattern: pat, regex: regex, repl: repl, flags: flags, valid: true}
+	}
+
+	// The "c" flag drives an interactive match-by-match confirmation instead of
+	// a one-shot batch replace (the "n" count-only flag takes precedence).
+	if confirm && !countOnly {
+		return m.beginSubstituteConfirm(re, repl, global, start, end, pat)
 	}
 
 	// Collect per-line replacements from the current text first; replacements
@@ -239,8 +245,8 @@ func scanDelim(s string, delim byte) (string, string) {
 	return b.String(), ""
 }
 
-// parseSubFlags reads the g/i/I/n flag letters; an unknown letter is an error.
-func parseSubFlags(flags string) (global, ci, countOnly bool, errMsg string) {
+// parseSubFlags reads the g/i/I/n/c flag letters; an unknown letter is an error.
+func parseSubFlags(flags string) (global, ci, countOnly, confirm bool, errMsg string) {
 	for _, r := range flags {
 		switch r {
 		case 'g':
@@ -251,12 +257,14 @@ func parseSubFlags(flags string) (global, ci, countOnly bool, errMsg string) {
 			ci = false
 		case 'n':
 			countOnly = true
+		case 'c':
+			confirm = true
 		case ' ', '\t':
 		default:
-			return false, false, false, "unknown flag: " + string(r)
+			return false, false, false, false, "unknown flag: " + string(r)
 		}
 	}
-	return global, ci, countOnly, ""
+	return global, ci, countOnly, confirm, ""
 }
 
 // compileSub builds the substitution regexp from the search-layer convention:

@@ -116,6 +116,9 @@ func (m Model) View() string {
 // commandLineRow renders the active command-line input with a block cursor, or
 // the last ex-command message while idle, or "" when neither is present.
 func (m Model) commandLineRow() string {
+	if m.subConfirm != nil {
+		return m.cmdMsg // the "replace (y/n/a/q/l)?" prompt
+	}
 	cl := m.CommandLine()
 	if cl == "" {
 		if m.mode != Command && m.cmdMsg != "" {
@@ -193,6 +196,13 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 // for the active visual mode, or ok=false when the line is outside the selection
 // or no visual mode is active.
 func (m Model) selectionOnLine(line, runeLen int) (start, end int, ok bool) {
+	if sc := m.subConfirm; sc != nil {
+		// Highlight the current ":s///c" match on its line.
+		if line == sc.curLine && sc.curEnd > sc.curStart {
+			return sc.curStart, sc.curEnd - 1, true
+		}
+		return 0, 0, false
+	}
 	if !m.mode.IsVisual() {
 		return 0, 0, false
 	}

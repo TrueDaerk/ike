@@ -82,8 +82,9 @@ type Model struct {
 	searching bool
 	searchDir search.Direction
 	query     search.Query
-	cmdMsg    string          // transient ":"-line message (errors, reports); shown while idle
-	lastSub   lastSubstitute  // last :substitute, for a bare ":s" repeat
+	cmdMsg     string           // transient ":"-line message (errors, reports); shown while idle
+	lastSub    lastSubstitute   // last :substitute, for a bare ":s" repeat
+	subConfirm *subConfirmState // active ":s///c" confirmation, nil when idle
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
@@ -348,6 +349,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.dismissHover() // any key dismisses a hover popup
 		before := m.docVersion
 		var cmd tea.Cmd
+		if m.subConfirm != nil {
+			// An open ":s///c" confirmation consumes keys before the mode machine.
+			m = m.updateSubConfirm(msg)
+			m.scroll()
+			return m.maybeReparse(before, cmd)
+		}
 		switch m.mode {
 		case Insert, Replace:
 			m.updateInsert(msg)
