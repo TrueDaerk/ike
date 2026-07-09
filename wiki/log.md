@@ -2,6 +2,17 @@
 
 ## 2026-07-09
 
+- Backup service (#165, Roadmap 0210): new `internal/backup` subsystem for
+  crash recovery — `Service` writes/reads/removes one full-text snapshot per
+  dirty buffer (`<sha256(key)>.ikebak`: magic + header with key/path/base
+  mtime+hash/timestamp, blank line, verbatim text) with **atomic** temp→fsync→
+  rename writes to `<state dir>/backups`; untitled buffers are marked "no base
+  file". `Debouncer` (injectable clock) collapses edit bursts into one pending
+  snapshot ~2s after the last edit, so clean buffers cause zero writes.
+  `BaseInfo` stats+hashes the on-disk base for change detection. Fully unit-
+  tested (fake clock + temp dirs). App event-loop wiring + restore UI land with
+  #166/#167. New concept doc `architecture/crash-recovery.md`.
+
 - Substitute confirm mode (#163, Roadmap 0200): the `c` flag
   (`:s/pat/repl/gc`) drives an interactive match-by-match walk in a mode-machine
   sub-state (`internal/editor/substitute_confirm.go`) — `y`/`n`/`a`/`q`/`l`
