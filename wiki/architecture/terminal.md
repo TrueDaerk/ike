@@ -1,17 +1,17 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a ctrl+tab escape hatch; workspace integration and command polish are the follow-up issues.
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-10T22:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
 
 `internal/terminal` embeds a real shell as a pane (spec: epic #88). Landed so
-far is the **PTY + VT core** (#95); workspace integration (#96), command/UX
-polish (#97) and toolchain environment injection (#98) build on it.
+far are the **PTY + VT core** (#95) and the **workspace integration** (#96);
+command/UX polish (#97) and toolchain environment injection (#98) build on it.
 
 ## Session (`session.go`)
 
@@ -31,26 +31,44 @@ polish (#97) and toolchain environment injection (#98) build on it.
 - **Batching**: output notifications are coalesced (`OutputMsg`, one per 8ms
   quiet interval), so `yes` or a build log cannot flood the render loop.
 
-## Pane citizenship
+## Pane citizenship (#96)
 
 `pane.KindTerminal` joins explorer/editor in the instance registry
 (`AddTerminal`, keys `terminal`, `terminal:2`, …; `Close` ends the session).
-The pane renders the grid with the cursor cell reverse-videoed while focused
-(`model.go` splices it ANSI-aware). `terminal.new` (palette/registry command)
-splits the active editor's leaf toward the bottom — the conventional
-JetBrains placement. Terminal leaves are pruned from the saved layout on
-restore (their sessions died with the process); re-spawning is #96.
+The pane title shows **shell + origin dir** (`TERMINAL — zsh · goproj`; the
+dir compacts once it differs from the working directory). The cursor cell
+reverse-videos while focused (`model.go` splices it ANSI-aware).
+`terminal.new` splits the active editor's leaf toward the bottom — the
+conventional JetBrains placement.
 
-## Key routing
+**Layout persistence**: terminal leaves save with their origin dir
+(`paneIdentity{Kind: "terminal", Path: dir}`) and restore as **fresh shells**
+in the saved position — no process resurrection, the cwd respawns.
+
+**Project switch (0090)**: live sessions are adopted into the freshly built
+workspace (`adoptTerminals` in app/switch.go), split below the new active
+editor and titled with their origin root; dead ones close for good. New
+terminals root in the new project as always (spawn dir is pinned absolute).
+
+## Key routing — the reserved set
 
 While a live terminal is focused, **every key goes raw to the PTY** — vim,
-htop and less must see tab, ctrl+c, F-keys and friends — except `ctrl+tab`,
-the escape hatch that moves focus away (the boundary is finalised with
-#96/#97). A dead session (shell exited) falls back to normal key handling so
-`ctrl+w` can close the pane.
+htop and less must see tab, ctrl+c, esc and the F-keys. The documented
+reserved set (`terminalReservedKey` in internal/app) is exactly:
+
+| Key | Effect |
+|---|---|
+| `ctrl+tab` | move focus to the next pane (the global escape hatch) |
+
+`shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
+grid per step, position marker on the bottom line, any typed key snaps back
+to live); the mouse wheel scrolls it too. A dead session (shell exited)
+falls back to normal key handling so `ctrl+w` can close the pane.
 
 ## Quality bar
 
 Verified inside the pane: `vim` (alt screen, insert/normal, `:wq` writes),
 `less` (paging), shell line editing and wrapping, colored output, `stty size`
-reflecting pane resizes.
+reflecting pane resizes, scrollback paging over `seq` output, layout restore
+with a fresh prompt, and a session surviving a project switch with its
+origin-root title.
