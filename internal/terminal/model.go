@@ -29,11 +29,12 @@ type Model struct {
 }
 
 // New starts a terminal model: shell (already resolved via Shell) spawned in
-// dir. A failed spawn yields a model rendering the error instead of a grid —
-// the pane stays usable (closable) rather than crashing the layout.
-func New(key, shell, dir string, w, h int, send func(tea.Msg)) Model {
+// dir with the extraEnv overlay (#98). A failed spawn yields a model
+// rendering the error instead of a grid — the pane stays usable (closable)
+// rather than crashing the layout.
+func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
 	m := Model{w: w, h: h}
-	sess, err := StartSession(key, shell, dir, w, h, send)
+	sess, err := StartSession(key, shell, dir, w, h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
 		return m

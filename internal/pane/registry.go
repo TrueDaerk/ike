@@ -94,14 +94,14 @@ func (r *Registry) AddEditorKey(key string) *Instance {
 // AddTerminal creates a terminal instance running shell in dir; send is the
 // program's async injector (host.Send) for output/exit notifications. It
 // returns the new instance's key ("terminal", then "terminal:N").
-func (r *Registry) AddTerminal(shell, dir string, send func(tea.Msg)) string {
+func (r *Registry) AddTerminal(shell, dir string, env []string, send func(tea.Msg)) string {
 	r.terminals++
 	key := terminalKeyBase
 	if r.terminals > 1 {
 		key = terminalKeyBase + ":" + strconv.Itoa(r.terminals)
 	}
 	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
-	inst.term = terminal.New(key, shell, dir, 80, 24, send)
+	inst.term = terminal.New(key, shell, dir, 80, 24, env, send)
 	inst.term.SetPalette(r.pal)
 	r.put(inst)
 	return key
@@ -110,9 +110,9 @@ func (r *Registry) AddTerminal(shell, dir string, send func(tea.Msg)) string {
 // AddTerminalKey recreates a terminal under an exact key with a fresh shell
 // session — layout restore re-spawns terminals in their saved position (no
 // process resurrection). The minting counter advances past the key.
-func (r *Registry) AddTerminalKey(key, shell, dir string, send func(tea.Msg)) *Instance {
+func (r *Registry) AddTerminalKey(key, shell, dir string, env []string, send func(tea.Msg)) *Instance {
 	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
-	inst.term = terminal.New(key, shell, dir, 80, 24, send)
+	inst.term = terminal.New(key, shell, dir, 80, 24, env, send)
 	inst.term.SetPalette(r.pal)
 	r.put(inst)
 	r.advancePastTerminal(key)

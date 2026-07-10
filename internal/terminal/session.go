@@ -69,7 +69,9 @@ func Shell(override string) string {
 
 // StartSession spawns shell in dir on a new PTY sized w×h and starts the read
 // loop. send delivers OutputMsg/ExitedMsg into the program (host.Send).
-func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Session, error) {
+// extraEnv entries override the inherited environment (toolchain injection,
+// #98); nil leaves it untouched beyond TERM.
+func StartSession(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) (*Session, error) {
 	if w < 2 || h < 2 {
 		w, h = 80, 24
 	}
@@ -80,7 +82,7 @@ func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Sessio
 	}
 	cmd := exec.Command(shell)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd.Env = MergeEnv(append(os.Environ(), "TERM=xterm-256color"), extraEnv)
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	if err != nil {
 		return nil, fmt.Errorf("terminal: start %s: %w", shell, err)

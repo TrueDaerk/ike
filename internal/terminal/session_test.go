@@ -50,7 +50,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // startSh spawns a plain /bin/sh session for grid assertions.
 func startSh(t *testing.T, c *collector) *Session {
 	t.Helper()
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24, c.send)
+	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}

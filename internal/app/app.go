@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/keymap"
+	"ike/internal/lang"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 	"ike/internal/menu"
@@ -456,7 +458,7 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			if v, ok := cfg.Get("terminal.shell"); ok {
 				shell = v
 			}
-			panes.AddTerminalKey(key, terminal.Shell(shell), dir, m.host.Send)
+			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -842,6 +844,11 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	if osc := t.Title(); osc != "" && osc != filepath.Base(t.ShellPath()) {
 		title += " · " + osc
 	}
+	// Active interpreter mappings (#98): what php/python resolve to inside
+	// this terminal, straight from the settings choice.
+	for _, mp := range explicitMappings() {
+		title += " · " + mp.Lang + "→" + project.CompactPath(mp.Interpreter)
+	}
 	return title
 }
 
@@ -914,6 +921,52 @@ func (m *Model) toggleTerminal() {
 	m.setFocus(target)
 }
 
+// explicitMappings collects the settings-page interpreter choices (#98):
+// only [lang.<id>] interpreter entries — silent detection never injects, per
+// the epic rule. The same lang.Interpreter seam the LSP toolchain reads.
+func explicitMappings() []terminal.Mapping {
+	c := config.Get()
+	if c == nil {
+		return nil
+	}
+	var out []terminal.Mapping
+	for _, l := range lang.All() {
+		explicit := c.Lang[l.ID]["interpreter"]
+		if explicit == "" {
+			continue
+		}
+		if path, source := lang.Interpreter(l.ID, ".", explicit); source == "config" && path != "" {
+			out = append(out, terminal.Mapping{Lang: l.ID, Interpreter: path})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Lang < out[j].Lang })
+	return out
+}
+
+// shimDir is the per-project shim directory, mirroring the state stores'
+// IKE_CONFIG_DIR override.
+func shimDir() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "shims")
+	}
+	return filepath.Join(".ike", "shims")
+}
+
+// terminalEnv regenerates the shims for the current settings and returns the
+// spawn-environment overlay (nil when no explicit interpreter is chosen).
+func terminalEnv() []string {
+	mappings := explicitMappings()
+	dir := shimDir()
+	if ok, err := terminal.WriteShims(dir, mappings); err != nil || !ok {
+		return nil
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = dir
+	}
+	return terminal.EnvOverlay(abs, mappings, os.Getenv("PATH"))
+}
+
 // openTerminal opens a fresh terminal pane rooted in the working directory
 // (the project root), split below the active editor — the conventional
 // JetBrains placement — falling back to the focused leaf when no editor
@@ -930,7 +983,7 @@ func (m *Model) openTerminal() {
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	key := m.panes.AddTerminal(terminal.Shell(shell), ".", m.host.Send)
+	key := m.panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
 	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
 	if !ok {
 		m.panes.Close(key)

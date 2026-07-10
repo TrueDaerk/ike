@@ -140,6 +140,10 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg)
+	// Regenerate the terminal shims (#98): they exec by absolute path and are
+	// re-read per invocation, so an interpreter change retargets even the
+	// already-running sessions.
+	terminalEnv()
 	if warning != "" {
 		m.host.Notify(host.Warn, warning)
 	}

@@ -9,7 +9,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/lang"
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/project"
@@ -241,5 +243,52 @@ func TestTerminalCommandsRegistered(t *testing.T) {
 		if _, ok := registry.Global().Command(id); !ok {
 			t.Fatalf("%s should be registered", id)
 		}
+	}
+}
+
+// TestTerminalEnvFromSettings guards #98: an explicit [lang.python]
+// interpreter yields shims + PATH overlay and the title indicator; no
+// setting leaves the environment untouched.
+func TestTerminalEnvFromSettings(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	t.Setenv("IKE_CONFIG_DIR", "")
+
+	// Register a python language for the mapping walk (idempotent).
+	lang.Register(lang.Language{ID: "python", Server: &lang.ServerSpec{Language: "python", Command: "x"}})
+
+	// No explicit setting: env untouched, no shims.
+	base, _ := config.Load(config.Options{})
+	config.Set(base)
+	if env := terminalEnv(); env != nil {
+		t.Fatalf("no setting must not inject, got %v", env)
+	}
+
+	// Explicit setting: shims written, PATH overlay present.
+	c, _ := config.Load(config.Options{})
+	c.Lang = map[string]map[string]string{"python": {"interpreter": "/opt/py/bin/python"}}
+	config.Set(c)
+	t.Cleanup(func() { fresh, _ := config.Load(config.Options{}); config.Set(fresh) })
+
+	env := terminalEnv()
+	if len(env) == 0 || !strings.Contains(env[len(env)-1], "PATH=") {
+		t.Fatalf("overlay = %v", env)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ".ike", "shims", "python3"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "/opt/py/bin/python") {
+		t.Fatalf("shim = %q", data)
+	}
+
+	// The pane title indicates the mapping.
+	m := sized(t, 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	inst := m.panes.Get(m.panes.Focused())
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if title := m.terminalTitle(inst); !strings.Contains(title, "python→") {
+		t.Fatalf("title should indicate the mapping, got %q", title)
 	}
 }

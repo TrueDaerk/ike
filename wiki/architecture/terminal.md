@@ -4,14 +4,14 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-11T01:30:00Z
+timestamp: 2026-07-11T03:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
 
-`internal/terminal` embeds a real shell as a pane (spec: epic #88). Landed so
-far are the **PTY + VT core** (#95), the **workspace integration** (#96) and
-the **commands & UX** (#97); toolchain environment injection (#98) remains.
+`internal/terminal` embeds a real shell as a pane (spec: epic #88), complete
+across the epic's four slices: PTY + VT core (#95), workspace integration
+(#96), commands & UX (#97) and toolchain environment injection (#98).
 
 ## Session (`session.go`)
 
@@ -83,10 +83,34 @@ falls back to normal key handling so `ctrl+w` can close the pane.
 - **Titles**: the shell's OSC 0/2 reports (the running command) append to
   the pane title — `TERMINAL — zsh · goproj · npm run build`.
 
+## Toolchain environment injection (#98)
+
+The interpreter chosen on the **settings page** — and only that; silent
+detection never injects — is what `php` / `python` / `python3` resolve to
+inside the IDE terminal (`internal/terminal/env.go`):
+
+- A per-project **shim directory** (`.ike/shims`, IKE_CONFIG_DIR-overridable)
+  holds `#!/bin/sh` exec scripts for `php`, `python`, `python3` (python
+  covers both names). Shims exec by absolute path and are re-read per
+  invocation, so regenerating them — on every config reload — retargets even
+  already-running sessions. Stale shims sweep when a setting is removed.
+- The **spawn environment** prepends the shim dir to PATH; a venv interpreter
+  (its bin's parent carries `pyvenv.cfg`) additionally sets `VIRTUAL_ENV` and
+  puts the venv bin on PATH, per convention. uv-managed interpreters resolve
+  through their absolute path in the shim. With no explicit setting the
+  environment stays untouched.
+- The pane **title indicates the mapping**: `… · python→~/proj/.venv/bin/python`.
+- The mapping reads through the same `lang.Interpreter` seam the LSP
+  toolchain uses — one source of truth, `source == "config"` only.
+- **Windows**: the shims are POSIX `sh` scripts; a windows port writes
+  `<name>.cmd` wrappers into the same directory (`@"%target%" %*`) —
+  documented here, darwin/linux land first like the rest of the PTY stack.
+
 ## Quality bar
 
 Verified inside the pane: `vim` (alt screen, insert/normal, `:wq` writes),
 `less` (paging), shell line editing and wrapping, colored output, `stty size`
 reflecting pane resizes, scrollback paging over `seq` output, layout restore
-with a fresh prompt, and a session surviving a project switch with its
-origin-root title.
+with a fresh prompt, a session surviving a project switch with its
+origin-root title, and `command -v python3` resolving to the shim with
+`sys.executable` reporting the configured venv interpreter.
