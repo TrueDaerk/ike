@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Copy/cut feedback toasts (#252): `editor.copy` / `editor.cut` report what
+  landed in the clipboard ("copied 1 line", "cut 5 chars") through the
+  existing `NoticeMsg` toast path; vim-native `y`/`d` stay silent. Found
+  running the 0082 sheet 03/04 protocols (#17). Documented in
+  [Editor](/architecture/editor.md).
+
 - Undo tracks the save point (#251): the history pins a checkpoint on save,
   and undo/redo clear the modified flag when they land exactly on it — `[+]`
   no longer sticks after undoing back to the saved content. Crash-restored
