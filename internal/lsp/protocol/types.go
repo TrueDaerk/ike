@@ -85,6 +85,7 @@ type TextDocumentClientCaps struct {
 	RangeFormatting *ReferencesClientCaps `json:"rangeFormatting,omitempty"`
 	Rename          *RenameClientCaps     `json:"rename,omitempty"`
 	CodeAction      *ReferencesClientCaps `json:"codeAction,omitempty"`
+	SignatureHelp   *ReferencesClientCaps `json:"signatureHelp,omitempty"`
 }
 
 // RenameClientCaps announces rename support; prepareSupport asks servers to
@@ -135,11 +136,12 @@ type ServerCapabilities struct {
 	DefinitionProvider json.RawMessage    `json:"definitionProvider,omitempty"`
 	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
 
-	DocumentFormattingProvider      json.RawMessage `json:"documentFormattingProvider,omitempty"`
-	DocumentRangeFormattingProvider json.RawMessage `json:"documentRangeFormattingProvider,omitempty"`
-	RenameProvider                  json.RawMessage `json:"renameProvider,omitempty"`
-	CodeActionProvider              json.RawMessage `json:"codeActionProvider,omitempty"`
-	ExecuteCommandProvider          json.RawMessage `json:"executeCommandProvider,omitempty"`
+	DocumentFormattingProvider      json.RawMessage       `json:"documentFormattingProvider,omitempty"`
+	DocumentRangeFormattingProvider json.RawMessage       `json:"documentRangeFormattingProvider,omitempty"`
+	RenameProvider                  json.RawMessage       `json:"renameProvider,omitempty"`
+	CodeActionProvider              json.RawMessage       `json:"codeActionProvider,omitempty"`
+	SignatureHelpProvider           *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
+	ExecuteCommandProvider          json.RawMessage       `json:"executeCommandProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -268,6 +270,40 @@ func (w WorkspaceEdit) AllChanges() map[string][]TextEdit {
 		out[dc.TextDocument.URI] = append(out[dc.TextDocument.URI], dc.Edits...)
 	}
 	return out
+}
+
+// --- signature help ---
+
+// SignatureHelpOptions carries the trigger characters a server wants
+// signature requests on (plus retrigger characters while help is showing).
+type SignatureHelpOptions struct {
+	TriggerCharacters   []string `json:"triggerCharacters,omitempty"`
+	RetriggerCharacters []string `json:"retriggerCharacters,omitempty"`
+}
+
+type SignatureHelpParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// SignatureHelp is the server's answer: the overloads plus which signature
+// and parameter are active at the cursor.
+type SignatureHelp struct {
+	Signatures      []SignatureInformation `json:"signatures"`
+	ActiveSignature int                    `json:"activeSignature,omitempty"`
+	ActiveParameter int                    `json:"activeParameter,omitempty"`
+}
+
+type SignatureInformation struct {
+	Label         string                 `json:"label"`
+	Documentation json.RawMessage        `json:"documentation,omitempty"`
+	Parameters    []ParameterInformation `json:"parameters,omitempty"`
+}
+
+// ParameterInformation's label is a substring of the signature label, or a
+// [start, end) offset pair in UTF-16 units — decoded leniently by consumers.
+type ParameterInformation struct {
+	Label json.RawMessage `json:"label"`
 }
 
 // --- code actions ---

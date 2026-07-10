@@ -240,6 +240,22 @@ func decodeCodeActions(raw json.RawMessage) []protocol.CodeAction {
 	return out
 }
 
+// SignatureHelp requests call-signature info; null decodes to nil.
+func (c *Client) SignatureHelp(ctx context.Context, p protocol.SignatureHelpParams) (*protocol.SignatureHelp, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/signatureHelp", p)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var sh protocol.SignatureHelp
+	if err := json.Unmarshal(raw, &sh); err != nil || len(sh.Signatures) == 0 {
+		return nil, nil
+	}
+	return &sh, nil
+}
+
 // decodeTextEdits accepts a TextEdit array or null.
 func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
 	if len(raw) == 0 || string(raw) == "null" {

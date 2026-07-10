@@ -359,6 +359,27 @@ func TestCodeActionsNull(t *testing.T) {
 	}
 }
 
+func TestSignatureHelpDecodeAndNull(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/signatureHelp": func(json.RawMessage) any {
+			return protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{{Label: "f(x int)"}}}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	sh, err := c.SignatureHelp(ctx, protocol.SignatureHelpParams{})
+	if err != nil || sh == nil || sh.Signatures[0].Label != "f(x int)" {
+		t.Fatalf("sh = %+v err = %v", sh, err)
+	}
+
+	c2, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/signatureHelp": func(json.RawMessage) any { return nil },
+	})
+	if sh, err := c2.SignatureHelp(ctx, protocol.SignatureHelpParams{}); err != nil || sh != nil {
+		t.Fatalf("null should decode to nil, got %+v err %v", sh, err)
+	}
+}
+
 func TestHoverNull(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/hover": func(json.RawMessage) any { return nil },

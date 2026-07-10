@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T12:30:00Z
+timestamp: 2026-07-10T14:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -119,6 +119,18 @@ through `workspace_edit.go` and/or executes its `command` via
 the read loop, converted, and dispatched through the same apply path. Result
 decode is lenient — bare `Command` entries wrap into command-only actions.
 Gated on `codeActionProvider` / `executeCommandProvider`.
+
+**Signature help (#4).** No command: typing one of the server's advertised
+trigger characters (`signatureHelpProvider.triggerCharacters` + retriggers)
+fires `textDocument/signatureHelp` off the change event; while the popup is
+showing, *every* change retriggers so the active parameter follows the cursor,
+and the server answering null dismisses it (typing past `)`). The bridge
+extracts the just-typed character from the change event; the editor renders a
+cursor-anchored popup (`signatureState`) with the active parameter emphasised
+(parameter labels arrive as substrings or UTF-16 offset pairs — both resolve
+to rune ranges in `lsp.SignatureContent`), the first doc line dimmed, and an
+overload counter. Esc dismisses; completion, when open, takes precedence in
+the popup compositor. Gated on `signatureHelpProvider`.
 
 ## Design rules
 

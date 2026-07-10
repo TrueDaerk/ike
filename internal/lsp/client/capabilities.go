@@ -27,6 +27,8 @@ type Capabilities struct {
 	PrepareRename      bool
 	CodeAction         bool
 	ExecuteCommand     bool
+	SignatureHelp      bool
+	SignatureTriggers  []string
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -61,6 +63,10 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	}
 	caps.CodeAction = truthyProvider(sc.CodeActionProvider)
 	caps.ExecuteCommand = truthyProvider(sc.ExecuteCommandProvider)
+	if sc.SignatureHelpProvider != nil {
+		caps.SignatureHelp = true
+		caps.SignatureTriggers = append(sc.SignatureHelpProvider.TriggerCharacters, sc.SignatureHelpProvider.RetriggerCharacters...)
+	}
 	return caps
 }
 

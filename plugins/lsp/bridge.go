@@ -39,6 +39,10 @@ type bridge struct {
 	// diags caches the latest published protocol diagnostics per path, so a
 	// code-action request can pass the overlapping ones as context.
 	diags map[string][]protocol.Diagnostic
+	// sigActive marks a showing signature popup for a path: while set, every
+	// change retriggers the request so the active parameter tracks the
+	// cursor; the server answering null clears it (and the popup).
+	sigActive map[string]bool
 }
 
 var (
@@ -81,6 +85,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		b.setSel(ev)
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
 			_ = b.manager().Change(ev.Path, ev.Text)
+			b.maybeSignatureHelp(ev)
 		}
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
@@ -412,6 +417,71 @@ func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction
 		}
 	}()
 	return nil
+}
+
+// maybeSignatureHelp fires a signature request after a change when the typed
+// character is one of the server's triggers, or whenever the popup is already
+// showing (so the active parameter follows the cursor). The server answering
+// null dismisses the popup.
+func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	b.mu.Lock()
+	active := b.sigActive[ev.Path]
+	b.mu.Unlock()
+	if !active && !isSignatureTrigger(typedChar(ev), mgr.SignatureTriggers(ev.Path)) {
+		return
+	}
+	path, line, col := ev.Path, ev.Line, ev.Col
+	go func() {
+		sh, err := mgr.SignatureHelp(context.Background(), path, buffer.Position{Line: line, Col: col})
+		if err != nil {
+			return
+		}
+		label, start, end, doc, more := ilsp.SignatureContent(sh)
+		b.mu.Lock()
+		if b.sigActive == nil {
+			b.sigActive = map[string]bool{}
+		}
+		b.sigActive[path] = label != ""
+		b.mu.Unlock()
+		if b.h != nil {
+			b.h.Send(ilsp.SignatureHelpMsg{Path: path, Label: label, ParamStart: start, ParamEnd: end, Doc: doc, More: more})
+		}
+	}()
+}
+
+// typedChar extracts the character the change just inserted: the one left of
+// the cursor. Deletions and multi-line pastes yield "".
+func typedChar(ev host.EditorEvent) string {
+	if ev.Col <= 0 {
+		return ""
+	}
+	lines := strings.Split(ev.Text, "\n")
+	if ev.Line < 0 || ev.Line >= len(lines) {
+		return ""
+	}
+	runes := []rune(lines[ev.Line])
+	if ev.Col > len(runes) {
+		return ""
+	}
+	return string(runes[ev.Col-1])
+}
+
+// isSignatureTrigger reports whether ch is one of the server's trigger (or
+// retrigger) characters.
+func isSignatureTrigger(ch string, triggers []string) bool {
+	if ch == "" {
+		return false
+	}
+	for _, t := range triggers {
+		if t == ch {
+			return true
+		}
+	}
+	return false
 }
 
 // restart stops every server; they respawn lazily on the next file open/edit.

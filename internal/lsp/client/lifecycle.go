@@ -39,6 +39,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 				RangeFormatting: &protocol.ReferencesClientCaps{},
 				Rename:          &protocol.RenameClientCaps{PrepareSupport: true},
 				CodeAction:      &protocol.ReferencesClientCaps{},
+				SignatureHelp:   &protocol.ReferencesClientCaps{},
 			},
 		},
 		InitializationOptions: p.InitializationOptions,

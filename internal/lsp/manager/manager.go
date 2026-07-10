@@ -455,6 +455,29 @@ func convertEdits(lines []string, edits []protocol.TextEdit, enc string) []lsp.F
 	return out
 }
 
+// SignatureHelp requests call-signature info at an editor position.
+func (m *Manager) SignatureHelp(ctx context.Context, path string, pos buffer.Position) (*protocol.SignatureHelp, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().SignatureHelp {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.SignatureHelp(cctx, protocol.SignatureHelpParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	})
+}
+
+// SignatureTriggers returns the trigger (and retrigger) characters the server
+// handling path advertises for signature help.
+func (m *Manager) SignatureTriggers(path string) []string {
+	if srv, _, ok := m.docServer(path); ok {
+		return srv.cl.Caps().SignatureTriggers
+	}
+	return nil
+}
+
 // Encoding returns the negotiated position encoding for the server handling path,
 // defaulting to UTF-16 when unknown. Used to convert results (e.g. definition
 // targets) back to editor coordinates.

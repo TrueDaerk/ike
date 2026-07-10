@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- LSP signature help (#4, Roadmap 0100): typing a server-advertised trigger
+  character opens a cursor-anchored popup with the active signature, the
+  active parameter emphasised (substring and UTF-16 offset-pair labels both
+  resolve), first doc line and overload counter. While showing, every change
+  retriggers so the parameter follows the cursor; a null answer (past ")")
+  or esc dismisses. Capability-gated; completion popup takes precedence.
+  Verified against gopls: popup on "(", highlight moves on ",", gone on ")".
 - LSP code actions (#8, Roadmap 0100): `lsp.codeAction` (alt+enter) lists
   quick-fixes/refactors for the cursor or visual selection in a locked
   palette picker (preferred first), passing cached diagnostics as context.

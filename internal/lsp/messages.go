@@ -121,6 +121,97 @@ type CodeActionsMsg struct {
 	Apply   func(index int) tea.Cmd
 }
 
+// SignatureHelpMsg delivers call-signature info for the cursor-anchored popup
+// (lsp signature help, #4). An empty Label dismisses the popup — the server
+// answering null means the cursor left the call context.
+type SignatureHelpMsg struct {
+	Path       string
+	Label      string
+	ParamStart int // rune index into Label where the active parameter starts
+	ParamEnd   int // rune index (exclusive) where it ends; == ParamStart when unknown
+	Doc        string
+	More       int // additional overloads beyond the active signature
+}
+
+// SignatureContent flattens a SignatureHelp into the popup fields: the active
+// signature's label, the active parameter's rune highlight range (parameter
+// labels arrive as substrings or UTF-16 offset pairs), the first line of its
+// documentation, and how many other overloads exist.
+func SignatureContent(sh *protocol.SignatureHelp) (label string, start, end int, doc string, more int) {
+	if sh == nil || len(sh.Signatures) == 0 {
+		return "", 0, 0, "", 0
+	}
+	active := sh.ActiveSignature
+	if active < 0 || active >= len(sh.Signatures) {
+		active = 0
+	}
+	sig := sh.Signatures[active]
+	label = sig.Label
+	more = len(sh.Signatures) - 1
+	doc = docFirstLine(sig.Documentation)
+
+	if p := sh.ActiveParameter; p >= 0 && p < len(sig.Parameters) {
+		start, end = paramRange(label, sig.Parameters[p].Label)
+	}
+	return label, start, end, doc, more
+}
+
+// paramRange resolves a parameter label (substring or UTF-16 [start,end)
+// pair) to rune offsets within the signature label.
+func paramRange(label string, raw json.RawMessage) (int, int) {
+	var pair [2]int
+	if err := json.Unmarshal(raw, &pair); err == nil {
+		return utf16OffToRune(label, pair[0]), utf16OffToRune(label, pair[1])
+	}
+	var sub string
+	if err := json.Unmarshal(raw, &sub); err == nil && sub != "" {
+		if i := strings.Index(label, sub); i >= 0 {
+			start := len([]rune(label[:i]))
+			return start, start + len([]rune(sub))
+		}
+	}
+	return 0, 0
+}
+
+// utf16OffToRune converts a UTF-16 unit offset within s to a rune index.
+func utf16OffToRune(s string, off int) int {
+	units := 0
+	for i, r := range []rune(s) {
+		if units >= off {
+			return i
+		}
+		units++
+		if r > 0xFFFF {
+			units++
+		}
+	}
+	return len([]rune(s))
+}
+
+// docFirstLine flattens a Documentation value (string | MarkupContent) to its
+// first non-empty line.
+func docFirstLine(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	text := ""
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		text = s
+	} else {
+		var mc protocol.MarkupContent
+		if err := json.Unmarshal(raw, &mc); err == nil {
+			text = mc.Value
+		}
+	}
+	for _, line := range strings.Split(text, "\n") {
+		if t := strings.TrimSpace(line); t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
 // ServerStatusKind classifies a server status update (Roadmap 0130):
 // persistent server state belongs on the status line, transient events surface
 // as toast notifications of the matching severity.
