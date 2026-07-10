@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-09T22:30:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Configuration System
@@ -60,7 +60,11 @@ Sections and their default-bearing slots (`schema.go`):
 - `[keymap]` — `preset` + an empty `[keymap.bindings]` slot (Roadmap 0080).
 - `[lsp]` — enabled, log-level + an empty `[lsp.servers]` slot (Roadmap 0100).
 - `[theme]` — `name`, `dark` (the selector; palettes owned by Roadmap 0110).
-- `[project]` — history list, `max_history`, `restore_last` (UX in Roadmap 0090).
+- `[project]` — recent-projects history as `[[project.history]]` entries
+  (`path` absolute, `name` display name, `last_opened` RFC3339), plus
+  `max_history`, `restore_last`. The entry semantics — validation, upsert,
+  dedupe, cap — live in `internal/project` (Roadmap 0090); config only fixes
+  the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
 
@@ -80,8 +84,9 @@ the *entries*.
   first `Set`.
 - `watch.go` defines `ConfigReloadedMsg` (a `tea.Msg`) and `Reload(opts)` — the
   reload seam; actual file-watching is left to its owning roadmap.
-- `write.go` exposes the typed setter seam (e.g. `PushHistory`) with the bounded
-  semantics.
+- `write.go` exposes the typed setter seam (`WriteKey`/`RemoveKey`) with the
+  bounded semantics; content rules for composite values (e.g. the recent-projects
+  list) live with their owning package, which hands config the finished value.
 
 ## Write-back (Roadmap 0160, #89)
 

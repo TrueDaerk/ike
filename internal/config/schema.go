@@ -110,11 +110,22 @@ type Theme struct {
 }
 
 // Project holds recent-project history. History is a replace-by-default list
-// (see merge.go); its presentation/editing UX lives in Roadmap 0090.
+// (see merge.go) of [[project.history]] entries, most-recent-first; its content
+// rules (upsert, dedupe, cap) and UX live in internal/project (Roadmap 0090).
 type Project struct {
-	History     []string `toml:"history"`
-	MaxHistory  int      `toml:"max_history"`
-	RestoreLast bool     `toml:"restore_last"`
+	History     []ProjectHistoryEntry `toml:"history"`
+	MaxHistory  int                   `toml:"max_history"`
+	RestoreLast bool                  `toml:"restore_last"`
+}
+
+// ProjectHistoryEntry is one recently opened project as persisted in
+// [[project.history]]. Path is absolute and cleaned, Name is the display name
+// (default: base dir name), LastOpened is RFC3339 and used for ordering.
+// internal/project owns the semantics; this struct only fixes the TOML shape.
+type ProjectHistoryEntry struct {
+	Path       string `toml:"path"`
+	Name       string `toml:"name"`
+	LastOpened string `toml:"last_opened"`
 }
 
 // Notifications tunes the toast system (Roadmap 0130). TimeoutSeconds is the

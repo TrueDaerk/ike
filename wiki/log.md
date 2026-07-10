@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- Project-switching data layer (#2, Roadmap 0090): new `internal/project`
+  package — `Entry` (path/name/last_opened), `Validate` (expand `~`, absolute,
+  exists/is-dir/readable with actionable errors) and history content rules
+  (upsert-by-path, move-to-front dedupe, cap at `project.max_history`),
+  persisted to the user layer via config's typed setter. `project.history`
+  becomes a `[[project.history]]` table array (`config.ProjectHistoryEntry`;
+  `config.PushHistory` removed). Startup records the initial open before the
+  model loads config. New doc `architecture/project-switching.md`; config doc
+  updated.
 - Missing-server install helper (#131, Roadmap 0180): `lang.ServerSpec` grows
   an `Install` recipe (argv; gopls via `go install`, pyright/intelephense via
   `npm -g`). A server launch failing with ErrNotFound on file open triggers

@@ -3,10 +3,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/app"
+	"ike/internal/config"
+	"ike/internal/project"
 
 	// Compiled-in plugins self-register via init(). Add or remove blank imports
 	// here to change the build-time plugin set.
@@ -21,6 +24,11 @@ import (
 )
 
 func main() {
+	// Record the initial project open into the recent-projects history before
+	// the model loads config, so the fresh entry is already part of the merged
+	// configuration (Roadmap 0090: the initial open counts as an open). A
+	// failure is non-fatal — history is a convenience, not a startup gate.
+	_ = project.RecordOpen(config.Discover("."), ".", time.Now())
 	// Under bubbletea v2 the alternate screen and mouse cell-motion reporting
 	// (which drives the pane drag/resize layout, Roadmap 0036) are declared on the
 	// model's View, not via program options. See app.Model.View.
