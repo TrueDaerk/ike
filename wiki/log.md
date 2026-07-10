@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- Project switching complete (#3, Roadmap 0090): msg-driven switch
+  transaction — `SwitchTo` validation, unsaved-changes guard (save-all /
+  discard / cancel in the floating shell), root-model re-root via chdir +
+  model rebuild with the live host carried over (LSP bridge and program
+  sender survive), session/layout persisted per project, history recorded on
+  success with a config reload. `alt+shift+p` added to the JetBrains chord
+  table so the picker opens from a capturing editor. Fixed: the floating
+  shell drops boxes wider than the terminal — prompt paths render through
+  `CompactPath`. Epic #37 closes with this.
 - project.switch command + picker (#12, Roadmap 0090): `internal/project`
   registers the `project.switch` command (default slot `alt+shift+p`) and a
   palette picker mode listing recent projects newest-first with fuzzy match

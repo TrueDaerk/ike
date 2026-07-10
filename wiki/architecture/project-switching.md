@@ -1,17 +1,16 @@
 ---
 type: concept
 title: Project Switching
-description: Roadmap 0090 — internal/project owns the recent-projects history data layer, the project.switch command and the palette picker; the switch orchestration is the remaining sub-issue.
+description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-10T05:00:00Z
+timestamp: 2026-07-10T06:45:00Z
 ---
 
 # Project Switching (Roadmap 0090)
 
-`internal/project` owns the "Switch Project" flow (spec: epic #37). Landed so
-far are the **data layer** (#2) and the **command + picker** (#12); the switch
-orchestration msgs (#3) complete the flow.
+`internal/project` owns the "Switch Project" flow (spec: epic #37): the data
+layer (#2), the command + picker (#12) and the switch orchestration (#3).
 
 ## Recent-projects history
 
@@ -49,5 +48,32 @@ orchestration msgs (#3) complete the flow.
   query lists all, newest first — plus an `Open "<query>"…` affordance for a
   typed path outside the history. Entry details render through `compactPath`
   (home → `~`, middle-ellipsis) so long roots never crowd out the title.
-  Activation emits `PickedMsg{Path}`; until #3 lands the root model surfaces
-  the selection as an informational toast instead of switching.
+  Activation emits `PickedMsg{Path}`, which the root model turns into the
+  switch transaction below. `alt+shift+p` is also in the JetBrains chord table
+  (`internal/keymap/defaults.go`): the chord layer resolves modified chords
+  even in a capturing editor, which the registry keymap layer does not.
+
+## Switch orchestration (#3)
+
+The switch is one msg-driven transaction; `internal/project` never mutates a
+subsystem (it must not import editor/explorer), the root model routes:
+
+1. `SwitchTo(path)` (`switch.go`) validates off the Update loop and yields
+   `SwitchProjectMsg{Root}` (absolute) or `SwitchFailedMsg{Path, Err}` — a
+   failure toasts and changes nothing.
+2. The root model (`internal/app/switch.go`): the current root is a friendly
+   no-op; dirty buffers emit `UnsavedChangesMsg{Root}`, which opens the
+   **unsaved-changes guard** in the floating shell — `[s]` save all then
+   switch, `[d]` discard and switch, `[esc]` cancel (project untouched).
+   The prompt renders the root through `CompactPath`: the shell drops a box
+   wider than the terminal, which a raw absolute root can force.
+3. `performSwitch` re-roots: persist the old project's session + layout, stop
+   the watcher, `os.Chdir(root)` (the whole IDE — explorer, config discovery,
+   session/layout stores, search, watcher — is anchored at "."), then rebuild
+   the model through the fresh-start path (`newWithHost`) with the **live
+   host** carried over, so the program sender and the LSP bridge's editor
+   emitter survive. The new project's layout/session restore exactly like a
+   normal launch; the watcher restarts on the new root.
+4. Afterwards `RecordOpenCmd` writes the history (success only) and
+   `SwitchedMsg` toasts; the recorded write triggers a config reload so the
+   picker's in-memory history is already current.
