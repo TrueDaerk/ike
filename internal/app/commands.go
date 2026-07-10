@@ -95,6 +95,15 @@ type MoveFileMsg struct{}
 // split off the focused leaf (Roadmap 0170, #95). Dispatched by terminal.new.
 type TerminalNewMsg struct{}
 
+// TerminalToggleMsg drives the JetBrains alt+f12 state machine (#97): no
+// terminal → create one; unfocused → focus it; focused → return focus to the
+// previously focused pane. Dispatched by terminal.toggle.
+type TerminalToggleMsg struct{}
+
+// TerminalClearMsg clears the focused (else first) terminal's scrollback and
+// repaints its screen (#97). Dispatched by terminal.clear.
+type TerminalClearMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -148,6 +157,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
+			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
+			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),

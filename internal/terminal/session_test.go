@@ -195,3 +195,35 @@ func TestScrollByClamps(t *testing.T) {
 		t.Fatal("scroll clamps to the available history")
 	}
 }
+
+// TestSessionOSCTitle: OSC 2 title sequences land in Title() for the pane.
+func TestSessionOSCTitle(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	cmd := `printf '\033]2;building things\007'` + "\r"
+	for _, r := range cmd {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "osc title", func() bool { return s.Title() == "building things" })
+}
+
+// TestSessionClear empties history and repaints via ctrl+l.
+func TestSessionClear(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	for _, r := range "seq 1 100\r" {
+		s.SendKey(keyFor(r))
+	}
+	// Wait for seq to FINISH (its last line on screen), not merely to start —
+	// clearing mid-stream would race the remaining output back onto the grid.
+	waitFor(t, "seq done", func() bool { return strings.Contains(plainView(s), "100") })
+	waitFor(t, "history", func() bool { return s.ScrollbackLen() > 0 })
+	s.Clear()
+	if s.ScrollbackLen() != 0 {
+		t.Fatalf("scrollback should be empty, len = %d", s.ScrollbackLen())
+	}
+	// The visible screen is wiped emulator-side — no stale seq output.
+	waitFor(t, "screen wipe", func() bool {
+		return !strings.Contains(plainView(s), "97") && !strings.Contains(plainView(s), "42")
+	})
+}

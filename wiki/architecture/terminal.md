@@ -4,14 +4,14 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-11T01:30:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
 
 `internal/terminal` embeds a real shell as a pane (spec: epic #88). Landed so
-far are the **PTY + VT core** (#95) and the **workspace integration** (#96);
-command/UX polish (#97) and toolchain environment injection (#98) build on it.
+far are the **PTY + VT core** (#95), the **workspace integration** (#96) and
+the **commands & UX** (#97); toolchain environment injection (#98) remains.
 
 ## Session (`session.go`)
 
@@ -58,12 +58,30 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 
 | Key | Effect |
 |---|---|
-| `ctrl+tab` | move focus to the next pane (the global escape hatch) |
+| `ctrl+tab` | move focus to the next pane (delivery is terminal-dependent — many terminals cannot send it; 0081's reality probe owns the call) |
+| `alt+f12` | `terminal.toggle` — return focus to the previous pane (the reliable hatch) |
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
 to live); the mouse wheel scrolls it too. A dead session (shell exited)
 falls back to normal key handling so `ctrl+w` can close the pane.
+
+## Commands (#97)
+
+- **`terminal.toggle`** (default `alt+f12`, fragile like every alt+F-key):
+  the JetBrains state machine — no terminal → open one below the active
+  editor; one exists unfocused → focus it (remembering where focus was);
+  focused → return focus to the remembered pane (falling back to the active
+  editor, then the explorer). Inside a focused terminal the reserved-set
+  handler catches `alt+f12` before the raw pass-through.
+- **`terminal.new`** opens an additional session; **`terminal.clear`** wipes
+  screen and scrollback via the canonical `CSI 2J` + `CSI 3J` pair (2J alone
+  pushes the visible lines *into* the scrollback — the xterm behaviour) and
+  asks the shell to repaint its prompt with the ctrl+l convention.
+- The Tools menu carries "Terminal" (toggle) and "New Terminal"; all three
+  commands are palette-reachable.
+- **Titles**: the shell's OSC 0/2 reports (the running command) append to
+  the pane title — `TERMINAL — zsh · goproj · npm run build`.
 
 ## Quality bar
 

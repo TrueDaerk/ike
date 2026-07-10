@@ -171,3 +171,75 @@ func TestTerminalScrollbackReservedKeys(t *testing.T) {
 		_ = got
 	}
 }
+
+// TestTerminalToggleStateMachine guards #97: create → return → refocus.
+func TestTerminalToggleStateMachine(t *testing.T) {
+	m := sized(t, 100, 40)
+	before := m.panes.Focused()
+
+	// No terminal: toggle creates and focuses one.
+	out, _ := m.Update(TerminalToggleMsg{})
+	m = out.(Model)
+	key := m.panes.Focused()
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatal("toggle should create a terminal")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	// Focused: toggle returns focus to the previous pane.
+	out, _ = m.Update(TerminalToggleMsg{})
+	m = out.(Model)
+	if m.panes.Focused() != before {
+		t.Fatalf("toggle should return focus to %q, got %q", before, m.panes.Focused())
+	}
+
+	// Unfocused terminal exists: toggle focuses it again (no second spawn).
+	out, _ = m.Update(TerminalToggleMsg{})
+	m = out.(Model)
+	if m.panes.Focused() != key {
+		t.Fatal("toggle should refocus the existing terminal")
+	}
+	terms := 0
+	for _, k := range m.panes.Keys() {
+		if m.panes.Get(k).Kind() == pane.KindTerminal {
+			terms++
+		}
+	}
+	if terms != 1 {
+		t.Fatalf("toggle must not spawn extra terminals, got %d", terms)
+	}
+}
+
+// TestTerminalClearEmptiesScrollback guards terminal.clear (#97).
+func TestTerminalClearEmptiesScrollback(t *testing.T) {
+	m, key := openTestTerminal(t)
+	inst := m.panes.Get(key)
+	term := inst.Terminal()
+	// Generate history.
+	for _, r := range "seq 1 200\r" {
+		out, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = out.(Model)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) && term.ScrollbackLen() == 0 {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if term.ScrollbackLen() == 0 {
+		t.Skip("shell produced no scrollback in time")
+	}
+	out, _ := m.Update(TerminalClearMsg{})
+	m = out.(Model)
+	if term.ScrollbackLen() != 0 {
+		t.Fatalf("clear should empty the scrollback, len = %d", term.ScrollbackLen())
+	}
+}
+
+// TestTerminalCommandsRegistered: the three commands resolve by id.
+func TestTerminalCommandsRegistered(t *testing.T) {
+	for _, id := range []string{"terminal.new", "terminal.toggle", "terminal.clear"} {
+		if _, ok := registry.Global().Command(id); !ok {
+			t.Fatalf("%s should be registered", id)
+		}
+	}
+}

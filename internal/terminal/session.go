@@ -49,6 +49,7 @@ type Session struct {
 	ptmx   *os.File
 	cmd    *exec.Cmd
 	w, h   int
+	title  string // last OSC 0/2 title the application set ("" until then)
 	closed atomic.Bool
 
 	notifyPending atomic.Bool
@@ -94,6 +95,14 @@ func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Sessio
 		cmd:   cmd,
 		w:     w, h: h,
 	}
+	// OSC 0/2 titles (the shell's running-command reporting) feed the pane
+	// title; the callback runs on the read loop, so it only stores.
+	s.em.SetCallbacks(vt.Callbacks{Title: func(t string) {
+		s.mu.Lock()
+		s.title = t
+		s.mu.Unlock()
+		s.notify()
+	}})
 	go s.readLoop()
 	go s.writeLoop()
 	go s.waitExit()
@@ -196,6 +205,29 @@ func (s *Session) Running() bool { return !s.closed.Load() }
 // (the session's origin root — the live cwd is the shell's business).
 func (s *Session) ShellPath() string { return s.shell }
 func (s *Session) Dir() string       { return s.dir }
+
+// Title returns the last OSC 0/2 title the running application set, "" when
+// none arrived yet.
+func (s *Session) Title() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.title
+}
+
+// Clear empties the scrollback and the visible screen (the JetBrains "clear
+// buffer" behaviour), then asks the shell to repaint its prompt via the
+// ctrl+l convention. The screen wipe happens emulator-side so the buffer is
+// clean even when the running program ignores ^L.
+func (s *Session) Clear() {
+	if s.closed.Load() {
+		return
+	}
+	// 2J pushes the visible lines into the scrollback (the xterm behaviour),
+	// 3J then erases the scrollback — the canonical clear-everything pair.
+	_, _ = s.em.WriteString("\x1b[2J\x1b[3J\x1b[H")
+	s.em.SendKey(vt.KeyPressEvent{Code: 'l', Mod: vt.ModCtrl})
+	s.notify()
+}
 
 // ScrollbackLen reports how many lines have scrolled off the screen.
 func (s *Session) ScrollbackLen() int { return s.em.ScrollbackLen() }

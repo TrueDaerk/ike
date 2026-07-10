@@ -32,7 +32,8 @@ func Defaults() []Menu {
 			{Title: "Forward", Command: "nav.forward"},
 		}},
 		{Title: "Tools", Items: []Item{
-			{Title: "Terminal", Command: "tools.terminal"},
+			{Title: "Terminal", Command: "terminal.toggle"},
+			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},
