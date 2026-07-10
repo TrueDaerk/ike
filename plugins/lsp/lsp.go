@@ -62,6 +62,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				func() []string { return shared().runningLangs() },
 				func() tea.Cmd { return shared().restartAll() },
 				func(langID string) tea.Cmd { return shared().restartLang(langID) },
+				func(langID string) tea.Cmd { return shared().installLang(langID) },
 			)},
 		},
 		Hooks: []plugin.Hook{
@@ -102,6 +103,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 // overrides. Servers are external binaries the user installs.
 func applyDefaults(c *config.Config) {
 	c.LSP.Enabled = true
+	c.LSP.AutoInstall = true
 	if c.LSP.Servers == nil {
 		c.LSP.Servers = map[string]map[string]any{}
 	}

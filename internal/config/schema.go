@@ -97,9 +97,10 @@ type Keymap struct {
 // Roadmap 0100; its value type stays a free-form table so a server entry can
 // carry arbitrary keys without a schema change here.
 type LSP struct {
-	Enabled  bool                      `toml:"enabled"`
-	LogLevel string                    `toml:"log_level"`
-	Servers  map[string]map[string]any `toml:"servers"`
+	Enabled     bool                      `toml:"enabled"`
+	AutoInstall bool                      `toml:"auto_install"`
+	LogLevel    string                    `toml:"log_level"`
+	Servers     map[string]map[string]any `toml:"servers"`
 }
 
 // Theme selects the active palette; its contents are owned by Roadmap 0110.

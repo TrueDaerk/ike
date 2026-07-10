@@ -117,6 +117,26 @@ layer, per-server enable and command/args/settings overrides via write-back,
 and per-server restart (`Manager.StopLang`: stops one language's servers, all
 roots; they respawn lazily) beside the global `lsp.restart`.
 
+## Missing-server installation (#131)
+
+**Activation implies installation.** Each language plugin's `ServerSpec`
+carries an `Install` recipe (a plain argv: `go install
+golang.org/x/tools/gopls@latest`, `npm install -g pyright` / `intelephense`).
+When launching a server fails with `transport.ErrNotFound` — detected on the
+first file open of the language — the recipe runs automatically in the
+background (`plugins/lsp/install.go`), with an "installing …" info toast, a
+success/failure result, and on success an immediate re-open of the triggering
+document so the fresh server starts without further interaction.
+
+`lsp.auto_install = true|false` (default true) is the opt-out; the Language
+Servers page toggles it with `A` and offers the same install manually with
+`i` — the fallback, and the only retry path after a failure. Guard rails: one
+install per language at a time, the automatic path backs off permanently
+after a failed attempt (no install loop on every file open), and failures
+surface the output tail as an error toast plus a `debug.log` line (#125,
+written by the root model for every `ServerEventError`). All work runs inside
+goroutines/`tea.Cmd`s, never on the Update loop (#123).
+
 ## Testing
 
 Pure-Go fakes throughout: an in-memory `io.ReadWriteCloser` speaking JSON-RPC

@@ -24,6 +24,7 @@ func init() {
 			Command:     "pyright-langserver",
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"pyproject.toml", "setup.py", "setup.cfg", ".git"},
+			Install:     []string{"npm", "install", "-g", "pyright"},
 		},
 		Toolchain:   toolchain{},
 		LineComment: "#",

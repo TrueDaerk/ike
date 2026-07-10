@@ -45,6 +45,7 @@ type LSPPage struct {
 	running     func() []string
 	restartAll  func() tea.Cmd
 	restartLang func(langID string) tea.Cmd
+	install     func(langID string) tea.Cmd
 	pal         *theme.Palette
 
 	sel     int
@@ -55,12 +56,13 @@ type LSPPage struct {
 }
 
 // NewLSPPage builds the page. The closures may be nil (no restart wiring).
-func NewLSPPage(opts config.Options, running func() []string, restartAll func() tea.Cmd, restartLang func(string) tea.Cmd) *LSPPage {
+func NewLSPPage(opts config.Options, running func() []string, restartAll func() tea.Cmd, restartLang, install func(string) tea.Cmd) *LSPPage {
 	return &LSPPage{
 		opts:        opts,
 		running:     running,
 		restartAll:  restartAll,
 		restartLang: restartLang,
+		install:     install,
 		status:      map[string]lspStatus{},
 	}
 }
@@ -175,9 +177,9 @@ func (p *LSPPage) rowStatus(id string) (label, detail string) {
 	}
 	last, has := p.status[id]
 	if has && strings.Contains(last.text, "not found") {
-		// Missing binary: the launch-failure reason plus the install hint
-		// (the automatic install helper is 0180/20, #131).
-		return "missing", last.text + " — install it manually (install helper: #131)"
+		// Missing binary: the launch-failure reason plus the install hint —
+		// auto-install (#131) covers the first attempt, i retries manually.
+		return "missing", last.text + " — press i to install"
 	}
 	if p.isRunning(id) {
 		return "ready", ""
@@ -232,6 +234,17 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if hasRow && p.restartLang != nil {
 			return p.restartLang(l.ID)
 		}
+	case "i":
+		if hasRow && p.install != nil {
+			return p.install(l.ID)
+		}
+	case "A":
+		// Auto-install opt-out (#131), the subsystem's conventional layer.
+		v := "true"
+		if c := config.Get(); c != nil && c.LSP.AutoInstall {
+			v = "false"
+		}
+		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.auto_install"), "lsp.auto_install", v == "true")
 	case "R":
 		if p.restartAll != nil {
 			return p.restartAll()
@@ -350,8 +363,12 @@ func (p *LSPPage) View(w, h int) string {
 	if !masterEnabled() {
 		master = "off"
 	}
+	auto := "on"
+	if c := config.Get(); c != nil && !c.LSP.AutoInstall {
+		auto = "off"
+	}
 	lines := []string{
-		sec.Render(" LSP master switch: " + master + "  (E toggles)"),
+		sec.Render(" LSP master switch: " + master + "  (E toggles) · auto-install: " + auto + "  (A toggles)"),
 		sec.Render(" language · status · command · source"),
 	}
 	for i, l := range p.servers() {
@@ -376,7 +393,7 @@ func (p *LSPPage) View(w, h int) string {
 			if detail != "" {
 				lines = append(lines, lipgloss.NewStyle().Foreground(pal.Error).Render("   "+detail))
 			}
-			lines = append(lines, sec.Render("   e enable · c command · a args · s settings · r restart · R restart all · x reset"))
+			lines = append(lines, sec.Render("   e enable · c command · a args · s settings · i install · r restart · R restart all · x reset"))
 		}
 	}
 	if len(lines) > h {

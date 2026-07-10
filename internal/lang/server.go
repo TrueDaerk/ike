@@ -14,6 +14,11 @@ type ServerSpec struct {
 	Env         []string
 	RootMarkers []string
 	Settings    map[string]any // forwarded as initializationOptions
+	// Install is the recipe that installs the server binary when it is
+	// missing (0180, #131): a plain argv shelled out as-is, e.g.
+	// ["go", "install", "golang.org/x/tools/gopls@latest"]. Empty means the
+	// plugin ships no recipe and installation stays manual.
+	Install []string
 }
 
 // SettingsJSON encodes Settings as initializationOptions, or nil when empty.

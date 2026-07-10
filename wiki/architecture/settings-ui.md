@@ -129,5 +129,6 @@ command / args / settings (JSON object) overrides inline — written to the
 **project** config via write-back, empty input resets the key — `x` clears all
 of a server's overrides, `r` restarts one server (`Manager.StopLang`, async
 per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
-binary renders the launch-failure reason with a hint toward the install
-helper (#131).
+binary renders the launch-failure reason; `i` runs the plugin's install
+recipe manually and `A` toggles `lsp.auto_install` (#131 — the automatic
+install on first use, with the manual action as fallback/retry).
