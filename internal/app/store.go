@@ -128,6 +128,8 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
+		case pane.KindTerminal:
+			ids[key] = paneIdentity{Kind: "terminal"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
 			for i, ed := range inst.Editors() {

@@ -24,3 +24,4 @@ Component-level concepts for the IKE codebase.
 * [Language Registry](/architecture/languages.md) - neutral lang registry bundling extensions + grammar + LSP server + toolchain detector; per-language plugins make adding a language a new package (Roadmap 0105)
 * [Themes / Color Schemes](/architecture/themes.md) - semantic-slot palette system: one [theme].name recolors syntax + explorer + chrome, built-in themes, plugin registration (Roadmap 0110)
 * [Project Switching](/architecture/project-switching.md) - recent-projects history data layer: typed [[project.history]] entries, root validation, upsert/dedupe/cap persisted via config; picker + switch orchestration upcoming (Roadmap 0090)
+* [Integrated Terminal](/architecture/terminal.md) - PTY-spawned shell through a VT emulator as a pane: raw key routing with ctrl+tab escape hatch, coalesced output, resize propagation (Roadmap 0170)

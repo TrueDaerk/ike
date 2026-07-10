@@ -38,6 +38,7 @@ import (
 	"ike/internal/registry"
 	"ike/internal/search"
 	"ike/internal/settings"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/watch"
@@ -402,6 +403,18 @@ func (m *Model) restoreLayout(cfg host.Config) {
 	tree, ids, ok := loadLayout()
 	if !ok {
 		return
+	}
+	// Terminal panes do not restore yet (their sessions died with the process;
+	// #96 owns re-spawning): collapse their leaves out of the saved tree so
+	// the rest of the layout still restores instead of falling back wholesale.
+	for _, key := range layout.Leaves(tree) {
+		if ids[key].Kind == "terminal" {
+			pruned, closed := layout.Close(tree, key)
+			if !closed {
+				return // terminal was the only non-explorer leaf: default layout
+			}
+			tree = pruned
+		}
 	}
 	leaves := layout.Leaves(tree)
 	explorers := 0
@@ -798,6 +811,41 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 	}
 }
 
+// terminalFocused reports whether the focused pane is a live terminal; a dead
+// one (shell exited) falls back to normal key handling so ctrl+w can close it.
+func (m Model) terminalFocused() bool {
+	inst := m.panes.FocusedInstance()
+	return inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Running()
+}
+
+// openTerminal opens a fresh terminal pane rooted in the working directory
+// (the project root), split below the active editor — the conventional
+// JetBrains placement — falling back to the focused leaf when no editor
+// exists.
+func (m *Model) openTerminal() {
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
+	if target == "" || m.tree == nil {
+		return
+	}
+	shell := ""
+	if v, ok := m.host.Config().Get("terminal.shell"); ok {
+		shell = v
+	}
+	key := m.panes.AddTerminal(terminal.Shell(shell), ".", m.host.Send)
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	if !ok {
+		m.panes.Close(key)
+		return
+	}
+	m.tree = tree
+	m.setFocus(key)
+	m.layout()
+	saveLayout(m.tree, m.panes)
+}
+
 // explorer returns the singleton explorer model.
 func (m Model) explorer() *explorer.Model {
 	return m.panes.Get(pane.ExplorerKey).Explorer()
@@ -1066,6 +1114,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		} else if m.panes.Has(pane.ExplorerKey) {
 			m.setFocus(pane.ExplorerKey)
+		}
+		return m, nil
+
+	case TerminalNewMsg:
+		// terminal.new (palette / menu): split the focused leaf with a fresh
+		// shell session rooted in the project (Roadmap 0170, #95).
+		m.openTerminal()
+		return m, nil
+
+	case terminal.OutputMsg:
+		// The grid changed; returning repaints. The msg is send-coalesced.
+		return m, nil
+
+	case terminal.ExitedMsg:
+		// The shell ended: close its pane like ctrl+w would; when the layout
+		// refuses (last leaf), the pane stays showing [process exited].
+		if m.panes.Has(msg.Key) {
+			if m.closeKey(msg.Key) {
+				m.setFocus(m.focusAfterClose())
+				m.syncExplorerOpen()
+				m.layout()
+				saveLayout(m.tree, m.panes)
+			}
 		}
 		return m, nil
 
@@ -1348,6 +1419,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// keyboard the same way: s / d / esc answer it.
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
+		}
+		// A focused terminal takes every key raw (vim/htop must see them all);
+		// ctrl+tab stays the escape hatch to move focus away. The boundary is
+		// finalised with the workspace integration (#96/#97).
+		if m.terminalFocused() {
+			if msg.String() == "ctrl+tab" {
+				m.cycleFocus()
+				return m, nil
+			}
+			return m.routeKey(msg)
 		}
 		// The rename prompt (#175) owns the keyboard the same way: typed
 		// characters build the new name, enter applies, esc cancels.
@@ -2727,6 +2808,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			if bar, ok := m.tabBar(inst, r.W-paneChromeW); ok {
 				title = bar
 			}
+		case pane.KindTerminal:
+			title, content = "TERMINAL", inst.View()
 		}
 	}
 

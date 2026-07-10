@@ -1,0 +1,202 @@
+// Package terminal is the integrated terminal core (Roadmap 0170, #95): a
+// PTY-spawned shell whose output feeds a VT emulator
+// (charmbracelet/x/vt), rendered as a pane. The Session owns the process and
+// the emulator; the pane-facing Model in model.go adapts it to the pane
+// registry. Workspace integration (splits, persistence, scrollback paging)
+// and command polish are the follow-up issues (#96, #97).
+package terminal
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/vt"
+	"github.com/creack/pty"
+)
+
+// OutputMsg reports that the emulator's screen changed; the root model only
+// needs to repaint. Key identifies the owning pane.
+type OutputMsg struct{ Key string }
+
+// ExitedMsg reports that the shell process ended; the root model closes the
+// pane (or marks it dead when it is the last leaf).
+type ExitedMsg struct{ Key string }
+
+// notifyQuiet coalesces output notifications: heavy PTY output (yes, seq or
+// a build log) must not flood the render loop, so at most one repaint request
+// is in flight per interval.
+const notifyQuiet = 8 * time.Millisecond
+
+// Session is one live shell: the PTY, the process and the emulator holding
+// the screen state. All methods are safe for concurrent use — the read loop
+// writes into the emulator while Update/View read from it (SafeEmulator).
+type Session struct {
+	key  string
+	em   *vt.SafeEmulator
+	send func(tea.Msg)
+
+	mu     sync.Mutex
+	ptmx   *os.File
+	cmd    *exec.Cmd
+	w, h   int
+	closed atomic.Bool
+
+	notifyPending atomic.Bool
+}
+
+// Shell resolves the shell to spawn: the config override first, $SHELL next,
+// /bin/sh as the safety net.
+func Shell(override string) string {
+	if override != "" {
+		return override
+	}
+	if s := os.Getenv("SHELL"); s != "" {
+		return s
+	}
+	return "/bin/sh"
+}
+
+// StartSession spawns shell in dir on a new PTY sized w×h and starts the read
+// loop. send delivers OutputMsg/ExitedMsg into the program (host.Send).
+func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Session, error) {
+	if w < 2 || h < 2 {
+		w, h = 80, 24
+	}
+	cmd := exec.Command(shell)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+	if err != nil {
+		return nil, fmt.Errorf("terminal: start %s: %w", shell, err)
+	}
+	s := &Session{
+		key:  key,
+		em:   vt.NewSafeEmulator(w, h),
+		send: send,
+		ptmx: ptmx,
+		cmd:  cmd,
+		w:    w, h: h,
+	}
+	go s.readLoop()
+	go s.writeLoop()
+	go s.waitExit()
+	return s, nil
+}
+
+// readLoop pumps PTY output into the emulator and requests repaints,
+// coalesced so a burst of output paints once per quiet interval.
+func (s *Session) readLoop() {
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := s.ptmx.Read(buf)
+		if n > 0 {
+			_, _ = s.em.Write(buf[:n])
+			s.notify()
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+// writeLoop pumps the emulator's host-bound bytes (key encodings from
+// SendKey, terminal query replies like DA1/DSR) into the PTY.
+func (s *Session) writeLoop() {
+	_, _ = io.Copy(s.ptmx, s.em)
+}
+
+// waitExit closes the session when the shell process ends and tells the app.
+func (s *Session) waitExit() {
+	_ = s.cmd.Wait()
+	if s.closed.CompareAndSwap(false, true) {
+		s.teardown()
+		if s.send != nil {
+			s.send(ExitedMsg{Key: s.key})
+		}
+	}
+}
+
+// notify schedules one OutputMsg per quiet interval.
+func (s *Session) notify() {
+	if s.send == nil || !s.notifyPending.CompareAndSwap(false, true) {
+		return
+	}
+	time.AfterFunc(notifyQuiet, func() {
+		s.notifyPending.Store(false)
+		if !s.closed.Load() {
+			s.send(OutputMsg{Key: s.key})
+		}
+	})
+}
+
+// Resize propagates a pane size change to the PTY (SIGWINCH for the child)
+// and the emulator. Same-size calls are no-ops.
+func (s *Session) Resize(w, h int) {
+	if w < 2 || h < 2 || s.closed.Load() {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if w == s.w && h == s.h {
+		return
+	}
+	s.w, s.h = w, h
+	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+	s.em.Resize(w, h)
+}
+
+// SendKey encodes one key press for the child, honouring the emulator's
+// input modes (application cursor keys, etc.); the write loop delivers it.
+func (s *Session) SendKey(k vt.KeyPressEvent) {
+	if !s.closed.Load() {
+		s.em.SendKey(k)
+	}
+}
+
+// Paste sends text through the emulator's paste path (bracketed paste when
+// the application enabled it).
+func (s *Session) Paste(text string) {
+	if !s.closed.Load() {
+		s.em.Paste(text)
+	}
+}
+
+// View renders the current screen as ANSI-styled lines.
+func (s *Session) View() string {
+	return s.em.Render()
+}
+
+// CursorPosition returns the emulator's cursor cell (column, row).
+func (s *Session) CursorPosition() (x, y int) {
+	pos := s.em.CursorPosition()
+	return pos.X, pos.Y
+}
+
+// Running reports whether the shell is still alive.
+func (s *Session) Running() bool { return !s.closed.Load() }
+
+// Close ends the session: the child is terminated and the PTY closed. Safe to
+// call more than once.
+func (s *Session) Close() {
+	if !s.closed.CompareAndSwap(false, true) {
+		return
+	}
+	s.teardown()
+}
+
+// teardown releases the process and PTY.
+func (s *Session) teardown() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cmd != nil && s.cmd.Process != nil {
+		_ = s.cmd.Process.Kill()
+	}
+	_ = s.ptmx.Close()
+	_ = s.em.Close()
+}
