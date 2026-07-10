@@ -182,6 +182,40 @@ func TestScrollbackPaging(t *testing.T) {
 	}
 }
 
+// TestShiftedTextReachesShell: shift/caps-lock characters arrive as modified
+// key presses that the vt encoder would drop; the model replays their text so
+// uppercase input reaches the shell (#224).
+func TestShiftedTextReachesShell(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+
+	for _, r := range "echo " {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	m.Update(tea.KeyPressMsg{Code: 'u', ShiftedCode: 'U', Mod: tea.ModShift, Text: "U"})
+	m.Update(tea.KeyPressMsg{Code: 'p', ShiftedCode: 'P', Mod: tea.ModCapsLock, Text: "P"})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	waitFor(t, "uppercase echo output", func() bool {
+		return strings.Count(plainView(s), "UP") >= 2 // echoed input + output
+	})
+}
+
+// TestShiftedTextKeepsSpecialKeys: shift on non-text keys stays a modified
+// event — shift+pgup must still page the scrollback, not type anything.
+func TestShiftedTextKeepsSpecialKeys(t *testing.T) {
+	got := toVTKeys(tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModShift})
+	want := vt.KeyPressEvent{Code: vt.KeyPgUp, Mod: vt.ModShift}
+	if len(got) != 1 || got[0] != want {
+		t.Fatalf("shift+pgup should pass through unchanged, got %#v", got)
+	}
+	// A ctrl chord with text stays a chord too.
+	got = toVTKeys(tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl, Text: "c"})
+	if len(got) != 1 || got[0].Mod != vt.ModCtrl {
+		t.Fatalf("ctrl+c should keep its modifier, got %#v", got)
+	}
+}
+
 func TestScrollByClamps(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)

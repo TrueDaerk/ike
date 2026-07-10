@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-11T03:00:00Z
+timestamp: 2026-07-10T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -27,7 +27,10 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   and key presses go through `SendKey`, which encodes per the emulator's
   input modes (application cursor keys etc.); a write loop pumps the
   emulator's host-bound bytes (key encodings, DA/DSR query replies) back
-  into the PTY.
+  into the PTY. The emulator drops non-special keys that still carry a
+  modifier, so the pane normalizes text-producing presses whose only
+  modifiers are shift/caps-lock/num-lock (`toVTKeys` in `model.go`) —
+  uppercase letters reach the shell as their produced text (#224).
 - **Batching**: output notifications are coalesced (`OutputMsg`, one per 8ms
   quiet interval), so `yes` or a build log cannot flood the render loop.
 

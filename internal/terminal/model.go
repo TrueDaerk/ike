@@ -125,7 +125,9 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.scroll = 0
-	m.sess.SendKey(toVTKey(msg))
+	for _, ev := range toVTKeys(msg) {
+		m.sess.SendKey(ev)
+	}
 	return nil
 }
 
@@ -162,15 +164,29 @@ func (m *Model) PasteText(text string) {
 	}
 }
 
-// toVTKey converts a bubbletea key press into the emulator's key event; the
+// textMods are the modifiers that only transform which text a key produces;
+// a key carrying nothing beyond these is plain typed input, not a chord.
+const textMods = tea.ModShift | tea.ModCapsLock | tea.ModNumLock
+
+// toVTKeys converts a bubbletea key press into the emulator's key events; the
 // two structs share the same shape (code, shifted code, modifiers, text).
-func toVTKey(k tea.KeyPressMsg) vt.KeyPressEvent {
-	return vt.KeyPressEvent{
+// The emulator's encoder writes a plain key only when no modifier is set, so
+// shifted or caps-locked characters (shift+a → "A") would be dropped (#224);
+// such presses are replayed as their produced text instead.
+func toVTKeys(k tea.KeyPressMsg) []vt.KeyPressEvent {
+	if k.Text != "" && k.Mod != 0 && k.Mod&^textMods == 0 {
+		evs := make([]vt.KeyPressEvent, 0, 1)
+		for _, r := range k.Text {
+			evs = append(evs, vt.KeyPressEvent{Code: r, Text: string(r)})
+		}
+		return evs
+	}
+	return []vt.KeyPressEvent{{
 		Code:        k.Code,
 		ShiftedCode: k.ShiftedCode,
 		Mod:         vt.KeyMod(k.Mod),
 		Text:        k.Text,
-	}
+	}}
 }
 
 // View renders the grid, with the cursor cell reversed while focused; a

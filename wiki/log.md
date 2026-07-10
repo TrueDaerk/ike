@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Terminal shifted-input fix (#224): the vt encoder drops non-special keys
+  that still carry a modifier, so uppercase/caps-lock characters never
+  reached the shell; the pane now replays shift/caps-lock/num-lock-only
+  text presses as their produced text (`toVTKeys` in
+  internal/terminal/model.go).
+
 - Navigation history cross-pane polish (#220, Roadmap 0220, closes the
   epic): stale-entry skipping via BackWhere/ForwardWhere validity filter
   (deleted/renamed files are dropped silently, traversal continues, no
