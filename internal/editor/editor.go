@@ -82,9 +82,19 @@ type Model struct {
 	searching bool
 	searchDir search.Direction
 	query     search.Query
-	cmdMsg     string           // transient ":"-line message (errors, reports); shown while idle
-	lastSub    lastSubstitute   // last :substitute, for a bare ":s" repeat
-	subConfirm *subConfirmState // active ":s///c" confirmation, nil when idle
+
+	// Incremental search (#255): the live-compiled preview query while the
+	// "/" line is open, the cursor/viewport captured at search start (Esc
+	// restores them exactly), and whether match highlights are shown
+	// (cleared by a normal-mode Esc, vim's :noh; re-armed by / n N *).
+	preview       search.Query
+	searchOrigin  buffer.Position
+	searchOrigTop int
+	searchOrigLft int
+	hlActive      bool
+	cmdMsg        string           // transient ":"-line message (errors, reports); shown while idle
+	lastSub       lastSubstitute   // last :substitute, for a bare ":s" repeat
+	subConfirm    *subConfirmState // active ":s///c" confirmation, nil when idle
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
@@ -118,8 +128,8 @@ type Model struct {
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
 	semIndex highlight.Index
-	hlTheme    highlight.Theme
-	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
+	hlTheme  highlight.Theme
+	pal      *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
 	// popup, and the hover popup. See lsp_state.go.

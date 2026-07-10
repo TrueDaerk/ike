@@ -541,6 +541,101 @@ func TestSearchForwardAndNext(t *testing.T) {
 	}
 }
 
+func TestIncrementalSearchPreviewJumpsWhileTyping(t *testing.T) {
+	m, _ := loaded(t, "aaa\nbbb\nccc target ddd\n")
+	m = send(m, key('/'))
+	m = typeKeys(m, "targ")
+	if m.cursor.Line != 2 || m.cursor.Col != 4 {
+		t.Fatalf("preview cursor=%v want {2 4} while still typing", m.cursor)
+	}
+	if !m.searching {
+		t.Fatal("preview jump must not leave search mode")
+	}
+	// Deleting back to a non-matching prefix parks the cursor at the origin.
+	m = send(m, special(tea.KeyBackspace), special(tea.KeyBackspace), special(tea.KeyBackspace), special(tea.KeyBackspace))
+	if m.cursor.Line != 0 || m.cursor.Col != 0 {
+		t.Fatalf("empty pattern cursor=%v want origin {0 0}", m.cursor)
+	}
+}
+
+func TestIncrementalSearchEscRestoresOrigin(t *testing.T) {
+	m, _ := loaded(t, "aaa\nbbb\nccc target ddd\n")
+	m = typeKeys(m, "j") // origin at line 1
+	m = send(m, key('/'))
+	m = typeKeys(m, "target")
+	if m.cursor.Line != 2 {
+		t.Fatalf("preview should sit on the match, cursor=%v", m.cursor)
+	}
+	m = send(m, special(tea.KeyEscape))
+	if m.cursor.Line != 1 || m.cursor.Col != 0 {
+		t.Fatalf("esc cursor=%v want origin {1 0}", m.cursor)
+	}
+	if m.searching || m.ModeName() != Normal {
+		t.Fatal("esc should leave search mode")
+	}
+}
+
+func TestSearchNoMatchesReportsAndRestores(t *testing.T) {
+	m, _ := loaded(t, "aaa\nbbb\n")
+	m = typeKeys(m, "j")
+	m = send(m, key('/'))
+	m = typeKeys(m, "zzz")
+	if m.cursor.Line != 1 {
+		t.Fatalf("no-match preview cursor=%v want origin line 1", m.cursor)
+	}
+	m = send(m, special(tea.KeyEnter))
+	if m.cmdMsg != "no matches: zzz" {
+		t.Fatalf("cmdMsg=%q want 'no matches: zzz'", m.cmdMsg)
+	}
+	if m.cursor.Line != 1 || m.hlActive {
+		t.Fatalf("cursor=%v hl=%v want origin/unhighlighted", m.cursor, m.hlActive)
+	}
+}
+
+func TestSearchWrapReportsHint(t *testing.T) {
+	m, _ := loaded(t, "foo\nbar\nfoo\n")
+	m = send(m, key('/'))
+	m = typeKeys(m, "foo")
+	m = send(m, special(tea.KeyEnter)) // lands on line 2 (skips the origin match)
+	if m.cursor.Line != 2 {
+		t.Fatalf("commit cursor=%v want line 2", m.cursor)
+	}
+	m = typeKeys(m, "n") // wraps to line 0
+	if m.cursor.Line != 0 {
+		t.Fatalf("n cursor=%v want wrapped to line 0", m.cursor)
+	}
+	if m.cmdMsg != "search wrapped" {
+		t.Fatalf("cmdMsg=%q want 'search wrapped'", m.cmdMsg)
+	}
+}
+
+func TestSearchCounterAndHighlightLifecycle(t *testing.T) {
+	m, _ := loaded(t, "foo bar foo baz foo\n")
+	m.SetSize(60, 6)
+	m = send(m, key('/'))
+	m = typeKeys(m, "foo")
+	// The origin sits on the first match; like vim's "/", the preview lands on
+	// the next one, so the counter reads 2/3.
+	if !strings.Contains(m.View(), "2/3") {
+		t.Fatalf("view should show the 2/3 counter while typing:\n%s", m.View())
+	}
+	if _, ok := m.searchHLQuery(); !ok {
+		t.Fatal("preview highlights should be active while typing")
+	}
+	m = send(m, special(tea.KeyEnter))
+	if _, ok := m.searchHLQuery(); !ok {
+		t.Fatal("committed highlights should stay active after enter")
+	}
+	m = send(m, special(tea.KeyEscape)) // normal-mode esc = :noh
+	if _, ok := m.searchHLQuery(); ok {
+		t.Fatal("normal-mode esc should clear the highlights")
+	}
+	m = typeKeys(m, "n") // n re-arms them
+	if _, ok := m.searchHLQuery(); !ok {
+		t.Fatal("n should re-arm the highlights")
+	}
+}
+
 // --- visual ----------------------------------------------------------------
 
 func TestVisualDelete(t *testing.T) {

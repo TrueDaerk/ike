@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Incremental in-file search (#255): the `/` line now previews live — per-
+  keystroke jump to the nearest match, match-count tally on the input line,
+  full-buffer match highlighting (current match underlined), exact
+  cursor/viewport restore on Esc, and "no matches" / "search wrapped"
+  ex-line hints. Normal-mode Esc clears highlights (`:noh`-style). Found
+  running the 0082 sheet 09 protocol (#18). Documented in
+  [Editor](/architecture/editor.md).
+
 - Copy/cut feedback toasts (#252): `editor.copy` / `editor.cut` report what
   landed in the clipboard ("copied 1 line", "cut 5 chars") through the
   existing `NoticeMsg` toast path; vim-native `y`/`d` stay silent. Found
