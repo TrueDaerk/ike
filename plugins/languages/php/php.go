@@ -21,6 +21,7 @@ func init() {
 			Command:     "intelephense",
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"composer.json", ".git"},
+			Install:     []string{"npm", "install", "-g", "intelephense"},
 		},
 		Toolchain:    toolchain{},
 		LineComment:  "//",

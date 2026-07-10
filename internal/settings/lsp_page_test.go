@@ -39,6 +39,10 @@ func lspPageFixture(t *testing.T) (*LSPPage, config.Options, *[]string) {
 			return func() tea.Msg {
 				return ilsp.ServerStatusMsg{Lang: id, Text: id + " language server restarted", Kind: ilsp.ServerEventInfo}
 			}
+		},
+		func(id string) tea.Cmd {
+			restarts = append(restarts, "install:"+id)
+			return nil
 		})
 	for i, l := range p.servers() {
 		if l.ID == "lsptest" {
@@ -170,6 +174,19 @@ func TestLSPPageRestartDispatch(t *testing.T) {
 	}
 }
 
+func TestLSPPageInstallDispatchAndAutoToggle(t *testing.T) {
+	p, _, restarts := lspPageFixture(t)
+	drainLSP(t, p, p.Update(key("i")))
+	if len(*restarts) != 1 || (*restarts)[0] != "install:lsptest" {
+		t.Fatalf("i must dispatch the manual install, got %v", *restarts)
+	}
+	before := config.Get().LSP.AutoInstall
+	drainLSP(t, p, p.Update(tea.KeyPressMsg{Text: "A", Code: 'A', Mod: tea.ModShift}))
+	if config.Get().LSP.AutoInstall == before {
+		t.Fatal("A must flip lsp.auto_install")
+	}
+}
+
 func TestLSPPageMissingBinaryDetail(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
 	p.running = func() []string { return nil }
@@ -179,7 +196,7 @@ func TestLSPPageMissingBinaryDetail(t *testing.T) {
 	if !strings.Contains(v, "missing") {
 		t.Fatalf("a not-found status must render as missing:\n%s", v)
 	}
-	if !strings.Contains(v, "fake-ls not found") || !strings.Contains(v, "install helper: #131") {
+	if !strings.Contains(v, "fake-ls not found") || !strings.Contains(v, "press i to install") {
 		t.Fatalf("the failure reason and install hint must render:\n%s", v)
 	}
 }

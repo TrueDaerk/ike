@@ -2,6 +2,19 @@
 
 ## 2026-07-10
 
+- Missing-server install helper (#131, Roadmap 0180): `lang.ServerSpec` grows
+  an `Install` recipe (argv; gopls via `go install`, pyright/intelephense via
+  `npm -g`). A server launch failing with ErrNotFound on file open triggers
+  the recipe automatically in the background (`plugins/lsp/install.go`) —
+  progress/result toasts, on success the triggering document re-opens so the
+  server starts immediately. New config `lsp.auto_install` (default true);
+  the Language Servers page toggles it (`A`) and runs the install manually
+  (`i`) — the retry path after a failure. Guards: one install per language,
+  auto path backs off after a failure, failures log the output tail to
+  debug.log (root model, every ServerEventError). Tests in `plugins/lsp`
+  (fake runner: recipe, opt-out, backoff, concurrency, no-recipe warn) and
+  `internal/settings`; wiki (lsp.md, settings-ui.md) updated.
+
 - Language-server settings page (#130, Roadmap 0180): new custom settings
   page "Language Servers", contributed by the LSP plugin via SettingsPages
   (`internal/settings/lsp_page.go`). One row per language with a server:

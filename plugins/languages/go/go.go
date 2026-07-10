@@ -22,6 +22,7 @@ func init() {
 			Language:    "go",
 			Command:     "gopls",
 			RootMarkers: []string{"go.mod", "go.work", ".git"},
+			Install:     []string{"go", "install", "golang.org/x/tools/gopls@latest"},
 		},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},

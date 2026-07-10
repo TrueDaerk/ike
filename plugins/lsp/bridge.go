@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
+	"ike/internal/lsp/transport"
 )
 
 // bridge is the long-lived glue between the editor and the LSP manager. It is a
@@ -23,6 +25,7 @@ type bridge struct {
 	mu      sync.Mutex
 	h       host.API
 	mgr     *manager.Manager
+	inst    *installer
 	curPath string
 	curLine int
 	curCol  int
@@ -35,7 +38,7 @@ var (
 
 // shared returns the process-wide bridge, created on first use.
 func shared() *bridge {
-	sharedOnce.Do(func() { sharedInst = &bridge{} })
+	sharedOnce.Do(func() { sharedInst = &bridge{inst: newInstaller()} })
 	return sharedInst
 }
 
@@ -91,7 +94,14 @@ func (b *bridge) fileOpened(h host.API, path string) {
 		return
 	}
 	mgr := b.manager()
-	go func() { _ = mgr.Open(path, l.ID, string(data)) }()
+	go func() {
+		err := mgr.Open(path, l.ID, string(data))
+		if err != nil && errors.Is(err, transport.ErrNotFound) {
+			// Missing binary on first use: activation implies installation
+			// (#131). We are already off the Update loop here.
+			b.autoInstall(l.ID, path)
+		}
+	}()
 }
 
 func (b *bridge) fileSaved(h host.API, path string) {

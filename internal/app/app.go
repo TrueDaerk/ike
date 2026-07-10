@@ -1075,6 +1075,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).
 		// The Language Servers settings page tracks per-language state (#130).
 		m.settings.Deliver(msg)
+		if msg.Kind == ilsp.ServerEventError {
+			// Unrecoverable failures (launch errors, failed installs, #131)
+			// also leave a debug.log line for post-mortems (#125).
+			logDiagnostic("lsp: " + msg.Text)
+		}
 		switch msg.Kind {
 		case ilsp.ServerEventInfo:
 			m.host.Notify(host.Info, msg.Text)
