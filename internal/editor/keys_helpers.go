@@ -80,7 +80,7 @@ func (m *Model) searchWord(forward bool) {
 	if word == "" {
 		return
 	}
-	m.query = search.Compile(word, false)
+	m.query = search.CompileExact(word) // "*"/"#" match the word exactly, no smartcase
 	if forward {
 		m.searchDir = search.Forward
 	} else {

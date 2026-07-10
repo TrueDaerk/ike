@@ -59,6 +59,9 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   border off screen).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
+  Matching is **smartcase** (#257): an all-lowercase pattern is
+  case-insensitive, any uppercase rune makes it exact; `*`/`#` always match
+  the word exactly, and `:s` keeps its own explicit `i`/`I` flags.
   The input line is **incremental** (#255): each keystroke recompiles the
   pattern, jumps to the nearest match from the search origin and shows a live
   counter ("3/17", "no matches") on the `/` line; Esc restores cursor and
