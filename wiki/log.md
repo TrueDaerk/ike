@@ -2,6 +2,20 @@
 
 ## 2026-07-10
 
+- Language-server settings page (#130, Roadmap 0180): new custom settings
+  page "Language Servers", contributed by the LSP plugin via SettingsPages
+  (`internal/settings/lsp_page.go`). One row per language with a server:
+  live status (ready/idle/crashed/missing/disabled/off-master — from
+  language-tagged `ServerStatusMsg`s, which now carry `Lang`, plus the new
+  `Manager.RunningLangs`), effective command line and source layer. Controls:
+  `E` master switch, `e` per-server enable (new `[lsp.servers.<id>] enabled`
+  key, honored by `resolveSpec`), inline `c`/`a`/`s` command/args/settings
+  overrides (project-scope write-back, empty = reset), `x` reset all, `r`
+  per-server restart (new `Manager.StopLang`, async per #123), `R` restart
+  all. Missing binaries render the launch-failure reason with an install-
+  helper hint (#131). Tests across `internal/settings`, `internal/lsp/manager`
+  and `plugins/lsp`; wiki (settings-ui.md, lsp.md) updated.
+
 - Editor tabs — session persistence (#160, Roadmap 0190, closes the epic):
   `layout.json`'s per-leaf identity grows `tabs` (ordered file-backed tab
   paths) and `active` (index within that list); `path` stays the active tab's

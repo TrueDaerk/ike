@@ -104,9 +104,18 @@ app (navigate + place cursor).
 
 The `[lsp]` section: `enabled` (master switch) and a per-language `servers` table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
-`settings.toml`. The servers are external binaries the user installs
+`settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
+server off while the subsystem stays on (#130; honored by `resolveSpec`). The
+servers are external binaries the user installs
 (`go install golang.org/x/tools/gopls@latest`, `npm i -g intelephense pyright`); a
 missing binary disables that language with a status message.
+
+All of this is editable in-IDE on the **Language Servers** settings page
+(0180, #130 — see [Settings UI](./settings-ui.md)): live per-server status
+(`ServerStatusMsg` now carries the language), effective command + source
+layer, per-server enable and command/args/settings overrides via write-back,
+and per-server restart (`Manager.StopLang`: stops one language's servers, all
+roots; they respawn lazily) beside the global `lsp.restart`.
 
 ## Testing
 

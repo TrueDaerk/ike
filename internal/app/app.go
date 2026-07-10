@@ -1073,6 +1073,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ilsp.ServerStatusMsg:
 		// Persistent server state stays on the status line; transient events
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).
+		// The Language Servers settings page tracks per-language state (#130).
+		m.settings.Deliver(msg)
 		switch msg.Kind {
 		case ilsp.ServerEventInfo:
 			m.host.Notify(host.Info, msg.Text)

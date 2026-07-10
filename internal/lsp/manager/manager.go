@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -251,6 +252,50 @@ func (m *Manager) Encoding(path string) string {
 		return srv.cl.Encoding()
 	}
 	return protocol.EncodingUTF16
+}
+
+// StopLang stops every running server for one language (all roots), dropping
+// its open documents; the next document event respawns it lazily — the
+// per-server restart of the settings page (#130). Best-effort, like Shutdown.
+func (m *Manager) StopLang(lang string) {
+	m.mu.Lock()
+	var stopped []*server
+	for k, srv := range m.servers {
+		if srv.lang != lang {
+			continue
+		}
+		srv.closing = true // suppress restart on the resulting Done
+		stopped = append(stopped, srv)
+		delete(m.servers, k)
+		delete(m.restarts, k)
+	}
+	for path, doc := range m.docs {
+		if doc.lang == lang {
+			delete(m.docs, path)
+		}
+	}
+	m.mu.Unlock()
+	for _, srv := range stopped {
+		if srv.stop != nil {
+			srv.stop()
+		}
+	}
+}
+
+// RunningLangs returns the languages with at least one live server, sorted.
+func (m *Manager) RunningLangs() []string {
+	m.mu.Lock()
+	seen := map[string]bool{}
+	for _, srv := range m.servers {
+		seen[srv.lang] = true
+	}
+	m.mu.Unlock()
+	out := make([]string, 0, len(seen))
+	for l := range seen {
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Shutdown stops every server. Best-effort; used on app exit.
