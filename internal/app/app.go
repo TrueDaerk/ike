@@ -358,26 +358,58 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		return // explorer must be present exactly once
 	}
 	// The default set is replaced: a fresh registry with the explorer plus one
-	// editor per non-explorer leaf, each loading its remembered file.
+	// editor per non-explorer leaf, each rebuilding its remembered tab list
+	// (#160). Files missing on disk are skipped; a pane whose every file
+	// vanished restores as a single scratch tab, like before tabs existed.
 	panes := pane.NewRegistry(cfg)
 	panes.AddExplorer()
-	first := map[string]*pane.Instance{} // path → first restored editor, for sharing
+	first := map[string]*editor.Model{} // path → first restored view, for sharing
+	restoreTab := func(ed *editor.Model, path string) bool {
+		if prev, ok := first[path]; ok {
+			// The same file across several tabs or leaves restores as one
+			// shared document (#142), not divergent copies.
+			ed.ShareDocumentWith(prev)
+			return true
+		}
+		if err := ed.Load(path); err != nil {
+			return false
+		}
+		first[path] = ed
+		return true
+	}
 	for _, key := range leaves {
 		if key == pane.ExplorerKey {
 			continue
 		}
 		inst := panes.AddEditorKey(key)
-		if id, hasID := ids[key]; hasID && id.Path != "" {
-			if prev, ok := first[id.Path]; ok {
-				// The same file across several leaves restores as one shared
-				// document (#142), not divergent copies.
-				inst.Editor().ShareDocumentWith(prev.Editor())
+		id, hasID := ids[key]
+		if !hasID {
+			continue
+		}
+		paths := id.Tabs
+		if len(paths) == 0 && id.Path != "" {
+			paths = []string{id.Path} // pre-tabs file: one remembered document
+		}
+		active := 0
+		for i, p := range paths {
+			if p == "" {
 				continue
 			}
-			if err := inst.Editor().Load(id.Path); err == nil { // best-effort: missing file → empty editor
-				first[id.Path] = inst
+			ed := inst.Editor()
+			if ed.HasFile() {
+				ed = inst.AddTab()
+			}
+			if !restoreTab(ed, p) {
+				if inst.TabCount() > 1 {
+					inst.CloseTab(inst.ActiveTab()) // missing file: drop the spare tab
+				}
+				continue
+			}
+			if i == id.Active {
+				active = inst.ActiveTab()
 			}
 		}
+		inst.ActivateTab(active)
 	}
 	panes.SetFocused(pane.ExplorerKey)
 	m.panes = panes

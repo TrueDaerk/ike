@@ -123,9 +123,23 @@ to (pane, tab) — only on the bar row of editor panes actually showing a bar.
 - **Wheel** over the bar row cycles tabs (up = previous, down = next) instead
   of scrolling the viewport; below the bar the wheel scrolls as before.
 
-## Deferred to sibling issues
+## Session persistence (#160)
 
-Per-pane tab persistence in `session.json`/`layout.json` (#160). Until #160
-lands, the layout store keeps recording only each pane's active document — and
-the reopen ring is session-local. Drag-reorder on the bar may follow later;
-keyboard reorder shipped with #158.
+The layout store's per-leaf identity table (`internal/app/store.go`) grows the
+tab list: `tabs` holds every file-backed tab's path in order, `active` indexes
+the active one within that list; `path` stays the active tab's file so older
+builds keep working. Scratch tabs are not persisted — their unsaved text is
+the crash-recovery side's job (#165).
+
+Restore (`restoreLayout`) rebuilds each pane's tab list tolerantly: identities
+without `tabs` (pre-#160 files) restore as single-tab panes; files missing on
+disk are skipped without leaving an empty tab (the saved active index maps to
+the surviving tab); a pane whose every file vanished restores as one scratch
+tab. The same file across several tabs or panes restores as one shared
+document (#142). `session.json` is unchanged — it still frames the focused
+editor's cursor/scroll, which lands on the restored active tab.
+
+## Open ends
+
+Drag-reorder on the bar may follow later (keyboard reorder shipped with #158);
+the reopen ring stays session-local.
