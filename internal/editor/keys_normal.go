@@ -341,9 +341,9 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "#":
 		m.searchWord(false)
 	case "u":
-		m.undo()
+		m.undo(count)
 	case "ctrl+r":
-		m.redo()
+		m.redo(count)
 	case ".":
 		m.repeatDot(count)
 	case "g":

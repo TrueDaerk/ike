@@ -390,6 +390,35 @@ func TestUndoRedo(t *testing.T) {
 	}
 }
 
+func TestUndoRedoWithCount(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	m = typeKeys(m, "xxx") // three separate changes -> "lo"
+	if line(m, 0) != "lo" {
+		t.Fatalf("setup=%q want lo", line(m, 0))
+	}
+	m = typeKeys(m, "3u") // undo all three at once
+	if line(m, 0) != "hello" {
+		t.Fatalf("3u=%q want hello", line(m, 0))
+	}
+	m = typeKeys(m, "2")
+	m, _ = m.Update(modKey('r', tea.ModCtrl)) // 2 ctrl+r redoes two
+	if line(m, 0) != "llo" {
+		t.Fatalf("2ctrl+r=%q want llo", line(m, 0))
+	}
+}
+
+func TestUndoCountPastHistoryStops(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	m = typeKeys(m, "x")   // -> "ello"
+	m = typeKeys(m, "99u") // count far beyond the single change
+	if line(m, 0) != "hello" {
+		t.Fatalf("99u=%q want hello", line(m, 0))
+	}
+	if !m.Dirty() {
+		t.Fatal("an applied undo should mark the buffer dirty")
+	}
+}
+
 func TestUndoInsertIsOneUnit(t *testing.T) {
 	m, _ := loaded(t, "x\n")
 	m = typeKeys(m, "A")

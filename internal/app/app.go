@@ -2698,10 +2698,20 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			// Scrolls the viewport regardless of mode (normal, insert,
 			// visual, …); the cursor stays put until the user clicks or moves.
-			switch msg.Button {
-			case tea.MouseWheelUp:
+			// Horizontal wheel and shift+wheel scroll sideways (#230), like
+			// the explorer.
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				inst.Editor().ScrollXBy(-wheelLines)
+			case msg.Button == tea.MouseWheelRight:
+				inst.Editor().ScrollXBy(wheelLines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				inst.Editor().ScrollXBy(-wheelLines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				inst.Editor().ScrollXBy(wheelLines)
+			case msg.Button == tea.MouseWheelUp:
 				inst.Editor().ScrollBy(-wheelLines)
-			case tea.MouseWheelDown:
+			case msg.Button == tea.MouseWheelDown:
 				inst.Editor().ScrollBy(wheelLines)
 			}
 		}

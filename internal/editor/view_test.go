@@ -40,3 +40,29 @@ func TestTabbedLinesStayInWidth(t *testing.T) {
 		t.Errorf("height %d exceeds %d", lipgloss.Height(v), h)
 	}
 }
+
+// TestScrollXBy scrolls the viewport horizontally without moving the cursor,
+// clamped so the longest visible line keeps its last character on screen (#230).
+func TestScrollXBy(t *testing.T) {
+	long := strings.Repeat("abcdefghij", 10) // 100 cols
+	m, _ := loaded(t, long+"\nshort\n")
+	m.SetSize(20, 10)
+
+	m.ScrollXBy(5)
+	if _, left := m.ScrollOffset(); left != 5 {
+		t.Fatalf("left=%d want 5", left)
+	}
+	if m.cursor.Col != 0 {
+		t.Fatalf("cursor moved to col %d; horizontal scroll must not move it", m.cursor.Col)
+	}
+
+	m.ScrollXBy(1000) // clamp: last char of the longest visible line stays on screen
+	if _, left := m.ScrollOffset(); left != len(long)-1 {
+		t.Fatalf("left=%d want %d", left, len(long)-1)
+	}
+
+	m.ScrollXBy(-1000) // clamp at 0
+	if _, left := m.ScrollOffset(); left != 0 {
+		t.Fatalf("left=%d want 0", left)
+	}
+}

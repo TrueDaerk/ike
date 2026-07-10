@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-09T19:30:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Editor
@@ -42,7 +42,9 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   from it (mid-insert the paste joins the open insert session's undo unit).
 - **history** — undo/redo as `Change` records (forward edits + inverses +
   cursor before/after); linear today, with parent/seq fields reserved for an
-  undo tree. `.` repeat lives in the editor (`dotCommand`).
+  undo tree. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
+  early when the history runs out, #231). `.` repeat lives in the editor
+  (`dotCommand`).
 - **viewport** — vertical/horizontal scroll with `scroll_off`, plus the
   absolute/relative line-number gutter. The line renderer budgets by **display
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered
@@ -91,7 +93,10 @@ Mouse: clicking the editor focuses it and `MouseClick` maps the cell — through
 the gutter width and scroll offsets — to the cursor. The wheel scrolls the
 viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
 buffer) without touching the cursor or mode — it works the same in Normal,
-Insert, Visual, etc., unlike the vim-motion scroll commands.
+Insert, Visual, etc., unlike the vim-motion scroll commands. Horizontal wheel
+(or shift+wheel) scrolls sideways via `ScrollXBy(delta)`, moving `view.Left`
+clamped so the longest visible line keeps its last character on screen (#230);
+the next cursor motion re-derives the offset to follow the cursor again.
 
 ## Command line (ex commands, Roadmap 0200)
 
