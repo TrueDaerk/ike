@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- Navigation history core (#218, Roadmap 0220 — promoted from idea #51):
+  internal/nav History (per-jump entries, forward-truncation on fresh
+  jumps, same-line dedup, 100-entry cap) recorded at the open funnel
+  (openPath file switches, openPathAt same-file line jumps — covers
+  definition/references/search/file opens at two choke points); nav.back /
+  nav.forward appCommands unblock the cmd+bracket defaults (removed from
+  the 0081 blocked ledger) with new leader mnemonics space b / space i;
+  status matrix regenerated. New concept doc
+  architecture/navigation-history.md.
 - Sandbox limits + plugin manifest (#27, Roadmap 9900, closes the epic):
   per-module memory cap (64 MiB default) and call deadlines (5 s default,
   wazero CloseOnContextDone) on every guest call incl. _initialize; a
