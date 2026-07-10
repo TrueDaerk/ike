@@ -10,6 +10,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/ui"
@@ -133,6 +134,38 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 	return cmds
 }
 
+// adoptTerminals carries the old model's live terminal sessions across a
+// project switch (#96): existing shells keep running, split below the new
+// workspace's active editor and titled with their origin root. Dead sessions
+// are closed for good.
+func (m *Model) adoptTerminals(old *Model) {
+	for _, key := range old.panes.Keys() {
+		inst := old.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindTerminal {
+			continue
+		}
+		if !inst.Terminal().Running() {
+			inst.Terminal().Close()
+			continue
+		}
+		target := m.activeEditorKey()
+		if target == "" {
+			target = m.panes.Focused()
+		}
+		if target == "" || m.tree == nil {
+			inst.Terminal().Close()
+			continue
+		}
+		m.panes.AdoptTerminal(inst)
+		if tree, ok := layout.SplitLeaf(m.tree, target, inst.Key(), layout.ZoneBottom); ok {
+			m.tree = tree
+		} else {
+			m.panes.Close(inst.Key())
+		}
+	}
+	m.layout()
+}
+
 // performSwitch re-roots the IDE at root, which must already be validated and
 // absolute. The old project's session and layout are persisted first, then the
 // process chdirs and the model is rebuilt through the fresh-start path — config
@@ -157,7 +190,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// Size the fresh model like the first WindowSizeMsg would, then run its
 	// Init and the post-switch effects: record the open (success only — we are
 	// past every failure point) and announce the switch.
-	sized, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+	sizedTM, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
+	sized := sizedTM.(Model)
+	// Live terminal sessions survive the switch (#96): adopt them into the
+	// freshly laid-out workspace, titled with their origin root.
+	sized.adoptTerminals(&m)
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,

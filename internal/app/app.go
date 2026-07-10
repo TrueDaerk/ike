@@ -404,23 +404,13 @@ func (m *Model) restoreLayout(cfg host.Config) {
 	if !ok {
 		return
 	}
-	// Terminal panes do not restore yet (their sessions died with the process;
-	// #96 owns re-spawning): collapse their leaves out of the saved tree so
-	// the rest of the layout still restores instead of falling back wholesale.
-	for _, key := range layout.Leaves(tree) {
-		if ids[key].Kind == "terminal" {
-			pruned, closed := layout.Close(tree, key)
-			if !closed {
-				return // terminal was the only non-explorer leaf: default layout
-			}
-			tree = pruned
-		}
-	}
 	leaves := layout.Leaves(tree)
 	explorers := 0
 	for _, key := range leaves {
 		if key == pane.ExplorerKey {
 			explorers++
+		} else if ids[key].Kind == "terminal" {
+			continue // restored below as a fresh shell in the saved position (#96)
 		} else if !isEditorKey(key) {
 			return // unknown leaf kind / malformed key: fall back to default
 		}
@@ -450,6 +440,20 @@ func (m *Model) restoreLayout(cfg host.Config) {
 	}
 	for _, key := range leaves {
 		if key == pane.ExplorerKey {
+			continue
+		}
+		if id := ids[key]; id.Kind == "terminal" {
+			// A terminal restores as a *fresh* shell in the saved position
+			// (#96): no process resurrection, the origin dir respawns it.
+			dir := id.Path
+			if dir == "" {
+				dir = "."
+			}
+			shell := ""
+			if v, ok := cfg.Get("terminal.shell"); ok {
+				shell = v
+			}
+			panes.AddTerminalKey(key, terminal.Shell(shell), dir, m.host.Send)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -816,6 +820,46 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 func (m Model) terminalFocused() bool {
 	inst := m.panes.FocusedInstance()
 	return inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Running()
+}
+
+// terminalTitle renders the pane title: shell name plus the session's origin
+// directory — the marker that keeps a terminal attributable after a project
+// switch carried it along (#96).
+func (m Model) terminalTitle(inst *pane.Instance) string {
+	t := inst.Terminal()
+	title := "TERMINAL"
+	if s := t.ShellPath(); s != "" {
+		title += " — " + filepath.Base(s)
+	}
+	if d := t.Dir(); d != "" {
+		title += " · " + displayDir(d)
+	}
+	return title
+}
+
+// displayDir shortens a directory for chrome: the base name when it is the
+// working directory's base, the compacted path otherwise.
+func displayDir(dir string) string {
+	if cwd, err := os.Getwd(); err == nil && cwd == dir {
+		return filepath.Base(dir)
+	}
+	return project.CompactPath(dir)
+}
+
+// terminalReservedKey handles the documented reserved set — the only keys a
+// focused live terminal does NOT forward to the shell:
+//
+//	ctrl+tab    move focus to the next pane (the global escape hatch)
+//
+// Everything else, including tab, ctrl+c, esc and the F-keys, belongs to the
+// shell. shift+pgup/pgdn page the scrollback inside the pane itself.
+func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
+	switch keys {
+	case "ctrl+tab":
+		m.cycleFocus()
+		return true, m, nil
+	}
+	return false, m, nil
 }
 
 // openTerminal opens a fresh terminal pane rooted in the working directory
@@ -1420,13 +1464,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
 		}
-		// A focused terminal takes every key raw (vim/htop must see them all);
-		// ctrl+tab stays the escape hatch to move focus away. The boundary is
-		// finalised with the workspace integration (#96/#97).
+		// A focused terminal takes every key raw (vim/htop must see them all)
+		// except the reserved set below; scrollback paging keys are handled by
+		// the pane itself.
 		if m.terminalFocused() {
-			if msg.String() == "ctrl+tab" {
-				m.cycleFocus()
-				return m, nil
+			if handled, tm, cmd := m.terminalReservedKey(msg.String()); handled {
+				return tm, cmd
 			}
 			return m.routeKey(msg)
 		}
@@ -2398,6 +2441,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				m.explorer().ScrollBy(wheelLines)
 			}
+		case pane.KindTerminal:
+			// Wheel pages the scrollback (#96): up towards history, down back
+			// to live.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Terminal().ScrollBy(wheelLines)
+			case tea.MouseWheelDown:
+				inst.Terminal().ScrollBy(-wheelLines)
+			}
 		case pane.KindEditor:
 			// The wheel over the tab bar row cycles tabs (#159): up goes to
 			// the previous tab, down to the next.
@@ -2809,7 +2861,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 				title = bar
 			}
 		case pane.KindTerminal:
-			title, content = "TERMINAL", inst.View()
+			title, content = m.terminalTitle(inst), inst.View()
 		}
 	}
 

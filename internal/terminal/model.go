@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -21,6 +22,10 @@ type Model struct {
 	focused bool
 	w, h    int
 	pal     *theme.Palette
+	// scroll is the scrollback offset in lines (0 = live view). Paging keys
+	// (shift+pgup/pgdn) and the mouse wheel move it; any other key snaps back
+	// to live and goes to the shell.
+	scroll int
 }
 
 // New starts a terminal model: shell (already resolved via Shell) spawned in
@@ -55,6 +60,22 @@ func (m *Model) SetFocused(on bool) { m.focused = on }
 // Running reports whether the shell is alive.
 func (m Model) Running() bool { return m.sess != nil && m.sess.Running() }
 
+// Dir returns the session's origin directory ("" for a failed spawn).
+func (m Model) Dir() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.Dir()
+}
+
+// ShellPath returns the spawned shell binary ("" for a failed spawn).
+func (m Model) ShellPath() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.ShellPath()
+}
+
 // Close ends the underlying session.
 func (m *Model) Close() {
 	if m.sess != nil {
@@ -62,16 +83,52 @@ func (m *Model) Close() {
 	}
 }
 
-// Update routes a key press to the shell. Every key goes raw to the PTY —
-// the escape hatch (focus-away chord) is enforced by the root model before
-// keys reach the pane (the boundary is finalised in #96/#97).
+// Update routes a key press: the scrollback paging keys move the view,
+// everything else goes raw to the PTY (snapping the view back to live). The
+// reserved set the root model never forwards is documented there
+// (terminalReservedKeys in internal/app).
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if m.sess == nil {
 		return nil
 	}
+	switch msg.String() {
+	case "shift+pgup":
+		m.ScrollBy(m.pageSize())
+		return nil
+	case "shift+pgdown":
+		m.ScrollBy(-m.pageSize())
+		return nil
+	}
+	m.scroll = 0
 	m.sess.SendKey(toVTKey(msg))
 	return nil
 }
+
+// pageSize is one paging step: half the grid, at least one line.
+func (m Model) pageSize() int {
+	if m.h > 1 {
+		return m.h / 2
+	}
+	return 1
+}
+
+// ScrollBy moves the scrollback view by delta lines (positive = older),
+// clamped to the available history; 0 is the live view.
+func (m *Model) ScrollBy(delta int) {
+	if m.sess == nil {
+		return
+	}
+	m.scroll += delta
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	if max := m.sess.ScrollbackLen(); m.scroll > max {
+		m.scroll = max
+	}
+}
+
+// Scroll reports the current scrollback offset (0 = live).
+func (m Model) Scroll() int { return m.scroll }
 
 // PasteText forwards pasted text through the bracketed-paste path.
 func (m *Model) PasteText(text string) {
@@ -91,11 +148,15 @@ func toVTKey(k tea.KeyPressMsg) vt.KeyPressEvent {
 	}
 }
 
-// View renders the grid, with the cursor cell reversed while focused. A dead
-// or failed session renders its state instead.
+// View renders the grid, with the cursor cell reversed while focused; a
+// scrolled view windows over [scrollback ++ screen] instead. A dead or failed
+// session renders its state.
 func (m Model) View() string {
 	if m.sess == nil {
 		return "terminal failed: " + m.err
+	}
+	if m.scroll > 0 {
+		return m.scrolledView()
 	}
 	view := m.sess.View()
 	if !m.focused || !m.sess.Running() {
@@ -106,6 +167,33 @@ func (m Model) View() string {
 	}
 	cx, cy := m.sess.CursorPosition()
 	return overlayCursor(view, cx, cy)
+}
+
+// scrolledView renders the paging window: scroll lines above the live screen,
+// filled from the scrollback, the remainder from the screen's top. The last
+// line carries a position marker instead of the cursor.
+func (m Model) scrolledView() string {
+	sbLen := m.sess.ScrollbackLen()
+	off := m.scroll
+	if off > sbLen {
+		off = sbLen
+	}
+	screen := strings.Split(m.sess.View(), "\n")
+	rows := make([]string, 0, m.h)
+	for i := 0; i < m.h; i++ {
+		virtual := sbLen - off + i // index into [scrollback ++ screen]
+		switch {
+		case virtual < sbLen:
+			rows = append(rows, m.sess.HistoryLine(virtual))
+		case virtual-sbLen < len(screen):
+			rows = append(rows, screen[virtual-sbLen])
+		}
+	}
+	marker := "[scrollback -" + strconv.Itoa(off) + "  shift+pgdn to return]"
+	if len(rows) > 0 {
+		rows[len(rows)-1] = marker
+	}
+	return strings.Join(rows, "\n")
 }
 
 // overlayCursor reverse-videos the cursor cell inside the rendered grid. The

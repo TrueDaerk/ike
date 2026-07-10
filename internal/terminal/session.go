@@ -11,11 +11,13 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
@@ -37,9 +39,11 @@ const notifyQuiet = 8 * time.Millisecond
 // the screen state. All methods are safe for concurrent use — the read loop
 // writes into the emulator while Update/View read from it (SafeEmulator).
 type Session struct {
-	key  string
-	em   *vt.SafeEmulator
-	send func(tea.Msg)
+	key   string
+	shell string
+	dir   string
+	em    *vt.SafeEmulator
+	send  func(tea.Msg)
 
 	mu     sync.Mutex
 	ptmx   *os.File
@@ -68,6 +72,11 @@ func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Sessio
 	if w < 2 || h < 2 {
 		w, h = 80, 24
 	}
+	// Pin the origin dir absolutely: it outlives project switches (which
+	// chdir the process) as the session's marker and respawn target.
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
 	cmd := exec.Command(shell)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
@@ -76,12 +85,14 @@ func StartSession(key, shell, dir string, w, h int, send func(tea.Msg)) (*Sessio
 		return nil, fmt.Errorf("terminal: start %s: %w", shell, err)
 	}
 	s := &Session{
-		key:  key,
-		em:   vt.NewSafeEmulator(w, h),
-		send: send,
-		ptmx: ptmx,
-		cmd:  cmd,
-		w:    w, h: h,
+		key:   key,
+		shell: shell,
+		dir:   dir,
+		em:    vt.NewSafeEmulator(w, h),
+		send:  send,
+		ptmx:  ptmx,
+		cmd:   cmd,
+		w:     w, h: h,
 	}
 	go s.readLoop()
 	go s.writeLoop()
@@ -180,6 +191,26 @@ func (s *Session) CursorPosition() (x, y int) {
 
 // Running reports whether the shell is still alive.
 func (s *Session) Running() bool { return !s.closed.Load() }
+
+// Shell returns the spawned shell binary; Dir the directory it started in
+// (the session's origin root — the live cwd is the shell's business).
+func (s *Session) ShellPath() string { return s.shell }
+func (s *Session) Dir() string       { return s.dir }
+
+// ScrollbackLen reports how many lines have scrolled off the screen.
+func (s *Session) ScrollbackLen() int { return s.em.ScrollbackLen() }
+
+// HistoryLine renders scrollback line y (0 = oldest) with its styles.
+func (s *Session) HistoryLine(y int) string {
+	w := s.em.Width()
+	line := uv.NewLine(w)
+	for x := 0; x < w; x++ {
+		if c := s.em.ScrollbackCellAt(x, y); c != nil {
+			line.Set(x, c)
+		}
+	}
+	return line.Render()
+}
 
 // Close ends the session: the child is terminated and the PTY closed. Safe to
 // call more than once.

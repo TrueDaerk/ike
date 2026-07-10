@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Terminal workspace integration (#96, Roadmap 0170): pane titles show
+  shell + origin dir; the reserved key set is documented and minimal
+  (ctrl+tab only — everything else reaches the shell); scrollback paging
+  via shift+pgup/pgdn and the mouse wheel (styled history lines, marker
+  row, snap-back on typing); layout persistence restores terminals as
+  fresh shells in their saved position with the origin cwd; live sessions
+  survive a project switch (adopted below the new active editor, titled
+  with their origin root). Spawn dirs are pinned absolute.
 - Integrated terminal core (#95, Roadmap 0170): new internal/terminal —
   creack/pty spawns the shell (terminal.shell → $SHELL → /bin/sh) in the
   project root, charmbracelet/x/vt emulates the screen, output notifications

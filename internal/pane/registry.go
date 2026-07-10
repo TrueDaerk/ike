@@ -107,6 +107,42 @@ func (r *Registry) AddTerminal(shell, dir string, send func(tea.Msg)) string {
 	return key
 }
 
+// AddTerminalKey recreates a terminal under an exact key with a fresh shell
+// session — layout restore re-spawns terminals in their saved position (no
+// process resurrection). The minting counter advances past the key.
+func (r *Registry) AddTerminalKey(key, shell, dir string, send func(tea.Msg)) *Instance {
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = terminal.New(key, shell, dir, 80, 24, send)
+	inst.term.SetPalette(r.pal)
+	r.put(inst)
+	r.advancePastTerminal(key)
+	return inst
+}
+
+// AdoptTerminal moves a live terminal instance from another registry into
+// this one — a project switch keeps existing sessions running (#96). The
+// key is kept; the counter advances past it.
+func (r *Registry) AdoptTerminal(inst *Instance) {
+	if inst == nil || inst.Kind() != KindTerminal || r.Has(inst.Key()) {
+		return
+	}
+	r.put(inst)
+	r.advancePastTerminal(inst.Key())
+}
+
+// advancePastTerminal bumps the terminal counter past key's numeric suffix.
+func (r *Registry) advancePastTerminal(key string) {
+	n := 1
+	if len(key) > len(terminalKeyBase)+1 && key[:len(terminalKeyBase)+1] == terminalKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(terminalKeyBase)+1:]); err == nil {
+			n = v
+		}
+	}
+	if n > r.terminals {
+		r.terminals = n
+	}
+}
+
 // mintEditorKey returns the next unused editor key.
 func (r *Registry) mintEditorKey() string {
 	r.editors++

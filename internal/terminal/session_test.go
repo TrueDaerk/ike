@@ -146,3 +146,52 @@ func TestShellResolution(t *testing.T) {
 		t.Fatalf("fallback should be /bin/sh, got %q", got)
 	}
 }
+
+func TestScrollbackPaging(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+
+	// Push well over one screen of output into history.
+	for _, r := range "seq 1 200\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "output scrolled", func() bool { return s.ScrollbackLen() > 20 })
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModShift})
+	if m.Scroll() == 0 {
+		t.Fatal("shift+pgup should enter the scrollback")
+	}
+	v := ansi.Strip(m.View())
+	if !strings.Contains(v, "[scrollback -") {
+		t.Fatalf("scrolled view should carry the position marker:\n%s", v)
+	}
+	// Paging back down (clamped) returns to live.
+	for i := 0; i < 10; i++ {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyPgDown, Mod: tea.ModShift})
+	}
+	if m.Scroll() != 0 {
+		t.Fatalf("paging down should clamp back to live, scroll = %d", m.Scroll())
+	}
+
+	// Any ordinary key snaps back to live and reaches the shell.
+	m.ScrollBy(30)
+	m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if m.Scroll() != 0 {
+		t.Fatal("a typed key should snap the view back to live")
+	}
+}
+
+func TestScrollByClamps(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+	m.ScrollBy(-5)
+	if m.Scroll() != 0 {
+		t.Fatal("negative scroll clamps to live")
+	}
+	m.ScrollBy(1 << 20)
+	if m.Scroll() > s.ScrollbackLen() {
+		t.Fatal("scroll clamps to the available history")
+	}
+}
