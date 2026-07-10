@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Python environment management (#132, Roadmap 0180): the toolchain page
+  creates a project venv (uv, python -m venv fallback) and installs managed
+  Pythons picked from `uv python list`; results register the absolute
+  interpreter via write-back ([lang.python] interpreter) and restart the
+  servers. Async cmds with fake-runner tests; uv-absent fallback covered.
+  This closes Roadmap 0180 — epic #129 and its milestone.
 - Plugin manager page (#133, Roadmap 0180): settings panel gains a Plugins
   page — every registered plugin with live enabled state, capability
   summary and expandable inspection; `e` toggles plugins.<id>.enabled via
