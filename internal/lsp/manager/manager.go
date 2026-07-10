@@ -167,18 +167,51 @@ func (m *Manager) Change(path, text string) error {
 		m.mu.Unlock()
 		return nil
 	}
-	doc.version++
-	version := doc.version
-	doc.lines = splitLines(text)
+	oldLines := doc.lines
 	srv := m.servers[doc.srvKey]
 	m.mu.Unlock()
 	if srv == nil {
 		return nil
 	}
+
+	// Respect the negotiated sync kind (#13): incremental servers get the
+	// minimal change region diffed against the previously synced lines;
+	// full-sync servers get the whole document; SyncNone servers get nothing.
+	// The version stays monotonic per document and only advances when a
+	// notification is actually sent.
+	var changes []protocol.TextDocumentContentChangeEvent
+	switch srv.cl.Caps().SyncKind {
+	case protocol.SyncNone:
+		m.setDocLines(path, text)
+		return nil
+	case protocol.SyncIncremental:
+		ev, changed := incrementalEvent(oldLines, text, srv.cl.Encoding())
+		if !changed {
+			return nil
+		}
+		changes = []protocol.TextDocumentContentChangeEvent{ev}
+	default:
+		changes = []protocol.TextDocumentContentChangeEvent{{Text: text}}
+	}
+
+	version := m.setDocLines(path, text)
 	return srv.cl.DidChange(protocol.DidChangeTextDocumentParams{
 		TextDocument:   protocol.VersionedTextDocumentIdentifier{URI: protocol.PathToURI(path), Version: version},
-		ContentChanges: []protocol.TextDocumentContentChangeEvent{{Text: text}},
+		ContentChanges: changes,
 	})
+}
+
+// setDocLines commits the new document text and bumps its version.
+func (m *Manager) setDocLines(path, text string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	doc, ok := m.docs[path]
+	if !ok {
+		return 0
+	}
+	doc.version++
+	doc.lines = splitLines(text)
+	return doc.version
 }
 
 // Save sends didSave for path.

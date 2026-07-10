@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- LSP incremental didChange sync (#13, Roadmap 0100): the manager now
+  respects the negotiated TextDocumentSyncKind — incremental servers get
+  the minimal change region (common-prefix/suffix diff against the
+  previously synced lines, manager/incremental.go) instead of the whole
+  document on every keystroke; full-sync servers keep the old behaviour,
+  SyncNone servers get nothing. UTF-16/UTF-32 offsets via convert.go,
+  monotonic versions that only advance on a real send. Verified against
+  gopls (negotiates incremental): diagnostics track correctly through
+  inserts, newline splits and line deletes.
 - LSP signature help (#4, Roadmap 0100): typing a server-advertised trigger
   character opens a cursor-anchored popup with the active signature, the
   active parameter emphasised (substring and UTF-16 offset-pair labels both
