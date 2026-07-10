@@ -4,7 +4,7 @@ title: Writing WASM Plugins
 description: Plugin-author guide — the Go guest SDK, building a .wasm plugin, installing it, and the raw ABI reference for other languages.
 resource: sdk/sdk.go
 tags: [plugins, wasm, sdk, guide]
-timestamp: 2026-07-10T17:00:00Z
+timestamp: 2026-07-10T17:45:00Z
 ---
 
 # Writing WASM Plugins
@@ -69,8 +69,32 @@ traps) print to stderr at startup; the broken module is skipped, IKE stays up.
 WASI with no preopened filesystem, no environment, no args — no ambient FS
 or network access. Every effect goes through the host calls; guest
 stdout/stderr are discarded. Callbacks run off the UI loop: a slow or
-faulting guest never freezes the editor, faults surface as warning toasts.
-(Resource limits and manifest validation are #27.)
+faulting guest never freezes the editor. Linear memory is capped (64 MiB
+default) and every call runs under a 5 s deadline — a runaway loop closes
+the module and IKE unloads it with an error toast; a recoverable trap only
+warns.
+
+## Manifest
+
+Optionally ship a sidecar `<plugin>.manifest.json` next to the `.wasm`:
+
+```json
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "capabilities": ["commands", "notify"]
+}
+```
+
+`name` must equal the `.wasm` base name. A present manifest is the
+capability ceiling: registration kinds not listed (`commands`, `keymaps`,
+`hooks`) are dropped with a startup diagnostic; host calls not listed
+(`open_file`, `dispatch`, `notify`, `set_status`, `config_get`) become
+no-ops (`ConfigGet` reports the key absent). An invalid manifest —
+malformed JSON, missing name/version, unknown or duplicate capability, name
+mismatch — rejects the module. Without a manifest the plugin is
+unrestricted at the capability level; the resource sandbox above always
+applies. Request only what you use.
 
 ## ABI reference (other languages)
 

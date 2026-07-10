@@ -46,7 +46,7 @@ func TestSDKExampleThroughFullPipeline(t *testing.T) {
 	t.Cleanup(rt.Close)
 	adapter := NewHostAdapter()
 	adapter.SetAPI(h)
-	if err := abi.InstantiateHost(ctx, rt.Engine(), adapter); err != nil {
+	if err := abi.InstantiateHostGated(ctx, rt.Engine(), adapter, rt.Allows); err != nil {
 		t.Fatal(err)
 	}
 
@@ -56,6 +56,15 @@ func TestSDKExampleThroughFullPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "wasm-example.wasm"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Ship the example's real manifest too: the pipeline runs gated (#27),
+	// so this also pins that the manifest grants everything the example uses.
+	manifest, err := os.ReadFile(filepath.Join("..", "..", "..", "sdk", "example", "wasm-example.manifest.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "wasm-example.manifest.json"), manifest, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if diags := rt.ScanDir(dir).Diagnostics; len(diags) > 0 {

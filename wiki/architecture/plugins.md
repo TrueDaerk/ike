@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-10T16:20:00Z
+timestamp: 2026-07-10T17:45:00Z
 ---
 
 # Plugin Extension Contract
@@ -131,10 +131,37 @@ registry:
   wasip1 `-buildmode=c-shared`, TinyGo's default) initialize via
   `_initialize` and keep their exports callable — the shape plugins use.
   `Module.ExportedFunction` is the seam the ABI (#24) calls through.
-- **Safety posture** (full sandbox rules are #27): WASI with no preopened
-  filesystem, no environment, no args — no ambient FS or network; guest
-  stdout/stderr are sunk so a chatty module cannot corrupt the TUI frame;
-  any load/instantiate/start fault isolates and unloads that module only.
+- **Safety posture**: WASI with no preopened filesystem, no environment,
+  no args — no ambient FS or network; guest stdout/stderr are sunk so a
+  chatty module cannot corrupt the TUI frame; any load/instantiate/start
+  fault isolates and unloads that module only. Full sandbox rules below.
+
+### Sandbox limits & manifest (#27)
+
+Resource limits are enforced by the runtime, capability limits by an
+optional per-plugin manifest:
+
+- **Memory cap**: every module's linear memory is capped
+  (`Options.MemoryLimitPages`, default 1024 pages = 64 MiB); a module
+  needing more fails to instantiate and is skipped.
+- **Call deadline**: every guest call — start functions, `register()`, and
+  each callback — runs under `Options.CallTimeout` (default 5 s) with
+  wazero's `WithCloseOnContextDone`, so a runaway loop is aborted by
+  closing the module. A module hanging in `_initialize` is rejected at
+  load; a callback that times out (or `proc_exit`s) gets its module
+  unloaded with an error toast — a trap that leaves the module alive only
+  warns. IKE stays up in every case.
+- **Manifest**: an optional sidecar `<plugin>.manifest.json`
+  (`{name, version, capabilities[]}`) is parsed and validated strictly at
+  load — malformed JSON, missing name/version, unknown or duplicate
+  capability names, or a name not matching the `.wasm` base name reject
+  the module. When present it is the capability ceiling, enforced twice:
+  the bridge drops registration kinds (`commands`, `keymaps`, `hooks`) the
+  manifest does not request (with a diagnostic), and the gated host module
+  (`abi.InstantiateHostGated` consulting `Runtime.Allows`) turns
+  undeclared host calls (`open_file`, `dispatch`, `notify`, `set_status`,
+  `config_get`) into no-ops. No manifest = full capabilities: the manifest
+  narrows the sandbox; the resource sandbox applies regardless.
 
 ### ABI (#24)
 

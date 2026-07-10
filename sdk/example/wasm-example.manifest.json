@@ -1,0 +1,12 @@
+{
+  "name": "wasm-example",
+  "version": "0.1.0",
+  "capabilities": [
+    "commands",
+    "keymaps",
+    "hooks",
+    "notify",
+    "set_status",
+    "config_get"
+  ]
+}

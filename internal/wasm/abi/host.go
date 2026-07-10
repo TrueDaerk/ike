@@ -27,12 +27,28 @@ type Host interface {
 	ConfigGet(key string) (string, bool)
 }
 
-// InstantiateHost registers the "ike" module on rt. Call it before any guest
-// module loads, so guest imports resolve. Malformed guest payloads are
-// dropped (a plugin cannot crash the host with garbage bytes).
+// Gate decides per call whether a module may use a host capability
+// (capability names mirror the manifest's: "open_file", "dispatch",
+// "notify", "set_status", "config_get"). A denied call is dropped — the
+// guest observes a no-op (config_get reports the key absent). nil allows
+// everything.
+type Gate func(module, capability string) bool
+
+// InstantiateHost registers the "ike" module on rt with no gating. Call it
+// before any guest module loads, so guest imports resolve. Malformed guest
+// payloads are dropped (a plugin cannot crash the host with garbage bytes).
 func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
+	return InstantiateHostGated(ctx, rt, host, nil)
+}
+
+// InstantiateHostGated is InstantiateHost with per-module capability gating
+// (#27): every shim consults allow(moduleName, capability) first.
+func InstantiateHostGated(ctx context.Context, rt wazero.Runtime, host Host, allow Gate) error {
 	builder := rt.NewHostModuleBuilder(HostModule)
 
+	permitted := func(mod api.Module, capability string) bool {
+		return allow == nil || allow(mod.Name(), capability)
+	}
 	readBytes := func(mod api.Module, ptr, length uint32) ([]byte, bool) {
 		if length == 0 {
 			return nil, true
@@ -42,6 +58,9 @@ func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
 
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, mod api.Module, ptr, length uint32) {
+			if !permitted(mod, "open_file") {
+				return
+			}
 			if b, ok := readBytes(mod, ptr, length); ok && len(b) > 0 {
 				host.OpenFile(string(b))
 			}
@@ -49,6 +68,9 @@ func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
 
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, mod api.Module, ptr, length uint32) {
+			if !permitted(mod, "dispatch") {
+				return
+			}
 			b, ok := readBytes(mod, ptr, length)
 			if !ok {
 				return
@@ -60,6 +82,9 @@ func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
 
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, mod api.Module, ptr, length uint32) {
+			if !permitted(mod, "notify") {
+				return
+			}
 			b, ok := readBytes(mod, ptr, length)
 			if !ok {
 				return
@@ -71,6 +96,9 @@ func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
 
 	builder.NewFunctionBuilder().
 		WithFunc(func(_ context.Context, mod api.Module, ptr, length uint32) {
+			if !permitted(mod, "set_status") {
+				return
+			}
 			if b, ok := readBytes(mod, ptr, length); ok {
 				host.SetStatus(string(b))
 			}
@@ -80,6 +108,9 @@ func InstantiateHost(ctx context.Context, rt wazero.Runtime, host Host) error {
 	// ike_alloc and returns the packed (ptr, len); 0 means key absent.
 	builder.NewFunctionBuilder().
 		WithFunc(func(ctx context.Context, mod api.Module, ptr, length uint32) uint64 {
+			if !permitted(mod, "config_get") {
+				return 0
+			}
 			b, ok := readBytes(mod, ptr, length)
 			if !ok {
 				return 0
