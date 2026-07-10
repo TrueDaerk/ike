@@ -1009,6 +1009,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.Deliver(msg)
 		return m, nil
 
+	case settings.EnvMsg:
+		// Python environment action finished (#132): show the result on the
+		// page, and on success register the interpreter through write-back
+		// (lang.Interpreter stays the single source of truth) and restart the
+		// language's server against it.
+		m.settings.Deliver(msg)
+		if msg.Err != nil {
+			m.host.Notify(host.Warn, "python environment: "+msg.Err.Error())
+			return m, nil
+		}
+		m.host.Notify(host.Info, msg.Label+" — registered as project interpreter")
+		cmds := []tea.Cmd{config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
+		if c, ok := m.reg.Command("lsp.restart"); ok {
+			cmds = append(cmds, c.Run(m.host))
+		}
+		return m, tea.Batch(cmds...)
+
 	case SplitFocusedMsg:
 		// pane.splitDown / pane.splitUp (cmd+k down / cmd+k up): split the
 		// focused leaf with a fresh empty editor, no drag or file open needed.

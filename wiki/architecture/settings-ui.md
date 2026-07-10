@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-10T20:00:00Z
 ---
 
 # Settings UI & Menu Bar

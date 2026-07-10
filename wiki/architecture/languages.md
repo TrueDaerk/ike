@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-10T20:00:00Z
 ---
 
 # Language Registry
@@ -119,3 +119,16 @@ Tree-sitter grammars are CGo (C code compiled into the binary), so grammars are
 linked at build time, not loaded at runtime. Delivery is therefore compile-in —
 consistent with every other IKE plugin. Runtime/WASM grammar loading is out of
 scope.
+
+## Python environment management (Roadmap 0180, #132)
+
+The toolchain settings page manages Python environments directly: `n` creates
+a project venv (`uv venv` when uv is on PATH, `python -m venv .venv`
+otherwise), `u` picks a version from `uv python list`'s download-available
+entries and installs it in the background (`uv python install`, path resolved
+via `uv python find`). Both run asynchronously as `tea.Cmd`s; the result
+(`settings.EnvMsg`) is routed by the root model, which registers the new
+interpreter as the absolute `[lang.python] interpreter` through the write-back
+layer — `lang.Interpreter` stays the single source of truth — and restarts the
+language servers against it. IKE shells out to `uv`/`python`; it never bundles
+toolchains.

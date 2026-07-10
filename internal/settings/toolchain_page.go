@@ -52,6 +52,13 @@ type ToolchainPage struct {
 	custom     bool
 	input      string
 	invalid    string
+
+	// Python environment actions (#132): the uv-version picker and the
+	// in-flight/busy marker the view shows while an action runs.
+	uvPicking  bool
+	uvVersions []string
+	uvPick     int
+	envState   string
 }
 
 // NewToolchainPage builds the page. restart may be nil (no LSP integration).
@@ -69,14 +76,24 @@ func NewToolchainPage(opts config.Options, root string, restart func() tea.Cmd) 
 // SetPalette implements PageModel.
 func (t *ToolchainPage) SetPalette(p *theme.Palette) { t.pal = p }
 
-// Capturing implements PageModel: the picker and the custom-path input need
+// Capturing implements PageModel: the pickers and the custom-path input need
 // keys verbatim.
-func (t *ToolchainPage) Capturing() bool { return t.picking || t.custom }
+func (t *ToolchainPage) Capturing() bool { return t.picking || t.custom || t.uvPicking }
 
-// Receive implements MsgReceiver: async version probes land in the cache.
+// Receive implements MsgReceiver: async version probes land in the cache,
+// environment results clear the busy marker.
 func (t *ToolchainPage) Receive(msg tea.Msg) {
-	if v, ok := msg.(VersionMsg); ok && v.Version != "" {
-		t.versions[v.Path] = v.Version
+	switch v := msg.(type) {
+	case VersionMsg:
+		if v.Version != "" {
+			t.versions[v.Path] = v.Version
+		}
+	case EnvMsg:
+		if v.Err != nil {
+			t.envState = "✗ " + v.Err.Error()
+		} else {
+			t.envState = "✓ " + v.Label
+		}
 	}
 }
 
@@ -117,6 +134,9 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.picking {
 		return t.updatePicker(key)
 	}
+	if t.uvPicking {
+		return t.updateUvPicker(key)
+	}
 	switch key.String() {
 	case "up", "k":
 		if t.sel > 0 {
@@ -141,6 +161,48 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 				return t.probe(l.ID, path)
 			}
 		}
+	case "n":
+		// Create a project environment (#132): uv venv, python -m venv fallback.
+		if l, ok := t.current(); ok && l.ID == "python" {
+			t.envState = envBusy
+			return createEnv(t.root, t.run, t.look)
+		}
+	case "u":
+		// Install a managed Python via uv (#132): pick from `uv python list`.
+		if l, ok := t.current(); ok && l.ID == "python" {
+			if t.look("uv") == "" {
+				t.envState = "✗ uv not found on PATH"
+				return nil
+			}
+			t.uvVersions = uvInstallable(t.run("uv", "python", "list"))
+			if len(t.uvVersions) == 0 {
+				t.envState = "✗ uv offers no downloadable versions"
+				return nil
+			}
+			t.uvPicking, t.uvPick = true, 0
+		}
+	}
+	return nil
+}
+
+// updateUvPicker handles keys inside the uv version picker.
+func (t *ToolchainPage) updateUvPicker(key tea.KeyPressMsg) tea.Cmd {
+	switch key.String() {
+	case "esc":
+		t.uvPicking = false
+	case "up", "k":
+		if t.uvPick > 0 {
+			t.uvPick--
+		}
+	case "down", "j":
+		if t.uvPick < len(t.uvVersions)-1 {
+			t.uvPick++
+		}
+	case "enter":
+		t.uvPicking = false
+		version := t.uvVersions[t.uvPick]
+		t.envState = envBusy
+		return uvInstall(version, t.run)
 	}
 	return nil
 }
@@ -279,8 +341,24 @@ func (t *ToolchainPage) View(w, h int) string {
 				lines = append(lines, sec.Render(detail))
 			case t.picking:
 				lines = append(lines, t.renderPicker()...)
+			case t.uvPicking:
+				for i, v := range t.uvVersions {
+					line := "   install python " + v
+					style := lipgloss.NewStyle().Foreground(pal.Secondary)
+					if i == t.uvPick {
+						style = lipgloss.NewStyle().Background(pal.Selection)
+					}
+					lines = append(lines, style.Render(line))
+				}
 			default:
-				lines = append(lines, sec.Render("   enter pick interpreter · p probe version · r reset to detection"))
+				hint := "   enter pick interpreter · p probe version · r reset to detection"
+				if l.ID == "python" {
+					hint += " · n new venv · u uv install"
+				}
+				lines = append(lines, sec.Render(hint))
+				if l.ID == "python" && t.envState != "" {
+					lines = append(lines, sec.Render("   "+t.envState))
+				}
 			}
 		}
 		if len(lines) >= h {
