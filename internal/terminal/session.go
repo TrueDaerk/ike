@@ -18,6 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 )
@@ -51,6 +52,9 @@ type Session struct {
 	w, h   int
 	title  string // last OSC 0/2 title the application set ("" until then)
 	closed atomic.Bool
+	// mouseModes holds the DEC mouse-reporting modes the child currently has
+	// enabled (?9/?1000/…); non-empty means wheel events belong to the child.
+	mouseModes map[ansi.Mode]struct{}
 
 	notifyPending atomic.Bool
 }
@@ -97,14 +101,19 @@ func StartSession(key, shell, dir string, w, h int, extraEnv []string, send func
 		cmd:   cmd,
 		w:     w, h: h,
 	}
+	s.mouseModes = make(map[ansi.Mode]struct{})
 	// OSC 0/2 titles (the shell's running-command reporting) feed the pane
-	// title; the callback runs on the read loop, so it only stores.
-	s.em.SetCallbacks(vt.Callbacks{Title: func(t string) {
-		s.mu.Lock()
-		s.title = t
-		s.mu.Unlock()
-		s.notify()
-	}})
+	// title; the callbacks run on the read loop, so they only store.
+	s.em.SetCallbacks(vt.Callbacks{
+		Title: func(t string) {
+			s.mu.Lock()
+			s.title = t
+			s.mu.Unlock()
+			s.notify()
+		},
+		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
+		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+	})
 	go s.readLoop()
 	go s.writeLoop()
 	go s.waitExit()
@@ -178,6 +187,41 @@ func (s *Session) Resize(w, h int) {
 func (s *Session) SendKey(k vt.KeyPressEvent) {
 	if !s.closed.Load() {
 		s.em.SendKey(k)
+	}
+}
+
+// trackMouseMode records the child flipping a DEC mouse-reporting mode; other
+// modes are none of our business here.
+func (s *Session) trackMouseMode(mode ansi.Mode, on bool) {
+	switch mode {
+	case ansi.ModeMouseX10, ansi.ModeMouseNormal, ansi.ModeMouseHighlight,
+		ansi.ModeMouseButtonEvent, ansi.ModeMouseAnyEvent:
+		s.mu.Lock()
+		if on {
+			s.mouseModes[mode] = struct{}{}
+		} else {
+			delete(s.mouseModes, mode)
+		}
+		s.mu.Unlock()
+	}
+}
+
+// WantsMouse reports whether the child currently has any mouse-reporting mode
+// enabled — wheel events then belong to it, not to the pane's scrollback.
+func (s *Session) WantsMouse() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.mouseModes) > 0
+}
+
+// AltScreen reports whether the child is on the alternate screen.
+func (s *Session) AltScreen() bool { return s.em.IsAltScreen() }
+
+// SendMouse forwards a mouse event to the child; the emulator encodes it per
+// the child's enabled modes (and drops it when none is set).
+func (s *Session) SendMouse(m vt.Mouse) {
+	if !s.closed.Load() {
+		s.em.SendMouse(m)
 	}
 }
 

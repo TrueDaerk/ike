@@ -66,8 +66,16 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
-to live); the mouse wheel scrolls it too. A dead session (shell exited)
-falls back to normal key handling so `ctrl+w` can close the pane.
+to live). A dead session (shell exited) falls back to normal key handling so
+`ctrl+w` can close the pane.
+
+**Mouse wheel** (#226, `MouseWheel` in `model.go`): the wheel goes to whoever
+asked for it — a child that enabled a DEC mouse-reporting mode
+(?9/?1000–?1003, tracked via the emulator's `EnableMode`/`DisableMode`
+callbacks) gets the encoded event through `SendMouse`; an alt-screen child
+without mouse reporting gets arrow keys, three per notch (the xterm
+"alternate scroll" convention — this is how `less`/`man` scroll); a plain
+shell pages the pane's scrollback.
 
 **macOS editing chords** (#225, `motionKey` in `model.go`): the pane
 translates the iTerm "natural text editing" motions to the readline/ZLE

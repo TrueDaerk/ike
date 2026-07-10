@@ -2652,13 +2652,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.explorer().ScrollBy(wheelLines)
 			}
 		case pane.KindTerminal:
-			// Wheel pages the scrollback (#96): up towards history, down back
-			// to live.
-			switch msg.Button {
-			case tea.MouseWheelUp:
-				inst.Terminal().ScrollBy(wheelLines)
-			case tea.MouseWheelDown:
-				inst.Terminal().ScrollBy(-wheelLines)
+			// The pane routes the wheel (#226): mouse-reporting children get
+			// the event, alt-screen children arrow keys, a plain shell pages
+			// the scrollback (#96) — up towards history, down back to live.
+			if r, ok := m.lay.Panes[key]; ok {
+				lx, ly := msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY)
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					inst.Terminal().MouseWheel(lx, ly, wheelLines)
+				case tea.MouseWheelDown:
+					inst.Terminal().MouseWheel(lx, ly, -wheelLines)
+				}
 			}
 		case pane.KindEditor:
 			// The wheel over the tab bar row cycles tabs (#159): up goes to

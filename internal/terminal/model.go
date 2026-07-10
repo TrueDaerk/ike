@@ -182,6 +182,38 @@ func (m *Model) ScrollBy(delta int) {
 // Scroll reports the current scrollback offset (0 = live).
 func (m Model) Scroll() int { return m.scroll }
 
+// MouseWheel routes one wheel movement at the pane-local cell (x, y); delta
+// is in lines, positive = up/towards history (#226). The convention every
+// terminal emulator implements: a child that enabled mouse reporting gets
+// the wheel event; an alt-screen child without it gets arrow keys (the xterm
+// "alternate scroll" behaviour); a plain shell pages the pane's scrollback.
+func (m *Model) MouseWheel(x, y, delta int) {
+	if m.sess == nil || delta == 0 {
+		return
+	}
+	up := delta > 0
+	switch {
+	case m.sess.WantsMouse():
+		m.scroll = 0
+		btn := vt.MouseWheelDown
+		if up {
+			btn = vt.MouseWheelUp
+		}
+		m.sess.SendMouse(vt.MouseWheel{X: x, Y: y, Button: btn})
+	case m.sess.AltScreen():
+		m.scroll = 0
+		code := vt.KeyDown
+		if up {
+			code = vt.KeyUp
+		}
+		for i := 0; i < delta || i < -delta; i++ {
+			m.sess.SendKey(vt.KeyPressEvent{Code: code})
+		}
+	default:
+		m.ScrollBy(delta)
+	}
+}
+
 // PasteText forwards pasted text through the bracketed-paste path.
 func (m *Model) PasteText(text string) {
 	if m.sess != nil {

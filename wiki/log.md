@@ -2,6 +2,11 @@
 
 ## 2026-07-10
 
+- Terminal wheel routing (#226): the mouse wheel now reaches the running
+  application — forwarded as encoded mouse events when the child enabled
+  mouse reporting, as arrow keys on the alt screen (less/man/vim), and it
+  keeps paging ike's scrollback at the plain prompt.
+
 - Terminal macOS editing chords (#225): option+left/right word-jump
   (ESC b / ESC f), cmd+left/right line start/end (ctrl+a / ctrl+e) — the
   iTerm "natural text editing" convention, translated in

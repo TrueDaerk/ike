@@ -201,6 +201,64 @@ func TestShiftedTextReachesShell(t *testing.T) {
 	})
 }
 
+// TestMouseWheelRouting: the wheel goes to whoever asked for it (#226) —
+// a mouse-reporting child gets the encoded event, an alt-screen child gets
+// arrow keys, the plain shell pages the pane's scrollback.
+func TestMouseWheelRouting(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+
+	// Plain prompt: the wheel pages the scrollback.
+	for _, r := range "seq 1 200\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "history", func() bool { return s.ScrollbackLen() > 20 })
+	m.MouseWheel(10, 5, 3)
+	if m.Scroll() != 3 {
+		t.Fatalf("plain shell: wheel should page the scrollback, scroll = %d", m.Scroll())
+	}
+	m.MouseWheel(10, 5, -3)
+	if m.Scroll() != 0 {
+		t.Fatal("plain shell: wheel down should return to live")
+	}
+
+	// Alt screen without mouse reporting: the wheel turns into arrow keys
+	// (cat echoes them as ^[[A via the tty's ECHOCTL).
+	for _, r := range "printf '\\033[?1049h' && cat\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "alt screen", func() bool { return s.AltScreen() })
+	if s.WantsMouse() {
+		t.Fatal("cat should not enable mouse reporting")
+	}
+	m.MouseWheel(10, 5, 3)
+	waitFor(t, "arrow keys echoed", func() bool {
+		return strings.Contains(plainView(s), "^[[A^[[A^[[A")
+	})
+
+	// Mouse reporting on: the wheel forwards as an encoded mouse event.
+	// Enter first so ctrl+d is an EOF, not a partial-line flush.
+	s.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
+	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl}) // end cat
+	for _, r := range "printf '\\033[?1000h\\033[?1006h' && cat\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "mouse mode tracked", func() bool { return s.WantsMouse() })
+	m.MouseWheel(10, 5, 3)
+	waitFor(t, "SGR wheel event echoed", func() bool {
+		return strings.Contains(plainView(s), "[<64;")
+	})
+
+	// Disabling the mode hands the wheel back to the scrollback.
+	s.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
+	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
+	for _, r := range "printf '\\033[?1000l\\033[?1049l'\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "modes reset", func() bool { return !s.WantsMouse() && !s.AltScreen() })
+}
+
 // TestMotionKeyTranslation: the macOS editing chords map to the readline
 // emacs-mode defaults (#225); everything else passes through untranslated.
 func TestMotionKeyTranslation(t *testing.T) {
