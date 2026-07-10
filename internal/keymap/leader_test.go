@@ -110,32 +110,9 @@ func TestFragileFlagsDeriveFromReachability(t *testing.T) {
 // delivered chord, or sits on the deliberate exception list (vim-native
 // editor operations and palette-only reach).
 func TestFragileDefaultsHaveReachableAlternative(t *testing.T) {
-	// Palette-reach or vim-native equivalents; kept deliberate and short.
-	exceptions := map[string]string{
-		"editor.copy":          "vim y / palette",
-		"editor.cut":           "vim d / palette",
-		"editor.paste":         "vim p / palette",
-		"editor.duplicateLine": "vim yyp / palette",
-		"editor.redo":          "vim ctrl+r / palette",
-		"editor.commentBlock":  "palette",
-		"editor.tab.next":      "palette",
-		"editor.tab.prev":      "palette",
-		"editor.tab.moveLeft":  "palette",
-		"editor.tab.moveRight": "palette",
-		"editor.lineStart":     "vim 0",
-		"editor.lineEnd":       "vim $",
-		"editor.find":          "vim / search",
-		"palette.keymapHelp":   "f1 delivered",
-		"pane.switcher":        "tab key (non-capturing contexts)",
-		"pane.splitDown":       "palette",
-		"pane.splitUp":         "palette",
-		"pane.splitRight":      "palette",
-		"pane.splitLeft":       "palette",
-		"explorer.undo":        "explorer-local ctrl+z variant / palette",
-		"explorer.redo":        "palette",
-		"vcs.commit":           "blocked anyway",
-		"terminal.new":         "palette",
-	}
+	// The shared alternatives map (matrix.go) is the single source of truth
+	// for the documented escapes.
+	exceptions := reachableAlternatives
 	leader := LeaderCommands()
 	delivered := map[string]bool{}
 	for _, b := range Defaults(PresetJetBrains) {
