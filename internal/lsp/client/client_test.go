@@ -321,6 +321,44 @@ func TestRenameDecodesBothWorkspaceEditShapes(t *testing.T) {
 	}
 }
 
+func TestCodeActionsDecodeMixedShapes(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/codeAction": func(json.RawMessage) any {
+			return []any{
+				map[string]any{"title": "Fix it", "kind": "quickfix", "isPreferred": true,
+					"edit": map[string]any{"changes": map[string]any{"file:///a.go": []protocol.TextEdit{{NewText: "x"}}}}},
+				map[string]any{"title": "Run tidy", "command": "gopls.tidy"},
+			}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	acts, err := c.CodeActions(ctx, protocol.CodeActionParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acts) != 2 {
+		t.Fatalf("acts = %+v", acts)
+	}
+	if acts[0].Edit == nil || !acts[0].IsPreferred || acts[0].Kind != "quickfix" {
+		t.Errorf("code-action shape wrong: %+v", acts[0])
+	}
+	if acts[1].Command == nil || acts[1].Command.Command != "gopls.tidy" || acts[1].Edit != nil {
+		t.Errorf("bare command should wrap into a command-only action: %+v", acts[1])
+	}
+}
+
+func TestCodeActionsNull(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/codeAction": func(json.RawMessage) any { return nil },
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	if acts, err := c.CodeActions(ctx, protocol.CodeActionParams{}); err != nil || len(acts) != 0 {
+		t.Fatalf("acts = %+v err = %v", acts, err)
+	}
+}
+
 func TestHoverNull(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/hover": func(json.RawMessage) any { return nil },

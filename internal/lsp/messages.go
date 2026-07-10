@@ -105,6 +105,22 @@ type RenamePromptMsg struct {
 	Apply       func(newName string) tea.Cmd
 }
 
+// CodeActionChoice is one offered action, presentation-ready.
+type CodeActionChoice struct {
+	Title     string
+	Kind      string
+	Preferred bool
+}
+
+// CodeActionsMsg lists the actions available at the request position
+// (lsp.codeAction, #8). Apply is the bridge-built continuation for the chosen
+// index — like RenamePromptMsg it keeps the manager unreachable from the app.
+type CodeActionsMsg struct {
+	Path    string
+	Actions []CodeActionChoice
+	Apply   func(index int) tea.Cmd
+}
+
 // ServerStatusKind classifies a server status update (Roadmap 0130):
 // persistent server state belongs on the status line, transient events surface
 // as toast notifications of the matching severity.

@@ -47,6 +47,11 @@ type Callbacks struct {
 	// kind classifies it: persistent state stays on the status line, transient
 	// events become toast notifications (Roadmap 0130).
 	Status func(lang, text string, kind lsp.ServerStatusKind)
+	// ApplyEdit receives a server-initiated workspace/applyEdit (e.g. the
+	// effect of an executed code-action command), already converted to
+	// per-file editor coordinates. The manager answers applied=true whenever
+	// the callback is installed.
+	ApplyEdit func(files []FileEdits)
 }
 
 // Manager coordinates servers and open documents.
@@ -360,7 +365,14 @@ func (m *Manager) Rename(ctx context.Context, path string, pos buffer.Position, 
 	if err != nil {
 		return nil, err
 	}
-	enc := srv.cl.Encoding()
+	return m.convertWorkspaceEdit(we, srv.cl.Encoding()), nil
+}
+
+// convertWorkspaceEdit maps a WorkspaceEdit into per-file editor-coordinate
+// edits, deterministically ordered by path: open documents convert from their
+// synced lines, closed files are read from disk (a vanished target is skipped
+// rather than corrupted).
+func (m *Manager) convertWorkspaceEdit(we protocol.WorkspaceEdit, enc string) []FileEdits {
 	var out []FileEdits
 	for uri, edits := range we.AllChanges() {
 		target := protocol.URIToPath(uri)
@@ -368,14 +380,55 @@ func (m *Manager) Rename(ctx context.Context, path string, pos buffer.Position, 
 		if !open {
 			data, rerr := os.ReadFile(target)
 			if rerr != nil {
-				continue // vanished target: skip rather than corrupt
+				continue
 			}
 			lines = splitLines(string(data))
 		}
 		out = append(out, FileEdits{Path: target, Open: open, Edits: convertEdits(lines, edits, enc)})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
-	return out, nil
+	return out
+}
+
+// ConvertWorkspaceEdit converts we under the encoding of the server handling
+// path — the seam a code action's inline Edit applies through.
+func (m *Manager) ConvertWorkspaceEdit(path string, we protocol.WorkspaceEdit) []FileEdits {
+	srv, _, ok := m.docServer(path)
+	if !ok {
+		return nil
+	}
+	return m.convertWorkspaceEdit(we, srv.cl.Encoding())
+}
+
+// CodeActions requests the actions available for the [start, end] editor
+// range, passing the client-known diagnostics so servers offer quick-fixes.
+func (m *Manager) CodeActions(ctx context.Context, path string, start, end buffer.Position, diags []protocol.Diagnostic) ([]protocol.CodeAction, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().CodeAction {
+		return nil, nil
+	}
+	if diags == nil {
+		diags = []protocol.Diagnostic{}
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.CodeActions(cctx, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Range:        protocol.ToLSPRange(doc.lines, buffer.Range{Start: start, End: end}, srv.cl.Encoding()),
+		Context:      protocol.CodeActionContext{Diagnostics: diags},
+	})
+}
+
+// ExecuteCommand runs a server-defined command for the server handling path;
+// its effects arrive as workspace/applyEdit requests (Callbacks.ApplyEdit).
+func (m *Manager) ExecuteCommand(ctx context.Context, path string, cmd protocol.Command) error {
+	srv, _, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().ExecuteCommand {
+		return nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.ExecuteCommand(cctx, protocol.ExecuteCommandParams{Command: cmd.Command, Arguments: cmd.Arguments})
 }
 
 // DocLines returns the tracked document lines for path, when open.
@@ -590,6 +643,21 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 			out[i] = settingsSection(srv.spec.Settings, it.Section)
 		}
 		_ = srv.cl.Respond(id, out, nil)
+	case "workspace/applyEdit":
+		// The effect of an executed command (code actions, #8): convert and
+		// hand to the ApplyEdit callback. Off the read-loop goroutine — the
+		// conversion may read files from disk, and responding inline can
+		// deadlock against a server still flushing its own write.
+		var p protocol.ApplyWorkspaceEditParams
+		_ = json.Unmarshal(params, &p)
+		go func() {
+			applied := false
+			if m.cb.ApplyEdit != nil {
+				m.cb.ApplyEdit(m.convertWorkspaceEdit(p.Edit, srv.cl.Encoding()))
+				applied = true
+			}
+			_ = srv.cl.Respond(id, protocol.ApplyWorkspaceEditResult{Applied: applied}, nil)
+		}()
 	default:
 		_ = srv.cl.Respond(id, nil, nil)
 	}

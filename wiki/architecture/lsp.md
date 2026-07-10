@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting/rename rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T11:00:00Z
+timestamp: 2026-07-10T12:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -47,7 +47,8 @@ from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
 exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.format` /
-`lsp.formatRange` / `lsp.rename` / `lsp.restart` as registry commands.
+`lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
+registry commands.
 
 ## Data flow
 
@@ -104,6 +105,20 @@ manager tracks — open editor buffers — are edited in-buffer as one undo unit
 via `FormatEditsMsg` and stay dirty; every other file is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
 Gated on `renameProvider`; the 0082 `Shift+F6` decision stays with the audit.
+
+**Code actions (#8).** `lsp.codeAction` (default `alt+enter`, fragile —
+option-as-meta) sends `textDocument/codeAction` for the cursor or the active
+visual selection, passing the cached published diagnostics overlapping the
+range so servers offer quick-fixes. The offer opens as a locked palette list
+(`internal/app/codeactions.go`) — preferred actions starred and sorted first,
+kind as the detail chip; picking an entry runs a bridge-built continuation
+(same seam as rename). The chosen action applies its inline `WorkspaceEdit`
+through `workspace_edit.go` and/or executes its `command` via
+`workspace/executeCommand`; server-initiated `workspace/applyEdit` requests
+(how gopls delivers e.g. Organize Imports) are answered by the manager off
+the read loop, converted, and dispatched through the same apply path. Result
+decode is lenient — bare `Command` entries wrap into command-only actions.
+Gated on `codeActionProvider` / `executeCommandProvider`.
 
 ## Design rules
 

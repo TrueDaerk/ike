@@ -84,6 +84,7 @@ type TextDocumentClientCaps struct {
 	Formatting      *ReferencesClientCaps `json:"formatting,omitempty"`
 	RangeFormatting *ReferencesClientCaps `json:"rangeFormatting,omitempty"`
 	Rename          *RenameClientCaps     `json:"rename,omitempty"`
+	CodeAction      *ReferencesClientCaps `json:"codeAction,omitempty"`
 }
 
 // RenameClientCaps announces rename support; prepareSupport asks servers to
@@ -137,6 +138,8 @@ type ServerCapabilities struct {
 	DocumentFormattingProvider      json.RawMessage `json:"documentFormattingProvider,omitempty"`
 	DocumentRangeFormattingProvider json.RawMessage `json:"documentRangeFormattingProvider,omitempty"`
 	RenameProvider                  json.RawMessage `json:"renameProvider,omitempty"`
+	CodeActionProvider              json.RawMessage `json:"codeActionProvider,omitempty"`
+	ExecuteCommandProvider          json.RawMessage `json:"executeCommandProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -265,6 +268,53 @@ func (w WorkspaceEdit) AllChanges() map[string][]TextEdit {
 		out[dc.TextDocument.URI] = append(out[dc.TextDocument.URI], dc.Edits...)
 	}
 	return out
+}
+
+// --- code actions ---
+
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+// CodeActionContext carries the client-known diagnostics overlapping the
+// range, so servers offer the matching quick-fixes.
+type CodeActionContext struct {
+	Diagnostics []Diagnostic `json:"diagnostics"`
+}
+
+// CodeAction is one offered fix/refactor: Edit, Command, or both (Edit is
+// applied first per the spec).
+type CodeAction struct {
+	Title       string         `json:"title"`
+	Kind        string         `json:"kind,omitempty"`
+	IsPreferred bool           `json:"isPreferred,omitempty"`
+	Edit        *WorkspaceEdit `json:"edit,omitempty"`
+	Command     *Command       `json:"command,omitempty"`
+}
+
+// Command is a server-defined command reference (the executeCommand shape).
+type Command struct {
+	Title     string            `json:"title"`
+	Command   string            `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+type ExecuteCommandParams struct {
+	Command   string            `json:"command"`
+	Arguments []json.RawMessage `json:"arguments,omitempty"`
+}
+
+// ApplyWorkspaceEditParams is the server→client workspace/applyEdit request.
+type ApplyWorkspaceEditParams struct {
+	Label string        `json:"label,omitempty"`
+	Edit  WorkspaceEdit `json:"edit"`
+}
+
+// ApplyWorkspaceEditResult answers it.
+type ApplyWorkspaceEditResult struct {
+	Applied bool `json:"applied"`
 }
 
 // --- hover ---
