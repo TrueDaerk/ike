@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-11T11:00:00Z
+timestamp: 2026-07-11T12:30:00Z
 ---
 
 # Plugin Extension Contract
@@ -136,5 +136,28 @@ registry:
   stdout/stderr are sunk so a chatty module cannot corrupt the TUI frame;
   any load/instantiate/start fault isolates and unloads that module only.
 
-The capability bridge into `registry.Register` is #25; until it lands a
-loaded module simply sits instantiated.
+### ABI (#24)
+
+`internal/wasm/abi` fixes the host↔guest contract. Wasm passes only numbers,
+so every richer value crosses as a byte region in guest linear memory:
+arguments as `(ptr, len)` u32 pairs (host→guest buffers via the guest's
+exported `ike_alloc`), guest returns as one packed u64 `(ptr<<32)|len`, and
+payload bytes as JSON — language-neutral by construction (Rust/Zig guests
+need any JSON library, nothing assumes Go; the Go SDK, #26, is merely the
+first client). Unknown JSON fields are tolerated on both sides for forward
+compatibility.
+
+- **Guest exports**: `ike_alloc(size)`, `register() → Capabilities JSON`
+  (name, commands, keymaps, hooks), `on_command(id)`, `on_key(id)`,
+  `on_hook(id, payload)`.
+- **Host imports** (module `"ike"`, thin marshalling shims mirroring
+  `host.API` through the narrow `abi.Host` interface): `open_file`,
+  `dispatch` (typed envelope; unknown types rejected, not guessed),
+  `notify`, `set_status`, `config_get` (result written back through
+  `ike_alloc`). Malformed guest payloads are dropped — a plugin cannot
+  crash the host with garbage bytes.
+
+The contract is verified end to end against a real Go wasip1 c-shared
+guest that registers capabilities and answers `on_command` through every
+shim. The capability bridge into `registry.Register` is #25; until it lands
+a loaded module simply sits instantiated.
