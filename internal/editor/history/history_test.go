@@ -75,3 +75,62 @@ func TestUndoEmptyIsSafe(t *testing.T) {
 		t.Fatal("undo on empty history should report ok=false")
 	}
 }
+
+func TestSavedCheckpoint(t *testing.T) {
+	b := buffer.FromString("abc")
+	h := New()
+	if !h.AtSaved() {
+		t.Fatal("a fresh history should start at the saved state")
+	}
+
+	rec := NewRecorder(b, buffer.Position{})
+	end := rec.Apply(buffer.Insert(buffer.Position{Line: 0, Col: 3}, "d"))
+	h.Push(rec.Commit(end))
+	if h.AtSaved() {
+		t.Fatal("a pushed change should leave the saved state")
+	}
+
+	h.MarkSaved()
+	if !h.AtSaved() {
+		t.Fatal("MarkSaved should pin the current state")
+	}
+	if _, ok := h.Undo(b); !ok || h.AtSaved() {
+		t.Fatal("undoing away from the save point should not be AtSaved")
+	}
+	if _, ok := h.Redo(b); !ok || !h.AtSaved() {
+		t.Fatal("redoing back to the save point should be AtSaved")
+	}
+}
+
+func TestSavedCheckpointDiscardedByBranch(t *testing.T) {
+	b := buffer.FromString("abc")
+	h := New()
+	rec := NewRecorder(b, buffer.Position{})
+	end := rec.Apply(buffer.Insert(buffer.Position{Line: 0, Col: 3}, "d"))
+	h.Push(rec.Commit(end))
+	h.MarkSaved()
+	if _, ok := h.Undo(b); !ok {
+		t.Fatal("undo failed")
+	}
+	rec = NewRecorder(b, buffer.Position{})
+	end = rec.Apply(buffer.Insert(buffer.Position{Line: 0, Col: 3}, "e"))
+	h.Push(rec.Commit(end)) // discards the future holding the saved state
+	if _, ok := h.Undo(b); !ok {
+		t.Fatal("undo failed")
+	}
+	if h.AtSaved() {
+		t.Fatal("the saved state was discarded; AtSaved must stay false")
+	}
+}
+
+func TestMarkNeverSaved(t *testing.T) {
+	h := New()
+	h.MarkNeverSaved()
+	if h.AtSaved() {
+		t.Fatal("MarkNeverSaved: even the empty state must not read as saved")
+	}
+	h.Reset()
+	if !h.AtSaved() {
+		t.Fatal("Reset re-baselines the empty state as saved")
+	}
+}
