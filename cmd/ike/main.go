@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"ike/internal/app"
 	"ike/internal/config"
 	"ike/internal/project"
+	"ike/internal/wasm"
 
 	// Compiled-in plugins self-register via init(). Add or remove blank imports
 	// here to change the build-time plugin set.
@@ -32,6 +34,16 @@ func main() {
 	// Under bubbletea v2 the alternate screen and mouse cell-motion reporting
 	// (which drives the pane drag/resize layout, Roadmap 0036) are declared on the
 	// model's View, not via program options. See app.Model.View.
+	// Load WASM plugins from the conventional directory (Roadmap 9900, #23).
+	// The capability bridge (#25) will register them; until then loaded
+	// modules simply sit instantiated. A faulting module is skipped with a
+	// diagnostic; a missing directory is normal.
+	wasmRT := wasm.NewRuntime(context.Background(), nil)
+	defer wasmRT.Close()
+	for _, diag := range wasmRT.ScanDir(wasm.DefaultDir()).Diagnostics {
+		fmt.Fprintln(os.Stderr, "ike:", diag)
+	}
+
 	m := app.New()
 	p := tea.NewProgram(m)
 	// Wire the program's Send into the host so background workers (the LSP bridge)

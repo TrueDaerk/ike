@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- WASM plugin runtime (#23, Roadmap 9900): internal/wasm embeds wazero —
+  plugins-dir scan (diagnostic-and-skip on faults), load/instantiate/unload
+  lifecycle supporting both WASI conventions (command _start incl. clean
+  proc_exit, reactor _initialize with callable exports), no ambient FS/net,
+  guest stdio sunk. Tests build real Go wasip1 fixtures (including a
+  c-shared reactor whose add export is called through the sandbox).
+  main.go scans at startup; the capability bridge is #25.
 - Per-binding status matrix (#16, Roadmap 0081): generated acceptance
   ledger (keymap.StatusMatrix/MatrixMarkdown) — one row per default-bound
   command with primary chord, reachability class, reachable fallback and

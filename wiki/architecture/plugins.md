@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-11T11:00:00Z
 ---
 
 # Plugin Extension Contract
@@ -114,3 +114,27 @@ type API interface {
 
 Runtime loading, `.wasm` plugins, sandboxing, cross-language plugins, and plugin
 install/distribution.
+
+## WASM runtime (Roadmap 9900, #23)
+
+`internal/wasm` embeds [wazero](https://github.com/tetratelabs/wazero)
+(pure Go, no CGo) as the second plugin producer, alongside the compile-in
+registry:
+
+- **Scan**: `Runtime.ScanDir` loads every `.wasm` in the plugins directory
+  (`$IKE_CONFIG_DIR/plugins`, else `~/.ike/plugins`) at startup, in
+  deterministic name order; a faulting file is recorded as a diagnostic and
+  skipped — one broken plugin never stops the scan or IKE.
+- **Lifecycle**: load → compile → instantiate → (unload | Close). Both WASI
+  conventions are supported: command modules run `_start` (a clean
+  `proc_exit(0)` is a normal end, not a fault), reactor modules (Go's
+  wasip1 `-buildmode=c-shared`, TinyGo's default) initialize via
+  `_initialize` and keep their exports callable — the shape plugins use.
+  `Module.ExportedFunction` is the seam the ABI (#24) calls through.
+- **Safety posture** (full sandbox rules are #27): WASI with no preopened
+  filesystem, no environment, no args — no ambient FS or network; guest
+  stdout/stderr are sunk so a chatty module cannot corrupt the TUI frame;
+  any load/instantiate/start fault isolates and unloads that module only.
+
+The capability bridge into `registry.Register` is #25; until it lands a
+loaded module simply sits instantiated.
