@@ -174,6 +174,11 @@ type Model struct {
 	lay layout.Layout
 	// drag is the active mouse gesture (resize or move), nil between drags.
 	drag *dragState
+	// pendingWheel accumulates queued mouse-wheel events so a fast scroll burst
+	// applies in one update pass instead of one render per event (#238);
+	// wheelFlushQueued records that a wheelFlushMsg is already in flight.
+	pendingWheel     []wheelBatch
+	wheelFlushQueued bool
 	// pendingScroll holds an editor viewport offset restored from a session that
 	// must be applied once the editor has been sized (the first layout). Cleared
 	// after it is applied. It targets the focused editor at restore time.
@@ -1104,6 +1109,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Wheel coalescing (#238): wheel events only accumulate; anything else
+	// flushes the pending batch first so ordering against clicks, keys and
+	// every other message is preserved.
+	switch msg.(type) {
+	case tea.MouseWheelMsg, wheelFlushMsg:
+	default:
+		if len(m.pendingWheel) > 0 {
+			tm, cmd := m.flushWheel()
+			mm, ok := tm.(Model)
+			if !ok {
+				return tm, cmd
+			}
+			tm2, cmd2 := mm.updateMsg(msg)
+			return tm2, tea.Batch(cmd, cmd2)
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -1128,7 +1149,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMotionMsg:
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseMotion})
 	case tea.MouseWheelMsg:
-		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseWheel})
+		return m.queueWheel(mouseEvent{Mouse: msg.Mouse(), action: mouseWheel})
+	case wheelFlushMsg:
+		return m.flushWheel()
 
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
@@ -2894,6 +2917,60 @@ const (
 type mouseEvent struct {
 	tea.Mouse
 	action mouseAction
+}
+
+// wheelFlushMsg asks the model to apply the accumulated wheel batch (#238). It
+// is emitted by queueWheel and travels through the same message queue as input
+// events, so by the time it arrives every wheel event that was backed up behind
+// it has been folded into pendingWheel — the whole burst then costs one update
+// pass (and one render) instead of one per event.
+type wheelFlushMsg struct{}
+
+// wheelBatch is one run of identical wheel events (same cell, button and
+// modifiers) waiting to be applied.
+type wheelBatch struct {
+	ev    mouseEvent
+	count int
+}
+
+// queueWheel folds a wheel event into the pending batch and schedules a flush
+// unless one is already in flight.
+func (m Model) queueWheel(ev mouseEvent) (tea.Model, tea.Cmd) {
+	if n := len(m.pendingWheel); n > 0 && m.pendingWheel[n-1].ev.Mouse == ev.Mouse {
+		m.pendingWheel[n-1].count++
+	} else {
+		m.pendingWheel = append(m.pendingWheel, wheelBatch{ev: ev, count: 1})
+	}
+	if m.wheelFlushQueued {
+		return m, nil
+	}
+	m.wheelFlushQueued = true
+	return m, func() tea.Msg { return wheelFlushMsg{} }
+}
+
+// flushWheel replays the accumulated wheel events through handleMouse in one
+// update pass. A stale flush — the batch was already applied inline by a
+// non-wheel message — is a no-op.
+func (m Model) flushWheel() (tea.Model, tea.Cmd) {
+	batches := m.pendingWheel
+	m.pendingWheel = nil
+	m.wheelFlushQueued = false
+	var tm tea.Model = m
+	var cmds []tea.Cmd
+	for _, b := range batches {
+		for i := 0; i < b.count; i++ {
+			mm, ok := tm.(Model)
+			if !ok {
+				return tm, tea.Batch(cmds...)
+			}
+			var cmd tea.Cmd
+			tm, cmd = mm.handleMouse(b.ev)
+			if cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+	}
+	return tm, tea.Batch(cmds...)
 }
 
 // updateHover sets (or clears) the explorer's hover highlight.

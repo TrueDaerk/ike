@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-06-24T00:00:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -56,6 +56,17 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
 One gesture is active at a time. While a floating shell (Roadmap 0035) is open,
 mouse input is ignored — overlays are composited above the tiling and are not
 draggable. Wheel events are ignored by the drag machine.
+
+**Wheel coalescing (#238).** Wheel events do not apply immediately: the root
+model folds them into a pending batch (consecutive events with the same cell,
+button and modifiers merge into one counted entry) and schedules a single
+`wheelFlushMsg` through the command queue. Because that flush message queues
+behind whatever input is already backed up, a fast scroll burst lands in the
+batch before the flush arrives and the whole burst applies in **one** update
+pass — one render instead of one per event, so the UI never visibly "catches
+up" on stale scrolls. Any non-wheel message flushes the pending batch first,
+preserving ordering against clicks, keys and motion; a stale flush after an
+inline flush is a no-op.
 
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an
