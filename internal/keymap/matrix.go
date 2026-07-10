@@ -79,7 +79,7 @@ var reachableAlternatives = map[string]string{
 	"pane.splitLeft":       "palette",
 	"explorer.undo":        "palette",
 	"explorer.redo":        "palette",
-	"terminal.new":         "palette",
+	"explorer.reveal":      "palette",
 }
 
 // StatusMatrix builds the ledger over the default table plus the leader

@@ -35,6 +35,9 @@ var leaderMnemonics = []leaderMnemonic{
 	{"r", "project.replaceInPath", "Replace in path"},
 	{"p", "project.switch", "Switch project"},
 	{"t", "terminal.toggle", "Toggle terminal"},
+	// T (shift+t) opens a fresh session next to lowercase-t's toggle (#242).
+	{"T", "terminal.new", "New terminal"},
+	{"h", "notifications.history", "Notification history"},
 	{"e", "explorer.toggle", "Focus explorer / editor"},
 	{"s", "editor.saveAll", "Save all"},
 	{"w", "editor.write", "Save file"},

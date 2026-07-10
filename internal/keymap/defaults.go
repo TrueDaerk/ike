@@ -67,6 +67,13 @@ var jetbrainsRows = []row{
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)"},
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)"},
 	{"cmd+shift+r", "project.replaceInPath", "Replace in path", Global, "Project (09)"},
+	// Retained find-in-path match stepping (0150, #242): the JetBrains
+	// next/previous-occurrence keys.
+	{"f3", "search.nextMatch", "Next search match", Global, "Search (0150)"},
+	{"shift+f3", "search.prevMatch", "Previous search match", Global, "Search (0150)"},
+	// JetBrains "Select in Project View" (#242). Alt+F-key delivery depends on
+	// the terminal (fragile); the palette stays the delivered fallback.
+	{"alt+f1", "explorer.reveal", "Reveal open file in explorer", Global, "Explorer (05)"},
 	{"cmd+left", "editor.lineStart", "Move to line start", Editor, "Editor (06)"},
 	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)"},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},

@@ -218,11 +218,11 @@ the existing multi-step resolver (no new engine):
   making this the universal variant that also works mid-edit.
 
 Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
-path, `r` replace in path, `p` switch project, `t` toggle terminal, `e`
-explorer/editor toggle, `s` save all, `w` save, `d` definition, `u` usages,
-`a` code actions, `n` rename, `l` reformat, `c` comment line, `x` close tab,
-`o` reopen tab, `m` recent files (MRU), `b` navigate back, `i` navigate
-forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (`ctrl+p`,
+path, `r` replace in path, `p` switch project, `t` toggle terminal, `T` new
+terminal, `h` notification history, `e` explorer/editor toggle, `s` save all,
+`w` save, `d` definition, `u` usages, `a` code actions, `n` rename, `l`
+reformat, `c` comment line, `x` close tab, `o` reopen tab, `m` recent files
+(MRU), `b` navigate back, `i` navigate forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (`ctrl+p`,
 delivered everywhere).
 
 **Honest fragility**: the per-row `fragile` flags are no longer
@@ -297,6 +297,7 @@ the fallback column is the path that always works.
 | `editor.undo` | `ctrl+z` | delivered | `—` | live |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
+| `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `space e` | live via space e |
 | `explorer.undo` | `ctrl+z` | delivered | `—` | live |
 | `file.move` | `f6` | delivered | `—` | live |
@@ -309,6 +310,7 @@ the fallback column is the path that always works.
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |
 | `nav.forward` | `cmd+right-bracket` | fragile | `space i` | live via space i |
+| `notifications.history` | `space h` | delivered | `—` | live |
 | `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
 | `palette.recentFiles` | `cmd+e` | fragile | `space m` | live via space m |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `—` | blocked: search-everywhere palette mode (0230, #236) |
@@ -322,7 +324,10 @@ the fallback column is the path that always works.
 | `project.goToFile` | `cmd+shift+o` | fragile | `space f` | live via space f |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `space r` | live via space r |
 | `project.switch` | `alt+shift+p` | fragile | `space p` | live via space p |
+| `search.nextMatch` | `f3` | delivered | `—` | live |
+| `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `space ,` | live via space , |
+| `terminal.new` | `space shift+t` | delivered | `—` | live |
 | `terminal.toggle` | `alt+f12` | fragile | `space t` | live via space t |
 | `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
 | `vcs.revertFile` | `cmd+shift+t` | fragile | `—` | blocked: VCS integration (idea #28) |

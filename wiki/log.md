@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Defaults for palette-only commands (#242): `f3`/`shift+f3` step retained
+  search matches, `alt+f1` reveals the open file in the explorer (fragile,
+  palette fallback), leader `T` opens a new terminal and leader `h` the
+  notification history. Status matrix regenerated in
+  [Keybindings](/architecture/keybindings.md).
+
 - Theme override survives config reloads (#241): `reloadConfig` no longer
   unconditionally re-resolves `[theme].name` — a palette-selected runtime
   theme now survives unrelated settings edits; an explicit `[theme].name`
