@@ -676,6 +676,31 @@ func TestClipboardCopyCutPaste(t *testing.T) {
 	}
 }
 
+func TestClipboardCopyCutFeedback(t *testing.T) {
+	clip := &fakeClipboard{}
+	m, _ := loaded(t, "foo bar\nsecond\n")
+	m.SetClipboard(clip)
+
+	// Charwise: the "foo" selection reports its rune count.
+	m = send(m, modKey(tea.KeyRight, tea.ModShift), modKey(tea.KeyRight, tea.ModShift))
+	m, cmd := m.runAction("copy")
+	if cmd == nil {
+		t.Fatal("copy should return a feedback command (#252)")
+	}
+	if n, ok := cmd().(NoticeMsg); !ok || n.Text != "copied 3 chars" {
+		t.Fatalf("copy notice=%+v want 'copied 3 chars'", cmd())
+	}
+
+	// Linewise: cutting without a selection reports one line.
+	m, cmd = m.runAction("cut")
+	if cmd == nil {
+		t.Fatal("cut should return a feedback command (#252)")
+	}
+	if n, ok := cmd().(NoticeMsg); !ok || n.Text != "cut 1 line" {
+		t.Fatalf("cut notice=%+v want 'cut 1 line'", cmd())
+	}
+}
+
 func TestClipboardPasteReplacesSelection(t *testing.T) {
 	clip := &fakeClipboard{text: "XY"}
 	m, _ := loaded(t, "foo\n")

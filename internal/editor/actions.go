@@ -2,6 +2,7 @@ package editor
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -370,9 +371,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	case "redo":
 		m.redo(1)
 	case "copy":
-		m.clipboardCopy()
+		cmd := m.clipboardCopy()
+		m.scroll()
+		return m, cmd
 	case "cut":
-		m.clipboardCut()
+		cmd := m.clipboardCut()
+		m.scroll()
+		return m, cmd
 	case "paste":
 		m.clipboardPaste()
 	case "line_start":
@@ -403,23 +408,51 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 }
 
 // clipboardCopy yanks the visual selection — or the current line when nothing
-// is selected — into the system-clipboard register `+` (Cmd+C).
-func (m *Model) clipboardCopy() {
+// is selected — into the system-clipboard register `+` (Cmd+C). The returned
+// command is the feedback toast (#252).
+func (m *Model) clipboardCopy() tea.Cmd {
 	if m.mode.IsVisual() {
 		m.visualOperateReg('y', '+')
-		return
+	} else {
+		m.runOperator('y', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
 	}
-	m.runOperator('y', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
+	return m.clipboardNotice("copied")
 }
 
 // clipboardCut deletes the visual selection — or the current line — into the
-// system-clipboard register `+` (Cmd+X).
-func (m *Model) clipboardCut() {
+// system-clipboard register `+` (Cmd+X). The returned command is the feedback
+// toast (#252).
+func (m *Model) clipboardCut() tea.Cmd {
 	if m.mode.IsVisual() {
 		m.visualOperateReg('d', '+')
-		return
+	} else {
+		m.runOperator('d', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
 	}
-	m.runOperator('d', operator.LineTarget(m.cursor.Line, m.cursor.Line), '+')
+	return m.clipboardNotice("cut")
+}
+
+// clipboardNotice reports what the copy/cut just put in the clipboard
+// ("copied 3 lines", "cut 12 chars"), read from the unnamed register — every
+// `+` write mirrors into it, so no system-clipboard read-back is needed.
+func (m *Model) clipboardNotice(verb string) tea.Cmd {
+	e := m.regs.Get(0)
+	if e.Text == "" {
+		return nil
+	}
+	var n int
+	unit := "char"
+	if e.Linewise {
+		unit = "line"
+		if n = strings.Count(e.Text, "\n"); n == 0 {
+			n = 1
+		}
+	} else {
+		n = len([]rune(e.Text))
+	}
+	if n != 1 {
+		unit += "s"
+	}
+	return notice(verb + " " + strconv.Itoa(n) + " " + unit)
 }
 
 // clipboardPaste inserts the system clipboard at the cursor (Cmd+V): it
