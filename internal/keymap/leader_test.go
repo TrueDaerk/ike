@@ -135,3 +135,33 @@ func TestFragileDefaultsHaveReachableAlternative(t *testing.T) {
 		}
 	}
 }
+
+// TestUnboundCommandDefaults: the previously palette-only commands picked up
+// defaults in #242 — f3/shift+f3 step retained search matches, alt+f1 reveals
+// the open file, leader T opens a terminal, leader h the notification history.
+func TestUnboundCommandDefaults(t *testing.T) {
+	cases := []struct {
+		keys []string
+		cmd  string
+	}{
+		{[]string{"f3"}, "search.nextMatch"},
+		{[]string{"shift+f3"}, "search.prevMatch"},
+		{[]string{"alt+f1"}, "explorer.reveal"},
+		{[]string{"space", "shift+t"}, "terminal.new"},
+		{[]string{"ctrl+k", "shift+t"}, "terminal.new"},
+		{[]string{"space", "h"}, "notifications.history"},
+		{[]string{"ctrl+k", "h"}, "notifications.history"},
+	}
+	for _, c := range cases {
+		r := NewResolver(leaderTable(t, "space"))
+		for i, k := range c.keys {
+			res := r.Feed(key(t, k), Global)
+			if i < len(c.keys)-1 {
+				continue
+			}
+			if res.Status != Resolved || res.Command != c.cmd {
+				t.Errorf("%v: got %+v, want %s", c.keys, res, c.cmd)
+			}
+		}
+	}
+}
