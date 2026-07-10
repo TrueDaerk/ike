@@ -269,16 +269,25 @@ func (m *Model) joinLines(count int) {
 	m.dot = &dotCommand{run: func(mm *Model) { mm.joinLines(count) }}
 }
 
-// undo reverts the last change and moves the cursor to its recorded position.
+// undo reverts the last count changes and moves the cursor to the last recorded
+// position, stopping early when the history runs out (vim's {count}u).
 // An undo requested mid-insert (Cmd+Z while typing) first commits the open insert
 // session so the whole typed run becomes one undoable unit, then reverts it —
 // undo therefore behaves the same from insert and normal mode.
-func (m *Model) undo() {
+func (m *Model) undo(count int) {
 	if m.insert.active {
 		m.commitInsert()
 	}
-	if cur, ok := m.hist.Undo(m.buf); ok {
+	undone := false
+	for i := 0; i < count; i++ {
+		cur, ok := m.hist.Undo(m.buf)
+		if !ok {
+			break
+		}
+		undone = true
 		m.cursor = m.buf.ClampCursor(cur)
+	}
+	if undone {
 		m.desiredCol = m.cursor.Col
 		// An undo mutates the buffer away from what was last written, so the
 		// document is dirty again — without this, undoing past a save (or an
@@ -288,14 +297,23 @@ func (m *Model) undo() {
 	}
 }
 
-// redo re-applies the last undone change. Like undo, it first commits any open
-// insert session so the redo stack is well defined regardless of mode.
-func (m *Model) redo() {
+// redo re-applies the last count undone changes ({count}ctrl+r), stopping early
+// when the redo stack runs out. Like undo, it first commits any open insert
+// session so the redo stack is well defined regardless of mode.
+func (m *Model) redo(count int) {
 	if m.insert.active {
 		m.commitInsert()
 	}
-	if cur, ok := m.hist.Redo(m.buf); ok {
+	redone := false
+	for i := 0; i < count; i++ {
+		cur, ok := m.hist.Redo(m.buf)
+		if !ok {
+			break
+		}
+		redone = true
 		m.cursor = m.buf.ClampCursor(cur)
+	}
+	if redone {
 		m.desiredCol = m.cursor.Col
 		m.dirty = true
 		m.emit(EventChange)
@@ -346,9 +364,9 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "undo":
-		m.undo()
+		m.undo(1)
 	case "redo":
-		m.redo()
+		m.redo(1)
 	case "copy":
 		m.clipboardCopy()
 	case "cut":

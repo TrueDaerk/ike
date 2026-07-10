@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- Editor horizontal scrolling (#230): horizontal wheel and shift+wheel scroll
+  the editor viewport sideways (`editor.ScrollXBy`, wired in `app.handleMouse`
+  like the explorer's), clamped so the longest visible line keeps its last
+  character on screen; the cursor stays put.
+- Counted undo/redo (#231): `{count}u` / `{count}ctrl+r` undo/redo count
+  changes at once, stopping early when the history runs out.
+
 - Terminal mouse selection + copy (#227): left-drag selects text on the grid
   (virtual-anchored, survives scrollback paging), cmd+c copies it to the
   system clipboard; clicks forward to mouse-reporting children instead.

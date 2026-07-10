@@ -41,10 +41,30 @@ func (m *Model) MouseClick(x, y int) {
 
 // ScrollBy moves the viewport by delta lines (positive down, negative up)
 // without moving the cursor, clamped to the buffer — a mouse-wheel scroll,
-// independent of mode. Vertical only; horizontal scroll rides the cursor via
-// MouseClick/motions.
+// independent of mode. Vertical only; see ScrollXBy for horizontal.
 func (m *Model) ScrollBy(delta int) {
 	m.SetScroll(m.view.Top+delta, m.view.Left)
+}
+
+// ScrollXBy moves the viewport by delta columns (positive right) without moving
+// the cursor — a horizontal-wheel or shift+wheel scroll (#230). It clamps so at
+// least the last character of the longest visible line stays on screen; the
+// next cursor motion re-derives the offset to follow the cursor again.
+func (m *Model) ScrollXBy(delta int) {
+	maxLen := 0
+	for i := m.view.Top; i < m.view.Bottom(m.buf.LineCount()); i++ {
+		if n := len([]rune(m.buf.Line(i))); n > maxLen {
+			maxLen = n
+		}
+	}
+	left := m.view.Left + delta
+	if max := maxLen - 1; left > max {
+		left = max
+	}
+	if left < 0 {
+		left = 0
+	}
+	m.view.Left = left
 }
 
 // CommandLine returns the text shown on the command line: ":cmd" in ex mode or
