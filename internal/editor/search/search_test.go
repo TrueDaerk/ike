@@ -77,3 +77,42 @@ func TestNoMatch(t *testing.T) {
 		t.Fatal("no match should report ok=false")
 	}
 }
+
+func TestSmartcaseLowercaseFoldsCase(t *testing.T) {
+	b := buffer.FromString("Foo foo FOO\n")
+	q := Compile("foo", false)
+	spans := q.LineMatches(b, 0)
+	if len(spans) != 3 {
+		t.Fatalf("lowercase pattern should match all cases, got %d spans", len(spans))
+	}
+}
+
+func TestSmartcaseUppercaseStaysExact(t *testing.T) {
+	b := buffer.FromString("Foo foo FOO\n")
+	q := Compile("Foo", false)
+	spans := q.LineMatches(b, 0)
+	if len(spans) != 1 || spans[0].Start != 0 {
+		t.Fatalf("uppercase pattern must match exactly, got %+v", spans)
+	}
+}
+
+func TestSmartcaseAppliesToRegex(t *testing.T) {
+	b := buffer.FromString("Alpha ALPHA alpha\n")
+	q := Compile("al.ha", true)
+	if got := len(q.LineMatches(b, 0)); got != 3 {
+		t.Fatalf("lowercase regex should fold case, got %d", got)
+	}
+	q = Compile("Al.ha", true)
+	if got := len(q.LineMatches(b, 0)); got != 1 {
+		t.Fatalf("uppercase regex must stay exact, got %d", got)
+	}
+}
+
+func TestCompileExactSkipsSmartcase(t *testing.T) {
+	b := buffer.FromString("word Word WORD\n")
+	q := CompileExact("word")
+	spans := q.LineMatches(b, 0)
+	if len(spans) != 1 || spans[0].Start != 0 {
+		t.Fatalf("CompileExact must be case-sensitive, got %+v", spans)
+	}
+}

@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Smartcase search (#257): `/` `?` (and the incremental preview, `n`/`N`,
+  ex `/pat/` addresses) fold case for all-lowercase patterns and stay exact
+  once the pattern contains an uppercase rune; `*`/`#` remain exact-word,
+  `:s` keeps its explicit `i`/`I` flags. Closes the last behavior item on
+  0082 sheet 09 (#18). Documented in [Editor](/architecture/editor.md).
+
 - Incremental in-file search (#255): the `/` line now previews live — per-
   keystroke jump to the nearest match, match-count tally on the input line,
   full-buffer match highlighting (current match underlined), exact
