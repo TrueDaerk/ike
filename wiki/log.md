@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Editor tabs — mouse on the bar (#159, Roadmap 0190): `tabAt`/`tabBarHit`
+  (in `internal/app/tabbar.go`) hit-test the rendered bar geometry exactly.
+  Left-click focuses/activates the clicked tab (the active segment still
+  starts a pane move, preserving the title-row drag handle), middle-click
+  closes it with the editor.closeTab guard (reopen ring fed; a single-tab
+  pane closes entirely), and the wheel over the bar row cycles tabs instead
+  of scrolling. Tests in `internal/app/tabmouse_test.go`; wiki updated.
+
 - Editor tabs — commands & keybindings (#158, Roadmap 0190): new registry
   commands `editor.tab.next`/`prev` (alt+right/left, wrapping),
   `editor.tab.select1…9` (alt+1…9), `editor.tab.moveLeft`/`moveRight`

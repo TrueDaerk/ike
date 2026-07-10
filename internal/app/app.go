@@ -2111,6 +2111,18 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.explorer().ScrollBy(wheelLines)
 			}
 		case pane.KindEditor:
+			// The wheel over the tab bar row cycles tabs (#159): up goes to
+			// the previous tab, down to the next.
+			if r, ok := m.lay.Panes[key]; ok && msg.Y == r.Y+1 &&
+				(inst.TabCount() > 1 || m.tabsAlwaysShow()) {
+				switch msg.Button {
+				case tea.MouseWheelUp:
+					m.cycleTabs(inst, -1)
+				case tea.MouseWheelDown:
+					m.cycleTabs(inst, 1)
+				}
+				return m, nil
+			}
 			// Scrolls the viewport regardless of mode (normal, insert,
 			// visual, …); the cursor stays put until the user clicks or moves.
 			switch msg.Button {
@@ -2138,6 +2150,22 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case layout.HitDivider:
 			m.drag = &dragState{kind: dragResize, divider: *hit.Divider, curX: msg.X, curY: msg.Y}
 		case layout.HitTitle:
+			// Clicks on a tab-bar segment act on that tab (#159): left-click
+			// focuses it, middle-click closes it. The active tab's own
+			// segment — and the row outside the segments — still starts a
+			// pane move, keeping the title row as the drag handle.
+			if key, idx, ok := m.tabBarHit(msg.X, msg.Y); ok {
+				inst := m.panes.Get(key)
+				if msg.Button == tea.MouseMiddle {
+					m.closeBarTab(key, idx)
+					return m, nil
+				}
+				if msg.Button == tea.MouseLeft && idx != inst.ActiveTab() {
+					m.setFocus(key)
+					m.switchTab(inst, idx)
+					return m, nil
+				}
+			}
 			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
 		case layout.HitPane:
 			return m.paneClick(hit.Pane, msg)

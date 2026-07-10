@@ -108,9 +108,24 @@ tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping
 files deleted since, and restores the caret via the standard open flow. A
 "Reopen Closed Tab" item joins the File menu.
 
+## Mouse on the bar (#159)
+
+`tabAt` mirrors the renderer's geometry exactly (window, padding, separators,
+ellipses), so clicks land on what is drawn; `tabBarHit` maps an absolute cell
+to (pane, tab) — only on the bar row of editor panes actually showing a bar.
+
+- **Left-click** on an inactive segment focuses the pane and activates that
+  tab. The active tab's own segment — and the row outside the segments —
+  still starts a **pane move**, keeping the title row as the drag handle.
+- **Middle-click** closes the clicked tab with the same guard as
+  `editor.closeTab` (backup snapshot kept while the document is open
+  elsewhere; the reopen ring is fed); a single-tab pane closes entirely.
+- **Wheel** over the bar row cycles tabs (up = previous, down = next) instead
+  of scrolling the viewport; below the bar the wheel scrolls as before.
+
 ## Deferred to sibling issues
 
-Mouse support on the bar (#159) and per-pane tab persistence in
-`session.json`/`layout.json` (#160). Until #160 lands, the layout store keeps
-recording only each pane's active document — and the reopen ring is
-session-local.
+Per-pane tab persistence in `session.json`/`layout.json` (#160). Until #160
+lands, the layout store keeps recording only each pane's active document — and
+the reopen ring is session-local. Drag-reorder on the bar may follow later;
+keyboard reorder shipped with #158.
