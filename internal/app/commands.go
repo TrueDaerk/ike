@@ -153,6 +153,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
+			appCommand("nav.back", "Navigate Back", NavBackMsg{}),
+			appCommand("nav.forward", "Navigate Forward", NavForwardMsg{}),
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),

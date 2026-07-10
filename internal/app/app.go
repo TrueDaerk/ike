@@ -32,6 +32,7 @@ import (
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 	"ike/internal/menu"
+	"ike/internal/nav"
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -67,6 +68,11 @@ const (
 type Model struct {
 	width  int
 	height int
+	// navHist is the session-scoped navigation history (Roadmap 0220): shared
+	// by pointer across the value-model copies. navSkip suppresses recording
+	// while nav.back/nav.forward themselves drive the open funnel.
+	navHist *nav.History
+	navSkip bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
 	// the registry's focused key, which always names a layout leaf.
@@ -258,6 +264,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
+		navHist:      &nav.History{},
 		host:         h,
 		reg:          reg,
 		themePal:     themePal,
@@ -1456,6 +1463,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 
+	case NavBackMsg:
+		// nav.back (Roadmap 0220): return to the previous recorded position.
+		return m.navigateHistory(m.navHist.Back, "no earlier position in the navigation history")
+	case NavForwardMsg:
+		return m.navigateHistory(m.navHist.Forward, "no later position in the navigation history")
+
 	case ilsp.CodeActionsMsg:
 		// lsp.codeAction: the offer opens as a locked palette list; picking an
 		// entry dispatches actionPickedMsg below.
@@ -1726,6 +1739,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // a scratch tab — and NewPane splits off a fresh editor and loads there.
 // EventFileOpened hooks fire either way.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
+	// Leaving one file for another is a navigation jump (Roadmap 0220);
+	// same-file opens are handled by openPathAt, which knows the target line.
+	if cur := m.currentNavPos(); cur.Path != "" && cur.Path != path {
+		m.recordNavFrom(cur)
+	}
 	var cmds []tea.Cmd
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
 		cmds = append(cmds, h.Open(m.host, path))
@@ -2271,6 +2289,11 @@ func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 // openPathAt opens path (reusing the standard open flow) and places the cursor at
 // the 0-based line/col — the navigation half of go-to-definition.
 func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
+	// A same-file jump to another line is a navigation jump too (Roadmap
+	// 0220); the different-file case records inside openPath below.
+	if cur := m.currentNavPos(); cur.Path == path && cur.Line != line {
+		m.recordNavFrom(cur)
+	}
 	model, cmd := m.openPath(path, false)
 	mm, ok := model.(Model)
 	if !ok {

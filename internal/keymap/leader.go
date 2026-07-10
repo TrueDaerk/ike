@@ -46,6 +46,11 @@ var leaderMnemonics = []leaderMnemonic{
 	{"c", "editor.commentLine", "Comment line"},
 	{"x", "editor.closeTab", "Close tab"},
 	{"o", "editor.tab.reopenClosed", "Reopen closed tab"},
+	// Navigation history (Roadmap 0220): the primary cmd+bracket chords are
+	// fragile and awkward on QWERTZ; b(ack) and i (vim's ctrl+i forward
+	// association) are the delivered path.
+	{"b", "nav.back", "Navigate back"},
+	{"i", "nav.forward", "Navigate forward"},
 	{",", "settings.open", "Settings"},
 	{"1", "editor.tab.select1", "Go to tab 1"},
 	{"2", "editor.tab.select2", "Go to tab 2"},

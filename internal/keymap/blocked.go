@@ -15,8 +15,6 @@ var blockedDefaults = map[string]string{
 	"palette.searchEverywhere": "search-everywhere palette mode (idea #50)",
 	"palette.recentFiles":      "recent-files palette mode (idea #50)",
 	"project.goToClass":        "document symbols / structure view (idea #31)",
-	"nav.back":                 "editor navigation history (idea #51)",
-	"nav.forward":              "editor navigation history (idea #51)",
 }
 
 // BlockedReason reports whether a command id is a documented blocked default
