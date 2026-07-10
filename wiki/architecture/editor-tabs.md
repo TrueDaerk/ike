@@ -92,16 +92,19 @@ one):
 
 | Command | Default chord | Behaviour |
 |---|---|---|
-| `editor.tab.next` / `editor.tab.prev` | `alt+right` / `alt+left` | cycle the active tab, wrapping |
-| `editor.tab.select1…9` | `alt+1`…`alt+9` | jump straight to tab N |
-| `editor.tab.moveLeft` / `editor.tab.moveRight` | `alt+shift+left/right` | reorder the active tab |
-| `editor.tab.reopenClosed` | `alt+shift+t` | pop the reopen ring |
+| `editor.tab.next` / `editor.tab.prev` | `ctrl+pgdown` / `ctrl+pgup` (also `alt+right/left`) | cycle the active tab, wrapping |
+| `editor.tab.select1…9` | `alt+1`…`alt+9` (leader `space 1…9`) | jump straight to tab N |
+| `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` (also `alt+shift+left/right`) | reorder the active tab |
+| `editor.tab.reopenClosed` | `alt+shift+t` (leader `space o`) | pop the reopen ring |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
 
-Chords follow the 0081 rules: arrows and digits sit identically on QWERTZ
-(layout-safe), everything is terminal-deliverable, and tab cycling is distinct
-from the `ctrl+tab` pane switcher. The alt+arrow rows are marked *fragile* —
-delivery depends on the terminal's option-as-meta setting.
+Chords follow the 0081 rules: the delivered primaries are the ctrl+page keys
+(#248) — terminal-tab-cycling convention, and their modifiers survive the
+legacy CSI encoding everywhere, including macOS where Option composes
+characters instead of acting as Alt. The alt chords stay as secondaries for
+terminals with option-as-meta (they remain *fragile*); digits and arrows sit
+identically on QWERTZ (layout-safe), and tab cycling stays distinct from the
+`ctrl+tab` pane switcher.
 
 The **reopen ring** keeps the last 10 closed tabs (path + caret), fed by both
 tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping

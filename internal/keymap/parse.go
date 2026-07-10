@@ -29,6 +29,9 @@ var baseAlias = map[string]string{
 	"spacebar": "space",
 	"spc":      "space",
 	"del":      "delete",
+	"pageup":   "pgup",
+	"pagedown": "pgdown",
+	"pgdn":     "pgdown",
 }
 
 // ParseChord parses a chord string ("cmd+k cmd+c", "shift shift", "esc") into a
