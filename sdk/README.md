@@ -62,8 +62,33 @@ Host calls (from any callback):
 
 Plugins run under WASI with **no** preopened filesystem, environment, or
 arguments — no ambient FS or network. Everything a plugin can do goes
-through the host calls above. Guest stdout/stderr are discarded; a faulting
-callback surfaces as a warning toast, never a crash.
+through the host calls above. Guest stdout/stderr are discarded. Linear
+memory is capped (64 MiB by default) and every callback runs under a
+deadline (5 s): a runaway loop closes the module and IKE unloads it with an
+error toast — the editor never freezes. A trapping callback surfaces as a
+warning toast, never a crash.
+
+## Manifest
+
+Ship an optional sidecar `<plugin>.manifest.json` next to the `.wasm` to
+declare your plugin's identity and narrow its capabilities:
+
+```json
+{
+  "name": "hello",
+  "version": "0.1.0",
+  "capabilities": ["commands", "notify"]
+}
+```
+
+`name` must equal the `.wasm` file's base name. When a manifest is present,
+anything not listed in `capabilities` is denied: undeclared registration
+kinds (`commands`, `keymaps`, `hooks`) are dropped with a startup
+diagnostic, undeclared host calls (`open_file`, `dispatch`, `notify`,
+`set_status`, `config_get`) become no-ops. An invalid manifest (malformed
+JSON, missing name/version, unknown capability, name mismatch) rejects the
+module entirely. Without a manifest the plugin keeps full capabilities —
+the manifest narrows the sandbox, the sandbox itself always applies.
 
 ## Example
 
@@ -73,7 +98,7 @@ directory:
 ```sh
 cd example
 GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o wasm-example.wasm .
-cp wasm-example.wasm ~/.ike/plugins/
+cp wasm-example.wasm wasm-example.manifest.json ~/.ike/plugins/
 ```
 
 ## Other languages

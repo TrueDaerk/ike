@@ -5,10 +5,13 @@
 // plugin registry (#25) build on top; until they land a loaded module simply
 // sits instantiated.
 //
-// Safety posture (full sandbox rules are #27): modules get WASI with no
-// preopened filesystem, no environment and no program arguments — no ambient
-// FS or network — and a faulting module (bad bytes, missing imports, a trap
-// during instantiation) is isolated and unloaded while IKE stays up.
+// Safety posture (#27): modules get WASI with no preopened filesystem, no
+// environment and no program arguments — no ambient FS or network. Each
+// module's memory is capped, every guest call runs under a deadline that
+// closes a runaway module, and a faulting module (bad bytes, missing
+// imports, a trap or timeout) is isolated and unloaded while IKE stays up.
+// An optional sidecar manifest (manifest.go) narrows a module's capabilities
+// further.
 package wasm
 
 import (
@@ -20,6 +23,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tetratelabs/wazero"
 	"github.com/tetratelabs/wazero/api"
@@ -27,35 +31,94 @@ import (
 	"github.com/tetratelabs/wazero/sys"
 )
 
+// Sandbox defaults (#27). 1024 wasm pages of 64 KiB = 64 MiB — comfortable
+// for Go-runtime guests, far below anything that could starve the editor.
+const (
+	DefaultMemoryLimitPages uint32 = 1024
+	DefaultCallTimeout             = 5 * time.Second
+)
+
+// Options tune the sandbox limits; the zero value means the defaults above.
+type Options struct {
+	// MemoryLimitPages caps every module's linear memory, in 64 KiB pages.
+	MemoryLimitPages uint32
+	// CallTimeout bounds each guest call (start functions, register, and
+	// every callback). A call exceeding it closes the module — runaway loops
+	// cannot freeze IKE.
+	CallTimeout time.Duration
+}
+
 // Module is one loaded plugin module.
 type Module struct {
 	Name string // file base name without .wasm — the plugin's identity
 	Path string
-	mod  api.Module
+	// Manifest is the validated sidecar manifest, nil when the module ships
+	// without one (nil grants all capabilities; see manifest.go).
+	Manifest *Manifest
+	mod      api.Module
 }
 
 // Runtime owns the wazero engine and the loaded module set.
 type Runtime struct {
-	ctx context.Context
-	rt  wazero.Runtime
+	ctx     context.Context
+	rt      wazero.Runtime
+	timeout time.Duration
 
 	mu      sync.Mutex
 	modules map[string]*Module
 	stdout  io.Writer // guest stdout/stderr sink; io.Discard by default
 }
 
-// NewRuntime builds an engine. Guest stdout/stderr go to out (nil discards),
-// so a chatty module cannot corrupt the TUI frame.
+// NewRuntime builds an engine with the default sandbox limits. Guest
+// stdout/stderr go to out (nil discards), so a chatty module cannot corrupt
+// the TUI frame.
 func NewRuntime(ctx context.Context, out io.Writer) *Runtime {
+	return NewRuntimeWith(ctx, out, Options{})
+}
+
+// NewRuntimeWith is NewRuntime with explicit sandbox limits.
+func NewRuntimeWith(ctx context.Context, out io.Writer, opts Options) *Runtime {
 	if out == nil {
 		out = io.Discard
 	}
-	rt := wazero.NewRuntime(ctx)
+	if opts.MemoryLimitPages == 0 {
+		opts.MemoryLimitPages = DefaultMemoryLimitPages
+	}
+	if opts.CallTimeout == 0 {
+		opts.CallTimeout = DefaultCallTimeout
+	}
+	// CloseOnContextDone is what makes CallContext deadlines effective: an
+	// in-flight guest call is aborted (and the module closed) when its
+	// context expires, instead of looping forever.
+	cfg := wazero.NewRuntimeConfig().
+		WithMemoryLimitPages(opts.MemoryLimitPages).
+		WithCloseOnContextDone(true)
+	rt := wazero.NewRuntimeWithConfig(ctx, cfg)
 	// WASI without preopens: TinyGo/Go guests need the import surface, but
 	// they get no filesystem, no env, no args — capabilities arrive only
 	// through host functions (#24).
 	wasi.MustInstantiate(ctx, rt)
-	return &Runtime{ctx: ctx, rt: rt, modules: map[string]*Module{}, stdout: out}
+	return &Runtime{ctx: ctx, rt: rt, timeout: opts.CallTimeout, modules: map[string]*Module{}, stdout: out}
+}
+
+// CallContext returns the deadline-bound context every guest call must run
+// under. The caller must cancel it.
+func (r *Runtime) CallContext() (context.Context, context.CancelFunc) {
+	return context.WithTimeout(r.ctx, r.timeout)
+}
+
+// Allows reports whether the named module's manifest grants a capability.
+// Unknown modules and modules without a manifest are unrestricted (the
+// manifest narrows, it does not exist to widen). The abi host gate and the
+// bridge's registration gating consult this.
+func (r *Runtime) Allows(module, capability string) bool {
+	r.mu.Lock()
+	m := r.modules[module]
+	r.mu.Unlock()
+	if m == nil {
+		return true
+	}
+	return m.Manifest.Allows(capability)
 }
 
 // Load compiles and instantiates the module at path. Any failure — unreadable
@@ -69,6 +132,13 @@ func (r *Runtime) Load(path string) (*Module, error) {
 		return nil, fmt.Errorf("wasm: module %q already loaded", name)
 	}
 	r.mu.Unlock()
+
+	// A present-but-invalid manifest rejects the module before any bytes are
+	// instantiated (#27); a missing sidecar is fine (nil = unrestricted).
+	manifest, err := loadManifest(path, name)
+	if err != nil {
+		return nil, fmt.Errorf("wasm: %s: %w", name, err)
+	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -99,7 +169,12 @@ func (r *Runtime) Load(path string) (*Module, error) {
 		if fn == nil {
 			continue
 		}
-		if _, err := fn.Call(r.ctx); err != nil {
+		// The start function runs under the call deadline too (#27): a module
+		// looping in _initialize must not hang IKE's startup.
+		callCtx, cancel := r.CallContext()
+		_, err := fn.Call(callCtx)
+		cancel()
+		if err != nil {
 			// A clean proc_exit(0) from a command module is a normal end of
 			// its start function, not a fault.
 			if exitErr, ok := err.(*sys.ExitError); ok && exitErr.ExitCode() == 0 {
@@ -111,7 +186,7 @@ func (r *Runtime) Load(path string) (*Module, error) {
 		break
 	}
 
-	m := &Module{Name: name, Path: path, mod: mod}
+	m := &Module{Name: name, Path: path, Manifest: manifest, mod: mod}
 	r.mu.Lock()
 	r.modules[name] = m
 	r.mu.Unlock()

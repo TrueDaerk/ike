@@ -2,6 +2,16 @@
 
 ## 2026-07-10
 
+- Sandbox limits + plugin manifest (#27, Roadmap 9900, closes the epic):
+  per-module memory cap (64 MiB default) and call deadlines (5 s default,
+  wazero CloseOnContextDone) on every guest call incl. _initialize; a
+  runaway callback closes the module and the bridge unloads it with an
+  error toast. Optional sidecar <plugin>.manifest.json (name/version/
+  capabilities) validated strictly at load — invalid manifests reject the
+  module; a present manifest gates registration kinds (bridge drops
+  undeclared ones with diagnostics) and host calls (gated "ike" module →
+  no-ops). Docs in plugins.md, plugin-authoring.md, sdk/README.md; example
+  plugin ships a least-privilege manifest.
 - Go guest SDK + example plugin (#26, Roadmap 9900): sdk/ (nested module
   ike/sdk) wraps the raw ABI in a typed guest API — Command/Keymap/Hook
   declarations plus Notify/SetStatus/OpenFile/Dispatch/ConfigGet host

@@ -46,7 +46,7 @@ func main() {
 	wasmRT := wasm.NewRuntime(ctx, nil)
 	defer wasmRT.Close()
 	wasmHost := bridge.NewHostAdapter()
-	if err := abi.InstantiateHost(ctx, wasmRT.Engine(), wasmHost); err != nil {
+	if err := abi.InstantiateHostGated(ctx, wasmRT.Engine(), wasmHost, wasmRT.Allows); err != nil {
 		fmt.Fprintln(os.Stderr, "ike: wasm host module:", err)
 	}
 	for _, diag := range wasmRT.ScanDir(wasm.DefaultDir()).Diagnostics {

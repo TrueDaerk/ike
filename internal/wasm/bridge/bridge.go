@@ -10,9 +10,11 @@ package bridge
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/tetratelabs/wazero/sys"
 
 	"ike/internal/host"
 	"ike/internal/plugin"
@@ -41,9 +43,12 @@ var hookEvents = map[string]plugin.Event{
 }
 
 // adapt builds the plugin face for a module from its declared capabilities.
-// Every callback runs the guest inside a tea.Cmd goroutine — a slow or
-// faulting guest never stalls the Update loop; faults surface as warnings.
-func adapt(ctx context.Context, mod *wasm.Module, caps *abi.Capabilities) *Plugin {
+// Every callback runs the guest inside a tea.Cmd goroutine under the
+// runtime's call deadline (#27) — a slow or faulting guest never stalls the
+// Update loop. A trap surfaces as a warning; a call that closed the module
+// (timeout, proc_exit) unloads it with an error toast — IKE stays up, the
+// plugin is gone until restart.
+func adapt(rt *wasm.Runtime, mod *wasm.Module, caps *abi.Capabilities) *Plugin {
 	id := caps.Name
 	if id == "" {
 		id = mod.Name
@@ -53,9 +58,22 @@ func adapt(ctx context.Context, mod *wasm.Module, caps *abi.Capabilities) *Plugi
 	guestCall := func(kind, target string, call func(context.Context) error) func(h host.API) tea.Cmd {
 		return func(h host.API) tea.Cmd {
 			return func() tea.Msg {
-				if err := call(ctx); err != nil {
-					h.Notify(host.Warn, fmt.Sprintf("plugin %s: %s %s: %v", id, kind, target, err))
+				callCtx, cancel := rt.CallContext()
+				err := call(callCtx)
+				cancel()
+				if err == nil {
+					return nil
 				}
+				// A *sys.ExitError means the module is closed (deadline
+				// exceeded or guest proc_exit) — its exports are gone for
+				// good, so unload rather than warn on every future call.
+				var exitErr *sys.ExitError
+				if errors.As(err, &exitErr) || errors.Is(err, context.DeadlineExceeded) {
+					rt.Unload(mod.Name)
+					h.Notify(host.Error, fmt.Sprintf("plugin %s unloaded: %s %s: %v", id, kind, target, err))
+					return nil
+				}
+				h.Notify(host.Warn, fmt.Sprintf("plugin %s: %s %s: %v", id, kind, target, err))
 				return nil
 			}
 		}
@@ -107,16 +125,13 @@ func adapt(ctx context.Context, mod *wasm.Module, caps *abi.Capabilities) *Plugi
 			ID:    hookID,
 			Event: event,
 			Notify: func(h host.API, payload any) tea.Cmd {
-				return func() tea.Msg {
-					data, err := json.Marshal(payload)
-					if err != nil {
-						data = nil
-					}
-					if err := abi.CallHook(ctx, mod.API(), hookID, data); err != nil {
-						h.Notify(host.Warn, fmt.Sprintf("plugin %s: hook %s: %v", p.id, hookID, err))
-					}
-					return nil
+				data, err := json.Marshal(payload)
+				if err != nil {
+					data = nil
 				}
+				return guestCall("hook", hookID, func(cctx context.Context) error {
+					return abi.CallHook(cctx, mod.API(), hookID, data)
+				})(h)
 			},
 		})
 	}
@@ -126,10 +141,14 @@ func adapt(ctx context.Context, mod *wasm.Module, caps *abi.Capabilities) *Plugi
 // RegisterModules asks every loaded module for its capabilities and adds the
 // resulting plugins to reg. Modules without a register() export contribute
 // nothing; a faulting registration is unloaded and reported, never fatal.
+// Capability kinds a module's manifest does not request are dropped with a
+// diagnostic (#27) — the manifest is the ceiling, not the registration.
 func RegisterModules(ctx context.Context, rt *wasm.Runtime, reg *registry.Registry) []string {
 	var diags []string
 	for _, mod := range rt.Modules() {
-		caps, err := abi.Register(ctx, mod.API())
+		callCtx, cancel := rt.CallContext()
+		caps, err := abi.Register(callCtx, mod.API())
+		cancel()
 		if err != nil {
 			rt.Unload(mod.Name)
 			diags = append(diags, fmt.Sprintf("plugin %s: register: %v", mod.Name, err))
@@ -138,7 +157,23 @@ func RegisterModules(ctx context.Context, rt *wasm.Runtime, reg *registry.Regist
 		if caps == nil {
 			continue // no register export: a bare module, nothing to add
 		}
-		reg.Add(adapt(ctx, mod, caps))
+		for _, gate := range []struct {
+			capability string
+			count      int
+			clear      func()
+		}{
+			{wasm.CapCommands, len(caps.Commands), func() { caps.Commands = nil }},
+			{wasm.CapKeymaps, len(caps.Keymaps), func() { caps.Keymaps = nil }},
+			{wasm.CapHooks, len(caps.Hooks), func() { caps.Hooks = nil }},
+		} {
+			if gate.count > 0 && !rt.Allows(mod.Name, gate.capability) {
+				diags = append(diags, fmt.Sprintf(
+					"plugin %s: dropped %d %s not requested by its manifest",
+					mod.Name, gate.count, gate.capability))
+				gate.clear()
+			}
+		}
+		reg.Add(adapt(rt, mod, caps))
 	}
 	return diags
 }
