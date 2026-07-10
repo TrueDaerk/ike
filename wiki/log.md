@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Navigation history cross-pane polish (#220, Roadmap 0220, closes the
+  epic): stale-entry skipping via BackWhere/ForwardWhere validity filter
+  (deleted/renamed files are dropped silently, traversal continues, no
+  duplicate departures on the opposite stack); back/forward acts in the
+  active editor pane with split layouts. TUI usability pass over
+  finder/definition jump chains incl. deleting a mid-chain file.
 - In-editor jump sources (#219, Roadmap 0220): the editor emits EventJump
   (departure position) for large motions (gg, G, {count}G via
   motion.Result.Jump) and search landings (initial //? jump, n/N, */#

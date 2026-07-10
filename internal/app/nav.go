@@ -7,6 +7,8 @@ package app
 // traverse the recorded positions via the same funnel.
 
 import (
+	"os"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
@@ -44,11 +46,19 @@ func (m Model) recordNavFrom(cur nav.Position) {
 	}
 }
 
+// navExists is the traversal validity filter (#220): entries whose file was
+// deleted or renamed are skipped in the same direction instead of erroring.
+func navExists(p nav.Position) bool {
+	info, err := os.Stat(p.Path)
+	return err == nil && !info.IsDir()
+}
+
 // navigateHistory runs one back/forward step: it hands the current position
-// to the history (keeping the opposite stack consistent), then navigates to
-// the target through the standard open flow with recording suppressed.
-func (m Model) navigateHistory(step func(nav.Position) (nav.Position, bool), emptyNote string) (tea.Model, tea.Cmd) {
-	target, ok := step(m.currentNavPos())
+// and the stale-entry filter to the history (keeping the opposite stack
+// consistent), then navigates to the target through the standard open flow
+// with recording suppressed.
+func (m Model) navigateHistory(step func(nav.Position, func(nav.Position) bool) (nav.Position, bool), emptyNote string) (tea.Model, tea.Cmd) {
+	target, ok := step(m.currentNavPos(), navExists)
 	if !ok {
 		m.host.Notify(host.Info, emptyNote)
 		return m, nil

@@ -51,6 +51,14 @@ func (h *History) RecordJump(from Position) {
 // pushed onto the forward stack so Forward can return. ok is false when
 // there is nothing to go back to.
 func (h *History) Back(current Position) (Position, bool) {
+	return h.BackWhere(current, nil)
+}
+
+// BackWhere is Back with a validity filter (#220): entries valid rejects —
+// deleted or renamed files — are dropped and traversal continues in the same
+// direction. current lands on the forward stack only when a target is found.
+// A nil valid accepts everything.
+func (h *History) BackWhere(current Position, valid func(Position) bool) (Position, bool) {
 	for len(h.back) > 0 {
 		n := len(h.back) - 1
 		target := h.back[n]
@@ -59,6 +67,9 @@ func (h *History) Back(current Position) (Position, bool) {
 		// (e.g. the jump landed where it started): skip it, keep looking.
 		if target.near(current) {
 			continue
+		}
+		if valid != nil && !valid(target) {
+			continue // stale entry: silently dropped (#220)
 		}
 		if current.Path != "" {
 			h.forward = append(h.forward, current)
@@ -71,12 +82,20 @@ func (h *History) Back(current Position) (Position, bool) {
 // Forward re-traverses after a Back. current is pushed onto the back stack.
 // ok is false when there is nothing ahead.
 func (h *History) Forward(current Position) (Position, bool) {
+	return h.ForwardWhere(current, nil)
+}
+
+// ForwardWhere is Forward with a validity filter; see BackWhere.
+func (h *History) ForwardWhere(current Position, valid func(Position) bool) (Position, bool) {
 	for len(h.forward) > 0 {
 		n := len(h.forward) - 1
 		target := h.forward[n]
 		h.forward = h.forward[:n]
 		if target.near(current) {
 			continue
+		}
+		if valid != nil && !valid(target) {
+			continue // stale entry: silently dropped (#220)
 		}
 		if current.Path != "" {
 			h.back = append(h.back, current)
