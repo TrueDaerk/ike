@@ -45,10 +45,12 @@ func (m *Model) parseCmd() tea.Cmd {
 // applies. Called from renderLine's default branch; cursor and selection styles
 // still win on overlap.
 func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
-	if m.hlIndex.Empty() {
-		return lipgloss.Style{}, false
+	// Precedence (#9): Tree-sitter base < semantic overlay; the diagnostic
+	// underline is applied on top by renderLine either way.
+	capture := m.semIndex.CaptureAt(line, col)
+	if capture == "" {
+		capture = m.hlIndex.CaptureAt(line, col)
 	}
-	capture := m.hlIndex.CaptureAt(line, col)
 	if capture == "" {
 		return lipgloss.Style{}, false
 	}

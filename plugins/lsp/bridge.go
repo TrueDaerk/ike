@@ -43,6 +43,11 @@ type bridge struct {
 	// change retriggers the request so the active parameter tracks the
 	// cursor; the server answering null clears it (and the popup).
 	sigActive map[string]bool
+	// semInFlight coalesces semantic-token requests per path: while one is
+	// running, further changes are absorbed and a fresh request fires right
+	// after it lands (semPending), so the overlay converges without queueing.
+	semInFlight map[string]bool
+	semPending  map[string]bool
 }
 
 var (
@@ -86,6 +91,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
 			_ = b.manager().Change(ev.Path, ev.Text)
 			b.maybeSignatureHelp(ev)
+			b.requestSemanticTokens(ev.Path)
 		}
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
@@ -121,7 +127,10 @@ func (b *bridge) fileOpened(h host.API, path string) {
 			// Missing binary on first use: activation implies installation
 			// (#131). We are already off the Update loop here.
 			b.autoInstall(l.ID, path)
+			return
 		}
+		// Initial semantic overlay for the fresh document (#9).
+		b.requestSemanticTokens(path)
 	}()
 }
 
@@ -482,6 +491,47 @@ func isSignatureTrigger(ch string, triggers []string) bool {
 		}
 	}
 	return false
+}
+
+// requestSemanticTokens refreshes the semantic overlay for path, coalescing
+// concurrent requests: at most one runs; changes during a run mark a pending
+// re-request that fires when it lands. Missing capability yields no spans and
+// no traffic beyond the gate check.
+func (b *bridge) requestSemanticTokens(path string) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	b.mu.Lock()
+	if b.semInFlight == nil {
+		b.semInFlight = map[string]bool{}
+		b.semPending = map[string]bool{}
+	}
+	if b.semInFlight[path] {
+		b.semPending[path] = true
+		b.mu.Unlock()
+		return
+	}
+	b.semInFlight[path] = true
+	b.mu.Unlock()
+
+	go func() {
+		for {
+			spans, err := mgr.SemanticTokens(context.Background(), path)
+			if err == nil && spans != nil && b.h != nil {
+				b.h.Send(ilsp.SemanticSpansMsg{Path: path, Spans: spans})
+			}
+			b.mu.Lock()
+			if b.semPending[path] {
+				b.semPending[path] = false
+				b.mu.Unlock()
+				continue
+			}
+			b.semInFlight[path] = false
+			b.mu.Unlock()
+			return
+		}
+	}()
 }
 
 // restart stops every server; they respawn lazily on the next file open/edit.

@@ -61,3 +61,17 @@ const (
 	EncodingUTF8  = "utf-8"
 	EncodingUTF32 = "utf-32"
 )
+
+// StandardTokenTypes / StandardTokenModifiers are the LSP-predefined semantic
+// token sets the client announces support for (3.17).
+var StandardTokenTypes = []string{
+	"namespace", "type", "class", "enum", "interface", "struct", "typeParameter",
+	"parameter", "variable", "property", "enumMember", "event", "function",
+	"method", "macro", "keyword", "modifier", "comment", "string", "number",
+	"regexp", "operator", "decorator",
+}
+
+var StandardTokenModifiers = []string{
+	"declaration", "definition", "readonly", "static", "deprecated", "abstract",
+	"async", "modification", "documentation", "defaultLibrary",
+}

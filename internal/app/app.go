@@ -1138,6 +1138,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.SignatureHelpMsg:
 		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.SemanticSpansMsg:
+		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DefinitionMsg:
 		// Navigate to a definition target and place the cursor there. Also the
 		// activation msg of a references-list entry (references.go).

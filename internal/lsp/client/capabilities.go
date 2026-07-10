@@ -29,6 +29,10 @@ type Capabilities struct {
 	ExecuteCommand     bool
 	SignatureHelp      bool
 	SignatureTriggers  []string
+	SemanticTokens     bool
+	SemanticDelta      bool
+	SemanticTypes      []string
+	SemanticModifiers  []string
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -66,6 +70,17 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	if sc.SignatureHelpProvider != nil {
 		caps.SignatureHelp = true
 		caps.SignatureTriggers = append(sc.SignatureHelpProvider.TriggerCharacters, sc.SignatureHelpProvider.RetriggerCharacters...)
+	}
+	if st := sc.SemanticTokensProvider; st != nil && truthyProvider(st.Full) {
+		caps.SemanticTokens = true
+		caps.SemanticTypes = st.Legend.TokenTypes
+		caps.SemanticModifiers = st.Legend.TokenModifiers
+		var full struct {
+			Delta bool `json:"delta"`
+		}
+		if json.Unmarshal(st.Full, &full) == nil {
+			caps.SemanticDelta = full.Delta
+		}
 	}
 	return caps
 }

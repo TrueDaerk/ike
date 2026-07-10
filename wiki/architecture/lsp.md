@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T15:30:00Z
+timestamp: 2026-07-10T17:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -138,6 +138,21 @@ cursor-anchored popup (`signatureState`) with the active parameter emphasised
 to rune ranges in `lsp.SignatureContent`), the first doc line dimmed, and an
 overload counter. Esc dismisses; completion, when open, takes precedence in
 the popup compositor. Gated on `signatureHelpProvider`.
+
+**Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
+relative 5-tuples against the server's legend into the same `highlight.Span`
+shape Tree-sitter produces, mapping LSP token types (refined by modifiers:
+readonly → constant, defaultLibrary → variable.builtin) onto the capture
+names the theme system already resolves — no colours defined in LSP code.
+The manager keeps per-document result state and uses
+`semanticTokens/full/delta` when the server offers it (a delta answer may
+also be a fresh full result); the bridge refreshes after open and every
+change, coalescing via an in-flight/pending pair. The editor layers the
+overlay over the Tree-sitter base in `styleAt` — base < semantic <
+diagnostic underline, which `renderLine` applies on top either way — and
+keeps the last result until the next one lands. Optional by construction:
+no `semanticTokensProvider` (gopls needs `semanticTokens = true` under
+`[lsp.servers.go.settings]`) simply means Tree-sitter-only rendering.
 
 ## Design rules
 

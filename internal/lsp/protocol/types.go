@@ -76,16 +76,34 @@ type GeneralClientCapabilities struct {
 
 // TextDocumentClientCaps gates per-feature client support.
 type TextDocumentClientCaps struct {
-	Synchronization *SyncClientCaps       `json:"synchronization,omitempty"`
-	Completion      *CompletionClientCaps `json:"completion,omitempty"`
-	Hover           *HoverClientCaps      `json:"hover,omitempty"`
-	Definition      *LinkSupportCaps      `json:"definition,omitempty"`
-	References      *ReferencesClientCaps `json:"references,omitempty"`
-	Formatting      *ReferencesClientCaps `json:"formatting,omitempty"`
-	RangeFormatting *ReferencesClientCaps `json:"rangeFormatting,omitempty"`
-	Rename          *RenameClientCaps     `json:"rename,omitempty"`
-	CodeAction      *ReferencesClientCaps `json:"codeAction,omitempty"`
-	SignatureHelp   *ReferencesClientCaps `json:"signatureHelp,omitempty"`
+	Synchronization *SyncClientCaps           `json:"synchronization,omitempty"`
+	Completion      *CompletionClientCaps     `json:"completion,omitempty"`
+	Hover           *HoverClientCaps          `json:"hover,omitempty"`
+	Definition      *LinkSupportCaps          `json:"definition,omitempty"`
+	References      *ReferencesClientCaps     `json:"references,omitempty"`
+	Formatting      *ReferencesClientCaps     `json:"formatting,omitempty"`
+	RangeFormatting *ReferencesClientCaps     `json:"rangeFormatting,omitempty"`
+	Rename          *RenameClientCaps         `json:"rename,omitempty"`
+	CodeAction      *ReferencesClientCaps     `json:"codeAction,omitempty"`
+	SignatureHelp   *ReferencesClientCaps     `json:"signatureHelp,omitempty"`
+	SemanticTokens  *SemanticTokensClientCaps `json:"semanticTokens,omitempty"`
+}
+
+// SemanticTokensClientCaps announces semantic-token support: which request
+// forms the client issues and which token types/modifiers it understands.
+type SemanticTokensClientCaps struct {
+	Requests       SemanticTokensRequests `json:"requests"`
+	TokenTypes     []string               `json:"tokenTypes"`
+	TokenModifiers []string               `json:"tokenModifiers"`
+	Formats        []string               `json:"formats"`
+}
+
+type SemanticTokensRequests struct {
+	Full *SemanticTokensFullRequest `json:"full,omitempty"`
+}
+
+type SemanticTokensFullRequest struct {
+	Delta bool `json:"delta,omitempty"`
 }
 
 // RenameClientCaps announces rename support; prepareSupport asks servers to
@@ -136,12 +154,13 @@ type ServerCapabilities struct {
 	DefinitionProvider json.RawMessage    `json:"definitionProvider,omitempty"`
 	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
 
-	DocumentFormattingProvider      json.RawMessage       `json:"documentFormattingProvider,omitempty"`
-	DocumentRangeFormattingProvider json.RawMessage       `json:"documentRangeFormattingProvider,omitempty"`
-	RenameProvider                  json.RawMessage       `json:"renameProvider,omitempty"`
-	CodeActionProvider              json.RawMessage       `json:"codeActionProvider,omitempty"`
-	SignatureHelpProvider           *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
-	ExecuteCommandProvider          json.RawMessage       `json:"executeCommandProvider,omitempty"`
+	DocumentFormattingProvider      json.RawMessage        `json:"documentFormattingProvider,omitempty"`
+	DocumentRangeFormattingProvider json.RawMessage        `json:"documentRangeFormattingProvider,omitempty"`
+	RenameProvider                  json.RawMessage        `json:"renameProvider,omitempty"`
+	CodeActionProvider              json.RawMessage        `json:"codeActionProvider,omitempty"`
+	SignatureHelpProvider           *SignatureHelpOptions  `json:"signatureHelpProvider,omitempty"`
+	SemanticTokensProvider          *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
+	ExecuteCommandProvider          json.RawMessage        `json:"executeCommandProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -270,6 +289,48 @@ func (w WorkspaceEdit) AllChanges() map[string][]TextEdit {
 		out[dc.TextDocument.URI] = append(out[dc.TextDocument.URI], dc.Edits...)
 	}
 	return out
+}
+
+// --- semantic tokens ---
+
+// SemanticTokensOptions is the server capability: the legend the packed data
+// decodes against, and whether full (and delta) requests are served. Full may
+// be a bool or {delta: true} — decoded leniently.
+type SemanticTokensOptions struct {
+	Legend SemanticTokensLegend `json:"legend"`
+	Full   json.RawMessage      `json:"full,omitempty"`
+}
+
+type SemanticTokensLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+type SemanticTokensDeltaParams struct {
+	TextDocument     TextDocumentIdentifier `json:"textDocument"`
+	PreviousResultID string                 `json:"previousResultId"`
+}
+
+// SemanticTokens is the full result: packed 5-tuples relative-encoded.
+type SemanticTokens struct {
+	ResultID string   `json:"resultId,omitempty"`
+	Data     []uint32 `json:"data"`
+}
+
+// SemanticTokensDelta carries edits against a previous result.
+type SemanticTokensDelta struct {
+	ResultID string               `json:"resultId,omitempty"`
+	Edits    []SemanticTokensEdit `json:"edits"`
+}
+
+type SemanticTokensEdit struct {
+	Start       int      `json:"start"`
+	DeleteCount int      `json:"deleteCount"`
+	Data        []uint32 `json:"data,omitempty"`
 }
 
 // --- signature help ---

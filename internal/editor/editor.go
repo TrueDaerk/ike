@@ -114,6 +114,10 @@ type Model struct {
 	docVersion int
 	hlVersion  int
 	hlIndex    highlight.Index
+	// semIndex is the LSP semantic-token overlay (#9), layered over hlIndex
+	// in styleAt; kept until the next result replaces it (stale positions may
+	// briefly lag an edit, like every semantic-token client).
+	semIndex highlight.Index
 	hlTheme    highlight.Theme
 	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
 
@@ -231,6 +235,7 @@ func (m *Model) Load(path string) error {
 	m.hist = history.New()
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
 	m.scroll()
 	return nil
 }
@@ -251,6 +256,7 @@ func (m *Model) RestoreText(text string) {
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
 	m.scroll()
 }
 
@@ -269,6 +275,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	}
 	m.path = path
 	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -357,6 +364,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.SignatureHelpMsg:
 		if msg.Path == m.path {
 			m.applySignature(msg)
+		}
+		return m, nil
+	case ilsp.SemanticSpansMsg:
+		if msg.Path == m.path {
+			m.semIndex = highlight.NewIndex(msg.Spans)
 		}
 		return m, nil
 	case ilsp.FormatEditsMsg:
