@@ -50,6 +50,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().definition(h) },
 			},
 			{
+				ID:    "lsp.references",
+				Title: "LSP: Find Usages",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().references(h) },
+			},
+			{
 				ID:    "lsp.restart",
 				Title: "LSP: Restart Servers",
 				Scope: plugin.GlobalScope(),

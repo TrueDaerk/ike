@@ -80,6 +80,7 @@ type TextDocumentClientCaps struct {
 	Completion      *CompletionClientCaps `json:"completion,omitempty"`
 	Hover           *HoverClientCaps      `json:"hover,omitempty"`
 	Definition      *LinkSupportCaps      `json:"definition,omitempty"`
+	References      *ReferencesClientCaps `json:"references,omitempty"`
 }
 
 type SyncClientCaps struct {
@@ -97,6 +98,10 @@ type HoverClientCaps struct {
 type LinkSupportCaps struct {
 	LinkSupport bool `json:"linkSupport,omitempty"`
 }
+
+// ReferencesClientCaps announces find-references support; the empty object is
+// the whole announcement (no options are gated client-side).
+type ReferencesClientCaps struct{}
 
 // InitializeResult carries the server's negotiated capabilities.
 type InitializeResult struct {
@@ -117,6 +122,7 @@ type ServerCapabilities struct {
 	CompletionProvider *CompletionOptions `json:"completionProvider,omitempty"`
 	HoverProvider      json.RawMessage    `json:"hoverProvider,omitempty"`
 	DefinitionProvider json.RawMessage    `json:"definitionProvider,omitempty"`
+	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -225,4 +231,17 @@ type MarkupContent struct {
 type DefinitionParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 	Position     Position               `json:"position"`
+}
+
+// --- references ---
+
+type ReferenceParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	Context      ReferenceContext       `json:"context"`
+}
+
+// ReferenceContext carries the one request option references defines.
+type ReferenceContext struct {
+	IncludeDeclaration bool `json:"includeDeclaration"`
 }

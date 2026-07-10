@@ -60,6 +60,22 @@ type DefinitionMsg struct {
 	Col  int
 }
 
+// Reference is one find-references result in editor coordinates, with the
+// target line's trimmed text as a preview for the results list.
+type Reference struct {
+	Path    string
+	Line    int
+	Col     int
+	Preview string
+}
+
+// ReferencesMsg delivers the find-references results (lsp.references). The
+// app renders them as a navigable list; an empty slice means the server found
+// nothing (surfaced as a notification, not a list).
+type ReferencesMsg struct {
+	Refs []Reference
+}
+
 // ServerStatusKind classifies a server status update (Roadmap 0130):
 // persistent server state belongs on the status line, transient events surface
 // as toast notifications of the matching severity.

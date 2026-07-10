@@ -12,7 +12,6 @@ var blockedDefaults = map[string]string{
 	"vcs.updateProject":        "VCS integration (idea #28)",
 	"vcs.revertFile":           "VCS integration (idea #28)",
 	"editor.replace":           "in-file replace UI (idea #49)",
-	"editor.findUsages":        "LSP find references (#5)",
 	"palette.searchEverywhere": "search-everywhere palette mode (idea #50)",
 	"palette.recentFiles":      "recent-files palette mode (idea #50)",
 	"project.goToClass":        "document symbols / structure view (idea #31)",

@@ -64,8 +64,24 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
 				HoverProvider:      json.RawMessage(`true`),
 				DefinitionProvider: json.RawMessage(`true`),
+				ReferencesProvider: json.RawMessage(`true`),
 			}}
 			respond(out, msg.ID, result)
+		case msg.Method == "textDocument/references":
+			// Echo the request option so the test can assert it round-trips.
+			var p protocol.ReferenceParams
+			_ = json.Unmarshal(msg.Params, &p)
+			locs := []protocol.Location{{
+				URI:   "file:///tmp/other.go",
+				Range: protocol.Range{Start: protocol.Position{Line: 2, Character: 1}},
+			}}
+			if p.Context.IncludeDeclaration {
+				locs = append(locs, protocol.Location{
+					URI:   p.TextDocument.URI,
+					Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 0}},
+				})
+			}
+			respond(out, msg.ID, locs)
 		case msg.Method == "textDocument/completion":
 			respond(out, msg.ID, protocol.CompletionList{Items: []protocol.CompletionItem{{Label: "Println"}}})
 		case msg.Method == "textDocument/didOpen":
@@ -186,6 +202,36 @@ func TestManagerCompletion(t *testing.T) {
 	}
 	if len(items) != 1 || items[0].Label != "Println" {
 		t.Fatalf("items = %+v", items)
+	}
+}
+
+func TestManagerReferences(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	locs, err := m.References(context.Background(), path, buffer.Position{Line: 0, Col: 0}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 2 {
+		t.Fatalf("includeDeclaration should round-trip to the server, locs = %+v", locs)
+	}
+	if locs[0].URI != "file:///tmp/other.go" || locs[0].Range.Start.Line != 2 {
+		t.Errorf("first loc wrong: %+v", locs[0])
+	}
+	// Excluding the declaration drops the echoed extra location.
+	locs, err = m.References(context.Background(), path, buffer.Position{Line: 0, Col: 0}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 1 {
+		t.Fatalf("without declaration expected 1 loc, got %+v", locs)
 	}
 }
 

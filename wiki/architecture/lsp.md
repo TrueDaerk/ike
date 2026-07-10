@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-10T08:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -46,7 +46,8 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.definition` / `lsp.restart` as registry commands.
+exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.restart` as
+registry commands.
 
 ## Data flow
 
@@ -61,11 +62,21 @@ the manager (`didChange`, full-document sync for the MVP); a file-open hook driv
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,
-`HoverMsg`, `DefinitionMsg`, `ServerStatusMsg` — injected with `host.Send`. The
-app routes each (by file path) to the editor leaf that owns it; the editor caches
-diagnostics, opens the completion / hover popup, and the app composites those
-popups at the cursor cell with `overlay.Place`. Go-to-definition is handled by the
-app (navigate + place cursor).
+`HoverMsg`, `DefinitionMsg`, `ReferencesMsg`, `ServerStatusMsg` — injected with
+`host.Send`. The app routes each (by file path) to the editor leaf that owns it;
+the editor caches diagnostics, opens the completion / hover popup, and the app
+composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
+is handled by the app (navigate + place cursor).
+
+**Find references (#5).** `lsp.references` (default `alt+f7`, reconciled in the
+chord table like `lsp.definition`) sends `textDocument/references` (declaration
+included, matching JetBrains' find-usages) from the cursor. The bridge converts
+every location to editor coordinates — reading each distinct target file once,
+which also supplies a trimmed preview line — and sends `ReferencesMsg`. The app
+routes by count: none → info toast, one → navigate directly, more → the palette
+opened locked to a references mode (`internal/app/references.go`) listing
+`path:line` + preview, fuzzy-filterable; activating an entry emits the same
+`DefinitionMsg` the go-to-definition path navigates with.
 
 ## Design rules
 
@@ -87,7 +98,7 @@ app (navigate + place cursor).
   binary) renders as a status-line segment; transient events (crashed → warn,
   restarted → info, launch error / disabled-after-crashes → error) surface as
   toast notifications. See [Notifications](./notifications.md).
-- **Actions are registry commands.** Hover/definition/restart are plain
+- **Actions are registry commands.** Hover/definition/references/restart are plain
   `plugin.Command`s reached by the palette (07) and keybindings (08) by id — no
   parallel dispatch path.
 - **Baselines live with the language, config overlays.** Server command/args/root
