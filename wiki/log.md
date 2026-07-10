@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Leader key & terminal-safe defaults (#14, Roadmap 0081): space-leader
+  (outside the editor, [keymap] leader tunable) plus universal ctrl+k
+  mnemonics through the existing chord resolver — go-to-file, grep,
+  project switch, terminal, LSP actions, tabs and more get delivered
+  two-keystroke paths. Fragile flags now derive from the reachability
+  table instead of hand-maintained booleans; a completeness test enforces
+  an escape route (leader / delivered chord / documented exception) for
+  every fragile default.
 - Terminal reality probe & reachability table (#10, Roadmap 0081):
   cmd/keyprobe (interactive chord probe with machine-parseable PROBE lines
   and shift-collapse evidence) plus internal/keymap/reachability.go — every

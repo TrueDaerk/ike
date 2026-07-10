@@ -99,9 +99,11 @@ type Explorer struct {
 }
 
 // Keymap selects a binding preset and carries per-action overrides. Bindings is
-// a slot filled by Roadmap 0080.
+// a slot filled by Roadmap 0080; Leader is the leader-prefix key (0081/30,
+// default "space").
 type Keymap struct {
 	Preset   string            `toml:"preset"`
+	Leader   string            `toml:"leader"`
 	Bindings map[string]string `toml:"bindings"`
 }
 
