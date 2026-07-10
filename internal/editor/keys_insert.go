@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/editor/motion"
 )
 
 // updateInsert handles a key in insert or replace mode, applying every edit
@@ -26,6 +27,16 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 			indent = m.indentOf(m.cursor.Line)
 		}
 		m.insertText("\n" + indent)
+	// Word/line kills (#246) come before the plain-backspace case, which
+	// matches KeyBackspace regardless of modifiers. alt+backspace mirrors the
+	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin;
+	// cmd+backspace / ctrl+u kill to the line start the same way.
+	case key.Code == tea.KeyBackspace && key.Mod&^tea.ModShift == tea.ModAlt,
+		key.Code == 'w' && key.Mod == tea.ModCtrl:
+		m.insertDeleteBack(motion.WordBackward(m.buf, m.cursor, 1).Pos)
+	case key.Code == tea.KeyBackspace && (key.Mod&^tea.ModShift == tea.ModSuper || key.Mod&^tea.ModShift == tea.ModMeta),
+		key.Code == 'u' && key.Mod == tea.ModCtrl:
+		m.insertDeleteBack(buffer.Position{Line: m.cursor.Line, Col: 0})
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
 	case key.Code == tea.KeyTab:
@@ -158,6 +169,34 @@ func (m *Model) insertBackspace() {
 	// Backspace approximately rewinds the recorded text for "." replay.
 	if r := []rune(m.insert.typed); len(r) > 0 {
 		m.insert.typed = string(r[:len(r)-1])
+	}
+	m.dirtyFromInsert()
+}
+
+// insertDeleteBack deletes from start (a position at or before the cursor)
+// up to the cursor through the session recorder — the shared engine behind
+// the word kill (alt+backspace / ctrl+w) and the line-start kill
+// (cmd+backspace / ctrl+u) in insert mode (#246). A start at or after the
+// cursor is a no-op.
+func (m *Model) insertDeleteBack(start buffer.Position) {
+	start = m.buf.Clamp(start)
+	if start.Line > m.cursor.Line || (start.Line == m.cursor.Line && start.Col >= m.cursor.Col) {
+		return
+	}
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	crossLine := start.Line != m.cursor.Line
+	deleted := m.cursor.Col - start.Col // rune count when staying on one line
+	m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: m.cursor}))
+	m.cursor = start
+	m.desiredCol = start.Col
+	// Approximately rewind the recorded text for "." replay, like
+	// insertBackspace; a cross-line kill just clears it.
+	if r := []rune(m.insert.typed); crossLine || deleted >= len(r) {
+		m.insert.typed = ""
+	} else {
+		m.insert.typed = string(r[:len(r)-deleted])
 	}
 	m.dirtyFromInsert()
 }
