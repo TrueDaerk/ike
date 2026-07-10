@@ -190,6 +190,56 @@ func (c *Client) Rename(ctx context.Context, p protocol.RenameParams) (protocol.
 	return we, nil
 }
 
+// CodeActions requests the actions available for a range. The result mixes
+// CodeAction and bare Command entries; both decode into CodeAction (a bare
+// command becomes a command-only action).
+func (c *Client) CodeActions(ctx context.Context, p protocol.CodeActionParams) ([]protocol.CodeAction, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/codeAction", p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeCodeActions(raw), nil
+}
+
+// ExecuteCommand runs a server-defined command; effects come back as
+// workspace/applyEdit requests, so the result payload is ignored.
+func (c *Client) ExecuteCommand(ctx context.Context, p protocol.ExecuteCommandParams) error {
+	_, err := c.conn.Call(ctx, "workspace/executeCommand", p)
+	return err
+}
+
+// decodeCodeActions accepts (Command | CodeAction)[] or null. The two shapes
+// share "title"; a bare Command carries "command" as a string, a CodeAction
+// as an object — probed per element.
+func decodeCodeActions(raw json.RawMessage) []protocol.CodeAction {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil
+	}
+	out := make([]protocol.CodeAction, 0, len(items))
+	for _, item := range items {
+		var probe struct {
+			Command json.RawMessage `json:"command"`
+		}
+		_ = json.Unmarshal(item, &probe)
+		if len(probe.Command) > 0 && probe.Command[0] == '"' {
+			var cmd protocol.Command
+			if json.Unmarshal(item, &cmd) == nil && cmd.Title != "" {
+				out = append(out, protocol.CodeAction{Title: cmd.Title, Command: &cmd})
+			}
+			continue
+		}
+		var act protocol.CodeAction
+		if json.Unmarshal(item, &act) == nil && act.Title != "" {
+			out = append(out, act)
+		}
+	}
+	return out
+}
+
 // decodeTextEdits accepts a TextEdit array or null.
 func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
 	if len(raw) == 0 || string(raw) == "null" {

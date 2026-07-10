@@ -36,6 +36,9 @@ type bridge struct {
 	selKind    int
 	anchorLine int
 	anchorCol  int
+	// diags caches the latest published protocol diagnostics per path, so a
+	// code-action request can pass the overlapping ones as context.
+	diags map[string][]protocol.Diagnostic
 }
 
 var (
@@ -63,6 +66,7 @@ func (b *bridge) ensure(h host.API) {
 	b.mgr = manager.New(resolveSpec, nil, manager.Callbacks{
 		Diagnostics: b.onDiagnostics,
 		Status:      b.onStatus,
+		ApplyEdit:   b.onApplyEdit,
 	})
 	h.SetEditorEmitter(b)
 }
@@ -341,6 +345,75 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newNa
 	return nil
 }
 
+// codeAction lists the actions available at the cursor (or the active visual
+// selection) and asks the app to show the picker; the chosen action applies
+// its WorkspaceEdit (workspace_edit.go) and/or executes its command, whose
+// effects come back as workspace/applyEdit.
+func (b *bridge) codeAction(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	start := buffer.Position{Line: line, Col: col}
+	end := start
+	if s, e, ok := b.sel(); ok {
+		start, end = s, e
+	}
+	diags := b.diagsOverlapping(path, start.Line, end.Line)
+	go func() {
+		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
+		if err != nil {
+			return
+		}
+		if len(actions) == 0 {
+			h.Send(ilsp.ServerStatusMsg{Text: "no code actions here", Kind: ilsp.ServerEventInfo})
+			return
+		}
+		choices := make([]ilsp.CodeActionChoice, len(actions))
+		for i, a := range actions {
+			choices[i] = ilsp.CodeActionChoice{Title: a.Title, Kind: a.Kind, Preferred: a.IsPreferred}
+		}
+		h.Send(ilsp.CodeActionsMsg{
+			Path:    path,
+			Actions: choices,
+			Apply: func(i int) tea.Cmd {
+				if i < 0 || i >= len(actions) {
+					return nil
+				}
+				return b.applyAction(h, path, actions[i])
+			},
+		})
+	}()
+	return nil
+}
+
+// applyAction performs one chosen action: the inline Edit first (per spec),
+// then the command, whose edits arrive via workspace/applyEdit.
+func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction) tea.Cmd {
+	mgr := b.manager()
+	if mgr == nil {
+		return nil
+	}
+	go func() {
+		if action.Edit != nil {
+			files := mgr.ConvertWorkspaceEdit(path, *action.Edit)
+			if n, err := dispatchWorkspaceEdits(h, files); err != nil {
+				h.Send(ilsp.ServerStatusMsg{Text: "edit applied partially: " + err.Error(), Kind: ilsp.ServerEventWarn})
+			} else if n > 0 {
+				h.Send(ilsp.ServerStatusMsg{Text: applySummary(n), Kind: ilsp.ServerEventInfo})
+			}
+		}
+		if action.Command != nil {
+			if err := mgr.ExecuteCommand(context.Background(), path, *action.Command); err != nil {
+				h.Send(ilsp.ServerStatusMsg{Text: "code action failed: " + err.Error(), Kind: ilsp.ServerEventError})
+			}
+		}
+	}()
+	return nil
+}
+
 // restart stops every server; they respawn lazily on the next file open/edit.
 // The work happens inside the returned tea.Cmd: a command's Run resolves on
 // the Update goroutine, where a blocking Shutdown would stall the UI and a
@@ -410,10 +483,44 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 // --- manager callbacks ---
 
 func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams, lines []string, enc string) {
+	b.mu.Lock()
+	if b.diags == nil {
+		b.diags = map[string][]protocol.Diagnostic{}
+	}
+	b.diags[path] = p.Diagnostics
+	b.mu.Unlock()
 	if b.h == nil {
 		return
 	}
 	b.h.Send(ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)})
+}
+
+// onApplyEdit lands a server-initiated workspace/applyEdit (the effect of an
+// executed code-action command): open buffers in-editor, the rest on disk.
+func (b *bridge) onApplyEdit(files []manager.FileEdits) {
+	if b.h == nil {
+		return
+	}
+	if n, err := dispatchWorkspaceEdits(b.h, files); err != nil {
+		b.h.Send(ilsp.ServerStatusMsg{Text: "edit applied partially: " + err.Error(), Kind: ilsp.ServerEventWarn})
+	} else if n > 0 {
+		b.h.Send(ilsp.ServerStatusMsg{Text: applySummary(n), Kind: ilsp.ServerEventInfo})
+	}
+}
+
+// diagsOverlapping returns the cached diagnostics for path whose range
+// overlaps the [startLine, endLine] span (line granularity is enough context
+// for servers to match their own diagnostics).
+func (b *bridge) diagsOverlapping(path string, startLine, endLine int) []protocol.Diagnostic {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	var out []protocol.Diagnostic
+	for _, d := range b.diags[path] {
+		if d.Range.End.Line >= startLine && d.Range.Start.Line <= endLine {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 func (b *bridge) onStatus(lang, text string, kind ilsp.ServerStatusKind) {

@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- LSP code actions (#8, Roadmap 0100): `lsp.codeAction` (alt+enter) lists
+  quick-fixes/refactors for the cursor or visual selection in a locked
+  palette picker (preferred first), passing cached diagnostics as context.
+  Chosen actions apply their WorkspaceEdit via workspace_edit.go and/or run
+  workspace/executeCommand; the manager now answers server-initiated
+  workspace/applyEdit (off the read loop — inline responding can deadlock
+  against a flushing server) through the new Callbacks.ApplyEdit seam.
+  Verified against gopls: Organize Imports removes an unused import through
+  the full executeCommand → applyEdit round trip.
 - LSP rename symbol (#6, Roadmap 0100): `lsp.rename` — prepareRename
   validation (reject toast), name prompt prefilled with the symbol
   (bridge-built Apply continuation keeps the manager out of the app), and

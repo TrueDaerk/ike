@@ -109,10 +109,18 @@ func clampPos(lines []string, line, col int) (int, int) {
 	return line, col
 }
 
-// editSummary phrases the result toast: "renamed in 3 files".
+// editSummary phrases the rename result toast: "renamed in 3 files".
 func editSummary(n int) string {
 	if n == 1 {
 		return "renamed in 1 file"
 	}
 	return "renamed in " + strconv.Itoa(n) + " files"
+}
+
+// applySummary phrases a generic workspace-edit toast: "edited 3 files".
+func applySummary(n int) string {
+	if n == 1 {
+		return "edited 1 file"
+	}
+	return "edited " + strconv.Itoa(n) + " files"
 }

@@ -69,6 +69,8 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				DocumentFormattingProvider:      json.RawMessage(`true`),
 				DocumentRangeFormattingProvider: json.RawMessage(`true`),
 				RenameProvider:                  json.RawMessage(`{"prepareProvider":true}`),
+				CodeActionProvider:              json.RawMessage(`true`),
+				ExecuteCommandProvider:          json.RawMessage(`{"commands":["test.fix"]}`),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/references":
@@ -86,6 +88,20 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/codeAction":
+			// Echo how many context diagnostics arrived in the title.
+			var p protocol.CodeActionParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.CodeAction{{
+				Title: fmt.Sprintf("fix (%d diags)", len(p.Context.Diagnostics)),
+				Kind:  "quickfix",
+			}})
+		case msg.Method == "workspace/executeCommand":
+			// Effect arrives as a server->client applyEdit request first.
+			var p protocol.ExecuteCommandParams
+			_ = json.Unmarshal(msg.Params, &p)
+			_ = writeFrame(out, []byte(`{"jsonrpc":"2.0","id":9999,"method":"workspace/applyEdit","params":{"edit":{"changes":{"file:///tmp/applyedit.go":[{"range":{"start":{"line":0,"character":0},"end":{"line":0,"character":0}},"newText":"x"}]}}}}`))
+			respond(out, msg.ID, nil)
 		case msg.Method == "textDocument/prepareRename":
 			// Reject position line 9; otherwise offer the first 3 characters.
 			var p protocol.PrepareRenameParams
@@ -382,6 +398,57 @@ func TestManagerRenameSplitsOpenAndDisk(t *testing.T) {
 	}
 	if e := files[1].Edits[0]; e.StartCol != 0 || e.EndCol != 3 || e.Text != "new" {
 		t.Errorf("disk edit converted wrong: %+v", e)
+	}
+}
+
+func TestManagerCodeActionsPassDiagnostics(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	pos := buffer.Position{Line: 0, Col: 0}
+	acts, err := m.CodeActions(context.Background(), path, pos, pos, []protocol.Diagnostic{{Message: "a"}, {Message: "b"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(acts) != 1 || acts[0].Title != "fix (2 diags)" {
+		t.Fatalf("diagnostics context should reach the server, acts = %+v", acts)
+	}
+}
+
+func TestManagerExecuteCommandAppliesEditViaCallback(t *testing.T) {
+	applied := make(chan []FileEdits, 1)
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{
+		ApplyEdit: func(files []FileEdits) { applied <- files },
+	})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("/tmp/applyedit.go", []byte("target\n"), 0o644); err != nil {
+		t.Skip("cannot stage /tmp target:", err)
+	}
+	defer os.Remove("/tmp/applyedit.go")
+
+	if err := m.ExecuteCommand(context.Background(), path, protocol.Command{Command: "test.fix"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case files := <-applied:
+		if len(files) != 1 || files[0].Path != "/tmp/applyedit.go" || files[0].Open {
+			t.Fatalf("files = %+v", files)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("workspace/applyEdit never reached the callback")
 	}
 }
 

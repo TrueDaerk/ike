@@ -25,6 +25,8 @@ type Capabilities struct {
 	RangeFormatting    bool
 	Rename             bool
 	PrepareRename      bool
+	CodeAction         bool
+	ExecuteCommand     bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -57,6 +59,8 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 			caps.PrepareRename = opts.PrepareProvider
 		}
 	}
+	caps.CodeAction = truthyProvider(sc.CodeActionProvider)
+	caps.ExecuteCommand = truthyProvider(sc.ExecuteCommandProvider)
 	return caps
 }
 

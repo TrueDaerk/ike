@@ -33,7 +33,9 @@ func selectChord(t *testing.T, k *KeymapPage, chord string) keymap.Binding {
 
 func TestKeymapPageListsEffectiveBindings(t *testing.T) {
 	k, _ := keymapPage(t)
-	v := k.View(120, 60)
+	// Tall enough for the whole default table; the assertion is about the
+	// listing, not pagination.
+	v := k.View(120, 80)
 	for _, want := range []string{"ctrl+s", "@default", "chord · command · context · layer"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)

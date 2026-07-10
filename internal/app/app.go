@@ -173,6 +173,9 @@ type Model struct {
 	// (lsp.references, #5); the ReferencesMsg handler fills it and opens the
 	// palette locked to it.
 	refs *refsMode
+	// actions is the palette mode listing the latest code-action offer
+	// (lsp.codeAction, #8), same pattern as refs.
+	actions *actionsMode
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -237,6 +240,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	edKey := panes.AddEditor()
 	panes.SetFocused(pane.ExplorerKey)
 	refs := &refsMode{}
+	actions := &actionsMode{}
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
@@ -245,8 +249,9 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		themePal:     themePal,
 		help:         help.New(reg, reg, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs),
+		palette:      buildPalette(reg, cfg, refs, actions),
 		refs:         refs,
+		actions:      actions,
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
@@ -674,7 +679,7 @@ func buildKeymap(cfg host.Config) *keymap.Resolver {
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -683,7 +688,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode) *pale
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
-	return palette.New(pcfg, cmd, file, dir, proj, refs)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1135,6 +1140,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Navigate to a definition target and place the cursor there. Also the
 		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case ilsp.CodeActionsMsg:
+		// lsp.codeAction: the offer opens as a locked palette list; picking an
+		// entry dispatches actionPickedMsg below.
+		m.actions.Set(msg)
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, actionsPrefix)
+		return m, nil
+
+	case actionPickedMsg:
+		return m, m.actions.Run(msg)
 
 	case ilsp.RenamePromptMsg:
 		// lsp.rename: the server validated the position; prompt for the name.
