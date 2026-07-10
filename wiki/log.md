@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Wheel-event coalescing (#238): queued mouse-wheel events accumulate in the
+  root model and apply in a single update pass via a scheduled `wheelFlushMsg`,
+  so fast scroll bursts cost one render instead of replaying every stale event;
+  any non-wheel message flushes the batch first to preserve input ordering.
+  Documented in [Pane Layout & Drag](/architecture/pane-layout.md).
+
 - Recent-files palette mode (#235, Roadmap 0230): `palette.recentFiles`
   (cmd+e / leader m / Navigate menu) opens the palette locked to an MRU file
   list — touched on every open and tab activation, persisted as

@@ -48,7 +48,14 @@ func release(x, y int) tea.MouseMsg {
 
 func step(m Model, msg tea.Msg) Model {
 	out, _ := m.Update(msg)
-	return out.(Model)
+	mm := out.(Model)
+	// Wheel events coalesce until a flush (#238); tests don't run commands, so
+	// apply the batch here to keep each step synchronous.
+	if len(mm.pendingWheel) > 0 {
+		out, _ = mm.Update(wheelFlushMsg{})
+		mm = out.(Model)
+	}
+	return mm
 }
 
 func TestMouseClickFocusesExplorer(t *testing.T) {
