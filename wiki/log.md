@@ -2,6 +2,11 @@
 
 ## 2026-07-10
 
+- Terminal word/line kill chords (#240): `motionKey` extends the #225 natural
+  text editing set — `option+backspace` sends `ESC DEL` (backward-kill-word),
+  `cmd+backspace` sends `ctrl+u` (kill to line start). Documented in
+  [Integrated Terminal](/architecture/terminal.md).
+
 - Wheel-event coalescing (#238): queued mouse-wheel events accumulate in the
   root model and apply in a single update pass via a scheduled `wheelFlushMsg`,
   so fast scroll bursts cost one render instead of replaying every stale event;

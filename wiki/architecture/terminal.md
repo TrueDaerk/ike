@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-10T12:00:00Z
+timestamp: 2026-07-10T18:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -90,12 +90,14 @@ without mouse reporting gets arrow keys, three per notch (the xterm
 "alternate scroll" convention — this is how `less`/`man` scroll); a plain
 shell pages the pane's scrollback.
 
-**macOS editing chords** (#225, `motionKey` in `model.go`): the pane
+**macOS editing chords** (#225, #240, `motionKey` in `model.go`): the pane
 translates the iTerm "natural text editing" motions to the readline/ZLE
 emacs-mode defaults — `option+left`/`right` → `ESC b`/`ESC f` (word jump),
-`cmd+left`/`right` → `ctrl+a`/`ctrl+e` (line start/end). Shift-augmented
-variants behave the same (a PTY has no selection). Cmd delivery is
-terminal-dependent (the 0081 reality-probe caveat).
+`cmd+left`/`right` → `ctrl+a`/`ctrl+e` (line start/end),
+`option+backspace` → `ESC DEL` (kill previous word), `cmd+backspace` →
+`ctrl+u` (kill to line start). Shift-augmented variants behave the same (a
+PTY has no selection). Cmd delivery is terminal-dependent (the 0081
+reality-probe caveat).
 
 ## Commands (#97)
 

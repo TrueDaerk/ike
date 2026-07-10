@@ -152,9 +152,10 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 
 // motionKey translates the macOS-conventional editing chords into the
 // readline/ZLE emacs-mode defaults — the iTerm "natural text editing"
-// convention (#225): option+arrows jump words (ESC b / ESC f), cmd+arrows go
-// to line start/end (ctrl+a / ctrl+e). Shift-augmented variants behave the
-// same; a PTY has no selection to extend.
+// convention (#225, #240): option+arrows jump words (ESC b / ESC f),
+// cmd+arrows go to line start/end (ctrl+a / ctrl+e), option+backspace kills
+// the previous word (ESC DEL), cmd+backspace kills to line start (ctrl+u).
+// Shift-augmented variants behave the same; a PTY has no selection to extend.
 func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
 	mod := k.Mod &^ textMods
 	isCmd := mod == tea.ModSuper || mod == tea.ModMeta
@@ -163,10 +164,14 @@ func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
 		return vt.KeyPressEvent{Code: 'b', Mod: vt.ModAlt}, true
 	case mod == tea.ModAlt && k.Code == tea.KeyRight:
 		return vt.KeyPressEvent{Code: 'f', Mod: vt.ModAlt}, true
+	case mod == tea.ModAlt && k.Code == tea.KeyBackspace:
+		return vt.KeyPressEvent{Code: vt.KeyBackspace, Mod: vt.ModAlt}, true
 	case isCmd && k.Code == tea.KeyLeft:
 		return vt.KeyPressEvent{Code: 'a', Mod: vt.ModCtrl}, true
 	case isCmd && k.Code == tea.KeyRight:
 		return vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}, true
+	case isCmd && k.Code == tea.KeyBackspace:
+		return vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}, true
 	}
 	return vt.KeyPressEvent{}, false
 }
