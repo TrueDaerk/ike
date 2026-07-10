@@ -81,12 +81,15 @@ func TestTableMergeKeyByKey(t *testing.T) {
 }
 
 func TestListReplaceNotAppend(t *testing.T) {
-	user := writeUser(t, "[project]\nhistory = [\"/a\", \"/b\"]\n")
-	proj := writeProject(t, "[project]\nhistory = [\"/c\"]\n")
+	user := writeUser(t, "[[project.history]]\npath = \"/a\"\n[[project.history]]\npath = \"/b\"\n")
+	proj := writeProject(t, "[[project.history]]\npath = \"/c\"\nname = \"c\"\nlast_opened = \"2026-06-19T10:00:00Z\"\n")
 	c, _ := Load(Options{UserPath: user, ProjectRoot: proj})
 
-	if len(c.Project.History) != 1 || c.Project.History[0] != "/c" {
+	if len(c.Project.History) != 1 || c.Project.History[0].Path != "/c" {
 		t.Errorf("history should be replaced, got %v", c.Project.History)
+	}
+	if e := c.Project.History[0]; e.Name != "c" || e.LastOpened != "2026-06-19T10:00:00Z" {
+		t.Errorf("entry fields should decode, got %+v", e)
 	}
 }
 
@@ -136,7 +139,7 @@ func TestNotificationsSection(t *testing.T) {
 }
 
 func TestHistoryTruncatedToMax(t *testing.T) {
-	proj := writeProject(t, "[project]\nmax_history = 2\nhistory = [\"/a\", \"/b\", \"/c\", \"/d\"]\n")
+	proj := writeProject(t, "[project]\nmax_history = 2\n[[project.history]]\npath = \"/a\"\n[[project.history]]\npath = \"/b\"\n[[project.history]]\npath = \"/c\"\n[[project.history]]\npath = \"/d\"\n")
 	c, diags := Load(Options{ProjectRoot: proj})
 	if len(c.Project.History) != 2 {
 		t.Errorf("history should truncate to 2, got %v", c.Project.History)
@@ -227,7 +230,7 @@ func TestDiscoverHonorsConfigDirEnv(t *testing.T) {
 }
 
 func TestFlatExposesScalarsAndSlots(t *testing.T) {
-	proj := writeProject(t, "[editor]\ntab_width = 6\n[explorer.colors]\ngo = \"blue\"\n[project]\nhistory = [\"/a\", \"/b\"]\n")
+	proj := writeProject(t, "[editor]\ntab_width = 6\n[explorer.colors]\ngo = \"blue\"\n[[project.history]]\npath = \"/a\"\n[[project.history]]\npath = \"/b\"\n")
 	c, _ := Load(Options{ProjectRoot: proj})
 	f := c.Flat()
 
@@ -257,21 +260,6 @@ func TestGetReturnsDefaultsBeforeSet(t *testing.T) {
 	Set(c)
 	if Get().Theme.Name != "marker" {
 		t.Errorf("Get after Set should return installed config")
-	}
-}
-
-func TestPushHistoryBoundedAndDeduped(t *testing.T) {
-	c := defaults()
-	c.Project.MaxHistory = 3
-	c.PushHistory("/a").PushHistory("/b").PushHistory("/a").PushHistory("/c").PushHistory("/d")
-	want := []string{"/d", "/c", "/a", "/b"}[:3]
-	if len(c.Project.History) != 3 {
-		t.Fatalf("history should bound to 3, got %v", c.Project.History)
-	}
-	for i, v := range want {
-		if c.Project.History[i] != v {
-			t.Errorf("history[%d] = %q, want %q (full %v)", i, c.Project.History[i], v, c.Project.History)
-		}
 	}
 }
 

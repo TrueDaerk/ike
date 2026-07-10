@@ -127,7 +127,11 @@ func (c *Config) Flat() map[string]string {
 
 	put("project.max_history", c.Project.MaxHistory)
 	put("project.restore_last", c.Project.RestoreLast)
-	put("project.history", strings.Join(c.Project.History, ","))
+	paths := make([]string, len(c.Project.History))
+	for i, e := range c.Project.History {
+		paths[i] = e.Path
+	}
+	put("project.history", strings.Join(paths, ","))
 
 	put("notifications.timeout_seconds", c.Notifications.TimeoutSeconds)
 	put("notifications.min_severity", c.Notifications.MinSeverity)

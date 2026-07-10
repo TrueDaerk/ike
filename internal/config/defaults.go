@@ -44,7 +44,7 @@ func defaults() *Config {
 			Dark: true,
 		},
 		Project: Project{
-			History:     []string{},
+			History:     []ProjectHistoryEntry{},
 			MaxHistory:  20,
 			RestoreLast: false,
 		},

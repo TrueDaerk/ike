@@ -23,3 +23,4 @@ Component-level concepts for the IKE codebase.
 * [Project Search](/architecture/search.md) - streaming find-in-path engine: rg --json backend + pure-Go fallback, generation-based cancellation, bounded results (Roadmap 0150)
 * [Language Registry](/architecture/languages.md) - neutral lang registry bundling extensions + grammar + LSP server + toolchain detector; per-language plugins make adding a language a new package (Roadmap 0105)
 * [Themes / Color Schemes](/architecture/themes.md) - semantic-slot palette system: one [theme].name recolors syntax + explorer + chrome, built-in themes, plugin registration (Roadmap 0110)
+* [Project Switching](/architecture/project-switching.md) - recent-projects history data layer: typed [[project.history]] entries, root validation, upsert/dedupe/cap persisted via config; picker + switch orchestration upcoming (Roadmap 0090)
