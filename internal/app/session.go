@@ -23,6 +23,9 @@ type sessionState struct {
 	// here beside layout/session, not in settings.toml; on restore it overrides
 	// the config-derived theme. Empty means "no runtime override, follow config".
 	Theme string `json:"theme,omitempty"`
+	// RecentFiles is the MRU list behind the recent-files palette mode
+	// (Roadmap 0230), most recent first. Missing → empty list.
+	RecentFiles []string `json:"recent_files,omitempty"`
 }
 
 type editorSession struct {

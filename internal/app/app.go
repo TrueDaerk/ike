@@ -81,6 +81,10 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
+	// recent is the MRU file list behind the recent-files palette mode
+	// (Roadmap 0230). Held by pointer so value-receiver open paths mutate the
+	// one shared store; persisted with the session.
+	recent *recentFiles
 	// closedTabs is the reopen ring (0190, #158): the last few closed tabs'
 	// paths and carets, newest last, popped by editor.tab.reopenClosed.
 	closedTabs []closedTab
@@ -263,9 +267,11 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	refs := &refsMode{}
 	actions := &actionsMode{}
 	bindings := &keymap.LiveBindings{}
+	recent := &recentFiles{}
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
+		recent:       recent,
 		navHist:      &nav.History{},
 		host:         h,
 		reg:          reg,
@@ -273,7 +279,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		bindings:     bindings,
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs, actions, bindings),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent),
 		refs:         refs,
 		actions:      actions,
 		paletteKey:   paletteToggleKey(cfg),
@@ -551,6 +557,7 @@ func (m *Model) restoreSession() {
 		return
 	}
 	m.restoreTheme(s.Theme)
+	m.recent.Set(s.RecentFiles)
 	m.explorer().Restore(explorer.State{
 		Expanded:   s.Explorer.Expanded,
 		ShowHidden: s.Explorer.ShowHidden,
@@ -602,7 +609,8 @@ func (m Model) editorWithFile(path string) string {
 func (m Model) snapshotSession() sessionState {
 	st := m.explorer().Snapshot()
 	s := sessionState{
-		Theme: m.themeOverride,
+		Theme:       m.themeOverride,
+		RecentFiles: m.recent.List(),
 		Explorer: explorerSession{
 			Expanded:   st.Expanded,
 			ShowHidden: st.ShowHidden,
@@ -777,7 +785,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -786,7 +794,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions)
+	mru := palette.NewRecentMode(recent.List)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1360,6 +1369,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
 		return m, nil
 
+	case ShowRecentFilesMsg:
+		// palette.recentFiles (cmd+e / leader m / menu): the MRU file list,
+		// locked to its mode. The active file is excluded so opening the
+		// palette and pressing enter jumps to the previously used file.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{
+			ContextID:  m.focusContext(),
+			Root:       ".",
+			ActivePath: m.activeFilePath(),
+		}, palette.RecentPrefix)
+		return m, nil
+
 	case project.OpenPickerMsg:
 		// project.switch (alt+shift+p / palette / menu): the recent-projects
 		// picker, locked to its mode; the selection lands as project.PickedMsg.
@@ -1782,6 +1803,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 			key = m.spawnEditor()
 		}
 		if m.openInTab(key, path) {
+			m.recent.Touch(path)  // MRU for the recent-files palette mode (0230)
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
@@ -1836,6 +1858,20 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 		inst.Editor().Autosave()
 	}
 	inst.ActivateTab(idx)
+	// Returning to a background tab counts as using its file (MRU, 0230).
+	if ed := inst.Editor(); ed.HasFile() {
+		m.recent.Touch(ed.Path())
+	}
+}
+
+// activeFilePath is the focused (else most recent) editor's file, or "".
+func (m Model) activeFilePath() string {
+	if key := m.activeEditorKey(); key != "" {
+		if ed := m.panes.Get(key).Editor(); ed.HasFile() {
+			return ed.Path()
+		}
+	}
+	return ""
 }
 
 // loadOrShare fills the active tab of editor pane key with path: when another

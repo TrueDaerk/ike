@@ -45,6 +45,7 @@ var leaderMnemonics = []leaderMnemonic{
 	{"l", "lsp.format", "Reformat file"},
 	{"c", "editor.commentLine", "Comment line"},
 	{"x", "editor.closeTab", "Close tab"},
+	{"m", "palette.recentFiles", "Recent files (MRU)"},
 	{"o", "editor.tab.reopenClosed", "Reopen closed tab"},
 	// Navigation history (Roadmap 0220): the primary cmd+bracket chords are
 	// fragile and awkward on QWERTZ; b(ack) and i (vim's ctrl+i forward

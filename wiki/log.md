@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Recent-files palette mode (#235, Roadmap 0230): `palette.recentFiles`
+  (cmd+e / leader m / Navigate menu) opens the palette locked to an MRU file
+  list — touched on every open and tab activation, persisted as
+  `recent_files` in .ike/session.json, active file excluded so enter jumps
+  to the previous file. The binding left the keymap blocked ledger.
+
 - Editor horizontal scrolling (#230): horizontal wheel and shift+wheel scroll
   the editor viewport sideways (`editor.ScrollXBy`, wired in `app.handleMouse`
   like the explorer's), clamped so the longest visible line keeps its last

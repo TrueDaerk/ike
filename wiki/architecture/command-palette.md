@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, a locked recent-files MRU mode behind cmd+e), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-09T00:00:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Command Palette
@@ -35,7 +35,8 @@ internal/palette/
   mode.go                  Mode interface (Prefix/Placeholder/Results) + Item + activation msgs
   command_mode.go          ":" mode — snapshot registry, fuzzy-filter, context-first ranking
   file_mode.go             "@" mode — fuzzy file finder over the project tree (cached walk)
-  context.go               Context captured at open (focused pane context id + project root)
+  recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
+  context.go               Context captured at open (focused pane context id + project root + active file)
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
 ```
 
@@ -62,6 +63,8 @@ Four entry points, all from a non-capturing context:
   opens the **centered** palette locked to the `@` file mode via
   `OpenLocked(cx, '@')`, so go-to-file works from any context, not just an
   editor pane.
+- **`palette.recentFiles`** (default `cmd+e`, leader `m`, Navigate menu) — opens
+  the centered palette locked to the recent-files mode (below).
 
 A palette can be **locked** to a single mode (no prefix switching): the anchored
 editor finder and the go-to-file open are locked to `@`, so a typed `:` is part
@@ -105,6 +108,24 @@ disk walk is cached per-root (filtered on every keystroke, walked once), skips
 hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.
+
+## Recent-files mode (`cmd+e`, Roadmap 0230)
+
+JetBrains' Recent Files popup, palette-style (`recent_mode.go`). The mode is
+locked-only (its prefix rune is internal, never typed): `palette.recentFiles`
+opens it centered via `OpenLocked`. The palette owns no MRU store — the list
+func is injected by the root model (`internal/app/recent.go`), which touches a
+path on every file open (`openPath`) and tab activation, deduplicates
+(touch moves to front) and caps at 50. The list persists as `recent_files` in
+`.ike/session.json` beside the rest of the session state, so history survives a
+restart; a missing section loads as empty (presence-versioned schema).
+
+With an empty query the items keep MRU order — most recent first — with the
+**currently active file excluded**, so `cmd+e` + `enter` jumps to the previous
+file (the `Context.ActivePath` field carries the exclusion). A query
+fuzzy-matches the project-relative path; equal scores keep MRU order. Files
+that vanished from disk are dropped from the listing. Activation emits the same
+`OpenFileMsg` as the `@` mode.
 
 ## Fuzzy matching
 
