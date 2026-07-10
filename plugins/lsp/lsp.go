@@ -14,6 +14,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/settings"
 )
 
 func init() {
@@ -54,6 +55,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Scope: plugin.GlobalScope(),
 				Run:   func(h host.API) tea.Cmd { return shared().restart(h) },
 			},
+		},
+		SettingsPages: []settings.Page{
+			{Title: "Language Servers", Custom: settings.NewLSPPage(
+				config.Discover("."),
+				func() []string { return shared().runningLangs() },
+				func() tea.Cmd { return shared().restartAll() },
+				func(langID string) tea.Cmd { return shared().restartLang(langID) },
+			)},
 		},
 		Hooks: []plugin.Hook{
 			{
@@ -107,6 +116,9 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 	if c == nil || !c.LSP.Enabled {
 		return ilsp.ServerSpec{}, false
 	}
+	if !serverEnabled(c, langID) {
+		return ilsp.ServerSpec{}, false
+	}
 	var spec ilsp.ServerSpec
 	if l, ok := lang.ByID(langID); ok && l.Server != nil {
 		spec = *l.Server
@@ -130,6 +142,18 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 		return ilsp.ServerSpec{}, false
 	}
 	return spec, true
+}
+
+// serverEnabled reads the per-server switch: [lsp.servers.<id>] enabled =
+// false disables one language's server while the subsystem stays on (#130).
+// Absent or non-bool values mean enabled.
+func serverEnabled(c *config.Config, langID string) bool {
+	if raw, ok := c.LSP.Servers[langID]; ok {
+		if b, isBool := raw["enabled"].(bool); isBool {
+			return b
+		}
+	}
+	return true
 }
 
 // mergeSpec overlays a config spec onto a baseline: each field the config sets

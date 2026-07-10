@@ -113,3 +113,21 @@ picker — Python: active venv, project `.venv`/`venv`, `uv python list`, pyenv
 shims, PATH; PHP: PATH + common install locations — plus a validated custom
 path input. A choice writes the **project** config and triggers `lsp.restart`
 so servers respawn against the new interpreter; `r` resets to detection.
+
+## Language Servers page (0180, #130)
+
+A custom `PageModel` contributed by the **LSP plugin** via
+`plugin.Capabilities.SettingsPages` (`internal/settings/lsp_page.go`): one row
+per registered language carrying a server — live status (`ready` / `idle` /
+`crashed` / `missing` / `disabled` / `off (master)`, from language-tagged
+`ServerStatusMsg`s the root model forwards via `Model.Deliver` plus the
+manager's `RunningLangs`), the effective command line (config overlay over the
+plugin baseline, mirroring the launch path) and the layer supplying it
+(`@project`/`@user`/`@built-in`). Controls: `E` flips the `lsp.enabled` master
+switch, `e` the per-server `lsp.servers.<id>.enabled`, `c`/`a`/`s` edit
+command / args / settings (JSON object) overrides inline — written to the
+**project** config via write-back, empty input resets the key — `x` clears all
+of a server's overrides, `r` restarts one server (`Manager.StopLang`, async
+per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
+binary renders the launch-failure reason with a hint toward the install
+helper (#131).

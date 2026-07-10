@@ -172,6 +172,38 @@ func (b *bridge) restart(h host.API) tea.Cmd {
 	}
 }
 
+// restartLang stops one language's servers; they respawn lazily like the
+// global restart. Work happens inside the returned tea.Cmd (see restart) —
+// and the bridge may not be activated yet (no file opened), in which case
+// there is nothing to stop and the status message still reports the action.
+func (b *bridge) restartLang(langID string) tea.Cmd {
+	return func() tea.Msg {
+		if mgr := b.manager(); mgr != nil {
+			mgr.StopLang(langID)
+		}
+		return ilsp.ServerStatusMsg{Lang: langID, Text: langID + " language server restarted", Kind: ilsp.ServerEventInfo}
+	}
+}
+
+// restartAll mirrors the lsp.restart command for the settings page: it works
+// without a captured host (the page can restart before any file was opened).
+func (b *bridge) restartAll() tea.Cmd {
+	return func() tea.Msg {
+		if mgr := b.manager(); mgr != nil {
+			mgr.Shutdown()
+		}
+		return ilsp.ServerStatusMsg{Text: "LSP servers restarted", Kind: ilsp.ServerEventInfo}
+	}
+}
+
+// runningLangs lists the languages with a live server, for the settings page.
+func (b *bridge) runningLangs() []string {
+	if mgr := b.manager(); mgr != nil {
+		return mgr.RunningLangs()
+	}
+	return nil
+}
+
 // requestCompletion fires a completion request on a goroutine and sends the
 // result as a CompletionMsg anchored at the trigger position.
 func (b *bridge) requestCompletion(path string, line, col int) {
@@ -200,7 +232,7 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 
 func (b *bridge) onStatus(lang, text string, kind ilsp.ServerStatusKind) {
 	if b.h != nil {
-		b.h.Send(ilsp.ServerStatusMsg{Text: text, Kind: kind})
+		b.h.Send(ilsp.ServerStatusMsg{Lang: lang, Text: text, Kind: kind})
 	}
 }
 

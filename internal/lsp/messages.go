@@ -80,8 +80,11 @@ const (
 )
 
 // ServerStatusMsg reports server state (ready / crashed / disabled). Kind
-// decides whether it lands on the status line or as a toast.
+// decides whether it lands on the status line or as a toast. Lang names the
+// language the update belongs to ("" for subsystem-wide events), so the
+// language-server settings page (#130) can track per-server state.
 type ServerStatusMsg struct {
+	Lang string
 	Text string
 	Kind ServerStatusKind
 }
