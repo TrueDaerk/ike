@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T08:00:00Z
+timestamp: 2026-07-11T09:30:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -250,3 +250,83 @@ exception (vim-native equivalents, palette reach).
   "blocked (dependency not landed)" group listing every default binding
   whose command has no owner yet, with its dependency — never hidden,
   never silently inert.
+
+## Per-binding status matrix (0081/50) — the acceptance ledger
+
+Generated from `keymap.StatusMatrix` against the shipped plugin set (run
+`IKE_GEN_MATRIX=<file> go test ./cmd/ike -run TestGenerateMatrixMarkdown` to
+regenerate); the final-gate test in `cmd/ike` fails the build if any row is
+ever unresolved. Per-binding Definition of Done: command exists → the chord
+reaches the program (or a reachable alias does) → conflict-free in context →
+discoverable → verified (automated tests plus the 2026-07 tmux terminal
+checks recorded above).
+
+The advertised JetBrains primary stays even when fragile (muscle memory);
+the fallback column is the path that always works.
+
+| command | primary | reachability | fallback | status |
+|---|---|---|---|---|
+| `editor.closeTab` | `cmd+w` | fragile | `space x` | live via space x |
+| `editor.commentBlock` | `cmd+shift+7` | fragile | `palette` | live via palette |
+| `editor.commentLine` | `cmd+7` | fragile | `space c` | live via space c |
+| `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
+| `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
+| `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
+| `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
+| `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
+| `editor.lineStart` | `cmd+left` | fragile | `vim 0` | live via vim 0 |
+| `editor.paste` | `cmd+v` | fragile | `vim p` | live via vim p |
+| `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
+| `editor.replace` | `cmd+r` | fragile | `—` | blocked: in-file replace UI (idea #49) |
+| `editor.saveAll` | `cmd+shift+s` | fragile | `space s` | live via space s |
+| `editor.tab.moveLeft` | `alt+shift+left` | fragile | `palette` | live via palette |
+| `editor.tab.moveRight` | `alt+shift+right` | fragile | `palette` | live via palette |
+| `editor.tab.next` | `alt+right` | fragile | `palette` | live via palette |
+| `editor.tab.prev` | `alt+left` | fragile | `palette` | live via palette |
+| `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `space o` | live via space o |
+| `editor.tab.select1` | `alt+1` | fragile | `space 1` | live via space 1 |
+| `editor.tab.select2` | `alt+2` | fragile | `space 2` | live via space 2 |
+| `editor.tab.select3` | `alt+3` | fragile | `space 3` | live via space 3 |
+| `editor.tab.select4` | `alt+4` | fragile | `space 4` | live via space 4 |
+| `editor.tab.select5` | `alt+5` | fragile | `space 5` | live via space 5 |
+| `editor.tab.select6` | `alt+6` | fragile | `space 6` | live via space 6 |
+| `editor.tab.select7` | `alt+7` | fragile | `space 7` | live via space 7 |
+| `editor.tab.select8` | `alt+8` | fragile | `space 8` | live via space 8 |
+| `editor.tab.select9` | `alt+9` | fragile | `space 9` | live via space 9 |
+| `editor.undo` | `ctrl+z` | delivered | `—` | live |
+| `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
+| `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
+| `explorer.toggle` | `cmd+1` | fragile | `space e` | live via space e |
+| `explorer.undo` | `ctrl+z` | delivered | `—` | live |
+| `file.move` | `f6` | delivered | `—` | live |
+| `file.rename` | `shift+f6` | delivered | `—` | live |
+| `lsp.codeAction` | `alt+enter` | fragile | `space a` | live via space a |
+| `lsp.definition` | `cmd+b` | fragile | `space d` | live via space d |
+| `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
+| `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
+| `lsp.rename` | `space n` | delivered | `—` | live |
+| `menu.open` | `f10` | delivered | `—` | live |
+| `nav.back` | `cmd+left-bracket` | fragile | `—` | blocked: editor navigation history (idea #51) |
+| `nav.forward` | `cmd+right-bracket` | fragile | `—` | blocked: editor navigation history (idea #51) |
+| `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
+| `palette.recentFiles` | `cmd+e` | fragile | `—` | blocked: recent-files palette mode (idea #50) |
+| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `—` | blocked: search-everywhere palette mode (idea #50) |
+| `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
+| `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
+| `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
+| `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
+| `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
+| `project.findInPath` | `cmd+shift+f` | fragile | `space g` | live via space g |
+| `project.goToClass` | `cmd+o` | fragile | `—` | blocked: document symbols / structure view (idea #31) |
+| `project.goToFile` | `cmd+shift+o` | fragile | `space f` | live via space f |
+| `project.replaceInPath` | `cmd+shift+r` | fragile | `space r` | live via space r |
+| `project.switch` | `alt+shift+p` | fragile | `space p` | live via space p |
+| `settings.open` | `cmd+,` | fragile | `space ,` | live via space , |
+| `terminal.toggle` | `alt+f12` | fragile | `space t` | live via space t |
+| `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
+| `vcs.revertFile` | `cmd+shift+t` | fragile | `—` | blocked: VCS integration (idea #28) |
+| `vcs.updateProject` | `cmd+t` | fragile | `—` | blocked: VCS integration (idea #28) |
+
+Every row is **live** (directly, or via a delivered fallback / vim-native
+equivalent / the palette) or **honestly blocked** with its dependency —
+Roadmap 0081's exit criterion.

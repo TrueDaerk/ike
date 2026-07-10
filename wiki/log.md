@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Per-binding status matrix (#16, Roadmap 0081): generated acceptance
+  ledger (keymap.StatusMatrix/MatrixMarkdown) — one row per default-bound
+  command with primary chord, reachability class, reachable fallback and
+  resolution status; the final-gate test in cmd/ike runs against the
+  shipped plugin set and fails on any unresolved row. All 60 rows resolve:
+  live, live-via-fallback, or honestly blocked. Table persisted in
+  architecture/keybindings.md. This closes Roadmap 0081 — epic #39 and its
+  milestone.
 - Keybinding discoverability (#15, Roadmap 0081): which-key panel for held
   chord prefixes (live continuations, letters first); keymap.LiveBindings
   gives the cheatsheet and the palette shortcut column honest labels from
