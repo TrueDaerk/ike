@@ -29,7 +29,7 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 		dir = opposite(dir)
 	}
 	if p, ok := m.query.Next(m.buf, m.cursor, dir, count); ok {
-		m.moveTo(p)
+		m.jumpTo(p) // n/N landings are jumps (Roadmap 0220)
 	}
 }
 
@@ -82,7 +82,7 @@ func (m *Model) commitSearch() {
 		return
 	}
 	if p, ok := m.query.Next(m.buf, m.cursor, m.searchDir, 1); ok {
-		m.moveTo(p)
+		m.jumpTo(p) // the initial /-search landing is a jump (Roadmap 0220)
 	}
 }
 

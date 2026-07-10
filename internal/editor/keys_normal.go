@@ -145,6 +145,11 @@ func (m *Model) applyMotionOrOperator(res motion.Result, count int) {
 		m.pending.Reset()
 		return
 	}
+	if res.Jump {
+		// The departure point of a large motion belongs in the navigation
+		// history (Roadmap 0220); emitted before the cursor moves.
+		m.emit(EventJump)
+	}
 	if res.Kind == motion.Linewise {
 		// Vertical motion keeps the remembered column.
 		m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
@@ -189,7 +194,9 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 	case "}":
 		return motion.ParagraphForward(m.buf, m.cursor, count), true
 	case "G":
-		return motion.Last(m.buf, m.cursor, countOrZero(m.pending)), true
+		res := motion.Last(m.buf, m.cursor, countOrZero(m.pending))
+		res.Jump = true // G / {count}G is a jump (Roadmap 0220)
+		return res, true
 	case "%":
 		if res, ok := motion.MatchPair(m.buf, m.cursor, count); ok {
 			return res, true
@@ -371,6 +378,7 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 	switch s {
 	case "g":
 		res := motion.First(m.buf, m.cursor, countOrZero(m.pending))
+		res.Jump = true // gg is a jump (Roadmap 0220)
 		m.applyMotionOrOperator(res, m.pending.EffectiveCount())
 	case "p":
 		m.paste(m.pending.Register, true, m.pending.EffectiveCount(), true)

@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-10T18:30:00Z
+timestamp: 2026-07-10T19:15:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -20,11 +20,13 @@ palette.
 ## Semantics
 
 - **Per-jump entries, not per-keystroke.** An entry is recorded when the
-  caret jumps through the open funnel: switching files (explorer, finder,
+  caret jumps through the open funnel — switching files (explorer, finder,
   palette, `host.OpenFileRequest`), go-to-definition, a references-list
-  pick, a find-in-path result — any open that lands somewhere else
-  (different file, or same file + different line). Small in-file motions
-  never record (large motions are the 0220/20 slice).
+  pick, a find-in-path result — and for in-file jumps (#219): large
+  motions (`gg`, `G`, `{count}G`) and search landings (the initial `/`/`?`
+  jump, `n`/`N`, `*`/`#`). Small motions (hjkl, w/b, paragraphs, page
+  scrolls) never record, and an operator composed over a large motion
+  (`dG`) is an edit, not a jump.
 - **Back** returns to the departure point; **forward** re-traverses after a
   back. A fresh jump while back in history truncates the forward tail.
 - **Dedup**: consecutive entries on the same file+line collapse (keeping
@@ -47,6 +49,12 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
   jumps to another *line* — so every jump source (definition, references,
   search results, file switches) is covered at two choke points instead of
   per-feature hooks.
+- In-file jumps come through the editor's event seam (#219): the editor
+  emits `EventJump` carrying the *departure* position immediately before a
+  large motion or search landing moves the caret (`motion.Result.Jump` for
+  `gg`/`G`, `jumpTo` for search sites); the app's `editorEmitter` adapter
+  records it into the shared history and swallows the event — the landing
+  follows as an ordinary cursor-move, so the LSP bridge sees nothing new.
 - `Back(current)` / `Forward(current)` take the caret's current position so
   the opposite stack stays consistent; navigation itself goes through
   `openPathAt` with recording suppressed (`navSkip`), reusing the standard

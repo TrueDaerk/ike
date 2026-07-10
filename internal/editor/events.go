@@ -23,6 +23,13 @@ const (
 	// watcher records a save epoch so IKE's own writes are not reported back as
 	// external changes; LSP didSave hangs off the same signal).
 	EventSave
+	// EventJump fires immediately before the cursor departs on an in-file
+	// jump — large motions (gg, G, {count}G) and search landings (/, ?, n,
+	// N, *, #). The event carries the departure position so the navigation
+	// history (Roadmap 0220) can record where the caret came from; the
+	// landing follows as an ordinary EventCursorMove. Small motions (hjkl,
+	// w/b, paragraphs) never emit it.
+	EventJump
 )
 
 // SelKind classifies the visual selection carried on an event: none, a
