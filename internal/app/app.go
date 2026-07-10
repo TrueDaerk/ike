@@ -369,13 +369,23 @@ func (m Model) StartWatcher(root string) {
 type editorEmitter struct {
 	host    *host.Host
 	watcher *watch.Service
-	key     string // pane key of the editor this emitter is installed on
+	nav     *nav.History // navigation history (Roadmap 0220); shared pointer
+	key     string       // pane key of the editor this emitter is installed on
 }
 
 // Emit implements editor.Emitter. The editor and host event-kind constants share
 // the same iota ordering (change/cursor/completion/save), so the kind maps
 // directly.
 func (e editorEmitter) Emit(ev editor.Event) {
+	if ev.Kind == editor.EventJump {
+		// An in-file jump departs (Roadmap 0220): record where the caret came
+		// from. Nav-only — the landing follows as an ordinary cursor-move, so
+		// the LSP bridge needs no forwarding of this kind.
+		if e.nav != nil {
+			e.nav.RecordJump(nav.Position{Path: ev.Path, Line: ev.Line, Col: ev.Col})
+		}
+		return
+	}
 	if ev.Kind == editor.EventSave && e.watcher != nil {
 		e.watcher.MarkSaved(ev.Path)
 	}
@@ -415,7 +425,7 @@ func (m *Model) wireEditorEmitters() {
 func (m *Model) installEmitter(key string) {
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		for _, ed := range inst.Editors() {
-			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, key: key})
+			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
 		}
 	}
 }

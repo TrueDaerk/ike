@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	ilsp "ike/internal/lsp"
 )
 
@@ -121,4 +123,26 @@ func TestNavCommandsRegistered(t *testing.T) {
 			t.Errorf("command %s not registered", id)
 		}
 	}
+}
+
+func TestNavBackAfterLargeMotion(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	tm, _ := m.openPath(files[0], false)
+	m = tm.(Model)
+
+	// G jumps to the last line; the departure (line 0) lands in the history
+	// through the editor's EventJump seam (#219).
+	m = drainKey(m, tea.KeyPressMsg{Code: 'G', Text: "G"})
+	m = m.atPosition(t, files[0], 9)
+	tm, _ = m.Update(NavBackMsg{})
+	m = tm.(Model).atPosition(t, files[0], 0)
+	tm, _ = m.Update(NavForwardMsg{})
+	m = tm.(Model).atPosition(t, files[0], 9)
+
+	// Small motions record nothing: j moves without touching the history,
+	// so another back still returns to the G departure, not line 9→10.
+	m = drainKey(m, tea.KeyPressMsg{Code: 'k', Text: "k"})
+	tm, _ = m.Update(NavBackMsg{})
+	tm.(Model).atPosition(t, files[0], 0)
 }

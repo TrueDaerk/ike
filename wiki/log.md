@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- In-editor jump sources (#219, Roadmap 0220): the editor emits EventJump
+  (departure position) for large motions (gg, G, {count}G via
+  motion.Result.Jump) and search landings (initial //? jump, n/N, */#
+  via jumpTo); the app's editorEmitter records it into the shared
+  history and swallows the event. Small motions and operator-composed
+  motions (dG) never record. navigation-history.md refreshed.
 - Navigation history core (#218, Roadmap 0220 — promoted from idea #51):
   internal/nav History (per-jump entries, forward-truncation on fresh
   jumps, same-line dedup, 100-entry cap) recorded at the open funnel

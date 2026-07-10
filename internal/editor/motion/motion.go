@@ -23,6 +23,10 @@ const (
 type Result struct {
 	Pos  buffer.Position
 	Kind Kind
+	// Jump marks a large motion (gg, G) whose departure point belongs in the
+	// navigation history (Roadmap 0220). Set by the key layer, consumed when
+	// the motion is applied as a move (operators do not jump).
+	Jump bool
 }
 
 // charClass partitions runes for word motions: blank, word (alnum + '_'), or

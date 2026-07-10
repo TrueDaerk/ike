@@ -87,7 +87,7 @@ func (m *Model) searchWord(forward bool) {
 		m.searchDir = search.Backward
 	}
 	if p, ok := m.query.Next(m.buf, m.cursor, m.searchDir, 1); ok {
-		m.moveTo(p)
+		m.jumpTo(p) // "*"/"#" landings are jumps (Roadmap 0220)
 	}
 }
 

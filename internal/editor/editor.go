@@ -438,6 +438,14 @@ func (m *Model) moveTo(p buffer.Position) {
 	m.emit(EventCursorMove)
 }
 
+// jumpTo is moveTo for in-file jumps (search landings): it first emits the
+// departure position as an EventJump — the navigation-history seam (Roadmap
+// 0220) — then moves.
+func (m *Model) jumpTo(p buffer.Position) {
+	m.emit(EventJump)
+	m.moveTo(p)
+}
+
 // atoi parses s as an int, returning def on failure.
 func atoi(s string, def int) int {
 	n, sign, seen := 0, 1, false
