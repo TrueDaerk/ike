@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-10T19:00:00Z
 ---
 
 # Editor
@@ -80,7 +80,10 @@ in visual mode they extend the selection like their plain counterparts.
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
-`Home`/`End` and the word/page keys move the caret mid-insert. An `undo`/`redo`
+`Home`/`End` and the word/page keys move the caret mid-insert. Backward kills
+work mid-insert too (#246), mirroring the terminal pane's macOS convention:
+`option+backspace` / `ctrl+w` delete the previous word, `cmd+backspace` /
+`ctrl+u` delete to the line start — all inside the open insert's undo unit. An `undo`/`redo`
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
 insert session**, so it reverts the whole typed run as one unit and behaves
 identically from insert and normal mode.

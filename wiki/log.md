@@ -2,6 +2,11 @@
 
 ## 2026-07-10
 
+- Insert-mode backward kills (#246): `option+backspace` / `ctrl+w` delete the
+  previous word, `cmd+backspace` / `ctrl+u` delete to the line start, all
+  through the open insert session's recorder (one undo unit). Documented in
+  [Editor](/architecture/editor.md).
+
 - Defaults for palette-only commands (#242): `f3`/`shift+f3` step retained
   search matches, `alt+f1` reveals the open file in the explorer (fragile,
   palette fallback), leader `T` opens a new terminal and leader `h` the

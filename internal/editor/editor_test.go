@@ -845,3 +845,61 @@ func TestEmitterReceivesChange(t *testing.T) {
 		t.Fatalf("expected a change event, got %v", got)
 	}
 }
+
+// TestInsertWordAndLineKill (#246): alt+backspace / ctrl+w delete the previous
+// word, cmd+backspace / ctrl+u delete to the line start; everything stays one
+// undo unit with the surrounding insert.
+func TestInsertWordAndLineKill(t *testing.T) {
+	mk := func(k tea.KeyPressMsg) func(*testing.T) {
+		return func(t *testing.T) {
+			m, _ := loaded(t, "alpha bravo charlie\n")
+			m = typeKeys(m, "A") // append at line end
+			m = send(m, k)
+			if line(m, 0) != "alpha bravo " {
+				t.Fatalf("word kill=%q want %q", line(m, 0), "alpha bravo ")
+			}
+			m = send(m, k)
+			if line(m, 0) != "alpha " {
+				t.Fatalf("second word kill=%q want %q", line(m, 0), "alpha ")
+			}
+			// The whole insert (both kills) undoes as one unit.
+			m = send(m, special(tea.KeyEsc))
+			m = typeKeys(m, "u")
+			if line(m, 0) != "alpha bravo charlie" {
+				t.Fatalf("undo=%q", line(m, 0))
+			}
+		}
+	}
+	t.Run("alt+backspace", mk(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt}))
+	t.Run("ctrl+w", mk(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl}))
+
+	lk := func(k tea.KeyPressMsg) func(*testing.T) {
+		return func(t *testing.T) {
+			m, _ := loaded(t, "alpha bravo\n")
+			m = typeKeys(m, "A")
+			m = send(m, k)
+			if line(m, 0) != "" {
+				t.Fatalf("line kill=%q want empty", line(m, 0))
+			}
+			// At column 0 the kill is a no-op (nothing before the cursor).
+			m = send(m, k)
+			if line(m, 0) != "" || m.buf.LineCount() != 1 {
+				t.Fatalf("col-0 kill=%q lines=%d", line(m, 0), m.buf.LineCount())
+			}
+		}
+	}
+	t.Run("cmd+backspace", lk(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper}))
+	t.Run("cmd+backspace (meta)", lk(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModMeta}))
+	t.Run("ctrl+u", lk(tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl}))
+
+	// A word kill from column 0 crosses into the previous line (vim
+	// backspace=eol behavior); plain backspace still joins lines unchanged.
+	t.Run("cross-line word kill", func(t *testing.T) {
+		m, _ := loaded(t, "one two\nthree\n")
+		m = typeKeys(m, "ji") // line 1, col 0, insert
+		m = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
+		if m.buf.LineCount() != 1 || line(m, 0) != "one three" {
+			t.Fatalf("cross-line kill=%q", m.buf.Lines())
+		}
+	})
+}
