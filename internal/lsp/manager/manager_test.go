@@ -70,6 +70,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				DocumentRangeFormattingProvider: json.RawMessage(`true`),
 				RenameProvider:                  json.RawMessage(`{"prepareProvider":true}`),
 				CodeActionProvider:              json.RawMessage(`true`),
+				SignatureHelpProvider:           &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
 				ExecuteCommandProvider:          json.RawMessage(`{"commands":["test.fix"]}`),
 			}}
 			respond(out, msg.ID, result)
@@ -88,6 +89,8 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/signatureHelp":
+			respond(out, msg.ID, protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{{Label: "Greet(name string)"}}})
 		case msg.Method == "textDocument/codeAction":
 			// Echo how many context diagnostics arrived in the title.
 			var p protocol.CodeActionParams
@@ -449,6 +452,29 @@ func TestManagerExecuteCommandAppliesEditViaCallback(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("workspace/applyEdit never reached the callback")
+	}
+}
+
+func TestManagerSignatureHelpAndTriggers(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	sh, err := m.SignatureHelp(context.Background(), path, buffer.Position{})
+	if err != nil || sh == nil || sh.Signatures[0].Label != "Greet(name string)" {
+		t.Fatalf("sh = %+v err = %v", sh, err)
+	}
+	trig := m.SignatureTriggers(path)
+	if len(trig) != 2 || trig[0] != "(" {
+		t.Fatalf("triggers = %v", trig)
+	}
+	if trig := m.SignatureTriggers("/nope/unknown.go"); trig != nil {
+		t.Fatalf("unknown doc should have no triggers, got %v", trig)
 	}
 }
 

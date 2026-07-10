@@ -123,6 +123,7 @@ type Model struct {
 	diagByLine map[int][]ilsp.Diagnostic
 	comp       *completionState
 	hover      *hoverState
+	signature  *signatureState
 
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.
@@ -353,6 +354,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.hover = &hoverState{lines: strings.Split(msg.Contents, "\n")}
 		}
 		return m, nil
+	case ilsp.SignatureHelpMsg:
+		if msg.Path == m.path {
+			m.applySignature(msg)
+		}
+		return m, nil
 	case ilsp.FormatEditsMsg:
 		// Formatting edits (Roadmap 0100, #7): applied as one undo unit.
 		if msg.Path == m.path {
@@ -380,6 +386,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m.maybeReparse(before, cmd)
 	case tea.KeyPressMsg:
 		m.dismissHover() // any key dismisses a hover popup
+		if msg.Code == tea.KeyEscape {
+			m.dismissSignature() // esc also drops the signature popup
+		}
 		before := m.docVersion
 		var cmd tea.Cmd
 		if m.subConfirm != nil {

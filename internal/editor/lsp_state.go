@@ -2,6 +2,7 @@ package editor
 
 import (
 	"image/color"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -284,6 +285,74 @@ func truncate(s string, w int) string {
 		return s
 	}
 	return string(r[:w-1]) + "…"
+}
+
+// --- signature popup ---
+
+// signatureState is the showing call-signature popup: the active signature's
+// label with the active parameter's rune highlight range, an optional first
+// doc line, and how many other overloads exist.
+type signatureState struct {
+	label      string
+	start, end int
+	doc        string
+	more       int
+}
+
+// applySignature installs or clears the popup from a SignatureHelpMsg: an
+// empty label means the cursor left the call context.
+func (m *Model) applySignature(msg ilsp.SignatureHelpMsg) {
+	if msg.Label == "" {
+		m.signature = nil
+		return
+	}
+	m.signature = &signatureState{label: msg.Label, start: msg.ParamStart, end: msg.ParamEnd, doc: msg.Doc, more: msg.More}
+}
+
+// SignatureOpen reports whether the signature popup is showing.
+func (m Model) SignatureOpen() bool { return m.signature != nil }
+
+// SignatureView renders the popup: the label with the active parameter
+// emphasised, the doc line dimmed below, an overload counter when applicable.
+func (m Model) SignatureView() string {
+	s := m.signature
+	if s == nil {
+		return ""
+	}
+	box := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Foreground).Padding(0, 1)
+	param := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Underline(true)
+	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
+
+	runes := []rune(s.label)
+	start, end := s.start, s.end
+	if start < 0 || end > len(runes) || end < start {
+		start, end = 0, 0
+	}
+	line := string(runes[:start]) + param.Render(string(runes[start:end])) + string(runes[end:])
+	if s.more > 0 {
+		line += dim.Render("  (+" + strconv.Itoa(s.more) + " overloads)")
+	}
+	rows := []string{line}
+	if s.doc != "" {
+		rows = append(rows, dim.Render(truncateTo(s.doc, 80)))
+	}
+	return box.Render(strings.Join(rows, "\n"))
+}
+
+// SignatureAnchor returns the buffer-relative cell the popup anchors to.
+func (m Model) SignatureAnchor() (col, line int) { return m.cursor.Col, m.cursor.Line }
+
+// dismissSignature clears the popup (esc / leaving insert); the server-driven
+// clear path is an empty SignatureHelpMsg.
+func (m *Model) dismissSignature() { m.signature = nil }
+
+// truncateTo caps s at max runes with an ellipsis.
+func truncateTo(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max-1]) + "…"
 }
 
 // --- hover popup ---

@@ -1136,6 +1136,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.HoverMsg:
 		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.SignatureHelpMsg:
+		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DefinitionMsg:
 		// Navigate to a definition target and place the cursor there. Also the
 		// activation msg of a references-list entry (references.go).
@@ -2508,6 +2510,10 @@ func (m Model) compositeLSPPopups(base string) string {
 	if ed.CompletionOpen() {
 		col, line := ed.CompletionAnchor()
 		return place(ed.CompletionView(), col, line)
+	}
+	if ed.SignatureOpen() {
+		col, line := ed.SignatureAnchor()
+		return place(ed.SignatureView(), col, line)
 	}
 	if ed.HoverOpen() {
 		col, line := ed.HoverAnchor()
