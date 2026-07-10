@@ -325,7 +325,7 @@ the fallback column is the path that always works.
 | `notifications.history` | `space h` | delivered | `—` | live |
 | `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
 | `palette.recentFiles` | `cmd+e` | fragile | `space m` | live via space m |
-| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `—` | blocked: search-everywhere palette mode (0230, #236) |
+| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `space shift+a` | live via space shift+a |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
 | `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
@@ -344,7 +344,3 @@ the fallback column is the path that always works.
 | `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
 | `vcs.revertFile` | `cmd+shift+t` | fragile | `—` | blocked: VCS integration (idea #28) |
 | `vcs.updateProject` | `cmd+t` | fragile | `—` | blocked: VCS integration (idea #28) |
-
-Every row is **live** (directly, or via a delivered fallback / vim-native
-equivalent / the palette) or **honestly blocked** with its dependency —
-Roadmap 0081's exit criterion.

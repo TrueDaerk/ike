@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Search-everywhere palette mode (#236): `cmd+shift+a` / double-shift (leader
+  `A`) rank one query across commands and files by composing the existing
+  command and file modes — per-kind cap, score interleave, kind glyph per row.
+  `palette.searchEverywhere` left the blocked ledger. Documented in
+  [Command Palette](/architecture/command-palette.md).
+
 - Delivered tab chords (#248): `ctrl+pgup`/`ctrl+pgdown` cycle tabs and
   `ctrl+shift+pgup/pgdown` reorder them — delivered primaries for the
   alt-arrow chords that never arrive on macOS (Option composes characters).
