@@ -119,6 +119,36 @@ func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]
 	return decodeLocations(raw), nil
 }
 
+// Formatting requests whole-document formatting edits.
+func (c *Client) Formatting(ctx context.Context, p protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/formatting", p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeTextEdits(raw), nil
+}
+
+// RangeFormatting requests formatting edits for one range.
+func (c *Client) RangeFormatting(ctx context.Context, p protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/rangeFormatting", p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeTextEdits(raw), nil
+}
+
+// decodeTextEdits accepts a TextEdit array or null.
+func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil
+	}
+	var edits []protocol.TextEdit
+	if err := json.Unmarshal(raw, &edits); err != nil {
+		return nil
+	}
+	return edits
+}
+
 // decodeCompletion accepts either a CompletionList or a bare item array.
 func decodeCompletion(raw json.RawMessage) []protocol.CompletionItem {
 	if len(raw) == 0 || string(raw) == "null" {

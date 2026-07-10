@@ -25,16 +25,32 @@ const (
 	EventSave
 )
 
+// SelKind classifies the visual selection carried on an event: none, a
+// character-wise range (visual / visual-block), or whole lines (visual-line).
+type SelKind int
+
+const (
+	SelNone SelKind = iota
+	SelChar
+	SelLine
+)
+
 // Event is one emitted signal. Line/Col are 0-based; Path is the buffer's file.
 // Text carries the full buffer content, populated only on EventChange so the LSP
 // bridge can drive full-document sync without a separate read-back seam.
+// AnchorLine/AnchorCol carry the visual anchor while a selection is active
+// (Sel != SelNone) so range-scoped LSP features (range formatting) know the
+// selection without a read-back seam; the cursor is the other end.
 type Event struct {
-	Kind EventKind
-	Path string
-	Line int
-	Col  int
-	Mode mode.Mode
-	Text string
+	Kind       EventKind
+	Path       string
+	Line       int
+	Col        int
+	Mode       mode.Mode
+	Text       string
+	Sel        SelKind
+	AnchorLine int
+	AnchorCol  int
 }
 
 // Emitter receives editor events. Implementations must not block.
@@ -67,6 +83,13 @@ func (m *Model) emit(kind EventKind) {
 		Line: m.cursor.Line,
 		Col:  m.cursor.Col,
 		Mode: m.mode,
+	}
+	if m.mode.IsVisual() {
+		ev.Sel = SelChar
+		if m.mode == VisualLine {
+			ev.Sel = SelLine
+		}
+		ev.AnchorLine, ev.AnchorCol = m.anchor.Line, m.anchor.Col
 	}
 	if kind == EventChange {
 		ev.Text = m.buf.String()

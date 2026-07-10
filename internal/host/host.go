@@ -79,7 +79,21 @@ type EditorEvent struct {
 	Line int
 	Col  int
 	Text string
+	// Sel carries an active visual selection (SelNone when there is none):
+	// the anchor is one end, the cursor (Line/Col) the other. SelLine means a
+	// line-wise selection spanning whole lines. Range-scoped LSP features
+	// (range formatting) read it off the latest event.
+	Sel        int
+	AnchorLine int
+	AnchorCol  int
 }
+
+// EditorEvent selection kinds (mirrors editor.SelKind).
+const (
+	SelNone = iota
+	SelChar
+	SelLine
+)
 
 // EditorEvent kinds.
 const (

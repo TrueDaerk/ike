@@ -328,11 +328,14 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		go e.host.Send(msg)
 	}
 	e.host.EmitEditor(host.EditorEvent{
-		Kind: int(ev.Kind),
-		Path: ev.Path,
-		Line: ev.Line,
-		Col:  ev.Col,
-		Text: ev.Text,
+		Kind:       int(ev.Kind),
+		Path:       ev.Path,
+		Line:       ev.Line,
+		Col:        ev.Col,
+		Text:       ev.Text,
+		Sel:        int(ev.Sel),
+		AnchorLine: ev.AnchorLine,
+		AnchorCol:  ev.AnchorCol,
 	})
 }
 
@@ -1129,6 +1132,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Navigate to a definition target and place the cursor there. Also the
 		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case ilsp.FormatEditsMsg:
+		// lsp.format / lsp.formatRange: the owning editor applies the edits as
+		// one undo unit (editor/textedit.go).
+		return m, m.routeToEditor(msg.Path, msg)
 
 	case ilsp.ReferencesMsg:
 		// lsp.references (alt+f7 / palette): nothing found is a toast, a single

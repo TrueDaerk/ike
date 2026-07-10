@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- LSP document & range formatting (#7, Roadmap 0100): `lsp.format`
+  (`cmd+alt+l`) and `lsp.formatRange` apply server `TextEdit`s to the buffer
+  as one undo unit via the new `editor.ApplyTextEdits` (bottom-up, clamped,
+  multi-line). Editor events now carry the visual anchor so the bridge knows
+  the selection for range requests; `FormattingOptions` honour
+  `editor.tab_width`/`use_spaces`; UTF-16 conversion stays in
+  protocol/convert.go (manager converts, owning the synced lines).
+  Capability-gated both ways; file-open now primes the bridge's current file
+  so formatting works before the first cursor move.
 - LSP find references (#5, Roadmap 0100): `textDocument/references` through
   client/manager (capability-gated on `referencesProvider`, UTF-16 conversion
   via protocol/convert.go), new `lsp.references` command ("LSP: Find
