@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-11T05:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -169,3 +169,38 @@ text objects) belong to Roadmap 0060 and are **not** in this table — this pack
 owns only global / IDE-level shortcuts. `vcs.commit`, `vcs.updateProject`,
 `vcs.revertFile` are bound to placeholder ids and stay inert until a future VCS
 roadmap registers them.
+
+## Terminal reality: the chord reachability table (0081/10)
+
+Terminal truth beats aspiration: every default chord is classified in
+`internal/keymap/reachability.go` (`Classify`/`ReachabilityNote`/
+`ReachabilityReport`), and the downstream 0081 work — leader defaults (#14),
+discoverability labels (#15), the status matrix (#16) — keys off these
+classes, not off JetBrains nostalgia.
+
+| Class | Meaning | Chord families |
+|---|---|---|
+| **delivered** | arrives in every mainstream terminal | plain keys, `ctrl+letter`, `f1–f12`, `shift+fN` |
+| **fragile** | terminal/configuration/protocol dependent | `cmd+*` (Kitty protocol required; OS/terminal menus intercept several), `alt+*` (option-as-meta), `ctrl+shift+letter` (collapses without Kitty disambiguation), `ctrl+tab` (terminal-eaten) |
+| **undetectable** | invisible to key-press events | bare-modifier taps (`shift shift` — needs key-up reporting) |
+
+Multi-step chords take the worst class of their steps.
+
+**Probe** (`cmd/keyprobe`): run it in a target terminal, press the listed
+chords, finish with `ctrl+d`; it prints one `PROBE\t<chord>\t<state>` line
+per target (parsed by `keymap.ParseProbeReport`), recording collapse evidence
+(`got=<key>`) when a shifted chord arrives as its unshifted twin.
+
+Ground truth recorded 2026-07 (tmux 3.x on macOS, client announcing the Kitty
+protocol):
+
+- `ctrl+tab` — **not delivered** (tmux consumes it; the reason the terminal
+  pane's reliable escape hatch is `alt+f12`, not the `pane.switcher` chord).
+- `ctrl+shift+z` — **not delivered as itself**: arrives collapsed as
+  `ctrl+z` (`got=ctrl+z` in the probe report), confirming the
+  ctrl+shift-collapse rule.
+- `alt+*` (letters, digits, F-keys, arrows, enter) — delivered (ESC-prefix
+  encoding).
+- `cmd+*` — delivered **when sent as Kitty CSI-u sequences**; plain macOS
+  terminals without the protocol swallow them.
+- plain keys, `ctrl+letter`, `f1/f6/f10`, `shift+f6` — delivered.

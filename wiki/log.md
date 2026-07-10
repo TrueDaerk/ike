@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Terminal reality probe & reachability table (#10, Roadmap 0081):
+  cmd/keyprobe (interactive chord probe with machine-parseable PROBE lines
+  and shift-collapse evidence) plus internal/keymap/reachability.go — every
+  default chord classified delivered/fragile/undetectable with an honest
+  note; ground truth recorded against tmux/macOS (ctrl+tab eaten,
+  ctrl+shift+z collapses to ctrl+z, alt+* and Kitty-encoded cmd+* arrive).
+  Downstream 0081 work (#14–#16) keys off these classes. Table persisted in
+  architecture/keybindings.md.
 - Toolchain environment injection (#98, Roadmap 0170): per-project shim dir
   (.ike/shims) with exec scripts for php/python/python3 targeting the
   settings-page interpreters (silent detection never injects); terminal
