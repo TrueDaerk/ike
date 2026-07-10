@@ -34,6 +34,7 @@ import (
 	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/plugin"
+	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/search"
 	"ike/internal/settings"
@@ -656,7 +657,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
 	cmd := palette.NewCommandMode(reg, reg, paletteHideOff(cfg))
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
-	return palette.New(pcfg, cmd, file, dir)
+	proj := project.NewPickerMode(nil)
+	return palette.New(pcfg, cmd, file, dir, proj)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -994,6 +996,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// finder, locked to the "@" mode, from any context.
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+		return m, nil
+
+	case project.OpenPickerMsg:
+		// project.switch (alt+shift+p / palette / menu): the recent-projects
+		// picker, locked to its mode; the selection lands as project.PickedMsg.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PickerPrefix)
+		return m, nil
+
+	case project.PickedMsg:
+		// Picker selection. The switch orchestration is #3; until it lands,
+		// surface the choice instead of silently dropping it.
+		m.host.Notify(host.Info, "switching to "+msg.Path+" is not available yet (#3)")
 		return m, nil
 
 	case SelectThemeMsg:

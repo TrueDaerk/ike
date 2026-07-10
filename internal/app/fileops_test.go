@@ -42,8 +42,8 @@ func drainCmd(m Model, cmd tea.Cmd) Model {
 	return m
 }
 
-// project builds a throwaway project dir with a file and a subfolder.
-func project(t *testing.T) (root, file string) {
+// projectDir builds a throwaway project dir with a file and a subfolder.
+func projectDir(t *testing.T) (root, file string) {
 	t.Helper()
 	root = t.TempDir()
 	file = filepath.Join(root, "a.txt")
@@ -60,7 +60,7 @@ func project(t *testing.T) (root, file string) {
 // (#175): the prompt opens prefilled, enter renames on disk, and the open
 // buffer follows the new path with its edits and undo history intact.
 func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
-	root, file := project(t)
+	root, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)
@@ -111,7 +111,7 @@ func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 // TestMoveRepointsOpenEditor guards the follow-on-move path: moving a file
 // into a folder re-points the editor instead of closing its pane.
 func TestMoveRepointsOpenEditor(t *testing.T) {
-	root, file := project(t)
+	root, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)
@@ -135,7 +135,7 @@ func TestMoveRepointsOpenEditor(t *testing.T) {
 // TestDirRenameRepointsNestedEditor: renaming a folder re-points editors on
 // files underneath it.
 func TestDirRenameRepointsNestedEditor(t *testing.T) {
-	root, _ := project(t)
+	root, _ := projectDir(t)
 	nested := filepath.Join(root, "sub", "c.txt")
 	if err := os.WriteFile(nested, []byte("c\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -157,7 +157,7 @@ func TestDirRenameRepointsNestedEditor(t *testing.T) {
 // focused stashes the source and opens the palette locked to the directory
 // mode.
 func TestF6OpensDirectoryPicker(t *testing.T) {
-	_, file := project(t)
+	_, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)
