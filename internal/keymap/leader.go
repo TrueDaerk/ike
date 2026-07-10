@@ -1,0 +1,97 @@
+package keymap
+
+// leader.go is the leader layer of Roadmap 0081/30: a reachable alternative
+// for every action whose primary chord is terminal-fragile. Two prefixes,
+// both driven by the existing multi-step resolver (0080's engine, no new
+// machinery):
+//
+//   - the leader key (default "space", `[keymap] leader` tunable) — plain
+//     keys never reach the chord layer inside a capturing editor, so the
+//     space leader is automatically scoped to "outside the editor";
+//   - `ctrl+k <mnemonic>` — ctrl-modified chords are eligible everywhere,
+//     making it the universal variant that also works mid-edit.
+//
+// Actions without a curated mnemonic stay reachable through the palette
+// (ctrl+p, delivered everywhere); the completeness test in
+// reachability_test.go enforces that every fragile default has one of the
+// two escape routes.
+
+// DefaultLeader is the leader prefix when [keymap] leader is unset.
+const DefaultLeader = "space"
+
+// leaderMnemonic is one curated leader continuation.
+type leaderMnemonic struct {
+	key     string
+	command string
+	title   string
+}
+
+// leaderMnemonics maps single follow-up keys to the fragile-primary actions
+// worth a two-keystroke path. Curated, not generated: mnemonics collide
+// easily and the palette already covers the long tail.
+var leaderMnemonics = []leaderMnemonic{
+	{"f", "project.goToFile", "Go to file"},
+	{"g", "project.findInPath", "Find in path (grep)"},
+	{"r", "project.replaceInPath", "Replace in path"},
+	{"p", "project.switch", "Switch project"},
+	{"t", "terminal.toggle", "Toggle terminal"},
+	{"e", "explorer.toggle", "Focus explorer / editor"},
+	{"s", "editor.saveAll", "Save all"},
+	{"w", "editor.write", "Save file"},
+	{"d", "lsp.definition", "Go to definition"},
+	{"u", "lsp.references", "Find usages"},
+	{"a", "lsp.codeAction", "Show intention actions"},
+	{"n", "lsp.rename", "Rename symbol"},
+	{"l", "lsp.format", "Reformat file"},
+	{"c", "editor.commentLine", "Comment line"},
+	{"x", "editor.closeTab", "Close tab"},
+	{"o", "editor.tab.reopenClosed", "Reopen closed tab"},
+	{",", "settings.open", "Settings"},
+	{"1", "editor.tab.select1", "Go to tab 1"},
+	{"2", "editor.tab.select2", "Go to tab 2"},
+	{"3", "editor.tab.select3", "Go to tab 3"},
+	{"4", "editor.tab.select4", "Go to tab 4"},
+	{"5", "editor.tab.select5", "Go to tab 5"},
+	{"6", "editor.tab.select6", "Go to tab 6"},
+	{"7", "editor.tab.select7", "Go to tab 7"},
+	{"8", "editor.tab.select8", "Go to tab 8"},
+	{"9", "editor.tab.select9", "Go to tab 9"},
+}
+
+// LeaderRows expands the mnemonic table into bindings under the given leader
+// prefix plus the universal ctrl+k variant. An empty leader falls back to
+// DefaultLeader; both prefixes resolve through the ordinary chord engine
+// (pending step + timeout).
+func LeaderRows(leader string) []Binding {
+	if leader == "" {
+		leader = DefaultLeader
+	}
+	out := make([]Binding, 0, len(leaderMnemonics)*2)
+	for _, m := range leaderMnemonics {
+		for _, prefix := range []string{leader, "ctrl+k"} {
+			chord, err := ParseChord(prefix + " " + m.key)
+			if err != nil {
+				continue // an unparseable configured leader skips that variant
+			}
+			out = append(out, Binding{
+				Chord:   chord,
+				Command: m.command,
+				Context: Global,
+				Title:   m.title,
+				Owner:   "Leader (0081)",
+				Layer:   LayerDefault,
+			})
+		}
+	}
+	return out
+}
+
+// LeaderCommands reports the command ids covered by the leader layer, for
+// the completeness check (every fragile default needs leader or palette).
+func LeaderCommands() map[string]bool {
+	out := make(map[string]bool, len(leaderMnemonics))
+	for _, m := range leaderMnemonics {
+		out[m.command] = true
+	}
+	return out
+}

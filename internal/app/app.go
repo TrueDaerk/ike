@@ -706,11 +706,17 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 // by the table builder.
 func buildKeymap(cfg host.Config) *keymap.Resolver {
 	preset := keymap.PresetJetBrains
+	leader := keymap.DefaultLeader
 	overrides := map[string]string{}
 	if cfg != nil {
 		if v, ok := cfg.Get("keymap.preset"); ok {
 			if p := strings.TrimSpace(v); p != "" {
 				preset = p
+			}
+		}
+		if v, ok := cfg.Get("keymap.leader"); ok {
+			if l := strings.TrimSpace(v); l != "" {
+				leader = l
 			}
 		}
 		const pfx = "keymap.bindings."
@@ -722,7 +728,8 @@ func buildKeymap(cfg host.Config) *keymap.Resolver {
 			}
 		}
 	}
-	table := keymap.BuildTable(keymap.Defaults(preset), overrides, keymap.GOOS)
+	rows := append(keymap.Defaults(preset), keymap.LeaderRows(leader)...)
+	table := keymap.BuildTable(rows, overrides, keymap.GOOS)
 	return keymap.NewResolver(table)
 }
 

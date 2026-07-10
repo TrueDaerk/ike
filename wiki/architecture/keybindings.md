@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T05:00:00Z
+timestamp: 2026-07-11T06:30:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -204,3 +204,29 @@ protocol):
 - `cmd+*` — delivered **when sent as Kitty CSI-u sequences**; plain macOS
   terminals without the protocol swallow them.
 - plain keys, `ctrl+letter`, `f1/f6/f10`, `shift+f6` — delivered.
+
+## Leader key (0081/30)
+
+Every fragile-primary action has a reachable two-keystroke path, driven by
+the existing multi-step resolver (no new engine):
+
+- **`space <mnemonic>`** — plain keys never reach the chord layer inside a
+  capturing editor, so the space leader is automatically scoped to "outside
+  the editor" (explorer, terminal-less panes). Tunable via `[keymap]
+  leader = "<key>"`.
+- **`ctrl+k <mnemonic>`** — ctrl-modified chords are eligible everywhere,
+  making this the universal variant that also works mid-edit.
+
+Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
+path, `r` replace in path, `p` switch project, `t` toggle terminal, `e`
+explorer/editor toggle, `s` save all, `w` save, `d` definition, `u` usages,
+`a` code actions, `n` rename, `l` reformat, `c` comment line, `x` close tab,
+`o` reopen tab, `,` settings, `1–9` tab N. The long tail stays reachable
+through the palette (`ctrl+p`, delivered everywhere).
+
+**Honest fragility**: the per-row `fragile` flags are no longer
+hand-maintained — `Defaults()` derives them from the reachability table
+(`Classify`), so every `cmd+*`/`alt+*`/collapsing chord now reports itself
+truthfully. A completeness test enforces that every fragile, non-blocked
+default has a leader mnemonic, another delivered chord, or a documented
+exception (vim-native equivalents, palette reach).
