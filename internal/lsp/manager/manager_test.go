@@ -27,22 +27,32 @@ type rwc struct {
 
 func (rwc) Close() error { return nil }
 
+// fakeOpts tunes the scripted server: the advertised sync kind and an
+// optional channel receiving every didChange notification.
+type fakeOpts struct {
+	syncKind   int
+	didChanges chan protocol.DidChangeTextDocumentParams
+}
+
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
 // server answers initialize with full capabilities, echoes completion, and pushes
 // a diagnostic when it sees didOpen.
-func fakeConnector() Connector {
+func fakeConnector() Connector { return fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull}) }
+
+// fakeConnectorOpts is fakeConnector with the server behaviour tuned.
+func fakeConnectorOpts(opts fakeOpts) Connector {
 	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		cli := rwc{Reader: cr, Writer: cw}
-		go runFakeServer(bufio.NewReader(sr), sw)
+		go runFakeServer(bufio.NewReader(sr), sw, opts)
 		conn := jsonrpc.NewConn(cli, handler)
 		c := client.New(conn)
 		return c, func() { conn.Close() }, nil
 	}
 }
 
-func runFakeServer(in *bufio.Reader, out io.Writer) {
+func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 	for {
 		payload, err := readFrame(in)
 		if err != nil {
@@ -60,7 +70,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 		case msg.Method == "initialize":
 			result := protocol.InitializeResult{Capabilities: protocol.ServerCapabilities{
 				PositionEncoding:   protocol.EncodingUTF16,
-				TextDocumentSync:   json.RawMessage(`1`),
+				TextDocumentSync:   json.RawMessage(strconv.Itoa(opts.syncKind)),
 				CompletionProvider: &protocol.CompletionOptions{TriggerCharacters: []string{"."}},
 				HoverProvider:      json.RawMessage(`true`),
 				DefinitionProvider: json.RawMessage(`true`),
@@ -146,6 +156,12 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 			respond(out, msg.ID, []protocol.TextEdit{{Range: p.Range, NewText: "X"}})
 		case msg.Method == "textDocument/completion":
 			respond(out, msg.ID, protocol.CompletionList{Items: []protocol.CompletionItem{{Label: "Println"}}})
+		case msg.Method == "textDocument/didChange":
+			if opts.didChanges != nil {
+				var p protocol.DidChangeTextDocumentParams
+				_ = json.Unmarshal(msg.Params, &p)
+				opts.didChanges <- p
+			}
 		case msg.Method == "textDocument/didOpen":
 			// Push a diagnostic for the opened doc.
 			var p protocol.DidOpenTextDocumentParams

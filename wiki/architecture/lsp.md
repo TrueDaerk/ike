@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T14:00:00Z
+timestamp: 2026-07-10T15:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -56,9 +56,16 @@ registry commands.
 events through its `Emitter` seam (`internal/editor/events.go`). The app installs
 a stateless adapter on every editor that forwards these to the host
 (`host.EmitEditor`), which fans them to the LSP bridge (registered via
-`host.SetEditorEmitter`). On a change the bridge sends the full document text to
-the manager (`didChange`, full-document sync for the MVP); a file-open hook drives
-`didOpen`, save drives `didSave`, close drives `didClose`.
+`host.SetEditorEmitter`). On a change the bridge hands the full document text to
+the manager, which **respects the negotiated `TextDocumentSyncKind`** (#13): an
+incremental server gets the minimal contiguous change region — recovered by
+common-prefix/suffix diffing against the previously synced lines
+(`manager/incremental.go`), one range + replacement text per keystroke — a
+full-sync server gets the whole document, a SyncNone server nothing. Range
+positions cross into the negotiated encoding through `protocol/convert.go`
+only; per-document versions stay monotonic and only advance when a
+notification is actually sent (an unchanged text sends nothing). A file-open
+hook drives `didOpen`, save drives `didSave`, close drives `didClose`.
 
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
