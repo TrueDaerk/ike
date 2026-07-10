@@ -7,6 +7,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -19,6 +20,9 @@ const (
 	KindExplorer Kind = iota
 	// KindEditor is a text editor pane. Any number may exist, tiled side by side.
 	KindEditor
+	// KindTerminal is an integrated terminal pane (Roadmap 0170); any number
+	// may exist, each owning one shell session.
+	KindTerminal
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -26,6 +30,7 @@ const (
 const (
 	ctxExplorer = "explorer"
 	ctxEditor   = "editor"
+	ctxTerminal = "terminal"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -39,6 +44,7 @@ type Instance struct {
 	key  string
 	kind Kind
 	exp  explorer.Model
+	term terminal.Model
 
 	// Editor state: the ordered tab list and the active index. cfg/pal/size
 	// and focus are remembered so tabs created later match the live pane.
@@ -60,8 +66,11 @@ func (i *Instance) Kind() Kind { return i.kind }
 // ContextID is the context id the instance advertises for command/keymap
 // resolution: explorer panes resolve under "explorer", editors under "editor".
 func (i *Instance) ContextID() string {
-	if i.kind == KindExplorer {
+	switch i.kind {
+	case KindExplorer:
 		return ctxExplorer
+	case KindTerminal:
+		return ctxTerminal
 	}
 	return ctxEditor
 }
@@ -69,6 +78,10 @@ func (i *Instance) ContextID() string {
 // Explorer returns the underlying explorer model. It is only valid for an
 // explorer instance; callers gate on Kind first.
 func (i *Instance) Explorer() *explorer.Model { return &i.exp }
+
+// Terminal returns the underlying terminal model. It is only valid for a
+// terminal instance; callers gate on Kind first.
+func (i *Instance) Terminal() *terminal.Model { return &i.term }
 
 // Editor returns the active tab's editor model. It is only valid for an editor
 // instance; callers gate on Kind first.
@@ -206,6 +219,8 @@ func (i *Instance) SetSize(w, h int) {
 		for _, t := range i.tabs {
 			t.SetSize(w, h)
 		}
+	case KindTerminal:
+		i.term.SetSize(w, h)
 	}
 }
 
@@ -220,6 +235,8 @@ func (i *Instance) SetFocused(f bool) {
 		for n, t := range i.tabs {
 			t.SetFocused(f && n == i.active)
 		}
+	case KindTerminal:
+		i.term.SetFocused(f)
 	}
 }
 
@@ -230,6 +247,8 @@ func (i *Instance) View() string {
 		return i.exp.View()
 	case KindEditor:
 		return i.Editor().View()
+	case KindTerminal:
+		return i.term.View()
 	}
 	return ""
 }
@@ -244,6 +263,10 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 	case KindEditor:
 		t := i.tabs[i.active]
 		*t, cmd = t.Update(msg)
+	case KindTerminal:
+		if k, ok := msg.(tea.KeyPressMsg); ok {
+			cmd = i.term.Update(k)
+		}
 	}
 	return cmd
 }

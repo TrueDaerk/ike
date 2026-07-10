@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Integrated terminal core (#95, Roadmap 0170): new internal/terminal —
+  creack/pty spawns the shell (terminal.shell → $SHELL → /bin/sh) in the
+  project root, charmbracelet/x/vt emulates the screen, output notifications
+  are coalesced. pane.KindTerminal + terminal.new (splits below the active
+  editor); focused terminals take every key raw with ctrl+tab as the escape
+  hatch; shell exit closes the pane; terminal leaves prune from layout
+  restore until #96. Quality bar verified: vim, less, resize, colors. New
+  doc architecture/terminal.md.
 - Python environment management (#132, Roadmap 0180): the toolchain page
   creates a project venv (uv, python -m venv fallback) and installs managed
   Pythons picked from `uv python list`; results register the absolute

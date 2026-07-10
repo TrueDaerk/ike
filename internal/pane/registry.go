@@ -3,7 +3,10 @@ package pane
 import (
 	"strconv"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/host"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -13,6 +16,9 @@ const ExplorerKey = "explorer"
 
 // editorKeyBase is the key of the first editor; subsequent editors append ":N".
 const editorKeyBase = "editor"
+
+// terminalKeyBase is the key of the first terminal; later ones append ":N".
+const terminalKeyBase = "terminal"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -26,6 +32,7 @@ type Registry struct {
 	order     []string // insertion order, for stable iteration
 	focused   string   // key of the focused instance
 	editors   int      // count of editors ever allocated, for key minting
+	terminals int      // count of terminals ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -84,6 +91,22 @@ func (r *Registry) AddEditorKey(key string) *Instance {
 	return inst
 }
 
+// AddTerminal creates a terminal instance running shell in dir; send is the
+// program's async injector (host.Send) for output/exit notifications. It
+// returns the new instance's key ("terminal", then "terminal:N").
+func (r *Registry) AddTerminal(shell, dir string, send func(tea.Msg)) string {
+	r.terminals++
+	key := terminalKeyBase
+	if r.terminals > 1 {
+		key = terminalKeyBase + ":" + strconv.Itoa(r.terminals)
+	}
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = terminal.New(key, shell, dir, 80, 24, send)
+	inst.term.SetPalette(r.pal)
+	r.put(inst)
+	return key
+}
+
 // mintEditorKey returns the next unused editor key.
 func (r *Registry) mintEditorKey() string {
 	r.editors++
@@ -117,11 +140,16 @@ func (r *Registry) Get(key string) *Instance { return r.instances[key] }
 // Has reports whether an instance exists for key.
 func (r *Registry) Has(key string) bool { _, ok := r.instances[key]; return ok }
 
-// Close drops the instance for key from the registry. Closing the focused
-// instance leaves focus dangling; the caller is responsible for refocusing.
+// Close drops the instance for key from the registry, ending a terminal's
+// shell session. Closing the focused instance leaves focus dangling; the
+// caller is responsible for refocusing.
 func (r *Registry) Close(key string) {
-	if _, ok := r.instances[key]; !ok {
+	inst, ok := r.instances[key]
+	if !ok {
 		return
+	}
+	if inst.Kind() == KindTerminal {
+		inst.term.Close()
 	}
 	delete(r.instances, key)
 	for i, k := range r.order {

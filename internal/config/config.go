@@ -145,6 +145,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("ui.menu_bar", c.UI.MenuBar)
 
+	put("terminal.shell", c.Terminal.Shell)
+
 	for id, kv := range c.Lang {
 		for k, v := range kv {
 			put("lang."+id+"."+k, v)

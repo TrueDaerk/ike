@@ -91,6 +91,10 @@ type RenameFileMsg struct{}
 // picked from the palette's directory mode. Dispatched by file.move.
 type MoveFileMsg struct{}
 
+// TerminalNewMsg asks the root model to open a new integrated terminal pane
+// split off the focused leaf (Roadmap 0170, #95). Dispatched by terminal.new.
+type TerminalNewMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -143,6 +147,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
+			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),

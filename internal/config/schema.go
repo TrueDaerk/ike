@@ -24,10 +24,18 @@ type Config struct {
 	// The toolchain settings page writes it; lang.Interpreter resolution and
 	// the LSP spec overlay read it.
 	Lang map[string]map[string]string `toml:"lang"`
+	// Terminal holds integrated-terminal settings (Roadmap 0170). Shell
+	// overrides $SHELL for spawned sessions; empty follows the environment.
+	Terminal Terminal `toml:"terminal"`
 	// Plugins holds per-plugin toggles as a free-form slot (Roadmap 0180,
 	// #133): [plugins.example] enabled = false. The plugin manager page
 	// writes it; applyPluginConfig and the LSP spec resolution read it.
 	Plugins map[string]map[string]any `toml:"plugins"`
+}
+
+// Terminal holds integrated-terminal behaviour (Roadmap 0170).
+type Terminal struct {
+	Shell string `toml:"shell"`
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.
