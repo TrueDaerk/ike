@@ -124,6 +124,14 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
+	// Capture the pre-reload [theme].name so an explicit theme edit is
+	// distinguishable from an unrelated config change (#241).
+	prevName := ""
+	if old := m.host.Config(); old != nil {
+		if v, ok := old.Get("theme.name"); ok {
+			prevName = v
+		}
+	}
 	config.Set(cfg)
 	hcfg := host.FromConfig(cfg)
 	m.host.SetConfig(hcfg)
@@ -131,8 +139,22 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// registry live, so SetEnabled plus the keymap rebuild below is the whole
 	// re-resolution.
 	applyPluginConfig(m.reg, hcfg)
-	pal, warning := resolveTheme(m.reg, hcfg)
-	m.applyTheme(pal)
+	// Theme (#241): an edited [theme].name is an explicit choice — it wins and
+	// clears any palette-selected runtime override. Any other config change
+	// leaves an active override (and thus the current palette) alone.
+	newName := ""
+	if v, ok := hcfg.Get("theme.name"); ok {
+		newName = v
+	}
+	warning := ""
+	if newName != prevName {
+		m.themeOverride = ""
+	}
+	if m.themeOverride == "" {
+		var pal *theme.Palette
+		pal, warning = resolveTheme(m.reg, hcfg)
+		m.applyTheme(pal)
+	}
 	m.panes.Reconfigure(hcfg)
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).

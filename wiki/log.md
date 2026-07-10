@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Theme override survives config reloads (#241): `reloadConfig` no longer
+  unconditionally re-resolves `[theme].name` — a palette-selected runtime
+  theme now survives unrelated settings edits; an explicit `[theme].name`
+  change still wins and clears the override. Documented in
+  [Themes](/architecture/themes.md).
+
 - Terminal word/line kill chords (#240): `motionKey` extends the #225 natural
   text editing set — `option+backspace` sends `ESC DEL` (backward-kill-word),
   `cmd+backspace` sends `ctrl+u` (kill to line start). Documented in

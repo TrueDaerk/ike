@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-07T12:00:00Z
+timestamp: 2026-07-10T18:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -136,6 +136,11 @@ layout, so `settings.toml` stays untouched (that write path belongs to Roadmap
 config-derived theme. Only an *explicit* palette pick is recorded
 (`Model.themeOverride`); a purely config-driven theme leaves the field empty,
 so editing `[theme].name` keeps working until a runtime pick overrides it.
+
+Live config reloads respect the override (#241): `reloadConfig` re-resolves
+the theme from config only when `[theme].name` itself changed in that reload
+— an explicit theme edit wins and clears the override — while any unrelated
+settings change leaves the runtime-selected palette in place.
 
 ## Boundaries
 
