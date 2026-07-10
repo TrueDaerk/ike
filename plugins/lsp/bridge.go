@@ -287,6 +287,60 @@ func formattingOptions(h host.API) protocol.FormattingOptions {
 	return opts
 }
 
+// rename starts the rename flow: prepareRename validates the cursor position
+// off the Update loop, then the app is asked to prompt for the new name; the
+// prompt's answer runs the Apply continuation, which requests the rename and
+// applies the WorkspaceEdit (workspace_edit.go). A rejected position surfaces
+// as a warn toast; the current project is untouched until edits arrive.
+func (b *bridge) rename(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	pos := buffer.Position{Line: line, Col: col}
+	go func() {
+		placeholder, ok, err := mgr.PrepareRename(context.Background(), path, pos)
+		if err != nil || !ok {
+			h.Send(ilsp.ServerStatusMsg{Text: "cannot rename here", Kind: ilsp.ServerEventWarn})
+			return
+		}
+		h.Send(ilsp.RenamePromptMsg{
+			Path:        path,
+			Placeholder: placeholder,
+			Apply:       func(newName string) tea.Cmd { return b.applyRename(h, path, pos, newName) },
+		})
+	}()
+	return nil
+}
+
+// applyRename requests the workspace edit for newName and applies it: open
+// buffers in-editor, closed files on disk, followed by a summary toast.
+func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, newName string) tea.Cmd {
+	mgr := b.manager()
+	if mgr == nil || strings.TrimSpace(newName) == "" {
+		return nil
+	}
+	go func() {
+		files, err := mgr.Rename(context.Background(), path, pos, newName)
+		if err != nil {
+			h.Send(ilsp.ServerStatusMsg{Text: "rename failed: " + err.Error(), Kind: ilsp.ServerEventError})
+			return
+		}
+		n, derr := dispatchWorkspaceEdits(h, files)
+		switch {
+		case derr != nil:
+			h.Send(ilsp.ServerStatusMsg{Text: "rename applied partially: " + derr.Error(), Kind: ilsp.ServerEventWarn})
+		case n == 0:
+			h.Send(ilsp.ServerStatusMsg{Text: "nothing to rename", Kind: ilsp.ServerEventInfo})
+		default:
+			h.Send(ilsp.ServerStatusMsg{Text: editSummary(n), Kind: ilsp.ServerEventInfo})
+		}
+	}()
+	return nil
+}
+
 // restart stops every server; they respawn lazily on the next file open/edit.
 // The work happens inside the returned tea.Cmd: a command's Run resolves on
 // the Update goroutine, where a blocking Shutdown would stall the UI and a

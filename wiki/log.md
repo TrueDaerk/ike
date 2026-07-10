@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- LSP rename symbol (#6, Roadmap 0100): `lsp.rename` — prepareRename
+  validation (reject toast), name prompt prefilled with the symbol
+  (bridge-built Apply continuation keeps the manager out of the app), and
+  WorkspaceEdit application through new shared infrastructure
+  (`plugins/lsp/workspace_edit.go`): open buffers in-editor as one undo
+  unit, closed files rewritten on disk; both WorkspaceEdit shapes decode.
+  Manager splits edits by open/closed and converts positions (UTF-16 in
+  convert.go). Verified against gopls across an open and a closed file.
 - LSP document & range formatting (#7, Roadmap 0100): `lsp.format`
   (`cmd+alt+l`) and `lsp.formatRange` apply server `TextEdit`s to the buffer
   as one undo unit via the new `editor.ApplyTextEdits` (bottom-up, clamped,

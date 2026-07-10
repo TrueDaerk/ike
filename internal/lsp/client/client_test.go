@@ -267,6 +267,60 @@ func TestRangeFormattingNull(t *testing.T) {
 	}
 }
 
+func TestPrepareRenameVariants(t *testing.T) {
+	cases := []struct {
+		name   string
+		result any
+		wantOK bool
+	}{
+		{"null rejects", nil, false},
+		{"placeholder shape", map[string]any{"range": protocol.Range{Start: protocol.Position{Line: 1, Character: 2}, End: protocol.Position{Line: 1, Character: 5}}, "placeholder": "foo"}, true},
+		{"bare range", protocol.Range{Start: protocol.Position{Line: 3}, End: protocol.Position{Line: 3, Character: 4}}, true},
+		{"default behavior", map[string]any{"defaultBehavior": true}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+				"textDocument/prepareRename": func(json.RawMessage) any { return tc.result },
+			})
+			ctx, cancel := ctx2s()
+			defer cancel()
+			_, ok, err := c.PrepareRename(ctx, protocol.PrepareRenameParams{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestRenameDecodesBothWorkspaceEditShapes(t *testing.T) {
+	edit := protocol.TextEdit{Range: protocol.Range{}, NewText: "x"}
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/rename": func(json.RawMessage) any {
+			return map[string]any{
+				"changes": map[string]any{"file:///a.go": []protocol.TextEdit{edit}},
+				"documentChanges": []map[string]any{{
+					"textDocument": map[string]any{"uri": "file:///b.go", "version": 1},
+					"edits":        []protocol.TextEdit{edit},
+				}},
+			}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	we, err := c.Rename(ctx, protocol.RenameParams{NewName: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	all := we.AllChanges()
+	if len(all) != 2 || len(all["file:///a.go"]) != 1 || len(all["file:///b.go"]) != 1 {
+		t.Fatalf("AllChanges = %+v", all)
+	}
+}
+
 func TestHoverNull(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/hover": func(json.RawMessage) any { return nil },

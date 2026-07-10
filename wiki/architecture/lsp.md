@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting/rename rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T09:30:00Z
+timestamp: 2026-07-10T11:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -47,7 +47,7 @@ from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
 exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.format` /
-`lsp.formatRange` / `lsp.restart` as registry commands.
+`lsp.formatRange` / `lsp.rename` / `lsp.restart` as registry commands.
 
 ## Data flow
 
@@ -91,6 +91,19 @@ bottom-up as **one undo unit** (`editor/textedit.go`, mirroring replace.go).
 Both requests are capability-gated (`documentFormattingProvider` /
 `documentRangeFormattingProvider`) — gopls, for example, offers no range
 formatting, so the range command is a graceful no-op there.
+
+**Rename (#6).** `lsp.rename` runs `prepareRename` first (when the server
+offers it): a rejected position toasts "cannot rename here", an accepted one
+opens an input prompt (`internal/app/lsprename.go`) prefilled with the ranged
+symbol text. The prompt msg carries a bridge-built `Apply` continuation, so
+the manager stays unreachable from the app. Confirming sends
+`textDocument/rename`; the returned `WorkspaceEdit` (both `changes` and
+`documentChanges` shapes decode) is applied by shared infrastructure
+(`plugins/lsp/workspace_edit.go`, reused by code actions later): files the
+manager tracks — open editor buffers — are edited in-buffer as one undo unit
+via `FormatEditsMsg` and stay dirty; every other file is rewritten on disk
+(bottom-up, mode-preserving). A summary toast reports the touched file count.
+Gated on `renameProvider`; the 0082 `Shift+F6` decision stays with the audit.
 
 ## Design rules
 

@@ -122,6 +122,9 @@ type Model struct {
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
+	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
+	// no rename is in flight.
+	lspRename *lspRenameState
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -1133,6 +1136,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 
+	case ilsp.RenamePromptMsg:
+		// lsp.rename: the server validated the position; prompt for the name.
+		m.openLSPRenamePrompt(msg)
+		return m, nil
+
 	case ilsp.FormatEditsMsg:
 		// lsp.format / lsp.formatRange: the owning editor applies the edits as
 		// one undo unit (editor/textedit.go).
@@ -1277,6 +1285,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// characters build the new name, enter applies, esc cancels.
 		if m.renameOpen() {
 			return m.updateRenamePrompt(msg)
+		}
+		// The symbol-rename prompt (0100, #6) mirrors it.
+		if m.lspRenameOpen() {
+			return m.updateLSPRenamePrompt(msg)
 		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)
