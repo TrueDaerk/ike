@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- project.switch command + picker (#12, Roadmap 0090): `internal/project`
+  registers the `project.switch` command (default slot `alt+shift+p`) and a
+  palette picker mode listing recent projects newest-first with fuzzy match
+  on name/path, compacted path details and an `Open "<query>"…` affordance.
+  The root model opens the picker locked and routes `PickedMsg` (stub toast
+  until the switch orchestration #3 lands). File-menu "Switch Project" now
+  resolves. Doc `architecture/project-switching.md` updated.
 - Project-switching data layer (#2, Roadmap 0090): new `internal/project`
   package — `Entry` (path/name/last_opened), `Validate` (expand `~`, absolute,
   exists/is-dir/readable with actionable errors) and history content rules
