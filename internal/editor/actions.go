@@ -289,10 +289,11 @@ func (m *Model) undo(count int) {
 	}
 	if undone {
 		m.desiredCol = m.cursor.Col
-		// An undo mutates the buffer away from what was last written, so the
-		// document is dirty again — without this, undoing past a save (or an
-		// auto-save, #174) would leave changes that never get persisted.
-		m.dirty = true
+		// An undo mutates the buffer, so the document is dirty again — unless
+		// the walk landed exactly on the last-saved state (#251). Without the
+		// dirty side, undoing past a save (or an auto-save, #174) would leave
+		// changes that never get persisted.
+		m.dirty = !m.hist.AtSaved()
 		m.emit(EventChange)
 	}
 }
@@ -315,7 +316,7 @@ func (m *Model) redo(count int) {
 	}
 	if redone {
 		m.desiredCol = m.cursor.Col
-		m.dirty = true
+		m.dirty = !m.hist.AtSaved()
 		m.emit(EventChange)
 	}
 }
@@ -345,6 +346,7 @@ func (m *Model) saveAs(path string) error {
 	}
 	m.path = path
 	m.dirty = false
+	m.hist.MarkSaved()
 	m.emit(EventSave)
 	return nil
 }

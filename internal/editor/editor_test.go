@@ -414,8 +414,57 @@ func TestUndoCountPastHistoryStops(t *testing.T) {
 	if line(m, 0) != "hello" {
 		t.Fatalf("99u=%q want hello", line(m, 0))
 	}
+	if m.Dirty() {
+		t.Fatal("undo back to the loaded (saved) state should clear dirty (#251)")
+	}
+}
+
+func TestUndoRedoTrackSavePoint(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	m = typeKeys(m, "x") // -> "ello"
+	m = send(m, key(':'))
+	m = typeKeys(m, "w")
+	m = send(m, special(tea.KeyEnter)) // save point at "ello"
+	m = typeKeys(m, "x")               // -> "llo", dirty
 	if !m.Dirty() {
-		t.Fatal("an applied undo should mark the buffer dirty")
+		t.Fatal("edit after save should be dirty")
+	}
+	m = typeKeys(m, "u") // back to "ello" = save point
+	if line(m, 0) != "ello" || m.Dirty() {
+		t.Fatalf("undo to save point: line=%q dirty=%v, want ello/clean", line(m, 0), m.Dirty())
+	}
+	m = typeKeys(m, "u") // back to "hello", before the save point
+	if line(m, 0) != "hello" || !m.Dirty() {
+		t.Fatalf("undo past save point: line=%q dirty=%v, want hello/dirty", line(m, 0), m.Dirty())
+	}
+	m, _ = m.Update(modKey('r', tea.ModCtrl)) // redo to "ello" = save point again
+	if line(m, 0) != "ello" || m.Dirty() {
+		t.Fatalf("redo to save point: line=%q dirty=%v, want ello/clean", line(m, 0), m.Dirty())
+	}
+}
+
+func TestUndoDiscardedSavePointStaysDirty(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	m = typeKeys(m, "x") // -> "ello"
+	m = send(m, key(':'))
+	m = typeKeys(m, "w")
+	m = send(m, special(tea.KeyEnter)) // save point at "ello"
+	m = typeKeys(m, "u")               // back to "hello" (dirty: disk has "ello")
+	m = typeKeys(m, "sX")              // fresh edit discards the redo branch (and the save point)
+	m = send(m, special(tea.KeyEsc))
+	m = typeKeys(m, "uu") // back to "hello" — but disk still holds "ello"
+	if line(m, 0) != "hello" || !m.Dirty() {
+		t.Fatalf("after discarding the saved branch: line=%q dirty=%v, want hello/dirty", line(m, 0), m.Dirty())
+	}
+}
+
+func TestRestoreTextUndoNeverClean(t *testing.T) {
+	m, _ := loaded(t, "base\n")
+	m.RestoreText("recovered\n")
+	m = typeKeys(m, "x") // edit the recovered text
+	m = typeKeys(m, "u") // undo back to the recovered content
+	if line(m, 0) != "recovered" || !m.Dirty() {
+		t.Fatalf("crash-restored buffer after undo: line=%q dirty=%v, want recovered/dirty", line(m, 0), m.Dirty())
 	}
 }
 

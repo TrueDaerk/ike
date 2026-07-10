@@ -253,6 +253,7 @@ func (m *Model) RestoreText(text string) {
 	m.pending.Reset()
 	m.wait = awaitNone
 	m.hist = history.New()
+	m.hist.MarkNeverSaved() // recovered text is dirty even after undoing back to it
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}

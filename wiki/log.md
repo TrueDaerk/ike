@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-11
+
+- Undo tracks the save point (#251): the history pins a checkpoint on save,
+  and undo/redo clear the modified flag when they land exactly on it — `[+]`
+  no longer sticks after undoing back to the saved content. Crash-restored
+  buffers never read as clean. Found running the 0082 sheet 01/02 protocols
+  (#17). Documented in [Editor](/architecture/editor.md).
+
 ## 2026-07-10
 
 - Search-everywhere palette mode (#236): `cmd+shift+a` / double-shift (leader

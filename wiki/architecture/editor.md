@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-10T19:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Editor
@@ -44,7 +44,11 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   cursor before/after); linear today, with parent/seq fields reserved for an
   undo tree. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
   early when the history runs out, #231). `.` repeat lives in the editor
-  (`dotCommand`).
+  (`dotCommand`). The history pins a **save checkpoint** (`MarkSaved`/`AtSaved`,
+  #251): saving pins the current state, and undo/redo clear the dirty flag when
+  they land exactly on it (vim-style), so `[+]` goes away when you undo back to
+  the saved content. A crash-restored buffer marks the checkpoint unreachable —
+  no undo depth makes it read as clean.
 - **viewport** — vertical/horizontal scroll with `scroll_off`, plus the
   absolute/relative line-number gutter. The line renderer budgets by **display
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered
