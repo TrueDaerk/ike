@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- WASM ABI (#24, Roadmap 9900): internal/wasm/abi fixes the host↔guest
+  contract — JSON payloads over (ptr,len) regions, packed-u64 returns,
+  guest ike_alloc for host→guest buffers; guest entry points register/
+  on_command/on_key/on_hook; host imports open_file/dispatch/notify/
+  set_status/config_get as thin shims over the narrow abi.Host interface
+  (malformed payloads dropped). Verified end to end against a real Go
+  wasip1 c-shared guest exercising every shim.
 - WASM plugin runtime (#23, Roadmap 9900): internal/wasm embeds wazero —
   plugins-dir scan (diagnostic-and-skip on faults), load/instantiate/unload
   lifecycle supporting both WASI conventions (command _start incl. clean
