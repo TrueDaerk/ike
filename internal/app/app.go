@@ -126,6 +126,9 @@ type Model struct {
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
+	// terminalReturnFocus remembers the pane focused before terminal.toggle
+	// moved focus into a terminal, so toggling again returns there (#97).
+	terminalReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -834,6 +837,11 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	if d := t.Dir(); d != "" {
 		title += " · " + displayDir(d)
 	}
+	// The application's OSC 0/2 title (shells report the running command
+	// here) takes the tail slot when it says more than the shell name (#97).
+	if osc := t.Title(); osc != "" && osc != filepath.Base(t.ShellPath()) {
+		title += " · " + osc
+	}
 	return title
 }
 
@@ -850,6 +858,7 @@ func displayDir(dir string) string {
 // focused live terminal does NOT forward to the shell:
 //
 //	ctrl+tab    move focus to the next pane (the global escape hatch)
+//	alt+f12     terminal.toggle — return focus to the previous pane (#97)
 //
 // Everything else, including tab, ctrl+c, esc and the F-keys, belongs to the
 // shell. shift+pgup/pgdn page the scrollback inside the pane itself.
@@ -858,8 +867,51 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	case "ctrl+tab":
 		m.cycleFocus()
 		return true, m, nil
+	case "alt+f12":
+		m.toggleTerminal()
+		return true, m, nil
 	}
 	return false, m, nil
+}
+
+// currentTerminal returns the focused terminal instance, else the first
+// terminal in pane order, else nil.
+func (m Model) currentTerminal() *pane.Instance {
+	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindTerminal {
+		return inst
+	}
+	for _, key := range m.panes.Keys() {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal {
+			return inst
+		}
+	}
+	return nil
+}
+
+// toggleTerminal is the terminal.toggle state machine (#97, JetBrains
+// alt+f12): no terminal → open one at the bottom split; one exists but is
+// not focused → focus it (remembering where focus was); focused → return
+// focus to the remembered pane (or the active editor as the fallback).
+func (m *Model) toggleTerminal() {
+	inst := m.currentTerminal()
+	if inst == nil {
+		m.terminalReturnFocus = m.panes.Focused()
+		m.openTerminal()
+		return
+	}
+	if m.panes.Focused() != inst.Key() {
+		m.terminalReturnFocus = m.panes.Focused()
+		m.setFocus(inst.Key())
+		return
+	}
+	target := m.terminalReturnFocus
+	if target == "" || !m.panes.Has(target) {
+		target = m.activeEditorKey()
+	}
+	if target == "" || !m.panes.Has(target) {
+		target = pane.ExplorerKey
+	}
+	m.setFocus(target)
 }
 
 // openTerminal opens a fresh terminal pane rooted in the working directory
@@ -1165,6 +1217,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal.new (palette / menu): split the focused leaf with a fresh
 		// shell session rooted in the project (Roadmap 0170, #95).
 		m.openTerminal()
+		return m, nil
+
+	case TerminalToggleMsg:
+		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
+		// machine — create, focus, or return focus (#97).
+		m.toggleTerminal()
+		return m, nil
+
+	case TerminalClearMsg:
+		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
+		if inst := m.currentTerminal(); inst != nil {
+			inst.Terminal().Clear()
+		}
 		return m, nil
 
 	case terminal.OutputMsg:

@@ -60,6 +60,30 @@ func (m *Model) SetFocused(on bool) { m.focused = on }
 // Running reports whether the shell is alive.
 func (m Model) Running() bool { return m.sess != nil && m.sess.Running() }
 
+// ScrollbackLen reports the history length (0 for a failed spawn).
+func (m Model) ScrollbackLen() int {
+	if m.sess == nil {
+		return 0
+	}
+	return m.sess.ScrollbackLen()
+}
+
+// Title returns the application-set OSC title ("" when none).
+func (m Model) Title() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.Title()
+}
+
+// Clear empties the scrollback and repaints (terminal.clear).
+func (m *Model) Clear() {
+	m.scroll = 0
+	if m.sess != nil {
+		m.sess.Clear()
+	}
+}
+
 // Dir returns the session's origin directory ("" for a failed spawn).
 func (m Model) Dir() string {
 	if m.sess == nil {

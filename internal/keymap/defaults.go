@@ -112,6 +112,10 @@ var jetbrainsRows = []row{
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)", false},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)", false},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)", false},
+	// JetBrains terminal toggle. Alt+F-key delivery depends on the terminal,
+	// hence fragile; inside a focused terminal the reserved-set handler picks
+	// it up before the chord layer (raw pass-through).
+	{"alt+f12", "terminal.toggle", "Toggle terminal", Global, "Terminal (0170)", true},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)", false},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)", false},
 }

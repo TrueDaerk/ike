@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Terminal commands & UX (#97, Roadmap 0170): terminal.toggle (alt+f12,
+  JetBrains state machine: create → focus → return-focus, also reserved
+  inside a focused terminal), terminal.clear (canonical 2J+3J wipe — 2J
+  alone pushes lines into the scrollback — plus ctrl+l prompt repaint),
+  Tools-menu entries, and OSC 0/2 titles appended to the pane title.
+  Chord and commands land together, so no blocked-ledger entry.
 - Terminal workspace integration (#96, Roadmap 0170): pane titles show
   shell + origin dir; the reserved key set is documented and minimal
   (ctrl+tab only — everything else reaches the shell); scrollback paging
