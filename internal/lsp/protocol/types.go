@@ -81,6 +81,8 @@ type TextDocumentClientCaps struct {
 	Hover           *HoverClientCaps      `json:"hover,omitempty"`
 	Definition      *LinkSupportCaps      `json:"definition,omitempty"`
 	References      *ReferencesClientCaps `json:"references,omitempty"`
+	Formatting      *ReferencesClientCaps `json:"formatting,omitempty"`
+	RangeFormatting *ReferencesClientCaps `json:"rangeFormatting,omitempty"`
 }
 
 type SyncClientCaps struct {
@@ -99,8 +101,9 @@ type LinkSupportCaps struct {
 	LinkSupport bool `json:"linkSupport,omitempty"`
 }
 
-// ReferencesClientCaps announces find-references support; the empty object is
-// the whole announcement (no options are gated client-side).
+// ReferencesClientCaps announces plain request support (references,
+// formatting, range formatting); the empty object is the whole announcement —
+// no options are gated client-side.
 type ReferencesClientCaps struct{}
 
 // InitializeResult carries the server's negotiated capabilities.
@@ -123,6 +126,9 @@ type ServerCapabilities struct {
 	HoverProvider      json.RawMessage    `json:"hoverProvider,omitempty"`
 	DefinitionProvider json.RawMessage    `json:"definitionProvider,omitempty"`
 	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
+
+	DocumentFormattingProvider      json.RawMessage `json:"documentFormattingProvider,omitempty"`
+	DocumentRangeFormattingProvider json.RawMessage `json:"documentRangeFormattingProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -244,4 +250,24 @@ type ReferenceParams struct {
 // ReferenceContext carries the one request option references defines.
 type ReferenceContext struct {
 	IncludeDeclaration bool `json:"includeDeclaration"`
+}
+
+// --- formatting ---
+
+// FormattingOptions carries the editor's indent settings into a formatting
+// request; servers honour tabSize/insertSpaces, the rest is optional.
+type FormattingOptions struct {
+	TabSize      int  `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
+}
+
+type DocumentFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Options      FormattingOptions      `json:"options"`
+}
+
+type DocumentRangeFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Options      FormattingOptions      `json:"options"`
 }

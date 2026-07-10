@@ -21,6 +21,8 @@ type Capabilities struct {
 	Hover              bool
 	Definition         bool
 	References         bool
+	Formatting         bool
+	RangeFormatting    bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -42,6 +44,8 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.Hover = truthyProvider(sc.HoverProvider)
 	caps.Definition = truthyProvider(sc.DefinitionProvider)
 	caps.References = truthyProvider(sc.ReferencesProvider)
+	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)
+	caps.RangeFormatting = truthyProvider(sc.DocumentRangeFormattingProvider)
 	return caps
 }
 

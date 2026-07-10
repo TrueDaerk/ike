@@ -261,6 +261,60 @@ func (m *Manager) References(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// Format requests whole-document formatting and returns the edits already
+// converted to editor rune coordinates (the manager owns the synced document
+// lines, so the UTF-16 mapping happens here and nowhere else).
+func (m *Manager) Format(ctx context.Context, path string, opts protocol.FormattingOptions) ([]lsp.FormatEdit, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().Formatting {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	edits, err := srv.cl.Formatting(cctx, protocol.DocumentFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Options:      opts,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertEdits(doc.lines, edits, srv.cl.Encoding()), nil
+}
+
+// FormatRange requests formatting for the [start, end) editor range, converted
+// through the negotiated encoding both ways.
+func (m *Manager) FormatRange(ctx context.Context, path string, start, end buffer.Position, opts protocol.FormattingOptions) ([]lsp.FormatEdit, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().RangeFormatting {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	edits, err := srv.cl.RangeFormatting(cctx, protocol.DocumentRangeFormattingParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Range:        protocol.ToLSPRange(doc.lines, buffer.Range{Start: start, End: end}, srv.cl.Encoding()),
+		Options:      opts,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertEdits(doc.lines, edits, srv.cl.Encoding()), nil
+}
+
+// convertEdits maps server TextEdits into editor-coordinate FormatEdits.
+func convertEdits(lines []string, edits []protocol.TextEdit, enc string) []lsp.FormatEdit {
+	out := make([]lsp.FormatEdit, len(edits))
+	for i, e := range edits {
+		r := protocol.FromLSPRange(lines, e.Range, enc)
+		out[i] = lsp.FormatEdit{
+			StartLine: r.Start.Line, StartCol: r.Start.Col,
+			EndLine: r.End.Line, EndCol: r.End.Col,
+			Text: e.NewText,
+		}
+	}
+	return out
+}
+
 // Encoding returns the negotiated position encoding for the server handling path,
 // defaulting to UTF-16 when unknown. Used to convert results (e.g. definition
 // targets) back to editor coordinates.

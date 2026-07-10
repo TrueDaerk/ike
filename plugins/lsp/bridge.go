@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -29,6 +30,12 @@ type bridge struct {
 	curPath string
 	curLine int
 	curCol  int
+	// Latest visual selection off the event stream (host.Sel* kinds); the
+	// anchor is one end, the cursor the other. selKind is host.SelNone when
+	// no selection is active.
+	selKind    int
+	anchorLine int
+	anchorCol  int
 }
 
 var (
@@ -67,11 +74,13 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	switch ev.Kind {
 	case host.EditorChange:
 		b.setCur(ev.Path, ev.Line, ev.Col)
+		b.setSel(ev)
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
 			_ = b.manager().Change(ev.Path, ev.Text)
 		}
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
+		b.setSel(ev)
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.requestCompletion(ev.Path, ev.Line, ev.Col)
@@ -85,6 +94,9 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 // text. Open blocks on the initialize handshake, so it runs on a goroutine.
 func (b *bridge) fileOpened(h host.API, path string) {
 	b.ensure(h)
+	// The just-opened file is the current one even before the first cursor
+	// event, so position-less actions (lsp.format) work immediately.
+	b.setCur(path, 0, 0)
 	l, ok := lang.ByPath(path)
 	if !ok || l.Server == nil {
 		return
@@ -207,6 +219,74 @@ func (b *bridge) references(h host.API) tea.Cmd {
 	return nil
 }
 
+// format requests whole-document formatting with the editor's indent settings
+// and delivers the edits as a FormatEditsMsg the owning editor applies.
+func (b *bridge) format(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, _, _ := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	opts := formattingOptions(h)
+	go func() {
+		edits, err := mgr.Format(context.Background(), path, opts)
+		if err != nil || len(edits) == 0 {
+			return
+		}
+		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
+	}()
+	return nil
+}
+
+// formatRange formats the active visual selection; without one it reports
+// what to do instead of silently doing nothing.
+func (b *bridge) formatRange(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, _, _ := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	start, end, ok := b.sel()
+	if !ok {
+		return func() tea.Msg {
+			return ilsp.ServerStatusMsg{Text: "select a range first (visual mode), or use LSP: Reformat File", Kind: ilsp.ServerEventInfo}
+		}
+	}
+	opts := formattingOptions(h)
+	go func() {
+		edits, err := mgr.FormatRange(context.Background(), path, start, end, opts)
+		if err != nil || len(edits) == 0 {
+			return
+		}
+		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
+	}()
+	return nil
+}
+
+// formattingOptions reads the editor indent settings from config; the defaults
+// mirror internal/config's editor defaults.
+func formattingOptions(h host.API) protocol.FormattingOptions {
+	opts := protocol.FormattingOptions{TabSize: 4, InsertSpaces: true}
+	if h == nil {
+		return opts
+	}
+	cfg := h.Config()
+	if cfg == nil {
+		return opts
+	}
+	if v, ok := cfg.Get("editor.tab_width"); ok {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			opts.TabSize = n
+		}
+	}
+	if v, ok := cfg.Get("editor.use_spaces"); ok {
+		opts.InsertSpaces = v == "true"
+	}
+	return opts
+}
+
 // restart stops every server; they respawn lazily on the next file open/edit.
 // The work happens inside the returned tea.Cmd: a command's Run resolves on
 // the Update goroutine, where a blocking Shutdown would stall the UI and a
@@ -300,6 +380,39 @@ func (b *bridge) setCur(path string, line, col int) {
 	b.mu.Lock()
 	b.curPath, b.curLine, b.curCol = path, line, col
 	b.mu.Unlock()
+}
+
+func (b *bridge) setSel(ev host.EditorEvent) {
+	b.mu.Lock()
+	b.selKind, b.anchorLine, b.anchorCol = ev.Sel, ev.AnchorLine, ev.AnchorCol
+	b.mu.Unlock()
+}
+
+// sel returns the active selection as a normalised [start, end) editor range,
+// or ok=false when none is active. A line-wise selection expands to whole
+// lines (end exclusive at the start of the following line).
+func (b *bridge) sel() (start, end buffer.Position, ok bool) {
+	b.mu.Lock()
+	kind, aLine, aCol := b.selKind, b.anchorLine, b.anchorCol
+	cLine, cCol := b.curLine, b.curCol
+	b.mu.Unlock()
+	if kind == host.SelNone {
+		return start, end, false
+	}
+	start = buffer.Position{Line: aLine, Col: aCol}
+	end = buffer.Position{Line: cLine, Col: cCol}
+	if end.Before(start) {
+		start, end = end, start
+	}
+	if kind == host.SelLine {
+		start = buffer.Position{Line: start.Line, Col: 0}
+		end = buffer.Position{Line: end.Line + 1, Col: 0}
+	} else {
+		// Visual selections are inclusive of the cursor cell; LSP ranges are
+		// end-exclusive.
+		end.Col++
+	}
+	return start, end, true
 }
 
 func (b *bridge) cur() (string, int, int) {

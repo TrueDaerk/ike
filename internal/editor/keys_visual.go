@@ -11,9 +11,12 @@ import (
 )
 
 // enterVisual switches to a visual mode, anchoring the selection at the cursor.
+// The cursor-move event tells selection listeners (the LSP bridge) a selection
+// now exists, before any motion extends it.
 func (m *Model) enterVisual(md mode.Mode) {
 	m.mode = md
 	m.anchor = m.cursor
+	m.emit(EventCursorMove)
 }
 
 // updateVisual handles keys while a selection is active. Motions extend the
@@ -25,6 +28,9 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if key.Code == tea.KeyEscape {
 		m.mode = Normal
 		m.wait = awaitNone
+		// Tell listeners the selection is gone (the LSP bridge tracks it for
+		// range-scoped requests).
+		m.emit(EventCursorMove)
 		return m, nil
 	}
 
@@ -46,6 +52,9 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if res, ok := m.resolveMotion(s, r, 1); ok {
 		if res.Kind == motion.Linewise {
 			m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
+			// moveTo emits for charwise motions; linewise must emit too so
+			// selection listeners track the moving end.
+			m.emit(EventCursorMove)
 		} else {
 			m.moveTo(res.Pos)
 		}
@@ -151,9 +160,11 @@ func (m *Model) visualPaste(reg rune) {
 func (m *Model) toggleVisual(md mode.Mode) {
 	if m.mode == md {
 		m.mode = Normal
-		return
+	} else {
+		m.mode = md
 	}
-	m.mode = md
+	// Mode changes alter what the current selection is; keep listeners current.
+	m.emit(EventCursorMove)
 }
 
 // visualSelection resolves the current selection to an operator Target.

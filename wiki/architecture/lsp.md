@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/go-to-definition/find-references/formatting rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T08:00:00Z
+timestamp: 2026-07-10T09:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -46,8 +46,8 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.restart` as
-registry commands.
+exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.format` /
+`lsp.formatRange` / `lsp.restart` as registry commands.
 
 ## Data flow
 
@@ -77,6 +77,20 @@ routes by count: none → info toast, one → navigate directly, more → the pa
 opened locked to a references mode (`internal/app/references.go`) listing
 `path:line` + preview, fuzzy-filterable; activating an entry emits the same
 `DefinitionMsg` the go-to-definition path navigates with.
+
+**Formatting (#7).** `lsp.format` (default `cmd+alt+l`) sends
+`textDocument/formatting`, `lsp.formatRange` sends the range variant for the
+active visual selection — the editor's cursor events carry the visual anchor
+(`editor.Event.Sel`/`Anchor*`, mirrored on `host.EditorEvent`), so the bridge
+knows the selection without a read-back seam; without one it answers with a
+how-to toast. `FormattingOptions` (tabSize / insertSpaces) come from
+`editor.tab_width` / `editor.use_spaces`. The manager converts the returned
+`TextEdit`s to editor rune coordinates (it owns the synced document lines) and
+the app routes a `FormatEditsMsg` to the owning editor, which applies the batch
+bottom-up as **one undo unit** (`editor/textedit.go`, mirroring replace.go).
+Both requests are capability-gated (`documentFormattingProvider` /
+`documentRangeFormattingProvider`) — gopls, for example, offers no range
+formatting, so the range command is a graceful no-op there.
 
 ## Design rules
 

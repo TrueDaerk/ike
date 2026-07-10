@@ -56,6 +56,18 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().references(h) },
 			},
 			{
+				ID:    "lsp.format",
+				Title: "LSP: Reformat File",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().format(h) },
+			},
+			{
+				ID:    "lsp.formatRange",
+				Title: "LSP: Reformat Selection",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().formatRange(h) },
+			},
+			{
 				ID:    "lsp.restart",
 				Title: "LSP: Restart Servers",
 				Scope: plugin.GlobalScope(),

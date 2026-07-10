@@ -76,6 +76,9 @@ var jetbrainsRows = []row{
 	// lsp.definition; the table uses the registered id rather than forking an
 	// editor.gotoDeclaration alias.
 	{"cmd+b", "lsp.definition", "Go to declaration", Editor, "LSP (0100)", false},
+	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
+	// variant keys off the active visual selection inside lsp.formatRange.
+	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "LSP (0100)", false},
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)", true},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)", true},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)", false},

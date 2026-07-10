@@ -65,6 +65,9 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				HoverProvider:      json.RawMessage(`true`),
 				DefinitionProvider: json.RawMessage(`true`),
 				ReferencesProvider: json.RawMessage(`true`),
+
+				DocumentFormattingProvider:      json.RawMessage(`true`),
+				DocumentRangeFormattingProvider: json.RawMessage(`true`),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/references":
@@ -82,6 +85,20 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/formatting":
+			// One edit whose character offsets are UTF-16 units past an emoji,
+			// so the conversion back to rune columns is observable.
+			var p protocol.DocumentFormattingParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.TextEdit{{
+				Range:   protocol.Range{Start: protocol.Position{Line: 0, Character: 10}, End: protocol.Position{Line: 0, Character: 10}},
+				NewText: fmt.Sprintf("/*tab=%d spaces=%v*/", p.Options.TabSize, p.Options.InsertSpaces),
+			}})
+		case msg.Method == "textDocument/rangeFormatting":
+			// Echo the requested range back as the edit range.
+			var p protocol.DocumentRangeFormattingParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.TextEdit{{Range: p.Range, NewText: "X"}})
 		case msg.Method == "textDocument/completion":
 			respond(out, msg.ID, protocol.CompletionList{Items: []protocol.CompletionItem{{Label: "Println"}}})
 		case msg.Method == "textDocument/didOpen":
@@ -232,6 +249,58 @@ func TestManagerReferences(t *testing.T) {
 	}
 	if len(locs) != 1 {
 		t.Fatalf("without declaration expected 1 loc, got %+v", locs)
+	}
+}
+
+func TestManagerFormatConvertsPositionsAndOptions(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	// "a🙂bcdefghij": the emoji is 2 UTF-16 units, so unit offset 10 is rune
+	// column 9.
+	if err := m.Open(path, "go", "a🙂bcdefghij"); err != nil {
+		t.Fatal(err)
+	}
+	edits, err := m.Format(context.Background(), path, protocol.FormattingOptions{TabSize: 3, InsertSpaces: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edits) != 1 {
+		t.Fatalf("edits = %+v", edits)
+	}
+	if edits[0].StartCol != 9 || edits[0].StartLine != 0 {
+		t.Errorf("UTF-16 offset should convert to rune col 9, got %+v", edits[0])
+	}
+	if edits[0].Text != "/*tab=3 spaces=true*/" {
+		t.Errorf("FormattingOptions should reach the server, got %q", edits[0].Text)
+	}
+}
+
+func TestManagerFormatRangeRoundTrip(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "one\ntwo\nthree"); err != nil {
+		t.Fatal(err)
+	}
+	edits, err := m.FormatRange(context.Background(), path,
+		buffer.Position{Line: 0, Col: 1}, buffer.Position{Line: 2, Col: 2},
+		protocol.FormattingOptions{TabSize: 4, InsertSpaces: false})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edits) != 1 {
+		t.Fatalf("edits = %+v", edits)
+	}
+	e := edits[0]
+	if e.StartLine != 0 || e.StartCol != 1 || e.EndLine != 2 || e.EndCol != 2 {
+		t.Errorf("range should round-trip through both conversions, got %+v", e)
 	}
 }
 

@@ -76,6 +76,22 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// FormatEdit is one formatting rewrite in 0-based editor rune coordinates:
+// the [Start, End) span becomes Text. Positions are already converted from the
+// server's encoding (protocol/convert.go) by the manager.
+type FormatEdit struct {
+	StartLine, StartCol int
+	EndLine, EndCol     int
+	Text                string
+}
+
+// FormatEditsMsg delivers formatting edits for the app to route to the editor
+// owning Path, which applies them as one undo unit.
+type FormatEditsMsg struct {
+	Path  string
+	Edits []FormatEdit
+}
+
 // ServerStatusKind classifies a server status update (Roadmap 0130):
 // persistent server state belongs on the status line, transient events surface
 // as toast notifications of the matching severity.

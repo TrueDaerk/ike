@@ -232,6 +232,41 @@ func TestReferencesNull(t *testing.T) {
 	}
 }
 
+func TestFormattingDecodesEdits(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/formatting": func(json.RawMessage) any {
+			return []protocol.TextEdit{{
+				Range:   protocol.Range{Start: protocol.Position{Line: 1}, End: protocol.Position{Line: 1, Character: 4}},
+				NewText: "\t",
+			}}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	edits, err := c.Formatting(ctx, protocol.DocumentFormattingParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edits) != 1 || edits[0].NewText != "\t" {
+		t.Fatalf("edits = %+v", edits)
+	}
+}
+
+func TestRangeFormattingNull(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/rangeFormatting": func(json.RawMessage) any { return nil },
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	edits, err := c.RangeFormatting(ctx, protocol.DocumentRangeFormattingParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(edits) != 0 {
+		t.Fatalf("null should decode to no edits, got %+v", edits)
+	}
+}
+
 func TestHoverNull(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/hover": func(json.RawMessage) any { return nil },

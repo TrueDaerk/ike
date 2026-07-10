@@ -353,6 +353,20 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.hover = &hoverState{lines: strings.Split(msg.Contents, "\n")}
 		}
 		return m, nil
+	case ilsp.FormatEditsMsg:
+		// Formatting edits (Roadmap 0100, #7): applied as one undo unit.
+		if msg.Path == m.path {
+			edits := make([]TextEdit, len(msg.Edits))
+			for i, e := range msg.Edits {
+				edits[i] = TextEdit{
+					StartLine: e.StartLine, StartCol: e.StartCol,
+					EndLine: e.EndLine, EndCol: e.EndCol,
+					Text: e.Text,
+				}
+			}
+			m.ApplyTextEdits(edits)
+		}
+		return m, nil
 	case watch.EventMsg:
 		// External change of the open file (Roadmap 0140): reload.go decides
 		// whether to reload in place (clean buffer) or leave it alone.
