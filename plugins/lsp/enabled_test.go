@@ -36,3 +36,25 @@ func TestResolveSpecHonorsPerServerEnable(t *testing.T) {
 		t.Fatal("no overlay at all must keep the server enabled")
 	}
 }
+
+// TestResolveSpecRespectsPluginToggle guards #133: a disabled lang.<id>
+// plugin takes its language server with it.
+func TestResolveSpecRespectsPluginToggle(t *testing.T) {
+	lang.Register(lang.Language{
+		ID:     "toggletest",
+		Server: &lang.ServerSpec{Language: "toggletest", Command: "toggle-ls"},
+	})
+	c, _ := config.Load(config.Options{})
+	c.Plugins = map[string]map[string]any{"lang-toggletest": {"enabled": false}}
+	config.Set(c)
+	t.Cleanup(func() { fresh, _ := config.Load(config.Options{}); config.Set(fresh) })
+
+	if _, ok := resolveSpec("toggletest"); ok {
+		t.Fatal("a disabled lang-toggletest plugin must disable its server")
+	}
+	c.Plugins["lang-toggletest"]["enabled"] = true
+	config.Set(c)
+	if _, ok := resolveSpec("toggletest"); !ok {
+		t.Fatal("re-enabling the plugin must restore the server")
+	}
+}

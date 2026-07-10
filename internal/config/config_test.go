@@ -289,3 +289,14 @@ func TestBackupClampAndOverride(t *testing.T) {
 		t.Errorf("expected one diagnostic per clamp, got %v", diags)
 	}
 }
+
+func TestPluginsSectionFlatAndDecode(t *testing.T) {
+	proj := writeProject(t, "[plugins.example]\nenabled = false\n")
+	c, _ := Load(Options{ProjectRoot: proj})
+	if v, ok := c.Plugins["example"]["enabled"].(bool); !ok || v {
+		t.Fatalf("plugins section should decode, got %+v", c.Plugins)
+	}
+	if f := c.Flat(); f["plugins.example.enabled"] != "false" {
+		t.Fatalf("flat should expose plugin toggles, got %q", f["plugins.example.enabled"])
+	}
+}

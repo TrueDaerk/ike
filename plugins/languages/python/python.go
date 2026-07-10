@@ -9,13 +9,14 @@ import (
 	_ "embed"
 
 	"ike/internal/lang"
+	"ike/plugins/languages/register"
 )
 
 //go:embed queries/python.scm
 var query string
 
 func init() {
-	lang.Register(lang.Language{
+	register.Language(lang.Language{
 		ID:         "python",
 		Extensions: []string{"py", "pyi"},
 		Grammar:    grammar(),

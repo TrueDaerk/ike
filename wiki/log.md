@@ -2,6 +2,15 @@
 
 ## 2026-07-10
 
+- Plugin manager page (#133, Roadmap 0180): settings panel gains a Plugins
+  page — every registered plugin with live enabled state, capability
+  summary and expandable inspection; `e` toggles plugins.<id>.enabled via
+  write-back (new real [plugins] config section; applyPluginConfig is now
+  symmetric and runs on reload). Language packages register a `lang-<id>`
+  plugin shim (plugins/languages/register), so a disabled language plugin
+  takes its LSP server with it and enabling one kicks the missing-server
+  install (new lsp.installMissing command). Registry.Describe lists
+  disabled plugins' capabilities for inspection.
 - LSP semantic-token highlighting (#9, Roadmap 0100): new
   internal/highlight/semantic decodes legend-based 5-tuples into highlight
   spans (modifier-refined capture mapping, UTF-16 via convert.go); manager

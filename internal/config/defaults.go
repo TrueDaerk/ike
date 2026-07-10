@@ -43,6 +43,7 @@ func defaults() *Config {
 			Name: "default",
 			Dark: true,
 		},
+		Plugins: map[string]map[string]any{},
 		Project: Project{
 			History:     []ProjectHistoryEntry{},
 			MaxHistory:  20,

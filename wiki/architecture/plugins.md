@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-06-19T00:00:00Z
+timestamp: 2026-07-10T18:30:00Z
 ---
 
 # Plugin Extension Contract
@@ -85,7 +85,18 @@ type API interface {
   (first owner by sorted order wins), and the clash is surfaced.
 - **Enable/disable.** Build-time set = which packages are blank-imported.
   Runtime on/off = `SetEnabled`, driven from config keys
-  `plugins.<id>.enabled = false`. Disabled plugins vanish from every lookup.
+  `plugins.<id>.enabled = false` (a real `[plugins]` config section since
+  #133, applied symmetrically on every reload — flipping the toggle back
+  re-enables). Disabled plugins vanish from every lookup;
+  `Registry.Describe` still lists them with their contributed capabilities,
+  which backs the settings panel's **Plugins page** (#133): one row per
+  plugin with id, live state, capability summary and an expandable
+  inspection; `e` toggles through the write-back layer. Language packages
+  register through `plugins/languages/register` — the lang registry entry
+  plus a `lang-<id>` plugin shim (dash, not dot: toggles persist as dotted
+  keys) — so disabling a language plugin takes its LSP server with it, and
+  enabling one kicks the missing-server install (#131) via
+  `lsp.installMissing`.
 
 ## Root model wiring
 

@@ -8,13 +8,14 @@ import (
 	_ "embed"
 
 	"ike/internal/lang"
+	"ike/plugins/languages/register"
 )
 
 //go:embed queries/go.scm
 var query string
 
 func init() {
-	lang.Register(lang.Language{
+	register.Language(lang.Language{
 		ID:         "go",
 		Extensions: []string{"go"},
 		Grammar:    grammar(),
