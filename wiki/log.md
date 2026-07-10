@@ -2,6 +2,12 @@
 
 ## 2026-07-10
 
+- Keybinding discoverability (#15, Roadmap 0081): which-key panel for held
+  chord prefixes (live continuations, letters first); keymap.LiveBindings
+  gives the cheatsheet and the palette shortcut column honest labels from
+  the effective table across reloads (delivered chord plain, fragile with
+  warning + escape route, blocked with dependency); the cheatsheet gains a
+  never-hidden blocked section.
 - Leader key & terminal-safe defaults (#14, Roadmap 0081): space-leader
   (outside the editor, [keymap] leader tunable) plus universal ctrl+k
   mnemonics through the existing chord resolver — go-to-file, grep,

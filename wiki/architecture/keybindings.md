@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T06:30:00Z
+timestamp: 2026-07-11T08:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -230,3 +230,23 @@ hand-maintained — `Defaults()` derives them from the reachability table
 truthfully. A completeness test enforces that every fragile, non-blocked
 default has a leader mnemonic, another delivered chord, or a documented
 exception (vim-native equivalents, palette reach).
+
+## Discoverability (0081/40)
+
+- **Which-key**: holding a chord prefix (the leader, `ctrl+k`, `cmd+k`)
+  pops a bottom-centered panel listing the available continuations — letter
+  mnemonics first, digits next — built live from the resolver's pending
+  state (`Resolver.PendingContinuations` / `BindingTable.Continuations`).
+  It clears on resolve, timeout or abort.
+- **Live, honest labels** (`keymap.LiveBindings`): the cheatsheet and the
+  palette's shortcut column read the *effective* table through a stable
+  holder that follows every keymap reload. Labelling is honest by rule:
+  a delivered chord shows plainly (`ctrl+s`; leader rows count, so
+  `lsp.definition` shows `space d` instead of the fragile `cmd+b`); a
+  fragile-only binding warns and names the escape (`cmd+d ⚠
+  terminal-dependent`, or `… ⚠ use space d`); blocked commands render
+  `✗ blocked: <dependency>`.
+- **Cheatsheet blocked section**: `palette.keymapHelp` appends a
+  "blocked (dependency not landed)" group listing every default binding
+  whose command has no owner yet, with its dependency — never hidden,
+  never silently inert.

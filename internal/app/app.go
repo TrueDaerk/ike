@@ -175,6 +175,13 @@ type Model struct {
 	// defaults. Roadmap 0080 owns the final keymap; this is the binding-agnostic op
 	// wired to a configurable default.
 	focusKeys map[string]Direction
+	// bindings is the live binding-table holder (0081/40): help and the
+	// palette's shortcut column read honest labels through it, following
+	// every keymap reload.
+	bindings *keymap.LiveBindings
+	// whichKey holds the which-key hint rows while a chord prefix is pending
+	// (0081/40); nil hides the overlay.
+	whichKey []string
 	// refs is the palette mode listing the latest find-references results
 	// (lsp.references, #5); the ReferencesMsg handler fills it and opens the
 	// palette locked to it.
@@ -247,21 +254,23 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	panes.SetFocused(pane.ExplorerKey)
 	refs := &refsMode{}
 	actions := &actionsMode{}
+	bindings := &keymap.LiveBindings{}
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
 		host:         h,
 		reg:          reg,
 		themePal:     themePal,
-		help:         help.New(reg, reg, helpMinCol(cfg)),
+		bindings:     bindings,
+		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs, actions),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings),
 		refs:         refs,
 		actions:      actions,
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
-		keys:         buildKeymap(cfg),
+		keys:         buildKeymap(cfg, bindings),
 	}
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -688,14 +697,20 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	res := m.keys.Feed(k, keymap.Context(m.focusContext()))
 	switch res.Status {
 	case keymap.Pending:
-		// Hold the partial chord and arm the timeout; swallow the key meanwhile.
+		// Hold the partial chord, surface the which-key hints (0081/40) and
+		// arm the timeout; swallow the key meanwhile.
+		prefix, conts := m.keys.PendingContinuations(keymap.Context(m.focusContext()))
+		m.whichKey = append([]string{prefix + " —"}, keymap.FormatContinuations(conts, 12)...)
 		return tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
 			return keymapTimeoutMsg{}
 		}), true
 	case keymap.Resolved:
+		m.whichKey = nil
 		if c, ok := m.reg.Command(res.Command); ok {
 			return c.Run(m.host), true
 		}
+	default:
+		m.whichKey = nil
 	}
 	return nil, false
 }
@@ -704,7 +719,7 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 // (keymap.preset, default JetBrains) overlaid by keymap.bindings.* overrides.
 // Non-chord override keys (the focus_* stopgap sharing the same map) are ignored
 // by the table builder.
-func buildKeymap(cfg host.Config) *keymap.Resolver {
+func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolver {
 	preset := keymap.PresetJetBrains
 	leader := keymap.DefaultLeader
 	overrides := map[string]string{}
@@ -730,17 +745,20 @@ func buildKeymap(cfg host.Config) *keymap.Resolver {
 	}
 	rows := append(keymap.Defaults(preset), keymap.LeaderRows(leader)...)
 	table := keymap.BuildTable(rows, overrides, keymap.GOOS)
+	if bindings != nil {
+		bindings.Set(table)
+	}
 	return keymap.NewResolver(table)
 }
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
 	}
-	cmd := palette.NewCommandMode(reg, reg, paletteHideOff(cfg))
+	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
@@ -1545,7 +1563,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case keymapTimeoutMsg:
 		// A held partial chord timed out: resolve it as an exact binding if one
-		// exists (e.g. cmd+k alone → vcs.commit), else discard it.
+		// exists (e.g. cmd+k alone → vcs.commit), else discard it. Either way
+		// the which-key overlay goes.
+		m.whichKey = nil
 		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
 			if c, ok := m.reg.Command(res.Command); ok {
 				return m, c.Run(m.host)
@@ -1820,10 +1840,37 @@ func (m Model) RunCommand(id string) tea.Cmd {
 // openHelp shows the keymap cheatsheet overlay in the modal shell, scoped to
 // the focused pane's context (global commands plus that context's own).
 func (m *Model) openHelp() {
+	// Honest blocked section (0081/40): bindings whose command has no owner
+	// yet appear with their dependency instead of vanishing. Built live from
+	// the effective table on every open.
+	m.help.SetExtra(m.blockedHelpGroup())
 	m.help.Snapshot(m.focusContext())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
+}
+
+// blockedHelpGroup collects the blocked default bindings for the cheatsheet.
+func (m Model) blockedHelpGroup() help.Group {
+	g := help.Group{Label: "blocked (dependency not landed)"}
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return g
+	}
+	seen := map[string]bool{}
+	for _, b := range m.bindings.Table().Bindings() {
+		reason, blocked := keymap.BlockedReason(b.Command)
+		if !blocked || seen[b.Command] {
+			continue
+		}
+		seen[b.Command] = true
+		title := b.Title
+		if title == "" {
+			title = b.Command
+		}
+		g.Entries = append(g.Entries, help.Entry{ID: b.Command, Title: title, Shortcut: "✗ needs " + reason})
+	}
+	sort.Slice(g.Entries, func(i, j int) bool { return g.Entries[i].Title < g.Entries[j].Title })
+	return g
 }
 
 // openPalette shows the centered command palette for the focused pane's context,
@@ -2866,6 +2913,7 @@ func (m Model) render() string {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
 	base = m.compositeLSPPopups(base)
+	base = m.compositeWhichKey(base)
 	result := base
 	switch {
 	case m.finder.IsOpen():
@@ -2888,6 +2936,27 @@ func (m Model) render() string {
 		Width(m.width).
 		Height(m.height).
 		Render(result)
+}
+
+// compositeWhichKey overlays the pending-chord hint rows (0081/40) as a
+// small bottom-centered panel above the status line.
+func (m Model) compositeWhichKey(base string) string {
+	if len(m.whichKey) == 0 {
+		return base
+	}
+	box := lipgloss.NewStyle().
+		Background(m.pal().Panel).
+		Foreground(m.pal().Foreground).
+		Padding(0, 1).
+		Render(strings.Join(m.whichKey, "\n"))
+	w := lipgloss.Width(box)
+	h := lipgloss.Height(box)
+	x := (m.width - w) / 2
+	y := m.height - h - 1 // one row above the status line
+	if x < 0 || y < 0 {
+		return base
+	}
+	return overlay.Place(base, box, x, y, m.width, m.height)
 }
 
 // moveGhost computes the preview box for an in-flight move. Onto another pane it
