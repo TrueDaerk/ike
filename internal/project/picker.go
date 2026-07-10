@@ -76,7 +76,7 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	for _, s := range out {
 		items = append(items, palette.Item{
 			Title:  s.entry.Name,
-			Detail: compactPath(s.entry.Path),
+			Detail: CompactPath(s.entry.Path),
 			Spans:  s.spans,
 			Score:  s.score,
 			Msg:    PickedMsg{Path: s.entry.Path},
@@ -95,10 +95,12 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 // the right untruncated, so an over-long path would crowd out the title.
 const maxDetailWidth = 40
 
-// compactPath renders path for the picker's detail chip: the home prefix
-// collapses to "~", and an over-long remainder keeps its head and tail around
-// a "…" so the project's location stays recognisable.
-func compactPath(path string) string {
+// CompactPath renders path for constrained chrome — the picker's detail chip
+// and the unsaved-changes prompt: the home prefix collapses to "~", and an
+// over-long remainder keeps its head and tail around a "…" so the project's
+// location stays recognisable. Bounding the width matters beyond looks: the
+// floating shell drops a box wider than the terminal outright.
+func CompactPath(path string) string {
 	if home, err := os.UserHomeDir(); err == nil && home != "" {
 		if rel, ok := strings.CutPrefix(path, home+string(filepath.Separator)); ok {
 			path = "~" + string(filepath.Separator) + rel

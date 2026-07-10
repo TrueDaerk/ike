@@ -118,11 +118,11 @@ func TestPickerNoHistoryStillOffersPathEntry(t *testing.T) {
 func TestCompactPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	if got := compactPath(home + "/code/ike"); got != "~/code/ike" {
+	if got := CompactPath(home + "/code/ike"); got != "~/code/ike" {
 		t.Errorf("home should collapse to ~, got %q", got)
 	}
 	long := "/very" + strings.Repeat("/deeply/nested", 6) + "/proj"
-	got := compactPath(long)
+	got := CompactPath(long)
 	if len([]rune(got)) > maxDetailWidth {
 		t.Errorf("compacted path too wide: %q", got)
 	}

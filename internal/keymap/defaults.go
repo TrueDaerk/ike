@@ -24,6 +24,10 @@ var jetbrainsRows = []row{
 	{"cmd+shift+a", "palette.searchEverywhere", "Search everywhere", Global, "Palette (07)", false},
 	{"shift shift", "palette.searchEverywhere", "Search everywhere (double-shift)", Global, "Palette (07)", true},
 	{"cmd+shift+o", "project.goToFile", "Go to file", Global, "Project (09)", false},
+	// alt+shift+p mirrors the project plugin's default Keymap slot: the chord
+	// table resolves modified chords even in a capturing editor, which the
+	// registry keymap layer does not.
+	{"alt+shift+p", "project.switch", "Switch project", Global, "Project (0090)", false},
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)", false},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)", false},
 	{"alt+f7", "editor.findUsages", "Find usages", Editor, "Editor (06)/LSP (10)", false},

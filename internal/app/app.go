@@ -122,6 +122,10 @@ type Model struct {
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
+	// switchPending is the validated project root awaiting the unsaved-changes
+	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
+	// cancel prompt; "" when no switch is gated.
+	switchPending string
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -209,6 +213,15 @@ func New() Model {
 // the pane registry (explorer singleton + one editor), then restores any saved
 // layout and session.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
+	return newWithHost(reg, cfg, host.New(cfg))
+}
+
+// newWithHost is NewWith with the host supplied. A project switch (Roadmap
+// 0090, #3) rebuilds the model through here with the *live* host, so the seams
+// wired to its pointer — the program sender, the LSP bridge's editor emitter,
+// plugin captures — survive the re-root.
+func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
+	h.SetConfig(cfg)
 	applyPluginConfig(reg, cfg)
 	themePal, themeWarning := resolveTheme(reg, cfg)
 	panes := pane.NewRegistry(cfg)
@@ -219,7 +232,7 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
-		host:         host.New(cfg),
+		host:         h,
 		reg:          reg,
 		themePal:     themePal,
 		help:         help.New(reg, reg, helpMinCol(cfg)),
@@ -1006,10 +1019,34 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case project.PickedMsg:
-		// Picker selection. The switch orchestration is #3; until it lands,
-		// surface the choice instead of silently dropping it.
-		m.host.Notify(host.Info, "switching to "+msg.Path+" is not available yet (#3)")
+		// Picker selection: validate off the Update loop; the result comes
+		// back as SwitchProjectMsg or SwitchFailedMsg.
+		return m, project.SwitchTo(msg.Path)
+
+	case project.SwitchProjectMsg:
+		return m.handleSwitchProject(msg)
+
+	case project.UnsavedChangesMsg:
+		m.openSwitchPrompt(msg.Root)
 		return m, nil
+
+	case project.SwitchFailedMsg:
+		m.host.Notify(host.Error, "cannot switch project: "+msg.Err.Error())
+		return m, nil
+
+	case project.SwitchedMsg:
+		m.host.Notify(host.Info, "switched to "+msg.Root)
+		return m, nil
+
+	case project.RecordedMsg:
+		// History write-back after a switch. A failure is worth a toast; a
+		// success reloads the config so the picker's in-memory history already
+		// lists the just-recorded open.
+		if msg.Err != nil {
+			m.host.Notify(host.Warn, "could not record project history: "+msg.Err.Error())
+			return m, nil
+		}
+		return m, config.Reload(m.cfgOpts)
 
 	case SelectThemeMsg:
 		// Session-only theme switch from the palette's "Theme: <name>" commands.
@@ -1199,6 +1236,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// handling: k / r / esc answer it, everything else is swallowed.
 		if m.conflictOpen() {
 			return m.updateConflict(msg)
+		}
+		// The unsaved-changes guard before a project switch (0090, #3) owns the
+		// keyboard the same way: s / d / esc answer it.
+		if m.switchPromptOpen() {
+			return m.updateSwitchPrompt(msg)
 		}
 		// The rename prompt (#175) owns the keyboard the same way: typed
 		// characters build the new name, enter applies, esc cancels.
