@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-11T12:30:00Z
+timestamp: 2026-07-10T16:20:00Z
 ---
 
 # Plugin Extension Contract
@@ -159,5 +159,37 @@ compatibility.
 
 The contract is verified end to end against a real Go wasip1 c-shared
 guest that registers capabilities and answers `on_command` through every
-shim. The capability bridge into `registry.Register` is #25; until it lands
-a loaded module simply sits instantiated.
+shim.
+
+### Capability bridge (#25)
+
+`internal/wasm/bridge` closes the loop: after the scan, `RegisterModules`
+calls each module's `register()` and adapts the declared descriptors into a
+`plugin.Plugin` added to the registry — from then on a WASM module is
+indistinguishable from a compile-in plugin (palette, keymaps, help sheet,
+settings Plugins page, `plugins.<id>.enabled` toggles all apply unchanged).
+
+- **Translation**: `CommandDesc` → `plugin.Command` (empty context = global,
+  else `PaneScope`), `KeymapDesc` → `plugin.Keymap` at `CorePriority`,
+  `HookDesc` → `plugin.Hook` (`file_opened` / `buffer_saved` /
+  `buffer_closed`; unknown events are skipped). The plugin id is the guest's
+  self-declared name, falling back to the file base name.
+- **Callbacks off the Update loop**: every guest entry point runs inside the
+  returned `tea.Cmd`, so a slow or faulting guest never stalls Update;
+  faults surface as warn toasts. Hook payloads cross as JSON bytes.
+- **Host adapter**: `bridge.HostAdapter` implements `abi.Host` over the real
+  `host.API`, binding late — `main.go` instantiates the `"ike"` host module
+  before any guest loads and calls `SetAPI` once the model exists (calls
+  before binding are dropped). Severity 0/1/2 maps to info/warn/error;
+  guest-initiated opens re-enter Update via `Send(OpenFileRequest)`; the
+  `open_file` dispatch envelope is the one mapped type, unknown types warn.
+- **Failure posture**: a module whose `register()` traps is unloaded with a
+  diagnostic; a module without the export stays loaded but contributes
+  nothing.
+
+Parity is pinned by tests: the same capability set registered once
+compile-in and once via a real WASM guest is asserted identical through
+every registry view (`Commands`, `Keymaps`, `Binding`, `Hooks`, context
+scoping) and produces identical notifications when invoked. Remaining 9900
+slices: the Go guest SDK + example plugin (#26) and sandbox limits +
+manifest validation (#27).
