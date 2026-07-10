@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- WASM capability bridge (#25, Roadmap 9900): internal/wasm/bridge adapts
+  loaded modules into plugin.Plugin — register() descriptors become
+  registry commands/keymaps/hooks (guest callbacks run inside tea.Cmds,
+  faults toast as warnings), HostAdapter binds abi.Host onto the live
+  host.API late (main.go instantiates the "ike" module before guests load,
+  SetAPI after app.New). A WASM plugin is now palette-reachable and
+  indistinguishable from a compile-in plugin; parity is pinned by tests
+  against a real Go wasip1 guest.
 - WASM ABI (#24, Roadmap 9900): internal/wasm/abi fixes the host↔guest
   contract — JSON payloads over (ptr,len) regions, packed-u64 returns,
   guest ike_alloc for host→guest buffers; guest entry points register/

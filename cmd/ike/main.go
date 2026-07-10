@@ -11,7 +11,10 @@ import (
 	"ike/internal/app"
 	"ike/internal/config"
 	"ike/internal/project"
+	"ike/internal/registry"
 	"ike/internal/wasm"
+	"ike/internal/wasm/abi"
+	"ike/internal/wasm/bridge"
 
 	// Compiled-in plugins self-register via init(). Add or remove blank imports
 	// here to change the build-time plugin set.
@@ -34,17 +37,27 @@ func main() {
 	// Under bubbletea v2 the alternate screen and mouse cell-motion reporting
 	// (which drives the pane drag/resize layout, Roadmap 0036) are declared on the
 	// model's View, not via program options. See app.Model.View.
-	// Load WASM plugins from the conventional directory (Roadmap 9900, #23).
-	// The capability bridge (#25) will register them; until then loaded
-	// modules simply sit instantiated. A faulting module is skipped with a
-	// diagnostic; a missing directory is normal.
-	wasmRT := wasm.NewRuntime(context.Background(), nil)
+	// Load WASM plugins from the conventional directory and bridge their
+	// declared capabilities into the plugin registry (Roadmap 9900, #23/#25),
+	// before app.New so the palette and keymap builds see them. A faulting
+	// module is skipped with a diagnostic; a missing directory is normal. The
+	// host adapter binds to the live host below, once the model exists.
+	ctx := context.Background()
+	wasmRT := wasm.NewRuntime(ctx, nil)
 	defer wasmRT.Close()
+	wasmHost := bridge.NewHostAdapter()
+	if err := abi.InstantiateHost(ctx, wasmRT.Engine(), wasmHost); err != nil {
+		fmt.Fprintln(os.Stderr, "ike: wasm host module:", err)
+	}
 	for _, diag := range wasmRT.ScanDir(wasm.DefaultDir()).Diagnostics {
+		fmt.Fprintln(os.Stderr, "ike:", diag)
+	}
+	for _, diag := range bridge.RegisterModules(ctx, wasmRT, registry.Global()) {
 		fmt.Fprintln(os.Stderr, "ike:", diag)
 	}
 
 	m := app.New()
+	wasmHost.SetAPI(m.Host())
 	p := tea.NewProgram(m)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
 	// can inject async results. The host is shared by pointer with the program's

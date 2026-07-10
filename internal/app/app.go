@@ -338,6 +338,11 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 // bridge) can inject async results. main.go calls it once after tea.NewProgram.
 func (m Model) SetSender(send func(tea.Msg)) { m.host.SetSender(send) }
 
+// Host exposes the model's live host as the plugin-facing API. main.go binds
+// it into the WASM host adapter (Roadmap 9900, #25) once the model exists;
+// the pointer survives project switches (newWithHost carries it over).
+func (m Model) Host() host.API { return m.host }
+
 // StartWatcher starts the external-file-change watcher on root when
 // files.watch is enabled (Roadmap 0140). main.go calls it once after
 // SetSender; a project switch (Roadmap 0090) re-calls it with the new root,

@@ -161,3 +161,11 @@ func (m *Module) ExportedFunction(name string) (api.Function, bool) {
 	fn := m.mod.ExportedFunction(name)
 	return fn, fn != nil
 }
+
+// API exposes the underlying wazero module for the ABI helpers (#24), which
+// operate on api.Module directly (exports plus linear memory).
+func (m *Module) API() api.Module { return m.mod }
+
+// Engine exposes the wazero runtime so the host import module ("ike", #24)
+// can be instantiated on it before any guest module loads.
+func (r *Runtime) Engine() wazero.Runtime { return r.rt }
