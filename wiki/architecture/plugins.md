@@ -190,6 +190,14 @@ settings Plugins page, `plugins.<id>.enabled` toggles all apply unchanged).
 Parity is pinned by tests: the same capability set registered once
 compile-in and once via a real WASM guest is asserted identical through
 every registry view (`Commands`, `Keymaps`, `Binding`, `Hooks`, context
-scoping) and produces identical notifications when invoked. Remaining 9900
-slices: the Go guest SDK + example plugin (#26) and sandbox limits +
-manifest validation (#27).
+scoping) and produces identical notifications when invoked.
+
+### Guest SDK (#26)
+
+`sdk/` (a nested Go module, `ike/sdk`) is the typed guest-side SDK: plugin
+authors declare commands/keymaps/hooks as Go callbacks in `init()` and call
+typed host functions; the SDK owns the wasm exports, the allocator, and the
+JSON marshalling. `sdk/example/` is a buildable reference plugin; the full
+pipeline (build → scan → register → invoke) is pinned by a test. Authoring
+guide: [Writing WASM Plugins](/architecture/plugin-authoring.md). The
+remaining 9900 slice is sandbox limits + manifest validation (#27).

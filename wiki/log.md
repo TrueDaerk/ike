@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- Go guest SDK + example plugin (#26, Roadmap 9900): sdk/ (nested module
+  ike/sdk) wraps the raw ABI in a typed guest API — Command/Keymap/Hook
+  declarations plus Notify/SetStatus/OpenFile/Dispatch/ConfigGet host
+  calls; sdk/example is a buildable reference plugin; new authoring guide
+  wiki/architecture/plugin-authoring.md (SDK, build via GOOS=wasip1
+  -buildmode=c-shared, ABI reference for other languages). Full-pipeline
+  test builds the example and drives it through scan → register → invoke.
 - WASM capability bridge (#25, Roadmap 9900): internal/wasm/bridge adapts
   loaded modules into plugin.Plugin — register() descriptors become
   registry commands/keymaps/hooks (guest callbacks run inside tea.Cmds,
