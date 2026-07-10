@@ -5,6 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -87,6 +88,43 @@ func TestSelectThemeCommand(t *testing.T) {
 	m = next.(Model)
 	if m.pal().Name != theme.DefaultName {
 		t.Errorf("unknown name: theme = %q, want %s", m.pal().Name, theme.DefaultName)
+	}
+}
+
+// TestReloadKeepsRuntimeTheme (#241): a config reload triggered by an
+// unrelated settings edit must not revert a palette-selected theme; only an
+// explicit [theme].name change wins (and clears the override).
+func TestReloadKeepsRuntimeTheme(t *testing.T) {
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(themeReg(), host.FromConfig(cfg))
+	next, _ := m.Update(SelectThemeMsg{Name: "nord"})
+	m = next.(Model)
+	if m.pal().Name != "nord" {
+		t.Fatalf("after select: theme = %q, want nord", m.pal().Name)
+	}
+
+	// Unrelated edit: theme.name is unchanged, the runtime pick survives.
+	cfg2, _ := config.Load(config.Options{})
+	cfg2.Editor.TabWidth = 2
+	tm, _ := m.Update(config.ConfigReloadedMsg{Config: cfg2})
+	m = tm.(Model)
+	if m.pal().Name != "nord" {
+		t.Errorf("unrelated reload reverted theme to %q, want nord", m.pal().Name)
+	}
+	if m.themeOverride != "nord" {
+		t.Errorf("override = %q, want nord", m.themeOverride)
+	}
+
+	// Explicit theme edit: the config choice wins and clears the override.
+	cfg3, _ := config.Load(config.Options{})
+	cfg3.Theme.Name = "tokyo-night"
+	tm, _ = m.Update(config.ConfigReloadedMsg{Config: cfg3})
+	m = tm.(Model)
+	if m.pal().Name != "tokyo-night" {
+		t.Errorf("theme edit: theme = %q, want tokyo-night", m.pal().Name)
+	}
+	if m.themeOverride != "" {
+		t.Errorf("theme edit should clear the override, got %q", m.themeOverride)
 	}
 }
 
