@@ -381,6 +381,9 @@ func TestMotionKeyTranslation(t *testing.T) {
 		{"cmd+left (super)", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'a', Mod: vt.ModCtrl}},
 		{"cmd+right (super)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
 		{"cmd+right (meta)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModMeta}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
+		{"option+backspace", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt}, vt.KeyPressEvent{Code: vt.KeyBackspace, Mod: vt.ModAlt}},
+		{"cmd+backspace (super)", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}},
+		{"cmd+backspace (meta)", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModMeta}, vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}},
 	}
 	for _, c := range cases {
 		got, ok := motionKey(c.in)
@@ -395,6 +398,8 @@ func TestMotionKeyTranslation(t *testing.T) {
 		{Code: 'b', Mod: tea.ModAlt},                       // native ESC b stays as-is
 		{Code: tea.KeyPgUp, Mod: tea.ModShift},             // scrollback paging
 		{Code: tea.KeyLeft, Mod: tea.ModAlt | tea.ModCtrl}, // extra modifier
+		{Code: tea.KeyBackspace},                           // plain backspace stays raw
+		{Code: tea.KeyBackspace, Mod: tea.ModCtrl},         // not a natural-editing chord
 	} {
 		if _, ok := motionKey(in); ok {
 			t.Fatalf("%#v should not translate", in)
