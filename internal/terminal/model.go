@@ -125,10 +125,35 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.scroll = 0
+	if ev, ok := motionKey(msg); ok {
+		m.sess.SendKey(ev)
+		return nil
+	}
 	for _, ev := range toVTKeys(msg) {
 		m.sess.SendKey(ev)
 	}
 	return nil
+}
+
+// motionKey translates the macOS-conventional editing chords into the
+// readline/ZLE emacs-mode defaults — the iTerm "natural text editing"
+// convention (#225): option+arrows jump words (ESC b / ESC f), cmd+arrows go
+// to line start/end (ctrl+a / ctrl+e). Shift-augmented variants behave the
+// same; a PTY has no selection to extend.
+func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
+	mod := k.Mod &^ textMods
+	isCmd := mod == tea.ModSuper || mod == tea.ModMeta
+	switch {
+	case mod == tea.ModAlt && k.Code == tea.KeyLeft:
+		return vt.KeyPressEvent{Code: 'b', Mod: vt.ModAlt}, true
+	case mod == tea.ModAlt && k.Code == tea.KeyRight:
+		return vt.KeyPressEvent{Code: 'f', Mod: vt.ModAlt}, true
+	case isCmd && k.Code == tea.KeyLeft:
+		return vt.KeyPressEvent{Code: 'a', Mod: vt.ModCtrl}, true
+	case isCmd && k.Code == tea.KeyRight:
+		return vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}, true
+	}
+	return vt.KeyPressEvent{}, false
 }
 
 // pageSize is one paging step: half the grid, at least one line.

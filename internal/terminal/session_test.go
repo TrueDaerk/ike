@@ -201,6 +201,71 @@ func TestShiftedTextReachesShell(t *testing.T) {
 	})
 }
 
+// TestMotionKeyTranslation: the macOS editing chords map to the readline
+// emacs-mode defaults (#225); everything else passes through untranslated.
+func TestMotionKeyTranslation(t *testing.T) {
+	cases := []struct {
+		name string
+		in   tea.KeyPressMsg
+		want vt.KeyPressEvent
+	}{
+		{"option+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModAlt}, vt.KeyPressEvent{Code: 'b', Mod: vt.ModAlt}},
+		{"option+right", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt}, vt.KeyPressEvent{Code: 'f', Mod: vt.ModAlt}},
+		{"shift+option+left", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModShift | tea.ModAlt}, vt.KeyPressEvent{Code: 'b', Mod: vt.ModAlt}},
+		{"cmd+left (super)", tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'a', Mod: vt.ModCtrl}},
+		{"cmd+right (super)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
+		{"cmd+right (meta)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModMeta}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
+	}
+	for _, c := range cases {
+		got, ok := motionKey(c.in)
+		if !ok || got != c.want {
+			t.Fatalf("%s: got %#v ok=%v, want %#v", c.name, got, ok, c.want)
+		}
+	}
+	for _, in := range []tea.KeyPressMsg{
+		{Code: tea.KeyLeft},                                // plain arrow
+		{Code: tea.KeyLeft, Mod: tea.ModCtrl},              // pane focus chord territory
+		{Code: tea.KeyUp, Mod: tea.ModAlt},                 // only left/right translate
+		{Code: 'b', Mod: tea.ModAlt},                       // native ESC b stays as-is
+		{Code: tea.KeyPgUp, Mod: tea.ModShift},             // scrollback paging
+		{Code: tea.KeyLeft, Mod: tea.ModAlt | tea.ModCtrl}, // extra modifier
+	} {
+		if _, ok := motionKey(in); ok {
+			t.Fatalf("%#v should not translate", in)
+		}
+	}
+}
+
+// TestMotionKeysDriveTheShell: option/cmd arrows edit the readline buffer of
+// a real shell — cmd+left prepends at the line start, option+left lands at
+// the last word (#225).
+func TestMotionKeysDriveTheShell(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24}
+
+	type press = tea.KeyPressMsg
+	for _, r := range "cho start-mark" {
+		m.Update(press{Code: r, Text: string(r)})
+	}
+	m.Update(press{Code: tea.KeyLeft, Mod: tea.ModSuper}) // → ctrl+a
+	m.Update(press{Code: 'e', Text: "e"})                 // completes "echo"
+	m.Update(press{Code: tea.KeyEnter})
+	waitFor(t, "line-start edit", func() bool {
+		return strings.Count(plainView(s), "start-mark") >= 2 // echoed input + output
+	})
+
+	for _, r := range "echo one two" {
+		m.Update(press{Code: r, Text: string(r)})
+	}
+	m.Update(press{Code: tea.KeyLeft, Mod: tea.ModAlt}) // → ESC b, before "two"
+	m.Update(press{Code: 'X', ShiftedCode: 'X', Mod: tea.ModShift, Text: "X"})
+	m.Update(press{Code: tea.KeyEnter})
+	waitFor(t, "word-jump edit", func() bool {
+		return strings.Count(plainView(s), "one Xtwo") >= 2
+	})
+}
+
 // TestShiftedTextKeepsSpecialKeys: shift on non-text keys stays a modified
 // event — shift+pgup must still page the scrollback, not type anything.
 func TestShiftedTextKeepsSpecialKeys(t *testing.T) {

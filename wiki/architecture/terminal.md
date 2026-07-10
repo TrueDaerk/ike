@@ -69,6 +69,13 @@ grid per step, position marker on the bottom line, any typed key snaps back
 to live); the mouse wheel scrolls it too. A dead session (shell exited)
 falls back to normal key handling so `ctrl+w` can close the pane.
 
+**macOS editing chords** (#225, `motionKey` in `model.go`): the pane
+translates the iTerm "natural text editing" motions to the readline/ZLE
+emacs-mode defaults — `option+left`/`right` → `ESC b`/`ESC f` (word jump),
+`cmd+left`/`right` → `ctrl+a`/`ctrl+e` (line start/end). Shift-augmented
+variants behave the same (a PTY has no selection). Cmd delivery is
+terminal-dependent (the 0081 reality-probe caveat).
+
 ## Commands (#97)
 
 - **`terminal.toggle`** (default `alt+f12`, fragile like every alt+F-key):

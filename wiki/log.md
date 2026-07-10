@@ -2,6 +2,11 @@
 
 ## 2026-07-10
 
+- Terminal macOS editing chords (#225): option+left/right word-jump
+  (ESC b / ESC f), cmd+left/right line start/end (ctrl+a / ctrl+e) — the
+  iTerm "natural text editing" convention, translated in
+  internal/terminal/model.go (motionKey).
+
 - Terminal shifted-input fix (#224): the vt encoder drops non-special keys
   that still carry a modifier, so uppercase/caps-lock characters never
   reached the shell; the pane now replays shift/caps-lock/num-lock-only
