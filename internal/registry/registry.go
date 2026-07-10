@@ -294,6 +294,46 @@ func (r *Registry) Hooks(event plugin.Event) []OwnedHook {
 	return out
 }
 
+// PluginDescription is the inspection view of one registered plugin (#133):
+// identity, live enabled state, and how many of each capability it
+// contributes — counted from the raw registration, so a disabled plugin's
+// contributions stay visible.
+type PluginDescription struct {
+	ID            string
+	Enabled       bool
+	Commands      []string
+	Panes         int
+	Keymaps       int
+	FileHandlers  int
+	Hooks         int
+	Themes        int
+	SettingsPages int
+}
+
+// Describe lists every registered plugin (enabled or not) in registration
+// order, with its contributed capabilities summarised.
+func (r *Registry) Describe() []PluginDescription {
+	out := make([]PluginDescription, 0, len(r.plugins))
+	for _, p := range r.plugins {
+		c := p.Capabilities()
+		d := PluginDescription{
+			ID:            p.ID(),
+			Enabled:       r.IsEnabled(p.ID()),
+			Panes:         len(c.Panes),
+			Keymaps:       len(c.Keymaps),
+			FileHandlers:  len(c.FileHandlers),
+			Hooks:         len(c.Hooks),
+			Themes:        len(c.Themes),
+			SettingsPages: len(c.SettingsPages),
+		}
+		for _, cmd := range c.Commands {
+			d.Commands = append(d.Commands, cmd.ID)
+		}
+		out = append(out, d)
+	}
+	return out
+}
+
 // Conflict describes a registration clash between two enabled capabilities.
 type Conflict struct {
 	Kind   string // "command", "keymap", "pane", "handler"

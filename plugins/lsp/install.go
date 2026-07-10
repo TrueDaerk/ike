@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 )
@@ -66,6 +67,36 @@ func (i *installer) finish(langID string, err error) {
 	defer i.mu.Unlock()
 	delete(i.inflight, langID)
 	i.failed[langID] = err != nil
+}
+
+// installMissing kicks the install recipe for every enabled language whose
+// server binary is missing (#133: enabling a language plugin from the plugin
+// manager triggers installation). It reads the configuration fresh off disk —
+// the toggle's write-back may still be racing the in-memory reload — and
+// reports when there is nothing to do.
+func (b *bridge) installMissing(h host.API) tea.Cmd {
+	b.ensure(h)
+	return func() tea.Msg {
+		cfg, _ := config.Load(config.Discover("."))
+		kicked := 0
+		for _, l := range lang.All() {
+			if l.Server == nil || len(l.Server.Install) == 0 {
+				continue
+			}
+			if !cfg.LSP.Enabled || !serverEnabled(cfg, l.ID) || !pluginEnabled(cfg, "lang-"+l.ID) {
+				continue
+			}
+			if _, err := exec.LookPath(l.Server.Command); err == nil {
+				continue
+			}
+			go func(id string) { _ = b.installLang(id)() }(l.ID)
+			kicked++
+		}
+		if kicked == 0 {
+			return ilsp.ServerStatusMsg{Text: "all enabled language servers are installed", Kind: ilsp.ServerEventInfo}
+		}
+		return nil
+	}
 }
 
 // autoInstallEnabled reads lsp.auto_install live.

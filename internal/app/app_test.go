@@ -822,3 +822,27 @@ func TestHelpOverlayFloatsCentered(t *testing.T) {
 		t.Fatal("help pane and its content should be composited onto the canvas")
 	}
 }
+
+// TestApplyPluginConfigSymmetric guards #133: a reload re-enables a plugin
+// whose toggle flipped back, not just disables.
+func TestApplyPluginConfigSymmetric(t *testing.T) {
+	reg := registry.New()
+	reg.Add(togglePlugin{})
+	applyPluginConfig(reg, host.MapConfig{"plugins.toggle.enabled": "false"})
+	if reg.IsEnabled("toggle") {
+		t.Fatal("false should disable")
+	}
+	applyPluginConfig(reg, host.MapConfig{"plugins.toggle.enabled": "true"})
+	if !reg.IsEnabled("toggle") {
+		t.Fatal("true should re-enable")
+	}
+	applyPluginConfig(reg, host.MapConfig{})
+	if !reg.IsEnabled("toggle") {
+		t.Fatal("an absent key should mean enabled")
+	}
+}
+
+type togglePlugin struct{}
+
+func (togglePlugin) ID() string                        { return "toggle" }
+func (togglePlugin) Capabilities() plugin.Capabilities { return plugin.Capabilities{} }

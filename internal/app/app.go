@@ -279,6 +279,33 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		}
 		return nil
 	})})
+	pages = append(pages, settings.Page{Title: "Plugins", Custom: settings.NewPluginsPage(m.cfgOpts,
+		func() []settings.PluginInfo {
+			descs := reg.Describe()
+			out := make([]settings.PluginInfo, len(descs))
+			for i, d := range descs {
+				out[i] = settings.PluginInfo{
+					ID: d.ID, Enabled: d.Enabled, Commands: d.Commands,
+					Panes: d.Panes, Keymaps: d.Keymaps, FileHandlers: d.FileHandlers,
+					Hooks: d.Hooks, Themes: d.Themes, SettingsPages: d.SettingsPages,
+				}
+			}
+			return out
+		},
+		func(id string, enable bool) tea.Cmd {
+			// The toggle is user preference, not project state: user scope.
+			write := config.WriteAndReload(m.cfgOpts, config.UserScope, "plugins."+id+".enabled", enable)
+			// Enabling a language plugin kicks the missing-server install
+			// (#131); the command re-reads config off disk, so it sees the
+			// write regardless of reload ordering.
+			if enable && strings.HasPrefix(id, "lang-") {
+				if c, ok := reg.Command("lsp.installMissing"); ok {
+					return tea.Batch(write, c.Run(m.host))
+				}
+			}
+			return write
+		},
+	)})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
@@ -761,8 +788,12 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 		return
 	}
 	for _, id := range reg.PluginIDs() {
-		if v, ok := cfg.Get("plugins." + id + ".enabled"); ok && v == "false" {
-			reg.SetEnabled(id, false)
+		// Symmetric on purpose (#133): a live reload must re-enable a plugin
+		// whose toggle flipped back, not just disable.
+		if v, ok := cfg.Get("plugins." + id + ".enabled"); ok {
+			reg.SetEnabled(id, v != "false")
+		} else {
+			reg.SetEnabled(id, true)
 		}
 	}
 }

@@ -163,3 +163,25 @@ func TestDispatchRoundTrip(t *testing.T) {
 		t.Fatalf("dispatch did not round-trip, got %#v", msg)
 	}
 }
+
+func TestDescribeIncludesDisabled(t *testing.T) {
+	r := New()
+	r.Add(fake{id: "a", caps: plugin.Capabilities{
+		Commands: []plugin.Command{cmd("a.one"), cmd("a.two")},
+		Hooks:    []plugin.Hook{{ID: "a.hook"}},
+	}})
+	r.Add(fake{id: "b", caps: plugin.Capabilities{Panes: []plugin.Pane{{ID: "b.pane"}}}})
+	r.SetEnabled("a", false)
+
+	descs := r.Describe()
+	if len(descs) != 2 {
+		t.Fatalf("descs = %+v", descs)
+	}
+	a := descs[0]
+	if a.ID != "a" || a.Enabled || len(a.Commands) != 2 || a.Hooks != 1 {
+		t.Fatalf("disabled plugin's capabilities must stay visible: %+v", a)
+	}
+	if b := descs[1]; b.ID != "b" || !b.Enabled || b.Panes != 1 {
+		t.Fatalf("b = %+v", b)
+	}
+}

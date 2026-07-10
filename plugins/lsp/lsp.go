@@ -80,6 +80,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().formatRange(h) },
 			},
 			{
+				ID:    "lsp.installMissing",
+				Title: "LSP: Install Missing Servers",
+				Scope: plugin.GlobalScope(),
+				Run:   func(h host.API) tea.Cmd { return shared().installMissing(h) },
+			},
+			{
 				ID:    "lsp.restart",
 				Title: "LSP: Restart Servers",
 				Scope: plugin.GlobalScope(),
@@ -151,6 +157,11 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 	if !serverEnabled(c, langID) {
 		return ilsp.ServerSpec{}, false
 	}
+	// LSP activation follows the plugin (#133): a disabled `lang-<id>` plugin
+	// takes its language server with it.
+	if !pluginEnabled(c, "lang-"+langID) {
+		return ilsp.ServerSpec{}, false
+	}
 	var spec ilsp.ServerSpec
 	if l, ok := lang.ByID(langID); ok && l.Server != nil {
 		spec = *l.Server
@@ -174,6 +185,16 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 		return ilsp.ServerSpec{}, false
 	}
 	return spec, true
+}
+
+// pluginEnabled reads the [plugins.<id>] enabled toggle (absent means on).
+func pluginEnabled(c *config.Config, id string) bool {
+	if raw, ok := c.Plugins[id]; ok {
+		if b, isBool := raw["enabled"].(bool); isBool {
+			return b
+		}
+	}
+	return true
 }
 
 // serverEnabled reads the per-server switch: [lsp.servers.<id>] enabled =

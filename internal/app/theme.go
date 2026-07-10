@@ -127,6 +127,10 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	config.Set(cfg)
 	hcfg := host.FromConfig(cfg)
 	m.host.SetConfig(hcfg)
+	// Re-resolve plugin toggles (#133): the palette/menu/help read the
+	// registry live, so SetEnabled plus the keymap rebuild below is the whole
+	// re-resolution.
+	applyPluginConfig(m.reg, hcfg)
 	pal, warning := resolveTheme(m.reg, hcfg)
 	m.applyTheme(pal)
 	m.panes.Reconfigure(hcfg)
