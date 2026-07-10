@@ -30,7 +30,9 @@ var jetbrainsRows = []row{
 	{"alt+shift+p", "project.switch", "Switch project", Global, "Project (0090)", false},
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)", false},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)", false},
-	{"alt+f7", "editor.findUsages", "Find usages", Editor, "Editor (06)/LSP (10)", false},
+	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
+	// the table uses the registered id (mirroring lsp.definition below).
+	{"alt+f7", "lsp.references", "Find usages", Editor, "LSP (0100)", false},
 	// shift+f6 renames the *file* (explorer selection or focused editor's
 	// file, #175). LSP rename-symbol (#6) needs its own chord or a
 	// context-aware dispatch when it lands.

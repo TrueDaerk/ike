@@ -20,6 +20,7 @@ type Capabilities struct {
 	CompletionTriggers []string
 	Hover              bool
 	Definition         bool
+	References         bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -40,6 +41,7 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	}
 	caps.Hover = truthyProvider(sc.HoverProvider)
 	caps.Definition = truthyProvider(sc.DefinitionProvider)
+	caps.References = truthyProvider(sc.ReferencesProvider)
 	return caps
 }
 

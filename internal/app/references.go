@@ -1,0 +1,82 @@
+package app
+
+import (
+	"sort"
+	"strconv"
+
+	"ike/internal/fuzzy"
+	ilsp "ike/internal/lsp"
+	"ike/internal/palette"
+)
+
+// references.go renders find-references results (lsp.references, #5) through
+// the command palette: the bridge delivers a ReferencesMsg, the root model
+// fills this static mode and opens the palette locked to it. Selecting an
+// entry emits the same DefinitionMsg go-to-definition navigates with, so the
+// open-file-and-place-cursor path is shared, not forked.
+
+// refsPrefix selects the references mode inside the palette. Like the
+// project picker it is only ever opened locked, so the rune has no
+// user-facing prefix story.
+const refsPrefix = '&'
+
+// previewMax caps the preview chip: the palette row pins Detail to the right
+// untruncated, so an over-long source line would crowd out the location.
+const previewMax = 32
+
+// refsMode is a palette Mode over the latest find-references results.
+type refsMode struct {
+	items []palette.Item
+}
+
+// Set replaces the mode's items with the given references, kept in server
+// order (grouped by file, ascending positions for every mainstream server).
+func (r *refsMode) Set(refs []ilsp.Reference) {
+	r.items = make([]palette.Item, len(refs))
+	for i, ref := range refs {
+		preview := ref.Preview
+		if runes := []rune(preview); len(runes) > previewMax {
+			preview = string(runes[:previewMax-1]) + "…"
+		}
+		r.items[i] = palette.Item{
+			Title:  displayPath(ref.Path) + ":" + strconv.Itoa(ref.Line+1),
+			Detail: preview,
+			Msg:    ilsp.DefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col},
+		}
+	}
+}
+
+// Prefix implements palette.Mode.
+func (r *refsMode) Prefix() rune { return refsPrefix }
+
+// Placeholder implements palette.Mode.
+func (r *refsMode) Placeholder() string { return "Usages — filter by file or text…" }
+
+// Results implements palette.Mode: the stored references fuzzy-matched on
+// location and preview (an empty query lists all, in server order).
+func (r *refsMode) Results(query string, cx palette.Context) []palette.Item {
+	type scored struct {
+		item  palette.Item
+		score int
+	}
+	var out []scored
+	for _, it := range r.items {
+		if m, ok := fuzzy.Match(query, it.Title); ok {
+			it.Spans = m.Positions
+			out = append(out, scored{item: it, score: m.Score})
+			continue
+		}
+		// Fall back to the preview text; spans index the rendered title, so a
+		// preview match highlights nothing.
+		if m, ok := fuzzy.Match(query, it.Detail); ok {
+			it.Spans = nil
+			out = append(out, scored{item: it, score: m.Score})
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	items := make([]palette.Item, len(out))
+	for i, s := range out {
+		items[i] = s.item
+	}
+	return items
+}

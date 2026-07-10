@@ -165,6 +165,48 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 	return nil
 }
 
+// references requests every usage of the symbol under the cursor, converts
+// the locations to editor coordinates (reading each distinct target file once,
+// which also supplies the preview lines) and sends a ReferencesMsg the app
+// renders as a navigable list.
+func (b *bridge) references(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	go func() {
+		locs, err := mgr.References(context.Background(), path, buffer.Position{Line: line, Col: col}, true)
+		if err != nil {
+			return
+		}
+		files := map[string][]string{}
+		refs := make([]ilsp.Reference, 0, len(locs))
+		for _, loc := range locs {
+			target := protocol.URIToPath(loc.URI)
+			lines, ok := files[target]
+			if !ok {
+				if data, rerr := os.ReadFile(target); rerr == nil {
+					lines = strings.Split(string(data), "\n")
+				}
+				files[target] = lines
+			}
+			ref := ilsp.Reference{Path: target, Line: loc.Range.Start.Line}
+			if lines != nil {
+				p := protocol.FromLSPPosition(lines, loc.Range.Start, mgr.Encoding(path))
+				ref.Line, ref.Col = p.Line, p.Col
+				if ref.Line >= 0 && ref.Line < len(lines) {
+					ref.Preview = strings.TrimSpace(lines[ref.Line])
+				}
+			}
+			refs = append(refs, ref)
+		}
+		h.Send(ilsp.ReferencesMsg{Refs: refs})
+	}()
+	return nil
+}
+
 // restart stops every server; they respawn lazily on the next file open/edit.
 // The work happens inside the returned tea.Cmd: a command's Run resolves on
 // the Update goroutine, where a blocking Shutdown would stall the UI and a

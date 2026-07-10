@@ -109,6 +109,16 @@ func (c *Client) Definition(ctx context.Context, p protocol.DefinitionParams) ([
 	return decodeLocations(raw), nil
 }
 
+// References requests every reference to the symbol at a position; the result
+// is a plain Location array (normalised like Definition for safety).
+func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]protocol.Location, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/references", p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeLocations(raw), nil
+}
+
 // decodeCompletion accepts either a CompletionList or a bare item array.
 func decodeCompletion(raw json.RawMessage) []protocol.CompletionItem {
 	if len(raw) == 0 || string(raw) == "null" {

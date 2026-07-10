@@ -197,6 +197,41 @@ func TestDefinitionNormalisesSingleLocation(t *testing.T) {
 	}
 }
 
+func TestReferencesNormalisesLocations(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/references": func(json.RawMessage) any {
+			return []protocol.Location{
+				{URI: "file:///tmp/a.go", Range: protocol.Range{Start: protocol.Position{Line: 3}}},
+				{URI: "file:///tmp/b.go", Range: protocol.Range{Start: protocol.Position{Line: 7}}},
+			}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	locs, err := c.References(ctx, protocol.ReferenceParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 2 || locs[1].URI != "file:///tmp/b.go" {
+		t.Fatalf("locs = %+v", locs)
+	}
+}
+
+func TestReferencesNull(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/references": func(json.RawMessage) any { return nil },
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	locs, err := c.References(ctx, protocol.ReferenceParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 0 {
+		t.Fatalf("null result should yield no locations, got %+v", locs)
+	}
+}
+
 func TestHoverNull(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/hover": func(json.RawMessage) any { return nil },

@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- LSP find references (#5, Roadmap 0100): `textDocument/references` through
+  client/manager (capability-gated on `referencesProvider`, UTF-16 conversion
+  via protocol/convert.go), new `lsp.references` command ("LSP: Find
+  Usages"), `alt+f7` reconciled in the chord table (blocked-ledger entry
+  removed). Results route by count: toast / direct navigation / palette
+  locked to a new references mode with `path:line` + preview and fuzzy
+  filter; activation reuses the DefinitionMsg navigation path. Tests across
+  client, manager (fake server echoes includeDeclaration), and app routing.
 - Project switching complete (#3, Roadmap 0090): msg-driven switch
   transaction — `SwitchTo` validation, unsaved-changes guard (save-all /
   discard / cancel in the floating shell), root-model re-root via chdir +

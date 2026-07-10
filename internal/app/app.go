@@ -166,6 +166,10 @@ type Model struct {
 	// defaults. Roadmap 0080 owns the final keymap; this is the binding-agnostic op
 	// wired to a configurable default.
 	focusKeys map[string]Direction
+	// refs is the palette mode listing the latest find-references results
+	// (lsp.references, #5); the ReferencesMsg handler fills it and opens the
+	// palette locked to it.
+	refs *refsMode
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -229,6 +233,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	panes.AddExplorer()
 	edKey := panes.AddEditor()
 	panes.SetFocused(pane.ExplorerKey)
+	refs := &refsMode{}
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
@@ -237,7 +242,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		themePal:     themePal,
 		help:         help.New(reg, reg, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg),
+		palette:      buildPalette(reg, cfg, refs),
+		refs:         refs,
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
@@ -662,7 +668,7 @@ func buildKeymap(cfg host.Config) *keymap.Resolver {
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -671,7 +677,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config) *palette.Palette {
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
-	return palette.New(pcfg, cmd, file, dir, proj)
+	return palette.New(pcfg, cmd, file, dir, proj, refs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1120,8 +1126,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ilsp.HoverMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DefinitionMsg:
-		// Navigate to a definition target and place the cursor there.
+		// Navigate to a definition target and place the cursor there. Also the
+		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case ilsp.ReferencesMsg:
+		// lsp.references (alt+f7 / palette): nothing found is a toast, a single
+		// usage navigates straight there, more open the results list.
+		switch len(msg.Refs) {
+		case 0:
+			m.host.Notify(host.Info, "no usages found")
+			return m, nil
+		case 1:
+			r := msg.Refs[0]
+			return m.openPathAt(r.Path, r.Line, r.Col)
+		}
+		m.refs.Set(msg.Refs)
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		return m, nil
 	case ilsp.ServerStatusMsg:
 		// Persistent server state stays on the status line; transient events
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).

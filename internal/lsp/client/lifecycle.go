@@ -34,6 +34,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 				Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: false}},
 				Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
 				Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
+				References:      &protocol.ReferencesClientCaps{},
 			},
 		},
 		InitializationOptions: p.InitializationOptions,

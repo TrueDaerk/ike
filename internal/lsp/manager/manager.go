@@ -244,6 +244,23 @@ func (m *Manager) Definition(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// References requests every reference to the symbol at an editor position.
+// IncludeDeclaration mirrors the LSP request option (JetBrains' find-usages
+// includes the declaration, so callers default to true).
+func (m *Manager) References(ctx context.Context, path string, pos buffer.Position, includeDecl bool) ([]protocol.Location, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().References {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.References(cctx, protocol.ReferenceParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+		Context:      protocol.ReferenceContext{IncludeDeclaration: includeDecl},
+	})
+}
+
 // Encoding returns the negotiated position encoding for the server handling path,
 // defaulting to UTF-16 when unknown. Used to convert results (e.g. definition
 // targets) back to editor coordinates.
