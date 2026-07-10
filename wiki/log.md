@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- LSP semantic-token highlighting (#9, Roadmap 0100): new
+  internal/highlight/semantic decodes legend-based 5-tuples into highlight
+  spans (modifier-refined capture mapping, UTF-16 via convert.go); manager
+  requests full/delta with per-document result state; bridge refreshes on
+  open + change (coalesced); editor layers the overlay over the
+  Tree-sitter base (base < semantic < diagnostics). Verified against gopls
+  in a CGO-free build (no Tree-sitter): the whole file renders from the
+  overlay alone. **This closes Roadmap 0100 — epic #38 and its milestone.**
 - LSP incremental didChange sync (#13, Roadmap 0100): the manager now
   respects the negotiated TextDocumentSyncKind — incremental servers get
   the minimal change region (common-prefix/suffix diff against the

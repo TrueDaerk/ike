@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/highlight"
 	"ike/internal/lsp/protocol"
 )
 
@@ -210,6 +211,14 @@ func docFirstLine(raw json.RawMessage) string {
 		}
 	}
 	return ""
+}
+
+// SemanticSpansMsg delivers the decoded semantic-token overlay for a document
+// (#9). The editor layers it over the Tree-sitter base index; an empty slice
+// clears the overlay.
+type SemanticSpansMsg struct {
+	Path  string
+	Spans []highlight.Span
 }
 
 // ServerStatusKind classifies a server status update (Roadmap 0130):

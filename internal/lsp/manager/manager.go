@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/highlight"
+	"ike/internal/highlight/semantic"
 	langreg "ike/internal/lang"
 	"ike/internal/lsp"
 	"ike/internal/lsp/client"
@@ -85,6 +87,10 @@ type document struct {
 	version int
 	lines   []string
 	srvKey  string
+	// Semantic-token state (#9): the last full data array and its result id,
+	// so a delta-capable server only sends edits.
+	semData     []uint32
+	semResultID string
 }
 
 // New builds a manager. resolve maps a language to its ServerSpec; connect dials
@@ -509,6 +515,54 @@ func (m *Manager) SignatureTriggers(path string) []string {
 		return srv.cl.Caps().SignatureTriggers
 	}
 	return nil
+}
+
+// SemanticTokens requests (or delta-updates) the document's semantic tokens
+// and returns them decoded into highlight spans against the server's legend.
+// Gated on the capability: no support returns nil spans, no error.
+func (m *Manager) SemanticTokens(ctx context.Context, path string) ([]highlight.Span, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().SemanticTokens {
+		return nil, nil
+	}
+	caps := srv.cl.Caps()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+
+	m.mu.Lock()
+	prevID, prevData := doc.semResultID, doc.semData
+	m.mu.Unlock()
+
+	var data []uint32
+	var resultID string
+	uri := protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)}
+	if caps.SemanticDelta && prevID != "" {
+		delta, full, err := srv.cl.SemanticTokensDelta(cctx, protocol.SemanticTokensDeltaParams{TextDocument: uri, PreviousResultID: prevID})
+		if err != nil {
+			return nil, err
+		}
+		switch {
+		case delta != nil:
+			data, resultID = semantic.ApplyDelta(prevData, delta.Edits), delta.ResultID
+		case full != nil:
+			data, resultID = full.Data, full.ResultID
+		default:
+			return nil, nil
+		}
+	} else {
+		full, err := srv.cl.SemanticTokensFull(cctx, protocol.SemanticTokensParams{TextDocument: uri})
+		if err != nil || full == nil {
+			return nil, err
+		}
+		data, resultID = full.Data, full.ResultID
+	}
+
+	m.mu.Lock()
+	lines := doc.lines
+	doc.semData, doc.semResultID = data, resultID
+	m.mu.Unlock()
+	legend := semantic.Legend{TokenTypes: caps.SemanticTypes, TokenModifiers: caps.SemanticModifiers}
+	return semantic.Decode(data, legend, lines, srv.cl.Encoding()), nil
 }
 
 // Encoding returns the negotiated position encoding for the server handling path,

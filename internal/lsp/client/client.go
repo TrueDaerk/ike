@@ -256,6 +256,53 @@ func (c *Client) SignatureHelp(ctx context.Context, p protocol.SignatureHelpPara
 	return &sh, nil
 }
 
+// SemanticTokensFull requests the whole document's packed semantic tokens.
+func (c *Client) SemanticTokensFull(ctx context.Context, p protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/semanticTokens/full", p)
+	if err != nil {
+		return nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	var st protocol.SemanticTokens
+	if err := json.Unmarshal(raw, &st); err != nil {
+		return nil, nil
+	}
+	return &st, nil
+}
+
+// SemanticTokensDelta requests edits against a previous result. Servers may
+// answer with either a delta (edits) or a fresh full result (data) — exactly
+// one of the returns is non-nil on success.
+func (c *Client) SemanticTokensDelta(ctx context.Context, p protocol.SemanticTokensDeltaParams) (*protocol.SemanticTokensDelta, *protocol.SemanticTokens, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/semanticTokens/full/delta", p)
+	if err != nil {
+		return nil, nil, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil, nil
+	}
+	var probe struct {
+		Edits json.RawMessage `json:"edits"`
+		Data  json.RawMessage `json:"data"`
+	}
+	_ = json.Unmarshal(raw, &probe)
+	if len(probe.Edits) > 0 {
+		var d protocol.SemanticTokensDelta
+		if err := json.Unmarshal(raw, &d); err == nil {
+			return &d, nil, nil
+		}
+	}
+	if len(probe.Data) > 0 {
+		var st protocol.SemanticTokens
+		if err := json.Unmarshal(raw, &st); err == nil {
+			return nil, &st, nil
+		}
+	}
+	return nil, nil, nil
+}
+
 // decodeTextEdits accepts a TextEdit array or null.
 func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
 	if len(raw) == 0 || string(raw) == "null" {

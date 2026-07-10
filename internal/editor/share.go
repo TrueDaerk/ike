@@ -48,6 +48,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.cmdline = ""
 	m.searching = false
 	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
 	m.scroll()
 }
 
@@ -70,5 +71,6 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.stale = msg.Stale
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
 	return m, m.parseCmd()
 }

@@ -81,7 +81,11 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				RenameProvider:                  json.RawMessage(`{"prepareProvider":true}`),
 				CodeActionProvider:              json.RawMessage(`true`),
 				SignatureHelpProvider:           &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
-				ExecuteCommandProvider:          json.RawMessage(`{"commands":["test.fix"]}`),
+				SemanticTokensProvider: &protocol.SemanticTokensOptions{
+					Legend: protocol.SemanticTokensLegend{TokenTypes: []string{"keyword", "function"}},
+					Full:   json.RawMessage(`{"delta":true}`),
+				},
+				ExecuteCommandProvider: json.RawMessage(`{"commands":["test.fix"]}`),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/references":
@@ -99,6 +103,18 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/semanticTokens/full":
+			// keyword at 0:0 len4.
+			respond(out, msg.ID, protocol.SemanticTokens{ResultID: "r1", Data: []uint32{0, 0, 4, 0, 0}})
+		case msg.Method == "textDocument/semanticTokens/full/delta":
+			var p protocol.SemanticTokensDeltaParams
+			_ = json.Unmarshal(msg.Params, &p)
+			if p.PreviousResultID != "r1" {
+				respond(out, msg.ID, nil)
+				break
+			}
+			// Append a function token on the next line.
+			respond(out, msg.ID, protocol.SemanticTokensDelta{ResultID: "r2", Edits: []protocol.SemanticTokensEdit{{Start: 5, DeleteCount: 0, Data: []uint32{1, 0, 4, 1, 0}}}})
 		case msg.Method == "textDocument/signatureHelp":
 			respond(out, msg.ID, protocol.SignatureHelp{Signatures: []protocol.SignatureInformation{{Label: "Greet(name string)"}}})
 		case msg.Method == "textDocument/codeAction":
@@ -491,6 +507,34 @@ func TestManagerSignatureHelpAndTriggers(t *testing.T) {
 	}
 	if trig := m.SignatureTriggers("/nope/unknown.go"); trig != nil {
 		t.Fatalf("unknown doc should have no triggers, got %v", trig)
+	}
+}
+
+func TestManagerSemanticTokensFullThenDelta(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "func main\nname here"); err != nil {
+		t.Fatal(err)
+	}
+	spans, err := m.SemanticTokens(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 1 || spans[0].Capture != "keyword" || spans[0].EndCol != 4 {
+		t.Fatalf("full spans = %+v", spans)
+	}
+	// Second request goes through the delta path (previousResultId=r1) and
+	// applies the appended edit.
+	spans, err = m.SemanticTokens(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(spans) != 2 || spans[1].Capture != "function" || spans[1].Line != 1 {
+		t.Fatalf("delta spans = %+v", spans)
 	}
 }
 
