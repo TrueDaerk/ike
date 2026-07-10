@@ -27,6 +27,7 @@ type Help struct {
 	pal    *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	groups []Group
+	extra  Group
 }
 
 // SetPalette threads the active theme palette in (Roadmap 0110); headings and
@@ -54,7 +55,15 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 // shell is opened so the cheat sheet reflects the current registry and focus.
 func (h *Help) Snapshot(contextID string) {
 	h.groups = Snapshot(h.src, h.res, contextID)
+	if len(h.extra.Entries) > 0 {
+		h.groups = append(h.groups, h.extra)
+	}
 }
+
+// SetExtra appends one caller-supplied group to every snapshot — the honest
+// "blocked" section (0081/40): bindings whose command has no owner yet are
+// shown with their dependency, never hidden.
+func (h *Help) SetExtra(g Group) { h.extra = g }
 
 // Title implements ui.Content.
 func (h *Help) Title() string { return "HELP — commands & shortcuts" }

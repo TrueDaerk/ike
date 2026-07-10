@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -846,3 +847,24 @@ type togglePlugin struct{}
 
 func (togglePlugin) ID() string                        { return "toggle" }
 func (togglePlugin) Capabilities() plugin.Capabilities { return plugin.Capabilities{} }
+
+// TestCheatsheetLiveAndBlocked guards 0081/40: the help sheet reads the live
+// table (leader chords appear) and shows blocked bindings with their
+// dependency instead of hiding them.
+func TestCheatsheetLiveAndBlocked(t *testing.T) {
+	m := sized(t, 120, 40)
+	m.openHelp()
+	m.help.Snapshot("")
+	view := m.help.Render(200)
+	plain := stripForTest(view)
+	if !strings.Contains(plain, "blocked (dependency not landed)") {
+		t.Fatalf("blocked group missing:\n%s", plain)
+	}
+	if !strings.Contains(plain, "✗ needs") {
+		t.Fatal("blocked entries should carry their dependency")
+	}
+}
+
+func stripForTest(s string) string { return ansiStripRe.ReplaceAllString(s, "") }
+
+var ansiStripRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
