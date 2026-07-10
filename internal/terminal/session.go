@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -288,6 +289,34 @@ func (s *Session) HistoryLine(y int) string {
 		}
 	}
 	return line.Render()
+}
+
+// LineText returns the plain text of virtual line v — an index into
+// [scrollback ++ screen] — without styles, right-trimmed. Out-of-range lines
+// are empty.
+func (s *Session) LineText(v int) string {
+	sb := s.em.ScrollbackLen()
+	w := s.em.Width()
+	var b strings.Builder
+	for x := 0; x < w; x++ {
+		var c *uv.Cell
+		if v < sb {
+			c = s.em.ScrollbackCellAt(x, v)
+		} else {
+			c = s.em.CellAt(x, v-sb)
+		}
+		switch {
+		case c == nil:
+			b.WriteByte(' ')
+		case c.Width == 0:
+			// Continuation cell of a wide rune: already covered by its head.
+		case c.Content == "":
+			b.WriteByte(' ')
+		default:
+			b.WriteString(c.Content)
+		}
+	}
+	return strings.TrimRight(b.String(), " ")
 }
 
 // Close ends the session: the child is terminated and the PTY closed. Safe to

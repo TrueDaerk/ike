@@ -26,6 +26,19 @@ type Model struct {
 	// (shift+pgup/pgdn) and the mouse wheel move it; any other key snaps back
 	// to live and goes to the shell.
 	scroll int
+	// Mouse selection (#227), anchored in virtual coordinates — indices into
+	// [scrollback ++ screen] — so it survives scrollback paging. selOn marks
+	// an existing selection, dragging a drag in progress.
+	selAnchor, selHead vpos
+	selOn, dragging    bool
+}
+
+// vpos is a cell position with a virtual line index (scrollback + screen).
+type vpos struct{ line, col int }
+
+// before orders two virtual positions.
+func (p vpos) before(q vpos) bool {
+	return p.line < q.line || (p.line == q.line && p.col < q.col)
 }
 
 // New starts a terminal model: shell (already resolved via Shell) spawned in
@@ -80,6 +93,7 @@ func (m Model) Title() string {
 // Clear empties the scrollback and repaints (terminal.clear).
 func (m *Model) Clear() {
 	m.scroll = 0
+	m.ClearSelection()
 	if m.sess != nil {
 		m.sess.Clear()
 	}
@@ -125,6 +139,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.scroll = 0
+	m.ClearSelection()
 	if ev, ok := motionKey(msg); ok {
 		m.sess.SendKey(ev)
 		return nil
@@ -181,6 +196,112 @@ func (m *Model) ScrollBy(delta int) {
 
 // Scroll reports the current scrollback offset (0 = live).
 func (m Model) Scroll() int { return m.scroll }
+
+// MousePress routes a left press at the pane-local cell (x, y): a child that
+// enabled mouse reporting gets the click (like the wheel, #226); otherwise it
+// anchors a text selection (#227).
+func (m *Model) MousePress(x, y int) {
+	if m.sess == nil {
+		return
+	}
+	m.ClearSelection()
+	if m.sess.WantsMouse() {
+		m.sess.SendMouse(vt.MouseClick{X: x, Y: y, Button: vt.MouseLeft})
+		return
+	}
+	m.dragging = true
+	m.selAnchor = m.virtualAt(x, y)
+	m.selHead = m.selAnchor
+}
+
+// MouseDrag extends the selection to (x, y) — or forwards the drag motion to
+// a mouse-reporting child.
+func (m *Model) MouseDrag(x, y int) {
+	if m.sess == nil {
+		return
+	}
+	if m.sess.WantsMouse() {
+		m.sess.SendMouse(vt.MouseMotion{X: x, Y: y, Button: vt.MouseLeft})
+		return
+	}
+	if !m.dragging {
+		return
+	}
+	m.selHead = m.virtualAt(x, y)
+	m.selOn = m.selHead != m.selAnchor
+}
+
+// MouseRelease ends a drag (or forwards the release); the selection, if any,
+// stays visible until a key goes to the shell or a new press lands.
+func (m *Model) MouseRelease(x, y int) {
+	if m.sess == nil {
+		return
+	}
+	if m.sess.WantsMouse() {
+		m.sess.SendMouse(vt.MouseRelease{X: x, Y: y, Button: vt.MouseLeft})
+		return
+	}
+	m.dragging = false
+}
+
+// HasSelection reports whether a mouse selection exists.
+func (m Model) HasSelection() bool { return m.selOn }
+
+// ClearSelection drops the selection and any drag in progress.
+func (m *Model) ClearSelection() { m.selOn, m.dragging = false, false }
+
+// SelectionText extracts the selected text: the span runs from the earlier
+// endpoint (inclusive) to the later one (exclusive), lines right-trimmed and
+// newline-joined — the stream selection every terminal implements.
+func (m Model) SelectionText() string {
+	if !m.selOn || m.sess == nil {
+		return ""
+	}
+	start, end := m.selAnchor, m.selHead
+	if end.before(start) {
+		start, end = end, start
+	}
+	var lines []string
+	for v := start.line; v <= end.line; v++ {
+		text := []rune(m.sess.LineText(v))
+		from, to := 0, len(text)
+		if v == start.line && start.col < to {
+			from = start.col
+		} else if v == start.line {
+			from = to
+		}
+		if v == end.line && end.col < to {
+			to = end.col
+		}
+		if from > to {
+			from = to
+		}
+		lines = append(lines, strings.TrimRight(string(text[from:to]), " "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// virtualAt maps a pane-local cell to virtual coordinates, honouring the
+// current scrollback offset and clamping to the grid.
+func (m Model) virtualAt(x, y int) vpos {
+	x = clamp(x, 0, m.w-1)
+	y = clamp(y, 0, m.h-1)
+	sb := 0
+	if m.sess != nil {
+		sb = m.sess.ScrollbackLen()
+	}
+	return vpos{line: clamp(sb-m.scroll+y, 0, sb+m.h), col: x}
+}
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
 
 // MouseWheel routes one wheel movement at the pane-local cell (x, y); delta
 // is in lines, positive = up/towards history (#226). The convention every
@@ -257,6 +378,11 @@ func (m Model) View() string {
 		return m.scrolledView()
 	}
 	view := m.sess.View()
+	if m.selOn {
+		lines := strings.Split(view, "\n")
+		m.highlightSelection(lines, m.sess.ScrollbackLen())
+		view = strings.Join(lines, "\n")
+	}
 	if !m.focused || !m.sess.Running() {
 		if !m.sess.Running() {
 			view += "\n[process exited]"
@@ -287,11 +413,40 @@ func (m Model) scrolledView() string {
 			rows = append(rows, screen[virtual-sbLen])
 		}
 	}
+	m.highlightSelection(rows, sbLen-off)
 	marker := "[scrollback -" + strconv.Itoa(off) + "  shift+pgdn to return]"
 	if len(rows) > 0 {
 		rows[len(rows)-1] = marker
 	}
 	return strings.Join(rows, "\n")
+}
+
+// highlightSelection reverse-videos the selected span on the visible rows;
+// firstVirtual is the virtual line index rendered at rows[0].
+func (m Model) highlightSelection(rows []string, firstVirtual int) {
+	if !m.selOn {
+		return
+	}
+	start, end := m.selAnchor, m.selHead
+	if end.before(start) {
+		start, end = end, start
+	}
+	for i := range rows {
+		v := firstVirtual + i
+		if v < start.line || v > end.line {
+			continue
+		}
+		from, to := 0, m.w
+		if v == start.line {
+			from = start.col
+		}
+		if v == end.line {
+			to = end.col
+		}
+		if from < to {
+			rows[i] = reverseSpan(rows[i], from, to)
+		}
+	}
 }
 
 // overlayCursor reverse-videos the cursor cell inside the rendered grid. The
@@ -307,6 +462,46 @@ func overlayCursor(view string, x, y int) string {
 }
 
 var cursorStyle = lipgloss.NewStyle().Reverse(true)
+
+// reverseSpan reverse-videos the visible cells [from, to) of an ANSI-styled
+// line, padding past the rendered content so a selection reads full-width.
+func reverseSpan(line string, from, to int) string {
+	var b strings.Builder
+	visible := 0
+	inEsc := false
+	for i := 0; i < len(line); {
+		if !inEsc && line[i] == 0x1b {
+			inEsc = true
+			b.WriteByte(line[i])
+			i++
+			continue
+		}
+		if inEsc {
+			b.WriteByte(line[i])
+			if line[i] >= 0x40 && line[i] <= 0x7e && line[i] != '[' {
+				inEsc = false
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(line[i:])
+		if visible >= from && visible < to {
+			b.WriteString(cursorStyle.Render(string(r)))
+		} else {
+			b.WriteString(line[i : i+size])
+		}
+		visible++
+		i += size
+	}
+	if visible < to {
+		if pad := from - visible; pad > 0 {
+			b.WriteString(strings.Repeat(" ", pad))
+			visible = from
+		}
+		b.WriteString(cursorStyle.Render(strings.Repeat(" ", to-visible)))
+	}
+	return b.String()
+}
 
 // reverseCell restyles the visible cell at column col of an ANSI-styled line.
 func reverseCell(line string, col int) string {

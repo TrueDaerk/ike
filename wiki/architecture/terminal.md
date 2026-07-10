@@ -63,11 +63,24 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 |---|---|
 | `ctrl+tab` | move focus to the next pane (delivery is terminal-dependent — many terminals cannot send it; 0081's reality probe owns the call) |
 | `alt+f12` | `terminal.toggle` — return focus to the previous pane (the reliable hatch) |
+| `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell |
+| `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
 to live). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
+
+**Mouse selection & copy** (#227, `MousePress`/`MouseDrag`/`MouseRelease` in
+`model.go`): a left drag over the grid selects text — highlighted in reverse
+video, anchored in virtual coordinates (indices into [scrollback ++ screen])
+so it survives scrollback paging and can span history and live rows. The
+selection is linear (stream-style): start line from the anchor column, full
+middle lines, end line up to the head column; `cmd+c` copies it right-trimmed
+and newline-joined to the system clipboard and drops the highlight. Any key
+routed to the shell (and `terminal.clear`) clears it. When the child enabled
+mouse reporting, press/drag/release forward to it instead — selection is
+unavailable then, like in xterm.
 
 **Mouse wheel** (#226, `MouseWheel` in `model.go`): the wheel goes to whoever
 asked for it — a child that enabled a DEC mouse-reporting mode

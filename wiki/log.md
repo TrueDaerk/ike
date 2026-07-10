@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- Terminal mouse selection + copy (#227): left-drag selects text on the grid
+  (virtual-anchored, survives scrollback paging), cmd+c copies it to the
+  system clipboard; clicks forward to mouse-reporting children instead.
+- Terminal focus escape (#228): the spatial focus moves (default
+  ctrl+arrows, keymap.bindings.focus_* overrides) now work from a focused
+  terminal; the reserved-set table grew accordingly.
+
 - Terminal wheel routing (#226): the mouse wheel now reaches the running
   application — forwarded as encoded mouse events when the child enabled
   mouse reporting, as arrow keys on the alt screen (less/man/vim), and it

@@ -72,6 +72,50 @@ func TestTerminalKeysBypassGlobalHandling(t *testing.T) {
 	}
 }
 
+// TestTerminalFocusKeysEscape: the spatial focus moves work from a focused
+// terminal (#228) — ctrl+arrows are part of the reserved set now.
+func TestTerminalFocusKeysEscape(t *testing.T) {
+	m, key := openTestTerminal(t)
+	// The terminal splits below the editor; ctrl+up must land elsewhere.
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.panes.Focused() == key {
+		t.Fatal("ctrl+up should move focus out of the terminal")
+	}
+}
+
+// TestTerminalSelectionCopyKey: with a mouse selection, cmd+c is reserved and
+// clears the selection; without one it stays with the shell (#227).
+func TestTerminalSelectionCopyKey(t *testing.T) {
+	var copied string
+	orig := clipboardWrite
+	clipboardWrite = func(text string) { copied = text }
+	t.Cleanup(func() { clipboardWrite = orig })
+
+	m, key := openTestTerminal(t)
+	term := m.panes.Get(key).Terminal()
+	time.Sleep(200 * time.Millisecond) // prompt on the grid
+
+	// Fake a drag over the prompt row.
+	term.MousePress(0, 0)
+	term.MouseDrag(5, 0)
+	term.MouseRelease(5, 0)
+	if !term.HasSelection() {
+		t.Fatal("drag should select")
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'c', Mod: tea.ModSuper})
+	m = out.(Model)
+	if term.HasSelection() {
+		t.Fatal("cmd+c should consume and clear the selection")
+	}
+	if copied == "" {
+		t.Fatal("cmd+c should write the selection to the clipboard")
+	}
+	if m.panes.Focused() != key {
+		t.Fatal("cmd+c must not move focus")
+	}
+}
+
 func TestTerminalExitClosesPane(t *testing.T) {
 	m, key := openTestTerminal(t)
 	out, _ := m.Update(terminal.ExitedMsg{Key: key})

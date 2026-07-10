@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/backup"
+	"ike/internal/clipboard"
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -212,8 +213,9 @@ type editorScroll struct {
 type dragKind int
 
 const (
-	dragResize dragKind = iota // dragging a divider to change a split ratio
-	dragMove                   // dragging a pane title bar to relocate or spawn
+	dragResize     dragKind = iota // dragging a divider to change a split ratio
+	dragMove                       // dragging a pane title bar to relocate or spawn
+	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -914,8 +916,10 @@ func displayDir(dir string) string {
 //	ctrl+tab    move focus to the next pane (the global escape hatch)
 //	alt+f12     terminal.toggle — return focus to the previous pane (#97)
 //
-// Everything else, including tab, ctrl+c, esc and the F-keys, belongs to the
-// shell. shift+pgup/pgdn page the scrollback inside the pane itself.
+// The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*) and
+// cmd+c over an active mouse selection are reserved in the caller (#228,
+// #227). Everything else, including tab, ctrl+c, esc and the F-keys, belongs
+// to the shell. shift+pgup/pgdn page the scrollback inside the pane itself.
 func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	switch keys {
 	case "ctrl+tab":
@@ -1643,6 +1647,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.terminalFocused() {
 			if handled, tm, cmd := m.terminalReservedKey(msg.String()); handled {
 				return tm, cmd
+			}
+			// The spatial focus moves (default ctrl+arrows) escape the terminal
+			// like every other pane (#228); keymap.bindings.focus_* overrides
+			// apply, and a disabled direction stays with the shell.
+			if dir, ok := m.focusKeys[msg.String()]; ok {
+				m.FocusDir(dir)
+				return m, nil
+			}
+			// cmd+c copies an active mouse selection (#227); without one the
+			// key stays with the shell.
+			if term := m.panes.FocusedInstance().Terminal(); term.HasSelection() {
+				if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "c" {
+					m.copyTerminalSelection(term)
+					return m, nil
+				}
 			}
 			return m.routeKey(msg)
 		}
@@ -2730,16 +2749,28 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.drag.curX, m.drag.curY = msg.X, msg.Y
-		if m.drag.kind == dragResize {
+		switch m.drag.kind {
+		case dragResize:
 			m.drag.divider.ResizeTo(msg.X, msg.Y)
 			m.layout()
+		case dragTermSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				m.panes.Get(m.drag.srcPane).Terminal().MouseDrag(lx, ly)
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
 			return m, nil
 		}
-		if m.drag.kind == dragMove {
+		switch m.drag.kind {
+		case dragMove:
 			m.commitMove(msg.X, msg.Y)
+		case dragTermSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				m.panes.Get(m.drag.srcPane).Terminal().MouseRelease(lx, ly)
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
 		}
 		m.drag = nil
 		saveLayout(m.tree, m.panes)
@@ -2854,8 +2885,40 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case pane.KindEditor:
 		inst.Editor().MouseClick(localX, localY)
+	case pane.KindTerminal:
+		// Left press: forward to a mouse-reporting child, else anchor a text
+		// selection and track the drag (#227).
+		if msg.Button == tea.MouseLeft {
+			inst.Terminal().MousePress(localX, localY)
+			m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+		}
 	}
 	return m, nil
+}
+
+// termLocal translates a screen-cell mouse event into pane-content-local
+// coordinates for the given terminal pane key.
+func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
+	r, found := m.lay.Panes[key]
+	if !found || m.panes.Get(key) == nil {
+		return 0, 0, false
+	}
+	return msg.X - (r.X + paneContentX), msg.Y - (r.Y + paneContentY), true
+}
+
+// clipboardWrite is a seam over the system clipboard so tests don't clobber
+// the user's real clipboard.
+var clipboardWrite = func(text string) {
+	if c := clipboard.System(); c != nil {
+		_ = c.Write(text)
+	}
+}
+
+// copyTerminalSelection writes the terminal's mouse selection to the system
+// clipboard and drops the highlight (#227).
+func (m *Model) copyTerminalSelection(term *terminal.Model) {
+	clipboardWrite(term.SelectionText())
+	term.ClearSelection()
 }
 
 // View implements tea.Model. Under bubbletea v2 the alternate screen, mouse mode

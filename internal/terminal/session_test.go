@@ -201,6 +201,114 @@ func TestShiftedTextReachesShell(t *testing.T) {
 	})
 }
 
+// TestMouseSelection: drag selects text in virtual coordinates, cmd+c-style
+// extraction returns it, typed keys clear it (#227).
+func TestMouseSelection(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24, w: 80}
+
+	for _, r := range "echo alpha-beta gamma\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "echo output", func() bool {
+		return strings.Count(plainView(s), "alpha-beta gamma") >= 2
+	})
+	// Locate the output line (the non-echoed one, without "echo ").
+	rows := strings.Split(plainView(s), "\n")
+	rowIdx, colIdx := -1, -1
+	for i, r := range rows {
+		if idx := strings.Index(r, "alpha-beta gamma"); idx >= 0 && !strings.Contains(r, "echo ") {
+			rowIdx, colIdx = i, idx
+			break
+		}
+	}
+	if rowIdx < 0 {
+		t.Fatalf("output row not found in:\n%s", plainView(s))
+	}
+
+	// Drag across "alpha-beta" (10 cells, exclusive head).
+	m.MousePress(colIdx, rowIdx)
+	m.MouseDrag(colIdx+10, rowIdx)
+	m.MouseRelease(colIdx+10, rowIdx)
+	if !m.HasSelection() {
+		t.Fatal("drag should create a selection")
+	}
+	if got := m.SelectionText(); got != "alpha-beta" {
+		t.Fatalf("selection text = %q, want %q", got, "alpha-beta")
+	}
+	// The view highlights the span (reverse-video escape around the text).
+	if !strings.Contains(m.View(), "alpha-beta") || m.View() == s.View() {
+		t.Fatal("selection should restyle the view")
+	}
+
+	// The selection survives scrollback paging (virtual anchoring).
+	m.ScrollBy(2)
+	if got := m.SelectionText(); got != "alpha-beta" {
+		t.Fatalf("selection after paging = %q, want %q", got, "alpha-beta")
+	}
+	m.ScrollBy(-2)
+
+	// A key routed to the shell clears it.
+	m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if m.HasSelection() {
+		t.Fatal("typed key should clear the selection")
+	}
+}
+
+// TestMouseSelectionMultiline: a drag across rows takes the start line's tail,
+// full middle lines, and the end line's head.
+func TestMouseSelectionMultiline(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24, w: 80}
+
+	for _, r := range "printf 'one-mark\\ntwo-mark\\nthree-mark\\n'\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "printf output", func() bool {
+		return strings.Contains(plainView(s), "three-mark")
+	})
+	rows := strings.Split(plainView(s), "\n")
+	first := -1
+	for i, r := range rows {
+		if strings.HasPrefix(r, "one-mark") {
+			first = i
+			break
+		}
+	}
+	if first < 0 {
+		t.Fatalf("output rows not found in:\n%s", plainView(s))
+	}
+	m.MousePress(4, first) // from "mark" of line one
+	m.MouseDrag(5, first+2)
+	m.MouseRelease(5, first+2)
+	if got, want := m.SelectionText(), "mark\ntwo-mark\nthree"; got != want {
+		t.Fatalf("selection = %q, want %q", got, want)
+	}
+}
+
+// TestMousePressForwardsToMouseChild: with a mouse-reporting child the press
+// forwards as an encoded event instead of selecting.
+func TestMousePressForwardsToMouseChild(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24, w: 80}
+
+	for _, r := range "printf '\\033[?1000h\\033[?1006h' && cat\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "mouse mode", func() bool { return s.WantsMouse() })
+	m.MousePress(10, 5)
+	m.MouseRelease(10, 5)
+	if m.HasSelection() {
+		t.Fatal("press should forward to the child, not select")
+	}
+	waitFor(t, "SGR click echoed", func() bool {
+		return strings.Contains(plainView(s), "[<0;") // MouseLeft press
+	})
+}
+
 // TestMouseWheelRouting: the wheel goes to whoever asked for it (#226) —
 // a mouse-reporting child gets the encoded event, an alt-screen child gets
 // arrow keys, the plain shell pages the pane's scrollback.
