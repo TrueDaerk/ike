@@ -23,6 +23,8 @@ type Capabilities struct {
 	References         bool
 	Formatting         bool
 	RangeFormatting    bool
+	Rename             bool
+	PrepareRename      bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -46,6 +48,15 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.References = truthyProvider(sc.ReferencesProvider)
 	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)
 	caps.RangeFormatting = truthyProvider(sc.DocumentRangeFormattingProvider)
+	caps.Rename = truthyProvider(sc.RenameProvider)
+	if caps.Rename {
+		var opts struct {
+			PrepareProvider bool `json:"prepareProvider"`
+		}
+		if json.Unmarshal(sc.RenameProvider, &opts) == nil {
+			caps.PrepareRename = opts.PrepareProvider
+		}
+	}
 	return caps
 }
 

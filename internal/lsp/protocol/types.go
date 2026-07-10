@@ -83,6 +83,13 @@ type TextDocumentClientCaps struct {
 	References      *ReferencesClientCaps `json:"references,omitempty"`
 	Formatting      *ReferencesClientCaps `json:"formatting,omitempty"`
 	RangeFormatting *ReferencesClientCaps `json:"rangeFormatting,omitempty"`
+	Rename          *RenameClientCaps     `json:"rename,omitempty"`
+}
+
+// RenameClientCaps announces rename support; prepareSupport asks servers to
+// offer textDocument/prepareRename validation.
+type RenameClientCaps struct {
+	PrepareSupport bool `json:"prepareSupport,omitempty"`
 }
 
 type SyncClientCaps struct {
@@ -129,6 +136,7 @@ type ServerCapabilities struct {
 
 	DocumentFormattingProvider      json.RawMessage `json:"documentFormattingProvider,omitempty"`
 	DocumentRangeFormattingProvider json.RawMessage `json:"documentRangeFormattingProvider,omitempty"`
+	RenameProvider                  json.RawMessage `json:"renameProvider,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
@@ -211,6 +219,52 @@ type CompletionItem struct {
 type TextEdit struct {
 	Range   Range  `json:"range"`
 	NewText string `json:"newText"`
+}
+
+// --- rename ---
+
+type PrepareRenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+type RenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	NewName      string                 `json:"newName"`
+}
+
+// WorkspaceEdit carries rename (and code-action) rewrites. Servers send either
+// the flat changes map or documentChanges; both decode.
+type WorkspaceEdit struct {
+	Changes         map[string][]TextEdit `json:"changes,omitempty"`
+	DocumentChanges []TextDocumentEdit    `json:"documentChanges,omitempty"`
+}
+
+// TextDocumentEdit is one document's edits inside documentChanges. Entries
+// that are not text edits (file operations) fail to decode into this shape
+// and are skipped by consumers (TextDocument.URI empty).
+type TextDocumentEdit struct {
+	TextDocument struct {
+		URI string `json:"uri"`
+	} `json:"textDocument"`
+	Edits []TextEdit `json:"edits"`
+}
+
+// AllChanges flattens a WorkspaceEdit into one uri -> edits map, whichever
+// shape the server chose.
+func (w WorkspaceEdit) AllChanges() map[string][]TextEdit {
+	out := map[string][]TextEdit{}
+	for uri, edits := range w.Changes {
+		out[uri] = append(out[uri], edits...)
+	}
+	for _, dc := range w.DocumentChanges {
+		if dc.TextDocument.URI == "" || len(dc.Edits) == 0 {
+			continue
+		}
+		out[dc.TextDocument.URI] = append(out[dc.TextDocument.URI], dc.Edits...)
+	}
+	return out
 }
 
 // --- hover ---

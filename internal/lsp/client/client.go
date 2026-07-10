@@ -137,6 +137,59 @@ func (c *Client) RangeFormatting(ctx context.Context, p protocol.DocumentRangeFo
 	return decodeTextEdits(raw), nil
 }
 
+// PrepareRename validates a rename position. ok is false when the server
+// rejects the position (null result); the returned range is zero when the
+// server answered with defaultBehavior only.
+func (c *Client) PrepareRename(ctx context.Context, p protocol.PrepareRenameParams) (protocol.Range, bool, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/prepareRename", p)
+	if err != nil {
+		return protocol.Range{}, false, err
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		return protocol.Range{}, false, nil
+	}
+	// Range | { range, placeholder } | { defaultBehavior: true }
+	var withRange struct {
+		Range           *protocol.Range    `json:"range"`
+		Start           *protocol.Position `json:"start"`
+		DefaultBehavior bool               `json:"defaultBehavior"`
+	}
+	if err := json.Unmarshal(raw, &withRange); err == nil {
+		if withRange.Range != nil {
+			return *withRange.Range, true, nil
+		}
+		if withRange.Start != nil { // bare Range shape
+			var r protocol.Range
+			if json.Unmarshal(raw, &r) == nil {
+				return r, true, nil
+			}
+		}
+		if withRange.DefaultBehavior {
+			return protocol.Range{}, true, nil
+		}
+	}
+	var r protocol.Range
+	if err := json.Unmarshal(raw, &r); err == nil {
+		return r, true, nil
+	}
+	return protocol.Range{}, false, nil
+}
+
+// Rename requests the workspace-wide edit for renaming the symbol at a
+// position. A null result decodes to an empty edit.
+func (c *Client) Rename(ctx context.Context, p protocol.RenameParams) (protocol.WorkspaceEdit, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/rename", p)
+	if err != nil {
+		return protocol.WorkspaceEdit{}, err
+	}
+	var we protocol.WorkspaceEdit
+	if len(raw) == 0 || string(raw) == "null" {
+		return we, nil
+	}
+	_ = json.Unmarshal(raw, &we)
+	return we, nil
+}
+
 // decodeTextEdits accepts a TextEdit array or null.
 func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
 	if len(raw) == 0 || string(raw) == "null" {

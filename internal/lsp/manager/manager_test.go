@@ -68,6 +68,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 
 				DocumentFormattingProvider:      json.RawMessage(`true`),
 				DocumentRangeFormattingProvider: json.RawMessage(`true`),
+				RenameProvider:                  json.RawMessage(`{"prepareProvider":true}`),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/references":
@@ -85,6 +86,31 @@ func runFakeServer(in *bufio.Reader, out io.Writer) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/prepareRename":
+			// Reject position line 9; otherwise offer the first 3 characters.
+			var p protocol.PrepareRenameParams
+			_ = json.Unmarshal(msg.Params, &p)
+			if p.Position.Line == 9 {
+				respond(out, msg.ID, nil)
+				break
+			}
+			respond(out, msg.ID, protocol.Range{
+				Start: protocol.Position{Line: p.Position.Line, Character: 0},
+				End:   protocol.Position{Line: p.Position.Line, Character: 3},
+			})
+		case msg.Method == "textDocument/rename":
+			// Rename touches the requested doc and a sibling on disk.
+			var p protocol.RenameParams
+			_ = json.Unmarshal(msg.Params, &p)
+			edit := protocol.TextEdit{
+				Range:   protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 3}},
+				NewText: p.NewName,
+			}
+			other := strings.Replace(string(p.TextDocument.URI), "main.go", "other.go", 1)
+			respond(out, msg.ID, protocol.WorkspaceEdit{Changes: map[string][]protocol.TextEdit{
+				string(p.TextDocument.URI): {edit},
+				other:                      {edit},
+			}})
 		case msg.Method == "textDocument/formatting":
 			// One edit whose character offsets are UTF-16 units past an emoji,
 			// so the conversion back to rune columns is observable.
@@ -301,6 +327,61 @@ func TestManagerFormatRangeRoundTrip(t *testing.T) {
 	e := edits[0]
 	if e.StartLine != 0 || e.StartCol != 1 || e.EndLine != 2 || e.EndCol != 2 {
 		t.Errorf("range should round-trip through both conversions, got %+v", e)
+	}
+}
+
+func TestManagerPrepareRename(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "abcdef\nsecond"); err != nil {
+		t.Fatal(err)
+	}
+	ph, ok, err := m.PrepareRename(context.Background(), path, buffer.Position{Line: 0, Col: 1})
+	if err != nil || !ok {
+		t.Fatalf("prepare should accept, got ok=%v err=%v", ok, err)
+	}
+	if ph != "abc" {
+		t.Errorf("placeholder should be the ranged text, got %q", ph)
+	}
+	if _, ok, _ := m.PrepareRename(context.Background(), path, buffer.Position{Line: 9, Col: 0}); ok {
+		t.Error("rejected position should report ok=false")
+	}
+}
+
+func TestManagerRenameSplitsOpenAndDisk(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	other := filepath.Join(dir, "other.go")
+	if err := os.WriteFile(other, []byte("old text\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Open(path, "go", "old text"); err != nil {
+		t.Fatal(err)
+	}
+	files, err := m.Rename(context.Background(), path, buffer.Position{Line: 0, Col: 0}, "new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 2 {
+		t.Fatalf("files = %+v", files)
+	}
+	// Sorted by path: main.go before other.go.
+	if !files[0].Open || files[0].Path != path {
+		t.Errorf("open doc should be flagged Open: %+v", files[0])
+	}
+	if files[1].Open || files[1].Path != other {
+		t.Errorf("disk file should not be flagged Open: %+v", files[1])
+	}
+	if e := files[1].Edits[0]; e.StartCol != 0 || e.EndCol != 3 || e.Text != "new" {
+		t.Errorf("disk edit converted wrong: %+v", e)
 	}
 }
 

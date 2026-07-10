@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/editor/buffer"
 	"ike/internal/lsp/protocol"
 )
@@ -90,6 +92,17 @@ type FormatEdit struct {
 type FormatEditsMsg struct {
 	Path  string
 	Edits []FormatEdit
+}
+
+// RenamePromptMsg asks the app to prompt for a symbol's new name
+// (lsp.rename, #6): the server validated the position, Placeholder prefills
+// the input (the current symbol text, possibly empty), and Apply is the
+// bridge-built continuation the app runs with the typed name — keeping the
+// manager unreachable from the app, as with every other LSP action.
+type RenamePromptMsg struct {
+	Path        string
+	Placeholder string
+	Apply       func(newName string) tea.Cmd
 }
 
 // ServerStatusKind classifies a server status update (Roadmap 0130):

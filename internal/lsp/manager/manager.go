@@ -301,6 +301,93 @@ func (m *Manager) FormatRange(ctx context.Context, path string, start, end buffe
 	return convertEdits(doc.lines, edits, srv.cl.Encoding()), nil
 }
 
+// PrepareRename validates a rename at an editor position. ok reports whether
+// the position is renameable; placeholder is the symbol text the prompt should
+// prefill (empty when the server offers no range — defaultBehavior — or no
+// prepareRename support at all, which skips validation entirely).
+func (m *Manager) PrepareRename(ctx context.Context, path string, pos buffer.Position) (placeholder string, ok bool, err error) {
+	srv, doc, found := m.docServer(path)
+	if !found || !srv.cl.Caps().Rename {
+		return "", false, nil
+	}
+	if !srv.cl.Caps().PrepareRename {
+		// No server-side validation offered; let the rename attempt decide.
+		return "", true, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	r, valid, err := srv.cl.PrepareRename(cctx, protocol.PrepareRenameParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	})
+	if err != nil || !valid {
+		return "", false, err
+	}
+	er := protocol.FromLSPRange(doc.lines, r, srv.cl.Encoding())
+	if er.Start.Line == er.End.Line && er.Start.Line >= 0 && er.Start.Line < len(doc.lines) && er.End.Col > er.Start.Col {
+		runes := []rune(doc.lines[er.Start.Line])
+		if er.End.Col <= len(runes) {
+			placeholder = string(runes[er.Start.Col:er.End.Col])
+		}
+	}
+	return placeholder, true, nil
+}
+
+// FileEdits is one file's slice of a WorkspaceEdit, converted to editor rune
+// coordinates. Open reports whether the manager tracks the document (an open
+// editor buffer): open files are edited in-buffer, the rest on disk.
+type FileEdits struct {
+	Path  string
+	Open  bool
+	Edits []lsp.FormatEdit
+}
+
+// Rename requests the workspace-wide rename and returns the edits per file,
+// deterministically ordered by path. Files the manager does not track are
+// read from disk for the position conversion.
+func (m *Manager) Rename(ctx context.Context, path string, pos buffer.Position, newName string) ([]FileEdits, error) {
+	srv, doc, found := m.docServer(path)
+	if !found || !srv.cl.Caps().Rename {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	we, err := srv.cl.Rename(cctx, protocol.RenameParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+		NewName:      newName,
+	})
+	if err != nil {
+		return nil, err
+	}
+	enc := srv.cl.Encoding()
+	var out []FileEdits
+	for uri, edits := range we.AllChanges() {
+		target := protocol.URIToPath(uri)
+		lines, open := m.DocLines(target)
+		if !open {
+			data, rerr := os.ReadFile(target)
+			if rerr != nil {
+				continue // vanished target: skip rather than corrupt
+			}
+			lines = splitLines(string(data))
+		}
+		out = append(out, FileEdits{Path: target, Open: open, Edits: convertEdits(lines, edits, enc)})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out, nil
+}
+
+// DocLines returns the tracked document lines for path, when open.
+func (m *Manager) DocLines(path string) ([]string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if doc, ok := m.docs[path]; ok {
+		return doc.lines, true
+	}
+	return nil, false
+}
+
 // convertEdits maps server TextEdits into editor-coordinate FormatEdits.
 func convertEdits(lines []string, edits []protocol.TextEdit, enc string) []lsp.FormatEdit {
 	out := make([]lsp.FormatEdit, len(edits))

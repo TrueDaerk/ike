@@ -56,6 +56,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().references(h) },
 			},
 			{
+				ID:    "lsp.rename",
+				Title: "LSP: Rename Symbol",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().rename(h) },
+			},
+			{
 				ID:    "lsp.format",
 				Title: "LSP: Reformat File",
 				Scope: plugin.PaneScope("editor"),
