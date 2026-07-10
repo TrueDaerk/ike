@@ -85,12 +85,36 @@ func classifyKey(k Key) Reachability {
 		// Alt chords need option-as-meta (macOS) or an emulator that encodes
 		// them; delivery is configuration-dependent.
 		return Fragile
-	case k.Has(ModCtrl) && k.Has(ModShift):
+	case k.Has(ModCtrl) && k.Has(ModShift) && !csiParamEncoded(k.Base):
 		// ctrl+shift+letter collapses onto ctrl+letter without the Kitty
-		// protocol's shifted-key disambiguation.
+		// protocol's shifted-key disambiguation. CSI-parameter keys are
+		// exempt: their legacy encoding carries the modifier bitset
+		// (CSI 5;6~ for ctrl+shift+pgup), so no collapse happens.
 		return Fragile
 	}
 	return Delivered
+}
+
+// csiParamEncoded reports whether a base key is transmitted as a CSI (or SS3)
+// sequence with a modifier parameter in the legacy encoding — arrows,
+// home/end, page keys, insert/delete and the function keys. Modifiers on
+// these keys arrive distinguishably in every mainstream terminal, unlike
+// modifiers on character keys (which need the Kitty protocol) or on the
+// C0-mapped keys (enter, tab, space, esc, backspace).
+func csiParamEncoded(base string) bool {
+	switch base {
+	case "up", "down", "left", "right", "home", "end", "pgup", "pgdown", "insert", "delete":
+		return true
+	}
+	if len(base) >= 2 && base[0] == 'f' {
+		for _, c := range base[1:] {
+			if c < '0' || c > '9' {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // ReachabilityNote explains a non-delivered class in one phrase, for honest
@@ -108,7 +132,7 @@ func ReachabilityNote(c Chord) string {
 			return "Cmd needs the Kitty keyboard protocol; the OS/terminal menu intercepts several"
 		case k.Has(ModAlt):
 			return "needs option-as-meta / meta-encoding in the terminal"
-		case k.Has(ModCtrl) && k.Has(ModShift):
+		case k.Has(ModCtrl) && k.Has(ModShift) && !csiParamEncoded(k.Base):
 			return "collapses onto the unshifted ctrl chord without the Kitty protocol"
 		}
 	}

@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T09:30:00Z
+timestamp: 2026-07-10T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -110,7 +110,13 @@ context (Global first) for the `palette.keymapHelp` cheatsheet.
 Actions whose JetBrains chord uses `Cmd` — undeliverable in macOS terminals —
 additionally get an everywhere-deliverable `Ctrl` chord: undo (`ctrl+z`), redo
 (`ctrl+shift+z`), and save (`ctrl+s`, alongside `cmd+s`; raw mode disables XOFF
-flow control, so `ctrl+s` arrives as a normal key). Save targets `editor.write`,
+flow control, so `ctrl+s` arrives as a normal key). Likewise the tab family
+(#248): on macOS Option is a composition key (no Alt at all — and QWERTZ needs
+Option for `{}[]|~@`, so option-as-meta is not viable), so the tab commands get
+delivered primaries following the terminal-tab-cycling convention —
+`ctrl+pgdown`/`ctrl+pgup` cycle tabs, `ctrl+shift+pgdown`/`ctrl+shift+pgup`
+move the active tab — with the `alt+arrows` chords kept as secondaries for
+terminals that deliver them. Save targets `editor.write`,
 the command the editor registers for `:w`, and works from insert mode because
 modified chords stay eligible for the keymap layer.
 
@@ -182,6 +188,12 @@ classes, not off JetBrains nostalgia.
 |---|---|---|
 | **delivered** | arrives in every mainstream terminal | plain keys, `ctrl+letter`, `f1–f12`, `shift+fN` |
 | **fragile** | terminal/configuration/protocol dependent | `cmd+*` (Kitty protocol required; OS/terminal menus intercept several), `alt+*` (option-as-meta), `ctrl+shift+letter` (collapses without Kitty disambiguation), `ctrl+tab` (terminal-eaten) |
+
+The ctrl+shift collapse only affects **character keys**: CSI-parameter-encoded
+keys (arrows, home/end, pgup/pgdown, insert/delete, fN) carry their modifier
+bitset in the legacy encoding (`CSI 5;6~` = ctrl+shift+pgup), so chords like
+`ctrl+shift+pgup` are **delivered** (`csiParamEncoded` in `reachability.go`).
+The C0-mapped keys (enter, tab, space, esc, backspace) are not exempt.
 | **undetectable** | invisible to key-press events | bare-modifier taps (`shift shift` — needs key-up reporting) |
 
 Multi-step chords take the worst class of their steps.
@@ -280,10 +292,10 @@ the fallback column is the path that always works.
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
 | `editor.replace` | `cmd+r` | fragile | `—` | blocked: in-file replace UI (idea #49) |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `space s` | live via space s |
-| `editor.tab.moveLeft` | `alt+shift+left` | fragile | `palette` | live via palette |
-| `editor.tab.moveRight` | `alt+shift+right` | fragile | `palette` | live via palette |
-| `editor.tab.next` | `alt+right` | fragile | `palette` | live via palette |
-| `editor.tab.prev` | `alt+left` | fragile | `palette` | live via palette |
+| `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
+| `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
+| `editor.tab.next` | `ctrl+pgdown` | delivered | `—` | live |
+| `editor.tab.prev` | `ctrl+pgup` | delivered | `—` | live |
 | `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `space o` | live via space o |
 | `editor.tab.select1` | `alt+1` | fragile | `space 1` | live via space 1 |
 | `editor.tab.select2` | `alt+2` | fragile | `space 2` | live via space 2 |

@@ -20,6 +20,15 @@ func TestClassifyRules(t *testing.T) {
 		"shift shift":  Undetectable,
 		"cmd+k cmd+c":  Fragile, // worst step wins
 		"alt+enter":    Fragile,
+		// CSI-parameter keys carry modifiers distinguishably in the legacy
+		// encoding — the ctrl+shift collapse only affects character keys.
+		"ctrl+pgdown":       Delivered,
+		"ctrl+pgup":         Delivered,
+		"ctrl+shift+pgup":   Delivered,
+		"ctrl+shift+pgdown": Delivered,
+		"ctrl+shift+f5":     Delivered,
+		"ctrl+shift+enter":  Fragile, // C0-mapped, not CSI-parameter encoded
+		"alt+pgup":          Fragile, // alt stays option-as-meta dependent
 	}
 	for chord, want := range cases {
 		if got := Classify(MustParseChord(chord)); got != want {
@@ -42,6 +51,23 @@ func TestReachabilityNotes(t *testing.T) {
 	}
 	if note := ReachabilityNote(MustParseChord("ctrl+s")); note != "" {
 		t.Errorf("delivered chords need no note, got %q", note)
+	}
+	if note := ReachabilityNote(MustParseChord("ctrl+shift+pgup")); note != "" {
+		t.Errorf("ctrl+shift on a CSI-parameter key needs no note, got %q", note)
+	}
+}
+
+func TestCSIParamEncoded(t *testing.T) {
+	for base, want := range map[string]bool{
+		"up": true, "down": true, "left": true, "right": true,
+		"home": true, "end": true, "pgup": true, "pgdown": true,
+		"insert": true, "delete": true, "f1": true, "f12": true,
+		"enter": false, "tab": false, "space": false, "esc": false,
+		"backspace": false, "a": false, "f": false, "fx": false,
+	} {
+		if got := csiParamEncoded(base); got != want {
+			t.Errorf("csiParamEncoded(%q) = %v, want %v", base, got, want)
+		}
 	}
 }
 

@@ -280,3 +280,19 @@ func contains(s, sub string) bool {
 	}
 	return false
 }
+
+func TestPageKeyAliases(t *testing.T) {
+	for in, want := range map[string]string{
+		"ctrl+pageup":   "ctrl+pgup",
+		"ctrl+pagedown": "ctrl+pgdown",
+		"ctrl+pgdn":     "ctrl+pgdown",
+	} {
+		k, err := ParseKey(in)
+		if err != nil {
+			t.Fatalf("ParseKey(%q): %v", in, err)
+		}
+		if k.String() != want {
+			t.Errorf("ParseKey(%q) = %q, want %q", in, k, want)
+		}
+	}
+}

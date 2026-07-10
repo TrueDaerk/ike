@@ -96,6 +96,14 @@ var jetbrainsRows = []row{
 	// ctrl+tab pane switcher — and alt+digits jump straight to a tab; both are
 	// layout-safe (arrows and digits sit identically on QWERTZ). Alt+arrow
 	// delivery depends on the terminal's option-as-meta setting, hence fragile.
+	// The delivered primaries are ctrl+pgup/pgdn (#248): on macOS Option is a
+	// composition key (QWERTZ needs it for brackets), so alt chords never
+	// arrive there; the page keys carry modifiers in their CSI parameter and
+	// follow the terminal-tab-cycling convention.
+	{"ctrl+pgdown", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
+	{"ctrl+pgup", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
+	{"ctrl+shift+pgdown", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
+	{"ctrl+shift+pgup", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
 	{"alt+right", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
 	{"alt+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+right", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},

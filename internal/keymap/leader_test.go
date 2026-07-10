@@ -151,6 +151,12 @@ func TestUnboundCommandDefaults(t *testing.T) {
 		{[]string{"ctrl+k", "shift+t"}, "terminal.new"},
 		{[]string{"space", "h"}, "notifications.history"},
 		{[]string{"ctrl+k", "h"}, "notifications.history"},
+		// Delivered tab-cycling primaries (#248): the alt chords never arrive
+		// on macOS (Option composes characters), ctrl+page keys always do.
+		{[]string{"ctrl+pgdown"}, "editor.tab.next"},
+		{[]string{"ctrl+pgup"}, "editor.tab.prev"},
+		{[]string{"ctrl+shift+pgdown"}, "editor.tab.moveRight"},
+		{[]string{"ctrl+shift+pgup"}, "editor.tab.moveLeft"},
 	}
 	for _, c := range cases {
 		r := NewResolver(leaderTable(t, "space"))

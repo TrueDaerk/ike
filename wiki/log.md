@@ -2,6 +2,13 @@
 
 ## 2026-07-10
 
+- Delivered tab chords (#248): `ctrl+pgup`/`ctrl+pgdown` cycle tabs and
+  `ctrl+shift+pgup/pgdown` reorder them — delivered primaries for the
+  alt-arrow chords that never arrive on macOS (Option composes characters).
+  The reachability rules now exempt CSI-parameter keys from the ctrl+shift
+  collapse. Documented in [Keybindings](/architecture/keybindings.md) and
+  [Editor Tabs](/architecture/editor-tabs.md).
+
 - Insert-mode backward kills (#246): `option+backspace` / `ctrl+w` delete the
   previous word, `cmd+backspace` / `ctrl+u` delete to the line start, all
   through the open insert session's recorder (one undo unit). Documented in
