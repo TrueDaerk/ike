@@ -35,12 +35,36 @@ func (m *Model) tabPane() *pane.Instance {
 
 // stepTab cycles the active tab by delta, wrapping around the tab list.
 func (m *Model) stepTab(delta int) {
-	inst := m.tabPane()
-	if inst == nil || inst.TabCount() < 2 {
+	if inst := m.tabPane(); inst != nil {
+		m.cycleTabs(inst, delta)
+	}
+}
+
+// cycleTabs advances inst's active tab by delta with wrap-around; shared by
+// the next/prev commands and the wheel over the tab bar (#159).
+func (m *Model) cycleTabs(inst *pane.Instance, delta int) {
+	n := inst.TabCount()
+	if n < 2 {
 		return
 	}
-	n := inst.TabCount()
 	m.switchTab(inst, ((inst.ActiveTab()+delta)%n+n)%n)
+}
+
+// closeBarTab closes tab idx of pane key after a middle-click on its bar
+// segment (#159), with the same guard as editor.closeTab: the crash-backup
+// snapshot survives only while the document is open elsewhere, and the pane
+// itself closes when its last tab goes.
+func (m *Model) closeBarTab(key string, idx int) {
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return
+	}
+	if inst.TabCount() > 1 {
+		m.closeTab(inst, idx)
+		return
+	}
+	m.setFocus(key)
+	m.closeFocused()
 }
 
 // selectTab activates the tab at idx; out-of-range indexes are a no-op.

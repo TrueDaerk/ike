@@ -121,6 +121,67 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 	return b.String()
 }
 
+// tabAt resolves a bar-local x cell to the tab index rendered there, or -1 for
+// the cells between and beyond tabs (ellipses, separators, trailing space). It
+// mirrors renderTabBar's geometry exactly, so clicks land on what is drawn.
+func tabAt(labels []string, active, width, x int) int {
+	if len(labels) == 0 || x < 0 || x >= width {
+		return -1
+	}
+	if active < 0 || active >= len(labels) {
+		active = 0
+	}
+	lo, hi := tabWindow(labels, active, width)
+	pos := 0
+	if lo > 0 {
+		pos++ // left ellipsis cell
+	}
+	if x < pos {
+		return -1
+	}
+	if lo == hi {
+		// A lone (possibly truncated) segment owns the rest of the bar.
+		return lo
+	}
+	for i := lo; i <= hi; i++ {
+		if i > lo {
+			if x == pos {
+				return -1 // separator cell
+			}
+			pos++
+		}
+		w := ansi.StringWidth(labels[i]) + 2
+		if x < pos+w {
+			return i
+		}
+		pos += w
+	}
+	return -1
+}
+
+// tabBarHit resolves an absolute mouse cell to the editor pane and tab index
+// whose visible tab-bar segment it lands on.
+func (m Model) tabBarHit(x, y int) (string, int, bool) {
+	for key, r := range m.lay.Panes {
+		if y != r.Y+1 || x < r.X+paneContentX || x >= r.X+r.W-paneContentX {
+			continue
+		}
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
+			continue // the row shows the plain title, not a bar
+		}
+		idx := tabAt(tabLabels(inst), inst.ActiveTab(), r.W-paneChromeW, x-(r.X+paneContentX))
+		if idx < 0 {
+			return "", 0, false
+		}
+		return key, idx, true
+	}
+	return "", 0, false
+}
+
 // tabWindow picks the run of tabs [lo, hi] to show: starting from the active
 // tab it grows rightward then leftward while the row — separators and any
 // end ellipses included — still fits width.
