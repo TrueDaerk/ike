@@ -131,4 +131,6 @@ via `uv python find`). Both run asynchronously as `tea.Cmd`s; the result
 interpreter as the absolute `[lang.python] interpreter` through the write-back
 layer — `lang.Interpreter` stays the single source of truth — and restarts the
 language servers against it. IKE shells out to `uv`/`python`; it never bundles
-toolchains.
+toolchains. The integrated terminal (Roadmap 0170, #98) injects the same
+explicit choice via per-project shims — see
+[Integrated Terminal](./terminal.md).

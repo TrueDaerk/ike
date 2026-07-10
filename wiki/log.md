@@ -2,6 +2,14 @@
 
 ## 2026-07-10
 
+- Toolchain environment injection (#98, Roadmap 0170): per-project shim dir
+  (.ike/shims) with exec scripts for php/python/python3 targeting the
+  settings-page interpreters (silent detection never injects); terminal
+  spawns prepend it to PATH, venv choices set VIRTUAL_ENV + venv bin; the
+  pane title indicates the mapping; shims regenerate on config reload and
+  retarget running sessions (exec by absolute path). No setting → untouched
+  env. Windows .cmd note documented. This closes Roadmap 0170 — epic #88
+  and its milestone.
 - Terminal commands & UX (#97, Roadmap 0170): terminal.toggle (alt+f12,
   JetBrains state machine: create → focus → return-focus, also reserved
   inside a focused terminal), terminal.clear (canonical 2J+3J wipe — 2J
