@@ -1475,9 +1475,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case NavBackMsg:
 		// nav.back (Roadmap 0220): return to the previous recorded position.
-		return m.navigateHistory(m.navHist.Back, "no earlier position in the navigation history")
+		return m.navigateHistory(m.navHist.BackWhere, "no earlier position in the navigation history")
 	case NavForwardMsg:
-		return m.navigateHistory(m.navHist.Forward, "no later position in the navigation history")
+		return m.navigateHistory(m.navHist.ForwardWhere, "no later position in the navigation history")
 
 	case ilsp.CodeActionsMsg:
 		// lsp.codeAction: the offer opens as a locked palette list; picking an

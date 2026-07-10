@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-10T19:15:00Z
+timestamp: 2026-07-10T20:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -59,7 +59,15 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
   the opposite stack stays consistent; navigation itself goes through
   `openPathAt` with recording suppressed (`navSkip`), reusing the standard
   open flow (tab reuse, focus, hooks) — no remembered pane identities,
-  which keeps entries valid across layout changes.
+  which keeps entries valid across layout changes. With split layouts,
+  back/forward acts in the *active* editor pane (focused, else most
+  recent); other panes are untouched (#220).
+- **Stale entries** (#220): traversal passes a validity filter
+  (`BackWhere`/`ForwardWhere` with an `os.Stat` check) — an entry whose
+  file was deleted or renamed is silently dropped and traversal continues
+  in the same direction; the current position lands on the opposite stack
+  only when a real target is found, so skipped attempts leave no
+  duplicates.
 - `nav.back` / `nav.forward` are `appCommand`s (compile-in `app` plugin)
   dispatching `NavBackMsg` / `NavForwardMsg`; the Navigate menu was already
   wired to these ids.

@@ -146,3 +146,54 @@ func TestNavBackAfterLargeMotion(t *testing.T) {
 	tm, _ = m.Update(NavBackMsg{})
 	tm.(Model).atPosition(t, files[0], 0)
 }
+
+func TestNavBackSkipsDeletedFile(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	tm, _ := m.openPath(files[0], false)
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DefinitionMsg{Path: files[1], Line: 4, Col: 0})
+	m = tm.(Model)
+	tm, _ = m.Update(ilsp.DefinitionMsg{Path: files[2], Line: 6, Col: 0})
+	m = tm.(Model)
+
+	// files[1] vanishes; back from c must skip it and land on a.
+	if err := os.Remove(files[1]); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ = m.Update(NavBackMsg{})
+	m = tm.(Model).atPosition(t, files[0], 0)
+
+	// Forward re-traverses to c directly — the stale b entry is gone.
+	tm, _ = m.Update(NavForwardMsg{})
+	tm.(Model).atPosition(t, files[2], 6)
+}
+
+func TestNavBackNavigatesInActivePane(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	tm, _ := m.openPath(files[0], false)
+	m = tm.(Model)
+	// Split off a second editor pane holding files[1] (records a:0).
+	tm, _ = m.openPath(files[1], true)
+	m = tm.(Model)
+	paneB := m.activeEditorKey()
+	if len(m.editorKeysForPath(files[1])) == 0 {
+		t.Fatal("second pane must hold files[1]")
+	}
+
+	// Back acts in the active pane: paneB now shows files[0]; the original
+	// pane is untouched and still shows files[0] too (shared standard flow),
+	// but crucially focus and the target pane stay on paneB.
+	tm, _ = m.Update(NavBackMsg{})
+	m = tm.(Model).atPosition(t, files[0], 0)
+	if m.activeEditorKey() != paneB {
+		t.Fatalf("back must navigate in the active pane %s, got %s", paneB, m.activeEditorKey())
+	}
+	// Forward returns paneB to files[1].
+	tm, _ = m.Update(NavForwardMsg{})
+	m = tm.(Model).atPosition(t, files[1], 0)
+	if m.activeEditorKey() != paneB {
+		t.Fatalf("forward must stay in pane %s, got %s", paneB, m.activeEditorKey())
+	}
+}

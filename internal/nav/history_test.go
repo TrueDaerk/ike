@@ -121,3 +121,47 @@ func TestCapDropsOldest(t *testing.T) {
 		t.Fatalf("oldest kept = %+v, the first 50 should have fallen off", h.back[0])
 	}
 }
+
+func TestBackWhereSkipsInvalidEntries(t *testing.T) {
+	var h History
+	h.RecordJump(pos("a.go", 1))
+	h.RecordJump(pos("gone.go", 2))
+	h.RecordJump(pos("b.go", 3))
+	valid := func(p Position) bool { return p.Path != "gone.go" }
+
+	back, ok := h.BackWhere(pos("c.go", 4), valid)
+	if !ok || back != pos("b.go", 3) {
+		t.Fatalf("back = %+v ok=%v", back, ok)
+	}
+	// gone.go is dropped silently; the next back lands on a.go.
+	back, ok = h.BackWhere(pos("b.go", 3), valid)
+	if !ok || back != pos("a.go", 1) {
+		t.Fatalf("back over stale = %+v ok=%v", back, ok)
+	}
+	// The forward stack holds only real departures — no duplicate of b.go
+	// from the skipped attempt.
+	fwd, ok := h.ForwardWhere(pos("a.go", 1), valid)
+	if !ok || fwd != pos("b.go", 3) {
+		t.Fatalf("forward = %+v ok=%v", fwd, ok)
+	}
+	fwd, ok = h.ForwardWhere(pos("b.go", 3), valid)
+	if !ok || fwd != pos("c.go", 4) {
+		t.Fatalf("forward2 = %+v ok=%v", fwd, ok)
+	}
+}
+
+func TestBackWhereAllStaleReportsEmpty(t *testing.T) {
+	var h History
+	h.RecordJump(pos("gone1.go", 1))
+	h.RecordJump(pos("gone2.go", 2))
+	none := func(Position) bool { return false }
+	if _, ok := h.BackWhere(pos("cur.go", 0), none); ok {
+		t.Fatal("all-stale back must report empty")
+	}
+	if h.CanBack() {
+		t.Fatal("stale entries must be consumed")
+	}
+	if h.CanForward() {
+		t.Fatal("nothing must land forward when no target was found")
+	}
+}
