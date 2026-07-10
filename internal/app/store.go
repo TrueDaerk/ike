@@ -23,10 +23,17 @@ import (
 // no remembered file).
 
 // paneIdentity is the persisted identity of one leaf: its kind and, for an
-// editor, the file it held (empty for a scratch buffer).
+// editor, the file it held (empty for a scratch buffer). Editor tabs (0190,
+// #160) grow it by the ordered tab list: Tabs holds every file-backed tab's
+// path in tab order and Active indexes the active one within that list.
+// Scratch tabs are not persisted (their text is the crash-recovery side's
+// job). Path stays the active tab's file so older builds — and the legacy
+// reader below — keep working; files without Tabs restore as single-tab panes.
 type paneIdentity struct {
-	Kind string `json:"kind"`
-	Path string `json:"path,omitempty"`
+	Kind   string   `json:"kind"`
+	Path   string   `json:"path,omitempty"`
+	Tabs   []string `json:"tabs,omitempty"`
+	Active int      `json:"active,omitempty"`
 }
 
 // persistedLayout is the on-disk layout schema: the encoded split tree plus the
@@ -122,7 +129,17 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
 		case pane.KindEditor:
-			ids[key] = paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
+			id := paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
+			for i, ed := range inst.Editors() {
+				if !ed.HasFile() {
+					continue // scratch tabs restore as nothing, not as ""
+				}
+				if i == inst.ActiveTab() {
+					id.Active = len(id.Tabs)
+				}
+				id.Tabs = append(id.Tabs, ed.Path())
+			}
+			ids[key] = id
 		}
 	}
 	data, err := json.Marshal(persistedLayout{Tree: treeData, Panes: ids})

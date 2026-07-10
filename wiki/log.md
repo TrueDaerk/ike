@@ -2,6 +2,17 @@
 
 ## 2026-07-10
 
+- Editor tabs — session persistence (#160, Roadmap 0190, closes the epic):
+  `layout.json`'s per-leaf identity grows `tabs` (ordered file-backed tab
+  paths) and `active` (index within that list); `path` stays the active tab's
+  file for older builds. Restore rebuilds tab lists tolerantly: pre-tabs
+  identities become single-tab panes, missing files are skipped (active index
+  maps to survivors), all-gone panes restore as a scratch tab, and one file in
+  several tabs/panes restores as one shared document. Scratch-tab text remains
+  crash recovery's job. Tests in `internal/app/tabpersist_test.go`; wiki
+  updated. **Epic 0190 complete** — tab model (#156), bar (#157), commands
+  (#158), mouse (#159), persistence (#160).
+
 - Editor tabs — mouse on the bar (#159, Roadmap 0190): `tabAt`/`tabBarHit`
   (in `internal/app/tabbar.go`) hit-test the rendered bar geometry exactly.
   Left-click focuses/activates the clicked tab (the active segment still
