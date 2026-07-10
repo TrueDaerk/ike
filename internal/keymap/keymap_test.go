@@ -80,6 +80,27 @@ func TestBuildTableLookupContextPrecedence(t *testing.T) {
 	}
 }
 
+// TestDoubleShiftResolvesOffMacOS drives the resolver's multi-step chord path
+// on a non-darwin table (#236): the first bare shift holds as a pending
+// prefix, the second resolves palette.searchEverywhere.
+func TestDoubleShiftResolvesOffMacOS(t *testing.T) {
+	prev := GOOS
+	GOOS = "linux"
+	defer func() { GOOS = prev }()
+
+	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
+	r := NewResolver(table)
+	shift := MustParseChord("shift shift").Steps[0]
+
+	if res := r.Feed(shift, Explorer); res.Status != Pending {
+		t.Fatalf("first shift = %+v, want Pending", res)
+	}
+	res := r.Feed(shift, Explorer)
+	if res.Status != Resolved || res.Command != "palette.searchEverywhere" {
+		t.Fatalf("second shift = %+v, want palette.searchEverywhere resolved", res)
+	}
+}
+
 func TestPaneScopeShadowsGlobal(t *testing.T) {
 	defs := []Binding{
 		{Chord: MustParseChord("ctrl+g"), Command: "global.cmd", Context: Global, Layer: LayerDefault},

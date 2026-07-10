@@ -800,7 +800,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(recent.List)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru)
+	all := palette.NewSearchAllMode(cmd, file)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1402,6 +1403,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Root:       ".",
 			ActivePath: m.activeFilePath(),
 		}, palette.RecentPrefix)
+		return m, nil
+
+	case ShowSearchEverywhereMsg:
+		// palette.searchEverywhere (cmd+shift+a / double-shift): one query
+		// ranked across commands and files, locked to its mode.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.SearchAllPrefix)
 		return m, nil
 
 	case project.OpenPickerMsg:

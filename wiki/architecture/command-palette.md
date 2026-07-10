@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, a locked recent-files MRU mode behind cmd+e), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
 timestamp: 2026-07-10T00:00:00Z
@@ -36,6 +36,7 @@ internal/palette/
   command_mode.go          ":" mode — snapshot registry, fuzzy-filter, context-first ranking
   file_mode.go             "@" mode — fuzzy file finder over the project tree (cached walk)
   recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
+  search_mode.go           locked search-everywhere mode — composes command + file modes, per-kind cap
   context.go               Context captured at open (focused pane context id + project root + active file)
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
 ```
@@ -65,6 +66,8 @@ Four entry points, all from a non-capturing context:
   editor pane.
 - **`palette.recentFiles`** (default `cmd+e`, leader `m`, Navigate menu) — opens
   the centered palette locked to the recent-files mode (below).
+- **`palette.searchEverywhere`** (default `cmd+shift+a` / double-shift, leader
+  `A`) — opens the centered palette locked to the search-everywhere mode (below).
 
 A palette can be **locked** to a single mode (no prefix switching): the anchored
 editor finder and the go-to-file open are locked to `@`, so a typed `:` is part
@@ -126,6 +129,21 @@ file (the `Context.ActivePath` field carries the exclusion). A query
 fuzzy-matches the project-relative path; equal scores keep MRU order. Files
 that vanished from disk are dropped from the listing. Activation emits the same
 `OpenFileMsg` as the `@` mode.
+
+## Search-everywhere mode (`cmd+shift+a` / double-shift, Roadmap 0230)
+
+JetBrains' Search Everywhere, palette-style (`search_mode.go`). Locked-only like
+the recent-files mode (`palette.searchEverywhere` opens it via `OpenLocked`);
+`shift shift` resolves through the ordinary multi-step chord engine, so it works
+off macOS too (it needs key-up reporting, hence leader `A` as the universal
+escape). One query is ranked across **commands and files** by *composing* the
+already-built `CommandMode` and `FileMode` — no duplicated ranking. Each
+source's top rows (per-kind cap, `searchAllPerKind`) interleave by fuzzy score,
+ties keeping commands first; every row is retitled with its source's prefix
+glyph (`:` / `@`, match spans shifted alongside) so the kind is visible, command
+rows keep their binding chip, file rows their project-relative path. Activation
+dispatches whatever the underlying item carries (`RunCommandMsg` /
+`OpenFileMsg`). Symbols join once a workspace-symbol source exists (idea #146).
 
 ## Fuzzy matching
 

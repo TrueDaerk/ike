@@ -8,12 +8,11 @@ package keymap
 // binding. Remove an entry the moment its command registers — a stale entry
 // (blocked and registered) fails the same test.
 var blockedDefaults = map[string]string{
-	"vcs.commit":               "VCS integration (idea #28)",
-	"vcs.updateProject":        "VCS integration (idea #28)",
-	"vcs.revertFile":           "VCS integration (idea #28)",
-	"editor.replace":           "in-file replace UI (idea #49)",
-	"palette.searchEverywhere": "search-everywhere palette mode (0230, #236)",
-	"project.goToClass":        "document symbols / structure view (idea #31)",
+	"vcs.commit":        "VCS integration (idea #28)",
+	"vcs.updateProject": "VCS integration (idea #28)",
+	"vcs.revertFile":    "VCS integration (idea #28)",
+	"editor.replace":    "in-file replace UI (idea #49)",
+	"project.goToClass": "document symbols / structure view (idea #31)",
 }
 
 // BlockedReason reports whether a command id is a documented blocked default

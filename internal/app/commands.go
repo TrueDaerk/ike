@@ -50,6 +50,12 @@ type GoToFileMsg struct{}
 // (cmd+e / leader m / menu).
 type ShowRecentFilesMsg struct{}
 
+// ShowSearchEverywhereMsg asks the root model to open the palette locked to
+// the search-everywhere mode ranking one query across commands and files
+// (Roadmap 0230). Dispatched by palette.searchEverywhere (cmd+shift+a /
+// double-shift).
+type ShowSearchEverywhereMsg struct{}
+
 // SaveAllMsg asks the root model to save every dirty editor pane. Dispatched
 // by editor.saveAll.
 type SaveAllMsg struct{}
@@ -154,6 +160,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
 			appCommand("palette.recentFiles", "Recent Files", ShowRecentFilesMsg{}),
+			appCommand("palette.searchEverywhere", "Search Everywhere", ShowSearchEverywhereMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
 			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),

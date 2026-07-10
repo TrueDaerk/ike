@@ -49,6 +49,9 @@ var leaderMnemonics = []leaderMnemonic{
 	{"c", "editor.commentLine", "Comment line"},
 	{"x", "editor.closeTab", "Close tab"},
 	{"m", "palette.recentFiles", "Recent files (MRU)"},
+	// A (shift+a) mirrors the fragile cmd+shift+a primary; double-shift needs
+	// key-up reporting, so the leader path is the universal escape (#236).
+	{"A", "palette.searchEverywhere", "Search everywhere"},
 	{"o", "editor.tab.reopenClosed", "Reopen closed tab"},
 	// Navigation history (Roadmap 0220): the primary cmd+bracket chords are
 	// fragile and awkward on QWERTZ; b(ack) and i (vim's ctrl+i forward
