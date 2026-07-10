@@ -21,6 +21,11 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	// last ":"-line message up until the next key).
 	m.cmdMsg = ""
 
+	// Esc dismisses search-match highlights (vim's :noh, #255); n/N/* re-arm.
+	if key.Code == tea.KeyEscape {
+		m.hlActive = false
+	}
+
 	// Secondary-key states resolve before anything else.
 	switch m.wait {
 	case awaitG:

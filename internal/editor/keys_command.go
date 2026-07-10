@@ -10,16 +10,21 @@ import (
 	"ike/internal/editor/search"
 )
 
-// beginSearch enters the command line in search mode for "/" or "?".
+// beginSearch enters the command line in search mode for "/" or "?", capturing
+// the cursor and viewport so an Esc restores them exactly (#255).
 func (m *Model) beginSearch(dir search.Direction) {
 	m.mode = Command
 	m.searching = true
 	m.searchDir = dir
 	m.cmdline = ""
+	m.preview = search.Query{}
+	m.searchOrigin = m.cursor
+	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
 }
 
 // searchNextRepeat repeats the active search for n/N. reverse flips the stored
-// direction (N).
+// direction (N). Wrapping past a buffer end leaves a "search wrapped" hint on
+// the ex line (#255).
 func (m *Model) searchNextRepeat(reverse bool, count int) {
 	if m.query.Empty() {
 		return
@@ -29,8 +34,22 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 		dir = opposite(dir)
 	}
 	if p, ok := m.query.Next(m.buf, m.cursor, dir, count); ok {
+		if wrapped(m.cursor, p, dir) {
+			m.cmdMsg = "search wrapped"
+		}
+		m.hlActive = true
 		m.jumpTo(p) // n/N landings are jumps (Roadmap 0220)
 	}
+}
+
+// wrapped reports whether a search landing at p from `from` crossed a buffer
+// end: a forward match behind the cursor (or on it) wrapped to the top, a
+// backward match ahead of it wrapped to the bottom.
+func wrapped(from, p buffer.Position, dir search.Direction) bool {
+	if dir == search.Forward {
+		return !from.Before(p)
+	}
+	return !p.Before(from)
 }
 
 func opposite(d search.Direction) search.Direction {
@@ -44,6 +63,9 @@ func opposite(d search.Direction) search.Direction {
 func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Code == tea.KeyEscape:
+		if m.searching {
+			m.cancelSearch()
+		}
 		m.mode = Normal
 		m.cmdline = ""
 		m.searching = false
@@ -59,31 +81,92 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		if r := []rune(m.cmdline); len(r) > 0 {
 			m.cmdline = string(r[:len(r)-1])
+			if m.searching {
+				m.searchPreview()
+			}
 		} else {
+			if m.searching {
+				m.cancelSearch()
+			}
 			m.mode = Normal
 			m.searching = false
 		}
 	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
 		// Printable input, including a bare space (Text == " ").
 		m.cmdline += key.Text
+		if m.searching {
+			m.searchPreview()
+		}
 	}
 	return m, nil
 }
 
-// commitSearch compiles the typed pattern and jumps to the first match. A "\v"
+// parseSearchPattern splits the typed line into pattern and regex flag: a "\v"
 // prefix enables regex (very-magic toggle); otherwise the search is literal.
-func (m *Model) commitSearch() {
-	pattern, regex := m.cmdline, false
-	if strings.HasPrefix(pattern, `\v`) {
-		pattern, regex = pattern[2:], true
+func parseSearchPattern(line string) (string, bool) {
+	if strings.HasPrefix(line, `\v`) {
+		return line[2:], true
 	}
-	m.query = search.Compile(pattern, regex)
+	return line, false
+}
+
+// searchPreview recompiles the half-typed pattern and moves to the nearest
+// match from the search origin, vim's incsearch (#255). No match (or an empty
+// pattern) parks the cursor back at the origin; nothing lands on the nav
+// stack — only the committed jump does.
+func (m *Model) searchPreview() {
+	m.preview = search.Compile(parseSearchPattern(m.cmdline))
+	if !m.preview.Empty() {
+		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
+			m.cursor = p
+			m.desiredCol = p.Col
+			m.scroll()
+			return
+		}
+	}
+	m.restoreSearchOrigin()
+}
+
+// cancelSearch abandons the search line: cursor and viewport return exactly to
+// where they were when the search opened; the previously committed query (and
+// its n/N state) is untouched.
+func (m *Model) cancelSearch() {
+	m.preview = search.Query{}
+	m.restoreSearchOrigin()
+}
+
+// restoreSearchOrigin puts cursor and viewport back at their captured state.
+func (m *Model) restoreSearchOrigin() {
+	m.cursor = m.buf.ClampCursor(m.searchOrigin)
+	m.desiredCol = m.cursor.Col
+	m.view.Top, m.view.Left = m.searchOrigTop, m.searchOrigLft
+	m.scroll()
+}
+
+// commitSearch installs the previewed pattern as the active query and jumps to
+// the first match from the origin. Zero matches leave a "no matches" report on
+// the ex line and restore the origin.
+func (m *Model) commitSearch() {
+	m.preview = search.Compile(parseSearchPattern(m.cmdline))
+	m.query = m.preview
+	m.preview = search.Query{}
 	if m.query.Empty() {
+		m.restoreSearchOrigin()
 		return
 	}
-	if p, ok := m.query.Next(m.buf, m.cursor, m.searchDir, 1); ok {
-		m.jumpTo(p) // the initial /-search landing is a jump (Roadmap 0220)
+	p, ok := m.query.Next(m.buf, m.searchOrigin, m.searchDir, 1)
+	if !ok {
+		m.hlActive = false
+		m.cmdMsg = "no matches: " + m.query.Pattern
+		m.restoreSearchOrigin()
+		return
 	}
+	m.hlActive = true
+	if wrapped(m.searchOrigin, p, m.searchDir) {
+		m.cmdMsg = "search wrapped"
+	}
+	m.cursor = m.searchOrigin // the jump departs from the origin, not the preview
+	m.jumpTo(p)               // the initial /-search landing is a jump (Roadmap 0220)
 }
 
 // runExLine parses and executes a ":" command, returning any resulting tea.Cmd.

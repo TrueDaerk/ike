@@ -1,11 +1,13 @@
 package editor
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/editor/search"
 )
 
 // MouseClick moves the cursor to the content-local cell (x, y) — coordinates
@@ -134,7 +136,8 @@ func (m Model) View() string {
 }
 
 // commandLineRow renders the active command-line input with a block cursor, or
-// the last ex-command message while idle, or "" when neither is present.
+// the last ex-command message while idle, or "" when neither is present. While
+// searching, a live match counter ("3/17", "no matches") trails the input.
 func (m Model) commandLineRow() string {
 	if m.subConfirm != nil {
 		return m.cmdMsg // the "replace (y/n/a/q/l)?" prompt
@@ -146,7 +149,42 @@ func (m Model) commandLineRow() string {
 		}
 		return ""
 	}
-	return cl + lipgloss.NewStyle().Reverse(true).Render(" ")
+	return cl + lipgloss.NewStyle().Reverse(true).Render(" ") + m.searchCounter()
+}
+
+// searchCounter renders the incremental-search tally for the command-line row
+// (#255): current match index over total, or "no matches" for a pattern that
+// hits nothing. Empty outside an active search line or on an empty pattern.
+func (m Model) searchCounter() string {
+	if !m.searching || m.preview.Empty() {
+		return ""
+	}
+	all := m.preview.AllMatches(m.buf)
+	dim := lipgloss.NewStyle().Faint(true)
+	if len(all) == 0 {
+		return dim.Render("  no matches")
+	}
+	cur := 0
+	for i, s := range all {
+		if s.Line == m.cursor.Line && s.Start == m.cursor.Col {
+			cur = i + 1
+			break
+		}
+	}
+	return dim.Render("  " + strconv.Itoa(cur) + "/" + strconv.Itoa(len(all)))
+}
+
+// searchHLQuery returns the query whose matches the view highlights: the live
+// preview while the search line is open, else the committed query while
+// highlights are armed (until a normal-mode Esc clears them, #255).
+func (m Model) searchHLQuery() (search.Query, bool) {
+	if m.searching && !m.preview.Empty() {
+		return m.preview, true
+	}
+	if m.hlActive && !m.query.Empty() {
+		return m.query, true
+	}
+	return search.Query{}, false
 }
 
 // renderLine renders one buffer line within the horizontal window, overlaying
@@ -161,6 +199,16 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 	left := m.view.Left
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
+
+	// Search-match highlighting (#255): all matches of the active query get a
+	// background; the span the cursor sits on (the current match) is also
+	// underlined so it stands apart from the rest.
+	var matchSpans []search.Span
+	if q, ok := m.searchHLQuery(); ok {
+		matchSpans = q.LineMatches(m.buf, line)
+	}
+	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
+	curMatchStyle := matchStyle.Underline(true)
 
 	var b strings.Builder
 	disp := 0 // display cells emitted so far
@@ -184,6 +232,15 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			cell = strings.Repeat(" ", cells)
 		}
 
+		inMatch, inCurrent := false, false
+		for _, s := range matchSpans {
+			if col >= s.Start && col < s.End {
+				inMatch = true
+				inCurrent = line == m.cursor.Line && m.cursor.Col >= s.Start && m.cursor.Col < s.End
+				break
+			}
+		}
+
 		switch {
 		case cursorHere && cells > 1:
 			// Cursor on a tab: highlight only the first cell, leave the rest plain.
@@ -193,6 +250,10 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			b.WriteString(cursorStyle.Render(cell))
 		case selected:
 			b.WriteString(selStyle.Render(cell))
+		case inCurrent:
+			b.WriteString(curMatchStyle.Render(cell))
+		case inMatch:
+			b.WriteString(matchStyle.Render(cell))
 		default:
 			st, styled := m.styleAt(line, col)
 			if sev, ok := m.diagSeverityAt(line, col); ok {

@@ -59,6 +59,16 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   border off screen).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
+  The input line is **incremental** (#255): each keystroke recompiles the
+  pattern, jumps to the nearest match from the search origin and shows a live
+  counter ("3/17", "no matches") on the `/` line; Esc restores cursor and
+  viewport exactly, Enter commits (zero matches / a wrapped landing leave
+  "no matches: pat" / "search wrapped" on the ex line, as do wrapping
+  `n`/`N`). All matches of the active query render with a background
+  highlight, the current match additionally underlined; a normal-mode Esc
+  clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm them.
+  `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
+  find UI.
 - **excmd** — parses the `:` line into a typed `Command{Range, Name, Bang, Args}`
   AST and resolves its range. The grammar is `[range] name[!] [args]`: a range is
   one or two comma-separated *addresses* (or `%` = whole file), and an address is
