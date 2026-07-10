@@ -45,6 +45,11 @@ type CyclePaneFocusMsg struct{}
 // mode ("@"), from any context. Dispatched by project.goToFile.
 type GoToFileMsg struct{}
 
+// ShowRecentFilesMsg asks the root model to open the palette locked to the
+// recent-files (MRU) mode (Roadmap 0230). Dispatched by palette.recentFiles
+// (cmd+e / leader m / menu).
+type ShowRecentFilesMsg struct{}
+
 // SaveAllMsg asks the root model to save every dirty editor pane. Dispatched
 // by editor.saveAll.
 type SaveAllMsg struct{}
@@ -148,6 +153,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			appCommand("palette.recentFiles", "Recent Files", ShowRecentFilesMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
 			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),

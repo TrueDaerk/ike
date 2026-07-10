@@ -8,7 +8,10 @@ package palette
 // supplied by the root model from the focused pane's ContextProvider. Command
 // mode uses it to rank in-context commands ahead of global and off-context ones.
 // Root is the project root file search walks for the "@" file mode.
+// ActivePath is the focused editor's file (may be empty); the recent-files
+// mode excludes it so its first result is the previously used file.
 type Context struct {
-	ContextID string
-	Root      string
+	ContextID  string
+	Root       string
+	ActivePath string
 }

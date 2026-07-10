@@ -221,8 +221,8 @@ Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
 path, `r` replace in path, `p` switch project, `t` toggle terminal, `e`
 explorer/editor toggle, `s` save all, `w` save, `d` definition, `u` usages,
 `a` code actions, `n` rename, `l` reformat, `c` comment line, `x` close tab,
-`o` reopen tab, `b` navigate back, `i` navigate forward, `,` settings,
-`1–9` tab N. The long tail stays reachable through the palette (`ctrl+p`,
+`o` reopen tab, `m` recent files (MRU), `b` navigate back, `i` navigate
+forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (`ctrl+p`,
 delivered everywhere).
 
 **Honest fragility**: the per-row `fragile` flags are no longer
@@ -310,8 +310,8 @@ the fallback column is the path that always works.
 | `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |
 | `nav.forward` | `cmd+right-bracket` | fragile | `space i` | live via space i |
 | `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
-| `palette.recentFiles` | `cmd+e` | fragile | `—` | blocked: recent-files palette mode (idea #50) |
-| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `—` | blocked: search-everywhere palette mode (idea #50) |
+| `palette.recentFiles` | `cmd+e` | fragile | `space m` | live via space m |
+| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `—` | blocked: search-everywhere palette mode (0230, #236) |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
 | `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
