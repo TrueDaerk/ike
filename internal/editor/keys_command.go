@@ -101,22 +101,6 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// beginReplaceLine opens the command line prefilled for a whole-file
-// substitute (editor.replace phase 1, #282): "%s/<pattern>/" with the cursor
-// at the end, so typing the replacement (+ flags) and Enter runs the ordinary
-// :s flow — confirm, single undo unit, smartcase, all shared. The committed
-// search query seeds the pattern when it is literal and slash-free; anything
-// else (regex, slashes, no search yet) starts empty.
-func (m *Model) beginReplaceLine() {
-	m.mode = Command
-	m.searching = false
-	pat := ""
-	if !m.query.Empty() && !m.query.Regex && !strings.Contains(m.query.Pattern, "/") {
-		pat = m.query.Pattern
-	}
-	m.cmdline = "%s/" + pat + "/"
-}
-
 // parseSearchPattern splits the typed line into pattern and regex flag: a "\v"
 // prefix enables regex (very-magic toggle); otherwise the search is literal.
 func parseSearchPattern(line string) (string, bool) {

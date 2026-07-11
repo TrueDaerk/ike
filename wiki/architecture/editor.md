@@ -156,12 +156,18 @@ The grammar is `[range] name[!] [args]`:
 ### `:substitute` (`substitute.go`)
 
 `:[range]s/pat/repl/[flags]` rewrites lines over the resolved range (default: the
-current line). `editor.replace` (`cmd+r`, leader `R`; 0240 phase 1, #282)
-fronts this same engine: it opens the ex line prefilled with `%s/<pattern>/` —
-the committed search seeds the pattern when it is literal and slash-free — so
-typing the replacement (+ flags, incl. `c` confirm) and Enter runs the
-ordinary substitute. A dedicated two-field panel is Epic 0240 phase 2 (#283).
-The pattern follows the search-layer convention — literal by
+current line). `editor.replace` (`cmd+r`, leader `R`; Epic 0240, #283) fronts
+this same engine with a **two-field panel** (`replace_panel.go`) rendered as
+the pane's bottom rows: Find (seeded from the committed literal search,
+driving the incremental-search preview — live highlight, match tally, jump to
+the nearest match) and Replace, `tab` switching fields. `ctrl+a` runs
+`%s/find/repl/g` (replace all, the engine's "N substitutions" report), `enter`
+runs the `gc` variant and hands over to the y/n/a/q/l confirm flow — exactly
+replace-current / skip / all with one undo unit — and `esc` cancels with
+nothing mutated, restoring cursor and viewport. The delimiter is picked to
+avoid both fields, so slashes need no escaping; the panel (like the confirm
+prompt) counts as *capturing*, so global plain keys (`tab` pane cycle) never
+steal its input. The pattern follows the search-layer convention — literal by
 default, `\v` prefix for regex — so `:s//bar/` reuses the last search (then the
 last substitute) as its pattern. Any non-alphanumeric delimiter works
 (`:s#a#b#`), and `\<delim>` is a literal delimiter.

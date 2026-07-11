@@ -397,7 +397,7 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		if m.insert.active {
 			m.commitInsert()
 		}
-		m.beginReplaceLine()
+		m.beginReplacePanel()
 	case "duplicate_line":
 		if m.insert.active {
 			m.commitInsert()

@@ -2,6 +2,15 @@
 
 ## 2026-07-11
 
+- Find/replace panel (#283, Epic 0240 phase 2): `editor.replace` (cmd+r /
+  leader `R`) now opens a two-field panel — Find with live incremental
+  preview and match tally, Replace, tab to switch — finishing through the
+  one substitute engine: ctrl+a replaces all ("N substitutions" report),
+  enter enters the y/n/a/q/l confirm flow, esc cancels and restores the
+  origin. The panel counts as capturing so global keys keep out of its
+  inputs. Replaces the phase-1 ex-line prefill (#282). Documented in
+  [Editor](/architecture/editor.md).
+
 - 0082-review fixes documented (#289): blocked-chord toast (#267) and
   bracket-glyph canonicalisation (#284) in
   [Keybindings](/architecture/keybindings.md); canonical open paths / tab
