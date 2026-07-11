@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T17:48:00Z
+timestamp: 2026-07-11T21:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -247,6 +247,30 @@ diagnostic underline, which `renderLine` applies on top either way — and
 keeps the last result until the next one lands. Optional by construction:
 no `semanticTokensProvider` (gopls needs `semanticTokens = true` under
 `[lsp.servers.go.settings]`) simply means Tree-sitter-only rendering.
+
+**Embedded fragments — virtual documents (0300, #412–#414).** SQL inside a
+Python string gets real completion and hover from an SQL server. LSP has no
+protocol-level notion of embedded fragments, so the manager mirrors each
+detected fragment into a synthetic in-memory document (`ike-fragment:` URI,
+`manager/fragments.go`) with the fragment's language id, served by that
+language's ordinary managed server. Detection comes from Tree-sitter
+*injection queries* (`highlight.Fragments`): a grammar built with
+`NewGrammarInjections` ships an `injections.scm` whose captures follow the
+`fragment.<lang>[.guess]` convention — `.guess` defers to a Go-side content
+heuristic (SQL statement-leading keywords), so plain strings never become
+fragments. Python's query captures `string_content`; the fragment text is
+exactly the host text of its range, so host↔fragment position mapping is a
+pure offset shift. Lifecycle follows the host document: fragments re-detect
+after every open/change on a manager goroutine (generation-guarded — the
+newest sync wins; `Change` runs on the UI thread and detection/spawning must
+not), matching slots update in place via didChange, vanished fragments close,
+crash restart re-opens them. Completion and hover requests whose position
+falls inside a fragment route to the fragment's server with positions mapped
+both ways (result edit/hover ranges return in host coordinates). A fragment
+language with no configured server degrades silently; fragment diagnostics
+are dropped until #415; references/definition inside fragments are #416. The
+`sql` language plugin registers `sql-language-server` (also serving plain
+`.sql` files) so the pipeline works out of the box.
 
 ## Design rules
 

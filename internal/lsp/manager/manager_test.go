@@ -173,7 +173,27 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 			_ = json.Unmarshal(msg.Params, &p)
 			respond(out, msg.ID, []protocol.TextEdit{{Range: p.Range, NewText: "X"}})
 		case msg.Method == "textDocument/completion":
-			respond(out, msg.ID, protocol.CompletionList{Items: []protocol.CompletionItem{{Label: "Println"}}})
+			// The edit covers the document's first 3 units so range mapping
+			// (fragment → host) is observable.
+			respond(out, msg.ID, protocol.CompletionList{Items: []protocol.CompletionItem{{
+				Label: "Println",
+				TextEdit: &protocol.TextEdit{
+					Range:   protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 3}},
+					NewText: "Println",
+				},
+			}}})
+		case msg.Method == "textDocument/hover":
+			// Echo the requested position's line in the contents and cover the
+			// first 6 units, so routing and range mapping are observable.
+			var p protocol.HoverParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, map[string]any{
+				"contents": fmt.Sprintf("hover@%d:%d", p.Position.Line, p.Position.Character),
+				"range": protocol.Range{
+					Start: protocol.Position{Line: 0, Character: 0},
+					End:   protocol.Position{Line: 0, Character: 6},
+				},
+			})
 		case msg.Method == "textDocument/didChange":
 			if opts.didChanges != nil {
 				var p protocol.DidChangeTextDocumentParams

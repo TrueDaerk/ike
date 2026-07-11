@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Embedded-language LSP via virtual documents (0300, #412–#414): Tree-sitter
+  injection queries detect fragments (SQL in Python strings, capture
+  convention `fragment.<lang>[.guess]`), the manager mirrors each into an
+  `ike-fragment:` document on the fragment language's server and routes
+  completion/hover inside the fragment there, mapping positions both ways.
+  New `sql` language plugin (sql-language-server). Diagnostics (#415) and
+  references (#416) follow. See [LSP](/architecture/lsp.md).
+
 - First-start LSP onboarding (#301): a one-time dialog on the very first
   launch (no user config yet) lists the servers with install recipes as
   checkboxes; enter batch-installs the checked ones via `lsp.installMissing`,
