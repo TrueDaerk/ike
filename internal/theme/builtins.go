@@ -44,19 +44,23 @@ func defaultTheme() Theme {
 			Selection:      "#3668ff",
 			SelectionText:  "#ffffff",
 			SelectionMuted: "#444444", // editor visual selection
-			Accent:         "#d7af87", // explorer active entry
-			Primary:        "#005f87", // completion selected row
-			Secondary:      "#ffaf5f",
-			Success:        "#5fd75f",
-			Warning:        "#9f9f00",
-			Error:          "#ff6464",
-			Info:           "#8d8dff",
-			Hint:           "#00a9a9",
-			MoveSource:     "#ff5f5f",
-			DropTarget:     "#ffd700",
-			Ghost:          "#af8700",
-			ScrollbarTrack: "#585858",
-			ScrollbarThumb: "#8a8a8a",
+			// Occurrence marks (#172) sit below the visual selection in
+			// emphasis: read cool, write warm.
+			OccurrenceRead:  "#31404f",
+			OccurrenceWrite: "#4f4031",
+			Accent:          "#d7af87", // explorer active entry
+			Primary:         "#005f87", // completion selected row
+			Secondary:       "#ffaf5f",
+			Success:         "#5fd75f",
+			Warning:         "#9f9f00",
+			Error:           "#ff6464",
+			Info:            "#8d8dff",
+			Hint:            "#00a9a9",
+			MoveSource:      "#ff5f5f",
+			DropTarget:      "#ffd700",
+			Ghost:           "#af8700",
+			ScrollbarTrack:  "#585858",
+			ScrollbarThumb:  "#8a8a8a",
 		},
 		Captures: map[string]string{
 			"keyword":          "magenta",
@@ -97,28 +101,30 @@ func tokyoNight() Theme {
 		Name: "tokyo-night",
 		Dark: true,
 		UI: UI{
-			Background:     "#16161e",
-			Foreground:     "#a9b1d6",
-			Surface:        "#1a1b26",
-			Panel:          "#24283b",
-			Border:         "#414868",
-			BorderFocus:    "#7aa2f7",
-			Selection:      "#7aa2f7",
-			SelectionText:  "#1a1b26",
-			SelectionMuted: "#283457",
-			Accent:         "#7fa1de",
-			Primary:        "#7aa2f7",
-			Secondary:      "#ff9e64",
-			Success:        "#9ece6a",
-			Warning:        "#e0af68",
-			Error:          "#f7768e",
-			Info:           "#7aa2f7",
-			Hint:           "#1abc9c",
-			MoveSource:     "#f7768e",
-			DropTarget:     "#e0af68",
-			Ghost:          "#ff9e64",
-			ScrollbarTrack: "#24283b",
-			ScrollbarThumb: "#414868",
+			Background:      "#16161e",
+			Foreground:      "#a9b1d6",
+			Surface:         "#1a1b26",
+			Panel:           "#24283b",
+			Border:          "#414868",
+			BorderFocus:     "#7aa2f7",
+			Selection:       "#7aa2f7",
+			SelectionText:   "#1a1b26",
+			SelectionMuted:  "#283457",
+			OccurrenceRead:  "#233450",
+			OccurrenceWrite: "#413630",
+			Accent:          "#7fa1de",
+			Primary:         "#7aa2f7",
+			Secondary:       "#ff9e64",
+			Success:         "#9ece6a",
+			Warning:         "#e0af68",
+			Error:           "#f7768e",
+			Info:            "#7aa2f7",
+			Hint:            "#1abc9c",
+			MoveSource:      "#f7768e",
+			DropTarget:      "#e0af68",
+			Ghost:           "#ff9e64",
+			ScrollbarTrack:  "#24283b",
+			ScrollbarThumb:  "#414868",
 		},
 		Captures: map[string]string{
 			"keyword":          "#bb9af7",
@@ -159,28 +165,30 @@ func nord() Theme {
 		Name: "nord",
 		Dark: true,
 		UI: UI{
-			Background:     "#2e3440",
-			Foreground:     "#d8dee9",
-			Surface:        "#2e3440",
-			Panel:          "#3b4252",
-			Border:         "#4c566a",
-			BorderFocus:    "#88c0d0",
-			Selection:      "#88c0d0",
-			SelectionText:  "#2e3440",
-			SelectionMuted: "#434c5e",
-			Accent:         "#8fbcbb",
-			Primary:        "#88c0d0",
-			Secondary:      "#dba291",
-			Success:        "#a3be8c",
-			Warning:        "#ebcb8b",
-			Error:          "#d9a1a6",
-			Info:           "#97b2cc",
-			Hint:           "#8fbcbb",
-			MoveSource:     "#bf616a",
-			DropTarget:     "#ebcb8b",
-			Ghost:          "#d08770",
-			ScrollbarTrack: "#3b4252",
-			ScrollbarThumb: "#4c566a",
+			Background:      "#2e3440",
+			Foreground:      "#d8dee9",
+			Surface:         "#2e3440",
+			Panel:           "#3b4252",
+			Border:          "#4c566a",
+			BorderFocus:     "#88c0d0",
+			Selection:       "#88c0d0",
+			SelectionText:   "#2e3440",
+			SelectionMuted:  "#434c5e",
+			OccurrenceRead:  "#3b4657",
+			OccurrenceWrite: "#524a43",
+			Accent:          "#8fbcbb",
+			Primary:         "#88c0d0",
+			Secondary:       "#dba291",
+			Success:         "#a3be8c",
+			Warning:         "#ebcb8b",
+			Error:           "#d9a1a6",
+			Info:            "#97b2cc",
+			Hint:            "#8fbcbb",
+			MoveSource:      "#bf616a",
+			DropTarget:      "#ebcb8b",
+			Ghost:           "#d08770",
+			ScrollbarTrack:  "#3b4252",
+			ScrollbarThumb:  "#4c566a",
 		},
 		Captures: map[string]string{
 			"keyword":          "#81a1c1",
@@ -221,28 +229,30 @@ func gruvbox() Theme {
 		Name: "gruvbox",
 		Dark: true,
 		UI: UI{
-			Background:     "#1d2021",
-			Foreground:     "#ebdbb2",
-			Surface:        "#282828",
-			Panel:          "#3c3836",
-			Border:         "#504945",
-			BorderFocus:    "#fabd2f",
-			Selection:      "#076678",
-			SelectionText:  "#ebdbb2",
-			SelectionMuted: "#504945",
-			Accent:         "#fe8019",
-			Primary:        "#076678",
-			Secondary:      "#fe8019",
-			Success:        "#b8bb26",
-			Warning:        "#fabd2f",
-			Error:          "#fc7d6e",
-			Info:           "#8aaa9e",
-			Hint:           "#8ec07c",
-			MoveSource:     "#fb4934",
-			DropTarget:     "#fabd2f",
-			Ghost:          "#fe8019",
-			ScrollbarTrack: "#3c3836",
-			ScrollbarThumb: "#665c54",
+			Background:      "#1d2021",
+			Foreground:      "#ebdbb2",
+			Surface:         "#282828",
+			Panel:           "#3c3836",
+			Border:          "#504945",
+			BorderFocus:     "#fabd2f",
+			Selection:       "#076678",
+			SelectionText:   "#ebdbb2",
+			SelectionMuted:  "#504945",
+			OccurrenceRead:  "#324547",
+			OccurrenceWrite: "#503b2c",
+			Accent:          "#fe8019",
+			Primary:         "#076678",
+			Secondary:       "#fe8019",
+			Success:         "#b8bb26",
+			Warning:         "#fabd2f",
+			Error:           "#fc7d6e",
+			Info:            "#8aaa9e",
+			Hint:            "#8ec07c",
+			MoveSource:      "#fb4934",
+			DropTarget:      "#fabd2f",
+			Ghost:           "#fe8019",
+			ScrollbarTrack:  "#3c3836",
+			ScrollbarThumb:  "#665c54",
 		},
 		Captures: gruvboxCaptures(false),
 		Files: map[string]string{
@@ -263,28 +273,30 @@ func gruvboxLight() Theme {
 		Name: "gruvbox-light",
 		Dark: false,
 		UI: UI{
-			Background:     "#f9f5d7",
-			Foreground:     "#3c3836",
-			Surface:        "#fbf1c7",
-			Panel:          "#ebdbb2",
-			Border:         "#d5c4a1",
-			BorderFocus:    "#d79921",
-			Selection:      "#3d7679",
-			SelectionText:  "#fbf1c7",
-			SelectionMuted: "#d5c4a1",
-			Accent:         "#9f450a",
-			Primary:        "#3d7679",
-			Secondary:      "#9f450a",
-			Success:        "#717013",
-			Warning:        "#7c5813",
-			Error:          "#ba211a",
-			Info:           "#36676a",
-			Hint:           "#446845",
-			MoveSource:     "#cc241d",
-			DropTarget:     "#d79921",
-			Ghost:          "#d65d0e",
-			ScrollbarTrack: "#ebdbb2",
-			ScrollbarThumb: "#bdae93",
+			Background:      "#f9f5d7",
+			Foreground:      "#3c3836",
+			Surface:         "#fbf1c7",
+			Panel:           "#ebdbb2",
+			Border:          "#d5c4a1",
+			BorderFocus:     "#d79921",
+			Selection:       "#3d7679",
+			SelectionText:   "#fbf1c7",
+			SelectionMuted:  "#d5c4a1",
+			OccurrenceRead:  "#d0dce2",
+			OccurrenceWrite: "#ecd9b5",
+			Accent:          "#9f450a",
+			Primary:         "#3d7679",
+			Secondary:       "#9f450a",
+			Success:         "#717013",
+			Warning:         "#7c5813",
+			Error:           "#ba211a",
+			Info:            "#36676a",
+			Hint:            "#446845",
+			MoveSource:      "#cc241d",
+			DropTarget:      "#d79921",
+			Ghost:           "#d65d0e",
+			ScrollbarTrack:  "#ebdbb2",
+			ScrollbarThumb:  "#bdae93",
 		},
 		Captures: gruvboxCaptures(true),
 		Files: map[string]string{
@@ -345,28 +357,30 @@ func rosePine() Theme {
 		Name: "rose-pine",
 		Dark: true,
 		UI: UI{
-			Background:     "#191724",
-			Foreground:     "#e0def4",
-			Surface:        "#191724",
-			Panel:          "#26233a",
-			Border:         "#403d52",
-			BorderFocus:    "#c4a7e7",
-			Selection:      "#c4a7e7",
-			SelectionText:  "#191724",
-			SelectionMuted: "#403d52",
-			Accent:         "#ebbcba",
-			Primary:        "#9ccfd8",
-			Secondary:      "#f6c177",
-			Success:        "#9ccfd8",
-			Warning:        "#f6c177",
-			Error:          "#eb6f92",
-			Info:           "#4097bb",
-			Hint:           "#9ccfd8",
-			MoveSource:     "#eb6f92",
-			DropTarget:     "#f6c177",
-			Ghost:          "#ebbcba",
-			ScrollbarTrack: "#26233a",
-			ScrollbarThumb: "#524f67",
+			Background:      "#191724",
+			Foreground:      "#e0def4",
+			Surface:         "#191724",
+			Panel:           "#26233a",
+			Border:          "#403d52",
+			BorderFocus:     "#c4a7e7",
+			Selection:       "#c4a7e7",
+			SelectionText:   "#191724",
+			SelectionMuted:  "#403d52",
+			OccurrenceRead:  "#2a3549",
+			OccurrenceWrite: "#4a3844",
+			Accent:          "#ebbcba",
+			Primary:         "#9ccfd8",
+			Secondary:       "#f6c177",
+			Success:         "#9ccfd8",
+			Warning:         "#f6c177",
+			Error:           "#eb6f92",
+			Info:            "#4097bb",
+			Hint:            "#9ccfd8",
+			MoveSource:      "#eb6f92",
+			DropTarget:      "#f6c177",
+			Ghost:           "#ebbcba",
+			ScrollbarTrack:  "#26233a",
+			ScrollbarThumb:  "#524f67",
 		},
 		Captures: map[string]string{
 			"keyword":          "#31748f",
@@ -407,28 +421,30 @@ func rosePineDawn() Theme {
 		Name: "rose-pine-dawn",
 		Dark: false,
 		UI: UI{
-			Background:     "#faf4ed",
-			Foreground:     "#575279",
-			Surface:        "#faf4ed",
-			Panel:          "#f2e9e1",
-			Border:         "#dfdad9",
-			BorderFocus:    "#907aa9",
-			Selection:      "#7e649b",
-			SelectionText:  "#faf4ed",
-			SelectionMuted: "#dfdad9",
-			Accent:         "#b83f39",
-			Primary:        "#286983",
-			Secondary:      "#945c0f",
-			Success:        "#416f77",
-			Warning:        "#945c0f",
-			Error:          "#a34e66",
-			Info:           "#286983",
-			Hint:           "#416f77",
-			MoveSource:     "#b4637a",
-			DropTarget:     "#ea9d34",
-			Ghost:          "#d7827e",
-			ScrollbarTrack: "#f2e9e1",
-			ScrollbarThumb: "#9893a5",
+			Background:      "#faf4ed",
+			Foreground:      "#575279",
+			Surface:         "#faf4ed",
+			Panel:           "#f2e9e1",
+			Border:          "#dfdad9",
+			BorderFocus:     "#907aa9",
+			Selection:       "#7e649b",
+			SelectionText:   "#faf4ed",
+			SelectionMuted:  "#dfdad9",
+			OccurrenceRead:  "#dee7ea",
+			OccurrenceWrite: "#f3ddd0",
+			Accent:          "#b83f39",
+			Primary:         "#286983",
+			Secondary:       "#945c0f",
+			Success:         "#416f77",
+			Warning:         "#945c0f",
+			Error:           "#a34e66",
+			Info:            "#286983",
+			Hint:            "#416f77",
+			MoveSource:      "#b4637a",
+			DropTarget:      "#ea9d34",
+			Ghost:           "#d7827e",
+			ScrollbarTrack:  "#f2e9e1",
+			ScrollbarThumb:  "#9893a5",
 		},
 		Captures: map[string]string{
 			"keyword":          "#286983",
@@ -469,28 +485,30 @@ func catppuccinMocha() Theme {
 		Name: "catppuccin-mocha",
 		Dark: true,
 		UI: UI{
-			Background:     "#181825",
-			Foreground:     "#cdd6f4",
-			Surface:        "#1e1e2e",
-			Panel:          "#313244",
-			Border:         "#45475a",
-			BorderFocus:    "#b4befe",
-			Selection:      "#b4befe",
-			SelectionText:  "#1e1e2e",
-			SelectionMuted: "#45475a",
-			Accent:         "#f5c2e7",
-			Primary:        "#89b4fa",
-			Secondary:      "#fab387",
-			Success:        "#a6e3a1",
-			Warning:        "#f9e2af",
-			Error:          "#f38ba8",
-			Info:           "#89dceb",
-			Hint:           "#94e2d5",
-			MoveSource:     "#f38ba8",
-			DropTarget:     "#f9e2af",
-			Ghost:          "#fab387",
-			ScrollbarTrack: "#313244",
-			ScrollbarThumb: "#585b70",
+			Background:      "#181825",
+			Foreground:      "#cdd6f4",
+			Surface:         "#1e1e2e",
+			Panel:           "#313244",
+			Border:          "#45475a",
+			BorderFocus:     "#b4befe",
+			Selection:       "#b4befe",
+			SelectionText:   "#1e1e2e",
+			SelectionMuted:  "#45475a",
+			OccurrenceRead:  "#2a3045",
+			OccurrenceWrite: "#463830",
+			Accent:          "#f5c2e7",
+			Primary:         "#89b4fa",
+			Secondary:       "#fab387",
+			Success:         "#a6e3a1",
+			Warning:         "#f9e2af",
+			Error:           "#f38ba8",
+			Info:            "#89dceb",
+			Hint:            "#94e2d5",
+			MoveSource:      "#f38ba8",
+			DropTarget:      "#f9e2af",
+			Ghost:           "#fab387",
+			ScrollbarTrack:  "#313244",
+			ScrollbarThumb:  "#585b70",
 		},
 		Captures: map[string]string{
 			"keyword":          "#cba6f7",
@@ -535,28 +553,30 @@ func kanagawa() Theme {
 		Name: "kanagawa",
 		Dark: true,
 		UI: UI{
-			Background:     "#1f1f28", // sumiInk3
-			Foreground:     "#dcd7ba", // fujiWhite
-			Surface:        "#1f1f28",
-			Panel:          "#2a2a37", // sumiInk4
-			Border:         "#54546d", // sumiInk6
-			BorderFocus:    "#7e9cd8", // crystalBlue
-			Selection:      "#2d4f67", // waveBlue2
-			SelectionText:  "#dcd7ba",
-			SelectionMuted: "#223249", // waveBlue1
-			Accent:         "#e6c384", // carpYellow
-			Primary:        "#2d4f67", // waveBlue2 (pmenu selection)
-			Secondary:      "#ffa066", // surimiOrange
-			Success:        "#98bb6c", // springGreen
-			Warning:        "#ff9e3b", // roninYellow
-			Error:          "#ff5d62", // peachRed
-			Info:           "#7fb4ca", // springBlue
-			Hint:           "#7aa89f", // waveAqua2
-			MoveSource:     "#e46876", // waveRed
-			DropTarget:     "#ff9e3b",
-			Ghost:          "#ffa066",
-			ScrollbarTrack: "#2a2a37",
-			ScrollbarThumb: "#54546d",
+			Background:      "#1f1f28", // sumiInk3
+			Foreground:      "#dcd7ba", // fujiWhite
+			Surface:         "#1f1f28",
+			Panel:           "#2a2a37", // sumiInk4
+			Border:          "#54546d", // sumiInk6
+			BorderFocus:     "#7e9cd8", // crystalBlue
+			Selection:       "#2d4f67", // waveBlue2
+			SelectionText:   "#dcd7ba",
+			SelectionMuted:  "#223249", // waveBlue1
+			OccurrenceRead:  "#25354d",
+			OccurrenceWrite: "#49443c",
+			Accent:          "#e6c384", // carpYellow
+			Primary:         "#2d4f67", // waveBlue2 (pmenu selection)
+			Secondary:       "#ffa066", // surimiOrange
+			Success:         "#98bb6c", // springGreen
+			Warning:         "#ff9e3b", // roninYellow
+			Error:           "#ff5d62", // peachRed
+			Info:            "#7fb4ca", // springBlue
+			Hint:            "#7aa89f", // waveAqua2
+			MoveSource:      "#e46876", // waveRed
+			DropTarget:      "#ff9e3b",
+			Ghost:           "#ffa066",
+			ScrollbarTrack:  "#2a2a37",
+			ScrollbarThumb:  "#54546d",
 		},
 		Captures: map[string]string{
 			"keyword":          "#957fb8", // oniViolet
@@ -600,28 +620,30 @@ func oneDark() Theme {
 		Name: "one-dark",
 		Dark: true,
 		UI: UI{
-			Background:     "#282c34", // black
-			Foreground:     "#abb2bf", // mono1
-			Surface:        "#282c34",
-			Panel:          "#21252b", // sidebar/panel background
-			Border:         "#3e4451", // gutter/selection gray
-			BorderFocus:    "#61afef", // blue
-			Selection:      "#3e4451",
-			SelectionText:  "#abb2bf",
-			SelectionMuted: "#2c313c", // cursor line
-			Accent:         "#61afef", // blue
-			Primary:        "#3e4451", // pmenu selection
-			Secondary:      "#d19a66", // orange 1
-			Success:        "#98c379", // green
-			Warning:        "#e5c07b", // orange 2 (yellow)
-			Error:          "#e88388", // red 1 lightened for AA
-			Info:           "#61afef", // blue
-			Hint:           "#56b6c2", // cyan
-			MoveSource:     "#c678dd", // purple
-			DropTarget:     "#d19a66",
-			Ghost:          "#5c6370", // mono3 / comment gray
-			ScrollbarTrack: "#21252b",
-			ScrollbarThumb: "#4b5263", // gutter gray
+			Background:      "#282c34", // black
+			Foreground:      "#abb2bf", // mono1
+			Surface:         "#282c34",
+			Panel:           "#21252b", // sidebar/panel background
+			Border:          "#3e4451", // gutter/selection gray
+			BorderFocus:     "#61afef", // blue
+			Selection:       "#3e4451",
+			SelectionText:   "#abb2bf",
+			SelectionMuted:  "#2c313c", // cursor line
+			OccurrenceRead:  "#323b4d",
+			OccurrenceWrite: "#4a3f33",
+			Accent:          "#61afef", // blue
+			Primary:         "#3e4451", // pmenu selection
+			Secondary:       "#d19a66", // orange 1
+			Success:         "#98c379", // green
+			Warning:         "#e5c07b", // orange 2 (yellow)
+			Error:           "#e88388", // red 1 lightened for AA
+			Info:            "#61afef", // blue
+			Hint:            "#56b6c2", // cyan
+			MoveSource:      "#c678dd", // purple
+			DropTarget:      "#d19a66",
+			Ghost:           "#5c6370", // mono3 / comment gray
+			ScrollbarTrack:  "#21252b",
+			ScrollbarThumb:  "#4b5263", // gutter gray
 		},
 		Captures: map[string]string{
 			"keyword":          "#c678dd", // purple
@@ -667,28 +689,30 @@ func solarizedDark() Theme {
 		Name: "solarized-dark",
 		Dark: true,
 		UI: UI{
-			Background:     "#002b36", // base03
-			Foreground:     "#93a1a1", // base1 (base0 misses AA on Panel)
-			Surface:        "#002b36",
-			Panel:          "#073642", // base02
-			Border:         "#586e75", // base01
-			BorderFocus:    "#268bd2", // blue
-			Selection:      "#586e75", // base01
-			SelectionText:  "#fdf6e3", // base3
-			SelectionMuted: "#073642", // base02 (editor visual selection)
-			Accent:         "#b58900", // yellow
-			Primary:        "#586e75", // base01 (pmenu selection)
-			Secondary:      "#db815c", // orange lightened for AA on Panel
-			Success:        "#859900", // green
-			Warning:        "#bb9316", // yellow lightened for AA on Panel
-			Error:          "#e87674", // red lightened for AA on Panel
-			Info:           "#4b9fda", // blue lightened for AA on Panel
-			Hint:           "#39a89f", // cyan lightened for AA on Panel
-			MoveSource:     "#dc322f", // red
-			DropTarget:     "#b58900", // yellow
-			Ghost:          "#cb4b16", // orange
-			ScrollbarTrack: "#073642",
-			ScrollbarThumb: "#586e75",
+			Background:      "#002b36", // base03
+			Foreground:      "#93a1a1", // base1 (base0 misses AA on Panel)
+			Surface:         "#002b36",
+			Panel:           "#073642", // base02
+			Border:          "#586e75", // base01
+			BorderFocus:     "#268bd2", // blue
+			Selection:       "#586e75", // base01
+			SelectionText:   "#fdf6e3", // base3
+			SelectionMuted:  "#073642", // base02 (editor visual selection)
+			OccurrenceRead:  "#0a4152",
+			OccurrenceWrite: "#3d3a28",
+			Accent:          "#b58900", // yellow
+			Primary:         "#586e75", // base01 (pmenu selection)
+			Secondary:       "#db815c", // orange lightened for AA on Panel
+			Success:         "#859900", // green
+			Warning:         "#bb9316", // yellow lightened for AA on Panel
+			Error:           "#e87674", // red lightened for AA on Panel
+			Info:            "#4b9fda", // blue lightened for AA on Panel
+			Hint:            "#39a89f", // cyan lightened for AA on Panel
+			MoveSource:      "#dc322f", // red
+			DropTarget:      "#b58900", // yellow
+			Ghost:           "#cb4b16", // orange
+			ScrollbarTrack:  "#073642",
+			ScrollbarThumb:  "#586e75",
 		},
 		Captures: solarizedCaptures(false),
 		Files: map[string]string{
@@ -712,28 +736,30 @@ func solarizedLight() Theme {
 		Name: "solarized-light",
 		Dark: false,
 		UI: UI{
-			Background:     "#fdf6e3", // base3
-			Foreground:     "#586c73", // base00 darkened for AA on Panel
-			Surface:        "#fdf6e3",
-			Panel:          "#eee8d5", // base2
-			Border:         "#93a1a1", // base1
-			BorderFocus:    "#268bd2", // blue
-			Selection:      "#586e75", // base01
-			SelectionText:  "#fdf6e3", // base3
-			SelectionMuted: "#eee8d5", // base2 (editor visual selection)
-			Accent:         "#c44815", // orange darkened for AA on Surface
-			Primary:        "#586e75", // base01 (pmenu selection)
-			Secondary:      "#b64314", // orange darkened for AA on Panel
-			Success:        "#687800", // green darkened for AA on Surface
-			Warning:        "#846400", // yellow darkened for AA on Panel
-			Error:          "#c52d2a", // red darkened for AA on Panel
-			Info:           "#1e6da5", // blue darkened for AA on Panel
-			Hint:           "#1e746d", // cyan darkened for AA on Panel
-			MoveSource:     "#dc322f", // red
-			DropTarget:     "#b58900", // yellow
-			Ghost:          "#cb4b16", // orange
-			ScrollbarTrack: "#eee8d5",
-			ScrollbarThumb: "#93a1a1",
+			Background:      "#fdf6e3", // base3
+			Foreground:      "#586c73", // base00 darkened for AA on Panel
+			Surface:         "#fdf6e3",
+			Panel:           "#eee8d5", // base2
+			Border:          "#93a1a1", // base1
+			BorderFocus:     "#268bd2", // blue
+			Selection:       "#586e75", // base01
+			SelectionText:   "#fdf6e3", // base3
+			SelectionMuted:  "#eee8d5", // base2 (editor visual selection)
+			OccurrenceRead:  "#e0ecec",
+			OccurrenceWrite: "#f2e4c4",
+			Accent:          "#c44815", // orange darkened for AA on Surface
+			Primary:         "#586e75", // base01 (pmenu selection)
+			Secondary:       "#b64314", // orange darkened for AA on Panel
+			Success:         "#687800", // green darkened for AA on Surface
+			Warning:         "#846400", // yellow darkened for AA on Panel
+			Error:           "#c52d2a", // red darkened for AA on Panel
+			Info:            "#1e6da5", // blue darkened for AA on Panel
+			Hint:            "#1e746d", // cyan darkened for AA on Panel
+			MoveSource:      "#dc322f", // red
+			DropTarget:      "#b58900", // yellow
+			Ghost:           "#cb4b16", // orange
+			ScrollbarTrack:  "#eee8d5",
+			ScrollbarThumb:  "#93a1a1",
 		},
 		Captures: solarizedCaptures(true),
 		Files: map[string]string{
@@ -798,28 +824,30 @@ func dracula() Theme {
 		Name: "dracula",
 		Dark: true,
 		UI: UI{
-			Background:     "#282a36", // background
-			Foreground:     "#f8f8f2", // foreground
-			Surface:        "#282a36",
-			Panel:          "#21222c", // sidebar/panel (VSCode port)
-			Border:         "#44475a", // current line / selection
-			BorderFocus:    "#bd93f9", // purple
-			Selection:      "#44475a", // selection
-			SelectionText:  "#f8f8f2",
-			SelectionMuted: "#44475a", // editor visual selection
-			Accent:         "#ff79c6", // pink
-			Primary:        "#44475a", // pmenu selection
-			Secondary:      "#ffb86c", // orange
-			Success:        "#50fa7b", // green
-			Warning:        "#f1fa8c", // yellow
-			Error:          "#ff5555", // red
-			Info:           "#bd93f9", // purple
-			Hint:           "#8be9fd", // cyan
-			MoveSource:     "#ff5555",
-			DropTarget:     "#ffb86c",
-			Ghost:          "#6272a4", // comment
-			ScrollbarTrack: "#21222c",
-			ScrollbarThumb: "#44475a",
+			Background:      "#282a36", // background
+			Foreground:      "#f8f8f2", // foreground
+			Surface:         "#282a36",
+			Panel:           "#21222c", // sidebar/panel (VSCode port)
+			Border:          "#44475a", // current line / selection
+			BorderFocus:     "#bd93f9", // purple
+			Selection:       "#44475a", // selection
+			SelectionText:   "#f8f8f2",
+			SelectionMuted:  "#44475a", // editor visual selection
+			OccurrenceRead:  "#34405c",
+			OccurrenceWrite: "#514440",
+			Accent:          "#ff79c6", // pink
+			Primary:         "#44475a", // pmenu selection
+			Secondary:       "#ffb86c", // orange
+			Success:         "#50fa7b", // green
+			Warning:         "#f1fa8c", // yellow
+			Error:           "#ff5555", // red
+			Info:            "#bd93f9", // purple
+			Hint:            "#8be9fd", // cyan
+			MoveSource:      "#ff5555",
+			DropTarget:      "#ffb86c",
+			Ghost:           "#6272a4", // comment
+			ScrollbarTrack:  "#21222c",
+			ScrollbarThumb:  "#44475a",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff79c6", // pink
@@ -860,28 +888,30 @@ func catppuccinLatte() Theme {
 		Name: "catppuccin-latte",
 		Dark: false,
 		UI: UI{
-			Background:     "#e6e9ef",
-			Foreground:     "#4c4f69",
-			Surface:        "#eff1f5",
-			Panel:          "#ccd0da",
-			Border:         "#bcc0cc",
-			BorderFocus:    "#7287fd",
-			Selection:      "#3d5afc",
-			SelectionText:  "#eff1f5",
-			SelectionMuted: "#bcc0cc",
-			Accent:         "#a1197d",
-			Primary:        "#1761f5",
-			Secondary:      "#9b3901",
-			Success:        "#327c21",
-			Warning:        "#7c4f10",
-			Error:          "#b10d30",
-			Info:           "#025f83",
-			Hint:           "#0f6166",
-			MoveSource:     "#d20f39",
-			DropTarget:     "#df8e1d",
-			Ghost:          "#fe640b",
-			ScrollbarTrack: "#ccd0da",
-			ScrollbarThumb: "#9ca0b0",
+			Background:      "#e6e9ef",
+			Foreground:      "#4c4f69",
+			Surface:         "#eff1f5",
+			Panel:           "#ccd0da",
+			Border:          "#bcc0cc",
+			BorderFocus:     "#7287fd",
+			Selection:       "#3d5afc",
+			SelectionText:   "#eff1f5",
+			SelectionMuted:  "#bcc0cc",
+			OccurrenceRead:  "#ccd8e8",
+			OccurrenceWrite: "#e8d8c4",
+			Accent:          "#a1197d",
+			Primary:         "#1761f5",
+			Secondary:       "#9b3901",
+			Success:         "#327c21",
+			Warning:         "#7c4f10",
+			Error:           "#b10d30",
+			Info:            "#025f83",
+			Hint:            "#0f6166",
+			MoveSource:      "#d20f39",
+			DropTarget:      "#df8e1d",
+			Ghost:           "#fe640b",
+			ScrollbarTrack:  "#ccd0da",
+			ScrollbarThumb:  "#9ca0b0",
 		},
 		Captures: map[string]string{
 			"keyword":          "#8839ef",

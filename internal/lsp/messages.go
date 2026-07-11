@@ -79,6 +79,23 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// DocumentHighlight is one occurrence of the symbol under the cursor in
+// editor coordinates (#172). Kind is protocol.Highlight* (text/read/write).
+type DocumentHighlight struct {
+	Range buffer.Range
+	Kind  int
+}
+
+// DocumentHighlightsMsg replaces the occurrence set for one document (#172).
+// Line/Col anchor the request position so a reply that raced a cursor move is
+// recognisably stale; an empty set clears the marks.
+type DocumentHighlightsMsg struct {
+	Path       string
+	Line       int
+	Col        int
+	Highlights []DocumentHighlight
+}
+
 // CallHierarchyEntry is one call-hierarchy node payload (#173): the raw
 // protocol item (kept verbatim for the incoming/outgoing follow-up requests)
 // plus its presentation fields and the navigation target in editor

@@ -140,8 +140,13 @@ type Model struct {
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
 	semIndex highlight.Index
-	hlTheme  highlight.Theme
-	pal      *theme.Palette // active theme (Roadmap 0110); nil = default
+	// occurrences are the LSP document-highlight marks (#172): every
+	// occurrence of the symbol under the cursor, refreshed debounced by the
+	// bridge on cursor moves; stale positions may briefly lag an edit like
+	// semIndex.
+	occurrences []ilsp.DocumentHighlight
+	hlTheme     highlight.Theme
+	pal         *theme.Palette // active theme (Roadmap 0110); nil = default
 
 	// LSP UI state (Roadmap 0100): diagnostics indexed by line, the autocomplete
 	// popup, and the hover popup. See lsp_state.go.
@@ -259,6 +264,7 @@ func (m *Model) Load(path string) error {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	m.scroll()
 	return nil
 }
@@ -282,6 +288,7 @@ func (m *Model) NewFile(path string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	m.scroll()
 }
 
@@ -303,6 +310,7 @@ func (m *Model) RestoreText(text string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	m.scroll()
 }
 
@@ -322,6 +330,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.path = path
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -426,6 +435,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.SemanticSpansMsg:
 		if msg.Path == m.path {
 			m.semIndex = highlight.NewIndex(msg.Spans)
+		}
+		return m, nil
+	case ilsp.DocumentHighlightsMsg:
+		if msg.Path == m.path {
+			m.applyDocumentHighlights(msg)
 		}
 		return m, nil
 	// ilsp.FormatEditsMsg is deliberately NOT handled here: views of a shared

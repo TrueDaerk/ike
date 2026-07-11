@@ -27,6 +27,8 @@ type UI struct {
 	Selection      string // selected-row background
 	SelectionText  string // text on Selection
 	SelectionMuted string // low-emphasis selection (editor visual range)
+	OccurrenceRead  string // symbol-occurrence mark, read access (LSP document highlight)
+	OccurrenceWrite string // symbol-occurrence mark, write access
 	Accent         string // emphasis foreground (explorer active entry)
 	Primary        string // primary action background (completion selected row)
 	Secondary      string // secondary emphasis foreground (help shortcut keys)
@@ -71,8 +73,10 @@ type Palette struct {
 	BorderFocus    color.Color
 	Selection      color.Color
 	SelectionText  color.Color
-	SelectionMuted color.Color
-	Accent         color.Color
+	SelectionMuted  color.Color
+	OccurrenceRead  color.Color
+	OccurrenceWrite color.Color
+	Accent          color.Color
 	Primary        color.Color
 	Secondary      color.Color
 	Success        color.Color
@@ -85,6 +89,16 @@ type Palette struct {
 	Ghost          color.Color
 	ScrollbarTrack color.Color
 	ScrollbarThumb color.Color
+}
+
+// firstNonEmpty returns the first non-empty token, for slot fallback chains.
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // DefaultPalette returns the resolved default theme, cached. Renderers use it
@@ -125,7 +139,12 @@ func NewPalette(t Theme) *Palette {
 		Selection:      slot(t.UI.Selection, def.UI.Selection),
 		SelectionText:  slot(t.UI.SelectionText, def.UI.SelectionText),
 		SelectionMuted: slot(t.UI.SelectionMuted, def.UI.SelectionMuted),
-		Accent:         slot(t.UI.Accent, def.UI.Accent),
+		// Occurrence marks fall back to the theme's own muted selection (then
+		// the default's), so a theme without the slots still marks subtly in
+		// its own colors instead of inheriting the default theme's.
+		OccurrenceRead:  slot(t.UI.OccurrenceRead, firstNonEmpty(t.UI.SelectionMuted, def.UI.SelectionMuted)),
+		OccurrenceWrite: slot(t.UI.OccurrenceWrite, firstNonEmpty(t.UI.SelectionMuted, def.UI.SelectionMuted)),
+		Accent:          slot(t.UI.Accent, def.UI.Accent),
 		Primary:        slot(t.UI.Primary, def.UI.Primary),
 		Secondary:      slot(t.UI.Secondary, def.UI.Secondary),
 		Success:        slot(t.UI.Success, def.UI.Success),

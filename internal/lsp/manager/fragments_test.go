@@ -358,6 +358,40 @@ func TestFragmentReferencesRoutesAndMapsLocations(t *testing.T) {
 	}
 }
 
+// TestFragmentDocumentHighlightRoutesAndMapsRanges routes a highlight request
+// inside a fragment to the fragment server and maps the result ranges back to
+// host coordinates (#172).
+func TestFragmentDocumentHighlightRoutesAndMapsRanges(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	hs, err := m.DocumentHighlight(context.Background(), path, buffer.Position{Line: 0, Col: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 2 {
+		t.Fatalf("hs = %+v, want 2", hs)
+	}
+	// Fragment [0:0, 0:6) maps to host [0:4, 0:10); the kinds survive. The
+	// second range's unit end 10 clamps to the fragment's 8-rune line.
+	if hs[0].Range.Start.Col != 4 || hs[0].Range.End.Col != 10 || hs[0].Kind != protocol.HighlightRead {
+		t.Errorf("first highlight = %+v, want host [0:4,0:10) read", hs[0])
+	}
+	if hs[1].Range.Start.Col != 11 || hs[1].Range.End.Col != 12 || hs[1].Kind != protocol.HighlightWrite {
+		t.Errorf("second highlight = %+v, want host [0:11,0:12) write", hs[1])
+	}
+}
+
 func TestFragLocationsToHostDropsStale(t *testing.T) {
 	m := New(multiResolver(fragmentSpecs()...), fakeConnector(), Callbacks{})
 	defer m.Shutdown()

@@ -403,6 +403,42 @@ func (m *Manager) fragmentReferences(ctx context.Context, hostPath string, pos b
 	return m.fragLocationsToHost(locs, enc), true, nil
 }
 
+// fragmentDocumentHighlight routes a document-highlight request into the
+// fragment covering pos, when one exists (#172). Result ranges are fragment
+// coordinates and map back onto the host buffer directly — occurrences of a
+// fragment symbol always live inside its own document.
+func (m *Manager) fragmentDocumentHighlight(ctx context.Context, hostPath string, pos buffer.Position) (hs []lsp.DocumentHighlight, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().DocumentHighlight {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	enc := srv.cl.Encoding()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	raw, err := srv.cl.DocumentHighlight(cctx, protocol.DocumentHighlightParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	out := make([]lsp.DocumentHighlight, len(raw))
+	for i, h := range raw {
+		er := protocol.FromLSPRange(frag.Lines, h.Range, enc)
+		out[i] = lsp.DocumentHighlight{
+			Range: buffer.Range{Start: fragToHost(frag, er.Start), End: fragToHost(frag, er.End)},
+			Kind:  h.Kind,
+		}
+	}
+	return out, true, nil
+}
+
 // fragLocationsToHost rewrites every fragment-URI location to the equivalent
 // host-file location (host file URI, host coordinates). Locations in real
 // files pass through untouched; a fragment location whose document is no

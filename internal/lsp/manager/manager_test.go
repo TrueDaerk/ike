@@ -41,6 +41,9 @@ type fakeOpts struct {
 	// noRename withholds the renameProvider capability (intelephense without a
 	// licence does this), so the ErrRenameUnsupported gate is observable (#426).
 	noRename bool
+	// noDocumentHighlight withholds the documentHighlightProvider capability,
+	// so the manager's gate is observable (#172).
+	noDocumentHighlight bool
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -52,6 +55,15 @@ func fakeConnector() Connector { return fakeConnectorOpts(fakeOpts{syncKind: pro
 // the options withhold it.
 func callHierarchyCap(opts fakeOpts) json.RawMessage {
 	if opts.noCallHierarchy {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
+
+// documentHighlightCap is the initialize capability the fake advertises
+// unless the options withhold it.
+func documentHighlightCap(opts fakeOpts) json.RawMessage {
+	if opts.noDocumentHighlight {
 		return nil
 	}
 	return json.RawMessage(`true`)
@@ -114,6 +126,8 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				},
 				ExecuteCommandProvider: json.RawMessage(`{"commands":["test.fix"]}`),
 				CallHierarchyProvider:  callHierarchyCap(opts),
+
+				DocumentHighlightProvider: documentHighlightCap(opts),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/definition":
@@ -140,6 +154,14 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/documentHighlight":
+			// Two occurrences in the requested doc with UTF-16 unit offsets
+			// (an emoji in the text makes the rune conversion observable) and
+			// distinct kinds.
+			respond(out, msg.ID, []protocol.DocumentHighlight{
+				{Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 6}}, Kind: protocol.HighlightRead},
+				{Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 7}, End: protocol.Position{Line: 0, Character: 10}}, Kind: protocol.HighlightWrite},
+			})
 		case msg.Method == "textDocument/prepareCallHierarchy":
 			// One item named after the request position, so the round-trip is
 			// observable.
@@ -422,6 +444,53 @@ func TestManagerReferences(t *testing.T) {
 	}
 	if len(locs) != 1 {
 		t.Fatalf("without declaration expected 1 loc, got %+v", locs)
+	}
+}
+
+// TestManagerDocumentHighlight converts the server's UTF-16 highlight ranges
+// to editor rune coordinates and keeps the kinds (#172).
+func TestManagerDocumentHighlight(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	// "a🙂bcdefghij": the emoji is 2 UTF-16 units, so unit offset 6 is rune
+	// column 5 and unit 7 is rune 6.
+	if err := m.Open(path, "go", "a🙂bcdefghij"); err != nil {
+		t.Fatal(err)
+	}
+	hs, err := m.DocumentHighlight(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 2 {
+		t.Fatalf("hs = %+v, want 2", hs)
+	}
+	if hs[0].Range.Start.Col != 0 || hs[0].Range.End.Col != 5 || hs[0].Kind != protocol.HighlightRead {
+		t.Errorf("first highlight = %+v, want runes [0,5) read", hs[0])
+	}
+	if hs[1].Range.Start.Col != 6 || hs[1].Range.End.Col != 9 || hs[1].Kind != protocol.HighlightWrite {
+		t.Errorf("second highlight = %+v, want runes [6,9) write", hs[1])
+	}
+}
+
+// TestManagerDocumentHighlightGated yields nothing when the server lacks the
+// capability — no request, no error.
+func TestManagerDocumentHighlightGated(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, noDocumentHighlight: true}), Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	hs, err := m.DocumentHighlight(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	if err != nil || hs != nil {
+		t.Fatalf("gated request should be a no-op, got %+v, %v", hs, err)
 	}
 }
 

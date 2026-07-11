@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/highlight"
 	ilsp "ike/internal/lsp"
+	"ike/internal/lsp/protocol"
 )
 
 // lsp_state.go holds the editor-side LSP UI state — diagnostics, the completion
@@ -672,6 +673,53 @@ func (m Model) HoverAnchor() (col, line int) { return m.cursor.Col, m.cursor.Lin
 
 // dismissHover clears any hover popup (called on the next key).
 func (m *Model) dismissHover() { m.hover = nil }
+
+// --- document highlight (#172) ---
+
+// applyDocumentHighlights installs the occurrence marks for the symbol under
+// the cursor. A reply anchored at a position the cursor has left is stale —
+// it clears the marks instead of installing them (the move that outdated it
+// already scheduled a fresh request).
+func (m *Model) applyDocumentHighlights(msg ilsp.DocumentHighlightsMsg) {
+	if msg.Line != m.cursor.Line || msg.Col != m.cursor.Col {
+		m.occurrences = nil
+		return
+	}
+	m.occurrences = msg.Highlights
+}
+
+// occurrenceAt returns the document-highlight kind covering a cell (for the
+// subtle occurrence background) and whether one exists. Ranges are
+// end-exclusive; a zero-width range marks nothing.
+func (m Model) occurrenceAt(line, col int) (int, bool) {
+	for _, h := range m.occurrences {
+		s, e := h.Range.Start, h.Range.End
+		if line < s.Line || line > e.Line {
+			continue
+		}
+		startCol := 0
+		if line == s.Line {
+			startCol = s.Col
+		}
+		endCol := col + 1 // whole line for middle rows of a multi-line range
+		if line == e.Line {
+			endCol = e.Col
+		}
+		if col >= startCol && col < endCol {
+			return h.Kind, true
+		}
+	}
+	return 0, false
+}
+
+// occurrenceColor maps a document-highlight kind to its theme slot: write
+// accesses get the warm slot, reads and plain text occurrences the cool one.
+func (m Model) occurrenceColor(kind int) color.Color {
+	if kind == protocol.HighlightWrite {
+		return m.theme().OccurrenceWrite
+	}
+	return m.theme().OccurrenceRead
+}
 
 // diagColor maps a diagnostic severity to the theme's diagnostic slots:
 // error, warning, info, hint.

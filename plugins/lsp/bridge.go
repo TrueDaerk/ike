@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -49,6 +50,10 @@ type bridge struct {
 	// after it lands (semPending), so the overlay converges without queueing.
 	semInFlight map[string]bool
 	semPending  map[string]bool
+	// hlTimer debounces the occurrence-highlight request (#172): each cursor
+	// move re-arms it, so only the last position of a motion burst reaches
+	// the server.
+	hlTimer *time.Timer
 }
 
 var (
@@ -96,10 +101,14 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			_ = b.manager().Change(ev.Path, ev.Text)
 			b.maybeSignatureHelp(ev)
 			b.requestSemanticTokens(ev.Path)
+			b.scheduleDocumentHighlight(ev.Path)
 		}
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.setSel(ev)
+		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil {
+			b.scheduleDocumentHighlight(ev.Path)
+		}
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.requestCompletion(ev.Path, ev.Line, ev.Col)
@@ -709,6 +718,41 @@ func (b *bridge) requestSemanticTokens(path string) {
 			return
 		}
 	}()
+}
+
+// highlightDebounce delays the occurrence-highlight request after a cursor
+// move so a hjkl motion sequence fires one request, not one per step (#172).
+const highlightDebounce = 150 * time.Millisecond
+
+// scheduleDocumentHighlight (re)arms the debounced occurrence-highlight
+// request (#172). The fired request reads the then-current cursor, so a
+// re-arm during the delay simply moves the target.
+func (b *bridge) scheduleDocumentHighlight(path string) {
+	if b.manager() == nil {
+		return
+	}
+	b.mu.Lock()
+	if b.hlTimer != nil {
+		b.hlTimer.Stop()
+	}
+	b.hlTimer = time.AfterFunc(highlightDebounce, func() { b.requestDocumentHighlight(path) })
+	b.mu.Unlock()
+}
+
+// requestDocumentHighlight asks for the occurrences of the symbol under the
+// cursor and delivers them; an empty set clears the editor's marks. Errors
+// stay silent — this is a passive decoration, not a user-initiated action.
+func (b *bridge) requestDocumentHighlight(path string) {
+	mgr := b.manager()
+	curPath, line, col := b.cur()
+	if mgr == nil || b.h == nil || curPath != path {
+		return
+	}
+	hs, err := mgr.DocumentHighlight(context.Background(), path, buffer.Position{Line: line, Col: col})
+	if err != nil {
+		return
+	}
+	b.h.Send(ilsp.DocumentHighlightsMsg{Path: path, Line: line, Col: col, Highlights: hs})
 }
 
 // restart stops every server; they respawn lazily on the next file open/edit.
