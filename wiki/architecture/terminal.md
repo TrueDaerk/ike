@@ -40,7 +40,11 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 (`AddTerminal`, keys `terminal`, `terminal:2`, …; `Close` ends the session).
 The pane title shows **shell + origin dir** (`TERMINAL — zsh · goproj`; the
 dir compacts once it differs from the working directory). The cursor cell
-reverse-videos while focused (`model.go` splices it ANSI-aware).
+reverse-videos while focused (`model.go` splices it ANSI-aware). While a
+terminal (or the explorer) holds focus, the **status line names that pane
+kind** — `TERMINAL │ zsh · goproj` (plus `[exited]` for a dead shell) or
+`EXPLORER` — instead of mirroring the active editor's mode/file/cursor, so
+the line always says where keystrokes go (#381).
 `terminal.new` splits the active editor's leaf toward the bottom — the
 conventional JetBrains placement.
 
