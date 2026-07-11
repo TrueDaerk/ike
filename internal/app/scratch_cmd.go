@@ -20,7 +20,10 @@ import (
 // registry query (Capabilities is lazy), so languages registered later —
 // plugins, tests — appear without ordering constraints.
 func scratchCommands() []plugin.Command {
-	cmds := []plugin.Command{appCommand("scratch.new", "New Scratch File", NewScratchMsg{})}
+	cmds := []plugin.Command{
+		appCommand("scratch.new", "New Scratch File", NewScratchMsg{}),
+		appCommand("scratch.list", "Open Scratch File…", ShowScratchFilesMsg{}),
+	}
 	for _, l := range lang.All() {
 		if len(l.Extensions) == 0 {
 			continue
@@ -43,6 +46,17 @@ func langTitle(id string) string {
 		return strings.ToUpper(id)
 	}
 	return strings.ToUpper(id[:1]) + id[1:]
+}
+
+// scratchList adapts scratch.List for the palette's injected source: a store
+// error just lists nothing (the palette shows its empty hint), matching how
+// the MRU list degrades.
+func scratchList() []string {
+	paths, err := scratch.List()
+	if err != nil {
+		return nil
+	}
+	return paths
 }
 
 // newScratch creates a scratch with the requested extension and opens it

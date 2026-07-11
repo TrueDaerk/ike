@@ -4,7 +4,7 @@ title: Scratch Files
 description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette, surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages]
-timestamp: 2026-07-11T12:30:00Z
+timestamp: 2026-07-11T13:15:00Z
 ---
 
 # Scratch Files
@@ -44,7 +44,11 @@ ordering constraints. The handler creates via the store and opens through the
 standard funnel (`openPath`, absolute path): the new scratch lands as a
 focused tab with highlighting/LSP live. Also in the File menu.
 
-## Listing (#352 — planned)
+## Listing (#352)
 
-`scratch.list` will surface `scratch.List()` as a palette mode (the
-recent-files pattern): fuzzy filter, enter opens.
+`scratch.list` ("Open Scratch File…", palette + File menu) opens the palette
+locked to `ScratchMode` (`internal/palette/scratch_mode.go`, prefix `~`, the
+recent-files pattern): file names newest-first from the injected
+`scratch.List`, fuzzy-filtered by the query, enter opens through the standard
+funnel (`OpenFileMsg`). An empty store renders one inert hint row pointing at
+"New Scratch File".
