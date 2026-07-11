@@ -415,7 +415,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case ilsp.HoverMsg:
 		if msg.Path == m.path && msg.Contents != "" {
-			m.hover = &hoverState{lines: strings.Split(msg.Contents, "\n")}
+			m.hover = m.newHover(msg.Contents)
 		}
 		return m, nil
 	case ilsp.SignatureHelpMsg:
