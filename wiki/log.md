@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Hover popup renders LSP markdown instead of showing it raw (#379): ```` ```go ````
+  fence markers are stripped, the fenced signature block is syntax-highlighted
+  via the language registry (accent tint when the fence tag has no grammar),
+  and `---` draws as a horizontal rule. See [LSP](/architecture/lsp.md).
+
 - Status line's LSP server segment is scoped to the focused buffer's language
   (#380): `ServerState` messages are tracked per language and the segment shows
   only the focused buffer's entry — non-LSP buffers show no server text, and

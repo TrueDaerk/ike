@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/highlight"
 	ilsp "ike/internal/lsp"
 )
 
@@ -28,9 +29,16 @@ type completionState struct {
 	anchor buffer.Position
 }
 
-// hoverState is the live hover popup content (already flattened to lines).
+// hoverState is the live hover popup content (already parsed to display rows).
 type hoverState struct {
-	lines []string
+	lines []hoverLine
+}
+
+// hoverLine is one display row of the hover popup: either pre-styled text or a
+// thematic break, which HoverView draws as a rule sized to the popup width.
+type hoverLine struct {
+	text string
+	rule bool
 }
 
 // setDiagnostics replaces the diagnostic set and rebuilds the per-line index.
@@ -455,11 +463,98 @@ func truncateTo(s string, max int) string {
 
 // --- hover popup ---
 
+// newHover parses hover markdown into display rows (#379): fenced code blocks
+// lose their ``` markers and are syntax-highlighted via the language registry
+// (or fall back to an accent tint, so the signature still reads as code), and a
+// thematic break ("---") becomes a rule row. Returns nil for empty content.
+func (m Model) newHover(contents string) *hoverState {
+	src := strings.Split(contents, "\n")
+	var out []hoverLine
+	for i := 0; i < len(src); i++ {
+		trimmed := strings.TrimSpace(src[i])
+		if strings.HasPrefix(trimmed, "```") {
+			tag := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
+			var code []string
+			for i++; i < len(src) && !strings.HasPrefix(strings.TrimSpace(src[i]), "```"); i++ {
+				code = append(code, src[i])
+			}
+			out = append(out, m.styledHoverCode(tag, code)...)
+			continue
+		}
+		if isThematicBreak(trimmed) {
+			out = append(out, hoverLine{rule: true})
+			continue
+		}
+		out = append(out, hoverLine{text: src[i]})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return &hoverState{lines: out}
+}
+
+// isThematicBreak reports whether a trimmed markdown line is a horizontal rule:
+// three or more of the same marker (-, _, *) and nothing else.
+func isThematicBreak(s string) bool {
+	if len(s) < 3 {
+		return false
+	}
+	marker := rune(s[0])
+	if marker != '-' && marker != '_' && marker != '*' {
+		return false
+	}
+	for _, r := range s {
+		if r != marker {
+			return false
+		}
+	}
+	return true
+}
+
+// styledHoverCode renders a fenced code block's lines: syntax-highlighted when
+// the fence tag resolves to a grammar, tinted with the accent colour otherwise,
+// so the signature block stays visually distinct from the doc prose (#379).
+func (m Model) styledHoverCode(tag string, code []string) []hoverLine {
+	ix := highlight.NewIndex(highlight.HighlightFenced(tag, code))
+	fallback := lipgloss.NewStyle().Foreground(m.theme().Accent)
+	out := make([]hoverLine, 0, len(code))
+	for ln, line := range code {
+		if ix.Empty() {
+			out = append(out, hoverLine{text: fallback.Render(line)})
+			continue
+		}
+		out = append(out, hoverLine{text: m.styledCodeLine(ix, ln, line)})
+	}
+	return out
+}
+
+// styledCodeLine applies capture styles from ix to one line, grouping adjacent
+// runes with the same capture into a single styled segment.
+func (m Model) styledCodeLine(ix highlight.Index, ln int, line string) string {
+	runes := []rune(line)
+	var b strings.Builder
+	for col := 0; col < len(runes); {
+		capture := ix.CaptureAt(ln, col)
+		end := col + 1
+		for end < len(runes) && ix.CaptureAt(ln, end) == capture {
+			end++
+		}
+		seg := string(runes[col:end])
+		if st, ok := m.hlTheme.Style(capture); ok {
+			seg = st.Render(seg)
+		}
+		b.WriteString(seg)
+		col = end
+	}
+	return b.String()
+}
+
 // HoverOpen reports whether the hover popup is showing.
 func (m Model) HoverOpen() bool { return m.hover != nil && len(m.hover.lines) > 0 }
 
 // HoverView renders the hover content box, wrapped and capped like the
-// signature popup (#306).
+// signature popup (#306). Rule rows are drawn as a horizontal line sized to the
+// widest content row (#379).
 func (m Model) HoverView() string {
 	if m.hover == nil {
 		return ""
@@ -468,9 +563,27 @@ func (m Model) HoverView() string {
 	const maxLines = 12
 	lines := m.hover.lines
 	if len(lines) > maxLines {
-		lines = append(append([]string{}, lines[:maxLines]...), "…")
+		lines = append(append([]hoverLine{}, lines[:maxLines]...), hoverLine{text: "…"})
 	}
-	return m.clampPopup(box, strings.Join(lines, "\n"))
+	width := 1
+	for _, l := range lines {
+		if w := lipgloss.Width(l.text); !l.rule && w > width {
+			width = w
+		}
+	}
+	if maxW := m.popupMaxWidth(); width > maxW {
+		width = maxW
+	}
+	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
+	rows := make([]string, len(lines))
+	for i, l := range lines {
+		if l.rule {
+			rows[i] = dim.Render(strings.Repeat("─", width))
+		} else {
+			rows[i] = l.text
+		}
+	}
+	return m.clampPopup(box, strings.Join(rows, "\n"))
 }
 
 // HoverAnchor returns the buffer-relative cell the hover popup anchors to.

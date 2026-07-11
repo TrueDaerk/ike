@@ -82,7 +82,12 @@ and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,
 `host.Send`. The app routes each (by file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
-is handled by the app (navigate + place cursor).
+is handled by the app (navigate + place cursor). Hover markdown is rendered,
+not shown raw (#379): fence markers (```` ```go ````) are stripped, the fenced
+block is syntax-highlighted through the language registry (`HighlightFenced`,
+fence tag resolved as language id then extension; an unresolvable tag falls
+back to an accent tint so the signature still reads as code), and a thematic
+break (`---`) draws as a horizontal rule sized to the popup content.
 
 **Request errors surface (#372).** Every user-initiated request (hover,
 definition, references, formatting, code actions — rename already had its own

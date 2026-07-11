@@ -125,6 +125,60 @@ func TestHoverShowsAndDismisses(t *testing.T) {
 	}
 }
 
+// TestHoverStripsMarkdownFences guards #379: LSP hover markdown fence markers
+// ("```go", "```") are markup, not content — they must not appear in the popup;
+// the thematic break ("---") renders as a horizontal rule instead of dashes.
+func TestHoverStripsMarkdownFences(t *testing.T) {
+	m, _ := loaded(t, "code\n")
+	contents := "```go\nfunc Printf(format string) (n int, err error)\n```\n---\nPrintf formats stuff."
+	m, _ = m.Update(ilsp.HoverMsg{Path: m.path, Contents: contents})
+	if !m.HoverOpen() {
+		t.Fatal("hover should be open")
+	}
+	v := m.HoverView()
+	if strings.Contains(v, "```") {
+		t.Errorf("fence markers leaked into hover view:\n%s", v)
+	}
+	if strings.Contains(v, "---") {
+		t.Errorf("thematic break rendered as text:\n%s", v)
+	}
+	if !strings.Contains(v, "─") {
+		t.Errorf("thematic break should render as a rule:\n%s", v)
+	}
+	if !strings.Contains(v, "func Printf(format string) (n int, err error)") {
+		t.Errorf("signature missing from hover view:\n%s", v)
+	}
+	if !strings.Contains(v, "Printf formats stuff.") {
+		t.Errorf("doc prose missing from hover view:\n%s", v)
+	}
+}
+
+// TestHoverCodeBlockVisuallyDistinct guards #379's second criterion: fenced code
+// carries styling (syntax captures or the accent fallback) that the plain doc
+// prose does not.
+func TestHoverCodeBlockVisuallyDistinct(t *testing.T) {
+	m, _ := loaded(t, "code\n")
+	m, _ = m.Update(ilsp.HoverMsg{Path: m.path, Contents: "```go\nfunc Foo()\n```\nprose line"})
+	var code, prose string
+	for _, l := range m.hover.lines {
+		if strings.Contains(l.text, "Foo") {
+			code = l.text
+		}
+		if strings.Contains(l.text, "prose") {
+			prose = l.text
+		}
+	}
+	if code == "" || prose == "" {
+		t.Fatalf("hover lines missing code or prose: %+v", m.hover.lines)
+	}
+	if !strings.Contains(code, "\x1b[") {
+		t.Errorf("code line should carry styling, got %q", code)
+	}
+	if strings.Contains(prose, "\x1b[") {
+		t.Errorf("prose line should stay unstyled, got %q", prose)
+	}
+}
+
 // TestCtrlSpaceTriggersCompletion guards #302: ctrl+space in insert mode
 // emits the completion-trigger event (both the Kitty ctrl+' ' and the legacy
 // ctrl+@ spellings), and a re-press with the popup open re-queries.

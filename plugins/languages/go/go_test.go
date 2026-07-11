@@ -24,3 +24,17 @@ func TestGoHighlighting(t *testing.T) {
 		t.Errorf("package keyword: got capture %q", got)
 	}
 }
+
+// TestHighlightFenced guards #379: a hover markdown fence tag ("```go")
+// resolves to the registered grammar, both as a language id and an extension.
+func TestHighlightFenced(t *testing.T) {
+	lines := []string{"func Printf(format string, a ...any) (n int, err error)"}
+	for _, tag := range []string{"go", "Go"} {
+		if spans := highlight.HighlightFenced(tag, lines); len(spans) == 0 {
+			t.Errorf("HighlightFenced(%q) returned no spans", tag)
+		}
+	}
+	if spans := highlight.HighlightFenced("no-such-lang", lines); spans != nil {
+		t.Errorf("unknown fence tag should yield nil spans, got %d", len(spans))
+	}
+}
