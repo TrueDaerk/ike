@@ -111,6 +111,65 @@ func TestOpenBelowIndentsAfterOpener(t *testing.T) {
 	}
 }
 
+// shiftTab is the Shift+Tab key press as the Kitty/legacy decoders deliver it.
+func shiftTab() tea.KeyPressMsg { return tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift} }
+
+func TestShiftTabDedentsWholeLine(t *testing.T) {
+	// Cursor mid-word on a written line: the whole line shifts left one unit.
+	m := loadedExt(t, "itest", "        pass\n")
+	m.autoIndent = true
+	m.useSpaces = true
+	m = send(m, key('A'), shiftTab())
+	if got := line(m, 0); got != "    pass" {
+		t.Fatalf("dedent: %q", got)
+	}
+	if m.cursor.Col != 8 { // was 12 (one past end), minus 4 removed columns
+		t.Fatalf("cursor must follow the removed columns, col=%d", m.cursor.Col)
+	}
+	// A second Shift+Tab reaches column 0; a third is a no-op.
+	m = send(m, shiftTab(), shiftTab())
+	if got := line(m, 0); got != "pass" {
+		t.Fatalf("dedent to column 0: %q", got)
+	}
+}
+
+func TestShiftTabLeadingTabAndNoop(t *testing.T) {
+	m := loadedExt(t, "itest", "\tx\n")
+	m = send(m, key('i'), shiftTab())
+	if got := line(m, 0); got != "x" {
+		t.Fatalf("a leading tab is one unit: %q", got)
+	}
+	if m.cursor.Col != 0 {
+		t.Fatalf("cursor clamps to 0, col=%d", m.cursor.Col)
+	}
+	m = send(m, shiftTab())
+	if got := line(m, 0); got != "x" {
+		t.Fatalf("no leading whitespace must be a no-op: %q", got)
+	}
+}
+
+func TestShiftTabWhitespaceOnlyLine(t *testing.T) {
+	m := loadedExt(t, "itest", "        \n")
+	m.useSpaces = true
+	m = send(m, key('A'), shiftTab())
+	if got := line(m, 0); got != "    " {
+		t.Fatalf("whitespace-only line dedents too: %q", got)
+	}
+}
+
+func TestShiftTabInsideInsertUndoUnit(t *testing.T) {
+	m := loadedExt(t, "itest", "    x\n")
+	m.useSpaces = true
+	m = send(m, key('A'), key('y'), shiftTab(), key('z'))
+	if got := line(m, 0); got != "xyz" {
+		t.Fatalf("edit result: %q", got)
+	}
+	m = send(m, special(tea.KeyEscape), key('u'))
+	if got := line(m, 0); got != "    x" {
+		t.Fatalf("one undo must revert the whole insert incl. dedent: %q", got)
+	}
+}
+
 func TestEnterSmartIndentIsOneUndoUnit(t *testing.T) {
 	m := loadedExt(t, "itest", "def m():\n")
 	m.autoIndent = true

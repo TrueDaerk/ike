@@ -50,6 +50,10 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		m.insertDeleteBack(buffer.Position{Line: m.cursor.Line, Col: 0})
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
+	// Shift+Tab dedents the whole current line one unit (Roadmap 0260),
+	// regardless of the cursor column; plain Tab inserts one unit at the cursor.
+	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0:
+		m.insertDedentLine()
 	case key.Code == tea.KeyTab:
 		m.insertText(m.tabText())
 	// Plain (or Shift-modified) arrows move the cursor; Alt/Ctrl chords fall
@@ -96,7 +100,8 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 	case key.Code == tea.KeyUp, key.Code == 'p' && key.Mod == tea.ModCtrl:
 		m.completionMove(-1)
 		return true
-	case key.Code == tea.KeyEnter, key.Code == tea.KeyTab:
+	// Only a plain Tab accepts; Shift+Tab falls through to the line dedent.
+	case key.Code == tea.KeyEnter, key.Code == tea.KeyTab && key.Mod&tea.ModShift == 0:
 		m.completionAccept()
 		return true
 	case key.Code == tea.KeyEscape:
@@ -212,6 +217,31 @@ func (m *Model) insertDeleteBack(start buffer.Position) {
 	} else {
 		m.insert.typed = string(r[:len(r)-deleted])
 	}
+	m.dirtyFromInsert()
+}
+
+// insertDedentLine removes one indent unit from the start of the current line
+// (Shift+Tab in insert mode, Roadmap 0260): the same unit "<<" removes — one
+// leading tab, or up to tabWidth leading spaces. The whole line shifts left no
+// matter where the cursor sits; the cursor follows the removed columns. A line
+// with no leading whitespace is a no-op. Like insertBackspace, the recorded
+// "." text is only approximate (the dedent is not replayed).
+func (m *Model) insertDedentLine() {
+	n := dedentCols(m.buf.Line(m.cursor.Line), m.tabWidth)
+	if n == 0 {
+		return
+	}
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	m.insert.rec.Apply(buffer.Delete(buffer.Range{
+		Start: buffer.Position{Line: m.cursor.Line, Col: 0},
+		End:   buffer.Position{Line: m.cursor.Line, Col: n},
+	}))
+	if m.cursor.Col -= n; m.cursor.Col < 0 {
+		m.cursor.Col = 0
+	}
+	m.desiredCol = m.cursor.Col
 	m.dirtyFromInsert()
 }
 

@@ -132,7 +132,12 @@ Go/PHP) — the reference text's leading whitespace, plus one `tabText()` unit
 indents by what stays behind); `o` uses the whole current line; `O` and
 languages without rules keep plain copy-indent. Pure text heuristic — no
 Tree-sitter — so an opener ending a trailing string literal false-positives;
-accepted for v1.
+accepted for v1. Mid-insert, plain `Tab` inserts one indent unit at the cursor
+and `Shift+Tab` dedents the **whole current line** by one unit (the same
+`dedentCols` unit as `<<` — one leading tab or up to `tab_width` spaces),
+wherever the cursor sits; the cursor follows the removed columns, and the edit
+stays inside the open insert's undo unit. While the completion popup is open a
+plain `Tab` still accepts the completion; `Shift+Tab` dedents regardless.
 
 Visual, V-Line and V-Block extend a selection that `View` highlights cell by
 cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and
