@@ -43,6 +43,14 @@ func (s *scroller) SetContent(content string) {
 	s.vp.GotoTop()
 }
 
+// Refresh replaces the scrolled text while keeping the current offset (clamped
+// to the new content's bounds). Used when content re-renders in place — e.g. a
+// modal moving its cursor — where jumping back to the top would be wrong.
+func (s *scroller) Refresh(content string) {
+	s.vp.SetContent(content)
+	s.vp.SetYOffset(s.vp.YOffset()) // re-clamp against the new max offset
+}
+
 // Update routes a scroll key. g/G jump to the extremes; every other key is
 // delegated to the viewport's own key map.
 func (s *scroller) Update(msg tea.Msg) {

@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Floating shell stale body (#409): `ui.Floating.View()` now re-renders its
+  content body on every call (scroll offset preserved via `scroller.Refresh`),
+  so modals that mutate state in place — the crash-recovery prompt's cursor and
+  item removal — update on the next frame. The onboarding dialog's per-key
+  `SetSize` workaround (#301) is removed. See
+  [floating-shell](/architecture/floating-shell.md).
+
 - Rename feedback (#426): a server that lacks the rename capability
   (intelephense free) now toasts "language server does not support rename"
   (`manager.ErrRenameUnsupported`) instead of the misleading "cannot rename
