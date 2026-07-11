@@ -52,6 +52,18 @@ func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
 	}
 }
 
+func TestScratchListOpensLockedPalette(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	m := newSized()
+	if _, ok := m.reg.Command("scratch.list"); !ok {
+		t.Fatal("scratch.list must be registered")
+	}
+	m = dispatch(t, m, ShowScratchFilesMsg{})
+	if !m.palette.IsOpen() {
+		t.Fatal("scratch.list must open the palette")
+	}
+}
+
 func TestLangTitle(t *testing.T) {
 	for id, want := range map[string]string{"go": "GO", "php": "PHP", "python": "Python"} {
 		if got := langTitle(id); got != want {

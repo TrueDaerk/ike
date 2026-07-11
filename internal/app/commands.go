@@ -126,6 +126,10 @@ type TerminalClearMsg struct{}
 // by explorer.toggle.
 type ToggleExplorerFocusMsg struct{}
 
+// ShowScratchFilesMsg asks the root model to open the palette locked to the
+// scratch-files mode (Roadmap 0280, #352). Dispatched by scratch.list.
+type ShowScratchFilesMsg struct{}
+
 // NewScratchMsg asks the root model to create a scratch file with the given
 // extension under the scratch store and open it (Roadmap 0280, #351).
 // Dispatched by scratch.new and the per-language scratch.new.<id> commands.

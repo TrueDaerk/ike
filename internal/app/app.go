@@ -830,9 +830,10 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(recent.List)
+	scr := palette.NewScratchMode(scratchList)
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1453,6 +1454,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Root:       ".",
 			ActivePath: m.activeFilePath(),
 		}, palette.RecentPrefix)
+		return m, nil
+
+	case ShowScratchFilesMsg:
+		// scratch.list (palette / File menu): the scratch store newest-first,
+		// locked to its mode (#352); enter opens through the standard funnel.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{
+			ContextID: m.focusContext(),
+			Root:      ".",
+		}, palette.ScratchPrefix)
 		return m, nil
 
 	case ShowSearchEverywhereMsg:

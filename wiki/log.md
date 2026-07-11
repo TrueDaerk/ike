@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Scratch picker (#352, Roadmap 0280 — epic complete): `scratch.list`
+  ("Open Scratch File…", palette + File menu) locks the palette to a new
+  scratch mode — newest-first, fuzzy filter, enter opens; empty store shows
+  an inert hint row. See [Scratch Files](/architecture/scratch-files.md).
+
 - Scratch files land (#350/#351, Roadmap 0280): `scratch.new` and per-language
   "New Scratch File: <Lang>" palette commands (File menu too) create
   `scratch-N.<ext>` under `$IKE_CONFIG_DIR/scratches` / `~/.ike/scratches`
