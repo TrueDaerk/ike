@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
+	ilsp "ike/internal/lsp"
 )
 
 // MouseClick moves the cursor to the content-local cell (x, y) — coordinates
@@ -230,13 +231,44 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 	curMatchStyle := matchStyle.Underline(true)
 
+	// Inlay hints (#171): virtual text injected before the cell it anchors at,
+	// dimmed and italic so it never reads as buffer content. Hints scrolled off
+	// the left edge are skipped up front.
+	hints := m.lineInlayHints(line)
+	hi := 0
+	for hi < len(hints) && hints[hi].Col < left {
+		hi++
+	}
+	hintStyle := lipgloss.NewStyle().Foreground(m.theme().InlayHint).Italic(true)
+	emitHint := func(b *strings.Builder, disp int, h ilsp.InlayHint) int {
+		text := hintText(h)
+		if w := width - disp; lipgloss.Width(text) > w {
+			text = truncate(text, w)
+		}
+		b.WriteString(hintStyle.Render(text))
+		return disp + lipgloss.Width(text)
+	}
+
 	var b strings.Builder
 	disp := 0 // display cells emitted so far
 	for col := left; disp < width; col++ {
+		for hi < len(hints) && hints[hi].Col == col && disp < width {
+			disp = emitHint(&b, disp, hints[hi])
+			hi++
+		}
+		if disp >= width {
+			break
+		}
 		cursorHere := isCursorLine && col == m.cursor.Col
 		selected := hasSel && col >= selStart && col <= selEnd
 		if col >= len(runes) && !cursorHere && !selected {
-			break // nothing meaningful left on this line
+			// Nothing meaningful left on this line; flush hints anchored at or
+			// past the line end (a type hint after the last token) first.
+			for hi < len(hints) && disp < width {
+				disp = emitHint(&b, disp, hints[hi])
+				hi++
+			}
+			break
 		}
 
 		cell, cells := " ", 1
@@ -297,6 +329,30 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 		disp += cells
 	}
 	return b.String()
+}
+
+// DisplayOffset converts a buffer column on a line to its display-cell offset
+// from the left edge of the text area, accounting for horizontal scroll, tab
+// expansion, and injected inlay hints (#171) — so overlays anchored at a
+// buffer cell align with what renderLine actually drew.
+func (m Model) DisplayOffset(line, col int) int {
+	runes := []rune(m.buf.Line(line))
+	disp := 0
+	for c := m.view.Left; c < col; c++ {
+		if c < len(runes) && runes[c] == '\t' {
+			disp += m.tabWidth
+		} else {
+			disp++
+		}
+	}
+	for _, h := range m.lineInlayHints(line) {
+		// A hint anchored exactly at col renders before that cell, so it
+		// shifts the cell too.
+		if h.Col >= m.view.Left && h.Col <= col {
+			disp += lipgloss.Width(hintText(h))
+		}
+	}
+	return disp
 }
 
 // selectionOnLine returns the inclusive rune-column range to highlight on line

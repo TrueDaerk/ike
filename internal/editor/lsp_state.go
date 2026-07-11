@@ -721,6 +721,46 @@ func (m Model) occurrenceColor(kind int) color.Color {
 	return m.theme().OccurrenceRead
 }
 
+// --- inlay hints (#171) ---
+
+// setInlayHints replaces the inlay-hint set and rebuilds the per-line index
+// renderLine reads. Hints arrive sorted by position from the manager, so the
+// per-line slices stay in column order.
+func (m *Model) setInlayHints(hints []ilsp.InlayHint) {
+	m.inlayHints = hints
+	if len(hints) == 0 {
+		m.hintsByLine = nil
+		return
+	}
+	m.hintsByLine = make(map[int][]ilsp.InlayHint)
+	for _, h := range hints {
+		m.hintsByLine[h.Line] = append(m.hintsByLine[h.Line], h)
+	}
+}
+
+// lineInlayHints returns the hints to render on a line, in column order; nil
+// while the lsp.inlay_hints toggle is off (cached hints survive a toggle
+// round-trip, they just stop rendering).
+func (m Model) lineInlayHints(line int) []ilsp.InlayHint {
+	if !m.showInlayHints {
+		return nil
+	}
+	return m.hintsByLine[line]
+}
+
+// hintText is the display text of one inlay hint: the label with the
+// server-requested padding spaces around it.
+func hintText(h ilsp.InlayHint) string {
+	text := h.Label
+	if h.PadLeft {
+		text = " " + text
+	}
+	if h.PadRight {
+		text += " "
+	}
+	return text
+}
+
 // diagColor maps a diagnostic severity to the theme's diagnostic slots:
 // error, warning, info, hint.
 func (m Model) diagColor(severity int) color.Color {

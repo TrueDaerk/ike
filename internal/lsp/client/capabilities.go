@@ -22,6 +22,7 @@ type Capabilities struct {
 	Definition         bool
 	References         bool
 	DocumentHighlight  bool
+	InlayHint          bool
 	Formatting         bool
 	RangeFormatting    bool
 	Rename             bool
@@ -58,6 +59,7 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.Definition = truthyProvider(sc.DefinitionProvider)
 	caps.References = truthyProvider(sc.ReferencesProvider)
 	caps.DocumentHighlight = truthyProvider(sc.DocumentHighlightProvider)
+	caps.InlayHint = truthyProvider(sc.InlayHintProvider)
 	caps.WorkspaceSymbol = truthyProvider(sc.WorkspaceSymbolProvider)
 	caps.CallHierarchy = truthyProvider(sc.CallHierarchyProvider)
 	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)

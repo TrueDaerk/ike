@@ -81,6 +81,7 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.SetCursor(line, col)
 	m.SetScroll(top, left)
 	m.emit(EventChange)

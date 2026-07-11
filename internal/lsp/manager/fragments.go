@@ -439,6 +439,46 @@ func (m *Manager) fragmentDocumentHighlight(ctx context.Context, hostPath string
 	return out, true, nil
 }
 
+// fragmentInlayHints collects the inlay hints of every embedded fragment of a
+// host document (#171), mapped onto host coordinates. A fragment whose server
+// lacks the capability or fails is skipped silently — hints are a passive
+// decoration and the host document's own hints should still show.
+func (m *Manager) fragmentInlayHints(ctx context.Context, hostPath string) []lsp.InlayHint {
+	m.mu.Lock()
+	fds := make([]*fragmentDoc, 0, len(m.frags[hostPath]))
+	for _, fd := range m.frags[hostPath] {
+		fds = append(fds, fd)
+	}
+	m.mu.Unlock()
+
+	var out []lsp.InlayHint
+	for _, fd := range fds {
+		m.mu.Lock()
+		srv := m.servers[fd.srvKey]
+		frag, uri := fd.frag, fd.uri
+		m.mu.Unlock()
+		if srv == nil || !srv.cl.Caps().InlayHint || len(frag.Lines) == 0 {
+			continue
+		}
+		enc := srv.cl.Encoding()
+		cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+		hints, err := srv.cl.InlayHints(cctx, protocol.InlayHintParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+			Range:        wholeDocRange(frag.Lines, enc),
+		})
+		cancel()
+		if err != nil {
+			continue
+		}
+		for _, h := range hints {
+			out = append(out, convertInlayHint(frag.Lines, h, enc, func(p buffer.Position) buffer.Position {
+				return fragToHost(frag, p)
+			}))
+		}
+	}
+	return out
+}
+
 // fragLocationsToHost rewrites every fragment-URI location to the equivalent
 // host-file location (host file URI, host coordinates). Locations in real
 // files pass through untouched; a fragment location whose document is no

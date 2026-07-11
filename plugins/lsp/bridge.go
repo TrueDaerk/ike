@@ -50,6 +50,9 @@ type bridge struct {
 	// after it lands (semPending), so the overlay converges without queueing.
 	semInFlight map[string]bool
 	semPending  map[string]bool
+	// hintInFlight/hintPending coalesce inlay-hint requests the same way (#171).
+	hintInFlight map[string]bool
+	hintPending  map[string]bool
 	// hlTimer debounces the occurrence-highlight request (#172): each cursor
 	// move re-arms it, so only the last position of a motion burst reaches
 	// the server.
@@ -101,6 +104,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			_ = b.manager().Change(ev.Path, ev.Text)
 			b.maybeSignatureHelp(ev)
 			b.requestSemanticTokens(ev.Path)
+			b.requestInlayHints(ev.Path)
 			b.scheduleDocumentHighlight(ev.Path)
 		}
 	case host.EditorCursorMove:
@@ -142,8 +146,10 @@ func (b *bridge) fileOpened(h host.API, path string) {
 			b.autoInstall(l.ID, path)
 			return
 		}
-		// Initial semantic overlay for the fresh document (#9).
+		// Initial semantic overlay (#9) and inlay hints (#171) for the fresh
+		// document.
 		b.requestSemanticTokens(path)
+		b.requestInlayHints(path)
 	}()
 }
 
@@ -714,6 +720,65 @@ func (b *bridge) requestSemanticTokens(path string) {
 				continue
 			}
 			b.semInFlight[path] = false
+			b.mu.Unlock()
+			return
+		}
+	}()
+}
+
+// inlayHintsEnabled reads the lsp.inlay_hints config toggle (#171); unset
+// means enabled, matching the config default.
+func (b *bridge) inlayHintsEnabled() bool {
+	b.mu.Lock()
+	h := b.h
+	b.mu.Unlock()
+	if h == nil {
+		return true
+	}
+	cfg := h.Config()
+	if cfg == nil {
+		return true
+	}
+	v, ok := cfg.Get("lsp.inlay_hints")
+	return !ok || v != "false"
+}
+
+// requestInlayHints refreshes the inlay hints for path, coalesced per path
+// like requestSemanticTokens: at most one request runs; changes during a run
+// mark a pending re-request that fires when it lands. The config toggle off
+// skips the traffic entirely (the editor also stops rendering cached hints).
+// Errors stay silent — a passive decoration, not a user action.
+func (b *bridge) requestInlayHints(path string) {
+	mgr := b.manager()
+	if mgr == nil || !b.inlayHintsEnabled() {
+		return
+	}
+	b.mu.Lock()
+	if b.hintInFlight == nil {
+		b.hintInFlight = map[string]bool{}
+		b.hintPending = map[string]bool{}
+	}
+	if b.hintInFlight[path] {
+		b.hintPending[path] = true
+		b.mu.Unlock()
+		return
+	}
+	b.hintInFlight[path] = true
+	b.mu.Unlock()
+
+	go func() {
+		for {
+			hints, err := mgr.InlayHints(context.Background(), path)
+			if err == nil && b.h != nil {
+				b.h.Send(ilsp.InlayHintsMsg{Path: path, Hints: hints})
+			}
+			b.mu.Lock()
+			if b.hintPending[path] {
+				b.hintPending[path] = false
+				b.mu.Unlock()
+				continue
+			}
+			b.hintInFlight[path] = false
 			b.mu.Unlock()
 			return
 		}

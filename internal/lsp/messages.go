@@ -96,6 +96,25 @@ type DocumentHighlightsMsg struct {
 	Highlights []DocumentHighlight
 }
 
+// InlayHint is one inline hint in editor coordinates (#171): Label is the
+// flattened hint text, Kind is protocol.InlayHint* (type/parameter, 0 when the
+// server left it unclassified), PadLeft/PadRight ask for a separating space.
+type InlayHint struct {
+	Line     int
+	Col      int
+	Label    string
+	Kind     int
+	PadLeft  bool
+	PadRight bool
+}
+
+// InlayHintsMsg replaces the inlay-hint set for one document (#171); an empty
+// set clears the hints.
+type InlayHintsMsg struct {
+	Path  string
+	Hints []InlayHint
+}
+
 // CallHierarchyEntry is one call-hierarchy node payload (#173): the raw
 // protocol item (kept verbatim for the incoming/outgoing follow-up requests)
 // plus its presentation fields and the navigation target in editor

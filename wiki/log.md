@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-12
+
+- Inlay hints (#171): inline parameter-name and inferred-type hints
+  (`textDocument/inlayHint`) render as dimmed italic virtual text via the new
+  `InlayHint` theme slot, refreshed document-wide on open/change and merged
+  from embedded fragments; `lsp.inlay_hints` toggles them (default on), and
+  the Go plugin enables gopls's parameter/type hint kinds by default. See
+  [lsp](/architecture/lsp.md).
+
 ## 2026-07-11
 
 - Document highlight (#172): occurrences of the symbol under the cursor are

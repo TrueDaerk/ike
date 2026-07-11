@@ -421,6 +421,60 @@ func convertHighlights(lines []string, hs []protocol.DocumentHighlight, enc stri
 	return out
 }
 
+// InlayHints requests the inline parameter/type hints for a whole document
+// (#171), returned in editor coordinates sorted by position. Hints inside
+// embedded fragments come from each fragment's server, mapped onto the host
+// buffer; a fragment failure only drops that fragment's hints — the decoration
+// is passive, so partial results beat none.
+func (m *Manager) InlayHints(ctx context.Context, path string) ([]lsp.InlayHint, error) {
+	var out []lsp.InlayHint
+	srv, doc, ok := m.docServer(path)
+	if ok && srv.cl.Caps().InlayHint {
+		enc := srv.cl.Encoding()
+		cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+		defer cancel()
+		hints, err := srv.cl.InlayHints(cctx, protocol.InlayHintParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+			Range:        wholeDocRange(doc.lines, enc),
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, h := range hints {
+			out = append(out, convertInlayHint(doc.lines, h, enc, nil))
+		}
+	}
+	out = append(out, m.fragmentInlayHints(ctx, path)...)
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].Line != out[j].Line {
+			return out[i].Line < out[j].Line
+		}
+		return out[i].Col < out[j].Col
+	})
+	return out, nil
+}
+
+// wholeDocRange is the full-document LSP range, for range-scoped requests that
+// IKE issues document-wide.
+func wholeDocRange(lines []string, enc string) protocol.Range {
+	last := len(lines) - 1
+	return protocol.Range{
+		Start: protocol.Position{Line: 0, Character: 0},
+		End:   protocol.ToLSPPosition(lines, buffer.Position{Line: last, Col: len([]rune(lines[last]))}, enc),
+	}
+}
+
+// convertInlayHint maps one protocol hint to editor coordinates; toHost (nil
+// for host-document hints) additionally maps a fragment position onto the
+// host buffer.
+func convertInlayHint(lines []string, h protocol.InlayHint, enc string, toHost func(buffer.Position) buffer.Position) lsp.InlayHint {
+	p := protocol.FromLSPPosition(lines, h.Position, enc)
+	if toHost != nil {
+		p = toHost(p)
+	}
+	return lsp.InlayHint{Line: p.Line, Col: p.Col, Label: string(h.Label), Kind: h.Kind, PadLeft: h.PaddingLeft, PadRight: h.PaddingRight}
+}
+
 // PrepareCallHierarchy resolves the symbol at an editor position into
 // call-hierarchy items (#173), gated on the server capability.
 func (m *Manager) PrepareCallHierarchy(ctx context.Context, path string, pos buffer.Position) ([]protocol.CallHierarchyItem, error) {

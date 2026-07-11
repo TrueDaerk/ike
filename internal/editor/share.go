@@ -50,6 +50,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
 }
 
@@ -74,5 +75,6 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	return m, m.parseCmd()
 }

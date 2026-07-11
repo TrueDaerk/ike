@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T23:30:00Z
+timestamp: 2026-07-12T00:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -266,6 +266,23 @@ the `OccurrenceRead` theme slot, writes `OccurrenceWrite` (see
 [themes](./themes.md)); errors stay silent — a passive decoration, not a
 user action.
 
+**Inlay hints (#171).** Inline parameter-name and inferred-type annotations
+(`textDocument/inlayHint`), requested document-wide by the bridge after open
+and every change, coalesced per path via an in-flight/pending pair like
+semantic tokens. The manager converts positions to editor coordinates,
+flattens the string-or-parts label union, sorts by position, and merges hints
+from embedded fragments (each fragment's server queried over its whole
+virtual document, positions mapped onto the host). The editor indexes the
+`InlayHintsMsg` per line and `renderLine` injects the hint text — dimmed and
+italic via the `InlayHint` theme slot (falls back to the theme's border tone)
+— before the anchor cell as pure virtual text; `DisplayOffset` keeps
+cursor-anchored popups aligned past injected hints and expanded tabs.
+Capability-gated on `inlayHintProvider`; the `lsp.inlay_hints` config toggle
+(default on) both skips the traffic and hides cached hints live. gopls ships
+all hint kinds off, so the Go plugin's baseline settings enable parameter
+names and inferred types (user `[lsp.servers.go] settings` still override).
+Errors stay silent — a passive decoration.
+
 **Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
 relative 5-tuples against the server's legend into the same `highlight.Span`
 shape Tree-sitter produces, mapping LSP token types (refined by modifiers:
@@ -355,7 +372,8 @@ fragment language with no configured server degrades silently. The
 
 ## Configuration
 
-The `[lsp]` section: `enabled` (master switch) and a per-language `servers` table.
+The `[lsp]` section: `enabled` (master switch), `inlay_hints` (inline
+parameter/type hints, default `true`), and a per-language `servers` table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The
