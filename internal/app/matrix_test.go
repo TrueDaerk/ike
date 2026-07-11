@@ -23,8 +23,14 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["file.rename"]; r.Class != keymap.Delivered || r.Status() != "live" {
 		t.Errorf("file.rename = %+v", r)
 	}
-	if r := byCmd["lsp.definition"]; r.Fallback == "" || !strings.Contains(r.Status(), "live via") {
+	// 0082 sheet 11 (#18): f4 is the delivered primary; cmd+b stays a
+	// secondary row for terminals that deliver Cmd.
+	if r := byCmd["lsp.definition"]; r.Primary != "f4" || r.Class != keymap.Delivered || r.Status() != "live" {
 		t.Errorf("lsp.definition = %+v", r)
+	}
+	// 0082 sheet 13 (#18): shift+f6 renames the symbol in the editor context.
+	if r := byCmd["lsp.rename"]; r.Primary != "shift+f6" || r.Status() != "live" {
+		t.Errorf("lsp.rename = %+v", r)
 	}
 	if r := byCmd["vcs.commit"]; !strings.Contains(r.Status(), "blocked:") {
 		t.Errorf("vcs.commit = %+v", r)

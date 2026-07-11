@@ -56,9 +56,11 @@ func projectDir(t *testing.T) (root, file string) {
 	return root, file
 }
 
-// TestRenamePromptRenamesAndEditorFollows guards the shift+f6 editor flow
+// TestRenamePromptRenamesAndEditorFollows guards the file.rename editor flow
 // (#175): the prompt opens prefilled, enter renames on disk, and the open
-// buffer follows the new path with its edits and undo history intact.
+// buffer follows the new path with its edits and undo history intact. The
+// command arrives as RenameFileMsg (palette path): with an editor focused
+// shift+f6 belongs to lsp.rename now (0082 sheet 13, #18).
 func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 	root, file := projectDir(t)
 	m := newSized()
@@ -70,9 +72,9 @@ func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 		m = drainKey(m, k)
 	}
 
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyF6, Mod: tea.ModShift})
+	m = dispatch(t, m, RenameFileMsg{})
 	if !m.renameOpen() {
-		t.Fatal("shift+f6 with an editor focused must open the rename prompt")
+		t.Fatal("file.rename with an editor focused must open the rename prompt")
 	}
 	if m.renameInput != "a.txt" {
 		t.Fatalf("prompt must prefill the name, got %q", m.renameInput)

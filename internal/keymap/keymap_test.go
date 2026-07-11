@@ -78,6 +78,16 @@ func TestBuildTableLookupContextPrecedence(t *testing.T) {
 	if b, ok := table.Lookup(g, Explorer); !ok || b.Command != "palette.searchEverywhere" {
 		t.Errorf("global cmd+shift+a in explorer = %+v ok=%v", b, ok)
 	}
+	// shift+f6 is context-aware (0082 sheet 13, #18): the Editor-scoped
+	// lsp.rename shadows the Global file.rename, which keeps the chord
+	// everywhere else.
+	sf6 := MustParseChord("shift+f6")
+	if b, ok := table.Lookup(sf6, Editor); !ok || b.Command != "lsp.rename" {
+		t.Errorf("editor shift+f6 = %+v ok=%v, want lsp.rename", b, ok)
+	}
+	if b, ok := table.Lookup(sf6, Explorer); !ok || b.Command != "file.rename" {
+		t.Errorf("explorer shift+f6 = %+v ok=%v, want file.rename", b, ok)
+	}
 }
 
 // TestDoubleShiftResolvesOffMacOS drives the resolver's multi-step chord path

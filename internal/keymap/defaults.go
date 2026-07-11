@@ -32,9 +32,12 @@ var jetbrainsRows = []row{
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
 	// the table uses the registered id (mirroring lsp.definition below).
 	{"alt+f7", "lsp.references", "Find usages", Editor, "LSP (0100)"},
-	// shift+f6 renames the *file* (explorer selection or focused editor's
-	// file, #175). LSP rename-symbol (#6) needs its own chord or a
-	// context-aware dispatch when it lands.
+	// shift+f6 is JetBrains' context-aware refactor-rename (0082 sheet 13):
+	// with an editor focused it renames the *symbol* at the cursor (LSP #6);
+	// everywhere else the Global file.rename row owns the chord (explorer
+	// selection, #175) — Lookup prefers the more specific context. File
+	// rename with an editor focused stays reachable through the palette.
+	{"shift+f6", "lsp.rename", "Rename symbol", Editor, "LSP (0100)"},
 	{"shift+f6", "file.rename", "Rename file", Global, "App (#175)"},
 	{"f6", "file.move", "Move file", Global, "App (#175)"},
 	// Comment toggling binds cmd+7, not the JetBrains cmd+/: on a German layout
@@ -80,7 +83,10 @@ var jetbrainsRows = []row{
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
 	// Reconciled (0081/20): the LSP plugin registers goto-definition as
 	// lsp.definition; the table uses the registered id rather than forking an
-	// editor.gotoDeclaration alias.
+	// editor.gotoDeclaration alias. f4 — JetBrains' jump-to-source — is the
+	// delivered primary (0082 sheet 11); cmd+b stays as the JetBrains chord
+	// for terminals that can deliver Cmd (macOS terminals never forward it).
+	{"f4", "lsp.definition", "Go to declaration", Editor, "LSP (0100)"},
 	{"cmd+b", "lsp.definition", "Go to declaration", Editor, "LSP (0100)"},
 	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
 	// variant keys off the active visual selection inside lsp.formatRange.

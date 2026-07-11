@@ -1,6 +1,9 @@
 package keymap
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // discover.go is the discoverability layer of Roadmap 0081/40: honest,
 // live binding labels for the cheatsheet and the palette's shortcut column,
@@ -65,9 +68,16 @@ func (l *LiveBindings) Binding(id string) (string, bool) {
 	return label + "terminal-dependent", true
 }
 
-// shorterThen orders labels short-first, then lexically, so single-step
-// delivered chords beat leader sequences in the primary slot.
+// shorterThen orders chord labels fewest-steps-first, then short-first, then
+// lexically, so single-step delivered chords beat leader sequences in the
+// primary slot. Pure string length is not enough for the step rule: "space n"
+// is shorter than "shift+f6" yet takes two keystrokes (#18). Steps are counted
+// by the separating space in Chord.String's format; key bases never contain
+// spaces.
 func shorterThen(a, b string) bool {
+	if sa, sb := strings.Count(a, " "), strings.Count(b, " "); sa != sb {
+		return sa < sb
+	}
 	if len(a) != len(b) {
 		return len(a) < len(b)
 	}
