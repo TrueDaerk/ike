@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T14:00:00Z
+timestamp: 2026-07-11T16:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -121,7 +121,12 @@ fanned out by the manager to every running server advertising
 `workspaceSymbolProvider` and merged (capped at 200). Rows lead with the
 symbol name (location + declaration preview as the detail chip), stale
 replies are dropped by query, and activation navigates via the shared
-`DefinitionMsg` path. The same mode holds the search-everywhere seat (#236):
+`DefinitionMsg` path. Ranking is tiered (#377): symbols located inside the
+project root always sort above dependency/stdlib symbols (a large score
+malus on non-project rows), and an exact name match earns a bonus so the
+project's own symbol is the top hit; the adjusted score is stored on the
+palette item, so search everywhere sinks stdlib noise below commands and
+files too. The same mode holds the search-everywhere seat (#236):
 its first open silently primes the bridge continuation through a
 `project.goToClass` run that installs the hook without opening the symbol
 palette. No provider → warn toast; zero hits render as the palette's empty

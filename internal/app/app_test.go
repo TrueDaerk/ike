@@ -1043,14 +1043,14 @@ func TestSymbolLiveMode(t *testing.T) {
 		{Name: "Helper", Ref: ilsp.Reference{Path: "a.go", Line: 3, Preview: "func Helper() string {"}},
 	}})
 	m = tm.(Model)
-	if len(m.symbols.items) != 1 || m.symbols.items[0].Title != "Helper" {
+	if len(m.symbols.items) != 1 || m.symbols.items[0].item.Title != "Helper" {
 		t.Fatalf("hits must cache as rows, got %+v", m.symbols.items)
 	}
 	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "stale", Hits: []ilsp.SymbolHit{
 		{Name: "Wrong", Ref: ilsp.Reference{Path: "b.go"}},
 	}})
 	m = tm.(Model)
-	if m.symbols.items[0].Title != "Helper" {
+	if m.symbols.items[0].item.Title != "Helper" {
 		t.Fatal("a stale reply must not overwrite newer rows")
 	}
 
