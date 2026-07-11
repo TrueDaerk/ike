@@ -224,7 +224,7 @@ func (f *Floating) View() string {
 	if f.cfg.Accent != "" {
 		accent = lipgloss.Color(f.cfg.Accent)
 	}
-	titleStyle := lipgloss.NewStyle().Bold(true).Underline(true)
+	titleStyle := lipgloss.NewStyle().Foreground(f.theme().Foreground).Bold(true).Underline(true)
 	hintStyle := lipgloss.NewStyle().Foreground(f.theme().Border)
 	title := titleStyle.Render(f.content.Title()) + hintStyle.Render("   ("+f.hint()+" to close)")
 

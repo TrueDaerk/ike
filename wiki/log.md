@@ -2,6 +2,16 @@
 
 ## 2026-07-11
 
+- Theme contrast audit (#384): all built-in themes now pass WCAG AA (≥ 4.5:1)
+  on the rendered fg/bg slot pairs, enforced by the new table-driven
+  `TestBuiltinThemeContrast`. Light themes (gruvbox-light, rose-pine-dawn,
+  catppuccin-latte) had their accent/diagnostic slots darkened; the default
+  theme's near-invisible `Error`/`Info`/`Hint`/`Warning` were lifted.
+  Selected-row renderers (settings pages, pickers) now always set
+  `Foreground(SelectionText)` with a `Selection` background instead of
+  inheriting the terminal default. See
+  [themes — contrast rule](/architecture/themes.md).
+
 - 0082 sheet 11+13 verdicts (#18): `f4` is the delivered primary for
   `lsp.definition` (JetBrains jump-to-source; `cmd+b` stays secondary), and
   `shift+f6` is context-aware refactor-rename — `lsp.rename` in an editor,
