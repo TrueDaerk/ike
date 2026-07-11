@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Auto-installed language servers start without PATH surgery (#370):
+  `transport.Resolve` probes `go env GOBIN` / `GOPATH/bin` and npm's global
+  prefix after `exec.LookPath` fails and launches the server via absolute
+  path, so a fresh `go install`ed gopls works immediately; the install
+  success toast now fires only after the binary actually resolves, otherwise
+  an error toast names the probed directories. See
+  [LSP](/architecture/lsp.md).
+
 - LSP actions no longer use a stale cursor after programmatic jumps (#371):
   `editor.SetCursor` now emits a cursor-move event, so go-to-definition /
   usages-pick / nav back-forward landings update the LSP bridge's tracked

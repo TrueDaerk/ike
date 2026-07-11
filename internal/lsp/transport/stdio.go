@@ -50,18 +50,23 @@ func (p rwc) Close() error {
 	return rerr
 }
 
-// ErrNotFound wraps the case where the server binary is not on PATH, so callers
-// can degrade gracefully (a missing server is a no-op, never a crash).
+// ErrNotFound wraps the case where the server binary is not on PATH (nor in a
+// known toolchain install directory, see Resolve), so callers can degrade
+// gracefully (a missing server is a no-op, never a crash).
 var ErrNotFound = errors.New("transport: server binary not found")
 
-// Start launches the server described by spec. It returns ErrNotFound (wrapped)
-// when the binary cannot be located, so the manager can disable that language
-// with a status message instead of failing hard.
+// Start launches the server described by spec. The command is resolved via
+// Resolve — PATH first, then well-known toolchain install directories (#370:
+// `go install` targets GOBIN, which plain sessions rarely have on PATH) — and
+// launched by absolute path. It returns ErrNotFound (wrapped) when the binary
+// cannot be located, so the manager can disable that language with a status
+// message instead of failing hard.
 func Start(spec Spec) (*Process, error) {
-	if _, err := exec.LookPath(spec.Command); err != nil {
+	bin, err := Resolve(spec.Command)
+	if err != nil {
 		return nil, errors.Join(ErrNotFound, err)
 	}
-	cmd := exec.Command(spec.Command, spec.Args...)
+	cmd := exec.Command(bin, spec.Args...)
 	cmd.Dir = spec.Dir
 	if len(spec.Env) > 0 {
 		cmd.Env = append(os.Environ(), spec.Env...)

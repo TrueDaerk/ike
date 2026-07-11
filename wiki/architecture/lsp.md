@@ -268,7 +268,11 @@ Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The
 servers are external binaries the user installs
 (`go install golang.org/x/tools/gopls@latest`, `npm i -g intelephense pyright`); a
-missing binary disables that language with a status message.
+missing binary disables that language with a status message. The binary is
+resolved by `transport.Resolve` (#370): PATH first, then the well-known
+per-toolchain install directories (`go env GOBIN` / `GOPATH/bin`, npm's global
+prefix) — so a `go install`ed server works even when GOBIN is not on PATH; the
+process is launched via the resolved absolute path.
 
 All of this is editable in-IDE on the **Language Servers** settings page
 (0180, #130 — see [Settings UI](./settings-ui.md)): live per-server status
@@ -286,7 +290,11 @@ When launching a server fails with `transport.ErrNotFound` — detected on the
 first file open of the language — the recipe runs automatically in the
 background (`plugins/lsp/install.go`), with an "installing …" info toast, a
 success/failure result, and on success an immediate re-open of the triggering
-document so the fresh server starts without further interaction.
+document so the fresh server starts without further interaction. Success is
+claimed only after the binary actually resolves (`transport.Resolve`, #370);
+a recipe that exits 0 but leaves the binary unresolvable (e.g. an unusual
+install prefix outside PATH and the known toolchain dirs) reports an error
+toast naming the probed directories, and counts as a failure for the backoff.
 
 `lsp.auto_install = true|false` (default true) is the opt-out; the Language
 Servers page toggles it with `A` and offers the same install manually with

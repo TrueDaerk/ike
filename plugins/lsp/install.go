@@ -1,6 +1,7 @@
 package lsp
 
 import (
+	"cmp"
 	"os"
 	"os/exec"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
+	"ike/internal/lsp/transport"
 )
 
 // install.go is the missing-server install helper (Roadmap 0180, #131).
@@ -39,10 +41,13 @@ type installer struct {
 	inflight map[string]bool
 	failed   map[string]bool
 	run      installRunner
+	// resolve locates the server binary after an install (PATH + known
+	// toolchain install dirs, #370). Injectable for tests.
+	resolve func(command string) (string, error)
 }
 
 func newInstaller() *installer {
-	return &installer{inflight: map[string]bool{}, failed: map[string]bool{}, run: execInstall}
+	return &installer{inflight: map[string]bool{}, failed: map[string]bool{}, run: execInstall, resolve: transport.Resolve}
 }
 
 // begin reserves an install slot for lang. It refuses while an install is
@@ -86,7 +91,7 @@ func (b *bridge) installMissing(h host.API) tea.Cmd {
 			if !cfg.LSP.Enabled || !serverEnabled(cfg, l.ID) || !pluginEnabled(cfg, "lang-"+l.ID) {
 				continue
 			}
-			if _, err := exec.LookPath(l.Server.Command); err == nil {
+			if _, err := transport.Resolve(l.Server.Command); err == nil {
 				continue
 			}
 			go func(id string) { _ = b.installLang(id)() }(l.ID)
@@ -167,11 +172,28 @@ func (b *bridge) runInstall(langID, path string, manual bool) tea.Msg {
 		Text: "installing " + l.Server.Command + " (" + strings.Join(recipe, " ") + ")…",
 		Kind: ilsp.ServerEventInfo})
 	out, err := b.inst.run(recipe[0], recipe[1:]...)
-	b.inst.finish(langID, err)
+	// The recipe exiting 0 is not enough (#370): `go install` drops the binary
+	// into GOBIN, which is often not on PATH. Verify the command actually
+	// resolves (PATH + known toolchain install dirs) before claiming success —
+	// and count an unresolvable result as a failure so the automatic path
+	// backs off instead of re-installing on every file open.
+	var resolveErr error
+	if err == nil {
+		_, resolveErr = b.inst.resolve(l.Server.Command)
+	}
+	b.inst.finish(langID, cmp.Or(err, resolveErr))
 	if err != nil {
 		text := l.Server.Command + " install failed: " + err.Error()
 		if tail := outputTail(out); tail != "" {
 			text += " — " + tail
+		}
+		return ilsp.ServerStatusMsg{Lang: langID, Text: text, Kind: ilsp.ServerEventError}
+	}
+	if resolveErr != nil {
+		text := l.Server.Command + " installed, but the binary cannot be found — " +
+			"add its install directory to PATH"
+		if dirs := transport.FallbackDirs(); len(dirs) > 0 {
+			text += " (looked in " + strings.Join(dirs, ", ") + ")"
 		}
 		return ilsp.ServerStatusMsg{Lang: langID, Text: text, Kind: ilsp.ServerEventError}
 	}
