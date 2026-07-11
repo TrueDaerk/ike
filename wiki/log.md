@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Signature popup lifecycle (#315): leaving insert mode and insert-mode
+  arrow motion dismiss the popup, stale replies after esc are dropped — it
+  no longer trails normal-mode cursor motion. Documented in
+  [LSP](/architecture/lsp.md).
+
 - Code-action clarity (#309): readable kind chips in the palette list, an
   explainer in the wiki, and feedback for every apply outcome — edited-N,
   changed-nothing, unresolved-action warning, command errors. Documented in

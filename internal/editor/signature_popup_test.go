@@ -14,6 +14,7 @@ import (
 func TestSignaturePopupLifecycle(t *testing.T) {
 	m, path := loaded(t, "Greet(\n")
 	msg := ilsp.SignatureHelpMsg{Path: path, Label: "Greet(name string) string", ParamStart: 6, ParamEnd: 17, Doc: "Greets.", More: 1}
+	m = insertModeAt(m, 0, 6) // signatures only show while typing the call (#315)
 	m, _ = m.Update(msg)
 	if !m.SignatureOpen() {
 		t.Fatal("msg should open the popup")
@@ -26,7 +27,7 @@ func TestSignaturePopupLifecycle(t *testing.T) {
 	}
 
 	// Typing keeps it open (retrigger is server-driven), esc dismisses.
-	m = send(m, key('i'), key('x'))
+	m = send(m, key('x'))
 	if !m.SignatureOpen() {
 		t.Fatal("typing must not dismiss the popup")
 	}
@@ -36,6 +37,7 @@ func TestSignaturePopupLifecycle(t *testing.T) {
 	}
 
 	// Server null (empty label) clears it too.
+	m = insertModeAt(m, 0, 6)
 	m, _ = m.Update(msg)
 	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path})
 	if m.SignatureOpen() {
@@ -57,6 +59,7 @@ func TestSignaturePopupIgnoresOtherFiles(t *testing.T) {
 func TestSignaturePopupClampsWidthAndHeight(t *testing.T) {
 	m, path := loaded(t, "f(\n")
 	m.SetSize(60, 20)
+	m = insertModeAt(m, 0, 2)
 	long := "print(" + strings.Repeat("value string, ", 60) + ")"
 	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: long, ParamStart: 6, ParamEnd: 11})
 	v := m.SignatureView()
@@ -79,6 +82,7 @@ func TestSignaturePopupClampsWidthAndHeight(t *testing.T) {
 func TestMouseClickDismissesPopups(t *testing.T) {
 	m, path := loaded(t, "Greet(\nsecond\n")
 	m.SetSize(60, 10)
+	m = insertModeAt(m, 0, 6)
 	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: "Greet(name string)", ParamStart: 6, ParamEnd: 17})
 	if !m.SignatureOpen() {
 		t.Fatal("setup: popup should be open")
@@ -93,6 +97,7 @@ func TestMouseClickDismissesPopups(t *testing.T) {
 // keys, the signature popup carries the informational marker.
 func TestPopupAffordances(t *testing.T) {
 	m, path := loaded(t, "Greet(\n")
+	m = insertModeAt(m, 0, 6)
 	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: "Greet(name string)", ParamStart: 6, ParamEnd: 17})
 	if v := ansi.Strip(m.SignatureView()); !strings.Contains(v, "ƒ ") {
 		t.Fatalf("signature popup missing the ƒ marker:\n%s", v)
@@ -105,5 +110,37 @@ func TestPopupAffordances(t *testing.T) {
 	}
 	if v := ansi.Strip(m.CompletionView()); !strings.Contains(v, "accept") {
 		t.Fatalf("completion popup missing the accept hint:\n%s", v)
+	}
+}
+
+// TestSignatureDismissalPaths guards #315: insert-mode arrow motion and
+// leaving insert dismiss the popup, and a reply landing after insert mode
+// ended is dropped instead of re-anchoring at the normal-mode cursor.
+func TestSignatureDismissalPaths(t *testing.T) {
+	m, path := loaded(t, "Greet(x, y)\n")
+	msg := ilsp.SignatureHelpMsg{Path: path, Label: "Greet(a int, b int)", ParamStart: 6, ParamEnd: 11}
+
+	// Arrow motion in insert mode dismisses.
+	m = insertModeAt(m, 0, 6)
+	m, _ = m.Update(msg)
+	if !m.SignatureOpen() {
+		t.Fatal("setup: popup open")
+	}
+	m = send(m, special(tea.KeyRight))
+	if m.SignatureOpen() {
+		t.Fatal("insert-mode arrow motion must dismiss the popup")
+	}
+
+	// Leaving insert mode dismisses.
+	m, _ = m.Update(msg)
+	m = send(m, special(tea.KeyEscape))
+	if m.SignatureOpen() {
+		t.Fatal("leaving insert mode must dismiss the popup")
+	}
+
+	// A stale reply after esc must not re-open it in normal mode.
+	m, _ = m.Update(msg)
+	if m.SignatureOpen() {
+		t.Fatal("a signature reply in normal mode must be dropped")
 	}
 }

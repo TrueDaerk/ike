@@ -168,9 +168,12 @@ cursor-anchored popup (`signatureState`) with the active parameter emphasised
 to rune ranges in `lsp.SignatureContent`), the first doc line dimmed, and an
 overload counter, and a leading dim `ƒ` marking it as informational — the
 actionable completion list carries an accept-keys hint row instead (#308).
-Esc and mouse clicks dismiss (#307; a click moves the anchoring cursor, so
-the popup must not trail it); completion, when open, takes precedence in the
-popup compositor. Popups clamp to the owning pane (#306): long signatures
+The popup lives only while the call is being typed (#315): leaving
+insert/replace mode, insert-mode arrow motion, and mouse clicks (#307) all
+dismiss it — anything that moves the anchoring cursor without a change event
+would otherwise drag the popup along — and a server reply landing after
+insert mode ended is dropped as stale. Completion, when open, takes
+precedence in the popup compositor. Popups clamp to the owning pane (#306): long signatures
 wrap at the popup width cap, over-tall content truncates with an ellipsis
 row, and the placement shifts left / flips above the anchor instead of
 bleeding across pane borders. Gated on `signatureHelpProvider`.

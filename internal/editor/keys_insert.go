@@ -105,6 +105,9 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 // insertMove nudges the cursor in insert mode, allowing the one-past-end column
 // (so typing can continue at the line end) rather than the normal-mode clamp.
 func (m *Model) insertMove(dLine, dCol int) {
+	// Arrow motion in insert mode emits no change event, so the popup would
+	// trail the cursor instead of being retriggered/dismissed (#315).
+	m.dismissSignature()
 	p := buffer.Position{Line: m.cursor.Line + dLine, Col: m.cursor.Col + dCol}
 	m.cursor = m.buf.Clamp(p)
 	m.desiredCol = m.cursor.Col

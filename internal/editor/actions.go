@@ -162,6 +162,11 @@ func (m *Model) startInsertWith(rec *history.Recorder, pre func(*Model, *history
 // commitInsert leaves insert mode, commits the session's recorder as one change,
 // and records the dot replay (structural pre + typed text).
 func (m *Model) commitInsert() {
+	// Leaving the insert session ends the call-typing context, so the
+	// signature popup goes with it (#315) — otherwise it would trail the
+	// cursor through normal-mode motions, which emit no change events for
+	// the server to dismiss it on.
+	m.dismissSignature()
 	s := m.insert
 	text := s.typed
 	if s.rec != nil && !s.rec.Empty() {
