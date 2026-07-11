@@ -251,6 +251,12 @@ func TestFromKeyMsg(t *testing.T) {
 		{tea.KeyPressMsg{Code: tea.KeyF7}, "f7", 0},
 		{tea.KeyPressMsg{Text: "A", Code: 'a', Mod: tea.ModShift}, "a", ModShift},
 		{tea.KeyPressMsg{Code: 'a', Mod: tea.ModAlt}, "a", ModAlt},
+		// Bracket glyphs normalize to their named bases with and without
+		// modifiers (#284) — cmd+[ must match the table's cmd+left-bracket.
+		{tea.KeyPressMsg{Text: "[", Code: '['}, "left-bracket", 0},
+		{tea.KeyPressMsg{Text: "]", Code: ']'}, "right-bracket", 0},
+		{tea.KeyPressMsg{Code: '[', Mod: tea.ModSuper}, "left-bracket", ModMeta},
+		{tea.KeyPressMsg{Code: ']', Mod: tea.ModSuper}, "right-bracket", ModMeta},
 	}
 	for _, c := range cases {
 		k, ok := FromKeyMsg(c.msg)
