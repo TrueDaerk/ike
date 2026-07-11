@@ -15,6 +15,9 @@ import (
 //go:embed queries/python.scm
 var query string
 
+//go:embed queries/injections.scm
+var injections string
+
 func init() {
 	register.Language(lang.Language{
 		ID:         "python",

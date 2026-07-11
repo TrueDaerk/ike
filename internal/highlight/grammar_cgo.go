@@ -16,12 +16,17 @@ import (
 // that fails to compile — grammar/query version skew — disables highlighting for
 // that language rather than crashing.
 type grammarImpl struct {
-	lang     *ts.Language
-	querySrc string
+	lang         *ts.Language
+	querySrc     string
+	injectionSrc string
 
 	once  sync.Once
 	query *ts.Query
 	ok    bool
+
+	injOnce  sync.Once
+	injQuery *ts.Query
+	injOK    bool
 }
 
 // NewGrammar builds a highlighting grammar from a compiled Tree-sitter language
@@ -30,6 +35,13 @@ type grammarImpl struct {
 // (grammar_stub.go) returns nil for CGO_ENABLED=0 builds.
 func NewGrammar(l *ts.Language, query string) lang.Grammar {
 	return &grammarImpl{lang: l, querySrc: query}
+}
+
+// NewGrammarInjections is NewGrammar plus an injections.scm query source for
+// embedded-language fragment detection (see Fragments). An empty injections
+// source behaves exactly like NewGrammar.
+func NewGrammarInjections(l *ts.Language, query, injections string) lang.Grammar {
+	return &grammarImpl{lang: l, querySrc: query, injectionSrc: injections}
 }
 
 // compiled lazily compiles the query, returning ok=false if it will not compile.
@@ -42,4 +54,20 @@ func (g *grammarImpl) compiled() (*ts.Language, *ts.Query, bool) {
 		g.query, g.ok = q, true
 	})
 	return g.lang, g.query, g.ok
+}
+
+// compiledInjections lazily compiles the injection query, returning ok=false
+// when the grammar has none or it will not compile.
+func (g *grammarImpl) compiledInjections() (*ts.Language, *ts.Query, bool) {
+	g.injOnce.Do(func() {
+		if g.injectionSrc == "" {
+			return
+		}
+		q, err := ts.NewQuery(g.lang, g.injectionSrc)
+		if err != nil {
+			return
+		}
+		g.injQuery, g.injOK = q, true
+	})
+	return g.lang, g.injQuery, g.injOK
 }

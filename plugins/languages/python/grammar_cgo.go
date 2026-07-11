@@ -11,5 +11,5 @@ import (
 )
 
 func grammar() lang.Grammar {
-	return highlight.NewGrammar(ts.NewLanguage(tspy.Language()), query)
+	return highlight.NewGrammarInjections(ts.NewLanguage(tspy.Language()), query, injections)
 }
