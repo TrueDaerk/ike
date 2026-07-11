@@ -22,7 +22,8 @@ import (
 // Fragment documents use the ike-fragment: URI scheme; protocol.URIToPath
 // passes non-file schemes through untouched, so these URIs survive round-trips
 // but never collide with real files. Diagnostics published for fragment URIs
-// are dropped until #415 maps them back onto the host buffer.
+// map back onto the host buffer and merge with the host server's diagnostics
+// (#415, fragdiags.go).
 
 // FragmentDetector returns the embedded-language fragments of a host buffer.
 // The bridge wires this to highlight.Fragments; tests inject fakes. It runs on
@@ -117,6 +118,9 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 	}
 	next := map[int]*fragmentDoc{}
 	m.mu.Unlock()
+	// Slots whose fragment document continued in place; only their published
+	// diagnostics stay valid — anything else was closed or reopened fresh.
+	kept := map[int]bool{}
 
 	for slot, fr := range found {
 		spec, ok := m.resolve(fr.Lang)
@@ -157,6 +161,7 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 				m.mu.Unlock()
 				delete(old, slot)
 				next[slot] = fd
+				kept[slot] = true
 				continue
 			}
 			// Server gone (crash, StopLang): fall through and reopen below.
@@ -180,7 +185,27 @@ func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment
 	} else {
 		m.frags[hostPath] = next
 	}
+	// Drop diagnostics of slots that did not continue in place (#415); the
+	// surviving ones may have shifted with the host edit, so re-emit the
+	// merged host diagnostics either way.
+	republish := false
+	if fds := m.fragDiags[hostPath]; fds != nil {
+		for slot := range fds {
+			if !kept[slot] {
+				delete(fds, slot)
+				republish = true
+			}
+		}
+		if len(fds) == 0 {
+			delete(m.fragDiags, hostPath)
+		} else {
+			republish = true
+		}
+	}
 	m.mu.Unlock()
+	if republish {
+		m.publishHostDiagnostics(hostPath)
+	}
 }
 
 // openFragment spawns/reuses the fragment language's server and sends didOpen.
@@ -224,12 +249,15 @@ func (m *Manager) closeFragment(fd *fragmentDoc) {
 	})
 }
 
-// closeFragmentsFor closes and forgets every fragment document of a host.
+// closeFragmentsFor closes and forgets every fragment document of a host,
+// including its published fragment diagnostics (the host is going away, so
+// nothing is re-emitted).
 func (m *Manager) closeFragmentsFor(hostPath string) {
 	m.mu.Lock()
 	fds := m.frags[hostPath]
 	delete(m.frags, hostPath)
 	delete(m.fragGen, hostPath)
+	delete(m.fragDiags, hostPath)
 	m.mu.Unlock()
 	for _, fd := range fds {
 		m.closeFragment(fd)
