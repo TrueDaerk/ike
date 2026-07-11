@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-10T20:00:00Z
+timestamp: 2026-07-11T09:00:00Z
 ---
 
 # Language Registry
@@ -31,11 +31,13 @@ type Language struct {
 
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
+    IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
 func ByPath(path string) (Language, bool)   // exact base name, then extension
 func Comments(path string) (line string, block [2]string, ok bool)
+func IndentAfter(path string) ([]string, bool)
 func All() []Language
 ```
 
@@ -43,6 +45,12 @@ func All() []Language
 toggling); `ok` is false when no language matches or the language declares no
 comment syntax at all (plain text) — the editor treats that as "toggling
 unavailable". Go and PHP declare `//` + `/* */`, Python declares `#` only.
+
+`IndentAfter` resolves the smart-indent openers for a buffer path (Roadmap
+0260): trimmed-line **suffixes** after which the next line indents one level
+deeper. Python declares `":"` plus the open brackets `( [ {`; Go and PHP
+declare `{ ( [`. `ok` is false when no language matches or none are declared —
+the editor then falls back to plain copy-indent.
 
 `Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
 `highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so

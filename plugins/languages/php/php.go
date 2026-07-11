@@ -27,5 +27,6 @@ func init() {
 		Toolchain:    toolchain{},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
+		IndentAfter:  []string{"{", "(", "["},
 	})
 }

@@ -56,6 +56,26 @@ func TestComments(t *testing.T) {
 	}
 }
 
+func TestIndentAfter(t *testing.T) {
+	Register(Language{
+		ID:          "indented",
+		Extensions:  []string{"ind"},
+		IndentAfter: []string{":", "{"},
+	})
+	Register(Language{ID: "noindent", Extensions: []string{"noi"}})
+
+	if suf, ok := IndentAfter("x.ind"); !ok || len(suf) != 2 || suf[0] != ":" || suf[1] != "{" {
+		t.Fatalf("IndentAfter(x.ind) = %v %v", suf, ok)
+	}
+	// A language without rules and an unknown path both report !ok.
+	if _, ok := IndentAfter("x.noi"); ok {
+		t.Fatal("IndentAfter(x.noi) should be !ok (no rules declared)")
+	}
+	if _, ok := IndentAfter("x.unknown-ext"); ok {
+		t.Fatal("IndentAfter on unknown language should be !ok")
+	}
+}
+
 func TestMergeSettings(t *testing.T) {
 	base := map[string]any{
 		"python": map[string]any{"defaultInterpreterPath": "/detected/python", "extra": 1},

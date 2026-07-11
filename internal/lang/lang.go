@@ -40,6 +40,12 @@ type Language struct {
 	// ("/*", "*/"). Empty strings mean the language has no such syntax.
 	LineComment  string
 	BlockComment [2]string
+
+	// IndentAfter lists trimmed-line suffixes that open a block (Roadmap 0260):
+	// a line ending with one of them indents the next line one level deeper,
+	// e.g. ":" for Python or "{" for brace languages. Empty means the editor
+	// falls back to plain copy-indent.
+	IndentAfter []string
 }
 
 var (
@@ -106,6 +112,17 @@ func Comments(path string) (line string, block [2]string, ok bool) {
 		return "", [2]string{}, false
 	}
 	return l.LineComment, l.BlockComment, l.LineComment != "" || l.BlockComment[0] != ""
+}
+
+// IndentAfter returns the block-opening line suffixes for path's language
+// (Roadmap 0260). ok is false when no language matches the path or the matched
+// language declares no indent rules; callers treat that as "plain copy-indent".
+func IndentAfter(path string) ([]string, bool) {
+	l, found := ByPath(path)
+	if !found || len(l.IndentAfter) == 0 {
+		return nil, false
+	}
+	return l.IndentAfter, true
 }
 
 // All returns every registered language, sorted by id (stable for tests/listing).
