@@ -277,14 +277,6 @@ exception (vim-native equivalents, palette reach).
 Generated from `keymap.StatusMatrix` against the shipped plugin set (run
 `IKE_GEN_MATRIX=<file> go test ./cmd/ike -run TestGenerateMatrixMarkdown` to
 regenerate); the final-gate test in `cmd/ike` fails the build if any row is
-ever unresolved. Per-binding Definition of Done: command exists → the chord
-reaches the program (or a reachable alias does) → conflict-free in context →
-discoverable → verified (automated tests plus the 2026-07 tmux terminal
-checks recorded above).
-
-The advertised JetBrains primary stays even when fragile (muscle memory);
-the fallback column is the path that always works.
-
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
 | `editor.closeTab` | `cmd+w` | fragile | `space x` | live via space x |
@@ -340,7 +332,7 @@ the fallback column is the path that always works.
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
 | `project.findInPath` | `cmd+shift+f` | fragile | `space g` | live via space g |
-| `project.goToClass` | `cmd+o` | fragile | `—` | blocked: document symbols / structure view (idea #31) |
+| `project.goToClass` | `cmd+o` | fragile | `space shift+s` | live via space shift+s |
 | `project.goToFile` | `cmd+shift+o` | fragile | `space f` | live via space f |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `space r` | live via space r |
 | `project.switch` | `alt+shift+p` | fragile | `space p` | live via space p |

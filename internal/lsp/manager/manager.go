@@ -288,6 +288,43 @@ func (m *Manager) Definition(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// maxWorkspaceSymbols caps the merged workspace/symbol result so one broad
+// query never floods the palette.
+const maxWorkspaceSymbols = 200
+
+// WorkspaceSymbols fans the query out to every running server advertising the
+// workspaceSymbolProvider capability and merges the results, capped (0250,
+// #294). ok=false when no running server supports the request at all, so the
+// caller can distinguish "no provider" from "no hits".
+func (m *Manager) WorkspaceSymbols(ctx context.Context, query string) ([]protocol.SymbolInformation, bool) {
+	m.mu.Lock()
+	var clients []*server
+	for _, srv := range m.servers {
+		if srv.cl != nil && srv.cl.Caps().WorkspaceSymbol {
+			clients = append(clients, srv)
+		}
+	}
+	m.mu.Unlock()
+	if len(clients) == 0 {
+		return nil, false
+	}
+	var out []protocol.SymbolInformation
+	for _, srv := range clients {
+		cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+		syms, err := srv.cl.WorkspaceSymbols(cctx, protocol.WorkspaceSymbolParams{Query: query})
+		cancel()
+		if err != nil {
+			continue // one slow/broken server must not sink the others
+		}
+		out = append(out, syms...)
+		if len(out) >= maxWorkspaceSymbols {
+			out = out[:maxWorkspaceSymbols]
+			break
+		}
+	}
+	return out, true
+}
+
 // References requests every reference to the symbol at an editor position.
 // IncludeDeclaration mirrors the LSP request option (JetBrains' find-usages
 // includes the declaration, so callers default to true).

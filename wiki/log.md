@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Workspace-symbol search (#294, Epic 0250 promoted from idea #146):
+  `project.goToClass` (cmd+o / leader `S`) prompts for a query and lists
+  `workspace/symbol` hits in the references palette (Enter navigates like
+  go-to-definition); capability-gated with honest no-provider/zero-hit
+  toasts. The last non-VCS blocked-ledger entry is gone. Documented in
+  [LSP](/architecture/lsp.md); status matrix regenerated in
+  [Keybindings](/architecture/keybindings.md).
+
 - Find/replace panel (#283, Epic 0240 phase 2): `editor.replace` (cmd+r /
   leader `R`) now opens a two-field panel — Find with live incremental
   preview and match tally, Replace, tab to switch — finishing through the

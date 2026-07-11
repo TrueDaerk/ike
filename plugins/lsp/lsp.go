@@ -80,6 +80,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().formatRange(h) },
 			},
 			{
+				ID:    "project.goToClass",
+				Title: "Go to Symbol",
+				Scope: plugin.GlobalScope(),
+				Run:   func(h host.API) tea.Cmd { return shared().goToSymbol(h) },
+			},
+			{
 				ID:    "lsp.installMissing",
 				Title: "LSP: Install Missing Servers",
 				Scope: plugin.GlobalScope(),

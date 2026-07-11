@@ -91,6 +91,16 @@ site (interface implementations, build-tag variants) opens the same palette
 list — placeholder "Definitions — pick a target…" — instead of guessing the
 first location; a single site still jumps directly.
 
+**Workspace symbols (0250, #294).** `project.goToClass` (default `cmd+o`,
+leader `S` — off macOS `ctrl+o` is vim jump-back) opens a floating-shell
+prompt for the symbol query; Enter sends one `workspace/symbol` request,
+fanned out by the manager to every running server advertising
+`workspaceSymbolProvider` and merged (capped at 200). Hits render through the
+same references palette rows (`path:line` + declaration-line preview,
+fuzzy-filterable, placeholder "Symbols — …"); activation navigates via the
+shared `DefinitionMsg` path. No provider → warn toast, zero hits → info
+toast. A live per-keystroke palette mode is phase 2 (#295).
+
 **Formatting (#7).** `lsp.format` (default `cmd+alt+l`) sends
 `textDocument/formatting`, `lsp.formatRange` sends the range variant for the
 active visual selection — the editor's cursor events carry the visual anchor

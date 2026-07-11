@@ -33,6 +33,7 @@ type Capabilities struct {
 	SemanticDelta      bool
 	SemanticTypes      []string
 	SemanticModifiers  []string
+	WorkspaceSymbol    bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -54,6 +55,7 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.Hover = truthyProvider(sc.HoverProvider)
 	caps.Definition = truthyProvider(sc.DefinitionProvider)
 	caps.References = truthyProvider(sc.ReferencesProvider)
+	caps.WorkspaceSymbol = truthyProvider(sc.WorkspaceSymbolProvider)
 	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)
 	caps.RangeFormatting = truthyProvider(sc.DocumentRangeFormattingProvider)
 	caps.Rename = truthyProvider(sc.RenameProvider)

@@ -119,6 +119,28 @@ func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]
 	return decodeLocations(raw), nil
 }
 
+// WorkspaceSymbols requests project-wide symbols matching query (0250, #294).
+// Servers may answer with SymbolInformation[] or the newer WorkspaceSymbol[]
+// (whose location may lack a range); both decode into the classic shape, and
+// entries without a usable URI are dropped.
+func (c *Client) WorkspaceSymbols(ctx context.Context, p protocol.WorkspaceSymbolParams) ([]protocol.SymbolInformation, error) {
+	raw, err := c.conn.Call(ctx, "workspace/symbol", p)
+	if err != nil {
+		return nil, err
+	}
+	var syms []protocol.SymbolInformation
+	if err := json.Unmarshal(raw, &syms); err != nil {
+		return nil, nil // null / unexpected shape: no symbols
+	}
+	out := syms[:0]
+	for _, s := range syms {
+		if s.Location.URI != "" {
+			out = append(out, s)
+		}
+	}
+	return out, nil
+}
+
 // Formatting requests whole-document formatting edits.
 func (c *Client) Formatting(ctx context.Context, p protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
 	raw, err := c.conn.Call(ctx, "textDocument/formatting", p)

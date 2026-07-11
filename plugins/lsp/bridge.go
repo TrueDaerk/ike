@@ -222,6 +222,43 @@ func (b *bridge) references(h host.API) tea.Cmd {
 	return nil
 }
 
+// goToSymbol opens the workspace-symbol prompt (project.goToClass, 0250,
+// #294): the app collects the query, then Apply runs the actual request.
+func (b *bridge) goToSymbol(h host.API) tea.Cmd {
+	b.ensure(h)
+	return func() tea.Msg {
+		return ilsp.SymbolPromptMsg{
+			Apply: func(query string) tea.Cmd { return b.workspaceSymbols(h, query) },
+		}
+	}
+}
+
+// workspaceSymbols fans the query out through the manager and delivers the
+// hits (converted like references) as a SymbolResultsMsg.
+func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
+	mgr := b.manager()
+	if mgr == nil {
+		return nil
+	}
+	go func() {
+		syms, ok := mgr.WorkspaceSymbols(context.Background(), query)
+		if !ok {
+			h.Send(ilsp.SymbolResultsMsg{Query: query, NoProvider: true})
+			return
+		}
+		locs := make([]protocol.Location, len(syms))
+		for i, sym := range syms {
+			locs[i] = sym.Location
+		}
+		path := ""
+		if len(syms) > 0 {
+			path = protocol.URIToPath(syms[0].Location.URI)
+		}
+		h.Send(ilsp.SymbolResultsMsg{Query: query, Refs: locationsToRefs(mgr, path, locs)})
+	}()
+	return nil
+}
+
 // locationsToRefs converts LSP locations to editor-coordinate references,
 // reading each distinct target file once — the read supplies both the
 // position conversion base and the preview line. Shared by find-references

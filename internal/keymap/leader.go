@@ -36,6 +36,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// R (shift+r) mirrors the fragile cmd+r primary for the in-file replace
 	// (0240 phase 1, #282).
 	{"R", "editor.replace", "Replace in file"},
+	// S (shift+s) mirrors the fragile cmd+o primary for the workspace-symbol
+	// search (0250 phase 1, #294) — off macOS ctrl+o is vim jump-back.
+	{"S", "project.goToClass", "Go to symbol"},
 	{"p", "project.switch", "Switch project"},
 	{"t", "terminal.toggle", "Toggle terminal"},
 	// T (shift+t) opens a fresh session next to lowercase-t's toggle (#242).
