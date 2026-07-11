@@ -40,5 +40,8 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// New .go files start with their package clause, named after the
+		// directory (#170). Override via `[lang.go] template`.
+		Template: "package ${PACKAGE}\n",
 	})
 }

@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -231,7 +232,15 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "e", "edit":
 		if cmd.Args != "" {
-			_ = m.Load(cmd.Args)
+			if err := m.Load(cmd.Args); err != nil {
+				if os.IsNotExist(err) {
+					// vim-style: a new path opens as an unsaved buffer, seeded
+					// with the language's file template (#170); :w creates it.
+					m.NewFile(cmd.Args)
+				} else {
+					m.cmdMsg = "E: " + err.Error()
+				}
+			}
 		}
 	case "g", "global", "v", "vglobal":
 		m.cmdMsg = "E: :" + cmd.Name + " is not implemented yet"

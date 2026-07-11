@@ -17,6 +17,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/lang"
 )
 
 // promptKind selects how a prompt reads input: a free-text line, or a yes/no
@@ -152,8 +154,10 @@ func (m *Model) promptNewEntry(isDir bool) {
 	}
 }
 
-// createEntry creates an empty file or a directory under dir, records the create
-// for undo, and re-scans dir so the new entry appears (and is selected).
+// createEntry creates a file or a directory under dir, records the create
+// for undo, and re-scans dir so the new entry appears (and is selected). A new
+// file starts with its language's template when one is registered — `package
+// <dir>` for Go, `<?php` for PHP (#170) — and empty otherwise.
 func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 	path := filepath.Join(dir, name)
 	if _, err := os.Lstat(path); err == nil {
@@ -165,10 +169,7 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 		err = os.MkdirAll(path, 0o755)
 	} else {
 		if err = os.MkdirAll(dir, 0o755); err == nil {
-			var f *os.File
-			if f, err = os.Create(path); err == nil {
-				_ = f.Close()
-			}
+			err = os.WriteFile(path, []byte(lang.TemplateFor(path)), 0o644)
 		}
 	}
 	if err != nil {

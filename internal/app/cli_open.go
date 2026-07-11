@@ -17,7 +17,8 @@ import (
 // OpenCLITargets opens targets as tabs in argument order and leaves the first
 // one focused with its cursor placed; the explorer reveals it. Line/Col are
 // 1-based as typed (0 = unset); out-of-range positions clamp. A nonexistent
-// path opens as an empty unsaved buffer with that path, vim-style.
+// path opens as an unsaved buffer with that path, vim-style, seeded with the
+// language's file template (#170).
 func (m Model) OpenCLITargets(targets []cli.Target) Model {
 	if len(targets) == 0 {
 		return m
@@ -74,9 +75,9 @@ func (m Model) OpenStdinBuffer(text string) Model {
 	return m
 }
 
-// openMissing lands a nonexistent path in the active editor pane as an empty
-// unsaved buffer — the CLI-only sibling of openInTab, which requires the file
-// to be readable.
+// openMissing lands a nonexistent path in the active editor pane as an
+// unsaved buffer (template-seeded, see editor.NewFile) — the CLI-only sibling
+// of openInTab, which requires the file to be readable.
 func (m Model) openMissing(path string) Model {
 	path = canonicalPath(path)
 	key := m.activeEditorKey()

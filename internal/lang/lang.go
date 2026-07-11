@@ -3,9 +3,10 @@
 // it, an optional Tree-sitter grammar for highlighting, an optional LSP server
 // spec, and an optional toolchain detector (Roadmap 0101).
 //
-// It is a leaf package — pure Go, no CGo, no Tree-sitter import — so both the
-// highlight engine (internal/highlight) and the LSP subsystem (internal/lsp) can
-// depend on it without a cycle. Per-language plugins (plugins/languages/*)
+// It is a leaf package — pure Go, no CGo, no Tree-sitter import; its only IKE
+// dependency is the equally leaf internal/config (template overrides, see
+// template.go) — so both the highlight engine (internal/highlight) and the LSP
+// subsystem (internal/lsp) can depend on it without a cycle. Per-language plugins (plugins/languages/*)
 // populate it from their init() via Register, exactly like registry.Register and
 // config.Register elsewhere in the codebase.
 package lang
@@ -46,6 +47,12 @@ type Language struct {
 	// e.g. ":" for Python or "{" for brace languages. Empty means the editor
 	// falls back to plain copy-indent.
 	IndentAfter []string
+
+	// Template is the initial content seeded into newly created files of this
+	// language (#170), with ${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}
+	// substituted — see TemplateFor. Empty means new files start empty. Users
+	// override it per language via `[lang.<id>] template` in the config.
+	Template string
 }
 
 var (

@@ -21,6 +21,7 @@ import (
 	"ike/internal/editor/viewport"
 	"ike/internal/highlight"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/watch"
@@ -279,11 +280,14 @@ func (m *Model) Load(path string) error {
 }
 
 // NewFile points the editor at a not-yet-existing path (CLI open of a missing
-// file, Roadmap 0270 — vim-style): an empty, unmodified buffer whose first :w
-// creates the file on disk. Everything else resets exactly like Load.
+// file, Roadmap 0270; `:e` on a new path — vim-style): an unmodified buffer
+// whose first :w creates the file on disk. The buffer is seeded with the
+// path's language template when one is registered (#170) but stays clean —
+// discarding it by quitting loses nothing user-authored. Everything else
+// resets exactly like Load.
 func (m *Model) NewFile(path string) {
 	m.path = path
-	m.buf = buffer.FromString("")
+	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal

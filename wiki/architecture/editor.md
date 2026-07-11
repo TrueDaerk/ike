@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-11T15:30:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # Editor
@@ -180,6 +180,10 @@ The grammar is `[range] name[!] [args]`:
   line.
 - **Entering `:` from Visual** pre-fills `'<,'>` and records the selection bounds,
   matching vim; those bounds back the `'<` / `'>` addresses.
+- **`:e <path>`** reloads an existing file in place; a **nonexistent** path
+  opens vim-style as an unsaved buffer seeded with the path's
+  [language template](./languages.md#file-templates-170) (#170) — clean until
+  edited, so `:q` discards it and the first `:w` creates the file.
 - **Errors:** unknown names and unresolvable addresses (missing selection,
   pattern not found) surface a transient `E:` message on the command-line row
   (`m.cmdMsg`), cleared by the next normal-mode key. `:g` / `:v` (global) parse
