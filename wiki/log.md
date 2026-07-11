@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Workspace edits (rename/format/code actions) apply once per document, not
+  once per view (#366): `FormatEditsMsg` now goes through exactly one view of
+  a shared document; per-view routing hit the aliased buffer N times when the
+  file was open in a second tab/split. See [lsp](/architecture/lsp.md).
+
 - Rename no longer applies edits twice (#364): `WorkspaceEdit.AllChanges`
   prefers `documentChanges` over `changes` per spec instead of merging both —
   pylsp sends the same edits in both fields, corrupting the buffer
