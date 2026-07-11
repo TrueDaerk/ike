@@ -94,6 +94,10 @@ var jetbrainsRows = []row{
 	// above). f1 — the macOS JetBrains quick-doc key — is taken by the
 	// cheatsheet.
 	{"ctrl+q", "lsp.hover", "Quick documentation", Editor, "LSP (0100)"},
+	// JetBrains next/previous highlighted error (#369). f2 and shift+f2 are
+	// both delivered (shift+fN carries its modifier in the CSI parameter).
+	{"f2", "lsp.nextDiagnostic", "Next diagnostic", Editor, "LSP (#369)"},
+	{"shift+f2", "lsp.prevDiagnostic", "Previous diagnostic", Editor, "LSP (#369)"},
 	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
 	// variant keys off the active visual selection inside lsp.formatRange.
 	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "LSP (0100)"},

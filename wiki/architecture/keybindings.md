@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T14:30:00Z
+timestamp: 2026-07-11T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -156,7 +156,11 @@ editor focused, `file.rename` everywhere else (the Editor row shadows the
 Global one). Quick documentation (`lsp.hover`, #378) binds `ctrl+q` — the
 JetBrains Windows/Linux quick-doc chord, delivered everywhere because raw mode
 disables XON flow control — plus the `space k` / `ctrl+k k` leader path
-(vim's K keyword lookup).
+(vim's K keyword lookup). Diagnostic navigation (#369) binds `f2` /
+`shift+f2` — the JetBrains next/previous-highlighted-error keys, both
+delivered — to `lsp.nextDiagnostic` / `lsp.prevDiagnostic`, which walk the
+focused document's cached diagnostics in document order (wrapping) and toast
+the message.
 
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
@@ -337,6 +341,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
+| `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
+| `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `menu.open` | `f10` | delivered | `—` | live |

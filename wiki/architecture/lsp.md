@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T16:00:00Z
+timestamp: 2026-07-11T18:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -88,6 +88,17 @@ block is syntax-highlighted through the language registry (`HighlightFenced`,
 fence tag resolved as language id then extension; an unresolvable tag falls
 back to an accent tint so the signature still reads as code), and a thematic
 break (`---`) draws as a horizontal rule sized to the popup content.
+
+**Diagnostic navigation (#369).** `lsp.nextDiagnostic` / `lsp.prevDiagnostic`
+(default `f2` / `shift+f2`, JetBrains' next/previous-highlighted-error keys)
+step the cursor through the focused document's diagnostics. No server
+round-trip: the editor already caches the set (`m.diags`), so the commands are
+editor actions (`next_diagnostic` / `prev_diagnostic`, registered by the
+editor plugin). The walk is document-ordered (not severity-ordered — repeated
+presses stay a monotone sweep through the file) and wraps around either end;
+each jump lands on the diagnostic's start position and raises a toast with
+the severity label and the message's first line ("error: undefined: foo",
+"(wrapped)" appended on wrap-around). No diagnostics → info toast.
 
 **Request errors surface (#372).** Every user-initiated request (hover,
 definition, references, formatting, code actions — rename already had its own

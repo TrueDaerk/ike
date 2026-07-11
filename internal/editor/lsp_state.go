@@ -2,10 +2,12 @@ package editor
 
 import (
 	"image/color"
+	"sort"
 	"strconv"
 	"strings"
 	"unicode"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
@@ -113,6 +115,66 @@ func diagCovers(d ilsp.Diagnostic, line, col int) bool {
 		endCol = startCol + 1 // zero-width: mark one cell
 	}
 	return col >= startCol && col < endCol
+}
+
+// diagnosticJump moves the cursor to the next (forward) or previous diagnostic
+// in document order, wrapping around the file (#369). Document order — not
+// severity order — keeps repeated presses a monotone walk through the file;
+// the severity is surfaced in the toast instead. Returns the toast command
+// with the diagnostic's message, or a "no diagnostics" notice.
+func (m *Model) diagnosticJump(forward bool) tea.Cmd {
+	if len(m.diags) == 0 {
+		return notice("no diagnostics in this file")
+	}
+	sorted := make([]ilsp.Diagnostic, len(m.diags))
+	copy(sorted, m.diags)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].Range.Start.Before(sorted[j].Range.Start)
+	})
+	// Strictly past the cursor in the walk direction, so a press while
+	// standing on a diagnostic's start moves on; falling off either end
+	// wraps to the other.
+	pick, found := sorted[0], false
+	if forward {
+		for _, d := range sorted {
+			if m.cursor.Before(d.Range.Start) {
+				pick, found = d, true
+				break
+			}
+		}
+	} else {
+		pick = sorted[len(sorted)-1]
+		for i := len(sorted) - 1; i >= 0; i-- {
+			if sorted[i].Range.Start.Before(m.cursor) {
+				pick, found = sorted[i], true
+				break
+			}
+		}
+	}
+	wrapped := ""
+	if !found {
+		wrapped = " (wrapped)"
+	}
+	m.SetCursor(pick.Range.Start.Line, pick.Range.Start.Col)
+	msg := pick.Message
+	if i := strings.IndexByte(msg, '\n'); i >= 0 {
+		msg = msg[:i]
+	}
+	return notice(severityLabel(pick.Severity) + ": " + msg + wrapped)
+}
+
+// severityLabel names an LSP severity for the diagnostic-jump toast;
+// unspecified severity is treated as an error, matching the gutter.
+func severityLabel(sev int) string {
+	switch sev {
+	case 2:
+		return "warning"
+	case 3:
+		return "info"
+	case 4:
+		return "hint"
+	}
+	return "error"
 }
 
 // DiagnosticCounts returns the number of error- and warning-severity diagnostics,

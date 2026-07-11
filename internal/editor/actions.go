@@ -417,6 +417,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		cmd := m.commentBlock()
 		m.scroll()
 		return m, cmd
+	case "next_diagnostic", "prev_diagnostic":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		cmd := m.diagnosticJump(action == "next_diagnostic")
+		return m, cmd
 	}
 	m.scroll()
 	return m, nil

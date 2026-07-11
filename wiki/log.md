@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Diagnostic navigation: `lsp.nextDiagnostic` / `lsp.prevDiagnostic` (f2 /
+  shift+f2, JetBrains parity) step the cursor through the focused document's
+  diagnostics in document order with wrap-around, toasting the message (#369).
+  See [LSP](/architecture/lsp.md) and
+  [Keybindings](/architecture/keybindings.md).
+
 - New built-in theme `dracula` (official Dracula spec), AA-contrast checked
   (#385). See [Themes](/architecture/themes.md).
 

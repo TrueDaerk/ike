@@ -59,6 +59,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
+			// Diagnostic navigation (#369) carries lsp.* ids — it steps through
+			// the LSP diagnostics — but lives here because the editor already
+			// caches the set; no server round-trip is involved.
+			action("lsp.nextDiagnostic", "Next Diagnostic", "next_diagnostic", ""),
+			action("lsp.prevDiagnostic", "Previous Diagnostic", "prev_diagnostic", ""),
 		},
 	}
 }
