@@ -315,8 +315,10 @@ func TestRenameDecodesBothWorkspaceEditShapes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Both wire shapes decode, but they are alternative encodings: when the
+	// server populates both, documentChanges wins and changes is ignored (#364).
 	all := we.AllChanges()
-	if len(all) != 2 || len(all["file:///a.go"]) != 1 || len(all["file:///b.go"]) != 1 {
+	if len(all) != 1 || len(all["file:///b.go"]) != 1 {
 		t.Fatalf("AllChanges = %+v", all)
 	}
 }

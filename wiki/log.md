@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Rename no longer applies edits twice (#364): `WorkspaceEdit.AllChanges`
+  prefers `documentChanges` over `changes` per spec instead of merging both —
+  pylsp sends the same edits in both fields, corrupting the buffer
+  (`z` → `match1` became `match1atch1`). See [lsp](/architecture/lsp.md).
+
 - `readStdin` folded back into `cmd/ike/main.go` (#362) so the single-file
   invocation `go run cmd/ike/main.go` compiles again; `cmd/ike/stdin.go`
   deleted. See [foundation](/architecture/foundation.md).

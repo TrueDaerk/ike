@@ -293,17 +293,23 @@ type TextDocumentEdit struct {
 }
 
 // AllChanges flattens a WorkspaceEdit into one uri -> edits map, whichever
-// shape the server chose.
+// shape the server chose. Per the spec the two fields are alternative
+// encodings: when documentChanges is present it wins and changes is ignored —
+// some servers (pylsp) send the same edits in both, and merging them applied
+// every rename twice (#364).
 func (w WorkspaceEdit) AllChanges() map[string][]TextEdit {
 	out := map[string][]TextEdit{}
-	for uri, edits := range w.Changes {
-		out[uri] = append(out[uri], edits...)
-	}
 	for _, dc := range w.DocumentChanges {
 		if dc.TextDocument.URI == "" || len(dc.Edits) == 0 {
 			continue
 		}
 		out[dc.TextDocument.URI] = append(out[dc.TextDocument.URI], dc.Edits...)
+	}
+	if len(out) > 0 {
+		return out
+	}
+	for uri, edits := range w.Changes {
+		out[uri] = append(out[uri], edits...)
 	}
 	return out
 }
