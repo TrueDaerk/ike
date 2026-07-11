@@ -355,3 +355,4 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
 | `vcs.revertFile` | `cmd+shift+t` | fragile | `—` | blocked: VCS integration (idea #28) |
 | `vcs.updateProject` | `cmd+t` | fragile | `—` | blocked: VCS integration (idea #28) |
+| `view.zenMode` | `cmd+k shift+z` | fragile | `palette` | live via palette |

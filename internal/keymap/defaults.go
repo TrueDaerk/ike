@@ -130,6 +130,7 @@ var jetbrainsRows = []row{
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)"},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)"},
 	{"cmd+k z", "pane.maximize", "Maximize pane", Global, "Zen & maximize (#358)"},
+	{"cmd+k shift+z", "view.zenMode", "Zen mode", Global, "Zen & maximize (#359)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	{"cmd+k shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
 	{"cmd+k shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},

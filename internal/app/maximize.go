@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"ike/internal/host"
 	"ike/internal/layout"
 )
 
@@ -17,10 +18,12 @@ import (
 
 // toggleMaximize flips the zoom: zoomed → restore the full layout; unzoomed →
 // zoom the focused pane. Zooming records the tree's leaf signature so layout()
-// can detect structural changes without per-callsite guards.
+// can detect structural changes without per-callsite guards. Unzooming also
+// leaves zen mode — zen without a zoom would be a bare chrome-less layout.
 func (m *Model) toggleMaximize() {
 	if m.zoomed != "" {
 		m.zoomed = ""
+		m.zen = false
 		m.layout()
 		return
 	}
@@ -45,9 +48,36 @@ func (m *Model) zoomActive() bool {
 	}
 	if !m.panes.Has(m.zoomed) || leavesSignature(m.tree) != m.zoomSig {
 		m.zoomed = ""
+		m.zen = false
 		return false
 	}
 	return true
+}
+
+// toggleZen flips zen mode (#359): the active editor maximized plus the tab
+// bar and status line hidden — pure text, JetBrains distraction-free. Leaving
+// zen restores the chrome; the zoom stays only when that same editor was
+// already manually zoomed before zen (else the full layout returns).
+func (m *Model) toggleZen() {
+	if m.zen {
+		m.zen = false
+		if !m.zenKeepZoom {
+			m.zoomed = ""
+		}
+		m.layout()
+		return
+	}
+	key := m.activeEditorKey()
+	if key == "" {
+		m.host.Notify(host.Info, "zen mode needs an editor")
+		return
+	}
+	m.setFocus(key)
+	m.zenKeepZoom = m.zoomed == key
+	m.zen = true
+	m.zoomed = key
+	m.zoomSig = leavesSignature(m.tree)
+	m.layout()
 }
 
 // leavesSignature renders the tree's leaf set order-independently, so a

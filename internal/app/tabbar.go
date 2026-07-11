@@ -23,6 +23,10 @@ const tabEllipsis = "…"
 // tabBar returns the rendered tab bar for an editor pane fitting width cells,
 // and whether the bar (rather than the plain title) should be shown.
 func (m Model) tabBar(inst *pane.Instance, width int) (string, bool) {
+	if m.zen {
+		// Zen (#359): no tab bar; the plain single-document title renders.
+		return "", false
+	}
 	if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
 		return "", false
 	}

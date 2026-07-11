@@ -77,6 +77,7 @@ var reachableAlternatives = map[string]string{
 	"editor.splitViewDown":    "palette",
 	"editor.pasteFromHistory": "palette",
 	"pane.maximize":           "palette",
+	"view.zenMode":            "palette",
 	"explorer.undo":           "palette",
 	"explorer.redo":           "palette",
 	"explorer.reveal":         "palette",
