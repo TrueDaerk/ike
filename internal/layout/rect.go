@@ -69,6 +69,10 @@ const (
 	ZoneRight
 	ZoneTop
 	ZoneBottom
+	// ZoneCenter is the interior merge zone (#318): dropping there joins the
+	// target's tab list instead of splitting or relocating. Only the
+	// five-zone resolver (DropZoneWithCenter) ever returns it.
+	ZoneCenter
 )
 
 // DropZone resolves which edge of rect cell (x,y) is nearest, picking the
@@ -92,6 +96,26 @@ func DropZone(r Rect, x, y int) Zone {
 		return ZoneTop
 	}
 	return ZoneBottom
+}
+
+// CenterBand is the fraction of a pane's span on each side forming the edge
+// zones; a point inside the remaining interior on both axes falls in
+// ZoneCenter (#318).
+const CenterBand = 0.30
+
+// DropZoneWithCenter is the five-zone variant of DropZone (#318): the outer
+// CenterBand of either axis resolves to the nearest edge exactly like
+// DropZone; the interior resolves to ZoneCenter.
+func DropZoneWithCenter(r Rect, x, y int) Zone {
+	if r.W <= 0 || r.H <= 0 {
+		return ZoneRight
+	}
+	fx := (float64(x-r.X) + 0.5) / float64(r.W)
+	fy := (float64(y-r.Y) + 0.5) / float64(r.H)
+	if fx > CenterBand && fx < 1-CenterBand && fy > CenterBand && fy < 1-CenterBand {
+		return ZoneCenter
+	}
+	return DropZone(r, x, y)
 }
 
 func min2(a, b float64) float64 {
