@@ -173,7 +173,10 @@ Both requests are capability-gated (`documentFormattingProvider` /
 formatting, so the range command is a graceful no-op there.
 
 **Rename (#6).** `lsp.rename` runs `prepareRename` first (when the server
-offers it): a rejected position toasts "cannot rename here", an accepted one
+offers it): a server without the rename capability at all toasts "language
+server does not support rename" (`manager.ErrRenameUnsupported`, #426 —
+intelephense gates rename behind its paid licence), a rejected position
+toasts "cannot rename here", an accepted one
 opens an input prompt (`internal/app/lsprename.go`) prefilled with the ranged
 symbol text. The prompt msg carries a bridge-built `Apply` continuation, so
 the manager stays unreachable from the app. Confirming sends

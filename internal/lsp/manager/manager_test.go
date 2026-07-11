@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -37,6 +38,9 @@ type fakeOpts struct {
 	// noCallHierarchy withholds the callHierarchyProvider capability, so the
 	// manager's gate is observable (#173).
 	noCallHierarchy bool
+	// noRename withholds the renameProvider capability (intelephense without a
+	// licence does this), so the ErrRenameUnsupported gate is observable (#426).
+	noRename bool
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -51,6 +55,15 @@ func callHierarchyCap(opts fakeOpts) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(`true`)
+}
+
+// renameCap is the rename capability the fake advertises unless the options
+// withhold it.
+func renameCap(opts fakeOpts) json.RawMessage {
+	if opts.noRename {
+		return json.RawMessage(`false`)
+	}
+	return json.RawMessage(`{"prepareProvider":true}`)
 }
 
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
@@ -92,7 +105,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 
 				DocumentFormattingProvider:      json.RawMessage(`true`),
 				DocumentRangeFormattingProvider: json.RawMessage(`true`),
-				RenameProvider:                  json.RawMessage(`{"prepareProvider":true}`),
+				RenameProvider:                  renameCap(opts),
 				CodeActionProvider:              json.RawMessage(`true`),
 				SignatureHelpProvider:           &protocol.SignatureHelpOptions{TriggerCharacters: []string{"(", ","}},
 				SemanticTokensProvider: &protocol.SemanticTokensOptions{
@@ -474,6 +487,27 @@ func TestManagerPrepareRename(t *testing.T) {
 	}
 	if _, ok, _ := m.PrepareRename(context.Background(), path, buffer.Position{Line: 9, Col: 0}); ok {
 		t.Error("rejected position should report ok=false")
+	}
+}
+
+// TestManagerPrepareRenameUnsupported guards #426: a server without the rename
+// capability (intelephense free) reports ErrRenameUnsupported, distinct from a
+// rejected position, so the UI can say the feature is missing.
+func TestManagerPrepareRenameUnsupported(t *testing.T) {
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, noRename: true}), Callbacks{})
+	defer m.Shutdown()
+
+	path := filepath.Join(t.TempDir(), "main.go")
+	if err := m.Open(path, "go", "abcdef"); err != nil {
+		t.Fatal(err)
+	}
+	_, ok, err := m.PrepareRename(context.Background(), path, buffer.Position{Line: 0, Col: 1})
+	if ok {
+		t.Error("unsupported rename must not report ok")
+	}
+	if !errors.Is(err, ErrRenameUnsupported) {
+		t.Fatalf("err = %v, want ErrRenameUnsupported", err)
 	}
 }
 

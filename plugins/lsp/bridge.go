@@ -483,6 +483,10 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 	pos := buffer.Position{Line: line, Col: col}
 	go func() {
 		placeholder, ok, err := mgr.PrepareRename(context.Background(), path, pos)
+		if errors.Is(err, manager.ErrRenameUnsupported) {
+			h.Send(ilsp.ServerStatusMsg{Text: "language server does not support rename", Kind: ilsp.ServerEventWarn})
+			return
+		}
 		if err != nil || !ok {
 			h.Send(ilsp.ServerStatusMsg{Text: "cannot rename here", Kind: ilsp.ServerEventWarn})
 			return
