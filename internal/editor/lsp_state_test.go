@@ -160,6 +160,39 @@ func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
 	}
 }
 
+// TestCompletionAcceptSigilPrefix guards #427: a completion whose insert text
+// carries a sigil the identifier scan does not cover (PHP's "$") must replace
+// the sigil too — "$he" completed to "$hello" is "$hello", not "$$hello".
+func TestCompletionAcceptSigilPrefix(t *testing.T) {
+	m, _ := loaded(t, "echo $he\n")
+	m = insertModeAt(m, 0, 8) // after "$he"
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 8, Items: []ilsp.CompletionItem{
+		{Label: "$hello", InsertText: "$hello"},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "echo $hello" {
+		t.Fatalf("after accept line = %q, want echo $hello", got)
+	}
+}
+
+// TestCompletionAcceptUnrelatedPunctuationStays ensures the sigil widening
+// stops at punctuation the insert text does not start with: completing "he"
+// after a dot must keep the dot.
+func TestCompletionAcceptUnrelatedPunctuationStays(t *testing.T) {
+	m, _ := loaded(t, "obj.he\n")
+	m = insertModeAt(m, 0, 6)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 6, Items: []ilsp.CompletionItem{
+		{Label: "hello", InsertText: "hello"},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "obj.hello" {
+		t.Fatalf("after accept line = %q, want obj.hello", got)
+	}
+}
+
 func TestCompletionEscapeCloses(t *testing.T) {
 	m, _ := loaded(t, "x.\n")
 	m = insertModeAt(m, 0, 2)
