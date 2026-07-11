@@ -750,6 +750,14 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 		if c, ok := m.reg.Command(res.Command); ok {
 			return c.Run(m.host), true
 		}
+		// A documented blocked default (0081/20 ledger): consume the chord and
+		// say why it does nothing — a silent no-op is indistinguishable from a
+		// typo'd binding (#267). Unregistered commands outside the ledger keep
+		// falling through to the legacy dispatch.
+		if reason, ok := keymap.BlockedReason(res.Command); ok {
+			m.host.Notify(host.Info, res.Command+" is not available yet — "+reason)
+			return nil, true
+		}
 	default:
 		m.whichKey = nil
 	}
