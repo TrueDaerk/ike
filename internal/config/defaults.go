@@ -1,5 +1,7 @@
 package config
 
+import "ike/internal/largefile"
+
 // defaults.go constructs the lowest-precedence layer in code, so IKE works with
 // zero config files present. Slot maps are initialised non-nil and empty so
 // higher layers (and extensions) merge into them by key rather than replacing a
@@ -63,8 +65,10 @@ func defaults() *Config {
 			MinSeverity:    "info",
 		},
 		Files: Files{
-			Watch:      true,
-			AutoReload: "clean",
+			Watch:          true,
+			AutoReload:     "clean",
+			LargeFileKB:    largefile.DefaultMaxKB,
+			LargeFileLines: largefile.DefaultMaxLines,
 		},
 		UI: UI{
 			MenuBar: true,

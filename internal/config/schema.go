@@ -57,9 +57,14 @@ type Backup struct {
 // Files holds external-file-change behaviour (Roadmap 0140). Watch enables the
 // fsnotify project watcher; AutoReload ("clean" or "never") controls whether a
 // clean editor buffer reloads in place when its file changes on disk.
+// LargeFileKB and LargeFileLines are the large-file thresholds (#149): a file
+// crossing either at load/reload is flagged and code insight (highlighting,
+// LSP, watcher content hashing) degrades; 0 disables that guard.
 type Files struct {
-	Watch      bool   `toml:"watch"`
-	AutoReload string `toml:"auto_reload"`
+	Watch          bool   `toml:"watch"`
+	AutoReload     string `toml:"auto_reload"`
+	LargeFileKB    int    `toml:"large_file_kb"`
+	LargeFileLines int    `toml:"large_file_lines"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).

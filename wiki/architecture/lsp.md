@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-12T00:30:00Z
+timestamp: 2026-07-12T15:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -69,7 +69,17 @@ full-sync server gets the whole document, a SyncNone server nothing. Range
 positions cross into the negotiated encoding through `protocol/convert.go`
 only; per-document versions stay monotonic and only advance when a
 notification is actually sent (an unchanged text sends nothing). A file-open
-hook drives `didOpen`, save drives `didSave`, close drives `didClose`. Files
+hook drives `didOpen`, save drives `didSave`, close drives `didClose`. The
+`didOpen` is gated by large-file mode (#149): a file over the
+`files.large_file_kb` / `files.large_file_lines` thresholds
+(`largeFileGated`, policy in `internal/largefile`) is never opened with the
+server — servers choke on huge documents too — so diagnostics and completion
+are silently absent, and the editor's change events ship no text (they carry
+`Large` instead; the bridge stops syncing and closes the document server-side,
+covering a reload that grows an already-open file past the threshold). The
+palette command
+`editor.forceCodeInsight` sets a per-path override and re-fires the file-open
+hook, which then didOpens normally. Files
 already open at startup restore straight into editors (bypassing the interactive
 open path), so the app also fires the file-open hook for each restored file from
 `Model.Init` — once per file even when it is shared across tabs — so a

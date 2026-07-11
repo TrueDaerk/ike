@@ -15,6 +15,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
@@ -100,6 +101,17 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	case host.EditorChange:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.setSel(ev)
+		if ev.Large {
+			// Large-file mode (#149): the event carries no text on purpose.
+			// The document is usually not open server-side (the didOpen gate),
+			// but a reload can grow an open document past the threshold —
+			// close it instead of syncing emptiness; unopened paths no-op.
+			if mgr := b.manager(); mgr != nil {
+				path := ev.Path
+				go func() { _ = mgr.Close(path) }()
+			}
+			return
+		}
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
 			_ = b.manager().Change(ev.Path, ev.Text)
 			b.maybeSignatureHelp(ev)
@@ -137,6 +149,14 @@ func (b *bridge) fileOpened(h host.API, path string) {
 	if err != nil {
 		return
 	}
+	if largeFileGated(h.Config(), path, data) {
+		// Large-file mode (#149): servers choke on huge documents too, so the
+		// didOpen never happens — diagnostics and completion are silently
+		// absent. Change events for the unopened document no-op in the
+		// manager. editor.forceCodeInsight re-fires this hook with the
+		// override set.
+		return
+	}
 	mgr := b.manager()
 	go func() {
 		err := mgr.Open(path, l.ID, string(data))
@@ -151,6 +171,21 @@ func (b *bridge) fileOpened(h host.API, path string) {
 		b.requestSemanticTokens(path)
 		b.requestInlayHints(path)
 	}()
+}
+
+// largeFileGated reports whether path's document crosses the large-file
+// thresholds (#149) without an active per-path override — the didOpen gate.
+// It decides from the just-read bytes, mirroring the editor's Load-time flag.
+func largeFileGated(cfg host.Config, path string, data []byte) bool {
+	if largefile.Forced(path) {
+		return false
+	}
+	var get largefile.Getter
+	if cfg != nil {
+		get = cfg.Get
+	}
+	lines := strings.Count(string(data), "\n") + 1
+	return largefile.LimitsFrom(get).Exceeded(int64(len(data)), lines)
 }
 
 func (b *bridge) fileSaved(h host.API, path string) {

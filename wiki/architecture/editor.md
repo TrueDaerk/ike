@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-12T15:00:00Z
 ---
 
 # Editor
@@ -351,11 +351,11 @@ Two editor panes showing the same file are two **views of one document**
   (one text, one undo stack), while cursor, scroll, mode, and registers stay
   per pane. Session restore deduplicates the same way.
 - After an edit, undo, save, or reload in one view, the emitter adapter (which
-  knows its pane key) broadcasts `editor.SyncMsg{Path, FromKey, Dirty, Stale}`
-  through `host.Send`; the root model routes it to every *other* pane showing
-  the path. Receivers clamp cursor/scroll into the mutated buffer, mirror the
-  dirty/stale flags, bump `docVersion` and reparse — no text is copied, the
-  buffer is shared. `applySync` never re-emits, so syncs cannot ping-pong.
+  knows its pane key) broadcasts `editor.SyncMsg{Path, FromKey, Dirty, Stale,
+  Large}` through `host.Send`; the root model routes it to every *other* pane
+  showing the path. Receivers clamp cursor/scroll into the mutated buffer,
+  mirror the document flags, bump `docVersion` and reparse — no text is copied,
+  the buffer is shared. `applySync` never re-emits, so syncs cannot ping-pong.
 - External reload mutates the document **in place** (`Buffer.ReplaceAll`,
   `History.Reset`) so the aliases survive; async per-path messages (highlight
   spans, LSP results, watch events) route to **all** panes owning the path
@@ -371,6 +371,32 @@ Two editor panes showing the same file are two **views of one document**
   (JetBrains). A file-less editor is a no-op with a toast. Layout and session
   persistence need nothing new: the split is an ordinary leaf and restore
   re-shares by path.
+
+## Large-file mode (#149)
+
+A document crossing `files.large_file_kb` (default 1024) or
+`files.large_file_lines` (default 100000) at `Load`/reload is flagged
+(`Model.largeFile`, a document property like dirty/stale: copied on
+`ShareDocumentWith`, mirrored via `SyncMsg.Large`). While flagged and not
+overridden (`InsightOff`), code insight degrades deliberately instead of
+stalling:
+
+- `parseCmd` returns nil — no Tree-sitter parse ever runs (the CGo parse cost
+  scales with file size), so typing stays flat.
+- Change events ship no `Text` payload — the per-keystroke `buf.String()`
+  re-join is skipped; the LSP bridge's `didOpen` gate means nothing consumes it.
+- The LSP bridge skips `didOpen` (see `/architecture/lsp.md`); diagnostics and
+  completion are silently absent.
+- The watcher's poll fallback never content-hashes the file (mtime+size alone
+  decide, `watch.Service.SetHashLimit`).
+
+UX: a one-time warn toast on open, plus a `[large file]` status-line segment.
+The palette command `editor.forceCodeInsight` overrides per document: it
+records the path in the shared `internal/largefile` override set, reparses
+every view, and re-fires the file-opened hook so the LSP bridge didOpens. The
+policy (thresholds + override set) lives in `internal/largefile`, shared by
+editor, LSP bridge, and app. Replacing the line-slice store (piece table) is
+explicitly out of scope — this mode is the cheap 90%.
 
 ## Config
 

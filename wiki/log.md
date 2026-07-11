@@ -2,6 +2,16 @@
 
 ## 2026-07-12
 
+- Large-file mode (#149): files over `files.large_file_kb` (default 1024) or
+  `files.large_file_lines` (default 100000) degrade gracefully instead of
+  stalling — highlighting off, LSP `didOpen` skipped, change events without
+  text, watcher poll never content-hashes — with a warn toast, a
+  `[large file]` status segment, and the `editor.forceCodeInsight` palette
+  override per document (policy shared via new `internal/largefile`). See
+  [editor](/architecture/editor.md),
+  [highlighting](/architecture/highlighting.md),
+  [lsp](/architecture/lsp.md).
+
 - Sticky scroll (#168): the header lines of the declarations enclosing the
   first visible line pin as the pane's top rows (JetBrains-style), collected
   by the same Tree-sitter parse as the highlight spans via new

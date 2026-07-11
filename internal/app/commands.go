@@ -33,6 +33,11 @@ type TabMoveMsg struct{ Delta int }
 // cursor from the closed-tab ring. Dispatched by editor.tab.reopenClosed.
 type TabReopenMsg struct{}
 
+// ForceCodeInsightMsg asks the root model to lift the large-file degradation
+// (#149) for the focused document: highlighting reparses and the LSP bridge
+// didOpens despite the size. Dispatched by editor.forceCodeInsight.
+type ForceCodeInsightMsg struct{}
+
 // ShowKeymapHelpMsg asks the root model to open the keymap cheatsheet overlay,
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
 type ShowKeymapHelpMsg struct{}
@@ -212,6 +217,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.splitViewRight", "Split View Right", SplitViewMsg{Zone: layout.ZoneRight}),
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
 			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
+			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
 		), scratchCommands()...),

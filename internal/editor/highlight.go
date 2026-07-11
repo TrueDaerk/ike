@@ -28,9 +28,11 @@ func (m Model) maybeReparse(beforeVersion int, cmd tea.Cmd) (Model, tea.Cmd) {
 func (m *Model) Reparse() tea.Cmd { return m.parseCmd() }
 
 // parseCmd snapshots the buffer and version and returns a command that parses on
-// a goroutine, yielding a SpansMsg. It returns nil when the file has no grammar.
+// a goroutine, yielding a SpansMsg. It returns nil when the file has no grammar,
+// or when the document is flagged large (#149) — the CGo parse cost scales with
+// file size, so skipping it is the single biggest degradation win.
 func (m *Model) parseCmd() tea.Cmd {
-	if !highlight.Supported(m.path) {
+	if m.InsightOff() || !highlight.Supported(m.path) {
 		return nil
 	}
 	path := m.path
