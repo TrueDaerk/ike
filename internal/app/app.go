@@ -146,6 +146,10 @@ type Model struct {
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
 	switchPending string
+
+	// closePending is the close request awaiting the unsaved-changes guard
+	// (#259); nil when no guard is open.
+	closePending *pendingClose
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -1232,8 +1236,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case CloseTabMsg:
 		// editor.closeTab (cmd+w / palette): close the focused editor pane's
 		// active tab, the pane itself on its last tab (#156); a no-op on the
-		// explorer / last leaf, matching the hardcoded ctrl+w.
-		m.CloseFocused()
+		// explorer / last leaf, matching the hardcoded ctrl+w. Dirty buffers
+		// open the unsaved-changes guard first (#259).
+		m.guardedCloseFocused()
 		return m, nil
 
 	case TabStepMsg:
@@ -1631,8 +1636,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case editor.CloseMsg:
-		// :q / :wq closes the focused editor leaf, mirroring CloseFocused.
-		m.closeFocused()
+		// :q / :wq closes the focused editor leaf, mirroring CloseFocused;
+		// :q! skips the unsaved-changes guard, vim-style (#259).
+		if msg.Force {
+			m.closeFocused()
+		} else {
+			m.guardedCloseFocused()
+		}
 		return m, nil
 
 	case backupTickMsg:
@@ -1692,6 +1702,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// keyboard the same way: s / d / esc answer it.
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
+		}
+		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
+		if m.closePromptOpen() {
+			return m.updateClosePrompt(msg)
 		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by
@@ -1806,7 +1820,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+w":
 			// Close the focused editor pane (no-op on the explorer / last leaf).
 			// Roadmap 0080 owns the final keymap; this is the default binding.
-			m.CloseFocused()
+			// Dirty buffers open the unsaved-changes guard first (#259).
+			m.guardedCloseFocused()
 			return m, nil
 		}
 		return m.routeKey(msg)
@@ -2237,7 +2252,7 @@ func (m *Model) spawnEditor() string {
 // tab goes (#156), preserving today's cmd+w feel for single-tab panes. It is
 // a no-op on the explorer (a singleton) and on the last leaf, so the workspace
 // never empties and context resolution never loses its explorer.
-func (m *Model) CloseFocused() { m.closeFocused() }
+func (m *Model) CloseFocused() { m.guardedCloseFocused() }
 
 func (m *Model) closeFocused() {
 	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor && inst.TabCount() > 1 {

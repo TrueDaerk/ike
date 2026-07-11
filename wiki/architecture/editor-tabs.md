@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered document list with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, shared-documents, close]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Editor Tabs
@@ -59,10 +59,16 @@ pane.
 
 `editor.closeTab` (cmd+w, `:q`, `CloseFocused`) closes the **active tab** and
 only closes the pane when the last tab goes — single-tab panes feel exactly like
-before. A closing tab applies the same unsaved-changes guard as a pane close:
-its crash-backup snapshot (#165) is dropped unless another tab or pane still
-shows the document. Externally deleted files close their tab (the pane survives
-while other tabs remain); moved files re-path every tab that holds them.
+before. **Dirty buffers open the unsaved-changes guard first** (#259,
+`internal/app/closeguard.go`): a floating-shell prompt offers `[s]` save then
+close, `[d]` discard, `[esc]` cancel — same pattern as the project-switch
+guard. A pane close checks every tab; documents still shown by another pane
+(#142) close without a prompt (nothing is lost), `:q!` forces the close
+vim-style, and a failed save (read-only file) keeps the tab open with an
+error toast. A closing tab drops its crash-backup snapshot (#165) unless
+another tab or pane still shows the document. Externally deleted files close
+their tab (the pane survives while other tabs remain); moved files re-path
+every tab that holds them.
 
 ## Tab bar rendering (#157)
 

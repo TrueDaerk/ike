@@ -41,7 +41,10 @@ const (
 )
 
 // CloseMsg asks the root model to detach the editor (result of :q / :wq).
-type CloseMsg struct{}
+type CloseMsg struct {
+	// Force skips the app's unsaved-changes guard (":q!", #259).
+	Force bool
+}
 
 // awaiting enumerates the secondary-key states the normal-mode handler can be
 // parked in: waiting for a second 'g', a find target char, a replace char, a
