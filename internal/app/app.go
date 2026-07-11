@@ -1837,10 +1837,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch keys {
 		case "ctrl+c":
-			return m.quit()
+			// Quit routes through the unsaved-changes guard (#287) so a
+			// dirty buffer prompts instead of being dropped.
+			return m.guardedQuit()
 		case "q":
 			if m.quitKey() {
-				return m.quit()
+				return m.guardedQuit()
 			}
 		case "tab":
 			m.cycleFocus()
