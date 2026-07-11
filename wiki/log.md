@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- CLI open targets (#343, Roadmap 0270): `ike file.go:42`, `file.go:42:7` and
+  vim-style `+42 file.go` open files as tabs at startup — first target focused
+  with the cursor placed, explorer revealing it; a nonexistent path opens as
+  an unsaved buffer. Session restore still runs first; CLI files win focus.
+  Documented in [Foundation](/architecture/foundation.md); README usage updated.
+
 - Shift+Tab in insert mode dedents the whole current line one indent unit
   (#337, Roadmap 0260) — the same unit `<<` removes — wherever the cursor
   sits, inside the open insert's undo unit; plain Tab keeps inserting one

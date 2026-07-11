@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-11T10:30:00Z
 ---
 
 # Foundation Slice
@@ -34,6 +34,22 @@ root `app.Model`. The root forwards `tea.Msg` to the focused child and owns
 layout. Layout geometry itself is no longer hard-coded: the root drives a pure
 split tree (see [Pane Layout & Drag](/architecture/pane-layout.md)) that computes
 each pane's rectangle and supports mouse divider-resize and title-bar move.
+
+## CLI open targets (Roadmap 0270)
+
+`ike path[:line[:col]]... [+N path]` opens files from the command line.
+`main.go` parses argv through the pure grammar in `internal/cli` (`cli.Parse`;
+a malformed invocation prints usage and exits before any UI), then calls
+`Model.OpenCLITargets` (`internal/app/cli_open.go`) **after** construction —
+session restore already ran in `newWithHost`, so the requested files win focus
+over the restored layout. Targets open as tabs in argument order through the
+standard funnel (`openPathAt`: canonicalization, tab reuse, shared buffers);
+the first target ends focused with its 1-based line/col mapped to the editor's
+0-based cursor (out-of-range clamps), and the explorer reveals it. A path that
+does not exist on disk opens as an empty unsaved buffer with that path
+(vim-style, `editor.NewFile`); the first `:w` creates the file. `EventFileOpened`
+hooks and the initial reparse fire in `Init` (#332) like for every file already
+open at launch. A `-` stdin target parses but is deferred to #344.
 
 ## Message routing
 
