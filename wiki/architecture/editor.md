@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-11T09:30:00Z
 ---
 
 # Editor
@@ -122,6 +122,17 @@ work mid-insert too (#246), mirroring the terminal pane's macOS convention:
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
 insert session**, so it reverts the whole typed run as one unit and behaves
 identically from insert and normal mode.
+
+Smart indentation (Roadmap 0260, `indent.go`): with `editor.auto_indent` on,
+`Enter` in insert mode and `o` compute the new line's indent from the
+language's block openers (`lang.IndentAfter`, e.g. `:` for Python, `{ ( [` for
+Go/PHP) — the reference text's leading whitespace, plus one `tabText()` unit
+(honouring `use_spaces`/`tab_width`) when its trimmed form ends with an opener.
+`Enter` keys off the part of the line **left of the cursor** (a mid-line split
+indents by what stays behind); `o` uses the whole current line; `O` and
+languages without rules keep plain copy-indent. Pure text heuristic — no
+Tree-sitter — so an opener ending a trailing string literal false-positives;
+accepted for v1.
 
 Visual, V-Line and V-Block extend a selection that `View` highlights cell by
 cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and
