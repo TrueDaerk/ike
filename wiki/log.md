@@ -2,6 +2,9 @@
 
 ## 2026-07-11
 
+- New built-in theme `kanagawa` (wave variant of rebelot/kanagawa.nvim),
+  AA-contrast checked (#388). See [Themes](/architecture/themes.md).
+
 - f3/shift+f3 repeat a committed in-file search (`/`, `?`, cmd+f) like `n`/`N`
   while it is the most recent search; a new find-in-path scan reclaims them
   (#376). See [Project Search](/architecture/search.md).
