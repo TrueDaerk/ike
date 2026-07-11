@@ -122,15 +122,17 @@ func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
 	}
 }
 
-// TestSaveAllNotifiesSavedCount guards the save-all migration: SaveAllMsg
-// reports 'saved N files' as an info toast, and stays silent with nothing to
-// save.
+// TestSaveAllNotifiesSavedCount guards editor.saveAll feedback: SaveAllMsg
+// reports 'saved N files' as an info toast, and hints 'nothing to save' when
+// no buffer is dirty (0082 review, #275) — a silent chord reads as dead.
 func TestSaveAllNotifiesSavedCount(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(SaveAllMsg{})
-	if m = tm.(Model); len(m.toasts) != 0 {
-		t.Fatal("save-all with no dirty editors must not toast")
+	if m = tm.(Model); len(m.toasts) != 1 || m.toasts[0].text != "nothing to save" {
+		t.Fatalf("save-all with no dirty editors should hint 'nothing to save', toasts=%+v", m.toasts)
 	}
+	tm, _ = m.Update(toastExpireMsg{id: m.toasts[0].id})
+	m = tm.(Model)
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")

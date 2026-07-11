@@ -1300,9 +1300,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		switch n := len(cmds); {
+		case n == 0:
+			// A silent no-op is indistinguishable from a dead chord (#275).
+			m.host.Notify(host.Info, "nothing to save")
 		case n == 1:
 			m.host.Notify(host.Info, "saved 1 file")
-		case n > 1:
+		default:
 			m.host.Notify(host.Info, "saved "+strconv.Itoa(n)+" files")
 		}
 		return m, tea.Batch(cmds...)
