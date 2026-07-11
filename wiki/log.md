@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- First-start LSP onboarding (#301): a one-time dialog on the very first
+  launch (no user config yet) lists the servers with install recipes as
+  checkboxes; enter batch-installs the checked ones via `lsp.installMissing`,
+  unchecked ones persist disabled, esc skips, `lsp.onboarded = true` keeps it
+  from returning; `lsp.auto_install = false` suppresses it entirely. See
+  [LSP](/architecture/lsp.md).
+
 - Diagnostic navigation: `lsp.nextDiagnostic` / `lsp.prevDiagnostic` (f2 /
   shift+f2, JetBrains parity) step the cursor through the focused document's
   diagnostics in document order with wrap-around, toasting the message (#369).

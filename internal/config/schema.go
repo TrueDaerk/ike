@@ -115,6 +115,9 @@ type LSP struct {
 	AutoInstall bool                      `toml:"auto_install"`
 	LogLevel    string                    `toml:"log_level"`
 	Servers     map[string]map[string]any `toml:"servers"`
+	// Onboarded records that the first-start server-install dialog (#301) has
+	// had its say (answered or skipped); it is never shown again once set.
+	Onboarded bool `toml:"onboarded"`
 }
 
 // Theme selects the active palette; its contents are owned by Roadmap 0110.
