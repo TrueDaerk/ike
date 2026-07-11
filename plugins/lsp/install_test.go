@@ -37,6 +37,9 @@ func installFixture(t *testing.T, fail bool) (*bridge, *[][]string) {
 	var mu sync.Mutex
 	var runs [][]string
 	b := &bridge{inst: newInstaller()}
+	// The post-install resolution check (#370) must not depend on the host's
+	// PATH; the fixture's binary always resolves.
+	b.inst.resolve = func(command string) (string, error) { return "/fake/bin/" + command, nil }
 	b.inst.run = func(name string, args ...string) ([]byte, error) {
 		mu.Lock()
 		runs = append(runs, append([]string{name}, args...))
@@ -125,6 +128,31 @@ func TestInstallNeverRunsConcurrently(t *testing.T) {
 	<-done
 	if ran != 1 {
 		t.Fatalf("exactly one install may run, got %d", ran)
+	}
+}
+
+func TestInstallUnresolvableBinaryReportsErrorNotSuccess(t *testing.T) {
+	// #370: the recipe exits 0 but the binary lands outside PATH (go install
+	// into GOBIN). The toast must not claim success, and the automatic path
+	// must back off like after any other failure.
+	b, runs := installFixture(t, false)
+	b.inst.resolve = func(string) (string, error) { return "", errors.New("not found") }
+
+	msg := b.installLang("insttest")().(ilsp.ServerStatusMsg)
+	if msg.Kind != ilsp.ServerEventError {
+		t.Fatalf("an unresolvable binary after install must be an error event, got %#v", msg)
+	}
+	if !strings.Contains(msg.Text, "cannot be found") || !strings.Contains(msg.Text, "PATH") {
+		t.Fatalf("the toast must explain the binary is unresolvable and point at PATH, got %q", msg.Text)
+	}
+	if strings.Contains(msg.Text, "inst-ls installed") && !strings.Contains(msg.Text, "but") {
+		t.Fatalf("the toast must not read as a plain success, got %q", msg.Text)
+	}
+
+	// Backoff: no automatic re-install loop on every file open.
+	b.autoInstall("insttest", "")
+	if len(*runs) != 1 {
+		t.Fatalf("the automatic path must back off after an unresolvable install, got %v", *runs)
 	}
 }
 
