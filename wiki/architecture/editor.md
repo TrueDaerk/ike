@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-11T13:45:00Z
+timestamp: 2026-07-11T15:30:00Z
 ---
 
 # Editor
@@ -253,7 +253,14 @@ each over the shared resolver and each a single undo unit:
 comment — resolved per buffer path via `lang.Comments` — on the current line or
 every line of the visual selection, JetBrains-style (`comment.go`):
 
-- Markers land at the range's **minimal indent**; blank lines are skipped.
+- Markers land in the column of the **comment on the line above** the range
+  when there is one (consecutive toggles stay aligned), otherwise at the
+  range's **minimal indent**; a column deeper than a line's own indent clamps
+  to that indent.
+- **Blank lines are commented too** — a bare marker padded to the column — so
+  repeated cmd+7 walks across empty lines without gaps (and without breaking
+  indent-sensitive code on re-indent); uncommenting a marker-only line empties
+  it again.
 - A **mixed** range comments its uncommented lines; a fully commented range
   uncomments.
 - A single-line toggle advances the cursor one line; a selection is preserved

@@ -139,9 +139,13 @@ func (m *Model) toggleLinewiseBlock(a, z int, opener, closer string) {
 }
 
 // toggleLineComments applies one toggle to lines a..z: a fully commented range
-// uncomments, a mixed or uncommented range comments its uncommented lines at
-// the range's minimal indent. Blank lines are skipped both ways. advance moves
-// the cursor down one line afterwards (the single-line JetBrains behavior).
+// uncomments, a mixed or uncommented range comments its uncommented lines. The
+// marker column follows the comment on the line above the range when there is
+// one (JetBrains keeps consecutive cmd+7 markers aligned), otherwise the
+// range's minimal indent. Blank lines are commented too — a marker padded to
+// the column — so repeated cmd+7 walks across empty lines without gaps;
+// uncommenting a marker-only line empties it again. advance moves the cursor
+// down one line afterwards (the single-line JetBrains behavior).
 func (m *Model) toggleLineComments(a, z int, marker string, advance bool) {
 	if last := m.buf.LineCount() - 1; z > last {
 		z = last
@@ -164,7 +168,13 @@ func (m *Model) toggleLineComments(a, z int, marker string, advance bool) {
 		}
 	}
 	if !anyContent {
-		return
+		allCommented = false // a blank-only range comments; it must not no-op
+	}
+	col := minIndent
+	if !allCommented {
+		if c, ok := m.commentColAbove(a, marker); ok {
+			col = c
+		}
 	}
 
 	cur := m.cursor
@@ -172,21 +182,39 @@ func (m *Model) toggleLineComments(a, z int, marker string, advance bool) {
 		for l := a; l <= z; l++ {
 			line := m.buf.Line(l)
 			trimmed := strings.TrimLeft(line, " \t")
-			if trimmed == "" {
-				continue
-			}
 			ind := m.buf.RuneLen(l) - len([]rune(trimmed))
 			if allCommented {
+				if trimmed == "" {
+					continue
+				}
+				rest := strings.TrimPrefix(trimmed, marker)
+				if strings.TrimSpace(rest) == "" {
+					// Marker-only line (a commented blank): empty it again.
+					rec.Apply(buffer.Delete(buffer.Range{
+						Start: buffer.Position{Line: l, Col: 0},
+						End:   buffer.Position{Line: l, Col: m.buf.RuneLen(l)},
+					}))
+					continue
+				}
 				n := len([]rune(marker))
-				if strings.HasPrefix(strings.TrimPrefix(trimmed, marker), " ") {
+				if strings.HasPrefix(rest, " ") {
 					n++
 				}
 				rec.Apply(buffer.Delete(buffer.Range{
 					Start: buffer.Position{Line: l, Col: ind},
 					End:   buffer.Position{Line: l, Col: ind + n},
 				}))
+			} else if trimmed == "" {
+				rec.Apply(buffer.Edit{
+					Range: buffer.Range{Start: buffer.Position{Line: l, Col: 0}, End: buffer.Position{Line: l, Col: m.buf.RuneLen(l)}},
+					Text:  strings.Repeat(" ", col) + marker,
+				})
 			} else if !strings.HasPrefix(trimmed, marker) {
-				rec.Apply(buffer.Insert(buffer.Position{Line: l, Col: minIndent}, marker+" "))
+				at := col
+				if at > ind {
+					at = ind // never split the line's own text
+				}
+				rec.Apply(buffer.Insert(buffer.Position{Line: l, Col: at}, marker+" "))
 			}
 		}
 		if advance {
@@ -194,4 +222,18 @@ func (m *Model) toggleLineComments(a, z int, marker string, advance bool) {
 		}
 		return cur
 	})
+}
+
+// commentColAbove returns the marker column of the line-comment directly above
+// line a, so consecutive toggles keep their markers in one column.
+func (m Model) commentColAbove(a int, marker string) (int, bool) {
+	if a == 0 {
+		return 0, false
+	}
+	line := m.buf.Line(a - 1)
+	trimmed := strings.TrimLeft(line, " \t")
+	if !strings.HasPrefix(trimmed, marker) {
+		return 0, false
+	}
+	return m.buf.RuneLen(a-1) - len([]rune(trimmed)), true
 }

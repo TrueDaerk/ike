@@ -204,15 +204,63 @@ func TestCommentBlockDotRepeat(t *testing.T) {
 	}
 }
 
-func TestCommentLineSkipsBlankLines(t *testing.T) {
-	m := loadedExt(t, "ctestnb", "one\n\ntwo\n")
+// TestCommentLineCommentsBlankLines guards #428: blank lines inside the range
+// get a marker (padded to the marker column) so a commented region has no
+// gaps; uncommenting empties them again.
+func TestCommentLineCommentsBlankLines(t *testing.T) {
+	m := loadedExt(t, "ctestnb", "    one\n\n    two\n")
 	m = send(m, key('V'), key('j'), key('j'))
 	m, _ = m.runAction("comment_line")
-	if line(m, 0) != "# one" || line(m, 1) != "" || line(m, 2) != "# two" {
-		t.Fatalf("blank line must stay blank: %q", m.buf.Lines())
+	if line(m, 0) != "    # one" || line(m, 1) != "    #" || line(m, 2) != "    # two" {
+		t.Fatalf("comment with blank: %q", m.buf.Lines())
 	}
 	m, _ = m.runAction("comment_line")
-	if line(m, 0) != "one" || line(m, 1) != "" || line(m, 2) != "two" {
+	if line(m, 0) != "    one" || line(m, 1) != "" || line(m, 2) != "    two" {
 		t.Fatalf("uncomment: %q", m.buf.Lines())
+	}
+}
+
+// TestCommentLineBlankOnlyRange guards #428: toggling a blank line is no
+// longer a no-op, so repeated single-line cmd+7 (which advances the cursor)
+// walks across empty lines.
+func TestCommentLineBlankOnlyRange(t *testing.T) {
+	m := loadedExt(t, "ctestnb", "# above\n\nbelow\n")
+	m = send(m, key('j')) // onto the blank line
+	m, _ = m.runAction("comment_line")
+	if got := line(m, 1); got != "#" {
+		t.Fatalf("blank line comment: %q", got)
+	}
+	if m.cursor.Line != 2 {
+		t.Fatalf("cursor must advance, line=%d", m.cursor.Line)
+	}
+}
+
+// TestCommentLineAlignsWithCommentAbove guards #428: when the line above the
+// range is a line comment, new markers land in its column instead of the
+// range's min indent.
+func TestCommentLineAlignsWithCommentAbove(t *testing.T) {
+	m := loadedExt(t, "ctestnb", "  # first\n    second\n")
+	m = send(m, key('j'))
+	m, _ = m.runAction("comment_line")
+	if got := line(m, 1); got != "  #   second" {
+		t.Fatalf("aligned comment: %q", got)
+	}
+	// No comment above: marker falls back to the line's indent.
+	m2 := loadedExt(t, "ctestnb", "above\n    second\n")
+	m2 = send(m2, key('j'))
+	m2, _ = m2.runAction("comment_line")
+	if got := line(m2, 1); got != "    # second" {
+		t.Fatalf("indent fallback: %q", got)
+	}
+}
+
+// TestCommentLineAlignAboveClampsToText ensures a comment column deeper than
+// the line's own indent never splits the text.
+func TestCommentLineAlignAboveClampsToText(t *testing.T) {
+	m := loadedExt(t, "ctestnb", "        # deep\nshallow\n")
+	m = send(m, key('j'))
+	m, _ = m.runAction("comment_line")
+	if got := line(m, 1); got != "# shallow" {
+		t.Fatalf("clamped comment: %q", got)
 	}
 }
