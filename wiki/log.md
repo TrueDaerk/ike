@@ -2,6 +2,10 @@
 
 ## 2026-07-11
 
+- Go-to-symbol / search everywhere ranks project symbols above
+  dependency/stdlib results, exact name match on top (#377). See
+  [LSP](/architecture/lsp.md).
+
 - `lsp.hover` (quick documentation) gets a delivered default chord (#378):
   `ctrl+q` (JetBrains Windows/Linux quick doc; XON is disabled in raw mode)
   plus the `space k` / `ctrl+k k` leader path (vim's K keyword lookup). See
