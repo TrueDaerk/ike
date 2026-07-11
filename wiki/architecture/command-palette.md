@@ -67,7 +67,9 @@ Four entry points, all from a non-capturing context:
 - **`palette.recentFiles`** (default `cmd+e`, leader `m`, Navigate menu) — opens
   the centered palette locked to the recent-files mode (below).
 - **`palette.searchEverywhere`** (default `cmd+shift+a` / double-shift, leader
-  `A`) — opens the centered palette locked to the search-everywhere mode (below).
+  `A`, **`space space`** — the terminal stand-in for JetBrains' double-shift,
+  #263) — opens the centered palette locked to the search-everywhere mode
+  (below).
 
 A palette can be **locked** to a single mode (no prefix switching): the anchored
 editor finder and the go-to-file open are locked to `@`, so a typed `:` is part
@@ -143,7 +145,11 @@ ties keeping commands first; every row is retitled with its source's prefix
 glyph (`:` / `@`, match spans shifted alongside) so the kind is visible, command
 rows keep their binding chip, file rows their project-relative path. Activation
 dispatches whatever the underlying item carries (`RunCommandMsg` /
-`OpenFileMsg`). Symbols join once a workspace-symbol source exists (idea #146).
+`OpenFileMsg`). An **empty query lists the recent files first** (MRU order,
+active file excluded — the same injected source as the recent-files mode)
+followed by the command listing; a fresh session without MRU history falls
+back to the plain listing (#263). Symbols join once a workspace-symbol source
+exists (idea #146).
 
 ## Fuzzy matching
 

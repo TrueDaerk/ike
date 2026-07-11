@@ -805,6 +805,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(recent.List)
 	all := palette.NewSearchAllMode(cmd, file)
+	all.SetRecents(mru)
 	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all)
 }
 
@@ -1411,10 +1412,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ShowSearchEverywhereMsg:
-		// palette.searchEverywhere (cmd+shift+a / double-shift): one query
-		// ranked across commands and files, locked to its mode.
+		// palette.searchEverywhere (cmd+shift+a / space space): one query
+		// ranked across commands and files, locked to its mode. ActivePath
+		// lets the empty-query recents listing exclude the open file (#263).
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.SearchAllPrefix)
+		m.palette.OpenLocked(palette.Context{
+			ContextID:  m.focusContext(),
+			Root:       ".",
+			ActivePath: m.activeFilePath(),
+		}, palette.SearchAllPrefix)
 		return m, nil
 
 	case project.OpenPickerMsg:

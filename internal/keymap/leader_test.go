@@ -171,3 +171,24 @@ func TestUnboundCommandDefaults(t *testing.T) {
 		}
 	}
 }
+
+// TestDoubleSpaceOpensSearchEverywhere: space space is the terminal stand-in
+// for JetBrains' double-shift (0082 sheet 17, #263), riding the leader engine.
+func TestDoubleSpaceOpensSearchEverywhere(t *testing.T) {
+	prev := GOOS
+	GOOS = "linux"
+	defer func() { GOOS = prev }()
+
+	rows := append(Defaults(PresetJetBrains), LeaderRows("")...)
+	table := BuildTable(rows, nil, "linux")
+	r := NewResolver(table)
+	space := MustParseChord("space space").Steps[0]
+
+	if res := r.Feed(space, Explorer); res.Status != Pending {
+		t.Fatalf("first space = %+v, want Pending", res)
+	}
+	res := r.Feed(space, Explorer)
+	if res.Status != Resolved || res.Command != "palette.searchEverywhere" {
+		t.Fatalf("second space = %+v, want palette.searchEverywhere", res)
+	}
+}
