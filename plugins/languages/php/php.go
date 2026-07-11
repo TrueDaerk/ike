@@ -28,5 +28,8 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// New .php files start with the opening tag (#170). Override via
+		// `[lang.php] template`.
+		Template: "<?php\n\n",
 	})
 }

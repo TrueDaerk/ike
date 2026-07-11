@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-11T09:00:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # Language Registry
@@ -32,12 +32,14 @@ type Language struct {
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
+    Template     string     // initial content for new files (#170); "" = start empty
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
 func ByPath(path string) (Language, bool)   // exact base name, then extension
 func Comments(path string) (line string, block [2]string, ok bool)
 func IndentAfter(path string) ([]string, bool)
+func TemplateFor(path string) string        // rendered new-file content (#170)
 func All() []Language
 ```
 
@@ -103,6 +105,29 @@ The **Python** detector (`plugins/languages/python/toolchain.go`) resolves the
 interpreter in priority order: active `$VIRTUAL_ENV` → project `.venv`/`venv` →
 `.python-version` (pyenv) → `python3` on `PATH`. Go relies on gopls reading
 `go.mod`; **PHP** ships a PATH/install-location detector (no server injection).
+
+## File templates (#170)
+
+A language may register a `Template`: the initial content seeded into newly
+created files — the explorer's `explorer.newFile`, `:e` on a nonexistent path,
+and a CLI open of a missing file all go through it. `lang.TemplateFor(path)`
+(`internal/lang/template.go`) matches the path's language, applies any user
+override, and substitutes the variables:
+
+| variable | value |
+| --- | --- |
+| `${FILENAME}` | base name with extension (`main.go`) |
+| `${NAME}` | base name without extension (`main`) |
+| `${DIR}` | containing directory's name |
+| `${PACKAGE}` | `${DIR}` sanitised to an identifier (`my-pkg` → `mypkg`, fallback `main`) |
+| `${DATE}` / `${YEAR}` | today as `YYYY-MM-DD` / `YYYY` |
+
+Built-ins: Go seeds `package ${PACKAGE}`, PHP seeds `<?php`. Users override per
+language with `[lang.<id>] template = "..."` in the config (TOML multiline
+strings work); an explicitly **empty** override disables the template. Explorer
+creates write the rendered template to disk; editor-side new buffers
+(`NewFile`) are seeded but stay unmodified, so quitting without `:w` loses
+nothing.
 
 ## Explicit interpreters (Roadmap 0160, #94)
 

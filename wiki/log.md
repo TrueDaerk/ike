@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- File templates (#170): newly created files start with language-aware
+  content — `package ${PACKAGE}` for Go, `<?php` for PHP — rendered by
+  `lang.TemplateFor` with `${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}`
+  variables and overridable per language via `[lang.<id>] template`. Applies
+  to explorer creates (written to disk), `:e` on a new path, and CLI opens of
+  missing files (seeded, unmodified buffers). See
+  [languages](/architecture/languages.md).
+
 - Inlay hints (#171): inline parameter-name and inferred-type hints
   (`textDocument/inlayHint`) render as dimmed italic virtual text via the new
   `InlayHint` theme slot, refreshed document-wide on open/change and merged

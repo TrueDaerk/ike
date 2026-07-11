@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # File Explorer
@@ -138,7 +138,7 @@ these are defaults.
 | `explorer.refresh` | `r` | invalidate + re-scan the selected subtree (`RefreshMsg`) |
 | `explorer.collapseAll` | `c` | fold the tree back to the root (`CollapseAllMsg`) |
 | `explorer.reveal` | — | move the cursor to the open file (`RevealMsg`) |
-| `explorer.newFile` | `a` | prompt for a name, create an empty file (`NewFileMsg`) |
+| `explorer.newFile` | `a` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
