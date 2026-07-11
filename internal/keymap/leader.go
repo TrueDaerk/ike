@@ -33,6 +33,9 @@ var leaderMnemonics = []leaderMnemonic{
 	{"f", "project.goToFile", "Go to file"},
 	{"g", "project.findInPath", "Find in path (grep)"},
 	{"r", "project.replaceInPath", "Replace in path"},
+	// R (shift+r) mirrors the fragile cmd+r primary for the in-file replace
+	// (0240 phase 1, #282).
+	{"R", "editor.replace", "Replace in file"},
 	{"p", "project.switch", "Switch project"},
 	{"t", "terminal.toggle", "Toggle terminal"},
 	// T (shift+t) opens a fresh session next to lowercase-t's toggle (#242).

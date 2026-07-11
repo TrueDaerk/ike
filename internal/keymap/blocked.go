@@ -11,7 +11,6 @@ var blockedDefaults = map[string]string{
 	"vcs.commit":        "VCS integration (idea #28)",
 	"vcs.updateProject": "VCS integration (idea #28)",
 	"vcs.revertFile":    "VCS integration (idea #28)",
-	"editor.replace":    "in-file replace UI (idea #49)",
 	"project.goToClass": "document symbols / structure view (idea #31)",
 }
 
