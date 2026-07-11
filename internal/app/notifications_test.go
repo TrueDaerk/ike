@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/registry"
 	"ike/internal/watch"
@@ -74,14 +75,17 @@ func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
 }
 
 // TestServerStatusRouting guards the 0130 call-site migration: persistent
-// server state lands on the status line, transient events become toasts of the
-// matching severity.
+// server state is tracked per language (#380), transient events become toasts
+// of the matching severity.
 func TestServerStatusRouting(t *testing.T) {
 	m := newSized()
-	tm, _ := m.Update(ilsp.ServerStatusMsg{Text: "go language server ready", Kind: ilsp.ServerState})
+	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "go", Text: "go language server ready", Kind: ilsp.ServerState})
 	m = tm.(Model)
-	if got := m.host.Status(); got != "go language server ready" {
-		t.Fatalf("persistent state should hit the status line, got %q", got)
+	if got := m.lspStatus["go"]; got != "go language server ready" {
+		t.Fatalf("persistent state should be tracked for its language, got %q", got)
+	}
+	if got := m.host.Status(); got != "" {
+		t.Fatalf("per-language state must not write the global host status (#380), got %q", got)
 	}
 	if len(m.toasts) != 0 {
 		t.Fatalf("persistent state must not toast, have %d toasts", len(m.toasts))
@@ -102,8 +106,39 @@ func TestServerStatusRouting(t *testing.T) {
 			t.Fatalf("kind %d should raise a severity-%d toast", ev.kind, ev.sev)
 		}
 	}
-	if got := m.host.Status(); got != "go language server ready" {
-		t.Fatalf("events must not overwrite the persistent segment, got %q", got)
+	if got := m.lspStatus["go"]; got != "go language server ready" {
+		t.Fatalf("events must not overwrite the persistent per-language state, got %q", got)
+	}
+}
+
+// TestStatusLineScopesServerSegmentToBuffer guards #380: the server segment
+// follows the focused buffer's language — a plain-text buffer shows no server
+// text, a buffer of the reporting language shows its current state.
+func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
+	lang.Register(lang.Language{ID: "statest", Extensions: []string{"stt"}, Server: &lang.ServerSpec{Language: "statest", Command: "x"}})
+	m := newSized()
+	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "statest", Text: "statest language server ready", Kind: ilsp.ServerState})
+	m = tm.(Model)
+
+	dir := t.TempDir()
+	code := filepath.Join(dir, "main.stt")
+	notes := filepath.Join(dir, "notes.txt")
+	for _, p := range []string{code, notes} {
+		if err := os.WriteFile(p, []byte("hello\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	tm, _ = m.openPath(code, false)
+	m = tm.(Model)
+	if line := m.statusLine(); !strings.Contains(line, "statest language server ready") {
+		t.Fatalf("focused buffer's language state missing from the status line: %q", line)
+	}
+
+	tm, _ = m.openPath(notes, false)
+	m = tm.(Model)
+	if line := m.statusLine(); strings.Contains(line, "language server") {
+		t.Fatalf("non-LSP buffer must show no server text (#380): %q", line)
 	}
 }
 

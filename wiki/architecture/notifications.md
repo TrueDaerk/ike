@@ -4,7 +4,7 @@ title: Notifications
 description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
 tags: [architecture, notifications, host, ui]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-11T12:00:00Z
 ---
 
 # Notifications
@@ -12,7 +12,8 @@ timestamp: 2026-07-11T00:00:00Z
 Roadmap 0130. Event-like messages ("saved 3 files", "server crashed") surface
 as **toasts** — short, severity-colored lines stacked bottom-right directly
 above the status line — instead of overwriting the status line. `SetStatus`
-remains for *persistent state segments* (mode, LSP server state); everything
+remains for *plugin-set persistent status segments*; LSP server state is
+tracked per language and scoped to the focused buffer (#380); everything
 event-shaped goes through `Notify`.
 
 ## API
@@ -65,13 +66,24 @@ example plugin's hook.
 | Save-all (`SaveAllMsg`) | event | `Notify(Info, "saved N files")`, `"nothing to save"` on a no-op (#275) |
 | Theme select confirm / unknown-theme warning / reload warning | event | `Notify(Info/Warn, …)` |
 | Startup theme warning | event | `Notify(Warn, …)` |
-| LSP server ready / disabled / binary missing | persistent state | `SetStatus` (status-line segment) |
+| LSP server ready / disabled / binary missing | persistent state | per-language status-line segment (see below) |
 | LSP server crashed | event | `Notify(Warn, …)` |
 | LSP server restarted (auto or `lsp.restart`) | event | `Notify(Info, …)` |
 | LSP launch error / disabled after repeated crashes | event | `Notify(Error, …)` |
 
 LSP classification travels with the message: `lsp.ServerStatusMsg` carries a
 `ServerStatusKind` (`ServerState`, `ServerEventInfo/Warn/Error`) assigned where
-the status originates (`internal/lsp/manager`); the root model routes state to
-`SetStatus` and events to `Notify`.
+the status originates (`internal/lsp/manager`); the root model routes events to
+`Notify`.
+
+## Per-language server segment (#380)
+
+`ServerState` messages carry `Lang`; the root model records them in a
+per-language map instead of the global host status. The status line's server
+segment renders only the *focused buffer's* language entry (`lang.ByPath` on
+the editor's path), so "gopls not found" never follows the user into a
+plain-text buffer, and each buffer reflects its own server's current state.
+Buffers whose language has no tracked server state show no server text.
+`host.SetStatus` stays as the plugin-facing global segment (WASM `set_status`
+capability).
 

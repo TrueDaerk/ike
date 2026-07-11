@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Status line's LSP server segment is scoped to the focused buffer's language
+  (#380): `ServerState` messages are tracked per language and the segment shows
+  only the focused buffer's entry — non-LSP buffers show no server text, and
+  stale event text no longer sticks globally. `host.SetStatus` stays as the
+  plugin-facing global segment. See
+  [Notifications](/architecture/notifications.md).
+
 - Status line names the focused pane kind (#381): a focused terminal shows
   `TERMINAL │ shell · dir` (`[exited]` when dead), the explorer shows
   `EXPLORER`; editor mode/file/cursor render only while an editor holds
