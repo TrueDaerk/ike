@@ -99,6 +99,8 @@ type Model struct {
 	lastSub       lastSubstitute   // last :substitute, for a bare ":s" repeat
 	subConfirm    *subConfirmState // active ":s///c" confirmation, nil when idle
 	replPanel     *replacePanel    // open find/replace panel (0240 phase 2, #283); nil when idle
+	// panelFind/panelRepl remember the panel fields across opens (#292).
+	panelFind, panelRepl string
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
