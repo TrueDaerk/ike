@@ -66,6 +66,14 @@ type Manager struct {
 	servers  map[string]*server // key: lang + "\x00" + root
 	docs     map[string]*document
 	restarts map[string]int // crash-restart attempts per server key
+
+	// Embedded-fragment state (0300, #413): detector, fragment documents per
+	// host path (keyed by detector slot), and a per-host generation counter so
+	// only the newest async sync run commits. fragMu serializes reconciliation.
+	detect  FragmentDetector
+	frags   map[string]map[int]*fragmentDoc
+	fragGen map[string]int
+	fragMu  sync.Mutex
 }
 
 // server is one running language server instance.
@@ -106,6 +114,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		servers:  make(map[string]*server),
 		docs:     make(map[string]*document),
 		restarts: make(map[string]int),
+		frags:    make(map[string]map[int]*fragmentDoc),
+		fragGen:  make(map[string]int),
 	}
 }
 
@@ -153,7 +163,7 @@ func (m *Manager) Open(path, lang, text string) error {
 	m.docs[path] = doc
 	m.mu.Unlock()
 
-	return srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
+	err = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.PathToURI(path),
 			LanguageID: lang,
@@ -161,6 +171,8 @@ func (m *Manager) Open(path, lang, text string) error {
 			Text:       text,
 		},
 	})
+	m.scheduleFragmentSync(path)
+	return err
 }
 
 // Change resends the full document text (full-sync MVP) under a monotonically
@@ -189,6 +201,7 @@ func (m *Manager) Change(path, text string) error {
 	switch srv.cl.Caps().SyncKind {
 	case protocol.SyncNone:
 		m.setDocLines(path, text)
+		m.scheduleFragmentSync(path)
 		return nil
 	case protocol.SyncIncremental:
 		ev, changed := incrementalEvent(oldLines, text, srv.cl.Encoding())
@@ -201,10 +214,12 @@ func (m *Manager) Change(path, text string) error {
 	}
 
 	version := m.setDocLines(path, text)
-	return srv.cl.DidChange(protocol.DidChangeTextDocumentParams{
+	err := srv.cl.DidChange(protocol.DidChangeTextDocumentParams{
 		TextDocument:   protocol.VersionedTextDocumentIdentifier{URI: protocol.PathToURI(path), Version: version},
 		ContentChanges: changes,
 	})
+	m.scheduleFragmentSync(path)
+	return err
 }
 
 // setDocLines commits the new document text and bumps its version.
@@ -231,8 +246,9 @@ func (m *Manager) Save(path string) error {
 	})
 }
 
-// Close sends didClose and forgets the document.
+// Close sends didClose and forgets the document, including its fragments.
 func (m *Manager) Close(path string) error {
+	m.closeFragmentsFor(path)
 	srv, _, ok := m.docServer(path)
 	m.mu.Lock()
 	delete(m.docs, path)
@@ -630,6 +646,20 @@ func (m *Manager) StopLang(lang string) {
 	for path, doc := range m.docs {
 		if doc.lang == lang {
 			delete(m.docs, path)
+			delete(m.frags, path)
+			delete(m.fragGen, path)
+		}
+	}
+	// Fragment documents in the stopped language lose their server; drop them
+	// so the next host change reopens cleanly.
+	for host, fds := range m.frags {
+		for slot, fd := range fds {
+			if fd.lang == lang {
+				delete(fds, slot)
+			}
+		}
+		if len(fds) == 0 {
+			delete(m.frags, host)
 		}
 	}
 	m.mu.Unlock()
@@ -662,6 +692,8 @@ func (m *Manager) Shutdown() {
 	servers := m.servers
 	m.servers = make(map[string]*server)
 	m.docs = make(map[string]*document)
+	m.frags = make(map[string]map[int]*fragmentDoc)
+	m.fragGen = make(map[string]int)
 	for _, srv := range servers {
 		srv.closing = true // suppress restart on the resulting Done
 	}
@@ -747,6 +779,9 @@ func (m *Manager) onNotify(lang, method string, params json.RawMessage) {
 	var p protocol.PublishDiagnosticsParams
 	if err := json.Unmarshal(params, &p); err != nil {
 		return
+	}
+	if isFragmentURI(string(p.URI)) {
+		return // mapped back onto the host buffer in #415
 	}
 	path := protocol.URIToPath(p.URI)
 	m.mu.Lock()

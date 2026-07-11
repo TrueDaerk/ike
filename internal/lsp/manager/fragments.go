@@ -1,0 +1,286 @@
+package manager
+
+import (
+	"strconv"
+	"strings"
+
+	"ike/internal/editor/buffer"
+	"ike/internal/highlight"
+	"ike/internal/lsp"
+	"ike/internal/lsp/protocol"
+)
+
+// fragments.go implements virtual documents for embedded-language fragments
+// (Roadmap 0300, #413): each fragment a detector finds in an open host buffer
+// (an SQL string in Python, …) is mirrored into a synthetic in-memory document
+// with the fragment's language id, kept in sync with the host, and served by
+// that language's ordinary managed server. LSP has no notion of embedded
+// fragments, so the seam lives entirely here — the editor and bridge stay
+// fragment-agnostic.
+//
+// Fragment documents use the ike-fragment: URI scheme; protocol.URIToPath
+// passes non-file schemes through untouched, so these URIs survive round-trips
+// but never collide with real files. Diagnostics published for fragment URIs
+// are dropped until #415 maps them back onto the host buffer.
+
+// FragmentDetector returns the embedded-language fragments of a host buffer.
+// The bridge wires this to highlight.Fragments; tests inject fakes. It runs on
+// manager goroutines and must be safe for concurrent use.
+type FragmentDetector func(lang string, lines []string) []highlight.Fragment
+
+// fragmentDoc is one synthetic document mirroring a fragment of a host buffer.
+// slot is the fragment's ordinal in the detector output; it keys the URI, so a
+// re-detected fragment in the same slot continues the same server-side
+// document instead of churning open/close.
+type fragmentDoc struct {
+	hostPath string
+	slot     int
+	uri      string
+	lang     string
+	version  int
+	frag     highlight.Fragment
+	srvKey   string
+}
+
+const fragmentScheme = "ike-fragment:"
+
+// fragmentURI builds the synthetic URI for a host path's fragment slot, e.g.
+// ike-fragment://3/Users/x/app.py (the slot is the URI authority).
+func fragmentURI(hostPath string, slot int) string {
+	return fragmentScheme + "//" + strconv.Itoa(slot) + hostPath
+}
+
+// isFragmentURI reports whether uri belongs to a fragment document.
+func isFragmentURI(uri string) bool { return strings.HasPrefix(uri, fragmentScheme) }
+
+// SetFragmentDetector installs the embedded-fragment detector. Without one the
+// manager never creates fragment documents.
+func (m *Manager) SetFragmentDetector(fn FragmentDetector) {
+	m.mu.Lock()
+	m.detect = fn
+	m.mu.Unlock()
+}
+
+// scheduleFragmentSync re-detects fragments for a host document off the caller
+// goroutine (Change runs on the UI thread, and fragment servers may need a
+// blocking initialize). A generation counter makes the newest schedule win, so
+// a slow detection run never clobbers fresher state.
+func (m *Manager) scheduleFragmentSync(hostPath string) {
+	m.mu.Lock()
+	detect := m.detect
+	m.mu.Unlock()
+	if detect == nil {
+		return
+	}
+	go m.syncFragments(hostPath)
+}
+
+func (m *Manager) syncFragments(hostPath string) {
+	m.mu.Lock()
+	detect := m.detect
+	doc, ok := m.docs[hostPath]
+	if detect == nil || !ok {
+		m.mu.Unlock()
+		return
+	}
+	m.fragGen[hostPath]++
+	gen := m.fragGen[hostPath]
+	lines, hostLang := doc.lines, doc.lang
+	m.mu.Unlock()
+
+	found := detect(hostLang, lines)
+
+	// Serialize reconciliation; only the newest generation may proceed, and the
+	// host must still be open.
+	m.fragMu.Lock()
+	defer m.fragMu.Unlock()
+	m.mu.Lock()
+	stale := m.fragGen[hostPath] != gen || m.docs[hostPath] == nil
+	m.mu.Unlock()
+	if stale {
+		return
+	}
+	m.reconcileFragments(hostPath, found)
+}
+
+// reconcileFragments diffs the detected fragments against the tracked fragment
+// documents slot by slot: same slot + language updates in place (didChange on
+// content change), anything else closes the old document and opens a new one.
+// Fragments whose language resolves to no server are skipped silently — the
+// host buffer just keeps its plain behavior. Caller holds fragMu.
+func (m *Manager) reconcileFragments(hostPath string, found []highlight.Fragment) {
+	m.mu.Lock()
+	old := m.frags[hostPath]
+	if old == nil {
+		old = map[int]*fragmentDoc{}
+	}
+	next := map[int]*fragmentDoc{}
+	m.mu.Unlock()
+
+	for slot, fr := range found {
+		spec, ok := m.resolve(fr.Lang)
+		if !ok {
+			continue
+		}
+		text := strings.Join(fr.Lines, "\n")
+
+		if fd := old[slot]; fd != nil && fd.lang == fr.Lang {
+			m.mu.Lock()
+			srv := m.servers[fd.srvKey]
+			oldText := strings.Join(fd.frag.Lines, "\n")
+			m.mu.Unlock()
+			if srv != nil {
+				if text != oldText {
+					var changes []protocol.TextDocumentContentChangeEvent
+					switch srv.cl.Caps().SyncKind {
+					case protocol.SyncNone:
+						changes = nil
+					case protocol.SyncIncremental:
+						ev, changed := incrementalEvent(fd.frag.Lines, text, srv.cl.Encoding())
+						if changed {
+							changes = []protocol.TextDocumentContentChangeEvent{ev}
+						}
+					default:
+						changes = []protocol.TextDocumentContentChangeEvent{{Text: text}}
+					}
+					if changes != nil {
+						fd.version++
+						_ = srv.cl.DidChange(protocol.DidChangeTextDocumentParams{
+							TextDocument:   protocol.VersionedTextDocumentIdentifier{URI: fd.uri, Version: fd.version},
+							ContentChanges: changes,
+						})
+					}
+				}
+				m.mu.Lock()
+				fd.frag = fr // the range may shift even when the content did not
+				m.mu.Unlock()
+				delete(old, slot)
+				next[slot] = fd
+				continue
+			}
+			// Server gone (crash, StopLang): fall through and reopen below.
+			delete(old, slot)
+		}
+
+		fd := m.openFragment(hostPath, slot, fr, text, spec)
+		if fd != nil {
+			next[slot] = fd
+		}
+	}
+
+	// Whatever is left in old has no matching fragment anymore.
+	for _, fd := range old {
+		m.closeFragment(fd)
+	}
+
+	m.mu.Lock()
+	if len(next) == 0 {
+		delete(m.frags, hostPath)
+	} else {
+		m.frags[hostPath] = next
+	}
+	m.mu.Unlock()
+}
+
+// openFragment spawns/reuses the fragment language's server and sends didOpen.
+// A failed spawn degrades silently (nil): the fragment simply stays plain text.
+func (m *Manager) openFragment(hostPath string, slot int, fr highlight.Fragment, text string, spec lsp.ServerSpec) *fragmentDoc {
+	root := detectRoot(hostPath, spec.RootMarkers)
+	srv, err := m.ensureServer(fr.Lang, root, spec)
+	if err != nil {
+		return nil
+	}
+	fd := &fragmentDoc{
+		hostPath: hostPath,
+		slot:     slot,
+		uri:      fragmentURI(hostPath, slot),
+		lang:     fr.Lang,
+		version:  1,
+		frag:     fr,
+		srvKey:   srv.key(),
+	}
+	_ = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
+		TextDocument: protocol.TextDocumentItem{
+			URI:        fd.uri,
+			LanguageID: fr.Lang,
+			Version:    fd.version,
+			Text:       text,
+		},
+	})
+	return fd
+}
+
+// closeFragment sends didClose when the fragment's server is still alive.
+func (m *Manager) closeFragment(fd *fragmentDoc) {
+	m.mu.Lock()
+	srv := m.servers[fd.srvKey]
+	m.mu.Unlock()
+	if srv == nil {
+		return
+	}
+	_ = srv.cl.DidClose(protocol.DidCloseTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: fd.uri},
+	})
+}
+
+// closeFragmentsFor closes and forgets every fragment document of a host.
+func (m *Manager) closeFragmentsFor(hostPath string) {
+	m.mu.Lock()
+	fds := m.frags[hostPath]
+	delete(m.frags, hostPath)
+	delete(m.fragGen, hostPath)
+	m.mu.Unlock()
+	for _, fd := range fds {
+		m.closeFragment(fd)
+	}
+}
+
+// fragmentAt returns the fragment document and its server covering an editor
+// position of the host buffer, when one exists. The end boundary is inclusive
+// so completion right before a closing quote still routes into the fragment.
+func (m *Manager) fragmentAt(hostPath string, pos buffer.Position) (*server, *fragmentDoc, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, fd := range m.frags[hostPath] {
+		if !fragContains(fd.frag, pos) {
+			continue
+		}
+		if srv := m.servers[fd.srvKey]; srv != nil {
+			return srv, fd, true
+		}
+	}
+	return nil, nil, false
+}
+
+// fragContains reports whether a host position lies inside the fragment,
+// inclusive of the end boundary.
+func fragContains(fr highlight.Fragment, pos buffer.Position) bool {
+	if pos.Line < fr.StartLine || pos.Line > fr.EndLine {
+		return false
+	}
+	if pos.Line == fr.StartLine && pos.Col < fr.StartCol {
+		return false
+	}
+	if pos.Line == fr.EndLine && pos.Col > fr.EndCol {
+		return false
+	}
+	return true
+}
+
+// hostToFrag maps a host-buffer position into fragment-document coordinates.
+// Fragment content is exactly the host text of its range, so the mapping is a
+// pure offset shift: only the first fragment line has a column offset.
+func hostToFrag(fr highlight.Fragment, pos buffer.Position) buffer.Position {
+	if pos.Line == fr.StartLine {
+		return buffer.Position{Line: 0, Col: pos.Col - fr.StartCol}
+	}
+	return buffer.Position{Line: pos.Line - fr.StartLine, Col: pos.Col}
+}
+
+// fragToHost is the inverse of hostToFrag.
+func fragToHost(fr highlight.Fragment, pos buffer.Position) buffer.Position {
+	if pos.Line == 0 {
+		return buffer.Position{Line: fr.StartLine, Col: pos.Col + fr.StartCol}
+	}
+	return buffer.Position{Line: pos.Line + fr.StartLine, Col: pos.Col}
+}

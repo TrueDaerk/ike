@@ -32,6 +32,8 @@ func (rwc) Close() error { return nil }
 type fakeOpts struct {
 	syncKind   int
 	didChanges chan protocol.DidChangeTextDocumentParams
+	didOpens   chan protocol.DidOpenTextDocumentParams
+	didCloses  chan protocol.DidCloseTextDocumentParams
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -178,10 +180,19 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				_ = json.Unmarshal(msg.Params, &p)
 				opts.didChanges <- p
 			}
+		case msg.Method == "textDocument/didClose":
+			if opts.didCloses != nil {
+				var p protocol.DidCloseTextDocumentParams
+				_ = json.Unmarshal(msg.Params, &p)
+				opts.didCloses <- p
+			}
 		case msg.Method == "textDocument/didOpen":
 			// Push a diagnostic for the opened doc.
 			var p protocol.DidOpenTextDocumentParams
 			_ = json.Unmarshal(msg.Params, &p)
+			if opts.didOpens != nil {
+				opts.didOpens <- p
+			}
 			notify(out, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{
 				URI:     p.TextDocument.URI,
 				Version: 1,
