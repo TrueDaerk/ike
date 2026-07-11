@@ -62,7 +62,8 @@ internal/theme/
   resolve.go    theme.Resolve — the ONE color-token resolver (name/hex/ANSI);
                 replaced the duplicated copies in highlight and explorer
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
-                catppuccin-mocha(+latte), kanagawa, one-dark
+                catppuccin-mocha(+latte), kanagawa, one-dark,
+                solarized-dark(+light)
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -139,7 +140,10 @@ lifted to AA contrast in #384), `tokyo-night`,
 `catppuccin-mocha`, `catppuccin-latte`, `kanagawa` (wave variant of
 rebelot/kanagawa.nvim; the darkest diagnostic shades are swapped for their
 lighter siblings per the contrast rule), `one-dark` (Atom's One Dark; the
-Error slot lightens the scheme's red to clear the contrast rule). Select via:
+Error slot lightens the scheme's red to clear the contrast rule),
+`solarized-dark` / `solarized-light` (Ethan Schoonover's Solarized; the
+scheme's low-contrast accents are lightened/darkened on the diagnostic and
+secondary slots to clear the contrast rule). Select via:
 
 ```toml
 [theme]
