@@ -81,6 +81,83 @@ func TestWordForwardAcrossLines(t *testing.T) {
 	}
 }
 
+func TestWordForwardStopsOnEmptyLine(t *testing.T) {
+	// vim: an empty line is itself a word, so w stops on it (issue #375).
+	b := buffer.FromString("package main\n\nimport (")
+	p := WordForward(b, pos(0, 8), 1).Pos // on "main"
+	if p != pos(1, 0) {
+		t.Fatalf("w onto empty line=%v want {1 0}", p)
+	}
+	p = WordForward(b, p, 1).Pos // leaving the empty line
+	if p != pos(2, 0) {
+		t.Fatalf("w off empty line=%v want {2 0}", p)
+	}
+}
+
+func TestWordForwardConsecutiveEmptyLines(t *testing.T) {
+	b := buffer.FromString("foo\n\n\nbar")
+	p := WordForward(b, pos(0, 0), 1).Pos
+	if p != pos(1, 0) {
+		t.Fatalf("w first empty=%v want {1 0}", p)
+	}
+	p = WordForward(b, p, 1).Pos
+	if p != pos(2, 0) {
+		t.Fatalf("w second empty=%v want {2 0}", p)
+	}
+	p = WordForward(b, p, 1).Pos
+	if p != pos(3, 0) {
+		t.Fatalf("w to bar=%v want {3 0}", p)
+	}
+}
+
+func TestWordForwardBigStopsOnEmptyLine(t *testing.T) {
+	b := buffer.FromString("foo.bar\n\nbaz")
+	p := WordForwardBig(b, pos(0, 0), 1).Pos
+	if p != pos(1, 0) {
+		t.Fatalf("W onto empty line=%v want {1 0}", p)
+	}
+}
+
+func TestWordForwardCountAcrossEmptyLine(t *testing.T) {
+	// 2w from "main" must land on "import", counting the empty line as one word.
+	b := buffer.FromString("package main\n\nimport (")
+	if p := WordForward(b, pos(0, 8), 2).Pos; p != pos(2, 0) {
+		t.Fatalf("2w=%v want {2 0}", p)
+	}
+}
+
+func TestWordBackwardStopsOnEmptyLine(t *testing.T) {
+	b := buffer.FromString("package main\n\nimport (")
+	p := WordBackward(b, pos(2, 0), 1).Pos // from "import"
+	if p != pos(1, 0) {
+		t.Fatalf("b onto empty line=%v want {1 0}", p)
+	}
+	p = WordBackward(b, p, 1).Pos // leaving the empty line
+	if p != pos(0, 8) {
+		t.Fatalf("b off empty line=%v want {0 8}", p)
+	}
+}
+
+func TestWordBackwardConsecutiveEmptyLines(t *testing.T) {
+	b := buffer.FromString("foo\n\n\nbar")
+	p := WordBackward(b, pos(3, 0), 1).Pos
+	if p != pos(2, 0) {
+		t.Fatalf("b first empty=%v want {2 0}", p)
+	}
+	p = WordBackward(b, p, 1).Pos
+	if p != pos(1, 0) {
+		t.Fatalf("b second empty=%v want {1 0}", p)
+	}
+}
+
+func TestWordEndSkipsEmptyLine(t *testing.T) {
+	// vim's e does NOT stop on empty lines.
+	b := buffer.FromString("foo\n\nbar")
+	if p := WordEnd(b, pos(0, 2), 1).Pos; p != pos(2, 2) {
+		t.Fatalf("e=%v want {2 2}", p)
+	}
+}
+
 func TestWordEnd(t *testing.T) {
 	b := buffer.FromString("foo bar")
 	p := WordEnd(b, pos(0, 0), 1).Pos
