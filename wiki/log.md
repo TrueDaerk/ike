@@ -2,6 +2,15 @@
 
 ## 2026-07-11
 
+- Center drop zone merges as tab (#318): during a move or tab drag an editor
+  target now shows five zones — the four edges split/relocate as before, the
+  interior center merges JetBrains-style: a whole-pane drop moves all source
+  files into the target's tab list (deduped) and closes the source pane, a
+  tab drop joins the list with that file; edge drops of a tab on an editor
+  now split next to it. Feedback distinguishes the center (`⧉ merge as tab`
+  marker, full-pane ghost). Documented in
+  [Pane Layout & Drag](/architecture/pane-layout.md).
+
 - LSP popups framed and freed from the pane clamp (#316): completion,
   signature and hover render inside a rounded themed border (like the
   floating shell) and may now overflow the owning pane — clamped to the

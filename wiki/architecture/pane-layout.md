@@ -68,6 +68,18 @@ up" on stale scrolls. Any non-wheel message flushes the pending batch first,
 preserving ordering against clicks, keys and motion; a stale flush after an
 inline flush is a no-op.
 
+**Center merge zone (#318).** During a move or tab drag an **editor** target
+whose drag carries files shows five zones, resolved by
+`layout.DropZoneWithCenter`: the outer `CenterBand` (30%) of either axis is
+the four edge zones (split/relocate exactly as before), the interior is
+`ZoneCenter`, which **merges as tab** JetBrains-style. A whole-pane title
+drag released there moves every file of the source editor into the target's
+tab list (`openInTab` dedupes onto existing tabs) and closes the emptied
+source pane (`mergePaneTabs`); a tab drag released there joins the target's
+tab list with just that file. Drags without files to merge — an explorer or
+terminal pane, or an empty editor — keep the plain four-zone relocate
+behaviour everywhere.
+
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an
 outer band (`edgeBand`) of the resolved zone — instead **spawns** a fresh editor
@@ -78,9 +90,11 @@ spawn-vs-move decision is `commitMove`; the ghost preview labels it `new pane`.
 **Tab-label drag (#305, #317).** In a multi-tab editor, pressing a tab-bar
 segment grabs just that file (`dragTab`); the title row and the bar outside the
 segments keep starting a whole-pane move. On release (`commitTabMove`): a drop
-on **another editor** relocates the document into that pane's tab list; a drop
-on the **source pane's own edge** splits off a fresh editor holding just that
-file; a drop on a **non-editor pane's edge zone** (e.g. a terminal) likewise
+in **another editor's center zone** merges the document into that pane's tab
+list, while its **edge zones** split a fresh editor next to it holding just
+that file (#318); a drop on the **source pane's own edge** splits off a fresh
+editor holding just that file; a drop on a **non-editor pane's edge zone**
+(e.g. a terminal) likewise
 splits that pane and opens the file in the fresh editor leaf (#317). A drop in a
 non-editor pane's interior is a no-op — there is no tab list to join — and the
 drag feedback (zone arrow, ghost, status hint) only signals a target there when
@@ -120,11 +134,13 @@ pane directly to the side.
 (`dragState.curX/curY`, updated on every motion). The pane being carried is
 tinted (and prefixed with `⤴`), the pane under the cursor is tinted as the drop
 target with its title showing the resolved zone (`◧ left` / `right ◨` / `⬒ top`
-/ `⬓ bottom`), and the status line narrates `MOVE <src> → <zone> of <target>`.
+/ `⬓ bottom` / `⧉ merge as tab` for the center zone), and the status line
+narrates `MOVE <src> → <zone> of <target>`.
 On top of that a **translucent ghost box** (a matte, dimmed shade of the
 drop-target accent) is composited over the exact region the pane would occupy on
-release — the relevant half of the target pane per the resolved zone — labelled
-with the dragged pane. It is drawn with `overlay.Place`, the arbitrary-position
+release — the relevant half of the target pane per the resolved zone, or the
+**whole** target pane for the center merge zone (#318), whose ghost carries the
+merge label — labelled with the dragged pane. It is drawn with `overlay.Place`, the arbitrary-position
 sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
 seam). Resize feedback is the divider tracking the cursor in real time as the
 ratio updates per motion frame.

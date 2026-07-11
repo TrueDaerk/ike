@@ -182,6 +182,29 @@ func TestDropZone(t *testing.T) {
 	}
 }
 
+func TestDropZoneWithCenter(t *testing.T) {
+	r := Rect{0, 0, 100, 40}
+	cases := []struct {
+		x, y int
+		want Zone
+	}{
+		{2, 20, ZoneLeft},
+		{98, 20, ZoneRight},
+		{50, 1, ZoneTop},
+		{50, 38, ZoneBottom},
+		{50, 20, ZoneCenter}, // dead center
+		{35, 15, ZoneCenter}, // just inside the interior band on both axes
+		{2, 2, ZoneLeft},     // corner stays an edge, never center
+		{20, 20, ZoneLeft},   // inside the horizontal band → edge wins
+		{50, 10, ZoneTop},    // inside the vertical band → edge wins
+	}
+	for _, c := range cases {
+		if got := DropZoneWithCenter(r, c.x, c.y); got != c.want {
+			t.Fatalf("DropZoneWithCenter(%d,%d)=%v want %v", c.x, c.y, got, c.want)
+		}
+	}
+}
+
 func TestStateRoundTrip(t *testing.T) {
 	root := Node(&Split{Orient: Horizontal, Ratio: 0.3,
 		A: &Leaf{"explorer"},

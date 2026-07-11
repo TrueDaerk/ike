@@ -2986,7 +2986,17 @@ func (m *Model) commitMove(x, y int) {
 		return
 	}
 	if target != m.drag.srcPane {
-		zone := layout.DropZone(m.lay.Panes[target], x, y)
+		r := m.lay.Panes[target]
+		zone := layout.DropZone(r, x, y)
+		if inst := m.panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && m.dragCarriesFiles(m.drag) {
+			zone = layout.DropZoneWithCenter(r, x, y)
+		}
+		if zone == layout.ZoneCenter {
+			// Center drop on an editor merges the source pane's files into
+			// the target's tab list instead of relocating the pane (#318).
+			m.mergePaneTabs(m.drag.srcPane, target)
+			return
+		}
 		m.tree = layout.Move(m.tree, m.drag.srcPane, target, zone)
 		m.layout()
 		return
@@ -3038,6 +3048,12 @@ func (m *Model) commitTabMove(x, y int) {
 			if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
 				m.splitTabTo(target, zone, path, ed)
 			}
+			return
+		}
+		// An editor target shows five zones (#318): the center merges the
+		// file into its tab list, the edges split next to it like #317.
+		if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
+			m.splitTabTo(target, zone, path, ed)
 			return
 		}
 		m.openInTab(target, path)
@@ -3439,13 +3455,12 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	}
 	label := m.paneLabel(d.srcPane)
 	if d.kind == dragTab {
-		// Dropping on another editor joins its tab bar in place — no
-		// spatial preview; only a split next to a non-editor pane (#317)
-		// has a rectangle to ghost.
-		if inst := m.panes.Get(tgt); inst != nil && inst.Kind() == pane.KindEditor {
-			return "", 0, 0, false
-		}
 		label = m.tabDragLabel(d)
+	}
+	if zone == layout.ZoneCenter {
+		// The full-pane ghost with a merge label marks the center zone
+		// (#318), distinct from the half-pane edge previews.
+		label += " ⧉ merge as tab"
 	}
 	gr := dropRect(m.lay.Panes[tgt], zone)
 	if gr.W < 3 || gr.H < 3 {
@@ -3456,14 +3471,58 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 
 // dropZoneFor reports the drop zone to signal for the hovered target pane and
 // whether a drop there would do anything: a dragged tab only lands in a
-// non-editor pane's edge zones (#317), so its interior shows no target.
+// non-editor pane's edge zones (#317), so its interior shows no target; an
+// editor target whose drag carries files shows the five-zone set with the
+// center merge zone (#318).
 func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone, bool) {
-	if d.kind == dragTab {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() != pane.KindEditor {
-			return edgeZone(r, d.curX, d.curY)
-		}
+	inst := m.panes.Get(key)
+	isEditor := inst != nil && inst.Kind() == pane.KindEditor
+	if d.kind == dragTab && !isEditor {
+		return edgeZone(r, d.curX, d.curY)
+	}
+	if isEditor && m.dragCarriesFiles(d) {
+		return layout.DropZoneWithCenter(r, d.curX, d.curY), true
 	}
 	return layout.DropZone(r, d.curX, d.curY), true
+}
+
+// dragCarriesFiles reports whether the drag has files an editor target could
+// merge as tabs (#318): a tab drag always carries one; a whole-pane move
+// carries the source editor's open files (an empty editor, an explorer or a
+// terminal pane keeps the plain relocate zones).
+func (m Model) dragCarriesFiles(d *dragState) bool {
+	if d.kind == dragTab {
+		return true
+	}
+	inst := m.panes.Get(d.srcPane)
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return false
+	}
+	for _, ed := range inst.Editors() {
+		if ed.HasFile() {
+			return true
+		}
+	}
+	return false
+}
+
+// mergePaneTabs finishes a whole-pane center drop (#318): every file of the
+// source editor joins the target's tab list (openInTab dedupes onto existing
+// tabs), then the emptied source pane closes.
+func (m *Model) mergePaneTabs(src, target string) {
+	inst := m.panes.Get(src)
+	if inst == nil {
+		return
+	}
+	for _, ed := range inst.Editors() {
+		if ed.HasFile() {
+			m.openInTab(target, ed.Path())
+		}
+	}
+	m.closeKey(src)
+	m.setFocus(target)
+	m.syncExplorerOpen()
+	m.layout()
 }
 
 // tabDragLabel is the ghost/status label for a tab drag: the dragged file's
@@ -3487,6 +3546,10 @@ func dropRect(r layout.Rect, z layout.Zone) layout.Rect {
 		return layout.Rect{X: r.X + r.W - w, Y: r.Y, W: w, H: r.H}
 	case layout.ZoneTop:
 		return layout.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H / 2}
+	case layout.ZoneCenter:
+		// The merge zone covers the whole target (#318): the full-pane ghost
+		// is what visually distinguishes it from the half-pane edge zones.
+		return r
 	default:
 		h := r.H / 2
 		return layout.Rect{X: r.X, Y: r.Y + r.H - h, W: r.W, H: h}
@@ -3575,6 +3638,8 @@ func zoneArrow(z layout.Zone) string {
 		return "right ◨"
 	case layout.ZoneTop:
 		return "⬒ top"
+	case layout.ZoneCenter:
+		return "⧉ merge as tab"
 	default:
 		return "⬓ bottom"
 	}
