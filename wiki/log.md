@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Paste from History (#57): every yank/delete feeds a bounded 20-entry
+  register history; `editor.pasteFromHistory` (`cmd+shift+v`, Edit menu,
+  palette) picks an entry from a palette list (first line + size, fuzzy
+  filter) — it becomes the current clipboard and pastes with Cmd+V
+  semantics. See [Editor](/architecture/editor.md); matrix regenerated.
+
 - Scratch picker (#352, Roadmap 0280 — epic complete): `scratch.list`
   ("Open Scratch File…", palette + File menu) locks the palette to a new
   scratch mode — newest-first, fuzzy filter, enter opens; empty store shows

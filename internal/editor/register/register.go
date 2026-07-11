@@ -29,10 +29,18 @@ type nopClipboard struct{}
 func (nopClipboard) Read() (string, error) { return "", nil }
 func (nopClipboard) Write(string) error    { return nil }
 
+// historyCap bounds the yank/delete history (#57): JetBrains keeps ~20
+// clipboard entries; the ring exists for the paste-from-history picker, not
+// as an archive.
+const historyCap = 20
+
 // Store holds every register.
 type Store struct {
 	regs map[rune]Entry
 	clip Clipboard
+	// hist is the bounded yank/delete history, newest first (#57). Every
+	// Yank/Delete pushes; consecutive duplicates collapse.
+	hist []Entry
 }
 
 // New returns an empty register store backed by a no-op clipboard.
@@ -49,6 +57,7 @@ func (s *Store) SetClipboard(c Clipboard) {
 // the unnamed register and the yank register `"0`. A named register stores
 // directly; an uppercase name appends to its lowercase counterpart.
 func (s *Store) Yank(reg rune, e Entry) {
+	s.pushHistory(e)
 	switch {
 	case reg == 0 || reg == '"':
 		s.regs['"'] = e
@@ -67,6 +76,7 @@ func (s *Store) Yank(reg rune, e Entry) {
 // register `"-`, while a linewise/multi-line delete shifts the numbered ring and
 // fills `"1`.
 func (s *Store) Delete(reg rune, e Entry) {
+	s.pushHistory(e)
 	switch {
 	case reg == 0 || reg == '"':
 		s.regs['"'] = e
@@ -98,6 +108,30 @@ func (s *Store) Get(reg rune) Entry {
 		return s.regs['"']
 	default:
 		return s.regs[lower(reg)]
+	}
+}
+
+// History returns the recorded yank/delete entries, newest first (#57). The
+// returned slice is a copy; callers may keep it across further edits.
+func (s *Store) History() []Entry {
+	out := make([]Entry, len(s.hist))
+	copy(out, s.hist)
+	return out
+}
+
+// pushHistory records e at the front of the bounded history. Empty text and
+// an exact repeat of the newest entry are dropped — re-yanking the same span
+// must not flood the picker.
+func (s *Store) pushHistory(e Entry) {
+	if e.Text == "" {
+		return
+	}
+	if len(s.hist) > 0 && s.hist[0] == e {
+		return
+	}
+	s.hist = append([]Entry{e}, s.hist...)
+	if len(s.hist) > historyCap {
+		s.hist = s.hist[:historyCap]
 	}
 }
 

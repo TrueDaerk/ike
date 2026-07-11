@@ -20,6 +20,7 @@ func Defaults() []Menu {
 			{Title: "Copy", Command: "editor.copy"},
 			{Title: "Cut", Command: "editor.cut"},
 			{Title: "Paste", Command: "editor.paste"},
+			{Title: "Paste from History", Command: "editor.pasteFromHistory"},
 			{Title: "Duplicate Line", Command: "editor.duplicateLine"},
 			{Title: "Find in File", Command: "editor.find"},
 		}},

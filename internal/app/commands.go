@@ -126,6 +126,11 @@ type TerminalClearMsg struct{}
 // by explorer.toggle.
 type ToggleExplorerFocusMsg struct{}
 
+// ShowPasteHistoryMsg asks the root model to open the palette locked to the
+// paste-history mode over the focused editor's yank/delete history (#57).
+// Dispatched by editor.pasteFromHistory (cmd+shift+v).
+type ShowPasteHistoryMsg struct{}
+
 // ShowScratchFilesMsg asks the root model to open the palette locked to the
 // scratch-files mode (Roadmap 0280, #352). Dispatched by scratch.list.
 type ShowScratchFilesMsg struct{}
@@ -197,6 +202,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.splitLeft", "Split Left", SplitFocusedMsg{Zone: layout.ZoneLeft}),
 			appCommand("editor.splitViewRight", "Split View Right", SplitViewMsg{Zone: layout.ZoneRight}),
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
+			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
 		), scratchCommands()...),
 	}
 }

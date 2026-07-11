@@ -11,6 +11,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/operator"
+	"ike/internal/editor/register"
 	"ike/internal/editor/search"
 )
 
@@ -486,6 +487,25 @@ func (m *Model) clipboardPaste() {
 		return
 	}
 	m.paste('+', false, 1, false)
+}
+
+// RegisterHistory exposes the yank/delete history, newest first, for the
+// paste-from-history picker (#57).
+func (m Model) RegisterHistory() []register.Entry { return m.regs.History() }
+
+// PasteHistoryEntry pastes history entry i with Cmd+V semantics (#57),
+// JetBrains-style: the chosen entry becomes the current clipboard (and the
+// unnamed register), then flows through the normal clipboard-paste path —
+// visual selections are replaced, a paste mid-insert joins the open insert's
+// undo unit.
+func (m *Model) PasteHistoryEntry(i int) {
+	h := m.regs.History()
+	if i < 0 || i >= len(h) {
+		return
+	}
+	m.regs.Yank('+', h[i])
+	m.clipboardPaste()
+	m.scroll()
 }
 
 // duplicateLine inserts a copy of the current line below it and moves the

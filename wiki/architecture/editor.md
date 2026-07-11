@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-11T11:30:00Z
+timestamp: 2026-07-11T13:45:00Z
 ---
 
 # Editor
@@ -41,7 +41,13 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   visual selection — or the current line without one — through `"+`, and paste
   from it (mid-insert the paste joins the open insert session's undo unit).
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
-  #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent. Saves
+  #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
+  Every yank/delete also feeds a bounded 20-entry **history** (#57,
+  `Store.History`, consecutive duplicates collapse); `editor.pasteFromHistory`
+  (`cmd+shift+v`, Edit menu) opens a palette picker over it — first line +
+  size per row, fuzzy filter — and the chosen entry becomes the current
+  clipboard and pastes with exact Cmd+V semantics (JetBrains Paste from
+  History). Saves
   report on the ex line (#261): `"file" written` on success, `E: <error>`
   on failure (read-only file, no file name) — a failed write keeps the
   buffer dirty and aborts `:wq`.
