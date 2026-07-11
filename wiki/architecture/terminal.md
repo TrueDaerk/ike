@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-10T18:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -52,6 +52,12 @@ in the saved position — no process resurrection, the cwd respawns.
 workspace (`adoptTerminals` in app/switch.go), split below the new active
 editor and titled with their origin root; dead ones close for good. New
 terminals root in the new project as always (spawn dir is pinned absolute).
+When the target's layout restore already recreated a terminal under the same
+key — a fresh placeholder shell for the very session being carried over — the
+live session **takes over that pane** (`Registry.AdoptTerminal` closes the
+placeholder and swaps in place, #320) instead of splitting a second leaf,
+which would both duplicate the terminal and render one instance in two
+mirrored panes.
 
 ## Key routing — the reserved set
 

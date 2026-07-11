@@ -120,14 +120,31 @@ func (r *Registry) AddTerminalKey(key, shell, dir string, env []string, send fun
 }
 
 // AdoptTerminal moves a live terminal instance from another registry into
-// this one — a project switch keeps existing sessions running (#96). The
-// key is kept; the counter advances past it.
-func (r *Registry) AdoptTerminal(inst *Instance) {
-	if inst == nil || inst.Kind() != KindTerminal || r.Has(inst.Key()) {
-		return
+// this one — a project switch keeps existing sessions running (#96). The key
+// is kept; the counter advances past it. When the key is already taken by a
+// restored terminal — layout restore just spawned a fresh placeholder shell
+// for this very session (#320) — the live session takes that slot over: the
+// placeholder's shell is closed and the instance replaced in place. It
+// returns true on such a takeover (the layout tree already holds the leaf)
+// and false when the instance was added fresh and still needs a leaf.
+func (r *Registry) AdoptTerminal(inst *Instance) (tookOver bool) {
+	if inst == nil || inst.Kind() != KindTerminal {
+		return false
+	}
+	inst.cfg, inst.pal = r.cfg, r.pal
+	inst.term.SetPalette(r.pal)
+	if existing := r.instances[inst.Key()]; existing != nil {
+		if existing.Kind() != KindTerminal {
+			return false // foreign key collision: not adopted
+		}
+		existing.term.Close()
+		r.instances[inst.Key()] = inst // order already lists the key
+		r.advancePastTerminal(inst.Key())
+		return true
 	}
 	r.put(inst)
 	r.advancePastTerminal(inst.Key())
+	return false
 }
 
 // advancePastTerminal bumps the terminal counter past key's numeric suffix.
