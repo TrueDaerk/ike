@@ -679,6 +679,10 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Reveal moves the cursor onto the active file's row — the programmatic twin
+// of the explorer.reveal command, used by the CLI open flow (Roadmap 0270).
+func (m *Model) Reveal() { m.reveal() }
+
 // reveal moves the cursor onto the row of the currently open file, if it is
 // visible in the tree. (Auto-expanding collapsed ancestors is left to a later
 // pass; today it locates an already-visible active row.)

@@ -263,6 +263,28 @@ func (m *Model) Load(path string) error {
 	return nil
 }
 
+// NewFile points the editor at a not-yet-existing path (CLI open of a missing
+// file, Roadmap 0270 — vim-style): an empty, unmodified buffer whose first :w
+// creates the file on disk. Everything else resets exactly like Load.
+func (m *Model) NewFile(path string) {
+	m.path = path
+	m.buf = buffer.FromString("")
+	m.cursor = buffer.Position{}
+	m.desiredCol = 0
+	m.mode = Normal
+	m.pending.Reset()
+	m.wait = awaitNone
+	m.cmdline = ""
+	m.searching = false
+	m.dirty = false
+	m.stale = false
+	m.hist = history.New()
+	m.docVersion++
+	m.hlIndex = highlight.Index{}
+	m.semIndex = highlight.Index{}
+	m.scroll()
+}
+
 // RestoreText installs crash-recovered text into the buffer and marks it dirty
 // (Roadmap 0210). Undo history resets to the recovered content — recovery is a
 // fresh starting point, not a continuation of the dead session's history. The

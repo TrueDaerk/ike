@@ -31,6 +31,16 @@ cd ~/src/my-project
 ike
 ```
 
+Files can be opened directly from the command line — as tabs, optionally at a
+line (and column); the vim-style `+N` form works too, and a path that does not
+exist yet opens as a new unsaved buffer:
+
+```sh
+ike internal/app/app.go:725       # open at line 725
+ike main.go:10:4 README.md        # two tabs, first one focused at 10:4
+ike +42 main.go                   # vim-style line prefix
+```
+
 ### Platform notes
 
 > [!IMPORTANT]

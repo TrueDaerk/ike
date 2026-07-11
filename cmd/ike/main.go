@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/app"
+	"ike/internal/cli"
 	"ike/internal/config"
 	"ike/internal/project"
 	"ike/internal/registry"
@@ -29,6 +30,18 @@ import (
 )
 
 func main() {
+	// CLI open targets (Roadmap 0270): `ike file.go:42` opens the file at that
+	// line. Parse argv up front so a malformed invocation fails before any UI.
+	inv, err := cli.Parse(os.Args[1:])
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ike:", err)
+		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
+		os.Exit(2)
+	}
+	if inv.Stdin {
+		// The stdin scratch buffer lands with #344.
+		fmt.Fprintln(os.Stderr, "ike: reading stdin ('-') is not supported yet")
+	}
 	// Record the initial project open into the recent-projects history before
 	// the model loads config, so the fresh entry is already part of the merged
 	// configuration (Roadmap 0090: the initial open counts as an open). A
@@ -57,6 +70,9 @@ func main() {
 	}
 
 	m := app.New()
+	// Open the CLI targets after construction: session restore already ran, so
+	// the requested files win focus over the restored layout.
+	m = m.OpenCLITargets(inv.Targets)
 	wasmHost.SetAPI(m.Host())
 	p := tea.NewProgram(m)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
