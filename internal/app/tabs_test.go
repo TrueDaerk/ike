@@ -56,6 +56,24 @@ func TestOpenSecondFileAppendsTab(t *testing.T) {
 	}
 }
 
+// TestOpenSameFileDifferentSpellingReusesTab guards #272: the explorer opens
+// absolute paths while palette modes open root-relative ones — both spellings
+// of one file must land on the same tab, not a duplicate buffer.
+func TestOpenSameFileDifferentSpellingReusesTab(t *testing.T) {
+	dir := t.TempDir()
+	abs := writeTemp(t, dir, "a.txt", "aaa\n")
+	t.Chdir(dir)
+	m := openApp(t, abs, "a.txt")
+
+	inst := m.panes.FocusedInstance()
+	if inst.TabCount() != 1 {
+		t.Fatalf("want 1 tab after reopening by relative path, got %d", inst.TabCount())
+	}
+	if got := inst.Editor().Path(); got != canonicalPath(abs) {
+		t.Fatalf("tab path = %q, want canonical %q", got, canonicalPath(abs))
+	}
+}
+
 func TestOpenExistingFileActivatesTab(t *testing.T) {
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
