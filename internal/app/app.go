@@ -31,6 +31,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/lang"
+	"ike/internal/largefile"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 	"ike/internal/menu"
@@ -89,6 +90,10 @@ type Model struct {
 	// closedTabs is the reopen ring (0190, #158): the last few closed tabs'
 	// paths and carets, newest last, popped by editor.tab.reopenClosed.
 	closedTabs []closedTab
+	// largeToasted remembers which paths already raised the one-time
+	// large-file toast (#149), so re-activating the tab stays quiet. Held as
+	// a map so value-receiver open paths mutate the shared set.
+	largeToasted map[string]bool
 	host       *host.Host
 	reg        *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
@@ -327,6 +332,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		panes:        panes,
 		recentEditor: edKey,
 		recent:       recent,
+		largeToasted: map[string]bool{},
 		navHist:      &nav.History{},
 		host:         h,
 		reg:          reg,
@@ -432,6 +438,9 @@ func (m Model) StartWatcher(root string) {
 	if v, ok := m.host.Config().Get("files.watch"); ok && v == "false" {
 		return
 	}
+	// Large files are never content-hashed by the poll fallback (#149):
+	// mtime+size alone decide for them.
+	m.watcher.SetHashLimit(largefile.LimitsFrom(m.host.Config().Get).MaxBytes)
 	_ = m.watcher.Start(root)
 }
 
@@ -482,6 +491,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		Sel:        int(ev.Sel),
 		AnchorLine: ev.AnchorLine,
 		AnchorCol:  ev.AnchorCol,
+		Large:      ev.Large,
 	})
 }
 
@@ -1364,6 +1374,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// editor.tab.reopenClosed (alt+shift+t): pop the reopen ring.
 		return m.reopenClosedTab()
 
+	case ForceCodeInsightMsg:
+		// editor.forceCodeInsight (palette): override the large-file
+		// degradation (#149) for the focused document.
+		return m.forceCodeInsight()
+
 	case ShowKeymapHelpMsg:
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
 		m.openHelp()
@@ -1677,6 +1692,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				skip = ed
 				msg.Dirty = ed.Dirty()
 				msg.Stale = ed.Stale()
+				msg.Large = ed.LargeFile()
 			}
 		}
 		var cmds []tea.Cmd
@@ -2115,6 +2131,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 			key = m.spawnEditor()
 		}
 		if m.openInTab(key, path) {
+			m.notifyLargeFile(m.panes.Get(key).Editor())
 			m.recent.Touch(path)  // MRU for the recent-files palette mode (0230)
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
@@ -2126,6 +2143,54 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
+	return m, tea.Batch(cmds...)
+}
+
+// notifyLargeFile raises the one-time large-file toast (#149) for a freshly
+// opened flagged document; later opens and tab switches of the same path stay
+// quiet.
+func (m Model) notifyLargeFile(ed *editor.Model) {
+	if ed == nil || !ed.HasFile() || !ed.InsightOff() || m.largeToasted[ed.Path()] {
+		return
+	}
+	m.largeToasted[ed.Path()] = true
+	m.host.Notify(host.Warn, "large file: highlighting and language features disabled")
+}
+
+// forceCodeInsight handles editor.forceCodeInsight (#149): it lifts the
+// large-file degradation for the focused document — highlighting reparses in
+// every view of it, and the file-opened hook re-fires so the LSP bridge
+// didOpens past its gate.
+func (m Model) forceCodeInsight() (tea.Model, tea.Cmd) {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		return m, nil
+	}
+	if !ed.LargeFile() {
+		m.host.Notify(host.Info, "code insight is already enabled for this file")
+		return m, nil
+	}
+	path := ed.Path()
+	var cmds []tea.Cmd
+	if c := ed.ForceCodeInsight(); c != nil {
+		cmds = append(cmds, c)
+	}
+	// Shared views of the document (#142) resume highlighting too.
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, other := range inst.Editors() {
+			if other != ed && other.HasFile() && other.Path() == path {
+				if c := other.Reparse(); c != nil {
+					cmds = append(cmds, c)
+				}
+			}
+		}
+	}
+	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
+	m.host.Notify(host.Info, "code insight enabled for "+filepath.Base(path))
 	return m, tea.Batch(cmds...)
 }
 
@@ -4004,6 +4069,10 @@ func (m Model) statusLine() string {
 		}
 		if ed.Stale() {
 			dirty += " [disk changed]"
+		}
+		if ed.InsightOff() {
+			// Large-file mode (#149): say why highlighting/LSP are absent.
+			dirty += " [large file]"
 		}
 		if errs, warns := ed.DiagnosticCounts(); errs > 0 || warns > 0 {
 			diag = " │ " + strconv.Itoa(errs) + "E " + strconv.Itoa(warns) + "W"

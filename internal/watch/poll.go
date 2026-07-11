@@ -12,10 +12,10 @@ import (
 // EventMsg shape through the shared debounce path.
 
 // Track registers path for poll comparison, capturing its current stamp
-// (mtime, size and content hash).
+// (mtime, size and — below the hash limit — content hash).
 func (s *Service) Track(path string) {
 	abs := absPath(path)
-	stamp := stampOf(abs)
+	stamp := s.stampOf(abs)
 	s.mu.Lock()
 	s.tracked[abs] = stamp
 	s.mu.Unlock()
@@ -32,7 +32,9 @@ func (s *Service) Untrack(path string) {
 // Poll compares every tracked file against its recorded stamp and reports
 // changes/removals through the debounced event path. An mtime change with an
 // unchanged size is treated as suspicion only: the content hash decides, so a
-// bare touch never reports a phantom change.
+// bare touch never reports a phantom change. Files above the hash limit (#149)
+// carry no hash — for them mtime+size alone decide, and a bare touch does
+// report (a conservative reload beats reading megabytes to rule it out).
 func (s *Service) Poll() {
 	s.mu.Lock()
 	snapshot := make(map[string]fileStamp, len(s.tracked))
@@ -53,11 +55,12 @@ func (s *Service) Poll() {
 		if st.ModTime().Equal(prev.mtime) && st.Size() == prev.size {
 			continue
 		}
-		cur := stampOf(path)
+		cur := s.stampOf(path)
 		s.mu.Lock()
 		s.tracked[path] = cur
 		s.mu.Unlock()
-		if st.Size() != prev.size || cur.hash != prev.hash {
+		if st.Size() != prev.size || cur.hash != prev.hash ||
+			(cur.hash == "" && prev.hash == "") {
 			s.note(path, FileChanged)
 		}
 	}
@@ -65,12 +68,19 @@ func (s *Service) Poll() {
 
 // stampOf captures the comparison state of path; a stat/read failure yields a
 // zero stamp (so the next Poll reports the file as removed or changed).
-func stampOf(path string) fileStamp {
+func (s *Service) stampOf(path string) fileStamp {
 	st, err := os.Stat(path)
 	if err != nil {
 		return fileStamp{}
 	}
-	return fileStamp{mtime: st.ModTime(), size: st.Size(), hash: hashOf(path)}
+	stamp := fileStamp{mtime: st.ModTime(), size: st.Size()}
+	s.mu.Lock()
+	limit := s.hashLimit
+	s.mu.Unlock()
+	if limit <= 0 || st.Size() <= limit {
+		stamp.hash = hashOf(path)
+	}
+	return stamp
 }
 
 // hashOf returns the hex sha256 of path's content ("" on read failure).

@@ -58,6 +58,12 @@ type Event struct {
 	Sel        SelKind
 	AnchorLine int
 	AnchorCol  int
+	// Large marks a change on a document in large-file mode (#149): Text is
+	// intentionally absent (not "the file became empty"), so the LSP bridge
+	// must stop syncing instead of shipping an empty didChange — a reload can
+	// flip an already-didOpened document into this state when it grows past
+	// the threshold on disk.
+	Large bool
 }
 
 // Emitter receives editor events. Implementations must not block.
@@ -99,7 +105,13 @@ func (m *Model) emit(kind EventKind) {
 		ev.AnchorLine, ev.AnchorCol = m.anchor.Line, m.anchor.Col
 	}
 	if kind == EventChange {
-		ev.Text = m.buf.String()
+		if m.InsightOff() {
+			// A flagged large document ships no text (#149): re-joining
+			// megabytes per keystroke is exactly the cost this mode avoids.
+			ev.Large = true
+		} else {
+			ev.Text = m.buf.String()
+		}
 	}
 	m.emitter.Emit(ev)
 }

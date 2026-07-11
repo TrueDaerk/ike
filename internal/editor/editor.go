@@ -22,6 +22,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/watch"
@@ -121,9 +122,16 @@ type Model struct {
 	insert insertSession
 	dot    *dotCommand
 
-	dirty   bool
-	stale   bool // file changed on disk while dirty (Roadmap 0140, #82)
-	focused bool
+	dirty bool
+	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
+	// largeFile flags a document crossing the files.large_file_kb /
+	// files.large_file_lines thresholds at Load/reload (#149): code insight
+	// (highlighting, LSP sync, change-event text) degrades so typing stays
+	// flat. A document property like dirty/stale — copied on share, mirrored
+	// via SyncMsg. editor.forceCodeInsight overrides it per path (see
+	// insightOff).
+	largeFile bool
+	focused   bool
 	width   int
 	height  int
 
@@ -274,6 +282,7 @@ func (m *Model) Load(path string) error {
 	}
 	m.path = path
 	m.buf = buffer.FromString(string(data))
+	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -303,6 +312,7 @@ func (m *Model) Load(path string) error {
 func (m *Model) NewFile(path string) {
 	m.path = path
 	m.buf = buffer.FromString(lang.TemplateFor(path))
+	m.largeFile = false // a template seed is never large
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -329,6 +339,7 @@ func (m *Model) NewFile(path string) {
 // or leave it empty (untitled restore).
 func (m *Model) RestoreText(text string) {
 	m.buf = buffer.FromString(text)
+	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -380,6 +391,37 @@ func (m Model) Dirty() bool { return m.dirty }
 // unsaved edits (Roadmap 0140): the tab and status line show an indicator and
 // the next save opens the conflict prompt.
 func (m Model) Stale() bool { return m.stale }
+
+// LargeFile reports whether the document crossed the large-file thresholds at
+// its last load/reload (#149).
+func (m Model) LargeFile() bool { return m.largeFile }
+
+// InsightOff reports whether code insight is degraded for this document
+// (#149): flagged large and not overridden per path via ForceCodeInsight. The
+// status line renders its indicator off this, and parseCmd/emit gate on it.
+func (m Model) InsightOff() bool { return m.largeFile && !largefile.Forced(m.path) }
+
+// ForceCodeInsight punches through the large-file degradation for this
+// document's path (editor.forceCodeInsight, #149): highlighting and change
+// text resume, and the returned command runs the first full reparse. The app
+// layer re-fires the file-opened hook alongside so the LSP bridge didOpens.
+// Nil when the document is not flagged.
+func (m *Model) ForceCodeInsight() tea.Cmd {
+	if !m.largeFile || !m.HasFile() {
+		return nil
+	}
+	largefile.Force(m.path)
+	return m.parseCmd()
+}
+
+// limits evaluates the configured large-file thresholds; no config means the
+// built-in defaults.
+func (m Model) limits() largefile.Limits {
+	if m.cfg == nil {
+		return largefile.LimitsFrom(nil)
+	}
+	return largefile.LimitsFrom(m.cfg.Get)
+}
 
 // ModeName returns the current modal state.
 func (m Model) ModeName() Mode { return m.mode }

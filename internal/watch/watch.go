@@ -62,6 +62,20 @@ type Service struct {
 
 	debounce time.Duration
 	now      func() time.Time // injectable clock for tests
+
+	// hashLimit is the largest file (bytes) the poll fallback content-hashes
+	// (#149): above it a stamp carries no hash and mtime+size alone decide,
+	// so a 50 MB log is never read wholesale just to confirm a touch. Zero
+	// means no limit.
+	hashLimit int64
+}
+
+// SetHashLimit caps poll-fallback content hashing at limit bytes (#149); zero
+// removes the cap. Applies to stamps taken after the call.
+func (s *Service) SetHashLimit(limit int64) {
+	s.mu.Lock()
+	s.hashLimit = limit
+	s.mu.Unlock()
 }
 
 // fileStamp is the poll comparison state for one tracked file.

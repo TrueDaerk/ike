@@ -86,6 +86,10 @@ type EditorEvent struct {
 	Sel        int
 	AnchorLine int
 	AnchorCol  int
+	// Large marks a change on a document in large-file mode (#149): Text is
+	// intentionally absent, so the LSP bridge stops syncing the document
+	// instead of treating the event as "the file is now empty".
+	Large bool
 }
 
 // EditorEvent selection kinds (mirrors editor.SelKind).

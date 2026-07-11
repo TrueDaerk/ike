@@ -187,3 +187,49 @@ func TestMarkSavedRefreshesPollStamp(t *testing.T) {
 		t.Fatalf("own save must not poll-report, got %d events", n)
 	}
 }
+
+func TestPollLargeFileSkipsHashUsesMtime(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "big.log")
+	if err := os.WriteFile(path, []byte("0123456789"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	s.SetHashLimit(4) // 10-byte file is over the limit: never content-hashed
+	s.Track(path)
+
+	if st := s.tracked[absPath(path)]; st.hash != "" {
+		t.Fatalf("large file must not be hashed, got %q", st.hash)
+	}
+
+	// mtime+size decide (#149): a bare touch reports for a large file — the
+	// conservative reload beats reading megabytes to rule it out.
+	if err := os.Chtimes(path, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	s.Poll()
+	got := c.wait(t, 1)
+	if got[0].Kind != FileChanged || got[0].Path != path {
+		t.Fatalf("mtime change on a large file must report, got %v", got)
+	}
+}
+
+func TestPollSmallFileStillHashedUnderLimit(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s.txt")
+	if err := os.WriteFile(path, []byte("aaa"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	s.SetHashLimit(1024)
+	s.Track(path)
+	// Under the limit the hash-on-suspicion path still absorbs a bare touch.
+	if err := os.Chtimes(path, time.Now().Add(time.Hour), time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	s.Poll()
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("touch under the hash limit must not report, got %d events", n)
+	}
+}

@@ -75,6 +75,7 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	// Mutate the document in place (not fresh pointers): other panes sharing
 	// it (#142) must see the reloaded text and the cleared undo stack too.
 	m.buf.ReplaceAll(string(data))
+	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.hist.Reset()
 	m.dirty = false
 	m.stale = false

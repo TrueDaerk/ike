@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-12T15:00:00Z
 ---
 
 # Syntax Highlighting
@@ -86,6 +86,13 @@ matches** (a newer edit drops stale results). `renderLine` then looks up the
 capture per rune cell and wraps it in the themed style — in the default branch,
 so the cursor and the visual selection still win on overlap, and a diagnostic
 underline composes on top.
+
+Large-file mode (#149) gates this at the source: a document flagged by the
+`files.large_file_kb` / `files.large_file_lines` thresholds never schedules a
+parse (`parseCmd` returns nil before the grammar check) — the CGo parse cost
+scales with file size, so this is the single biggest degradation win. The
+palette command `editor.forceCodeInsight` re-enables it per document; see
+`/architecture/editor.md`.
 
 ## Testing
 

@@ -44,6 +44,14 @@ func TestDefaultsWhenNoFiles(t *testing.T) {
 	if c.Project.MaxHistory != 20 || len(c.Project.History) != 0 {
 		t.Errorf("project defaults wrong: %+v", c.Project)
 	}
+	if c.Files.LargeFileKB != 1024 || c.Files.LargeFileLines != 100_000 {
+		t.Errorf("large-file defaults wrong: %+v", c.Files)
+	}
+	flat := c.Flat()
+	if flat["files.large_file_kb"] != "1024" || flat["files.large_file_lines"] != "100000" {
+		t.Errorf("large-file keys not flattened: kb=%q lines=%q",
+			flat["files.large_file_kb"], flat["files.large_file_lines"])
+	}
 }
 
 func TestPrecedenceProjectWinsScalar(t *testing.T) {
