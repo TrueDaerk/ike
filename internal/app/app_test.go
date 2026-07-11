@@ -18,6 +18,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/layout"
+	ilsp "ike/internal/lsp"
 	"ike/internal/menu"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -938,5 +939,32 @@ func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
 	m2 = tm.(Model)
 	if !m2.explorerVisible() || m2.panes.Focused() != pane.ExplorerKey {
 		t.Fatal("toggle must bring the restored hidden explorer back")
+	}
+}
+
+// TestDefinitionCandidatesOpenPicker guards the multi-target go-to-definition
+// picker (#279): several candidates open the palette list (with the
+// definitions placeholder) instead of guessing the first location.
+func TestDefinitionCandidatesOpenPicker(t *testing.T) {
+	m := newSized()
+	tm, _ := m.Update(ilsp.DefinitionCandidatesMsg{Refs: []ilsp.Reference{
+		{Path: "a.go", Line: 1, Preview: "func A()"},
+		{Path: "b.go", Line: 9, Preview: "func A()"},
+	}})
+	m = tm.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("two definition candidates must open the picker palette")
+	}
+	if got := m.refs.Placeholder(); got != "Definitions — pick a target…" {
+		t.Fatalf("placeholder = %q, want the definitions hint", got)
+	}
+
+	// A later find-references run resets the hint to the usages default.
+	tm, _ = m.Update(ilsp.ReferencesMsg{Refs: []ilsp.Reference{
+		{Path: "a.go", Line: 1}, {Path: "b.go", Line: 2},
+	}})
+	m = tm.(Model)
+	if got := m.refs.Placeholder(); got != "Usages — filter by file or text…" {
+		t.Fatalf("placeholder after references = %q, want the usages default", got)
 	}
 }

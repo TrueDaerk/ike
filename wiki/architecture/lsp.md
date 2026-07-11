@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-10T17:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -84,7 +84,12 @@ which also supplies a trimmed preview line — and sends `ReferencesMsg`. The ap
 routes by count: none → info toast, one → navigate directly, more → the palette
 opened locked to a references mode (`internal/app/references.go`) listing
 `path:line` + preview, fuzzy-filterable; activating an entry emits the same
-`DefinitionMsg` the go-to-definition path navigates with.
+`DefinitionMsg` the go-to-definition path navigates with. The location→
+reference conversion is shared (`locationsToRefs`), and go-to-definition
+reuses it for the **multi-target picker** (#279): more than one definition
+site (interface implementations, build-tag variants) opens the same palette
+list — placeholder "Definitions — pick a target…" — instead of guessing the
+first location; a single site still jumps directly.
 
 **Formatting (#7).** `lsp.format` (default `cmd+alt+l`) sends
 `textDocument/formatting`, `lsp.formatRange` sends the range variant for the

@@ -24,14 +24,23 @@ const refsPrefix = '&'
 // untruncated, so an over-long source line would crowd out the location.
 const previewMax = 32
 
-// refsMode is a palette Mode over the latest find-references results.
+// refsMode is a palette Mode over the latest find-references results. It
+// doubles as the definition-candidates picker (#279) — same rows, same
+// activation path — with only the placeholder swapped.
 type refsMode struct {
-	items []palette.Item
+	items       []palette.Item
+	placeholder string // "" renders the default usages hint
 }
+
+// SetPlaceholder overrides the input hint for the next open ("Definitions —
+// pick a target…"); Set resets it to the usages default.
+func (r *refsMode) SetPlaceholder(s string) { r.placeholder = s }
 
 // Set replaces the mode's items with the given references, kept in server
 // order (grouped by file, ascending positions for every mainstream server).
+// It resets the placeholder to the usages default.
 func (r *refsMode) Set(refs []ilsp.Reference) {
+	r.placeholder = ""
 	r.items = make([]palette.Item, len(refs))
 	for i, ref := range refs {
 		preview := ref.Preview
@@ -50,7 +59,12 @@ func (r *refsMode) Set(refs []ilsp.Reference) {
 func (r *refsMode) Prefix() rune { return refsPrefix }
 
 // Placeholder implements palette.Mode.
-func (r *refsMode) Placeholder() string { return "Usages — filter by file or text…" }
+func (r *refsMode) Placeholder() string {
+	if r.placeholder != "" {
+		return r.placeholder
+	}
+	return "Usages — filter by file or text…"
+}
 
 // Results implements palette.Mode: the stored references fuzzy-matched on
 // location and preview (an empty query lists all, in server order).
