@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -20,13 +20,19 @@ It **defines no Commands.** A binding is `(Chord, Context) → commandID`; the
 target ids are owned by the editor (06), explorer (05), palette (07), project
 switching (09), and a future VCS roadmap. If a command id is not registered the
 binding is **inert** — it still appears in the cheatsheet, but pressing it falls
-through to the focused pane.
+through to the focused pane. The exception is an id documented in the blocked
+ledger: pressing such a chord consumes the key and raises an info toast naming
+the blocking dependency (#267), so a dead default reads as "not yet" rather
+than as a typo.
 
 ## The binding model
 
 - **`Key`** (`key.go`) — a base key (`a`, `f7`, `esc`, `left-bracket`, `/`) plus
   a `Mod` bitset (`Meta`/`Ctrl`/`Alt`/`Shift`). Authors write logical modifiers;
-  `Meta` (Cmd) is folded to a concrete modifier at build time.
+  `Meta` (Cmd) is folded to a concrete modifier at build time. Glyph spellings
+  canonicalise in `ParseKey`'s `baseAlias` (`[` → `left-bracket`, `]` →
+  `right-bracket`), so a modified press like `cmd+[` normalises the same way
+  as a bare one and matches the default table (#284).
 - **`Chord`** (`chord.go`) — an ordered list of `Key` steps. One type models all
   three shapes: single (`esc`), modified (`cmd+t`), multi-step (`cmd+k cmd+c`).
 - **`parse.go`** — `ParseChord`/`ParseKey` accept whitespace-separated steps with
@@ -90,7 +96,9 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 - In a text-capturing editor (insert mode) only **modified** chords — or a chord
   already in progress — are eligible; plain letters always reach the editor.
 - A **Resolved** id that names a registered command runs it via `host.API`; an
-  inert id falls through. **Pending** swallows the key and schedules a
+  inert id falls through — unless the blocked ledger documents it, in which
+  case the chord is consumed with an explanatory toast (#267). **Pending**
+  swallows the key and schedules a
   `keymapTimeoutMsg`; on timeout the held chord resolves as an exact binding or is
   discarded.
 
