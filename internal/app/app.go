@@ -2917,6 +2917,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 			}
+			// A click on the title band focuses the pane (#304); the drag
+			// only commits once the pointer leaves the band (commitMove).
+			m.setFocus(hit.Pane)
 			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
 		case layout.HitPane:
 			return m.paneClick(hit.Pane, msg)
@@ -2962,6 +2965,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 func (m *Model) commitMove(x, y int) {
 	target, ok := m.lay.PaneAt(x, y)
 	if !ok {
+		return
+	}
+	// A release still inside the source pane's own title band is a click,
+	// not a drag (#304): the title rows double as the pane's top edge, so
+	// without this guard a plain click would land in the top edgeZone and
+	// spawn a surprise split. Dragging out of the band (any direction,
+	// including onto another pane's title row) still commits.
+	if r, ok := m.lay.Panes[m.drag.srcPane]; ok && target == m.drag.srcPane && y < r.Y+layout.TitleBarRows {
 		return
 	}
 	if target != m.drag.srcPane {

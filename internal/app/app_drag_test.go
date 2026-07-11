@@ -282,3 +282,39 @@ func TestActiveFollowsFocusedEditor(t *testing.T) {
 		t.Fatalf("active = %q want %q after refocusing", got, a)
 	}
 }
+
+// TestTitleClickDoesNotSplit guards #304: a press+release on a pane's title
+// band without leaving it is a click — it focuses the pane and must not spawn
+// a split (the title band doubles as the top edgeZone).
+func TestTitleClickDoesNotSplit(t *testing.T) {
+	m := sized(t, 100, 40)
+	before := len(m.lay.Panes)
+	edRect := m.lay.Panes[ctxEditor]
+	m = step(m, press(edRect.X+2, edRect.Y))
+	m = step(m, release(edRect.X+2, edRect.Y))
+	if got := len(m.lay.Panes); got != before {
+		t.Fatalf("title click must not split: %d panes, want %d", got, before)
+	}
+	if m.panes.Focused() != ctxEditor {
+		t.Fatalf("title click should focus the pane, focused=%q", m.panes.Focused())
+	}
+	// The second title row (tab bar) behaves the same.
+	m = step(m, press(edRect.X+2, edRect.Y+1))
+	m = step(m, release(edRect.X+3, edRect.Y+1))
+	if got := len(m.lay.Panes); got != before {
+		t.Fatalf("tab-row click must not split: %d panes, want %d", got, before)
+	}
+}
+
+// TestTitleDragOutOfBandStillSplits: dragging from the title band to the
+// source pane's bottom edge keeps spawning the self-split.
+func TestTitleDragOutOfBandStillSplits(t *testing.T) {
+	m := sized(t, 100, 40)
+	before := len(m.lay.Panes)
+	edRect := m.lay.Panes[ctxEditor]
+	m = step(m, press(edRect.X+edRect.W/2, edRect.Y))
+	m = step(m, release(edRect.X+edRect.W/2, edRect.Y+edRect.H-1))
+	if got := len(m.lay.Panes); got != before+1 {
+		t.Fatalf("bottom-edge drop should split: %d panes, want %d", got, before+1)
+	}
+}
