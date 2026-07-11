@@ -289,6 +289,59 @@ func TestReplaceModeAltEnterOpensInstead(t *testing.T) {
 	}
 }
 
+// The ctrl chords mirror every alt binding (#422): on macOS Option is a
+// composition key, so alt never reaches the terminal.
+func TestCtrlChordsMirrorAltBindings(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, match("a.go", 3))
+	for _, tc := range []struct {
+		code rune
+		flag *bool
+	}{
+		{'c', &m.caseSensitive},
+		{'w', &m.wholeWord},
+		{'x', &m.regex},
+	} {
+		before := m.gen
+		m.Update(tea.KeyPressMsg{Code: tc.code, Mod: tea.ModCtrl})
+		if !*tc.flag || m.gen == before {
+			t.Fatalf("ctrl+%c must toggle and rescan", tc.code)
+		}
+	}
+
+	r := openedReplace(t)
+	cmd := r.Update(tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl})
+	if req := cmd().(ReplaceRequestMsg); len(req.Items) != 2 {
+		t.Fatalf("ctrl+f must batch the selected file's matches: %+v", req.Items)
+	}
+	cmd = r.Update(tea.KeyPressMsg{Code: 'a', Mod: tea.ModCtrl})
+	if req := cmd().(ReplaceRequestMsg); len(req.Items) != 1 {
+		t.Fatalf("ctrl+a must batch the remaining matches: %+v", req.Items)
+	}
+
+	r = openedReplace(t)
+	cmd = r.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl})
+	if _, ok := cmd().(OpenLocationMsg); !ok {
+		t.Fatal("ctrl+enter must navigate, not replace")
+	}
+}
+
+func TestCtrlUpRecallsHistory(t *testing.T) {
+	m := opened(t)
+	typeText(m, "first")
+	feed(m, match("a.go", 1))
+	m.Update(key("enter"))
+	m.Open(t.TempDir())
+	for range "first" {
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
+	if m.query != "first" {
+		t.Fatalf("ctrl+up must recall the last committed query, got %q", m.query)
+	}
+}
+
 func TestFindModeHasNoReplaceField(t *testing.T) {
 	m := opened(t)
 	m.Update(key("tab"))

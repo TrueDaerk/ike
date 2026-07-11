@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Finder ctrl chords (#422): every alt binding in the find/replace-in-path
+  overlay gained a ctrl primary (`ctrl+c/w/x` toggles, `ctrl+f`/`ctrl+a`
+  batch replace, `ctrl+enter` navigate, `ctrl+up/down` history) — on macOS
+  Option composes characters, so the alt chords never arrived. Alt stays as
+  secondary. See [search](/architecture/search.md).
+
 - LSP call hierarchy (#173): `lsp.callHierarchy` (`ctrl+alt+h`, leader `H`)
   prepares the symbol under the cursor and opens a lazily-expanding
   callers/callees tree overlay (`internal/callhier`); `tab` flips the

@@ -248,9 +248,13 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		return m.openCurrent()
-	case "alt+enter":
+	// The ctrl chords double every alt binding below: on macOS Option is a
+	// composition key, so alt chords never reach the terminal (#422, same
+	// story as the tab keys in #248). ctrl is the delivered primary; alt
+	// stays for terminals where it works.
+	case "alt+enter", "ctrl+enter":
 		return m.openCurrent()
-	case "alt+f":
+	case "alt+f", "ctrl+f":
 		// Replace every match of the selected file.
 		if m.replaceMode {
 			if path, items := m.list.CurrentGroup(); len(items) > 0 {
@@ -261,7 +265,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 		return nil
-	case "alt+a":
+	case "alt+a", "ctrl+a":
 		// Replace all matches.
 		if m.replaceMode && m.list.Total() > 0 {
 			m.commitHistory()
@@ -296,22 +300,22 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case "pgup":
 		m.list.Move(-10)
 		return nil
-	case "alt+c":
+	case "alt+c", "ctrl+c":
 		m.caseSensitive = !m.caseSensitive
 		m.rescan()
 		return nil
-	case "alt+w":
+	case "alt+w", "ctrl+w":
 		m.wholeWord = !m.wholeWord
 		m.rescan()
 		return nil
-	case "alt+x":
+	case "alt+x", "ctrl+x":
 		m.regex = !m.regex
 		m.rescan()
 		return nil
-	case "alt+up":
+	case "alt+up", "ctrl+up":
 		m.history(1)
 		return nil
-	case "alt+down":
+	case "alt+down", "ctrl+down":
 		m.history(-1)
 		return nil
 	case "backspace":
@@ -504,7 +508,8 @@ func (m *Model) inputRow(label, value string, f field, width int) string {
 	return lipgloss.NewStyle().MaxWidth(width).Render(row)
 }
 
-// togglesRow renders the three match-mode toggles with their alt-key hints.
+// togglesRow renders the three match-mode toggles with their key hints
+// (ctrl is the delivered primary on macOS, #422; alt still works elsewhere).
 func (m *Model) togglesRow() string {
 	pal := m.theme()
 	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
@@ -515,9 +520,9 @@ func (m *Model) togglesRow() string {
 		}
 		return off.Render("[ ] " + label)
 	}
-	return "        " + part("Case (alt+c)", m.caseSensitive) +
-		"  " + part("Word (alt+w)", m.wholeWord) +
-		"  " + part("Regex (alt+x)", m.regex)
+	return "        " + part("Case (ctrl+c)", m.caseSensitive) +
+		"  " + part("Word (ctrl+w)", m.wholeWord) +
+		"  " + part("Regex (ctrl+x)", m.regex)
 }
 
 // previewRows renders the before/after preview for the selected match in
@@ -554,7 +559,7 @@ func (m *Model) statusRow(width int) string {
 			lipgloss.NewStyle().MaxWidth(width).Render("error: " + m.errText))
 	case strings.TrimSpace(m.query) == "":
 		if m.replaceMode {
-			return dim.Render("type to search — enter replaces match, alt+f file, alt+a all, alt+enter opens")
+			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+enter opens")
 		}
 		return dim.Render("type to search — enter opens, esc closes, tab cycles fields")
 	case m.scanning && m.list.Total() == 0:
