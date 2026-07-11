@@ -376,6 +376,10 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		},
 	)})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
+	// Thread the startup palette through every chrome component; without this
+	// the settings panel, command palette, shell, help, and menu render with
+	// the default palette until the first theme switch (#384).
+	m.applyTheme(themePal)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)

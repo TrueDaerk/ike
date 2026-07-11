@@ -75,7 +75,7 @@ func (m *Model) renderFilter() string {
 func (m *Model) renderCategories(h int) string {
 	pal := m.theme()
 	base := lipgloss.NewStyle().Width(catWidth)
-	sel := base.Background(pal.Selection).Bold(true)
+	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	dim := base.Foreground(pal.Secondary).Faint(true)
 
 	lines := make([]string, 0, len(m.pages))
@@ -157,7 +157,7 @@ func (m *Model) renderEntry(r row, selected bool, w int) string {
 	style := lipgloss.NewStyle()
 	switch {
 	case selected && m.focus == formColumn:
-		style = style.Background(pal.Selection).Bold(true)
+		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	case origin == "default":
 		style = style.Foreground(pal.Foreground)
 	default:

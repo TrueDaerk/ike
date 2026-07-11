@@ -346,7 +346,7 @@ func (t *ToolchainPage) View(w, h int) string {
 					line := "   install python " + v
 					style := lipgloss.NewStyle().Foreground(pal.Secondary)
 					if i == t.uvPick {
-						style = lipgloss.NewStyle().Background(pal.Selection)
+						style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
 					}
 					lines = append(lines, style.Render(line))
 				}
@@ -384,7 +384,7 @@ func (t *ToolchainPage) renderLang(l lang.Language, selected bool) string {
 	style := lipgloss.NewStyle()
 	switch {
 	case selected:
-		style = style.Background(pal.Selection).Bold(true)
+		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	case source == "config":
 		style = style.Foreground(pal.Info)
 	}
@@ -402,14 +402,14 @@ func (t *ToolchainPage) renderPicker() []string {
 		}
 		style := lipgloss.NewStyle().Foreground(pal.Secondary)
 		if i == t.pick {
-			style = lipgloss.NewStyle().Background(pal.Selection)
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
 		}
 		out = append(out, style.Render(line))
 	}
 	custom := "   custom path…"
 	style := lipgloss.NewStyle().Foreground(pal.Secondary)
 	if t.pick >= len(t.candidates) {
-		style = lipgloss.NewStyle().Background(pal.Selection)
+		style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
 	}
 	return append(out, style.Render(custom))
 }

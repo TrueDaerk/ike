@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-10T18:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -110,9 +110,31 @@ renderer default makes every reset fall back to the palette background
 instead. Raised surfaces (status bar, LSP popups, hover rows, selected rows)
 additionally paint their own `Panel`/`Selection` backgrounds.
 
+## Contrast rule (adding a theme)
+
+Every built-in theme must pass **WCAG AA text contrast (≥ 4.5:1)** on the
+fg/bg slot pairs the chrome actually renders; `TestBuiltinThemeContrast`
+(`internal/theme/contrast_test.go`) enforces this table-driven over all
+builtins, so a new theme with unreadable pairs fails CI. The checked pairs:
+`Foreground` on `Background`/`Surface`/`Panel`; `SelectionText` on
+`Selection` and on `Primary` (the completion selected row paints
+`SelectionText` on `Primary`); `Accent` and `Secondary` on `Surface`
+(`Secondary` also on `Panel`); `Success` on `Surface`; and each diagnostic
+color (`Warning`/`Error`/`Info`/`Hint`) on both `Surface` and `Panel`.
+Border/indicator slots (`BorderFocus`, `MoveSource`, `DropTarget`, `Ghost`,
+scrollbars) are exempt — they never carry text. When designing a theme, pick
+the darkest/lightest canonical shade of each accent that clears the bar
+rather than inventing new hues.
+
+Renderers must never pair a hardcoded color with a theme color: a
+`Selection`/`Primary` background always sets `Foreground(SelectionText)`
+explicitly (terminal-default text on a theme background was the source of
+issue #384).
+
 ## Built-in palettes
 
-`default` (today's colors, pixel-identical to pre-theme IKE), `tokyo-night`,
+`default` (today's colors; the low-contrast diagnostic/selection slots were
+lifted to AA contrast in #384), `tokyo-night`,
 `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`,
 `catppuccin-mocha`, `catppuccin-latte`. Select via:
 

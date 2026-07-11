@@ -413,7 +413,7 @@ func (p *LSPPage) renderRow(l lang.Language, selected bool) string {
 	style := lipgloss.NewStyle()
 	switch {
 	case selected:
-		style = style.Background(pal.Selection).Bold(true)
+		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	case status == "missing" || status == "crashed":
 		style = style.Foreground(pal.Error)
 	case src != "built-in":

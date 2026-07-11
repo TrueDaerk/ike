@@ -302,14 +302,14 @@ func (k *KeymapPage) renderRow(b keymap.Binding, selected bool, w int) string {
 		}
 		style := lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true)
 		if selected {
-			style = style.Background(pal.Selection)
+			style = style.Background(pal.Selection).Foreground(pal.SelectionText)
 		}
 		return style.Render(label + "  ✗ " + hint)
 	}
 	style := lipgloss.NewStyle()
 	switch {
 	case selected:
-		style = style.Background(pal.Selection).Bold(true)
+		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	case b.Layer != keymap.LayerDefault:
 		style = style.Foreground(pal.Info)
 	}
