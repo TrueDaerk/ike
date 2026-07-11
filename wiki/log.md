@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Palette-invoked explorer file ops focus the explorer (#374): dispatching
+  `NewFileMsg`/`NewDirMsg`/`DeleteMsg`/`RenameMsg` from the command palette now
+  moves focus to the explorer pane first (re-showing a hidden tree), so the
+  modal prompt captures every typed key instead of leaking vim commands into
+  the focused editor buffer. See
+  [explorer — file operations](/architecture/explorer.md).
+
 - Theme contrast audit (#384): all built-in themes now pass WCAG AA (≥ 4.5:1)
   on the rendered fg/bg slot pairs, enforced by the new table-driven
   `TestBuiltinThemeContrast`. Light themes (gruvbox-light, rose-pine-dawn,

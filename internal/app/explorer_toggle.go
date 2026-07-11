@@ -25,6 +25,20 @@ func (m *Model) toggleExplorer() {
 	m.setFocus(pane.ExplorerKey)
 }
 
+// focusExplorer moves focus to the explorer pane, re-inserting it into the
+// layout first when hidden. Unlike toggleExplorer it never hides the tree —
+// it is the "make the explorer able to receive keys" primitive behind
+// palette-invoked file operations (#374).
+func (m *Model) focusExplorer() {
+	if !m.explorerVisible() {
+		m.showExplorer()
+		return
+	}
+	if m.panes.Focused() != pane.ExplorerKey {
+		m.setFocus(pane.ExplorerKey)
+	}
+}
+
 // explorerVisible reports whether the explorer leaf is in the layout tree.
 func (m Model) explorerVisible() bool {
 	for _, key := range layout.Leaves(m.tree) {

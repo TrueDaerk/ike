@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/explorer"
+	"ike/internal/pane"
 )
 
 // drainCmd runs cmd to quiescence, expanding batches and feeding every
@@ -152,6 +153,103 @@ func TestDirRenameRepointsNestedEditor(t *testing.T) {
 	want := filepath.Join(root, "pkg", "c.txt")
 	if got := m.panes.Get(m.activeEditorKey()).Editor().Path(); got != want {
 		t.Fatalf("editor under a renamed folder must follow, path = %q want %q", got, want)
+	}
+}
+
+// TestPaletteFileOpFocusesExplorer guards #374: dispatching a prompt-opening
+// explorer file op (the palette path) while an editor holds focus must move
+// focus to the explorer so the prompt captures every typed key — previously
+// the filename executed as vim commands against the buffer.
+func TestPaletteFileOpFocusesExplorer(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		msg  tea.Msg
+		// rename/delete refuse to prompt on the root selection (the fresh
+		// test tree's cursor); prompt opening per selection is the explorer's
+		// own tested behavior — here only the focus hand-off matters.
+		wantPrompt bool
+	}{
+		{"newFile", explorer.NewFileMsg{}, true},
+		{"newFolder", explorer.NewDirMsg{}, true},
+		{"rename", explorer.RenameMsg{}, false},
+		{"delete", explorer.DeleteMsg{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root, file := projectDir(t)
+			t.Chdir(root)
+			m := newSized()
+			tm, _ := m.openPath(file, false)
+			m = tm.(Model)
+			if m.panes.Focused() == pane.ExplorerKey {
+				t.Fatal("setup: an editor must hold focus")
+			}
+
+			m = dispatch(t, m, tc.msg)
+			if m.panes.Focused() != pane.ExplorerKey {
+				t.Fatalf("focus = %q, want the explorer pane", m.panes.Focused())
+			}
+			if tc.wantPrompt && !m.explorer().Prompting() {
+				t.Fatal("the file-op prompt must be open")
+			}
+		})
+	}
+}
+
+// TestPaletteNewFileTypesIntoPromptNotEditor guards the end-to-end #374 repro:
+// after a palette-invoked New File, typed keys land in the prompt (creating
+// the file on enter) and never leak into the editor buffer as vim commands.
+func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
+	root, file := projectDir(t)
+	t.Chdir(root)
+	m := newSized()
+	tm, _ := m.openPath(file, false)
+	m = tm.(Model)
+	editorKey := m.activeEditorKey()
+	before := m.panes.Get(editorKey).Editor().Text()
+
+	m = dispatch(t, m, explorer.NewFileMsg{})
+	for _, r := range "util.go" {
+		m = drainKey(m, tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	tm2, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = drainCmd(tm2.(Model), cmd)
+
+	created := filepath.Join(root, "util.go")
+	if _, err := os.Stat(created); err != nil {
+		t.Fatalf("enter must create the file on disk: %v", err)
+	}
+	if got := m.panes.Get(editorKey).Editor().Text(); got != before {
+		t.Fatalf("keystrokes leaked into the editor buffer: %q -> %q", before, got)
+	}
+	if m.panes.Get(editorKey).Editor().Dirty() {
+		t.Fatal("the buffer must stay clean — no leaked vim commands")
+	}
+}
+
+// TestPaletteFileOpShowsHiddenExplorer: with the tree hidden (cmd+1), a
+// palette file op must re-show the explorer so its prompt is visible and
+// focused instead of rendering into a pane that is not in the layout.
+func TestPaletteFileOpShowsHiddenExplorer(t *testing.T) {
+	root, file := projectDir(t)
+	t.Chdir(root)
+	m := newSized()
+	tm, _ := m.openPath(file, false)
+	m = tm.(Model)
+	m.setFocus(pane.ExplorerKey)
+	m.hideExplorer()
+	if m.explorerVisible() {
+		t.Fatal("setup: the explorer must be hidden")
+	}
+
+	m = dispatch(t, m, explorer.NewFileMsg{})
+	if !m.explorerVisible() {
+		t.Fatal("a palette file op must re-show the hidden explorer")
+	}
+	if m.panes.Focused() != pane.ExplorerKey {
+		t.Fatalf("focus = %q, want the explorer pane", m.panes.Focused())
+	}
+	if !m.explorer().Prompting() {
+		t.Fatal("the file-op prompt must be open")
 	}
 }
 
