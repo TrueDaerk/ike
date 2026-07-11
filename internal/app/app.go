@@ -139,6 +139,9 @@ type Model struct {
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
+
+	// symbolPrompt is the open workspace-symbol query prompt (0250, #294).
+	symbolPrompt *symbolPromptState
 	// terminalReturnFocus remembers the pane focused before terminal.toggle
 	// moved focus into a terminal, so toggling again returns there (#97).
 	terminalReturnFocus string
@@ -1576,6 +1579,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openLSPRenamePrompt(msg)
 		return m, nil
 
+	case ilsp.SymbolPromptMsg:
+		// project.goToClass (cmd+o / leader S): collect the symbol query.
+		m.openSymbolPrompt(msg)
+		return m, nil
+
+	case ilsp.SymbolResultsMsg:
+		// Workspace-symbol hits (#294): honest empty states, results through
+		// the references palette rows; Enter navigates via DefinitionMsg.
+		switch {
+		case msg.NoProvider:
+			m.host.Notify(host.Warn, "no running language server supports workspace symbols")
+		case len(msg.Refs) == 0:
+			m.host.Notify(host.Info, "no symbols found: "+msg.Query)
+		default:
+			m.refs.Set(msg.Refs)
+			m.refs.SetPlaceholder("Symbols — filter by file or text…")
+			m.palette.SetSize(m.width, m.height)
+			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		}
+		return m, nil
+
 	case ilsp.FormatEditsMsg:
 		// lsp.format / lsp.formatRange: the owning editor applies the edits as
 		// one undo unit (editor/textedit.go).
@@ -1767,6 +1791,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
+		}
+		// The workspace-symbol query prompt (0250, #294) too.
+		if m.symbolPromptOpen() {
+			return m.updateSymbolPrompt(msg)
 		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)

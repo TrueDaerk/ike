@@ -79,6 +79,21 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// SymbolPromptMsg asks the app to prompt for a workspace-symbol query (0250,
+// #294); Apply runs the workspace/symbol request with the typed query.
+type SymbolPromptMsg struct {
+	Apply func(query string) tea.Cmd
+}
+
+// SymbolResultsMsg delivers the workspace/symbol hits, converted to editor
+// coordinates like ReferencesMsg. NoProvider reports that no running server
+// advertises the capability, so the app can hint instead of staying silent.
+type SymbolResultsMsg struct {
+	Query      string
+	Refs       []Reference
+	NoProvider bool
+}
+
 // DefinitionCandidatesMsg delivers a go-to-definition result with several
 // target locations (#279): instead of guessing the first, the app renders the
 // candidates as a palette list; picking one navigates through the same

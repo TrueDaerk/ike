@@ -968,3 +968,54 @@ func TestDefinitionCandidatesOpenPicker(t *testing.T) {
 		t.Fatalf("placeholder after references = %q, want the usages default", got)
 	}
 }
+
+// TestSymbolPromptAndResults guards the workspace-symbol flow (0250 phase 1,
+// #294): the prompt collects a query and hands it to the bridge continuation;
+// results open the references palette with the symbols placeholder; the
+// no-provider and zero-hit cases stay honest.
+func TestSymbolPromptAndResults(t *testing.T) {
+	m := newSized()
+	var applied string
+	tm, _ := m.Update(ilsp.SymbolPromptMsg{Apply: func(q string) tea.Cmd {
+		applied = q
+		return nil
+	}})
+	m = tm.(Model)
+	if !m.symbolPromptOpen() {
+		t.Fatal("SymbolPromptMsg must open the query prompt")
+	}
+	for _, r := range "Helper" {
+		tm, _ = m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		m = tm.(Model)
+	}
+	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = tm.(Model)
+	if applied != "Helper" || m.symbolPromptOpen() {
+		t.Fatalf("enter must apply the query and close (applied=%q)", applied)
+	}
+
+	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "Helper", Refs: []ilsp.Reference{
+		{Path: "a.go", Line: 3, Preview: "func Helper() string {"},
+		{Path: "b.go", Line: 9, Preview: "func HelperTwo() {"},
+	}})
+	m = tm.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("symbol hits must open the palette list")
+	}
+	if got := m.refs.Placeholder(); got != "Symbols — filter by file or text…" {
+		t.Fatalf("placeholder = %q, want the symbols hint", got)
+	}
+
+	// Zero hits and no-provider both toast instead of opening anything.
+	m.palette.Close()
+	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "zzz"})
+	m = tm.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("zero hits must not open the palette")
+	}
+	tm, _ = m.Update(ilsp.SymbolResultsMsg{NoProvider: true})
+	m = tm.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("no-provider must not open the palette")
+	}
+}

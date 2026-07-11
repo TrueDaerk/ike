@@ -11,7 +11,6 @@ var blockedDefaults = map[string]string{
 	"vcs.commit":        "VCS integration (idea #28)",
 	"vcs.updateProject": "VCS integration (idea #28)",
 	"vcs.revertFile":    "VCS integration (idea #28)",
-	"project.goToClass": "document symbols / structure view (idea #31)",
 }
 
 // BlockedReason reports whether a command id is a documented blocked default

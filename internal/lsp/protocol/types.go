@@ -161,6 +161,23 @@ type ServerCapabilities struct {
 	SignatureHelpProvider           *SignatureHelpOptions  `json:"signatureHelpProvider,omitempty"`
 	SemanticTokensProvider          *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
 	ExecuteCommandProvider          json.RawMessage        `json:"executeCommandProvider,omitempty"`
+	WorkspaceSymbolProvider         json.RawMessage        `json:"workspaceSymbolProvider,omitempty"`
+}
+
+// WorkspaceSymbolParams is the workspace/symbol request (0250, #294): a plain
+// query the server matches against every symbol it knows.
+type WorkspaceSymbolParams struct {
+	Query string `json:"query"`
+}
+
+// SymbolInformation is one workspace/symbol hit. Servers may reply with the
+// newer WorkspaceSymbol shape whose location can lack a range; the client
+// normalises both into this classic form.
+type SymbolInformation struct {
+	Name          string   `json:"name"`
+	Kind          int      `json:"kind"`
+	Location      Location `json:"location"`
+	ContainerName string   `json:"containerName,omitempty"`
 }
 
 // CompletionOptions describes completion support, notably trigger characters.
