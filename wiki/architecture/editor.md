@@ -65,7 +65,15 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered
   width matches the terminal and stays inside its pane (a raw tab would be
   expanded by the terminal past the budget and wrap, pushing the pane's bottom
-  border off screen).
+  border off screen). **Sticky scroll** (#168) pins the header lines of the
+  declarations enclosing the first visible line as the top rows of the pane
+  (JetBrains-style): the scopes come from the same Tree-sitter parse that
+  produces the highlight spans (`highlight.HighlightScoped`, node kinds per
+  language via `lang.Language.ScopeNodes`), `sticky.go` resolves which headers
+  pin for the current `view.Top` (a fixed point, since pinned rows cover
+  content and move the reference line down; capped by `sticky_scroll_depth`,
+  innermost win), scrolling keeps the cursor from hiding behind the pinned
+  rows, and a mouse click on a pinned row jumps to its declaration.
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
   Matching is **smartcase** (#257): an all-lowercase pattern is
@@ -369,7 +377,8 @@ Two editor panes showing the same file are two **views of one document**
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
 the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `trim_trailing_whitespace`, `insert_final_newline`,
-`line_numbers`, `relative_line_numbers` and `scroll_off` take effect live.
+`line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll` and
+`sticky_scroll_depth` take effect live.
 
 ## Registry bridge & LSP seam
 

@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # Configuration System
@@ -43,7 +43,8 @@ map is decoded onto the defaults-filled struct (`load.go`):
 emitting a non-fatal `Diagnostic`**. Bad config must never crash the IDE. Only a
 TOML *parse* error hard-fails a single file — its layer is dropped and the lower
 layers still apply, reported as a file-sourced diagnostic. Clamped today:
-`editor.tab_width >= 1`, `editor.scroll_off >= 0`, `explorer.tree_indent >= 0`,
+`editor.tab_width >= 1`, `editor.scroll_off >= 0`,
+`editor.sticky_scroll_depth >= 1`, `explorer.tree_indent >= 0`,
 `project.max_history >= 0`, `backup.debounce_ms >= 100`,
 `backup.max_age_days >= 1`, `explorer.sort` ∈ {name,type,size,modified},
 `lsp.log_level` ∈ {error,warn,info,debug}, and `project.history` truncated to

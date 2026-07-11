@@ -33,5 +33,7 @@ func init() {
 		Toolchain:   toolchain{},
 		LineComment: "#",
 		IndentAfter: []string{":", "(", "[", "{"},
+		// Sticky-scroll scopes (#168).
+		ScopeNodes: []string{"function_definition", "class_definition"},
 	})
 }

@@ -137,6 +137,10 @@ type Model struct {
 	docVersion int
 	hlVersion  int
 	hlIndex    highlight.Index
+	// scopes are the sticky-scroll scopes (#168) delivered by the same parse
+	// as hlIndex: pre-ordered multi-line declarations whose header line pins
+	// at the top of the view while the cursor is inside their body.
+	scopes []highlight.Scope
 	// semIndex is the LSP semantic-token overlay (#9), layered over hlIndex
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
@@ -171,6 +175,8 @@ type Model struct {
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
+	stickyScroll       bool
+	stickyDepth        int
 }
 
 // New returns an empty editor with no file loaded.
@@ -183,6 +189,8 @@ func New() Model {
 		tabWidth:           4,
 		insertFinalNewline: true,
 		showInlayHints:     true,
+		stickyScroll:       true,
+		stickyDepth:        4,
 		hlTheme:            highlight.NewTheme(nil, nil),
 		visualStart:        -1,
 		visualEnd:          -1,
@@ -250,6 +258,12 @@ func (m *Model) applyConfig() {
 	if v, ok := m.cfg.Get("editor.scroll_off"); ok {
 		m.view.ScrollOff = atoi(v, m.view.ScrollOff)
 	}
+	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
+	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
+		if n := atoi(v, m.stickyDepth); n > 0 {
+			m.stickyDepth = n
+		}
+	}
 }
 
 // Load reads path into the buffer, resetting cursor, mode, and history.
@@ -272,6 +286,7 @@ func (m *Model) Load(path string) error {
 	m.hist = history.New()
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.scopes = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -300,6 +315,7 @@ func (m *Model) NewFile(path string) {
 	m.hist = history.New()
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.scopes = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -323,6 +339,7 @@ func (m *Model) RestoreText(text string) {
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.scopes = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -344,6 +361,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	}
 	m.path = path
 	m.hlIndex = highlight.Index{}
+	m.scopes = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -425,6 +443,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// version; a newer edit since the parse was scheduled drops it.
 		if msg.Path == m.path && msg.Version == m.docVersion {
 			m.hlIndex = highlight.NewIndex(msg.Spans)
+			m.scopes = msg.Scopes
 			m.hlVersion = msg.Version
 		}
 		return m, nil
@@ -515,8 +534,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	return m, nil
 }
 
-// scroll keeps the cursor within the visible window.
-func (m *Model) scroll() { m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount()) }
+// scroll keeps the cursor within the visible window, including the rows
+// covered by pinned sticky-scroll headers (#168).
+func (m *Model) scroll() {
+	m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount())
+	m.unhideCursor()
+}
 
 // moveTo places the cursor at p (clamped to a real character) and remembers the
 // column for vertical motion. It emits a cursor-move event.

@@ -30,6 +30,11 @@ func (m *Model) MouseClick(x, y int) {
 		x = 0
 	}
 	line := m.view.Top + y
+	// A click on a pinned sticky-scroll header (#168) jumps to its declaration
+	// instead of the buffer line the row covers.
+	if sticky := m.stickyLines(); y < len(sticky) {
+		line = sticky[y]
+	}
 	if line > m.buf.LineCount()-1 {
 		line = m.buf.LineCount() - 1
 	}
@@ -110,7 +115,16 @@ func (m Model) View() string {
 	selStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 
 	var out []string
-	for i := m.view.Top; i < bottom; i++ {
+	// Sticky scroll (#168): the enclosing declaration headers replace the top
+	// rows of the pane; the buffer lines they cover are skipped, so the first
+	// content row is the line right below the innermost pinned scope header.
+	sticky := m.stickyLines()
+	for _, line := range sticky {
+		gutter := gutterStyle.Render(m.view.Gutter(line, m.cursor.Line, lineCount))
+		body := m.renderLine(line, textWidth, cursorStyle, selStyle)
+		out = append(out, gutter+body)
+	}
+	for i := m.view.Top + len(sticky); i < bottom; i++ {
 		gs := gutterStyle
 		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
 		// the cheap sign-column indicator that keeps the gutter width unchanged.

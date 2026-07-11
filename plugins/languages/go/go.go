@@ -40,6 +40,9 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// Sticky-scroll scopes (#168): declarations whose header line stays
+		// pinned while scrolling through the body.
+		ScopeNodes: []string{"function_declaration", "method_declaration", "func_literal", "type_declaration"},
 		// New .go files start with their package clause, named after the
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",

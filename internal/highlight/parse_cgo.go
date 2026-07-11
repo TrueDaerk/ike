@@ -16,26 +16,44 @@ import (
 // the opaque token built by NewGrammar; a non-*grammarImpl or an uncompilable
 // query yields no spans.
 func parse(g lang.Grammar, lines []string) []Span {
+	spans, _ := parseScoped(g, nil, lines)
+	return spans
+}
+
+// parseScoped is parse plus sticky-scroll scope collection (#168): one Tree-sitter
+// parse yields both the highlight spans and, when scopeKinds is non-empty, the
+// multi-line nodes of those kinds as Scopes in pre-order (outer before inner).
+// Sharing the parse keeps sticky scroll free — no second CGo pass per edit.
+func parseScoped(g lang.Grammar, scopeKinds []string, lines []string) ([]Span, []Scope) {
 	gi, ok := g.(*grammarImpl)
 	if !ok {
-		return nil
+		return nil, nil
 	}
 	tsLang, query, ok := gi.compiled()
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	src := []byte(strings.Join(lines, "\n"))
 	parser := ts.NewParser()
 	defer parser.Close()
 	if err := parser.SetLanguage(tsLang); err != nil {
-		return nil
+		return nil, nil
 	}
 	tree := parser.Parse(src, nil)
 	if tree == nil {
-		return nil
+		return nil, nil
 	}
 	defer tree.Close()
+
+	var scopes []Scope
+	if len(scopeKinds) > 0 {
+		kinds := make(map[string]bool, len(scopeKinds))
+		for _, k := range scopeKinds {
+			kinds[k] = true
+		}
+		collectScopes(tree.RootNode(), kinds, &scopes)
+	}
 
 	// byteToRune[line] maps a byte offset within that line to a rune column.
 	conv := newColMapper(lines)
@@ -57,7 +75,21 @@ func parse(g lang.Grammar, lines []string) []Span {
 		end := cap.Node.EndPosition()
 		appendSpans(&spans, conv, name, start, end)
 	}
-	return spans
+	return spans, scopes
+}
+
+// collectScopes walks the tree depth-first and appends every multi-line node
+// whose kind is in kinds — pre-order, so outer scopes precede the scopes they
+// contain, which is the order EnclosingScopes relies on. Single-line nodes are
+// skipped: a header with no body below it can never be scrolled into.
+func collectScopes(n *ts.Node, kinds map[string]bool, out *[]Scope) {
+	start, end := n.StartPosition(), n.EndPosition()
+	if kinds[n.Kind()] && end.Row > start.Row {
+		*out = append(*out, Scope{HeaderLine: int(start.Row), EndLine: int(end.Row)})
+	}
+	for i := uint(0); i < n.NamedChildCount(); i++ {
+		collectScopes(n.NamedChild(i), kinds, out)
+	}
 }
 
 // appendSpans turns a (possibly multi-line) captured node into one Span per

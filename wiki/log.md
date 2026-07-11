@@ -2,6 +2,15 @@
 
 ## 2026-07-12
 
+- Sticky scroll (#168): the header lines of the declarations enclosing the
+  first visible line pin as the pane's top rows (JetBrains-style), collected
+  by the same Tree-sitter parse as the highlight spans via new
+  `lang.Language.ScopeNodes` per language; clicking a pinned row jumps to the
+  declaration, `editor.sticky_scroll` toggles it and
+  `editor.sticky_scroll_depth` caps the nesting. See
+  [editor](/architecture/editor.md),
+  [highlighting](/architecture/highlighting.md).
+
 - File templates (#170): newly created files start with language-aware
   content — `package ${PACKAGE}` for Go, `<?php` for PHP — rendered by
   `lang.TemplateFor` with `${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}`
