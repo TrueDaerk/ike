@@ -62,7 +62,7 @@ internal/theme/
   resolve.go    theme.Resolve — the ONE color-token resolver (name/hex/ANSI);
                 replaced the duplicated copies in highlight and explorer
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
-                catppuccin-mocha(+latte)
+                catppuccin-mocha(+latte), kanagawa
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -136,7 +136,9 @@ issue #384).
 `default` (today's colors; the low-contrast diagnostic/selection slots were
 lifted to AA contrast in #384), `tokyo-night`,
 `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`,
-`catppuccin-mocha`, `catppuccin-latte`. Select via:
+`catppuccin-mocha`, `catppuccin-latte`, `kanagawa` (wave variant of
+rebelot/kanagawa.nvim; the darkest diagnostic shades are swapped for their
+lighter siblings per the contrast rule). Select via:
 
 ```toml
 [theme]

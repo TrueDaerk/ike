@@ -14,6 +14,7 @@ func Builtins() []Theme {
 		rosePineDawn(),
 		catppuccinMocha(),
 		catppuccinLatte(),
+		kanagawa(),
 	}
 }
 
@@ -517,6 +518,72 @@ func catppuccinMocha() Theme {
 			"json":    "#f9e2af",
 			"yaml":    "#f9e2af",
 			"lock":    "#6c7086",
+		},
+	}
+}
+
+// kanagawa ports the "wave" variant of rebelot/kanagawa.nvim. Diagnostic
+// slots swap the scheme's darkest reds/blues (samuraiRed, dragonBlue,
+// waveAqua1) for their lighter siblings so every pair clears AA contrast
+// on Surface and Panel.
+func kanagawa() Theme {
+	return Theme{
+		Name: "kanagawa",
+		Dark: true,
+		UI: UI{
+			Background:     "#1f1f28", // sumiInk3
+			Foreground:     "#dcd7ba", // fujiWhite
+			Surface:        "#1f1f28",
+			Panel:          "#2a2a37", // sumiInk4
+			Border:         "#54546d", // sumiInk6
+			BorderFocus:    "#7e9cd8", // crystalBlue
+			Selection:      "#2d4f67", // waveBlue2
+			SelectionText:  "#dcd7ba",
+			SelectionMuted: "#223249", // waveBlue1
+			Accent:         "#e6c384", // carpYellow
+			Primary:        "#2d4f67", // waveBlue2 (pmenu selection)
+			Secondary:      "#ffa066", // surimiOrange
+			Success:        "#98bb6c", // springGreen
+			Warning:        "#ff9e3b", // roninYellow
+			Error:          "#ff5d62", // peachRed
+			Info:           "#7fb4ca", // springBlue
+			Hint:           "#7aa89f", // waveAqua2
+			MoveSource:     "#e46876", // waveRed
+			DropTarget:     "#ff9e3b",
+			Ghost:          "#ffa066",
+			ScrollbarTrack: "#2a2a37",
+			ScrollbarThumb: "#54546d",
+		},
+		Captures: map[string]string{
+			"keyword":          "#957fb8", // oniViolet
+			"operator":         "#c0a36e", // boatYellow2
+			"string":           "#98bb6c", // springGreen
+			"number":           "#d27e99", // sakuraPink
+			"comment":          "#727169", // fujiGray
+			"function":         "#7e9cd8", // crystalBlue
+			"type":             "#7aa89f", // waveAqua2
+			"constant":         "#ffa066", // surimiOrange
+			"constant.builtin": "#ffa066",
+			"variable":         "#dcd7ba", // fujiWhite
+			"variable.builtin": "#e46876", // waveRed
+			"property":         "#e6c384", // carpYellow
+			"label":            "#957fb8",
+			"attribute":        "#e6c384",
+			"punctuation":      "#9cabca", // springViolet2
+			"escape":           "#7fb4ca", // springBlue
+			"boolean":          "#ffa066",
+			"tag":              "#e46876",
+			"embedded":         "#dcd7ba",
+		},
+		Files: map[string]string{
+			"dir":     "#7e9cd8",
+			"default": "#dcd7ba",
+			"go":      "#7aa89f",
+			"md":      "#98bb6c",
+			"toml":    "#e6c384",
+			"json":    "#e6c384",
+			"yaml":    "#e6c384",
+			"lock":    "#727169",
 		},
 	}
 }
