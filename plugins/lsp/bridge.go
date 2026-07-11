@@ -254,7 +254,12 @@ func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
 		if len(syms) > 0 {
 			path = protocol.URIToPath(syms[0].Location.URI)
 		}
-		h.Send(ilsp.SymbolResultsMsg{Query: query, Refs: locationsToRefs(mgr, path, locs)})
+		refs := locationsToRefs(mgr, path, locs)
+		hits := make([]ilsp.SymbolHit, len(refs))
+		for i, ref := range refs {
+			hits[i] = ilsp.SymbolHit{Name: syms[i].Name, Ref: ref}
+		}
+		h.Send(ilsp.SymbolResultsMsg{Query: query, Hits: hits})
 	}()
 	return nil
 }

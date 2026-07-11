@@ -969,53 +969,89 @@ func TestDefinitionCandidatesOpenPicker(t *testing.T) {
 	}
 }
 
-// TestSymbolPromptAndResults guards the workspace-symbol flow (0250 phase 1,
-// #294): the prompt collects a query and hands it to the bridge continuation;
-// results open the references palette with the symbols placeholder; the
-// no-provider and zero-hit cases stay honest.
-func TestSymbolPromptAndResults(t *testing.T) {
+// TestSymbolLiveMode guards the live workspace-symbol flow (0250 phase 2,
+// #295): SymbolPromptMsg installs the re-query hook and opens the palette
+// locked to the symbol mode; typing debounces into QueryChanged; results
+// cache into rows (stale queries dropped) and refresh the open palette;
+// no-provider stays an honest toast.
+func TestSymbolLiveMode(t *testing.T) {
 	m := newSized()
-	var applied string
+	var applied []string
 	tm, _ := m.Update(ilsp.SymbolPromptMsg{Apply: func(q string) tea.Cmd {
-		applied = q
+		applied = append(applied, q)
 		return nil
 	}})
 	m = tm.(Model)
-	if !m.symbolPromptOpen() {
-		t.Fatal("SymbolPromptMsg must open the query prompt")
+	if !m.palette.IsOpen() {
+		t.Fatal("SymbolPromptMsg must open the symbol palette")
 	}
-	for _, r := range "Helper" {
-		tm, _ = m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+
+	// Typing schedules a debounce tick; delivering it re-queries the source.
+	var tick tea.Cmd
+	for _, r := range "Help" {
+		tm, tick = m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 		m = tm.(Model)
 	}
-	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if tick == nil {
+		t.Fatal("typing in a live mode must schedule the debounce tick")
+	}
+	tm, _ = m.Update(palette.LiveTickMsg{Gen: 4}) // 4 edits -> gen 4
 	m = tm.(Model)
-	if applied != "Helper" || m.symbolPromptOpen() {
-		t.Fatalf("enter must apply the query and close (applied=%q)", applied)
+	if len(applied) != 1 || applied[0] != "Help" {
+		t.Fatalf("settled tick must re-query once with the query, got %v", applied)
 	}
 
-	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "Helper", Refs: []ilsp.Reference{
-		{Path: "a.go", Line: 3, Preview: "func Helper() string {"},
-		{Path: "b.go", Line: 9, Preview: "func HelperTwo() {"},
+	// Results for the latest query cache into rows; stale replies drop.
+	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "Help", Hits: []ilsp.SymbolHit{
+		{Name: "Helper", Ref: ilsp.Reference{Path: "a.go", Line: 3, Preview: "func Helper() string {"}},
 	}})
 	m = tm.(Model)
-	if !m.palette.IsOpen() {
-		t.Fatal("symbol hits must open the palette list")
+	if len(m.symbols.items) != 1 || m.symbols.items[0].Title != "Helper" {
+		t.Fatalf("hits must cache as rows, got %+v", m.symbols.items)
 	}
-	if got := m.refs.Placeholder(); got != "Symbols — filter by file or text…" {
-		t.Fatalf("placeholder = %q, want the symbols hint", got)
+	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "stale", Hits: []ilsp.SymbolHit{
+		{Name: "Wrong", Ref: ilsp.Reference{Path: "b.go"}},
+	}})
+	m = tm.(Model)
+	if m.symbols.items[0].Title != "Helper" {
+		t.Fatal("a stale reply must not overwrite newer rows")
 	}
 
-	// Zero hits and no-provider both toast instead of opening anything.
-	m.palette.Close()
-	tm, _ = m.Update(ilsp.SymbolResultsMsg{Query: "zzz"})
-	m = tm.(Model)
-	if m.palette.IsOpen() {
-		t.Fatal("zero hits must not open the palette")
-	}
+	// No provider toasts and leaves the palette alone.
 	tm, _ = m.Update(ilsp.SymbolResultsMsg{NoProvider: true})
 	m = tm.(Model)
-	if m.palette.IsOpen() {
-		t.Fatal("no-provider must not open the palette")
+	tm, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = tm.(Model)
+	if len(m.toasts) != 1 {
+		t.Fatalf("no-provider must toast, got %d", len(m.toasts))
+	}
+}
+
+// TestSearchEverywherePrimesSymbolHook guards the #295 search-everywhere
+// seat: the first ShowSearchEverywhereMsg silently primes the bridge
+// continuation via project.goToClass without opening the symbol palette.
+func TestSearchEverywherePrimesSymbolHook(t *testing.T) {
+	m := newSized()
+	prompt := func(host.API) tea.Cmd {
+		return func() tea.Msg {
+			return ilsp.SymbolPromptMsg{Apply: func(string) tea.Cmd { return nil }}
+		}
+	}
+	m.reg.Add(fakePlugin{id: "lsptest", caps: plugin.Capabilities{Commands: []plugin.Command{{
+		ID: "project.goToClass", Title: "Go to symbol", Scope: plugin.GlobalScope(), Run: prompt,
+	}}}})
+
+	tm, cmd := m.Update(ShowSearchEverywhereMsg{})
+	m = tm.(Model)
+	if cmd == nil {
+		t.Fatal("the first search-everywhere open must prime the symbol hook")
+	}
+	tm, _ = m.Update(cmd())
+	m = tm.(Model)
+	if m.symbols.request == nil {
+		t.Fatal("priming must install the bridge continuation")
+	}
+	if got := m.palette.View(); !strings.Contains(got, "Search everywhere") {
+		t.Fatal("priming must keep the search-everywhere palette open")
 	}
 }
