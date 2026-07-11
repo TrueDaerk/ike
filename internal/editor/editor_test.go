@@ -650,6 +650,49 @@ func TestVisualDelete(t *testing.T) {
 	}
 }
 
+func TestVisualCountedMotion(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\nthree\nfour\nfive\n")
+	m = typeKeys(m, "V3j") // select lines 0..3
+	if m.cursor.Line != 3 {
+		t.Fatalf("V3j cursor line=%d want 3", m.cursor.Line)
+	}
+	m = typeKeys(m, "d")
+	if got := line(m, 0); got != "five" {
+		t.Fatalf("V3jd left %q want five", got)
+	}
+}
+
+func TestVisualCountedGotoLine(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\nthree\nfour\n")
+	m = typeKeys(m, "V3G") // select lines 0..2
+	if m.cursor.Line != 2 {
+		t.Fatalf("V3G cursor line=%d want 2", m.cursor.Line)
+	}
+}
+
+func TestVisualZeroIsLineStartWithoutCount(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	m = typeKeys(m, "$v0") // select the whole line charwise, right to left
+	if m.cursor.Col != 0 {
+		t.Fatalf("v0 cursor col=%d want 0", m.cursor.Col)
+	}
+	// With a pending count, 0 continues the count instead: 10| goes to col 9.
+	m = typeKeys(m, "10l")
+	if m.cursor.Col != 10 {
+		t.Fatalf("v10l cursor col=%d want 10", m.cursor.Col)
+	}
+}
+
+func TestVisualEscapeClearsPendingCount(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\nthree\nfour\n")
+	m = typeKeys(m, "v3")
+	m = send(m, special(tea.KeyEscape))
+	m = typeKeys(m, "j") // must move one line, not three
+	if m.cursor.Line != 1 {
+		t.Fatalf("j after v3<esc> cursor line=%d want 1", m.cursor.Line)
+	}
+}
+
 func TestVisualLineYank(t *testing.T) {
 	m, _ := loaded(t, "one\ntwo\nthree\n")
 	m = typeKeys(m, "Vj") // select lines 0-1
