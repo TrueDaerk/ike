@@ -86,6 +86,43 @@ func TestOpenRoutesThroughHandlerAndHooks(t *testing.T) {
 	}
 }
 
+// TestInitFiresFileOpenedForRestoredFiles guards #332: files already open at
+// startup are loaded straight into editors by restoreLayout/restoreSession,
+// bypassing openPath, so Init must announce them via EventFileOpened (the LSP
+// didOpen trigger) — once per file even when it is shared across tabs (#142).
+func TestInitFiresFileOpenedForRestoredFiles(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "restored.go")
+	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var opened []string
+	reg := registry.New()
+	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{
+		Hooks: []plugin.Hook{{
+			ID: "p.hook", Event: plugin.EventFileOpened,
+			Notify: func(h host.API, payload any) tea.Cmd {
+				opened = append(opened, payload.(string))
+				return nil
+			},
+		}},
+	}})
+	m := NewWith(reg, host.MapConfig{})
+	// Simulate a startup restore: the same file loaded straight into two tabs of
+	// the active editor, exactly as restoreLayout does (never through openPath).
+	inst := m.panes.Get(m.activeEditorKey())
+	if err := inst.Editor().Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := inst.AddTab().Load(path); err != nil {
+		t.Fatal(err)
+	}
+	m.Init()
+	if len(opened) != 1 || opened[0] != path {
+		t.Fatalf("Init must fire EventFileOpened exactly once for the restored file, got %v", opened)
+	}
+}
+
 // TestPluginKeymapOverridesCore checks a high-priority plugin binding wins over
 // a core key.
 func TestPluginKeymapOverridesCore(t *testing.T) {
