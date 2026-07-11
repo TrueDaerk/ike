@@ -239,6 +239,7 @@ type dragKind int
 const (
 	dragResize     dragKind = iota // dragging a divider to change a split ratio
 	dragMove                       // dragging a pane title bar to relocate or spawn
+	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
 )
 
@@ -250,6 +251,7 @@ type dragState struct {
 	kind    dragKind
 	divider layout.Divider
 	srcPane string
+	srcTab  int // dragTab: index of the grabbed tab (#305)
 	curX    int
 	curY    int
 }
@@ -2911,10 +2913,16 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					m.closeBarTab(key, idx)
 					return m, nil
 				}
-				if msg.Button == tea.MouseLeft && idx != inst.ActiveTab() {
+				if msg.Button == tea.MouseLeft {
 					m.setFocus(key)
 					m.switchTab(inst, idx)
-					return m, nil
+					if inst.TabCount() > 1 {
+						// Grabbing a tab label drags just that file
+						// (#305); the whole-pane move below stays the
+						// last-tab / off-segment behavior.
+						m.drag = &dragState{kind: dragTab, srcPane: key, srcTab: idx, curX: msg.X, curY: msg.Y}
+						return m, nil
+					}
 				}
 			}
 			// A click on the title band focuses the pane (#304); the drag
@@ -2946,6 +2954,8 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		switch m.drag.kind {
 		case dragMove:
 			m.commitMove(msg.X, msg.Y)
+		case dragTab:
+			m.commitTabMove(msg.X, msg.Y)
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				m.panes.Get(m.drag.srcPane).Terminal().MouseRelease(lx, ly)
@@ -2992,6 +3002,60 @@ func (m *Model) commitMove(x, y int) {
 		} else {
 			m.panes.Close(newKey)
 		}
+	}
+}
+
+// commitTabMove applies a tab-label drag release (#305): only the grabbed
+// file moves. Onto another editor pane it relocates the document (shared
+// documents stay shared); onto the source pane's own edge it spawns a split
+// holding just that file. A release still inside the source's title band is a
+// click (the tab already switched on press); everything else is a no-op.
+func (m *Model) commitTabMove(x, y int) {
+	src := m.drag.srcPane
+	inst := m.panes.Get(src)
+	r, rok := m.lay.Panes[src]
+	if inst == nil || !rok {
+		return
+	}
+	ed := inst.TabEditor(m.drag.srcTab)
+	if ed == nil || !ed.HasFile() {
+		return
+	}
+	path := ed.Path()
+	target, ok := m.lay.PaneAt(x, y)
+	if !ok || (target == src && y < r.Y+layout.TitleBarRows) {
+		return // dropped outside any pane, or a plain click (#304 semantics)
+	}
+	if target != src {
+		tinst := m.panes.Get(target)
+		if tinst == nil || tinst.Kind() != pane.KindEditor {
+			return // tabs only land on editor panes
+		}
+		m.openInTab(target, path)
+		m.backupDropOnCloseTab(ed, src)
+		inst.CloseTab(m.drag.srcTab)
+		m.setFocus(target)
+		m.syncExplorerOpen()
+		m.layout()
+		return
+	}
+	// Self-drop on an edge: split off a fresh pane holding just this file.
+	if zone, near := edgeZone(r, x, y); near {
+		newKey := m.panes.AddEditor()
+		m.installEmitter(newKey)
+		tree, ok := layout.SplitLeaf(m.tree, src, newKey, zone)
+		if !ok {
+			m.panes.Close(newKey)
+			return
+		}
+		m.tree = tree
+		m.layout()
+		m.openInTab(newKey, path)
+		m.backupDropOnCloseTab(ed, src)
+		inst.CloseTab(m.drag.srcTab)
+		m.setFocus(newKey)
+		m.syncExplorerOpen()
+		m.layout()
 	}
 }
 
@@ -3411,7 +3475,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	if focused {
 		border = m.pal().BorderFocus
 	}
-	if d := m.drag; d != nil && d.kind == dragMove {
+	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) {
 		if key == d.srcPane {
 			border = m.pal().MoveSource
 			title = "⤴ " + title
@@ -3472,8 +3536,13 @@ func (m Model) statusLine() string {
 		Background(m.pal().Panel).
 		Foreground(m.pal().Foreground)
 
-	if d := m.drag; d != nil && d.kind == dragMove {
+	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
+		if d.kind == dragTab {
+			if ed := m.panes.Get(d.srcPane).TabEditor(d.srcTab); ed != nil && ed.HasFile() {
+				hint = "MOVE " + filepath.Base(ed.Path())
+			}
+		}
 		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
 			hint += " → " + zoneArrow(layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY)) + " of " + m.paneLabel(tgt)
 		} else if zone, near := m.selfDropZone(d); near {
