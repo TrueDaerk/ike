@@ -92,6 +92,10 @@ type Model struct {
 
 	list locations.List
 
+	// lay records, during View, which content rows the mouse can hit; Click
+	// hit-tests against it.
+	lay layoutInfo
+
 	width, height int
 	pal           *theme.Palette
 
@@ -337,6 +341,80 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// layoutInfo maps content rows (0 = first row inside the border) to click
+// targets; View fills it in each render, -1 marks an absent row.
+type layoutInfo struct {
+	query, replace, toggles, include, exclude int
+	listTop, listRows                         int
+}
+
+// toggleSpans mirrors togglesRow's layout: the half-open x range of each
+// toggle ("[x] " + label) within the content row.
+func toggleSpans() [3][2]int {
+	labels := [3]string{caseLabel, wordLabel, regexLabel}
+	var spans [3][2]int
+	x := len(togglesIndent)
+	for i, l := range labels {
+		w := 4 + len(l) // "[x] " + label
+		spans[i] = [2]int{x, x + w}
+		x += w + 2
+	}
+	return spans
+}
+
+// Click handles a left press at panel-local coordinates (0,0 = the box's
+// top-left border cell, mirroring the settings panel, #127): an input row
+// takes focus, a toggle flips and rescans, a result row selects its match,
+// and a press on the already-selected match opens it — the same
+// press-again-to-activate semantics as the settings panel.
+func (m *Model) Click(x, y int) tea.Cmd {
+	if !m.open || m.lay.query <= 0 {
+		return nil
+	}
+	cx, cy := x-2, y-1 // border + horizontal padding
+	if cx < 0 || cy < 0 {
+		return nil
+	}
+	switch cy {
+	case m.lay.query:
+		m.focus, m.preselect = fieldQuery, false
+	case m.lay.replace:
+		m.focus = fieldReplace
+	case m.lay.include:
+		m.focus = fieldInclude
+	case m.lay.exclude:
+		m.focus = fieldExclude
+	case m.lay.toggles:
+		for i, sp := range toggleSpans() {
+			if cx < sp[0] || cx >= sp[1] {
+				continue
+			}
+			switch i {
+			case 0:
+				m.caseSensitive = !m.caseSensitive
+			case 1:
+				m.wholeWord = !m.wholeWord
+			case 2:
+				m.regex = !m.regex
+			}
+			m.rescan()
+			break
+		}
+	}
+	if m.lay.listTop >= 0 && cy >= m.lay.listTop && cy < m.lay.listTop+m.lay.listRows {
+		if idx, ok := m.list.ItemAt(cy - m.lay.listTop); ok {
+			if idx == m.list.Cursor() {
+				return m.openCurrent()
+			}
+			m.list.SetCursor(idx)
+		}
+	}
+	return nil
+}
+
+// Wheel scrolls the results list by delta items.
+func (m *Model) Wheel(delta int) { m.list.Move(delta) }
+
 // openCurrent dispatches the selected match as a navigation and closes.
 func (m *Model) openCurrent() tea.Cmd {
 	it, ok := m.list.Current()
@@ -456,13 +534,19 @@ func (m *Model) View() string {
 		heading = "Replace in Path"
 	}
 	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(heading)
+	lay := layoutInfo{replace: -1, listTop: -1}
 	rows := []string{title, ""}
+	lay.query = len(rows)
 	rows = append(rows, m.inputRow("Search ", m.query, fieldQuery, innerW))
 	if m.replaceMode {
+		lay.replace = len(rows)
 		rows = append(rows, m.inputRow("Replace", m.replace, fieldReplace, innerW))
 	}
-	rows = append(rows, m.togglesRow())
+	lay.toggles = len(rows)
+	rows = append(rows, m.togglesRow(innerW))
+	lay.include = len(rows)
 	rows = append(rows, m.inputRow("Include", m.include, fieldInclude, innerW))
+	lay.exclude = len(rows)
 	rows = append(rows, m.inputRow("Exclude", m.exclude, fieldExclude, innerW))
 	rows = append(rows, "")
 
@@ -471,8 +555,11 @@ func (m *Model) View() string {
 		listH = 4
 	}
 	if body := m.list.Render(innerW, listH, pal, m.displayPath); body != "" {
+		lay.listTop = len(rows)
+		lay.listRows = strings.Count(body, "\n") + 1
 		rows = append(rows, body)
 	}
+	m.lay = lay
 	if pre := m.previewRows(innerW); len(pre) > 0 {
 		rows = append(rows, "")
 		rows = append(rows, pre...)
@@ -508,9 +595,18 @@ func (m *Model) inputRow(label, value string, f field, width int) string {
 	return lipgloss.NewStyle().MaxWidth(width).Render(row)
 }
 
+// The toggle row's fixed pieces; toggleSpans derives the click ranges from
+// them, so keep the render and the constants in sync.
+const (
+	togglesIndent = "        "
+	caseLabel     = "Case (ctrl+c)"
+	wordLabel     = "Word (ctrl+w)"
+	regexLabel    = "Regex (ctrl+x)"
+)
+
 // togglesRow renders the three match-mode toggles with their key hints
 // (ctrl is the delivered primary on macOS, #422; alt still works elsewhere).
-func (m *Model) togglesRow() string {
+func (m *Model) togglesRow(width int) string {
 	pal := m.theme()
 	on := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
 	off := lipgloss.NewStyle().Faint(true)
@@ -520,9 +616,10 @@ func (m *Model) togglesRow() string {
 		}
 		return off.Render("[ ] " + label)
 	}
-	return "        " + part("Case (ctrl+c)", m.caseSensitive) +
-		"  " + part("Word (ctrl+w)", m.wholeWord) +
-		"  " + part("Regex (ctrl+x)", m.regex)
+	row := togglesIndent + part(caseLabel, m.caseSensitive) +
+		"  " + part(wordLabel, m.wholeWord) +
+		"  " + part(regexLabel, m.regex)
+	return lipgloss.NewStyle().MaxWidth(width).Render(row)
 }
 
 // previewRows renders the before/after preview for the selected match in

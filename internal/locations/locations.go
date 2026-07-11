@@ -77,6 +77,43 @@ func (l *List) Current() (Item, bool) {
 	return Item{}, false
 }
 
+// Cursor returns the item index under the cursor.
+func (l *List) Cursor() int { return l.cursor }
+
+// SetCursor moves the cursor to item index i, clamped to the item range.
+func (l *List) SetCursor(i int) {
+	l.cursor = i
+	if l.cursor >= l.total {
+		l.cursor = l.total - 1
+	}
+	if l.cursor < 0 {
+		l.cursor = 0
+	}
+}
+
+// ItemAt maps a visible row of the last Render window (0-based from the
+// window's top) to the index of the item rendered on it; header rows and
+// rows past the end report ok = false.
+func (l *List) ItemAt(visibleRow int) (int, bool) {
+	if visibleRow < 0 {
+		return 0, false
+	}
+	target := l.top + visibleRow
+	row, item := 0, 0
+	for _, g := range l.groups {
+		if target == row {
+			return 0, false // header row
+		}
+		row++
+		if target < row+len(g.items) {
+			return item + (target - row), true
+		}
+		row += len(g.items)
+		item += len(g.items)
+	}
+	return 0, false
+}
+
 // Move shifts the cursor by delta, clamped to the item range.
 func (l *List) Move(delta int) {
 	l.cursor += delta

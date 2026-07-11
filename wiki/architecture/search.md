@@ -90,6 +90,15 @@ the palette):
   committed in-file search (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like
   `n`/`N` on the active editor (the editor announces the commit with
   `editor.SearchCommittedMsg`); the next find-in-path scan reclaims them.
+- **Mouse (#424):** the overlay hit-tests first in the root mouse handler
+  (it renders above every other overlay); a click outside dismisses it and
+  clicks inside never leak to the panes below (#116). Inside: a click on an
+  input row focuses that field, on a toggle flips it (and rescans), on a
+  result row selects the match — a second press on the selected match opens
+  it (the settings panel's press-again-to-activate semantics, #127). The
+  wheel scrolls the result list. `View` records the row layout in a
+  `layoutInfo` each render; `Click` maps panel-local coordinates through it
+  and `locations.List.ItemAt` (window-relative row → item index).
 
 ## Replace in path (#86)
 
