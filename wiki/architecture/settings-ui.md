@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-10T20:00:00Z
+timestamp: 2026-07-11T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -55,17 +55,28 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 - **Apply-on-change, single source of truth.** The panel never caches values:
   every render reads `config.Get().Flat()`, and every edit returns a
   `config.WriteAndReload` command — the write-back layer persists the key and
-  the reload pipeline re-applies it. Bool toggles and Enum cycles apply on
-  enter; Int/String/Path open an inline input (int parses + clamps to bounds,
-  path validates existence); Chord captures the next key press.
+  the reload pipeline re-applies it. Bool toggles apply on enter; Enum opens a
+  **picker list** on enter (↑↓ move, enter commits, esc cancels) while ←/→ on
+  the row quick-cycle prev/next without opening it (#383); Int/String/Path
+  open an inline input (int parses + clamps to bounds, path validates
+  existence); Chord captures the next key press.
 - **Layer indicator + reset.** Each row shows `@default` / `@user` /
   `@project` (`config.Origin`); overridden values are tinted; `r` resets
   (RemoveAndReload — fall back through the layers).
-- **Filter.** `/` starts a type-to-filter across *all* pages (titles, keys,
-  page names); matches render as `Page › Title`. Esc clears the filter, then
-  closes the panel.
-- **Keys.** ↑↓/jk navigate, tab switches columns, enter edits, esc
-  cancels/closes.
+- **Filter.** `/` starts a type-to-filter across all schema pages (titles,
+  keys, page names); matches render as `Page › Title`, and the result list
+  names the custom pages the filter cannot search (`(not searched: Keymap,
+  …)`, #383). Esc clears the filter, then closes the panel.
+- **Keys.** ↑↓/jk navigate, ←→ (and h/l) or tab switch columns, enter edits,
+  esc cancels/closes (#383). On custom pages only arrow-left returns to the
+  categories — plain `h` is forwarded to the page (it may be filter text
+  there).
+- **Scrolling.** Both columns scroll to follow the selection on short windows
+  (a shared `follow` offset helper in `view.go`); nothing is hard-truncated
+  out of reach (#383).
+- **Focus clarity.** The focused column shows the vivid selection bar; the
+  unfocused column keeps a dimmed (faint) selection background, so keyboard
+  ownership is always visible (#383).
 - **Mouse (#127).** Clicking a category selects that page; clicking a form
   entry selects it, and a second click on the selection activates it (enter
   semantics). Clicks outside the panel dismiss it (#116); custom pages stay

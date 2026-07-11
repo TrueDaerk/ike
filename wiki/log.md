@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Settings window QoL pass (#383): ←→/h/l switch between the category column
+  and the form (arrow-left only on custom pages, `h` stays page filter text);
+  both columns scroll with the selection instead of truncating; enum entries
+  open a picker list on enter (←/→ still quick-cycle on the row); the
+  unfocused column dims its selection so focus is unambiguous; filtered
+  results name the custom pages the filter cannot search. See
+  [Settings UI](/architecture/settings-ui.md).
+
 - Auto-installed language servers start without PATH surgery (#370):
   `transport.Resolve` probes `go env GOBIN` / `GOPATH/bin` and npm's global
   prefix after `exec.LookPath` fails and launches the server via absolute

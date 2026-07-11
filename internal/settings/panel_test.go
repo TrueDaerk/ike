@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/theme"
 )
 
 func testOpts(t *testing.T) config.Options {
@@ -37,6 +38,10 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "down":
 		return tea.KeyPressMsg{Code: tea.KeyDown}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
 	}
 	return tea.KeyPressMsg{Text: s, Code: rune(s[0])}
 }
@@ -63,6 +68,55 @@ func testPages() []Page {
 		{Title: "Appearance", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Scope: config.UserScope, Options: []string{"default", "tokyo-night"}},
 		}},
+	}
+}
+
+// stubPage is a minimal custom PageModel for panel-hosting tests.
+type stubPage struct{ got []string }
+
+func (s *stubPage) Update(k tea.KeyPressMsg) tea.Cmd { s.got = append(s.got, k.String()); return nil }
+func (s *stubPage) View(w, h int) string             { return "stub page" }
+func (s *stubPage) SetPalette(*theme.Palette)        {}
+func (s *stubPage) Capturing() bool                  { return false }
+
+// TestFilterIndicatesCustomPages guards #383: a filtered view names the
+// custom pages the filter cannot search.
+func TestFilterIndicatesCustomPages(t *testing.T) {
+	restoreConfig(t)
+	pages := append(testPages(), Page{Title: "Keymap", Custom: &stubPage{}})
+	m := New(pages, testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("/"))
+	m.Update(key("m"))
+	if v := m.View(); !strings.Contains(v, "not searched: Keymap") {
+		t.Fatalf("filtered view must name unsearched custom pages:\n%s", v)
+	}
+}
+
+// TestCustomPageArrowLeftReturnsToCategories guards #383: on a hosted custom
+// page arrow-left goes back to the category column, while plain "h" is still
+// forwarded to the page (it may be filter text there).
+func TestCustomPageArrowLeftReturnsToCategories(t *testing.T) {
+	restoreConfig(t)
+	stub := &stubPage{}
+	pages := append(testPages(), Page{Title: "Keymap", Custom: stub})
+	m := New(pages, testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("down"))
+	m.Update(key("down")) // Keymap page
+	m.Update(key("right"))
+	if m.focus != formColumn {
+		t.Fatal("right must focus the custom page")
+	}
+	m.Update(key("h"))
+	if m.focus != formColumn || len(stub.got) == 0 || stub.got[len(stub.got)-1] != "h" {
+		t.Fatalf("h must be forwarded to the page, got %v", stub.got)
+	}
+	m.Update(key("left"))
+	if m.focus != catColumn {
+		t.Fatal("arrow-left must return to the categories")
 	}
 }
 
@@ -139,16 +193,128 @@ func TestIntEditValidatesAndClamps(t *testing.T) {
 	}
 }
 
-func TestEnumCycles(t *testing.T) {
+// TestEnumPicker guards #383: enter on an enum row opens a picker list;
+// ↑↓ move, enter commits, esc cancels without a write.
+func TestEnumPicker(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
 	m.SetSize(90, 20)
 	m.Open()
 	m.Update(key("down")) // Appearance page
 	m.Update(key("tab"))
+	if cmd := m.Update(key("enter")); cmd != nil || !m.picking {
+		t.Fatalf("enter on an enum must open the picker, picking=%v", m.picking)
+	}
+	if !strings.Contains(m.View(), "▸") {
+		t.Fatalf("picker must render its options:\n%s", m.View())
+	}
+	// Esc cancels without writing.
+	if cmd := m.Update(key("esc")); cmd != nil || m.picking {
+		t.Fatal("esc must close the picker without a write")
+	}
+	if got := config.Get().Theme.Name; got != "default" {
+		t.Fatalf("cancel must not change the value, got %q", got)
+	}
+	// Reopen, move down, commit.
+	m.Update(key("enter"))
+	m.Update(key("down"))
 	apply(t, m.Update(key("enter")))
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
-		t.Fatalf("enum must cycle default -> tokyo-night, got %q", got)
+		t.Fatalf("picker enter must write the highlighted option, got %q", got)
+	}
+	if m.picking {
+		t.Fatal("commit must close the picker")
+	}
+}
+
+// TestEnumQuickCycle guards #383: ←/→ on a selected enum row cycle the value
+// without opening the picker.
+func TestEnumQuickCycle(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("down")) // Appearance page
+	m.Update(key("tab"))
+	apply(t, m.Update(key("right")))
+	if got := config.Get().Theme.Name; got != "tokyo-night" {
+		t.Fatalf("right must cycle to the next option, got %q", got)
+	}
+	if m.focus != formColumn || m.picking {
+		t.Fatal("quick cycle must not move focus or open the picker")
+	}
+	apply(t, m.Update(key("left")))
+	if got := config.Get().Theme.Name; got != "default" {
+		t.Fatalf("left must cycle to the previous option, got %q", got)
+	}
+	if m.focus != formColumn {
+		t.Fatal("left on an enum row must cycle, not leave the column")
+	}
+}
+
+// TestArrowColumnNavigation guards #383: →/l enter the form, ←/h return to
+// the categories (on non-enum rows).
+func TestArrowColumnNavigation(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	if m.Update(key("right")); m.focus != formColumn || m.sel != 0 {
+		t.Fatalf("right must focus the form, focus=%v sel=%d", m.focus, m.sel)
+	}
+	if m.Update(key("h")); m.focus != catColumn {
+		t.Fatal("h must return to the categories")
+	}
+	if m.Update(key("l")); m.focus != formColumn {
+		t.Fatal("l must focus the form")
+	}
+	// Row 0 is a bool: arrow-left leaves the column (no enum to cycle).
+	if cmd := m.Update(key("left")); cmd != nil || m.focus != catColumn {
+		t.Fatal("left on a non-enum row must return to the categories")
+	}
+}
+
+// TestScrollFollowsSelection guards #383: on a short window both columns
+// scroll so the selection (and its detail line) stay visible.
+func TestScrollFollowsSelection(t *testing.T) {
+	restoreConfig(t)
+	var entries []Entry
+	var pages []Page
+	for i := 0; i < 12; i++ {
+		entries = append(entries, Entry{Key: "ui.menu_bar", Type: Bool,
+			Title: "Entry " + string(rune('A'+i)), Scope: config.UserScope})
+		pages = append(pages, Page{Title: "Page " + string(rune('A'+i)),
+			Entries: entries[:1]})
+	}
+	pages[0].Entries = entries
+	m := New(pages, testOpts(t))
+	m.SetSize(80, 10) // inner body height = 6
+	m.Open()
+
+	// Category column: move to the last page; its label must be visible.
+	for i := 0; i < len(pages); i++ {
+		m.Update(key("down"))
+	}
+	if v := m.View(); !strings.Contains(v, "Page L") {
+		t.Fatalf("category list must scroll to the selected page:\n%s", v)
+	}
+	// Form column: back to page 0 (12 entries), walk to the last entry.
+	for i := 0; i < len(pages); i++ {
+		m.Update(key("up"))
+	}
+	m.Update(key("tab"))
+	for i := 0; i < len(entries); i++ {
+		m.Update(key("down"))
+	}
+	if v := m.View(); !strings.Contains(v, "Entry L") {
+		t.Fatalf("form must scroll to the selected entry:\n%s", v)
+	}
+	// Scrolling back up must reveal the first entry again.
+	for i := 0; i < len(entries); i++ {
+		m.Update(key("up"))
+	}
+	if v := m.View(); !strings.Contains(v, "Entry A") {
+		t.Fatalf("form must scroll back up with the selection:\n%s", v)
 	}
 }
 

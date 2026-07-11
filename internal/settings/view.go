@@ -43,8 +43,11 @@ func (m *Model) View() string {
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ") + m.renderFilter()
-	hint := lipgloss.NewStyle().Foreground(pal.Secondary).
-		Render(" ↑↓/jk navigate · tab column · enter edit · r reset · / filter · esc close")
+	hintText := " ↑↓/jk navigate · ←→/tab column · enter edit · r reset · / filter · esc close"
+	if m.picking {
+		hintText = " ↑↓ choose · enter apply · esc cancel"
+	}
+	hint := lipgloss.NewStyle().Foreground(pal.Secondary).Render(hintText)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
 	return lipgloss.NewStyle().
@@ -71,15 +74,20 @@ func (m *Model) renderFilter() string {
 }
 
 // renderCategories renders the page list; filtering dims it (results span all
-// pages then).
+// pages then). The list scrolls so the selected page is always visible; the
+// unfocused column keeps a dimmed selection background so the focused column
+// is unambiguous.
 func (m *Model) renderCategories(h int) string {
 	pal := m.theme()
 	base := lipgloss.NewStyle().Width(catWidth)
 	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
 	dim := base.Foreground(pal.Secondary).Faint(true)
 
-	lines := make([]string, 0, len(m.pages))
-	for i, p := range m.pages {
+	m.catOff = follow(m.catOff, m.cat, m.cat, len(m.pages), h)
+	lines := make([]string, 0, h)
+	for i := m.catOff; i < len(m.pages) && len(lines) < h; i++ {
+		p := m.pages[i]
 		label := " " + p.Title
 		switch {
 		case m.filter != "":
@@ -87,7 +95,7 @@ func (m *Model) renderCategories(h int) string {
 		case i == m.cat && m.focus == catColumn:
 			lines = append(lines, sel.Render(label))
 		case i == m.cat:
-			lines = append(lines, base.Bold(true).Render(label))
+			lines = append(lines, inactiveSel.Render(label))
 		default:
 			lines = append(lines, base.Render(label))
 		}
@@ -96,6 +104,27 @@ func (m *Model) renderCategories(h int) string {
 		lines = append(lines, base.Render(""))
 	}
 	return strings.Join(lines[:h], "\n")
+}
+
+// follow adjusts a scroll offset so the [selStart, selEnd] line range stays
+// visible in a window of h lines over n total lines.
+func follow(off, selStart, selEnd, n, h int) int {
+	if h <= 0 {
+		return 0
+	}
+	if selEnd >= off+h {
+		off = selEnd - h + 1
+	}
+	if selStart < off {
+		off = selStart
+	}
+	if off > n-h {
+		off = n - h
+	}
+	if off < 0 {
+		off = 0
+	}
+	return off
 }
 
 // renderForm renders the visible entries with value, layer badge and — for the
@@ -108,24 +137,79 @@ func (m *Model) renderForm(w, h int) string {
 	}
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	var lines []string
+	selStart, selEnd := 0, 0
 	for i, r := range rows {
+		if i == m.sel {
+			selStart = len(lines)
+		}
 		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, w)))
 		if i == m.sel {
-			detail := "   " + r.entry.Description + "  (" + r.entry.Key + ")"
-			if m.invalid != "" {
-				detail = "   ✗ " + m.invalid
+			if m.picking {
+				lines = append(lines, m.renderPicker(r.entry, clip)...)
+			} else {
+				detail := "   " + r.entry.Description + "  (" + r.entry.Key + ")"
+				if m.invalid != "" {
+					detail = "   ✗ " + m.invalid
+				}
+				style := lipgloss.NewStyle().Foreground(pal.Secondary)
+				if m.invalid != "" {
+					style = style.Foreground(pal.Error)
+				}
+				lines = append(lines, clip.Render(style.Render(detail)))
 			}
-			style := lipgloss.NewStyle().Foreground(pal.Secondary)
-			if m.invalid != "" {
-				style = style.Foreground(pal.Error)
-			}
-			lines = append(lines, clip.Render(style.Render(detail)))
+			selEnd = len(lines) - 1
 		}
 	}
-	if len(lines) > h {
-		lines = lines[:h]
+	if m.filter != "" {
+		if note := m.customPagesNote(); note != "" {
+			lines = append(lines, clip.Render(
+				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
+		}
 	}
-	return strings.Join(lines, "\n")
+	m.formOff = follow(m.formOff, selStart, selEnd, len(lines), h)
+	end := m.formOff + h
+	if end > len(lines) {
+		end = len(lines)
+	}
+	return strings.Join(lines[m.formOff:end], "\n")
+}
+
+// renderPicker renders the open enum dropdown under the selected row.
+func (m *Model) renderPicker(e Entry, clip lipgloss.Style) []string {
+	pal := m.theme()
+	base := lipgloss.NewStyle().Foreground(pal.Secondary)
+	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	cur := value(e.Key)
+	out := make([]string, 0, len(e.Options))
+	for i, o := range e.Options {
+		line := "     " + o
+		if i == m.pickIdx {
+			line = "   ▸ " + o
+		}
+		if o == cur {
+			line += " ●"
+		}
+		style := base
+		if i == m.pickIdx {
+			style = sel
+		}
+		out = append(out, clip.Render(style.Render(line)))
+	}
+	return out
+}
+
+// customPagesNote names the custom pages the filter cannot search.
+func (m *Model) customPagesNote() string {
+	var names []string
+	for _, p := range m.pages {
+		if p.Custom != nil {
+			names = append(names, p.Title)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "   (not searched: " + strings.Join(names, ", ") + ")"
 }
 
 // renderEntry renders one form row: "Title  [page]  value  @layer".
@@ -158,6 +242,10 @@ func (m *Model) renderEntry(r row, selected bool, w int) string {
 	switch {
 	case selected && m.focus == formColumn:
 		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	case selected:
+		// Unfocused column: keep the selection visible but dimmed, so the
+		// vivid selection always marks the focused column.
+		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
 	case origin == "default":
 		style = style.Foreground(pal.Foreground)
 	default:
