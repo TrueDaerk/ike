@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/explorer"
 	"ike/internal/search"
@@ -175,5 +176,25 @@ func TestFinderSwallowsKeysFromPanes(t *testing.T) {
 	}
 	if m.finder.Query() == before {
 		t.Fatal("typed key must edit the finder query, not move a pane cursor")
+	}
+}
+
+func TestFinderMouseClicksToggleAndDismiss(t *testing.T) {
+	m, _ := finderApp(t)
+	v := m.finder.View()
+	bx := (m.width - lipgloss.Width(v)) / 2
+	by := (m.height - lipgloss.Height(v)) / 2
+	// The Case toggle sits on content row 3 (title, blank, query, toggles),
+	// starting at content column 8; +2/+1 skip the border and padding.
+	tm, _ := m.Update(tea.MouseClickMsg{X: bx + 2 + 10, Y: by + 1 + 3, Button: tea.MouseLeft})
+	m = tm.(Model)
+	if !strings.Contains(m.render(), "[x] Case") {
+		t.Fatal("click on the Case toggle must flip it")
+	}
+	// A click outside the overlay dismisses it (never reaching the panes).
+	tm, _ = m.Update(tea.MouseClickMsg{X: 0, Y: 0, Button: tea.MouseLeft})
+	m = tm.(Model)
+	if m.finder.IsOpen() {
+		t.Fatal("click outside the overlay must close it")
 	}
 }

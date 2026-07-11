@@ -2969,6 +2969,24 @@ func paneInterior(outer, chrome int) int {
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
 	// a click inside stays with the overlay (never leaks to the panes below).
+	// The finder renders above every other overlay, so it hit-tests first (#424).
+	if m.finder.IsOpen() {
+		if clickOutside(msg, m.finder.View(), m.width, m.height) {
+			m.finder.Close()
+			return m, nil
+		}
+		switch {
+		case msg.action == mousePress && msg.Button == tea.MouseLeft:
+			v := m.finder.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.finder.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+			m.finder.Wheel(-3)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+			m.finder.Wheel(3)
+		}
+		return m, nil
+	}
 	if m.settings.IsOpen() {
 		if clickOutside(msg, m.settings.View(), m.width, m.height) {
 			m.settings.Close()

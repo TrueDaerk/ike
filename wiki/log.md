@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Finder mouse support (#424): the find/replace-in-path overlay is now
+  mouse-operable — click outside dismisses, clicks focus input rows, flip
+  the Case/Word/Regex toggles, select result rows (press again to open),
+  and the wheel scrolls the list. New `locations.List` seams: `ItemAt`,
+  `SetCursor`, `Cursor`. See [search](/architecture/search.md).
+
 - Finder ctrl chords (#422): every alt binding in the find/replace-in-path
   overlay gained a ctrl primary (`ctrl+c/w/x` toggles, `ctrl+f`/`ctrl+a`
   batch replace, `ctrl+enter` navigate, `ctrl+up/down` history) — on macOS

@@ -93,3 +93,59 @@ func TestRenderEmpty(t *testing.T) {
 		t.Fatalf("empty list must render empty, got %q", out)
 	}
 }
+
+func TestItemAtMapsRowsToItems(t *testing.T) {
+	var l List
+	l.Append(items())
+	l.Render(60, 10, theme.DefaultPalette(), nil) // top = 0
+	// Rows: 0 header a.go, 1 item0, 2 item1, 3 header b.go, 4 item2.
+	if _, ok := l.ItemAt(0); ok {
+		t.Fatal("header row must not map to an item")
+	}
+	for row, want := range map[int]int{1: 0, 2: 1, 4: 2} {
+		if got, ok := l.ItemAt(row); !ok || got != want {
+			t.Fatalf("ItemAt(%d) = %d,%v want %d,true", row, got, ok, want)
+		}
+	}
+	if _, ok := l.ItemAt(3); ok {
+		t.Fatal("second header row must not map to an item")
+	}
+	if _, ok := l.ItemAt(99); ok {
+		t.Fatal("row past the end must not map to an item")
+	}
+	if _, ok := l.ItemAt(-1); ok {
+		t.Fatal("negative row must not map to an item")
+	}
+}
+
+func TestItemAtHonorsScrolledWindow(t *testing.T) {
+	var l List
+	var many []Item
+	for i := 1; i <= 30; i++ {
+		many = append(many, Item{Path: "big.go", Line: i, Text: "needle row"})
+	}
+	l.Append(many)
+	l.Move(29)
+	l.Render(40, 5, theme.DefaultPalette(), nil) // window scrolled to the tail
+	// Visible row 4 is the last item (index 29).
+	if got, ok := l.ItemAt(4); !ok || got != 29 {
+		t.Fatalf("ItemAt(4) = %d,%v want 29,true", got, ok)
+	}
+}
+
+func TestSetCursorClamps(t *testing.T) {
+	var l List
+	l.Append(items())
+	l.SetCursor(1)
+	if l.Cursor() != 1 {
+		t.Fatalf("cursor = %d, want 1", l.Cursor())
+	}
+	l.SetCursor(99)
+	if l.Cursor() != 2 {
+		t.Fatalf("cursor must clamp high, got %d", l.Cursor())
+	}
+	l.SetCursor(-5)
+	if l.Cursor() != 0 {
+		t.Fatalf("cursor must clamp low, got %d", l.Cursor())
+	}
+}

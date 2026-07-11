@@ -374,3 +374,120 @@ func TestEndToEndScanAgainstDisk(t *testing.T) {
 		t.Fatalf("end-to-end scan found %d matches, want 1", m.list.Total())
 	}
 }
+
+// Content rows of the find-mode overlay (0 = first row inside the border):
+// 0 title, 1 blank, 2 query, 3 toggles, 4 include, 5 exclude, 6 blank,
+// 7+ results. Click takes panel-local coordinates, so x = column+2 (border +
+// padding) and y = row+1 (border).
+func clickAt(m *Model, col, row int) tea.Cmd { return m.Click(col+2, row+1) }
+
+func TestClickTogglesFlipModes(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	m.View()
+	if cmd := clickAt(m, 10, 3); cmd != nil {
+		t.Fatal("toggle click must not emit a command")
+	}
+	if !m.caseSensitive {
+		t.Fatal("click on the Case toggle must enable case sensitivity")
+	}
+	clickAt(m, 29, 3)
+	if !m.wholeWord {
+		t.Fatal("click on the Word toggle must enable whole-word")
+	}
+	clickAt(m, 48, 3)
+	if !m.regex {
+		t.Fatal("click on the Regex toggle must enable regex")
+	}
+	clickAt(m, 10, 3)
+	if m.caseSensitive {
+		t.Fatal("second click on the Case toggle must disable it again")
+	}
+	// The indent left of the first toggle is dead space.
+	clickAt(m, 2, 3)
+	if m.caseSensitive {
+		t.Fatal("click left of the toggles must not flip anything")
+	}
+}
+
+func TestClickFocusesInputFields(t *testing.T) {
+	m := opened(t)
+	m.View()
+	clickAt(m, 5, 4)
+	typeText(m, "x")
+	if m.include != "x" {
+		t.Fatalf("click on the Include row must focus it, include=%q", m.include)
+	}
+	clickAt(m, 5, 5)
+	typeText(m, "y")
+	if m.exclude != "y" {
+		t.Fatalf("click on the Exclude row must focus it, exclude=%q", m.exclude)
+	}
+	clickAt(m, 5, 2)
+	typeText(m, "q")
+	if m.query != "q" {
+		t.Fatalf("click on the Search row must focus it, query=%q", m.query)
+	}
+}
+
+func TestClickReplaceRowFocusesReplaceField(t *testing.T) {
+	m := New(search.New(nil))
+	m.SetSize(100, 30)
+	m.OpenReplace(t.TempDir())
+	m.View()
+	// Replace mode shifts the rows: 2 query, 3 replace, 4 toggles, ...
+	clickAt(m, 5, 3)
+	typeText(m, "z")
+	if m.replace != "z" {
+		t.Fatalf("click on the Replace row must focus it, replace=%q", m.replace)
+	}
+}
+
+func TestClickSelectsThenOpensResult(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, match("a.go", 1), match("a.go", 9), match("b.go", 2))
+	m.View()
+	// Result rows start at content row 7: 7 header a.go, 8 item0, 9 item1,
+	// 10 header b.go, 11 item2.
+	if cmd := clickAt(m, 5, 11); cmd != nil {
+		t.Fatal("first click must only select, not open")
+	}
+	if m.list.Cursor() != 2 {
+		t.Fatalf("click must move the cursor to the row's item, got %d", m.list.Cursor())
+	}
+	cmd := clickAt(m, 5, 11)
+	if cmd == nil {
+		t.Fatal("second click on the selected match must open it")
+	}
+	msg, ok := cmd().(OpenLocationMsg)
+	if !ok || msg.Path != "b.go" || msg.Line != 2 {
+		t.Fatalf("open message = %+v", msg)
+	}
+	if m.IsOpen() {
+		t.Fatal("opening a match must close the overlay")
+	}
+	// Header rows are labels, not stops.
+	m.Open(t.TempDir())
+	feed(m, match("a.go", 1), match("b.go", 2))
+	m.View()
+	m.list.SetCursor(1)
+	clickAt(m, 5, 7)
+	if m.list.Cursor() != 1 {
+		t.Fatalf("header click must not move the cursor, got %d", m.list.Cursor())
+	}
+}
+
+func TestWheelScrollsResults(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, match("a.go", 1), match("a.go", 9), match("b.go", 2))
+	m.Wheel(2)
+	if m.list.Cursor() != 2 {
+		t.Fatalf("wheel must move the cursor, got %d", m.list.Cursor())
+	}
+	m.Wheel(-3)
+	if m.list.Cursor() != 0 {
+		t.Fatalf("wheel must clamp at the top, got %d", m.list.Cursor())
+	}
+}
