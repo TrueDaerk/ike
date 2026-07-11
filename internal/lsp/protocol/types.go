@@ -5,7 +5,10 @@
 // the wire are ignored by encoding/json, and capabilities gate everything else.
 package protocol
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strings"
+)
 
 // Position is a zero-based line and character offset. Character is measured in
 // the negotiated position encoding (UTF-16 by default) — never assume runes.
@@ -88,6 +91,7 @@ type TextDocumentClientCaps struct {
 	SignatureHelp   *ReferencesClientCaps     `json:"signatureHelp,omitempty"`
 	SemanticTokens  *SemanticTokensClientCaps `json:"semanticTokens,omitempty"`
 	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
+	InlayHint       *ReferencesClientCaps     `json:"inlayHint,omitempty"`
 }
 
 // SemanticTokensClientCaps announces semantic-token support: which request
@@ -156,6 +160,7 @@ type ServerCapabilities struct {
 	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
 
 	DocumentHighlightProvider json.RawMessage `json:"documentHighlightProvider,omitempty"`
+	InlayHintProvider         json.RawMessage `json:"inlayHintProvider,omitempty"`
 
 	DocumentFormattingProvider      json.RawMessage        `json:"documentFormattingProvider,omitempty"`
 	DocumentRangeFormattingProvider json.RawMessage        `json:"documentRangeFormattingProvider,omitempty"`
@@ -502,6 +507,58 @@ const (
 type DocumentHighlight struct {
 	Range Range `json:"range"`
 	Kind  int   `json:"kind,omitempty"`
+}
+
+// --- inlay hints ---
+
+// InlayHintParams is the textDocument/inlayHint request (#171): the inline
+// parameter-name / inferred-type hints within a document range.
+type InlayHintParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+}
+
+// InlayHintKind values (LSP): a type annotation, a parameter name.
+const (
+	InlayHintType      = 1
+	InlayHintParameter = 2
+)
+
+// InlayHint is one inline hint anchored at a position. Kind is optional;
+// absent means an unclassified hint. PaddingLeft/Right ask the client to
+// separate the hint from the code with a space on that side.
+type InlayHint struct {
+	Position     Position       `json:"position"`
+	Label        InlayHintLabel `json:"label"`
+	Kind         int            `json:"kind,omitempty"`
+	PaddingLeft  bool           `json:"paddingLeft,omitempty"`
+	PaddingRight bool           `json:"paddingRight,omitempty"`
+}
+
+// InlayHintLabel is the hint text: the wire value is either a plain string or
+// an array of label parts, flattened to one string on decode (the parts'
+// tooltip/location extras are presentation we do not render).
+type InlayHintLabel string
+
+// UnmarshalJSON accepts both label shapes.
+func (l *InlayHintLabel) UnmarshalJSON(data []byte) error {
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		*l = InlayHintLabel(s)
+		return nil
+	}
+	var parts []struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(data, &parts); err != nil {
+		return err
+	}
+	var b strings.Builder
+	for _, p := range parts {
+		b.WriteString(p.Value)
+	}
+	*l = InlayHintLabel(b.String())
+	return nil
 }
 
 // --- call hierarchy ---

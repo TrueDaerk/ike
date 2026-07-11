@@ -1706,6 +1706,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DocumentHighlightsMsg:
 		return m, m.routeToEditor(msg.Path, msg)
+	case ilsp.InlayHintsMsg:
+		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DefinitionMsg:
 		// Navigate to a definition target and place the cursor there. Also the
 		// activation msg of a references-list entry (references.go).
@@ -3537,12 +3539,15 @@ func (m Model) compositeLSPPopups(base string) string {
 	// pane; cap their content width at the terminal instead of the pane
 	// (frame + padding take 4 columns).
 	ed.SetPopupMaxWidth(m.width - 4)
-	top, left := ed.ScrollOffset()
+	top, _ := ed.ScrollOffset()
 	gw := ed.GutterWidth()
 	contentX := r.X + paneContentX
 	contentY := r.Y + paneContentY
 	place := func(view string, col, line int) string {
-		x := contentX + gw + (col - left)
+		// DisplayOffset (not col-left): tabs expand and inlay hints (#171)
+		// inject virtual text, so the buffer column alone under-counts the
+		// cells renderLine drew before the anchor.
+		x := contentX + gw + ed.DisplayOffset(line, col)
 		y := contentY + (line - top) + 1 // one row below the cursor
 		// Clamp the box to the terminal (#316): the framed popup may extend
 		// past the owning pane's borders, but shifts left instead of bleeding

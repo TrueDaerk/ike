@@ -18,30 +18,31 @@ import (
 // Resolve. A slot left empty falls back to the default palette's value when
 // the theme is resolved into a Palette.
 type UI struct {
-	Background     string // app-wide background: dividers, gaps
-	Foreground     string // default text
-	Surface        string // pane body background
-	Panel          string // raised surfaces: status bar, popups, hover rows
-	Border         string // blurred pane borders, dividers, scrollbar track
-	BorderFocus    string // focused pane border
-	Selection      string // selected-row background
-	SelectionText  string // text on Selection
-	SelectionMuted string // low-emphasis selection (editor visual range)
+	Background      string // app-wide background: dividers, gaps
+	Foreground      string // default text
+	Surface         string // pane body background
+	Panel           string // raised surfaces: status bar, popups, hover rows
+	Border          string // blurred pane borders, dividers, scrollbar track
+	BorderFocus     string // focused pane border
+	Selection       string // selected-row background
+	SelectionText   string // text on Selection
+	SelectionMuted  string // low-emphasis selection (editor visual range)
 	OccurrenceRead  string // symbol-occurrence mark, read access (LSP document highlight)
 	OccurrenceWrite string // symbol-occurrence mark, write access
-	Accent         string // emphasis foreground (explorer active entry)
-	Primary        string // primary action background (completion selected row)
-	Secondary      string // secondary emphasis foreground (help shortcut keys)
-	Success        string
-	Warning        string // diagnostic warning
-	Error          string // diagnostic error
-	Info           string // diagnostic info
-	Hint           string // diagnostic hint
-	MoveSource     string // pane-move source border
-	DropTarget     string // pane-move drop-target border
-	Ghost          string // pane-move ghost preview
-	ScrollbarTrack string
-	ScrollbarThumb string
+	InlayHint       string // inline LSP inlay-hint text (dimmed parameter/type hints, #171)
+	Accent          string // emphasis foreground (explorer active entry)
+	Primary         string // primary action background (completion selected row)
+	Secondary       string // secondary emphasis foreground (help shortcut keys)
+	Success         string
+	Warning         string // diagnostic warning
+	Error           string // diagnostic error
+	Info            string // diagnostic info
+	Hint            string // diagnostic hint
+	MoveSource      string // pane-move source border
+	DropTarget      string // pane-move drop-target border
+	Ghost           string // pane-move ghost preview
+	ScrollbarTrack  string
+	ScrollbarThumb  string
 }
 
 // Theme is one named color scheme: ui chrome slots plus the default sources
@@ -65,30 +66,31 @@ type Palette struct {
 	Captures map[string]string
 	Files    map[string]string
 
-	Background     color.Color
-	Foreground     color.Color
-	Surface        color.Color
-	Panel          color.Color
-	Border         color.Color
-	BorderFocus    color.Color
-	Selection      color.Color
-	SelectionText  color.Color
+	Background      color.Color
+	Foreground      color.Color
+	Surface         color.Color
+	Panel           color.Color
+	Border          color.Color
+	BorderFocus     color.Color
+	Selection       color.Color
+	SelectionText   color.Color
 	SelectionMuted  color.Color
 	OccurrenceRead  color.Color
 	OccurrenceWrite color.Color
+	InlayHint       color.Color
 	Accent          color.Color
-	Primary        color.Color
-	Secondary      color.Color
-	Success        color.Color
-	Warning        color.Color
-	Error          color.Color
-	Info           color.Color
-	Hint           color.Color
-	MoveSource     color.Color
-	DropTarget     color.Color
-	Ghost          color.Color
-	ScrollbarTrack color.Color
-	ScrollbarThumb color.Color
+	Primary         color.Color
+	Secondary       color.Color
+	Success         color.Color
+	Warning         color.Color
+	Error           color.Color
+	Info            color.Color
+	Hint            color.Color
+	MoveSource      color.Color
+	DropTarget      color.Color
+	Ghost           color.Color
+	ScrollbarTrack  color.Color
+	ScrollbarThumb  color.Color
 }
 
 // firstNonEmpty returns the first non-empty token, for slot fallback chains.
@@ -144,7 +146,11 @@ func NewPalette(t Theme) *Palette {
 		// its own colors instead of inheriting the default theme's.
 		OccurrenceRead:  slot(t.UI.OccurrenceRead, firstNonEmpty(t.UI.SelectionMuted, def.UI.SelectionMuted)),
 		OccurrenceWrite: slot(t.UI.OccurrenceWrite, firstNonEmpty(t.UI.SelectionMuted, def.UI.SelectionMuted)),
-		Accent:          slot(t.UI.Accent, def.UI.Accent),
+		// Inlay-hint text falls back to the theme's own border tone: already a
+		// legible-but-dim foreground in every theme, which is exactly what a
+		// hint should be.
+		InlayHint:      slot(t.UI.InlayHint, firstNonEmpty(t.UI.Border, def.UI.Border)),
+		Accent:         slot(t.UI.Accent, def.UI.Accent),
 		Primary:        slot(t.UI.Primary, def.UI.Primary),
 		Secondary:      slot(t.UI.Secondary, def.UI.Secondary),
 		Success:        slot(t.UI.Success, def.UI.Success),

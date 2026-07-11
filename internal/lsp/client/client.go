@@ -133,6 +133,20 @@ func (c *Client) DocumentHighlight(ctx context.Context, p protocol.DocumentHighl
 	return hs, nil
 }
 
+// InlayHints requests the inline hints within a document range (#171). A null
+// result (nothing to hint) is an empty slice.
+func (c *Client) InlayHints(ctx context.Context, p protocol.InlayHintParams) ([]protocol.InlayHint, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/inlayHint", p)
+	if err != nil {
+		return nil, err
+	}
+	var hints []protocol.InlayHint
+	if err := json.Unmarshal(raw, &hints); err != nil {
+		return nil, nil // null / unexpected shape: nothing to show
+	}
+	return hints, nil
+}
+
 // PrepareCallHierarchy resolves the symbol at a position into call-hierarchy
 // items (#173). A null result (position not on a callable) is an empty slice.
 func (c *Client) PrepareCallHierarchy(ctx context.Context, p protocol.CallHierarchyPrepareParams) ([]protocol.CallHierarchyItem, error) {

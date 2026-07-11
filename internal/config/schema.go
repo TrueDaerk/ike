@@ -111,10 +111,12 @@ type Keymap struct {
 // Roadmap 0100; its value type stays a free-form table so a server entry can
 // carry arbitrary keys without a schema change here.
 type LSP struct {
-	Enabled     bool                      `toml:"enabled"`
-	AutoInstall bool                      `toml:"auto_install"`
-	LogLevel    string                    `toml:"log_level"`
-	Servers     map[string]map[string]any `toml:"servers"`
+	Enabled     bool `toml:"enabled"`
+	AutoInstall bool `toml:"auto_install"`
+	// InlayHints toggles the inline parameter-name/type hints (#171).
+	InlayHints bool                      `toml:"inlay_hints"`
+	LogLevel   string                    `toml:"log_level"`
+	Servers    map[string]map[string]any `toml:"servers"`
 	// Onboarded records that the first-start server-install dialog (#301) has
 	// had its say (answered or skipped); it is never shown again once set.
 	Onboarded bool `toml:"onboarded"`

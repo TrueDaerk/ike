@@ -44,6 +44,9 @@ type fakeOpts struct {
 	// noDocumentHighlight withholds the documentHighlightProvider capability,
 	// so the manager's gate is observable (#172).
 	noDocumentHighlight bool
+	// noInlayHint withholds the inlayHintProvider capability, so the
+	// manager's gate is observable (#171).
+	noInlayHint bool
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -64,6 +67,15 @@ func callHierarchyCap(opts fakeOpts) json.RawMessage {
 // unless the options withhold it.
 func documentHighlightCap(opts fakeOpts) json.RawMessage {
 	if opts.noDocumentHighlight {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
+
+// inlayHintCap is the initialize capability the fake advertises unless the
+// options withhold it.
+func inlayHintCap(opts fakeOpts) json.RawMessage {
+	if opts.noInlayHint {
 		return nil
 	}
 	return json.RawMessage(`true`)
@@ -128,6 +140,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				CallHierarchyProvider:  callHierarchyCap(opts),
 
 				DocumentHighlightProvider: documentHighlightCap(opts),
+				InlayHintProvider:         inlayHintCap(opts),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/definition":
@@ -162,6 +175,14 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				{Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 6}}, Kind: protocol.HighlightRead},
 				{Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 7}, End: protocol.Position{Line: 0, Character: 10}}, Kind: protocol.HighlightWrite},
 			})
+		case msg.Method == "textDocument/inlayHint":
+			// Two hints in UTF-16 unit offsets, deliberately out of document
+			// order so the manager's sort is observable; one label is a parts
+			// array, the other a plain string.
+			respond(out, msg.ID, json.RawMessage(`[
+				{"position":{"line":0,"character":7},"label":[{"value":"n:"}],"kind":2,"paddingRight":true},
+				{"position":{"line":0,"character":3},"label":"int","kind":1,"paddingLeft":true}
+			]`))
 		case msg.Method == "textDocument/prepareCallHierarchy":
 			// One item named after the request position, so the round-trip is
 			// observable.

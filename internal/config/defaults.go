@@ -35,9 +35,10 @@ func defaults() *Config {
 			Bindings: map[string]string{},
 		},
 		LSP: LSP{
-			Enabled:  true,
-			LogLevel: "warn",
-			Servers:  map[string]map[string]any{},
+			Enabled:    true,
+			InlayHints: true,
+			LogLevel:   "warn",
+			Servers:    map[string]map[string]any{},
 		},
 		Theme: Theme{
 			Name: "default",

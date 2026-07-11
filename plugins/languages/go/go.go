@@ -24,6 +24,18 @@ func init() {
 			Command:     "gopls",
 			RootMarkers: []string{"go.mod", "go.work", ".git"},
 			Install:     []string{"go", "install", "golang.org/x/tools/gopls@latest"},
+			// gopls ships every inlay-hint kind off; enable the ones matching
+			// what IKE renders (#171): parameter names and inferred types.
+			// User config ([lsp.servers.go] settings) still overrides these,
+			// and the lsp.inlay_hints toggle hides them client-side.
+			Settings: map[string]any{
+				"hints": map[string]any{
+					"parameterNames":         true,
+					"assignVariableTypes":    true,
+					"rangeVariableTypes":     true,
+					"compositeLiteralFields": true,
+				},
+			},
 		},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},

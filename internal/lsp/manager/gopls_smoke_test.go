@@ -87,3 +87,79 @@ func TestSmokeGoplsDiagnosticsAndCompletion(t *testing.T) {
 		t.Errorf("expected Println in completion items")
 	}
 }
+
+// TestSmokeGoplsInlayHints drives a real gopls with the Go plugin's baseline
+// hint settings (#171) and expects parameter-name and inferred-type hints for
+// a plain call + assignment.
+func TestSmokeGoplsInlayHints(t *testing.T) {
+	if _, err := exec.LookPath("gopls"); err != nil {
+		t.Skip("gopls not on PATH")
+	}
+	spec := lsp.ServerSpec{
+		Language: "go", Command: "gopls", RootMarkers: []string{"go.mod"},
+		Settings: map[string]any{"hints": map[string]any{
+			"parameterNames":         true,
+			"assignVariableTypes":    true,
+			"rangeVariableTypes":     true,
+			"compositeLiteralFields": true,
+		}},
+	}
+	m := New(func(string) (lsp.ServerSpec, bool) { return spec, true }, nil, Callbacks{
+		Status: func(lang, text string, kind lsp.ServerStatusKind) { t.Logf("status: %s", text) },
+	})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module smoke\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "main.go")
+	src := "package main\n\nfunc add(a, b int) int { return a + b }\n\nfunc main() {\n\tx := add(1, 2)\n\t_ = x\n}\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.Open(path, "go", src); err != nil {
+		t.Fatalf("open: %v", err)
+	}
+
+	// gopls answers empty until the package is type-checked; poll briefly.
+	deadline := time.Now().Add(20 * time.Second)
+	var hints []lsp.InlayHint
+	for time.Now().Before(deadline) {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		var err error
+		hints, err = m.InlayHints(ctx, path)
+		cancel()
+		if err != nil {
+			t.Fatalf("inlay hints: %v", err)
+		}
+		if len(hints) > 0 {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Logf("hints: %+v", hints)
+	var haveParam, haveType bool
+	for _, h := range hints {
+		if h.Kind == protocol.InlayHintParameter {
+			haveParam = true
+		}
+		if h.Kind == protocol.InlayHintType {
+			haveType = true
+		}
+	}
+	if !haveParam || !haveType {
+		t.Errorf("expected parameter and type hints, got %+v", hints)
+	}
+	// The call's first parameter hint anchors on line 5 before the "1".
+	sorted := false
+	for i := 1; i < len(hints); i++ {
+		sorted = hints[i-1].Line < hints[i].Line || (hints[i-1].Line == hints[i].Line && hints[i-1].Col <= hints[i].Col)
+		if !sorted {
+			break
+		}
+	}
+	if len(hints) > 1 && !sorted {
+		t.Errorf("hints must arrive sorted by position: %+v", hints)
+	}
+}

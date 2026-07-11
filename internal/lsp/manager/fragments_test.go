@@ -392,6 +392,44 @@ func TestFragmentDocumentHighlightRoutesAndMapsRanges(t *testing.T) {
 	}
 }
 
+// TestFragmentInlayHintsMergeAndMap merges the fragment server's hints into
+// the host document's, with fragment positions mapped onto host coordinates
+// and the combined set sorted by position (#171).
+func TestFragmentInlayHintsMergeAndMap(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	hints, err := m.InlayHints(context.Background(), path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Host doc hints land at cols 3 and 7; the fragment's cols 3 and 7 map
+	// through its start col 4 to host 7 and 11. Sorted by position.
+	var cols []int
+	for _, h := range hints {
+		cols = append(cols, h.Col)
+	}
+	want := []int{3, 7, 7, 11}
+	if len(cols) != len(want) {
+		t.Fatalf("hints = %+v, want cols %v", hints, want)
+	}
+	for i, w := range want {
+		if cols[i] != w {
+			t.Fatalf("cols = %v, want %v (hints %+v)", cols, want, hints)
+		}
+	}
+}
+
 func TestFragLocationsToHostDropsStale(t *testing.T) {
 	m := New(multiResolver(fragmentSpecs()...), fakeConnector(), Callbacks{})
 	defer m.Shutdown()

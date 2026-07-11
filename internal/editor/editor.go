@@ -145,6 +145,11 @@ type Model struct {
 	// bridge on cursor moves; stale positions may briefly lag an edit like
 	// semIndex.
 	occurrences []ilsp.DocumentHighlight
+	// inlayHints are the LSP inlay hints (#171): inline parameter-name/type
+	// annotations refreshed by the bridge on every change, indexed per line
+	// for rendering. Stale positions may briefly lag an edit like semIndex.
+	inlayHints  []ilsp.InlayHint
+	hintsByLine map[int][]ilsp.InlayHint
 	hlTheme     highlight.Theme
 	pal         *theme.Palette // active theme (Roadmap 0110); nil = default
 
@@ -164,6 +169,7 @@ type Model struct {
 	autoIndent         bool
 	trimTrailing       bool
 	insertFinalNewline bool
+	showInlayHints     bool
 }
 
 // New returns an empty editor with no file loaded.
@@ -175,6 +181,7 @@ func New() Model {
 		hist:               history.New(),
 		tabWidth:           4,
 		insertFinalNewline: true,
+		showInlayHints:     true,
 		hlTheme:            highlight.NewTheme(nil, nil),
 		visualStart:        -1,
 		visualEnd:          -1,
@@ -235,6 +242,7 @@ func (m *Model) applyConfig() {
 	m.useSpaces = boolOr(m.cfg, "editor.use_spaces", m.useSpaces)
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
+	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)
 	m.view.LineNumbers = boolOr(m.cfg, "editor.line_numbers", m.view.LineNumbers)
 	m.view.RelativeNumbers = boolOr(m.cfg, "editor.relative_line_numbers", m.view.RelativeNumbers)
@@ -265,6 +273,7 @@ func (m *Model) Load(path string) error {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
 	return nil
 }
@@ -289,6 +298,7 @@ func (m *Model) NewFile(path string) {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
 }
 
@@ -311,6 +321,7 @@ func (m *Model) RestoreText(text string) {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
 }
 
@@ -331,6 +342,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
 	m.emit(EventChange)
 	return m.parseCmd()
 }
@@ -440,6 +452,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.DocumentHighlightsMsg:
 		if msg.Path == m.path {
 			m.applyDocumentHighlights(msg)
+		}
+		return m, nil
+	case ilsp.InlayHintsMsg:
+		if msg.Path == m.path {
+			m.setInlayHints(msg.Hints)
 		}
 		return m, nil
 	// ilsp.FormatEditsMsg is deliberately NOT handled here: views of a shared
