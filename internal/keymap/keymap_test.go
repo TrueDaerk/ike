@@ -201,6 +201,25 @@ func TestUndoBindsToCtrlZ(t *testing.T) {
 	}
 }
 
+// TestHoverBindsToCtrlQ guards that quick documentation is reachable via
+// ctrl+q — the JetBrains Windows/Linux quick-doc chord, delivered on every
+// platform because raw mode disables XON flow control (#378) — and that the
+// chord classifies as delivered, so the palette shows a non-fragile primary.
+func TestHoverBindsToCtrlQ(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, goos))
+		if res := r.Feed(Key{Base: "q", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "lsp.hover" {
+			t.Fatalf("%s: ctrl+q in editor = %+v, want lsp.hover", goos, res)
+		}
+	}
+	if got := Classify(MustParseChord("ctrl+q")); got != Delivered {
+		t.Fatalf("ctrl+q classifies as %v, want delivered", got)
+	}
+	if !LeaderCommands()["lsp.hover"] {
+		t.Fatal("lsp.hover missing from the leader mnemonic table")
+	}
+}
+
 func TestMultiStepChordAndTimeout(t *testing.T) {
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
 	r := NewResolver(table)

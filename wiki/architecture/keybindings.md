@@ -153,7 +153,10 @@ reconciled onto the registered `lsp.definition` id (instead of the forked
 `lsp.definition` also has `f4` (JetBrains jump-to-source) as its delivered
 primary, and `shift+f6` is context-aware refactor-rename: `lsp.rename` with an
 editor focused, `file.rename` everywhere else (the Editor row shadows the
-Global one).
+Global one). Quick documentation (`lsp.hover`, #378) binds `ctrl+q` — the
+JetBrains Windows/Linux quick-doc chord, delivered everywhere because raw mode
+disables XON flow control — plus the `space k` / `ctrl+k k` leader path
+(vim's K keyword lookup).
 
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
@@ -333,6 +336,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.codeAction` | `alt+enter` | fragile | `space a` | live via space a |
 | `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
+| `lsp.hover` | `ctrl+q` | delivered | `—` | live |
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `menu.open` | `f10` | delivered | `—` | live |

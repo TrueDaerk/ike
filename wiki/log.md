@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- `lsp.hover` (quick documentation) gets a delivered default chord (#378):
+  `ctrl+q` (JetBrains Windows/Linux quick doc; XON is disabled in raw mode)
+  plus the `space k` / `ctrl+k k` leader path (vim's K keyword lookup). See
+  [Keybindings](/architecture/keybindings.md).
+
 - Hover popup renders LSP markdown instead of showing it raw (#379): ```` ```go ````
   fence markers are stripped, the fenced signature block is syntax-highlighted
   via the language registry (accent tint when the fence tag has no grammar),

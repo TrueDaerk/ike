@@ -48,6 +48,8 @@ var leaderMnemonics = []leaderMnemonic{
 	{"s", "editor.saveAll", "Save all"},
 	{"w", "editor.write", "Save file"},
 	{"d", "lsp.definition", "Go to definition"},
+	// k mirrors vim's K (keyword lookup) for the hover / quick-doc popup (#378).
+	{"k", "lsp.hover", "Quick documentation (hover)"},
 	{"u", "lsp.references", "Find usages"},
 	{"a", "lsp.codeAction", "Show intention actions"},
 	{"n", "lsp.rename", "Rename symbol"},
