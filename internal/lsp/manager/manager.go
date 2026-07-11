@@ -299,8 +299,13 @@ func (m *Manager) Hover(ctx context.Context, path string, pos buffer.Position) (
 	})
 }
 
-// Definition requests definition locations at an editor position.
+// Definition requests definition locations at an editor position. Fragment
+// positions route to the fragment's server (0300, #416); fragment-document
+// locations in the result are rewritten to host-file locations.
 func (m *Manager) Definition(ctx context.Context, path string, pos buffer.Position) ([]protocol.Location, error) {
+	if locs, handled, err := m.fragmentDefinition(ctx, path, pos); handled {
+		return locs, err
+	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().Definition {
 		return nil, nil
@@ -352,8 +357,12 @@ func (m *Manager) WorkspaceSymbols(ctx context.Context, query string) ([]protoco
 
 // References requests every reference to the symbol at an editor position.
 // IncludeDeclaration mirrors the LSP request option (JetBrains' find-usages
-// includes the declaration, so callers default to true).
+// includes the declaration, so callers default to true). Fragment positions
+// route to the fragment's server (0300, #416) like Definition.
 func (m *Manager) References(ctx context.Context, path string, pos buffer.Position, includeDecl bool) ([]protocol.Location, error) {
+	if locs, handled, err := m.fragmentReferences(ctx, path, pos, includeDecl); handled {
+		return locs, err
+	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().References {
 		return nil, nil

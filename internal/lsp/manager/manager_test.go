@@ -116,6 +116,15 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				CallHierarchyProvider:  callHierarchyCap(opts),
 			}}
 			respond(out, msg.ID, result)
+		case msg.Method == "textDocument/definition":
+			// One location in the requested doc covering its first 6 units, so
+			// fragment→host URI/range rewriting is observable.
+			var p protocol.DefinitionParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.Location{{
+				URI:   p.TextDocument.URI,
+				Range: protocol.Range{Start: protocol.Position{Line: 0, Character: 0}, End: protocol.Position{Line: 0, Character: 6}},
+			}})
 		case msg.Method == "textDocument/references":
 			// Echo the request option so the test can assert it round-trips.
 			var p protocol.ReferenceParams

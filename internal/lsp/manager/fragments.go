@@ -320,6 +320,107 @@ func (m *Manager) fragmentHover(ctx context.Context, hostPath string, pos buffer
 	return h, true, nil
 }
 
+// fragmentDefinition routes a definition request into the fragment covering
+// pos, when one exists (#416). Result locations inside fragment documents are
+// rewritten to host-file locations; locations in real files pass through.
+func (m *Manager) fragmentDefinition(ctx context.Context, hostPath string, pos buffer.Position) (locs []protocol.Location, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().Definition {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	enc := srv.cl.Encoding()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	locs, err = srv.cl.Definition(cctx, protocol.DefinitionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	return m.fragLocationsToHost(locs, enc), true, nil
+}
+
+// fragmentReferences routes a references request into the fragment covering
+// pos, when one exists (#416), mapping result locations like
+// fragmentDefinition.
+func (m *Manager) fragmentReferences(ctx context.Context, hostPath string, pos buffer.Position, includeDecl bool) (locs []protocol.Location, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().References {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	enc := srv.cl.Encoding()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	locs, err = srv.cl.References(cctx, protocol.ReferenceParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
+		Context:      protocol.ReferenceContext{IncludeDeclaration: includeDecl},
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	return m.fragLocationsToHost(locs, enc), true, nil
+}
+
+// fragLocationsToHost rewrites every fragment-URI location to the equivalent
+// host-file location (host file URI, host coordinates). Locations in real
+// files pass through untouched; a fragment location whose document is no
+// longer tracked (stale, host closed) is dropped rather than surfaced as an
+// unopenable synthetic URI.
+func (m *Manager) fragLocationsToHost(locs []protocol.Location, enc string) []protocol.Location {
+	out := make([]protocol.Location, 0, len(locs))
+	for _, l := range locs {
+		if !isFragmentURI(l.URI) {
+			out = append(out, l)
+			continue
+		}
+		fd, ok := m.fragmentByURI(l.URI)
+		if !ok {
+			continue
+		}
+		m.mu.Lock()
+		frag := fd.frag
+		m.mu.Unlock()
+		hostLines, ok := m.DocLines(fd.hostPath)
+		if !ok {
+			continue
+		}
+		l.URI = protocol.PathToURI(fd.hostPath)
+		l.Range = fragRangeToHost(frag, hostLines, l.Range, enc)
+		out = append(out, l)
+	}
+	return out
+}
+
+// fragmentByURI returns the tracked fragment document behind a fragment URI,
+// across all hosts (a fragment server may answer with locations in another
+// host's fragments).
+func (m *Manager) fragmentByURI(uri string) (*fragmentDoc, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, fds := range m.frags {
+		for _, fd := range fds {
+			if fd.uri == uri {
+				return fd, true
+			}
+		}
+	}
+	return nil, false
+}
+
 // fragRangeToHost converts a fragment-document LSP range into the equivalent
 // host-document LSP range, staying in the fragment server's encoding (today's
 // consumers only read the edit text, not the range).

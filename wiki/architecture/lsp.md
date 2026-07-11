@@ -265,8 +265,9 @@ keeps the last result until the next one lands. Optional by construction:
 no `semanticTokensProvider` (gopls needs `semanticTokens = true` under
 `[lsp.servers.go.settings]`) simply means Tree-sitter-only rendering.
 
-**Embedded fragments — virtual documents (0300, #412–#414).** SQL inside a
-Python string gets real completion and hover from an SQL server. LSP has no
+**Embedded fragments — virtual documents (0300, #412–#416).** SQL inside a
+Python string gets real completion, hover, definition and references from an
+SQL server. LSP has no
 protocol-level notion of embedded fragments, so the manager mirrors each
 detected fragment into a synthetic in-memory document (`ike-fragment:` URI,
 `manager/fragments.go`) with the fragment's language id, served by that
@@ -281,11 +282,16 @@ pure offset shift. Lifecycle follows the host document: fragments re-detect
 after every open/change on a manager goroutine (generation-guarded — the
 newest sync wins; `Change` runs on the UI thread and detection/spawning must
 not), matching slots update in place via didChange, vanished fragments close,
-crash restart re-opens them. Completion and hover requests whose position
-falls inside a fragment route to the fragment's server with positions mapped
-both ways (result edit/hover ranges return in host coordinates). A fragment
-language with no configured server degrades silently; fragment diagnostics
-are dropped until #415; references/definition inside fragments are #416. The
+crash restart re-opens them. Position-based requests (completion, hover,
+definition, references) whose position falls inside a fragment route to the
+fragment's server with positions mapped both ways: request positions become
+fragment-relative, result edit/hover ranges return in host coordinates, and
+definition/reference locations pointing into fragment documents are rewritten
+to the host file (host URI + host range); locations in real files pass
+through, and a fragment location that no longer resolves to a tracked
+fragment is dropped rather than surfaced as an unopenable synthetic URI. A
+fragment language with no configured server degrades silently; fragment
+diagnostics are dropped until #415. The
 `sql` language plugin registers `sql-language-server` (also serving plain
 `.sql` files) so the pipeline works out of the box.
 
