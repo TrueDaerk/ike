@@ -129,6 +129,8 @@ var jetbrainsRows = []row{
 	{"cmd+k up", "pane.splitUp", "Split up", Global, "App (01)"},
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)"},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)"},
+	{"cmd+k shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
+	{"cmd+k shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)"},
 	// JetBrains terminal toggle. Alt+F-key delivery depends on the terminal,
 	// hence fragile; inside a focused terminal the reserved-set handler picks

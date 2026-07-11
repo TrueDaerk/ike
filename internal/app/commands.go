@@ -60,6 +60,11 @@ type ShowSearchEverywhereMsg struct{}
 // by editor.saveAll.
 type SaveAllMsg struct{}
 
+// SplitViewMsg asks the root model to split the focused editor and open the
+// same document as a second live shared view (#147), cursor/scroll copied
+// from the source view.
+type SplitViewMsg struct{ Zone layout.Zone }
+
 // SplitFocusedMsg asks the root model to split the focused leaf toward Zone
 // with a fresh empty editor (#114). Dispatched by pane.splitDown / pane.splitUp.
 type SplitFocusedMsg struct{ Zone layout.Zone }
@@ -181,6 +186,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),
 			appCommand("pane.splitLeft", "Split Left", SplitFocusedMsg{Zone: layout.ZoneLeft}),
+			appCommand("editor.splitViewRight", "Split View Right", SplitViewMsg{Zone: layout.ZoneRight}),
+			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
 		),
 	}
 }

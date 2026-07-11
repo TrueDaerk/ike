@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Split view (#147): `editor.splitViewRight`/`Down` (`cmd+k shift+right`/
+  `shift+down`, View menu, palette) split the focused editor into a second
+  live shared view of the same document (#142), cursor/scroll copied from the
+  source, new view focused; file-less editors no-op with a toast. Documented
+  in [Editor](/architecture/editor.md); keybinding matrix regenerated.
+
 - `command | ike -` pipes stdin into a scratch buffer (#344, Roadmap 0270):
   read to EOF before the UI starts, opened focused after any file targets,
   dirty + never-saved so the quit guard prompts and `:w <path>` names it; the
