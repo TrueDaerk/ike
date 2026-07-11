@@ -849,3 +849,85 @@ func TestSetOpenClearsStaleActive(t *testing.T) {
 		t.Fatalf("stale active = %q want cleared", m.Active())
 	}
 }
+
+// #373: a prompt whose natural box is wider than the pane must still render
+// (truncated), never disappear while it keeps capturing keys.
+func TestDeletePromptRendersWiderThanPane(t *testing.T) {
+	root := t.TempDir()
+	long := "a-very-long-filename-that-overflows.go"
+	mustWrite(t, filepath.Join(root, long), "x")
+	m := mounted(t, root, 28, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j")) // select the file
+	m, cmd := m.Update(DeleteMsg{})
+	m, _ = pumpScans(m, cmd)
+	if !m.Prompting() {
+		t.Fatal("delete confirmation prompt should be open")
+	}
+	_, _, w, _, ok := m.promptBoxOrigin()
+	if !ok {
+		t.Fatal("an active prompt must always have a render origin")
+	}
+	if w > 28 {
+		t.Fatalf("prompt box width = %d, must fit pane width 28", w)
+	}
+	view := m.View()
+	if !strings.Contains(view, "…") {
+		t.Fatalf("truncated prompt title should end in an ellipsis:\n%s", view)
+	}
+	if !strings.Contains(view, "[y]es") {
+		t.Fatalf("confirm row missing — prompt would capture keys invisibly:\n%s", view)
+	}
+}
+
+// #373: the rename input windows horizontally so the cursor (at the end of the
+// prefilled name) stays visible, and typing still lands at the cursor.
+func TestRenamePromptWindowsLongInput(t *testing.T) {
+	root := t.TempDir()
+	long := "a-very-long-filename-that-overflows.go"
+	mustWrite(t, filepath.Join(root, long), "x")
+	m := mounted(t, root, 28, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"))
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if m.prompt == nil || m.prompt.input != long {
+		t.Fatalf("rename prompt should be open prefilled with %q", long)
+	}
+	_, _, w, _, ok := m.promptBoxOrigin()
+	if !ok || w > 28 {
+		t.Fatalf("prompt box ok=%v width=%d, want rendered and <= pane width 28", ok, w)
+	}
+	// the window slides to the cursor at the end of the name: the tail is visible.
+	if !strings.Contains(m.View(), "overflows.go") {
+		t.Fatalf("input window should show the text around the cursor:\n%s", m.View())
+	}
+	m, _ = send(m, key("z"))
+	if m.prompt.input != long+"z" {
+		t.Fatalf("input after typing = %q want %q", m.prompt.input, long+"z")
+	}
+}
+
+// #373: a click on the input row maps through the window offset, so the cursor
+// lands on the clicked rune even when the input is horizontally scrolled.
+func TestPromptMouseClickWithWindowOffset(t *testing.T) {
+	root := t.TempDir()
+	long := "a-very-long-filename-that-overflows.go"
+	mustWrite(t, filepath.Join(root, long), "x")
+	m := mounted(t, root, 28, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"))
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	off, _ := m.promptInputWindow()
+	if off == 0 {
+		t.Fatal("test setup: expected a scrolled input window")
+	}
+	bx, by, _, _, _ := m.promptBoxOrigin()
+	inputRow := by + 2
+	textX := bx + 2 + len(promptInputPrefix)
+	m.PromptMouseClick(textX+3, inputRow)
+	if want := off + 3; m.prompt.pos != want {
+		t.Fatalf("pos after click = %d want %d", m.prompt.pos, want)
+	}
+}

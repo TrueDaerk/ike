@@ -422,24 +422,56 @@ const promptInputPrefix = "> "
 // a cell instead of pushing the text sideways as it moves.
 var promptCursorStyle = lipgloss.NewStyle().Reverse(true)
 
+// promptInnerWidth is the horizontal space a prompt line may occupy inside
+// the box's border and padding (2 cells each side), floored at 1 so even a
+// degenerate pane renders something.
+func (m Model) promptInnerWidth() int {
+	if w := m.width - 4; w > 1 {
+		return w
+	}
+	return 1
+}
+
+// promptInputWindow returns the rune offset of the visible slice of the
+// prompt's input text and the cell width available for it on the input row.
+// The window slides right just far enough to keep the cursor cell visible,
+// so long prefilled names (rename) still show where typing lands.
+func (m Model) promptInputWindow() (off, avail int) {
+	avail = m.promptInnerWidth() - len(promptInputPrefix)
+	if avail < 1 {
+		avail = 1
+	}
+	if m.prompt.pos+1 > avail {
+		off = m.prompt.pos + 1 - avail
+	}
+	return off, avail
+}
+
 // promptBox renders the active prompt as a bordered box for View to overlay.
 // The input row's cursor is drawn at p.pos by reverse-video-ing that cell,
 // keeping the line the same length as the text (no inserted caret rune).
+// Every line is truncated (title) or windowed (input) to the pane's width so
+// the box always fits horizontally — a prompt that captures keys must never
+// be wider than the pane it renders in (#373).
 func (m Model) promptBox() string {
 	p := m.prompt
-	body := p.title
+	inner := m.promptInnerWidth()
+	body := ansi.Truncate(p.title, inner, "…")
 	switch p.kind {
 	case promptInput:
 		r := []rune(p.input)
-		before, after := string(r[:p.pos]), ""
+		off, avail := m.promptInputWindow()
+		before, after := string(r[off:p.pos]), ""
 		cur := " " // past the last rune: a blank cursor cell
 		if p.pos < len(r) {
 			cur = string(r[p.pos])
-			after = string(r[p.pos+1:])
+			if end := off + avail; p.pos+1 < end {
+				after = string(r[p.pos+1 : min(end, len(r))])
+			}
 		}
 		body += "\n" + promptInputPrefix + before + promptCursorStyle.Render(cur) + after
 	default:
-		body += "\n[y]es  [n]o"
+		body += "\n" + ansi.Truncate("[y]es  [n]o", inner, "…")
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -449,13 +481,17 @@ func (m Model) promptBox() string {
 }
 
 // promptBoxOrigin returns the content-local cell of the prompt box's
-// upper-left corner (border included), mirroring the centring math View uses
-// to overlay it via overlay.Center — which places it within the explorer's
-// own m.width/m.height, i.e. the pane's content area, not the full terminal.
-// ok is false when the box does not fit that area, in which case it is not
-// actually shown (Center falls back to the bare base).
+// upper-left corner (border included), mirroring the placement math View uses
+// to overlay it via overlay.Place — within the explorer's own m.width/m.height,
+// i.e. the pane's content area, not the full terminal. promptBox truncates
+// itself to the pane width and a too-tall box is clipped by Place rather than
+// dropped, so the origin is clamped at 0 and ok is false only when there is no
+// box at all: an active prompt is always rendered (#373).
 func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 	box := m.promptBox()
+	if box == "" {
+		return 0, 0, 0, 0, false
+	}
 	lines := strings.Split(box, "\n")
 	h = len(lines)
 	for _, l := range lines {
@@ -463,10 +499,7 @@ func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 			w = lw
 		}
 	}
-	if box == "" || w > m.width || h > m.height {
-		return 0, 0, 0, 0, false
-	}
-	return (m.width - w) / 2, (m.height - h) / 2, w, h, true
+	return max(0, (m.width-w)/2), max(0, (m.height-h)/2), w, h, true
 }
 
 // PromptMouseClick moves the text cursor of an open promptInput to the column
@@ -489,8 +522,9 @@ func (m *Model) PromptMouseClick(x, y int) {
 	if y != inputRow {
 		return
 	}
+	off, _ := m.promptInputWindow()
 	r := []rune(p.input)
-	p.pos = clamp(x-textX, 0, len(r))
+	p.pos = clamp(x-textX+off, 0, len(r))
 }
 
 // trimSpace trims leading/trailing ASCII spaces and tabs from a filename without

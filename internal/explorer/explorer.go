@@ -1116,7 +1116,11 @@ func (m Model) View() string {
 
 	out := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	if m.prompt != nil {
-		out = overlay.Center(out, m.promptBox(), m.width, m.height)
+		// Place, not Center: Center drops a box that does not fit, which would
+		// leave an invisible prompt capturing keys (#373). promptBox fits the
+		// pane width by construction; a too-short pane clips the box instead.
+		bx, by, _, _, _ := m.promptBoxOrigin()
+		out = overlay.Place(out, m.promptBox(), bx, by, m.width, m.height)
 	}
 	return out
 }

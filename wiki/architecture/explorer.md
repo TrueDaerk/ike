@@ -183,14 +183,19 @@ prefilled name). The cursor cell itself is reverse-video (`promptCursorStyle`)
 over the rune already there (a blank cell past the last rune), not an inserted
 caret glyph — so it never shifts the surrounding text as it moves.
 
-`View` overlays the box via `overlay.Center(out, m.promptBox(), m.width,
-m.height)` — the explorer's **own** `m.width`/`m.height` (its pane content
-area), not the full terminal, since `out` here is the explorer's own rendered
-tree. So the box is centered within the pane, not the screen. Mouse clicks
-must land in the same content-local space `MouseClick` uses:
-`promptBoxOrigin()` recomputes that centering math with the model's own
-dimensions, and `PromptMouseClick(x, y)` maps a content-local click on the
-input row to a `pos`. The app computes those content-local coordinates itself
+`View` overlays the box via `overlay.Place(out, m.promptBox(), bx, by,
+m.width, m.height)` — the explorer's **own** `m.width`/`m.height` (its pane
+content area), not the full terminal, since `out` here is the explorer's own
+rendered tree. So the box is centered within the pane, not the screen. The box
+always fits and always renders (#373): `promptBox` truncates the title to the
+pane width (ellipsis) and horizontally windows the input row so the cursor cell
+stays visible for long prefilled names; `Place` clips a box taller than the
+pane instead of dropping it, so an active prompt can never capture keys
+invisibly. Mouse clicks must land in the same content-local space `MouseClick`
+uses: `promptBoxOrigin()` recomputes that centering math (origin clamped at 0)
+with the model's own dimensions, and `PromptMouseClick(x, y)` maps a
+content-local click on the input row to a `pos`, adding the input window's
+scroll offset. The app computes those content-local coordinates itself
 (pane rect + `paneContentX`/`paneContentY`, same as a normal pane click) and
 routes mouse presses there instead of through the normal pane hit-test
 whenever `explorerCapturing()` is true (explorer focused with a prompt open).
