@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- 0082 sheet 11+13 verdicts (#18): `f4` is the delivered primary for
+  `lsp.definition` (JetBrains jump-to-source; `cmd+b` stays secondary), and
+  `shift+f6` is context-aware refactor-rename — `lsp.rename` in an editor,
+  `file.rename` in the explorer. Label/matrix primary selection now prefers
+  fewer keystrokes before shorter strings, so single-step chords beat leader
+  sequences. Matrix regenerated. See
+  [keybindings](/architecture/keybindings.md).
+
 - Workspace edits (rename/format/code actions) apply once per document, not
   once per view (#366): `FormatEditsMsg` now goes through exactly one view of
   a shared document; per-view routing hit the aliased buffer N times when the

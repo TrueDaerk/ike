@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T13:00:00Z
+timestamp: 2026-07-11T14:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -141,7 +141,12 @@ per view, #366; the change-sync broadcast converges the other views, the
 same single-view rule as replace-in-path) and stay dirty; every other file
 is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
-Gated on `renameProvider`; the 0082 `Shift+F6` decision stays with the audit.
+Gated on `renameProvider`. The 0082 sheet-13 verdict landed (#18): `shift+f6`
+binds `lsp.rename` in the Editor context — JetBrains' context-aware
+refactor-rename — while the Global `file.rename` row keeps the chord in the
+explorer; `space n` stays as the leader path. Go-to-declaration's sheet-11
+verdict made `f4` the delivered primary for `lsp.definition` (`cmd+b` stays a
+secondary).
 
 **Code actions (#8).** Code actions are *server-defined* fixes and
 refactorings for the code at the cursor — "add the missing import", "organize

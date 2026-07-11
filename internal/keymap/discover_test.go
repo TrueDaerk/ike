@@ -23,9 +23,14 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	if got, ok := l.Binding("editor.write"); !ok || got != "ctrl+s" {
 		t.Fatalf("editor.write = %q ok=%v", got, ok)
 	}
-	// A leader row is a delivered chord, so covered fragile commands show it.
-	if got, _ := l.Binding("lsp.definition"); got != "space d" {
+	// A delivered default primary wins even when a leader mnemonic exists
+	// (0082 sheet 11, #18: f4 outranks both cmd+b and space d).
+	if got, _ := l.Binding("lsp.definition"); got != "f4" {
 		t.Fatalf("lsp.definition = %q", got)
+	}
+	// A leader row is a delivered chord, so covered fragile commands show it.
+	if got, _ := l.Binding("lsp.references"); got != "space u" {
+		t.Fatalf("lsp.references = %q", got)
 	}
 	// Fragile-only with no alternative: honest warning.
 	if got, _ := l.Binding("editor.duplicateLine"); !strings.Contains(got, "cmd+d ⚠") {
@@ -45,9 +50,9 @@ func TestLiveBindingsFragileUseAlternative(t *testing.T) {
 	// Without the leader layer in the table, the label points at the leader
 	// path as the escape route.
 	l := liveTable(t, false)
-	got, _ := l.Binding("lsp.definition")
-	if !strings.Contains(got, "cmd+b ⚠ use space d") {
-		t.Fatalf("lsp.definition = %q", got)
+	got, _ := l.Binding("lsp.references")
+	if !strings.Contains(got, "alt+f7 ⚠ use space u") {
+		t.Fatalf("lsp.references = %q", got)
 	}
 }
 

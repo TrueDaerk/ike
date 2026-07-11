@@ -149,7 +149,11 @@ since the 0081/20 reconciliation: `editor.find` (`cmd+f`, opens the vim `/`
 search), `editor.duplicateLine` (`cmd+d`), `editor.saveAll` (`cmd+shift+s`),
 `explorer.toggle` (`cmd+1`, focus flip between tree and editor), and `cmd+b`
 reconciled onto the registered `lsp.definition` id (instead of the forked
-`editor.gotoDeclaration`).
+`editor.gotoDeclaration`). Since the 0082 sheet-11/13 verdicts (#18),
+`lsp.definition` also has `f4` (JetBrains jump-to-source) as its delivered
+primary, and `shift+f6` is context-aware refactor-rename: `lsp.rename` with an
+editor focused, `file.rename` everywhere else (the Editor row shadows the
+Global one).
 
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
@@ -270,7 +274,9 @@ exception (vim-native equivalents, palette reach).
   palette's shortcut column read the *effective* table through a stable
   holder that follows every keymap reload. Labelling is honest by rule:
   a delivered chord shows plainly (`ctrl+s`; leader rows count, so
-  `lsp.definition` shows `space d` instead of the fragile `cmd+b`); a
+  `lsp.references` shows `space u` instead of the fragile `alt+f7`, and
+  fewer keystrokes win before shorter labels, so `lsp.rename` shows the
+  single-step `shift+f6` over `space n`); a
   fragile-only binding warns and names the escape (`cmd+d ⚠
   terminal-dependent`, or `… ⚠ use space d`); blocked commands render
   `✗ blocked: <dependency>`.
@@ -325,10 +331,10 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `lsp.codeAction` | `alt+enter` | fragile | `space a` | live via space a |
-| `lsp.definition` | `cmd+b` | fragile | `space d` | live via space d |
+| `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
-| `lsp.rename` | `space n` | delivered | `—` | live |
+| `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |
 | `nav.forward` | `cmd+right-bracket` | fragile | `space i` | live via space i |
