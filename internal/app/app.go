@@ -3028,8 +3028,17 @@ func (m *Model) commitTabMove(x, y int) {
 	}
 	if target != src {
 		tinst := m.panes.Get(target)
-		if tinst == nil || tinst.Kind() != pane.KindEditor {
-			return // tabs only land on editor panes
+		if tinst == nil {
+			return
+		}
+		if tinst.Kind() != pane.KindEditor {
+			// A non-editor pane has no tab list to join, but its edge
+			// zones still accept the file as a split next to it (#317),
+			// mirroring the self-edge drop below.
+			if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
+				m.splitTabTo(target, zone, path, ed)
+			}
+			return
 		}
 		m.openInTab(target, path)
 		m.backupDropOnCloseTab(ed, src)
@@ -3041,22 +3050,28 @@ func (m *Model) commitTabMove(x, y int) {
 	}
 	// Self-drop on an edge: split off a fresh pane holding just this file.
 	if zone, near := edgeZone(r, x, y); near {
-		newKey := m.panes.AddEditor()
-		m.installEmitter(newKey)
-		tree, ok := layout.SplitLeaf(m.tree, src, newKey, zone)
-		if !ok {
-			m.panes.Close(newKey)
-			return
-		}
-		m.tree = tree
-		m.layout()
-		m.openInTab(newKey, path)
-		m.backupDropOnCloseTab(ed, src)
-		inst.CloseTab(m.drag.srcTab)
-		m.setFocus(newKey)
-		m.syncExplorerOpen()
-		m.layout()
+		m.splitTabTo(src, zone, path, ed)
 	}
+}
+
+// splitTabTo finishes a tab drag by splitting pane target at zone into a fresh
+// editor leaf holding path, then closing the dragged tab in the source pane.
+func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *editor.Model) {
+	newKey := m.panes.AddEditor()
+	m.installEmitter(newKey)
+	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	if !ok {
+		m.panes.Close(newKey)
+		return
+	}
+	m.tree = tree
+	m.layout()
+	m.openInTab(newKey, path)
+	m.backupDropOnCloseTab(ed, m.drag.srcPane)
+	m.panes.Get(m.drag.srcPane).CloseTab(m.drag.srcTab)
+	m.setFocus(newKey)
+	m.syncExplorerOpen()
+	m.layout()
 }
 
 // edgeBand is the fraction of a pane's span near an edge that, when a self-drop
@@ -3391,7 +3406,7 @@ func (m Model) compositeWhichKey(base string) string {
 // previews the relocation; onto the source pane's own edge it previews the spawn.
 func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	d := m.drag
-	if d == nil || d.kind != dragMove {
+	if d == nil || (d.kind != dragMove && d.kind != dragTab) {
 		return "", 0, 0, false
 	}
 	tgt, found := m.lay.PaneAt(d.curX, d.curY)
@@ -3407,13 +3422,54 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 		if gr.W < 3 || gr.H < 3 {
 			return "", 0, 0, false
 		}
-		return ghostBox(gr.W, gr.H, "new pane", m.pal().Ghost), gr.X, gr.Y, true
+		label := "new pane"
+		if d.kind == dragTab {
+			label = m.tabDragLabel(d)
+		}
+		return ghostBox(gr.W, gr.H, label, m.pal().Ghost), gr.X, gr.Y, true
 	}
-	gr := dropRect(m.lay.Panes[tgt], layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY))
+	zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt])
+	if !can {
+		return "", 0, 0, false
+	}
+	label := m.paneLabel(d.srcPane)
+	if d.kind == dragTab {
+		// Dropping on another editor joins its tab bar in place — no
+		// spatial preview; only a split next to a non-editor pane (#317)
+		// has a rectangle to ghost.
+		if inst := m.panes.Get(tgt); inst != nil && inst.Kind() == pane.KindEditor {
+			return "", 0, 0, false
+		}
+		label = m.tabDragLabel(d)
+	}
+	gr := dropRect(m.lay.Panes[tgt], zone)
 	if gr.W < 3 || gr.H < 3 {
 		return "", 0, 0, false
 	}
-	return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane), m.pal().Ghost), gr.X, gr.Y, true
+	return ghostBox(gr.W, gr.H, label, m.pal().Ghost), gr.X, gr.Y, true
+}
+
+// dropZoneFor reports the drop zone to signal for the hovered target pane and
+// whether a drop there would do anything: a dragged tab only lands in a
+// non-editor pane's edge zones (#317), so its interior shows no target.
+func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone, bool) {
+	if d.kind == dragTab {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() != pane.KindEditor {
+			return edgeZone(r, d.curX, d.curY)
+		}
+	}
+	return layout.DropZone(r, d.curX, d.curY), true
+}
+
+// tabDragLabel is the ghost/status label for a tab drag: the dragged file's
+// basename.
+func (m Model) tabDragLabel(d *dragState) string {
+	if inst := m.panes.Get(d.srcPane); inst != nil {
+		if ed := inst.TabEditor(d.srcTab); ed != nil && ed.HasFile() {
+			return baseName(ed.Path())
+		}
+	}
+	return "tab"
 }
 
 // dropRect is the sub-rectangle of r the dragged pane would occupy for zone z.
@@ -3496,8 +3552,10 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			border = m.pal().MoveSource
 			title = "⤴ " + title
 		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt == key && tgt != d.srcPane {
-			border = m.pal().DropTarget
-			title = title + "  " + zoneArrow(layout.DropZone(r, d.curX, d.curY))
+			if zone, can := m.dropZoneFor(d, tgt, r); can {
+				border = m.pal().DropTarget
+				title = title + "  " + zoneArrow(zone)
+			}
 		}
 	}
 	return paneBox(title, content, r.W, r.H, border)
@@ -3560,7 +3618,11 @@ func (m Model) statusLine() string {
 			}
 		}
 		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
-			hint += " → " + zoneArrow(layout.DropZone(m.lay.Panes[tgt], d.curX, d.curY)) + " of " + m.paneLabel(tgt)
+			if zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt]); can {
+				hint += " → " + zoneArrow(zone) + " of " + m.paneLabel(tgt)
+			} else {
+				hint += "  (drop on a pane or this pane's edge)"
+			}
 		} else if zone, near := m.selfDropZone(d); near {
 			hint += " → split " + zoneArrow(zone)
 		} else {
