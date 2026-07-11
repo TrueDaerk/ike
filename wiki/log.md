@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Rename feedback (#426): a server that lacks the rename capability
+  (intelephense free) now toasts "language server does not support rename"
+  (`manager.ErrRenameUnsupported`) instead of the misleading "cannot rename
+  here". See [lsp](/architecture/lsp.md).
+
 - Comment toggling (#428): line-comment markers align with the comment on
   the line above the range (fallback: min indent, clamped to each line's
   indent), and blank lines now get a padded bare marker instead of being

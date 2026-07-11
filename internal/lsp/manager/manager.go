@@ -445,14 +445,23 @@ func (m *Manager) FormatRange(ctx context.Context, path string, start, end buffe
 	return convertEdits(doc.lines, edits, srv.cl.Encoding()), nil
 }
 
+// ErrRenameUnsupported reports that the document's server does not offer
+// rename at all (e.g. intelephense without a licence), as opposed to a
+// position the server rejected — the two deserve different user feedback.
+var ErrRenameUnsupported = errors.New("server does not support rename")
+
 // PrepareRename validates a rename at an editor position. ok reports whether
 // the position is renameable; placeholder is the symbol text the prompt should
 // prefill (empty when the server offers no range — defaultBehavior — or no
-// prepareRename support at all, which skips validation entirely).
+// prepareRename support at all, which skips validation entirely). A server
+// without the rename capability returns ErrRenameUnsupported.
 func (m *Manager) PrepareRename(ctx context.Context, path string, pos buffer.Position) (placeholder string, ok bool, err error) {
 	srv, doc, found := m.docServer(path)
-	if !found || !srv.cl.Caps().Rename {
+	if !found {
 		return "", false, nil
+	}
+	if !srv.cl.Caps().Rename {
+		return "", false, ErrRenameUnsupported
 	}
 	if !srv.cl.Caps().PrepareRename {
 		// No server-side validation offered; let the rename attempt decide.
