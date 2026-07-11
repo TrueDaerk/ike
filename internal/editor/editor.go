@@ -512,12 +512,7 @@ func boolOr(cfg host.Config, key string, def bool) bool {
 
 // indentOf returns the leading whitespace run of line i (for auto-indent).
 func (m *Model) indentOf(i int) string {
-	line := m.buf.Line(i)
-	j := 0
-	for j < len(line) && (line[j] == ' ' || line[j] == '\t') {
-		j++
-	}
-	return line[:j]
+	return leadingWhitespace(m.buf.Line(i))
 }
 
 // tabText is the string a Tab key inserts, honouring expandtab.

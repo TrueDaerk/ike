@@ -31,7 +31,11 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case key.Code == tea.KeyEnter:
 		indent := ""
 		if m.autoIndent {
-			indent = m.indentOf(m.cursor.Line)
+			// Smart indent (Roadmap 0260) keys off what stays on the line: a
+			// mid-line split indents by the text left of the cursor.
+			left := []rune(m.buf.Line(m.cursor.Line))
+			col := min(m.cursor.Col, len(left))
+			indent = m.smartIndent(string(left[:col]))
 		}
 		m.insertText("\n" + indent)
 	// Word/line kills (#246) come before the plain-backspace case, which

@@ -38,7 +38,13 @@ func (m *Model) openLine(below bool) {
 func (m *Model) applyOpenLine(rec *history.Recorder, below bool) buffer.Position {
 	indent := ""
 	if m.autoIndent {
-		indent = m.indentOf(m.cursor.Line)
+		if below {
+			// "o" opens a block body when the current line ends with an
+			// opener (Roadmap 0260); "O" keeps plain copy-indent.
+			indent = m.smartIndent(m.buf.Line(m.cursor.Line))
+		} else {
+			indent = m.indentOf(m.cursor.Line)
+		}
 	}
 	if below {
 		at := buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}

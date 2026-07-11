@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Enter and `o` gain language-aware smart indent (#336, Roadmap 0260): with
+  `editor.auto_indent` on, a line whose trimmed text ends with a block opener
+  (`lang.IndentAfter` — Python `:`, Go/PHP braces) opens the next line one
+  `tabText()` unit deeper; Enter keys off the text left of the cursor, `O` and
+  unknown languages keep plain copy-indent. Documented in
+  [Editor](/architecture/editor.md).
+
 - The language registry gains smart-indent metadata (#335, Roadmap 0260):
   `Language.IndentAfter` lists trimmed-line suffixes that open a block, resolved
   per buffer path via `lang.IndentAfter`. Python registers `":"` + open
