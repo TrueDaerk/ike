@@ -283,6 +283,96 @@ func TestFragmentCompletionRoutesAndMapsRanges(t *testing.T) {
 	}
 }
 
+func TestFragmentDefinitionRoutesAndMapsLocations(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	locs, err := m.Definition(context.Background(), path, buffer.Position{Line: 0, Col: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 1 {
+		t.Fatalf("locs = %+v, want 1", locs)
+	}
+	// The fake answers with a location in the requested (fragment) doc; it
+	// must come back as the host file, range 0:0-0:6 shifted to 0:4-0:10.
+	if want := protocol.PathToURI(path); locs[0].URI != want {
+		t.Errorf("URI = %q, want host %q", locs[0].URI, want)
+	}
+	if r := locs[0].Range; r.Start.Character != 4 || r.End.Character != 10 || r.Start.Line != 0 {
+		t.Errorf("mapped range = %+v, want 0:4-0:10", r)
+	}
+
+	// Outside the fragment the host server answers; its location stays put.
+	locs, err = m.Definition(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(locs) != 1 || locs[0].URI != protocol.PathToURI(path) || locs[0].Range.Start.Character != 0 {
+		t.Errorf("host locs = %+v, want unmapped host location", locs)
+	}
+}
+
+func TestFragmentReferencesRoutesAndMapsLocations(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	locs, err := m.References(context.Background(), path, buffer.Position{Line: 0, Col: 10}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The fake answers with a real-file location plus (includeDeclaration)
+	// one in the requested fragment doc.
+	if len(locs) != 2 {
+		t.Fatalf("locs = %+v, want 2", locs)
+	}
+	if locs[0].URI != "file:///tmp/other.go" || locs[0].Range.Start.Line != 2 {
+		t.Errorf("real-file location must pass through, got %+v", locs[0])
+	}
+	if want := protocol.PathToURI(path); locs[1].URI != want {
+		t.Errorf("fragment location URI = %q, want host %q", locs[1].URI, want)
+	}
+	// Fragment 0:0 maps to host 0:4.
+	if locs[1].Range.Start.Character != 4 || locs[1].Range.Start.Line != 0 {
+		t.Errorf("fragment location range = %+v, want start 0:4", locs[1].Range)
+	}
+}
+
+func TestFragLocationsToHostDropsStale(t *testing.T) {
+	m := New(multiResolver(fragmentSpecs()...), fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+
+	// A fragment URI that no tracked fragment document backs must be dropped,
+	// never surfaced as an unopenable synthetic URI.
+	locs := m.fragLocationsToHost([]protocol.Location{
+		{URI: fragmentURI("/tmp/gone.py", 0)},
+		{URI: "file:///tmp/keep.go"},
+	}, protocol.EncodingUTF16)
+	if len(locs) != 1 || locs[0].URI != "file:///tmp/keep.go" {
+		t.Errorf("locs = %+v, want only the real-file location", locs)
+	}
+}
+
 func TestFragmentHoverRoutesAndMapsRange(t *testing.T) {
 	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
 	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})

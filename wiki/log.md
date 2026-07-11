@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Fragment references/definition (#416): definition and references requests
+  inside an embedded fragment now route to the fragment's server; result
+  locations in fragment documents are rewritten to host-file locations
+  (fragment URIs never reach the editor), real-file locations pass through,
+  stale fragment locations are dropped. See [lsp](/architecture/lsp.md).
+
 - Floating shell stale body (#409): `ui.Floating.View()` now re-renders its
   content body on every call (scroll offset preserved via `scroller.Refresh`),
   so modals that mutate state in place — the crash-recovery prompt's cursor and
