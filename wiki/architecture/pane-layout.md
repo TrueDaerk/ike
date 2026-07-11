@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-11T14:30:00Z
 ---
 
 # Pane Layout & Drag
@@ -144,6 +144,22 @@ merge label — labelled with the dragged pane. It is drawn with `overlay.Place`
 sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
 seam). Resize feedback is the divider tracking the cursor in real time as the
 ratio updates per motion frame.
+
+## Maximize / zoom (Roadmap 0290, #358)
+
+`pane.maximize` (`cmd+k z`, View menu, palette) is a tmux-style zoom toggle:
+the focused pane renders alone over the whole body rect while the split tree
+stays untouched underneath. Implementation is one substitution point — while
+zoomed, `layout()` builds `m.lay` as a single-pane Layout with no dividers,
+and since `m.lay` is the sole source of pane geometry (rendering, mouse
+hit-testing, focus navigation), no other subsystem branches on zoom; `render`
+draws the one pane via `renderPane` instead of walking the tree. Any change
+to the tree's **leaf set** (split, close, drag relocation) auto-unzooms: the
+zoom records a sorted leaf signature and `layout()` — the choke point every
+mutation already runs through — drops the zoom when the signature no longer
+matches or the pane vanished. Resizes keep the leaf set, so a zoom survives
+a terminal resize. Zoom is deliberately not persisted; a restart restores
+unzoomed. Zen mode (#359) will layer chrome-hiding on top.
 
 ## Persistence
 
