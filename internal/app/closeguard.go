@@ -20,11 +20,13 @@ import (
 
 // pendingClose remembers what asked to close while the guard is open: the
 // pane key, the tab index (-1 = the whole pane) and the dirty documents the
-// close would drop.
+// close would drop. quit marks an app-quit request (#287) — s/d then act on
+// every dirty editor instead of one pane.
 type pendingClose struct {
 	key   string
 	tab   int
 	dirty []string // display names for the prompt body
+	quit  bool
 }
 
 // guardedCloseFocused closes the focused pane's active tab (the pane on its
@@ -43,6 +45,61 @@ func (m *Model) guardedCloseFocused() {
 		}
 	}
 	m.closeFocused()
+}
+
+// guardedQuit quits the app unless that would drop unsaved changes (#287):
+// with dirty buffers anywhere, the #259 guard prompt opens with quit
+// semantics — save everything and quit, discard and quit, or cancel.
+func (m Model) guardedQuit() (tea.Model, tea.Cmd) {
+	if dirty := m.dirtyEverywhere(); len(dirty) > 0 {
+		m.openQuitPrompt(dirty)
+		return m, nil
+	}
+	return m.quit()
+}
+
+// dirtyEverywhere lists every dirty document across all editor panes, deduped
+// by path (shared documents count once — quitting loses them regardless).
+func (m *Model) dirtyEverywhere() []string {
+	var dirty []string
+	seen := map[string]bool{}
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			ed := inst.TabEditor(i)
+			if ed == nil || !ed.Dirty() {
+				continue
+			}
+			name := "untitled"
+			if path := ed.Path(); path != "" {
+				if seen[path] {
+					continue
+				}
+				seen[path] = true
+				name = filepath.Base(path)
+			}
+			dirty = append(dirty, name)
+		}
+	}
+	return dirty
+}
+
+// openQuitPrompt shows the guard for a pending app quit.
+func (m *Model) openQuitPrompt(dirty []string) {
+	m.closePending = &pendingClose{quit: true, dirty: dirty}
+	body := strings.Join(dirty, ", ") + " has unsaved changes.\n\n" +
+		"  [s]   save all, then quit\n" +
+		"  [d]   discard changes and quit\n" +
+		"  [esc] cancel — keep ike running"
+	m.shell.SetContent(ui.ModelContent{
+		Heading: "Unsaved changes",
+		Body:    func() string { return body },
+	})
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
 }
 
 // dirtyOnClose lists the documents that closing tab idx (or the whole pane,
@@ -97,6 +154,9 @@ func (m Model) closePromptOpen() bool { return m.closePending != nil && m.shell.
 // (read-only file) keeps the tab open with an error instead of closing.
 func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pending := m.closePending
+	if pending.quit {
+		return m.updateQuitPrompt(msg)
+	}
 	switch msg.String() {
 	case "s":
 		m.closePending = nil
@@ -123,6 +183,34 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shell.Close()
 		m.closeFocused()
 		return m, nil
+	case "esc":
+		m.closePending = nil
+		m.shell.Close()
+		return m, nil
+	}
+	return m, nil
+}
+
+// updateQuitPrompt is the quit flavor of the guard (#287): s writes every
+// dirty buffer (staying open if any write fails), d quits discarding, esc
+// cancels.
+func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "s":
+		m.closePending = nil
+		m.shell.Close()
+		cmds := m.saveAllDirty()
+		if len(m.dirtyEverywhere()) > 0 {
+			// A write failed (read-only file, full disk): stay running; the
+			// batched editor cmds surface the write error.
+			m.host.Notify(host.Error, "not quit: save failed")
+			return m, tea.Batch(cmds...)
+		}
+		return m.quit()
+	case "d":
+		m.closePending = nil
+		m.shell.Close()
+		return m.quit()
 	case "esc":
 		m.closePending = nil
 		m.shell.Close()

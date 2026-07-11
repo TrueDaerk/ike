@@ -223,6 +223,69 @@ func dirtyActive(t *testing.T, m Model) Model {
 	return m
 }
 
+// isQuit reports whether cmd resolves to tea.Quit's message.
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+// TestQuitGuardPromptsOnDirty guards #287: q/ctrl+c with unsaved changes must
+// prompt instead of dropping the edits; esc cancels and keeps everything.
+func TestQuitGuardPromptsOnDirty(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	m := openApp(t, a)
+	m = dirtyActive(t, m)
+
+	tm, cmd := m.guardedQuit()
+	m = tm.(Model)
+	if isQuit(cmd) {
+		t.Fatal("dirty quit must not exit immediately")
+	}
+	if !m.closePromptOpen() {
+		t.Fatal("dirty quit must open the unsaved-changes guard")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.closePromptOpen() || !m.panes.FocusedInstance().Editor().Dirty() {
+		t.Fatal("esc must cancel the quit and keep the dirty buffer")
+	}
+}
+
+// TestQuitGuardSaveQuits: s writes every dirty buffer, then quits.
+func TestQuitGuardSaveQuits(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	m := openApp(t, a)
+	m = dirtyActive(t, m)
+
+	tm, _ := m.guardedQuit()
+	m = tm.(Model)
+	tm, cmd := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = tm.(Model)
+	if !isQuit(cmd) {
+		t.Fatal("s must save and quit")
+	}
+	// dirtyActive's 'x' deleted the first rune; the write persists that edit.
+	if data, _ := os.ReadFile(a); string(data) != "aa\n" {
+		t.Fatalf("s must write the dirty buffer before quitting, got %q", data)
+	}
+}
+
+// TestQuitGuardCleanQuitsImmediately: nothing dirty → the old direct quit.
+func TestQuitGuardCleanQuitsImmediately(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	m := openApp(t, a)
+
+	_, cmd := m.guardedQuit()
+	if !isQuit(cmd) {
+		t.Fatal("clean quit must exit immediately")
+	}
+}
+
 func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
