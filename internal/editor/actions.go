@@ -356,14 +356,18 @@ func (m *Model) saveAs(path string) error {
 func (m Model) runAction(action string) (Model, tea.Cmd) {
 	switch action {
 	case "write":
-		if cmd := m.saveGuarded(m.path); cmd != nil {
+		if cmd, _ := m.saveGuarded(m.path); cmd != nil {
 			return m, cmd
 		}
 	case "quit":
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "write_quit":
-		if cmd := m.saveGuarded(m.path); cmd != nil {
+		cmd, ok := m.saveGuarded(m.path)
+		if cmd != nil {
 			return m, cmd // conflict: prompt first, keep the pane open
+		}
+		if !ok {
+			return m, nil // write failed: stay open, the ex line has the error
 		}
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "undo":

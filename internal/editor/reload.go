@@ -100,12 +100,24 @@ func (m Model) conflictCmd() tea.Cmd {
 // editor.write, save-all) goes through: writing target over a stale buffer's
 // own file would clobber the external change, so it yields the prompt instead.
 // Saving to a different path (":w other") is not a conflict.
-func (m *Model) saveGuarded(target string) tea.Cmd {
+// It reports ok=false when nothing was written — a pending conflict, a write
+// error, or a scratch buffer without a name — so ":wq" knows not to close.
+// The outcome lands on the ex line (#261): `"file" written` on success,
+// vim-style "E: …" on failure.
+func (m *Model) saveGuarded(target string) (tea.Cmd, bool) {
 	if m.stale && samePath(target, m.path) {
-		return m.conflictCmd()
+		return m.conflictCmd(), false
 	}
-	_ = m.saveAs(target)
-	return nil
+	if target == "" && m.path == "" {
+		m.cmdMsg = "E: no file name"
+		return nil, false
+	}
+	if err := m.saveAs(target); err != nil {
+		m.cmdMsg = "E: " + err.Error()
+		return nil, false
+	}
+	m.cmdMsg = `"` + filepath.Base(m.path) + `" written`
+	return nil, true
 }
 
 // Autosave writes the buffer when focus leaves the pane or its document is
@@ -127,7 +139,9 @@ func (m *Model) Autosave() bool {
 // change.
 func (m *Model) ResolveConflictKeepMine() {
 	m.stale = false
-	_ = m.save()
+	if err := m.save(); err != nil {
+		m.cmdMsg = "E: " + err.Error()
+	}
 }
 
 // ResolveConflictReload resolves the save conflict by discarding the buffer's

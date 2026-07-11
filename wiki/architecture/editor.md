@@ -41,7 +41,10 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   visual selection — or the current line without one — through `"+`, and paste
   from it (mid-insert the paste joins the open insert session's undo unit).
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
-  #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
+  #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent. Saves
+  report on the ex line (#261): `"file" written` on success, `E: <error>`
+  on failure (read-only file, no file name) — a failed write keeps the
+  buffer dirty and aborts `:wq`.
 - **history** — undo/redo as `Change` records (forward edits + inverses +
   cursor before/after); linear today, with parent/seq fields reserved for an
   undo tree. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
