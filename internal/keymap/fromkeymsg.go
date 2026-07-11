@@ -16,14 +16,8 @@ func FromKeyMsg(msg tea.KeyPressMsg) (Key, bool) {
 	if s == "" {
 		return Key{}, false
 	}
-	// Some terminals report the bracket keys as the literal glyphs; normalise to
-	// the named bases the default set uses.
-	switch s {
-	case "[":
-		return Key{Base: "left-bracket"}, true
-	case "]":
-		return Key{Base: "right-bracket"}, true
-	}
+	// Bracket-glyph normalization lives in ParseKey's baseAlias (#284), so
+	// modified presses ("cmd+[") and bare ones canonicalise identically.
 	k, err := ParseKey(strings.TrimSpace(s))
 	if err != nil {
 		return Key{}, false

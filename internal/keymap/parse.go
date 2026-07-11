@@ -22,7 +22,9 @@ var modAlias = map[string]Mod{
 	"shift":   ModShift,
 }
 
-// baseAlias canonicalises common spellings of named base keys.
+// baseAlias canonicalises common spellings of named base keys. The bracket
+// glyphs map to their named bases here (not in FromKeyMsg) so a modified
+// press ("cmd+[") normalizes the same way as a bare one (#284).
 var baseAlias = map[string]string{
 	"escape":   "esc",
 	"return":   "enter",
@@ -32,6 +34,8 @@ var baseAlias = map[string]string{
 	"pageup":   "pgup",
 	"pagedown": "pgdown",
 	"pgdn":     "pgdown",
+	"[":        "left-bracket",
+	"]":        "right-bracket",
 }
 
 // ParseChord parses a chord string ("cmd+k cmd+c", "shift shift", "esc") into a
