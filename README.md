@@ -12,7 +12,8 @@ integrated terminal, themes, and a WASM plugin system.
 ## Installation & usage
 
 IKE is a single Go binary. You need [Go 1.26+](https://go.dev/dl/) and a
-terminal with truecolor and mouse support.
+terminal with truecolor, mouse, and Kitty keyboard protocol support
+(see [Platform notes](#platform-notes)).
 
 Build from source (all platforms):
 
@@ -32,11 +33,26 @@ ike
 
 ### Platform notes
 
+> [!IMPORTANT]
+> IKE only works properly in a terminal that supports the
+> [Kitty keyboard protocol](https://sw.kovidgoyal.net/kitty/keyboard-protocol/)
+> **and** has its own keybindings (mostly) disabled — otherwise the terminal
+> swallows chords before they ever reach IKE. For example, with
+> [Ghostty](https://ghostty.org/) use a config like:
+>
+> ```
+> keybind = clear
+> keybind = super+,=open_config
+> keybind = super+shift+,=reload_config
+> ```
+>
+> (on Windows/Linux use `ctrl` instead of `super`.)
+
 | Platform | Notes |
 |---|---|
-| **Linux** | Works in any modern terminal (kitty, Alacritty, GNOME Terminal, wezterm, …). Put the binary on your `PATH`, e.g. `install ike ~/.local/bin/`. |
-| **macOS** | Works in Terminal.app, iTerm2, kitty, Ghostty, wezterm, …. Install with `go build -o /usr/local/bin/ike ./cmd/ike` (or any `PATH` directory). |
-| **Windows** | Build with `go build -o ike.exe ./cmd/ike` and run inside **Windows Terminal** (recommended) or another truecolor-capable terminal. WSL2 also works well — follow the Linux notes there. |
+| **Linux** | Works in terminals with Kitty keyboard protocol support (Ghostty, kitty, wezterm, foot, Alacritty, …). Put the binary on your `PATH`, e.g. `install ike ~/.local/bin/`. |
+| **macOS** | Works in Ghostty, kitty, wezterm, iTerm2 (3.5+), Alacritty, …. Install with `go build -o /usr/local/bin/ike ./cmd/ike` (or any `PATH` directory). |
+| **Windows** | Build with `go build -o ike.exe ./cmd/ike` and run in a terminal with Kitty keyboard protocol support (e.g. wezterm). WSL2 also works well — follow the Linux notes there. |
 
 ### Optional tools
 
