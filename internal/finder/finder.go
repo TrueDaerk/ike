@@ -562,11 +562,19 @@ func (m *Model) statusRow(width int) string {
 	case m.list.Total() == 0:
 		return dim.Render("no matches")
 	}
-	s := strconv.Itoa(m.list.Total()) + " matches in " + strconv.Itoa(m.list.Files()) + " files"
+	s := plural(m.list.Total(), "match", "matches") + " in " + plural(m.list.Files(), "file", "files")
 	if m.truncated {
 		s += " (truncated)"
 	} else if m.scanning {
 		s += "…"
 	}
 	return dim.Render(s)
+}
+
+// plural renders "1 match" / "3 matches" style counts.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return strconv.Itoa(n) + " " + many
 }
