@@ -3280,6 +3280,10 @@ func (m Model) compositeLSPPopups(base string) string {
 		return base
 	}
 	ed := inst.Editor()
+	// The popups carry their own frame (#316), so they may overflow the owning
+	// pane; cap their content width at the terminal instead of the pane
+	// (frame + padding take 4 columns).
+	ed.SetPopupMaxWidth(m.width - 4)
 	top, left := ed.ScrollOffset()
 	gw := ed.GutterWidth()
 	contentX := r.X + paneContentX
@@ -3287,21 +3291,22 @@ func (m Model) compositeLSPPopups(base string) string {
 	place := func(view string, col, line int) string {
 		x := contentX + gw + (col - left)
 		y := contentY + (line - top) + 1 // one row below the cursor
-		// Clamp the box into the owning pane (#306): shift left instead of
-		// bleeding across the right border, and flip above the anchor row
-		// when it would cross the bottom border.
+		// Clamp the box to the terminal (#316): the framed popup may extend
+		// past the owning pane's borders, but shifts left instead of bleeding
+		// across the screen edge and flips above the anchor row when it would
+		// cross the bottom of the screen.
 		w, h := lipgloss.Width(view), lipgloss.Height(view)
-		if maxX := r.X + r.W - 1 - w; x > maxX {
+		if maxX := m.width - w; x > maxX {
 			x = maxX
 		}
-		if x < r.X+1 {
-			x = r.X + 1
+		if x < 0 {
+			x = 0
 		}
-		if y+h > r.Y+r.H-1 {
+		if y+h > m.height {
 			y = contentY + (line - top) - h
 		}
-		if y < r.Y+1 {
-			y = r.Y + 1
+		if y < 0 {
+			y = 0
 		}
 		return overlay.Place(base, view, x, y, m.width, m.height)
 	}

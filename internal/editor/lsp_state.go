@@ -260,7 +260,9 @@ func (m Model) CompletionView() string {
 	// similar but is informational, so the actionable list says its keys.
 	hint := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Border)
 	rows = append(rows, hint.Width(width).Render(truncate(completionHint, width)))
-	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+	// The same rounded frame as signature/hover (#316); the rows carry their
+	// own backgrounds, so the frame adds no padding.
+	return m.popupFrame().Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
 }
 
 // CompletionAnchor returns the buffer-relative cell (col, line) the popup anchors
@@ -332,7 +334,7 @@ func (m Model) SignatureView() string {
 	if s == nil {
 		return ""
 	}
-	box := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Foreground).Padding(0, 1)
+	box := m.popupFrame().Padding(0, 1)
 	param := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Underline(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
 
@@ -354,10 +356,31 @@ func (m Model) SignatureView() string {
 	return m.clampPopup(box, strings.Join(rows, "\n"))
 }
 
+// popupFrame is the shared overlay frame for the LSP popups (#316): a rounded
+// themed border like the floating shell, so the box reads as an overlay and
+// not as buffer content, in light and dark themes alike.
+func (m Model) popupFrame() lipgloss.Style {
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.theme().BorderFocus).
+		BorderBackground(m.theme().Panel).
+		Background(m.theme().Panel).
+		Foreground(m.theme().Foreground)
+}
+
+// SetPopupMaxWidth sets the popup content-width cap. The app derives it from
+// the terminal width now that popups may overflow their pane (#316); unset it
+// falls back to the pane's text area (#306).
+func (m *Model) SetPopupMaxWidth(w int) { m.popupMaxW = w }
+
 // popupMaxWidth caps a popup's content width: wide enough for real
-// signatures, never wider than the editor's own text area (#306).
+// signatures, never wider than the app-provided canvas (#316) — or, when the
+// app never told us, the editor's own text area (#306).
 func (m Model) popupMaxWidth() int {
-	w := m.view.TextWidth(m.buf.LineCount()) - 2
+	w := m.popupMaxW
+	if w <= 0 {
+		w = m.view.TextWidth(m.buf.LineCount()) - 2
+	}
 	if w > 80 {
 		w = 80
 	}
@@ -368,22 +391,23 @@ func (m Model) popupMaxWidth() int {
 }
 
 // popupMaxRows caps a popup's height so a wrapped monster signature cannot
-// cover the whole pane (#306).
+// cover the whole screen (#306, #316).
 const popupMaxRows = 10
 
-// clampPopup renders content inside box, wrapping lines wider than the popup
-// cap and truncating past popupMaxRows with an ellipsis row.
+// clampPopup wraps content at the popup width cap, truncates past
+// popupMaxRows with an ellipsis row, and renders it inside box (which carries
+// the popup frame, so the clamp happens on the content before the border is
+// drawn).
 func (m Model) clampPopup(box lipgloss.Style, content string) string {
 	maxW := m.popupMaxWidth()
 	if lipgloss.Width(content) > maxW {
-		box = box.Width(maxW + 2) // +2 for the padding cells
+		content = lipgloss.NewStyle().Width(maxW).Render(content)
 	}
-	out := box.Render(content)
-	lines := strings.Split(out, "\n")
+	lines := strings.Split(content, "\n")
 	if len(lines) > popupMaxRows {
-		lines = append(lines[:popupMaxRows], box.Render("…"))
+		lines = append(lines[:popupMaxRows], "…")
 	}
-	return strings.Join(lines, "\n")
+	return box.Render(strings.Join(lines, "\n"))
 }
 
 // SignatureAnchor returns the buffer-relative cell the popup anchors to.
@@ -413,7 +437,7 @@ func (m Model) HoverView() string {
 	if m.hover == nil {
 		return ""
 	}
-	box := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Foreground).Padding(0, 1)
+	box := m.popupFrame().Padding(0, 1)
 	const maxLines = 12
 	lines := m.hover.lines
 	if len(lines) > maxLines {

@@ -144,6 +144,7 @@ type Model struct {
 	comp       *completionState
 	hover      *hoverState
 	signature  *signatureState
+	popupMaxW  int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.

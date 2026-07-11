@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- LSP popups framed and freed from the pane clamp (#316): completion,
+  signature and hover render inside a rounded themed border (like the
+  floating shell) and may now overflow the owning pane — clamped to the
+  terminal edges instead, still shifting left / flipping above the anchor;
+  the width/height caps and ellipsis row stay as safety nets. Documented in
+  [LSP](/architecture/lsp.md).
+
 - Word-wise alt+arrow cursor motion (#303): `alt/opt+←/→` (and the delivered
   `ctrl+←/→` fallback) now move word-wise within the current line with `.` as
   a stop point; `shift+alt/ctrl+←/→` extend the selection the same way. The
