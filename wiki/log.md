@@ -2,6 +2,9 @@
 
 ## 2026-07-11
 
+- New built-in theme `one-dark` (Atom's One Dark), AA-contrast checked
+  (#387). See [Themes](/architecture/themes.md).
+
 - New built-in theme `kanagawa` (wave variant of rebelot/kanagawa.nvim),
   AA-contrast checked (#388). See [Themes](/architecture/themes.md).
 
