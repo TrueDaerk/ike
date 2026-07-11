@@ -21,6 +21,13 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	switch {
 	case key.Code == tea.KeyEscape:
 		m.commitInsert()
+	// ctrl+space is the conventional manual completion trigger (#302). It
+	// arrives as ctrl+' ' under the Kitty protocol and as ctrl+@ (NUL) from
+	// legacy terminals; both request completion at the cursor through the
+	// same event the "." auto-trigger uses. With the popup already open the
+	// re-emit re-queries the server.
+	case (key.Code == ' ' || key.Code == '@' || key.Code == tea.KeySpace) && key.Mod == tea.ModCtrl:
+		m.emit(EventCompletionTrigger)
 	case key.Code == tea.KeyEnter:
 		indent := ""
 		if m.autoIndent {
