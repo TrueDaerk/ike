@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 
@@ -18,7 +19,9 @@ import (
 
 // completionState is the live autocomplete popup. anchor is where the trigger
 // fired (just after the "."); the prefix the user types after it filters the
-// list and is replaced on accept.
+// list. On accept the partial identifier before the cursor is replaced (see
+// identifierStart) — not the anchor..cursor span, which is empty for a manual
+// trigger anchored at the cursor.
 type completionState struct {
 	items  []ilsp.CompletionItem
 	sel    int
@@ -196,18 +199,42 @@ func (m *Model) completionAccept() {
 		m.comp.sel = 0
 	}
 	item := items[m.comp.sel]
-	anchor := m.comp.anchor
 	cursor := m.cursor
 	m.comp = nil
-	// Replace [anchor, cursor) (the typed prefix) with the item's insert text in
-	// the open insert session so it joins the same undo unit.
+	// Replace the partial identifier already typed before the cursor with the
+	// item's insert text. The replacement starts at the identifier boundary (not
+	// the request anchor): a manual ctrl+space trigger anchors at the cursor, so
+	// an anchor-only range would be empty and splice the full insert text after
+	// the typed prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
+	start := m.identifierStart(cursor)
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
-	end := m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: anchor, End: cursor}, Text: item.InsertText})
+	end := m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: cursor}, Text: item.InsertText})
 	m.cursor = end
 	m.desiredCol = end.Col
 	m.dirtyFromInsert()
+}
+
+// identifierStart returns the position of the start of the identifier run
+// ending at pos: it walks back over identifier characters (letters, digits, and
+// underscore) on the same line. This is the span a completion replaces — the
+// partial word already typed — independent of where the request was anchored.
+func (m Model) identifierStart(pos buffer.Position) buffer.Position {
+	runes := []rune(m.buf.Line(pos.Line))
+	col := pos.Col
+	if col > len(runes) {
+		col = len(runes)
+	}
+	for col > 0 && isIdentRune(runes[col-1]) {
+		col--
+	}
+	return buffer.Position{Line: pos.Line, Col: col}
+}
+
+// isIdentRune reports whether r can appear in a completion identifier.
+func isIdentRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 // completionCancel hides the popup without inserting.

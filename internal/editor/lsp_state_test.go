@@ -75,6 +75,25 @@ func TestCompletionOpenFilterAccept(t *testing.T) {
 	}
 }
 
+// TestCompletionAcceptReplacesTypedPrefix guards #330: a completion whose insert
+// text starts with the identifier already typed before the cursor must replace
+// that partial word rather than duplicate it. This is the manual (ctrl+space)
+// trigger shape, where the popup is anchored at the cursor.
+func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
+	m, _ := loaded(t, "xyz.__\n")
+	m = insertModeAt(m, 0, 6) // after "xyz.__", as a manual trigger would anchor
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 6, Items: []ilsp.CompletionItem{
+		{Label: "__dict__", InsertText: "__dict__"},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "xyz.__dict__" {
+		t.Fatalf("after accept line = %q, want xyz.__dict__", got)
+	}
+}
+
 func TestCompletionEscapeCloses(t *testing.T) {
 	m, _ := loaded(t, "x.\n")
 	m = insertModeAt(m, 0, 2)
