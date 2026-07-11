@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Explorer hide/show (#268): `explorer.toggle` (`space e` / cmd+1) now runs
+  the JetBrains cmd+1 state machine — focused tree hides and editors reclaim
+  the width, a hidden tree comes back at its remembered ratio and takes
+  focus; the hidden state persists across restarts. Found running the 0082
+  sheet 25 protocol (#21). Documented in
+  [Explorer](/architecture/explorer.md).
+
 - Search-everywhere follow-ups (#263): `space space` opens the mode (the
   terminal stand-in for JetBrains' double-shift, via the leader engine), and
   an empty query now lists the recent files first (active file excluded)

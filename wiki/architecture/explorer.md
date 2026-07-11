@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-09T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # File Explorer
@@ -144,6 +144,15 @@ these are defaults.
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
+
+`explorer.toggle` (global, `cmd+1` / leader `e`) is the JetBrains cmd+1 state
+machine (#268, `internal/app/explorer_toggle.go`): a focused tree **hides**
+(the layout leaf is removed, editors reclaim the width; the pane instance
+stays registered so expansion/selection/scroll survive), a visible unfocused
+tree gains focus, and a hidden tree comes back as the outer-left split at its
+remembered ratio, focused. The hidden state persists in the layout store —
+`restoreLayout` accepts a tree without the explorer leaf — so it survives a
+restart; the next toggle brings the tree back.
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
 rebuilds (no re-scan), since all children — hidden included — are cached on the
