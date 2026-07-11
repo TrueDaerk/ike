@@ -3272,6 +3272,22 @@ func (m Model) compositeLSPPopups(base string) string {
 	place := func(view string, col, line int) string {
 		x := contentX + gw + (col - left)
 		y := contentY + (line - top) + 1 // one row below the cursor
+		// Clamp the box into the owning pane (#306): shift left instead of
+		// bleeding across the right border, and flip above the anchor row
+		// when it would cross the bottom border.
+		w, h := lipgloss.Width(view), lipgloss.Height(view)
+		if maxX := r.X + r.W - 1 - w; x > maxX {
+			x = maxX
+		}
+		if x < r.X+1 {
+			x = r.X + 1
+		}
+		if y+h > r.Y+r.H-1 {
+			y = contentY + (line - top) - h
+		}
+		if y < r.Y+1 {
+			y = r.Y + 1
+		}
 		return overlay.Place(base, view, x, y, m.width, m.height)
 	}
 	if ed.CompletionOpen() {

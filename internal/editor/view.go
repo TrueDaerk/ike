@@ -16,6 +16,12 @@ import (
 // insert/replace mode the cursor may land one past the line end; otherwise it
 // snaps onto a character.
 func (m *Model) MouseClick(x, y int) {
+	// A click dismisses cursor-anchored popups like any keypress does (#307):
+	// the popup anchors at the cursor, so leaving it open would make it trail
+	// every click/drag. The server re-opens signature help on the next
+	// keystroke inside the call.
+	m.dismissHover()
+	m.dismissSignature()
 	if y < 0 {
 		y = 0
 	}

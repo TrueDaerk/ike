@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- LSP popup fixes from live use (#306, #307, #308): signature/hover popups
+  clamp to the owning pane (width wrap, ellipsis row, shift/flip placement),
+  mouse clicks dismiss cursor-anchored popups, the completion list shows an
+  accept-keys hint and the signature popup a dim `ƒ` marker. Documented in
+  [LSP](/architecture/lsp.md).
+
 - Live workspace-symbol palette mode (#295, Epic 0250 phase 2): cmd+o now
   opens the palette locked to a live symbol mode — 150 ms debounced
   `workspace/symbol` re-query per keystroke (`palette.LiveMode` plumbing),

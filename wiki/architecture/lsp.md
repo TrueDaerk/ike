@@ -156,8 +156,14 @@ extracts the just-typed character from the change event; the editor renders a
 cursor-anchored popup (`signatureState`) with the active parameter emphasised
 (parameter labels arrive as substrings or UTF-16 offset pairs — both resolve
 to rune ranges in `lsp.SignatureContent`), the first doc line dimmed, and an
-overload counter. Esc dismisses; completion, when open, takes precedence in
-the popup compositor. Gated on `signatureHelpProvider`.
+overload counter, and a leading dim `ƒ` marking it as informational — the
+actionable completion list carries an accept-keys hint row instead (#308).
+Esc and mouse clicks dismiss (#307; a click moves the anchoring cursor, so
+the popup must not trail it); completion, when open, takes precedence in the
+popup compositor. Popups clamp to the owning pane (#306): long signatures
+wrap at the popup width cap, over-tall content truncates with an ellipsis
+row, and the placement shifts left / flips above the anchor instead of
+bleeding across pane borders. Gated on `signatureHelpProvider`.
 
 **Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
 relative 5-tuples against the server's legend into the same `highlight.Span`
