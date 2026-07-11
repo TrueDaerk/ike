@@ -542,6 +542,47 @@ func TestSearchForwardAndNext(t *testing.T) {
 	}
 }
 
+// TestCommitSearchEmitsSearchCommittedMsg guards the app-level f3/shift+f3
+// hookup (#376): committing a non-empty in-file search must announce itself so
+// f3 can repeat it; an empty commit stays silent.
+func TestCommitSearchEmitsSearchCommittedMsg(t *testing.T) {
+	m, _ := loaded(t, "foo bar foo baz\n")
+	if m.HasSearch() {
+		t.Fatal("HasSearch must be false before any commit")
+	}
+	m = send(m, key('/'))
+	m = typeKeys(m, "foo")
+	m, cmd := m.Update(special(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatal("committing a search must return a command")
+	}
+	if _, ok := cmd().(SearchCommittedMsg); !ok {
+		t.Fatal("committed search must announce SearchCommittedMsg")
+	}
+	if !m.HasSearch() {
+		t.Fatal("HasSearch must be true after a committed search")
+	}
+	// RepeatSearch behaves like n/N: forward wraps to the first match, reverse
+	// returns to the committed landing.
+	m.RepeatSearch(false)
+	if m.cursor.Col != 0 {
+		t.Fatalf("RepeatSearch(false) col=%d want 0", m.cursor.Col)
+	}
+	m.RepeatSearch(true)
+	if m.cursor.Col != 8 {
+		t.Fatalf("RepeatSearch(true) col=%d want 8", m.cursor.Col)
+	}
+	// An empty pattern commit clears the query and announces nothing.
+	m = send(m, key('/'))
+	m, cmd = m.Update(special(tea.KeyEnter))
+	if cmd != nil {
+		t.Fatal("empty search commit must not announce SearchCommittedMsg")
+	}
+	if m.HasSearch() {
+		t.Fatal("empty commit must clear the active query")
+	}
+}
+
 func TestIncrementalSearchPreviewJumpsWhileTyping(t *testing.T) {
 	m, _ := loaded(t, "aaa\nbbb\nccc target ddd\n")
 	m = send(m, key('/'))

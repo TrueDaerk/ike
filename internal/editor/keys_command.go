@@ -10,6 +10,12 @@ import (
 	"ike/internal/editor/search"
 )
 
+// SearchCommittedMsg announces that an in-file search was committed with a
+// non-empty pattern (Enter on the "/" or "?" line). The app uses it to make
+// f3/shift+f3 repeat the in-file search instead of retained find-in-path
+// results while it is the most recent search (#376).
+type SearchCommittedMsg struct{}
+
 // beginSearch enters the command line in search mode for "/" or "?", capturing
 // the cursor and viewport so an Esc restores them exactly (#255).
 func (m *Model) beginSearch(dir search.Direction) {
@@ -41,6 +47,16 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 		m.jumpTo(p) // n/N landings are jumps (Roadmap 0220)
 	}
 }
+
+// HasSearch reports whether a committed in-file search query is active, i.e.
+// n/N (and f3/shift+f3 while in-file is the most recent search) have something
+// to repeat.
+func (m Model) HasSearch() bool { return !m.query.Empty() }
+
+// RepeatSearch steps the committed in-file search once, like n (reverse=false)
+// or N (reverse=true). It backs search.nextMatch/prevMatch when the in-file
+// search is the most recent one (#376).
+func (m *Model) RepeatSearch(reverse bool) { m.searchNextRepeat(reverse, 1) }
 
 // wrapped reports whether a search landing at p from `from` crossed a buffer
 // end: a forward match behind the cursor (or on it) wrapped to the top, a
@@ -75,6 +91,9 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.mode = Normal
 			m.searching = false
 			m.cmdline = ""
+			if !m.query.Empty() {
+				return m, func() tea.Msg { return SearchCommittedMsg{} }
+			}
 			return m, nil
 		}
 		return m.runExLine()

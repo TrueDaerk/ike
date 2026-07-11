@@ -2,6 +2,10 @@
 
 ## 2026-07-11
 
+- f3/shift+f3 repeat a committed in-file search (`/`, `?`, cmd+f) like `n`/`N`
+  while it is the most recent search; a new find-in-path scan reclaims them
+  (#376). See [Project Search](/architecture/search.md).
+
 - Go-to-symbol / search everywhere ranks project symbols above
   dependency/stdlib results, exact name match on top (#377). See
   [LSP](/architecture/lsp.md).
