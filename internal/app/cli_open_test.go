@@ -79,6 +79,44 @@ func TestCLITargetMissingPathOpensUnsavedBuffer(t *testing.T) {
 	}
 }
 
+func TestStdinBufferOpensPathlessDirtyFocused(t *testing.T) {
+	m := newSized()
+	m = m.OpenStdinBuffer("piped line 1\npiped line 2\n")
+	ed := m.panes.FocusedInstance().Editor()
+	if ed.HasFile() {
+		t.Fatalf("scratch buffer must be pathless, got %q", ed.Path())
+	}
+	// The buffer normalizes the trailing newline away (same as Load); the
+	// save flow re-adds it via insert_final_newline.
+	if got := ed.Text(); got != "piped line 1\npiped line 2" {
+		t.Fatalf("text = %q", got)
+	}
+	// Dirty + never-saved: quitting must run the unsaved-changes guard.
+	if !ed.Dirty() {
+		t.Fatal("scratch buffer must be dirty")
+	}
+}
+
+func TestStdinBufferAppendsAfterFileTargets(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	m := newSized()
+	m = m.OpenCLITargets([]cli.Target{{Path: a}})
+	m = m.OpenStdinBuffer("piped\n")
+
+	inst := m.panes.FocusedInstance()
+	if inst.TabCount() != 2 {
+		t.Fatalf("want 2 tabs (file + scratch), got %d", inst.TabCount())
+	}
+	// The scratch tab is appended after the file targets and wins focus.
+	if ed := inst.Editor(); ed.HasFile() || ed.Text() != "piped" {
+		t.Fatalf("active tab must be the scratch buffer (path %q text %q)", ed.Path(), ed.Text())
+	}
+	if got := inst.TabEditor(0).Path(); got != a {
+		t.Fatalf("tab 0 = %q, want %q", got, a)
+	}
+}
+
 func TestCLITargetsZeroIsNoop(t *testing.T) {
 	m := newSized()
 	before := m.panes.Focused()

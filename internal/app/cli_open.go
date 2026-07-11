@@ -53,6 +53,27 @@ func (m Model) openCLITarget(t cli.Target) Model {
 	return m
 }
 
+// OpenStdinBuffer opens text as a pathless scratch buffer in the active
+// editor pane's tab list and focuses it (`ike -`, #344). The buffer is marked
+// dirty and never-saved (RestoreText), so quitting runs the unsaved-changes
+// guard and `:w <path>` names it — the same flow crash recovery uses for
+// untitled restores.
+func (m Model) OpenStdinBuffer(text string) Model {
+	key := m.activeEditorKey()
+	if key == "" {
+		key = m.spawnEditor()
+	}
+	inst := m.panes.Get(key)
+	if inst.Editor().HasFile() {
+		inst.AddTab()
+		m.installEmitter(key)
+	}
+	inst.Editor().RestoreText(text)
+	m.setFocus(key)
+	m.layout()
+	return m
+}
+
 // openMissing lands a nonexistent path in the active editor pane as an empty
 // unsaved buffer — the CLI-only sibling of openInTab, which requires the file
 // to be readable.
