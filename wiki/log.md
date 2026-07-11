@@ -2,6 +2,10 @@
 
 ## 2026-07-11
 
+- New built-in themes `solarized-dark` / `solarized-light` (Ethan
+  Schoonover's Solarized), AA-contrast checked (#386). See
+  [Themes](/architecture/themes.md).
+
 - New built-in theme `one-dark` (Atom's One Dark), AA-contrast checked
   (#387). See [Themes](/architecture/themes.md).
 

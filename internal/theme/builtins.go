@@ -16,6 +16,8 @@ func Builtins() []Theme {
 		catppuccinLatte(),
 		kanagawa(),
 		oneDark(),
+		solarizedDark(),
+		solarizedLight(),
 	}
 }
 
@@ -652,6 +654,137 @@ func oneDark() Theme {
 			"lock":    "#5c6370",
 		},
 	}
+}
+
+// solarizedDark ports Ethan Schoonover's Solarized (dark). The scheme's
+// low-contrast accents sit below AA on the base03/base02 backgrounds, so the
+// slots the contrast test checks against Panel (Secondary, Warning, Error,
+// Info, Hint) carry lightened accent shades; Accent and Success only render
+// on Surface and keep (or barely nudge) the canonical values.
+func solarizedDark() Theme {
+	return Theme{
+		Name: "solarized-dark",
+		Dark: true,
+		UI: UI{
+			Background:     "#002b36", // base03
+			Foreground:     "#93a1a1", // base1 (base0 misses AA on Panel)
+			Surface:        "#002b36",
+			Panel:          "#073642", // base02
+			Border:         "#586e75", // base01
+			BorderFocus:    "#268bd2", // blue
+			Selection:      "#586e75", // base01
+			SelectionText:  "#fdf6e3", // base3
+			SelectionMuted: "#073642", // base02 (editor visual selection)
+			Accent:         "#b58900", // yellow
+			Primary:        "#586e75", // base01 (pmenu selection)
+			Secondary:      "#db815c", // orange lightened for AA on Panel
+			Success:        "#859900", // green
+			Warning:        "#bb9316", // yellow lightened for AA on Panel
+			Error:          "#e87674", // red lightened for AA on Panel
+			Info:           "#4b9fda", // blue lightened for AA on Panel
+			Hint:           "#39a89f", // cyan lightened for AA on Panel
+			MoveSource:     "#dc322f", // red
+			DropTarget:     "#b58900", // yellow
+			Ghost:          "#cb4b16", // orange
+			ScrollbarTrack: "#073642",
+			ScrollbarThumb: "#586e75",
+		},
+		Captures: solarizedCaptures(false),
+		Files: map[string]string{
+			"dir":     "#268bd2",
+			"default": "#93a1a1",
+			"go":      "#2aa198",
+			"md":      "#859900",
+			"toml":    "#b58900",
+			"json":    "#b58900",
+			"yaml":    "#b58900",
+			"lock":    "#586e75",
+		},
+	}
+}
+
+// solarizedLight mirrors solarizedDark on the base3/base2 backgrounds.
+// Foreground darkens base00 slightly (#657b83 is 3.64:1 on base2) and the
+// accent slots use darkened shades where the contrast test checks them.
+func solarizedLight() Theme {
+	return Theme{
+		Name: "solarized-light",
+		Dark: false,
+		UI: UI{
+			Background:     "#fdf6e3", // base3
+			Foreground:     "#586c73", // base00 darkened for AA on Panel
+			Surface:        "#fdf6e3",
+			Panel:          "#eee8d5", // base2
+			Border:         "#93a1a1", // base1
+			BorderFocus:    "#268bd2", // blue
+			Selection:      "#586e75", // base01
+			SelectionText:  "#fdf6e3", // base3
+			SelectionMuted: "#eee8d5", // base2 (editor visual selection)
+			Accent:         "#c44815", // orange darkened for AA on Surface
+			Primary:        "#586e75", // base01 (pmenu selection)
+			Secondary:      "#b64314", // orange darkened for AA on Panel
+			Success:        "#687800", // green darkened for AA on Surface
+			Warning:        "#846400", // yellow darkened for AA on Panel
+			Error:          "#c52d2a", // red darkened for AA on Panel
+			Info:           "#1e6da5", // blue darkened for AA on Panel
+			Hint:           "#1e746d", // cyan darkened for AA on Panel
+			MoveSource:     "#dc322f", // red
+			DropTarget:     "#b58900", // yellow
+			Ghost:          "#cb4b16", // orange
+			ScrollbarTrack: "#eee8d5",
+			ScrollbarThumb: "#93a1a1",
+		},
+		Captures: solarizedCaptures(true),
+		Files: map[string]string{
+			"dir":     "#268bd2",
+			"default": "#657b83",
+			"go":      "#2aa198",
+			"md":      "#859900",
+			"toml":    "#b58900",
+			"json":    "#b58900",
+			"yaml":    "#b58900",
+			"lock":    "#93a1a1",
+		},
+	}
+}
+
+// solarizedCaptures builds the capture table for solarized, following the
+// canonical vim mapping (Statement=green, Identifier=blue, Type=yellow,
+// Constant=cyan/magenta, Special=red, Comment=base01). Accents are shared
+// between variants by design; only the monotone slots (operator, variable,
+// comment, punctuation, embedded) flip between the base0x and base0x-inverse
+// halves of the palette.
+func solarizedCaptures(light bool) map[string]string {
+	c := map[string]string{
+		"keyword":          "#859900", // green
+		"operator":         "#839496", // base0
+		"string":           "#2aa198", // cyan
+		"number":           "#d33682", // magenta
+		"comment":          "#586e75", // base01
+		"function":         "#268bd2", // blue
+		"type":             "#b58900", // yellow
+		"constant":         "#d33682",
+		"constant.builtin": "#d33682",
+		"variable":         "#839496", // base0
+		"variable.builtin": "#cb4b16", // orange
+		"property":         "#268bd2",
+		"label":            "#859900",
+		"attribute":        "#6c71c4", // violet
+		"punctuation":      "#657b83", // base00
+		"escape":           "#dc322f", // red
+		"boolean":          "#d33682",
+		"tag":              "#dc322f",
+		"embedded":         "#839496",
+	}
+	if light {
+		for k, v := range map[string]string{
+			"operator": "#657b83", "comment": "#93a1a1", "variable": "#657b83",
+			"punctuation": "#839496", "embedded": "#657b83",
+		} {
+			c[k] = v
+		}
+	}
+	return c
 }
 
 func catppuccinLatte() Theme {
