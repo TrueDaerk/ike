@@ -18,6 +18,7 @@ func Builtins() []Theme {
 		oneDark(),
 		solarizedDark(),
 		solarizedLight(),
+		dracula(),
 	}
 }
 
@@ -785,6 +786,73 @@ func solarizedCaptures(light bool) map[string]string {
 		}
 	}
 	return c
+}
+
+// dracula ports the official Dracula spec (draculatheme.com/contribute).
+// Every slot uses a canonical palette value; the darker panel/scrollbar
+// shades follow the Dracula VSCode port (#21222c sidebar). Red (#ff5555)
+// clears AA on both Surface (4.52:1) and the darker Panel, so no accent
+// needed lightening.
+func dracula() Theme {
+	return Theme{
+		Name: "dracula",
+		Dark: true,
+		UI: UI{
+			Background:     "#282a36", // background
+			Foreground:     "#f8f8f2", // foreground
+			Surface:        "#282a36",
+			Panel:          "#21222c", // sidebar/panel (VSCode port)
+			Border:         "#44475a", // current line / selection
+			BorderFocus:    "#bd93f9", // purple
+			Selection:      "#44475a", // selection
+			SelectionText:  "#f8f8f2",
+			SelectionMuted: "#44475a", // editor visual selection
+			Accent:         "#ff79c6", // pink
+			Primary:        "#44475a", // pmenu selection
+			Secondary:      "#ffb86c", // orange
+			Success:        "#50fa7b", // green
+			Warning:        "#f1fa8c", // yellow
+			Error:          "#ff5555", // red
+			Info:           "#bd93f9", // purple
+			Hint:           "#8be9fd", // cyan
+			MoveSource:     "#ff5555",
+			DropTarget:     "#ffb86c",
+			Ghost:          "#6272a4", // comment
+			ScrollbarTrack: "#21222c",
+			ScrollbarThumb: "#44475a",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ff79c6", // pink
+			"operator":         "#ff79c6",
+			"string":           "#f1fa8c", // yellow
+			"number":           "#bd93f9", // purple
+			"comment":          "#6272a4", // comment
+			"function":         "#50fa7b", // green
+			"type":             "#8be9fd", // cyan
+			"constant":         "#bd93f9",
+			"constant.builtin": "#bd93f9",
+			"variable":         "#f8f8f2",
+			"variable.builtin": "#bd93f9", // this/self purple
+			"property":         "#f8f8f2",
+			"label":            "#ff79c6",
+			"attribute":        "#50fa7b", // HTML attributes green
+			"punctuation":      "#f8f8f2",
+			"escape":           "#ff79c6",
+			"boolean":          "#bd93f9",
+			"tag":              "#ff79c6", // HTML tags pink
+			"embedded":         "#f8f8f2",
+		},
+		Files: map[string]string{
+			"dir":     "#bd93f9",
+			"default": "#f8f8f2",
+			"go":      "#8be9fd",
+			"md":      "#50fa7b",
+			"toml":    "#f1fa8c",
+			"json":    "#f1fa8c",
+			"yaml":    "#f1fa8c",
+			"lock":    "#6272a4",
+		},
+	}
 }
 
 func catppuccinLatte() Theme {
