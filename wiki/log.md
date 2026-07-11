@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Comment toggling (#428): line-comment markers align with the comment on
+  the line above the range (fallback: min indent, clamped to each line's
+  indent), and blank lines now get a padded bare marker instead of being
+  skipped — uncommenting empties them again. See
+  [editor](/architecture/editor.md).
+
 - Finder mouse support (#424): the find/replace-in-path overlay is now
   mouse-operable — click outside dismisses, clicks focus input rows, flip
   the Case/Word/Regex toggles, select result rows (press again to open),
