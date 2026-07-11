@@ -63,7 +63,7 @@ internal/theme/
                 replaced the duplicated copies in highlight and explorer
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
                 catppuccin-mocha(+latte), kanagawa, one-dark,
-                solarized-dark(+light)
+                solarized-dark(+light), dracula
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -143,7 +143,9 @@ lighter siblings per the contrast rule), `one-dark` (Atom's One Dark; the
 Error slot lightens the scheme's red to clear the contrast rule),
 `solarized-dark` / `solarized-light` (Ethan Schoonover's Solarized; the
 scheme's low-contrast accents are lightened/darkened on the diagnostic and
-secondary slots to clear the contrast rule). Select via:
+secondary slots to clear the contrast rule), `dracula` (the official Dracula
+spec; every slot is a canonical palette value — all accents clear the
+contrast rule as-is). Select via:
 
 ```toml
 [theme]

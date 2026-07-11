@@ -2,6 +2,9 @@
 
 ## 2026-07-11
 
+- New built-in theme `dracula` (official Dracula spec), AA-contrast checked
+  (#385). See [Themes](/architecture/themes.md).
+
 - New built-in themes `solarized-dark` / `solarized-light` (Ethan
   Schoonover's Solarized), AA-contrast checked (#386). See
   [Themes](/architecture/themes.md).
