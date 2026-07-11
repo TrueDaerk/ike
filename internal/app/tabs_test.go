@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/keymap"
 	"ike/internal/pane"
 )
@@ -191,5 +192,121 @@ func TestExternallyDeletedFileClosesItsTab(t *testing.T) {
 	}
 	if got := m.editorKeysForPath(a); len(got) != 0 {
 		t.Fatalf("no editor may still claim the deleted file, got %v", got)
+	}
+}
+
+// dirtyActive makes the focused editor's active tab dirty by deleting a char.
+func dirtyActive(t *testing.T, m Model) Model {
+	t.Helper()
+	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if !m.panes.FocusedInstance().Editor().Dirty() {
+		t.Fatal("setup: active editor should be dirty")
+	}
+	return m
+}
+
+func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	b := writeTemp(t, dir, "b.txt", "bbb\n")
+	m := openApp(t, a, b)
+	key := m.panes.Focused()
+	m = dirtyActive(t, m)
+
+	tm, _ := m.Update(CloseTabMsg{})
+	m = tm.(Model)
+	if !m.closePromptOpen() {
+		t.Fatal("closing a dirty tab must open the unsaved-changes guard (#259)")
+	}
+	if m.panes.Get(key).TabCount() != 2 {
+		t.Fatal("the tab must stay open while the guard is up")
+	}
+
+	// esc cancels: prompt gone, tab still open and still dirty.
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.closePromptOpen() || m.panes.Get(key).TabCount() != 2 {
+		t.Fatal("esc must cancel the close and keep the tab")
+	}
+	if !m.panes.Get(key).Editor().Dirty() {
+		t.Fatal("esc must not touch the buffer")
+	}
+}
+
+func TestCloseGuardDiscardCloses(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	b := writeTemp(t, dir, "b.txt", "bbb\n")
+	m := openApp(t, a, b)
+	key := m.panes.Focused()
+	m = dirtyActive(t, m)
+
+	tm, _ := m.Update(CloseTabMsg{})
+	m = tm.(Model)
+	m = drainKey(m, tea.KeyPressMsg{Code: 'd', Text: "d"})
+	if m.closePromptOpen() {
+		t.Fatal("d must dismiss the guard")
+	}
+	if got := m.panes.Get(key).TabCount(); got != 1 {
+		t.Fatalf("d must close the tab, got %d tabs", got)
+	}
+	if data, _ := os.ReadFile(b); string(data) != "bbb\n" {
+		t.Fatalf("discard must not write the file, got %q", data)
+	}
+}
+
+func TestCloseGuardSaveCloses(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	b := writeTemp(t, dir, "b.txt", "bbb\n")
+	m := openApp(t, a, b)
+	key := m.panes.Focused()
+	m = dirtyActive(t, m)
+
+	tm, _ := m.Update(CloseTabMsg{})
+	m = tm.(Model)
+	m = drainKey(m, tea.KeyPressMsg{Code: 's', Text: "s"})
+	if got := m.panes.Get(key).TabCount(); got != 1 {
+		t.Fatalf("s must save and close, got %d tabs", got)
+	}
+	if data, _ := os.ReadFile(b); string(data) != "bb\n" {
+		t.Fatalf("s must write the edited content, got %q", data)
+	}
+}
+
+func TestCloseGuardSaveFailureKeepsTab(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	b := writeTemp(t, dir, "b.txt", "bbb\n")
+	m := openApp(t, a, b)
+	key := m.panes.Focused()
+	m = dirtyActive(t, m)
+	if err := os.Chmod(b, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(b, 0o644)
+
+	tm, _ := m.Update(CloseTabMsg{})
+	m = tm.(Model)
+	m = drainKey(m, tea.KeyPressMsg{Code: 's', Text: "s"})
+	if got := m.panes.Get(key).TabCount(); got != 2 {
+		t.Fatalf("a failed save must keep the tab open, got %d tabs", got)
+	}
+}
+
+func TestCloseGuardForceSkipsPrompt(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "aaa\n")
+	b := writeTemp(t, dir, "b.txt", "bbb\n")
+	m := openApp(t, a, b)
+	key := m.panes.Focused()
+	m = dirtyActive(t, m)
+
+	tm, _ := m.Update(editor.CloseMsg{Force: true}) // :q!
+	m = tm.(Model)
+	if m.closePromptOpen() {
+		t.Fatal(":q! must not open the guard")
+	}
+	if got := m.panes.Get(key).TabCount(); got != 1 {
+		t.Fatalf(":q! must close the tab, got %d tabs", got)
 	}
 }

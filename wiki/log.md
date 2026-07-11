@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Unsaved-changes guard on close (#259): `cmd+w` / `ctrl+w` / `:q` on a dirty
+  buffer now prompt save/discard/cancel instead of silently dropping the
+  edits; `:q!` forces, shared documents skip the prompt, a failed save keeps
+  the tab open. Found running the 0082 sheet 16 protocol (#19). Documented in
+  [Editor Tabs](/architecture/editor-tabs.md).
+
 - Smartcase search (#257): `/` `?` (and the incremental preview, `n`/`N`,
   ex `/pat/` addresses) fold case for all-lowercase patterns and stay exact
   once the pattern contains an uppercase rune; `*`/`#` remain exact-word,

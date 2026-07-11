@@ -200,7 +200,7 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 			return m, c
 		}
 	case "q", "quit":
-		return m, func() tea.Msg { return CloseMsg{} }
+		return m, func() tea.Msg { return CloseMsg{Force: cmd.Bang} }
 	case "wq", "x", "xit":
 		if c := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
 			return m, c // conflict: prompt first, keep the pane open
