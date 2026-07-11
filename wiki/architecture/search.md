@@ -68,10 +68,14 @@ the palette):
   **preselected** (rendered inverted, #277): the first typed character
   replaces it wholesale; backspace, tab, arrows or history recall keep the
   text and drop the mark.
-- **Toggles:** case (`alt+c`), whole word (`alt+w`), regex (`alt+x`).
-- **Query history:** committed on enter; recalled with `alt+up`/`alt+down`
-  (and plain `up`/`down` while the result list is empty — with results those
-  keys move the selection).
+- **Toggles:** case (`ctrl+c`), whole word (`ctrl+w`), regex (`ctrl+x`);
+  `alt+c`/`alt+w`/`alt+x` still work where terminals deliver alt (#422 —
+  on macOS Option is a composition key, so ctrl is the delivered primary,
+  mirroring the tab-key story in #248). The overlay owns the keyboard, so
+  these ctrl chords never reach the global quit/close-pane bindings.
+- **Query history:** committed on enter; recalled with `ctrl+up`/`ctrl+down`
+  (`alt+up`/`alt+down` as secondary, and plain `up`/`down` while the result
+  list is empty — with results those keys move the selection).
 - **Results:** the reusable `internal/locations` list — items grouped by
   file (headers show per-file counts), match ranges highlighted, cursor row
   selected, scrolled into view; the status row shows live counts, `…` while
@@ -92,8 +96,9 @@ the palette):
 `project.replaceInPath` (cmd+shift+r) opens the same overlay in replace mode:
 a replacement-template input joins the field cycle, and a before/after
 preview for the selected match renders under the results (`- old` / `+ new`).
-Apply keys: `enter` replaces the selected match (and steps on), `alt+f` the
-selected file's matches, `alt+a` everything; `alt+enter` navigates instead.
+Apply keys: `enter` replaces the selected match (and steps on), `ctrl+f` the
+selected file's matches, `ctrl+a` everything; `ctrl+enter` navigates instead
+(alt variants remain as secondaries, #422).
 Applied matches leave the list; the overlay stays open.
 
 Application (`internal/app/replace.go`) routes per file:
