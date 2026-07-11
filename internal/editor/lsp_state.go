@@ -313,6 +313,11 @@ func (m *Model) applySignature(msg ilsp.SignatureHelpMsg) {
 		m.signature = nil
 		return
 	}
+	// A reply that lands after insert mode ended is stale (#315): the popup
+	// only lives while the call is being typed.
+	if m.mode != Insert && m.mode != Replace {
+		return
+	}
 	m.signature = &signatureState{label: msg.Label, start: msg.ParamStart, end: msg.ParamEnd, doc: msg.Doc, more: msg.More}
 }
 
