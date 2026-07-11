@@ -358,12 +358,17 @@ func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col
 func (m Model) CursorPos() (line, col int) { return m.cursor.Line, m.cursor.Col }
 
 // SetCursor moves the cursor to a 0-based line/column, clamping to a valid
-// normal-mode position and scrolling it into view. Used to restore a saved
-// session; out-of-range coordinates land on the nearest valid cell.
+// normal-mode position and scrolling it into view. Used for programmatic
+// placement (session restore, go-to-definition, usages picks, nav history);
+// out-of-range coordinates land on the nearest valid cell. It emits an
+// EventCursorMove so the LSP bridge tracks programmatic jumps the same as
+// interactive motions — otherwise position-based actions (rename, references)
+// right after a jump would query the pre-jump location (#371).
 func (m *Model) SetCursor(line, col int) {
 	m.cursor = m.buf.ClampCursor(buffer.Position{Line: line, Col: col})
 	m.desiredCol = m.cursor.Col
 	m.scroll()
+	m.emit(EventCursorMove)
 }
 
 // HasFile reports whether a file is currently open.
