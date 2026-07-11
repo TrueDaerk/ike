@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Tab cycling gains an `alt+home`/`alt+end` default pair, `alt+shift+home/end`
+  to move the active tab (#328): on Macs without physical PgUp/PgDn keys,
+  `fn+ctrl+arrows` is claimed by macOS globals, while `fn+option+left/right`
+  arrives as exactly these chords. `ctrl+pgup/pgdown` stay bound.
+
 - Shift+arrow selections stop on unshifted navigation (#326): a selection
   started with `Shift+arrows` is now GUI-style — releasing Shift and pressing
   a plain navigation key (arrows, `Home`/`End`, word/paragraph/page keys)

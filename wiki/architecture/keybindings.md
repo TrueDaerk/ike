@@ -123,8 +123,12 @@ flow control, so `ctrl+s` arrives as a normal key). Likewise the tab family
 Option for `{}[]|~@`, so option-as-meta is not viable), so the tab commands get
 delivered primaries following the terminal-tab-cycling convention —
 `ctrl+pgdown`/`ctrl+pgup` cycle tabs, `ctrl+shift+pgdown`/`ctrl+shift+pgup`
-move the active tab — with the `alt+arrows` chords kept as secondaries for
-terminals that deliver them. Save targets `editor.write`,
+move the active tab. Because Macs without physical page keys lose
+`fn+ctrl+arrows` to macOS globals, the tab family carries an `alt+end`/
+`alt+home` pair (`alt+shift+end`/`alt+shift+home` to move) as additional
+defaults (#328) — `fn+option+left/right` arrives as exactly these chords, and
+named CSI-parameter keys keep their Alt modifier even in Option-as-compose
+terminals. Save targets `editor.write`,
 the command the editor registers for `:w`, and works from insert mode because
 modified chords stay eligible for the keymap layer.
 
@@ -155,7 +159,8 @@ clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
 (`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` /
 `shift+alt+arrow` selection are vim-layer keys handled inside the editor, not
 rows in this table — the alt+arrow tab-cycling secondaries were removed for
-this (#303); tab cycling keeps its delivered `ctrl+pgup/pgdown` primaries.
+this (#303); tab cycling keeps its delivered `ctrl+pgup/pgdown` primaries plus
+the `alt+home/end` pair (#328).
 
 ## Keymap editor (Roadmap 0160, #93)
 

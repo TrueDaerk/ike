@@ -157,6 +157,12 @@ func TestUnboundCommandDefaults(t *testing.T) {
 		{[]string{"ctrl+pgup"}, "editor.tab.prev"},
 		{[]string{"ctrl+shift+pgdown"}, "editor.tab.moveRight"},
 		{[]string{"ctrl+shift+pgup"}, "editor.tab.moveLeft"},
+		// alt+home/end pair (#328): fn+option+left/right on Macs without
+		// physical page keys, where fn+ctrl+arrows is claimed by macOS.
+		{[]string{"alt+end"}, "editor.tab.next"},
+		{[]string{"alt+home"}, "editor.tab.prev"},
+		{[]string{"alt+shift+end"}, "editor.tab.moveRight"},
+		{[]string{"alt+shift+home"}, "editor.tab.moveLeft"},
 	}
 	for _, c := range cases {
 		r := NewResolver(leaderTable(t, "space"))
