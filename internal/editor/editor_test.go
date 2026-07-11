@@ -1178,52 +1178,83 @@ func TestSaveScratchWithoutNameReportsError(t *testing.T) {
 	}
 }
 
-// TestReplaceActionPrefillsExLine guards editor.replace phase 1 (#282): the
-// action opens the ":" line prefilled with a whole-file substitute, seeded
-// from the committed search when it is literal and slash-free.
-func TestReplaceActionPrefillsExLine(t *testing.T) {
-	m, _ := loaded(t, "foo bar\n")
-	m, _ = m.runAction("replace")
-	if m.ModeName() != Command || m.searching {
-		t.Fatal("replace must open the ex line, not search")
-	}
-	if m.cmdline != "%s//" {
-		t.Fatalf("cmdline = %q, want empty-pattern prefill", m.cmdline)
-	}
-
-	// A committed literal search seeds the pattern.
-	m = send(m, special(tea.KeyEscape))
+// TestReplaceActionOpensPanel guards the find/replace panel (0240 phase 2,
+// #283): editor.replace opens the two-field panel, the committed literal
+// search seeds Find, and the live preview jumps to the nearest match.
+func TestReplaceActionOpensPanel(t *testing.T) {
+	m, _ := loaded(t, "aaa\nfoo bar\n")
 	m = typeKeys(m, "/foo")
 	m = send(m, special(tea.KeyEnter))
+	m = typeKeys(m, "gg") // back to the top so the preview jump is visible
 	m, _ = m.runAction("replace")
-	if m.cmdline != "%s/foo/" {
-		t.Fatalf("cmdline = %q, want the last search seeded", m.cmdline)
+	if m.replPanel == nil || m.replPanel.find != "foo" {
+		t.Fatalf("panel = %+v, want open with Find seeded", m.replPanel)
+	}
+	if m.cursor.Line != 1 {
+		t.Fatalf("preview should sit on the match, cursor=%v", m.cursor)
+	}
+	if _, ok := m.searchHLQuery(); !ok {
+		t.Fatal("panel preview must drive the match highlights")
 	}
 
-	// Typing the replacement and Enter runs the ordinary substitute.
-	m = typeKeys(m, "baz/g")
-	m = send(m, special(tea.KeyEnter))
-	if line(m, 0) != "baz bar" {
-		t.Fatalf("substitute result = %q, want baz bar", line(m, 0))
+	// Esc restores the origin and closes.
+	m = send(m, special(tea.KeyEscape))
+	if m.replPanel != nil || m.cursor.Line != 0 {
+		t.Fatalf("esc must close and restore origin, cursor=%v", m.cursor)
 	}
 }
 
-// TestReplacePrefillSkipsRegexAndSlashes: regex queries and patterns holding
-// a slash would break the %s/…/ prefill, so they seed nothing.
-func TestReplacePrefillSkipsRegexAndSlashes(t *testing.T) {
-	m, _ := loaded(t, "a/b a.b\n")
-	m = typeKeys(m, "/a\\vX") // nonsense; build a regex query directly instead
-	m = send(m, special(tea.KeyEscape))
-	m.query = searchCompileForTest(`a.b`, true)
+// TestReplacePanelReplaceAll: typing both fields and ctrl+a runs the g
+// substitute with the engine's report; one undo unit reverts it all.
+func TestReplacePanelReplaceAll(t *testing.T) {
+	m, _ := loaded(t, "one two one\nthree one\n")
 	m, _ = m.runAction("replace")
-	if m.cmdline != "%s//" {
-		t.Fatalf("regex query must not seed the prefill, got %q", m.cmdline)
+	m = typeKeys(m, "one")
+	m = send(m, special(tea.KeyTab))
+	m = typeKeys(m, "X")
+	m, _ = m.Update(modKey('a', tea.ModCtrl))
+	if line(m, 0) != "X two X" || line(m, 1) != "three X" {
+		t.Fatalf("replace all = %q / %q", line(m, 0), line(m, 1))
 	}
-	m = send(m, special(tea.KeyEscape))
-	m.query = searchCompileForTest(`a/b`, false)
+	if !strings.Contains(m.cmdMsg, "3 substitutions") {
+		t.Fatalf("cmdMsg = %q, want the substitution report", m.cmdMsg)
+	}
+	m = typeKeys(m, "u")
+	if line(m, 0) != "one two one" {
+		t.Fatalf("one undo must revert the whole replace, got %q", line(m, 0))
+	}
+}
+
+// TestReplacePanelEnterStartsConfirmFlow: enter hands over to the y/n/a/q/l
+// confirm machinery — replace-current / skip / all.
+func TestReplacePanelEnterStartsConfirmFlow(t *testing.T) {
+	m, _ := loaded(t, "one two one\n")
 	m, _ = m.runAction("replace")
-	if m.cmdline != "%s//" {
-		t.Fatalf("slash-holding pattern must not seed the prefill, got %q", m.cmdline)
+	m = typeKeys(m, "one")
+	m = send(m, special(tea.KeyTab))
+	m = typeKeys(m, "Y")
+	m = send(m, special(tea.KeyEnter))
+	if m.replPanel != nil || m.subConfirm == nil {
+		t.Fatal("enter must close the panel and start the confirm flow")
+	}
+	m = typeKeys(m, "y") // replace the first match
+	m = typeKeys(m, "n") // skip the second
+	if line(m, 0) != "Y two one" {
+		t.Fatalf("confirm flow result = %q, want Y two one", line(m, 0))
+	}
+}
+
+// TestReplacePanelSlashesPickAnotherDelimiter: fields holding "/" still build
+// a valid substitute via an alternate delimiter.
+func TestReplacePanelSlashesPickAnotherDelimiter(t *testing.T) {
+	m, _ := loaded(t, "a/b c\n")
+	m, _ = m.runAction("replace")
+	m = typeKeys(m, "a/b")
+	m = send(m, special(tea.KeyTab))
+	m = typeKeys(m, "Z")
+	m, _ = m.Update(modKey('a', tea.ModCtrl))
+	if line(m, 0) != "Z c" {
+		t.Fatalf("slash pattern replace = %q, want Z c", line(m, 0))
 	}
 }
 

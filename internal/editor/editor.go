@@ -98,6 +98,7 @@ type Model struct {
 	cmdMsg        string           // transient ":"-line message (errors, reports); shown while idle
 	lastSub       lastSubstitute   // last :substitute, for a bare ":s" repeat
 	subConfirm    *subConfirmState // active ":s///c" confirmation, nil when idle
+	replPanel     *replacePanel    // open find/replace panel (0240 phase 2, #283); nil when idle
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
@@ -311,7 +312,13 @@ func (m Model) ModeName() Mode { return m.mode }
 
 // Capturing reports whether the editor is consuming raw text (insert / replace /
 // command line), so the host must not intercept single-letter global keys.
-func (m Model) Capturing() bool { return m.mode.Capturing() }
+// Capturing also covers the modal editor prompts that consume keys ahead of
+// the mode machine: the find/replace panel (#283) and the ":s///c" confirm —
+// without this the app layer would steal plain keys (tab = pane cycle) from
+// their inputs.
+func (m Model) Capturing() bool {
+	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil
+}
 
 // Cursor returns the 1-based line and column for the status line.
 func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col + 1 }
@@ -420,6 +427,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.subConfirm != nil {
 			// An open ":s///c" confirmation consumes keys before the mode machine.
 			m = m.updateSubConfirm(msg)
+			m.scroll()
+			return m.maybeReparse(before, cmd)
+		}
+		if m.replPanel != nil {
+			// The find/replace panel (#283) owns the keyboard the same way.
+			m, cmd = m.updateReplacePanel(msg)
 			m.scroll()
 			return m.maybeReparse(before, cmd)
 		}

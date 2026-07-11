@@ -114,9 +114,22 @@ func (m Model) View() string {
 		body := m.renderLine(i, textWidth, cursorStyle, selStyle)
 		out = append(out, gutter+body)
 	}
-	// An active ":" / "/" / "?" input renders as the pane's bottom row
-	// (vim-style), padding short files down so the line sits at the bottom.
-	if cl := m.commandLineRow(); cl != "" {
+	// An open find/replace panel (#283) renders as the pane's bottom rows;
+	// otherwise an active ":" / "/" / "?" input renders as the bottom row
+	// (vim-style). Short files pad down so the rows sit at the bottom.
+	if rows := m.replacePanelRows(textWidth + m.view.GutterWidth(lineCount)); len(rows) > 0 {
+		h := m.view.Height()
+		if h < len(rows) {
+			h = len(rows)
+		}
+		if len(out) > h-len(rows) {
+			out = out[:h-len(rows)]
+		}
+		for len(out) < h-len(rows) {
+			out = append(out, "")
+		}
+		out = append(out, rows...)
+	} else if cl := m.commandLineRow(); cl != "" {
 		h := m.view.Height()
 		if h < 1 {
 			h = 1
@@ -175,10 +188,11 @@ func (m Model) searchCounter() string {
 }
 
 // searchHLQuery returns the query whose matches the view highlights: the live
-// preview while the search line is open, else the committed query while
-// highlights are armed (until a normal-mode Esc clears them, #255).
+// preview while the search line or the replace panel (#283) is open, else the
+// committed query while highlights are armed (until a normal-mode Esc clears
+// them, #255).
 func (m Model) searchHLQuery() (search.Query, bool) {
-	if m.searching && !m.preview.Empty() {
+	if (m.searching || m.replPanel != nil) && !m.preview.Empty() {
 		return m.preview, true
 	}
 	if m.hlActive && !m.query.Empty() {
