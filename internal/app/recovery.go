@@ -165,6 +165,9 @@ func (m Model) closeRecovery() tea.Model {
 	if m.backupEnabled() {
 		_, _ = backupService().Prune(backupMaxAge(m.host.Config()))
 	}
+	// The shell is free again: a first-start onboarding dialog (#301) that was
+	// waiting behind the recovery prompt may open now.
+	m.maybeOpenOnboarding()
 	return m
 }
 

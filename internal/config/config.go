@@ -117,6 +117,7 @@ func (c *Config) Flat() map[string]string {
 	put("lsp.enabled", c.LSP.Enabled)
 	put("lsp.auto_install", c.LSP.AutoInstall)
 	put("lsp.log_level", c.LSP.LogLevel)
+	put("lsp.onboarded", c.LSP.Onboarded)
 	for srv, kv := range c.LSP.Servers {
 		for k, v := range kv {
 			put("lsp.servers."+srv+"."+k, v)

@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T18:00:00Z
+timestamp: 2026-07-11T17:48:00Z
 ---
 
 # LSP & Language Intelligence
@@ -325,6 +325,23 @@ after a failed attempt (no install loop on every file open), and failures
 surface the output tail as an error toast plus a `debug.log` line (#125,
 written by the root model for every `ServerEventError`). All work runs inside
 goroutines/`tea.Cmd`s, never on the Update loop (#123).
+
+### First-start onboarding (#301)
+
+On the very first launch — the user settings file does not exist yet — a
+one-time floating dialog (`internal/app/onboarding.go`) lists every registered
+language whose server ships an install recipe, each with a checkbox
+(pre-checked). Enter installs the checked servers as a batch through the
+existing `lsp.installMissing` command (same recipes, progress and result
+notifications as above); unchecked servers persist as `[lsp.servers.<id>]
+enabled = false` in the user layer so auto-install leaves them alone. Esc
+skips without touching any server. Either way `lsp.onboarded = true` is
+written (which creates the user settings file), so the dialog never returns —
+the Language Servers settings page stays the ongoing management surface.
+`lsp.auto_install = false` (e.g. from a project config) suppresses the dialog
+entirely: ask me nothing, install nothing. When the crash-recovery prompt is
+due on the same start, recovery wins the shell and onboarding follows once it
+closes.
 
 ## Testing
 

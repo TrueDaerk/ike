@@ -119,6 +119,11 @@ type Model struct {
 	// the window is sized and the prompt can open. Both nil/empty when idle.
 	recovery        *recoveryState
 	recoveryPending []backup.Snapshot
+	// onboarding holds the first-start LSP server-install dialog (#301) while
+	// the shell shows it; onboardingPending flags it at startup until the
+	// window is sized. Both nil/false when idle.
+	onboarding        *onboardingState
+	onboardingPending bool
 	// backupSvc/backupDeb are the crash-recovery write side (Roadmap 0210,
 	// #167): the change seam marks dirty buffers, one armed tick
 	// (backupTickArmed) snapshots the ones that went quiet. backupIv caches the
@@ -396,6 +401,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.restoreLayout(cfg)
 	m.restoreSession()
 	m.scanRecovery()
+	m.scanOnboarding()
 	m.wireEditorEmitters()
 	if themeWarning != "" {
 		m.host.Notify(host.Warn, themeWarning)
@@ -1211,8 +1217,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settings.SetSize(w, h)
 		}
 		// Now that the window is sized, surface any crash-recovery snapshots found
-		// at startup (Roadmap 0210, #166).
+		// at startup (Roadmap 0210, #166), then the first-start LSP onboarding
+		// dialog (#301) — recovery wins the shell when both are due.
 		m.maybeOpenRecovery()
+		m.maybeOpenOnboarding()
 		return m, nil
 
 	case tea.MouseClickMsg:
@@ -1915,6 +1923,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// startup: r / d / s decide the highlighted file, j / k move, esc skips.
 		if m.recoveryOpen() {
 			return m.updateRecovery(msg)
+		}
+		// The first-start LSP onboarding dialog (#301) owns the keyboard the
+		// same way: space toggles, enter installs, esc skips.
+		if m.onboardingOpen() {
+			return m.updateOnboarding(msg)
 		}
 		// The save-conflict prompt owns the keyboard ahead of the generic shell
 		// handling: k / r / esc answer it, everything else is swallowed.
