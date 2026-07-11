@@ -78,7 +78,12 @@ type Editor struct {
 	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
 	InsertFinalNewline     bool   `toml:"insert_final_newline"`
 	ShowWhitespace         bool   `toml:"show_whitespace"`
-	Tabs                   Tabs   `toml:"tabs"`
+	// StickyScroll pins the enclosing declaration lines (function/class
+	// headers) at the top of the editor while scrolling inside their body
+	// (#168); StickyScrollDepth caps how many nested headers are pinned.
+	StickyScroll      bool `toml:"sticky_scroll"`
+	StickyScrollDepth int  `toml:"sticky_scroll_depth"`
+	Tabs              Tabs `toml:"tabs"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the

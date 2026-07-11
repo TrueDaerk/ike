@@ -28,6 +28,12 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// Sticky-scroll scopes (#168).
+		ScopeNodes: []string{
+			"function_definition", "method_declaration", "anonymous_function",
+			"class_declaration", "interface_declaration", "trait_declaration",
+			"enum_declaration", "namespace_definition",
+		},
 		// New .php files start with the opening tag (#170). Override via
 		// `[lang.php] template`.
 		Template: "<?php\n\n",

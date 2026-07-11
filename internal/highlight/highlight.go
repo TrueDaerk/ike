@@ -34,11 +34,21 @@ func Supported(path string) bool {
 // language, no grammar, or the build has CGo disabled (the stub). The actual
 // parse lives in parse_cgo.go / parse_stub.go.
 func Highlight(path string, lines []string) []Span {
+	spans, _ := HighlightScoped(path, lines)
+	return spans
+}
+
+// HighlightScoped is Highlight plus sticky-scroll scopes (#168): the same
+// single parse also collects the multi-line nodes whose kinds the language
+// registers as ScopeNodes, in pre-order. Scopes are nil when the language
+// declares none — sticky scroll is simply inert for it.
+func HighlightScoped(path string, lines []string) ([]Span, []Scope) {
 	l, ok := lang.ByPath(path)
 	if !ok || l.Grammar == nil {
-		return nil
+		return nil, nil
 	}
-	return overlayFragments(l.Grammar, lines, parse(l.Grammar, lines))
+	spans, scopes := parseScoped(l.Grammar, l.ScopeNodes, lines)
+	return overlayFragments(l.Grammar, lines, spans), scopes
 }
 
 // HighlightFenced parses lines tagged with a markdown fence info string (as in

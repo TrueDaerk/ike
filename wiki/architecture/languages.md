@@ -32,6 +32,7 @@ type Language struct {
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
+    ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
     Template     string     // initial content for new files (#170); "" = start empty
 }
 func Register(l Language)
@@ -53,6 +54,14 @@ unavailable". Go and PHP declare `//` + `/* */`, Python declares `#` only.
 deeper. Python declares `":"` plus the open brackets `( [ {`; Go and PHP
 declare `{ ( [`. `ok` is false when no language matches or none are declared —
 the editor then falls back to plain copy-indent.
+
+`ScopeNodes` names the Tree-sitter node kinds that define **sticky-scroll
+scopes** (#168) — declarations whose header line pins at the top of the editor
+while their body scrolls (see [highlighting](./highlighting.md)). Go declares
+functions, methods, func literals and type declarations; Python declares
+function and class definitions; PHP declares functions, methods, anonymous
+functions, class/interface/trait/enum declarations and namespaces. An empty
+list leaves sticky scroll inert for the language.
 
 `Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
 `highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so

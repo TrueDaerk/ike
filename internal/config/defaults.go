@@ -21,6 +21,8 @@ func defaults() *Config {
 			TrimTrailingWhitespace: true,
 			InsertFinalNewline:     true,
 			ShowWhitespace:         false,
+			StickyScroll:           true,
+			StickyScrollDepth:      4,
 			Tabs:                   Tabs{AlwaysShow: false},
 		},
 		Explorer: Explorer{

@@ -45,6 +45,7 @@ func validate(c *Config) []Diagnostic {
 
 	clampMin("editor.tab_width", &c.Editor.TabWidth, 1)
 	clampMin("editor.scroll_off", &c.Editor.ScrollOff, 0)
+	clampMin("editor.sticky_scroll_depth", &c.Editor.StickyScrollDepth, 1)
 	clampMin("explorer.tree_indent", &c.Explorer.TreeIndent, 0)
 	clampMin("project.max_history", &c.Project.MaxHistory, 0)
 

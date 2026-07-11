@@ -27,6 +27,9 @@ type SpansMsg struct {
 	Path    string
 	Version int
 	Spans   []Span
+	// Scopes are the sticky-scroll scopes (#168) collected by the same parse,
+	// in pre-order; nil when the language registers no ScopeNodes.
+	Scopes []Scope
 }
 
 // Index is a per-line lookup over a span set, built once when the editor caches

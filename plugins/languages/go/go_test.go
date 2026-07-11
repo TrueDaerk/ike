@@ -38,3 +38,41 @@ func TestHighlightFenced(t *testing.T) {
 		t.Errorf("unknown fence tag should yield nil spans, got %d", len(spans))
 	}
 }
+
+// TestGoScopes guards sticky scroll (#168): the scope-collecting parse yields
+// the enclosing declarations of Go source, pre-ordered and multi-line only.
+func TestGoScopes(t *testing.T) {
+	lines := []string{
+		"package main",     // 0
+		"",                 // 1
+		"func outer() {",   // 2
+		"\tf := func() {",  // 3
+		"\t\tprintln(1)",   // 4
+		"\t}",              // 5
+		"\tf()",            // 6
+		"}",                // 7
+		"",                 // 8
+		"type T struct {",  // 9
+		"\tX int",          // 10
+		"}",                // 11
+		"",                 // 12
+		"func single() {}", // 13 — single line, no scope
+	}
+	_, scopes := highlight.HighlightScoped("main.go", lines)
+	want := []highlight.Scope{
+		{HeaderLine: 2, EndLine: 7},  // outer
+		{HeaderLine: 3, EndLine: 5},  // func literal
+		{HeaderLine: 9, EndLine: 11}, // type T
+	}
+	if len(scopes) != len(want) {
+		t.Fatalf("scopes = %v, want %v", scopes, want)
+	}
+	for i := range want {
+		if scopes[i] != want[i] {
+			t.Errorf("scope[%d] = %v, want %v", i, scopes[i], want[i])
+		}
+	}
+	if got := highlight.EnclosingScopes(scopes, 4); len(got) != 2 {
+		t.Errorf("EnclosingScopes(line 4) = %v, want outer + literal", got)
+	}
+}

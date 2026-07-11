@@ -48,6 +48,13 @@ type Language struct {
 	// falls back to plain copy-indent.
 	IndentAfter []string
 
+	// ScopeNodes lists the Tree-sitter node kinds that define a sticky-scroll
+	// scope (#168): declarations whose first line is pinned at the top of the
+	// editor while their body is scrolled through, e.g. "function_declaration"
+	// for Go or "class_definition" for Python. Empty means the language has no
+	// sticky scopes (the feature is simply inert for it).
+	ScopeNodes []string
+
 	// Template is the initial content seeded into newly created files of this
 	// language (#170), with ${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}
 	// substituted — see TemplateFor. Empty means new files start empty. Users
