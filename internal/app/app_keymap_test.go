@@ -46,6 +46,31 @@ func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
 	}
 }
 
+// TestKeymapBlockedBindingToasts verifies a chord bound to a ledger-blocked
+// command is consumed with an info toast naming the blocking dependency
+// instead of dying silently (#267).
+func TestKeymapBlockedBindingToasts(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	reg := registry.New()
+	// editor.replace is a documented blocked default (idea #49).
+	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "editor.replace"}
+	m := NewWith(reg, cfg)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
+	m = out.(Model)
+	// The Notify queues on the host; one more Update pass drains it.
+	out, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	if len(m.toasts) != 1 {
+		t.Fatalf("toasts = %d want 1", len(m.toasts))
+	}
+	if want := "editor.replace is not available yet — in-file replace UI (idea #49)"; m.toasts[0].text != want {
+		t.Fatalf("toast text = %q want %q", m.toasts[0].text, want)
+	}
+}
+
 // TestKeymapInertBindingFallsThrough verifies an unregistered command id leaves
 // the key to normal dispatch instead of swallowing it.
 func TestKeymapInertBindingFallsThrough(t *testing.T) {
