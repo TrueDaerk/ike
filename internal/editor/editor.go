@@ -124,6 +124,12 @@ type Model struct {
 
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
+	// diskHash is the content hash of the open file when buffer and disk last
+	// agreed (Load, save, external reload) — the adoption key for persistent
+	// undo (#148, see undopersist.go). A document property like dirty/stale:
+	// copied on share, mirrored via SyncMsg. Empty for unsaved new files and
+	// crash restores (nothing to key against).
+	diskHash string
 	// largeFile flags a document crossing the files.large_file_kb /
 	// files.large_file_lines thresholds at Load/reload (#149): code insight
 	// (highlighting, LSP sync, change-event text) degrades so typing stays
@@ -293,6 +299,7 @@ func (m *Model) Load(path string) error {
 	m.dirty = false
 	m.stale = false
 	m.hist = history.New()
+	m.restoreUndo(data)
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
@@ -323,6 +330,7 @@ func (m *Model) NewFile(path string) {
 	m.dirty = false
 	m.stale = false
 	m.hist = history.New()
+	m.diskHash = "" // nothing on disk yet; the first :w stamps it
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
@@ -347,6 +355,7 @@ func (m *Model) RestoreText(text string) {
 	m.wait = awaitNone
 	m.hist = history.New()
 	m.hist.MarkNeverSaved() // recovered text is dirty even after undoing back to it
+	m.diskHash = "" // recovered content matches no on-disk state
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}

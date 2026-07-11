@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor/operator"
 	"ike/internal/editor/register"
 	"ike/internal/editor/search"
+	"ike/internal/undostore"
 )
 
 // ActionMsg requests a named editor action. It is the single path the plugin
@@ -354,6 +355,11 @@ func (m *Model) saveAs(path string) error {
 	m.path = path
 	m.dirty = false
 	m.hist.MarkSaved()
+	m.diskHash = ""
+	if !m.largeFile { // large-file mode opts out of persistent undo (#149)
+		m.diskHash = undostore.Hash([]byte(data))
+		m.PersistUndo()
+	}
 	m.emit(EventSave)
 	return nil
 }

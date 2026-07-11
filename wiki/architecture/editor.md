@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T15:00:00Z
+timestamp: 2026-07-12T18:00:00Z
 ---
 
 # Editor
@@ -60,6 +60,21 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   they land exactly on it (vim-style), so `[+]` goes away when you undo back to
   the saved content. A crash-restored buffer marks the checkpoint unreachable —
   no undo depth makes it read as clean.
+  **Persistent undo** (#148, vim's `undofile`): the stacks survive a restart.
+  `internal/undostore` keeps one JSON file per document under the state store
+  (`.ike/undo/`, or `IKE_CONFIG_DIR/undo`), keyed by a hash of the absolute
+  path and stamped with the content hash the stacks describe. The editor
+  writes it after every save and the app layer on tab/pane close and quit
+  (dirty buffers are skipped — the last save's undo file still matches the
+  disk content); on `Load` the stacks are adopted only when the stored hash
+  matches the just-read content, so any external change (git checkout,
+  another editor) discards them silently — correctness over continuity,
+  mirroring the 0140 reload trade-off. Views of a shared document (#142)
+  alias one history, loaded once by the first view; the adoption hash travels
+  with the document (copied on share, mirrored via `SyncMsg`). Large-file
+  mode (#149) opts out — load stays flat, no content hashing.
+  `files.persistent_undo` (default `true`) switches it off; a 1 MiB per-file
+  cap and a 200-file LRU prune bound the store.
 - **viewport** — vertical/horizontal scroll with `scroll_off`, plus the
   absolute/relative line-number gutter. The line renderer budgets by **display
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered

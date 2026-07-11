@@ -99,7 +99,7 @@ any entry whose key the typed schema does not expose (no dead keys).
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.
 - **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
-  (clean|never, #81).
+  (clean|never, #81), `files.persistent_undo` (undo survives restarts, #148).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).

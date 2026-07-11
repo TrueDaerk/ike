@@ -69,6 +69,7 @@ func defaults() *Config {
 			AutoReload:     "clean",
 			LargeFileKB:    largefile.DefaultMaxKB,
 			LargeFileLines: largefile.DefaultMaxLines,
+			PersistentUndo: true,
 		},
 		UI: UI{
 			MenuBar: true,

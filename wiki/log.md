@@ -2,6 +2,15 @@
 
 ## 2026-07-12
 
+- Persistent undo (#148, vim's `undofile`): undo/redo stacks survive a
+  restart. New `internal/undostore` keeps one hash-keyed JSON file per
+  document under `.ike/undo/`, written on save/close/quit (clean buffers
+  only) and adopted on `Load` when the stored content hash matches the
+  just-read file; any mismatch discards silently. Shared documents load
+  once; `files.persistent_undo` (default on) toggles it; 1 MiB per-file and
+  200-file LRU caps. See [editor](/architecture/editor.md),
+  [session-restore](/architecture/session-restore.md).
+
 - Large-file mode (#149): files over `files.large_file_kb` (default 1024) or
   `files.large_file_lines` (default 100000) degrade gracefully instead of
   stalling — highlighting off, LSP `didOpen` skipped, change events without

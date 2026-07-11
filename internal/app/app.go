@@ -710,11 +710,33 @@ func (m Model) snapshotSession() sessionState {
 // quit persists the session and layout and returns the program-exit command.
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	saveSession(m.snapshotSession())
+	m.persistUndoAll()
 	if m.tree != nil {
 		saveLayout(m.tree, m.panes)
 	}
 	m.backupCleanShutdown()
 	return m, tea.Quit
+}
+
+// persistUndoAll writes the undo history of every open document (#148), one
+// write per path — views of a shared document alias one history, so the first
+// view covers them all.
+func (m Model) persistUndoAll() {
+	seen := map[string]bool{}
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			ed := inst.TabEditor(i)
+			if ed == nil || !ed.HasFile() || seen[ed.Path()] {
+				continue
+			}
+			seen[ed.Path()] = true
+			ed.PersistUndo()
+		}
+	}
 }
 
 // shellConfig builds the floating shell configuration, reading optional tuning
@@ -1693,6 +1715,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.Dirty = ed.Dirty()
 				msg.Stale = ed.Stale()
 				msg.Large = ed.LargeFile()
+				msg.Hash = ed.DiskHash()
 			}
 		}
 		var cmds []tea.Cmd
@@ -2646,6 +2669,7 @@ func (m *Model) closeKey(key string) bool {
 	}
 	for _, ed := range inst.Editors() {
 		m.rememberClosedTab(ed)
+		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
 	}
 	m.backupDropOnClose(inst, key)
 	m.tree = tree
@@ -2667,6 +2691,7 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 		return
 	}
 	m.rememberClosedTab(ed)
+	ed.PersistUndo() // undo survives the close (#148); no-op while dirty
 	m.backupDropOnCloseTab(ed, inst.Key())
 	inst.CloseTab(idx)
 	m.syncExplorerOpen()
