@@ -367,6 +367,44 @@ func (m *Manager) References(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// PrepareCallHierarchy resolves the symbol at an editor position into
+// call-hierarchy items (#173), gated on the server capability.
+func (m *Manager) PrepareCallHierarchy(ctx context.Context, path string, pos buffer.Position) ([]protocol.CallHierarchyItem, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().CallHierarchy {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.PrepareCallHierarchy(cctx, protocol.CallHierarchyPrepareParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	})
+}
+
+// IncomingCalls requests the callers of a prepared item (#173). Path names the
+// document the hierarchy was prepared from and selects the server.
+func (m *Manager) IncomingCalls(ctx context.Context, path string, item protocol.CallHierarchyItem) ([]protocol.CallHierarchyIncomingCall, error) {
+	srv, _, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().CallHierarchy {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.IncomingCalls(cctx, protocol.CallHierarchyCallsParams{Item: item})
+}
+
+// OutgoingCalls requests the callees of a prepared item (#173).
+func (m *Manager) OutgoingCalls(ctx context.Context, path string, item protocol.CallHierarchyItem) ([]protocol.CallHierarchyOutgoingCall, error) {
+	srv, _, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().CallHierarchy {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.OutgoingCalls(cctx, protocol.CallHierarchyCallsParams{Item: item})
+}
+
 // Format requests whole-document formatting and returns the edits already
 // converted to editor rune coordinates (the manager owns the synced document
 // lines, so the UTF-16 mapping happens here and nowhere else).

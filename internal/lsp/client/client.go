@@ -119,6 +119,46 @@ func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]
 	return decodeLocations(raw), nil
 }
 
+// PrepareCallHierarchy resolves the symbol at a position into call-hierarchy
+// items (#173). A null result (position not on a callable) is an empty slice.
+func (c *Client) PrepareCallHierarchy(ctx context.Context, p protocol.CallHierarchyPrepareParams) ([]protocol.CallHierarchyItem, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/prepareCallHierarchy", p)
+	if err != nil {
+		return nil, err
+	}
+	var items []protocol.CallHierarchyItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, nil // null / unexpected shape: nothing to show
+	}
+	return items, nil
+}
+
+// IncomingCalls requests the callers of a prepared item (#173).
+func (c *Client) IncomingCalls(ctx context.Context, p protocol.CallHierarchyCallsParams) ([]protocol.CallHierarchyIncomingCall, error) {
+	raw, err := c.conn.Call(ctx, "callHierarchy/incomingCalls", p)
+	if err != nil {
+		return nil, err
+	}
+	var calls []protocol.CallHierarchyIncomingCall
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		return nil, nil
+	}
+	return calls, nil
+}
+
+// OutgoingCalls requests the callees of a prepared item (#173).
+func (c *Client) OutgoingCalls(ctx context.Context, p protocol.CallHierarchyCallsParams) ([]protocol.CallHierarchyOutgoingCall, error) {
+	raw, err := c.conn.Call(ctx, "callHierarchy/outgoingCalls", p)
+	if err != nil {
+		return nil, err
+	}
+	var calls []protocol.CallHierarchyOutgoingCall
+	if err := json.Unmarshal(raw, &calls); err != nil {
+		return nil, nil
+	}
+	return calls, nil
+}
+
 // WorkspaceSymbols requests project-wide symbols matching query (0250, #294).
 // Servers may answer with SymbolInformation[] or the newer WorkspaceSymbol[]
 // (whose location may lack a range); both decode into the classic shape, and

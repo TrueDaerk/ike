@@ -34,12 +34,24 @@ type fakeOpts struct {
 	didChanges chan protocol.DidChangeTextDocumentParams
 	didOpens   chan protocol.DidOpenTextDocumentParams
 	didCloses  chan protocol.DidCloseTextDocumentParams
+	// noCallHierarchy withholds the callHierarchyProvider capability, so the
+	// manager's gate is observable (#173).
+	noCallHierarchy bool
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
 // server answers initialize with full capabilities, echoes completion, and pushes
 // a diagnostic when it sees didOpen.
 func fakeConnector() Connector { return fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull}) }
+
+// callHierarchyCap is the initialize capability the fake advertises unless
+// the options withhold it.
+func callHierarchyCap(opts fakeOpts) json.RawMessage {
+	if opts.noCallHierarchy {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
 
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
 func fakeConnectorOpts(opts fakeOpts) Connector {
@@ -88,6 +100,7 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 					Full:   json.RawMessage(`{"delta":true}`),
 				},
 				ExecuteCommandProvider: json.RawMessage(`{"commands":["test.fix"]}`),
+				CallHierarchyProvider:  callHierarchyCap(opts),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/references":
@@ -105,6 +118,36 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 				})
 			}
 			respond(out, msg.ID, locs)
+		case msg.Method == "textDocument/prepareCallHierarchy":
+			// One item named after the request position, so the round-trip is
+			// observable.
+			var p protocol.CallHierarchyPrepareParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.CallHierarchyItem{{
+				Name:           fmt.Sprintf("sym@%d:%d", p.Position.Line, p.Position.Character),
+				URI:            string(p.TextDocument.URI),
+				SelectionRange: protocol.Range{Start: protocol.Position{Line: 1, Character: 0}},
+				Data:           json.RawMessage(`"token"`),
+			}})
+		case msg.Method == "callHierarchy/incomingCalls":
+			// Echo the item's opaque data into the caller name so the test can
+			// assert it round-trips verbatim.
+			var p protocol.CallHierarchyCallsParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.CallHierarchyIncomingCall{{
+				From: protocol.CallHierarchyItem{
+					Name: "caller-of-" + p.Item.Name + "-" + string(p.Item.Data),
+					URI:  "file:///tmp/caller.go",
+				},
+				FromRanges: []protocol.Range{{Start: protocol.Position{Line: 5, Character: 2}}},
+			}})
+		case msg.Method == "callHierarchy/outgoingCalls":
+			var p protocol.CallHierarchyCallsParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.CallHierarchyOutgoingCall{{
+				To:         protocol.CallHierarchyItem{Name: "callee", URI: "file:///tmp/callee.go"},
+				FromRanges: []protocol.Range{{Start: protocol.Position{Line: 3, Character: 1}}},
+			}})
 		case msg.Method == "textDocument/semanticTokens/full":
 			// keyword at 0:0 len4.
 			respond(out, msg.ID, protocol.SemanticTokens{ResultID: "r1", Data: []uint32{0, 0, 4, 0, 0}})

@@ -51,6 +51,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// k mirrors vim's K (keyword lookup) for the hover / quick-doc popup (#378).
 	{"k", "lsp.hover", "Quick documentation (hover)"},
 	{"u", "lsp.references", "Find usages"},
+	// H (shift+h) mirrors the fragile ctrl+alt+h primary for the call
+	// hierarchy (#173) — lowercase h is the notification history.
+	{"H", "lsp.callHierarchy", "Call hierarchy"},
 	{"a", "lsp.codeAction", "Show intention actions"},
 	{"n", "lsp.rename", "Rename symbol"},
 	{"l", "lsp.format", "Reformat file"},

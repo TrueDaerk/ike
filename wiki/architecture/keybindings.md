@@ -344,6 +344,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
 | `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
+| `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `space H` | live via space H |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |

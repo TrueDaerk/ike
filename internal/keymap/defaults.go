@@ -32,6 +32,9 @@ var jetbrainsRows = []row{
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
 	// the table uses the registered id (mirroring lsp.definition below).
 	{"alt+f7", "lsp.references", "Find usages", Editor, "LSP (0100)"},
+	// JetBrains' call-hierarchy chord (#173); alt is fragile, so the leader
+	// mnemonic (space H) is the delivered escape route.
+	{"ctrl+alt+h", "lsp.callHierarchy", "Call hierarchy", Editor, "LSP (0100)"},
 	// shift+f6 is JetBrains' context-aware refactor-rename (0082 sheet 13):
 	// with an editor focused it renames the *symbol* at the cursor (LSP #6);
 	// everywhere else the Global file.rename row owns the chord (explorer
