@@ -16,6 +16,7 @@ import (
 func (m *Model) enterVisual(md mode.Mode) {
 	m.mode = md
 	m.anchor = m.cursor
+	m.shiftSelect = false
 	m.emit(EventCursorMove)
 }
 
@@ -28,6 +29,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if key.Code == tea.KeyEscape {
 		m.mode = Normal
 		m.wait = awaitNone
+		m.shiftSelect = false
 		m.pending.Reset()
 		// Tell listeners the selection is gone (the LSP bridge tracks it for
 		// range-scoped requests).
@@ -42,6 +44,19 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.visualTextObject(r)
 		}
 		return m, nil
+	}
+
+	// A selection started with Shift+arrows is dropped by an unshifted
+	// navigation key (vim's keymodel=stopsel, #326): back to normal mode,
+	// where the key moves the cursor like any plain motion.
+	if m.shiftSelect {
+		if _, shifted := shiftSelectKey(s); !shifted && stopSelectKey(s) {
+			m.mode = Normal
+			m.shiftSelect = false
+			m.pending.Reset()
+			m.emit(EventCursorMove)
+			return m.updateNormal(key)
+		}
 	}
 
 	// Shift+arrows extend the selection like their plain counterparts.
@@ -176,6 +191,8 @@ func (m *Model) toggleVisual(md mode.Mode) {
 	} else {
 		m.mode = md
 	}
+	// v/V/ctrl+v converts a shift+arrow selection into a sticky vim one.
+	m.shiftSelect = false
 	// Mode changes alter what the current selection is; keep listeners current.
 	m.emit(EventCursorMove)
 }

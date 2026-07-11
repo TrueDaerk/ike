@@ -107,7 +107,11 @@ insert. `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
 mode they enter charwise visual mode anchored at the cursor and move; in visual
 mode they extend the selection like their plain counterparts.
 `Shift+Alt/Option+←/→` (and `Shift+Ctrl+←/→`) extend the selection by the same
-in-line word motion; mid-insert they just move the caret.
+in-line word motion; mid-insert they just move the caret. A selection started
+this way is GUI-style (vim's `keymodel=stopsel`, #326): releasing Shift and
+pressing an unshifted navigation key (arrows, `Home`/`End`, word/paragraph and
+page keys) drops the selection and just moves the caret, while vim motions and
+selections entered with `v`/`V`/`Ctrl+V` keep extending as in vim.
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,

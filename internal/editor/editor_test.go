@@ -848,6 +848,67 @@ func TestShiftArrowStartsAndExtendsSelection(t *testing.T) {
 	}
 }
 
+func TestPlainArrowStopsShiftSelection(t *testing.T) {
+	// Releasing Shift and navigating drops a shift+arrow selection instead of
+	// extending it (vim's keymodel=stopsel, #326).
+	m, _ := loaded(t, "foo bar baz\nnext\n")
+	m = send(m, modKey(tea.KeyRight, tea.ModShift), modKey(tea.KeyRight, tea.ModShift))
+	m = send(m, special(tea.KeyRight))
+	if m.mode.IsVisual() {
+		t.Fatalf("plain right after shift-select mode=%v want normal", m.mode)
+	}
+	if m.cursor.Col != 3 {
+		t.Fatalf("plain right col=%d want 3", m.cursor.Col)
+	}
+
+	// The same for vertical and word-wise navigation.
+	m = send(m, modKey(tea.KeyRight, tea.ModShift))
+	m = send(m, special(tea.KeyDown))
+	if m.mode.IsVisual() {
+		t.Fatal("plain down should stop the shift-selection")
+	}
+	m = send(m, modKey(tea.KeyRight, tea.ModShift))
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt))
+	if m.mode.IsVisual() {
+		t.Fatal("alt+right should stop the shift-selection")
+	}
+}
+
+func TestShiftSelectionKeepsExtendingWithShift(t *testing.T) {
+	m, _ := loaded(t, "foo bar\n")
+	m = send(m, modKey(tea.KeyRight, tea.ModShift),
+		modKey(tea.KeyRight, tea.ModShift),
+		modKey(tea.KeyRight, tea.ModShift|tea.ModAlt))
+	if !m.mode.IsVisual() {
+		t.Fatalf("mode=%v want visual", m.mode)
+	}
+	if m.anchor.Col != 0 || m.cursor.Col != 4 {
+		t.Fatalf("selection anchor=%d cursor=%d want 0/4", m.anchor.Col, m.cursor.Col)
+	}
+}
+
+func TestVimVisualStillExtendsWithPlainArrows(t *testing.T) {
+	// Selections entered with v keep vim semantics: plain motions extend.
+	m, _ := loaded(t, "foo bar\n")
+	m = typeKeys(m, "v")
+	m = send(m, special(tea.KeyRight), special(tea.KeyRight))
+	if !m.mode.IsVisual() {
+		t.Fatalf("v selection mode=%v want visual", m.mode)
+	}
+	if m.anchor.Col != 0 || m.cursor.Col != 2 {
+		t.Fatalf("v selection anchor=%d cursor=%d want 0/2", m.anchor.Col, m.cursor.Col)
+	}
+
+	// Switching a shift-selection to another visual variant makes it sticky.
+	m = send(m, special(tea.KeyEscape))
+	m = send(m, modKey(tea.KeyRight, tea.ModShift))
+	m = typeKeys(m, "V")
+	m = send(m, special(tea.KeyDown))
+	if !m.mode.IsVisual() {
+		t.Fatal("V should convert a shift-selection into a sticky visual one")
+	}
+}
+
 func TestClipboardCopyCutPaste(t *testing.T) {
 	clip := &fakeClipboard{}
 	m, _ := loaded(t, "foo bar\n")
