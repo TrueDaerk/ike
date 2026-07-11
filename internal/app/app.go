@@ -1363,6 +1363,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// view of the focused editor's document.
 		return m.splitView(msg.Zone)
 
+	case NewScratchMsg:
+		// scratch.new[.<lang>] (#351): create under the scratch store, open
+		// through the standard funnel.
+		return m.newScratch(msg.Ext)
+
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the floating settings panel.
 		w, h := m.settingsSize()

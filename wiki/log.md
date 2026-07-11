@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Scratch files land (#350/#351, Roadmap 0280): `scratch.new` and per-language
+  "New Scratch File: <Lang>" palette commands (File menu too) create
+  `scratch-N.<ext>` under `$IKE_CONFIG_DIR/scratches` / `~/.ike/scratches`
+  (new `internal/scratch` store) and open it focused through the standard
+  funnel — highlighting/LSP/session flow from the extension. Documented in
+  [Scratch Files](/architecture/scratch-files.md); picker follows as #352.
+
 - Split view (#147): `editor.splitViewRight`/`Down` (`cmd+k shift+right`/
   `shift+down`, View menu, palette) split the focused editor into a second
   live shared view of the same document (#142), cursor/scroll copied from the

@@ -122,6 +122,9 @@ Most settings can also be edited interactively in the settings panel
   style and offered back after a crash.
 - **Project switching** — recent-projects history for jumping between
   workspaces.
+- **Scratch files** — language-aware throwaway buffers ("New Scratch File:
+  Python" in the palette), stored outside the project tree and surviving
+  restarts.
 - **Navigation history** — JetBrains-style Back/Forward across cursor jumps.
 - **Settings UI & menu bar** — schema-driven settings forms with config
   write-back, and a menu bar fronting the command registry.

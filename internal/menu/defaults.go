@@ -6,6 +6,7 @@ package menu
 func Defaults() []Menu {
 	return []Menu{
 		{Title: "File", Items: []Item{
+			{Title: "New Scratch File", Command: "scratch.new"},
 			{Title: "Save", Command: "editor.write"},
 			{Title: "Save All", Command: "editor.saveAll"},
 			{Title: "Close Tab", Command: "editor.closeTab"},

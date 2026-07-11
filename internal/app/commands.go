@@ -126,6 +126,11 @@ type TerminalClearMsg struct{}
 // by explorer.toggle.
 type ToggleExplorerFocusMsg struct{}
 
+// NewScratchMsg asks the root model to create a scratch file with the given
+// extension under the scratch store and open it (Roadmap 0280, #351).
+// Dispatched by scratch.new and the per-language scratch.new.<id> commands.
+type NewScratchMsg struct{ Ext string }
+
 // appCommands is the compile-in plugin exposing root-model actions as registry
 // commands, so the default keybindings (Roadmap 0080/0081) and the palette can
 // drive them; the root model owns the behavior, this file only names it.
@@ -160,7 +165,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		cmds = append(cmds, appCommand("editor.tab.select"+n, "Go to Tab "+n, TabSelectMsg{Index: i - 1}))
 	}
 	return plugin.Capabilities{
-		Commands: append(cmds,
+		Commands: append(append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
@@ -188,7 +193,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.splitLeft", "Split Left", SplitFocusedMsg{Zone: layout.ZoneLeft}),
 			appCommand("editor.splitViewRight", "Split View Right", SplitViewMsg{Zone: layout.ZoneRight}),
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
-		),
+		), scratchCommands()...),
 	}
 }
 
