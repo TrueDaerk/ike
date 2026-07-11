@@ -39,6 +39,7 @@ exist yet opens as a new unsaved buffer:
 ike internal/app/app.go:725       # open at line 725
 ike main.go:10:4 README.md        # two tabs, first one focused at 10:4
 ike +42 main.go                   # vim-style line prefix
+git log | ike -                   # pipe stdin into a scratch buffer
 ```
 
 ### Platform notes

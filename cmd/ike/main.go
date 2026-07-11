@@ -38,9 +38,12 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
 		os.Exit(2)
 	}
-	if inv.Stdin {
-		// The stdin scratch buffer lands with #344.
-		fmt.Fprintln(os.Stderr, "ike: reading stdin ('-') is not supported yet")
+	// `ike -` (#344): consume piped stdin up front; the UI reads its keyboard
+	// from /dev/tty instead, vim-style. Both failure modes abort before any UI.
+	stdinText, progOpts, err := readStdin(inv.Stdin)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "ike:", err)
+		os.Exit(2)
 	}
 	// Record the initial project open into the recent-projects history before
 	// the model loads config, so the fresh entry is already part of the merged
@@ -73,8 +76,12 @@ func main() {
 	// Open the CLI targets after construction: session restore already ran, so
 	// the requested files win focus over the restored layout.
 	m = m.OpenCLITargets(inv.Targets)
+	if inv.Stdin {
+		// The scratch buffer opens after the file targets and wins focus.
+		m = m.OpenStdinBuffer(stdinText)
+	}
 	wasmHost.SetAPI(m.Host())
-	p := tea.NewProgram(m)
+	p := tea.NewProgram(m, progOpts...)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
 	// can inject async results. The host is shared by pointer with the program's
 	// model copy, so this takes effect for the running model.

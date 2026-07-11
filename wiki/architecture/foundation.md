@@ -49,7 +49,17 @@ the first target ends focused with its 1-based line/col mapped to the editor's
 does not exist on disk opens as an empty unsaved buffer with that path
 (vim-style, `editor.NewFile`); the first `:w` creates the file. `EventFileOpened`
 hooks and the initial reparse fire in `Init` (#332) like for every file already
-open at launch. A `-` stdin target parses but is deferred to #344.
+open at launch.
+
+`command | ike -` (#344) reads piped stdin to EOF before the UI starts
+(`cmd/ike/stdin.go`) and opens it as a pathless scratch buffer after any file
+targets, focused (`Model.OpenStdinBuffer`). The buffer is dirty + never-saved
+(`editor.RestoreText`, the untitled-crash-restore flow), so quitting runs the
+unsaved-changes guard and `:w <path>` names it. The keyboard comes from an
+explicitly opened `/dev/tty` via `tea.WithInput` — bubbletea's own
+non-terminal-stdin fallback does not deliver key events in this setup. `ike -`
+on a TTY fails fast with usage exit code 2 (nothing piped; a blocking read
+would hang).
 
 ## Message routing
 

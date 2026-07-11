@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- `command | ike -` pipes stdin into a scratch buffer (#344, Roadmap 0270):
+  read to EOF before the UI starts, opened focused after any file targets,
+  dirty + never-saved so the quit guard prompts and `:w <path>` names it; the
+  keyboard re-points at /dev/tty. `ike -` on a TTY fails fast. Roadmap 0270
+  is complete.
+
 - CLI open targets (#343, Roadmap 0270): `ike file.go:42`, `file.go:42:7` and
   vim-style `+42 file.go` open files as tabs at startup — first target focused
   with the cursor placed, explorer revealing it; a nonexistent path opens as
