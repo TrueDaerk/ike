@@ -66,6 +66,11 @@ type Model struct {
 	include string // comma-separated include globs
 	exclude string // comma-separated exclude globs
 
+	// preselect marks the remembered query as selected on re-open (#277):
+	// the first typed character replaces it wholesale, any other key keeps
+	// the text and drops the mark — JetBrains' prefill-selected behavior.
+	preselect bool
+
 	// replaceMode adds the replacement input, the before/after preview, and
 	// the apply keys (project.replaceInPath); off is plain find-in-path.
 	replaceMode bool
@@ -118,6 +123,7 @@ func (m *Model) Open(root string) {
 	m.focus = fieldQuery
 	m.histIdx = -1
 	m.errText = ""
+	m.preselect = m.query != ""
 	m.rescan()
 }
 
@@ -223,6 +229,10 @@ func splitGlobs(s string) []string {
 
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
+	// Selection semantics for the remembered query (#277): the first typed
+	// character replaces it; any other key keeps the text, drops the mark.
+	pre := m.preselect
+	m.preselect = false
 	switch msg.String() {
 	case "esc":
 		m.Close()
@@ -314,6 +324,9 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	if msg.Text != "" && !strings.ContainsAny(msg.Text, "\n\r") {
 		f := m.focused()
+		if pre && m.focus == fieldQuery {
+			*f = "" // typing replaces the selected prefill (#277)
+		}
 		*f = *f + msg.Text
 		m.editedField()
 	}
@@ -476,6 +489,11 @@ func (m *Model) inputRow(label, value string, f field, width int) string {
 	pal := m.theme()
 	lab := lipgloss.NewStyle().Faint(true).Render(label + " ")
 	text := value
+	if f == fieldQuery && m.preselect && value != "" {
+		// The remembered query is "selected" (#277): render it inverted so
+		// it reads as replace-on-type.
+		text = lipgloss.NewStyle().Reverse(true).Render(value)
+	}
 	if m.focus == f {
 		text += lipgloss.NewStyle().Reverse(true).Render(" ")
 	}

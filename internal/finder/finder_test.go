@@ -57,6 +57,37 @@ func match(path string, line int) search.Match {
 	return search.Match{Path: path, Line: line, Text: "needle text", StartCol: 0, EndCol: 6}
 }
 
+// TestReopenPreselectsQuery guards #277: the remembered query is selected on
+// re-open — typing replaces it wholesale, backspace keeps it and just edits.
+func TestReopenPreselectsQuery(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	m.Update(key("esc"))
+
+	m.Open(t.TempDir())
+	if m.query != "needle" || !m.preselect {
+		t.Fatalf("re-open should preselect the remembered query, query=%q preselect=%v", m.query, m.preselect)
+	}
+	typeText(m, "x")
+	if m.query != "x" {
+		t.Fatalf("typing over the preselected query should replace it, got %q", m.query)
+	}
+
+	// Backspace instead of typing edits the remembered text and drops the
+	// selection, so subsequent typing appends.
+	typeText(m, "yz") // query "xyz", no longer preselected
+	m.Update(key("esc"))
+	m.Open(t.TempDir())
+	m.Update(key("backspace"))
+	if m.query != "xy" || m.preselect {
+		t.Fatalf("backspace should edit the prefill, got query=%q preselect=%v", m.query, m.preselect)
+	}
+	typeText(m, "z")
+	if m.query != "xyz" {
+		t.Fatalf("after backspace typing appends, got %q", m.query)
+	}
+}
+
 func TestTypingScansAndRendersResults(t *testing.T) {
 	m := opened(t)
 	typeText(m, "needle")
