@@ -1852,6 +1852,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // a scratch tab — and NewPane splits off a fresh editor and loads there.
 // EventFileOpened hooks fire either way.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
+	// Every open source spells paths differently (explorer: absolute, palette
+	// modes: root-relative) — canonicalize first so the same file always
+	// lands on its existing tab instead of a duplicate buffer (#272).
+	path = canonicalPath(path)
 	// Leaving one file for another is a navigation jump (Roadmap 0220);
 	// same-file opens are handled by openPathAt, which knows the target line.
 	if cur := m.currentNavPos(); cur.Path != "" && cur.Path != path {
@@ -2418,6 +2422,9 @@ func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 // openPathAt opens path (reusing the standard open flow) and places the cursor at
 // the 0-based line/col — the navigation half of go-to-definition.
 func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
+	// Canonicalize before the same-file compare and editorForPath below;
+	// openPath normalizes again, which is harmless (#272).
+	path = canonicalPath(path)
 	// A same-file jump to another line is a navigation jump too (Roadmap
 	// 0220); the different-file case records inside openPath below.
 	if cur := m.currentNavPos(); cur.Path == path && cur.Line != line {
@@ -3486,6 +3493,16 @@ func paneBox(title, content string, width, height int, borderColor color.Color) 
 }
 
 func baseName(path string) string { return filepath.Base(path) }
+
+// canonicalPath normalizes a file path to its cleaned absolute form, so the
+// tab and buffer lookups (TabForPath, editorForPath) treat every spelling of
+// the same file as equal (#272).
+func canonicalPath(path string) string {
+	if abs, err := filepath.Abs(path); err == nil {
+		return abs
+	}
+	return filepath.Clean(path)
+}
 
 // displayPath renders a file path for the status line: relative to the project
 // root (the working directory) when inside it, absolute when outside.
