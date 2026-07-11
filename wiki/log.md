@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- LSP request errors surface as toasts (#372): a failing hover / definition /
+  references / formatting / code-action request now raises an error toast with
+  the server's message ("find usages failed: …") instead of silently doing
+  nothing, via the shared `requestFailed` seam in `plugins/lsp/bridge.go`. See
+  [LSP](/architecture/lsp.md).
+
 - Explorer prompts never render invisibly (#373): a rename/delete prompt box
   wider than the pane used to be silently dropped while still capturing keys
   (blind renames/deletes). `promptBox` now truncates the title and windows the

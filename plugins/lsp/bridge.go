@@ -149,6 +149,18 @@ func (b *bridge) fileClosed(path string) {
 
 // --- commands ---
 
+// requestFailed surfaces a failed server request as an error toast and reports
+// whether it fired (#372). A swallowed error is indistinguishable from a
+// command that never ran, so every user-initiated request routes its error
+// here; op is the user-facing action name ("find usages").
+func requestFailed(h host.API, op string, err error) bool {
+	if err == nil {
+		return false
+	}
+	h.Send(ilsp.ServerStatusMsg{Text: op + " failed: " + err.Error(), Kind: ilsp.ServerEventError})
+	return true
+}
+
 // hover requests hover at the current cursor and sends a HoverMsg.
 func (b *bridge) hover(h host.API) tea.Cmd {
 	b.ensure(h)
@@ -159,7 +171,7 @@ func (b *bridge) hover(h host.API) tea.Cmd {
 	}
 	go func() {
 		hv, err := mgr.Hover(context.Background(), path, buffer.Position{Line: line, Col: col})
-		if err != nil || hv == nil {
+		if requestFailed(h, "hover", err) || hv == nil {
 			return
 		}
 		if text := ilsp.HoverText(hv); text != "" {
@@ -180,7 +192,7 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 	}
 	go func() {
 		locs, err := mgr.Definition(context.Background(), path, buffer.Position{Line: line, Col: col})
-		if err != nil || len(locs) == 0 {
+		if requestFailed(h, "go to definition", err) || len(locs) == 0 {
 			return
 		}
 		if len(locs) > 1 {
@@ -214,7 +226,7 @@ func (b *bridge) references(h host.API) tea.Cmd {
 	}
 	go func() {
 		locs, err := mgr.References(context.Background(), path, buffer.Position{Line: line, Col: col}, true)
-		if err != nil {
+		if requestFailed(h, "find usages", err) {
 			return
 		}
 		h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
@@ -305,7 +317,7 @@ func (b *bridge) format(h host.API) tea.Cmd {
 	opts := formattingOptions(h)
 	go func() {
 		edits, err := mgr.Format(context.Background(), path, opts)
-		if err != nil || len(edits) == 0 {
+		if requestFailed(h, "reformat", err) || len(edits) == 0 {
 			return
 		}
 		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
@@ -331,7 +343,7 @@ func (b *bridge) formatRange(h host.API) tea.Cmd {
 	opts := formattingOptions(h)
 	go func() {
 		edits, err := mgr.FormatRange(context.Background(), path, start, end, opts)
-		if err != nil || len(edits) == 0 {
+		if requestFailed(h, "reformat selection", err) || len(edits) == 0 {
 			return
 		}
 		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
@@ -434,7 +446,7 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 	diags := b.diagsOverlapping(path, start.Line, end.Line)
 	go func() {
 		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
-		if err != nil {
+		if requestFailed(h, "code actions", err) {
 			return
 		}
 		if len(actions) == 0 {

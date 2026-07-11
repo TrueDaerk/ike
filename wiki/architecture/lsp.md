@@ -80,6 +80,15 @@ the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
 is handled by the app (navigate + place cursor).
 
+**Request errors surface (#372).** Every user-initiated request (hover,
+definition, references, formatting, code actions — rename already had its own
+path) routes a failed server reply through `requestFailed`
+(`plugins/lsp/bridge.go`), which raises an error `ServerStatusMsg` toast
+naming the action and the server's message ("find usages failed: …"). A
+failing request is therefore always distinguishable from a command that never
+fired; only silent *empty* results (no hover info, zero definitions) stay
+quiet or keep their existing info toasts.
+
 **Find references (#5).** `lsp.references` (default `alt+f7`, reconciled in the
 chord table like `lsp.definition`) sends `textDocument/references` (declaration
 included, matching JetBrains' find-usages) from the cursor. The bridge converts
