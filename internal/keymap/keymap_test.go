@@ -88,6 +88,13 @@ func TestBuildTableLookupContextPrecedence(t *testing.T) {
 	if b, ok := table.Lookup(sf6, Explorer); !ok || b.Command != "file.rename" {
 		t.Errorf("explorer shift+f6 = %+v ok=%v, want file.rename", b, ok)
 	}
+	// Diagnostic navigation (#369): f2/shift+f2, Editor-scoped and delivered.
+	if b, ok := table.Lookup(MustParseChord("f2"), Editor); !ok || b.Command != "lsp.nextDiagnostic" || b.Fragile {
+		t.Errorf("editor f2 = %+v ok=%v, want delivered lsp.nextDiagnostic", b, ok)
+	}
+	if b, ok := table.Lookup(MustParseChord("shift+f2"), Editor); !ok || b.Command != "lsp.prevDiagnostic" || b.Fragile {
+		t.Errorf("editor shift+f2 = %+v ok=%v, want delivered lsp.prevDiagnostic", b, ok)
+	}
 }
 
 // TestDoubleShiftResolvesOffMacOS drives the resolver's multi-step chord path

@@ -41,6 +41,72 @@ func TestDiagnosticsWrongPathIgnored(t *testing.T) {
 	}
 }
 
+// jumpNotice runs a diagnostic-jump action and returns the toast text.
+func jumpNotice(t *testing.T, m *Model, action string) string {
+	t.Helper()
+	next, cmd := m.runAction(action)
+	*m = next
+	if cmd == nil {
+		t.Fatalf("%s must produce a NoticeMsg", action)
+	}
+	n, ok := cmd().(NoticeMsg)
+	if !ok {
+		t.Fatalf("%s: expected a NoticeMsg, got %#v", action, cmd())
+	}
+	return n.Text
+}
+
+func TestDiagnosticJumpNextPrevWraps(t *testing.T) {
+	m, _ := loaded(t, "aaa\nbbb\nccc\nddd\n")
+	m, _ = m.Update(ilsp.DiagnosticsMsg{Path: m.path, Diagnostics: []ilsp.Diagnostic{
+		// Deliberately unsorted: the walk must be document-ordered.
+		{Range: buffer.Range{Start: buffer.Position{Line: 2, Col: 1}, End: buffer.Position{Line: 2, Col: 2}}, Severity: 2, Message: "warn here"},
+		{Range: buffer.Range{Start: buffer.Position{Line: 0, Col: 1}, End: buffer.Position{Line: 0, Col: 2}}, Severity: 1, Message: "first line\nsecond detail line"},
+	}})
+	if got := jumpNotice(t, &m, "next_diagnostic"); got != "error: first line" {
+		t.Errorf("first jump toast = %q (message must be its first line)", got)
+	}
+	if m.cursor != (buffer.Position{Line: 0, Col: 1}) {
+		t.Fatalf("first jump cursor = %+v", m.cursor)
+	}
+	if got := jumpNotice(t, &m, "next_diagnostic"); got != "warning: warn here" {
+		t.Errorf("second jump toast = %q", got)
+	}
+	if m.cursor != (buffer.Position{Line: 2, Col: 1}) {
+		t.Fatalf("second jump cursor = %+v", m.cursor)
+	}
+	// Past the last diagnostic: wrap to the first, flagged in the toast.
+	if got := jumpNotice(t, &m, "next_diagnostic"); got != "error: first line (wrapped)" {
+		t.Errorf("wrap jump toast = %q", got)
+	}
+	if m.cursor != (buffer.Position{Line: 0, Col: 1}) {
+		t.Fatalf("wrap jump cursor = %+v", m.cursor)
+	}
+	// Backwards from the first diagnostic: wrap to the last.
+	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "warning: warn here (wrapped)" {
+		t.Errorf("prev wrap toast = %q", got)
+	}
+	if m.cursor != (buffer.Position{Line: 2, Col: 1}) {
+		t.Fatalf("prev wrap cursor = %+v", m.cursor)
+	}
+	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "error: first line" {
+		t.Errorf("prev jump toast = %q", got)
+	}
+}
+
+func TestDiagnosticJumpEmptyNotifies(t *testing.T) {
+	m, _ := loaded(t, "clean\n")
+	if got := jumpNotice(t, &m, "next_diagnostic"); got != "no diagnostics in this file" {
+		t.Errorf("empty next toast = %q", got)
+	}
+	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "no diagnostics in this file" {
+		t.Errorf("empty prev toast = %q", got)
+	}
+	if m.cursor != (buffer.Position{}) {
+		t.Errorf("empty jump must not move the cursor, got %+v", m.cursor)
+	}
+}
+
 // enterInsertAtEnd puts the editor in insert mode at end of the buffer.
 func insertModeAt(m Model, line, col int) Model {
 	m.mode = Insert
