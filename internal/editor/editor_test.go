@@ -1072,3 +1072,64 @@ func TestInsertWordAndLineKill(t *testing.T) {
 		}
 	})
 }
+
+func TestSaveReportsWrittenOnExLine(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	m = typeKeys(m, "x")
+	m = send(m, key(':'))
+	m = typeKeys(m, "w")
+	m = send(m, special(tea.KeyEnter))
+	if m.cmdMsg != `"f.txt" written` {
+		t.Fatalf("cmdMsg=%q want %q (#261)", m.cmdMsg, `"f.txt" written`)
+	}
+}
+
+func TestSaveFailureReportsError(t *testing.T) {
+	m, path := loaded(t, "hello\n")
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(path, 0o644)
+	m = typeKeys(m, "x")
+	m = send(m, key(':'))
+	m = typeKeys(m, "w")
+	m = send(m, special(tea.KeyEnter))
+	if !strings.HasPrefix(m.cmdMsg, "E: ") {
+		t.Fatalf("cmdMsg=%q want a visible E: error (#261)", m.cmdMsg)
+	}
+	if !m.Dirty() {
+		t.Fatal("a failed save must keep the buffer dirty")
+	}
+}
+
+func TestWriteQuitStaysOpenOnSaveFailure(t *testing.T) {
+	m, path := loaded(t, "hello\n")
+	if err := os.Chmod(path, 0o444); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Chmod(path, 0o644)
+	m = typeKeys(m, "x")
+	m = send(m, key(':'))
+	m = typeKeys(m, "wq")
+	var cmd tea.Cmd
+	m, cmd = m.Update(special(tea.KeyEnter))
+	if cmd != nil {
+		if _, ok := cmd().(CloseMsg); ok {
+			t.Fatal(":wq with a failed write must not close the pane (#261)")
+		}
+	}
+	if !strings.HasPrefix(m.cmdMsg, "E: ") {
+		t.Fatalf("cmdMsg=%q want the write error", m.cmdMsg)
+	}
+}
+
+func TestSaveScratchWithoutNameReportsError(t *testing.T) {
+	m := New()
+	m.SetSize(40, 5)
+	m.SetFocused(true)
+	m = typeKeys(m, ":w")
+	m = send(m, special(tea.KeyEnter))
+	if m.cmdMsg != "E: no file name" {
+		t.Fatalf("cmdMsg=%q want 'E: no file name' (#261)", m.cmdMsg)
+	}
+}

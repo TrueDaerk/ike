@@ -196,14 +196,18 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 
 	switch cmd.Name {
 	case "w", "write":
-		if c := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
+		if c, _ := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
 			return m, c
 		}
 	case "q", "quit":
 		return m, func() tea.Msg { return CloseMsg{Force: cmd.Bang} }
 	case "wq", "x", "xit":
-		if c := m.saveGuarded(orDefault(cmd.Args, m.path)); c != nil {
+		c, ok := m.saveGuarded(orDefault(cmd.Args, m.path))
+		if c != nil {
 			return m, c // conflict: prompt first, keep the pane open
+		}
+		if !ok {
+			return m, nil // write failed: stay open, the ex line has the error
 		}
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "e", "edit":

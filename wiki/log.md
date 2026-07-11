@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Save feedback on the ex line (#261): `:w` / `cmd+s` report `"file" written`
+  on success and a vim-style `E: <error>` on failure (previously silent);
+  a failed write keeps the buffer dirty, aborts `:wq`, and a nameless
+  scratch `:w` reports "E: no file name". Found running the 0082 sheet 14
+  protocol (#19). Documented in [Editor](/architecture/editor.md).
+
 - Unsaved-changes guard on close (#259): `cmd+w` / `ctrl+w` / `:q` on a dirty
   buffer now prompt save/discard/cancel instead of silently dropping the
   edits; `:q!` forces, shared documents skip the prompt, a failed save keeps
