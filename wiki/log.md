@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Zen mode (#359, Roadmap 0290 — epic complete): `view.zenMode`
+  (`cmd+k shift+z`, View menu — the dormant entry is live now) maximizes the
+  active editor and hides the tab bar + status line; leaving zen restores
+  both, tree mutations drop it like the zoom. See
+  [Pane Layout](/architecture/pane-layout.md).
+
 - Pane maximize (#358, Roadmap 0290): `pane.maximize` (`cmd+k z`, View menu,
   palette) zooms the focused pane tmux-style — it renders alone over the body
   while the split tree survives untouched; any leaf-set change (split, close,

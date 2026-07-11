@@ -228,6 +228,11 @@ type Model struct {
 	// time — layout() drops the zoom when it changes. Not persisted.
 	zoomed  string
 	zoomSig string
+	// zen hides the tab bar and status line on top of the zoom (#359);
+	// zenKeepZoom remembers whether the editor was manually zoomed before zen,
+	// so leaving zen restores that state instead of the full layout.
+	zen         bool
+	zenKeepZoom bool
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -1372,6 +1377,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MaximizePaneMsg:
 		// pane.maximize (cmd+k z / View menu, #358): tmux-style zoom toggle.
 		m.toggleMaximize()
+		return m, nil
+
+	case ZenModeMsg:
+		// view.zenMode (cmd+k shift+z / View menu, #359): maximize + no chrome.
+		m.toggleZen()
 		return m, nil
 
 	case SplitViewMsg:
@@ -2745,7 +2755,12 @@ func abs(v int) int {
 // enabled), above the status line.
 func (m *Model) bodyRect() layout.Rect {
 	top := m.menuHeight()
-	return layout.Rect{X: 0, Y: top, W: m.width, H: m.height - statusHeight - top}
+	h := m.height - statusHeight - top
+	if m.zen {
+		// Zen (#359): the status line is hidden, its row joins the body.
+		h = m.height - top
+	}
+	return layout.Rect{X: 0, Y: top, W: m.width, H: h}
 }
 
 // clickOutside reports a mouse press landing outside a centered overlay view
@@ -3473,7 +3488,10 @@ func (m Model) render() string {
 	} else {
 		body = m.renderNode(m.tree, m.bodyRect())
 	}
-	rows := []string{body, m.statusLine()}
+	rows := []string{body}
+	if !m.zen {
+		rows = append(rows, m.statusLine())
+	}
 	if m.menuEnabled() {
 		rows = append([]string{m.menu.Bar()}, rows...)
 	}

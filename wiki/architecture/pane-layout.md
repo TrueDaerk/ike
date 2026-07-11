@@ -159,7 +159,17 @@ zoom records a sorted leaf signature and `layout()` — the choke point every
 mutation already runs through — drops the zoom when the signature no longer
 matches or the pane vanished. Resizes keep the leaf set, so a zoom survives
 a terminal resize. Zoom is deliberately not persisted; a restart restores
-unzoomed. Zen mode (#359) will layer chrome-hiding on top.
+unzoomed.
+
+**Zen mode (#359).** `view.zenMode` (`cmd+k shift+z`, View menu, palette)
+layers chrome-hiding on the zoom: the **active editor** is maximized and the
+tab bar and status line disappear — the status row joins the body
+(`bodyRect`), the tab bar yields to the plain title (`tabBar`), and the ex
+command line is unaffected (it renders inside the editor pane). Leaving zen
+restores the chrome; the zoom survives only when that same editor was already
+manually zoomed before zen. Tree mutations drop zen exactly like they drop
+the zoom (one flag cleared in the same `layout()` check); zen is not
+persisted either.
 
 ## Persistence
 

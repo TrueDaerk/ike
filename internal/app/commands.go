@@ -126,6 +126,10 @@ type TerminalClearMsg struct{}
 // by explorer.toggle.
 type ToggleExplorerFocusMsg struct{}
 
+// ZenModeMsg toggles zen mode (#359): the active editor maximized plus the
+// tab bar and status line hidden. Dispatched by view.zenMode.
+type ZenModeMsg struct{}
+
 // MaximizePaneMsg toggles the focused pane's zoom (#358, tmux-style): render
 // it alone over the whole body, or restore the previous layout. Dispatched by
 // pane.maximize.
@@ -209,6 +213,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
 			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
+			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
 		), scratchCommands()...),
 	}
 }
