@@ -2,6 +2,8 @@ package app
 
 import (
 	"sort"
+	"strings"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -49,10 +51,36 @@ func (a *actionsMode) Set(msg ilsp.CodeActionsMsg) {
 		}
 		a.items[n] = palette.Item{
 			Title:  title,
-			Detail: act.Kind,
+			Detail: actionKindLabel(act.Kind),
 			Msg:    actionPickedMsg{index: i},
 		}
 	}
+}
+
+// actionKindLabel renders an LSP code-action kind readably (#309):
+// "quickfix" → "quick fix", "source.organizeImports" → "source · organize
+// imports", "refactor.extract" → "refactor · extract". Servers may omit the
+// kind entirely; the row then shows a generic "action" so the chip column
+// stays meaningful.
+func actionKindLabel(kind string) string {
+	if kind == "" {
+		return "action"
+	}
+	if kind == "quickfix" {
+		return "quick fix"
+	}
+	parts := strings.Split(kind, ".")
+	for i, p := range parts {
+		var out []rune
+		for j, r := range p {
+			if unicode.IsUpper(r) && j > 0 {
+				out = append(out, ' ')
+			}
+			out = append(out, unicode.ToLower(r))
+		}
+		parts[i] = string(out)
+	}
+	return strings.Join(parts, " · ")
 }
 
 // Run resolves a picked entry to the bridge continuation.

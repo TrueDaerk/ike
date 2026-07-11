@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Code-action clarity (#309): readable kind chips in the palette list, an
+  explainer in the wiki, and feedback for every apply outcome — edited-N,
+  changed-nothing, unresolved-action warning, command errors. Documented in
+  [LSP](/architecture/lsp.md).
+
 - ctrl+space triggers completion manually (#302): both the Kitty and the
   legacy NUL spelling emit the same trigger event the "." auto-path uses.
   Documented in [LSP](/architecture/lsp.md).

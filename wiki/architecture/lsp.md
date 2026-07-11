@@ -133,19 +133,29 @@ via `FormatEditsMsg` and stay dirty; every other file is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
 Gated on `renameProvider`; the 0082 `Shift+F6` decision stays with the audit.
 
-**Code actions (#8).** `lsp.codeAction` (default `alt+enter`, fragile —
-option-as-meta) sends `textDocument/codeAction` for the cursor or the active
-visual selection, passing the cached published diagnostics overlapping the
-range so servers offer quick-fixes. The offer opens as a locked palette list
-(`internal/app/codeactions.go`) — preferred actions starred and sorted first,
-kind as the detail chip; picking an entry runs a bridge-built continuation
+**Code actions (#8).** Code actions are *server-defined* fixes and
+refactorings for the code at the cursor — "add the missing import", "organize
+imports", "extract function"; what the list offers depends entirely on the
+language server and the diagnostics at that spot. `lsp.codeAction` (default
+`alt+enter`, fragile — option-as-meta) sends `textDocument/codeAction` for
+the cursor or the active visual selection, passing the cached published
+diagnostics overlapping the range so servers offer quick-fixes. The offer
+opens as a locked palette list (`internal/app/codeactions.go`) — preferred
+actions starred and sorted first, the kind rendered readably as the detail
+chip ("quick fix", "source · organize imports"; a server that omits the kind
+gets a generic "action", #309); picking an entry runs a bridge-built
+continuation
 (same seam as rename). The chosen action applies its inline `WorkspaceEdit`
 through `workspace_edit.go` and/or executes its `command` via
 `workspace/executeCommand`; server-initiated `workspace/applyEdit` requests
 (how gopls delivers e.g. Organize Imports) are answered by the manager off
 the read loop, converted, and dispatched through the same apply path. Result
 decode is lenient — bare `Command` entries wrap into command-only actions.
-Gated on `codeActionProvider` / `executeCommandProvider`.
+Every outcome reports (#309): applied edits toast "'<title>': edited N
+files", a no-op edit toasts "changed nothing", an action with neither edit
+nor command warns that `codeAction/resolve` is not supported yet, and
+command failures surface as error toasts. Gated on `codeActionProvider` /
+`executeCommandProvider`.
 
 **Signature help (#4).** No command: typing one of the server's advertised
 trigger characters (`signatureHelpProvider.triggerCharacters` + retriggers)
