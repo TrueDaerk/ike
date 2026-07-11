@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 )
 
@@ -30,5 +31,35 @@ func TestFormatEditsMsgRoutesToEditor(t *testing.T) {
 	}
 	if !ed.Dirty() {
 		t.Fatal("formatting should mark the buffer dirty (apply, not save)")
+	}
+}
+
+// TestFormatEditsMsgAppliesOncePerDocument (#366): views of a shared document
+// alias one buffer, so a FormatEditsMsg must be applied through exactly one
+// view — routing it to every view applied every edit once per view (an LSP
+// rename of z -> match1 with a split open produced match1atch1).
+func TestFormatEditsMsgAppliesOncePerDocument(t *testing.T) {
+	dir := t.TempDir()
+	file := writeTemp(t, dir, "a.py", "print(z)\n")
+	m := openApp(t, file)
+	src := m.panes.Get(m.panes.Focused()).Editor()
+
+	m = dispatch(t, m, SplitViewMsg{Zone: layout.ZoneRight})
+	other := m.panes.Get(m.panes.Focused()).Editor()
+	if !other.SharesBufferWith(src) {
+		t.Fatal("precondition: views must alias one buffer")
+	}
+
+	// The rename edit: z (line 0, cols 6-7) -> match1.
+	out, _ := m.Update(ilsp.FormatEditsMsg{Path: file, Edits: []ilsp.FormatEdit{
+		{StartLine: 0, StartCol: 6, EndLine: 0, EndCol: 7, Text: "match1"},
+	}})
+	m = out.(Model)
+
+	if got := src.Text(); got != "print(match1)" {
+		t.Fatalf("edit must apply exactly once, got %q", got)
+	}
+	if got := other.Text(); got != "print(match1)" {
+		t.Fatalf("second view must read the same document, got %q", got)
 	}
 }

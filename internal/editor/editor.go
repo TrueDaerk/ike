@@ -423,20 +423,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.semIndex = highlight.NewIndex(msg.Spans)
 		}
 		return m, nil
-	case ilsp.FormatEditsMsg:
-		// Formatting edits (Roadmap 0100, #7): applied as one undo unit.
-		if msg.Path == m.path {
-			edits := make([]TextEdit, len(msg.Edits))
-			for i, e := range msg.Edits {
-				edits[i] = TextEdit{
-					StartLine: e.StartLine, StartCol: e.StartCol,
-					EndLine: e.EndLine, EndCol: e.EndCol,
-					Text: e.Text,
-				}
-			}
-			m.ApplyTextEdits(edits)
-		}
-		return m, nil
+	// ilsp.FormatEditsMsg is deliberately NOT handled here: views of a shared
+	// document (#142) all receive path-routed messages, and applying edits in
+	// each view hit the shared buffer once per view (#366). The app applies
+	// them through exactly one view (app.go) via ApplyTextEdits.
 	case watch.EventMsg:
 		// External change of the open file (Roadmap 0140): reload.go decides
 		// whether to reload in place (clean buffer) or leave it alone.

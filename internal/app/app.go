@@ -1709,9 +1709,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.palette.LiveTick(msg)
 
 	case ilsp.FormatEditsMsg:
-		// lsp.format / lsp.formatRange: the owning editor applies the edits as
-		// one undo unit (editor/textedit.go).
-		return m, m.routeToEditor(msg.Path, msg)
+		// lsp.format / rename / code actions: applied as one undo unit
+		// (editor/textedit.go) through exactly ONE view. Views of the same
+		// file alias one document (#142), so routing to every view — like
+		// diagnostics or highlight spans — applied the edits once per view
+		// (#366: rename z -> match1 became match1atch1 with a second view
+		// open). The first view applies, the change-sync broadcast converges
+		// the others, mirroring replace.go's single-view rule.
+		if views := m.editorViewsForPath(msg.Path); len(views) > 0 {
+			edits := make([]editor.TextEdit, len(msg.Edits))
+			for i, e := range msg.Edits {
+				edits[i] = editor.TextEdit{
+					StartLine: e.StartLine, StartCol: e.StartCol,
+					EndLine: e.EndLine, EndCol: e.EndCol,
+					Text: e.Text,
+				}
+			}
+			views[0].ApplyTextEdits(edits)
+		}
+		return m, nil
 
 	case ilsp.ReferencesMsg:
 		// lsp.references (alt+f7 / palette): nothing found is a toast, a single

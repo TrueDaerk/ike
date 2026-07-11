@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T12:30:00Z
+timestamp: 2026-07-11T13:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -135,7 +135,11 @@ the manager stays unreachable from the app. Confirming sends
 applied every edit twice, #364) is applied by shared infrastructure
 (`plugins/lsp/workspace_edit.go`, reused by code actions later): files the
 manager tracks — open editor buffers — are edited in-buffer as one undo unit
-via `FormatEditsMsg` and stay dirty; every other file is rewritten on disk
+via `FormatEditsMsg`, applied through exactly **one** view of the document
+(views alias one buffer, #142, so per-view routing applied every edit once
+per view, #366; the change-sync broadcast converges the other views, the
+same single-view rule as replace-in-path) and stay dirty; every other file
+is rewritten on disk
 (bottom-up, mode-preserving). A summary toast reports the touched file count.
 Gated on `renameProvider`; the 0082 `Shift+F6` decision stays with the audit.
 
