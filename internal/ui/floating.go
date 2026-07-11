@@ -198,8 +198,15 @@ func (f *Floating) filterKey(flt Filterable, key string) bool {
 
 // relayout sizes the pane to its content — clamped to the terminal minus the
 // margin and the optional max fractions — and feeds the laid-out body to the
-// scroller. Safe to call before a size or content is known (it no-ops).
+// scroller, resetting scroll to the top. Safe to call before a size or content
+// is known (it no-ops).
 func (f *Floating) relayout() {
+	f.layout(false)
+}
+
+// layout is relayout's body; preserveScroll keeps the current scroll offset
+// (clamped) instead of jumping back to the top.
+func (f *Floating) layout(preserveScroll bool) {
 	if f.content == nil || f.width <= 0 || f.height <= 0 {
 		return
 	}
@@ -211,15 +218,24 @@ func (f *Floating) relayout() {
 		viewH = ch // content overflows -> scroll within the budget
 	}
 	f.scroll.SetSize(bodyW, viewH)
-	f.scroll.SetContent(body)
+	if preserveScroll {
+		f.scroll.Refresh(body)
+	} else {
+		f.scroll.SetContent(body)
+	}
 }
 
 // View renders the floating box, sized to its content, or empty when closed or
 // before a size is known. The caller composites it centered via overlay.Center.
+// The body is re-rendered on every call (#409): content that mutates its state
+// in place after opening — a modal moving its cursor, dropping list items —
+// shows the change on the very next frame without the host having to force a
+// relayout. The scroll offset survives the refresh.
 func (f *Floating) View() string {
 	if !f.open || f.width <= 0 || f.content == nil {
 		return ""
 	}
+	f.layout(true)
 	var accent color.Color = f.theme().BorderFocus
 	if f.cfg.Accent != "" {
 		accent = lipgloss.Color(f.cfg.Accent)

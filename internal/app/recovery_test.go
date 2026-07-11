@@ -140,6 +140,59 @@ func TestRecoveryEscSkipsAll(t *testing.T) {
 	}
 }
 
+// markedRow returns the row text carrying the cursor marker.
+func markedRow(t *testing.T, view string) string {
+	t.Helper()
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "▸") {
+			return line
+		}
+	}
+	t.Fatalf("no cursor marker in view: %q", view)
+	return ""
+}
+
+func TestRecoveryCursorMoveShowsInView(t *testing.T) {
+	// #409: the shell used to serve a cached body, so j moved the cursor state
+	// but the prompt looked frozen. The very next View must show the move.
+	m := recoverySeed(t, func(svc *backup.Service, dir string) {
+		for _, n := range []string{"a.txt", "b.txt"} {
+			f := filepath.Join(dir, n)
+			_ = os.WriteFile(f, []byte("x\n"), 0o644)
+			_ = svc.Snapshot(backup.Doc{Key: f, Path: f, Text: "r\n"})
+		}
+	})
+	before := markedRow(t, m.shell.View())
+	m = answer(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
+	if m.recovery.cursor != 1 {
+		t.Fatalf("cursor = %d, want 1", m.recovery.cursor)
+	}
+	after := markedRow(t, m.shell.View())
+	if before == after {
+		t.Fatalf("view still marks the old row after j: %q", after)
+	}
+	if want := displayPath(m.recovery.items[1].snap.Path); !strings.Contains(after, want) {
+		t.Fatalf("marked row %q should be the second item %q", after, want)
+	}
+}
+
+func TestRecoveryDropItemShowsInView(t *testing.T) {
+	// Removing the highlighted item must disappear from the very next View.
+	var first string
+	m := recoverySeed(t, func(svc *backup.Service, dir string) {
+		for _, n := range []string{"a.txt", "b.txt"} {
+			f := filepath.Join(dir, n)
+			_ = os.WriteFile(f, []byte("x\n"), 0o644)
+			_ = svc.Snapshot(backup.Doc{Key: f, Path: f, Text: "r\n"})
+		}
+	})
+	first = displayPath(m.recovery.items[0].snap.Path)
+	m = answer(m, tea.KeyPressMsg{Code: 's', Text: "s"})
+	if v := m.shell.View(); strings.Contains(v, first) {
+		t.Fatalf("skipped item %q still rendered: %q", first, v)
+	}
+}
+
 func TestRecoveryBaseChangedWarning(t *testing.T) {
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "moved.txt")

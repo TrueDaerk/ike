@@ -149,9 +149,6 @@ func (m Model) updateOnboarding(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// has had its say (the write also creates the user settings file).
 		return m.closeOnboarding(), config.WriteAndReload(m.cfgOpts, config.UserScope, "lsp.onboarded", true)
 	}
-	// The shell renders its body only on relayout; re-trigger it so cursor and
-	// checkbox changes show up in the very next frame.
-	m.shell.SetSize(m.width, m.height)
 	return m, nil
 }
 

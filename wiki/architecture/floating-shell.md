@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Floating Shell
@@ -73,6 +73,11 @@ is the seam that lets a plugin float its `plugin.Pane` as a modal for free.
   `bubbles/viewport` (↑/↓, pgup/pgdn, ctrl+u/ctrl+d, plus g/G for top/bottom) and
   appends a position indicator (`▲ … ▼  NN%`) only when the content overflows.
   The pane therefore never grows past the terminal.
+- **The body re-renders on every `View()`** (#409), preserving the scroll
+  offset. Content that mutates its state in place after opening — a modal
+  moving its cursor or dropping list items — shows the change on the very next
+  frame; hosts never need to force a relayout (`SetSize`/`SetContent`) after
+  handling a key. `SetContent`/`Open` still reset scroll to the top.
 
 ## Root integration
 

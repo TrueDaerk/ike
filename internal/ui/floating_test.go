@@ -155,6 +155,42 @@ func TestFloatingScrollsOverflowingContent(t *testing.T) {
 	}
 }
 
+func TestFloatingViewReflectsInPlaceContentChange(t *testing.T) {
+	// #409: content that mutates its state after opening (a modal moving its
+	// cursor) must show the change on the very next View, without the host
+	// forcing a relayout via SetSize/SetContent.
+	body := "cursor at 0"
+	f := New(Config{})
+	f.SetContent(ModelContent{Heading: "T", Body: func() string { return body }})
+	f.SetSize(80, 24)
+	f.Open()
+	if v := ansi.Strip(f.View()); !strings.Contains(v, "cursor at 0") {
+		t.Fatalf("initial body missing: %q", v)
+	}
+	body = "cursor at 1"
+	if v := ansi.Strip(f.View()); !strings.Contains(v, "cursor at 1") {
+		t.Fatalf("view served stale body after in-place change: %q", v)
+	}
+}
+
+func TestFloatingViewRefreshKeepsScrollOffset(t *testing.T) {
+	// Re-rendering the body every View must not reset an active scroll.
+	tall := strings.TrimRight(strings.Repeat("line\n", 200), "\n")
+	f := New(Config{})
+	f.SetContent(&stubContent{heading: "T", body: tall})
+	f.SetSize(80, 24)
+	f.Open()
+	f.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	off := f.scroll.vp.YOffset()
+	if off == 0 {
+		t.Fatal("setup: scroll should have moved")
+	}
+	_ = f.View()
+	if got := f.scroll.vp.YOffset(); got != off {
+		t.Fatalf("View reset scroll offset: got %d, want %d", got, off)
+	}
+}
+
 func TestModelContentAdapter(t *testing.T) {
 	mc := ModelContent{Heading: "PANE", Body: func() string { return "rendered" }}
 	if mc.Title() != "PANE" {
