@@ -104,6 +104,14 @@ var jetbrainsRows = []row{
 	{"ctrl+pgup", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgdown", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgup", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
+	// alt+home/end mirror the page-key pair for Macs without physical PgUp/PgDn
+	// (#328): fn+ctrl+arrows is claimed globally by macOS, while fn+option+left/
+	// right arrives as alt+home/alt+end — named special keys keep their modifier
+	// in the CSI parameter, so they survive Option-as-compose terminals.
+	{"alt+end", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
+	{"alt+home", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
+	{"alt+shift+end", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
+	{"alt+shift+home", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},

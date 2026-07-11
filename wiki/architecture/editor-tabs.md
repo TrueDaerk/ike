@@ -105,9 +105,9 @@ one):
 
 | Command | Default chord | Behaviour |
 |---|---|---|
-| `editor.tab.next` / `editor.tab.prev` | `ctrl+pgdown` / `ctrl+pgup` | cycle the active tab, wrapping |
+| `editor.tab.next` / `editor.tab.prev` | `ctrl+pgdown` / `ctrl+pgup` (also `alt+end` / `alt+home` — fn+option+right/left on Mac) | cycle the active tab, wrapping |
 | `editor.tab.select1…9` | `alt+1`…`alt+9` (leader `space 1…9`) | jump straight to tab N |
-| `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` | reorder the active tab |
+| `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` (also `alt+shift+home/end`) | reorder the active tab |
 | `editor.tab.reopenClosed` | `alt+shift+t` (leader `space o`) | pop the reopen ring |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
 
