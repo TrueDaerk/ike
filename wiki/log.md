@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Tree-sitter language injections (#299): embedded fragments (SQL in Python
+  strings) now highlight with the fragment language's own grammar. The SQL
+  plugin gained a Tree-sitter grammar (DerekStride/tree-sitter-sql), so .sql
+  files highlight too. See [highlighting](/architecture/highlighting.md).
+
 - Embedded-language LSP via virtual documents (0300, #412–#414): Tree-sitter
   injection queries detect fragments (SQL in Python strings, capture
   convention `fragment.<lang>[.guess]`), the manager mirrors each into an

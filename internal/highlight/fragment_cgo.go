@@ -13,7 +13,7 @@ import (
 // detectFragments parses lines with the host grammar and runs its injection
 // query, turning every @fragment.<lang>[.guess] capture into a Fragment. Like
 // parse, it re-parses from scratch: fragment detection runs on the LSP sync
-// path (off the Update goroutine), never per-keystroke render.
+// and highlight paths (off the Update goroutine), never per-keystroke render.
 func detectFragments(g lang.Grammar, lines []string) []Fragment {
 	gi, ok := g.(*grammarImpl)
 	if !ok {

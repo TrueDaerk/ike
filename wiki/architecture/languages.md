@@ -71,8 +71,10 @@ queries/<lang>.scm
 toolchain.go     optional Toolchain detector
 ```
 
-Ships with `go`, `python`, `php`. The grammar/query for each moved here out of the
-highlight engine.
+Ships with `go`, `python`, `php`, and `sql` (grammar from
+DerekStride/tree-sitter-sql; also highlights SQL fragments injected into other
+languages, see [highlighting](./highlighting.md)). The grammar/query for the
+first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
 
