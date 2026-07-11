@@ -79,6 +79,39 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// CallHierarchyEntry is one call-hierarchy node payload (#173): the raw
+// protocol item (kept verbatim for the incoming/outgoing follow-up requests)
+// plus its presentation fields and the navigation target in editor
+// coordinates — the call site for a caller row, the declaration for a callee.
+type CallHierarchyEntry struct {
+	Item   protocol.CallHierarchyItem
+	Name   string
+	Detail string
+	Path   string
+	Line   int
+	Col    int
+}
+
+// CallHierarchyMsg opens the call-hierarchy overlay (lsp.callHierarchy, #173)
+// on the prepared root items. Fetch is the bridge-built continuation the
+// overlay runs to expand a node lazily; the result arrives as a
+// CallHierarchyCallsMsg carrying the same ReqID — the manager stays
+// unreachable from the app, as with every other LSP action.
+type CallHierarchyMsg struct {
+	Path  string
+	Roots []CallHierarchyEntry
+	Fetch func(reqID int, item protocol.CallHierarchyItem, incoming bool) tea.Cmd
+}
+
+// CallHierarchyCallsMsg delivers one node expansion: the callers (Incoming)
+// or callees of the item requested under ReqID. An empty slice marks the node
+// a leaf.
+type CallHierarchyCallsMsg struct {
+	ReqID    int
+	Incoming bool
+	Calls    []CallHierarchyEntry
+}
+
 // SymbolPromptMsg asks the app to prompt for a workspace-symbol query (0250,
 // #294); Apply runs the workspace/symbol request with the typed query.
 type SymbolPromptMsg struct {

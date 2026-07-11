@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/backup"
+	"ike/internal/callhier"
 	"ike/internal/clipboard"
 	"ike/internal/config"
 	"ike/internal/editor"
@@ -171,6 +172,8 @@ type Model struct {
 	// explorer.toggle restores the tree at its prior width (#268); 0 means
 	// "use the default width".
 	explorerRatio float64
+	// callhier is the call-hierarchy tree overlay (lsp.callHierarchy, #173).
+	callhier *callhier.Model
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -350,6 +353,9 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
 	m.finder.SetDisplayPath(displayPath)
+	m.callhier = callhier.New()
+	m.callhier.SetPalette(themePal)
+	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
 	pages := settings.BasePages(themeNames(reg))
@@ -1211,6 +1217,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
+		m.callhier.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
 			w, h := m.settingsSize()
@@ -1791,6 +1798,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
 		return m, nil
+	case ilsp.CallHierarchyMsg:
+		// lsp.callHierarchy (#173): the prepared roots open the tree overlay;
+		// nothing prepared never reaches here (the bridge toasts instead).
+		m.callhier.SetSize(m.width, m.height)
+		return m, m.callhier.Open(msg)
+	case ilsp.CallHierarchyCallsMsg:
+		// One lazy node expansion; stale replies are dropped inside.
+		m.callhier.Apply(msg)
+		return m, nil
 	case ilsp.DefinitionCandidatesMsg:
 		// lsp.definition with several targets (#279): pick, don't guess. The
 		// list reuses the references rows; Enter navigates via DefinitionMsg.
@@ -1915,6 +1931,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.finder.IsOpen() {
 			// The find-in-path overlay owns the keyboard like the palette.
 			return m, m.finder.Update(msg)
+		}
+		if m.callhier.IsOpen() {
+			// The call-hierarchy overlay owns the keyboard the same way (#173).
+			return m, m.callhier.Update(msg)
 		}
 		if m.palette.IsOpen() {
 			return m, m.palette.Update(msg)
@@ -3588,6 +3608,8 @@ func (m Model) render() string {
 	switch {
 	case m.finder.IsOpen():
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
+	case m.callhier.IsOpen():
+		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
 	case m.palette.IsOpen():
 		v := m.palette.View()
 		if m.palette.Anchored() {

@@ -40,6 +40,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 				Rename:          &protocol.RenameClientCaps{PrepareSupport: true},
 				CodeAction:      &protocol.ReferencesClientCaps{},
 				SignatureHelp:   &protocol.ReferencesClientCaps{},
+				CallHierarchy:   &protocol.ReferencesClientCaps{},
 				SemanticTokens: &protocol.SemanticTokensClientCaps{
 					Requests:       protocol.SemanticTokensRequests{Full: &protocol.SemanticTokensFullRequest{Delta: true}},
 					TokenTypes:     protocol.StandardTokenTypes,

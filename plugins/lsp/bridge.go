@@ -238,6 +238,97 @@ func (b *bridge) references(h host.API) tea.Cmd {
 	return nil
 }
 
+// callHierarchy prepares the call hierarchy for the symbol under the cursor
+// (#173) and sends a CallHierarchyMsg carrying the root items plus the Fetch
+// continuation the overlay expands nodes with. Nothing prepared (position not
+// on a callable, or the server lacks the capability) surfaces as a toast.
+func (b *bridge) callHierarchy(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	go func() {
+		items, err := mgr.PrepareCallHierarchy(context.Background(), path, buffer.Position{Line: line, Col: col})
+		if requestFailed(h, "call hierarchy", err) {
+			return
+		}
+		if len(items) == 0 {
+			h.Send(ilsp.ServerStatusMsg{Text: "no call hierarchy here", Kind: ilsp.ServerEventInfo})
+			return
+		}
+		roots := make([]ilsp.CallHierarchyEntry, len(items))
+		for i, it := range items {
+			roots[i] = hierEntry(mgr, path, it, it.URI, it.SelectionRange.Start)
+		}
+		h.Send(ilsp.CallHierarchyMsg{
+			Path:  path,
+			Roots: roots,
+			Fetch: func(reqID int, item protocol.CallHierarchyItem, incoming bool) tea.Cmd {
+				return b.fetchCalls(h, path, reqID, item, incoming)
+			},
+		})
+	}()
+	return nil
+}
+
+// fetchCalls expands one hierarchy node: callers (incoming) navigate to the
+// call site inside the caller, callees to the callee's declaration.
+func (b *bridge) fetchCalls(h host.API, path string, reqID int, item protocol.CallHierarchyItem, incoming bool) tea.Cmd {
+	mgr := b.manager()
+	if mgr == nil {
+		return nil
+	}
+	go func() {
+		var entries []ilsp.CallHierarchyEntry
+		if incoming {
+			calls, err := mgr.IncomingCalls(context.Background(), path, item)
+			if requestFailed(h, "call hierarchy", err) {
+				return
+			}
+			entries = make([]ilsp.CallHierarchyEntry, len(calls))
+			for i, c := range calls {
+				nav := c.From.SelectionRange.Start
+				if len(c.FromRanges) > 0 {
+					nav = c.FromRanges[0].Start
+				}
+				entries[i] = hierEntry(mgr, path, c.From, c.From.URI, nav)
+			}
+		} else {
+			calls, err := mgr.OutgoingCalls(context.Background(), path, item)
+			if requestFailed(h, "call hierarchy", err) {
+				return
+			}
+			entries = make([]ilsp.CallHierarchyEntry, len(calls))
+			for i, c := range calls {
+				entries[i] = hierEntry(mgr, path, c.To, c.To.URI, c.To.SelectionRange.Start)
+			}
+		}
+		h.Send(ilsp.CallHierarchyCallsMsg{ReqID: reqID, Incoming: incoming, Calls: entries})
+	}()
+	return nil
+}
+
+// hierEntry converts one CallHierarchyItem to its editor-coordinate entry,
+// with the navigation target at navPos inside navURI (like locationsToRefs,
+// the target file read supplies the position conversion base).
+func hierEntry(mgr *manager.Manager, path string, item protocol.CallHierarchyItem, navURI string, navPos protocol.Position) ilsp.CallHierarchyEntry {
+	target := protocol.URIToPath(navURI)
+	e := ilsp.CallHierarchyEntry{
+		Item:   item,
+		Name:   item.Name,
+		Detail: item.Detail,
+		Path:   target,
+		Line:   navPos.Line,
+	}
+	if data, err := os.ReadFile(target); err == nil {
+		p := protocol.FromLSPPosition(strings.Split(string(data), "\n"), navPos, mgr.Encoding(path))
+		e.Line, e.Col = p.Line, p.Col
+	}
+	return e
+}
+
 // goToSymbol opens the workspace-symbol prompt (project.goToClass, 0250,
 // #294): the app collects the query, then Apply runs the actual request.
 func (b *bridge) goToSymbol(h host.API) tea.Cmd {

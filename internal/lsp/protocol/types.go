@@ -87,6 +87,7 @@ type TextDocumentClientCaps struct {
 	CodeAction      *ReferencesClientCaps     `json:"codeAction,omitempty"`
 	SignatureHelp   *ReferencesClientCaps     `json:"signatureHelp,omitempty"`
 	SemanticTokens  *SemanticTokensClientCaps `json:"semanticTokens,omitempty"`
+	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
 }
 
 // SemanticTokensClientCaps announces semantic-token support: which request
@@ -162,6 +163,7 @@ type ServerCapabilities struct {
 	SemanticTokensProvider          *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
 	ExecuteCommandProvider          json.RawMessage        `json:"executeCommandProvider,omitempty"`
 	WorkspaceSymbolProvider         json.RawMessage        `json:"workspaceSymbolProvider,omitempty"`
+	CallHierarchyProvider           json.RawMessage        `json:"callHierarchyProvider,omitempty"`
 }
 
 // WorkspaceSymbolParams is the workspace/symbol request (0250, #294): a plain
@@ -474,6 +476,51 @@ type ReferenceParams struct {
 // ReferenceContext carries the one request option references defines.
 type ReferenceContext struct {
 	IncludeDeclaration bool `json:"includeDeclaration"`
+}
+
+// --- call hierarchy ---
+
+// CallHierarchyPrepareParams is the textDocument/prepareCallHierarchy request
+// (#173): resolve the symbol at a position into hierarchy items.
+type CallHierarchyPrepareParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// CallHierarchyItem is one node of a call hierarchy: a callable symbol with
+// its declaration range and the selection range naming it. Data is the
+// server's opaque resolve token and must round-trip verbatim into the
+// incoming/outgoing follow-up requests.
+type CallHierarchyItem struct {
+	Name           string          `json:"name"`
+	Kind           int             `json:"kind"`
+	Tags           []int           `json:"tags,omitempty"`
+	Detail         string          `json:"detail,omitempty"`
+	URI            string          `json:"uri"`
+	Range          Range           `json:"range"`
+	SelectionRange Range           `json:"selectionRange"`
+	Data           json.RawMessage `json:"data,omitempty"`
+}
+
+// CallHierarchyCallsParams is the shared parameter shape of the
+// callHierarchy/incomingCalls and callHierarchy/outgoingCalls requests: the
+// prepared item whose callers/callees are wanted.
+type CallHierarchyCallsParams struct {
+	Item CallHierarchyItem `json:"item"`
+}
+
+// CallHierarchyIncomingCall is one caller of an item; FromRanges are the call
+// sites inside From's document.
+type CallHierarchyIncomingCall struct {
+	From       CallHierarchyItem `json:"from"`
+	FromRanges []Range           `json:"fromRanges"`
+}
+
+// CallHierarchyOutgoingCall is one callee of an item; FromRanges are the call
+// sites inside the *queried* item's document.
+type CallHierarchyOutgoingCall struct {
+	To         CallHierarchyItem `json:"to"`
+	FromRanges []Range           `json:"fromRanges"`
 }
 
 // --- formatting ---

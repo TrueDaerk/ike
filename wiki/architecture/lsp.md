@@ -1,7 +1,7 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/formatting/rename/code-actions rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
 timestamp: 2026-07-11T21:30:00Z
@@ -46,7 +46,7 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.format` /
+exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
 registry commands.
 
@@ -123,6 +123,20 @@ reuses it for the **multi-target picker** (#279): more than one definition
 site (interface implementations, build-tag variants) opens the same palette
 list — placeholder "Definitions — pick a target…" — instead of guessing the
 first location; a single site still jumps directly.
+
+**Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, leader
+`H` — lowercase `h` is the notification history) sends
+`textDocument/prepareCallHierarchy` from the cursor and opens the prepared
+items in the call-hierarchy overlay (`internal/callhier`): a centered modal
+rendering callers (default) or callees as a lazily-expanding tree. Expanding a
+node runs the bridge-built `Fetch` continuation (`callHierarchy/incomingCalls`
+/ `outgoingCalls`); the reply arrives as a `CallHierarchyCallsMsg` keyed by
+request id, so stale replies (after a direction toggle) fall on the floor.
+`tab` flips callers/callees on the same roots, `enter` navigates through the
+shared `DefinitionMsg` path — a caller row jumps to the call site
+(`fromRanges[0]`), a callee row to its declaration. Nothing prepared (cursor
+not on a callable, or the server lacks `callHierarchyProvider`) is an info
+toast.
 
 **Workspace symbols (0250, #294/#295).** `project.goToClass` (default
 `cmd+o`, leader `S` — off macOS `ctrl+o` is vim jump-back) opens the palette

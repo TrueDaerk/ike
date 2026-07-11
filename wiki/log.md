@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- LSP call hierarchy (#173): `lsp.callHierarchy` (`ctrl+alt+h`, leader `H`)
+  prepares the symbol under the cursor and opens a lazily-expanding
+  callers/callees tree overlay (`internal/callhier`); `tab` flips the
+  direction, `enter` jumps to the call site / declaration. See
+  [LSP](/architecture/lsp.md).
+
 - Tree-sitter language injections (#299): embedded fragments (SQL in Python
   strings) now highlight with the fragment language's own grammar. The SQL
   plugin gained a Tree-sitter grammar (DerekStride/tree-sitter-sql), so .sql
