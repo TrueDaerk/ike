@@ -1995,6 +1995,7 @@ func (m *Model) openHelp() {
 	// yet appear with their dependency instead of vanishing. Built live from
 	// the effective table on every open.
 	m.help.SetExtra(m.blockedHelpGroup())
+	m.help.SetFilter("") // each open starts unfiltered (#271)
 	m.help.Snapshot(m.focusContext())
 	m.shell.SetContent(m.help)
 	m.shell.SetSize(m.width, m.height)

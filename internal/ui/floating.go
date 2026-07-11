@@ -8,6 +8,7 @@ package ui
 
 import (
 	"image/color"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -125,9 +126,21 @@ func (f *Floating) SetSize(width, height int) {
 	f.relayout()
 }
 
-// Update handles shell keys while open: a dismiss key closes it, every other
-// key is a scroll key. It reports whether the message was consumed, so the host
-// can suppress all other routing while the shell is open.
+// Filterable is an optional Content extension (#271): when the installed
+// content implements it, printable keys typed while the shell is open become
+// a live filter string instead of scroll keys. Dismiss keys that double as
+// letters (q, ?) dismiss only while the filter is empty; esc first clears an
+// active filter, a second esc closes.
+type Filterable interface {
+	Content
+	SetFilter(string)
+	Filter() string
+}
+
+// Update handles shell keys while open: a dismiss key closes it, printable
+// keys feed a Filterable content's live filter, every other key is a scroll
+// key. It reports whether the message was consumed, so the host can suppress
+// all other routing while the shell is open.
 func (f *Floating) Update(msg tea.Msg) bool {
 	if !f.open {
 		return false
@@ -137,6 +150,9 @@ func (f *Floating) Update(msg tea.Msg) bool {
 		f.SetSize(msg.Width, msg.Height)
 		return true
 	case tea.KeyMsg:
+		if flt, ok := f.content.(Filterable); ok && f.filterKey(flt, msg.String()) {
+			return true
+		}
 		if f.dismiss[msg.String()] {
 			f.Close()
 			return true
@@ -144,6 +160,39 @@ func (f *Floating) Update(msg tea.Msg) bool {
 		f.scroll.Update(msg)
 		return true
 	}
+	return true
+}
+
+// filterKey applies one key to the live filter, reporting whether it consumed
+// the key. Unconsumed keys fall through to dismiss/scroll handling.
+func (f *Floating) filterKey(flt Filterable, key string) bool {
+	cur := flt.Filter()
+	switch key {
+	case "esc":
+		if cur == "" {
+			return false // fall through: esc closes the shell
+		}
+		flt.SetFilter("")
+		f.relayout()
+		return true
+	case "backspace":
+		if cur == "" {
+			return false
+		}
+		r := []rune(cur)
+		flt.SetFilter(string(r[:len(r)-1]))
+		f.relayout()
+		return true
+	}
+	r := []rune(key)
+	if len(r) != 1 || !unicode.IsPrint(r[0]) {
+		return false // chords, arrows, page keys: scroll handling
+	}
+	if cur == "" && f.dismiss[key] {
+		return false // q / ? dismiss while nothing is being filtered
+	}
+	flt.SetFilter(cur + key)
+	f.relayout()
 	return true
 }
 

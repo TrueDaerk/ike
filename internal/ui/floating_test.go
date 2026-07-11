@@ -168,3 +168,45 @@ func TestModelContentAdapter(t *testing.T) {
 		t.Fatal("nil body should render empty")
 	}
 }
+
+// filterableContent is a Filterable stub recording its filter.
+type filterableContent struct {
+	ModelContent
+	filter string
+}
+
+func (f *filterableContent) SetFilter(s string) { f.filter = s }
+func (f *filterableContent) Filter() string     { return f.filter }
+
+func TestFilterableTypingAndDismissRules(t *testing.T) {
+	f := New(Config{DismissKeys: []string{"esc", "q"}})
+	fc := &filterableContent{ModelContent: ModelContent{Heading: "T", Body: func() string { return "b" }}}
+	f.SetSize(80, 24)
+	f.SetContent(fc)
+	f.Open()
+
+	key := func(s string) tea.Msg { return tea.KeyPressMsg{Text: s, Code: rune(s[0])} }
+
+	// Typing builds the filter; q with an active filter is a letter.
+	f.Update(key("s"))
+	f.Update(key("q"))
+	if fc.filter != "sq" {
+		t.Fatalf("filter = %q, want sq (q is a letter mid-filter)", fc.filter)
+	}
+
+	// Backspace shortens; esc clears the filter but keeps the shell open.
+	f.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if fc.filter != "s" {
+		t.Fatalf("backspace: filter = %q, want s", fc.filter)
+	}
+	f.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if fc.filter != "" || !f.IsOpen() {
+		t.Fatalf("esc must clear the filter and keep the shell open (filter=%q open=%v)", fc.filter, f.IsOpen())
+	}
+
+	// With an empty filter, q dismisses; esc would too.
+	f.Update(key("q"))
+	if f.IsOpen() {
+		t.Fatal("q on an empty filter must dismiss the shell")
+	}
+}
