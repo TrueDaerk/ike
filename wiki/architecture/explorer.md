@@ -168,6 +168,13 @@ is open `Prompting()` is true, and the root model routes every key straight to
 the explorer (ahead of the keymap and global layers) so typed names and answers
 are not stolen by other bindings.
 
+That routing only fires while the explorer pane holds focus, so a prompt-opening
+op dispatched from elsewhere — the command palette with an editor focused —
+first moves focus to the explorer (`focusExplorer` in
+`internal/app/explorer_toggle.go`, re-showing a hidden tree via `showExplorer`)
+before the message reaches `Update` (#374). Otherwise the typed filename would
+execute as vim commands against the buffer.
+
 A `promptInput`'s text carries a rune-index cursor (`prompt.pos`), not just
 append/backspace at the end: `Left`/`Right` step it, `Home`/`End` jump it,
 `Delete` removes forward, and typed text/`Backspace` act at `pos` rather than

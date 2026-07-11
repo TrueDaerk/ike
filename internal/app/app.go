@@ -1282,6 +1282,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.finishMoveFile(msg.Dir)
 
 	case explorer.Msg:
+		// File ops that open a modal prompt render it in the explorer pane,
+		// but the prompt only receives keys while that pane holds focus. A
+		// palette invocation leaves focus wherever it was — typed filenames
+		// would execute as vim commands in the editor (#374) — so move focus
+		// to the explorer first, re-showing it when hidden.
+		switch msg.(type) {
+		case explorer.NewFileMsg, explorer.NewDirMsg, explorer.DeleteMsg, explorer.RenameMsg:
+			m.focusExplorer()
+		}
 		exp := m.explorer()
 		var cmd tea.Cmd
 		*exp, cmd = exp.Update(msg)
