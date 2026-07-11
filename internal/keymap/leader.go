@@ -52,6 +52,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// A (shift+a) mirrors the fragile cmd+shift+a primary; double-shift needs
 	// key-up reporting, so the leader path is the universal escape (#236).
 	{"A", "palette.searchEverywhere", "Search everywhere"},
+	// A doubled leader is the terminal stand-in for JetBrains' double-shift
+	// (0082 sheet 17, #263): space space opens search-everywhere.
+	{"space", "palette.searchEverywhere", "Search everywhere (double-tap)"},
 	{"o", "editor.tab.reopenClosed", "Reopen closed tab"},
 	// Navigation history (Roadmap 0220): the primary cmd+bracket chords are
 	// fragile and awkward on QWERTZ; b(ack) and i (vim's ctrl+i forward

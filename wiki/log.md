@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Search-everywhere follow-ups (#263): `space space` opens the mode (the
+  terminal stand-in for JetBrains' double-shift, via the leader engine), and
+  an empty query now lists the recent files first (active file excluded)
+  before the command listing. From 0082 sheet 17 (#20). Documented in
+  [Command Palette](/architecture/command-palette.md).
+
 - Save feedback on the ex line (#261): `:w` / `cmd+s` report `"file" written`
   on success and a vim-style `E: <error>` on failure (previously silent);
   a failed write keeps the buffer dirty, aborts `:wq`, and a nameless

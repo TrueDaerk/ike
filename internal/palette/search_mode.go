@@ -23,6 +23,7 @@ const searchAllPerKind = 8
 // underlying item carries (RunCommandMsg / OpenFileMsg).
 type SearchAllMode struct {
 	sources []Mode // composed modes, in kind-tiebreak order
+	recents Mode   // optional; listed first on an empty query (#263)
 }
 
 // NewSearchAllMode builds the search-everywhere mode over the already-built
@@ -30,6 +31,11 @@ type SearchAllMode struct {
 func NewSearchAllMode(sources ...Mode) *SearchAllMode {
 	return &SearchAllMode{sources: sources}
 }
+
+// SetRecents installs the recent-files mode shown while the query is empty:
+// JetBrains' Search Everywhere opens on recents, not on a directory walk
+// (0082 sheet 17, #263).
+func (s *SearchAllMode) SetRecents(m Mode) { s.recents = m }
 
 // Prefix implements Mode.
 func (s *SearchAllMode) Prefix() rune { return SearchAllPrefix }
@@ -39,8 +45,18 @@ func (s *SearchAllMode) Placeholder() string { return "Search everywhere…" }
 
 // Results implements Mode. Each source is queried and capped, then the union
 // is ordered by score; the stable sort keeps earlier sources (commands) ahead
-// on equal scores.
+// on equal scores. An empty query lists the recent files first (most recent
+// first, active file excluded) followed by the first source's listing; with
+// no MRU history it falls through to the plain source listing.
 func (s *SearchAllMode) Results(query string, cx Context) []Item {
+	if query == "" && s.recents != nil {
+		if rec := capped(s.recents, "", cx); len(rec) > 0 {
+			if len(s.sources) > 0 {
+				rec = append(rec, capped(s.sources[0], "", cx)...)
+			}
+			return rec
+		}
+	}
 	var merged []Item
 	for _, src := range s.sources {
 		merged = append(merged, capped(src, query, cx)...)

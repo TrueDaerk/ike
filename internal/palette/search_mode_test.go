@@ -92,3 +92,39 @@ func TestSearchAllPreservesUnderlyingMsgAndDetail(t *testing.T) {
 		t.Fatalf("file msg = %+v, want OpenFileMsg{/root/a/b.go}", items[1].Msg)
 	}
 }
+
+func TestSearchAllEmptyQueryListsRecentsFirst(t *testing.T) {
+	cmds := stubMode{prefix: ':', items: []Item{{Title: "Some Command", Score: 0}}}
+	files := stubMode{prefix: '@', items: []Item{{Title: "walk.go", Score: 0}}}
+	rec := stubMode{prefix: '%', items: []Item{{Title: "recent.go", Score: 0, Msg: OpenFileMsg{Path: "recent.go"}}}}
+	m := NewSearchAllMode(cmds, files)
+	m.SetRecents(rec)
+
+	items := m.Results("", Context{})
+	if len(items) != 2 {
+		t.Fatalf("empty query: got %d items, want recents + commands", len(items))
+	}
+	if items[0].Title != "% recent.go" || items[1].Title != ": Some Command" {
+		t.Fatalf("empty query order = %q, %q; want recents first, commands after", items[0].Title, items[1].Title)
+	}
+
+	// A typed query composes commands and files as before — recents step aside.
+	items = m.Results("x", Context{})
+	for _, it := range items {
+		if it.Title == "% recent.go" {
+			t.Fatal("recents must not join ranked non-empty queries")
+		}
+	}
+}
+
+func TestSearchAllEmptyQueryWithoutRecentsKeepsListing(t *testing.T) {
+	cmds := stubMode{prefix: ':', items: []Item{{Title: "Cmd", Score: 0}}}
+	files := stubMode{prefix: '@', items: []Item{{Title: "f.go", Score: 0}}}
+	m := NewSearchAllMode(cmds, files)
+	m.SetRecents(stubMode{prefix: '%'}) // MRU empty (fresh session)
+
+	items := m.Results("", Context{})
+	if len(items) != 2 {
+		t.Fatalf("empty MRU must fall back to the plain listing, got %d items", len(items))
+	}
+}
