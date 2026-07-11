@@ -52,9 +52,15 @@ type Model struct {
 	cat           int
 	sel           int // index into rows()
 
+	catOff  int // scroll offset of the category column
+	formOff int // scroll offset (in rendered lines) of the form column
+
 	editing bool
 	input   string
 	invalid string // inline validation error for the current edit
+
+	picking bool // enum picker open for the selected row
+	pickIdx int  // highlighted option inside the picker
 
 	filtering bool
 	filter    string
@@ -86,7 +92,8 @@ func (m *Model) Open() {
 	m.open = true
 	m.focus = catColumn
 	m.cat, m.sel = 0, 0
-	m.editing, m.filtering = false, false
+	m.catOff, m.formOff = 0, 0
+	m.editing, m.filtering, m.picking = false, false, false
 	m.filter, m.input, m.invalid = "", "", ""
 }
 
@@ -148,7 +155,7 @@ func value(key string) string {
 // selects its entry, and a press on the already-selected entry activates it —
 // the same semantics as enter.
 func (m *Model) Click(x, y int) tea.Cmd {
-	if !m.open || m.editing || m.filtering {
+	if !m.open || m.editing || m.filtering || m.picking {
 		return nil
 	}
 	const bodyTop = 2 // border row + title row
@@ -158,8 +165,8 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	}
 	// Category column.
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
-		if row < len(m.pages) {
-			m.cat, m.sel, m.focus = row, 0, catColumn
+		if idx := row + m.catOff; idx < len(m.pages) {
+			m.cat, m.sel, m.focus = idx, 0, catColumn
 		}
 		return nil
 	}
@@ -173,9 +180,10 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	// Recreate renderForm's row layout: the selected entry carries one extra
 	// detail line that shifts everything below it.
 	rows := m.rows()
+	target := row + m.formOff
 	line := 0
 	for i := range rows {
-		if line == row {
+		if line == target {
 			if i == m.sel && m.focus == formColumn {
 				return m.activate()
 			}
@@ -209,18 +217,22 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	if m.editing {
 		return m.updateEdit(key)
 	}
+	if m.picking {
+		return m.updatePick(key)
+	}
 	if m.filtering {
 		return m.updateFilter(key)
 	}
 	// A custom page in capture mode gets every key verbatim; otherwise it gets
-	// everything but the panel's own chrome keys (tab / esc).
+	// everything but the panel's own chrome keys (tab / esc / arrow-left back
+	// to the categories — plain "h" stays with the page, it may be filter text).
 	if page := m.customPage(); page != nil && m.filter == "" {
 		if page.Capturing() {
 			return page.Update(key)
 		}
 		if m.focus == formColumn {
 			switch key.String() {
-			case "tab":
+			case "tab", "left":
 				m.focus = catColumn
 				return nil
 			case "esc":
@@ -248,6 +260,29 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.move(-1)
 	case "down", "j":
 		m.move(1)
+	case "right", "l":
+		if m.focus == catColumn && m.filter == "" {
+			m.focus = formColumn
+			m.sel = 0
+			return nil
+		}
+		if m.focus == formColumn {
+			return m.cycleEnum(1) // quick next on an enum row; no-op otherwise
+		}
+	case "left", "h":
+		if m.focus != formColumn {
+			return nil
+		}
+		// Arrow-left on an enum row is the quick prev-cycle; "h" (and left on
+		// any other row) returns to the category column.
+		if key.String() == "left" {
+			if cmd := m.cycleEnum(-1); cmd != nil {
+				return cmd
+			}
+		}
+		if m.filter == "" {
+			m.focus = catColumn
+		}
 	case "enter":
 		if m.focus == catColumn && m.filter == "" {
 			m.focus = formColumn
@@ -295,17 +330,12 @@ func (m *Model) activate() tea.Cmd {
 		}
 		return config.WriteAndReload(m.opts, e.Scope, e.Key, next == "true")
 	case Enum:
-		cur := value(e.Key)
-		next := 0
-		for i, o := range e.Options {
-			if o == cur {
-				next = (i + 1) % len(e.Options)
-			}
-		}
 		if len(e.Options) == 0 {
 			return nil
 		}
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[next])
+		m.picking = true
+		m.pickIdx = optionIndex(e, value(e.Key))
+		return nil
 	default:
 		m.editing = true
 		m.invalid = ""
@@ -315,6 +345,51 @@ func (m *Model) activate() tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// optionIndex returns the position of val in e.Options (0 when absent).
+func optionIndex(e Entry, val string) int {
+	for i, o := range e.Options {
+		if o == val {
+			return i
+		}
+	}
+	return 0
+}
+
+// cycleEnum writes the selected enum row's next (dir=1) or previous (dir=-1)
+// option; nil when the selection is not an enum.
+func (m *Model) cycleEnum(dir int) tea.Cmd {
+	r, ok := m.current()
+	if !ok || r.entry.Type != Enum || len(r.entry.Options) == 0 {
+		return nil
+	}
+	e := r.entry
+	n := len(e.Options)
+	next := (optionIndex(e, value(e.Key)) + dir + n) % n
+	return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[next])
+}
+
+// updatePick handles keys while the enum picker is open.
+func (m *Model) updatePick(key tea.KeyPressMsg) tea.Cmd {
+	r, ok := m.current()
+	if !ok || len(r.entry.Options) == 0 {
+		m.picking = false
+		return nil
+	}
+	e := r.entry
+	switch key.String() {
+	case "esc":
+		m.picking = false
+	case "up", "k":
+		m.pickIdx = clamp(m.pickIdx-1, 0, len(e.Options)-1)
+	case "down", "j":
+		m.pickIdx = clamp(m.pickIdx+1, 0, len(e.Options)-1)
+	case "enter":
+		m.picking = false
+		return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[m.pickIdx])
+	}
+	return nil
 }
 
 // updateEdit handles keys during an inline edit.
