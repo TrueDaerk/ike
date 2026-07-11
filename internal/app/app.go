@@ -1358,6 +1358,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.SplitFocused(msg.Zone)
 		return m, nil
 
+	case SplitViewMsg:
+		// editor.splitViewRight / editor.splitViewDown (#147): second shared
+		// view of the focused editor's document.
+		return m.splitView(msg.Zone)
+
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the floating settings panel.
 		w, h := m.settingsSize()
@@ -2312,6 +2317,35 @@ func (m *Model) SplitFocused(zone layout.Zone) {
 	m.setFocus(newKey)
 	m.layout()
 	saveLayout(m.tree, m.panes)
+}
+
+// splitView implements editor.splitViewRight/Down (#147): split the focused
+// editor leaf toward zone and turn the new pane into a second live view of
+// the same document (#142), with cursor and scroll copied from the source so
+// both views start at the same spot; the new view keeps the focus JetBrains
+// gives it. A pane without a file (scratch editor, explorer, terminal) is a
+// no-op with a toast — there is no document to share.
+func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
+	target := m.panes.Focused()
+	inst := m.panes.Get(target)
+	if inst == nil || inst.Kind() != pane.KindEditor || !inst.Editor().HasFile() {
+		m.host.Notify(host.Info, "no file to split — open one first")
+		return m, nil
+	}
+	src := inst.Editor()
+	line, col := src.CursorPos()
+	top, left := src.ScrollOffset()
+	m.SplitFocused(zone)
+	newKey := m.panes.Focused()
+	if newKey == target {
+		return m, nil // split failed (leaf vanished mid-flight); nothing changed
+	}
+	ed := m.panes.Get(newKey).Editor()
+	ed.ShareDocumentWith(src)
+	ed.SetCursor(line, col)
+	ed.SetScroll(top, left)
+	m.syncExplorerOpen()
+	return m, ed.Reparse()
 }
 
 // spawnEditor splits the active editor's leaf toward the default zone, returning

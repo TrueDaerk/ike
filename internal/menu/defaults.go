@@ -23,6 +23,8 @@ func Defaults() []Menu {
 		}},
 		{Title: "View", Items: []Item{
 			{Title: "Focus Explorer / Editor", Command: "explorer.toggle"},
+			{Title: "Split View Right", Command: "editor.splitViewRight"},
+			{Title: "Split View Down", Command: "editor.splitViewDown"},
 			{Title: "Zen Mode", Command: "view.zenMode"},
 		}},
 		{Title: "Navigate", Items: []Item{

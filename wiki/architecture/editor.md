@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-11T09:30:00Z
+timestamp: 2026-07-11T11:30:00Z
 ---
 
 # Editor
@@ -338,6 +338,14 @@ Two editor panes showing the same file are two **views of one document**
 - Known edge: `:e` inside a pane loads a fresh copy and leaves any prior
   sharing (it re-points that pane's document); `:w otherfile` re-targets only
   the saving view's path.
+- **Split view (#147):** `editor.splitViewRight` / `editor.splitViewDown`
+  (`cmd+k shift+right` / `cmd+k shift+down`, View menu, palette) split the
+  focused editor and make the new pane a second view directly — no explorer
+  detour. Unlike an explorer open (which starts at the top), cursor and scroll
+  are **copied from the source view**, and the new view gets focus
+  (JetBrains). A file-less editor is a no-op with a toast. Layout and session
+  persistence need nothing new: the split is an ordinary leaf and restore
+  re-shares by path.
 
 ## Config
 
