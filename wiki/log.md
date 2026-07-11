@@ -2,6 +2,10 @@
 
 ## 2026-07-11
 
+- ctrl+space triggers completion manually (#302): both the Kitty and the
+  legacy NUL spelling emit the same trigger event the "." auto-path uses.
+  Documented in [LSP](/architecture/lsp.md).
+
 - LSP popup fixes from live use (#306, #307, #308): signature/hover popups
   clamp to the owning pane (width wrap, ellipsis row, shift/flip placement),
   mouse clicks dismiss cursor-anchored popups, the completion list shows an

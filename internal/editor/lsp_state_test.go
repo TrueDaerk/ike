@@ -105,3 +105,28 @@ func TestHoverShowsAndDismisses(t *testing.T) {
 		t.Error("hover should be dismissed on key press")
 	}
 }
+
+// TestCtrlSpaceTriggersCompletion guards #302: ctrl+space in insert mode
+// emits the completion-trigger event (both the Kitty ctrl+' ' and the legacy
+// ctrl+@ spellings), and a re-press with the popup open re-queries.
+func TestCtrlSpaceTriggersCompletion(t *testing.T) {
+	m, _ := loaded(t, "fmt\n")
+	var got []EventKind
+	m.SetEmitter(EmitterFunc(func(e Event) { got = append(got, e.Kind) }))
+	m = insertModeAt(m, 0, 3)
+
+	m = send(m, tea.KeyPressMsg{Code: ' ', Mod: tea.ModCtrl})
+	m = send(m, tea.KeyPressMsg{Code: '@', Mod: tea.ModCtrl})
+	n := 0
+	for _, k := range got {
+		if k == EventCompletionTrigger {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Fatalf("ctrl+space variants must emit completion triggers, got %d of %v", n, got)
+	}
+	if line(m, 0) != "fmt" {
+		t.Fatalf("ctrl+space must not insert text, line=%q", line(m, 0))
+	}
+}
