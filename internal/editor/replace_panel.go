@@ -4,6 +4,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/search"
@@ -24,16 +26,23 @@ import (
 type replacePanel struct {
 	find, repl string
 	field      int // 0 = Find, 1 = Replace
+	// preselect marks a prefilled Find as selected (#292, mirroring the
+	// find-in-path overlay's #277): the first typed rune replaces it
+	// wholesale, any other key keeps the text and drops the mark.
+	preselect bool
 }
 
 // beginReplacePanel opens the panel (editor.replace, cmd+r / leader R). The
-// committed literal search seeds the Find field; cursor and viewport are
-// captured so Esc restores them exactly, sharing the search-origin plumbing.
+// committed literal search seeds the Find field, else the panel's last use
+// does (#292); Replace always starts from the last use. Cursor and viewport
+// are captured so Esc restores them exactly, sharing the search-origin
+// plumbing.
 func (m *Model) beginReplacePanel() {
-	m.replPanel = &replacePanel{}
+	m.replPanel = &replacePanel{find: m.panelFind, repl: m.panelRepl}
 	if !m.query.Empty() && !m.query.Regex {
 		m.replPanel.find = m.query.Pattern
 	}
+	m.replPanel.preselect = m.replPanel.find != ""
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
 	m.previewPanelFind()
@@ -57,7 +66,9 @@ func (m *Model) previewPanelFind() {
 
 // closeReplacePanel dismisses the panel; restore puts cursor and viewport
 // back at the captured origin (Esc), while a finishing substitute keeps them.
+// The fields are remembered for the next open either way (#292).
 func (m *Model) closeReplacePanel(restore bool) {
+	m.panelFind, m.panelRepl = m.replPanel.find, m.replPanel.repl
 	m.replPanel = nil
 	m.preview = search.Query{}
 	if restore {
@@ -68,6 +79,12 @@ func (m *Model) closeReplacePanel(restore bool) {
 // updateReplacePanel consumes one key while the panel is open.
 func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	p := m.replPanel
+	// A fresh key clears a lingering panel error ("E: empty pattern") and,
+	// #277-style, ends the prefill selection — only a typed rune below still
+	// sees it (and replaces the field wholesale).
+	m.cmdMsg = ""
+	pre := p.preselect
+	p.preselect = false
 	switch {
 	case key.Code == tea.KeyEscape:
 		m.closeReplacePanel(true)
@@ -91,6 +108,9 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.previewPanelFind()
 		}
 	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+		if pre && p.field == 0 {
+			p.find = "" // typing replaces the preselected prefill (#292)
+		}
 		*m.panelField() += key.Text
 		if p.field == 0 {
 			m.previewPanelFind()
@@ -159,11 +179,21 @@ func (m Model) replacePanelRows(width int) []string {
 	find := "Find     " + m.panelInput(p.find, p.field == 0) + tally
 	repl := "Replace  " + m.panelInput(p.repl, p.field == 1)
 	hint := "[enter] confirm each · [ctrl+a] replace all · [tab] switch field · [esc] cancel"
+	if m.cmdMsg != "" {
+		// Panel errors ("E: empty pattern") render where the ex line would
+		// (#292) — the hint row is the panel's message surface.
+		hint = m.cmdMsg
+	}
 	return []string{truncRow(find, width), truncRow(repl, width), truncRow(hint, width)}
 }
 
 // panelInput renders one field's text, the active one with a cursor block.
+// A preselected Find prefill renders inverted so it reads as replace-on-type
+// (#292).
 func (m Model) panelInput(text string, active bool) string {
+	if m.replPanel.preselect && active && m.replPanel.field == 0 && text != "" {
+		text = lipgloss.NewStyle().Reverse(true).Render(text)
+	}
 	if active {
 		return text + "▏"
 	}

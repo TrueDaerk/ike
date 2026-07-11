@@ -1204,6 +1204,56 @@ func TestReplaceActionOpensPanel(t *testing.T) {
 	}
 }
 
+// TestReplacePanelRemembersFields guards #292: re-opening the panel restores
+// the last find/replace strings, with the Find prefill preselected — typing
+// replaces it wholesale, backspace edits it.
+func TestReplacePanelRemembersFields(t *testing.T) {
+	m, _ := loaded(t, "one two one\n")
+	m, _ = m.runAction("replace")
+	m = typeKeys(m, "one")
+	m = send(m, special(tea.KeyTab))
+	m = typeKeys(m, "X")
+	m = send(m, special(tea.KeyEscape))
+
+	m, _ = m.runAction("replace")
+	p := m.replPanel
+	if p == nil || p.find != "one" || p.repl != "X" || !p.preselect {
+		t.Fatalf("re-open should restore fields preselected, got %+v", p)
+	}
+	m = typeKeys(m, "z") // typing replaces the preselected prefill
+	if m.replPanel.find != "z" {
+		t.Fatalf("typing over the prefill should replace it, got %q", m.replPanel.find)
+	}
+
+	m = send(m, special(tea.KeyEscape))
+	m, _ = m.runAction("replace")
+	m = send(m, special(tea.KeyBackspace)) // backspace edits, keeps the rest
+	if m.replPanel.find != "" || m.replPanel.preselect {
+		t.Fatalf("backspace should edit the one-rune prefill, got %q preselect=%v", m.replPanel.find, m.replPanel.preselect)
+	}
+}
+
+// TestReplacePanelErrorVisibleInRows guards #292: enter on an empty pattern
+// renders its error on the panel's hint row (the ex line is covered).
+func TestReplacePanelErrorVisibleInRows(t *testing.T) {
+	m, _ := loaded(t, "one two one\n")
+	m.SetSize(60, 8)
+	m, _ = m.runAction("replace")
+	m = send(m, special(tea.KeyEnter))
+	if m.replPanel == nil {
+		t.Fatal("an empty pattern must keep the panel open")
+	}
+	rows := m.replacePanelRows(60)
+	if len(rows) != 3 || !strings.Contains(rows[2], "empty pattern") {
+		t.Fatalf("the error must render on the hint row, got %q", rows)
+	}
+	// The next key clears the message and the hint returns.
+	m = typeKeys(m, "o")
+	if rows := m.replacePanelRows(60); !strings.Contains(rows[2], "[enter]") {
+		t.Fatalf("hint row should return after the next key, got %q", rows[2])
+	}
+}
+
 // TestReplacePanelReplaceAll: typing both fields and ctrl+a runs the g
 // substitute with the engine's report; one undo unit reverts it all.
 func TestReplacePanelReplaceAll(t *testing.T) {
