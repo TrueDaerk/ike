@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Document highlight (#172): occurrences of the symbol under the cursor are
+  marked with a subtle background (read cool / write warm via the new
+  `OccurrenceRead`/`OccurrenceWrite` theme slots), debounced 150 ms on cursor
+  moves; fragment positions route to the fragment's server. See
+  [lsp](/architecture/lsp.md).
+
 - Fragment diagnostics (#415): diagnostics published on fragment documents
   now map back onto the host buffer and merge with the host server's own
   diagnostics into a single host-path publish (`manager/fragdiags.go`).

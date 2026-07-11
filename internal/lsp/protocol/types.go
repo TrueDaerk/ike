@@ -155,6 +155,8 @@ type ServerCapabilities struct {
 	DefinitionProvider json.RawMessage    `json:"definitionProvider,omitempty"`
 	ReferencesProvider json.RawMessage    `json:"referencesProvider,omitempty"`
 
+	DocumentHighlightProvider json.RawMessage `json:"documentHighlightProvider,omitempty"`
+
 	DocumentFormattingProvider      json.RawMessage        `json:"documentFormattingProvider,omitempty"`
 	DocumentRangeFormattingProvider json.RawMessage        `json:"documentRangeFormattingProvider,omitempty"`
 	RenameProvider                  json.RawMessage        `json:"renameProvider,omitempty"`
@@ -476,6 +478,30 @@ type ReferenceParams struct {
 // ReferenceContext carries the one request option references defines.
 type ReferenceContext struct {
 	IncludeDeclaration bool `json:"includeDeclaration"`
+}
+
+// --- document highlight ---
+
+// DocumentHighlightParams is the textDocument/documentHighlight request
+// (#172): the occurrences of the symbol at a position within its document.
+type DocumentHighlightParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// DocumentHighlightKind values (LSP): a plain textual occurrence, a read
+// access, a write access.
+const (
+	HighlightText  = 1
+	HighlightRead  = 2
+	HighlightWrite = 3
+)
+
+// DocumentHighlight is one occurrence of the symbol under the cursor. Kind is
+// optional; absent means HighlightText.
+type DocumentHighlight struct {
+	Range Range `json:"range"`
+	Kind  int   `json:"kind,omitempty"`
 }
 
 // --- call hierarchy ---

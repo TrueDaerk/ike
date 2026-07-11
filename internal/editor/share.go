@@ -49,6 +49,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.searching = false
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	m.scroll()
 }
 
@@ -72,5 +73,6 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	m.occurrences = nil
 	return m, m.parseCmd()
 }

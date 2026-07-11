@@ -119,6 +119,20 @@ func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]
 	return decodeLocations(raw), nil
 }
 
+// DocumentHighlight requests the occurrences of the symbol at a position
+// (#172). A null result (position not on a symbol) is an empty slice.
+func (c *Client) DocumentHighlight(ctx context.Context, p protocol.DocumentHighlightParams) ([]protocol.DocumentHighlight, error) {
+	raw, err := c.conn.Call(ctx, "textDocument/documentHighlight", p)
+	if err != nil {
+		return nil, err
+	}
+	var hs []protocol.DocumentHighlight
+	if err := json.Unmarshal(raw, &hs); err != nil {
+		return nil, nil // null / unexpected shape: nothing to mark
+	}
+	return hs, nil
+}
+
 // PrepareCallHierarchy resolves the symbol at a position into call-hierarchy
 // items (#173). A null result (position not on a callable) is an empty slice.
 func (c *Client) PrepareCallHierarchy(ctx context.Context, p protocol.CallHierarchyPrepareParams) ([]protocol.CallHierarchyItem, error) {

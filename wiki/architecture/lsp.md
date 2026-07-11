@@ -1,10 +1,10 @@
 ---
 type: concept
 title: LSP & Language Intelligence
-description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
+description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T22:30:00Z
+timestamp: 2026-07-11T23:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -249,6 +249,22 @@ edge, and the app feeds the terminal-derived width cap in via
 `SetPopupMaxWidth`. The #306 safety nets stay: long signatures wrap at the
 popup width cap (≤ 80) and over-tall content truncates at `popupMaxRows`
 with an ellipsis row. Gated on `signatureHelpProvider`.
+
+**Document highlight (#172).** Occurrences of the symbol under the cursor are
+marked automatically: every cursor move (and change) re-arms a 150 ms
+debounced `time.AfterFunc` in the bridge, so a `hjkl` motion burst fires one
+`textDocument/documentHighlight`, not one per step. The manager converts the
+result ranges to editor coordinates (it owns the synced lines, like
+formatting) and keeps the LSP kind; positions inside an embedded fragment
+route to the fragment's server with ranges mapped back onto the host
+(`fragmentDocumentHighlight`). The bridge sends `DocumentHighlightsMsg`
+anchored at the request cursor — the editor installs the marks only while the
+cursor still sits at that anchor (a raced reply clears instead) and renders
+them in `renderLine` as a subtle background under the syntax colour, below
+cursor/selection/search in precedence. Read and plain-text occurrences use
+the `OccurrenceRead` theme slot, writes `OccurrenceWrite` (see
+[themes](./themes.md)); errors stay silent — a passive decoration, not a
+user action.
 
 **Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
 relative 5-tuples against the server's legend into the same `highlight.Span`

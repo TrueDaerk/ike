@@ -276,6 +276,12 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			b.WriteString(matchStyle.Render(cell))
 		default:
 			st, styled := m.styleAt(line, col)
+			if kind, ok := m.occurrenceAt(line, col); ok {
+				// Occurrence mark (#172): a subtle background under the syntax
+				// colour; cursor/selection/search already won above.
+				st = st.Background(m.occurrenceColor(kind))
+				styled = true
+			}
 			if sev, ok := m.diagSeverityAt(line, col); ok {
 				// Diagnostic underline composes over the syntax colour (syntax base <
 				// diagnostic underline); cursor/selection already won above.

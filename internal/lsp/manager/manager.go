@@ -388,6 +388,39 @@ func (m *Manager) References(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// DocumentHighlight requests the occurrences of the symbol at an editor
+// position (#172), returned in editor coordinates (the manager owns the
+// synced document lines, so the conversion happens here, like Format).
+// Fragment positions route to the fragment's server like Hover.
+func (m *Manager) DocumentHighlight(ctx context.Context, path string, pos buffer.Position) ([]lsp.DocumentHighlight, error) {
+	if hs, handled, err := m.fragmentDocumentHighlight(ctx, path, pos); handled {
+		return hs, err
+	}
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().DocumentHighlight {
+		return nil, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	hs, err := srv.cl.DocumentHighlight(cctx, protocol.DocumentHighlightParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
+	})
+	if err != nil {
+		return nil, err
+	}
+	return convertHighlights(doc.lines, hs, srv.cl.Encoding()), nil
+}
+
+// convertHighlights maps protocol document highlights to editor coordinates.
+func convertHighlights(lines []string, hs []protocol.DocumentHighlight, enc string) []lsp.DocumentHighlight {
+	out := make([]lsp.DocumentHighlight, len(hs))
+	for i, h := range hs {
+		out[i] = lsp.DocumentHighlight{Range: protocol.FromLSPRange(lines, h.Range, enc), Kind: h.Kind}
+	}
+	return out
+}
+
 // PrepareCallHierarchy resolves the symbol at an editor position into
 // call-hierarchy items (#173), gated on the server capability.
 func (m *Manager) PrepareCallHierarchy(ctx context.Context, path string, pos buffer.Position) ([]protocol.CallHierarchyItem, error) {
