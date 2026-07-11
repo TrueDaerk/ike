@@ -16,6 +16,7 @@ func WordForwardBig(b *buffer.Buffer, from buffer.Position, count int) Result {
 func wordForward(b *buffer.Buffer, from buffer.Position, count int, big bool) Result {
 	p := from
 	for i := 0; i < max1(count); i++ {
+		start := p
 		// Advance past the current run of same non-blank class.
 		for c := classAt(b, p, big); c != clsBlank && classAt(b, p, big) == c; {
 			q, ok := next(b, p)
@@ -24,8 +25,13 @@ func wordForward(b *buffer.Buffer, from buffer.Position, count int, big bool) Re
 			}
 			p = q
 		}
-		// Skip blanks (including line breaks) to the next word start.
+		// Skip blanks (including line breaks) to the next word start. An empty
+		// line is itself a word in vim, so stop on one — unless it is where
+		// this step began.
 		for classAt(b, p, big) == clsBlank {
+			if p != start && b.RuneLen(p.Line) == 0 {
+				break
+			}
 			q, ok := next(b, p)
 			if !ok {
 				break
@@ -119,8 +125,12 @@ func wordBackward(b *buffer.Buffer, from buffer.Position, count int, big bool) R
 		if q, ok := prev(b, p); ok {
 			p = q
 		}
-		// Skip blanks backward.
+		// Skip blanks backward. An empty line is itself a word in vim, so
+		// stop on one.
 		for classAt(b, p, big) == clsBlank {
+			if b.RuneLen(p.Line) == 0 {
+				break
+			}
 			q, ok := prev(b, p)
 			if !ok {
 				break
