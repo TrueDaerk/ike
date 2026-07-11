@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor/search"
 	"ike/internal/host"
 )
 
@@ -1176,3 +1177,56 @@ func TestSaveScratchWithoutNameReportsError(t *testing.T) {
 		t.Fatalf("cmdMsg=%q want 'E: no file name' (#261)", m.cmdMsg)
 	}
 }
+
+// TestReplaceActionPrefillsExLine guards editor.replace phase 1 (#282): the
+// action opens the ":" line prefilled with a whole-file substitute, seeded
+// from the committed search when it is literal and slash-free.
+func TestReplaceActionPrefillsExLine(t *testing.T) {
+	m, _ := loaded(t, "foo bar\n")
+	m, _ = m.runAction("replace")
+	if m.ModeName() != Command || m.searching {
+		t.Fatal("replace must open the ex line, not search")
+	}
+	if m.cmdline != "%s//" {
+		t.Fatalf("cmdline = %q, want empty-pattern prefill", m.cmdline)
+	}
+
+	// A committed literal search seeds the pattern.
+	m = send(m, special(tea.KeyEscape))
+	m = typeKeys(m, "/foo")
+	m = send(m, special(tea.KeyEnter))
+	m, _ = m.runAction("replace")
+	if m.cmdline != "%s/foo/" {
+		t.Fatalf("cmdline = %q, want the last search seeded", m.cmdline)
+	}
+
+	// Typing the replacement and Enter runs the ordinary substitute.
+	m = typeKeys(m, "baz/g")
+	m = send(m, special(tea.KeyEnter))
+	if line(m, 0) != "baz bar" {
+		t.Fatalf("substitute result = %q, want baz bar", line(m, 0))
+	}
+}
+
+// TestReplacePrefillSkipsRegexAndSlashes: regex queries and patterns holding
+// a slash would break the %s/…/ prefill, so they seed nothing.
+func TestReplacePrefillSkipsRegexAndSlashes(t *testing.T) {
+	m, _ := loaded(t, "a/b a.b\n")
+	m = typeKeys(m, "/a\\vX") // nonsense; build a regex query directly instead
+	m = send(m, special(tea.KeyEscape))
+	m.query = searchCompileForTest(`a.b`, true)
+	m, _ = m.runAction("replace")
+	if m.cmdline != "%s//" {
+		t.Fatalf("regex query must not seed the prefill, got %q", m.cmdline)
+	}
+	m = send(m, special(tea.KeyEscape))
+	m.query = searchCompileForTest(`a/b`, false)
+	m, _ = m.runAction("replace")
+	if m.cmdline != "%s//" {
+		t.Fatalf("slash-holding pattern must not seed the prefill, got %q", m.cmdline)
+	}
+}
+
+// searchCompileForTest builds a query via the search package (kept here so the
+// test reads at the editor level).
+func searchCompileForTest(pat string, regex bool) search.Query { return search.Compile(pat, regex) }

@@ -393,6 +393,11 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.beginSearch(search.Forward)
+	case "replace":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.beginReplaceLine()
 	case "duplicate_line":
 		if m.insert.active {
 			m.commitInsert()

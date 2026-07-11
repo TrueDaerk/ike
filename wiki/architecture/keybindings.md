@@ -290,7 +290,7 @@ the fallback column is the path that always works.
 | `editor.lineStart` | `cmd+left` | fragile | `vim 0` | live via vim 0 |
 | `editor.paste` | `cmd+v` | fragile | `vim p` | live via vim p |
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
-| `editor.replace` | `cmd+r` | fragile | `—` | blocked: in-file replace UI (idea #49) |
+| `editor.replace` | `cmd+r` | fragile | `space shift+r` | live via space shift+r |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `space s` | live via space s |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
@@ -325,7 +325,7 @@ the fallback column is the path that always works.
 | `notifications.history` | `space h` | delivered | `—` | live |
 | `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
 | `palette.recentFiles` | `cmd+e` | fragile | `space m` | live via space m |
-| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `space shift+a` | live via space shift+a |
+| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `space space` | live via space space |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
 | `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |

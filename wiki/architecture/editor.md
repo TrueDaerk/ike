@@ -153,7 +153,12 @@ The grammar is `[range] name[!] [args]`:
 ### `:substitute` (`substitute.go`)
 
 `:[range]s/pat/repl/[flags]` rewrites lines over the resolved range (default: the
-current line). The pattern follows the search-layer convention — literal by
+current line). `editor.replace` (`cmd+r`, leader `R`; 0240 phase 1, #282)
+fronts this same engine: it opens the ex line prefilled with `%s/<pattern>/` —
+the committed search seeds the pattern when it is literal and slash-free — so
+typing the replacement (+ flags, incl. `c` confirm) and Enter runs the
+ordinary substitute. A dedicated two-field panel is Epic 0240 phase 2 (#283).
+The pattern follows the search-layer convention — literal by
 default, `\v` prefix for regex — so `:s//bar/` reuses the last search (then the
 last substitute) as its pattern. Any non-alphanumeric delimiter works
 (`:s#a#b#`), and `\<delim>` is a literal delimiter.

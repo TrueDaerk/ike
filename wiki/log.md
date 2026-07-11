@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- In-file replace, phase 1 (#282, Epic 0240 promoted from idea #49):
+  `editor.replace` (cmd+r, leader `R`) opens the ex line prefilled with
+  `%s/<pattern>/` (seeded from the committed search when literal and
+  slash-free) and runs through the existing `:substitute` engine — flags,
+  per-match confirm and single-undo included. The chord left the blocked
+  ledger. Documented in [Editor](/architecture/editor.md); status matrix
+  regenerated in [Keybindings](/architecture/keybindings.md).
+
 - Multi-target go-to-definition picker (#279): several definition sites open
   the references-style palette list ("Definitions — pick a target…") instead
   of silently jumping to the first; one site still jumps directly. The
