@@ -220,6 +220,9 @@ type Model struct {
 	// actions is the palette mode listing the latest code-action offer
 	// (lsp.codeAction, #8), same pattern as refs.
 	actions *actionsMode
+	// pasteHist is the palette mode over the focused editor's yank/delete
+	// history (#57), same pattern as refs.
+	pasteHist *pasteHistMode
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -289,6 +292,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	refs := &refsMode{}
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
+	pasteHist := &pasteHistMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	m := Model{
@@ -302,10 +306,11 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		bindings:     bindings,
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist),
 		refs:         refs,
 		symbols:      symbols,
 		actions:      actions,
+		pasteHist:    pasteHist,
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
 		focusKeys:    focusKeys(cfg),
@@ -820,7 +825,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -833,7 +838,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	scr := palette.NewScratchMode(scratchList)
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1454,6 +1459,32 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Root:       ".",
 			ActivePath: m.activeFilePath(),
 		}, palette.RecentPrefix)
+		return m, nil
+
+	case ShowPasteHistoryMsg:
+		// editor.pasteFromHistory (cmd+shift+v / Edit menu, #57): snapshot the
+		// focused editor's yank/delete history into the picker.
+		inst := m.panes.FocusedInstance()
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			m.host.Notify(host.Info, "paste history needs a focused editor")
+			return m, nil
+		}
+		hist := inst.Editor().RegisterHistory()
+		if len(hist) == 0 {
+			m.host.Notify(host.Info, "clipboard history is empty — yank or delete something first")
+			return m, nil
+		}
+		m.pasteHist.Set(hist)
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, pasteHistPrefix)
+		return m, nil
+
+	case PasteHistoryEntryMsg:
+		// A picker row was chosen: paste that entry into the focused editor
+		// with Cmd+V semantics (it also becomes the current clipboard).
+		if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+			inst.Editor().PasteHistoryEntry(msg.Index)
+		}
 		return m, nil
 
 	case ShowScratchFilesMsg:
