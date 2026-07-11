@@ -42,7 +42,10 @@ All open seams (explorer, palette `@`, find-in-path, `host.API`) already funnel
 through `openPath`; it now lands the file in the focused pane's tab list via
 `openInTab`:
 
-- a tab already showing the file is **activated** (no duplicate tab);
+- a tab already showing the file is **activated** (no duplicate tab) —
+  `openPath`/`openPathAt` canonicalise the incoming path to its cleaned
+  absolute form first (#272), so the explorer's absolute spelling and the
+  palette's root-relative one land on the same tab;
 - a pathless scratch tab is **filled in place** (fresh panes keep the old feel);
 - otherwise a **new tab is appended**, after autosaving the document being left
   (#174) — tab switches autosave the same way (`activateTab`).
@@ -65,7 +68,11 @@ close, `[d]` discard, `[esc]` cancel — same pattern as the project-switch
 guard. A pane close checks every tab; documents still shown by another pane
 (#142) close without a prompt (nothing is lost), `:q!` forces the close
 vim-style, and a failed save (read-only file) keeps the tab open with an
-error toast. A closing tab drops its crash-backup snapshot (#165) unless
+error toast. **App quit runs through the same guard** (#287): `q` (normal-mode
+editor or explorer focus) and `ctrl+c` collect every dirty document across all
+panes (`guardedQuit`/`dirtyEverywhere`, deduped by path — shared documents
+count once) and prompt `[s]` save all then quit, `[d]` discard and quit,
+`[esc]` cancel; a failed write keeps the app running. A closing tab drops its crash-backup snapshot (#165) unless
 another tab or pane still shows the document. Externally deleted files close
 their tab (the pane survives while other tabs remain); moved files re-path
 every tab that holds them.

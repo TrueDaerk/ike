@@ -4,7 +4,7 @@ title: Notifications
 description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
 tags: [architecture, notifications, host, ui]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Notifications
@@ -62,7 +62,7 @@ example plugin's hook.
 | Call site | Classification | Now |
 |---|---|---|
 | Example plugin (hello / handler opened / saw open) | event | `Notify(Info, …)` |
-| Save-all (`SaveAllMsg`) | event | `Notify(Info, "saved N files")` (silent when nothing is dirty) |
+| Save-all (`SaveAllMsg`) | event | `Notify(Info, "saved N files")`, `"nothing to save"` on a no-op (#275) |
 | Theme select confirm / unknown-theme warning / reload warning | event | `Notify(Info/Warn, …)` |
 | Startup theme warning | event | `Notify(Warn, …)` |
 | LSP server ready / disabled / binary missing | persistent state | `SetStatus` (status-line segment) |

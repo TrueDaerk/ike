@@ -91,6 +91,9 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
 Normal mode resolves an optional `"reg`, an optional count, an operator, and a
 motion / text object before committing. Secondary-key states (`awaitG`,
 `awaitFind`, `awaitReplace`, `awaitObject`) park the handler between keys.
+Visual mode accumulates counts with the same 1–9/continuing-0 rule (#265), so
+`V3j` extends the selection three lines and `3G` jumps inside a selection;
+the count is consumed by its motion and Esc clears the pending state.
 Beyond the core motions it also binds `~` (toggle case), `*`/`#` (search the
 word under the cursor), indent operators `>`/`<` (and `>>`/`<<`), `H M L`
 (screen top/middle/bottom), and screen scrolling via `Ctrl-f/b` (page),

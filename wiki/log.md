@@ -2,6 +2,15 @@
 
 ## 2026-07-11
 
+- 0082-review fixes documented (#289): blocked-chord toast (#267) and
+  bracket-glyph canonicalisation (#284) in
+  [Keybindings](/architecture/keybindings.md); canonical open paths / tab
+  dedupe (#272) and the app-quit unsaved-changes guard (#287) in
+  [Editor Tabs](/architecture/editor-tabs.md); visual-mode counts (#265) in
+  [Editor](/architecture/editor.md); finder query preselect (#277) in
+  [Project Search](/architecture/search.md); save-all no-op hint (#275) in
+  [Notifications](/architecture/notifications.md).
+
 - In-file replace, phase 1 (#282, Epic 0240 promoted from idea #49):
   `editor.replace` (cmd+r, leader `R`) opens the ex line prefilled with
   `%s/<pattern>/` (seeded from the committed search when literal and

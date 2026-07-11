@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-08T12:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -64,7 +64,10 @@ the palette):
 - **Inputs:** the query plus include/exclude glob fields (comma-separated);
   `tab`/`shift+tab` cycle field focus. Every edit restarts the scan — the
   service's generation counter cancels the superseded one, and `Apply` drops
-  stale-generation messages.
+  stale-generation messages. Re-opening keeps the previous query
+  **preselected** (rendered inverted, #277): the first typed character
+  replaces it wholesale; backspace, tab, arrows or history recall keep the
+  text and drop the mark.
 - **Toggles:** case (`alt+c`), whole word (`alt+w`), regex (`alt+x`).
 - **Query history:** committed on enter; recalled with `alt+up`/`alt+down`
   (and plain `up`/`down` while the result list is empty — with results those
