@@ -57,6 +57,34 @@ func (m *Manager) restart(old *server, docs []*document) {
 			},
 		})
 	}
+
+	// Fragment documents served by the crashed server (0300, #413): the
+	// respawned server shares its key, so re-opening them restores state.
+	m.mu.Lock()
+	var frags []*fragmentDoc
+	for _, fds := range m.frags {
+		for _, fd := range fds {
+			if fd.srvKey == k {
+				frags = append(frags, fd)
+			}
+		}
+	}
+	m.mu.Unlock()
+	for _, fd := range frags {
+		m.mu.Lock()
+		text := strings.Join(fd.frag.Lines, "\n")
+		version := fd.version
+		uri, lang := fd.uri, fd.lang
+		m.mu.Unlock()
+		_ = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
+			TextDocument: protocol.TextDocumentItem{
+				URI:        uri,
+				LanguageID: lang,
+				Version:    version,
+				Text:       text,
+			},
+		})
+	}
 	m.status(old.lang, old.lang+" language server restarted", lsp.ServerEventInfo)
 }
 

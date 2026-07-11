@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
@@ -77,6 +78,9 @@ func (b *bridge) ensure(h host.API) {
 		Status:      b.onStatus,
 		ApplyEdit:   b.onApplyEdit,
 	})
+	// Embedded fragments (0300): tree-sitter injections feed the manager's
+	// virtual documents; a no-cgo build detects nothing and this stays inert.
+	b.mgr.SetFragmentDetector(highlight.Fragments)
 	h.SetEditorEmitter(b)
 }
 
