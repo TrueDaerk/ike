@@ -868,3 +868,75 @@ func TestCheatsheetLiveAndBlocked(t *testing.T) {
 func stripForTest(s string) string { return ansiStripRe.ReplaceAllString(s, "") }
 
 var ansiStripRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
+
+// TestExplorerToggleHidesAndRestores guards the JetBrains cmd+1 state machine
+// (#268): focused tree hides (leaf gone, editors reflow), the next toggle
+// brings it back at the remembered ratio with focus on it.
+func TestExplorerToggleHidesAndRestores(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	m := newSized()
+	if !m.explorerVisible() || m.panes.Focused() != pane.ExplorerKey {
+		t.Fatal("precondition: visible focused explorer")
+	}
+	wantRatio, ok := explorerSplitRatio(m.tree)
+	if !ok {
+		t.Fatal("precondition: explorer split ratio resolvable")
+	}
+
+	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focused → hide
+	m = tm.(Model)
+	if m.explorerVisible() {
+		t.Fatal("toggle on the focused explorer must hide it")
+	}
+	if m.panes.Focused() == pane.ExplorerKey {
+		t.Fatal("hiding must move focus off the explorer")
+	}
+	if !m.panes.Has(pane.ExplorerKey) {
+		t.Fatal("hiding must keep the pane instance registered")
+	}
+
+	tm, _ = m.Update(ToggleExplorerFocusMsg{}) // hidden → show + focus
+	m = tm.(Model)
+	if !m.explorerVisible() || m.panes.Focused() != pane.ExplorerKey {
+		t.Fatal("toggle on a hidden explorer must show and focus it")
+	}
+	if got, _ := explorerSplitRatio(m.tree); got != wantRatio {
+		t.Fatalf("restored ratio = %v, want remembered %v", got, wantRatio)
+	}
+
+	tm, _ = m.Update(ToggleExplorerFocusMsg{}) // focused again → hide again
+	m = tm.(Model)
+	if m.explorerVisible() {
+		t.Fatal("third toggle must hide again")
+	}
+}
+
+// TestRestoreLayoutAcceptsHiddenExplorer: a persisted tree without the
+// explorer leaf (hidden via toggle) restores as saved instead of falling back
+// to the default layout (#268).
+func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
+	m := newSized() // rotates IKE_CONFIG_DIR to a fresh store
+	dir := os.Getenv("IKE_CONFIG_DIR")
+	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // hide (persists the layout)
+	m = tm.(Model)
+	if m.explorerVisible() {
+		t.Fatal("setup: explorer should be hidden")
+	}
+
+	// A fresh model over the same store restores the persisted layout
+	// (newSized would rotate the store dir away, so pin it and call New).
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	tm, _ = New().Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m2 := tm.(Model)
+	if m2.explorerVisible() {
+		t.Fatal("restored session must keep the explorer hidden")
+	}
+	if !m2.panes.Has(pane.ExplorerKey) {
+		t.Fatal("restored session must still register the explorer instance")
+	}
+	tm, _ = m2.Update(ToggleExplorerFocusMsg{})
+	m2 = tm.(Model)
+	if !m2.explorerVisible() || m2.panes.Focused() != pane.ExplorerKey {
+		t.Fatal("toggle must bring the restored hidden explorer back")
+	}
+}

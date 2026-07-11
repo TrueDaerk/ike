@@ -150,6 +150,11 @@ type Model struct {
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
 	closePending *pendingClose
+
+	// explorerRatio remembers the hidden explorer's split ratio so
+	// explorer.toggle restores the tree at its prior width (#268); 0 means
+	// "use the default width".
+	explorerRatio float64
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -468,9 +473,12 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			return // unknown leaf kind / malformed key: fall back to default
 		}
 	}
-	if explorers != 1 {
-		return // explorer must be present exactly once
+	if explorers > 1 {
+		return // more than one explorer leaf is malformed
 	}
+	// Zero explorer leaves is a valid save: the tree was hidden via
+	// explorer.toggle (#268). The instance below registers regardless, so
+	// the toggle can bring the leaf back.
 	// The default set is replaced: a fresh registry with the explorer plus one
 	// editor per non-explorer leaf, each rebuilding its remembered tab list
 	// (#160). Files missing on disk are skipped; a pane whose every file
@@ -1353,15 +1361,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ToggleExplorerFocusMsg:
-		// explorer.toggle (cmd+1 / palette): focus the tree, or jump back to the
-		// active editor when the tree already holds focus.
-		if m.panes.Focused() == pane.ExplorerKey {
-			if key := m.activeEditorKey(); key != "" {
-				m.setFocus(key)
-			}
-		} else if m.panes.Has(pane.ExplorerKey) {
-			m.setFocus(pane.ExplorerKey)
-		}
+		// explorer.toggle (cmd+1 / space e): the JetBrains cmd+1 state machine
+		// (#268) — focused tree hides, visible unfocused tree gains focus, a
+		// hidden tree comes back at its remembered width and takes focus.
+		m.toggleExplorer()
 		return m, nil
 
 	case TerminalNewMsg:
