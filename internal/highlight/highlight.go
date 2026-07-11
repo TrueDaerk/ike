@@ -27,15 +27,18 @@ func Supported(path string) bool {
 	return ok && l.Grammar != nil
 }
 
-// Highlight parses lines with the grammar for path and returns the spans. It
-// returns nil when the path has no language, no grammar, or the build has CGo
-// disabled (the stub). The actual parse lives in parse_cgo.go / parse_stub.go.
+// Highlight parses lines with the grammar for path and returns the spans,
+// including spans for embedded-language fragments (SQL in a Python string, …)
+// detected by the host grammar's injection query and parsed with the fragment
+// language's own grammar (issue #299). It returns nil when the path has no
+// language, no grammar, or the build has CGo disabled (the stub). The actual
+// parse lives in parse_cgo.go / parse_stub.go.
 func Highlight(path string, lines []string) []Span {
 	l, ok := lang.ByPath(path)
 	if !ok || l.Grammar == nil {
 		return nil
 	}
-	return parse(l.Grammar, lines)
+	return overlayFragments(l.Grammar, lines, parse(l.Grammar, lines))
 }
 
 // HighlightFenced parses lines tagged with a markdown fence info string (as in
