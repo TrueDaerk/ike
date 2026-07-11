@@ -467,12 +467,22 @@ func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction
 		return nil
 	}
 	go func() {
-		if action.Edit != nil {
+		// Every outcome reports (#309): a silent action is indistinguishable
+		// from a broken one.
+		switch {
+		case action.Edit == nil && action.Command == nil:
+			// Lazy actions need codeAction/resolve, which is not implemented
+			// yet — say so instead of doing nothing.
+			h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' returned no edit (codeAction/resolve not supported yet)", Kind: ilsp.ServerEventWarn})
+			return
+		case action.Edit != nil:
 			files := mgr.ConvertWorkspaceEdit(path, *action.Edit)
 			if n, err := dispatchWorkspaceEdits(h, files); err != nil {
 				h.Send(ilsp.ServerStatusMsg{Text: "edit applied partially: " + err.Error(), Kind: ilsp.ServerEventWarn})
 			} else if n > 0 {
-				h.Send(ilsp.ServerStatusMsg{Text: applySummary(n), Kind: ilsp.ServerEventInfo})
+				h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "': " + applySummary(n), Kind: ilsp.ServerEventInfo})
+			} else if action.Command == nil {
+				h.Send(ilsp.ServerStatusMsg{Text: "'" + action.Title + "' changed nothing", Kind: ilsp.ServerEventInfo})
 			}
 		}
 		if action.Command != nil {

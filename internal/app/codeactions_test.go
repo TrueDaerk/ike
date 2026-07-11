@@ -32,7 +32,7 @@ func TestActionsModePreferredFirstAndIndices(t *testing.T) {
 	if len(items) != 2 {
 		t.Fatalf("items = %+v", items)
 	}
-	if items[0].Title != "★ Fix undeclared name" || items[0].Detail != "quickfix" {
+	if items[0].Title != "★ Fix undeclared name" || items[0].Detail != "quick fix" {
 		t.Fatalf("preferred action should list first, got %+v", items[0])
 	}
 	// The picked index must reference the ORIGINAL offer order despite the sort.
@@ -60,5 +60,22 @@ func TestCodeActionsMsgOpensLockedPicker(t *testing.T) {
 	_ = cmd
 	if *picked != 0 {
 		t.Fatalf("activation should run the continuation, picked = %d", *picked)
+	}
+}
+
+// TestActionKindLabel guards #309: LSP kinds render readably and an omitted
+// kind still yields a chip.
+func TestActionKindLabel(t *testing.T) {
+	cases := map[string]string{
+		"":                       "action",
+		"quickfix":               "quick fix",
+		"source.organizeImports": "source · organize imports",
+		"refactor.extract":       "refactor · extract",
+		"refactor":               "refactor",
+	}
+	for in, want := range cases {
+		if got := actionKindLabel(in); got != want {
+			t.Errorf("actionKindLabel(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
