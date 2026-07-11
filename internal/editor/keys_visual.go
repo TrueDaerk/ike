@@ -28,6 +28,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if key.Code == tea.KeyEscape {
 		m.mode = Normal
 		m.wait = awaitNone
+		m.pending.Reset()
 		// Tell listeners the selection is gone (the LSP bridge tracks it for
 		// range-scoped requests).
 		m.emit(EventCursorMove)
@@ -48,8 +49,20 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		s = plain
 	}
 
+	// Counts: 1-9 always; 0 only continues an existing count (else it is a
+	// motion) — the same rule as normal mode.
+	if hasRune && r >= '1' && r <= '9' {
+		m.pending.PushDigit(int(r - '0'))
+		return m, nil
+	}
+	if s == "0" && m.pending.Count > 0 {
+		m.pending.PushDigit(0)
+		return m, nil
+	}
+
 	// Motions move the cursor end of the selection.
-	if res, ok := m.resolveMotion(s, r, 1); ok {
+	if res, ok := m.resolveMotion(s, r, m.pending.EffectiveCount()); ok {
+		m.pending.Count = 0 // the motion consumed the count
 		if res.Kind == motion.Linewise {
 			m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
 			// moveTo emits for charwise motions; linewise must emit too so
