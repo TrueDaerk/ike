@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-11T10:30:00Z
+timestamp: 2026-07-11T12:00:00Z
 ---
 
 # Foundation Slice
@@ -52,7 +52,9 @@ hooks and the initial reparse fire in `Init` (#332) like for every file already
 open at launch.
 
 `command | ike -` (#344) reads piped stdin to EOF before the UI starts
-(`cmd/ike/stdin.go`) and opens it as a pathless scratch buffer after any file
+(`readStdin` in `cmd/ike/main.go`; the package deliberately stays a single
+file so `go run cmd/ike/main.go` keeps compiling, #362) and opens it as a
+pathless scratch buffer after any file
 targets, focused (`Model.OpenStdinBuffer`). The buffer is dirty + never-saved
 (`editor.RestoreText`, the untitled-crash-restore flow), so quitting runs the
 unsaved-changes guard and `:w <path>` names it. The keyboard comes from an

@@ -2,6 +2,10 @@
 
 ## 2026-07-11
 
+- `readStdin` folded back into `cmd/ike/main.go` (#362) so the single-file
+  invocation `go run cmd/ike/main.go` compiles again; `cmd/ike/stdin.go`
+  deleted. See [foundation](/architecture/foundation.md).
+
 - Zen mode (#359, Roadmap 0290 — epic complete): `view.zenMode`
   (`cmd+k shift+z`, View menu — the dormant entry is live now) maximizes the
   active editor and hides the tab bar + status line; leaving zen restores
