@@ -103,6 +103,7 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	// cursor and apply the plain arrow motion (updateVisual extends it further).
 	if plain, ok := shiftSelectKey(s); ok && !m.pending.HasOperator() {
 		m.enterVisual(Visual)
+		m.shiftSelect = true
 		if res, ok := m.resolveMotion(plain, 0, count); ok {
 			m.applyMotionOrOperator(res, count)
 		}
@@ -273,6 +274,21 @@ func shiftSelectKey(s string) (string, bool) {
 		return "ctrl+right", true
 	}
 	return "", false
+}
+
+// stopSelectKey reports whether s is an unshifted navigation key that ends a
+// Shift+arrow selection (vim's keymodel=stopsel, #326). Deliberately limited
+// to the keys that can also start/extend a selection with Shift held — vim
+// motions (h/l/w/…) keep extending, as in vim.
+func stopSelectKey(s string) bool {
+	switch s {
+	case "left", "right", "up", "down", "home", "end",
+		"alt+left", "alt+right", "ctrl+left", "ctrl+right",
+		"alt+up", "alt+down", "ctrl+up", "ctrl+down",
+		"pgup", "pgdown":
+		return true
+	}
+	return false
 }
 
 // pageMotion computes a vertical jump of a full or half page in the given

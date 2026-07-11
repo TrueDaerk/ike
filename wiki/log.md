@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Shift+arrow selections stop on unshifted navigation (#326): a selection
+  started with `Shift+arrows` is now GUI-style — releasing Shift and pressing
+  a plain navigation key (arrows, `Home`/`End`, word/paragraph/page keys)
+  drops the selection and moves the caret (vim's `keymodel=stopsel`), instead
+  of extending it. Vim motions and `v`/`V`/`Ctrl+V` selections keep extending.
+  Documented in [Editor](/architecture/editor.md).
+
 - Center drop zone merges as tab (#318): during a move or tab drag an editor
   target now shows five zones — the four edges split/relocate as before, the
   interior center merges JetBrains-style: a whole-pane drop moves all source

@@ -105,6 +105,12 @@ type Model struct {
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
 
+	// True while the active selection was started with Shift+arrows (#326):
+	// such a selection is GUI-style — an unshifted navigation key drops it
+	// instead of extending it (vim's keymodel=stopsel). Selections entered
+	// with v/V/ctrl+v keep vim semantics.
+	shiftSelect bool
+
 	// Last visual selection line bounds (0-based) for the '< / '> ex addresses;
 	// -1 when no selection has been made this session.
 	visualStart int
