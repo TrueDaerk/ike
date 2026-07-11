@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -250,6 +251,82 @@ func (m *Manager) fragmentAt(hostPath string, pos buffer.Position) (*server, *fr
 		}
 	}
 	return nil, nil, false
+}
+
+// fragmentCompletion routes a completion request into the fragment covering
+// pos, when one exists. handled=false means "not a fragment position; use the
+// host server". A fragment whose server lacks the capability handles the
+// request with an empty result — the host server has nothing useful to say
+// about a position inside an embedded string either.
+func (m *Manager) fragmentCompletion(ctx context.Context, hostPath string, pos buffer.Position) (items []protocol.CompletionItem, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().Completion {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	enc := srv.cl.Encoding()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	items, err = srv.cl.Completion(cctx, protocol.CompletionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
+		Context:      &protocol.CompletionContext{TriggerKind: protocol.CompletionTriggerInvoked},
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	hostLines, _ := m.DocLines(hostPath)
+	for i := range items {
+		if items[i].TextEdit != nil {
+			items[i].TextEdit.Range = fragRangeToHost(frag, hostLines, items[i].TextEdit.Range, enc)
+		}
+	}
+	return items, true, nil
+}
+
+// fragmentHover routes a hover request into the fragment covering pos, when
+// one exists; the result range maps back to host coordinates.
+func (m *Manager) fragmentHover(ctx context.Context, hostPath string, pos buffer.Position) (h *protocol.Hover, handled bool, err error) {
+	srv, fd, ok := m.fragmentAt(hostPath, pos)
+	if !ok {
+		return nil, false, nil
+	}
+	if !srv.cl.Caps().Hover {
+		return nil, true, nil
+	}
+	m.mu.Lock()
+	frag, uri := fd.frag, fd.uri
+	m.mu.Unlock()
+	enc := srv.cl.Encoding()
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	h, err = srv.cl.Hover(cctx, protocol.HoverParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
+	})
+	if err != nil || h == nil {
+		return h, true, err
+	}
+	if h.Range != nil {
+		hostLines, _ := m.DocLines(hostPath)
+		r := fragRangeToHost(frag, hostLines, *h.Range, enc)
+		h.Range = &r
+	}
+	return h, true, nil
+}
+
+// fragRangeToHost converts a fragment-document LSP range into the equivalent
+// host-document LSP range, staying in the fragment server's encoding (today's
+// consumers only read the edit text, not the range).
+func fragRangeToHost(frag highlight.Fragment, hostLines []string, r protocol.Range, enc string) protocol.Range {
+	er := protocol.FromLSPRange(frag.Lines, r, enc)
+	hr := buffer.Range{Start: fragToHost(frag, er.Start), End: fragToHost(frag, er.End)}
+	return protocol.ToLSPRange(hostLines, hr, enc)
 }
 
 // fragContains reports whether a host position lies inside the fragment,

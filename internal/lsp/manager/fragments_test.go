@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -242,5 +243,71 @@ func TestFragmentPositionMapping(t *testing.T) {
 		if got := fragContains(fr, c.pos); got != c.in {
 			t.Errorf("fragContains(%+v) = %v, want %v", c.pos, got, c.in)
 		}
+	}
+}
+
+func TestFragmentCompletionRoutesAndMapsRanges(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	items, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].TextEdit == nil {
+		t.Fatalf("items = %+v", items)
+	}
+	// The fake's fragment-relative edit range 0:0-0:3 maps to host 0:4-0:7
+	// (the fragment starts at host column 4).
+	r := items[0].TextEdit.Range
+	if r.Start.Character != 4 || r.End.Character != 7 || r.Start.Line != 0 {
+		t.Errorf("mapped edit range = %+v, want 0:4-0:7", r)
+	}
+	// Outside the fragment the host server answers; its range stays put.
+	items, err = m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r := items[0].TextEdit.Range; r.Start.Character != 0 || r.End.Character != 3 {
+		t.Errorf("host edit range = %+v, want 0:0-0:3", r)
+	}
+}
+
+func TestFragmentHoverRoutesAndMapsRange(t *testing.T) {
+	opens := make(chan protocol.DidOpenTextDocumentParams, 8)
+	m := New(multiResolver(fragmentSpecs()...), fakeConnectorOpts(fakeOpts{syncKind: protocol.SyncFull, didOpens: opens}), Callbacks{})
+	defer m.Shutdown()
+	m.SetFragmentDetector(lineDetector)
+
+	path := filepath.Join(t.TempDir(), "app.py")
+	if err := m.Open(path, "python", "sql>SELECT 1"); err != nil {
+		t.Fatal(err)
+	}
+	waitOpen(t, opens, func(p protocol.DidOpenTextDocumentParams) bool {
+		return isFragmentURI(p.TextDocument.URI)
+	})
+
+	h, err := m.Hover(context.Background(), path, buffer.Position{Line: 0, Col: 10})
+	if err != nil || h == nil {
+		t.Fatalf("hover = %+v err = %v", h, err)
+	}
+	// Host col 10 is fragment col 6: the request position must arrive
+	// fragment-relative at the fragment server.
+	if got := string(h.Contents); !strings.Contains(got, "hover@0:6") {
+		t.Errorf("contents = %s, want request at fragment position 0:6", got)
+	}
+	// The fake's fragment range 0:0-0:6 maps back to host 0:4-0:10.
+	if h.Range == nil || h.Range.Start.Character != 4 || h.Range.End.Character != 10 {
+		t.Errorf("mapped hover range = %+v, want 0:4-0:10", h.Range)
 	}
 }

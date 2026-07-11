@@ -262,7 +262,12 @@ func (m *Manager) Close(path string) error {
 }
 
 // Completion requests completion at an editor position, gated on capability.
+// A position inside an embedded fragment routes to the fragment's server
+// (0300, #414) with results mapped back to host coordinates.
 func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position) ([]protocol.CompletionItem, error) {
+	if items, handled, err := m.fragmentCompletion(ctx, path, pos); handled {
+		return items, err
+	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().Completion {
 		return nil, nil
@@ -276,8 +281,12 @@ func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
-// Hover requests hover at an editor position, gated on capability.
+// Hover requests hover at an editor position, gated on capability. Fragment
+// positions route to the fragment's server like Completion.
 func (m *Manager) Hover(ctx context.Context, path string, pos buffer.Position) (*protocol.Hover, error) {
+	if h, handled, err := m.fragmentHover(ctx, path, pos); handled {
+		return h, err
+	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().Hover {
 		return nil, nil
