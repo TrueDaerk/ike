@@ -170,6 +170,11 @@ type Model struct {
 	// streaming scan service it drives.
 	finder   *finder.Model
 	searcher *search.Service
+	// inFileSearchRecent is true while a committed in-file search ("/", "?",
+	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
+	// the in-file search on the active editor instead of stepping retained
+	// find-in-path results (#376). Any new scan activity flips it back.
+	inFileSearchRecent bool
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
@@ -1245,8 +1250,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case search.BatchMsg, search.DoneMsg:
-		// Streamed scan results (generation-filtered inside the finder).
+		// Streamed scan results (generation-filtered inside the finder). A scan
+		// makes find-in-path the most recent search again for f3/shift+f3.
+		m.inFileSearchRecent = false
 		m.finder.Apply(msg)
+		return m, nil
+
+	case editor.SearchCommittedMsg:
+		// A committed "/", "?" or cmd+f search: f3/shift+f3 repeat it until the
+		// next find-in-path scan (#376).
+		m.inFileSearchRecent = true
 		return m, nil
 
 	case finder.OpenLocationMsg:
@@ -1255,8 +1268,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 
 	case MatchStepMsg:
-		// search.nextMatch / search.prevMatch: walk the retained results
-		// without the overlay open.
+		// search.nextMatch / search.prevMatch: when an in-file search is the
+		// most recent one, repeat it on the active editor like n/N (#376);
+		// otherwise walk the retained find-in-path results without the overlay.
+		if m.inFileSearchRecent {
+			if ed := m.activeEditor(); ed != nil && ed.HasSearch() {
+				ed.RepeatSearch(msg.Delta < 0)
+				return m, nil
+			}
+		}
 		if it, ok := m.finder.Advance(msg.Delta); ok {
 			return m.openPathAt(it.Path, it.Line-1, it.StartCol)
 		}
