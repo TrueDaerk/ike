@@ -15,6 +15,7 @@ func Builtins() []Theme {
 		catppuccinMocha(),
 		catppuccinLatte(),
 		kanagawa(),
+		oneDark(),
 	}
 }
 
@@ -584,6 +585,71 @@ func kanagawa() Theme {
 			"json":    "#e6c384",
 			"yaml":    "#e6c384",
 			"lock":    "#727169",
+		},
+	}
+}
+
+// oneDark ports Atom's One Dark. The Error slot lightens the scheme's red
+// (#e06c75, 4.38:1 on Surface) to #e88388 so every checked pair clears the
+// AA contrast test; all other slots keep the official palette values.
+func oneDark() Theme {
+	return Theme{
+		Name: "one-dark",
+		Dark: true,
+		UI: UI{
+			Background:     "#282c34", // black
+			Foreground:     "#abb2bf", // mono1
+			Surface:        "#282c34",
+			Panel:          "#21252b", // sidebar/panel background
+			Border:         "#3e4451", // gutter/selection gray
+			BorderFocus:    "#61afef", // blue
+			Selection:      "#3e4451",
+			SelectionText:  "#abb2bf",
+			SelectionMuted: "#2c313c", // cursor line
+			Accent:         "#61afef", // blue
+			Primary:        "#3e4451", // pmenu selection
+			Secondary:      "#d19a66", // orange 1
+			Success:        "#98c379", // green
+			Warning:        "#e5c07b", // orange 2 (yellow)
+			Error:          "#e88388", // red 1 lightened for AA
+			Info:           "#61afef", // blue
+			Hint:           "#56b6c2", // cyan
+			MoveSource:     "#c678dd", // purple
+			DropTarget:     "#d19a66",
+			Ghost:          "#5c6370", // mono3 / comment gray
+			ScrollbarTrack: "#21252b",
+			ScrollbarThumb: "#4b5263", // gutter gray
+		},
+		Captures: map[string]string{
+			"keyword":          "#c678dd", // purple
+			"operator":         "#abb2bf", // mono1
+			"string":           "#98c379", // green
+			"number":           "#d19a66", // orange 1
+			"comment":          "#5c6370", // mono3
+			"function":         "#61afef", // blue
+			"type":             "#e5c07b", // orange 2 (classes/types)
+			"constant":         "#d19a66",
+			"constant.builtin": "#d19a66",
+			"variable":         "#abb2bf",
+			"variable.builtin": "#e06c75", // red 1
+			"property":         "#e06c75",
+			"label":            "#c678dd",
+			"attribute":        "#d19a66",
+			"punctuation":      "#abb2bf",
+			"escape":           "#56b6c2", // cyan
+			"boolean":          "#d19a66",
+			"tag":              "#e06c75",
+			"embedded":         "#abb2bf",
+		},
+		Files: map[string]string{
+			"dir":     "#61afef",
+			"default": "#abb2bf",
+			"go":      "#56b6c2",
+			"md":      "#98c379",
+			"toml":    "#e5c07b",
+			"json":    "#e5c07b",
+			"yaml":    "#e5c07b",
+			"lock":    "#5c6370",
 		},
 	}
 }
