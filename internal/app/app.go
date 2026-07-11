@@ -139,6 +139,11 @@ type Model struct {
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
+	// lspStatus holds the persistent per-language server state ("ready",
+	// "disabled") behind the status line's server segment (#380). Keyed by
+	// language ID; the segment renders only the focused buffer's language, so
+	// stale text never follows the user into unrelated buffers.
+	lspStatus map[string]string
 
 	// symbols is the live workspace-symbol palette mode (0250 phase 2,
 	// #295); symbolPriming marks a hook-priming goToClass run for the
@@ -318,6 +323,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		shell:        ui.New(shellConfig(cfg)),
 		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist),
 		refs:         refs,
+		lspStatus:    map[string]string{},
 		symbols:      symbols,
 		actions:      actions,
 		pasteHist:    pasteHist,
@@ -1783,7 +1789,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ilsp.ServerEventError:
 			m.host.Notify(host.Error, msg.Text)
 		default:
-			m.host.SetStatus(msg.Text)
+			// Persistent state is tracked per language (#380): the status line
+			// shows only the focused buffer's language, so "gopls not found"
+			// no longer haunts a plain-text buffer. The host's global status
+			// segment stays reserved for plugins (host.API.SetStatus).
+			if msg.Lang != "" {
+				m.lspStatus[msg.Lang] = msg.Text
+			} else {
+				m.host.SetStatus(msg.Text)
+			}
 		}
 		return m, nil
 
@@ -3917,9 +3931,14 @@ func (m Model) statusLine() string {
 		line, col = ed.Cursor()
 	}
 	left := " " + mode + " │ " + file + dirty + diag
-	// Persistent host status (LSP server state) is one more segment; it never
+	// Persistent host status (plugin-set) is one more segment; it never
 	// replaces the mode/file/cursor segments (Roadmap 0130).
 	if s := m.host.Status(); s != "" {
+		left += " │ " + s
+	}
+	// The LSP server segment is scoped to the focused buffer's language (#380):
+	// blank for buffers whose language has no tracked server state.
+	if s := m.focusedLangStatus(ed); s != "" {
 		left += " │ " + s
 	}
 	right := "Ln " + strconv.Itoa(line) + ", Col " + strconv.Itoa(col) + " "
@@ -3928,6 +3947,21 @@ func (m Model) statusLine() string {
 		gap = 1
 	}
 	return style.Render(left + strings.Repeat(" ", gap) + right)
+}
+
+// focusedLangStatus returns the tracked server state for the focused editor's
+// language (#380): the status line's server segment follows the buffer instead
+// of echoing the last event globally. Empty when no file is open, the language
+// is unknown, or no server state was ever reported for it.
+func (m Model) focusedLangStatus(ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	l, ok := lang.ByPath(ed.Path())
+	if !ok {
+		return ""
+	}
+	return m.lspStatus[l.ID]
 }
 
 // selfDropZone reports the spawn zone (and proximity) for a self-drop during a
