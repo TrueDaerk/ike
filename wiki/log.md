@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Terminal duplication on project switch fixed (#320): when layout restore
+  already recreated a terminal under the carried session's key, the live
+  session now takes over that pane instead of splitting a duplicate leaf
+  (which mirrored one instance in two panels). Documented in
+  [Terminal](/architecture/terminal.md).
+
 - Signature popup lifecycle (#315): leaving insert mode and insert-mode
   arrow motion dismiss the popup, stale replies after esc are dropped — it
   no longer trails normal-mode cursor motion. Documented in

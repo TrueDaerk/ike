@@ -137,7 +137,11 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 // adoptTerminals carries the old model's live terminal sessions across a
 // project switch (#96): existing shells keep running, split below the new
 // workspace's active editor and titled with their origin root. Dead sessions
-// are closed for good.
+// are closed for good. When the target workspace's layout restore already
+// recreated a terminal under the same key (a fresh placeholder shell for this
+// very session), the live session takes over that pane instead of gaining a
+// second leaf — a duplicate key in the tree would render the same instance
+// twice (#320).
 func (m *Model) adoptTerminals(old *Model) {
 	for _, key := range old.panes.Keys() {
 		inst := old.panes.Get(key)
@@ -148,15 +152,21 @@ func (m *Model) adoptTerminals(old *Model) {
 			inst.Terminal().Close()
 			continue
 		}
+		if m.panes.AdoptTerminal(inst) {
+			continue // took over the restored placeholder's leaf (#320)
+		}
+		if !m.panes.Has(inst.Key()) {
+			inst.Terminal().Close() // key collision with a non-terminal pane
+			continue
+		}
 		target := m.activeEditorKey()
 		if target == "" {
 			target = m.panes.Focused()
 		}
 		if target == "" || m.tree == nil {
-			inst.Terminal().Close()
+			m.panes.Close(inst.Key())
 			continue
 		}
-		m.panes.AdoptTerminal(inst)
 		if tree, ok := layout.SplitLeaf(m.tree, target, inst.Key(), layout.ZoneBottom); ok {
 			m.tree = tree
 		} else {

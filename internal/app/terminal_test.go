@@ -202,6 +202,61 @@ func TestTerminalSurvivesProjectSwitch(t *testing.T) {
 	}
 }
 
+// TestTerminalSwitchRoundTripNoDuplicates guards #320: switching away and
+// back restores the terminal leaf from the saved layout AND carries the live
+// session over. The live session must take over the restored placeholder —
+// not gain a second leaf (which would mirror one instance in two panes) or
+// leave a duplicate shell running.
+func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.panes.Focused()
+	sess := m.panes.Get(key).Terminal()
+	t.Cleanup(func() { sess.Close() })
+
+	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src})
+	m = out.(Model)
+
+	terms := 0
+	for _, k := range m.panes.Keys() {
+		if inst := m.panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal {
+			terms++
+			t.Cleanup(func() { inst.Terminal().Close() })
+		}
+	}
+	if terms != 1 {
+		t.Fatalf("round trip must keep exactly one terminal pane, got %d", terms)
+	}
+	seen := map[string]int{}
+	for _, leaf := range layout.Leaves(m.tree) {
+		seen[leaf]++
+		if seen[leaf] > 1 {
+			t.Fatalf("leaf %q appears twice in the tree — two panes would mirror one instance", leaf)
+		}
+	}
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("terminal should live under its original key %q", key)
+	}
+	if inst.Terminal() != sess {
+		t.Fatal("the live session should take over the restored placeholder, not be dropped")
+	}
+	if !inst.Terminal().Running() {
+		t.Fatal("adopted session should keep running")
+	}
+}
+
 // TestTerminalScrollbackReservedKeys: shift+pgup pages instead of reaching the
 // shell, ctrl+tab stays the only reserved escape.
 func TestTerminalScrollbackReservedKeys(t *testing.T) {
