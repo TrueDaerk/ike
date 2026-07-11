@@ -277,6 +277,7 @@ func (m *Model) completionAccept() {
 	// an anchor-only range would be empty and splice the full insert text after
 	// the typed prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
 	start := m.identifierStart(cursor)
+	start = m.extendPrefixMatch(start, cursor, item.InsertText)
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
@@ -300,6 +301,24 @@ func (m Model) identifierStart(pos buffer.Position) buffer.Position {
 		col--
 	}
 	return buffer.Position{Line: pos.Line, Col: col}
+}
+
+// extendPrefixMatch widens the replacement span leftwards beyond the
+// identifier boundary while the widened typed text is still a prefix of the
+// insert text. This covers sigil-carrying completions — PHP's "$he" completed
+// to "$hello" must replace the "$" too, or the insert doubles it ("$$hello",
+// #427) — without hard-coding per-language identifier characters.
+func (m Model) extendPrefixMatch(start, cursor buffer.Position, insertText string) buffer.Position {
+	runes := []rune(m.buf.Line(start.Line))
+	end := cursor.Col
+	if end > len(runes) {
+		end = len(runes)
+	}
+	col := start.Col
+	for col > 0 && strings.HasPrefix(insertText, string(runes[col-1:end])) {
+		col--
+	}
+	return buffer.Position{Line: start.Line, Col: col}
 }
 
 // isIdentRune reports whether r can appear in a completion identifier.
