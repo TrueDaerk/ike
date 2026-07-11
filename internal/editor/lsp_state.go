@@ -235,7 +235,7 @@ func (m Model) CompletionView() string {
 		endIdx = len(items)
 	}
 
-	width := 0
+	width := lipgloss.Width(completionHint) // the hint row must stay readable (#308)
 	for _, it := range items[start:endIdx] {
 		if l := lipgloss.Width(completionLabel(it)); l > width {
 			width = l
@@ -256,6 +256,10 @@ func (m Model) CompletionView() string {
 		}
 		rows = append(rows, st.Width(width).Render(truncate(label, width)))
 	}
+	// The accept affordance stays visible (#308): the signature popup looks
+	// similar but is informational, so the actionable list says its keys.
+	hint := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Border)
+	rows = append(rows, hint.Width(width).Render(truncate(completionHint, width)))
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
 
@@ -287,6 +291,9 @@ func truncate(s string, w int) string {
 	return string(r[:w-1]) + "…"
 }
 
+// completionHint is the completion popup's keys row (#308).
+const completionHint = "↹/⏎ accept · esc close"
+
 // --- signature popup ---
 
 // signatureState is the showing call-signature popup: the active signature's
@@ -314,6 +321,7 @@ func (m Model) SignatureOpen() bool { return m.signature != nil }
 
 // SignatureView renders the popup: the label with the active parameter
 // emphasised, the doc line dimmed below, an overload counter when applicable.
+// Long signatures wrap at the popup width cap instead of widening (#306).
 func (m Model) SignatureView() string {
 	s := m.signature
 	if s == nil {
@@ -328,7 +336,9 @@ func (m Model) SignatureView() string {
 	if start < 0 || end > len(runes) || end < start {
 		start, end = 0, 0
 	}
-	line := string(runes[:start]) + param.Render(string(runes[start:end])) + string(runes[end:])
+	// The leading glyph marks this as the informational signature popup —
+	// distinct from the actionable completion list (#308).
+	line := dim.Render("ƒ ") + string(runes[:start]) + param.Render(string(runes[start:end])) + string(runes[end:])
 	if s.more > 0 {
 		line += dim.Render("  (+" + strconv.Itoa(s.more) + " overloads)")
 	}
@@ -336,7 +346,39 @@ func (m Model) SignatureView() string {
 	if s.doc != "" {
 		rows = append(rows, dim.Render(truncateTo(s.doc, 80)))
 	}
-	return box.Render(strings.Join(rows, "\n"))
+	return m.clampPopup(box, strings.Join(rows, "\n"))
+}
+
+// popupMaxWidth caps a popup's content width: wide enough for real
+// signatures, never wider than the editor's own text area (#306).
+func (m Model) popupMaxWidth() int {
+	w := m.view.TextWidth(m.buf.LineCount()) - 2
+	if w > 80 {
+		w = 80
+	}
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
+// popupMaxRows caps a popup's height so a wrapped monster signature cannot
+// cover the whole pane (#306).
+const popupMaxRows = 10
+
+// clampPopup renders content inside box, wrapping lines wider than the popup
+// cap and truncating past popupMaxRows with an ellipsis row.
+func (m Model) clampPopup(box lipgloss.Style, content string) string {
+	maxW := m.popupMaxWidth()
+	if lipgloss.Width(content) > maxW {
+		box = box.Width(maxW + 2) // +2 for the padding cells
+	}
+	out := box.Render(content)
+	lines := strings.Split(out, "\n")
+	if len(lines) > popupMaxRows {
+		lines = append(lines[:popupMaxRows], box.Render("…"))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // SignatureAnchor returns the buffer-relative cell the popup anchors to.
@@ -360,7 +402,8 @@ func truncateTo(s string, max int) string {
 // HoverOpen reports whether the hover popup is showing.
 func (m Model) HoverOpen() bool { return m.hover != nil && len(m.hover.lines) > 0 }
 
-// HoverView renders the hover content box.
+// HoverView renders the hover content box, wrapped and capped like the
+// signature popup (#306).
 func (m Model) HoverView() string {
 	if m.hover == nil {
 		return ""
@@ -371,7 +414,7 @@ func (m Model) HoverView() string {
 	if len(lines) > maxLines {
 		lines = append(append([]string{}, lines[:maxLines]...), "…")
 	}
-	return box.Render(strings.Join(lines, "\n"))
+	return m.clampPopup(box, strings.Join(lines, "\n"))
 }
 
 // HoverAnchor returns the buffer-relative cell the hover popup anchors to.
