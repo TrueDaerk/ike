@@ -52,8 +52,14 @@ func TestLeftClickFocusesTab(t *testing.T) {
 	if inst.Editor().Path() != paths[0] {
 		t.Fatalf("left-click on the first segment must activate tab 0, got %q", inst.Editor().Path())
 	}
-	if m.drag != nil {
-		t.Fatal("a tab click must not start a pane drag")
+	if m.drag == nil || m.drag.kind != dragTab {
+		t.Fatal("a tab press grabs the tab for a possible drag (#305)")
+	}
+	// Releasing in place is a plain click: nothing moves, no split.
+	panes := len(m.lay.Panes)
+	m = step(m, release(x, y))
+	if m.drag != nil || len(m.lay.Panes) != panes || inst.TabCount() != 3 {
+		t.Fatal("releasing on the bar must be a click, not a move")
 	}
 }
 
@@ -114,10 +120,79 @@ func TestActiveTabClickStartsDrag(t *testing.T) {
 	}
 	x, y := barCell(t, m, dx)
 	m = step(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
-	if m.drag == nil || m.drag.kind != dragMove {
-		t.Fatal("clicking the active tab must keep the title row as a drag handle")
+	// Since #305 a press on any tab segment grabs that tab; the whole-pane
+	// drag handle is the title row and the bar outside the segments.
+	if m.drag == nil || m.drag.kind != dragTab {
+		t.Fatal("pressing the active tab must grab it as a tab drag (#305)")
 	}
 	if inst.ActiveTab() != 2 {
-		t.Fatal("clicking the active tab must not switch tabs")
+		t.Fatal("pressing the active tab must not switch tabs")
+	}
+	m = step(m, release(x, y)) // click resolves as a no-op
+	rr := m.lay.Panes[m.panes.Focused()]
+	m = step(m, press(rr.X+2, rr.Y)) // the top border row stays the pane handle
+	if m.drag == nil || m.drag.kind != dragMove {
+		t.Fatal("the title row must keep starting a whole-pane move")
+	}
+	m = step(m, release(rr.X+2, rr.Y))
+}
+
+
+// TestTabDragToOwnEdgeSplitsSingleFile guards #305: dragging one tab label to
+// the source pane's bottom edge splits off a pane holding just that file; the
+// remaining tabs stay put.
+func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
+	m, paths := tabApp(t)
+	src := m.panes.Focused()
+	inst := m.panes.FocusedInstance()
+	r := m.lay.Panes[src]
+	x, y := barCell(t, m, 1) // grab the first tab (a.txt)
+	m = step(m, press(x, y))
+	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
+
+	if inst.TabCount() != 2 {
+		t.Fatalf("source pane should keep 2 tabs, got %d", inst.TabCount())
+	}
+	newKey := m.panes.Focused()
+	if newKey == src {
+		t.Fatal("focus should land on the split pane")
+	}
+	if got := m.panes.Get(newKey).Editor().Path(); got != canonicalPath(paths[0]) {
+		t.Fatalf("split pane should hold the dragged file, got %q", got)
+	}
+}
+
+// TestTabDragToOtherPaneMovesOnlyThatFile guards #305: dropping a tab on
+// another editor pane relocates exactly that document.
+func TestTabDragToOtherPaneMovesOnlyThatFile(t *testing.T) {
+	m, paths := tabApp(t)
+	src := m.panes.Focused()
+	inst := m.panes.FocusedInstance()
+	// First create a second editor pane by tab-dragging c.txt (active) off
+	// the bottom edge, then drag a.txt from the source onto it.
+	r := m.lay.Panes[src]
+	x, y := barCell(t, m, 17) // third segment (" a.txt │ b.txt │ c.txt ")
+	m = step(m, press(x, y))
+	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
+	dst := m.panes.Focused()
+	if dst == src {
+		t.Fatal("setup: expected a split pane")
+	}
+
+	m.setFocus(src)
+	x, y = barCell(t, m, 1) // a.txt
+	m = step(m, press(x, y))
+	dr := m.lay.Panes[dst]
+	m = step(m, release(dr.X+dr.W/2, dr.Y+dr.H/2))
+
+	if inst.TabCount() != 1 {
+		t.Fatalf("source should be down to 1 tab, got %d", inst.TabCount())
+	}
+	dinst := m.panes.Get(dst)
+	if dinst.TabCount() != 2 {
+		t.Fatalf("target should have 2 tabs, got %d", dinst.TabCount())
+	}
+	if got := dinst.Editor().Path(); got != canonicalPath(paths[0]) {
+		t.Fatalf("target's active tab should be the moved file, got %q", got)
 	}
 }
