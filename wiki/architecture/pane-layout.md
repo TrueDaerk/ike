@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -74,6 +74,18 @@ outer band (`edgeBand`) of the resolved zone — instead **spawns** a fresh edit
 split there via `layout.SplitLeaf`, so a pane can be cloned by dragging it to its
 own side. A drop in the source pane's interior is a no-op. The release-time
 spawn-vs-move decision is `commitMove`; the ghost preview labels it `new pane`.
+
+**Tab-label drag (#305, #317).** In a multi-tab editor, pressing a tab-bar
+segment grabs just that file (`dragTab`); the title row and the bar outside the
+segments keep starting a whole-pane move. On release (`commitTabMove`): a drop
+on **another editor** relocates the document into that pane's tab list; a drop
+on the **source pane's own edge** splits off a fresh editor holding just that
+file; a drop on a **non-editor pane's edge zone** (e.g. a terminal) likewise
+splits that pane and opens the file in the fresh editor leaf (#317). A drop in a
+non-editor pane's interior is a no-op — there is no tab list to join — and the
+drag feedback (zone arrow, ghost, status hint) only signals a target there when
+the cursor is in an edge zone. The ghost for a tab drag is labelled with the
+dragged file's basename.
 
 ## Create / close ops (Roadmap 0037)
 

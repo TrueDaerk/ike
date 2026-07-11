@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Tab drop next to terminals (#317): a dragged tab released on a non-editor
+  pane's edge zone now splits that pane and opens the file in the fresh
+  editor leaf; interior drops stay a no-op and the drag feedback (zone
+  arrow, ghost) reflects it. Documented in
+  [Pane Layout & Drag](/architecture/pane-layout.md).
+
 - Terminal duplication on project switch fixed (#320): when layout restore
   already recreated a terminal under the carried session's key, the live
   session now takes over that pane instead of splitting a duplicate leaf

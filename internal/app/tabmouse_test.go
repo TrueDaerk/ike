@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/pane"
 )
 
 // tabmouse_test.go covers mouse support on the tab bar (#159): left-click
@@ -160,6 +162,85 @@ func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
 	if got := m.panes.Get(newKey).Editor().Path(); got != canonicalPath(paths[0]) {
 		t.Fatalf("split pane should hold the dragged file, got %q", got)
 	}
+}
+
+// terminalTabApp is tabApp plus a terminal pane split off it, refocused back on
+// the editor pane; it returns the model, the tab paths, and both pane keys.
+func terminalTabApp(t *testing.T) (m Model, paths [3]string, src, term string) {
+	t.Helper()
+	m, paths = tabApp(t)
+	src = m.panes.Focused()
+	m = dispatch(t, m, TerminalNewMsg{})
+	term = m.panes.Focused()
+	inst := m.panes.Get(term)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("setup: terminal.new should focus a terminal pane, got %q", term)
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	m.setFocus(src)
+	return m, paths, src, term
+}
+
+// TestTabDragToTerminalEdgeSplits guards #317: dropping a dragged tab on a
+// terminal pane's edge zone splits the terminal there and opens the file in
+// the fresh editor leaf, like a self-edge drop.
+func TestTabDragToTerminalEdgeSplits(t *testing.T) {
+	m, paths, src, term := terminalTabApp(t)
+	inst := m.panes.Get(src)
+	x, y := barCell(t, m, 1) // grab a.txt
+	m = step(m, press(x, y))
+	tr := m.lay.Panes[term]
+	m = step(m, release(tr.X+tr.W/2, tr.Y+tr.H-1)) // terminal's bottom edge
+
+	if inst.TabCount() != 2 {
+		t.Fatalf("source pane should keep 2 tabs, got %d", inst.TabCount())
+	}
+	newKey := m.panes.Focused()
+	if newKey == src || newKey == term {
+		t.Fatalf("focus should land on the fresh split pane, got %q", newKey)
+	}
+	ninst := m.panes.Get(newKey)
+	if ninst.Kind() != pane.KindEditor || ninst.Editor().Path() != canonicalPath(paths[0]) {
+		t.Fatalf("split pane should be an editor holding the dragged file, got %q", ninst.Editor().Path())
+	}
+	if m.panes.Get(term).Kind() != pane.KindTerminal {
+		t.Fatal("the terminal pane must survive the split")
+	}
+}
+
+// TestTabDragToTerminalInteriorNoop guards #317: a terminal has no tab list to
+// join, so a drop in its interior stays a no-op.
+func TestTabDragToTerminalInteriorNoop(t *testing.T) {
+	m, _, src, term := terminalTabApp(t)
+	inst := m.panes.Get(src)
+	panes := len(m.lay.Panes)
+	x, y := barCell(t, m, 1)
+	m = step(m, press(x, y))
+	tr := m.lay.Panes[term]
+	m = step(m, release(tr.X+tr.W/2, tr.Y+tr.H/2))
+
+	if len(m.lay.Panes) != panes || inst.TabCount() != 3 {
+		t.Fatalf("interior drop on a terminal must change nothing: panes=%d tabs=%d",
+			len(m.lay.Panes), inst.TabCount())
+	}
+}
+
+// TestTabDragOverTerminalShowsFeedback guards #317: during a tab drag the
+// ghost/zone feedback renders over a terminal target's edge zone.
+func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
+	m, _, _, term := terminalTabApp(t)
+	x, y := barCell(t, m, 1)
+	m = step(m, press(x, y))
+	tr := m.lay.Panes[term]
+	m = step(m, motion(tr.X+tr.W/2, tr.Y+tr.H-1))
+	if _, _, _, ok := m.moveGhost(); !ok {
+		t.Fatal("a tab drag over a terminal edge must render the drop ghost")
+	}
+	m = step(m, motion(tr.X+tr.W/2, tr.Y+tr.H/2))
+	if _, _, _, ok := m.moveGhost(); ok {
+		t.Fatal("a terminal's interior is not a tab drop target, no ghost")
+	}
+	m = step(m, release(x, y))
 }
 
 // TestTabDragToOtherPaneMovesOnlyThatFile guards #305: dropping a tab on
