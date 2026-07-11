@@ -223,6 +223,11 @@ type Model struct {
 	// pasteHist is the palette mode over the focused editor's yank/delete
 	// history (#57), same pattern as refs.
 	pasteHist *pasteHistMode
+	// zoomed is the pane key rendered alone while pane.maximize is active
+	// (#358); "" = normal layout. zoomSig is the tree's leaf signature at zoom
+	// time — layout() drops the zoom when it changes. Not persisted.
+	zoomed  string
+	zoomSig string
 	// keys is the JetBrains-flavoured keybinding resolver (Roadmap 0080). It maps
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
@@ -1362,6 +1367,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pane.splitDown / pane.splitUp (cmd+k down / cmd+k up): split the
 		// focused leaf with a fresh empty editor, no drag or file open needed.
 		m.SplitFocused(msg.Zone)
+		return m, nil
+
+	case MaximizePaneMsg:
+		// pane.maximize (cmd+k z / View menu, #358): tmux-style zoom toggle.
+		m.toggleMaximize()
 		return m, nil
 
 	case SplitViewMsg:
@@ -2812,7 +2822,12 @@ func (m *Model) layout() {
 	if m.tree == nil {
 		m.tree = layout.Default(m.width, explorerWidth)
 	}
-	m.lay = layout.Compute(m.tree, m.bodyRect())
+	if m.zoomActive() {
+		// Zoomed (#358): the one pane owns the whole body; no dividers.
+		m.lay = layout.Layout{Panes: map[string]layout.Rect{m.zoomed: m.bodyRect()}}
+	} else {
+		m.lay = layout.Compute(m.tree, m.bodyRect())
+	}
 	for key, r := range m.lay.Panes {
 		inst := m.panes.Get(key)
 		if inst == nil {
@@ -3451,7 +3466,13 @@ func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
 	}
-	body := m.renderNode(m.tree, m.bodyRect())
+	body := ""
+	if m.zoomed != "" {
+		// Zoomed (#358): render only that pane; the tree survives untouched.
+		body = m.renderPane(m.zoomed, m.bodyRect())
+	} else {
+		body = m.renderNode(m.tree, m.bodyRect())
+	}
 	rows := []string{body, m.statusLine()}
 	if m.menuEnabled() {
 		rows = append([]string{m.menu.Bar()}, rows...)

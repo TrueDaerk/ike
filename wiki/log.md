@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Pane maximize (#358, Roadmap 0290): `pane.maximize` (`cmd+k z`, View menu,
+  palette) zooms the focused pane tmux-style — it renders alone over the body
+  while the split tree survives untouched; any leaf-set change (split, close,
+  relocation) auto-unzooms via a signature check in `layout()`. Not
+  persisted. Documented in [Pane Layout](/architecture/pane-layout.md);
+  zen mode follows as #359.
+
 - Paste from History (#57): every yank/delete feeds a bounded 20-entry
   register history; `editor.pasteFromHistory` (`cmd+shift+v`, Edit menu,
   palette) picks an entry from a palette list (first line + size, fuzzy

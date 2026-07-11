@@ -126,6 +126,11 @@ type TerminalClearMsg struct{}
 // by explorer.toggle.
 type ToggleExplorerFocusMsg struct{}
 
+// MaximizePaneMsg toggles the focused pane's zoom (#358, tmux-style): render
+// it alone over the whole body, or restore the previous layout. Dispatched by
+// pane.maximize.
+type MaximizePaneMsg struct{}
+
 // ShowPasteHistoryMsg asks the root model to open the palette locked to the
 // paste-history mode over the focused editor's yank/delete history (#57).
 // Dispatched by editor.pasteFromHistory (cmd+shift+v).
@@ -203,6 +208,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.splitViewRight", "Split View Right", SplitViewMsg{Zone: layout.ZoneRight}),
 			appCommand("editor.splitViewDown", "Split View Down", SplitViewMsg{Zone: layout.ZoneBottom}),
 			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
+			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 		), scratchCommands()...),
 	}
 }
