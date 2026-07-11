@@ -63,14 +63,16 @@ func TestSignaturePopupClampsWidthAndHeight(t *testing.T) {
 	long := "print(" + strings.Repeat("value string, ", 60) + ")"
 	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: long, ParamStart: 6, ParamEnd: 11})
 	v := m.SignatureView()
-	maxW := m.popupMaxWidth() + 2 // + the box padding
+	maxW := m.popupMaxWidth() + 4 // + the box padding and the frame (#316)
 	for i, line := range strings.Split(v, "\n") {
 		if w := lipgloss.Width(line); w > maxW {
 			t.Fatalf("popup line %d width %d exceeds cap %d", i, w, maxW)
 		}
 	}
-	if rows := len(strings.Split(v, "\n")); rows > popupMaxRows+1 {
-		t.Fatalf("popup is %d rows, want at most %d + ellipsis", rows, popupMaxRows+1)
+	// Content rows cap at popupMaxRows plus the ellipsis row; the frame adds
+	// its two border rows (#316).
+	if rows := len(strings.Split(v, "\n")); rows > popupMaxRows+3 {
+		t.Fatalf("popup is %d rows, want at most %d + ellipsis + frame", rows, popupMaxRows+3)
 	}
 	if !strings.Contains(ansi.Strip(v), "…") {
 		t.Fatal("the truncated popup should end in an ellipsis row")
@@ -110,6 +112,27 @@ func TestPopupAffordances(t *testing.T) {
 	}
 	if v := ansi.Strip(m.CompletionView()); !strings.Contains(v, "accept") {
 		t.Fatalf("completion popup missing the accept hint:\n%s", v)
+	}
+}
+
+// TestPopupsCarryRoundedFrame guards #316: signature and completion popups
+// ship the rounded overlay frame so they read as overlays, not buffer text.
+func TestPopupsCarryRoundedFrame(t *testing.T) {
+	m, path := loaded(t, "Greet(\n")
+	m = insertModeAt(m, 0, 6)
+	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: "Greet(name string)", ParamStart: 6, ParamEnd: 17})
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if v := ansi.Strip(m.SignatureView()); !strings.Contains(v, corner) {
+			t.Fatalf("signature popup misses frame corner %q:\n%s", corner, v)
+		}
+	}
+	m.dismissSignature()
+	m = insertModeAt(m, 0, 6)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 6, Items: []ilsp.CompletionItem{{Label: "Greet", InsertText: "Greet"}}})
+	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
+		if v := ansi.Strip(m.CompletionView()); !strings.Contains(v, corner) {
+			t.Fatalf("completion popup misses frame corner %q:\n%s", corner, v)
+		}
 	}
 }
 

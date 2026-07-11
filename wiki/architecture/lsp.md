@@ -173,10 +173,16 @@ insert/replace mode, insert-mode arrow motion, and mouse clicks (#307) all
 dismiss it — anything that moves the anchoring cursor without a change event
 would otherwise drag the popup along — and a server reply landing after
 insert mode ended is dropped as stale. Completion, when open, takes
-precedence in the popup compositor. Popups clamp to the owning pane (#306): long signatures
-wrap at the popup width cap, over-tall content truncates with an ellipsis
-row, and the placement shifts left / flips above the anchor instead of
-bleeding across pane borders. Gated on `signatureHelpProvider`.
+precedence in the popup compositor. All three popups render inside a rounded
+themed frame (`popupFrame`, #316) — `BorderFocus` on `Panel`, like the
+floating shell — so they read as overlays rather than buffer text. With the
+frame in place they clamp to the **terminal**, not the pane: a popup may
+overflow the owning pane's borders when it needs the room, the placement
+shifts left / flips above the anchor instead of bleeding past the screen
+edge, and the app feeds the terminal-derived width cap in via
+`SetPopupMaxWidth`. The #306 safety nets stay: long signatures wrap at the
+popup width cap (≤ 80) and over-tall content truncates at `popupMaxRows`
+with an ellipsis row. Gated on `signatureHelpProvider`.
 
 **Semantic tokens (#9).** `internal/highlight/semantic` decodes the packed
 relative 5-tuples against the server's legend into the same `highlight.Span`
