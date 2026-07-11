@@ -391,3 +391,41 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 		t.Fatalf("title should indicate the mapping, got %q", title)
 	}
 }
+
+// TestStatusLineNamesFocusedTerminal guards #381: with a terminal focused the
+// status line says TERMINAL (shell · dir) instead of mirroring the active
+// editor's mode/file/cursor — which made it hard to tell where input goes.
+func TestStatusLineNamesFocusedTerminal(t *testing.T) {
+	m, key := openTestTerminal(t)
+	line := m.statusLine()
+	if !strings.Contains(line, "TERMINAL") {
+		t.Fatalf("status line should name the focused terminal, got %q", line)
+	}
+	if strings.Contains(line, "NORMAL") || strings.Contains(line, "Ln ") {
+		t.Fatalf("status line must not show editor mode/cursor while a terminal is focused: %q", line)
+	}
+	if sh := m.panes.Get(key).Terminal().ShellPath(); sh != "" &&
+		!strings.Contains(line, filepath.Base(sh)) {
+		t.Fatalf("status line should show the shell name %q, got %q", filepath.Base(sh), line)
+	}
+
+	// Focus back on the editor: the mode/file segments return.
+	m.setFocus(m.activeEditorKey())
+	if line := m.statusLine(); !strings.Contains(line, "NORMAL") {
+		t.Fatalf("editor focus should restore the mode segment, got %q", line)
+	}
+}
+
+// TestStatusLineNamesFocusedExplorer guards #381 for the explorer: its focus
+// names the pane kind, never an implied editor normal mode.
+func TestStatusLineNamesFocusedExplorer(t *testing.T) {
+	m := sized(t, 100, 40)
+	m.setFocus(pane.ExplorerKey)
+	line := m.statusLine()
+	if !strings.Contains(line, "EXPLORER") {
+		t.Fatalf("status line should name the focused explorer, got %q", line)
+	}
+	if strings.Contains(line, "NORMAL") || strings.Contains(line, "Ln ") {
+		t.Fatalf("status line must not show editor mode/cursor while the explorer is focused: %q", line)
+	}
+}

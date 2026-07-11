@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Status line names the focused pane kind (#381): a focused terminal shows
+  `TERMINAL │ shell · dir` (`[exited]` when dead), the explorer shows
+  `EXPLORER`; editor mode/file/cursor render only while an editor holds
+  focus. See [Integrated Terminal](/architecture/terminal.md).
+
 - Settings window QoL pass (#383): ←→/h/l switch between the category column
   and the form (arrow-left only on custom pages, `h` stays page filter text);
   both columns scroll with the selection instead of truncating; enum entries

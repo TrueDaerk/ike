@@ -3831,8 +3831,9 @@ func (m Model) editorTitle(ed *editor.Model) string {
 	return name
 }
 
-// statusLine renders the bottom status bar: mode, file, dirty flag, cursor, and
-// any active command line, reflecting the active editor.
+// statusLine renders the bottom status bar. With an editor focused it shows
+// mode, file, dirty flag and cursor; with a terminal or the explorer focused
+// it names that pane kind instead, so the line always says where input goes (#381).
 func (m Model) statusLine() string {
 	style := lipgloss.NewStyle().
 		Width(m.width).
@@ -3858,6 +3859,40 @@ func (m Model) statusLine() string {
 			hint += "  (drop on a pane or this pane's edge)"
 		}
 		return style.Foreground(m.pal().DropTarget).Render(" " + hint)
+	}
+
+	// A non-editor focus names itself instead of implying editor input (#381):
+	// mirroring the active editor while a terminal owns the keystrokes made it
+	// hard to tell where input goes.
+	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() != pane.KindEditor {
+		left := " "
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			left += "TERMINAL"
+			t := inst.Terminal()
+			seg := ""
+			if s := t.ShellPath(); s != "" {
+				seg = filepath.Base(s)
+			}
+			if d := t.Dir(); d != "" {
+				if seg != "" {
+					seg += " · "
+				}
+				seg += displayDir(d)
+			}
+			if seg != "" {
+				left += " │ " + seg
+			}
+			if !t.Running() {
+				left += " [exited]"
+			}
+		default:
+			left += "EXPLORER"
+		}
+		if s := m.host.Status(); s != "" {
+			left += " │ " + s
+		}
+		return style.Render(left)
 	}
 
 	// The ":" / "/" command line renders inside the editor pane (vim-style),

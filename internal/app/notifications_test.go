@@ -112,6 +112,7 @@ func TestServerStatusRouting(t *testing.T) {
 // mode/cursor segments.
 func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
 	m := newSized()
+	m.setFocus(m.activeEditorKey()) // mode/cursor segments render for a focused editor (#381)
 	m.host.SetStatus("go language server ready")
 	line := m.statusLine()
 	if !strings.Contains(line, "NORMAL") || !strings.Contains(line, "Ln 1") {
