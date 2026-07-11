@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Accepting an LSP completion no longer duplicates the already-typed identifier
+  prefix (#330): the insert now replaces the identifier run before the cursor
+  (`identifierStart`) rather than the request anchor, which is empty for a
+  manual `ctrl+space` trigger (`xyz.__` + `__dict__` had produced `xyz.____dict__`).
+
 - Tab cycling gains an `alt+home`/`alt+end` default pair, `alt+shift+home/end`
   to move the active tab (#328): on Macs without physical PgUp/PgDn keys,
   `fn+ctrl+arrows` is claimed by macOS globals, while `fn+option+left/right`

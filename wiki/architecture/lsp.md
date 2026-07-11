@@ -65,7 +65,7 @@ full-sync server gets the whole document, a SyncNone server nothing. Range
 positions cross into the negotiated encoding through `protocol/convert.go`
 only; per-document versions stay monotonic and only advance when a
 notification is actually sent (an unchanged text sends nothing). A file-open
-hook drives `didOpen`, save drives `didSave`, close drives `didClose`. `ctrl+space` (Kitty `ctrl+' '` or the legacy `ctrl+@`/NUL spelling) emits the same completion trigger manually (#302), so completion opens without typing a trigger character; a re-press with the popup open re-queries.
+hook drives `didOpen`, save drives `didSave`, close drives `didClose`. `ctrl+space` (Kitty `ctrl+' '` or the legacy `ctrl+@`/NUL spelling) emits the same completion trigger manually (#302), so completion opens without typing a trigger character; a re-press with the popup open re-queries. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
 
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
