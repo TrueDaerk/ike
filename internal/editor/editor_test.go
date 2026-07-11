@@ -764,6 +764,71 @@ func TestAltArrowWordNav(t *testing.T) {
 	}
 }
 
+func TestAltArrowWordNavDotStopsAndLineClamp(t *testing.T) {
+	m, _ := loaded(t, "config.editor.tabWidth\nnext\n")
+	// '.' inside the identifier is a stop point (#303).
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt))
+	if m.cursor.Col != 6 {
+		t.Fatalf("alt+right to '.' col=%d want 6", m.cursor.Col)
+	}
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt), modKey(tea.KeyRight, tea.ModAlt))
+	if m.cursor.Col != 13 {
+		t.Fatalf("alt+right to second '.' col=%d want 13", m.cursor.Col)
+	}
+	// Past the last word the motion clamps to the line instead of crossing.
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt), modKey(tea.KeyRight, tea.ModAlt),
+		modKey(tea.KeyRight, tea.ModAlt))
+	if m.cursor.Line != 0 {
+		t.Fatalf("alt+right crossed to line %d, must stay on line 0", m.cursor.Line)
+	}
+	// Backward from column 0 stays put rather than jumping to the previous line.
+	m = send(m, special(tea.KeyDown))
+	for range 4 {
+		m = send(m, modKey(tea.KeyLeft, tea.ModAlt))
+	}
+	if m.cursor.Line != 1 || m.cursor.Col != 0 {
+		t.Fatalf("alt+left clamp pos=%v want line 1 col 0", m.cursor)
+	}
+}
+
+func TestShiftAltArrowExtendsSelection(t *testing.T) {
+	m, _ := loaded(t, "foo.bar baz\n")
+	m = send(m, modKey(tea.KeyRight, tea.ModShift|tea.ModAlt))
+	if !m.mode.IsVisual() {
+		t.Fatalf("alt+shift+right mode=%v want visual", m.mode)
+	}
+	if m.anchor.Col != 0 || m.cursor.Col != 3 {
+		t.Fatalf("selection anchor=%d cursor=%d want 0/3", m.anchor.Col, m.cursor.Col)
+	}
+	m = send(m, modKey(tea.KeyRight, tea.ModShift|tea.ModAlt))
+	if m.anchor.Col != 0 || m.cursor.Col != 4 {
+		t.Fatalf("extended selection anchor=%d cursor=%d want 0/4", m.anchor.Col, m.cursor.Col)
+	}
+	m = send(m, modKey(tea.KeyLeft, tea.ModShift|tea.ModAlt))
+	if m.anchor.Col != 0 || m.cursor.Col != 3 {
+		t.Fatalf("shrunk selection anchor=%d cursor=%d want 0/3", m.anchor.Col, m.cursor.Col)
+	}
+}
+
+func TestAltArrowWordNavInInsertMode(t *testing.T) {
+	m, _ := loaded(t, "foo bar\nnext\n")
+	m = typeKeys(m, "i")
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt))
+	if m.cursor.Col != 4 {
+		t.Fatalf("insert alt+right col=%d want 4", m.cursor.Col)
+	}
+	// Clamps to the line-end slot (one past the last rune) instead of crossing.
+	m = send(m, modKey(tea.KeyRight, tea.ModAlt), modKey(tea.KeyRight, tea.ModAlt))
+	if m.cursor.Line != 0 || m.cursor.Col != 7 {
+		t.Fatalf("insert alt+right clamp pos=%v want line 0 col 7", m.cursor)
+	}
+	m = send(m, modKey(tea.KeyLeft, tea.ModAlt), modKey(tea.KeyLeft, tea.ModAlt),
+		modKey(tea.KeyLeft, tea.ModAlt))
+	if m.cursor.Line != 0 || m.cursor.Col != 0 {
+		t.Fatalf("insert alt+left clamp pos=%v want line 0 col 0", m.cursor)
+	}
+}
+
 func TestShiftArrowStartsAndExtendsSelection(t *testing.T) {
 	m, _ := loaded(t, "foo bar baz\n")
 	m = send(m, modKey(tea.KeyRight, tea.ModShift))

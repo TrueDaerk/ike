@@ -98,10 +98,16 @@ Beyond the core motions it also binds `~` (toggle case), `*`/`#` (search the
 word under the cursor), indent operators `>`/`<` (and `>>`/`<<`), `H M L`
 (screen top/middle/bottom), and screen scrolling via `Ctrl-f/b` (page),
 `Ctrl-d/u` (half page) and `PgUp`/`PgDn`. `Alt/Option+←/→` (and `Ctrl+←/→`) are
-word motions, `Alt+↑/↓` (and `Ctrl+↑/↓`) paragraph jumps — these work in normal,
-visual and insert. `Shift+arrows` (plus `Shift+Home/End`) are selection keys:
-in normal mode they enter charwise visual mode anchored at the cursor and move;
-in visual mode they extend the selection like their plain counterparts.
+word motions clamped to the current line (#303) — `.` inside identifiers counts
+as a stop point (`config.editor.tabWidth` yields sub-word stops), and past the
+first/last word the caret lands on the line start/end instead of crossing
+lines; cross-line word motion stays on vim `w`/`b`/`e`. `Alt+↑/↓` (and
+`Ctrl+↑/↓`) are paragraph jumps — all of these work in normal, visual and
+insert. `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
+mode they enter charwise visual mode anchored at the cursor and move; in visual
+mode they extend the selection like their plain counterparts.
+`Shift+Alt/Option+←/→` (and `Shift+Ctrl+←/→`) extend the selection by the same
+in-line word motion; mid-insert they just move the caret.
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,

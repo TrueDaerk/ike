@@ -41,6 +41,29 @@ func wordForward(b *buffer.Buffer, from buffer.Position, count int, big bool) Re
 	return Result{Pos: p, Kind: Exclusive}
 }
 
+// WordForwardInLine is WordForward clamped to the starting line (#303,
+// opt/alt+right): past the last word it lands on the line-end slot instead of
+// crossing into the next line. Punctuation such as '.' forms its own class, so
+// dotted identifiers (config.editor.tabWidth) yield sub-word stops for free.
+func WordForwardInLine(b *buffer.Buffer, from buffer.Position, count int) Result {
+	res := wordForward(b, from, count, false)
+	if res.Pos.Line != from.Line {
+		res.Pos = buffer.Position{Line: from.Line, Col: b.RuneLen(from.Line)}
+	}
+	return res
+}
+
+// WordBackwardInLine is WordBackward clamped to the starting line (#303,
+// opt/alt+left): before the first word it lands on column 0 instead of
+// crossing into the previous line.
+func WordBackwardInLine(b *buffer.Buffer, from buffer.Position, count int) Result {
+	res := wordBackward(b, from, count, false)
+	if res.Pos.Line != from.Line {
+		res.Pos = buffer.Position{Line: from.Line, Col: 0}
+	}
+	return res
+}
+
 // WordEnd moves to the end of the next word ("e"); inclusive.
 func WordEnd(b *buffer.Buffer, from buffer.Position, count int) Result {
 	return wordEnd(b, from, count, false)

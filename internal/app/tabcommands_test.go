@@ -149,13 +149,30 @@ func TestTabKeymapChords(t *testing.T) {
 	m, paths := tabApp(t)
 	inst := m.panes.FocusedInstance()
 
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyPgDown, Mod: tea.ModCtrl})
 	if inst.Editor().Path() != paths[0] {
-		t.Fatalf("alt+right must cycle to the next tab, got %q", inst.Editor().Path())
+		t.Fatalf("ctrl+pgdown must cycle to the next tab, got %q", inst.Editor().Path())
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: '2', Mod: tea.ModAlt})
 	if inst.Editor().Path() != paths[1] {
 		t.Fatalf("alt+2 must jump to the second tab, got %q", inst.Editor().Path())
+	}
+}
+
+// The alt+arrow tab secondaries were freed for word-wise cursor motion (#303):
+// the chord must fall through the keymap to the editor instead of cycling tabs.
+func TestAltArrowReachesEditorWordMotion(t *testing.T) {
+	m, paths := tabApp(t)
+	inst := m.panes.FocusedInstance()
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
+	if inst.Editor().Path() != paths[2] {
+		t.Fatalf("alt+right must not switch tabs anymore, got %q", inst.Editor().Path())
+	}
+	// "ccc" is the only word on the line: the in-line motion clamps to the
+	// line end, which normal mode snaps onto the last rune.
+	if _, col := inst.Editor().CursorPos(); col != 2 {
+		t.Fatalf("alt+right must move the cursor word-wise, col=%d want 2", col)
 	}
 }
 

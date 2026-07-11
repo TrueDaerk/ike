@@ -208,13 +208,16 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 		}
 		return motion.Result{}, false
 
-	// Word navigation with Option/Alt+Left/Right; paragraph jumps with
+	// Word navigation with Option/Alt+Left/Right (#303): word-wise within the
+	// current line, '.' counts as a stop point. Paragraph jumps with
 	// Alt+Up/Down. Ctrl variants are the everywhere-deliverable fallback.
-	// Shift+arrows are selection keys, handled before motion resolution.
-	case "alt+right", "ctrl+right":
-		return motion.WordForward(m.buf, m.cursor, count), true
-	case "alt+left", "ctrl+left":
-		return motion.WordBackward(m.buf, m.cursor, count), true
+	// Shift+arrows are selection keys, handled before motion resolution in
+	// normal and visual mode; the shifted chords resolve here only for
+	// insert-mode movement.
+	case "alt+right", "ctrl+right", "alt+shift+right", "ctrl+shift+right":
+		return motion.WordForwardInLine(m.buf, m.cursor, count), true
+	case "alt+left", "ctrl+left", "alt+shift+left", "ctrl+shift+left":
+		return motion.WordBackwardInLine(m.buf, m.cursor, count), true
 	case "alt+down", "ctrl+down":
 		return motion.ParagraphForward(m.buf, m.cursor, count), true
 	case "alt+up", "ctrl+up":
@@ -258,6 +261,16 @@ func shiftSelectKey(s string) (string, bool) {
 		return "home", true
 	case "shift+end":
 		return "end", true
+	// Shift+opt (and the delivered ctrl fallback) extend the selection
+	// word-wise within the line (#303), consistent with shift+arrows (#47).
+	case "alt+shift+left":
+		return "alt+left", true
+	case "alt+shift+right":
+		return "alt+right", true
+	case "ctrl+shift+left":
+		return "ctrl+left", true
+	case "ctrl+shift+right":
+		return "ctrl+right", true
 	}
 	return "", false
 }

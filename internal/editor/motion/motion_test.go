@@ -183,3 +183,51 @@ func TestMatchPairAcrossLines(t *testing.T) {
 		t.Fatalf("%% multiline=%v ok=%v want {2 0}", r.Pos, ok)
 	}
 }
+
+func TestWordForwardInLineClampsToLine(t *testing.T) {
+	b := buffer.FromString("foo bar\nnext line")
+	// Within the line it behaves like w.
+	if p := WordForwardInLine(b, pos(0, 0), 1).Pos; p != pos(0, 4) {
+		t.Fatalf("in-line w -> %v want %v", p, pos(0, 4))
+	}
+	// Past the last word it stops at the line-end slot instead of crossing.
+	if p := WordForwardInLine(b, pos(0, 4), 1).Pos; p != pos(0, 7) {
+		t.Fatalf("in-line w at last word -> %v want %v", p, pos(0, 7))
+	}
+	if p := WordForwardInLine(b, pos(0, 4), 5).Pos; p != pos(0, 7) {
+		t.Fatalf("in-line w with count past end -> %v want %v", p, pos(0, 7))
+	}
+}
+
+func TestWordBackwardInLineClampsToLine(t *testing.T) {
+	b := buffer.FromString("first line\nfoo bar")
+	if p := WordBackwardInLine(b, pos(1, 4), 1).Pos; p != pos(1, 0) {
+		t.Fatalf("in-line b -> %v want %v", p, pos(1, 0))
+	}
+	// Before the first word it stops at column 0 instead of crossing.
+	if p := WordBackwardInLine(b, pos(1, 0), 1).Pos; p != pos(1, 0) {
+		t.Fatalf("in-line b at line start -> %v want %v", p, pos(1, 0))
+	}
+	if p := WordBackwardInLine(b, pos(1, 6), 9).Pos; p != pos(1, 0) {
+		t.Fatalf("in-line b with count past start -> %v want %v", p, pos(1, 0))
+	}
+}
+
+func TestWordInLineDotStops(t *testing.T) {
+	b := buffer.FromString("config.editor.tabWidth x")
+	// Forward: each '.' and each segment is a stop point.
+	p := pos(0, 0)
+	for _, want := range []int{6, 7, 13, 14, 23} {
+		p = WordForwardInLine(b, p, 1).Pos
+		if p != pos(0, want) {
+			t.Fatalf("in-line w -> %v want col %d", p, want)
+		}
+	}
+	// Backward retraces the same stops.
+	for _, want := range []int{14, 13, 7, 6, 0} {
+		p = WordBackwardInLine(b, p, 1).Pos
+		if p != pos(0, want) {
+			t.Fatalf("in-line b -> %v want col %d", p, want)
+		}
+	}
+}
