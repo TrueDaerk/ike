@@ -88,6 +88,12 @@ var jetbrainsRows = []row{
 	// for terminals that can deliver Cmd (macOS terminals never forward it).
 	{"f4", "lsp.definition", "Go to declaration", Editor, "LSP (0100)"},
 	{"cmd+b", "lsp.definition", "Go to declaration", Editor, "LSP (0100)"},
+	// JetBrains quick documentation (#378). ctrl+q is the Windows/Linux
+	// JetBrains chord and delivered everywhere: raw mode disables XON flow
+	// control, so ctrl+q arrives as a normal key (mirroring the ctrl+s story
+	// above). f1 — the macOS JetBrains quick-doc key — is taken by the
+	// cheatsheet.
+	{"ctrl+q", "lsp.hover", "Quick documentation", Editor, "LSP (0100)"},
 	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
 	// variant keys off the active visual selection inside lsp.formatRange.
 	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "LSP (0100)"},
