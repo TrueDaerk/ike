@@ -43,7 +43,9 @@ type Connector func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (
 type Callbacks struct {
 	// Diagnostics delivers a publishDiagnostics for path, with the document's
 	// current lines and the server's position encoding so the receiver can map to
-	// editor coordinates.
+	// editor coordinates. For open documents the params carry the merged view:
+	// the host server's diagnostics plus any embedded-fragment diagnostics
+	// already mapped to host coordinates (#415).
 	Diagnostics func(path string, params protocol.PublishDiagnosticsParams, lines []string, enc string)
 	// Status reports a human-readable server state change (started, crashed, …).
 	// kind classifies it: persistent state stays on the status line, transient
@@ -74,6 +76,12 @@ type Manager struct {
 	frags   map[string]map[int]*fragmentDoc
 	fragGen map[string]int
 	fragMu  sync.Mutex
+
+	// Diagnostics state (#415): the host server's last publish per host path
+	// and each fragment server's last publish per (host, slot), merged into
+	// one host-path publish whenever either side changes.
+	hostDiags map[string][]protocol.Diagnostic
+	fragDiags map[string]map[int][]fragDiagnostic
 }
 
 // server is one running language server instance.
@@ -116,6 +124,9 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		restarts: make(map[string]int),
 		frags:    make(map[string]map[int]*fragmentDoc),
 		fragGen:  make(map[string]int),
+
+		hostDiags: make(map[string][]protocol.Diagnostic),
+		fragDiags: make(map[string]map[int][]fragDiagnostic),
 	}
 }
 
@@ -252,6 +263,7 @@ func (m *Manager) Close(path string) error {
 	srv, _, ok := m.docServer(path)
 	m.mu.Lock()
 	delete(m.docs, path)
+	delete(m.hostDiags, path)
 	m.mu.Unlock()
 	if !ok {
 		return nil
@@ -713,18 +725,28 @@ func (m *Manager) StopLang(lang string) {
 			delete(m.docs, path)
 			delete(m.frags, path)
 			delete(m.fragGen, path)
+			delete(m.hostDiags, path)
+			delete(m.fragDiags, path)
 		}
 	}
 	// Fragment documents in the stopped language lose their server; drop them
-	// so the next host change reopens cleanly.
+	// (and their published diagnostics) so the next host change reopens cleanly.
+	republish := map[string]bool{}
 	for host, fds := range m.frags {
 		for slot, fd := range fds {
 			if fd.lang == lang {
 				delete(fds, slot)
+				if _, ok := m.fragDiags[host][slot]; ok {
+					delete(m.fragDiags[host], slot)
+					republish[host] = true
+				}
 			}
 		}
 		if len(fds) == 0 {
 			delete(m.frags, host)
+		}
+		if len(m.fragDiags[host]) == 0 {
+			delete(m.fragDiags, host)
 		}
 	}
 	m.mu.Unlock()
@@ -732,6 +754,9 @@ func (m *Manager) StopLang(lang string) {
 		if srv.stop != nil {
 			srv.stop()
 		}
+	}
+	for host := range republish {
+		m.publishHostDiagnostics(host)
 	}
 }
 
@@ -759,6 +784,8 @@ func (m *Manager) Shutdown() {
 	m.docs = make(map[string]*document)
 	m.frags = make(map[string]map[int]*fragmentDoc)
 	m.fragGen = make(map[string]int)
+	m.hostDiags = make(map[string][]protocol.Diagnostic)
+	m.fragDiags = make(map[string]map[int][]fragDiagnostic)
 	for _, srv := range servers {
 		srv.closing = true // suppress restart on the resulting Done
 	}
@@ -846,23 +873,25 @@ func (m *Manager) onNotify(lang, method string, params json.RawMessage) {
 		return
 	}
 	if isFragmentURI(string(p.URI)) {
-		return // mapped back onto the host buffer in #415
+		m.onFragmentDiagnostics(p) // mapped back onto the host buffer (#415)
+		return
 	}
 	path := protocol.URIToPath(p.URI)
 	m.mu.Lock()
 	doc := m.docs[path]
-	var lines []string
-	var enc string
 	if doc != nil {
-		lines = doc.lines
-		if srv := m.servers[doc.srvKey]; srv != nil {
-			enc = srv.cl.Encoding()
-		}
+		m.hostDiags[path] = p.Diagnostics
 	}
 	m.mu.Unlock()
-	if m.cb.Diagnostics != nil {
-		m.cb.Diagnostics(path, p, lines, enc)
+	if doc == nil {
+		// Not an open document (a dependency the server also checks): pass
+		// through untouched — there is nothing to merge with.
+		if m.cb.Diagnostics != nil {
+			m.cb.Diagnostics(path, p, nil, "")
+		}
+		return
 	}
+	m.publishHostDiagnostics(path)
 }
 
 // onRequest answers server→client requests minimally so a server does not stall:

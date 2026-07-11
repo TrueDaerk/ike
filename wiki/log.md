@@ -2,6 +2,13 @@
 
 ## 2026-07-11
 
+- Fragment diagnostics (#415): diagnostics published on fragment documents
+  now map back onto the host buffer and merge with the host server's own
+  diagnostics into a single host-path publish (`manager/fragdiags.go`).
+  Fragment diagnostics follow the fragment when host edits move it and clear
+  immediately when the fragment closes or its language is stopped. See
+  [lsp](/architecture/lsp.md).
+
 - Fragment references/definition (#416): definition and references requests
   inside an embedded fragment now route to the fragment's server; result
   locations in fragment documents are rewritten to host-file locations

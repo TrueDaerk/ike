@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-11T21:30:00Z
+timestamp: 2026-07-11T22:30:00Z
 ---
 
 # LSP & Language Intelligence
@@ -289,9 +289,18 @@ fragment-relative, result edit/hover ranges return in host coordinates, and
 definition/reference locations pointing into fragment documents are rewritten
 to the host file (host URI + host range); locations in real files pass
 through, and a fragment location that no longer resolves to a tracked
-fragment is dropped rather than surfaced as an unopenable synthetic URI. A
-fragment language with no configured server degrades silently; fragment
-diagnostics are dropped until #415. The
+fragment is dropped rather than surfaced as an unopenable synthetic URI.
+Diagnostics published on fragment documents merge into the host's (#415,
+`manager/fragdiags.go`): the manager keeps the last publish per source — the
+host server's per path, each fragment server's per (host, slot) — and
+re-emits one merged host-path `publishDiagnostics` whenever any source
+changes, so the bridge stays fragment-agnostic. Fragment diagnostics are
+stored in fragment-relative coordinates and mapped through the fragment's
+*current* range at publish time, so they follow the fragment when host edits
+move it; a fragment that closes (or whose language is stopped) drops its
+diagnostics from the merged view immediately, without waiting for a server
+publish. A
+fragment language with no configured server degrades silently. The
 `sql` language plugin registers `sql-language-server` (also serving plain
 `.sql` files) so the pipeline works out of the box.
 
