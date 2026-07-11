@@ -104,6 +104,19 @@ func TestTypingScansAndRendersResults(t *testing.T) {
 	}
 }
 
+func TestFooterPluralizesCounts(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, match("a.go", 3))
+	if v := m.View(); !strings.Contains(v, "1 match in 1 file") {
+		t.Fatalf("singular counts must not be pluralized:\n%s", v)
+	}
+	feed(m, match("a.go", 5))
+	if v := m.View(); !strings.Contains(v, "2 matches in 1 file") {
+		t.Fatalf("mixed counts must pluralize independently:\n%s", v)
+	}
+}
+
 func TestStaleGenerationIsDropped(t *testing.T) {
 	m := opened(t)
 	typeText(m, "needle")
