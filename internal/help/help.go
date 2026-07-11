@@ -28,7 +28,15 @@ type Help struct {
 
 	groups []Group
 	extra  Group
+	filter string // live typed filter (#271); "" shows everything
 }
+
+// SetFilter installs the live filter typed into the floating shell (#271);
+// Filter reports it. Help implements ui.Filterable through this pair.
+func (h *Help) SetFilter(s string) { h.filter = s }
+
+// Filter implements the ui.Filterable read side.
+func (h *Help) Filter() string { return h.filter }
 
 // SetPalette threads the active theme palette in (Roadmap 0110); headings and
 // shortcut keys derive their colours from its ui slots.
@@ -65,8 +73,14 @@ func (h *Help) Snapshot(contextID string) {
 // shown with their dependency, never hidden.
 func (h *Help) SetExtra(g Group) { h.extra = g }
 
-// Title implements ui.Content.
-func (h *Help) Title() string { return "HELP — commands & shortcuts" }
+// Title implements ui.Content; an active filter is echoed so the user sees
+// what they typed.
+func (h *Help) Title() string {
+	if h.filter != "" {
+		return "HELP — filter: " + h.filter
+	}
+	return "HELP — commands & shortcuts"
+}
 
 // Render implements ui.Content: it lays the snapshotted groups out into at most
 // maxColumns columns that fit within width, returning the body for the shell to
@@ -75,7 +89,11 @@ func (h *Help) Render(width int) string {
 	if width < 1 {
 		width = 1
 	}
-	colW := MinColumnWidth(h.allCells(), h.minCol) + colSlack
+	groups := h.visibleGroups()
+	if len(groups) == 0 && h.filter != "" {
+		return "no matches for \"" + h.filter + "\"  (backspace edits, esc clears)"
+	}
+	colW := MinColumnWidth(h.allCells(groups), h.minCol) + colSlack
 	if colW > width {
 		colW = width
 	}
@@ -83,14 +101,37 @@ func (h *Help) Render(width int) string {
 	if cols > maxColumns {
 		cols = maxColumns
 	}
-	return h.renderBody(colW, cols)
+	return h.renderBody(groups, colW, cols)
 }
 
-// allCells renders every entry across all groups at its natural width, used to
-// derive a shared column width so the columns line up.
-func (h *Help) allCells() []string {
-	var cells []string
+// visibleGroups applies the live filter: a case-insensitive substring match
+// over title and shortcut keeps an entry; empty groups drop out.
+func (h *Help) visibleGroups() []Group {
+	if h.filter == "" {
+		return h.groups
+	}
+	needle := strings.ToLower(h.filter)
+	var out []Group
 	for _, g := range h.groups {
+		kept := Group{Label: g.Label}
+		for _, e := range g.Entries {
+			if strings.Contains(strings.ToLower(e.Title), needle) ||
+				strings.Contains(strings.ToLower(e.Shortcut), needle) {
+				kept.Entries = append(kept.Entries, e)
+			}
+		}
+		if len(kept.Entries) > 0 {
+			out = append(out, kept)
+		}
+	}
+	return out
+}
+
+// allCells renders every entry across the given groups at its natural width,
+// used to derive a shared column width so the columns line up.
+func (h *Help) allCells(groups []Group) []string {
+	var cells []string
+	for _, g := range groups {
 		for _, e := range g.Entries {
 			cells = append(cells, h.renderEntry(e, 0))
 		}
@@ -100,12 +141,12 @@ func (h *Help) allCells() []string {
 
 // renderBody renders every group as a heading followed by its entries packed
 // column-major into at most cols columns of width colW.
-func (h *Help) renderBody(colW, cols int) string {
+func (h *Help) renderBody(groups []Group, colW, cols int) string {
 	// Headings are set apart by weight and an underline, not colour alone, so the
 	// grouping reads even on monochrome terminals.
 	headingStyle := lipgloss.NewStyle().Bold(true).Underline(true).Foreground(h.theme().BorderFocus)
 	var blocks []string
-	for _, g := range h.groups {
+	for _, g := range groups {
 		cells := make([]string, len(g.Entries))
 		for i, e := range g.Entries {
 			cells[i] = h.renderEntry(e, colW)

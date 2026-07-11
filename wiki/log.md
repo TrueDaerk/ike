@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Cheatsheet live filter (#271): typing in the help overlay narrows the
+  bindings (titles + shortcuts, empty groups drop, title echoes the filter);
+  `q`/`?` stay dismiss keys only while the filter is empty, esc clears then
+  closes. Implements the last open item on 0082 sheet 27 (#21). Documented in
+  [Help Overlay](/architecture/help-overlay.md).
+
 - Explorer hide/show (#268): `explorer.toggle` (`space e` / cmd+1) now runs
   the JetBrains cmd+1 state machine — focused tree hides and editors reclaim
   the width, a hidden tree comes back at its remembered ratio and takes

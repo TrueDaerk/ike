@@ -4,7 +4,7 @@ title: Help Overlay
 description: Read-only command & shortcut cheat sheet — snapshots the plugin registry scoped to the focused pane, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-07-08T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Help Overlay
@@ -31,8 +31,13 @@ Explorer, …) are separated by a blank line.
 The cheat sheet is rendered inside the reusable **floating shell**
 (`internal/ui.Floating`, roadmap 0035) — `Help` is just a `ui.Content` provider.
 The shell owns the centered floating box, content sizing, vertical scroll, and
-`esc/?/f1/q` dismissal; Help owns only the snapshot and column layout. See
-[Floating Shell](/architecture/floating-shell.md).
+`esc/?/f1/q` dismissal; Help owns only the snapshot, column layout, and the
+**live filter** (#271): typed printable keys narrow the sheet (case-insensitive
+substring over titles and shortcuts, empty groups drop out, the title echoes
+the filter). `Help` implements the shell's optional `ui.Filterable` extension —
+with an active filter, `q`/`?` act as letters, `backspace` edits, and `esc`
+first clears the filter before a second `esc` closes; each open starts
+unfiltered. See [Floating Shell](/architecture/floating-shell.md).
 
 ## Structure
 

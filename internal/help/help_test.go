@@ -263,11 +263,50 @@ func TestRenderNeverExceedsTwoColumns(t *testing.T) {
 	// body packs column-major into rows = ceil(40/2) = 20 — so it stays tall and
 	// narrow rather than spreading across the budget.
 	body := h.Render(400)
-	colW := MinColumnWidth(h.allCells(), 0) + colSlack
+	colW := MinColumnWidth(h.allCells(h.groups), 0) + colSlack
 	if w, limit := lipgloss.Width(body), 2*colW+gutter; w > limit {
 		t.Fatalf("body width %d exceeds two-column bound %d", w, limit)
 	}
 	if hgt := lipgloss.Height(body); hgt < 20 {
 		t.Fatalf("two-column body should stack ~20 rows tall, got height %d", hgt)
+	}
+}
+
+func TestFilterNarrowsEntriesAndGroups(t *testing.T) {
+	h := New(testRegistry(), MapResolver{"core.quit": "ctrl+c"}, 0)
+	h.Snapshot("")
+
+	h.SetFilter("save")
+	body := ansi.Strip(h.Render(80))
+	if !strings.Contains(body, "Save") {
+		t.Fatalf("filtered body must keep the match:\n%s", body)
+	}
+	if strings.Contains(body, "Quit") || strings.Contains(body, "Global") {
+		t.Fatalf("filter must drop non-matching entries and empty groups:\n%s", body)
+	}
+
+	// Shortcuts match too: "ctrl+c" finds Quit.
+	h.SetFilter("ctrl+c")
+	body = ansi.Strip(h.Render(80))
+	if !strings.Contains(body, "Quit") {
+		t.Fatalf("filter must match shortcuts:\n%s", body)
+	}
+
+	h.SetFilter("")
+	body = ansi.Strip(h.Render(80))
+	if !strings.Contains(body, "Quit") || !strings.Contains(body, "Save") {
+		t.Fatal("clearing the filter must restore the full sheet")
+	}
+}
+
+func TestFilterEmptyStateAndTitle(t *testing.T) {
+	h := New(testRegistry(), nil, 0)
+	h.Snapshot("")
+	h.SetFilter("zzz")
+	if body := h.Render(80); !strings.Contains(body, `no matches for "zzz"`) {
+		t.Fatalf("want the empty state, got:\n%s", body)
+	}
+	if got := h.Title(); got != "HELP — filter: zzz" {
+		t.Fatalf("title = %q, want the filter echoed", got)
 	}
 }
