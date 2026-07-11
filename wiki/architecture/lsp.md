@@ -91,15 +91,20 @@ site (interface implementations, build-tag variants) opens the same palette
 list — placeholder "Definitions — pick a target…" — instead of guessing the
 first location; a single site still jumps directly.
 
-**Workspace symbols (0250, #294).** `project.goToClass` (default `cmd+o`,
-leader `S` — off macOS `ctrl+o` is vim jump-back) opens a floating-shell
-prompt for the symbol query; Enter sends one `workspace/symbol` request,
+**Workspace symbols (0250, #294/#295).** `project.goToClass` (default
+`cmd+o`, leader `S` — off macOS `ctrl+o` is vim jump-back) opens the palette
+locked to the **live symbol mode** (`internal/app/symbols.go`): every settled
+keystroke (150 ms debounce, `palette.LiveMode`) re-sends `workspace/symbol`,
 fanned out by the manager to every running server advertising
-`workspaceSymbolProvider` and merged (capped at 200). Hits render through the
-same references palette rows (`path:line` + declaration-line preview,
-fuzzy-filterable, placeholder "Symbols — …"); activation navigates via the
-shared `DefinitionMsg` path. No provider → warn toast, zero hits → info
-toast. A live per-keystroke palette mode is phase 2 (#295).
+`workspaceSymbolProvider` and merged (capped at 200). Rows lead with the
+symbol name (location + declaration preview as the detail chip), stale
+replies are dropped by query, and activation navigates via the shared
+`DefinitionMsg` path. The same mode holds the search-everywhere seat (#236):
+its first open silently primes the bridge continuation through a
+`project.goToClass` run that installs the hook without opening the symbol
+palette. No provider → warn toast; zero hits render as the palette's empty
+list. The request continuation still arrives via `SymbolPromptMsg.Apply`
+(the phase-1 message), so the manager stays unreachable from the app.
 
 **Formatting (#7).** `lsp.format` (default `cmd+alt+l`) sends
 `textDocument/formatting`, `lsp.formatRange` sends the range variant for the

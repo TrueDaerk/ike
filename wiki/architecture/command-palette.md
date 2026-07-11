@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-10T00:00:00Z
+timestamp: 2026-07-11T00:00:00Z
 ---
 
 # Command Palette
@@ -148,8 +148,10 @@ dispatches whatever the underlying item carries (`RunCommandMsg` /
 `OpenFileMsg`). An **empty query lists the recent files first** (MRU order,
 active file excluded — the same injected source as the recent-files mode)
 followed by the command listing; a fresh session without MRU history falls
-back to the plain listing (#263). Symbols join once a workspace-symbol source
-exists (idea #146).
+back to the plain listing (#263). The workspace-symbol mode holds its
+reserved seat (#295): a **live source** — `palette.LiveMode`, re-queried
+per settled keystroke through the debounce plumbing (`live.go`), its cached
+rows composed and capped like any other source.
 
 ## Fuzzy matching
 

@@ -48,6 +48,9 @@ type Palette struct {
 	top      int // first visible row (scroll window into items)
 	cx       Context
 
+	// liveGen pins debounce ticks to the newest query edit (#295).
+	liveGen int
+
 	// locked, when non-nil, pins the palette to a single mode (no prefix
 	// switching): a slimmed file-only palette opened from the editor uses this.
 	locked Mode
@@ -197,17 +200,18 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if r := []rune(p.query); len(r) > 0 {
 			p.query = string(r[:len(r)-1])
 			p.recompute()
+			return p.liveKick()
 		}
 		return nil
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 		p.query = ""
 		p.recompute()
-		return nil
+		return p.liveKick()
 	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
 		// Printable input, including a bare space (Text == " ").
 		p.query += msg.Text
 		p.recompute()
-		return nil
+		return p.liveKick()
 	}
 	return nil
 }

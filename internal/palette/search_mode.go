@@ -1,6 +1,10 @@
 package palette
 
-import "sort"
+import (
+	"sort"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 // SearchAllPrefix selects the search-everywhere mode inside the palette. The
 // root model opens the palette locked to it (palette.searchEverywhere,
@@ -86,4 +90,20 @@ func capped(src Mode, query string, cx Context) []Item {
 		out[i] = it
 	}
 	return out
+}
+
+// QueryChanged implements LiveMode by forwarding to every composed live
+// source (#295), so an asynchronous source — the workspace-symbol mode —
+// re-queries inside search everywhere exactly as it does standalone.
+func (s *SearchAllMode) QueryChanged(query string, cx Context) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, src := range s.sources {
+		if live, ok := src.(LiveMode); ok {
+			cmds = append(cmds, live.QueryChanged(query, cx))
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }

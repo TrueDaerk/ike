@@ -85,12 +85,20 @@ type SymbolPromptMsg struct {
 	Apply func(query string) tea.Cmd
 }
 
+// SymbolHit is one workspace/symbol result: the symbol's name (what the
+// palette row leads with, #295) plus its location as an editor-coordinate
+// Reference (the preview doubles as the declaration line).
+type SymbolHit struct {
+	Name string
+	Ref  Reference
+}
+
 // SymbolResultsMsg delivers the workspace/symbol hits, converted to editor
 // coordinates like ReferencesMsg. NoProvider reports that no running server
 // advertises the capability, so the app can hint instead of staying silent.
 type SymbolResultsMsg struct {
 	Query      string
-	Refs       []Reference
+	Hits       []SymbolHit
 	NoProvider bool
 }
 

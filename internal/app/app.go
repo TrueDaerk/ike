@@ -140,8 +140,11 @@ type Model struct {
 	// no rename is in flight.
 	lspRename *lspRenameState
 
-	// symbolPrompt is the open workspace-symbol query prompt (0250, #294).
-	symbolPrompt *symbolPromptState
+	// symbols is the live workspace-symbol palette mode (0250 phase 2,
+	// #295); symbolPriming marks a hook-priming goToClass run for the
+	// search-everywhere seat, which must not open the palette.
+	symbols       *symbolMode
+	symbolPriming bool
 	// terminalReturnFocus remembers the pane focused before terminal.toggle
 	// moved focus into a terminal, so toggling again returns there (#97).
 	terminalReturnFocus string
@@ -283,6 +286,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	panes.SetFocused(pane.ExplorerKey)
 	refs := &refsMode{}
 	actions := &actionsMode{}
+	symbols := &symbolMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	m := Model{
@@ -296,8 +300,9 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		bindings:     bindings,
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols),
 		refs:         refs,
+		symbols:      symbols,
 		actions:      actions,
 		paletteKey:   paletteToggleKey(cfg),
 		splitZone:    splitZone(cfg),
@@ -813,7 +818,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -823,9 +828,9 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(recent.List)
-	all := palette.NewSearchAllMode(cmd, file)
+	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -1432,13 +1437,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// palette.searchEverywhere (cmd+shift+a / space space): one query
 		// ranked across commands and files, locked to its mode. ActivePath
 		// lets the empty-query recents listing exclude the open file (#263).
+		// The workspace-symbol seat (#295) needs the bridge continuation;
+		// prime it silently on the first open.
+		var prime tea.Cmd
+		if m.symbols.request == nil {
+			if c, ok := m.reg.Command("project.goToClass"); ok {
+				m.symbolPriming = true
+				prime = c.Run(m.host)
+			}
+		}
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{
 			ContextID:  m.focusContext(),
 			Root:       ".",
 			ActivePath: m.activeFilePath(),
 		}, palette.SearchAllPrefix)
-		return m, nil
+		return m, prime
 
 	case project.OpenPickerMsg:
 		// project.switch (alt+shift+p / palette / menu): the recent-projects
@@ -1580,25 +1594,35 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ilsp.SymbolPromptMsg:
-		// project.goToClass (cmd+o / leader S): collect the symbol query.
-		m.openSymbolPrompt(msg)
+		// project.goToClass (cmd+o / leader S): install the bridge
+		// continuation as the live mode's re-query hook (#295) and open the
+		// palette locked to it — unless this run only primes the hook for
+		// the search-everywhere seat.
+		m.symbols.SetRequest(msg.Apply)
+		if m.symbolPriming {
+			m.symbolPriming = false
+			return m, nil
+		}
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, symbolsPrefix)
 		return m, nil
 
 	case ilsp.SymbolResultsMsg:
-		// Workspace-symbol hits (#294): honest empty states, results through
-		// the references palette rows; Enter navigates via DefinitionMsg.
-		switch {
-		case msg.NoProvider:
+		// Workspace-symbol hits (#295): fresh rows into the live mode's
+		// cache (stale queries are dropped there), then the open palette
+		// recomputes. No provider stays an honest toast; zero hits render as
+		// the palette's natural empty list.
+		if msg.NoProvider {
 			m.host.Notify(host.Warn, "no running language server supports workspace symbols")
-		case len(msg.Refs) == 0:
-			m.host.Notify(host.Info, "no symbols found: "+msg.Query)
-		default:
-			m.refs.Set(msg.Refs)
-			m.refs.SetPlaceholder("Symbols — filter by file or text…")
-			m.palette.SetSize(m.width, m.height)
-			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+			return m, nil
 		}
+		m.symbols.SetHits(msg.Query, msg.Hits)
+		m.palette.Refresh()
 		return m, nil
+
+	case palette.LiveTickMsg:
+		// A live mode's settled-query debounce fired (#295).
+		return m, m.palette.LiveTick(msg)
 
 	case ilsp.FormatEditsMsg:
 		// lsp.format / lsp.formatRange: the owning editor applies the edits as
@@ -1791,10 +1815,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
-		}
-		// The workspace-symbol query prompt (0250, #294) too.
-		if m.symbolPromptOpen() {
-			return m.updateSymbolPrompt(msg)
 		}
 		if m.shell.IsOpen() {
 			m.shell.Update(msg)

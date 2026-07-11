@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Live workspace-symbol palette mode (#295, Epic 0250 phase 2): cmd+o now
+  opens the palette locked to a live symbol mode — 150 ms debounced
+  `workspace/symbol` re-query per keystroke (`palette.LiveMode` plumbing),
+  symbol-name rows, stale replies dropped — and the same mode fills the
+  search-everywhere seat (#236) via silent hook-priming. Replaces the
+  phase-1 prompt. Documented in [LSP](/architecture/lsp.md) and
+  [Command Palette](/architecture/command-palette.md).
+
 - Workspace-symbol search (#294, Epic 0250 promoted from idea #146):
   `project.goToClass` (cmd+o / leader `S`) prompts for a query and lists
   `workspace/symbol` hits in the references palette (Enter navigates like

@@ -243,3 +243,52 @@ func TestNoResults(t *testing.T) {
 		t.Fatal("palette should stay open when activating nothing")
 	}
 }
+
+// liveStub is a LiveMode whose QueryChanged records the settled queries.
+type liveStub struct {
+	rows    []Item
+	queries []string
+}
+
+func (l *liveStub) Prefix() rune        { return '$' }
+func (l *liveStub) Placeholder() string { return "live…" }
+func (l *liveStub) Results(q string, cx Context) []Item {
+	return l.rows
+}
+func (l *liveStub) QueryChanged(q string, cx Context) tea.Cmd {
+	l.queries = append(l.queries, q)
+	return nil
+}
+
+// TestLiveModeDebounce guards the #295 plumbing: query edits schedule a
+// debounce tick, only the newest generation re-queries, and Refresh
+// recomputes rows from the mode's cache.
+func TestLiveModeDebounce(t *testing.T) {
+	live := &liveStub{}
+	p := New(Config{}, live)
+	p.SetSize(80, 24)
+	p.OpenLocked(Context{}, '$')
+
+	var tick tea.Cmd
+	for _, r := range "ab" {
+		tick = p.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	if tick == nil {
+		t.Fatal("editing a live mode's query must schedule a tick")
+	}
+	// The first edit's tick is stale; only gen 2 re-queries.
+	if cmd := p.LiveTick(LiveTickMsg{Gen: 1}); cmd != nil {
+		t.Fatal("a stale tick must be dropped")
+	}
+	p.LiveTick(LiveTickMsg{Gen: 2})
+	if len(live.queries) != 1 || live.queries[0] != "ab" {
+		t.Fatalf("the settled tick must re-query once, got %v", live.queries)
+	}
+
+	// Fresh rows land in the cache; Refresh makes them visible.
+	live.rows = []Item{{Title: "alpha"}}
+	p.Refresh()
+	if len(p.items) != 1 || p.items[0].Title != "alpha" {
+		t.Fatalf("Refresh must recompute from the cache, got %+v", p.items)
+	}
+}
