@@ -183,6 +183,12 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		if err != nil || len(locs) == 0 {
 			return
 		}
+		if len(locs) > 1 {
+			// Several definition sites (interface implementations, build-tag
+			// variants): pick, don't guess (#279).
+			h.Send(ilsp.DefinitionCandidatesMsg{Refs: locationsToRefs(mgr, path, locs)})
+			return
+		}
 		loc := locs[0]
 		target := protocol.URIToPath(loc.URI)
 		tline, tcol := loc.Range.Start.Line, 0
@@ -211,30 +217,38 @@ func (b *bridge) references(h host.API) tea.Cmd {
 		if err != nil {
 			return
 		}
-		files := map[string][]string{}
-		refs := make([]ilsp.Reference, 0, len(locs))
-		for _, loc := range locs {
-			target := protocol.URIToPath(loc.URI)
-			lines, ok := files[target]
-			if !ok {
-				if data, rerr := os.ReadFile(target); rerr == nil {
-					lines = strings.Split(string(data), "\n")
-				}
-				files[target] = lines
-			}
-			ref := ilsp.Reference{Path: target, Line: loc.Range.Start.Line}
-			if lines != nil {
-				p := protocol.FromLSPPosition(lines, loc.Range.Start, mgr.Encoding(path))
-				ref.Line, ref.Col = p.Line, p.Col
-				if ref.Line >= 0 && ref.Line < len(lines) {
-					ref.Preview = strings.TrimSpace(lines[ref.Line])
-				}
-			}
-			refs = append(refs, ref)
-		}
-		h.Send(ilsp.ReferencesMsg{Refs: refs})
+		h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
 	}()
 	return nil
+}
+
+// locationsToRefs converts LSP locations to editor-coordinate references,
+// reading each distinct target file once — the read supplies both the
+// position conversion base and the preview line. Shared by find-references
+// and the multi-target definition picker (#279).
+func locationsToRefs(mgr *manager.Manager, path string, locs []protocol.Location) []ilsp.Reference {
+	files := map[string][]string{}
+	refs := make([]ilsp.Reference, 0, len(locs))
+	for _, loc := range locs {
+		target := protocol.URIToPath(loc.URI)
+		lines, ok := files[target]
+		if !ok {
+			if data, rerr := os.ReadFile(target); rerr == nil {
+				lines = strings.Split(string(data), "\n")
+			}
+			files[target] = lines
+		}
+		ref := ilsp.Reference{Path: target, Line: loc.Range.Start.Line}
+		if lines != nil {
+			p := protocol.FromLSPPosition(lines, loc.Range.Start, mgr.Encoding(path))
+			ref.Line, ref.Col = p.Line, p.Col
+			if ref.Line >= 0 && ref.Line < len(lines) {
+				ref.Preview = strings.TrimSpace(lines[ref.Line])
+			}
+		}
+		refs = append(refs, ref)
+	}
+	return refs
 }
 
 // format requests whole-document formatting with the editor's indent settings

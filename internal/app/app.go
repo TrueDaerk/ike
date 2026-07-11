@@ -1596,6 +1596,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
 		return m, nil
+	case ilsp.DefinitionCandidatesMsg:
+		// lsp.definition with several targets (#279): pick, don't guess. The
+		// list reuses the references rows; Enter navigates via DefinitionMsg.
+		m.refs.Set(msg.Refs)
+		m.refs.SetPlaceholder("Definitions — pick a target…")
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		return m, nil
 	case ilsp.ServerStatusMsg:
 		// Persistent server state stays on the status line; transient events
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).

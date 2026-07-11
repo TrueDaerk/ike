@@ -79,6 +79,14 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// DefinitionCandidatesMsg delivers a go-to-definition result with several
+// target locations (#279): instead of guessing the first, the app renders the
+// candidates as a palette list; picking one navigates through the same
+// DefinitionMsg path a single-target jump uses.
+type DefinitionCandidatesMsg struct {
+	Refs []Reference
+}
+
 // FormatEdit is one formatting rewrite in 0-based editor rune coordinates:
 // the [Start, End) span becomes Text. Positions are already converted from the
 // server's encoding (protocol/convert.go) by the manager.

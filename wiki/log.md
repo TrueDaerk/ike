@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Multi-target go-to-definition picker (#279): several definition sites open
+  the references-style palette list ("Definitions — pick a target…") instead
+  of silently jumping to the first; one site still jumps directly. The
+  location→reference conversion is now shared with find-references. From the
+  0082 sheet 11 protocol (#18). Documented in [LSP](/architecture/lsp.md).
+
 - Cheatsheet live filter (#271): typing in the help overlay narrows the
   bindings (titles + shortcuts, empty groups drop, title echoes the filter);
   `q`/`?` stay dismiss keys only while the filter is empty, esc clears then
