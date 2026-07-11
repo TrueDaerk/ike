@@ -92,22 +92,18 @@ var jetbrainsRows = []row{
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)"},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)"},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)"},
-	// Editor tabs (0190, #158). Tab cycling gets alt+arrows — distinct from the
-	// ctrl+tab pane switcher — and alt+digits jump straight to a tab; both are
-	// layout-safe (arrows and digits sit identically on QWERTZ). Alt+arrow
-	// delivery depends on the terminal's option-as-meta setting, hence fragile.
-	// The delivered primaries are ctrl+pgup/pgdn (#248): on macOS Option is a
-	// composition key (QWERTZ needs it for brackets), so alt chords never
-	// arrive there; the page keys carry modifiers in their CSI parameter and
-	// follow the terminal-tab-cycling convention.
+	// Editor tabs (0190, #158). Alt+digits jump straight to a tab (digits sit
+	// identically on QWERTZ). The delivered tab-cycling primaries are
+	// ctrl+pgup/pgdn (#248): on macOS Option is a composition key (QWERTZ needs
+	// it for brackets), so alt chords never arrive there; the page keys carry
+	// modifiers in their CSI parameter and follow the terminal-tab-cycling
+	// convention. The alt+arrow secondaries were freed for word-wise cursor
+	// motion in the editor (#303) — they now fall through the chord table to
+	// the editor's vim layer.
 	{"ctrl+pgdown", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
 	{"ctrl+pgup", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgdown", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgup", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
-	{"alt+right", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
-	{"alt+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
-	{"alt+shift+right", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
-	{"alt+shift+left", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},

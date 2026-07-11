@@ -2,6 +2,14 @@
 
 ## 2026-07-11
 
+- Word-wise alt+arrow cursor motion (#303): `alt/opt+←/→` (and the delivered
+  `ctrl+←/→` fallback) now move word-wise within the current line with `.` as
+  a stop point; `shift+alt/ctrl+←/→` extend the selection the same way. The
+  alt+arrow tab-cycling secondaries were freed for this — tab cycling keeps
+  `ctrl+pgup/pgdown`. Documented in [Editor](/architecture/editor.md),
+  [Editor Tabs](/architecture/editor-tabs.md) and
+  [Keybindings](/architecture/keybindings.md).
+
 - Tab drop next to terminals (#317): a dragged tab released on a non-editor
   pane's edge zone now splits that pane and opens the file in the fresh
   editor leaf; interior drops stay a no-op and the drag feedback (zone

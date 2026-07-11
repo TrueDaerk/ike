@@ -152,8 +152,10 @@ Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `editor.paste` commands (visual selection or current line, through the system
 clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
 `editor.lineStart` / `editor.lineEnd`. Word/paragraph navigation
-(`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` selection are
-vim-layer keys handled inside the editor, not rows in this table.
+(`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` /
+`shift+alt+arrow` selection are vim-layer keys handled inside the editor, not
+rows in this table — the alt+arrow tab-cycling secondaries were removed for
+this (#303); tab cycling keeps its delivered `ctrl+pgup/pgdown` primaries.
 
 ## Keymap editor (Roadmap 0160, #93)
 
