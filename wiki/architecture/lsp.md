@@ -56,7 +56,11 @@ registry commands.
 events through its `Emitter` seam (`internal/editor/events.go`). The app installs
 a stateless adapter on every editor that forwards these to the host
 (`host.EmitEditor`), which fans them to the LSP bridge (registered via
-`host.SetEditorEmitter`). On a change the bridge hands the full document text to
+`host.SetEditorEmitter`). Programmatic cursor placement (`editor.SetCursor` —
+go-to-definition landings, usages picks, nav back/forward, session restore)
+emits a cursor-move too, so the bridge's tracked position always matches the
+visible cursor and position-based actions (rename, references, hover) right
+after a jump act on the landed symbol, not the departure (#371). On a change the bridge hands the full document text to
 the manager, which **respects the negotiated `TextDocumentSyncKind`** (#13): an
 incremental server gets the minimal contiguous change region — recovered by
 common-prefix/suffix diffing against the previously synced lines

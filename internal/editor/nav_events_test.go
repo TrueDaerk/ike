@@ -73,6 +73,33 @@ func TestSmallMotionsNeverEmitJump(t *testing.T) {
 	}
 }
 
+func TestSetCursorEmitsCursorMove(t *testing.T) {
+	// Programmatic placement (go-to-definition landing, usages pick, nav
+	// back/forward) must emit a cursor-move so the LSP bridge tracks the new
+	// position — otherwise rename/references right after a jump query the
+	// pre-jump location (#371).
+	m, path := loaded(t, "zero\none\ntwo\nthree\n")
+	var moves []Event
+	m.SetEmitter(EmitterFunc(func(e Event) {
+		if e.Kind == EventCursorMove {
+			moves = append(moves, e)
+		}
+	}))
+	m.SetCursor(2, 2)
+	if len(moves) != 1 {
+		t.Fatalf("cursor-move events = %d, want 1 (%+v)", len(moves), moves)
+	}
+	if moves[0].Path != path || moves[0].Line != 2 || moves[0].Col != 2 {
+		t.Fatalf("event = %s:%d:%d, want %s:2:2", moves[0].Path, moves[0].Line, moves[0].Col, path)
+	}
+	// Out-of-range coordinates emit the clamped landing, not the request.
+	m.SetCursor(99, 99)
+	last := moves[len(moves)-1]
+	if last.Line != 3 {
+		t.Fatalf("clamped event line = %d, want 3", last.Line)
+	}
+}
+
 func TestOperatorWithLargeMotionDoesNotJump(t *testing.T) {
 	// dG composes an operator over the motion: the caret does not travel in
 	// the jump sense, so nothing is recorded.

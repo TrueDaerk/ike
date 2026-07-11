@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- LSP actions no longer use a stale cursor after programmatic jumps (#371):
+  `editor.SetCursor` now emits a cursor-move event, so go-to-definition /
+  usages-pick / nav back-forward landings update the LSP bridge's tracked
+  position and rename/references immediately act on the landed symbol. See
+  [LSP](/architecture/lsp.md).
+
 - LSP request errors surface as toasts (#372): a failing hover / definition /
   references / formatting / code-action request now raises an error toast with
   the server's message ("find usages failed: …") instead of silently doing
