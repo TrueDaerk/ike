@@ -1101,15 +1101,25 @@ func (m Model) explorer() *explorer.Model {
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
 	// Highlight any files restored from the previous session at startup, before
-	// the user edits them.
+	// the user edits them, and announce each to the plugin hooks (#332): the
+	// restore paths (restoreLayout/restoreSession) load editors directly via
+	// editor.Load, bypassing openPath, so without this the LSP never learns about
+	// files already open at launch and they get no diagnostics until reopened.
+	// Init runs after main.go wires the sender, so the bridge's async results land.
+	opened := map[string]bool{} // one EventFileOpened per file — shared tabs/leaves (#142)
 	for _, key := range m.panes.Keys() {
 		inst := m.panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
 		for _, ed := range inst.Editors() {
-			if ed.HasFile() {
-				cmds = append(cmds, ed.Reparse())
+			if !ed.HasFile() {
+				continue
+			}
+			cmds = append(cmds, ed.Reparse())
+			if path := ed.Path(); !opened[path] {
+				opened[path] = true
+				cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 			}
 		}
 	}

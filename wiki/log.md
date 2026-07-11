@@ -2,6 +2,12 @@
 
 ## 2026-07-11
 
+- Files already open at startup now receive an LSP `didOpen` (#332): the session
+  restore paths load editors directly (bypassing the interactive open), so
+  `Model.Init` fires the file-open hook for each restored file — deduped per path
+  for buffers shared across tabs (#142) — instead of leaving them without a
+  server until reopened.
+
 - Accepting an LSP completion no longer duplicates the already-typed identifier
   prefix (#330): the insert now replaces the identifier run before the cursor
   (`identifierStart`) rather than the request anchor, which is empty for a
