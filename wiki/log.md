@@ -2,6 +2,11 @@
 
 ## 2026-07-11
 
+- Shift+Tab in insert mode dedents the whole current line one indent unit
+  (#337, Roadmap 0260) — the same unit `<<` removes — wherever the cursor
+  sits, inside the open insert's undo unit; plain Tab keeps inserting one
+  unit at the cursor (and still accepts an open completion popup).
+
 - Enter and `o` gain language-aware smart indent (#336, Roadmap 0260): with
   `editor.auto_indent` on, a line whose trimmed text ends with a block opener
   (`lang.IndentAfter` — Python `:`, Go/PHP braces) opens the next line one
