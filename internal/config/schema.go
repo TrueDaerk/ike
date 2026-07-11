@@ -60,11 +60,15 @@ type Backup struct {
 // LargeFileKB and LargeFileLines are the large-file thresholds (#149): a file
 // crossing either at load/reload is flagged and code insight (highlighting,
 // LSP, watcher content hashing) degrades; 0 disables that guard.
+// PersistentUndo (#148) keeps undo history across restarts (vim's undofile):
+// stacks are written to the state store on save/close and adopted on open
+// while the file content is unchanged.
 type Files struct {
 	Watch          bool   `toml:"watch"`
 	AutoReload     string `toml:"auto_reload"`
 	LargeFileKB    int    `toml:"large_file_kb"`
 	LargeFileLines int    `toml:"large_file_lines"`
+	PersistentUndo bool   `toml:"persistent_undo"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).

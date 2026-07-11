@@ -4,7 +4,7 @@ title: Session Restore
 description: Per-project workspace persistence — open file + cursor and explorer expansion/hidden/cursor saved on quit and reapplied on launch, beside the layout store.
 resource: internal/app/session.go
 tags: [architecture, persistence, session, explorer, editor, bubbletea]
-timestamp: 2026-06-20T12:00:00Z
+timestamp: 2026-07-12T18:00:00Z
 ---
 
 # Session Restore
@@ -69,8 +69,18 @@ when a session was restored — the one place the two paths must agree.
 Expanded paths that no longer exist on disk are skipped, not fatal; the cursor is
 restored only when its saved path is visible after re-expansion.
 
+## Undo history
+
+Undo/redo survives the restart alongside the session (#148): quit (and every
+save and editor close) writes each clean document's stacks to `.ike/undo/`
+via `internal/undostore`, and the reopen's ordinary `editor.Load` adopts them
+when the file content still hashes to the value recorded at persist time.
+A file changed between sessions restores with an empty history — see the
+history section of [editor](/architecture/editor.md) for the format, caps,
+and the `files.persistent_undo` flag.
+
 ## Out of scope
 
 Multiple editors / tabs (Roadmap 0037 will extend the layout store with per-leaf
-file identity), undo history, selection/visual state, and cross-project session
+file identity), selection/visual state, and cross-project session
 history (Roadmap 0090's `restore_last`).

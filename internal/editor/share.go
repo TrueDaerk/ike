@@ -27,7 +27,8 @@ type SyncMsg struct {
 	FromKey string // pane key of the originating editor; opaque to the editor
 	Dirty   bool
 	Stale   bool
-	Large   bool // large-file flag (#149), a document property like Dirty/Stale
+	Large   bool   // large-file flag (#149), a document property like Dirty/Stale
+	Hash    string // disk-content hash for persistent undo (#148), same lifecycle
 }
 
 // ShareDocumentWith turns m into a second view of src's document: buffer and
@@ -41,6 +42,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.dirty = src.dirty
 	m.stale = src.stale
 	m.largeFile = src.largeFile
+	m.diskHash = src.diskHash
 	m.docVersion = src.docVersion
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
@@ -74,6 +76,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.dirty = msg.Dirty
 	m.stale = msg.Stale
 	m.largeFile = msg.Large
+	m.diskHash = msg.Hash
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}

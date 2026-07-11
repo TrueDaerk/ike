@@ -145,6 +145,7 @@ func (c *Config) Flat() map[string]string {
 	put("files.auto_reload", c.Files.AutoReload)
 	put("files.large_file_kb", c.Files.LargeFileKB)
 	put("files.large_file_lines", c.Files.LargeFileLines)
+	put("files.persistent_undo", c.Files.PersistentUndo)
 
 	put("backup.enable", c.Backup.Enable)
 	put("backup.debounce_ms", c.Backup.DebounceMs)

@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/highlight"
+	"ike/internal/undostore"
 	"ike/internal/watch"
 )
 
@@ -77,6 +78,10 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	m.buf.ReplaceAll(string(data))
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.hist.Reset()
+	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)
+	if !m.largeFile {
+		m.diskHash = undostore.Hash(data)
+	}
 	m.dirty = false
 	m.stale = false
 	m.hlIndex = highlight.Index{}
