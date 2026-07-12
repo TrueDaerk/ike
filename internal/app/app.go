@@ -3551,7 +3551,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		*exp, cmd = exp.MouseClick(localX, localY)
 		return m, cmd
 	case pane.KindEditor:
-		inst.Editor().MouseClick(localX, localY)
+		// alt+click toggles a secondary caret (#145); a plain click moves the
+		// cursor and collapses the caret set.
+		if msg.Mod&tea.ModAlt != 0 {
+			inst.Editor().AltClick(localX, localY)
+		} else {
+			inst.Editor().MouseClick(localX, localY)
+		}
 	case pane.KindTerminal:
 		// Left press: forward to a mouse-reporting child, else anchor a text
 		// selection and track the drag (#227).

@@ -17,10 +17,27 @@ import (
 // insert/replace mode the cursor may land one past the line end; otherwise it
 // snaps onto a character.
 func (m *Model) MouseClick(x, y int) {
-	// A click dismisses cursor-anchored popups like any keypress does (#307):
-	// the popup anchors at the cursor, so leaving it open would make it trail
-	// every click/drag. The server re-opens signature help on the next
-	// keystroke inside the call.
+	p := m.clickPosition(x, y)
+	// A plain click returns to single-caret editing (#145).
+	m.collapseCarets()
+	m.cursor = p
+	m.desiredCol = m.cursor.Col
+	m.scroll()
+	m.emit(EventCursorMove)
+}
+
+// AltClick toggles a secondary caret at the clicked cell (#145): alt+click on
+// a caret removes it, anywhere else adds one. The primary caret stays put.
+func (m *Model) AltClick(x, y int) {
+	m.toggleCaret(m.clickPosition(x, y))
+}
+
+// clickPosition maps a content-local cell to a buffer position (see
+// MouseClick) and dismisses cursor-anchored popups, like any keypress does
+// (#307): the popup anchors at the cursor, so leaving it open would make it
+// trail every click/drag. The server re-opens signature help on the next
+// keystroke inside the call.
+func (m *Model) clickPosition(x, y int) buffer.Position {
 	m.dismissHover()
 	m.dismissSignature()
 	if y < 0 {
@@ -44,13 +61,9 @@ func (m *Model) MouseClick(x, y int) {
 	}
 	p := buffer.Position{Line: line, Col: col}
 	if m.mode == Insert || m.mode == Replace {
-		m.cursor = m.buf.Clamp(p)
-	} else {
-		m.cursor = m.buf.ClampCursor(p)
+		return m.buf.Clamp(p)
 	}
-	m.desiredCol = m.cursor.Col
-	m.scroll()
-	m.emit(EventCursorMove)
+	return m.buf.ClampCursor(p)
 }
 
 // ScrollBy moves the viewport by delta lines (positive down, negative up)
@@ -234,6 +247,8 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 	left := m.view.Left
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
+	// Secondary carets (#145) render dimmer than the primary cell.
+	caretStyle := cursorStyle.Faint(true)
 
 	// Search-match highlighting (#255): all matches of the active query get a
 	// background; the span the cursor sits on (the current match) is also
@@ -274,8 +289,9 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			break
 		}
 		cursorHere := isCursorLine && col == m.cursor.Col
+		caretHere := m.focused && m.caretOnLine(line, col)
 		selected := hasSel && col >= selStart && col <= selEnd
-		if col >= len(runes) && !cursorHere && !selected {
+		if col >= len(runes) && !cursorHere && !caretHere && !selected {
 			// Nothing meaningful left on this line; flush hints anchored at or
 			// past the line end (a type hint after the last token) first.
 			for hi < len(hints) && disp < width {
@@ -314,6 +330,11 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case cursorHere:
 			b.WriteString(cursorStyle.Render(cell))
+		case caretHere && cells > 1:
+			b.WriteString(caretStyle.Render(" "))
+			b.WriteString(strings.Repeat(" ", cells-1))
+		case caretHere:
+			b.WriteString(caretStyle.Render(cell))
 		case selected:
 			b.WriteString(selStyle.Render(cell))
 		case inCurrent:

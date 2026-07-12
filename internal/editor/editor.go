@@ -69,6 +69,12 @@ type Model struct {
 	cursor     buffer.Position
 	desiredCol int // remembered column for vertical motion across short lines
 
+	// Multi-caret editing (#145): secondary carets fanning edits out around
+	// the primary cursor, and the remembered add-next occurrence query.
+	// Per-view state like the cursor — never shared between panes (#142).
+	carets     []caret
+	caretQuery search.Query
+
 	mode    mode.Mode
 	pending mode.Pending
 

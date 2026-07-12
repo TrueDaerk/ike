@@ -24,44 +24,67 @@ func (m *Model) cursorRightForAppend() {
 }
 
 // openLine implements o/O: open a new (optionally auto-indented) line and enter
-// insert mode, with the structural edit recorded for undo and "." replay.
+// insert mode, with the structural edit recorded for undo and "." replay. With
+// carets active, a line opens at every caret (one per line, #145).
 func (m *Model) openLine(below bool) {
 	rec := m.newRecorder()
+	if m.hasCarets() {
+		m.caretsOnePerLine()
+		m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+			return m.openLineAt(rec, pos, below)
+		})
+		m.startInsertWith(rec, nil)
+		return
+	}
 	m.applyOpenLine(rec, below)
 	m.startInsertWith(rec, func(mm *Model, r *history.Recorder) buffer.Position {
 		return mm.applyOpenLine(r, below)
 	})
 }
 
-// applyOpenLine performs the structural part of o/O through rec and returns the
-// cursor position where insertion begins.
-func (m *Model) applyOpenLine(rec *history.Recorder, below bool) buffer.Position {
+// openLineAt performs the structural part of o/O at pos through rec and
+// returns the position where insertion begins on the new line.
+func (m *Model) openLineAt(rec *history.Recorder, pos buffer.Position, below bool) buffer.Position {
 	indent := ""
 	if m.autoIndent {
 		if below {
 			// "o" opens a block body when the current line ends with an
 			// opener (Roadmap 0260); "O" keeps plain copy-indent.
-			indent = m.smartIndent(m.buf.Line(m.cursor.Line))
+			indent = m.smartIndent(m.buf.Line(pos.Line))
 		} else {
-			indent = m.indentOf(m.cursor.Line)
+			indent = m.indentOf(pos.Line)
 		}
 	}
 	if below {
-		at := buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
-		m.cursor = rec.Apply(buffer.Insert(at, "\n"+indent))
-	} else {
-		at := buffer.Position{Line: m.cursor.Line, Col: 0}
-		rec.Apply(buffer.Insert(at, indent+"\n"))
-		m.cursor = buffer.Position{Line: m.cursor.Line, Col: len([]rune(indent))}
+		at := buffer.Position{Line: pos.Line, Col: m.buf.RuneLen(pos.Line)}
+		return rec.Apply(buffer.Insert(at, "\n"+indent))
 	}
+	at := buffer.Position{Line: pos.Line, Col: 0}
+	rec.Apply(buffer.Insert(at, indent+"\n"))
+	return buffer.Position{Line: pos.Line, Col: len([]rune(indent))}
+}
+
+// applyOpenLine performs the structural part of o/O through rec and returns the
+// cursor position where insertion begins.
+func (m *Model) applyOpenLine(rec *history.Recorder, below bool) buffer.Position {
+	m.cursor = m.openLineAt(rec, m.cursor, below)
 	m.desiredCol = m.cursor.Col
 	return m.cursor
 }
 
-// applyLinewiseOperator runs op over count whole lines from the cursor.
+// applyLinewiseOperator runs op over count whole lines from the cursor. With
+// carets active, dd/cc/yy fan over every caret's line span as one undo unit
+// (#145); carets sharing a line first merge so no line is hit twice.
 func (m *Model) applyLinewiseOperator(op rune, count int) {
 	if count < 1 {
 		count = 1
+	}
+	if m.hasCarets() && (op == 'd' || op == 'c' || op == 'y') {
+		m.fanLinewiseOperator(op, count)
+		if op == 'd' {
+			m.dot = &dotCommand{run: func(mm *Model) { mm.applyLinewiseOperator(op, count) }}
+		}
+		return
 	}
 	end := m.cursor.Line + count - 1
 	if end > m.buf.LineCount()-1 {
@@ -132,12 +155,26 @@ func (m *Model) resolveTextObject(r rune) textobject.Result {
 }
 
 // applyTextObject resolves the text object named by r and applies the pending
-// operator to it. Without a pending operator it is a no-op (vim ignores a bare
-// "iw" in normal mode).
+// operator to it — per caret when carets are active (#145). Without a pending
+// operator it is a no-op (vim ignores a bare "iw" in normal mode).
 func (m *Model) applyTextObject(r rune) {
+	op := m.pending.Operator
+	if m.hasCarets() && (op == 'd' || op == 'c' || op == 'y') {
+		m.fanOperatorTargets(op, m.pending.Register, func(pos buffer.Position) (operator.Target, bool) {
+			saved := m.cursor
+			m.cursor = pos
+			res := m.resolveTextObject(r)
+			m.cursor = saved
+			if !res.OK {
+				return operator.Target{}, false
+			}
+			return operator.CharTarget(res.Range), true
+		})
+		return
+	}
 	res := m.resolveTextObject(r)
 	if !res.OK || !m.pending.HasOperator() {
 		return
 	}
-	m.runOperator(m.pending.Operator, operator.CharTarget(res.Range), m.pending.Register)
+	m.runOperator(op, operator.CharTarget(res.Range), m.pending.Register)
 }

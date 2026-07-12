@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/editor/search"
 	"ike/internal/highlight"
 )
 
@@ -46,6 +47,8 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.docVersion = src.docVersion
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
+	m.carets = nil // carets are per-view state (#145)
+	m.caretQuery = search.Query{}
 	m.mode = Normal
 	m.pending.Reset()
 	m.wait = awaitNone
@@ -71,6 +74,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	}
 	m.cursor = m.buf.ClampCursor(m.cursor)
 	m.desiredCol = m.cursor.Col
+	m.clampCarets()                      // this view's carets survive, snapped into the new text (#145)
 	m.SetScroll(m.view.Top, m.view.Left) // re-clamp into the new line count
 	m.scroll()
 	m.dirty = msg.Dirty

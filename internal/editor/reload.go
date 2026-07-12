@@ -89,6 +89,7 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
 	m.SetCursor(line, col)
+	m.clampCarets() // carets clamp into the reloaded text like the cursor (#145)
 	m.SetScroll(top, left)
 	m.emit(EventChange)
 	return m, m.parseCmd()

@@ -20,6 +20,7 @@ type SearchCommittedMsg struct{}
 // beginSearch enters the command line in search mode for "/" or "?", capturing
 // the cursor and viewport so an Esc restores them exactly (#255).
 func (m *Model) beginSearch(dir search.Direction) {
+	m.collapseCarets() // search is single-caret (#145)
 	m.mode = Command
 	m.searching = true
 	m.searchDir = dir

@@ -270,21 +270,21 @@ func (m *Model) completionAccept() {
 		m.comp.sel = 0
 	}
 	item := items[m.comp.sel]
-	cursor := m.cursor
 	m.comp = nil
-	// Replace the partial identifier already typed before the cursor with the
-	// item's insert text. The replacement starts at the identifier boundary (not
-	// the request anchor): a manual ctrl+space trigger anchors at the cursor, so
-	// an anchor-only range would be empty and splice the full insert text after
-	// the typed prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
-	start := m.identifierStart(cursor)
-	start = m.extendPrefixMatch(start, cursor, item.InsertText)
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
-	end := m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: cursor}, Text: item.InsertText})
-	m.cursor = end
-	m.desiredCol = end.Col
+	// Replace the partial identifier already typed before the cursor with the
+	// item's insert text — at every caret when carets are active (#145). The
+	// replacement starts at the identifier boundary (not the request anchor):
+	// a manual ctrl+space trigger anchors at the cursor, so an anchor-only
+	// range would be empty and splice the full insert text after the typed
+	// prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		start := m.identifierStart(pos)
+		start = m.extendPrefixMatch(start, pos, item.InsertText)
+		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: item.InsertText})
+	})
 	m.dirtyFromInsert()
 }
 

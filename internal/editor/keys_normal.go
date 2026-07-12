@@ -22,8 +22,10 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	m.cmdMsg = ""
 
 	// Esc dismisses search-match highlights (vim's :noh, #255); n/N/* re-arm.
+	// With multiple carets active it collapses them to the primary first (#145).
 	if key.Code == tea.KeyEscape {
 		m.hlActive = false
+		m.collapseCarets()
 	}
 
 	// Secondary-key states resolve before anything else.
@@ -110,8 +112,17 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Motions (also serve as operator targets).
+	// Motions (also serve as operator targets). With carets active, an
+	// operator fans out per caret and a bare motion moves every caret (#145).
 	if res, ok := m.resolveMotion(s, r, count); ok {
+		if m.hasCarets() && m.pending.HasOperator() {
+			m.fanOperatorMotion(s, r, count)
+			m.pending.Reset()
+			return m, nil
+		}
+		if !m.pending.HasOperator() {
+			m.fanMotionSecondaries(s, r, count, false)
+		}
 		m.applyMotionOrOperator(res, count)
 		return m, nil
 	}
@@ -323,6 +334,10 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "I":
 		rec := m.newRecorder()
 		m.cursor = motion.FirstNonBlank(m.buf, m.cursor, 1).Pos
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			p := motion.FirstNonBlank(m.buf, pos, 1).Pos
+			return p, p.Col
+		})
 		m.startInsertWith(rec, func(mm *Model, _ *history.Recorder) buffer.Position {
 			mm.cursor = motion.FirstNonBlank(mm.buf, mm.cursor, 1).Pos
 			return mm.cursor
@@ -330,6 +345,12 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "a":
 		rec := m.newRecorder()
 		m.cursorRightForAppend()
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			if m.buf.RuneLen(pos.Line) > 0 {
+				pos.Col++
+			}
+			return pos, pos.Col
+		})
 		m.startInsertWith(rec, func(mm *Model, _ *history.Recorder) buffer.Position {
 			mm.cursorRightForAppend()
 			return mm.cursor
@@ -337,6 +358,10 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "A":
 		rec := m.newRecorder()
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			c := m.buf.RuneLen(pos.Line)
+			return buffer.Position{Line: pos.Line, Col: c}, c
+		})
 		m.startInsertWith(rec, func(mm *Model, _ *history.Recorder) buffer.Position {
 			mm.cursor = buffer.Position{Line: mm.cursor.Line, Col: mm.buf.RuneLen(mm.cursor.Line)}
 			return mm.cursor
@@ -360,6 +385,7 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.wait = awaitReplace
 		return m, nil
 	case "R":
+		m.collapseCarets() // replace mode is single-caret (#145)
 		m.mode = Replace
 		m.insert = insertSession{active: true, rec: m.newRecorder()}
 	case "p":
@@ -379,27 +405,34 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "ctrl+r":
 		m.redo(count)
 	case ".":
+		m.collapseCarets() // "." repeats the recorded change at the primary caret
 		m.repeatDot(count)
 	case "g":
 		m.wait = awaitG
 		return m, nil
 	case "v":
+		m.collapseCarets() // visual selections are single-caret (#145)
 		m.enterVisual(Visual)
 	case "V":
+		m.collapseCarets()
 		m.enterVisual(mode.VisualLine)
 	case "ctrl+v":
+		m.collapseCarets()
 		m.enterVisual(mode.VisualBlock)
 	case "n":
 		m.searchNextRepeat(false, count)
 	case "N":
 		m.searchNextRepeat(true, count)
 	case "/":
+		m.collapseCarets() // the command line and search are single-caret (#145)
 		m.beginSearch(search.Forward)
 		return m, nil
 	case "?":
+		m.collapseCarets()
 		m.beginSearch(search.Backward)
 		return m, nil
 	case ":":
+		m.collapseCarets()
 		m.mode = Command
 		m.cmdline = ""
 	}

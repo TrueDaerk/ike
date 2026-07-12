@@ -116,6 +116,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case "a":
 		m.around = true
 		m.wait = awaitObject
+	case "I":
+		// Visual block I/A converts the rectangle into carets (#145).
+		if m.mode == mode.VisualBlock {
+			m.blockCarets(false)
+		}
+	case "A":
+		if m.mode == mode.VisualBlock {
+			m.blockCarets(true)
+		}
 	case ":":
 		// Remember the selection line bounds for '< / '> and pre-fill the range,
 		// mirroring vim's ":'<,'>" when entering the command line from Visual.

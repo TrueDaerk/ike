@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- Multi-caret editing (#145): a primary caret plus secondary carets fan every
+  edit out — insert-mode typing/kills, `x r`, `d c y` with motions and text
+  objects, `dd cc yy`, `p/P`, `o/O`, completion — as **one undo unit**.
+  Created via `ctrl+g` (add next occurrence), `ctrl+shift+g` / `space G`
+  (all occurrences), `alt+click` (toggle), visual block `I`/`A`; Esc
+  collapses. Carets are per-view (#142) and re-clamp on reload/sync.
+  See [editor](/architecture/editor.md).
+
 - Persistent undo (#148, vim's `undofile`): undo/redo stacks survive a
   restart. New `internal/undostore` keeps one hash-keyed JSON file per
   document under `.ike/undo/`, written on save/close/quit (clean buffers

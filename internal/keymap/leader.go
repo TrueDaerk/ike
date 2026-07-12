@@ -55,6 +55,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// hierarchy (#173) — lowercase h is the notification history.
 	{"H", "lsp.callHierarchy", "Call hierarchy"},
 	{"a", "lsp.codeAction", "Show intention actions"},
+	// G (shift+g) mirrors the fragile ctrl+shift+g primary for select-all-
+	// occurrences (#145) — lowercase g is find-in-path.
+	{"G", "editor.caret.addAll", "Add carets at all occurrences"},
 	{"n", "lsp.rename", "Rename symbol"},
 	{"l", "lsp.format", "Reformat file"},
 	{"c", "editor.commentLine", "Comment line"},
