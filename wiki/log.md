@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Keymap-page filter input (#531): type-to-filter shared its keyspace with the
+  single-letter actions, so a search term containing `u`/`r`/`j`/`k` fired
+  them instead of typing (`r` silently reset the selected binding). `/` now
+  opens an explicit filter input (like the schema pages) that captures every
+  printable key verbatim; enter keeps the filter, esc clears it, and the
+  actions work on the filtered rows afterwards.
 - Quit-key crash on tool panes (#529): `q` on a focused diff / preview / VCS
   pane nil-dereferenced the missing editor in `app.quitKey` and took the whole
   IDE down. Those panes no longer quit on `q`, and a diff pane in edit mode

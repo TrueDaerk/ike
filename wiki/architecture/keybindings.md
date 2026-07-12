@@ -186,8 +186,11 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
 - It lists the **effective** bindings — chord, command, context, source layer
   (`@default`/`@user`) — rebuilt from the live config on every render;
   blocked-ledger ids render disabled with their unblocking reason (the page
-  shows the whole default table truthfully); fragile chords carry ⚠. Typing
-  filters; enter starts a **capture**: each key press appends a chord step
+  shows the whole default table truthfully); fragile chords carry ⚠. `/` opens
+  the filter input (#531) — while it is open every printable key is filter
+  text (including the action letters `u`/`r`/`j`/`k`), enter keeps the filter,
+  esc clears it; enter on a row starts a **capture**: each key press appends a
+  chord step
   (`keymap.FromKeyMsg` + platform normalisation, multi-step supported), enter
   confirms, esc cancels.
 - On confirm the capture runs conflict detection against the effective table;

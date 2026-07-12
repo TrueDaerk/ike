@@ -138,6 +138,10 @@ func TestFragileWarningOnCapture(t *testing.T) {
 
 func TestKeymapFilter(t *testing.T) {
 	k, _ := keymapPage(t)
+	k.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
+	if !k.Capturing() {
+		t.Fatal("the open filter input must capture keys verbatim")
+	}
 	for _, r := range "comment" {
 		k.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
@@ -149,5 +153,48 @@ func TestKeymapFilter(t *testing.T) {
 		if !strings.Contains(b.Command+b.Title, "omment") {
 			t.Fatalf("filter leaked %q", b.Command)
 		}
+	}
+}
+
+// TestKeymapFilterActionLetters guards #531: filter text may contain the
+// page's action letters (u/r/j/k) without firing them — "r" used to reset the
+// selected binding mid-typing.
+func TestKeymapFilterActionLetters(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	k.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
+	for _, r := range "rujk" {
+		if cmd := k.Update(tea.KeyPressMsg{Text: string(r), Code: r}); cmd != nil {
+			t.Fatalf("%q while filtering must not run an action", string(r))
+		}
+	}
+	if k.filter != "rujk" {
+		t.Fatalf("filter = %q, want %q", k.filter, "rujk")
+	}
+	// Enter keeps the filter and returns to the list; esc from the reopened
+	// input clears it.
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if k.Capturing() || k.filter != "rujk" {
+		t.Fatalf("enter must keep the filter, got capturing=%v filter=%q", k.Capturing(), k.filter)
+	}
+	k.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if k.Capturing() || k.filter != "" {
+		t.Fatalf("esc must clear the filter, got capturing=%v filter=%q", k.Capturing(), k.filter)
+	}
+}
+
+// TestKeymapActionsAfterFilter guards #531: after leaving the filter input the
+// single-letter actions work on the filtered rows.
+func TestKeymapActionsAfterFilter(t *testing.T) {
+	k, _ := keymapPage(t)
+	k.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
+	for _, r := range "write" {
+		k.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	selectChord(t, k, "ctrl+s")
+	if cmd := k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}); cmd == nil {
+		t.Fatal("u after leaving the filter input must unbind")
 	}
 }

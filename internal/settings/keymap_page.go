@@ -25,8 +25,9 @@ type KeymapPage struct {
 	registered func(commandID string) bool
 	pal        *theme.Palette
 
-	sel    int
-	filter string
+	sel       int
+	filter    string
+	filtering bool // "/" opened the filter input; every key is filter text
 
 	capturing bool
 	steps     []keymap.Key // chord steps captured so far
@@ -46,8 +47,9 @@ func NewKeymapPage(opts config.Options, registered func(commandID string) bool) 
 func (k *KeymapPage) SetPalette(p *theme.Palette) { k.pal = p }
 
 // Capturing implements PageModel: while a rebind capture (or its conflict
-// confirmation) is active the page needs every key verbatim.
-func (k *KeymapPage) Capturing() bool { return k.capturing }
+// confirmation) or the filter input (#531) is active the page needs every key
+// verbatim — filter text may contain the page's own action letters (u/r/j/k).
+func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering }
 
 // table builds the effective binding table from the live config — the same
 // construction the app's resolver uses, so the page always shows reality.
@@ -98,6 +100,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if k.capturing {
 		return k.updateCapture(key)
 	}
+	if k.filtering {
+		return k.updateFilter(key)
+	}
 	switch key.String() {
 	case "up", "k":
 		if k.sel > 0 {
@@ -127,9 +132,33 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			k.filter = k.filter[:len(k.filter)-1]
 			k.sel = 0
 		}
+	case "/":
+		// Explicit filter input (#531), mirroring the schema pages: while it
+		// is open every printable key is filter text, so terms containing the
+		// action letters (u/r/j/k) type instead of firing actions.
+		k.filtering = true
+	}
+	return nil
+}
+
+// updateFilter handles keys while the filter input is open: enter keeps the
+// filter and returns to the list, esc clears it, backspace edits, printable
+// text appends verbatim.
+func (k *KeymapPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
+	switch key.Code {
+	case tea.KeyEscape:
+		k.filtering = false
+		k.filter = ""
+		k.sel = 0
+	case tea.KeyEnter:
+		k.filtering = false
+	case tea.KeyBackspace:
+		if k.filter != "" {
+			k.filter = k.filter[:len(k.filter)-1]
+			k.sel = 0
+		}
 	default:
-		// Plain single-rune keys extend the filter (type-to-filter).
-		if key.Text != "" && len(key.Text) == 1 && key.Text != "j" && key.Text != "k" {
+		if key.Text != "" {
 			k.filter += key.Text
 			k.sel = 0
 		}
@@ -259,8 +288,13 @@ func (k *KeymapPage) View(w, h int) string {
 	pal := k.theme()
 	rows := k.rows()
 	head := " chord · command · context · layer"
-	if k.filter != "" {
+	switch {
+	case k.filtering:
+		head += "   filter: " + k.filter + "▌"
+	case k.filter != "":
 		head += "   filter: " + k.filter
+	default:
+		head += "   (/ to filter)"
 	}
 	lines := []string{lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)}
 	for i, b := range rows {
