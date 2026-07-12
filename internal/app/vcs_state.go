@@ -1,0 +1,72 @@
+package app
+
+import (
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/vcs"
+)
+
+// Git status plumbing (Roadmap 0320, #462). The model holds one shared
+// vcsState pointer: the latest snapshot plus the refresh scheduling flags.
+// Refreshes are debounced (a watcher burst or save storm collapses into one
+// `git status` run) and serialized (at most one git subprocess in flight; a
+// trigger arriving mid-flight queues exactly one follow-up run).
+
+// vcsDebounce collapses refresh triggers; watcher events are already
+// debounced at 100ms, this adds slack for multi-file bursts (checkout, save
+// all) so one git run covers them.
+const vcsDebounce = 250 * time.Millisecond
+
+// vcsInvalidateMsg reports one working-tree mutation (buffer save, mutating
+// VCS command); the handler arms the debounce tick.
+type vcsInvalidateMsg struct{}
+
+// vcsTickMsg wakes the model to run the debounced git status refresh.
+type vcsTickMsg struct{}
+
+type vcsState struct {
+	snap       *vcs.Snapshot // latest snapshot; nil = not a git repo (or unloaded)
+	tickArmed  bool          // a vcsTickMsg is pending
+	refreshing bool          // a git status run is in flight
+	dirty      bool          // triggers arrived mid-flight: run again after
+}
+
+// scheduleVCSRefresh arms the debounce tick unless one is already pending.
+// Callers batch the returned command with their own.
+func (m Model) scheduleVCSRefresh() tea.Cmd {
+	if m.vcs.tickArmed {
+		return nil
+	}
+	m.vcs.tickArmed = true
+	return tea.Tick(vcsDebounce, func(time.Time) tea.Msg { return vcsTickMsg{} })
+}
+
+// startVCSRefresh launches the git status run, or queues a follow-up when one
+// is already in flight.
+func (m Model) startVCSRefresh() tea.Cmd {
+	if m.vcs.refreshing {
+		m.vcs.dirty = true
+		return nil
+	}
+	m.vcs.refreshing = true
+	return vcs.Refresh(".")
+}
+
+// applyVCSSnapshot stores a finished run's snapshot and chains the queued
+// follow-up run, if triggers arrived while git was running.
+func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
+	m.vcs.refreshing = false
+	m.vcs.snap = msg.Snap
+	if m.vcs.dirty {
+		m.vcs.dirty = false
+		m.vcs.refreshing = true
+		return vcs.Refresh(".")
+	}
+	return nil
+}
+
+// VCSSnapshot exposes the current snapshot to tests and consumers; nil means
+// "not a git repository" and must render as a clean no-op everywhere.
+func (m Model) VCSSnapshot() *vcs.Snapshot { return m.vcs.snap }
