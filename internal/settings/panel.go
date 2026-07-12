@@ -179,9 +179,10 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if x < 1+catWidth+3 {
 		return nil
 	}
-	// The description sits in a pinned footer (#535), so list lines map 1:1
-	// to rows; the footer line itself is not clickable.
-	if row >= m.height-4-1 {
+	// The description sits in a pinned footer (#535, wrapped over
+	// detailLines lines #549), so list lines map 1:1 to rows; the footer
+	// lines themselves are not clickable.
+	if row >= m.height-4-detailLines {
 		return nil
 	}
 	if idx := row + m.formOff; idx < len(m.rows()) {

@@ -413,7 +413,7 @@ func TestDetailFooterPinned(t *testing.T) {
 		return -1
 	}
 	v := m.View()
-	if lineOf(v, "first description") != 20-3 { // last body line above the hint+border rows
+	if lineOf(v, "first description") != 20-4 { // first footer line (2-line footer #549) above hint+border
 		t.Fatalf("description must be pinned to the bottom of the form column:\n%s", v)
 	}
 	third := lineOf(v, "Third entry")
@@ -422,7 +422,7 @@ func TestDetailFooterPinned(t *testing.T) {
 	if got := lineOf(v, "Third entry"); got != third {
 		t.Fatalf("moving the selection must not shift other rows: line %d -> %d\n%s", third, got, v)
 	}
-	if lineOf(v, "second description") != 20-3 {
+	if lineOf(v, "second description") != 20-4 {
 		t.Fatalf("footer must follow the selection:\n%s", v)
 	}
 }
@@ -452,5 +452,40 @@ func TestFilterSpansAllPages(t *testing.T) {
 	m.Update(key("esc"))
 	if m.IsOpen() {
 		t.Fatal("esc must close the panel")
+	}
+}
+
+// TestDetailFooterWraps guards #549: a long description word-wraps over the
+// two pinned footer lines instead of clipping at the column edge, and the
+// footer height stays constant for short descriptions.
+func TestDetailFooterWraps(t *testing.T) {
+	restoreConfig(t)
+	long := "This is a deliberately long help text that cannot possibly fit into a single narrow form column line and therefore must wrap"
+	pages := []Page{{Title: "Interface", Entries: []Entry{
+		{Key: "ui.menu_bar", Type: Bool, Title: "First", Scope: config.UserScope, Description: long},
+		{Key: "editor.tab_width", Type: Int, Title: "Second", Scope: config.UserScope, Description: "short"},
+	}}}
+	m := New(pages, testOpts(t))
+	m.SetSize(90, 16) // wide enough that the hint row stays a single line
+	m.Open()
+	m.Update(key("tab"))
+
+	v := m.View()
+	lines := strings.Split(v, "\n")
+	// The two footer lines sit above the hint row and the bottom border.
+	first, second := lines[len(lines)-4], lines[len(lines)-3]
+	if !strings.Contains(first, "This is a deliberately") {
+		t.Fatalf("first footer line = %q", first)
+	}
+	if !strings.Contains(second, "wrap") && !strings.Contains(second, "(ui.menu_bar)") {
+		t.Fatalf("second footer line must carry the wrapped remainder, got %q", second)
+	}
+
+	// A short description keeps the same footer height (second line blank-ish).
+	m.Update(key("down"))
+	v = m.View()
+	lines = strings.Split(v, "\n")
+	if !strings.Contains(lines[len(lines)-4], "short") {
+		t.Fatalf("short description must sit on the first footer line:\n%s", v)
 	}
 }

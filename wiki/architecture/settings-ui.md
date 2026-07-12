@@ -61,7 +61,11 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   (#383); ← never cycles — it always returns to the category column, the
   mirror of → (#533); Int/String/Path
   open an inline input (int parses + clamps to bounds, path validates
-  existence); Chord captures the next key press. Path inputs get shell-style
+  existence); Chord captures the next key press. The pinned footer is **two lines** and
+  the description (plus its `(key)` suffix) **word-wraps** across them (#549)
+  — long help stays readable instead of clipping; an overflow beyond two
+  lines is marked with an ellipsis, a validation error takes the first line
+  and the wrapped description continues below. Path inputs get shell-style
   **tab completion** (#541) via the shared `internal/pathcomplete` engine:
   matching entries render as a suggestion list under the row (final path
   component only, capped with a `+N more` tail), tab extends the input to the

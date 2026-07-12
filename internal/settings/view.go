@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
 	"ike/internal/theme"
@@ -158,10 +159,15 @@ func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string 
 	return strings.Join(out, "\n")
 }
 
+// detailLines is the pinned description footer's constant height (#549): the
+// help text word-wraps over this many lines instead of clipping at one.
+const detailLines = 2
+
 // renderForm renders the visible entries with value and layer badge. The
 // selected entry's description lives in a footer pinned to the bottom of the
 // column — never inline — so moving the selection cannot shift the rows below
-// it (#535). Only the enum picker still expands inline (an explicit action).
+// it (#535); it wraps over detailLines lines (#549). Only the enum picker
+// still expands inline (an explicit action).
 func (m *Model) renderForm(w, h int) string {
 	pal := m.theme()
 	rows := m.rows()
@@ -169,7 +175,7 @@ func (m *Model) renderForm(w, h int) string {
 		return lipgloss.NewStyle().Foreground(pal.Secondary).Render("no matching settings")
 	}
 	clip := lipgloss.NewStyle().MaxWidth(w)
-	listH := h - 1 // the last line is the pinned detail footer
+	listH := h - detailLines // the last lines are the pinned detail footer
 	if listH < 1 {
 		listH = 1
 	}
@@ -205,30 +211,47 @@ func (m *Model) renderForm(w, h int) string {
 		end = len(lines)
 	}
 	out := lines[m.formOff:end]
-	if h > 1 {
+	if h > detailLines {
 		for len(out) < listH {
 			out = append(out, "")
 		}
-		out = append(out, clip.Render(m.renderDetail()))
+		for _, d := range m.renderDetail(w) {
+			out = append(out, clip.Render(d))
+		}
 	}
 	return strings.Join(out, "\n")
 }
 
-// renderDetail renders the pinned footer line: the selected entry's
-// description and key, or the current validation error.
-func (m *Model) renderDetail() string {
+// renderDetail renders the pinned footer (#535): the selected entry's
+// description and key, word-wrapped over a constant detailLines lines (#549)
+// — long help stays readable instead of clipping at the column edge. A
+// validation error takes the first line; the wrapped description continues
+// below it. The result always has exactly detailLines entries so the footer
+// height never shifts the list.
+func (m *Model) renderDetail(w int) []string {
+	out := make([]string, 0, detailLines)
 	r, ok := m.current()
-	if !ok {
-		return ""
+	if ok {
+		pal := m.theme()
+		style := lipgloss.NewStyle().Foreground(pal.Secondary)
+		if m.invalid != "" {
+			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.invalid))
+		}
+		text := r.entry.Description + "  (" + r.entry.Key + ")"
+		for _, line := range strings.Split(ansi.Wordwrap(text, w-1, ""), "\n") {
+			if len(out) == detailLines {
+				// Even the wrapped footer overflows: mark the cut (the
+				// clip style trims the ellipsis back into the column).
+				out[detailLines-1] += "…"
+				break
+			}
+			out = append(out, style.Render(" "+line))
+		}
 	}
-	pal := m.theme()
-	style := lipgloss.NewStyle().Foreground(pal.Secondary)
-	text := " " + r.entry.Description + "  (" + r.entry.Key + ")"
-	if m.invalid != "" {
-		text = " ✗ " + m.invalid
-		style = style.Foreground(pal.Error)
+	for len(out) < detailLines {
+		out = append(out, "")
 	}
-	return style.Render(text)
+	return out
 }
 
 // renderPicker renders the open enum dropdown under the selected row.

@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Settings description footer wrap (#549): the pinned help line clipped long
+  descriptions at the column edge. The footer is now a constant two lines
+  with word-wrapped description + key (ellipsis beyond that); validation
+  errors take the first line. Height stays constant, so the #535
+  no-jumpiness invariant holds.
+
 - uv project scaffolding (#548): create-environment on the uv path now
   generates a missing `pyproject.toml` (`uv init --bare`) and a missing
   `uv.lock` (`uv lock`) around the venv creation — best effort, existing
