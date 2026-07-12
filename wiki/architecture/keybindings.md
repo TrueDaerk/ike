@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-11T18:00:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -256,7 +256,7 @@ the existing multi-step resolver (no new engine):
   making this the universal variant that also works mid-edit.
 
 Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
-path, `r` replace in path, `p` switch project, `t` toggle terminal, `T` new
+path, `r` replace in path, `p` switch project, `P` markdown preview, `t` toggle terminal, `T` new
 terminal, `h` notification history, `e` explorer/editor toggle, `s` save all,
 `w` save, `d` definition, `u` usages, `a` code actions, `n` rename, `l`
 reformat, `c` comment line, `x` close tab, `o` reopen tab, `m` recent files
@@ -346,6 +346,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `space H` | live via space H |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
+| `markdown.preview` | `cmd+k m` | fragile | `space shift+p` | live via space shift+p |
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |
 | `nav.forward` | `cmd+right-bracket` | fragile | `space i` | live via space i |

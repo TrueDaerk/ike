@@ -128,6 +128,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
+		case pane.KindMarkdown:
+			// Path names the previewed source file; restore re-reads it (#62).
+			ids[key] = paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}
 		case pane.KindTerminal:
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.

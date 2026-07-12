@@ -40,6 +40,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// search (0250 phase 1, #294) — off macOS ctrl+o is vim jump-back.
 	{"S", "project.goToClass", "Go to symbol"},
 	{"p", "project.switch", "Switch project"},
+	// P (shift+p) mirrors the fragile cmd+k m primary for the rendered
+	// markdown preview (#62) — lowercase p is the project switch.
+	{"P", "markdown.preview", "Markdown preview"},
 	{"t", "terminal.toggle", "Toggle terminal"},
 	// T (shift+t) opens a fresh session next to lowercase-t's toggle (#242).
 	{"T", "terminal.new", "New terminal"},

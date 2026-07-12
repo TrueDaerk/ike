@@ -31,3 +31,4 @@ Component-level concepts for the IKE codebase.
 * [Navigation History (Back/Forward)](/architecture/navigation-history.md) - per-jump cursor history with JetBrains Back/Forward semantics: open-funnel recording, nav.back/nav.forward, leader mnemonics space b / space i (Roadmap 0220)
 * [Status Line Segments](/architecture/status-line.md) - extensible left/right slot model behind the bottom status bar: mode/file/diagnostics plus toolchain interpreter and notification counter segments (#101)
 * [Plugin Marketplace](/architecture/marketplace.md) - discover/install/update/remove WASM plugins in-IDE: static HTTPS JSON catalog, checksum-verified atomic installs pinning the reviewed capability list, marketplace settings page (Roadmap 0310)
+* [Markdown Preview](/architecture/markdown-preview.md) - rendered live preview pane for markdown buffers: glamour ANSI output beside the editor, debounced re-render, heading-anchored cursor scroll sync, theme-aware (#62)
