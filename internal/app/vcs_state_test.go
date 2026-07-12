@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/host"
 	"ike/internal/registry"
 	"ike/internal/vcs"
@@ -13,6 +15,33 @@ func vcsApp(t *testing.T) Model {
 	t.Helper()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	return NewWith(registry.New(), host.MapConfig{})
+}
+
+func TestVCSBranchSegment(t *testing.T) {
+	m := vcsApp(t)
+	if got := m.branchSegment(); got != "" {
+		t.Fatalf("no snapshot: segment = %q, want hidden", got)
+	}
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
+	if got := m.branchSegment(); got != "⎇ main" {
+		t.Errorf("segment = %q", got)
+	}
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main", Ahead: 2, Behind: 1}
+	if got := m.branchSegment(); got != "⎇ main ↑2 ↓1" {
+		t.Errorf("diverged segment = %q", got)
+	}
+}
+
+func TestVCSSnapshotReachesExplorer(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	snap := vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
+	out, _ = m.Update(vcs.SnapshotMsg{Snap: snap})
+	m = out.(Model)
+	if m.VCSSnapshot() != snap {
+		t.Fatal("snapshot not stored on the model")
+	}
 }
 
 func TestVCSWatcherEventArmsDebounce(t *testing.T) {

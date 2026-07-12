@@ -58,7 +58,32 @@ func (m Model) todoSegment() string {
 }
 
 var statusRight = []statusSegment{
+	{id: "branch", render: func(m Model, _ *editor.Model) string { return m.branchSegment() }},
 	{id: "cursor", render: cursorSegment},
+}
+
+// branchSegment shows the git branch (Roadmap 0320, #463) with ahead/behind
+// counters when the upstream diverges; hidden outside git repos. A detached
+// HEAD shows the short commit hash the snapshot carries instead.
+func (m Model) branchSegment() string {
+	snap := m.vcs.snap
+	if snap == nil || snap.Branch == "" {
+		return ""
+	}
+	branch := snap.Branch
+	// Long branch names would crowd out the left segments: clip mid-word,
+	// JetBrains-style, keeping the discriminating prefix.
+	if len(branch) > 24 {
+		branch = branch[:23] + "…"
+	}
+	s := "⎇ " + branch
+	if snap.Ahead > 0 {
+		s += " ↑" + strconv.Itoa(snap.Ahead)
+	}
+	if snap.Behind > 0 {
+		s += " ↓" + strconv.Itoa(snap.Behind)
+	}
+	return s
 }
 
 // renderSegments joins the non-empty slots with the segment divider.

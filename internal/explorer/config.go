@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/theme"
+	"ike/internal/vcs"
 )
 
 // Config keys consumed from the merged [explorer] section (see internal/config).
@@ -49,6 +50,13 @@ func (m *Model) Configure(cfg host.Config) {
 func (m *Model) SetPalette(p *theme.Palette) {
 	m.pal = p
 	m.mergeColors()
+}
+
+// SetVCS threads the current git status snapshot in (Roadmap 0320): files and
+// dirty directories render in their status color. A nil snapshot (not a git
+// repo) restores plain filetype coloring.
+func (m *Model) SetVCS(snap *vcs.Snapshot) {
+	m.vcsSnap = snap
 }
 
 // mergeColors rebuilds the colour table: the palette's file colors (default

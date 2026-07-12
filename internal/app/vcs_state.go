@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/pane"
 	"ike/internal/vcs"
 )
 
@@ -59,6 +60,11 @@ func (m Model) startVCSRefresh() tea.Cmd {
 func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	m.vcs.refreshing = false
 	m.vcs.snap = msg.Snap
+	// Consumers read the snapshot per frame; the explorer holds its own
+	// reference (#463).
+	if m.panes.Has(pane.ExplorerKey) {
+		m.explorer().SetVCS(msg.Snap)
+	}
 	if m.vcs.dirty {
 		m.vcs.dirty = false
 		m.vcs.refreshing = true

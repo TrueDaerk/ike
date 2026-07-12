@@ -488,6 +488,12 @@ func (m Model) Host() host.API { return m.host }
 // SetSender; a project switch (Roadmap 0090) re-calls it with the new root,
 // which restarts the watcher there.
 func (m Model) StartWatcher(root string) {
+	// The initial git status load (Roadmap 0320) piggybacks on the same
+	// lifecycle: main.go-only, so tests stay free of the developer repo's
+	// live git state (mirroring the watcher-free-tests rule above). The
+	// invalidate goes through the debounce and runs even with files.watch
+	// disabled.
+	go m.host.Send(vcsInvalidateMsg{})
 	if v, ok := m.host.Config().Get("files.watch"); ok && v == "false" {
 		return
 	}
@@ -1361,9 +1367,6 @@ func (m Model) explorer() *explorer.Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
-	// Initial git status load (Roadmap 0320): Init runs at startup and again
-	// after a project switch, so the snapshot follows the workspace.
-	cmds = append(cmds, m.startVCSRefresh())
 	// The TODO index's initial full scan (#61): Init runs after main.go wires
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.

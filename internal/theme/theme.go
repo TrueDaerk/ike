@@ -49,6 +49,11 @@ type UI struct {
 	DiffAdded       string // diff viewer: added-line background (#60)
 	DiffRemoved     string // diff viewer: removed-line background
 	DiffChanged     string // diff viewer: intra-line changed-range background
+	VCSModified     string // vcs status foreground: modified/renamed files (Roadmap 0320)
+	VCSAdded        string // vcs status foreground: added files
+	VCSUntracked    string // vcs status foreground: untracked files
+	VCSDeleted      string // vcs status foreground: deleted files
+	VCSConflicted   string // vcs status foreground: merge-conflicted files
 }
 
 // Theme is one named color scheme: ui chrome slots plus the default sources
@@ -103,6 +108,11 @@ type Palette struct {
 	DiffAdded       color.Color
 	DiffRemoved     color.Color
 	DiffChanged     color.Color
+	VCSModified     color.Color
+	VCSAdded        color.Color
+	VCSUntracked    color.Color
+	VCSDeleted      color.Color
+	VCSConflicted   color.Color
 }
 
 // firstNonEmpty returns the first non-empty token, for slot fallback chains.
@@ -189,6 +199,14 @@ func NewPalette(t Theme) *Palette {
 	p.DiffAdded = slotOrMix(t.UI.DiffAdded, p.Success, p.Surface, 0.22)
 	p.DiffRemoved = slotOrMix(t.UI.DiffRemoved, p.Error, p.Surface, 0.22)
 	p.DiffChanged = slotOrMix(t.UI.DiffChanged, p.Warning, p.Surface, 0.42)
+	// VCS status foregrounds (Roadmap 0320) default to the theme's own
+	// semantic hues, JetBrains-style: modified→info blue, added→success green,
+	// untracked→warning, conflicted→error, deleted→the dim border tone.
+	p.VCSModified = slot(t.UI.VCSModified, firstNonEmpty(t.UI.Info, def.UI.Info))
+	p.VCSAdded = slot(t.UI.VCSAdded, firstNonEmpty(t.UI.Success, def.UI.Success))
+	p.VCSUntracked = slot(t.UI.VCSUntracked, firstNonEmpty(t.UI.Warning, def.UI.Warning))
+	p.VCSDeleted = slot(t.UI.VCSDeleted, firstNonEmpty(t.UI.Border, def.UI.Border))
+	p.VCSConflicted = slot(t.UI.VCSConflicted, firstNonEmpty(t.UI.Error, def.UI.Error))
 	return p
 }
 
