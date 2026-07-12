@@ -253,8 +253,13 @@ carries an accept-keys hint row instead (#308). An automatically opened
 popup lives only while the call is being typed (#315): leaving insert/replace
 mode and mouse clicks (#307) dismiss it, and a server reply landing after
 insert mode ended is dropped as stale — unless it answers the manual command
-(`Manual` flag) or updates a popup that is already showing. Completion, when
-open, takes precedence in the popup compositor. All three popups render inside a rounded
+(`Manual` flag) or updates a popup that is already showing. Some servers
+(gopls) answer null when the position sits inside a string literal — the most
+common place to ask "which argument is this?" — so an empty answer retries
+once at the literal's opening delimiter on the synced line
+(`stringLiteralStart`, #525), which is still inside the argument and yields
+the correct active parameter. Completion, when open, takes precedence in the
+popup compositor. All three popups render inside a rounded
 themed frame (`popupFrame`, #316) — `BorderFocus` on `Panel`, like the
 floating shell — so they read as overlays rather than buffer text. With the
 frame in place they clamp to the **terminal**, not the pane: a popup may

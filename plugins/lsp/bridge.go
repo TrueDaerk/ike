@@ -700,7 +700,11 @@ func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
 
 // requestSignature asks the server for signature help at the given position
 // and delivers the popup message. Manual replies (lsp.parameterInfo) may open
-// the popup outside insert mode; an empty answer dismisses it.
+// the popup outside insert mode; an empty answer dismisses it. Some servers
+// (gopls) answer null when the position sits inside a string literal — the
+// most common place to ask "which argument is this?" — so an empty answer
+// retries once at the literal's opening delimiter, which is still inside the
+// argument and yields the correct active parameter (#525).
 func (b *bridge) requestSignature(path string, line, col int, manual bool) {
 	mgr := b.manager()
 	if mgr == nil {
@@ -712,6 +716,23 @@ func (b *bridge) requestSignature(path string, line, col int, manual bool) {
 			return
 		}
 		msg := ilsp.SignatureContent(sh)
+		if msg.Label == "" {
+			if text, ok := mgr.Line(path, line); ok {
+				// gopls treats the whole literal, delimiters included, as
+				// answer-free, so retry just before the opening quote (the
+				// space/comma/paren still belongs to the argument) and, when
+				// that is also empty, just past the closing quote.
+				for _, c := range stringRetryCols(text, col) {
+					sh, err = mgr.SignatureHelp(context.Background(), path, buffer.Position{Line: line, Col: c})
+					if err != nil {
+						return
+					}
+					if msg = ilsp.SignatureContent(sh); msg.Label != "" {
+						break
+					}
+				}
+			}
+		}
 		msg.Path, msg.Manual = path, manual
 		b.mu.Lock()
 		if b.sigActive == nil {
@@ -723,6 +744,56 @@ func (b *bridge) requestSignature(path string, line, col int, manual bool) {
 			b.h.Send(msg)
 		}
 	}()
+}
+
+// stringRetryCols scans line (a single line of source) and, when rune column
+// col sits inside a string literal delimited by ", ' or a backtick (honoring
+// backslash escapes inside "/' literals), returns the retry candidates: the
+// column before the opening delimiter, then the column after the closing one
+// — positions still inside the surrounding argument list but outside the
+// literal, which servers like gopls do answer (#525). Outside a literal (or
+// in a multi-line literal opened on an earlier line) it returns nil and the
+// fallback does not fire.
+func stringRetryCols(line string, col int) []int {
+	runes := []rune(line)
+	open := -1
+	var delim rune
+	escaped := false
+	for i, r := range runes {
+		if i >= col {
+			break
+		}
+		switch {
+		case open >= 0 && escaped:
+			escaped = false
+		case open >= 0 && r == '\\' && delim != '`':
+			escaped = true
+		case open >= 0 && r == delim:
+			open = -1
+		case open < 0 && (r == '"' || r == '\'' || r == '`'):
+			open, delim = i, r
+		}
+	}
+	if open < 0 {
+		return nil
+	}
+	var cols []int
+	if open > 0 {
+		cols = append(cols, open-1)
+	}
+	escaped = false
+	for i := col; i < len(runes); i++ {
+		r := runes[i]
+		switch {
+		case escaped:
+			escaped = false
+		case r == '\\' && delim != '`':
+			escaped = true
+		case r == delim:
+			return append(cols, i+1)
+		}
+	}
+	return cols
 }
 
 // typedChar extracts the character the change just inserted: the one left of

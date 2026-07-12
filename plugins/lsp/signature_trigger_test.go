@@ -46,6 +46,58 @@ func TestSignatureAutoAndInlayToggles(t *testing.T) {
 	}
 }
 
+// TestStringRetryCols covers the #525 fallback scanner: inside a string
+// argument the request retries just before the opening delimiter, then just
+// past the closing one.
+func TestStringRetryCols(t *testing.T) {
+	eq := func(a, b []int) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for i := range a {
+			if a[i] != b[i] {
+				return false
+			}
+		}
+		return true
+	}
+	line := `	t.Error("abc") // "x"`
+	cases := []struct {
+		name string
+		col  int
+		want []int
+	}{
+		{"on function name", 3, nil},
+		{"inside string", 11, []int{8, 14}},
+		{"on closing quote", 13, []int{8, 14}},
+		{"after closing quote", 14, nil},
+		{"second literal on the line", 20, []int{18, 22}},
+	}
+	for _, c := range cases {
+		if got := stringRetryCols(line, c.col); !eq(got, c.want) {
+			t.Errorf("%s: col %d = %v, want %v", c.name, c.col, got, c.want)
+		}
+	}
+
+	// Escaped quote does not close the literal; backticks ignore backslashes.
+	if got := stringRetryCols(`f("a\"b", 1)`, 6); !eq(got, []int{1, 8}) {
+		t.Errorf(`escaped quote: got %v, want [1 8]`, got)
+	}
+	if got := stringRetryCols("f(`a\\`, x)", 7); got != nil {
+		t.Errorf("outside a raw string must return nil, got %v", got)
+	}
+	if got := stringRetryCols("f('x', y)", 3); !eq(got, []int{1, 5}) {
+		t.Errorf("single quote: got %v, want [1 5]", got)
+	}
+	if got := stringRetryCols("plain(code, here)", 8); got != nil {
+		t.Errorf("no literal on the line must return nil, got %v", got)
+	}
+	// Literal at line start (col 0) has no front candidate.
+	if got := stringRetryCols(`"x" + y`, 1); !eq(got, []int{3}) {
+		t.Errorf("line-start literal: got %v, want [3]", got)
+	}
+}
+
 func TestIsSignatureTrigger(t *testing.T) {
 	trig := []string{"(", ","}
 	if !isSignatureTrigger("(", trig) || !isSignatureTrigger(",", trig) {
