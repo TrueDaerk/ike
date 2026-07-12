@@ -32,8 +32,14 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["lsp.rename"]; r.Primary != "shift+f6" || r.Status() != "live" {
 		t.Errorf("lsp.rename = %+v", r)
 	}
-	if r := byCmd["vcs.commit"]; !strings.Contains(r.Status(), "blocked:") {
+	// vcs.commit went live with 0320 (#465): cmd+k stays the fragile primary,
+	// the leader mnemonic is the delivered path. updateProject remains the
+	// blocked-ledger specimen until its sub-issue lands.
+	if r := byCmd["vcs.commit"]; r.Fallback != "space v c" || !strings.Contains(r.Status(), "live") {
 		t.Errorf("vcs.commit = %+v", r)
+	}
+	if r := byCmd["vcs.updateProject"]; !strings.Contains(r.Status(), "blocked:") {
+		t.Errorf("vcs.updateProject = %+v", r)
 	}
 	if r := byCmd["editor.copy"]; r.Fallback != "vim y" {
 		t.Errorf("editor.copy = %+v", r)
