@@ -232,29 +232,67 @@ type SignatureHelpMsg struct {
 	ParamEnd   int // rune index (exclusive) where it ends; == ParamStart when unknown
 	Doc        string
 	More       int // additional overloads beyond the active signature
+	// Params lists every parameter of the active signature for the
+	// parameter-list popup layout (#523); ActiveParam indexes into it
+	// (-1 when the server gave no usable active parameter).
+	Params      []SignatureParam
+	ActiveParam int
+	// Manual marks replies to the explicit lsp.parameterInfo command, which
+	// may open the popup outside insert mode.
+	Manual bool
+}
+
+// SignatureParam is one parameter of the active signature: its display label,
+// its rune highlight range within the signature label (Start == End when
+// unresolvable), and the first line of its documentation.
+type SignatureParam struct {
+	Label      string
+	Start, End int
+	Doc        string
 }
 
 // SignatureContent flattens a SignatureHelp into the popup fields: the active
-// signature's label, the active parameter's rune highlight range (parameter
-// labels arrive as substrings or UTF-16 offset pairs), the first line of its
-// documentation, and how many other overloads exist.
-func SignatureContent(sh *protocol.SignatureHelp) (label string, start, end int, doc string, more int) {
+// signature's label, every parameter with its rune highlight range (parameter
+// labels arrive as substrings or UTF-16 offset pairs), the first line of the
+// signature documentation, and how many other overloads exist. Path and Manual
+// are left for the caller.
+func SignatureContent(sh *protocol.SignatureHelp) SignatureHelpMsg {
 	if sh == nil || len(sh.Signatures) == 0 {
-		return "", 0, 0, "", 0
+		return SignatureHelpMsg{ActiveParam: -1}
 	}
 	active := sh.ActiveSignature
 	if active < 0 || active >= len(sh.Signatures) {
 		active = 0
 	}
 	sig := sh.Signatures[active]
-	label = sig.Label
-	more = len(sh.Signatures) - 1
-	doc = docFirstLine(sig.Documentation)
-
-	if p := sh.ActiveParameter; p >= 0 && p < len(sig.Parameters) {
-		start, end = paramRange(label, sig.Parameters[p].Label)
+	msg := SignatureHelpMsg{
+		Label:       sig.Label,
+		Doc:         docFirstLine(sig.Documentation),
+		More:        len(sh.Signatures) - 1,
+		ActiveParam: -1,
 	}
-	return label, start, end, doc, more
+	labelRunes := []rune(sig.Label)
+	for _, p := range sig.Parameters {
+		start, end := paramRange(sig.Label, p.Label)
+		text := ""
+		if start < end && end <= len(labelRunes) {
+			text = string(labelRunes[start:end])
+		} else if s := ""; json.Unmarshal(p.Label, &s) == nil {
+			text = s
+		}
+		msg.Params = append(msg.Params, SignatureParam{
+			Label: text,
+			Start: start,
+			End:   end,
+			Doc:   docFirstLine(p.Documentation),
+		})
+	}
+	if p := sh.ActiveParameter; p >= 0 && p < len(msg.Params) {
+		msg.ActiveParam = p
+		msg.ParamStart = msg.Params[p].Start
+		msg.ParamEnd = msg.Params[p].End
+	}
+	return msg
 }
 
 // paramRange resolves a parameter label (substring or UTF-16 [start,end)

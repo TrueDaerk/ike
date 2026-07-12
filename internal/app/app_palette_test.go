@@ -29,20 +29,34 @@ func (palettePlugin) Capabilities() plugin.Capabilities {
 }
 
 func TestPaletteToggleKeyOpens(t *testing.T) {
-	m := sized(t, 100, 40)
+	// The toggle chord defaults to empty (#523: ctrl+p belongs to
+	// lsp.parameterInfo); a configured key still opens the palette.
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	m := NewWith(registry.New(), host.MapConfig{"palette.toggle_key": "ctrl+g"})
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
 	if m.palette.IsOpen() {
 		t.Fatal("palette should start closed")
 	}
-	out, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
 	m = out.(Model)
 	if !m.palette.IsOpen() {
-		t.Fatal("ctrl+p should open the palette")
+		t.Fatal("the configured toggle key should open the palette")
 	}
 	// A key while open is consumed by the palette, not routed to panes.
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
 	if m.palette.IsOpen() {
 		t.Fatal("esc should close the palette")
+	}
+}
+
+func TestPaletteToggleKeyDefaultsEmpty(t *testing.T) {
+	m := sized(t, 100, 40)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("ctrl+p must not open the palette by default (#523: bound to lsp.parameterInfo)")
 	}
 }
 

@@ -4,13 +4,13 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-12T23:45:00Z
 ---
 
 # Command Palette
 
 Roadmap 0070. A single modal overlay that fronts every action in IKE. It opens
-centered over the layout (default `ctrl+p`) and reads a leading **prefix rune**
+centered over the layout (esc-esc, or a configured `palette.toggle_key`) and reads a leading **prefix rune**
 that selects a **Mode**: `:` runs registered **Commands**, `@` fuzzy-finds
 **files**, and a locked-only **directory mode** (`dir_mode.go`, no user-facing
 prefix) is the target picker behind `file.move` (#175), emitting a
@@ -51,8 +51,9 @@ open-file path.
 
 Four entry points, all from a non-capturing context:
 
-- **Toggle key** (config `palette.toggle_key`, default `ctrl+p`) — `Open` centered
-  for the focused pane's context.
+- **Toggle key** (config `palette.toggle_key`, default **empty** since #523 —
+  `ctrl+p` now belongs to `lsp.parameterInfo`; set the key to restore a
+  dedicated chord) — `Open` centered for the focused pane's context.
 - **esc-esc** — two consecutive `esc` presses outside a text-capturing editor
   mode open the centered palette (the first esc is still forwarded, so it keeps
   its normal-mode meaning); any other key resets the pending state.
@@ -180,7 +181,7 @@ truncated first, so the binding chip is never dropped on a narrow box.
 - `max_results` — result rows shown (default 12; the list scrolls past it),
 - `default_mode` — prefix used when none is typed (default `:`),
 - `off_context` — `"rank"` (last) or `"hide"` for off-context commands,
-- `toggle_key` — default open key (default `ctrl+p`).
+- `toggle_key` — dedicated open key (default empty since #523; esc-esc stays).
 
 The toggle key is a binding-agnostic default; the final keymap (and the `:`/`@`
 discoverability, the project-switch command's appearance) is owned by roadmaps

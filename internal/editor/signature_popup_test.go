@@ -136,26 +136,27 @@ func TestPopupsCarryRoundedFrame(t *testing.T) {
 	}
 }
 
-// TestSignatureDismissalPaths guards #315: insert-mode arrow motion and
-// leaving insert dismiss the popup, and a reply landing after insert mode
-// ended is dropped instead of re-anchoring at the normal-mode cursor.
+// TestSignatureDismissalPaths guards #315: leaving insert dismisses the
+// popup, and a reply landing after insert mode ended is dropped instead of
+// re-anchoring at the normal-mode cursor. Insert-mode arrow motion no longer
+// dismisses — the bridge retriggers at the new cursor and the server decides
+// (#523).
 func TestSignatureDismissalPaths(t *testing.T) {
 	m, path := loaded(t, "Greet(x, y)\n")
 	msg := ilsp.SignatureHelpMsg{Path: path, Label: "Greet(a int, b int)", ParamStart: 6, ParamEnd: 11}
 
-	// Arrow motion in insert mode dismisses.
+	// Arrow motion in insert mode keeps the popup; the retrigger updates it.
 	m = insertModeAt(m, 0, 6)
 	m, _ = m.Update(msg)
 	if !m.SignatureOpen() {
 		t.Fatal("setup: popup open")
 	}
 	m = send(m, special(tea.KeyRight))
-	if m.SignatureOpen() {
-		t.Fatal("insert-mode arrow motion must dismiss the popup")
+	if !m.SignatureOpen() {
+		t.Fatal("insert-mode arrow motion must keep the popup (#523)")
 	}
 
 	// Leaving insert mode dismisses.
-	m, _ = m.Update(msg)
 	m = send(m, special(tea.KeyEscape))
 	if m.SignatureOpen() {
 		t.Fatal("leaving insert mode must dismiss the popup")
@@ -165,5 +166,57 @@ func TestSignatureDismissalPaths(t *testing.T) {
 	m, _ = m.Update(msg)
 	if m.SignatureOpen() {
 		t.Fatal("a signature reply in normal mode must be dropped")
+	}
+}
+
+// TestSignatureManualAndFollow guards #523: a Manual reply opens the popup in
+// normal mode, follow-up replies update it in any mode, and an empty follow-up
+// dismisses it.
+func TestSignatureManualAndFollow(t *testing.T) {
+	m, path := loaded(t, "Greet(x, y)\n")
+	manual := ilsp.SignatureHelpMsg{Path: path, Label: "Greet(a int, b int)", Manual: true,
+		Params:      []ilsp.SignatureParam{{Label: "a int", Start: 6, End: 11}, {Label: "b int", Start: 13, End: 18}},
+		ActiveParam: 0, ParamStart: 6, ParamEnd: 11}
+
+	m, _ = m.Update(manual)
+	if !m.SignatureOpen() {
+		t.Fatal("a manual reply must open the popup in normal mode")
+	}
+
+	// A non-manual follow-up (cursor-follow retrigger) updates the open popup.
+	follow := manual
+	follow.Manual = false
+	follow.ActiveParam = 1
+	m, _ = m.Update(follow)
+	if !m.SignatureOpen() || m.signature.activeParam != 1 {
+		t.Fatal("a follow-up reply must update the open popup in normal mode")
+	}
+
+	// The server answering null dismisses it.
+	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path})
+	if m.SignatureOpen() {
+		t.Fatal("an empty follow-up must dismiss the popup")
+	}
+}
+
+// TestSignatureParamListRendering guards the parameter-list layout (#523):
+// one row per parameter, the active one marked, its doc below.
+func TestSignatureParamListRendering(t *testing.T) {
+	m, path := loaded(t, "Greet(\n")
+	m = insertModeAt(m, 0, 6)
+	m, _ = m.Update(ilsp.SignatureHelpMsg{Path: path, Label: "Greet(a int, b int)", Doc: "Greets.",
+		Params: []ilsp.SignatureParam{
+			{Label: "a int", Start: 6, End: 11, Doc: "first"},
+			{Label: "b int", Start: 13, End: 18, Doc: "second"},
+		},
+		ActiveParam: 1, ParamStart: 13, ParamEnd: 18})
+	v := ansi.Strip(m.SignatureView())
+	for _, want := range []string{"▶ b int", "  a int", "second", "Greets."} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("view missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "▶ a int") {
+		t.Fatalf("inactive parameter must not carry the marker:\n%s", v)
 	}
 }

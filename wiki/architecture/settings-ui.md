@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-12T23:45:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -142,7 +142,10 @@ of a server's overrides, `r` restarts one server (`Manager.StopLang`, async
 per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
 binary renders the launch-failure reason; `i` runs the plugin's install
 recipe manually and `A` toggles `lsp.auto_install` (#131 — the automatic
-install on first use, with the manual action as fallback/retry).
+install on first use, with the manual action as fallback/retry). `I` toggles
+`lsp.inlay_hints` (default off, #523) and `S` toggles `lsp.signature_auto`
+(the automatic signature popup on trigger characters; the manual
+`lsp.parameterInfo` command works regardless), both shown in the header row.
 
 ## Marketplace page (0310, #446)
 

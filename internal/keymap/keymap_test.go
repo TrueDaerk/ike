@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -224,6 +225,29 @@ func TestHoverBindsToCtrlQ(t *testing.T) {
 	}
 	if !LeaderCommands()["lsp.hover"] {
 		t.Fatal("lsp.hover missing from the leader mnemonic table")
+	}
+}
+
+// TestParameterInfoBindsToCtrlP guards the parameter-info chords (#523):
+// ctrl+p resolves on every platform (it is the everywhere-deliverable
+// fallback), cmd+p stays a distinct Meta chord on darwin, and the off-macOS
+// collapse of both rows onto ctrl+p raises no conflict diagnostic.
+func TestParameterInfoBindsToCtrlP(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		r := NewResolver(table)
+		if res := r.Feed(Key{Base: "p", Mods: ModCtrl}, Editor); res.Status != Resolved || res.Command != "lsp.parameterInfo" {
+			t.Fatalf("%s: ctrl+p in editor = %+v, want lsp.parameterInfo", goos, res)
+		}
+		for _, c := range table.Conflicts() {
+			if strings.Contains(c.Chord, "p") && strings.Contains(c.Chord, "ctrl") {
+				t.Fatalf("%s: ctrl+p rows must dedupe without a conflict, got %+v", goos, c)
+			}
+		}
+	}
+	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
+	if res := r.Feed(Key{Base: "p", Mods: ModMeta}, Editor); res.Status != Resolved || res.Command != "lsp.parameterInfo" {
+		t.Fatalf("darwin: cmd+p in editor = %+v, want lsp.parameterInfo", res)
 	}
 }
 

@@ -297,7 +297,7 @@ func New() Model {
 		hist:               history.New(),
 		tabWidth:           4,
 		insertFinalNewline: true,
-		showInlayHints:     true,
+		showInlayHints:     false,
 		stickyScroll:       true,
 		stickyDepth:        4,
 		hlTheme:            highlight.NewTheme(nil, nil),

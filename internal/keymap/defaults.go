@@ -101,6 +101,13 @@ var jetbrainsRows = []row{
 	// above). f1 — the macOS JetBrains quick-doc key — is taken by the
 	// cheatsheet.
 	{"ctrl+q", "lsp.hover", "Quick documentation", Editor, "LSP (0100)"},
+	// JetBrains parameter info (#523). cmd+p matches JetBrains where the
+	// terminal can deliver Cmd; ctrl+p is the everywhere-deliverable fallback
+	// (the palette's former default toggle chord — palette.toggle_key now
+	// defaults to empty; esc-esc, "@" and search-everywhere stay). Off macOS
+	// both rows collapse to one ctrl+p binding.
+	{"cmd+p", "lsp.parameterInfo", "Parameter info", Editor, "LSP (0100)"},
+	{"ctrl+p", "lsp.parameterInfo", "Parameter info", Editor, "LSP (0100)"},
 	// JetBrains next/previous highlighted error (#369). f2 and shift+f2 are
 	// both delivered (shift+fN carries its modifier in the CSI parameter).
 	{"f2", "lsp.nextDiagnostic", "Next diagnostic", Editor, "LSP (#369)"},

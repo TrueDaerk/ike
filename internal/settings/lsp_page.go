@@ -245,6 +245,21 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			v = "false"
 		}
 		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.auto_install"), "lsp.auto_install", v == "true")
+	case "I":
+		// Inline parameter-name/type hints (#171), off by default (#523).
+		v := true
+		if c := config.Get(); c != nil && c.LSP.InlayHints {
+			v = false
+		}
+		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.inlay_hints"), "lsp.inlay_hints", v)
+	case "S":
+		// Automatic signature popup on trigger characters (#523); the manual
+		// parameter-info command works regardless.
+		v := false
+		if c := config.Get(); c != nil && !c.LSP.SignatureAuto {
+			v = true
+		}
+		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.signature_auto"), "lsp.signature_auto", v)
 	case "R":
 		if p.restartAll != nil {
 			return p.restartAll()
@@ -367,8 +382,18 @@ func (p *LSPPage) View(w, h int) string {
 	if c := config.Get(); c != nil && !c.LSP.AutoInstall {
 		auto = "off"
 	}
+	inlay, sigAuto := "off", "on"
+	if c := config.Get(); c != nil {
+		if c.LSP.InlayHints {
+			inlay = "on"
+		}
+		if !c.LSP.SignatureAuto {
+			sigAuto = "off"
+		}
+	}
 	lines := []string{
 		sec.Render(" LSP master switch: " + master + "  (E toggles) · auto-install: " + auto + "  (A toggles)"),
+		sec.Render(" inlay hints: " + inlay + "  (I toggles) · signature auto-popup: " + sigAuto + "  (S toggles)"),
 		sec.Render(" language · status · command · source"),
 	}
 	for i, l := range p.servers() {

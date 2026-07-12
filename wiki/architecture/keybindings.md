@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-12T23:45:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -160,7 +160,12 @@ disables XON flow control — plus the `space k` / `ctrl+k k` leader path
 `shift+f2` — the JetBrains next/previous-highlighted-error keys, both
 delivered — to `lsp.nextDiagnostic` / `lsp.prevDiagnostic`, which walk the
 focused document's cached diagnostics in document order (wrapping) and toast
-the message.
+the message. Parameter info (#523) binds `ctrl+p` — the palette's former
+default toggle chord, freed because the palette's primary entry is esc-esc
+(`palette.toggle_key` now defaults to empty and stays configurable) — plus
+`cmd+p` (the JetBrains chord) for terminals that deliver Cmd; both rows
+collapse to one `ctrl+p` binding off macOS. `lsp.parameterInfo` opens the
+signature-help popup on demand, in insert and normal mode.
 
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
@@ -263,7 +268,7 @@ path, `r` replace in path, `p` switch project, `P` markdown preview, `D` TODO in
 terminal, `h` notification history, `e` explorer/editor toggle, `s` save all,
 `w` save, `d` definition, `u` usages, `a` code actions, `n` rename, `l`
 reformat, `c` comment line, `x` close tab, `o` reopen tab, `m` recent files
-(MRU), `b` navigate back, `i` navigate forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (`ctrl+p`,
+(MRU), `b` navigate back, `i` navigate forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (esc-esc,
 delivered everywhere).
 
 **Honest fragility**: the per-row `fragile` flags are no longer
@@ -344,6 +349,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
+| `lsp.parameterInfo` | `ctrl+p` | delivered | `—` | live |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
 | `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
 | `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |

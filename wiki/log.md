@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- Parameter info on demand (#523): new `lsp.parameterInfo` command
+  (`ctrl+p`, `cmd+p` on Cmd-forwarding terminals) opens the signature-help
+  popup in insert and normal mode; the popup now lists every parameter with
+  the active one marked `▶` and follows cursor motion. Inlay hints default
+  off (settings `I` toggle), the automatic signature popup gets a
+  `lsp.signature_auto` toggle (`S`), and `palette.toggle_key` defaults to
+  empty — the palette's primary entry stays esc-esc.
 - Auto-closing quote pairs (#521): `"`, `'` and `` ` `` pair like brackets
   under `editor.auto_close_pairs`; the same quote at the cursor is skipped
   over, no pair after a word rune or the same quote (apostrophes), backspace

@@ -124,6 +124,14 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		b.setSel(ev)
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil {
 			b.scheduleDocumentHighlight(ev.Path)
+			// A showing signature popup follows the cursor (#523): the server
+			// re-picks the active parameter, or answers null to dismiss.
+			b.mu.Lock()
+			active := b.sigActive[ev.Path]
+			b.mu.Unlock()
+			if active {
+				b.requestSignature(ev.Path, ev.Line, ev.Col, false)
+			}
 		}
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
@@ -232,6 +240,20 @@ func (b *bridge) hover(h host.API) tea.Cmd {
 			h.Send(ilsp.HoverMsg{Path: path, Contents: text})
 		}
 	}()
+	return nil
+}
+
+// parameterInfo requests signature help at the current cursor on demand
+// (#523) and opens the cursor-anchored popup, regardless of mode or the
+// lsp.signature_auto toggle. No server or no signatureHelp capability yields
+// an empty answer, which no-ops as a dismissal.
+func (b *bridge) parameterInfo(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	if path == "" || b.manager() == nil {
+		return nil
+	}
+	b.requestSignature(path, line, col, true)
 	return nil
 }
 
@@ -667,24 +689,38 @@ func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
 	b.mu.Lock()
 	active := b.sigActive[ev.Path]
 	b.mu.Unlock()
-	if !active && !isSignatureTrigger(typedChar(ev), mgr.SignatureTriggers(ev.Path)) {
+	// The auto toggle (#523) only gates the initial open; a showing popup —
+	// however it was opened — keeps following the cursor.
+	if !active && (!b.signatureAutoEnabled() ||
+		!isSignatureTrigger(typedChar(ev), mgr.SignatureTriggers(ev.Path))) {
 		return
 	}
-	path, line, col := ev.Path, ev.Line, ev.Col
+	b.requestSignature(ev.Path, ev.Line, ev.Col, false)
+}
+
+// requestSignature asks the server for signature help at the given position
+// and delivers the popup message. Manual replies (lsp.parameterInfo) may open
+// the popup outside insert mode; an empty answer dismisses it.
+func (b *bridge) requestSignature(path string, line, col int, manual bool) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
 	go func() {
 		sh, err := mgr.SignatureHelp(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if err != nil {
 			return
 		}
-		label, start, end, doc, more := ilsp.SignatureContent(sh)
+		msg := ilsp.SignatureContent(sh)
+		msg.Path, msg.Manual = path, manual
 		b.mu.Lock()
 		if b.sigActive == nil {
 			b.sigActive = map[string]bool{}
 		}
-		b.sigActive[path] = label != ""
+		b.sigActive[path] = msg.Label != ""
 		b.mu.Unlock()
 		if b.h != nil {
-			b.h.Send(ilsp.SignatureHelpMsg{Path: path, Label: label, ParamStart: start, ParamEnd: end, Doc: doc, More: more})
+			b.h.Send(msg)
 		}
 	}()
 }
@@ -762,20 +798,34 @@ func (b *bridge) requestSemanticTokens(path string) {
 }
 
 // inlayHintsEnabled reads the lsp.inlay_hints config toggle (#171); unset
-// means enabled, matching the config default.
+// means disabled, matching the config default (#523).
 func (b *bridge) inlayHintsEnabled() bool {
+	v, ok := b.configGet("lsp.inlay_hints")
+	return ok && v == "true"
+}
+
+// signatureAutoEnabled reads the lsp.signature_auto config toggle (#523);
+// unset means enabled, matching the config default. It only gates the
+// automatic trigger-character open — an already-showing popup keeps
+// retriggering, and lsp.parameterInfo works regardless.
+func (b *bridge) signatureAutoEnabled() bool {
+	v, ok := b.configGet("lsp.signature_auto")
+	return !ok || v != "false"
+}
+
+// configGet reads a flattened config key via the host, if one is attached.
+func (b *bridge) configGet(key string) (string, bool) {
 	b.mu.Lock()
 	h := b.h
 	b.mu.Unlock()
 	if h == nil {
-		return true
+		return "", false
 	}
 	cfg := h.Config()
 	if cfg == nil {
-		return true
+		return "", false
 	}
-	v, ok := cfg.Get("lsp.inlay_hints")
-	return !ok || v != "false"
+	return cfg.Get(key)
 }
 
 // requestInlayHints refreshes the inlay hints for path, coalesced per path

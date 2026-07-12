@@ -47,10 +47,20 @@ func TestDefaultsWhenNoFiles(t *testing.T) {
 	if c.Files.LargeFileKB != 1024 || c.Files.LargeFileLines != 100_000 {
 		t.Errorf("large-file defaults wrong: %+v", c.Files)
 	}
+	if c.LSP.InlayHints || !c.LSP.SignatureAuto {
+		t.Errorf("lsp defaults wrong (#523): %+v", c.LSP)
+	}
+	if c.Palette.ToggleKey != "" {
+		t.Errorf("palette toggle key should default empty (#523), got %q", c.Palette.ToggleKey)
+	}
 	flat := c.Flat()
 	if flat["files.large_file_kb"] != "1024" || flat["files.large_file_lines"] != "100000" {
 		t.Errorf("large-file keys not flattened: kb=%q lines=%q",
 			flat["files.large_file_kb"], flat["files.large_file_lines"])
+	}
+	if flat["lsp.inlay_hints"] != "false" || flat["lsp.signature_auto"] != "true" {
+		t.Errorf("lsp keys not flattened: inlay=%q sig=%q",
+			flat["lsp.inlay_hints"], flat["lsp.signature_auto"])
 	}
 }
 

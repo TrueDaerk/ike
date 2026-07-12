@@ -1090,16 +1090,16 @@ func paletteHideOff(cfg host.Config) bool {
 	return false
 }
 
-// paletteToggleKey reads palette.toggle_key, defaulting to ctrl+p.
+// paletteToggleKey reads palette.toggle_key. Empty means no toggle chord: the
+// palette opens via esc-esc, "@" and searchEverywhere; ctrl+p is bound to
+// lsp.parameterInfo by default (#523).
 func paletteToggleKey(cfg host.Config) string {
 	if cfg != nil {
 		if v, ok := cfg.Get("palette.toggle_key"); ok {
-			if k := strings.TrimSpace(v); k != "" {
-				return k
-			}
+			return strings.TrimSpace(v)
 		}
 	}
-	return "ctrl+p"
+	return ""
 }
 
 // helpMinCol reads the optional help.min_column_width config value.
@@ -2842,7 +2842,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.routeKey(msg)
 		}
 		keys := msg.String()
-		if keys == m.paletteKey {
+		if m.paletteKey != "" && keys == m.paletteKey {
 			m.lastEsc = false
 			m.openPalette()
 			return m, nil

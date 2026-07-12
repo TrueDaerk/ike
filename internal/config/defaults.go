@@ -43,10 +43,11 @@ func defaults() *Config {
 			Bindings: map[string]string{},
 		},
 		LSP: LSP{
-			Enabled:    true,
-			InlayHints: true,
-			LogLevel:   "warn",
-			Servers:    map[string]map[string]any{},
+			Enabled:       true,
+			InlayHints:    false,
+			SignatureAuto: true,
+			LogLevel:      "warn",
+			Servers:       map[string]map[string]any{},
 		},
 		Theme: Theme{
 			Name: "default",
@@ -62,7 +63,9 @@ func defaults() *Config {
 			MaxResults:  12,
 			DefaultMode: ":",
 			OffContext:  "rank",
-			ToggleKey:   "ctrl+p",
+			// No default toggle chord: the palette opens via esc-esc, "@" and
+			// searchEverywhere; ctrl+p belongs to lsp.parameterInfo (#523).
+			ToggleKey: "",
 		},
 		Notifications: Notifications{
 			TimeoutSeconds: 4,

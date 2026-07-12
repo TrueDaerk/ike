@@ -119,9 +119,10 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 // (so typing can continue at the line end) rather than the normal-mode clamp.
 // Secondary carets move in parallel (#145).
 func (m *Model) insertMove(dLine, dCol int) {
-	// Arrow motion in insert mode emits no change event, so the popup would
-	// trail the cursor instead of being retriggered/dismissed (#315).
-	m.dismissSignature()
+	// Arrow motion emits a cursor-move event; a showing signature popup
+	// follows it via the bridge retrigger (#523) instead of being dismissed
+	// outright (#315) — the server answers null once the cursor leaves the
+	// call context.
 	p := buffer.Position{Line: m.cursor.Line + dLine, Col: m.cursor.Col + dCol}
 	m.cursor = m.buf.Clamp(p)
 	m.desiredCol = m.cursor.Col

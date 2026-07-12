@@ -23,18 +23,47 @@ func TestSignatureContentOffsets(t *testing.T) {
 			},
 		},
 	}
-	label, start, end, doc, more := SignatureContent(sh)
-	if label != "Greet(name string, times int) string" {
-		t.Fatalf("label = %q", label)
+	msg := SignatureContent(sh)
+	if msg.Label != "Greet(name string, times int) string" {
+		t.Fatalf("label = %q", msg.Label)
 	}
-	if got := string([]rune(label)[start:end]); got != "times int" {
+	if got := string([]rune(msg.Label)[msg.ParamStart:msg.ParamEnd]); got != "times int" {
 		t.Fatalf("offset pair should highlight %q, got %q", "times int", got)
 	}
-	if doc != "Greets someone." {
-		t.Errorf("doc = %q", doc)
+	if msg.Doc != "Greets someone." {
+		t.Errorf("doc = %q", msg.Doc)
 	}
-	if more != 1 {
-		t.Errorf("more = %d", more)
+	if msg.More != 1 {
+		t.Errorf("more = %d", msg.More)
+	}
+	if len(msg.Params) != 2 {
+		t.Fatalf("params = %d, want 2", len(msg.Params))
+	}
+	if msg.Params[0].Label != "name string" || msg.Params[1].Label != "times int" {
+		t.Errorf("param labels = %q, %q", msg.Params[0].Label, msg.Params[1].Label)
+	}
+	if msg.ActiveParam != 1 {
+		t.Errorf("active param = %d, want 1", msg.ActiveParam)
+	}
+}
+
+func TestSignatureContentParamDocsAndClamp(t *testing.T) {
+	sh := &protocol.SignatureHelp{
+		ActiveParameter: 5, // out of range: no usable active parameter
+		Signatures: []protocol.SignatureInformation{{
+			Label: "add(a, b int)",
+			Parameters: []protocol.ParameterInformation{
+				{Label: json.RawMessage(`"a"`), Documentation: json.RawMessage(`"first operand"`)},
+				{Label: json.RawMessage(`"b int"`), Documentation: json.RawMessage(`{"kind":"markdown","value":"second\nrest"}`)},
+			},
+		}},
+	}
+	msg := SignatureContent(sh)
+	if msg.ActiveParam != -1 {
+		t.Errorf("out-of-range active param should clamp to -1, got %d", msg.ActiveParam)
+	}
+	if msg.Params[0].Doc != "first operand" || msg.Params[1].Doc != "second" {
+		t.Errorf("param docs = %q, %q", msg.Params[0].Doc, msg.Params[1].Doc)
 	}
 }
 
@@ -45,11 +74,11 @@ func TestSignatureContentSubstringAndNil(t *testing.T) {
 			Parameters: []protocol.ParameterInformation{{Label: json.RawMessage(`"a"`)}},
 		}},
 	}
-	label, start, end, _, _ := SignatureContent(sh)
-	if got := string([]rune(label)[start:end]); got != "a" {
-		t.Fatalf("substring param should highlight, got %q in %q", got, label)
+	msg := SignatureContent(sh)
+	if got := msg.Params[0].Label; got != "a" {
+		t.Fatalf("substring param should resolve, got %q in %q", got, msg.Label)
 	}
-	if l, _, _, _, _ := SignatureContent(nil); l != "" {
+	if m := SignatureContent(nil); m.Label != "" || m.ActiveParam != -1 {
 		t.Fatal("nil help should flatten to empty")
 	}
 }

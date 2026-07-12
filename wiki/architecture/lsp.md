@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-12T15:00:00Z
+timestamp: 2026-07-12T23:45:00Z
 ---
 
 # LSP & Language Intelligence
@@ -46,7 +46,7 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
+exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
 registry commands.
 
@@ -233,23 +233,28 @@ nor command warns that `codeAction/resolve` is not supported yet, and
 command failures surface as error toasts. Gated on `codeActionProvider` /
 `executeCommandProvider`.
 
-**Signature help (#4).** No command: typing one of the server's advertised
-trigger characters (`signatureHelpProvider.triggerCharacters` + retriggers)
-fires `textDocument/signatureHelp` off the change event; while the popup is
-showing, *every* change retriggers so the active parameter follows the cursor,
-and the server answering null dismisses it (typing past `)`). The bridge
-extracts the just-typed character from the change event; the editor renders a
-cursor-anchored popup (`signatureState`) with the active parameter emphasised
-(parameter labels arrive as substrings or UTF-16 offset pairs — both resolve
-to rune ranges in `lsp.SignatureContent`), the first doc line dimmed, and an
-overload counter, and a leading dim `ƒ` marking it as informational — the
-actionable completion list carries an accept-keys hint row instead (#308).
-The popup lives only while the call is being typed (#315): leaving
-insert/replace mode, insert-mode arrow motion, and mouse clicks (#307) all
-dismiss it — anything that moves the anchoring cursor without a change event
-would otherwise drag the popup along — and a server reply landing after
-insert mode ended is dropped as stale. Completion, when open, takes
-precedence in the popup compositor. All three popups render inside a rounded
+**Signature help (#4, #523).** Two ways in: typing one of the server's
+advertised trigger characters (`signatureHelpProvider.triggerCharacters` +
+retriggers) fires `textDocument/signatureHelp` off the change event — gated
+on the `lsp.signature_auto` config toggle (default on) — and the
+`lsp.parameterInfo` command (`cmd+p`, fallback `ctrl+p`) requests it on
+demand at the cursor, in insert *and* normal mode, regardless of the toggle.
+While the popup is showing, every change **and cursor move** retriggers so
+the active parameter follows the cursor, and the server answering null
+dismisses it (typing past `)`). The bridge extracts the just-typed character
+from the change event; the editor renders a cursor-anchored popup
+(`signatureState`) with the signature label (active parameter emphasised —
+parameter labels arrive as substrings or UTF-16 offset pairs, both resolve to
+rune ranges in `lsp.SignatureContent`), a separator, one row per parameter
+with the active one marked `▶` in the accent tone (#523), the active
+parameter's / signature's first doc line dimmed, an overload counter, and a
+leading dim `ƒ` marking it as informational — the actionable completion list
+carries an accept-keys hint row instead (#308). An automatically opened
+popup lives only while the call is being typed (#315): leaving insert/replace
+mode and mouse clicks (#307) dismiss it, and a server reply landing after
+insert mode ended is dropped as stale — unless it answers the manual command
+(`Manual` flag) or updates a popup that is already showing. Completion, when
+open, takes precedence in the popup compositor. All three popups render inside a rounded
 themed frame (`popupFrame`, #316) — `BorderFocus` on `Panel`, like the
 floating shell — so they read as overlays rather than buffer text. With the
 frame in place they clamp to the **terminal**, not the pane: a popup may
@@ -288,7 +293,9 @@ italic via the `InlayHint` theme slot (falls back to the theme's border tone)
 — before the anchor cell as pure virtual text; `DisplayOffset` keeps
 cursor-anchored popups aligned past injected hints and expanded tabs.
 Capability-gated on `inlayHintProvider`; the `lsp.inlay_hints` config toggle
-(default on) both skips the traffic and hides cached hints live. gopls ships
+(**default off**, #523 — parameter info is on demand via `lsp.parameterInfo`
+instead; the settings LSP page's `I` key flips it) both skips the traffic and
+hides cached hints live. gopls ships
 all hint kinds off, so the Go plugin's baseline settings enable parameter
 names and inferred types (user `[lsp.servers.go] settings` still override).
 Errors stay silent — a passive decoration.
@@ -383,7 +390,10 @@ fragment language with no configured server degrades silently. The
 ## Configuration
 
 The `[lsp]` section: `enabled` (master switch), `inlay_hints` (inline
-parameter/type hints, default `true`), and a per-language `servers` table.
+parameter/type hints, default `false`, #523), `signature_auto` (automatic
+signature popup on trigger characters, default `true`; the manual
+`lsp.parameterInfo` command works regardless), and a per-language `servers`
+table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The
