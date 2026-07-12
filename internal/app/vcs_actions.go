@@ -127,7 +127,7 @@ func (m *Model) openRevertPrompt(path string, changed int) {
 				lines = "1 changed line"
 			}
 			return displayPath(path) + ": discard " + lines + " and restore the last committed version?\n\n" +
-				"This cannot be undone.\n\n" +
+				"The replaced content is kept in the revert history — vcs.undoRevert restores it.\n\n" +
 				"  [enter] revert — discard the local changes\n" +
 				"  [esc]   cancel"
 		},

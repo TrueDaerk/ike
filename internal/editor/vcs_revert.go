@@ -28,6 +28,27 @@ func (m *Model) RevertHunkUnderCursor(head string) bool {
 	return true
 }
 
+// RestoreContent replaces the whole buffer with text as one undo step — the
+// vcs.undoRevert landing (#556): a revert-history snapshot re-applied to the
+// live buffer, dirty and undoable, saved only when the user says so. Text is
+// normalized to the buffer's line model (CRLF folded, the trailing newline
+// treated as a terminator). It reports false when the buffer already holds
+// that content.
+func (m *Model) RestoreContent(text string) bool {
+	text = strings.TrimSuffix(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if text == m.buf.String() {
+		return false
+	}
+	m.mutate(func(rec *history.Recorder) buffer.Position {
+		rec.Apply(buffer.Edit{
+			Range: buffer.Range{Start: buffer.Position{}, End: m.buf.EndOfBuffer()},
+			Text:  text,
+		})
+		return buffer.Position{}
+	})
+	return true
+}
+
 // revertHunk is one contiguous change against HEAD, resolved to buffer terms:
 // the 0-based buffer-line range to replace (rightStart > rightEnd marks a
 // pure deletion, restored by inserting above anchor), and the HEAD lines that

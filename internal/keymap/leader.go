@@ -89,6 +89,7 @@ var leaderMnemonics = []leaderMnemonic{
 	{"v u", "vcs.updateProject", "Update project"},
 	{"v x", "vcs.revertFile", "Revert file"},
 	{"v h", "vcs.revertHunk", "Revert hunk under caret"},
+	{"v z", "vcs.undoRevert", "Undo revert (history)"},
 	{"v b", "vcs.branches", "Switch branch"},
 	{"v d", "vcs.diff", "Diff file against HEAD"},
 	{"v a", "vcs.blameLine", "Toggle inline blame (annotate)"},

@@ -261,6 +261,51 @@ func TestRevertHunkFlow(t *testing.T) {
 	}
 }
 
+func TestUndoRevertFlow(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	dir := t.TempDir()
+	path := writeTemp(t, dir, "f.go", "head\n")
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+
+	// No snapshots recorded: hint, picker stays closed.
+	out, _ = m.Update(UndoRevertMsg{})
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("picker must not open without snapshots")
+	}
+
+	// A recorded snapshot opens the picker.
+	vcs.SaveRevertSnapshot(path, "pre-revert\n", 2)
+	out, _ = m.Update(UndoRevertMsg{})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("picker should open")
+	}
+	if len(m.vcs.reverts) != 1 || m.vcs.revertsPath != path {
+		t.Fatalf("picker state = %q %+v", m.vcs.revertsPath, m.vcs.reverts)
+	}
+
+	// Selecting the entry restores the content as an undoable buffer edit.
+	out, _ = m.Update(RestoreRevertMsg{Path: path, Index: 0})
+	m = out.(Model)
+	if got := m.activeEditor().Text(); got != "pre-revert" {
+		t.Fatalf("buffer = %q, want %q", got, "pre-revert")
+	}
+	if !m.activeEditor().Dirty() {
+		t.Fatal("restore must dirty the buffer")
+	}
+
+	// A stale or out-of-range selection is dropped.
+	out, _ = m.Update(RestoreRevertMsg{Path: path, Index: 7})
+	m = out.(Model)
+	if got := m.activeEditor().Text(); got != "pre-revert" {
+		t.Fatalf("out-of-range restore mutated the buffer: %q", got)
+	}
+}
+
 func TestVCSWatcherEventArmsDebounce(t *testing.T) {
 	m := vcsApp(t)
 	_, cmd := m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: "x.go"})

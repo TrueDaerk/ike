@@ -1049,7 +1049,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
 	branches := newBranchMode(func() []vcs.Branch { return vcsSt.branches })
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches)
+	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches, reverts)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2649,6 +2650,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case RevertHunkMsg:
 		return m.revertActiveHunk()
+
+	case UndoRevertMsg:
+		return m.openRevertHistory()
+
+	case RestoreRevertMsg:
+		return m.restoreRevert(msg)
 
 	case vcs.RevertHunkHeadMsg:
 		return m.applyRevertHunk(msg)

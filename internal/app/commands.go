@@ -246,6 +246,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.updateProject", "Update Project", UpdateProjectMsg{}),
 			appCommand("vcs.revertFile", "Revert File", RevertActiveFileMsg{}),
 			appCommand("vcs.revertHunk", "Revert Hunk Under Caret", RevertHunkMsg{}),
+			appCommand("vcs.undoRevert", "Undo Revert…", UndoRevertMsg{}),
 			appCommand("vcs.branches", "Switch Branch…", OpenBranchPickerMsg{}),
 			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),

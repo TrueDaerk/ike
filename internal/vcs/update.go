@@ -102,9 +102,18 @@ type RevertDoneMsg struct {
 	Err  error
 }
 
-// RevertCmd restores path (worktree and index) to its HEAD state.
+// RevertCmd restores path (worktree and index) to its HEAD state, snapshotting
+// the current on-disk content into the revert log first (#556) so
+// vcs.undoRevert can bring it back.
 func RevertCmd(root, path string) tea.Cmd {
 	return func() tea.Msg {
+		if data, err := os.ReadFile(path); err == nil {
+			changed := 0
+			if head, err := HeadContent(root, path); err == nil {
+				changed = len(LineMarks(head, string(data)))
+			}
+			SaveRevertSnapshot(path, string(data), changed)
+		}
 		_, err := runGit(root, "checkout", "HEAD", "--", path)
 		return RevertDoneMsg{Path: path, Err: err}
 	}
