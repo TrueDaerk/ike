@@ -127,6 +127,34 @@ func follow(off, selStart, selEnd, n, h int) int {
 	return off
 }
 
+// pinFooter lays out a scrolling list with a footer pinned to the bottom of an
+// h-line window (#537): the list is windowed with follow so the [selStart,
+// selEnd] lines stay visible, padded to a constant height, and the footer
+// renders below it — so a selection move can never shift the list rows. When
+// the window is too short for the footer, the list wins.
+func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string {
+	if h < 1 {
+		return ""
+	}
+	listH := h - len(footer)
+	if listH < 1 {
+		footer, listH = nil, h
+	}
+	*off = follow(*off, selStart, selEnd, len(list), listH)
+	end := *off + listH
+	if end > len(list) {
+		end = len(list)
+	}
+	out := append([]string{}, list[*off:end]...)
+	if len(footer) > 0 {
+		for len(out) < listH {
+			out = append(out, "")
+		}
+		out = append(out, footer...)
+	}
+	return strings.Join(out, "\n")
+}
+
 // renderForm renders the visible entries with value and layer badge. The
 // selected entry's description lives in a footer pinned to the bottom of the
 // column — never inline — so moving the selection cannot shift the rows below

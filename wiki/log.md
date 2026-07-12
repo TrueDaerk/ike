@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- Custom settings pages footer (#537): Toolchain, Keymap and Language Servers
+  rendered hints/details inline under the selected row (same jumpiness #535
+  fixed on the schema pages) and never scrolled to follow the selection. A
+  shared `pinFooter` helper now pins the header top and a constant-height
+  footer (hints, failure detail, env status, override input) bottom; the list
+  windows with `follow` so the selection stays visible.
+
 - Settings detail footer (#535): the selected entry's description used to
   render inline under the selected row, so ↑↓ inserted/removed a line
   mid-list and shifted every row below the selection. The description (and

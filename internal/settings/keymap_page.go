@@ -26,6 +26,7 @@ type KeymapPage struct {
 	pal        *theme.Palette
 
 	sel       int
+	off       int // list scroll offset (#537)
 	filter    string
 	filtering bool // "/" opened the filter input; every key is filter text
 
@@ -296,25 +297,21 @@ func (k *KeymapPage) View(w, h int) string {
 	default:
 		head += "   (/ to filter)"
 	}
-	lines := []string{lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)}
+	var list []string
 	for i, b := range rows {
-		lines = append(lines, k.renderRow(b, i == k.sel, w))
-		if i == k.sel {
-			if extra := k.detailLine(b); extra != "" {
-				lines = append(lines, extra)
-			}
-		}
-		if len(lines) >= h {
-			break
-		}
+		list = append(list, k.renderRow(b, i == k.sel, w))
 	}
 	if len(rows) == 0 {
-		lines = append(lines, "no bindings match")
+		list = append(list, "no bindings match")
 	}
-	if len(lines) > h {
-		lines = lines[:h]
+	// The detail line is a footer pinned below the list (#537): moving the
+	// selection never shifts the rows, and the list scrolls to follow it.
+	var footer []string
+	if b, ok := k.current(); ok {
+		footer = []string{k.detailLine(b)}
 	}
-	return strings.Join(lines, "\n")
+	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
+	return headLine + "\n" + pinFooter(list, footer, k.sel, k.sel, h-1, &k.off)
 }
 
 // renderRow renders one binding line.

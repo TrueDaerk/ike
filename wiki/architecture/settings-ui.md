@@ -64,7 +64,11 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   existence); Chord captures the next key press. The selected entry's
   description, key and validation error render in a **footer pinned to the
   bottom of the form column** — not inline under the row — so ↑↓ never shifts
-  the other rows (#535); only the enum picker expands inline.
+  the other rows (#535); only the enum picker expands inline. The custom pages
+  (Toolchain, Keymap, Language Servers) follow the same layout via a shared
+  `pinFooter` helper (#537): header line(s) pinned top, the list scrolls to
+  follow the selection, and hints / failure details / env status / inline
+  override inputs render in a constant-height footer pinned bottom.
 - **Layer indicator + reset.** Each row shows `@default` / `@user` /
   `@project` (`config.Origin`); overridden values are tinted; `r` resets
   (RemoveAndReload — fall back through the layers).
