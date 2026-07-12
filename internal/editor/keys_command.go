@@ -86,7 +86,11 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.mode = Normal
 		m.cmdline = ""
+		m.cmdSuggest = nil
 		m.searching = false
+	case key.Code == tea.KeyTab && !m.searching:
+		// Path completion for ":e <partial>" / ":w <partial>" (#543).
+		m.completeCmdlinePath()
 	case key.Code == tea.KeyEnter:
 		if m.searching {
 			m.commitSearch()
@@ -104,6 +108,8 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.cmdline = string(r[:len(r)-1])
 			if m.searching {
 				m.searchPreview()
+			} else {
+				m.refreshCmdlineSuggest()
 			}
 		} else {
 			if m.searching {
@@ -111,12 +117,15 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			}
 			m.mode = Normal
 			m.searching = false
+			m.cmdSuggest = nil
 		}
 	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
 		// Printable input, including a bare space (Text == " ").
 		m.cmdline += key.Text
 		if m.searching {
 			m.searchPreview()
+		} else {
+			m.refreshCmdlineSuggest()
 		}
 	}
 	return m, nil
@@ -195,6 +204,7 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 	cmd := excmd.Parse(m.cmdline)
 	m.mode = Normal
 	m.cmdline = ""
+	m.cmdSuggest = nil
 	m.cmdMsg = ""
 	if cmd.Err != "" {
 		m.cmdMsg = "E: " + cmd.Err

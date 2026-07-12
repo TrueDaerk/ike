@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- Ex cmdline path completion (#543): `tab` on `:e <partial>` / `:w <partial>`
+  (also `:wq`/`:x`) extends the path argument via `internal/pathcomplete`;
+  ambiguous matches render as a dim hint after the cursor and typing narrows
+  them. Inert on non-path commands and the search line.
+
 - Project picker path browsing (#542): a path-shaped picker query (`/…`,
   `~/…`, `./…`) now lists matching directories as selectable `Open <dir>`
   items and tab-completes to the longest unambiguous prefix
