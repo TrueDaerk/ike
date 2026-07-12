@@ -23,6 +23,7 @@ Component-level concepts for the IKE codebase.
 * [Syntax Highlighting](/architecture/highlighting.md) - Tree-sitter lexical layer: per-language grammars parsed off-loop into theme-coloured spans, applied per cell (Roadmap 0100)
 * [Project Search](/architecture/search.md) - streaming find-in-path engine: rg --json backend + pure-Go fallback, generation-based cancellation, bounded results (Roadmap 0150)
 * [Language Registry](/architecture/languages.md) - neutral lang registry bundling extensions + grammar + LSP server + toolchain detector; per-language plugins make adding a language a new package (Roadmap 0105)
+* [EditorConfig Support](/architecture/editorconfig.md) - .editorconfig resolution: spec glob matching, root=true upward search, watcher-invalidated cache, per-buffer override layer (#63)
 * [Themes / Color Schemes](/architecture/themes.md) - semantic-slot palette system: one [theme].name recolors syntax + explorer + chrome, built-in themes, plugin registration (Roadmap 0110)
 * [Project Switching](/architecture/project-switching.md) - recent-projects history data layer: typed [[project.history]] entries, root validation, upsert/dedupe/cap persisted via config; picker + switch orchestration upcoming (Roadmap 0090)
 * [Integrated Terminal](/architecture/terminal.md) - PTY-spawned shell through a VT emulator as a pane: raw key routing with ctrl+tab escape hatch, coalesced output, resize propagation (Roadmap 0170)

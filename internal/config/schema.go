@@ -95,6 +95,10 @@ type Editor struct {
 	AutoIndent             bool   `toml:"auto_indent"`
 	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
 	InsertFinalNewline     bool   `toml:"insert_final_newline"`
+	// Editorconfig honours .editorconfig files (#63): their matching sections
+	// override the [editor] indent/trim/final-newline/EOL/charset values per
+	// buffer. On by default; false ignores them entirely.
+	Editorconfig bool `toml:"editorconfig"`
 	// ShowWhitespace renders whitespace visibly (#64): "none", "trailing"
 	// (only line-end runs) or "all". IndentGuides draws vertical lines at each
 	// indent stop; Rulers tints the given display columns (e.g. [80, 120]).

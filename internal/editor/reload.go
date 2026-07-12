@@ -85,6 +85,9 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	// it (#142) must see the reloaded text and the cleared undo stack too.
 	m.buf.ReplaceAll(text)
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
+	if eol, ok := m.editorconfigEOL(); ok {
+		m.eol = eol // end_of_line keeps applying across external reloads (#63)
+	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.hist.Reset()
 	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)

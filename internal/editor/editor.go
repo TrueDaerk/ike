@@ -19,6 +19,7 @@ import (
 	"ike/internal/editor/register"
 	"ike/internal/editor/search"
 	"ike/internal/editor/viewport"
+	"ike/internal/editorconfig"
 	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/lang"
@@ -143,6 +144,12 @@ type Model struct {
 	eol      textenc.LineEnding
 	enc      textenc.Encoding
 	mixedEOL bool
+	// ec is the buffer path's resolved EditorConfig settings (#63), a
+	// per-buffer override layer applied on top of the [editor] config each
+	// applyConfig pass (see editorconfig.go). Re-resolved when the buffer's
+	// identity changes and when a watched .editorconfig changes; nil when no
+	// .editorconfig applies or the layer is disabled.
+	ec editorconfig.Settings
 	// diskHash is the content hash of the open file when buffer and disk last
 	// agreed (Load, save, external reload) — the adoption key for persistent
 	// undo (#148, see undopersist.go). A document property like dirty/stale:
@@ -317,9 +324,12 @@ func (m *Model) rebuildTheme() {
 	m.hlTheme = highlight.NewTheme(captures, get)
 }
 
-// applyConfig refreshes settings from the retained config reference.
+// applyConfig refreshes settings from the retained config reference, then
+// overlays the buffer's resolved EditorConfig settings (#63) — their
+// precedence is built-in defaults < IKE config < .editorconfig.
 func (m *Model) applyConfig() {
 	if m.cfg == nil {
+		m.applyEditorconfig()
 		return
 	}
 	if v, ok := m.cfg.Get("editor.tab_width"); ok {
@@ -361,6 +371,7 @@ func (m *Model) applyConfig() {
 			m.stickyDepth = n
 		}
 	}
+	m.applyEditorconfig()
 }
 
 // Load reads path into the buffer, resetting cursor, mode, and history. The
@@ -372,13 +383,24 @@ func (m *Model) Load(path string) error {
 	if err != nil {
 		return err
 	}
+	// Resolve .editorconfig before decoding: its charset is the decode
+	// fallback (#63). Restore the previous identity if the decode fails, so a
+	// failed :e leaves the open buffer untouched.
+	prevPath, prevEC := m.path, m.ec
+	m.path = path
+	m.resolveEditorconfig()
 	text, info, err := textenc.Decode(data, m.fallbackEncoding())
 	if err != nil {
+		m.path, m.ec = prevPath, prevEC
 		return err
 	}
-	m.path = path
 	m.buf = buffer.FromString(text)
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
+	if eol, ok := m.editorconfigEOL(); ok {
+		// end_of_line applies on save, like every EditorConfig client: the
+		// stored flavor flips so the next write converts.
+		m.eol = eol
+	}
 	m.cmdMsg = ""
 	if info.MixedEOL {
 		m.cmdMsg = "W: mixed line endings, first is " + string(info.EOL) +
@@ -403,6 +425,7 @@ func (m *Model) Load(path string) error {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 	return nil
 }
@@ -415,8 +438,17 @@ func (m *Model) Load(path string) error {
 // resets exactly like Load.
 func (m *Model) NewFile(path string) {
 	m.path = path
+	m.resolveEditorconfig()
 	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
+	// A new file has no on-disk flavor to preserve, so .editorconfig picks
+	// the initial line endings and charset outright (#63).
+	if eol, ok := m.editorconfigEOL(); ok {
+		m.eol = eol
+	}
+	if enc, ok := m.editorconfigCharset(); ok {
+		m.enc = enc
+	}
 	m.largeFile = false                                        // a template seed is never large
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
@@ -436,6 +468,7 @@ func (m *Model) NewFile(path string) {
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
+	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
 }
 
@@ -480,6 +513,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 		return nil
 	}
 	m.path = path
+	m.resolveEditorconfig()
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
 	m.resetFolds()
@@ -641,6 +675,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	// each view hit the shared buffer once per view (#366). The app applies
 	// them through exactly one view (app.go) via ApplyTextEdits.
 	case watch.EventMsg:
+		// A changed .editorconfig re-resolves this buffer's override layer
+		// (#63) before the usual external-change handling.
+		if m.handleEditorconfigChange(msg.Path) {
+			m.applyConfig()
+		}
 		// External change of the open file (Roadmap 0140): reload.go decides
 		// whether to reload in place (clean buffer) or leave it alone.
 		return m.handleExternalChange(msg)

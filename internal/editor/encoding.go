@@ -25,6 +25,11 @@ func (m Model) MixedEOL() bool { return m.mixedEOL }
 // means strict UTF-8 — an invalid file fails to open with a clear error
 // instead of rendering mojibake.
 func (m Model) fallbackEncoding() textenc.Encoding {
+	// An .editorconfig charset outranks files.encoding (#63); both only apply
+	// to BOM-less non-UTF-8 content — readable bytes are never re-interpreted.
+	if enc, ok := m.editorconfigCharset(); ok {
+		return enc
+	}
 	if m.cfg != nil {
 		if v, ok := m.cfg.Get("files.encoding"); ok {
 			if enc, known := textenc.Lookup(v); known {

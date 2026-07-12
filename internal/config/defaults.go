@@ -22,6 +22,7 @@ func defaults() *Config {
 			AutoIndent:             true,
 			TrimTrailingWhitespace: true,
 			InsertFinalNewline:     true,
+			Editorconfig:           true,
 			ShowWhitespace:         "none",
 			IndentGuides:           false,
 			Rulers:                 []int{},
