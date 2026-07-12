@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
+	"ike/internal/editor/viewport"
 	ilsp "ike/internal/lsp"
 )
 
@@ -47,7 +48,14 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 		x = 0
 	}
 	line := m.view.Top + y
-	if m.hasFolds() {
+	colBase := m.view.Left
+	if m.softWrap {
+		// Soft wrap (#64): map the clicked row through the wrap segments —
+		// the mouse map's inverse of the wrapped View() loop. The column
+		// counts from the clicked segment's start; there is no horizontal
+		// scroll under wrap.
+		line, colBase = m.wrapClickAt(y)
+	} else if m.hasFolds() {
 		// Collapsed folds render as one row (#144): map the clicked row
 		// through the visible lines, mirroring the View() render loop.
 		line = m.displayLineAt(y)
@@ -55,12 +63,18 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 	// A click on a pinned sticky-scroll header (#168) jumps to its declaration
 	// instead of the buffer line the row covers.
 	if sticky := m.stickyLines(); y < len(sticky) {
-		line = sticky[y]
+		line, colBase = sticky[y], 0
+		if !m.softWrap {
+			colBase = m.view.Left
+		}
 	}
 	if line > m.buf.LineCount()-1 {
 		line = m.buf.LineCount() - 1
 	}
-	col := x - m.view.GutterWidth(m.buf.LineCount()) + m.view.Left
+	col := x - m.view.GutterWidth(m.buf.LineCount()) + colBase
+	if m.softWrap && col < colBase {
+		col = colBase // a gutter click snaps to the clicked segment's start
+	}
 	if col < 0 {
 		col = 0
 	}
@@ -99,6 +113,9 @@ func (m *Model) ScrollBy(delta int) {
 // least the last character of the longest visible line stays on screen; the
 // next cursor motion re-derives the offset to follow the cursor again.
 func (m *Model) ScrollXBy(delta int) {
+	if m.softWrap {
+		return // no horizontal scroll under soft wrap (#64)
+	}
 	maxLen := 0
 	for i := m.view.Top; i < m.view.Bottom(m.buf.LineCount()); i++ {
 		if n := len([]rune(m.buf.Line(i))); n > maxLen {
@@ -176,13 +193,31 @@ func (m Model) View() string {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		}
 		gutter := gs.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
-		var body string
 		if end, ok := m.foldedAt(i); ok {
-			body = m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle)
-		} else {
-			body = m.renderLine(i, textWidth, cursorStyle, selStyle)
+			out = append(out, gutter+m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle))
+			continue
 		}
-		out = append(out, gutter+body)
+		if m.softWrap {
+			// Soft wrap (#64): one row per wrap segment; continuation rows
+			// carry a wrap marker in the gutter instead of a line number.
+			segs := m.wrapSegs(i)
+			for si := range segs {
+				if len(out) >= height {
+					break
+				}
+				to := -1 // final segment: unbounded, through the content end
+				if si+1 < len(segs) {
+					to = segs[si+1]
+				}
+				g := gutter
+				if si > 0 {
+					g = gutterStyle.Render(m.view.GutterContinuation(lineCount))
+				}
+				out = append(out, g+m.renderSpan(i, segs[si], to, textWidth, cursorStyle, selStyle))
+			}
+			continue
+		}
+		out = append(out, gutter+m.renderLine(i, textWidth, cursorStyle, selStyle))
 	}
 	// An open find/replace panel (#283) renders as the pane's bottom rows;
 	// otherwise an active ":" / "/" / "?" input renders as the bottom row
@@ -277,10 +312,20 @@ func (m Model) searchHLQuery() (search.Query, bool) {
 // rendered width matches what the terminal shows, which keeps the line inside its
 // pane (a raw tab would otherwise be expanded by the terminal past the budget and
 // wrap, pushing the pane's bottom border off screen). It stops at the end of
-// meaningful content so trailing blanks are not emitted.
+// meaningful content so trailing blanks are not emitted (unless a ruler column
+// lies past it, which pads with tinted blanks so the ruler stays visible).
 func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style) string {
+	return m.renderSpan(line, m.view.Left, -1, width, cursorStyle, selStyle)
+}
+
+// renderSpan renders the columns [from, to) of one buffer line (to < 0 means
+// unbounded — through the content end). Under soft wrap (#64) each wrap
+// segment is one span; the unwrapped renderLine is the single span starting at
+// the horizontal scroll offset. Whitespace glyphs, indent guides, and ruler
+// tints (#64) overlay here so both paths share them.
+func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
 	runes := []rune(m.buf.Line(line))
-	left := m.view.Left
+	left := from
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Secondary carets (#145) render dimmer than the primary cell.
@@ -314,9 +359,47 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 		return disp + lipgloss.Width(text)
 	}
 
+	// View-option overlays (#64), precomputed per span: the first column of
+	// the trailing-whitespace run, the end of the leading indent, and the
+	// display-cell offset of `from` measured from the line start so indent
+	// guides and rulers align with the line's own columns regardless of
+	// horizontal scroll or wrap segment.
+	trailStart := len(runes)
+	if m.wsMode != wsNone {
+		for trailStart > 0 && (runes[trailStart-1] == ' ' || runes[trailStart-1] == '\t') {
+			trailStart--
+		}
+	}
+	indentEnd := 0
+	if m.indentGuides {
+		for indentEnd < len(runes) && (runes[indentEnd] == ' ' || runes[indentEnd] == '\t') {
+			indentEnd++
+		}
+	}
+	wsStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
+	guideStyle := lipgloss.NewStyle().Foreground(m.theme().IndentGuide)
+	rulerBG := m.theme().Ruler
+	isRuler := func(cell int) bool {
+		for _, r := range m.rulers {
+			if r == cell {
+				return true
+			}
+		}
+		return false
+	}
+	startCells := 0
+	for c := 0; c < from && c < len(runes); c++ {
+		if runes[c] == '\t' {
+			startCells += m.tabWidth
+		} else {
+			startCells++
+		}
+	}
+
 	var b strings.Builder
-	disp := 0 // display cells emitted so far
-	for col := left; disp < width; col++ {
+	disp := 0         // display cells emitted so far (buffer cells + inlay hints)
+	contentCells := 0 // buffer cells emitted so far (excludes inlay hints)
+	for col := left; disp < width && (to < 0 || col < to); col++ {
 		for hi < len(hints) && hints[hi].Col == col && disp < width {
 			disp = emitHint(&b, disp, hints[hi])
 			hi++
@@ -338,16 +421,33 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 		}
 
 		cell, cells := " ", 1
+		var overlay *lipgloss.Style // whitespace/guide foreground for this cell (#64)
+		abs := startCells + contentCells
 		if col < len(runes) {
-			if runes[col] == '\t' {
+			switch r := runes[col]; {
+			case r == '\t':
 				cell, cells = strings.Repeat(" ", m.tabWidth), m.tabWidth
-			} else {
-				cell = string(runes[col])
+				if m.wsVisible(col, trailStart) {
+					cell = "→" + strings.Repeat(" ", cells-1)
+					overlay = &wsStyle
+				} else if m.guideAt(col, indentEnd, abs) {
+					cell = "│" + strings.Repeat(" ", cells-1)
+					overlay = &guideStyle
+				}
+			case r == ' ' && m.wsVisible(col, trailStart):
+				cell = "·"
+				overlay = &wsStyle
+			case r == ' ' && m.guideAt(col, indentEnd, abs):
+				cell = "│"
+				overlay = &guideStyle
+			default:
+				cell = string(r)
 			}
 		}
 		if disp+cells > width { // clamp a tab straddling the right edge
 			cells = width - disp
 			cell = strings.Repeat(" ", cells)
+			overlay = nil
 		}
 
 		inMatch, inCurrent := false, false
@@ -361,13 +461,14 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 
 		switch {
 		case cursorHere && cells > 1:
-			// Cursor on a tab: highlight only the first cell, leave the rest plain.
-			b.WriteString(cursorStyle.Render(" "))
+			// Cursor on a tab: highlight only the first cell (which may carry
+			// a whitespace/guide glyph), leave the rest plain.
+			b.WriteString(cursorStyle.Render(string([]rune(cell)[0])))
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case cursorHere:
 			b.WriteString(cursorStyle.Render(cell))
 		case caretHere && cells > 1:
-			b.WriteString(caretStyle.Render(" "))
+			b.WriteString(caretStyle.Render(string([]rune(cell)[0])))
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case caretHere:
 			b.WriteString(caretStyle.Render(cell))
@@ -379,6 +480,17 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			b.WriteString(matchStyle.Render(cell))
 		default:
 			st, styled := m.styleAt(line, col)
+			if overlay != nil {
+				// Whitespace glyphs / indent guides (#64) replace the syntax
+				// colour; cursor/selection/search already won above.
+				st, styled = *overlay, true
+			}
+			if isRuler(abs) {
+				// Ruler tint (#64): a background stripe under everything the
+				// higher-priority overlays didn't claim.
+				st = st.Background(rulerBG)
+				styled = true
+			}
 			if kind, ok := m.occurrenceAt(line, col); ok {
 				// Occurrence mark (#172): a subtle background under the syntax
 				// colour; cursor/selection/search already won above.
@@ -398,8 +510,48 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 			}
 		}
 		disp += cells
+		contentCells += cells
+	}
+	// Ruler columns past the content end (#64): pad with blanks so the ruler
+	// reads as a continuous stripe on short lines. Only the unbounded final
+	// span pads — wrapped middle segments are already full width.
+	if to < 0 && len(m.rulers) > 0 {
+		maxRuler := 0
+		for _, r := range m.rulers {
+			if r > maxRuler {
+				maxRuler = r
+			}
+		}
+		rulerStyle := lipgloss.NewStyle().Background(rulerBG)
+		for abs := startCells + contentCells; disp < width && abs <= maxRuler; abs++ {
+			if isRuler(abs) {
+				b.WriteString(rulerStyle.Render(" "))
+			} else {
+				b.WriteString(" ")
+			}
+			disp++
+		}
 	}
 	return b.String()
+}
+
+// wsVisible reports whether the whitespace rune at col renders as a visible
+// glyph (#64) given the first column of the line's trailing-whitespace run.
+func (m Model) wsVisible(col, trailStart int) bool {
+	switch m.wsMode {
+	case wsAll:
+		return true
+	case wsTrailing:
+		return col >= trailStart
+	}
+	return false
+}
+
+// guideAt reports whether the whitespace cell at col (display cell abs from
+// the line start) carries an indent guide (#64): inside the leading indent, on
+// a tab-stop column past the first.
+func (m Model) guideAt(col, indentEnd, abs int) bool {
+	return m.indentGuides && col < indentEnd && abs > 0 && abs%m.tabWidth == 0
 }
 
 // DisplayOffset converts a buffer column on a line to its display-cell offset
@@ -408,8 +560,15 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 // buffer cell align with what renderLine actually drew.
 func (m Model) DisplayOffset(line, col int) int {
 	runes := []rune(m.buf.Line(line))
+	from := m.view.Left
+	if m.softWrap {
+		// Under soft wrap (#64) the offset counts from the cell's own wrap
+		// segment; DisplayRow supplies the matching row.
+		segs := m.wrapSegs(line)
+		from = segs[viewport.SegmentIndex(segs, col)]
+	}
 	disp := 0
-	for c := m.view.Left; c < col; c++ {
+	for c := from; c < col; c++ {
 		if c < len(runes) && runes[c] == '\t' {
 			disp += m.tabWidth
 		} else {
@@ -419,7 +578,7 @@ func (m Model) DisplayOffset(line, col int) int {
 	for _, h := range m.lineInlayHints(line) {
 		// A hint anchored exactly at col renders before that cell, so it
 		// shifts the cell too.
-		if h.Col >= m.view.Left && h.Col <= col {
+		if h.Col >= from && h.Col <= col {
 			disp += lipgloss.Width(hintText(h))
 		}
 	}

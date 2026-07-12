@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-12T00:30:00Z
+timestamp: 2026-07-12T23:30:00Z
 ---
 
 # Themes / Color Schemes
@@ -26,7 +26,8 @@ Palettes mirror [sqlit](https://github.com/Maxteabag/sqlit), which reuses
 set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 (`theme.UI`): `Background`, `Foreground`, `Surface`, `Panel`, `Border`,
 `BorderFocus`, `Selection`, `SelectionText`, `SelectionMuted`, `Accent`,
-`OccurrenceRead`, `OccurrenceWrite`, `InlayHint`, `Primary`, `Secondary`,
+`OccurrenceRead`, `OccurrenceWrite`, `InlayHint`, `Whitespace`, `IndentGuide`,
+`Ruler`, `Primary`, `Secondary`,
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
 `Ghost`, `ScrollbarTrack`, `ScrollbarThumb`. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
@@ -34,7 +35,10 @@ document-highlight marks (#172); left empty they fall back to the theme's own
 for sparse themes. `InlayHint` colours the inline LSP inlay-hint text (#171);
 left empty it falls back to the theme's own `Border` — already a
 legible-but-dim foreground in every palette (the builtins set it to their
-comment tone).
+comment tone). `Whitespace` and `IndentGuide` colour the visible-whitespace
+glyphs and indent guides (#64), falling back to the theme's own `Border`;
+`Ruler` is the column-ruler background tint, falling back to the theme's own
+`Panel`.
 
 ## Model
 

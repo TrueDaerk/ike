@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T22:00:00Z
+timestamp: 2026-07-12T23:30:00Z
 ---
 
 # Editor
@@ -80,7 +80,26 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered
   width matches the terminal and stays inside its pane (a raw tab would be
   expanded by the terminal past the budget and wrap, pushing the pane's bottom
-  border off screen). **Sticky scroll** (#168) pins the header lines of the
+  border off screen). **Soft wrap** (#64, `editor.wrap` or `view.toggleWrap`)
+  replaces horizontal scroll with a visual-row map: `viewport/wrap.go` splits
+  each line into wrap segments by the same cell budget (`WrapSegments` /
+  `SegmentIndex`), `ScrollWrapped` follows the cursor in visual rows (folds
+  count 0 rows hidden / 1 row header), continuation rows carry a `↪` gutter
+  marker, `j`/`k` move one visual row (vim's `gj`/`gk`; the motion is charwise,
+  fold-aware, in `editor/wrap.go`), and mouse clicks map through the segment
+  list (`wrapClickAt`). `ScrollXBy` is a no-op and `Left` pins to 0 while wrap
+  is on; a single line taller than the window pins `Top` on it (vim's `@@@`
+  case). Overlay anchors (LSP popups) go through `DisplayRow`/`DisplayOffset`,
+  which count wrap segments and folds. Render-only view options (#64) overlay
+  in the same span renderer: **visible whitespace** (`editor.show_whitespace =
+  none|trailing|all` or `view.toggleWhitespace`; dim `·` for spaces, `→` for
+  tabs, `trailing` marks only the line-end run), **indent guides**
+  (`editor.indent_guides` or `view.toggleIndentGuides`; `│` on whitespace
+  cells at each `tab_width` stop inside the leading indent — visible
+  whitespace wins on overlap) and **column rulers** (`editor.rulers = [80]`;
+  a background tint on those display columns, padded past short lines). The
+  palette toggles override the config per view; theme slots `Whitespace`,
+  `IndentGuide`, `Ruler` colour them. **Sticky scroll** (#168) pins the header lines of the
   declarations enclosing the first visible line as the top rows of the pane
   (JetBrains-style): the scopes come from the same Tree-sitter parse that
   produces the highlight spans (`highlight.HighlightScoped`, node kinds per
@@ -516,8 +535,12 @@ explicitly out of scope — this mode is the cheap 90%.
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
 the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `trim_trailing_whitespace`, `insert_final_newline`,
-`line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll` and
-`sticky_scroll_depth` take effect live. `files.encoding` names the fallback
+`line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
+`sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
+`indent_guides` and `rulers` take effect live. The view-option keys (#64) are
+special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,
+`view.toggleIndentGuides`) marks a per-view override that the per-event config
+refresh no longer clobbers. `files.encoding` names the fallback
 encoding for BOM-less non-UTF-8 files (#66).
 
 ## Registry bridge & LSP seam

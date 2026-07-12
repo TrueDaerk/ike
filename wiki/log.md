@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- View options (#64): soft wrap (`editor.wrap` / `view.toggleWrap`; visual-row
+  map in `internal/editor/viewport/wrap.go`, gj/gk-style j/k, wrapped scroll,
+  click mapping, `↪` continuation gutter), visible whitespace
+  (`editor.show_whitespace = none|trailing|all`, now an enum), indent guides
+  (`editor.indent_guides`) and column rulers (`editor.rulers = [80]`). New
+  theme slots `Whitespace`, `IndentGuide`, `Ruler`. Palette toggles override
+  the config per view.
 - Encoding & line endings (#66): new `internal/textenc` package (BOM/UTF-8
   detection, UTF-16 LE/BE + ISO 8859-1 + Windows-1252 transcoding via
   `golang.org/x/text`). Load detects and save re-applies the on-disk

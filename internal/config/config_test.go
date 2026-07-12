@@ -308,3 +308,35 @@ func TestPluginsSectionFlatAndDecode(t *testing.T) {
 		t.Fatalf("flat should expose plugin toggles, got %q", f["plugins.example.enabled"])
 	}
 }
+
+// TestViewOptionKeys guards the #64 config keys: the show_whitespace enum
+// (with the pre-#64 boolean spelling accepted), rulers validation, and the
+// flattened editor.rulers list.
+func TestViewOptionKeys(t *testing.T) {
+	proj := writeProject(t, "[editor]\nshow_whitespace = \"bogus\"\nrulers = [80, -3, 120]\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Editor.ShowWhitespace != "none" {
+		t.Errorf("bad show_whitespace should fall back to none, got %q", c.Editor.ShowWhitespace)
+	}
+	if len(c.Editor.Rulers) != 3 || c.Editor.Rulers[1] != 1 {
+		t.Errorf("negative ruler should clamp to 1, got %v", c.Editor.Rulers)
+	}
+	if len(diags) != 2 {
+		t.Fatalf("expected 2 diagnostics, got %d: %v", len(diags), diags)
+	}
+	if flat := c.Flat(); flat["editor.rulers"] != "80,1,120" {
+		t.Errorf("rulers not flattened: %q", flat["editor.rulers"])
+	}
+
+	proj = writeProject(t, "[editor]\nshow_whitespace = \"true\"\nindent_guides = true\n")
+	c, diags = Load(Options{ProjectRoot: proj})
+	if c.Editor.ShowWhitespace != "all" {
+		t.Errorf("legacy \"true\" should map to all, got %q", c.Editor.ShowWhitespace)
+	}
+	if !c.Editor.IndentGuides {
+		t.Error("indent_guides not decoded")
+	}
+	if len(diags) != 0 {
+		t.Errorf("legacy boolean spelling must not warn: %v", diags)
+	}
+}

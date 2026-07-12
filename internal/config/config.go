@@ -10,6 +10,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -98,6 +99,12 @@ func (c *Config) Flat() map[string]string {
 	put("editor.trim_trailing_whitespace", c.Editor.TrimTrailingWhitespace)
 	put("editor.insert_final_newline", c.Editor.InsertFinalNewline)
 	put("editor.show_whitespace", c.Editor.ShowWhitespace)
+	put("editor.indent_guides", c.Editor.IndentGuides)
+	rulers := make([]string, len(c.Editor.Rulers))
+	for i, r := range c.Editor.Rulers {
+		rulers[i] = strconv.Itoa(r)
+	}
+	put("editor.rulers", strings.Join(rulers, ","))
 	put("editor.sticky_scroll", c.Editor.StickyScroll)
 	put("editor.sticky_scroll_depth", c.Editor.StickyScrollDepth)
 	put("editor.tabs.always_show", c.Editor.Tabs.AlwaysShow)
