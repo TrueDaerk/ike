@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Revert history (#556): `vcs.revertFile` snapshots the pre-revert content
+  into a persisted per-file log (state store, capped + age-pruned) before the
+  checkout; `vcs.undoRevert` (`space v z`) lists the snapshots in a palette
+  picker and re-applies the chosen one to the buffer as one undoable change.
+  The revert prompt no longer claims "This cannot be undone."
+
 - `vcs.revertHunk` (#555): JetBrains "Rollback Lines" — the contiguous change
   under the caret (matching the gutter diff markers, deletion anchors
   included) reverts to its HEAD content as a single undo-tree edit, so plain

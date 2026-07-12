@@ -122,6 +122,31 @@ func TestRevertHunkCleanBuffer(t *testing.T) {
 	}
 }
 
+func TestRestoreContentUndoRoundTrip(t *testing.T) {
+	m, _ := loaded(t, "head\n")
+	if !m.RestoreContent("pre\nrevert\r\ncontent\n") {
+		t.Fatal("restore reported no-op")
+	}
+	wantText(t, m, "pre\nrevert\ncontent") // CRLF folded, terminator dropped
+	if !m.Dirty() {
+		t.Fatal("restore must dirty the buffer")
+	}
+	m.undo(1)
+	wantText(t, m, "head")
+	m.redo(1)
+	wantText(t, m, "pre\nrevert\ncontent")
+}
+
+func TestRestoreContentSameContentIsNoOp(t *testing.T) {
+	m, _ := loaded(t, "a\nb\n")
+	if m.RestoreContent("a\nb\n") {
+		t.Fatal("identical content must report false")
+	}
+	if m.Dirty() {
+		t.Fatal("no-op must not dirty the buffer")
+	}
+}
+
 func TestRevertHunkUndoRoundTrip(t *testing.T) {
 	buf := "a\nX\ny\nc\n"
 	m, ok := revertAt(t, "a\nb\nc\n", buf, 1)

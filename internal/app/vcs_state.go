@@ -39,6 +39,10 @@ type vcsState struct {
 	// draft is the shared in-progress commit message (0330, #483): the modal
 	// dialog and the tool window edit the same text.
 	draft *vcs.MessageDraft
+	// revertsPath/reverts back the vcs.undoRevert picker (#556): the focused
+	// file's pre-revert snapshots, loaded when the picker opens.
+	revertsPath string
+	reverts     []vcs.RevertSnapshot
 }
 
 // scheduleVCSRefresh arms the debounce tick unless one is already pending.
