@@ -108,7 +108,8 @@ any entry whose key the typed schema does not expose (no dead keys).
 ## Keymap page (#93)
 
 A custom `PageModel` (the framework's seam for self-rendered pages, forwarded
-every key while focused — verbatim during chord capture). See
+every key while focused — verbatim during chord capture and while the `/`
+filter input is open, #531). See
 [Keybindings](./keybindings.md) for the full editor behavior: effective-table
 listing with layer badges and blocked/fragile flags, capture-based rebinding
 with conflict confirmation, unbind and reset-to-preset.
