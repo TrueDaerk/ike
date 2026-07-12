@@ -2,6 +2,18 @@
 
 ## 2026-07-12
 
+- VCS / Git integration (Epic 0320, #461, from idea #28): new `internal/vcs`
+  package — async porcelain-v2 status snapshot (debounced refresh off watcher
+  events and saves) behind JetBrains-style explorer status coloring, a
+  `⎇ branch ↑n ↓m` status-line segment, gutter diff markers against HEAD,
+  and toggleable inline blame on the cursor line. Commands: `vcs.commit`
+  (commit dialog `internal/commitui`: stage toggles + message pane),
+  `vcs.updateProject` (pull merge/rebase with summary), `vcs.revertFile`
+  (confirmed rollback to HEAD), `vcs.branches` (palette picker + checkout),
+  `vcs.diff` (buffer vs HEAD in the diff viewer), `vcs.blameLine`. Leader
+  family `space v c/u/x/b/d/a`; the blocked-bindings ledger emptied. Five new
+  theme slots (`VCSModified/Added/Untracked/Deleted/Conflicted`). New
+  [VCS doc](/architecture/vcs.md); editor/explorer/status-line docs updated.
 - Vim macros (#58): `q{a-z}` records every keypress (mode-agnostic tap in
   `editor.Update`), `q` stops, `@{a-z}` / `@@` replay with count support
   (`5@a`). Payload is the keystroke list, kept per view beside the register

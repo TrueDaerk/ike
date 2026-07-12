@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-13T00:30:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Editor
@@ -447,8 +447,9 @@ it with a floating prompt (`internal/app/conflict.go`): **keep mine** (`k`,
 force-save — clears staleness; the save event stamps the watcher's epoch so the
 overwrite doesn't echo back), **reload** (`r`, discard edits via the
 clean-reload path; local history #35 will snapshot before the discard once it
-lands), or **cancel** (`esc`, buffer stays dirty + stale). A 'show diff' choice
-joins once the diff viewer (#60) exists.
+lands), or **cancel** (`esc`, buffer stays dirty + stale). The diff viewer (#60,
+Epic 0320) has since landed; wiring a 'show diff' choice into this prompt is
+a candidate follow-up.
 
 External **deletes** (#83): the root model closes a clean editor whose file was
 removed (the explorer's delete-closes-editor flow); a dirty one survives with
@@ -458,6 +459,16 @@ git checkout) is downgraded to a content change and reloads normally.
 
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
+
+## Git gutter & inline blame (Epic 0320)
+
+The gutter shows diff markers against HEAD: added and changed lines recolor
+their line number, a removal marks the line below it, and a diagnostic marker
+wins the cell on overlap. `vcs.blameLine` toggles a dimmed inline blame
+annotation at the end of the cursor line — "author, when · summary", or
+"not committed yet" for unstaged lines. Both are recomputed on save, external
+change, and vcs refresh, so marker positions may briefly lag unsaved edits.
+See [VCS / Git Integration](/architecture/vcs.md).
 
 ## Auto-save (#174)
 

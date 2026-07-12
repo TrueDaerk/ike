@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-13T00:30:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Status Line Segments
@@ -49,6 +49,14 @@ binary's base name (e.g. `python3.12`). Resolution stats the filesystem and
 scans PATH, so the label is **cached per language** (`Model.toolchainSeg`, a
 shared map across value copies) and the cache is dropped on every config
 reload — an interpreter change on the settings page re-resolves immediately.
+
+## Git branch segment
+
+Epic 0320 adds a `vcs` slot to the **right** list: `⎇ branch ↑n ↓m` — the
+current branch (clipped to 24 characters) plus ahead/behind counters against
+the upstream. It renders from the vcs status snapshot rather than shelling out
+per frame, and hides entirely outside a git repository. See
+[VCS / Git Integration](/architecture/vcs.md).
 
 ## Notification counter
 

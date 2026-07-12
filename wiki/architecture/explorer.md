@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # File Explorer
@@ -103,6 +103,15 @@ padding, and title row) before calling the explorer:
   scrollbar: vertical by default (`ScrollBy`), horizontal with **shift** held or
   the wheel's own left/right buttons (`ScrollXBy`), `wheelLines` per notch.
 - **Left press** on a scrollbar track jumps that axis proportionally.
+
+## Git status colouring
+
+Epic 0320 layers git status over the per-filetype colours: entries render in
+the new theme VCS slots — modified, added, untracked, conflicted — and a
+directory containing changes tints with the modified colour so pending work is
+visible on collapsed subtrees. The app threads each vcs status snapshot into
+the tree via `SetVCS`; outside a git repository nothing changes. See
+[VCS / Git Integration](/architecture/vcs.md).
 
 ## Row highlighting
 
