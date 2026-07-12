@@ -33,6 +33,15 @@ type Config struct {
 	Plugins map[string]map[string]any `toml:"plugins"`
 	// Marketplace holds plugin-marketplace settings (Roadmap 0310).
 	Marketplace Marketplace `toml:"marketplace"`
+	// Todo holds the TODO/FIXME index settings (#61).
+	Todo Todo `toml:"todo"`
+}
+
+// Todo holds the comment-tag index settings (#61). Patterns is the list of tag
+// words the project scan matches as whole words, case-insensitively (e.g.
+// ["TODO", "FIXME", "HACK", "XXX"]); entries are literals, not regexes.
+type Todo struct {
+	Patterns []string `toml:"patterns"`
 }
 
 // Marketplace holds plugin-marketplace settings (Roadmap 0310, #444).

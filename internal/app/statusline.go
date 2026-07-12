@@ -40,6 +40,20 @@ var statusLeft = []statusSegment{
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
+	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
+}
+
+// todoSegment is the project's comment-tag count from the TODO index (#61);
+// hidden until the first full scan finishes and while the project is clean.
+func (m Model) todoSegment() string {
+	if !m.todo.Scanned() || m.todo.Count() == 0 {
+		return ""
+	}
+	n := m.todo.Count()
+	if n == 1 {
+		return "1 TODO"
+	}
+	return strconv.Itoa(n) + " TODOs"
 }
 
 var statusRight = []statusSegment{

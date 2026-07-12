@@ -2,6 +2,15 @@
 
 ## 2026-07-12
 
+- TODO index (#61): new `internal/todoindex` package — JetBrains' TODO tool
+  window as a centered overlay over the reusable locations list. `todo.list`
+  command (`cmd+6`, leader `space D`, palette); own `search.Service` scan
+  (results wrapped in `ScanMsg` to stay out of the finder's generations);
+  full scan at Init/project switch, single-file rescan on buffer save
+  (spliced in place); in-memory tag and current-file filters (`ctrl+t`,
+  `ctrl+o`); `[todo] patterns` config; "12 TODOs" status-line segment. New
+  concept doc [TODO Index](/architecture/todo-index.md).
+
 - Markdown preview pane (#62): new `internal/preview` package rendering
   markdown buffers to ANSI via glamour, split beside the editor as a fourth
   `pane.Kind`. `markdown.preview` command (`cmd+k m`, leader `space P`,

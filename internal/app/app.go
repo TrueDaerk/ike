@@ -49,6 +49,7 @@ import (
 	"ike/internal/terminal"
 	"ike/internal/textenc"
 	"ike/internal/theme"
+	"ike/internal/todoindex"
 	"ike/internal/ui"
 	"ike/internal/wasm"
 	"ike/internal/watch"
@@ -198,6 +199,12 @@ type Model struct {
 	// streaming scan service it drives.
 	finder   *finder.Model
 	searcher *search.Service
+	// todo is the TODO/FIXME index overlay (#61); todoSearch is its own scan
+	// service — separate from searcher so the index and the finder never cancel
+	// each other, with results wrapped in todoindex.ScanMsg so the finder can
+	// never mistake them for its own generations.
+	todo       *todoindex.Model
+	todoSearch *search.Service
 	// inFileSearchRecent is true while a committed in-file search ("/", "?",
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
@@ -375,6 +382,10 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
 	m.finder.SetDisplayPath(displayPath)
+	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
+	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
+	m.todo.SetPalette(themePal)
+	m.todo.SetDisplayPath(displayPath)
 	m.callhier = callhier.New()
 	m.callhier.SetPalette(themePal)
 	m.callhier.SetDisplayPath(displayPath)
@@ -473,6 +484,11 @@ func (m Model) StartWatcher(root string) {
 // stateless adapter is installed on every editor instance; it is a no-op when no
 // bridge is registered. Save events additionally stamp the file watcher's save
 // epoch (Roadmap 0140) so IKE's own writes never report as external changes.
+// todoSavedMsg reports one buffer save to the TODO index (#61). The editor
+// emitter sends it from a goroutine; the root model answers with the index's
+// single-file rescan command.
+type todoSavedMsg struct{ path string }
+
 type editorEmitter struct {
 	host    *host.Host
 	watcher *watch.Service
@@ -495,6 +511,12 @@ func (e editorEmitter) Emit(ev editor.Event) {
 	}
 	if ev.Kind == editor.EventSave && e.watcher != nil {
 		e.watcher.MarkSaved(ev.Path)
+	}
+	if ev.Kind == editor.EventSave && ev.Path != "" {
+		// The TODO index rescans the saved file (#61). Same goroutine
+		// indirection as the SyncMsg below: Emit runs inside Update, so a
+		// direct send into the program's own loop would deadlock.
+		go e.host.Send(todoSavedMsg{path: ev.Path})
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -1276,6 +1298,10 @@ func (m Model) explorer() *explorer.Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
+	// The TODO index's initial full scan (#61): Init runs after main.go wires
+	// the sender (and again after a project switch), so the streamed results
+	// land and the status-line count is live without opening the overlay.
+	m.todo.Rescan()
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -1350,6 +1376,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.shell.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
+		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
@@ -1390,6 +1417,36 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finder.SetSize(m.width, m.height)
 		m.finder.OpenReplace(".")
 		return m, nil
+
+	case OpenTodoIndexMsg:
+		// todo.list (cmd+k t / palette): the TODO/FIXME index overlay (#61),
+		// rooted at the working directory like the finder.
+		m.todo.SetSize(m.width, m.height)
+		cur := ""
+		if ed := m.activeEditor(); ed != nil && ed.HasFile() {
+			cur = ed.Path()
+		}
+		m.todo.Open(cur)
+		return m, nil
+
+	case todoindex.ScanMsg:
+		// The TODO index's streamed scan results (#61), wrapped so the finder
+		// never ingests them (both services count generations independently).
+		m.todo.Apply(msg.Inner)
+		return m, nil
+
+	case todoSavedMsg:
+		// A buffer save (#61): rescan just the saved file off the update loop.
+		return m, m.todo.RescanFile(msg.path)
+
+	case todoindex.FileScanMsg:
+		m.todo.ApplyFileScan(msg)
+		return m, nil
+
+	case todoindex.OpenLocationMsg:
+		// A selected tag: open the file with the cursor on it (1-based lines,
+		// openPathAt takes 0-based).
+		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 
 	case finder.ReplaceRequestMsg:
 		// Apply replacements: through open dirty buffers, on disk otherwise;
@@ -2146,6 +2203,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.finder.IsOpen() {
 			// The find-in-path overlay owns the keyboard like the palette.
 			return m, m.finder.Update(msg)
+		}
+		if m.todo.IsOpen() {
+			// The TODO index overlay owns the keyboard the same way (#61).
+			return m, m.todo.Update(msg)
 		}
 		if m.callhier.IsOpen() {
 			// The call-hierarchy overlay owns the keyboard the same way (#173).
@@ -3253,6 +3314,24 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.todo.IsOpen() {
+		// The TODO index overlay hit-tests like the finder above (#61).
+		if clickOutside(msg, m.todo.View(), m.width, m.height) {
+			m.todo.Close()
+			return m, nil
+		}
+		switch {
+		case msg.action == mousePress && msg.Button == tea.MouseLeft:
+			v := m.todo.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.todo.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+			m.todo.Wheel(-3)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+			m.todo.Wheel(3)
+		}
+		return m, nil
+	}
 	if m.settings.IsOpen() {
 		if clickOutside(msg, m.settings.View(), m.width, m.height) {
 			m.settings.Close()
@@ -3913,6 +3992,8 @@ func (m Model) render() string {
 	switch {
 	case m.finder.IsOpen():
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
+	case m.todo.IsOpen():
+		result = overlay.Center(base, m.todo.View(), m.width, m.height)
 	case m.callhier.IsOpen():
 		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
 	case m.palette.IsOpen():
@@ -4262,6 +4343,19 @@ func canonicalPath(path string) string {
 		return abs
 	}
 	return filepath.Clean(path)
+}
+
+// todoPatterns reads [todo] patterns from the flattened config (#61): the
+// comma-joined tag list, empty falling back to todoindex.DefaultPatterns.
+func todoPatterns(cfg host.Config) []string {
+	raw, _ := cfg.Get("todo.patterns")
+	var out []string
+	for _, p := range strings.Split(raw, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // displayPath renders a file path for the status line: relative to the project

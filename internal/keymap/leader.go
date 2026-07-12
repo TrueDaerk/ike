@@ -61,6 +61,9 @@ var leaderMnemonics = []leaderMnemonic{
 	// G (shift+g) mirrors the fragile ctrl+shift+g primary for select-all-
 	// occurrences (#145) — lowercase g is find-in-path.
 	{"G", "editor.caret.addAll", "Add carets at all occurrences"},
+	// D (shift+d) mirrors the fragile cmd+6 primary for the TODO index (#61)
+	// — "toDo"; lowercase t is the terminal toggle, lowercase d go-to-definition.
+	{"D", "todo.list", "TODO index"},
 	{"n", "lsp.rename", "Rename symbol"},
 	{"l", "lsp.format", "Reformat file"},
 	{"c", "editor.commentLine", "Comment line"},

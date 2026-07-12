@@ -165,6 +165,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
 
+	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
+
 	for id, kv := range c.Lang {
 		for k, v := range kv {
 			put("lang."+id+"."+k, v)
