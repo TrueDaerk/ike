@@ -49,6 +49,9 @@ func defaultTheme() Theme {
 			OccurrenceRead:  "#31404f",
 			OccurrenceWrite: "#4f4031",
 			InlayHint:       "gray",
+			Whitespace:      "#585858",
+			IndentGuide:     "#585858",
+			Ruler:           "#303030",
 			Accent:          "#d7af87", // explorer active entry
 			Primary:         "#005f87", // completion selected row
 			Secondary:       "#ffaf5f",
@@ -114,6 +117,9 @@ func tokyoNight() Theme {
 			OccurrenceRead:  "#233450",
 			OccurrenceWrite: "#413630",
 			InlayHint:       "#565f89",
+			Whitespace:      "#414868",
+			IndentGuide:     "#414868",
+			Ruler:           "#24283b",
 			Accent:          "#7fa1de",
 			Primary:         "#7aa2f7",
 			Secondary:       "#ff9e64",
@@ -179,6 +185,9 @@ func nord() Theme {
 			OccurrenceRead:  "#3b4657",
 			OccurrenceWrite: "#524a43",
 			InlayHint:       "#616e88",
+			Whitespace:      "#4c566a",
+			IndentGuide:     "#4c566a",
+			Ruler:           "#3b4252",
 			Accent:          "#8fbcbb",
 			Primary:         "#88c0d0",
 			Secondary:       "#dba291",
@@ -244,6 +253,9 @@ func gruvbox() Theme {
 			OccurrenceRead:  "#324547",
 			OccurrenceWrite: "#503b2c",
 			InlayHint:       "#928374",
+			Whitespace:      "#504945",
+			IndentGuide:     "#504945",
+			Ruler:           "#3c3836",
 			Accent:          "#fe8019",
 			Primary:         "#076678",
 			Secondary:       "#fe8019",
@@ -289,6 +301,9 @@ func gruvboxLight() Theme {
 			OccurrenceRead:  "#d0dce2",
 			OccurrenceWrite: "#ecd9b5",
 			InlayHint:       "#7c6f64",
+			Whitespace:      "#d5c4a1",
+			IndentGuide:     "#d5c4a1",
+			Ruler:           "#ebdbb2",
 			Accent:          "#9f450a",
 			Primary:         "#3d7679",
 			Secondary:       "#9f450a",
@@ -374,6 +389,9 @@ func rosePine() Theme {
 			OccurrenceRead:  "#2a3549",
 			OccurrenceWrite: "#4a3844",
 			InlayHint:       "#6e6a86",
+			Whitespace:      "#403d52",
+			IndentGuide:     "#403d52",
+			Ruler:           "#26233a",
 			Accent:          "#ebbcba",
 			Primary:         "#9ccfd8",
 			Secondary:       "#f6c177",
@@ -439,6 +457,9 @@ func rosePineDawn() Theme {
 			OccurrenceRead:  "#dee7ea",
 			OccurrenceWrite: "#f3ddd0",
 			InlayHint:       "#9893a5",
+			Whitespace:      "#dfdad9",
+			IndentGuide:     "#dfdad9",
+			Ruler:           "#f2e9e1",
 			Accent:          "#b83f39",
 			Primary:         "#286983",
 			Secondary:       "#945c0f",
@@ -504,6 +525,9 @@ func catppuccinMocha() Theme {
 			OccurrenceRead:  "#2a3045",
 			OccurrenceWrite: "#463830",
 			InlayHint:       "#6c7086",
+			Whitespace:      "#45475a",
+			IndentGuide:     "#45475a",
+			Ruler:           "#313244",
 			Accent:          "#f5c2e7",
 			Primary:         "#89b4fa",
 			Secondary:       "#fab387",
@@ -573,6 +597,9 @@ func kanagawa() Theme {
 			OccurrenceRead:  "#25354d",
 			OccurrenceWrite: "#49443c",
 			InlayHint:       "#727169",
+			Whitespace:      "#54546d",
+			IndentGuide:     "#54546d",
+			Ruler:           "#2a2a37",
 			Accent:          "#e6c384", // carpYellow
 			Primary:         "#2d4f67", // waveBlue2 (pmenu selection)
 			Secondary:       "#ffa066", // surimiOrange
@@ -641,6 +668,9 @@ func oneDark() Theme {
 			OccurrenceRead:  "#323b4d",
 			OccurrenceWrite: "#4a3f33",
 			InlayHint:       "#5c6370",
+			Whitespace:      "#3e4451",
+			IndentGuide:     "#3e4451",
+			Ruler:           "#21252b",
 			Accent:          "#61afef", // blue
 			Primary:         "#3e4451", // pmenu selection
 			Secondary:       "#d19a66", // orange 1
@@ -711,6 +741,9 @@ func solarizedDark() Theme {
 			OccurrenceRead:  "#0a4152",
 			OccurrenceWrite: "#3d3a28",
 			InlayHint:       "#586e75",
+			Whitespace:      "#586e75",
+			IndentGuide:     "#586e75",
+			Ruler:           "#073642",
 			Accent:          "#b58900", // yellow
 			Primary:         "#586e75", // base01 (pmenu selection)
 			Secondary:       "#db815c", // orange lightened for AA on Panel
@@ -759,6 +792,9 @@ func solarizedLight() Theme {
 			OccurrenceRead:  "#e0ecec",
 			OccurrenceWrite: "#f2e4c4",
 			InlayHint:       "#93a1a1",
+			Whitespace:      "#93a1a1",
+			IndentGuide:     "#93a1a1",
+			Ruler:           "#eee8d5",
 			Accent:          "#c44815", // orange darkened for AA on Surface
 			Primary:         "#586e75", // base01 (pmenu selection)
 			Secondary:       "#b64314", // orange darkened for AA on Panel
@@ -848,6 +884,9 @@ func dracula() Theme {
 			OccurrenceRead:  "#34405c",
 			OccurrenceWrite: "#514440",
 			InlayHint:       "#6272a4",
+			Whitespace:      "#44475a",
+			IndentGuide:     "#44475a",
+			Ruler:           "#21222c",
 			Accent:          "#ff79c6", // pink
 			Primary:         "#44475a", // pmenu selection
 			Secondary:       "#ffb86c", // orange
@@ -913,6 +952,9 @@ func catppuccinLatte() Theme {
 			OccurrenceRead:  "#ccd8e8",
 			OccurrenceWrite: "#e8d8c4",
 			InlayHint:       "#9ca0b0",
+			Whitespace:      "#bcc0cc",
+			IndentGuide:     "#bcc0cc",
+			Ruler:           "#ccd0da",
 			Accent:          "#a1197d",
 			Primary:         "#1761f5",
 			Secondary:       "#9b3901",

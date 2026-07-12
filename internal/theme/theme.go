@@ -30,6 +30,9 @@ type UI struct {
 	OccurrenceRead  string // symbol-occurrence mark, read access (LSP document highlight)
 	OccurrenceWrite string // symbol-occurrence mark, write access
 	InlayHint       string // inline LSP inlay-hint text (dimmed parameter/type hints, #171)
+	Whitespace      string // visible whitespace glyphs (· / →, #64)
+	IndentGuide     string // vertical indent-guide lines (#64)
+	Ruler           string // column-ruler background tint (#64)
 	Accent          string // emphasis foreground (explorer active entry)
 	Primary         string // primary action background (completion selected row)
 	Secondary       string // secondary emphasis foreground (help shortcut keys)
@@ -78,6 +81,9 @@ type Palette struct {
 	OccurrenceRead  color.Color
 	OccurrenceWrite color.Color
 	InlayHint       color.Color
+	Whitespace      color.Color
+	IndentGuide     color.Color
+	Ruler           color.Color
 	Accent          color.Color
 	Primary         color.Color
 	Secondary       color.Color
@@ -149,7 +155,14 @@ func NewPalette(t Theme) *Palette {
 		// Inlay-hint text falls back to the theme's own border tone: already a
 		// legible-but-dim foreground in every theme, which is exactly what a
 		// hint should be.
-		InlayHint:      slot(t.UI.InlayHint, firstNonEmpty(t.UI.Border, def.UI.Border)),
+		InlayHint: slot(t.UI.InlayHint, firstNonEmpty(t.UI.Border, def.UI.Border)),
+		// Whitespace glyphs and indent guides fall back to the theme's own
+		// border tone (a legible-but-dim foreground in every theme); the
+		// ruler tint falls back to the theme's panel surface, one step above
+		// the pane body so the column reads as a subtle stripe.
+		Whitespace:     slot(t.UI.Whitespace, firstNonEmpty(t.UI.Border, def.UI.Border)),
+		IndentGuide:    slot(t.UI.IndentGuide, firstNonEmpty(t.UI.Border, def.UI.Border)),
+		Ruler:          slot(t.UI.Ruler, firstNonEmpty(t.UI.Panel, def.UI.Panel)),
 		Accent:         slot(t.UI.Accent, def.UI.Accent),
 		Primary:        slot(t.UI.Primary, def.UI.Primary),
 		Secondary:      slot(t.UI.Secondary, def.UI.Secondary),

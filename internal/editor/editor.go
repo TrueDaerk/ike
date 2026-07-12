@@ -157,8 +157,8 @@ type Model struct {
 	// insightOff).
 	largeFile bool
 	focused   bool
-	width   int
-	height  int
+	width     int
+	height    int
 
 	cfg     host.Config
 	emitter Emitter
@@ -219,6 +219,41 @@ type Model struct {
 	showInlayHints     bool
 	stickyScroll       bool
 	stickyDepth        int
+
+	// View options (#64). softWrap/wsMode/indentGuides follow the [editor]
+	// config until their palette toggle flips them; the *Set flags mark a
+	// per-view override so the per-Update applyConfig refresh no longer
+	// clobbers the toggled value. rulersRaw caches the last parsed
+	// editor.rulers string so the list isn't re-split every Update.
+	softWrap     bool
+	wsMode       whitespaceMode
+	indentGuides bool
+	rulers       []int
+	wrapSet      bool
+	wsSet        bool
+	guidesSet    bool
+	rulersRaw    string
+}
+
+// whitespaceMode selects which whitespace runs render visibly (#64).
+type whitespaceMode int
+
+const (
+	wsNone     whitespaceMode = iota
+	wsTrailing                // only the line-end whitespace run
+	wsAll                     // every space and tab
+)
+
+// parseWhitespaceMode maps the editor.show_whitespace config value; config
+// validation already normalised it to none|trailing|all.
+func parseWhitespaceMode(v string) whitespaceMode {
+	switch v {
+	case "trailing":
+		return wsTrailing
+	case "all":
+		return wsAll
+	}
+	return wsNone
 }
 
 // New returns an empty editor with no file loaded.
@@ -302,6 +337,24 @@ func (m *Model) applyConfig() {
 	if v, ok := m.cfg.Get("editor.scroll_off"); ok {
 		m.view.ScrollOff = atoi(v, m.view.ScrollOff)
 	}
+	// View options (#64): a palette toggle overrides the config value for
+	// this view until the next toggle; rulers have no toggle and always track
+	// the config.
+	if !m.wrapSet {
+		m.softWrap = boolOr(m.cfg, "editor.wrap", m.softWrap)
+	}
+	if !m.wsSet {
+		if v, ok := m.cfg.Get("editor.show_whitespace"); ok {
+			m.wsMode = parseWhitespaceMode(v)
+		}
+	}
+	if !m.guidesSet {
+		m.indentGuides = boolOr(m.cfg, "editor.indent_guides", m.indentGuides)
+	}
+	if v, ok := m.cfg.Get("editor.rulers"); ok && v != m.rulersRaw {
+		m.rulersRaw = v
+		m.rulers = parseRulers(v)
+	}
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
@@ -364,7 +417,7 @@ func (m *Model) NewFile(path string) {
 	m.path = path
 	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
-	m.largeFile = false // a template seed is never large
+	m.largeFile = false                                        // a template seed is never large
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -401,7 +454,7 @@ func (m *Model) RestoreText(text string) {
 	m.wait = awaitNone
 	m.hist = history.New()
 	m.hist.MarkNeverSaved() // recovered text is dirty even after undoing back to it
-	m.diskHash = "" // recovered content matches no on-disk state
+	m.diskHash = ""         // recovered content matches no on-disk state
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
@@ -642,8 +695,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 // one row.
 func (m *Model) scroll() {
 	m.unfoldAtCursor()
-	m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount())
-	m.foldScrollFix()
+	if m.softWrap {
+		// Soft wrap (#64): follow the cursor in visual rows through the wrap
+		// map; the rows callback already counts folds (header = 1, hidden =
+		// 0), so no fold fix-up pass is needed.
+		segs := m.wrapSegs(m.cursor.Line)
+		m.view.ScrollWrapped(m.cursor.Line, viewport.SegmentIndex(segs, m.cursor.Col), m.buf.LineCount(), m.wrapRows)
+	} else {
+		m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount())
+		m.foldScrollFix()
+	}
 	m.unhideCursor()
 }
 

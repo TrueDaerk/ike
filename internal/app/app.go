@@ -3696,7 +3696,10 @@ func (m Model) compositeLSPPopups(base string) string {
 		// inject virtual text, so the buffer column alone under-counts the
 		// cells renderLine drew before the anchor.
 		x := contentX + gw + ed.DisplayOffset(line, col)
-		y := contentY + (line - top) + 1 // one row below the cursor
+		// DisplayRow (not line-top): collapsed folds and soft wrap (#64)
+		// change how many screen rows sit between the scroll top and the
+		// anchor line.
+		y := contentY + ed.DisplayRow(line, col) + 1 // one row below the cursor
 		// Clamp the box to the terminal (#316): the framed popup may extend
 		// past the owning pane's borders, but shifts left instead of bleeding
 		// across the screen edge and flips above the anchor row when it would

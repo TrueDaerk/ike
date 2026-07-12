@@ -95,7 +95,12 @@ type Editor struct {
 	AutoIndent             bool   `toml:"auto_indent"`
 	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
 	InsertFinalNewline     bool   `toml:"insert_final_newline"`
-	ShowWhitespace         bool   `toml:"show_whitespace"`
+	// ShowWhitespace renders whitespace visibly (#64): "none", "trailing"
+	// (only line-end runs) or "all". IndentGuides draws vertical lines at each
+	// indent stop; Rulers tints the given display columns (e.g. [80, 120]).
+	ShowWhitespace string `toml:"show_whitespace"`
+	IndentGuides   bool   `toml:"indent_guides"`
+	Rulers         []int  `toml:"rulers"`
 	// StickyScroll pins the enclosing declaration lines (function/class
 	// headers) at the top of the editor while scrolling inside their body
 	// (#168); StickyScrollDepth caps how many nested headers are pinned.

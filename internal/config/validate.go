@@ -30,6 +30,8 @@ var (
 	reloadModes = map[string]bool{"clean": true, "never": true}
 	saveModes   = map[string]bool{"off": true, "focus": true}
 	severities  = map[string]bool{"info": true, "warn": true, "error": true}
+	// whitespaceModes are the editor.show_whitespace values (#64).
+	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
 )
 
 // validate clamps c in place against the baseline rules and returns one
@@ -40,6 +42,23 @@ func validate(c *Config) []Diagnostic {
 		if *v < min {
 			diags = append(diags, Diagnostic{Field: field, Message: fmt.Sprintf("%d below minimum %d, using %d", *v, min, min)})
 			*v = min
+		}
+	}
+
+	if !whitespaceModes[c.Editor.ShowWhitespace] {
+		// Accept the pre-#64 boolean spelling: true meant "render whitespace".
+		fixed := "none"
+		if c.Editor.ShowWhitespace == "true" {
+			fixed = "all"
+		} else if c.Editor.ShowWhitespace != "false" && c.Editor.ShowWhitespace != "" {
+			diags = append(diags, Diagnostic{Field: "editor.show_whitespace", Message: fmt.Sprintf("unknown mode %q, using \"none\"", c.Editor.ShowWhitespace)})
+		}
+		c.Editor.ShowWhitespace = fixed
+	}
+	for i, r := range c.Editor.Rulers {
+		if r < 1 {
+			diags = append(diags, Diagnostic{Field: "editor.rulers", Message: fmt.Sprintf("ruler column %d below minimum 1, using 1", r)})
+			c.Editor.Rulers[i] = 1
 		}
 	}
 

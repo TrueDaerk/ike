@@ -61,6 +61,11 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
+			// View options (#64): per-view display toggles. They flip the
+			// focused buffer's option on top of the [editor] config defaults.
+			action("view.toggleWrap", "Toggle Soft Wrap", "toggle_wrap", ""),
+			action("view.toggleWhitespace", "Toggle Whitespace Rendering", "toggle_whitespace", ""),
+			action("view.toggleIndentGuides", "Toggle Indent Guides", "toggle_indent_guides", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),

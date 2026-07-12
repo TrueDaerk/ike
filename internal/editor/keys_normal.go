@@ -188,12 +188,20 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 	case "l", "right", " ":
 		return motion.Right(m.buf, m.cursor, count), true
 	case "j", "down":
+		if m.softWrap {
+			// Soft wrap (#64): j moves one visual row (vim's gj); the motion
+			// is fold-aware, so it also covers collapsed folds.
+			return m.wrapVertical(count, 1), true
+		}
 		if m.hasFolds() {
 			// A collapsed fold is one row for vertical motion (#144).
 			return m.foldVertical(count, 1), true
 		}
 		return motion.Down(m.buf, m.cursor, count), true
 	case "k", "up":
+		if m.softWrap {
+			return m.wrapVertical(count, -1), true
+		}
 		if m.hasFolds() {
 			return m.foldVertical(count, -1), true
 		}

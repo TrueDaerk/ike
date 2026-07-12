@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-12T23:30:00Z
 ---
 
 # Configuration System
@@ -47,15 +47,18 @@ layers still apply, reported as a file-sourced diagnostic. Clamped today:
 `editor.sticky_scroll_depth >= 1`, `explorer.tree_indent >= 0`,
 `project.max_history >= 0`, `backup.debounce_ms >= 100`,
 `backup.max_age_days >= 1`, `explorer.sort` ∈ {name,type,size,modified},
-`lsp.log_level` ∈ {error,warn,info,debug}, and `project.history` truncated to
-`max_history`.
+`lsp.log_level` ∈ {error,warn,info,debug}, `editor.show_whitespace` ∈
+{none,trailing,all} (the pre-#64 boolean spelling maps: `"true"` → `all`,
+`"false"` → `none`), `editor.rulers` entries `>= 1`, and `project.history`
+truncated to `max_history`.
 
 ## Baseline schema
 
 Sections and their default-bearing slots (`schema.go`):
 
 - `[editor]` — tab width, spaces, line numbers, wrap, scroll-off, auto-indent,
-  trim/insert-newline, show-whitespace.
+  trim/insert-newline, show-whitespace (`none|trailing|all`), indent-guides,
+  rulers (display-column list, e.g. `[80, 120]`).
 - `[explorer]` — show-hidden, git-status, tree-indent, sort, plus an empty
   `[explorer.colors]` slot (Roadmap 0050 fills entries).
 - `[keymap]` — `preset` + an empty `[keymap.bindings]` slot (Roadmap 0080).

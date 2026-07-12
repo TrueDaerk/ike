@@ -464,6 +464,14 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.lineStart()
 	case "line_end":
 		m.lineEnd()
+	// View options (#64): per-view display toggles, overriding the [editor]
+	// config for this view.
+	case "toggle_wrap":
+		m.toggleWrap()
+	case "toggle_whitespace":
+		m.toggleWhitespace()
+	case "toggle_indent_guides":
+		m.toggleIndentGuides()
 	case "find":
 		if m.insert.active {
 			m.commitInsert()
