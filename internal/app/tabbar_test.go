@@ -24,11 +24,26 @@ func TestSingleTabShowsPlainTitle(t *testing.T) {
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	m := openApp(t, a)
-	v := stripped(m)
+	// The status line renders "…/aaa.txt │ LF" whenever the temp path keeps
+	// the divider on screen, which used to trip the tab-bar guard below
+	// depending on the random temp-dir length (#457). It can also wrap onto
+	// two frame lines when the path overflows the width (#471), so scope the
+	// assertion to the pane body by dropping every status-line row instead of
+	// just the last line.
+	// The bar is the frame's tail: cut at its first row so wrapped
+	// continuation rows (which don't repeat the NORMAL marker) go too.
+	body := strings.Split(stripped(m), "\n")
+	for i, l := range body {
+		if strings.Contains(l, "NORMAL │") {
+			body = body[:i]
+			break
+		}
+	}
+	v := strings.Join(body, "\n")
 	if !strings.Contains(v, "aaa.txt") {
 		t.Fatal("single-tab pane must show the file title")
 	}
-	if strings.Contains(v, "│ ") && strings.Contains(v, "aaa.txt │") {
+	if strings.Contains(v, "aaa.txt │") {
 		t.Fatal("single-tab pane must not render a tab bar by default")
 	}
 }
