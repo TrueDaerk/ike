@@ -102,6 +102,7 @@ type Editor struct {
 	Wrap                   bool   `toml:"wrap"`
 	ScrollOff              int    `toml:"scroll_off"`
 	AutoIndent             bool   `toml:"auto_indent"`
+	AutoClosePairs         bool   `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
 	InsertFinalNewline     bool   `toml:"insert_final_newline"`
 	// Editorconfig honours .editorconfig files (#63): their matching sections

@@ -45,7 +45,7 @@ func TestCorePagesPresent(t *testing.T) {
 		return out
 	}
 	ed := keys("Editor")
-	for _, k := range []string{"editor.tab_width", "editor.use_spaces", "editor.auto_indent", "editor.trim_trailing_whitespace", "editor.insert_final_newline", "editor.line_numbers", "editor.relative_line_numbers", "editor.scroll_off"} {
+	for _, k := range []string{"editor.tab_width", "editor.use_spaces", "editor.auto_indent", "editor.auto_close_pairs", "editor.trim_trailing_whitespace", "editor.insert_final_newline", "editor.line_numbers", "editor.relative_line_numbers", "editor.scroll_off"} {
 		if !ed[k] {
 			t.Errorf("Editor page missing %s", k)
 		}

@@ -216,6 +216,19 @@ wherever the cursor sits; the cursor follows the removed columns, and the edit
 stays inside the open insert's undo unit. While the completion popup is open a
 plain `Tab` still accepts the completion; `Shift+Tab` dedents regardless.
 
+Auto-closing pairs (#517, `autoclose.go`): with `editor.auto_close_pairs` on
+(default), typing `(`, `[` or `{` in insert mode also inserts the matching
+closer and leaves the cursor between the pair — in every file type, no
+language rules involved. The closer is only added when sensible: the cursor
+sits at the line end, before whitespace, or before another closer; directly
+before other text the opener inserts alone. Typing a closer whose rune already
+sits at the cursor **skips over** it instead of duplicating it, and backspacing
+the opener of an empty pair removes both runes. Everything applies per caret
+(one fan-out can mix pairing, plain insert, and skip-over) and stays inside the
+open insert's undo unit. The `.`-replay text records only the keystrokes, so a
+fully typed `(x)` run replays exactly; an insert that never types the closer
+replays without it (same approximation as backspace).
+
 **Macros** (#58, `macro.go`): `q{a-z}` records, `q` stops, `@{a-z}` replays,
 `@@` repeats the last replay, and a count multiplies (`5@a`). Recording taps
 every keypress in `Update` *before* mode dispatch, so inserts, visual
@@ -574,7 +587,7 @@ explicitly out of scope — this mode is the cheap 90%.
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
 the `[editor]` section on every event, so `tab_width`, `use_spaces`,
-`auto_indent`, `trim_trailing_whitespace`, `insert_final_newline`,
+`auto_indent`, `auto_close_pairs`, `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides` and `rulers` take effect live. The view-option keys (#64) are

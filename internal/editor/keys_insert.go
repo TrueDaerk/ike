@@ -139,6 +139,9 @@ func (m *Model) writeRunes(text string) {
 		m.replaceText(text)
 		return
 	}
+	if m.autoClosePairs && m.autoCloseWrite(text) {
+		return
+	}
 	m.insertText(text)
 	if text == "." {
 		m.emit(EventCompletionTrigger)
@@ -222,7 +225,15 @@ func (m *Model) insertBackspace() {
 		if !start.Before(pos) {
 			return pos
 		}
-		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: pos}))
+		end := pos
+		// Backspacing the opener of an empty pair removes the closer with
+		// it (#517), undoing an auto-close in one keystroke.
+		if m.autoClosePairs && start.Line == pos.Line && pos.Col-start.Col == 1 {
+			if c, ok := closePairs[m.runeAt(start)]; ok && m.runeAt(pos) == c {
+				end.Col++
+			}
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: end}))
 		edited = true
 		return start
 	})
