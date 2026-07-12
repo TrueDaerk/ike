@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- uv project scaffolding (#548): create-environment on the uv path now
+  generates a missing `pyproject.toml` (`uv init --bare`) and a missing
+  `uv.lock` (`uv lock`) around the venv creation — best effort, existing
+  files untouched, toast names the scaffolded files.
+
 - Venv target directory (#547): the toolchain page's create-environment
   action (`n`) always built `<root>/.venv`. It now opens a path-completed
   input pre-filled with `.venv`; relative targets resolve against the project

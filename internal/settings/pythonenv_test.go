@@ -64,8 +64,10 @@ func TestCreateEnvPrefersUv(t *testing.T) {
 	if env.Err != nil {
 		t.Fatal(env.Err)
 	}
-	if len(f.calls) != 1 || f.calls[0] != "uv venv "+filepath.Join(root, ".venv") {
-		t.Fatalf("calls = %v", f.calls)
+	// No pyproject.toml in root: init is attempted first (#548), then venv.
+	want := []string{"uv init --bare " + root, "uv venv " + filepath.Join(root, ".venv")}
+	if len(f.calls) != 2 || f.calls[0] != want[0] || f.calls[1] != want[1] {
+		t.Fatalf("calls = %v, want %v", f.calls, want)
 	}
 	if env.Interpreter != filepath.Join(root, ".venv", "bin", "python") {
 		t.Fatalf("interpreter = %q", env.Interpreter)
@@ -223,7 +225,13 @@ func TestCreateEnvCustomTargets(t *testing.T) {
 		if env.Err != nil {
 			t.Fatalf("target %q: %v", c.target, env.Err)
 		}
-		if f.calls[0] != "uv venv "+c.want {
+		venvCall := false
+		for _, call := range f.calls {
+			if call == "uv venv "+c.want {
+				venvCall = true
+			}
+		}
+		if !venvCall {
 			t.Fatalf("target %q: calls = %v, want uv venv %s", c.target, f.calls, c.want)
 		}
 		if env.Interpreter != filepath.Join(c.want, "bin", "python") {
@@ -257,5 +265,115 @@ func TestEnvInputPathCompletion(t *testing.T) {
 	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if p.envInput || p.envState == envBusy || len(f.calls) != 0 {
 		t.Fatalf("esc must cancel: input=%v state=%q calls=%v", p.envInput, p.envState, f.calls)
+	}
+}
+
+// TestCreateEnvScaffoldsUvProject guards #548: on the uv path, a missing
+// pyproject.toml is generated (uv init --bare) and a missing uv.lock is
+// locked (uv lock); the label names what was created.
+func TestCreateEnvScaffoldsUvProject(t *testing.T) {
+	root := t.TempDir()
+	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
+	f.onRun = func(name string, args ...string) string {
+		switch args[0] {
+		case "init":
+			os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\n"), 0o644)
+		case "venv":
+			mkInterp(t, filepath.Join(root, ".venv"))
+		case "lock":
+			os.WriteFile(filepath.Join(root, "uv.lock"), []byte("version = 1\n"), 0o644)
+		}
+		return ""
+	}
+	env := createEnv(root, ".venv", f.run, f.look)().(EnvMsg)
+	if env.Err != nil {
+		t.Fatal(env.Err)
+	}
+	want := []string{
+		"uv init --bare " + root,
+		"uv venv " + filepath.Join(root, ".venv"),
+		"uv lock --directory " + root,
+	}
+	if len(f.calls) != 3 || f.calls[0] != want[0] || f.calls[1] != want[1] || f.calls[2] != want[2] {
+		t.Fatalf("calls = %v, want %v", f.calls, want)
+	}
+	if !strings.Contains(env.Label, "pyproject.toml") || !strings.Contains(env.Label, "uv.lock") {
+		t.Fatalf("label = %q, must name the scaffolded files", env.Label)
+	}
+}
+
+// TestCreateEnvKeepsExistingManifest: an existing pyproject.toml is never
+// re-initialized; only the missing uv.lock is generated.
+func TestCreateEnvKeepsExistingManifest(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte("[project]\nname='x'\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
+	f.onRun = func(name string, args ...string) string {
+		switch args[0] {
+		case "venv":
+			mkInterp(t, filepath.Join(root, ".venv"))
+		case "lock":
+			os.WriteFile(filepath.Join(root, "uv.lock"), []byte("version = 1\n"), 0o644)
+		}
+		return ""
+	}
+	env := createEnv(root, ".venv", f.run, f.look)().(EnvMsg)
+	if env.Err != nil {
+		t.Fatal(env.Err)
+	}
+	for _, call := range f.calls {
+		if strings.HasPrefix(call, "uv init") {
+			t.Fatalf("existing pyproject.toml must not be re-initialized: %v", f.calls)
+		}
+	}
+	if !strings.Contains(env.Label, "uv.lock") || strings.Contains(env.Label, "pyproject.toml") {
+		t.Fatalf("label = %q", env.Label)
+	}
+}
+
+// TestCreateEnvSkipsExistingLock: both files present — only the venv runs.
+func TestCreateEnvSkipsExistingLock(t *testing.T) {
+	root := t.TempDir()
+	for _, file := range []string{"pyproject.toml", "uv.lock"} {
+		if err := os.WriteFile(filepath.Join(root, file), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
+	f.onRun = func(name string, args ...string) string {
+		mkInterp(t, filepath.Join(root, ".venv"))
+		return ""
+	}
+	env := createEnv(root, ".venv", f.run, f.look)().(EnvMsg)
+	if env.Err != nil {
+		t.Fatal(env.Err)
+	}
+	if len(f.calls) != 1 || f.calls[0] != "uv venv "+filepath.Join(root, ".venv") {
+		t.Fatalf("calls = %v, want only the venv", f.calls)
+	}
+	if env.Label != "created "+filepath.Join(root, ".venv") {
+		t.Fatalf("label = %q", env.Label)
+	}
+}
+
+// TestCreateEnvFallbackNoScaffold: without uv, no scaffolding happens.
+func TestCreateEnvFallbackNoScaffold(t *testing.T) {
+	root := t.TempDir()
+	f := &fakeEnv{binaries: map[string]string{"python3": "/bin/python3"}}
+	f.onRun = func(string, ...string) string {
+		mkInterp(t, filepath.Join(root, ".venv"))
+		return ""
+	}
+	env := createEnv(root, ".venv", f.run, f.look)().(EnvMsg)
+	if env.Err != nil {
+		t.Fatal(env.Err)
+	}
+	if len(f.calls) != 1 || !strings.HasPrefix(f.calls[0], "python3 -m venv") {
+		t.Fatalf("calls = %v", f.calls)
+	}
+	if fileExists(filepath.Join(root, "pyproject.toml")) {
+		t.Fatal("fallback must not scaffold")
 	}
 }
