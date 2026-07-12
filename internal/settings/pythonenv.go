@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/pathcomplete"
 )
 
 // pythonenv.go is the Python environment management half of the toolchain
@@ -30,10 +32,14 @@ type EnvMsg struct {
 // envBusy is the in-flight marker the view shows while an action runs.
 const envBusy = "working…"
 
-// createEnv builds the async create-environment command for the project
-// root: uv when present, the stdlib venv module otherwise.
-func createEnv(root string, run runCommand, look lookPath) tea.Cmd {
-	venv := filepath.Join(root, ".venv")
+// createEnv builds the async create-environment command: uv when present,
+// the stdlib venv module otherwise. target is where the environment lands
+// (#547) — relative paths resolve against the project root, ~ expands.
+func createEnv(root, target string, run runCommand, look lookPath) tea.Cmd {
+	venv := pathcomplete.Expand(target)
+	if !filepath.IsAbs(venv) {
+		venv = filepath.Join(root, venv)
+	}
 	// Register an absolute interpreter path: the effective root is often "."
 	// and lang.Interpreter/server launches should not depend on the CWD.
 	if abs, err := filepath.Abs(venv); err == nil {

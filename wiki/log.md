@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- Venv target directory (#547): the toolchain page's create-environment
+  action (`n`) always built `<root>/.venv`. It now opens a path-completed
+  input pre-filled with `.venv`; relative targets resolve against the project
+  root, absolute and `~` targets are honored.
+
 - Ex cmdline path completion (#543): `tab` on `:e <partial>` / `:w <partial>`
   (also `:wq`/`:x`) extends the path argument via `internal/pathcomplete`;
   ambiguous matches render as a dim hint after the cursor and typing narrows

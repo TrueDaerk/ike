@@ -61,6 +61,12 @@ type ToolchainPage struct {
 	uvVersions []string
 	uvPick     int
 	envState   string
+
+	// Create-environment target input (#547): pre-filled with ".venv",
+	// path-completed, resolved against the project root on enter.
+	envInput   bool
+	envPath    string
+	envSuggest pathSuggest
 }
 
 // NewToolchainPage builds the page. restart may be nil (no LSP integration).
@@ -80,7 +86,9 @@ func (t *ToolchainPage) SetPalette(p *theme.Palette) { t.pal = p }
 
 // Capturing implements PageModel: the pickers and the custom-path input need
 // keys verbatim.
-func (t *ToolchainPage) Capturing() bool { return t.picking || t.custom || t.uvPicking }
+func (t *ToolchainPage) Capturing() bool {
+	return t.picking || t.custom || t.uvPicking || t.envInput
+}
 
 // Receive implements MsgReceiver: async version probes land in the cache,
 // environment results clear the busy marker.
@@ -139,6 +147,9 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.uvPicking {
 		return t.updateUvPicker(key)
 	}
+	if t.envInput {
+		return t.updateEnvInput(key)
+	}
 	switch key.String() {
 	case "up", "k":
 		if t.sel > 0 {
@@ -164,10 +175,11 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	case "n":
-		// Create a project environment (#132): uv venv, python -m venv fallback.
+		// Create a project environment (#132): uv venv, python -m venv
+		// fallback. The target directory is asked first (#547).
 		if l, ok := t.current(); ok && l.ID == "python" {
-			t.envState = envBusy
-			return createEnv(t.root, t.run, t.look)
+			t.envInput, t.envPath = true, ".venv"
+			t.envSuggest.clear()
 		}
 	case "u":
 		// Install a managed Python via uv (#132): pick from `uv python list`.
@@ -182,6 +194,37 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 				return nil
 			}
 			t.uvPicking, t.uvPick = true, 0
+		}
+	}
+	return nil
+}
+
+// updateEnvInput handles the create-environment target input (#547).
+func (t *ToolchainPage) updateEnvInput(key tea.KeyPressMsg) tea.Cmd {
+	switch key.Code {
+	case tea.KeyEscape:
+		t.envInput = false
+		t.envSuggest.clear()
+	case tea.KeyEnter:
+		target := strings.TrimSpace(t.envPath)
+		if target == "" {
+			target = ".venv"
+		}
+		t.envInput = false
+		t.envSuggest.clear()
+		t.envState = envBusy
+		return createEnv(t.root, target, t.run, t.look)
+	case tea.KeyTab:
+		t.envPath = t.envSuggest.complete(t.envPath)
+	case tea.KeyBackspace:
+		if t.envPath != "" {
+			t.envPath = t.envPath[:len(t.envPath)-1]
+			t.envSuggest.refresh(t.envPath)
+		}
+	default:
+		if key.Text != "" {
+			t.envPath += key.Text
+			t.envSuggest.refresh(t.envPath)
 		}
 	}
 	return nil
@@ -357,6 +400,11 @@ func (t *ToolchainPage) View(w, h int) string {
 				for _, s := range t.suggest.lines() {
 					list = append(list, sec.Render(s))
 				}
+			case t.envInput:
+				list = append(list, sec.Render("   create env at: "+t.envPath+"▌"))
+				for _, s := range t.envSuggest.lines() {
+					list = append(list, sec.Render(s))
+				}
 			case t.picking:
 				list = append(list, t.renderPicker()...)
 			case t.uvPicking:
@@ -386,6 +434,8 @@ func (t *ToolchainPage) footer(sec lipgloss.Style) []string {
 	switch {
 	case t.custom:
 		hint = " tab complete path · enter apply · esc cancel"
+	case t.envInput:
+		hint = " target directory (relative to project root) · tab complete · enter create · esc cancel"
 	case t.picking, t.uvPicking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
 	case l.ID == "python":
