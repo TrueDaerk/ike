@@ -172,3 +172,31 @@ func TestToolchainFooterPinned(t *testing.T) {
 		t.Fatalf("footer must stay pinned after a selection move:\n%s", strings.Join(lines, "\n"))
 	}
 }
+
+// TestDefaultCandidatesWellKnownDirs guards #538: languages without specific
+// discovery get PATH plus the well-known install directories as candidates.
+func TestDefaultCandidatesWellKnownDirs(t *testing.T) {
+	prev := wellKnownBinDirs
+	t.Cleanup(func() { wellKnownBinDirs = prev })
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "xlang")
+	if err := os.WriteFile(fake, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wellKnownBinDirs = []string{filepath.Join(dir, "missing"), dir}
+
+	// PATH miss: the well-known location is still offered.
+	got := defaultCandidates("xlang", func(string) string { return "" })
+	if len(got) != 1 || got[0] != fake {
+		t.Fatalf("candidates = %v, want [%s]", got, fake)
+	}
+	// PATH hit first, deduplicated against the same well-known path.
+	got = defaultCandidates("xlang", func(string) string { return fake })
+	if len(got) != 1 || got[0] != fake {
+		t.Fatalf("candidates must dedupe PATH vs well-known, got %v", got)
+	}
+	got = defaultCandidates("xlang", func(string) string { return "/elsewhere/xlang" })
+	if len(got) != 2 || got[0] != "/elsewhere/xlang" || got[1] != fake {
+		t.Fatalf("PATH must come first, got %v", got)
+	}
+}

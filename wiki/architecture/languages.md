@@ -112,8 +112,13 @@ e.g. the resolved `python.defaultInterpreterPath` reaches pyright.
 
 The **Python** detector (`plugins/languages/python/toolchain.go`) resolves the
 interpreter in priority order: active `$VIRTUAL_ENV` → project `.venv`/`venv` →
-`.python-version` (pyenv) → `python3` on `PATH`. Go relies on gopls reading
-`go.mod`; **PHP** ships a PATH/install-location detector (no server injection).
+`.python-version` (pyenv) → `python3` on `PATH`. **PHP** and **Go** ship
+PATH/install-location detectors (no server injection): PATH first, then the
+common install locations — for Go `/opt/homebrew/bin`, `/usr/local/bin`,
+`/usr/local/go/bin`, `/usr/bin` (#538), since a GUI-launched process often
+misses homebrew's bin on PATH. The toolchain settings page's generic
+interpreter picker probes the same well-known directories after PATH
+(`defaultCandidates` in `internal/settings/toolchain_discover.go`).
 
 ## File templates (#170)
 

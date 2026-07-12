@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Go interpreter detection (#538): the Toolchain page showed "(not found)"
+  for Go at /opt/homebrew/bin/go when PATH lacked it — the Go plugin had no
+  InterpreterDetector and the generic picker only did a PATH lookup. Go now
+  ships a PHP-style detector (PATH, then well-known install locations), and
+  the picker's default branch probes the same directories.
+
 - Custom settings pages footer (#537): Toolchain, Keymap and Language Servers
   rendered hints/details inline under the selected row (same jumpiness #535
   fixed on the schema pages) and never scrolled to follow the selection. A
