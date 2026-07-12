@@ -42,7 +42,10 @@ func TestKeymapPageListsEffectiveBindings(t *testing.T) {
 		}
 	}
 	// Blocked-ledger ids are shown disabled with their reason, not hidden.
-	if !strings.Contains(v, "✗") {
+	// The real ledger emptied with 0320 (#466), so the rendering is
+	// exercised through a stubbed entry.
+	defer keymap.StubBlockedForTest("vcs.commit", "unit-test dependency")()
+	if v := k.View(120, 80); !strings.Contains(v, "✗") {
 		t.Fatalf("blocked bindings must render disabled-with-reason:\n%s", v)
 	}
 }

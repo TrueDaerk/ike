@@ -240,6 +240,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
 			appCommand("vcs.commit", "Commit…", OpenCommitMsg{}),
+			appCommand("vcs.updateProject", "Update Project", UpdateProjectMsg{}),
+			appCommand("vcs.revertFile", "Revert File", RevertActiveFileMsg{}),
 		), scratchCommands()...),
 	}
 }
