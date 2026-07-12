@@ -169,6 +169,18 @@ func (m *Model) SetContents(left, right string) {
 	m.render()
 }
 
+// Retarget points the pane at a different comparison (#513): titles, paths,
+// per-side revisions, and editability swap; layout, context, and collapse
+// preferences stay. The caller feeds the new texts via SetContents and must
+// dismount any edit-mode editor first.
+func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, rightRev string, editable bool) {
+	m.leftTitle, m.rightTitle = leftTitle, rightTitle
+	m.leftPath, m.rightPath = leftPath, rightPath
+	m.leftRev, m.rightRev = leftRev, rightRev
+	m.editable = editable
+	m.editModeOn = false
+}
+
 // SetRevs records which revision backs each side ("" = a working-tree file),
 // for persistence (#508): a restored pane re-reads revision sides via git.
 func (m *Model) SetRevs(left, right string) { m.leftRev, m.rightRev = left, right }

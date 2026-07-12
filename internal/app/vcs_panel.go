@@ -80,6 +80,21 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 		m.setFocus(key)
 		return
 	}
+	short := msg.Hash
+	if len(short) > 7 {
+		short = short[:7]
+	}
+	name := filepath.Base(msg.Path)
+	// Single diff window (#513): retarget the existing pane.
+	if key, ok := m.diffSlot(); ok {
+		inst := m.panes.Get(key)
+		inst.StopDiffEdit()
+		inst.Diff().Retarget(name+" @ "+short+"^", name+" @ "+short, "", absPath, msg.Hash+"^", msg.Hash, false)
+		inst.Diff().SetContents(msg.Parent, msg.Content)
+		m.setFocus(key)
+		saveLayout(m.tree, m.panes)
+		return
+	}
 	target := m.activeEditorKey()
 	if target == "" {
 		target = m.panes.Focused()
@@ -87,16 +102,7 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 	if target == "" || m.tree == nil {
 		return
 	}
-	short := msg.Hash
-	if len(short) > 7 {
-		short = short[:7]
-	}
-	name := filepath.Base(msg.Path)
-	abs := msg.Path
-	if snap := m.vcs.snap; snap != nil {
-		abs = filepath.Join(snap.Root, filepath.FromSlash(msg.Path))
-	}
-	key := m.panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, abs)
+	key := m.panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, absPath)
 	m.panes.Get(key).Diff().SetRevs(msg.Hash+"^", msg.Hash)
 	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
 	if !ok {
