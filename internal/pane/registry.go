@@ -198,8 +198,22 @@ func (r *Registry) AddDiff(leftPath, rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
+}
+
+// applyDiffConfig threads the diff.context config key (0340, #494) into a
+// fresh diff instance; unset keeps the model's default.
+func (r *Registry) applyDiffConfig(inst *Instance) {
+	if r.cfg == nil {
+		return
+	}
+	if v, ok := r.cfg.Get("diff.context"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			inst.df.SetContext(n)
+		}
+	}
 }
 
 // AddVCS creates the singleton VCS tool window under VCSKey (Roadmap 0330)
@@ -225,6 +239,7 @@ func (r *Registry) AddDiffHead(rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, filepath.Base(rightPath)+" @ HEAD", filepath.Base(rightPath), rightPath, r.pal)
+	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
 }
@@ -239,6 +254,7 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, leftTitle, rightTitle, rightPath, r.pal)
+	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
 }
@@ -248,6 +264,7 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 func (r *Registry) AddDiffKey(key, leftPath, rightPath string) *Instance {
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	r.applyDiffConfig(inst)
 	r.put(inst)
 	r.advancePastDiff(key)
 	return inst
