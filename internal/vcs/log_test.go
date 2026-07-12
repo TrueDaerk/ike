@@ -84,6 +84,51 @@ func TestShowCmdFilesAndRename(t *testing.T) {
 	}
 }
 
+func TestShowCmdMergeCommitListsFirstParentFiles(t *testing.T) {
+	dir := historyRepo(t)
+	commit := func(msg string) {
+		gitIn(t, dir, "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-m", msg)
+	}
+	// Branch adds side.txt, main adds main.txt, then merge.
+	gitIn(t, dir, "checkout", "-b", "feature")
+	writeIn(t, dir, "side.txt", "s\n")
+	gitIn(t, dir, "add", "side.txt")
+	commit("side")
+	gitIn(t, dir, "checkout", "main")
+	writeIn(t, dir, "main.txt", "m\n")
+	gitIn(t, dir, "add", "main.txt")
+	commit("mainline")
+	gitIn(t, dir, "merge", "--no-ff", "-m", "merge feature", "feature")
+
+	root, _ := DetectRoot(dir)
+	log := LogCmd(root, 0, 1)().(LogMsg)
+	if log.Entries[0].Subject != "merge feature" {
+		t.Fatalf("setup: head = %q", log.Entries[0].Subject)
+	}
+	show := ShowCmd(root, log.Entries[0].Hash)().(ShowMsg)
+	if show.Err != nil {
+		t.Fatalf("show: %v", show.Err)
+	}
+	// Against the FIRST parent the merge brings in side.txt (#489); plain
+	// `git show --name-status` would list nothing here.
+	if len(show.Files) != 1 || show.Files[0].Path != "side.txt" || show.Files[0].Status != StatusAdded {
+		t.Fatalf("merge files = %+v", show.Files)
+	}
+}
+
+func TestShowCmdRootCommitDiffsEmptyTree(t *testing.T) {
+	dir := testRepo(t) // single "init" commit adding f.txt
+	root, _ := DetectRoot(dir)
+	log := LogCmd(root, 0, 1)().(LogMsg)
+	show := ShowCmd(root, log.Entries[0].Hash)().(ShowMsg)
+	if show.Err != nil {
+		t.Fatalf("show: %v", show.Err)
+	}
+	if len(show.Files) != 1 || show.Files[0].Path != "f.txt" || show.Files[0].Status != StatusAdded {
+		t.Fatalf("root files = %+v", show.Files)
+	}
+}
+
 func TestFileAtCmdSides(t *testing.T) {
 	dir := historyRepo(t)
 	root, _ := DetectRoot(dir)

@@ -95,30 +95,54 @@ type ShowMsg struct {
 	Err   error
 }
 
-// ShowCmd loads one commit's metadata and changed files.
+// emptyTree is git's well-known empty-tree object id: the diff base for a
+// root commit, which has no parent to diff against.
+const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
+// ShowCmd loads one commit's metadata and changed files. The file list diffs
+// against the FIRST parent explicitly — `git show --name-status` prints no
+// files at all for merge commits (#489), which read as a dead expansion in
+// the log view.
 func ShowCmd(root, hash string) tea.Cmd {
 	return func() tea.Msg {
-		out, err := runGit(root, "show", "--name-status", "--format="+logFormat+"%x1e%b%x1e", hash)
+		meta, err := runGit(root, "show", "-s", "--format="+logFormat+"%x1e%b", hash)
 		if err != nil {
 			return ShowMsg{Err: err}
 		}
-		return parseShow(out)
+		msg := parseShowMeta(meta)
+		if msg.Err != nil {
+			return msg
+		}
+		base := hash + "^"
+		if _, err := runGit(root, "rev-parse", "--verify", "--quiet", base+"^{commit}"); err != nil {
+			base = emptyTree // root commit
+		}
+		files, err := runGit(root, "diff", "--name-status", "-M", base, hash)
+		if err != nil {
+			return ShowMsg{Err: err}
+		}
+		msg.Files = parseNameStatus(files)
+		return msg
 	}
 }
 
-// parseShow decodes ShowCmd output: the header line, the record-separated
-// body, then the name-status file list.
-func parseShow(out []byte) ShowMsg {
-	parts := strings.SplitN(string(out), "\x1e", 3)
-	if len(parts) != 3 {
+// parseShowMeta decodes the header + record-separated body of ShowCmd.
+func parseShowMeta(out []byte) ShowMsg {
+	parts := strings.SplitN(string(out), "\x1e", 2)
+	if len(parts) != 2 {
 		return ShowMsg{Err: errMalformedShow}
 	}
 	entries := parseLog([]byte(parts[0]))
 	if len(entries) != 1 {
 		return ShowMsg{Err: errMalformedShow}
 	}
-	msg := ShowMsg{Entry: entries[0], Body: strings.TrimSpace(parts[1])}
-	for _, line := range strings.Split(parts[2], "\n") {
+	return ShowMsg{Entry: entries[0], Body: strings.TrimSpace(parts[1])}
+}
+
+// parseNameStatus decodes `git diff --name-status` lines.
+func parseNameStatus(out []byte) []CommitFile {
+	var files []CommitFile
+	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Split(strings.TrimRight(line, "\r"), "\t")
 		if len(f) < 2 || f[0] == "" {
 			continue
@@ -128,9 +152,9 @@ func parseShow(out []byte) ShowMsg {
 			// name-status renames list "R<score>\told\tnew".
 			cf.OldPath, cf.Path = f[1], f[2]
 		}
-		msg.Files = append(msg.Files, cf)
+		files = append(files, cf)
 	}
-	return msg
+	return files
 }
 
 // statusFromLetter maps one name-status letter onto the shared FileStatus.

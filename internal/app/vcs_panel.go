@@ -65,10 +65,15 @@ func (m Model) vcsPanelLogReload() tea.Cmd {
 	return nil
 }
 
-// openCommitDiffPane splits the focused leaf with one commit file's diff
-// against the commit's parent (0330, #484).
+// openCommitDiffPane splits the editor area with one commit file's diff
+// against the commit's parent (0330, #484). The editor area is the target —
+// splitting the focused leaf would carve a sliver out of the bottom tool
+// window the request came from (#489).
 func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
-	target := m.panes.Focused()
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
 	if target == "" || m.tree == nil {
 		return
 	}

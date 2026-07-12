@@ -172,11 +172,17 @@ func TestVCSPanelLogRouting(t *testing.T) {
 	if !strings.Contains(stripped(m), "one") {
 		t.Fatal("log entry missing from the panel")
 	}
+	panelW := m.lay.Panes[pane.VCSKey].W
 	out, _ = m.Update(vcs.FileAtMsg{Hash: strings.Repeat("a", 40), Path: "f.txt", Parent: "v1\n", Content: "v2\n"})
 	m = out.(Model)
 	inst := m.panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindDiff || inst.Diff().HunkCount() != 1 {
 		t.Fatalf("commit diff pane not opened (focus=%v)", m.panes.Focused())
+	}
+	// The diff splits the editor area, never the bottom tool window (#489):
+	// the panel keeps its full width.
+	if got := m.lay.Panes[pane.VCSKey].W; got != panelW {
+		t.Fatalf("panel width %d → %d: diff carved the tool window", panelW, got)
 	}
 }
 
