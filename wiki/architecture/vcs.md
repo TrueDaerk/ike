@@ -59,6 +59,7 @@ path (`space g` belongs to grep):
 | `vcs.commit` | `cmd+k` / `space v c` | Commit dialog (`internal/commitui`): changed files with `[x]/[~]/[ ]` stage toggles (space), message pane (tab), `ctrl+s` commits, esc keeps the in-progress message; disabled-commit hints. |
 | `vcs.updateProject` | `cmd+t` / `space v u` | `git pull` (merge, or rebase via config `vcs.update = "rebase"`); dirty tree blocks with a warning; summary toast (commits/files). |
 | `vcs.revertFile` | `cmd+shift+t` / `space v x` | Restore the focused file to HEAD behind a confirmation prompt showing the changed-line count; buffer reloads. |
+| `vcs.revertHunk` | `space v h` | JetBrains "Rollback Lines": restore the contiguous change under the caret (the gutter-marked region, deletion anchors included) to its HEAD content. Applied as one buffer edit through the undo tree — plain undo brings the hunk back; works against unsaved edits too (`internal/editor/vcs_revert.go`). |
 | `vcs.branches` | `space v b` | Palette picker of local branches (current first), checkout on select. |
 | `vcs.diff` | `space v d` | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
 | `vcs.blameLine` | `space v a` | Toggle the inline blame annotation. |

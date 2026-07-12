@@ -23,6 +23,9 @@ type UpdateProjectMsg struct{}
 // RevertActiveFileMsg starts the vcs.revertFile flow for the focused editor.
 type RevertActiveFileMsg struct{}
 
+// RevertHunkMsg starts the vcs.revertHunk flow (#555) for the focused editor.
+type RevertHunkMsg struct{}
+
 // updateProject validates and launches the pull.
 func (m Model) updateProject() (tea.Model, tea.Cmd) {
 	snap := m.vcs.snap
@@ -71,6 +74,45 @@ func (m Model) revertActiveFile() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, vcs.RevertInfoCmd(snap.Root, path)
+}
+
+// revertActiveHunk validates the focused file and fetches the HEAD blob the
+// editor needs to resolve the hunk under the caret (#555). Unlike the file
+// revert it works against the live buffer, so unsaved edits count too — the
+// editor reports when the caret sits outside any change.
+func (m Model) revertActiveHunk() (tea.Model, tea.Cmd) {
+	snap := m.vcs.snap
+	if snap == nil {
+		m.host.Notify(host.Info, "not a git repository")
+		return m, nil
+	}
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "no file to revert")
+		return m, nil
+	}
+	if snap.Status(ed.Path()) == vcs.StatusUntracked {
+		m.host.Notify(host.Warn, "untracked file — there is no committed version to revert to")
+		return m, nil
+	}
+	return m, vcs.RevertHunkHeadCmd(snap.Root, ed.Path())
+}
+
+// applyRevertHunk lands the fetched HEAD blob in the focused editor.
+func (m Model) applyRevertHunk(msg vcs.RevertHunkHeadMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		m.host.Notify(host.Error, "revert hunk: "+msg.Err.Error())
+		return m, nil
+	}
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() || ed.Path() != msg.Path {
+		return m, nil // focus moved away while the blob was fetched
+	}
+	if !ed.RevertHunkUnderCursor(msg.Head) {
+		m.host.Notify(host.Info, "no change under the caret")
+		return m, nil
+	}
+	return m, m.vcsMarksCmd(ed)
 }
 
 // openRevertPrompt shows the destructive-action confirmation with the line

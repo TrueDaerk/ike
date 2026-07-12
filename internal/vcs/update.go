@@ -80,6 +80,22 @@ func RevertInfoCmd(root, path string) tea.Cmd {
 	}
 }
 
+// RevertHunkHeadMsg carries the HEAD blob backing a vcs.revertHunk run
+// (#555); the editor diffs it against the live buffer to find the hunk.
+type RevertHunkHeadMsg struct {
+	Path string
+	Head string
+	Err  error
+}
+
+// RevertHunkHeadCmd fetches the HEAD blob of path for a hunk revert.
+func RevertHunkHeadCmd(root, path string) tea.Cmd {
+	return func() tea.Msg {
+		head, err := HeadContent(root, path)
+		return RevertHunkHeadMsg{Path: path, Head: head, Err: err}
+	}
+}
+
 // RevertDoneMsg reports a finished vcs.revertFile run.
 type RevertDoneMsg struct {
 	Path string

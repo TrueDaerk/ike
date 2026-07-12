@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- `vcs.revertHunk` (#555): JetBrains "Rollback Lines" — the contiguous change
+  under the caret (matching the gutter diff markers, deletion anchors
+  included) reverts to its HEAD content as a single undo-tree edit, so plain
+  editor undo restores it. Leader `space v h`.
+
 - Custom-page footer wrap (#553): the Toolchain/Keymap/Language-Servers
   footer hints were single clipped lines (narrow windows showed "· u u" for
   "u uv install"). A shared `wrapFooter` helper word-wraps footer lines to
