@@ -125,6 +125,12 @@ type TerminalToggleMsg struct{}
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
 
+// MarkdownPreviewMsg asks the root model to open a rendered markdown preview
+// pane split right of the active editor, bound to its markdown buffer (#62).
+// With a preview for the buffer already open it focuses that pane instead.
+// Dispatched by markdown.preview.
+type MarkdownPreviewMsg struct{}
+
 // ToggleExplorerFocusMsg asks the root model to move focus to the explorer, or
 // back to the active editor when the explorer already holds focus (the
 // terminal approximation of JetBrains' Cmd+1 tool-window toggle). Dispatched
@@ -204,6 +210,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
+			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),

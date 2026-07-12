@@ -2,6 +2,16 @@
 
 ## 2026-07-12
 
+- Markdown preview pane (#62): new `internal/preview` package rendering
+  markdown buffers to ANSI via glamour, split beside the editor as a fourth
+  `pane.Kind`. `markdown.preview` command (`cmd+k m`, leader `space P`,
+  palette) opens it; edits re-render debounced (200ms) off the shared-document
+  sync seam; the preview follows the editor cursor via heading anchors;
+  styling maps the active palette (dark/light + accent/info slots); layout
+  persistence restores previews from disk. New concept doc
+  [Markdown Preview](/architecture/markdown-preview.md); keybindings matrix
+  gains the `markdown.preview` row.
+
 - EditorConfig support (#63): new `internal/editorconfig` package (spec
   parsing, glob matching with `**`/`{a,b}`/`{n1..n2}`, upward search stopped
   by `root = true`, per-directory cache invalidated via the file watcher).

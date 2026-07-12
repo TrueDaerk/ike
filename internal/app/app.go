@@ -40,6 +40,7 @@ import (
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
+	"ike/internal/preview"
 	"ike/internal/plugin"
 	"ike/internal/project"
 	"ike/internal/registry"
@@ -495,6 +496,13 @@ func (e editorEmitter) Emit(ev editor.Event) {
 	if ev.Kind == editor.EventSave && e.watcher != nil {
 		e.watcher.MarkSaved(ev.Path)
 	}
+	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
+		// Markdown previews follow the cursor (#62). Same goroutine indirection
+		// as the SyncMsg below: Emit runs inside Update, so a direct send into
+		// the program's own loop would deadlock. The handler is a cheap no-op
+		// when no preview pane is bound to the path.
+		go e.host.Send(preview.CursorMsg{Path: ev.Path, Line: ev.Line})
+	}
 	if ev.Kind == editor.EventChange || ev.Kind == editor.EventSave {
 		// Shared documents (#142): tell the other views of this file that the
 		// document changed. Emit runs synchronously inside Update, and sending
@@ -554,6 +562,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			explorers++
 		} else if ids[key].Kind == "terminal" {
 			continue // restored below as a fresh shell in the saved position (#96)
+		} else if ids[key].Kind == "markdown" {
+			continue // restored below re-reading the source file (#62)
 		} else if !isEditorKey(key) {
 			return // unknown leaf kind / malformed key: fall back to default
 		}
@@ -600,6 +610,16 @@ func (m *Model) restoreLayout(cfg host.Config) {
 				shell = v
 			}
 			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
+			continue
+		}
+		if id := ids[key]; id.Kind == "markdown" {
+			// A preview restores from the file on disk (#62); live re-binding to
+			// an editor buffer resumes with the first change event. A vanished
+			// file restores as an empty preview rather than breaking the layout.
+			inst := panes.AddMarkdownKey(key, id.Path)
+			if data, err := os.ReadFile(id.Path); err == nil {
+				inst.Preview().SetSourceImmediate(string(data))
+			}
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -1190,6 +1210,64 @@ func (m *Model) openTerminal() {
 	saveLayout(m.tree, m.panes)
 }
 
+// openMarkdownPreview opens a rendered preview pane for the active editor's
+// markdown buffer, split to its right (#62). The editor keeps focus — the
+// preview follows the typing, it does not receive it. A preview already bound
+// to the buffer is focused instead of duplicated; a non-markdown buffer is a
+// no-op with a toast.
+func (m *Model) openMarkdownPreview() {
+	target := m.activeEditorKey()
+	if target == "" || m.tree == nil {
+		m.host.Notify(host.Info, "markdown preview needs an open markdown file")
+		return
+	}
+	ed := m.panes.Get(target).Editor()
+	if ed == nil || !ed.HasFile() || !isMarkdownPath(ed.Path()) {
+		m.host.Notify(host.Info, "markdown preview needs an open markdown file")
+		return
+	}
+	path := ed.Path()
+	for _, key := range m.panes.Keys() {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
+			m.setFocus(key)
+			return
+		}
+	}
+	key := m.panes.AddMarkdownPreview(path)
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	if !ok {
+		m.panes.Close(key)
+		return
+	}
+	m.tree = tree
+	m.layout()
+	pv := m.panes.Get(key).Preview()
+	pv.SetSourceImmediate(ed.Text())
+	line, _ := ed.CursorPos()
+	pv.SetCursorLine(line)
+	saveLayout(m.tree, m.panes)
+}
+
+// isMarkdownPath reports whether path names a markdown document.
+func isMarkdownPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown", ".mdown", ".mkd":
+		return true
+	}
+	return false
+}
+
+// previewsForPath returns every markdown preview instance bound to path.
+func (m Model) previewsForPath(path string) []*pane.Instance {
+	var out []*pane.Instance
+	for _, key := range m.panes.Keys() {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
+			out = append(out, inst)
+		}
+	}
+	return out
+}
+
 // explorer returns the singleton explorer model.
 func (m Model) explorer() *explorer.Model {
 	return m.panes.Get(pane.ExplorerKey).Explorer()
@@ -1572,6 +1650,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openTerminal()
 		return m, nil
 
+	case MarkdownPreviewMsg:
+		// markdown.preview (cmd+k m / palette): split the active editor with a
+		// rendered live preview of its markdown buffer (#62).
+		m.openMarkdownPreview()
+		return m, nil
+
+	case preview.RenderTickMsg:
+		// A preview's debounce timer fired: route it to the owning pane, which
+		// renders only when the tick is still the newest one.
+		if inst := m.panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindMarkdown {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
+	case preview.CursorMsg:
+		// The source editor's cursor moved: scroll every preview of the buffer
+		// to follow (#62).
+		for _, inst := range m.previewsForPath(msg.Path) {
+			inst.Preview().SetCursorLine(msg.Line)
+		}
+		return m, nil
+
 	case TerminalToggleMsg:
 		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
 		// machine — create, focus, or return focus (#97).
@@ -1781,6 +1881,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		for _, key := range m.editorKeysForPath(msg.Path) {
 			if cmd := m.panes.Get(key).UpdateForPath(msg.Path, skip, msg); cmd != nil {
 				cmds = append(cmds, cmd)
+			}
+		}
+		// Markdown previews of the document re-render debounced off the same
+		// seam (#62), pulling the text fresh from the originating editor.
+		if previews := m.previewsForPath(msg.Path); len(previews) > 0 {
+			src := skip
+			if src == nil {
+				if key := m.editorWithFile(msg.Path); key != "" {
+					src = m.panes.Get(key).EditorForPath(msg.Path)
+				}
+			}
+			if src != nil {
+				text := src.Text()
+				line, _ := src.CursorPos()
+				for _, inst := range previews {
+					if cmd := inst.Preview().SetSource(text); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
+					inst.Preview().SetCursorLine(line)
+				}
 			}
 		}
 		return m, tea.Batch(cmds...)
@@ -3221,6 +3341,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				m.explorer().ScrollBy(wheelLines)
 			}
+		case pane.KindMarkdown:
+			// The wheel scrolls the rendered document (#62); the next cursor
+			// move in the source editor re-syncs the view.
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Preview().ScrollBy(-wheelLines)
+			case tea.MouseWheelDown:
+				inst.Preview().ScrollBy(wheelLines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -4012,6 +4141,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			}
 		case pane.KindTerminal:
 			title, content = m.terminalTitle(inst), inst.View()
+		case pane.KindMarkdown:
+			title, content = "PREVIEW "+baseName(inst.Preview().Path()), inst.View()
 		}
 	}
 

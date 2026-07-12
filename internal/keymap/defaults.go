@@ -155,6 +155,9 @@ var jetbrainsRows = []row{
 	// select-all-occurrences chord (the JetBrains original needs alt).
 	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},
 	{"ctrl+shift+g", "editor.caret.addAll", "Add carets at all occurrences", Editor, "Multi-caret (#145)"},
+	// Rendered markdown preview (#62): the cmd+k leader keeps it off fragile
+	// alt chords; the palette remains the universal route.
+	{"cmd+k m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	{"cmd+k shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
 	{"cmd+k shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)"},

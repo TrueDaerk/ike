@@ -254,6 +254,8 @@ func (m Model) statusLine() string {
 			if !t.Running() {
 				left += " [exited]"
 			}
+		case pane.KindMarkdown:
+			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
 		default:
 			left += "EXPLORER"
 		}

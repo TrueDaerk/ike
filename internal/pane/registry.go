@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/preview"
 	"ike/internal/terminal"
 	"ike/internal/theme"
 )
@@ -20,6 +21,9 @@ const editorKeyBase = "editor"
 // terminalKeyBase is the key of the first terminal; later ones append ":N".
 const terminalKeyBase = "terminal"
 
+// previewKeyBase is the key of the first markdown preview; later ones append ":N".
+const previewKeyBase = "preview"
+
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
 // editors are allocated monotonic keys ("editor", "editor:2", "editor:3", …)
@@ -33,6 +37,7 @@ type Registry struct {
 	focused   string   // key of the focused instance
 	editors   int      // count of editors ever allocated, for key minting
 	terminals int      // count of terminals ever allocated, for key minting
+	previews  int      // count of markdown previews ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -145,6 +150,44 @@ func (r *Registry) AdoptTerminal(inst *Instance) (tookOver bool) {
 	r.put(inst)
 	r.advancePastTerminal(inst.Key())
 	return false
+}
+
+// AddMarkdownPreview creates a markdown preview instance bound to the source
+// buffer at path, returning the new instance's key ("preview", then
+// "preview:N"). Content arrives afterwards via the preview model's setters.
+func (r *Registry) AddMarkdownPreview(path string) string {
+	r.previews++
+	key := previewKeyBase
+	if r.previews > 1 {
+		key = previewKeyBase + ":" + strconv.Itoa(r.previews)
+	}
+	inst := &Instance{key: key, kind: KindMarkdown, cfg: r.cfg, pal: r.pal}
+	inst.md = preview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddMarkdownKey recreates a markdown preview under an exact key, used by
+// layout restore. The minting counter advances past the key.
+func (r *Registry) AddMarkdownKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindMarkdown, cfg: r.cfg, pal: r.pal}
+	inst.md = preview.New(key, path, r.pal)
+	r.put(inst)
+	r.advancePastPreview(key)
+	return inst
+}
+
+// advancePastPreview bumps the preview counter past key's numeric suffix.
+func (r *Registry) advancePastPreview(key string) {
+	n := 1
+	if len(key) > len(previewKeyBase)+1 && key[:len(previewKeyBase)+1] == previewKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(previewKeyBase)+1:]); err == nil {
+			n = v
+		}
+	}
+	if n > r.previews {
+		r.previews = n
+	}
 }
 
 // advancePastTerminal bumps the terminal counter past key's numeric suffix.
