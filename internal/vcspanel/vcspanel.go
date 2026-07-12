@@ -34,11 +34,27 @@ type Model struct {
 	tab     Tab
 
 	snap *vcs.Snapshot // shared status snapshot; nil = not a git repo
+
+	// Changes view (#483): the staging rows plus the message draft shared
+	// with the modal commit dialog.
+	chRows   []Row
+	chCursor int
+	chTop    int
+	msgFocus bool
+	draft    *vcs.MessageDraft
 }
 
 // New returns a closed-over-nothing panel showing the Changes tab.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal}
+	return Model{pal: pal, draft: &vcs.MessageDraft{}}
+}
+
+// SetDraft swaps in the shared commit message draft (#483) so the panel and
+// the modal dialog edit the same text.
+func (m *Model) SetDraft(d *vcs.MessageDraft) {
+	if d != nil {
+		m.draft = d
+	}
 }
 
 // SetSize records the interior content size.
@@ -51,8 +67,11 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
 // SetVCS threads the current status snapshot in; the root model calls it on
-// every refresh, mirroring the explorer.
-func (m *Model) SetVCS(snap *vcs.Snapshot) { m.snap = snap }
+// every refresh, mirroring the explorer. The Changes rows re-derive from it.
+func (m *Model) SetVCS(snap *vcs.Snapshot) {
+	m.snap = snap
+	m.rebuildChanges()
+}
 
 // ActiveTab reports the visible view (tests).
 func (m *Model) ActiveTab() Tab { return m.tab }
@@ -76,8 +95,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 // handleKey drives the tab header; view-specific keys land in the active
-// view's handler.
+// view's handler. While the message field holds focus every key belongs to
+// it — the tab-switch digits must stay typeable.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.tab == TabChanges && m.msgFocus {
+		return m.updateChanges(msg)
+	}
 	switch msg.String() {
 	case "1":
 		m.tab = TabChanges

@@ -9,6 +9,7 @@ import (
 	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/vcs"
+	"ike/internal/vcspanel"
 )
 
 func TestBranchModeRanksCurrentFirst(t *testing.T) {
@@ -107,6 +108,43 @@ func TestVCSPanelToggleLifecycle(t *testing.T) {
 	m = out.(Model)
 	if !strings.Contains(stripped(m), "⎇ dev") {
 		t.Fatal("panel header should carry the refreshed branch")
+	}
+}
+
+func TestVCSPanelSharesDraftWithDialog(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main",
+		Entries: []vcs.FileEntry{{Path: "a.go", Status: vcs.StatusModified, X: 'M', Y: '.'}}}
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+
+	// Type a message in the panel; the modal dialog sees the same draft.
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	m = out.(Model)
+	for _, r := range "wip" {
+		out, _ = m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = out.(Model)
+	}
+	if m.commitUI.Message() != "wip" {
+		t.Fatalf("dialog draft = %q, want the panel's text", m.commitUI.Message())
+	}
+
+	// Panel commit request routes to git; a successful commit clears the
+	// shared draft for both entry points.
+	out, cmd := m.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("panel ctrl+s must submit")
+	}
+	if _, ok := cmd().(vcspanel.SubmitMsg); !ok {
+		t.Fatalf("submit msg = %T", cmd())
+	}
+	out, _ = m.Update(vcs.CommitDoneMsg{Hash: "abc", Summary: "wip"})
+	m = out.(Model)
+	if m.commitUI.Message() != "" || m.vcs.draft.Text != "" {
+		t.Fatal("commit success must clear the shared draft")
 	}
 }
 

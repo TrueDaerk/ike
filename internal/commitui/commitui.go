@@ -43,11 +43,10 @@ type Model struct {
 	cursor int
 	top    int
 
-	// message is the in-progress commit message; it survives Close/Open and
-	// clears only on ClearMessage (successful commit). msgFocus routes typing
-	// into the message pane; msgPos is the rune cursor.
-	message  string
-	msgPos   int
+	// draft is the shared in-progress commit message (0330, #483): the VCS
+	// tool window edits the same draft, and it clears only on ClearMessage
+	// (successful commit). msgFocus routes typing into the message pane.
+	draft    *vcs.MessageDraft
 	msgFocus bool
 
 	width, height int
@@ -55,7 +54,7 @@ type Model struct {
 }
 
 // New returns a closed dialog.
-func New() *Model { return &Model{} }
+func New() *Model { return &Model{draft: &vcs.MessageDraft{}} }
 
 // SetPalette threads the active theme in.
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
@@ -102,11 +101,19 @@ func (m *Model) Close() { m.open = false }
 // IsOpen reports whether the dialog is shown.
 func (m *Model) IsOpen() bool { return m.open }
 
+// SetDraft swaps the backing message store for the shared draft (0330,
+// #483), so the dialog and the VCS tool window edit the same text.
+func (m *Model) SetDraft(d *vcs.MessageDraft) {
+	if d != nil {
+		m.draft = d
+	}
+}
+
 // ClearMessage drops the retained commit message (after a successful commit).
-func (m *Model) ClearMessage() { m.message, m.msgPos = "", 0 }
+func (m *Model) ClearMessage() { m.draft.Clear() }
 
 // Message exposes the in-progress message (tests).
-func (m *Model) Message() string { return m.message }
+func (m *Model) Message() string { return m.draft.Text }
 
 // stagedCount counts the rows that would land in the commit.
 func (m *Model) stagedCount() int {
@@ -124,7 +131,7 @@ func (m *Model) canCommit() (bool, string) {
 	if m.stagedCount() == 0 {
 		return false, "nothing staged — space toggles a file"
 	}
-	if strings.TrimSpace(m.message) == "" {
+	if strings.TrimSpace(m.draft.Text) == "" {
 		return false, "commit message is empty"
 	}
 	return true, ""
@@ -143,7 +150,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if ok, hint := m.canCommit(); !ok {
 			return func() tea.Msg { return HintMsg{Text: "cannot commit: " + hint} }
 		}
-		message := m.message
+		message := m.draft.Text
 		return func() tea.Msg { return SubmitMsg{Message: message} }
 	}
 	if m.msgFocus {
@@ -179,33 +186,6 @@ func (m *Model) updateList(msg tea.KeyPressMsg) tea.Cmd {
 
 // updateMessage handles keys while the message pane has focus.
 func (m *Model) updateMessage(msg tea.KeyPressMsg) tea.Cmd {
-	runes := []rune(m.message)
-	switch msg.String() {
-	case "enter":
-		m.message = string(runes[:m.msgPos]) + "\n" + string(runes[m.msgPos:])
-		m.msgPos++
-	case "backspace":
-		if m.msgPos > 0 {
-			m.message = string(runes[:m.msgPos-1]) + string(runes[m.msgPos:])
-			m.msgPos--
-		}
-	case "left":
-		if m.msgPos > 0 {
-			m.msgPos--
-		}
-	case "right":
-		if m.msgPos < len(runes) {
-			m.msgPos++
-		}
-	case "home":
-		m.msgPos = 0
-	case "end":
-		m.msgPos = len(runes)
-	default:
-		if t := msg.Text; t != "" && !strings.ContainsAny(t, "\x00") {
-			m.message = string(runes[:m.msgPos]) + t + string(runes[m.msgPos:])
-			m.msgPos += len([]rune(t))
-		}
-	}
+	m.draft.Edit(msg)
 	return nil
 }
