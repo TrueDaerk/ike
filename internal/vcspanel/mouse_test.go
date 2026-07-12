@@ -2,6 +2,7 @@ package vcspanel
 
 import (
 	"testing"
+	"time"
 
 	"ike/internal/vcs"
 )
@@ -52,6 +53,46 @@ func TestClickLogSelectAndActivate(t *testing.T) {
 	// Column-header click is inert.
 	if cmd := m.Click(5, 1); cmd != nil {
 		t.Fatal("header click must be inert")
+	}
+}
+
+func TestSlowSecondClickOnlySelects(t *testing.T) {
+	m := changesPanel()
+	clock := time.Now()
+	m.now = func() time.Time { return clock }
+
+	if cmd := m.Click(10, 1); cmd != nil {
+		t.Fatal("first click must only select")
+	}
+	// Second click outside the window: still just a selection.
+	clock = clock.Add(doubleClickWindow + time.Millisecond)
+	if cmd := m.Click(10, 1); cmd != nil {
+		t.Fatal("slow second click must not open the diff")
+	}
+	// Third click inside the window completes the double-click.
+	clock = clock.Add(100 * time.Millisecond)
+	cmd := m.Click(10, 1)
+	if cmd == nil {
+		t.Fatal("fast second click must activate")
+	}
+	if od, ok := cmd().(OpenDiffMsg); !ok || od.Path != "a.go" {
+		t.Fatalf("activate = %#v", cmd())
+	}
+
+	// Log rows use the same window.
+	m.Click(16, 0) // switch to Log (resets nothing relevant)
+	m.ApplyLog(vcs.LogMsg{Entries: entries("one")})
+	clock = clock.Add(time.Second)
+	if cmd := m.Click(5, 2); cmd != nil {
+		t.Fatal("log first click must only select")
+	}
+	clock = clock.Add(doubleClickWindow * 2)
+	if cmd := m.Click(5, 2); cmd != nil {
+		t.Fatal("slow log second click must not activate")
+	}
+	clock = clock.Add(50 * time.Millisecond)
+	if cmd := m.Click(5, 2); cmd == nil {
+		t.Fatal("fast log second click must activate")
 	}
 }
 

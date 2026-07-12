@@ -8,6 +8,7 @@ package vcspanel
 
 import (
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -43,6 +44,14 @@ type Model struct {
 	msgFocus bool
 	draft    *vcs.MessageDraft
 
+	// Double-click detection (#514): activating a row (diff / expand) needs
+	// a second click on the same row within doubleClickWindow; now is
+	// injectable so tests control the clock.
+	lastClickTab Tab
+	lastClickRow int
+	lastClickAt  time.Time
+	now          func() time.Time
+
 	// Log view (#484): windowed history, flattened with the expanded
 	// commit's files; loaded lazily through the root model.
 	logEntries   []vcs.LogEntry
@@ -58,7 +67,7 @@ type Model struct {
 
 // New returns a closed-over-nothing panel showing the Changes tab.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, draft: &vcs.MessageDraft{}}
+	return Model{pal: pal, draft: &vcs.MessageDraft{}, lastClickRow: -1, now: time.Now}
 }
 
 // SetDraft swaps in the shared commit message draft (#483) so the panel and
