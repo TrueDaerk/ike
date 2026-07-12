@@ -245,6 +245,7 @@ type Model struct {
 	tabWidth           int
 	useSpaces          bool
 	autoIndent         bool
+	autoClosePairs     bool
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
@@ -363,6 +364,7 @@ func (m *Model) applyConfig() {
 	}
 	m.useSpaces = boolOr(m.cfg, "editor.use_spaces", m.useSpaces)
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
+	m.autoClosePairs = boolOr(m.cfg, "editor.auto_close_pairs", m.autoClosePairs)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)

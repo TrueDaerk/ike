@@ -20,6 +20,7 @@ func defaults() *Config {
 			Wrap:                   false,
 			ScrollOff:              3,
 			AutoIndent:             true,
+			AutoClosePairs:         true,
 			TrimTrailingWhitespace: true,
 			InsertFinalNewline:     true,
 			Editorconfig:           true,

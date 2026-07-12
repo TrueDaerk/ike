@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- Auto-closing bracket pairs (#517): typing `(`/`[`/`{` in insert mode inserts
+  the matching closer with the cursor between (only when before EOL,
+  whitespace, or a closer), typing a closer at the cursor skips over it, and
+  backspace inside an empty pair deletes both runes. New setting
+  `editor.auto_close_pairs` (default on), per-caret, all file types.
 - Diff viewer v2 (Epic 0340, #493): collapsed context with expandable gaps
   (`c`/`o`, config `diff.context`), F7/shift+F7 change navigation
   (diff-scoped bindings), and an editable current side for worktree-backed
