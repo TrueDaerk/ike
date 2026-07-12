@@ -125,6 +125,41 @@ func TestLogReloadResetsAndErrors(t *testing.T) {
 	}
 }
 
+func TestLogTableColumns(t *testing.T) {
+	m := logPanel()
+	m.Update(key("2"))
+	m.ApplyLog(vcs.LogMsg{Entries: []vcs.LogEntry{{
+		Hash:      strings.Repeat("a", 40),
+		ShortHash: "aaaa000",
+		Author:    "Alice Wonderland Extra Long",
+		Time:      time.Now().Add(-2 * time.Hour),
+		Subject:   "feat: table",
+	}}})
+	v := ansi.Strip(m.View())
+	// Header row + aligned cells; the over-long author clips with ellipsis.
+	for _, want := range []string{"Commit", "Subject", "Author", "Date", "▸ aaaa000", "feat: table", "2 hours ago"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("table missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "Alice Wonderland Extra Long") {
+		t.Fatal("author must clip to its column")
+	}
+	if !strings.Contains(v, "Alice Wonderl…") {
+		t.Fatalf("clipped author cell missing:\n%s", v)
+	}
+
+	// Narrow panel: date, then author drop; the subject survives.
+	m.SetSize(46, 14)
+	v = ansi.Strip(m.View())
+	if strings.Contains(v, "Date") {
+		t.Fatalf("narrow panel should drop the date column:\n%s", v)
+	}
+	if !strings.Contains(v, "feat: table") {
+		t.Fatal("subject must survive narrow widths")
+	}
+}
+
 type fakeErr struct{}
 
 func (fakeErr) Error() string { return "boom" }

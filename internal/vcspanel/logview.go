@@ -173,7 +173,7 @@ func (m *Model) viewLog() string {
 		}
 		return lipgloss.NewStyle().Faint(true).Render(text)
 	}
-	height := m.bodyHeight() - 1 // footer
+	height := m.bodyHeight() - 2 // header + footer
 	if height < 1 {
 		height = 1
 	}
@@ -184,11 +184,14 @@ func (m *Model) viewLog() string {
 		m.logTop = m.logCursor - height + 1
 	}
 	now := time.Now()
+	cols := m.logColumns()
 	var b strings.Builder
+	b.WriteString(m.logHeader(pal, cols))
+	b.WriteString("\n")
 	for k := 0; k < height; k++ {
 		i := m.logTop + k
 		if i < len(m.logRows) {
-			b.WriteString(m.renderLogRow(pal, i, now))
+			b.WriteString(m.renderLogRow(pal, i, now, cols))
 		}
 		b.WriteString("\n")
 	}
@@ -196,8 +199,64 @@ func (m *Model) viewLog() string {
 	return b.String()
 }
 
+// logCols is the tabular layout of the commit list (#501): fixed hash,
+// author, and date columns around a flexible subject.
+type logCols struct {
+	hash, subject, author, date int
+}
+
+// logColumns budgets the columns for the current panel width. The subject
+// keeps priority: on narrow panels the date, then the author drop to zero
+// and disappear entirely.
+func (m *Model) logColumns() logCols {
+	c := logCols{hash: 9, author: 14, date: 14} // hash: "▸ " + 7 short
+	fixed := 1 + c.hash + 2 + c.author + 2 + c.date
+	c.subject = m.width - fixed
+	if c.subject < 20 {
+		c.date = 0
+		c.subject = m.width - (1 + c.hash + 2 + c.author + 2)
+	}
+	if c.subject < 20 {
+		c.author = 0
+		c.subject = m.width - (1 + c.hash + 2)
+	}
+	if c.subject < 1 {
+		c.subject = 1
+	}
+	return c
+}
+
+// cell pads or clips s to exactly width display cells (width 0 hides it).
+func cell(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) > width {
+		if width == 1 {
+			return "…"
+		}
+		return string(r[:width-1]) + "…"
+	}
+	return s + strings.Repeat(" ", width-len(r))
+}
+
+// logHeader renders the faint column caption row.
+func (m *Model) logHeader(pal *theme.Palette, c logCols) string {
+	var b strings.Builder
+	b.WriteString(" " + cell("Commit", c.hash))
+	b.WriteString("  " + cell("Subject", c.subject))
+	if c.author > 0 {
+		b.WriteString("  " + cell("Author", c.author))
+	}
+	if c.date > 0 {
+		b.WriteString("  " + cell("Date", c.date))
+	}
+	return lipgloss.NewStyle().Faint(true).Underline(true).Render(b.String())
+}
+
 // renderLogRow draws one flattened row.
-func (m *Model) renderLogRow(pal *theme.Palette, i int, now time.Time) string {
+func (m *Model) renderLogRow(pal *theme.Palette, i int, now time.Time, cols logCols) string {
 	row := m.logRows[i]
 	entry := m.logEntries[row.commit]
 	selected := i == m.logCursor && m.focused
@@ -209,8 +268,16 @@ func (m *Model) renderLogRow(pal *theme.Palette, i int, now time.Time) string {
 		if entry.Hash == m.expandedHash {
 			marker = "▾"
 		}
-		meta := entry.Author + ", " + vcs.RelativeTime(entry.Time, now)
-		line = " " + marker + " " + entry.ShortHash + " " + entry.Subject + "  — " + meta
+		var b strings.Builder
+		b.WriteString(" " + cell(marker+" "+entry.ShortHash, cols.hash))
+		b.WriteString("  " + cell(entry.Subject, cols.subject))
+		if cols.author > 0 {
+			b.WriteString("  " + cell(entry.Author, cols.author))
+		}
+		if cols.date > 0 {
+			b.WriteString("  " + cell(vcs.RelativeTime(entry.Time, now), cols.date))
+		}
+		line = b.String()
 		style = lipgloss.NewStyle().Foreground(pal.Foreground)
 	} else {
 		f := m.details.Files[row.file]
