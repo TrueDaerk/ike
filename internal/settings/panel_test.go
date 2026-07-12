@@ -227,8 +227,9 @@ func TestEnumPicker(t *testing.T) {
 	}
 }
 
-// TestEnumQuickCycle guards #383: ←/→ on a selected enum row cycle the value
-// without opening the picker.
+// TestEnumQuickCycle guards #383/#533: →/l on a selected enum row cycle the
+// value (wrapping) without opening the picker; ← never cycles — it returns to
+// the category column like on every other row.
 func TestEnumQuickCycle(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
@@ -243,12 +244,16 @@ func TestEnumQuickCycle(t *testing.T) {
 	if m.focus != formColumn || m.picking {
 		t.Fatal("quick cycle must not move focus or open the picker")
 	}
-	apply(t, m.Update(key("left")))
+	apply(t, m.Update(key("l")))
 	if got := config.Get().Theme.Name; got != "default" {
-		t.Fatalf("left must cycle to the previous option, got %q", got)
+		t.Fatalf("l must wrap to the first option, got %q", got)
 	}
-	if m.focus != formColumn {
-		t.Fatal("left on an enum row must cycle, not leave the column")
+	// ← is the mirror of →: back to the categories, no config write (#533).
+	if cmd := m.Update(key("left")); cmd != nil || m.focus != catColumn {
+		t.Fatal("left on an enum row must leave the column without cycling")
+	}
+	if got := config.Get().Theme.Name; got != "default" {
+		t.Fatalf("left must not change the value, got %q", got)
 	}
 }
 

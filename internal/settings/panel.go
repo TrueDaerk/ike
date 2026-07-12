@@ -270,17 +270,10 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			return m.cycleEnum(1) // quick next on an enum row; no-op otherwise
 		}
 	case "left", "h":
-		if m.focus != formColumn {
-			return nil
-		}
-		// Arrow-left on an enum row is the quick prev-cycle; "h" (and left on
-		// any other row) returns to the category column.
-		if key.String() == "left" {
-			if cmd := m.cycleEnum(-1); cmd != nil {
-				return cmd
-			}
-		}
-		if m.filter == "" {
+		// Always the mirror of →: back to the category column, never a value
+		// change (#533). The enum quick-cycle lives on →/l alone (it wraps),
+		// enter opens the picker.
+		if m.focus == formColumn && m.filter == "" {
 			m.focus = catColumn
 		}
 	case "enter":

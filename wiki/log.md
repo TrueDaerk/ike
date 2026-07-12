@@ -2,6 +2,10 @@
 
 ## 2026-07-12
 
+- Settings arrow-left (#533): ← on an enum row (Appearance → Theme) used to
+  prev-cycle the value, so arrow keys could not leave the form column and
+  every press wrote config. ←/h now always return to the category column;
+  the quick-cycle stays on →/l (wrapping) and enter still opens the picker.
 - Keymap-page filter input (#531): type-to-filter shared its keyspace with the
   single-letter actions, so a search term containing `u`/`r`/`j`/`k` fired
   them instead of typing (`r` silently reset the selected binding). `/` now
