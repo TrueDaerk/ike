@@ -11,6 +11,7 @@ import (
 	"ike/internal/preview"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/vcspanel"
 )
 
 // ExplorerKey is the stable key of the singleton explorer instance. It never
@@ -28,6 +29,9 @@ const previewKeyBase = "preview"
 
 // diffKeyBase is the key of the first diff viewer; later ones append ":N".
 const diffKeyBase = "diff"
+
+// VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
+const VCSKey = "vcs"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -196,6 +200,18 @@ func (r *Registry) AddDiff(leftPath, rightPath string) string {
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
 	r.put(inst)
 	return key
+}
+
+// AddVCS creates the singleton VCS tool window under VCSKey (Roadmap 0330)
+// and returns its key; a second call returns the existing key.
+func (r *Registry) AddVCS() string {
+	if _, ok := r.instances[VCSKey]; ok {
+		return VCSKey
+	}
+	inst := &Instance{key: VCSKey, kind: KindVCS, cfg: r.cfg, pal: r.pal}
+	inst.vp = vcspanel.New(r.pal)
+	r.put(inst)
+	return VCSKey
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)

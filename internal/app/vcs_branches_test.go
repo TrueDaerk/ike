@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -64,6 +65,48 @@ func TestBranchPickerOpensOnBranchesMsg(t *testing.T) {
 	m = out.(Model)
 	if cmd == nil {
 		t.Fatal("selecting another branch must launch the checkout")
+	}
+}
+
+func TestVCSPanelToggleLifecycle(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+
+	// Outside a repo: hint, no pane.
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+	if m.panes.Has(pane.VCSKey) {
+		t.Fatal("panel must not open without a repo")
+	}
+
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
+	before := m.panes.Focused()
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+	if !m.panes.Has(pane.VCSKey) || m.panes.Focused() != pane.VCSKey {
+		t.Fatalf("first toggle must open + focus the panel (focus=%q)", m.panes.Focused())
+	}
+
+	// Second toggle returns focus whence it came.
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+	if m.panes.Focused() != before {
+		t.Fatalf("focus = %q, want %q", m.panes.Focused(), before)
+	}
+	// Third re-focuses the existing pane without duplicating it.
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+	if m.panes.Focused() != pane.VCSKey {
+		t.Fatal("third toggle must re-focus the panel")
+	}
+
+	// A snapshot refresh reaches the panel.
+	snap := &vcs.Snapshot{Root: "/r", Branch: "dev"}
+	out, _ = m.Update(vcs.SnapshotMsg{Snap: snap})
+	m = out.(Model)
+	if !strings.Contains(stripped(m), "⎇ dev") {
+		t.Fatal("panel header should carry the refreshed branch")
 	}
 }
 

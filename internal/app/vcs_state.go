@@ -69,6 +69,10 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	if m.panes.Has(pane.ExplorerKey) {
 		m.explorer().SetVCS(msg.Snap)
 	}
+	// The VCS tool window re-reads the snapshot (0330, #482).
+	if m.panes.Has(pane.VCSKey) {
+		m.panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
+	}
 	// The open commit dialog re-reads the changed files (#465); losing the
 	// repo underneath it closes it.
 	if m.commitUI.IsOpen() {

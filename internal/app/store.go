@@ -139,6 +139,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.
 			ids[key] = paneIdentity{Kind: "terminal", Path: inst.Terminal().Dir()}
+		case pane.KindVCS:
+			// Content is session-local; the slot restores empty and re-feeds
+			// from the first status snapshot (0330, #482).
+			ids[key] = paneIdentity{Kind: "vcs"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
 			for i, ed := range inst.Editors() {

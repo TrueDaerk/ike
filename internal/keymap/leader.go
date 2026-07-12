@@ -91,6 +91,7 @@ var leaderMnemonics = []leaderMnemonic{
 	{"v b", "vcs.branches", "Switch branch"},
 	{"v d", "vcs.diff", "Diff file against HEAD"},
 	{"v a", "vcs.blameLine", "Toggle inline blame (annotate)"},
+	{"v v", "vcs.panel", "Toggle VCS tool window"},
 	{"1", "editor.tab.select1", "Go to tab 1"},
 	{"2", "editor.tab.select2", "Go to tab 2"},
 	{"3", "editor.tab.select3", "Go to tab 3"},

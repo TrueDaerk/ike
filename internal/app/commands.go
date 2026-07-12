@@ -245,6 +245,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.branches", "Switch Branch…", OpenBranchPickerMsg{}),
 			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),
+			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 		), scratchCommands()...),
 	}
 }
