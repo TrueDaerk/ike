@@ -338,6 +338,24 @@ type dragState struct {
 	srcTab  int // dragTab: index of the grabbed tab (#305)
 	curX    int
 	curY    int
+	startX  int // press cell, for the move/tab engage threshold (#559)
+	startY  int
+}
+
+// moveEngageCols is how far a move/tab drag must travel horizontally before the
+// gesture engages; any vertical travel engages immediately (rows are taller
+// than columns, so one row is already a deliberate motion).
+const moveEngageCols = 3
+
+// engaged reports whether a move/tab drag has traveled past the threshold that
+// separates a deliberate drag from a plain click (#559). Until then no move
+// feedback renders and a release commits nothing. Other drag kinds engage on
+// press.
+func (d *dragState) engaged() bool {
+	if d.kind != dragMove && d.kind != dragTab {
+		return true
+	}
+	return abs(d.curY-d.startY) >= 1 || abs(d.curX-d.startX) >= moveEngageCols
 }
 
 // New returns the initial root model rooted at the working directory, wired to
@@ -4119,7 +4137,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 						// Grabbing a tab label drags just that file
 						// (#305); the whole-pane move below stays the
 						// last-tab / off-segment behavior.
-						m.drag = &dragState{kind: dragTab, srcPane: key, srcTab: idx, curX: msg.X, curY: msg.Y}
+						m.drag = &dragState{kind: dragTab, srcPane: key, srcTab: idx, curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
 						return m, nil
 					}
 				}
@@ -4127,7 +4145,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// A click on the title band focuses the pane (#304); the drag
 			// only commits once the pointer leaves the band (commitMove).
 			m.setFocus(hit.Pane)
-			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y}
+			m.drag = &dragState{kind: dragMove, srcPane: hit.Pane, curX: msg.X, curY: msg.Y, startX: msg.X, startY: msg.Y}
 		case layout.HitPane:
 			return m.paneClick(hit.Pane, msg)
 		}
@@ -4150,11 +4168,21 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if m.drag == nil {
 			return m, nil
 		}
+		m.drag.curX, m.drag.curY = msg.X, msg.Y
 		switch m.drag.kind {
-		case dragMove:
-			m.commitMove(msg.X, msg.Y)
-		case dragTab:
-			m.commitTabMove(msg.X, msg.Y)
+		case dragMove, dragTab:
+			// A release before the drag traveled the engage threshold is a
+			// plain click (#559): the press already focused the pane / tab,
+			// so there is nothing to commit or persist.
+			if !m.drag.engaged() {
+				m.drag = nil
+				return m, nil
+			}
+			if m.drag.kind == dragMove {
+				m.commitMove(msg.X, msg.Y)
+			} else {
+				m.commitTabMove(msg.X, msg.Y)
+			}
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				m.panes.Get(m.drag.srcPane).Terminal().MouseRelease(lx, ly)
@@ -4661,7 +4689,7 @@ func (m Model) compositeWhichKey(base string) string {
 // previews the relocation; onto the source pane's own edge it previews the spawn.
 func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	d := m.drag
-	if d == nil || (d.kind != dragMove && d.kind != dragTab) {
+	if d == nil || (d.kind != dragMove && d.kind != dragTab) || !d.engaged() {
 		return "", 0, 0, false
 	}
 	tgt, found := m.lay.PaneAt(d.curX, d.curY)
@@ -4856,7 +4884,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	if focused {
 		border = m.pal().BorderFocus
 	}
-	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) {
+	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		if key == d.srcPane {
 			border = m.pal().MoveSource
 			title = "⤴ " + title

@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-11T14:30:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -43,7 +43,11 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
 `tea.MouseMsg` branch runs a small state machine:
 
 - **Press** hit-tests the cached `Layout` (`Layout.Hit`). A divider gutter starts
-  a **resize**; a pane's first row (its title bar) starts a **move**.
+  a **resize**; a pane's first row (its title bar) starts a **move**. A move (or
+  tab drag) stays latent until the pointer travels an **engage threshold** from
+  the press cell — one row vertically or `moveEngageCols` columns sideways
+  (#559): before that, no move feedback (status hint, source marker, ghost)
+  renders and a release is a plain click that only focuses.
 - **Motion** during a resize calls `Divider.ResizeTo`, which updates the owning
   split's ratio, **clamped** so neither child drops below a minimum cell size — a
   pane can never be dragged to zero.
