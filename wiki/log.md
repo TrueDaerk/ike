@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Move-drag engage threshold (#559): a plain title-bar click flashed the
+  move overlay (status hint, source marker, ghost). A move or tab drag now
+  stays latent until the pointer travels one row or `moveEngageCols`
+  columns from the press cell; below that, release is a plain focusing
+  click and nothing renders or persists.
+
 - Custom-page footer wrap (#553): the Toolchain/Keymap/Language-Servers
   footer hints were single clipped lines (narrow windows showed "· u u" for
   "u uv install"). A shared `wrapFooter` helper word-wraps footer lines to

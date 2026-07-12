@@ -260,7 +260,7 @@ func (m Model) statusLine() string {
 		Background(m.pal().Panel).
 		Foreground(m.pal().Foreground)
 
-	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) {
+	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		hint := "MOVE " + m.paneLabel(d.srcPane)
 		if d.kind == dragTab {
 			if ed := m.panes.Get(d.srcPane).TabEditor(d.srcTab); ed != nil && ed.HasFile() {
