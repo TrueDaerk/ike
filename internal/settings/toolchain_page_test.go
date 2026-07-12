@@ -163,12 +163,12 @@ func TestToolchainFooterPinned(t *testing.T) {
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
-	if !strings.Contains(lines[h-2], "enter pick interpreter") {
+	if !strings.Contains(lines[h-3], "enter pick interpreter") { // 3-line footer: hint(2, #553) + status
 		t.Fatalf("hint must be pinned above the status line:\n%s", strings.Join(lines, "\n"))
 	}
 	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	lines = strings.Split(p.View(120, h), "\n")
-	if len(lines) != h || !strings.Contains(lines[h-2], "enter pick interpreter") {
+	if len(lines) != h || !strings.Contains(lines[h-3], "enter pick interpreter") {
 		t.Fatalf("footer must stay pinned after a selection move:\n%s", strings.Join(lines, "\n"))
 	}
 }
@@ -198,5 +198,23 @@ func TestDefaultCandidatesWellKnownDirs(t *testing.T) {
 	got = defaultCandidates("xlang", func(string) string { return "/elsewhere/xlang" })
 	if len(got) != 2 || got[0] != "/elsewhere/xlang" || got[1] != fake {
 		t.Fatalf("PATH must come first, got %v", got)
+	}
+}
+
+// TestToolchainFooterHintWraps guards #553: on a narrow column the python
+// hint wraps over the footer's two hint lines instead of clipping mid-word
+// ("· u u" for "u uv install").
+func TestToolchainFooterHintWraps(t *testing.T) {
+	restoreConfig(t)
+	f := &fakeEnv{binaries: map[string]string{}}
+	p := pythonPage(t, f)
+	const w, h = 76, 12
+	v := p.View(w, h)
+	if !strings.Contains(v, "u uv install") {
+		t.Fatalf("the full hint must survive wrapping:\n%s", v)
+	}
+	lines := strings.Split(v, "\n")
+	if len(lines) != h {
+		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
 }

@@ -420,12 +420,13 @@ func (t *ToolchainPage) View(w, h int) string {
 			selEnd = len(list) - 1
 		}
 	}
-	return head + "\n" + pinFooter(list, t.footer(sec), selStart, selEnd, h-1, &t.off)
+	return head + "\n" + pinFooter(list, t.footer(sec, w), selStart, selEnd, h-1, &t.off)
 }
 
-// footer renders the pinned two-line footer: key hints for the current mode
-// plus the python environment status (empty lines keep the height constant).
-func (t *ToolchainPage) footer(sec lipgloss.Style) []string {
+// footer renders the pinned footer: key hints for the current mode (wrapped
+// to the column width over up to two lines, #553) plus the python
+// environment status — a constant three lines so the list never shifts.
+func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	l, ok := t.current()
 	if !ok {
 		return nil
@@ -445,7 +446,8 @@ func (t *ToolchainPage) footer(sec lipgloss.Style) []string {
 	if l.ID == "python" && t.envState != "" {
 		status = " " + t.envState
 	}
-	return []string{sec.Render(hint), sec.Render(status)}
+	out := wrapFooter([]footerLine{{text: hint, style: sec}}, w, 2)
+	return append(out, sec.Render(status))
 }
 
 // renderLang renders one language row.

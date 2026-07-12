@@ -306,9 +306,10 @@ func (k *KeymapPage) View(w, h int) string {
 	}
 	// The detail line is a footer pinned below the list (#537): moving the
 	// selection never shifts the rows, and the list scrolls to follow it.
+	// It wraps to the column width over a constant two lines (#553).
 	var footer []string
 	if b, ok := k.current(); ok {
-		footer = []string{k.detailLine(b)}
+		footer = wrapFooter([]footerLine{k.detailLine(b)}, w, 2)
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
 	return headLine + "\n" + pinFooter(list, footer, k.sel, k.sel, h-1, &k.off)
@@ -350,20 +351,25 @@ func (k *KeymapPage) renderRow(b keymap.Binding, selected bool, w int) string {
 	return style.Render(label)
 }
 
-// detailLine renders capture status / warnings / hints under the selection.
-func (k *KeymapPage) detailLine(b keymap.Binding) string {
+// detailLine names the capture status / warning / hint under the selection,
+// as text + style (wrapped by the caller, #553).
+func (k *KeymapPage) detailLine(b keymap.Binding) footerLine {
 	pal := k.theme()
 	switch {
 	case k.conflict != "":
-		return lipgloss.NewStyle().Foreground(pal.Error).
-			Render("   conflicts with " + k.conflict + " — enter overrides, any other key cancels")
+		return footerLine{
+			text:  "   conflicts with " + k.conflict + " — enter overrides, any other key cancels",
+			style: lipgloss.NewStyle().Foreground(pal.Error),
+		}
 	case k.warn != "":
-		return lipgloss.NewStyle().Foreground(pal.Warning).Render("   ⚠ " + k.warn)
+		return footerLine{text: "   ⚠ " + k.warn, style: lipgloss.NewStyle().Foreground(pal.Warning)}
 	case k.capturing:
-		return lipgloss.NewStyle().Foreground(pal.Secondary).Render("   esc cancels the capture")
+		return footerLine{text: "   esc cancels the capture", style: lipgloss.NewStyle().Foreground(pal.Secondary)}
 	default:
-		return lipgloss.NewStyle().Foreground(pal.Secondary).
-			Render("   " + b.Command + " — enter rebind · u unbind · r reset to preset")
+		return footerLine{
+			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset",
+			style: lipgloss.NewStyle().Foreground(pal.Secondary),
+		}
 	}
 }
 

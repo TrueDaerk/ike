@@ -163,6 +163,43 @@ func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string 
 // help text word-wraps over this many lines instead of clipping at one.
 const detailLines = 2
 
+// footerLine couples a pinned-footer text with its style before wrapping.
+type footerLine struct {
+	text  string
+	style lipgloss.Style
+}
+
+// wrapFooter word-wraps each footer line to width w (wrapping the raw text,
+// then styling every resulting line) and pads/clamps the result to exactly
+// want lines (#553): custom-page hints stay readable in a narrow column
+// instead of clipping, and the constant count keeps pinFooter's
+// no-jumpiness invariant. Overflow beyond want lines is marked with "…".
+func wrapFooter(lines []footerLine, w, want int) []string {
+	if w < 2 {
+		w = 2
+	}
+	out := make([]string, 0, want)
+	for _, l := range lines {
+		if l.text == "" {
+			if len(out) < want {
+				out = append(out, "")
+			}
+			continue
+		}
+		for _, part := range strings.Split(ansi.Wordwrap(l.text, w-1, ""), "\n") {
+			if len(out) == want {
+				out[want-1] += "…"
+				return out
+			}
+			out = append(out, l.style.Render(part))
+		}
+	}
+	for len(out) < want {
+		out = append(out, "")
+	}
+	return out
+}
+
 // renderForm renders the visible entries with value and layer badge. The
 // selected entry's description lives in a footer pinned to the bottom of the
 // column — never inline — so moving the selection cannot shift the rows below

@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Custom-page footer wrap (#553): the Toolchain/Keymap/Language-Servers
+  footer hints were single clipped lines (narrow windows showed "· u u" for
+  "u uv install"). A shared `wrapFooter` helper word-wraps footer lines to
+  the column width at a constant per-page line count (Toolchain 3, LSP 3,
+  Keymap 2), keeping the #537 no-jumpiness invariant.
+
 - Settings description footer wrap (#549): the pinned help line clipped long
   descriptions at the column edge. The footer is now a constant two lines
   with word-wrapped description + key (ellipsis beyond that); validation

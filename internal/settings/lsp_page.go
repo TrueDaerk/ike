@@ -413,8 +413,8 @@ func (p *LSPPage) View(w, h int) string {
 		list = append(list, p.renderRow(l, i == p.sel))
 	}
 	// Failure detail, key hints and the override input live in a constant
-	// two-line footer pinned below the list (#537), so moving the selection
-	// never shifts the rows.
+	// three-line footer pinned below the list (#537), wrapped to the column
+	// width (#553), so moving the selection never shifts the rows.
 	var footer []string
 	if l, ok := p.current(); ok {
 		_, detail := p.rowStatus(l.ID)
@@ -429,16 +429,15 @@ func (p *LSPPage) View(w, h int) string {
 			if p.invalid != "" {
 				line += "  ✗ " + p.invalid
 			}
-			footer = []string{sec.Render(line), sec.Render(" enter apply · esc cancel")}
+			footer = wrapFooter([]footerLine{
+				{text: line, style: sec},
+				{text: " enter apply · esc cancel", style: sec},
+			}, w, 3)
 		default:
-			detailLine := ""
-			if detail != "" {
-				detailLine = lipgloss.NewStyle().Foreground(pal.Error).Render(" " + detail)
-			}
-			footer = []string{
-				detailLine,
-				sec.Render(" e enable · c command · a args · s settings · i install · r restart · R restart all · x reset"),
-			}
+			footer = wrapFooter([]footerLine{
+				{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
+				{text: " e enable · c command · a args · s settings · i install · r restart · R restart all · x reset", style: sec},
+			}, w, 3)
 		}
 	}
 	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)

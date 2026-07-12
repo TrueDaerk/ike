@@ -210,13 +210,13 @@ func TestLSPFooterPinned(t *testing.T) {
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
-	if !strings.Contains(lines[h-1], "e enable") {
+	if !strings.Contains(lines[h-2], "e enable") { // 3-line wrapped footer (#553)
 		t.Fatalf("key hints must be pinned to the last line:\n%s", strings.Join(lines, "\n"))
 	}
 	// The override editor renders in the footer too.
 	p.Update(key("c"))
 	lines = strings.Split(p.View(120, h), "\n")
-	if !strings.Contains(lines[h-2], "command:") {
+	if !strings.Contains(lines[h-3], "command:") {
 		t.Fatalf("override input must render in the footer:\n%s", strings.Join(lines, "\n"))
 	}
 }

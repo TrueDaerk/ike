@@ -213,7 +213,7 @@ func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
 	}
-	if !strings.Contains(lines[h-1], rows[0].Command) {
+	if !strings.Contains(lines[h-2], rows[0].Command) { // 2-line wrapped footer (#553)
 		t.Fatalf("footer must show the selected command:\n%s", strings.Join(lines, "\n"))
 	}
 	// Moving the selection must not shift unselected rows: line 3 (third
@@ -233,7 +233,7 @@ func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
 	if !strings.Contains(v, last.Chord.String()) {
 		t.Fatalf("list must scroll to the selected binding %q:\n%s", last.Chord.String(), v)
 	}
-	if !strings.Contains(strings.Split(v, "\n")[h-1], last.Command) {
+	if !strings.Contains(strings.Split(v, "\n")[h-2], last.Command) {
 		t.Fatalf("footer must follow the selection:\n%s", v)
 	}
 }
