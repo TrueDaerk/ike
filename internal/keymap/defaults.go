@@ -32,6 +32,10 @@ var jetbrainsRows = []row{
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
 	// the table uses the registered id (mirroring lsp.definition below).
 	{"alt+f7", "lsp.references", "Find usages", Editor, "LSP (0100)"},
+	// JetBrains next/previous difference in the diff viewer (0340, #495);
+	// n/N remain the vim-flavored equivalents inside the pane.
+	{"f7", "diff.nextChange", "Next change (diff)", Diff, "Diff (0340)"},
+	{"shift+f7", "diff.prevChange", "Previous change (diff)", Diff, "Diff (0340)"},
 	// JetBrains' call-hierarchy chord (#173); alt is fragile, so the leader
 	// mnemonic (space H) is the delivered escape route.
 	{"ctrl+alt+h", "lsp.callHierarchy", "Call hierarchy", Editor, "LSP (0100)"},

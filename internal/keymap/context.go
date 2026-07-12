@@ -14,6 +14,8 @@ const (
 	Editor   Context = "editor"
 	Explorer Context = "explorer"
 	Palette  Context = "palette"
+	// Diff scopes bindings to a focused diff viewer pane (0340, #495).
+	Diff Context = "diff"
 )
 
 // Matches reports whether a binding in context c is active for the focused pane
