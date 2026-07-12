@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- Path completion in settings inputs (#541): typing a filesystem path (the
+  Toolchain custom-path input, schema `Path` entries) required knowing the
+  exact path. A new shared engine `internal/pathcomplete` (candidates +
+  longest unambiguous extension, `~` preserved, case-insensitive fallback,
+  dirs-only flavor) now powers shell-style tab completion with a live
+  suggestion list; the settings-local `expandHome` delegates to
+  `pathcomplete.Expand`. Project picker (#542) and ex cmdline (#543) follow.
+
 - Go interpreter detection (#538): the Toolchain page showed "(not found)"
   for Go at /opt/homebrew/bin/go when PATH lacked it — the Go plugin had no
   InterpreterDetector and the generic picker only did a PATH lookup. Go now

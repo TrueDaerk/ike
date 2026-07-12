@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/pathcomplete"
 	"ike/internal/theme"
 )
 
@@ -57,7 +58,8 @@ type Model struct {
 
 	editing bool
 	input   string
-	invalid string // inline validation error for the current edit
+	invalid string      // inline validation error for the current edit
+	suggest pathSuggest // live path completion while editing a Path entry (#541)
 
 	picking bool // enum picker open for the selected row
 	pickIdx int  // highlighted option inside the picker
@@ -329,6 +331,9 @@ func (m *Model) activate() tea.Cmd {
 		if e.Type == Chord {
 			m.input = ""
 		}
+		if e.Type == Path {
+			m.suggest.refresh(m.input)
+		}
 		return nil
 	}
 }
@@ -399,15 +404,26 @@ func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEscape:
 		m.editing = false
 		m.invalid = ""
+		m.suggest.clear()
 	case tea.KeyEnter:
 		return m.commit(e)
+	case tea.KeyTab:
+		if e.Type == Path {
+			m.input = m.suggest.complete(m.input)
+		}
 	case tea.KeyBackspace:
 		if m.input != "" {
 			m.input = m.input[:len(m.input)-1]
+			if e.Type == Path {
+				m.suggest.refresh(m.input)
+			}
 		}
 	default:
 		if key.Text != "" {
 			m.input += key.Text
+			if e.Type == Path {
+				m.suggest.refresh(m.input)
+			}
 		}
 	}
 	return nil
@@ -436,6 +452,7 @@ func (m *Model) commit(e Entry) tea.Cmd {
 			}
 		}
 		m.editing = false
+		m.suggest.clear()
 		return config.WriteAndReload(m.opts, e.Scope, e.Key, p)
 	default: // String
 		m.editing = false
@@ -465,15 +482,9 @@ func (m *Model) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// expandHome resolves a leading ~/ against the home directory.
-func expandHome(p string) string {
-	if strings.HasPrefix(p, "~/") {
-		if home, err := os.UserHomeDir(); err == nil {
-			return home + p[1:]
-		}
-	}
-	return p
-}
+// expandHome resolves a leading ~ against the home directory (delegates to
+// the shared helper, #541).
+func expandHome(p string) string { return pathcomplete.Expand(p) }
 
 func clamp(v, lo, hi int) int {
 	if v < lo {
