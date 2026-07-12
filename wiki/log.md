@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- Diff viewer v2 (Epic 0340, #493): collapsed context with expandable gaps
+  (`c`/`o`, config `diff.context`), F7/shift+F7 change navigation
+  (diff-scoped bindings), and an editable current side for worktree-backed
+  diffs (`e` mounts a live shared-document editor as the right column,
+  `ctrl+e` returns). Fixes: merge commits expand their first-parent files in
+  the VCS log (#489), diff panes no longer split the bottom tool window
+  (#489), and saved layouts containing diff panes survive restarts (#490).
 - VCS tool window (Epic 0330, #480): persistent `vcs.panel` pane
   (`internal/vcspanel`, `space v v`) as a bottom split with terminal-style
   toggle — Changes tab (staging list, diff-on-enter, commit with the message
