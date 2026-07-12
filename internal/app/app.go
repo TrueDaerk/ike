@@ -1357,6 +1357,17 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 		m.setFocus(key)
 		return
 	}
+	// Single diff window (#513): retarget the existing pane instead of
+	// splitting another one.
+	if key, ok := m.diffSlot(); ok {
+		inst := m.panes.Get(key)
+		inst.StopDiffEdit()
+		inst.Diff().Retarget(baseName(leftPath), baseName(rightPath), leftPath, rightPath, "", "", true)
+		inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+		m.setFocus(key)
+		saveLayout(m.tree, m.panes)
+		return
+	}
 	target := m.panes.Focused()
 	if target == "" || m.tree == nil {
 		return
@@ -1372,6 +1383,21 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)
+}
+
+// diffSlot returns the diff pane to reuse in single-window mode (#513): the
+// first open diff pane, unless config diff.windows = "multi" restores the
+// split-per-open behavior.
+func (m Model) diffSlot() (string, bool) {
+	if v, ok := m.host.Config().Get("diff.windows"); ok && v == "multi" {
+		return "", false
+	}
+	for _, key := range m.panes.Keys() {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
+			return key, true
+		}
+	}
+	return "", false
 }
 
 // findDiffPane locates an open diff pane matching the identity: the file

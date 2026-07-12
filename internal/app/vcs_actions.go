@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -153,6 +154,21 @@ func (m *Model) openDiffHeadPane(path, head string) {
 		}
 		m.panes.Get(key).Diff().SetContents(head, right)
 		m.setFocus(key)
+		return
+	}
+	// Single diff window (#513): retarget the existing pane.
+	if key, ok := m.diffSlot(); ok {
+		right := readFileOrEmpty(path)
+		if ed := m.editorForPath(path); ed != nil {
+			right = ed.Text()
+		}
+		name := filepath.Base(path)
+		inst := m.panes.Get(key)
+		inst.StopDiffEdit()
+		inst.Diff().Retarget(name+" @ HEAD", name, "", path, "HEAD", "", true)
+		inst.Diff().SetContents(head, right)
+		m.setFocus(key)
+		saveLayout(m.tree, m.panes)
 		return
 	}
 	target := m.activeEditorKey()
