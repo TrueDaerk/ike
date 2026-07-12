@@ -14,6 +14,7 @@ import (
 	"ike/internal/highlight"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
+	"ike/internal/vcs"
 )
 
 // lsp_state.go holds the editor-side LSP UI state — diagnostics, the completion
@@ -759,6 +760,19 @@ func hintText(h ilsp.InlayHint) string {
 		text += " "
 	}
 	return text
+}
+
+// gitMarkColor maps a gutter diff marker (Roadmap 0320, #464) to the theme's
+// vcs status slots: added green, changed blue, deleted the dim border tone.
+func (m Model) gitMarkColor(mk vcs.LineMark) color.Color {
+	switch mk {
+	case vcs.LineAdded:
+		return m.theme().VCSAdded
+	case vcs.LineDeleted:
+		return m.theme().VCSDeleted
+	default:
+		return m.theme().VCSModified
+	}
 }
 
 // diagColor maps a diagnostic severity to the theme's diagnostic slots:

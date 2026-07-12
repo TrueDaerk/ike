@@ -44,6 +44,39 @@ func TestVCSSnapshotReachesExplorer(t *testing.T) {
 	}
 }
 
+func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	dir := t.TempDir()
+	path := writeTemp(t, dir, "f.go", "x\n")
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+	ed := m.activeEditor()
+	if ed == nil || ed.Path() != path {
+		t.Fatal("setup: file not open")
+	}
+
+	// No snapshot / clean file: the command resolves to a clearing message,
+	// never a git subprocess.
+	msg, ok := m.vcsMarksCmd(ed)().(vcs.MarksMsg)
+	if !ok || msg.Path != path || msg.Marks != nil {
+		t.Fatalf("clean-file marks cmd = %#v", msg)
+	}
+
+	// Untracked stays clearing; modified goes through RefreshMarks (which on
+	// this fake root fails and also resolves to a clear — the gate is what's
+	// under test, the git call is covered in internal/vcs).
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusUntracked})
+	if msg := m.vcsMarksCmd(ed)().(vcs.MarksMsg); msg.Marks != nil {
+		t.Fatalf("untracked marks = %#v", msg)
+	}
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusModified})
+	if msg := m.vcsMarksCmd(ed)().(vcs.MarksMsg); msg.Path != path {
+		t.Fatalf("modified marks path = %q", msg.Path)
+	}
+}
+
 func TestVCSWatcherEventArmsDebounce(t *testing.T) {
 	m := vcsApp(t)
 	_, cmd := m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: "x.go"})
