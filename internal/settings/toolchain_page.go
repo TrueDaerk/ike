@@ -53,6 +53,7 @@ type ToolchainPage struct {
 	custom     bool
 	input      string
 	invalid    string
+	suggest    pathSuggest // live path completion for the custom input (#541)
 
 	// Python environment actions (#132): the uv-version picker and the
 	// in-flight/busy marker the view shows while an action runs.
@@ -254,10 +255,12 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		t.custom, t.invalid = false, ""
+		t.suggest.clear()
 	case tea.KeyEnter:
 		p := strings.TrimSpace(t.input)
 		if p == "" {
 			t.custom = false
+			t.suggest.clear()
 			return nil
 		}
 		if !fileExists(expandHome(p)) {
@@ -265,14 +268,19 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		t.custom = false
+		t.suggest.clear()
 		return t.choose(p)
+	case tea.KeyTab:
+		t.input = t.suggest.complete(t.input)
 	case tea.KeyBackspace:
 		if t.input != "" {
 			t.input = t.input[:len(t.input)-1]
+			t.suggest.refresh(t.input)
 		}
 	default:
 		if key.Text != "" {
 			t.input += key.Text
+			t.suggest.refresh(t.input)
 		}
 	}
 	return nil
@@ -346,6 +354,9 @@ func (t *ToolchainPage) View(w, h int) string {
 					detail += "  ✗ " + t.invalid
 				}
 				list = append(list, sec.Render(detail))
+				for _, s := range t.suggest.lines() {
+					list = append(list, sec.Render(s))
+				}
 			case t.picking:
 				list = append(list, t.renderPicker()...)
 			case t.uvPicking:
@@ -374,7 +385,7 @@ func (t *ToolchainPage) footer(sec lipgloss.Style) []string {
 	hint := " enter pick interpreter · p probe version · r reset to detection"
 	switch {
 	case t.custom:
-		hint = " enter apply · esc cancel"
+		hint = " tab complete path · enter apply · esc cancel"
 	case t.picking, t.uvPicking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
 	case l.ID == "python":

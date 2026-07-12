@@ -47,6 +47,9 @@ func (m *Model) View() string {
 	if m.picking {
 		hintText = " ↑↓ choose · enter apply · esc cancel"
 	}
+	if r, ok := m.current(); ok && m.editing && r.entry.Type == Path {
+		hintText = " tab complete path · enter apply · esc cancel"
+	}
 	hint := lipgloss.NewStyle().Foreground(pal.Secondary).Render(hintText)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
@@ -180,6 +183,12 @@ func (m *Model) renderForm(w, h int) string {
 		if i == m.sel {
 			if m.picking {
 				lines = append(lines, m.renderPicker(r.entry, clip)...)
+			}
+			if m.editing && r.entry.Type == Path {
+				sug := lipgloss.NewStyle().Foreground(pal.Secondary)
+				for _, s := range m.suggest.lines() {
+					lines = append(lines, clip.Render(sug.Render(s)))
+				}
 			}
 			selEnd = len(lines) - 1
 		}

@@ -61,7 +61,13 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   (#383); ← never cycles — it always returns to the category column, the
   mirror of → (#533); Int/String/Path
   open an inline input (int parses + clamps to bounds, path validates
-  existence); Chord captures the next key press. The selected entry's
+  existence); Chord captures the next key press. Path inputs get shell-style
+  **tab completion** (#541) via the shared `internal/pathcomplete` engine:
+  matching entries render as a suggestion list under the row (final path
+  component only, capped with a `+N more` tail), tab extends the input to the
+  longest unambiguous prefix — a single directory match completes with its
+  trailing separator so repeated tab descends; `~` notation is preserved and
+  matching falls back to case-insensitive (`~/dev` finds `~/Development`). The selected entry's
   description, key and validation error render in a **footer pinned to the
   bottom of the form column** — not inline under the row — so ↑↓ never shifts
   the other rows (#535); only the enum picker expands inline. The custom pages
@@ -132,7 +138,9 @@ async version probe (`p`, `python --version` / `php -v` as `tea.Cmd`s routed
 back via `settings.VersionMsg` → `Model.Deliver`). Enter opens the discovery
 picker — Python: active venv, project `.venv`/`venv`, `uv python list`, pyenv
 shims, PATH; PHP: PATH + common install locations — plus a validated custom
-path input. A choice writes the **project** config and triggers `lsp.restart`
+path input with tab completion and a live suggestion list (#541, same
+`internal/pathcomplete` engine as the schema Path entries). A choice writes
+the **project** config and triggers `lsp.restart`
 so servers respawn against the new interpreter; `r` resets to detection.
 
 ## Language Servers page (0180, #130)
