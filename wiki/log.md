@@ -2,6 +2,16 @@
 
 ## 2026-07-12
 
+- EditorConfig support (#63): new `internal/editorconfig` package (spec
+  parsing, glob matching with `**`/`{a,b}`/`{n1..n2}`, upward search stopped
+  by `root = true`, per-directory cache invalidated via the file watcher).
+  Resolved settings are a per-buffer override layer — defaults < IKE config <
+  `.editorconfig` < explicit user action — mapping `indent_style`,
+  `indent_size`/`tab_width`, `trim_trailing_whitespace`,
+  `insert_final_newline`, `end_of_line` and `charset` onto existing editor
+  behaviour. New `indent` status segment ("Spaces: 2"), new config key
+  `editor.editorconfig` (default true). New doc
+  [editorconfig.md](/architecture/editorconfig.md).
 - View options (#64): soft wrap (`editor.wrap` / `view.toggleWrap`; visual-row
   map in `internal/editor/viewport/wrap.go`, gj/gk-style j/k, wrapped scroll,
   click mapping, `↪` continuation gutter), visible whitespace

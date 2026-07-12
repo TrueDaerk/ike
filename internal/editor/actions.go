@@ -415,7 +415,12 @@ func (m *Model) saveAs(path string) error {
 	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return err
 	}
-	m.path = path
+	if path != m.path {
+		// ":w other" retargets the buffer; its .editorconfig overrides (#63)
+		// follow the new path from the next applyConfig pass on.
+		m.path = path
+		m.resolveEditorconfig()
+	}
 	m.dirty = false
 	m.mixedEOL = false // the write just normalized to m.eol
 	m.hist.MarkSaved()

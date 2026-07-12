@@ -34,6 +34,7 @@ var statusLeft = []statusSegment{
 	{id: "file", render: fileSegment},
 	{id: "eol", render: eolSegment},
 	{id: "encoding", render: encodingSegment},
+	{id: "indent", render: indentSegment},
 	{id: "diagnostics", render: diagSegment},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
@@ -110,6 +111,19 @@ func encodingSegment(_ Model, ed *editor.Model) string {
 		return ""
 	}
 	return ed.EncodingName()
+}
+
+// indentSegment is the focused buffer's effective indent style and width —
+// "Spaces: 2" or "Tab: 4" — including any .editorconfig override (#63).
+func indentSegment(_ Model, ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	spaces, width := ed.IndentInfo()
+	if spaces {
+		return "Spaces: " + strconv.Itoa(width)
+	}
+	return "Tab: " + strconv.Itoa(width)
 }
 
 // diagSegment is the focused buffer's diagnostic counts; hidden when clean.

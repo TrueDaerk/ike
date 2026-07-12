@@ -98,6 +98,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.auto_indent", c.Editor.AutoIndent)
 	put("editor.trim_trailing_whitespace", c.Editor.TrimTrailingWhitespace)
 	put("editor.insert_final_newline", c.Editor.InsertFinalNewline)
+	put("editor.editorconfig", c.Editor.Editorconfig)
 	put("editor.show_whitespace", c.Editor.ShowWhitespace)
 	put("editor.indent_guides", c.Editor.IndentGuides)
 	rulers := make([]string, len(c.Editor.Rulers))
