@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- `vcs.revertHunk` (#555): JetBrains "Rollback Lines" — the contiguous change
+  under the caret (matching the gutter diff markers, deletion anchors
+  included) reverts to its HEAD content as a single undo-tree edit, so plain
+  editor undo restores it. Leader `space v h`.
+
 - Terminal OSC ghost text (#561): OSC 0/2 titles containing runes whose
   UTF-8 encoding carries the byte `0x9C` (U+2700 dingbats — Claude Code's
   `✳` spinner titles) terminated the sequence mid-rune and printed the rest

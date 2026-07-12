@@ -222,6 +222,45 @@ func TestRevertFlowPromptAndCancel(t *testing.T) {
 	}
 }
 
+func TestRevertHunkFlow(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	dir := t.TempDir()
+	path := writeTemp(t, dir, "f.go", "X\nb\n")
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+
+	// Untracked: warned away, no HEAD fetch (the warning toast may still
+	// produce a command of its own).
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusUntracked})
+	if _, cmd := m.Update(RevertHunkMsg{}); cmd != nil {
+		if _, fetched := cmd().(vcs.RevertHunkHeadMsg); fetched {
+			t.Fatal("untracked file must not fetch HEAD")
+		}
+	}
+
+	// Modified: the HEAD fetch launches.
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusModified})
+	if _, cmd := m.Update(RevertHunkMsg{}); cmd == nil {
+		t.Fatal("modified file must fetch the HEAD blob")
+	}
+
+	// The fetched blob reverts the hunk under the caret (line 0).
+	out, _ = m.Update(vcs.RevertHunkHeadMsg{Path: path, Head: "a\nb\n"})
+	m = out.(Model)
+	if got := m.activeEditor().Text(); got != "a\nb" {
+		t.Fatalf("buffer after revert = %q, want %q", got, "a\nb")
+	}
+
+	// Caret now outside any change: the same blob is a no-op.
+	out, _ = m.Update(vcs.RevertHunkHeadMsg{Path: path, Head: "a\nb\n"})
+	m = out.(Model)
+	if got := m.activeEditor().Text(); got != "a\nb" {
+		t.Fatalf("no-op mutated the buffer: %q", got)
+	}
+}
+
 func TestVCSWatcherEventArmsDebounce(t *testing.T) {
 	m := vcsApp(t)
 	_, cmd := m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: "x.go"})

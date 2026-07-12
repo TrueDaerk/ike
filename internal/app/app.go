@@ -2665,6 +2665,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RevertActiveFileMsg:
 		return m.revertActiveFile()
 
+	case RevertHunkMsg:
+		return m.revertActiveHunk()
+
+	case vcs.RevertHunkHeadMsg:
+		return m.applyRevertHunk(msg)
+
 	case vcs.RevertInfoMsg:
 		if msg.Err != nil {
 			m.host.Notify(host.Error, "revert: "+msg.Err.Error())
