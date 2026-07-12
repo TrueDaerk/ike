@@ -58,6 +58,31 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.pending.Reset()
 		return m, nil
+	case awaitRecordReg:
+		// q's register name (#58): only a-z starts a recording, anything else
+		// cancels — the two pending keys (q + name) were never recorded, so
+		// nothing needs dropping.
+		m.wait = awaitNone
+		if hasRune && macroRegister(r) {
+			m.startRecording(r)
+		}
+		m.pending.Reset()
+		return m, nil
+	case awaitPlayReg:
+		// @'s register name (#58): @@ repeats the last replay; the count typed
+		// before @ (5@a) is still pending here.
+		m.wait = awaitNone
+		count := m.pending.EffectiveCount()
+		m.pending.Reset()
+		if hasRune {
+			if r == '@' {
+				r = m.lastMacro
+			}
+			if macroRegister(r) {
+				return m.playMacro(r, count)
+			}
+		}
+		return m, nil
 	}
 
 	// Register selection: `"` then a name.
@@ -456,6 +481,24 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.collapseCarets()
 		m.mode = Command
 		m.cmdline = ""
+	case "q":
+		// Macro recording (#58): q stops an active recording, otherwise the
+		// next key names the register to record into. Like vim, a q replayed
+		// from a macro neither stops nor starts a recording.
+		if m.replayDepth > 0 {
+			break
+		}
+		if m.recordReg != 0 {
+			m.stopRecording()
+			break
+		}
+		m.wait = awaitRecordReg
+		return m, nil
+	case "@":
+		// Macro replay (#58): the next key names the register (or @ for the
+		// last one). The pending count survives until the name resolves.
+		m.wait = awaitPlayReg
+		return m, nil
 	}
 	m.pending.Reset()
 	return m, nil
