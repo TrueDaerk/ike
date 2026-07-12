@@ -52,6 +52,7 @@ import (
 	"ike/internal/theme"
 	"ike/internal/todoindex"
 	"ike/internal/ui"
+	"ike/internal/undotree"
 	"ike/internal/wasm"
 	"ike/internal/watch"
 )
@@ -206,6 +207,9 @@ type Model struct {
 	// never mistake them for its own generations.
 	todo       *todoindex.Model
 	todoSearch *search.Service
+	// undoTree is the undo-tree overlay (#59): the focused editor's change
+	// tree; jumps route back into that editor as HistoryJumpMsg.
+	undoTree *undotree.Model
 	// inFileSearchRecent is true while a committed in-file search ("/", "?",
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
@@ -394,6 +398,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.todo.SetDisplayPath(displayPath)
 	m.callhier = callhier.New()
 	m.callhier.SetPalette(themePal)
+	m.undoTree = undotree.New()
+	m.undoTree.SetPalette(themePal)
 	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
@@ -1425,6 +1431,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finder.SetSize(m.width, m.height)
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
+		m.undoTree.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
 			w, h := m.settingsSize()
@@ -1494,6 +1501,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A selected tag: open the file with the cursor on it (1-based lines,
 		// openPathAt takes 0-based).
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
+
+	case editor.OpenUndoTreeMsg:
+		// editor.undoTree (palette): the undo-tree overlay (#59) over the
+		// focused editor's change tree.
+		if ed := m.activeEditor(); ed != nil {
+			m.undoTree.SetSize(m.width, m.height)
+			m.undoTree.Open(ed.HistoryTree())
+		}
+		return m, nil
+
+	case undotree.JumpMsg:
+		// A selected state (#59): restore the focused editor's buffer to it,
+		// then refresh the overlay so the current marker follows the jump.
+		if key := m.activeEditorKey(); key != "" {
+			cmd := m.panes.Get(key).Update(editor.HistoryJumpMsg{Seq: msg.Seq})
+			if ed := m.activeEditor(); ed != nil {
+				m.undoTree.SetNodes(ed.HistoryTree())
+			}
+			return m, cmd
+		}
+		return m, nil
 
 	case finder.ReplaceRequestMsg:
 		// Apply replacements: through open dirty buffers, on disk otherwise;
@@ -2287,6 +2315,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.todo.IsOpen() {
 			// The TODO index overlay owns the keyboard the same way (#61).
 			return m, m.todo.Update(msg)
+		}
+		if m.undoTree.IsOpen() {
+			// The undo-tree overlay owns the keyboard the same way (#59).
+			return m, m.undoTree.Update(msg)
 		}
 		if m.callhier.IsOpen() {
 			// The call-hierarchy overlay owns the keyboard the same way (#173).
@@ -3419,6 +3451,24 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	if m.undoTree.IsOpen() {
+		// The undo-tree overlay hit-tests like the TODO index above (#59).
+		if clickOutside(msg, m.undoTree.View(), m.width, m.height) {
+			m.undoTree.Close()
+			return m, nil
+		}
+		switch {
+		case msg.action == mousePress && msg.Button == tea.MouseLeft:
+			v := m.undoTree.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			return m, m.undoTree.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+			m.undoTree.Wheel(-3)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+			m.undoTree.Wheel(3)
+		}
+		return m, nil
+	}
 	if m.settings.IsOpen() {
 		if clickOutside(msg, m.settings.View(), m.width, m.height) {
 			m.settings.Close()
@@ -4089,6 +4139,8 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.finder.View(), m.width, m.height)
 	case m.todo.IsOpen():
 		result = overlay.Center(base, m.todo.View(), m.width, m.height)
+	case m.undoTree.IsOpen():
+		result = overlay.Center(base, m.undoTree.View(), m.width, m.height)
 	case m.callhier.IsOpen():
 		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
 	case m.palette.IsOpen():

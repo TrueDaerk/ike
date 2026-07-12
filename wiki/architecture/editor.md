@@ -52,18 +52,31 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   on failure (read-only file, no file name) — a failed write keeps the
   buffer dirty and aborts `:wq`.
 - **history** — undo/redo as `Change` records (forward edits + inverses +
-  cursor before/after); linear today, with parent/seq fields reserved for an
-  undo tree. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
+  cursor before/after + timestamp), stored as an **undo tree** (#59, vim's
+  undotree): every state ever reached is a node keyed by its global `seq`; an
+  edit after an undo becomes a sibling branch instead of discarding the redo
+  chain, and `u`/`ctrl+r` walk the *active branch* so the default feel stays
+  linear. `g-`/`g+` step **chronologically** across branches (global seq
+  order), `JumpTo` restores any node by applying inverses up to the common
+  ancestor and forwards down to the target, and `Tree()` exposes the nodes for
+  the **undo-tree overlay** (`internal/undotree`, palette `editor.undoTree`):
+  a centered view of the change tree — newest first, abandoned branches
+  indented, current/saved states marked — where `j`/`k` move and `enter`
+  restores the selected state (the overlay stays open and refreshes, esc
+  closes). A per-buffer cap (1000 nodes) prunes oldest leaf branches first; a
+  purely linear history over the cap drops its oldest level, vim's
+  `undolevels`. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
   early when the history runs out, #231). `.` repeat lives in the editor
   (`dotCommand`). The history pins a **save checkpoint** (`MarkSaved`/`AtSaved`,
   #251): saving pins the current state, and undo/redo clear the dirty flag when
   they land exactly on it (vim-style), so `[+]` goes away when you undo back to
   the saved content. A crash-restored buffer marks the checkpoint unreachable —
   no undo depth makes it read as clean.
-  **Persistent undo** (#148, vim's `undofile`): the stacks survive a restart.
+  **Persistent undo** (#148, vim's `undofile`): the tree survives a restart.
   `internal/undostore` keeps one JSON file per document under the state store
   (`.ike/undo/`, or `IKE_CONFIG_DIR/undo`), keyed by a hash of the absolute
-  path and stamped with the content hash the stacks describe. The editor
+  path and stamped with the content hash the tree describes (pre-tree
+  `past`/`future` snapshots still restore as a degenerate chain). The editor
   writes it after every save and the app layer on tab/pane close and quit
   (dirty buffers are skipped — the last save's undo file still matches the
   disk content); on `Load` the stacks are adopted only when the stored hash

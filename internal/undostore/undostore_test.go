@@ -33,8 +33,8 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("load failed for matching hash")
 	}
-	if len(snap.Past) != 1 {
-		t.Fatalf("past = %d changes, want 1", len(snap.Past))
+	if len(snap.Nodes) != 1 {
+		t.Fatalf("nodes = %d changes, want 1", len(snap.Nodes))
 	}
 }
 

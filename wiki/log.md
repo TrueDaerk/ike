@@ -2,6 +2,15 @@
 
 ## 2026-07-12
 
+- Undo tree (#59): `internal/editor/history` turned from linear past/future
+  stacks into a change tree — an edit after an undo branches instead of
+  discarding the redo chain; `u`/`ctrl+r` walk the active branch (unchanged
+  feel), `g-`/`g+` step chronologically across branches, and the new
+  `internal/undotree` overlay (palette `editor.undoTree`) renders the tree
+  with timestamps/previews/current/saved marks, `enter` restoring any state.
+  1000-node per-buffer cap pruning oldest branches first. Persistent-undo
+  wire form now serializes the tree (`nodes` + `current`); legacy
+  `past`/`future` snapshots still restore. Editor doc updated.
 - Diff viewer pane (#60): new `internal/diff` package — reusable read-only
   diff component as a fifth `pane.Kind` (`KindDiff`). Line-level Myers engine
   with rune-level intra-line refinement and hunk grouping; side-by-side

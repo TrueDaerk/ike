@@ -471,6 +471,14 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 	case "p":
 		m.paste(m.pending.Register, true, m.pending.EffectiveCount(), true)
 		m.pending.Reset()
+	case "-":
+		// g-: chronological undo across branches (#59).
+		m.undoChrono(m.pending.EffectiveCount())
+		m.pending.Reset()
+	case "+":
+		// g+: chronological redo across branches (#59).
+		m.redoChrono(m.pending.EffectiveCount())
+		m.pending.Reset()
 	}
 	return m, nil
 }

@@ -49,6 +49,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.write_quit", "Save and Close", "write_quit", ":wq"),
 			action("editor.undo", "Undo", "undo", "u"),
 			action("editor.redo", "Redo", "redo", "ctrl+r"),
+			// Undo tree (#59): the overlay plus vim's chronological walks.
+			action("editor.undoTree", "Undo Tree", "undo_tree", ""),
+			action("editor.undoChrono", "Undo (Chronological)", "undo_chrono", "g-"),
+			action("editor.redoChrono", "Redo (Chronological)", "redo_chrono", "g+"),
 			action("editor.copy", "Copy", "copy", "y"),
 			action("editor.cut", "Cut", "cut", "d"),
 			action("editor.paste", "Paste", "paste", "p"),

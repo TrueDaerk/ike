@@ -76,7 +76,7 @@ func TestRestoreSnapshotResumesSeq(t *testing.T) {
 	pushEdit(t, h2, b, buffer.Position{Line: 0, Col: 3}, "!")
 
 	s := h2.Snapshot()
-	last := s.Past[len(s.Past)-1]
+	last := s.Nodes[len(s.Nodes)-1]
 	if last.Seq != 3 {
 		t.Errorf("seq after restore = %d, want 3", last.Seq)
 	}
