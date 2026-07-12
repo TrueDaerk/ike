@@ -1874,6 +1874,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleVCSPanel()
 		return m, nil
 
+	case DiffStepMsg:
+		// diff.nextChange / diff.prevChange (F7 / shift+F7, 0340 #495): step
+		// the focused diff pane's hunk; a non-diff focus is a quiet no-op
+		// (the bindings are diff-scoped, so this is belt and braces).
+		if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindDiff {
+			inst.Diff().StepHunk(msg.Delta)
+		}
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {

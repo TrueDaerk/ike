@@ -267,6 +267,11 @@ func (m *Model) expandNearestGap() {
 	m.render()
 }
 
+// StepHunk moves the current hunk by delta — the diff.nextChange /
+// diff.prevChange commands (F7 / shift+F7, 0340 #495) drive it from outside
+// the key handler.
+func (m *Model) StepHunk(delta int) { m.stepHunk(delta) }
+
 // stepHunk moves the current hunk by delta, clamped, and scrolls to it.
 func (m *Model) stepHunk(delta int) {
 	if len(m.res.Hunks) == 0 {

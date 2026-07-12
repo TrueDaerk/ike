@@ -170,6 +170,9 @@ type ShowScratchFilesMsg struct{}
 // Dispatched by scratch.new and the per-language scratch.new.<id> commands.
 type NewScratchMsg struct{ Ext string }
 
+// DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
+type DiffStepMsg struct{ Delta int }
+
 // appCommands is the compile-in plugin exposing root-model actions as registry
 // commands, so the default keybindings (Roadmap 0080/0081) and the palette can
 // drive them; the root model owns the behavior, this file only names it.
@@ -246,6 +249,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
+			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
+			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), scratchCommands()...),
 	}
 }
