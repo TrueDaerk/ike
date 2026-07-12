@@ -373,6 +373,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	pasteHist := &pasteHistMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
+	vcsSt := &vcsState{} // shared before the literal: the branch picker mode reads it
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
@@ -386,7 +387,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		bindings:     bindings,
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist),
+		vcs:          vcsSt,
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt),
 		refs:         refs,
 		lspStatus:    map[string]string{},
 		symbols:      symbols,
@@ -397,7 +399,6 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		focusKeys:    focusKeys(cfg),
 		keys:         buildKeymap(cfg, bindings),
 	}
-	m.vcs = &vcsState{}
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
@@ -1004,7 +1005,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1017,7 +1018,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	scr := palette.NewScratchMode(scratchList)
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist)
+	branches := newBranchMode(func() []vcs.Branch { return vcsSt.branches })
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2335,6 +2337,56 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, msg.Op+" failed: "+msg.Err.Error())
 		}
 		return m, m.scheduleVCSRefresh()
+
+	case OpenBranchPickerMsg:
+		// vcs.branches (#467): fetch a fresh list, then open the picker.
+		if m.vcs.snap == nil {
+			m.host.Notify(host.Info, "not a git repository")
+			return m, nil
+		}
+		return m, vcs.BranchesCmd(m.vcs.snap.Root)
+
+	case vcs.BranchesMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "branches: "+msg.Err.Error())
+			return m, nil
+		}
+		m.vcs.branches = msg.Branches
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, branchesPrefix)
+		return m, nil
+
+	case CheckoutBranchMsg:
+		snap := m.vcs.snap
+		if snap == nil {
+			return m, nil
+		}
+		if msg.Name == snap.Branch {
+			m.host.Notify(host.Info, "already on "+msg.Name)
+			return m, nil
+		}
+		return m, vcs.CheckoutCmd(snap.Root, msg.Name)
+
+	case vcs.CheckoutDoneMsg:
+		if msg.Err != nil {
+			// Dirty-tree collisions surface as git's own "would be
+			// overwritten by checkout" line.
+			m.host.Notify(host.Error, "checkout failed: "+msg.Err.Error())
+			return m, m.scheduleVCSRefresh()
+		}
+		m.host.Notify(host.Info, "switched to "+msg.Branch)
+		return m, m.scheduleVCSRefresh()
+
+	case DiffHeadMsg:
+		return m.diffAgainstHead()
+
+	case vcs.HeadDiffMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "diff: "+msg.Err.Error())
+			return m, nil
+		}
+		m.openDiffHeadPane(msg.Path, msg.Head)
+		return m, nil
 
 	case UpdateProjectMsg:
 		return m.updateProject()

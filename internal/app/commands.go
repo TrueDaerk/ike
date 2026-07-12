@@ -242,6 +242,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.commit", "Commit…", OpenCommitMsg{}),
 			appCommand("vcs.updateProject", "Update Project", UpdateProjectMsg{}),
 			appCommand("vcs.revertFile", "Revert File", RevertActiveFileMsg{}),
+			appCommand("vcs.branches", "Switch Branch…", OpenBranchPickerMsg{}),
+			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
 		), scratchCommands()...),
 	}
 }

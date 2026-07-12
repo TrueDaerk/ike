@@ -35,6 +35,7 @@ type vcsState struct {
 	tickArmed  bool          // a vcsTickMsg is pending
 	refreshing bool          // a git status run is in flight
 	dirty      bool          // triggers arrived mid-flight: run again after
+	branches   []vcs.Branch  // last fetched branch list, behind the picker (#467)
 }
 
 // scheduleVCSRefresh arms the debounce tick unless one is already pending.

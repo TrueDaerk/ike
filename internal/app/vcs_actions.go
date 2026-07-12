@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/ui"
 	"ike/internal/vcs"
 )
@@ -114,3 +115,50 @@ func (m Model) updateRevertPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // revertPromptOpen reports whether the shell shows the revert confirmation.
 func (m Model) revertPromptOpen() bool { return m.revertPending != "" && m.shell.IsOpen() }
+
+// DiffHeadMsg runs vcs.diff: the focused file against its HEAD version.
+type DiffHeadMsg struct{}
+
+// diffAgainstHead validates the focused file and fetches its HEAD blob.
+func (m Model) diffAgainstHead() (tea.Model, tea.Cmd) {
+	snap := m.vcs.snap
+	if snap == nil {
+		m.host.Notify(host.Info, "not a git repository")
+		return m, nil
+	}
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "no file to diff")
+		return m, nil
+	}
+	path := ed.Path()
+	if snap.Status(path) == vcs.StatusUntracked {
+		m.host.Notify(host.Info, "untracked file — there is no HEAD version to diff against")
+		return m, nil
+	}
+	return m, vcs.HeadDiffCmd(snap.Root, path)
+}
+
+// openDiffHeadPane splits the focused leaf with a diff of the live buffer
+// (unsaved edits included) against the file's HEAD blob (#467).
+func (m *Model) openDiffHeadPane(path, head string) {
+	target := m.panes.Focused()
+	if target == "" || m.tree == nil {
+		return
+	}
+	right := readFileOrEmpty(path)
+	if ed := m.editorForPath(path); ed != nil {
+		right = ed.Text()
+	}
+	key := m.panes.AddDiffHead(path)
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	if !ok {
+		m.panes.Close(key)
+		return
+	}
+	m.tree = tree
+	m.layout()
+	m.panes.Get(key).Diff().SetContents(head, right)
+	m.setFocus(key)
+	saveLayout(m.tree, m.panes)
+}
