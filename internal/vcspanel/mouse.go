@@ -1,8 +1,24 @@
 package vcspanel
 
 import (
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 )
+
+// doubleClickWindow is the maximum delay between two clicks on the same row
+// for the second to activate it (#514), matching the explorer.
+const doubleClickWindow = 400 * time.Millisecond
+
+// doubleClicked records one click on a row and reports whether it completes
+// a double-click on that row.
+func (m *Model) doubleClicked(row int) bool {
+	nowAt := m.now()
+	hit := m.lastClickTab == m.tab && m.lastClickRow == row &&
+		nowAt.Sub(m.lastClickAt) <= doubleClickWindow
+	m.lastClickTab, m.lastClickRow, m.lastClickAt = m.tab, row, nowAt
+	return hit
+}
 
 // Mouse control (#503). Coordinates are pane-content-local: y 0 is the tab
 // header, the active view's body starts at y 1.
@@ -54,15 +70,19 @@ func (m *Model) clickChanges(x, y int) tea.Cmd {
 	}
 	m.msgFocus = false
 	if x <= 4 {
-		// The checkbox region stages/unstages regardless of selection.
+		// The checkbox region stages/unstages on a single click; it never
+		// arms a double-click.
 		m.chCursor = i
+		m.lastClickRow = -1
 		return m.updateChanges(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	}
-	if m.chCursor == i {
+	// A single click selects; only a double-click opens the diff (#514).
+	double := m.doubleClicked(i)
+	m.chCursor = i
+	if double {
 		path := m.chRows[i].Path
 		return func() tea.Msg { return OpenDiffMsg{Path: path} }
 	}
-	m.chCursor = i
 	return nil
 }
 
@@ -73,10 +93,12 @@ func (m *Model) clickLog(y int) tea.Cmd {
 	if y < 2 || i < 0 || i >= len(m.logRows) {
 		return nil
 	}
-	if m.logCursor == i {
+	// A single click selects; only a double-click activates (#514).
+	double := m.doubleClicked(i)
+	m.logCursor = i
+	if double {
 		return m.activateLogRow()
 	}
-	m.logCursor = i
 	return nil
 }
 
