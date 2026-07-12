@@ -148,6 +148,38 @@ func TestVCSPanelSharesDraftWithDialog(t *testing.T) {
 	}
 }
 
+func TestVCSPanelLogRouting(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
+	out, _ = m.Update(VCSPanelToggleMsg{})
+	m = out.(Model)
+
+	// Selecting the Log tab requests the first window through the app.
+	out, cmd := m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("log tab must request a window")
+	}
+	if _, ok := cmd().(vcspanel.LogRequestMsg); !ok {
+		t.Fatalf("cmd msg = %T", cmd())
+	}
+	// The loaded window lands in the panel; a commit-file diff opens a pane
+	// with the parent/commit contents.
+	out, _ = m.Update(vcs.LogMsg{Entries: []vcs.LogEntry{{Hash: strings.Repeat("a", 40), ShortHash: "aaaaaaa", Author: "t", Subject: "one"}}})
+	m = out.(Model)
+	if !strings.Contains(stripped(m), "one") {
+		t.Fatal("log entry missing from the panel")
+	}
+	out, _ = m.Update(vcs.FileAtMsg{Hash: strings.Repeat("a", 40), Path: "f.txt", Parent: "v1\n", Content: "v2\n"})
+	m = out.(Model)
+	inst := m.panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindDiff || inst.Diff().HunkCount() != 1 {
+		t.Fatalf("commit diff pane not opened (focus=%v)", m.panes.Focused())
+	}
+}
+
 func TestDiffHeadOpensDiffPane(t *testing.T) {
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

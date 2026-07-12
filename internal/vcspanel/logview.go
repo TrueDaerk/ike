@@ -1,19 +1,243 @@
 package vcspanel
 
 import (
+	"strings"
+	"time"
+
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/theme"
+	"ike/internal/vcs"
 )
 
-// Log view (#484 fills this in): windowed commit history with details. The
-// skeleton renders a placeholder so the pane lands (#482) before the view.
+// Log view (Roadmap 0330, #484): the windowed commit history. Commits load
+// page-wise through the root model (the panel never runs git); enter expands
+// a commit's changed files, enter on a file opens its parent-vs-commit diff.
+
+// logPageSize is one log window.
+const logPageSize = 50
+
+// LogRequestMsg asks the root model to load one log window into the panel.
+type LogRequestMsg struct {
+	Offset int
+	Limit  int
+}
+
+// ShowRequestMsg asks the root model to load one commit's details.
+type ShowRequestMsg struct{ Hash string }
+
+// OpenCommitDiffMsg asks the root model to open one commit file's diff
+// against the commit's parent.
+type OpenCommitDiffMsg struct {
+	Hash    string
+	Path    string
+	OldPath string
+}
+
+// logRow is one flattened list row: a commit, or a file of the expanded one.
+type logRow struct {
+	commit int // index into logEntries
+	file   int // -1 for the commit row itself
+}
+
+// ApplyLog ingests one loaded window (append for follow-up pages, replace
+// for offset 0 — the reload path after a mutating command).
+func (m *Model) ApplyLog(msg vcs.LogMsg) {
+	m.logLoading = false
+	if msg.Err != nil {
+		m.logErr = msg.Err.Error()
+		return
+	}
+	m.logErr = ""
+	if msg.Offset == 0 {
+		m.logEntries = msg.Entries
+		m.logCursor, m.logTop = 0, 0
+		m.expandedHash = ""
+		m.details = nil
+	} else {
+		m.logEntries = append(m.logEntries, msg.Entries...)
+	}
+	m.logHasMore = msg.HasMore
+	m.rebuildLogRows()
+}
+
+// ApplyShow ingests one commit's details and expands it.
+func (m *Model) ApplyShow(msg vcs.ShowMsg) {
+	if msg.Err != nil {
+		m.logErr = msg.Err.Error()
+		return
+	}
+	m.logErr = ""
+	m.expandedHash = msg.Entry.Hash
+	m.details = &msg
+	m.rebuildLogRows()
+}
+
+// rebuildLogRows flattens commits plus the expanded commit's files.
+func (m *Model) rebuildLogRows() {
+	m.logRows = m.logRows[:0]
+	for ci := range m.logEntries {
+		m.logRows = append(m.logRows, logRow{commit: ci, file: -1})
+		if m.details != nil && m.logEntries[ci].Hash == m.expandedHash {
+			for fi := range m.details.Files {
+				m.logRows = append(m.logRows, logRow{commit: ci, file: fi})
+			}
+		}
+	}
+	if m.logCursor >= len(m.logRows) {
+		m.logCursor = len(m.logRows) - 1
+	}
+	if m.logCursor < 0 {
+		m.logCursor = 0
+	}
+}
+
+// ensureLogLoaded requests the first window when the tab opens empty.
+func (m *Model) ensureLogLoaded() tea.Cmd {
+	if m.snap == nil || m.logLoading || len(m.logEntries) > 0 {
+		return nil
+	}
+	m.logLoading = true
+	return func() tea.Msg { return LogRequestMsg{Offset: 0, Limit: logPageSize} }
+}
+
+// ReloadLog re-requests the first window (after commit/update/checkout); a
+// never-opened log stays lazy.
+func (m *Model) ReloadLog() tea.Cmd {
+	if m.snap == nil || len(m.logEntries) == 0 {
+		return nil
+	}
+	m.logLoading = true
+	return func() tea.Msg { return LogRequestMsg{Offset: 0, Limit: logPageSize} }
+}
 
 // updateLog handles keys while the Log tab is visible.
 func (m *Model) updateLog(msg tea.KeyPressMsg) tea.Cmd {
+	switch msg.String() {
+	case "j", "down":
+		if m.logCursor < len(m.logRows)-1 {
+			m.logCursor++
+		} else if m.logHasMore && !m.logLoading {
+			// The cursor hit the loaded tail: fetch the next window.
+			m.logLoading = true
+			offset := len(m.logEntries)
+			return func() tea.Msg { return LogRequestMsg{Offset: offset, Limit: logPageSize} }
+		}
+	case "k", "up":
+		if m.logCursor > 0 {
+			m.logCursor--
+		}
+	case "r":
+		return m.ReloadLog()
+	case "enter":
+		return m.activateLogRow()
+	}
 	return nil
 }
 
-// viewLog renders the Log tab body.
+// activateLogRow expands/collapses a commit, or opens a file's diff.
+func (m *Model) activateLogRow() tea.Cmd {
+	if m.logCursor >= len(m.logRows) {
+		return nil
+	}
+	row := m.logRows[m.logCursor]
+	entry := m.logEntries[row.commit]
+	if row.file >= 0 {
+		f := m.details.Files[row.file]
+		return func() tea.Msg {
+			return OpenCommitDiffMsg{Hash: entry.Hash, Path: f.Path, OldPath: f.OldPath}
+		}
+	}
+	if m.expandedHash == entry.Hash {
+		// Collapse.
+		m.expandedHash = ""
+		m.details = nil
+		m.rebuildLogRows()
+		return nil
+	}
+	hash := entry.Hash
+	return func() tea.Msg { return ShowRequestMsg{Hash: hash} }
+}
+
+// viewLog renders the flattened rows scrolled around the cursor.
 func (m *Model) viewLog() string {
-	return lipgloss.NewStyle().Faint(true).Render("log view lands with #484")
+	pal := m.theme()
+	if m.logErr != "" {
+		return lipgloss.NewStyle().Foreground(pal.Error).Render(" log: " + m.logErr)
+	}
+	if len(m.logRows) == 0 {
+		text := " (no commits)"
+		if m.logLoading {
+			text = " loading…"
+		}
+		return lipgloss.NewStyle().Faint(true).Render(text)
+	}
+	height := m.bodyHeight() - 1 // footer
+	if height < 1 {
+		height = 1
+	}
+	if m.logCursor < m.logTop {
+		m.logTop = m.logCursor
+	}
+	if m.logCursor >= m.logTop+height {
+		m.logTop = m.logCursor - height + 1
+	}
+	now := time.Now()
+	var b strings.Builder
+	for k := 0; k < height; k++ {
+		i := m.logTop + k
+		if i < len(m.logRows) {
+			b.WriteString(m.renderLogRow(pal, i, now))
+		}
+		b.WriteString("\n")
+	}
+	b.WriteString(m.logFooter(pal))
+	return b.String()
+}
+
+// renderLogRow draws one flattened row.
+func (m *Model) renderLogRow(pal *theme.Palette, i int, now time.Time) string {
+	row := m.logRows[i]
+	entry := m.logEntries[row.commit]
+	selected := i == m.logCursor && m.focused
+
+	var line string
+	var style lipgloss.Style
+	if row.file < 0 {
+		marker := "▸"
+		if entry.Hash == m.expandedHash {
+			marker = "▾"
+		}
+		meta := entry.Author + ", " + vcs.RelativeTime(entry.Time, now)
+		line = " " + marker + " " + entry.ShortHash + " " + entry.Subject + "  — " + meta
+		style = lipgloss.NewStyle().Foreground(pal.Foreground)
+	} else {
+		f := m.details.Files[row.file]
+		badge := f.Status.String()
+		if badge == "" {
+			badge = " "
+		}
+		line = "      " + badge + " " + f.Path
+		style = lipgloss.NewStyle().Foreground(pal.Foreground)
+		if c := vcs.StatusColor(pal, f.Status); c != nil {
+			style = style.Foreground(c)
+		}
+	}
+	if selected {
+		style = style.Background(pal.Selection).Bold(true)
+	}
+	return style.Render(m.clip(line))
+}
+
+// logFooter shows the hints plus the paging/loading state.
+func (m *Model) logFooter(pal *theme.Palette) string {
+	hints := " enter expand/diff · j/k move · r reload"
+	switch {
+	case m.logLoading:
+		hints += " · loading…"
+	case m.logHasMore:
+		hints += " · j past the end loads more"
+	}
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(hints))
 }

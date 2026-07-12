@@ -42,6 +42,18 @@ type Model struct {
 	chTop    int
 	msgFocus bool
 	draft    *vcs.MessageDraft
+
+	// Log view (#484): windowed history, flattened with the expanded
+	// commit's files; loaded lazily through the root model.
+	logEntries   []vcs.LogEntry
+	logRows      []logRow
+	logCursor    int
+	logTop       int
+	logHasMore   bool
+	logLoading   bool
+	logErr       string
+	expandedHash string
+	details      *vcs.ShowMsg
 }
 
 // New returns a closed-over-nothing panel showing the Changes tab.
@@ -107,9 +119,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "2":
 		m.tab = TabLog
-		return nil
+		return m.ensureLogLoaded()
 	case "tab":
 		m.tab = (m.tab + 1) % 2
+		if m.tab == TabLog {
+			return m.ensureLogLoaded()
+		}
 		return nil
 	}
 	switch m.tab {

@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- VCS tool window (Epic 0330, #480): persistent `vcs.panel` pane
+  (`internal/vcspanel`, `space v v`) as a bottom split with terminal-style
+  toggle — Changes tab (staging list, diff-on-enter, commit with the message
+  draft shared with the modal dialog via `vcs.MessageDraft`) and Log tab
+  (windowed `git log` with paging, commit details via `ShowCmd`, per-file
+  parent-vs-commit diffs via `FileAtCmd`). New pane kind `KindVCS` with
+  layout persistence; log reloads after commit/update/checkout. VCS doc
+  updated.
 - VCS / Git integration (Epic 0320, #461, from idea #28): new `internal/vcs`
   package — async porcelain-v2 status snapshot (debounced refresh off watcher
   events and saves) behind JetBrains-style explorer status coloring, a
