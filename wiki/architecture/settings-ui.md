@@ -78,7 +78,11 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   (Toolchain, Keymap, Language Servers) follow the same layout via a shared
   `pinFooter` helper (#537): header line(s) pinned top, the list scrolls to
   follow the selection, and hints / failure details / env status / inline
-  override inputs render in a constant-height footer pinned bottom.
+  override inputs render in a constant-height footer pinned bottom. Custom-
+  page footer lines word-wrap to the column width through the shared
+  `wrapFooter` helper (#553) — Toolchain: two hint lines + status, Language
+  Servers: three lines, Keymap: two — so long key hints stay readable on
+  narrow windows instead of clipping mid-word.
 - **Layer indicator + reset.** Each row shows `@default` / `@user` /
   `@project` (`config.Origin`); overridden values are tinted; `r` resets
   (RemoveAndReload — fall back through the layers).
