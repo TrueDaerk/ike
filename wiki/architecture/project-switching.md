@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-10T06:45:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -46,7 +46,14 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   locked) reusing Roadmap 0070's overlay/fuzzy list. Items are the history
   entries — fuzzy-matched on display name, falling back to the path; an empty
   query lists all, newest first — plus an `Open "<query>"…` affordance for a
-  typed path outside the history. Entry details render through `compactPath`
+  typed path outside the history. A **path-shaped** query (`/…`, `~/…`,
+  `./…`, `../…`) browses the filesystem (#542): matching directories (via the
+  shared `internal/pathcomplete` engine, dirs-only) render as selectable
+  `Open <dir>` items ahead of the raw affordance, and `tab` extends the query
+  to the longest unambiguous prefix — a single match completes with its
+  trailing separator, so repeated tab descends (`~/Dev` → `~/Development/`).
+  The tab plumbing is a palette-level seam: modes opt in by implementing
+  `palette.Completer`. Entry details render through `compactPath`
   (home → `~`, middle-ellipsis) so long roots never crowd out the title.
   Activation emits `PickedMsg{Path}`, which the root model turns into the
   switch transaction below. `alt+shift+p` is also in the JetBrains chord table

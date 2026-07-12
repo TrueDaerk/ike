@@ -196,6 +196,17 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
 		p.move(1)
 		return nil
+	case msg.Code == tea.KeyTab:
+		// Ask the active mode to extend the query (path completion, #542).
+		m, body := p.mode()
+		if c, ok := m.(Completer); ok {
+			if out := c.Complete(body); out != body {
+				p.query = p.query[:len(p.query)-len(body)] + out
+				p.recompute()
+				return p.liveKick()
+			}
+		}
+		return nil
 	case msg.Code == tea.KeyBackspace:
 		if r := []rune(p.query); len(r) > 0 {
 			p.query = string(r[:len(r)-1])
