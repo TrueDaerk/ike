@@ -2,6 +2,9 @@
 
 ## 2026-07-12
 
+- Enter between a bracket pair opens a block (#518): `{|}` splits into three
+  lines — closer on its own line at the reference indent, caret on the
+  smart-indented middle line. Gated on `editor.auto_indent`, per caret.
 - Auto-closing bracket pairs (#517): typing `(`/`[`/`{` in insert mode inserts
   the matching closer with the cursor between (only when before EOL,
   whitespace, or a closer), typing a closer at the cursor skips over it, and
