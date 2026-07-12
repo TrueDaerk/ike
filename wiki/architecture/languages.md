@@ -176,6 +176,10 @@ a venv (`uv venv` when uv is on PATH, `python -m venv` otherwise) — it first
 asks for the target directory (#547) in a path-completed input pre-filled
 with `.venv`; relative targets resolve against the project root, absolute and
 `~` targets are honored, so a shared env directory outside the project works.
+On the uv path the project is scaffolded too (#548): a missing
+`pyproject.toml` is generated via `uv init --bare` (manifest only, no sample
+sources) and a missing `uv.lock` via `uv lock` — best effort, existing files
+are never touched, and the result toast names what was created.
 `u` picks a version from `uv python list`'s download-available
 entries and installs it in the background (`uv python install`, path resolved
 via `uv python find`). Both run asynchronously as `tea.Cmd`s; the result

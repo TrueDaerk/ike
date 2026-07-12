@@ -11,9 +11,12 @@ import (
 )
 
 // pythonenv.go is the Python environment management half of the toolchain
-// page (Roadmap 0180, #132): create a project venv (`uv venv` when uv is on
-// PATH, `python -m venv .venv` otherwise) and install a managed Python via
-// `uv python install <version>` picked from `uv python list`. Both run
+// page (Roadmap 0180, #132): create a venv (`uv venv` when uv is on PATH,
+// `python -m venv` otherwise) at a chosen target (#547) and install a managed
+// Python via `uv python install <version>` picked from `uv python list`. On
+// the uv path the project is scaffolded too (#548): a missing pyproject.toml
+// is generated via `uv init --bare` and a missing uv.lock via `uv lock` —
+// best effort, existing files are never touched. Both actions run
 // asynchronously inside tea.Cmds; the result lands as an EnvMsg the root
 // model routes — it registers the new interpreter through the write-back
 // layer ([lang.python] interpreter) and offers the LSP restart, so
@@ -47,8 +50,10 @@ func createEnv(root, target string, run runCommand, look lookPath) tea.Cmd {
 	}
 	interp := filepath.Join(venv, "bin", "python")
 	return func() tea.Msg {
+		var scaffolded []string
 		switch {
 		case look("uv") != "":
+			scaffolded = uvScaffold(root, run) // pyproject.toml before the env (#548)
 			run("uv", "venv", venv)
 		case look("python3") != "":
 			run("python3", "-m", "venv", venv)
@@ -60,8 +65,45 @@ func createEnv(root, target string, run runCommand, look lookPath) tea.Cmd {
 		if !fileExists(interp) {
 			return EnvMsg{LangID: "python", Err: fmt.Errorf("environment creation left no interpreter at %s", interp)}
 		}
-		return EnvMsg{LangID: "python", Interpreter: interp, Label: "created " + venv}
+		if look("uv") != "" {
+			scaffolded = append(scaffolded, uvLock(root, run)...)
+		}
+		label := "created " + venv
+		for _, s := range scaffolded {
+			label += " + " + s
+		}
+		return EnvMsg{LangID: "python", Interpreter: interp, Label: label}
 	}
+}
+
+// uvScaffold makes the project a uv project before the env is created
+// (#548): a missing pyproject.toml is generated with `uv init --bare` (the
+// manifest only — no sample sources). An existing manifest is never touched.
+// It returns the names of the files it created (best effort — a failing uv
+// simply creates nothing).
+func uvScaffold(root string, run runCommand) []string {
+	if fileExists(filepath.Join(root, "pyproject.toml")) {
+		return nil
+	}
+	run("uv", "init", "--bare", root)
+	if !fileExists(filepath.Join(root, "pyproject.toml")) {
+		return nil
+	}
+	return []string{"pyproject.toml"}
+}
+
+// uvLock generates the lockfile for the project's manifest when both uv and
+// pyproject.toml are present and no uv.lock exists yet (#548). Best effort:
+// the created env stands regardless of the lock outcome.
+func uvLock(root string, run runCommand) []string {
+	if !fileExists(filepath.Join(root, "pyproject.toml")) || fileExists(filepath.Join(root, "uv.lock")) {
+		return nil
+	}
+	run("uv", "lock", "--directory", root)
+	if !fileExists(filepath.Join(root, "uv.lock")) {
+		return nil
+	}
+	return []string{"uv.lock"}
 }
 
 // uvInstallable parses `uv python list` output into the versions offered for
