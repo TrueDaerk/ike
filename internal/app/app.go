@@ -2357,6 +2357,45 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, msg.Text)
 		return m, nil
 
+	case vcspanel.LogRequestMsg:
+		// The panel's log window loads through the root model (#484).
+		if snap := m.vcs.snap; snap != nil {
+			return m, vcs.LogCmd(snap.Root, msg.Offset, msg.Limit)
+		}
+		return m, nil
+
+	case vcs.LogMsg:
+		if p := m.vcsPanel(); p != nil {
+			p.ApplyLog(msg)
+		}
+		return m, nil
+
+	case vcspanel.ShowRequestMsg:
+		if snap := m.vcs.snap; snap != nil {
+			return m, vcs.ShowCmd(snap.Root, msg.Hash)
+		}
+		return m, nil
+
+	case vcs.ShowMsg:
+		if p := m.vcsPanel(); p != nil {
+			p.ApplyShow(msg)
+		}
+		return m, nil
+
+	case vcspanel.OpenCommitDiffMsg:
+		if snap := m.vcs.snap; snap != nil {
+			return m, vcs.FileAtCmd(snap.Root, msg.Hash, msg.Path, msg.OldPath)
+		}
+		return m, nil
+
+	case vcs.FileAtMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "diff: "+msg.Err.Error())
+			return m, nil
+		}
+		m.openCommitDiffPane(msg)
+		return m, nil
+
 	case vcspanel.OpenDiffMsg:
 		// enter on a changes row (#483): the file's diff against HEAD. Rows
 		// carry repo-relative paths; untracked files have no HEAD side.
@@ -2426,7 +2465,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.scheduleVCSRefresh()
 		}
 		m.host.Notify(host.Info, "switched to "+msg.Branch)
-		return m, m.scheduleVCSRefresh()
+		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case DiffHeadMsg:
 		return m.diffAgainstHead()
@@ -2476,7 +2515,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		default:
 			m.host.Notify(host.Info, "updated: "+strconv.Itoa(msg.Commits)+" commits, "+strconv.Itoa(msg.Files)+" files")
 		}
-		return m, m.scheduleVCSRefresh()
+		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case RevertActiveFileMsg:
 		return m.revertActiveFile()
@@ -2516,7 +2555,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.commitUI.ClearMessage()
 		m.commitUI.Close()
 		m.host.Notify(host.Info, "committed "+msg.Hash+" — "+msg.Summary)
-		return m, m.scheduleVCSRefresh()
+		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting

@@ -229,6 +229,20 @@ func (r *Registry) AddDiffHead(rightPath string) string {
 	return key
 }
 
+// AddDiffTitled creates a diff viewer with explicit column titles (the log
+// view's parent-vs-commit diff, 0330 #484); contents arrive via SetContents.
+func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string {
+	r.diffs++
+	key := diffKeyBase
+	if r.diffs > 1 {
+		key = diffKeyBase + ":" + strconv.Itoa(r.diffs)
+	}
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.New(key, leftTitle, rightTitle, rightPath, r.pal)
+	r.put(inst)
+	return key
+}
+
 // AddDiffKey recreates a diff viewer under an exact key, used by layout
 // restore. The minting counter advances past the key.
 func (r *Registry) AddDiffKey(key, leftPath, rightPath string) *Instance {

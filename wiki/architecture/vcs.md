@@ -1,13 +1,13 @@
 ---
 type: concept
 title: VCS / Git Integration
-description: "Epic 0320 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, commit dialog, update/revert, branch picker, file-vs-HEAD diff, inline blame; all git calls async via tea.Cmd."
+description: "Epics 0320/0330 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, commit dialog, update/revert, branch picker, file-vs-HEAD diff, inline blame, persistent tool window (changes + log); all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
 timestamp: 2026-07-12T00:00:00Z
 ---
 
-# VCS / Git Integration (Epic 0320)
+# VCS / Git Integration (Epics 0320/0330)
 
 `internal/vcs` owns every Git interaction: it shells out to the `git` CLI
 (no libgit2), always inside a `tea.Cmd` with a 5s timeout — **no blocking IO
@@ -67,7 +67,30 @@ Stage/unstage/commit/checkout/pull/revert live in `internal/vcs` as async
 commands resolving to result messages; errors surface as toasts carrying the
 decisive git stderr line.
 
+## VCS tool window (Epic 0330)
+
+`vcs.panel` (`space v v`) toggles the persistent JetBrains-style tool window
+(`internal/vcspanel`, pane kind `KindVCS`, singleton key `vcs`): a bottom
+split below the active editor with terminal-style focus-return semantics.
+Two tabs, switched with `1`/`2`/`tab`:
+
+- **Changes** — the staging list re-derived from every snapshot: `space`
+  stages/unstages through the shared ops, `enter` opens the file's
+  diff-vs-HEAD, `c`/`m` focus the message field, `ctrl+s` commits with the
+  dialog's validation hints. The commit message is a shared
+  `vcs.MessageDraft`: the panel and the modal `vcs.commit` dialog edit the
+  same text, and only a successful commit clears it.
+- **Log** — windowed history (`LogCmd`, 50 per page; `j` past the tail loads
+  more, `r` reloads): `enter` expands a commit's changed files (`ShowCmd`,
+  renames keep their old path), `enter` on a file opens the parent-vs-commit
+  diff (`FileAtCmd` blobs into the diff viewer, titled `name @ sha^ ⇄ name @
+  sha`). The log reloads after commit/update/checkout.
+
+The panel never runs git itself — it emits request messages the root model
+answers with `internal/vcs` commands. The layout slot persists (kind
+`"vcs"`); content is session-local and re-feeds from the first snapshot.
+
 ## Later increments
 
-Log/history browser, whole-file blame gutter, hunk staging, merge-conflict
-resolution UI, stash management.
+Whole-file blame gutter, hunk staging from the panel, merge-conflict
+resolution UI, stash management, branch-graph rendering in the log.
