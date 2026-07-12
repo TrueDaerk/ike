@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-07-12T00:00:00Z
@@ -71,3 +71,18 @@ plain file open. Unreadable files diff as empty text.
 Layout persistence saves `{kind: "diff", path, path2}`; restore rebuilds the
 pane and re-reads both files from disk (a vanished side restores empty rather
 than breaking the layout).
+
+## Diff viewer v2 (Epic 0340)
+
+- **Collapsed context** — unchanged runs fold into `··· N unchanged lines ···`
+  separators around a context budget (default 3, config `diff.context`;
+  negative disables). `c` toggles collapsed/full, `o` expands the gap nearest
+  the viewport center; expansions reset with new contents. Hunk navigation
+  and jumps work over collapsed maps.
+- **F7 / shift+F7** — next/previous change via the diff-scoped default
+  bindings (`diff.nextChange`/`diff.prevChange`); `n`/`N` stay.
+- **Editable current side** — `e` on a worktree-backed diff (diff.files,
+  vcs.diff, the changes view) mounts a live editor as the right column: full
+  vim editing, `:w` saves, shared document with open tabs, the left column
+  re-aligns per keystroke; `ctrl+e` returns to browsing. Revision-vs-revision
+  diffs (the log view) stay read-only with a hint.
