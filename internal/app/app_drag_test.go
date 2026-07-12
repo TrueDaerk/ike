@@ -327,3 +327,65 @@ func TestTitleDragOutOfBandStillSplits(t *testing.T) {
 		t.Fatalf("bottom-edge drop should split: %d panes, want %d", got, before+1)
 	}
 }
+
+// TestTitleClickShowsNoMoveFeedback: a press on a title bar without any pointer
+// travel must not flash the move overlay (#559) — no status hint, no source
+// marker, no ghost — and a release in place changes nothing.
+func TestTitleClickShowsNoMoveFeedback(t *testing.T) {
+	m := sized(t, 100, 40)
+	before := len(m.lay.Panes)
+	x, y := 2, m.lay.Panes[ctxExplorer].Y
+	m = step(m, press(x, y))
+	view := m.render()
+	if strings.Contains(view, "MOVE EXPLORER") {
+		t.Fatal("status line shows move hint on a plain press")
+	}
+	if strings.Contains(view, "⤴") {
+		t.Fatal("source pane shows move marker on a plain press")
+	}
+	if _, _, _, ok := m.moveGhost(); ok {
+		t.Fatal("ghost box rendered on a plain press")
+	}
+	m = step(m, release(x, y))
+	if m.drag != nil {
+		t.Fatal("drag state should clear on release")
+	}
+	if got := len(m.lay.Panes); got != before {
+		t.Fatalf("plain click changed layout: %d panes, want %d", got, before)
+	}
+}
+
+// TestTitleDragBelowThresholdIsClick: travel of fewer columns than the engage
+// threshold on the same row stays a click (#559).
+func TestTitleDragBelowThresholdIsClick(t *testing.T) {
+	m := sized(t, 100, 40)
+	before := len(m.lay.Panes)
+	x, y := 2, m.lay.Panes[ctxExplorer].Y
+	m = step(m, press(x, y))
+	m = step(m, motion(x+moveEngageCols-1, y))
+	if strings.Contains(m.render(), "MOVE EXPLORER") {
+		t.Fatal("move hint shown below the engage threshold")
+	}
+	m = step(m, release(x+moveEngageCols-1, y))
+	if got := len(m.lay.Panes); got != before {
+		t.Fatalf("sub-threshold drag changed layout: %d panes, want %d", got, before)
+	}
+}
+
+// TestTitleDragPastThresholdEngages: one row of vertical travel — or the column
+// threshold sideways — engages the move and its feedback (#559).
+func TestTitleDragPastThresholdEngages(t *testing.T) {
+	m := sized(t, 100, 40)
+	x, y := 2, m.lay.Panes[ctxExplorer].Y
+	m = step(m, press(x, y))
+	m = step(m, motion(x+moveEngageCols, y)) // sideways past the threshold
+	if !strings.Contains(m.render(), "MOVE EXPLORER") {
+		t.Fatal("move hint missing after horizontal travel past the threshold")
+	}
+	m = step(m, release(x, y)) // back at the press cell: engaged, but a no-op drop
+	m = step(m, press(x, y))
+	m = step(m, motion(x, y+1)) // one row down engages immediately
+	if !strings.Contains(m.render(), "MOVE EXPLORER") {
+		t.Fatal("move hint missing after one row of vertical travel")
+	}
+}
