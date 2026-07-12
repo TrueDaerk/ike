@@ -34,6 +34,8 @@ type paneIdentity struct {
 	Kind   string   `json:"kind"`
 	Path   string   `json:"path,omitempty"`
 	Path2  string   `json:"path2,omitempty"` // diff panes: the right-hand file (#60)
+	Rev    string   `json:"rev,omitempty"`   // diff panes: revision backing the left side (#508)
+	Rev2   string   `json:"rev2,omitempty"`  // diff panes: revision backing the right side
 	Tabs   []string `json:"tabs,omitempty"`
 	Active int      `json:"active,omitempty"`
 }
@@ -134,8 +136,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// Path names the previewed source file; restore re-reads it (#62).
 			ids[key] = paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}
 		case pane.KindDiff:
-			// Path/Path2 name the compared files; restore re-reads both (#60).
-			ids[key] = paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath()}
+			// Path/Path2 name the compared files; Rev/Rev2 mark revision-
+			// backed sides so restore re-reads blobs instead of files (#508).
+			lr, rr := inst.Diff().Revs()
+			ids[key] = paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}
 		case pane.KindTerminal:
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.

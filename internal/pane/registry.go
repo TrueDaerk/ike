@@ -3,6 +3,7 @@ package pane
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -241,6 +242,7 @@ func (r *Registry) AddDiffHead(rightPath string) string {
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, filepath.Base(rightPath)+" @ HEAD", filepath.Base(rightPath), rightPath, r.pal)
 	inst.df.SetEditable(true) // the right side is the working tree (#496)
+	inst.df.SetRevs("HEAD", "")
 	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
@@ -259,6 +261,42 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
+}
+
+// AddDiffRevKey recreates a revision-backed diff viewer under an exact key
+// (#508): a non-empty rev labels its side "name @ rev" and marks it for
+// git-blob restore; a revision-backed right side is read-only.
+func (r *Registry) AddDiffRevKey(key, leftPath, rightPath, leftRev, rightRev string) *Instance {
+	name := filepath.Base(rightPath)
+	leftTitle := name + " @ " + shortRev(leftRev)
+	if leftRev == "" {
+		leftTitle = filepath.Base(leftPath)
+	}
+	rightTitle := name
+	if rightRev != "" {
+		rightTitle = name + " @ " + shortRev(rightRev)
+	}
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.New(key, leftTitle, rightTitle, rightPath, r.pal)
+	inst.df.SetRevs(leftRev, rightRev)
+	inst.df.SetEditable(rightRev == "")
+	r.applyDiffConfig(inst)
+	r.put(inst)
+	r.advancePastDiff(key)
+	return inst
+}
+
+// shortRev clips a full sha to seven characters, keeping suffixes ("^") and
+// symbolic names ("HEAD") intact.
+func shortRev(rev string) string {
+	base, suffix := rev, ""
+	if strings.HasSuffix(rev, "^") {
+		base, suffix = rev[:len(rev)-1], "^"
+	}
+	if len(base) == 40 {
+		base = base[:7]
+	}
+	return base + suffix
 }
 
 // AddDiffKey recreates a diff viewer under an exact key, used by layout

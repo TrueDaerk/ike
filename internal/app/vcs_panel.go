@@ -87,6 +87,7 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 		abs = filepath.Join(snap.Root, filepath.FromSlash(msg.Path))
 	}
 	key := m.panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, abs)
+	m.panes.Get(key).Diff().SetRevs(msg.Hash+"^", msg.Hash)
 	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
 	if !ok {
 		m.panes.Close(key)
