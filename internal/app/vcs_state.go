@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/pane"
 	"ike/internal/vcs"
 )
@@ -70,7 +71,45 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 		m.vcs.refreshing = true
 		return vcs.Refresh(".")
 	}
-	return nil
+	// Recompute the gutter diff markers of every open buffer against the new
+	// snapshot (#464); clean/untracked buffers get their markers cleared.
+	return tea.Batch(m.vcsMarksCmds()...)
+}
+
+// vcsMarksCmds fans one marks recompute out per open document.
+func (m Model) vcsMarksCmds() []tea.Cmd {
+	seen := map[string]bool{}
+	var cmds []tea.Cmd
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if !ed.HasFile() || seen[ed.Path()] {
+				continue
+			}
+			seen[ed.Path()] = true
+			cmds = append(cmds, m.vcsMarksCmd(ed))
+		}
+	}
+	return cmds
+}
+
+// vcsMarksCmd recomputes one buffer's gutter diff markers (#464). Buffers
+// without HEAD-relative changes — clean, untracked, outside the repo — get a
+// clearing message instead of a git subprocess.
+func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
+	if ed == nil || !ed.HasFile() {
+		return nil
+	}
+	snap, path := m.vcs.snap, ed.Path()
+	switch snap.Status(path) {
+	case vcs.StatusModified, vcs.StatusConflicted, vcs.StatusRenamed:
+		return vcs.RefreshMarks(snap.Root, path, ed.Text())
+	default:
+		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
+	}
 }
 
 // VCSSnapshot exposes the current snapshot to tests and consumers; nil means

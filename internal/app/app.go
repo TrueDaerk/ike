@@ -2283,6 +2283,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vcs.SnapshotMsg:
 		return m, m.applyVCSSnapshot(msg)
 
+	case vcs.MarksMsg:
+		// Recomputed gutter diff markers (#464): to every view of the path.
+		return m, m.routeToEditor(msg.Path, msg)
+
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
 		// the external change.
@@ -2547,6 +2551,8 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 			m.layout()
 			saveLayout(m.tree, m.panes)
 			cmds = append(cmds, m.panes.Get(key).Editor().Reparse())
+			// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
+			cmds = append(cmds, m.vcsMarksCmd(m.panes.Get(key).Editor()))
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)

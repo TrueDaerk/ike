@@ -27,6 +27,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/textenc"
 	"ike/internal/theme"
+	"ike/internal/vcs"
 	"ike/internal/watch"
 )
 
@@ -225,6 +226,10 @@ type Model struct {
 	// popup, and the hover popup. See lsp_state.go.
 	diags      []ilsp.Diagnostic
 	diagByLine map[int][]ilsp.Diagnostic
+	// gitMarks are the gutter diff markers against HEAD (Roadmap 0320, #464),
+	// keyed by 0-based line like diagByLine; recomputed by the app on save,
+	// external change, and vcs refresh, so positions may briefly lag an edit.
+	gitMarks map[int]vcs.LineMark
 	comp       *completionState
 	hover      *hoverState
 	signature  *signatureState
@@ -682,6 +687,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.InlayHintsMsg:
 		if msg.Path == m.path {
 			m.setInlayHints(msg.Hints)
+		}
+		return m, nil
+	case vcs.MarksMsg:
+		// Recomputed gutter diff markers against HEAD (Roadmap 0320, #464);
+		// nil clears them (clean file, untracked, not a repo).
+		if msg.Path == m.path {
+			m.gitMarks = msg.Marks
 		}
 		return m, nil
 	// ilsp.FormatEditsMsg is deliberately NOT handled here: views of a shared

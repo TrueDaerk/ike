@@ -189,8 +189,12 @@ func (m Model) View() string {
 		gs := gutterStyle
 		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
 		// the cheap sign-column indicator that keeps the gutter width unchanged.
+		// A git diff marker (Roadmap 0320, #464) colours the same way; a
+		// diagnostic wins the cell when both apply.
 		if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
+		} else if mk, ok := m.gitMarks[i]; ok {
+			gs = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk))
 		}
 		gutter := gs.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
 		if end, ok := m.foldedAt(i); ok {

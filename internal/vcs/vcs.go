@@ -116,9 +116,18 @@ func (s *Snapshot) relPath(path string) (string, bool) {
 		return "", true // the repo root itself
 	}
 	if filepath.IsAbs(path) {
-		rel, err := filepath.Rel(s.Root, path)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return "", false
+		rel, ok := relInside(s.Root, path)
+		if !ok {
+			// macOS tempdirs reach git through /private symlinks: retry with
+			// both sides resolved before declaring the path outside the repo.
+			root, err1 := filepath.EvalSymlinks(s.Root)
+			p, err2 := filepath.EvalSymlinks(path)
+			if err1 != nil || err2 != nil {
+				return "", false
+			}
+			if rel, ok = relInside(root, p); !ok {
+				return "", false
+			}
 		}
 		path = rel
 	}
@@ -127,6 +136,15 @@ func (s *Snapshot) relPath(path string) (string, bool) {
 		path = ""
 	}
 	return path, true
+}
+
+// relInside computes path relative to root, rejecting paths outside it.
+func relInside(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }
 
 // SnapshotMsg carries a refreshed snapshot back into Update. A nil Snap means
