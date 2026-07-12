@@ -1,6 +1,8 @@
 package editor
 
 import (
+	"unicode"
+
 	"ike/internal/editor/buffer"
 )
 
@@ -10,10 +12,26 @@ import (
 // an empty pair removes both runes. Everything is gated on the
 // editor.auto_close_pairs setting and applies per caret (#145).
 
-// closePairs maps the auto-closing openers to their closers. Quotes and angle
-// brackets are deliberately excluded — too ambiguous (apostrophes, comparison
-// operators) for a plain-text heuristic.
+// closePairs maps the auto-closing openers to their closers. Angle brackets
+// are deliberately excluded — too ambiguous (comparison operators) for a
+// plain-text heuristic.
 var closePairs = map[rune]rune{'(': ')', '[': ']', '{': '}'}
+
+// quotePairs holds the auto-closing quotes (#521). Quotes close themselves,
+// so their handling is symmetric: skip-over doubles as the closing keystroke.
+var quotePairs = map[rune]bool{'"': true, '\'': true, '`': true}
+
+// pairCloser returns the auto-close counterpart of an opener; quotes close
+// themselves. False for runes that open no pair.
+func pairCloser(ch rune) (rune, bool) {
+	if c, ok := closePairs[ch]; ok {
+		return c, true
+	}
+	if quotePairs[ch] {
+		return ch, true
+	}
+	return 0, false
+}
 
 // isCloser reports whether ch is the closing member of an auto-close pair.
 func isCloser(ch rune) bool {
@@ -60,6 +78,10 @@ func (m *Model) autoCloseWrite(text string) bool {
 	}
 	if isCloser(r[0]) {
 		return m.autoCloseSkip(r[0])
+	}
+	if quotePairs[r[0]] {
+		m.autoCloseQuote(r[0])
+		return true
 	}
 	return false
 }
@@ -113,4 +135,45 @@ func (m *Model) autoCloseSkip(ch rune) bool {
 		m.emit(EventCursorMove)
 	}
 	return true
+}
+
+// autoCloseQuote handles a typed quote (#521), per caret: the same quote at
+// the cursor is skipped over (the symmetric char's closing keystroke); a
+// sensible context pairs it — unless the rune before the caret is a word rune
+// or the same quote, so the apostrophe in "don't" and adjacent quotes insert
+// alone; anything else inserts the single quote.
+func (m *Model) autoCloseQuote(ch rune) {
+	edited := false
+	insert := func(pos buffer.Position, text string) buffer.Position {
+		if m.insert.rec == nil {
+			m.insert.rec = m.newRecorder()
+		}
+		edited = true
+		return m.insert.rec.Apply(buffer.Insert(pos, text))
+	}
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		if m.runeAt(pos) == ch {
+			return buffer.Position{Line: pos.Line, Col: pos.Col + 1}
+		}
+		prev := rune(0)
+		if pos.Col > 0 {
+			prev = m.runeAt(buffer.Position{Line: pos.Line, Col: pos.Col - 1})
+		}
+		if !m.shouldClose(pos) || prev == ch || isWordRune(prev) {
+			return insert(pos, string(ch))
+		}
+		end := insert(pos, string(ch)+string(ch))
+		return buffer.Position{Line: end.Line, Col: end.Col - 1}
+	})
+	m.insert.typed += string(ch)
+	if edited {
+		m.dirtyFromInsert()
+	} else {
+		m.emit(EventCursorMove)
+	}
+}
+
+// isWordRune reports whether ch is a letter, digit, or underscore.
+func isWordRune(ch rune) bool {
+	return ch == '_' || unicode.IsLetter(ch) || unicode.IsDigit(ch)
 }

@@ -2,6 +2,10 @@
 
 ## 2026-07-12
 
+- Auto-closing quote pairs (#521): `"`, `'` and `` ` `` pair like brackets
+  under `editor.auto_close_pairs`; the same quote at the cursor is skipped
+  over, no pair after a word rune or the same quote (apostrophes), backspace
+  inside an empty quote pair deletes both.
 - Enter between a bracket pair opens a block (#518): `{|}` splits into three
   lines — closer on its own line at the reference indent, caret on the
   smart-indented middle line. Gated on `editor.auto_indent`, per caret.
