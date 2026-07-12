@@ -31,6 +31,15 @@ type Config struct {
 	// #133): [plugins.example] enabled = false. The plugin manager page
 	// writes it; applyPluginConfig and the LSP spec resolution read it.
 	Plugins map[string]map[string]any `toml:"plugins"`
+	// Marketplace holds plugin-marketplace settings (Roadmap 0310).
+	Marketplace Marketplace `toml:"marketplace"`
+}
+
+// Marketplace holds plugin-marketplace settings (Roadmap 0310, #444).
+// CatalogURL is the HTTPS location of the catalog index.json; empty falls back
+// to the built-in default (which may itself be empty — marketplace disabled).
+type Marketplace struct {
+	CatalogURL string `toml:"catalog_url"`
 }
 
 // Terminal holds integrated-terminal behaviour (Roadmap 0170).

@@ -155,6 +155,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("terminal.shell", c.Terminal.Shell)
 
+	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
+
 	for id, kv := range c.Lang {
 		for k, v := range kv {
 			put("lang."+id+"."+k, v)
