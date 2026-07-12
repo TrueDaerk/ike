@@ -4,7 +4,7 @@ title: Writing WASM Plugins
 description: Plugin-author guide — the Go guest SDK, building a .wasm plugin, installing it, and the raw ABI reference for other languages.
 resource: sdk/sdk.go
 tags: [plugins, wasm, sdk, guide]
-timestamp: 2026-07-10T17:45:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Writing WASM Plugins
@@ -57,7 +57,11 @@ GOOS=wasip1 GOARCH=wasm go build -buildmode=c-shared -o hello.wasm .
 callable after `_initialize` — the shape IKE requires. A default build is a
 command module whose `_start` runs and exits, leaving nothing to call.
 
-Install: copy the `.wasm` into the plugins directory and restart IKE.
+Install: copy the `.wasm` into the plugins directory and restart IKE — or,
+for catalog-published plugins, install from Settings → Marketplace, which
+downloads the artifact checksum-verified and writes the manifest sidecar
+pinning the catalog's capability list (see
+[Plugin Marketplace](./marketplace.md)).
 Registration diagnostics (a module that fails to load or whose `register()`
 traps) print to stderr at startup; the broken module is skipped, IKE stays up.
 
