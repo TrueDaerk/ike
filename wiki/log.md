@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- Status line segments (#101): the editor status line became an extensible
+  left/right slot model (`internal/app/statusline.go`) replacing string
+  concatenation. Two new segments: the focused buffer's effective interpreter
+  (venv name or binary name via the shared `lang.Interpreter` resolution,
+  cached per language, invalidated on config reload) and an unseen
+  notification counter (`● N`, reset by `notifications.history`). New doc
+  [status-line.md](/architecture/status-line.md).
+
 - Plugin marketplace (Roadmap 0310, #444-#446): new `internal/market` package
   (static HTTPS `index.json` catalog with strict per-entry validation, install
   engine with SHA-256 verification and atomic .wasm+manifest writes pinning

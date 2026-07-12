@@ -28,4 +28,5 @@ Component-level concepts for the IKE codebase.
 * [Integrated Terminal](/architecture/terminal.md) - PTY-spawned shell through a VT emulator as a pane: raw key routing with ctrl+tab escape hatch, coalesced output, resize propagation (Roadmap 0170)
 * [Writing WASM Plugins](/architecture/plugin-authoring.md) - plugin-author guide: Go guest SDK, build & install (wasip1 c-shared), sandbox posture, raw ABI reference for other languages (Roadmap 9900)
 * [Navigation History (Back/Forward)](/architecture/navigation-history.md) - per-jump cursor history with JetBrains Back/Forward semantics: open-funnel recording, nav.back/nav.forward, leader mnemonics space b / space i (Roadmap 0220)
+* [Status Line Segments](/architecture/status-line.md) - extensible left/right slot model behind the bottom status bar: mode/file/diagnostics plus toolchain interpreter and notification counter segments (#101)
 * [Plugin Marketplace](/architecture/marketplace.md) - discover/install/update/remove WASM plugins in-IDE: static HTTPS JSON catalog, checksum-verified atomic installs pinning the reviewed capability list, marketplace settings page (Roadmap 0310)

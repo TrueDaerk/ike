@@ -105,6 +105,14 @@ type Model struct {
 	// history is the notification ring (#78): the newest historyCap entries,
 	// newest first, browsable via the notifications.history command.
 	history []histEntry
+	// notifUnseen counts history entries added since the history view was last
+	// opened, shown as the status line's counter segment (#101).
+	notifUnseen int
+	// toolchainSeg caches the status line's toolchain label per language ID
+	// (#101): resolving an interpreter stats the filesystem and scans PATH, too
+	// costly per frame. Shared by pointer across the value-model copies (like
+	// largeToasted); its keys are dropped on config reload.
+	toolchainSeg map[string]string
 	// watcher is the external-file-change service (Roadmap 0140). It is
 	// constructed with the model (so save epochs record from the start) but
 	// only started by main.go via StartWatcher, keeping tests watcher-free.
@@ -338,6 +346,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		recentEditor: edKey,
 		recent:       recent,
 		largeToasted: map[string]bool{},
+		toolchainSeg: map[string]string{},
 		navHist:      &nav.History{},
 		host:         h,
 		reg:          reg,
@@ -1541,6 +1550,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ShowNotificationHistoryMsg:
 		// notifications.history (palette): the history ring in the floating shell.
+		// Opening marks everything seen — the status line counter resets (#101).
+		m.notifUnseen = 0
 		body := m.historyView()
 		m.shell.SetContent(ui.ModelContent{Heading: "NOTIFICATIONS", Body: func() string { return body }})
 		m.shell.SetSize(m.width, m.height)
@@ -4056,129 +4067,6 @@ func (m Model) editorTitle(ed *editor.Model) string {
 		name += "!" // file changed on disk while dirty (Roadmap 0140)
 	}
 	return name
-}
-
-// statusLine renders the bottom status bar. With an editor focused it shows
-// mode, file, dirty flag and cursor; with a terminal or the explorer focused
-// it names that pane kind instead, so the line always says where input goes (#381).
-func (m Model) statusLine() string {
-	style := lipgloss.NewStyle().
-		Width(m.width).
-		Background(m.pal().Panel).
-		Foreground(m.pal().Foreground)
-
-	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) {
-		hint := "MOVE " + m.paneLabel(d.srcPane)
-		if d.kind == dragTab {
-			if ed := m.panes.Get(d.srcPane).TabEditor(d.srcTab); ed != nil && ed.HasFile() {
-				hint = "MOVE " + filepath.Base(ed.Path())
-			}
-		}
-		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
-			if zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt]); can {
-				hint += " → " + zoneArrow(zone) + " of " + m.paneLabel(tgt)
-			} else {
-				hint += "  (drop on a pane or this pane's edge)"
-			}
-		} else if zone, near := m.selfDropZone(d); near {
-			hint += " → split " + zoneArrow(zone)
-		} else {
-			hint += "  (drop on a pane or this pane's edge)"
-		}
-		return style.Foreground(m.pal().DropTarget).Render(" " + hint)
-	}
-
-	// A non-editor focus names itself instead of implying editor input (#381):
-	// mirroring the active editor while a terminal owns the keystrokes made it
-	// hard to tell where input goes.
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() != pane.KindEditor {
-		left := " "
-		switch inst.Kind() {
-		case pane.KindTerminal:
-			left += "TERMINAL"
-			t := inst.Terminal()
-			seg := ""
-			if s := t.ShellPath(); s != "" {
-				seg = filepath.Base(s)
-			}
-			if d := t.Dir(); d != "" {
-				if seg != "" {
-					seg += " · "
-				}
-				seg += displayDir(d)
-			}
-			if seg != "" {
-				left += " │ " + seg
-			}
-			if !t.Running() {
-				left += " [exited]"
-			}
-		default:
-			left += "EXPLORER"
-		}
-		if s := m.host.Status(); s != "" {
-			left += " │ " + s
-		}
-		return style.Render(left)
-	}
-
-	// The ":" / "/" command line renders inside the editor pane (vim-style),
-	// not here — the status line keeps its segments while typing a command.
-	ed := m.activeEditor()
-	mode, file, dirty, diag := "NORMAL", "no file", "", ""
-	line, col := 1, 1
-	if ed != nil {
-		mode = ed.ModeName().String()
-		if ed.HasFile() {
-			file = displayPath(ed.Path())
-		}
-		if ed.Dirty() {
-			dirty = " [+]"
-		}
-		if ed.Stale() {
-			dirty += " [disk changed]"
-		}
-		if ed.InsightOff() {
-			// Large-file mode (#149): say why highlighting/LSP are absent.
-			dirty += " [large file]"
-		}
-		if errs, warns := ed.DiagnosticCounts(); errs > 0 || warns > 0 {
-			diag = " │ " + strconv.Itoa(errs) + "E " + strconv.Itoa(warns) + "W"
-		}
-		line, col = ed.Cursor()
-	}
-	left := " " + mode + " │ " + file + dirty + diag
-	// Persistent host status (plugin-set) is one more segment; it never
-	// replaces the mode/file/cursor segments (Roadmap 0130).
-	if s := m.host.Status(); s != "" {
-		left += " │ " + s
-	}
-	// The LSP server segment is scoped to the focused buffer's language (#380):
-	// blank for buffers whose language has no tracked server state.
-	if s := m.focusedLangStatus(ed); s != "" {
-		left += " │ " + s
-	}
-	right := "Ln " + strconv.Itoa(line) + ", Col " + strconv.Itoa(col) + " "
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
-	return style.Render(left + strings.Repeat(" ", gap) + right)
-}
-
-// focusedLangStatus returns the tracked server state for the focused editor's
-// language (#380): the status line's server segment follows the buffer instead
-// of echoing the last event globally. Empty when no file is open, the language
-// is unknown, or no server state was ever reported for it.
-func (m Model) focusedLangStatus(ed *editor.Model) string {
-	if ed == nil || !ed.HasFile() {
-		return ""
-	}
-	l, ok := lang.ByPath(ed.Path())
-	if !ok {
-		return ""
-	}
-	return m.lspStatus[l.ID]
 }
 
 // selfDropZone reports the spawn zone (and proximity) for a self-drop during a
