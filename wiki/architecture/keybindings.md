@@ -198,9 +198,12 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
 
 Vim-internal keymaps inside the editor (normal/insert/visual motions, operators,
 text objects) belong to Roadmap 0060 and are **not** in this table — this package
-owns only global / IDE-level shortcuts. `vcs.commit`, `vcs.updateProject`,
-`vcs.revertFile` are bound to placeholder ids and stay inert until a future VCS
-roadmap registers them.
+owns only global / IDE-level shortcuts. The VCS ids (`vcs.commit`,
+`vcs.updateProject`, `vcs.revertFile`, …) went live with Epic 0320 — see
+[VCS / Git Integration](/architecture/vcs.md); their fragile Cmd primaries are
+escaped by the leader `space v` family (`c`/`u`/`x`/`b`/`d`/`a`), and the
+blocked ledger is currently empty (its machinery stays test-covered through
+`keymap.StubBlockedForTest`).
 
 ## Terminal reality: the chord reachability table (0081/10)
 

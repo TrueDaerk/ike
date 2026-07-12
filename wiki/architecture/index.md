@@ -34,3 +34,4 @@ Component-level concepts for the IKE codebase.
 * [Markdown Preview](/architecture/markdown-preview.md) - rendered live preview pane for markdown buffers: glamour ANSI output beside the editor, debounced re-render, heading-anchored cursor scroll sync, theme-aware (#62)
 * [TODO Index](/architecture/todo-index.md) - project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable): overlay over the locations list, own scan service, per-file rescan on save, tag/current-file filters, status-line count (#61)
 * [Diff Viewer](/architecture/diff-viewer.md) - reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side/unified rendering, hunk navigation with editor jump, diff.files palette command (#60)
+* [VCS / Git Integration](/architecture/vcs.md) - async git status snapshot behind explorer coloring, branch segment, gutter diff markers, commit dialog, update/revert, branch picker, file-vs-HEAD diff, inline blame (Epic 0320)
