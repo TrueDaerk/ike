@@ -9,6 +9,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/palette"
+	"ike/internal/pathcomplete"
 )
 
 // picker.go is the project picker behind project.switch (Roadmap 0090, #12):
@@ -83,12 +84,41 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 		})
 	}
 	if q := strings.TrimSpace(query); q != "" {
+		// A path-shaped query browses the filesystem (#542): matching
+		// directories become selectable items ahead of the raw fallback.
+		if pathish(q) {
+			for _, c := range pathcomplete.Dirs(q).Candidates {
+				items = append(items, palette.Item{
+					Title: "Open " + c,
+					Msg:   PickedMsg{Path: c},
+				})
+			}
+		}
 		items = append(items, palette.Item{
 			Title: "Open \"" + q + "\"…",
 			Msg:   PickedMsg{Path: q},
 		})
 	}
 	return items
+}
+
+// Complete implements palette.Completer (#542): tab extends a path-shaped
+// query to the longest unambiguous directory prefix; anything else is inert.
+func (m *PickerMode) Complete(query string) string {
+	q := strings.TrimSpace(query)
+	if !pathish(q) {
+		return query
+	}
+	return pathcomplete.Dirs(q).Completed
+}
+
+// pathish reports a query meant as a filesystem path rather than a fuzzy
+// history search: absolute, home-relative or explicitly dot-relative.
+func pathish(q string) bool {
+	return strings.HasPrefix(q, string(filepath.Separator)) ||
+		q == "~" || strings.HasPrefix(q, "~"+string(filepath.Separator)) ||
+		strings.HasPrefix(q, "."+string(filepath.Separator)) ||
+		strings.HasPrefix(q, ".."+string(filepath.Separator))
 }
 
 // maxDetailWidth caps the rendered path chip: the palette row pins Detail to

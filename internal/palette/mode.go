@@ -30,6 +30,14 @@ type Mode interface {
 	Results(query string, cx Context) []Item
 }
 
+// Completer is an optional Mode extension (#542): a mode that can extend the
+// query body on tab — the project picker completes filesystem paths this way.
+// Complete returns the extended body; returning the input unchanged means
+// "nothing to complete" and the tab press is inert.
+type Completer interface {
+	Complete(query string) string
+}
+
 // RunCommandMsg is emitted when a command-mode item is activated. The root model
 // resolves the id against the registry and runs it, keeping the palette free of
 // any command store of its own.

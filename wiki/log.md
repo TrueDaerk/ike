@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Project picker path browsing (#542): a path-shaped picker query (`/…`,
+  `~/…`, `./…`) now lists matching directories as selectable `Open <dir>`
+  items and tab-completes to the longest unambiguous prefix
+  (`pathcomplete.Dirs`). The palette gained an optional `Completer` mode
+  seam: tab asks the active mode to extend the query body.
+
 - Path completion in settings inputs (#541): typing a filesystem path (the
   Toolchain custom-path input, schema `Path` entries) required knowing the
   exact path. A new shared engine `internal/pathcomplete` (candidates +

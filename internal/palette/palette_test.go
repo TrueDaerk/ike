@@ -292,3 +292,49 @@ func TestLiveModeDebounce(t *testing.T) {
 		t.Fatalf("Refresh must recompute from the cache, got %+v", p.items)
 	}
 }
+
+// completerMode is a Mode implementing Completer for tab tests (#542).
+type completerMode struct{ out string }
+
+func (m completerMode) Prefix() rune                   { return '#' }
+func (m completerMode) Placeholder() string            { return "" }
+func (m completerMode) Results(string, Context) []Item { return nil }
+func (m completerMode) Complete(query string) string {
+	if m.out == "" {
+		return query
+	}
+	return m.out
+}
+
+func TestTabAsksModeToComplete(t *testing.T) {
+	p := New(Config{}, completerMode{out: "~/Development/"})
+	p.SetSize(80, 24)
+	p.Open(Context{})
+	p.Update(runes("#~/Dev"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.query != "#~/Development/" {
+		t.Fatalf("tab must extend the query body keeping the prefix, got %q", p.query)
+	}
+}
+
+func TestTabInertWithoutCompletion(t *testing.T) {
+	p := New(Config{}, completerMode{})
+	p.SetSize(80, 24)
+	p.Open(Context{})
+	p.Update(runes("#~/zzz"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.query != "#~/zzz" {
+		t.Fatalf("tab with nothing to complete must be inert, got %q", p.query)
+	}
+}
+
+func TestTabInertOnNonCompleterMode(t *testing.T) {
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false))
+	p.SetSize(80, 24)
+	p.Open(Context{})
+	p.Update(runes(":wri"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.query != ":wri" {
+		t.Fatalf("tab on a non-completer mode must be inert, got %q", p.query)
+	}
+}

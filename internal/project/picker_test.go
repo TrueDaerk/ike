@@ -1,6 +1,8 @@
 package project
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -137,5 +139,62 @@ func TestPickerDefaultsToLiveConfig(t *testing.T) {
 	_ = m.Results("", palette.Context{})
 	if m.Prefix() != PickerPrefix || m.Placeholder() == "" {
 		t.Errorf("mode metadata wrong: %q %q", m.Prefix(), m.Placeholder())
+	}
+}
+
+// pickerTree builds a fixture with Development/ and Downloads/ directories
+// plus a stray file.
+func pickerTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, d := range []string{"Development", "Downloads"} {
+		if err := os.Mkdir(filepath.Join(root, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestPickerPathQueryListsDirectories(t *testing.T) {
+	root := pickerTree(t)
+	m := NewPickerMode(func() []Entry { return nil })
+	q := filepath.Join(root, "D")
+	items := m.Results(q, palette.Context{})
+	// Two directory candidates + the raw affordance last; the file is not offered.
+	if len(items) != 3 {
+		t.Fatalf("items = %+v, want 2 dir candidates + affordance", items)
+	}
+	wantFirst := "Open " + filepath.Join(root, "Development") + string(filepath.Separator)
+	if items[0].Title != wantFirst {
+		t.Fatalf("items[0] = %q, want %q", items[0].Title, wantFirst)
+	}
+	if msg, ok := items[0].Msg.(PickedMsg); !ok || msg.Path != filepath.Join(root, "Development")+string(filepath.Separator) {
+		t.Fatalf("candidate msg = %#v", items[0].Msg)
+	}
+	if items[2].Title != "Open \""+q+"\"…" {
+		t.Fatalf("raw affordance must stay last, got %q", items[2].Title)
+	}
+}
+
+func TestPickerNonPathQueryHasNoDirCandidates(t *testing.T) {
+	m := NewPickerMode(func() []Entry { return nil })
+	items := m.Results("ike", palette.Context{})
+	if len(items) != 1 {
+		t.Fatalf("non-path query must only offer the raw affordance, got %+v", items)
+	}
+}
+
+func TestPickerComplete(t *testing.T) {
+	root := pickerTree(t)
+	m := NewPickerMode(func() []Entry { return nil })
+	got := m.Complete(filepath.Join(root, "Dev"))
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); got != want {
+		t.Fatalf("Complete = %q, want %q", got, want)
+	}
+	if got := m.Complete("ike"); got != "ike" {
+		t.Fatalf("non-path query must complete to itself, got %q", got)
 	}
 }
