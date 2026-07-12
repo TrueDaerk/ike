@@ -216,11 +216,9 @@ func (t *ToolchainPage) openPicker(l lang.Language) {
 	case "php":
 		t.candidates = phpCandidates(t.look)
 	default:
-		// No specific discovery: PATH lookup by language id.
-		t.candidates = nil
-		if p := t.look(l.ID); p != "" {
-			t.candidates = []string{p}
-		}
+		// No specific discovery: PATH lookup by language id, then the
+		// well-known install directories (#538).
+		t.candidates = defaultCandidates(l.ID, t.look)
 	}
 	t.picking, t.pick, t.invalid = true, 0, ""
 }

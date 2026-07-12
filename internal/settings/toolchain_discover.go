@@ -111,6 +111,32 @@ func phpCandidates(look lookPath) []string {
 	return out
 }
 
+// wellKnownBinDirs are the install directories the generic candidate lookup
+// probes after PATH (#538) — homebrew and the go tarball land outside the PATH
+// a GUI-launched process inherits. Variable for tests.
+var wellKnownBinDirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/local/go/bin", "/usr/bin"}
+
+// defaultCandidates lists interpreter candidates for languages without
+// specific discovery (#538): PATH lookup by language id, then the id in the
+// well-known install directories.
+func defaultCandidates(id string, look lookPath) []string {
+	var out []string
+	seen := map[string]bool{}
+	if p := look(id); p != "" {
+		out, seen[p] = append(out, p), true
+	}
+	for _, dir := range wellKnownBinDirs {
+		p := filepath.Join(dir, id)
+		if seen[p] {
+			continue
+		}
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			out, seen[p] = append(out, p), true
+		}
+	}
+	return out
+}
+
 // versionArgs returns the probe invocation for a language's interpreter.
 func versionArgs(langID string) []string {
 	if langID == "php" {

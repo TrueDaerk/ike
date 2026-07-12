@@ -19,6 +19,7 @@ func init() {
 		ID:         "go",
 		Extensions: []string{"go"},
 		Grammar:    grammar(),
+		Toolchain:  toolchain{},
 		Server: &lang.ServerSpec{
 			Language:    "go",
 			Command:     "gopls",
