@@ -46,6 +46,7 @@ import (
 	"ike/internal/search"
 	"ike/internal/settings"
 	"ike/internal/terminal"
+	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/wasm"
@@ -1764,6 +1765,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				msg.Stale = ed.Stale()
 				msg.Large = ed.LargeFile()
 				msg.Hash = ed.DiskHash()
+				msg.EOL = textenc.LineEnding(ed.LineEnding())
+				msg.Enc = textenc.Encoding(ed.EncodingName())
+				msg.MixedEOL = ed.MixedEOL()
 			}
 		}
 		var cmds []tea.Cmd

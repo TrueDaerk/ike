@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T21:00:00Z
+timestamp: 2026-07-12T22:00:00Z
 ---
 
 # Editor
@@ -425,6 +425,35 @@ an undo past the saved state re-dirties the buffer so the next blur persists
 it. A **stale** buffer is never auto-saved: it stays dirty for the explicit-
 save conflict prompt above. Cmd+S remains the explicit save.
 
+## Line endings & encodings (#66)
+
+The buffer is always **LF-joined UTF-8**; the on-disk flavor lives beside it as
+document properties (`Model.eol`, `Model.enc`, `Model.mixedEOL` — like
+dirty/stale: copied on `ShareDocumentWith`, mirrored via `SyncMsg`). Detection
+and transcoding live in `internal/textenc`; `encoding.go` is the editor side.
+
+- **Load / reload** decode the raw bytes (`textenc.Decode`): a BOM picks
+  UTF-8 BOM / UTF-16 LE / UTF-16 BE outright; BOM-less bytes must validate as
+  UTF-8 or decode via the `files.encoding` config fallback (`latin-1`,
+  `windows-1252`, `utf-16le`, …) — otherwise the open **fails with a clear
+  error** instead of rendering mojibake. The line-ending flavor is the first
+  line break's (`LF` when none); a file containing both flavors is flagged
+  *mixed* and warned about on the ex line (the next save normalizes to the
+  stored flavor).
+- **Save** (`saveAs`) applies trim-trailing / final-newline on the logical
+  lines, then `textenc.Encode` re-applies the stored flavor: CRLF re-joined,
+  BOM re-attached, text transcoded — a CRLF or UTF-16 file **round-trips
+  byte-identically**. A rune the target encoding cannot represent (e.g. `€`
+  in ISO 8859-1) fails the save with an error on the ex line.
+- **Conversion** is explicit: the `file.setLineEndings.{lf,crlf}` and
+  `file.setEncoding.{utf8,utf8bom,utf16le,utf16be,latin1,windows1252}`
+  palette commands (theme-picker style, one command per choice) set the
+  flavor and mark the buffer dirty — the conversion materializes on the next
+  save. The status line shows both (`eol` + `encoding` segments, see
+  [status-line](./status-line.md)).
+- EditorConfig (#63) will layer *policy* (`end_of_line`, `charset`) on this
+  mechanism once it lands.
+
 ## Shared documents (#142)
 
 Two editor panes showing the same file are two **views of one document**
@@ -436,7 +465,7 @@ Two editor panes showing the same file are two **views of one document**
   per pane. Session restore deduplicates the same way.
 - After an edit, undo, save, or reload in one view, the emitter adapter (which
   knows its pane key) broadcasts `editor.SyncMsg{Path, FromKey, Dirty, Stale,
-  Large}` through `host.Send`; the root model routes it to every *other* pane
+  Large, EOL, Enc, MixedEOL}` through `host.Send`; the root model routes it to every *other* pane
   showing the path. Receivers clamp cursor/scroll into the mutated buffer,
   mirror the document flags, bump `docVersion` and reparse — no text is copied,
   the buffer is shared. `applySync` never re-emits, so syncs cannot ping-pong.
@@ -488,7 +517,8 @@ explicitly out of scope — this mode is the cheap 90%.
 the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll` and
-`sticky_scroll_depth` take effect live.
+`sticky_scroll_depth` take effect live. `files.encoding` names the fallback
+encoding for BOM-less non-UTF-8 files (#66).
 
 ## Registry bridge & LSP seam
 

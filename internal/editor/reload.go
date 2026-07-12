@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/highlight"
+	"ike/internal/textenc"
 	"ike/internal/undostore"
 	"ike/internal/watch"
 )
@@ -71,11 +72,19 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	if err != nil {
 		return m, nil // e.g. changed then removed within one debounce window
 	}
+	text, info, err := textenc.Decode(data, m.fallbackEncoding())
+	if err != nil {
+		// The rewritten file is no longer decodable (#66): keep the buffer as
+		// is rather than replacing it with mojibake; the next open reports the
+		// error properly.
+		return m, nil
+	}
 	line, col := m.cursor.Line, m.cursor.Col
 	top, left := m.view.Top, m.view.Left
 	// Mutate the document in place (not fresh pointers): other panes sharing
 	// it (#142) must see the reloaded text and the cleared undo stack too.
-	m.buf.ReplaceAll(string(data))
+	m.buf.ReplaceAll(text)
+	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.hist.Reset()
 	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)

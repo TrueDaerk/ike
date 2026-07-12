@@ -6,6 +6,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
 	"ike/internal/highlight"
+	"ike/internal/textenc"
 )
 
 // share.go implements shared documents (#142): two editor panes showing the
@@ -30,6 +31,12 @@ type SyncMsg struct {
 	Stale   bool
 	Large   bool   // large-file flag (#149), a document property like Dirty/Stale
 	Hash    string // disk-content hash for persistent undo (#148), same lifecycle
+	// On-disk line-ending flavor and encoding (#66), document properties like
+	// Dirty/Stale — a file.setLineEndings/file.setEncoding conversion in one
+	// view must save identically from every view.
+	EOL      textenc.LineEnding
+	Enc      textenc.Encoding
+	MixedEOL bool
 }
 
 // ShareDocumentWith turns m into a second view of src's document: buffer and
@@ -44,6 +51,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.stale = src.stale
 	m.largeFile = src.largeFile
 	m.diskHash = src.diskHash
+	m.eol, m.enc, m.mixedEOL = src.eol, src.enc, src.mixedEOL
 	m.docVersion = src.docVersion
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
@@ -86,6 +94,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.stale = msg.Stale
 	m.largeFile = msg.Large
 	m.diskHash = msg.Hash
+	m.eol, m.enc, m.mixedEOL = msg.EOL, msg.Enc, msg.MixedEOL
 	m.docVersion++
 	// This view's collapsed folds (#144) survive the remote edit where they
 	// can: drop the ones out of range now, and let the reparse scheduled

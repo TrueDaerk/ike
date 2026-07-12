@@ -32,6 +32,8 @@ type statusSegment struct {
 var statusLeft = []statusSegment{
 	{id: "mode", render: modeSegment},
 	{id: "file", render: fileSegment},
+	{id: "eol", render: eolSegment},
+	{id: "encoding", render: encodingSegment},
 	{id: "diagnostics", render: diagSegment},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
@@ -85,6 +87,29 @@ func fileSegment(_ Model, ed *editor.Model) string {
 		file += " [large file]"
 	}
 	return file
+}
+
+// eolSegment is the focused file's on-disk line-ending flavor (#66) — "LF" or
+// "CRLF", flagged when the load saw mixed endings. Clicking converts later
+// (#30); the file.setLineEndings commands are the interaction path.
+func eolSegment(_ Model, ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	s := ed.LineEnding()
+	if ed.MixedEOL() {
+		s += " (mixed)"
+	}
+	return s
+}
+
+// encodingSegment is the focused file's on-disk character encoding (#66);
+// converted via the file.setEncoding commands.
+func encodingSegment(_ Model, ed *editor.Model) string {
+	if ed == nil || !ed.HasFile() {
+		return ""
+	}
+	return ed.EncodingName()
 }
 
 // diagSegment is the focused buffer's diagnostic counts; hidden when clean.

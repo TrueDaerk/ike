@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor/operator"
 	"ike/internal/editor/register"
 	"ike/internal/editor/search"
+	"ike/internal/textenc"
 	"ike/internal/undostore"
 )
 
@@ -389,7 +390,10 @@ func (m *Model) redo(count int) {
 func (m *Model) save() error { return m.saveAs(m.path) }
 
 // saveAs writes the buffer to path (":w file"). It updates the editor's path on
-// success so subsequent saves target the new file.
+// success so subsequent saves target the new file. The trim/final-newline
+// policies apply to the logical lines; the stored line-ending flavor and
+// encoding are re-applied on the way out (#66), so a CRLF or UTF-16 file
+// round-trips byte-identically.
 func (m *Model) saveAs(path string) error {
 	if path == "" {
 		return nil
@@ -404,15 +408,20 @@ func (m *Model) saveAs(path string) error {
 	if m.insertFinalNewline {
 		data += "\n"
 	}
-	if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+	out, err := textenc.Encode(data, m.enc, m.eol)
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
 		return err
 	}
 	m.path = path
 	m.dirty = false
+	m.mixedEOL = false // the write just normalized to m.eol
 	m.hist.MarkSaved()
 	m.diskHash = ""
 	if !m.largeFile { // large-file mode opts out of persistent undo (#149)
-		m.diskHash = undostore.Hash([]byte(data))
+		m.diskHash = undostore.Hash(out)
 		m.PersistUndo()
 	}
 	m.emit(EventSave)
@@ -504,6 +513,22 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.foldCloseAll()
 	case "fold_open_all":
 		m.foldOpenAll()
+	case "eol_lf":
+		m.setLineEnding(textenc.LF)
+	case "eol_crlf":
+		m.setLineEnding(textenc.CRLF)
+	case "encoding_utf8":
+		m.setEncoding(textenc.UTF8)
+	case "encoding_utf8_bom":
+		m.setEncoding(textenc.UTF8BOM)
+	case "encoding_utf16le":
+		m.setEncoding(textenc.UTF16LE)
+	case "encoding_utf16be":
+		m.setEncoding(textenc.UTF16BE)
+	case "encoding_latin1":
+		m.setEncoding(textenc.Latin1)
+	case "encoding_windows1252":
+		m.setEncoding(textenc.Windows1252)
 	}
 	m.scroll()
 	return m, nil
