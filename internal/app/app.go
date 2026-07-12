@@ -694,8 +694,17 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
-			// A diff pane restores from the two files on disk (#60); a vanished
-			// side restores as empty rather than breaking the layout.
+			// A diff pane restores from the two files on disk (#60); a
+			// revision-backed side re-reads its blob via git instead (#508).
+			// A vanished side restores as empty rather than breaking the
+			// layout.
+			if id.Rev != "" || id.Rev2 != "" {
+				inst := panes.AddDiffRevKey(key, id.Path, id.Path2, id.Rev, id.Rev2)
+				left := revContentOrFile(id.Rev, id.Path, id.Path2)
+				right := revContentOrFile(id.Rev2, id.Path2, id.Path2)
+				inst.Diff().SetContents(left, right)
+				continue
+			}
 			inst := panes.AddDiffKey(key, id.Path, id.Path2)
 			inst.Diff().SetContents(readFileOrEmpty(id.Path), readFileOrEmpty(id.Path2))
 			continue
@@ -1356,6 +1365,24 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)
+}
+
+// revContentOrFile resolves one restored diff side (#508): a revision reads
+// its blob at blobPath via git, a file-backed side reads path from disk;
+// failures degrade to empty text like readFileOrEmpty.
+func revContentOrFile(rev, path, blobPath string) string {
+	if rev == "" {
+		return readFileOrEmpty(path)
+	}
+	root, err := vcs.DetectRoot(".")
+	if err != nil {
+		return ""
+	}
+	content, err := vcs.RevContent(root, rev, blobPath)
+	if err != nil {
+		return ""
+	}
+	return content
 }
 
 // readFileOrEmpty reads path, degrading a missing or unreadable file to the

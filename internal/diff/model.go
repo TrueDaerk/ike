@@ -71,6 +71,11 @@ type Model struct {
 	leftText   string
 	rightRow   map[int]int
 	editModeOn bool
+
+	// leftRev/rightRev name the revision backing each side ("" = file),
+	// persisted so a restart can re-read the blobs (#508).
+	leftRev  string
+	rightRev string
 }
 
 // EditRequestMsg asks the root model to start edit mode on the diff pane Key
@@ -163,6 +168,13 @@ func (m *Model) SetContents(left, right string) {
 	m.buildRightRow()
 	m.render()
 }
+
+// SetRevs records which revision backs each side ("" = a working-tree file),
+// for persistence (#508): a restored pane re-reads revision sides via git.
+func (m *Model) SetRevs(left, right string) { m.leftRev, m.rightRev = left, right }
+
+// Revs returns the per-side backing revisions ("" = file-backed).
+func (m Model) Revs() (left, right string) { return m.leftRev, m.rightRev }
 
 // SetEditable marks the right side as backed by the working tree (#496);
 // revision-only diffs stay read-only.
