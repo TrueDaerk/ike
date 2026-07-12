@@ -95,6 +95,10 @@ func Compute(left, right string) Result {
 
 // splitLines splits text on '\n', treating the empty text as zero lines so an
 // empty side diffs as pure inserts/deletes instead of one phantom empty line.
+// A trailing newline is a line terminator, not a separator (#507): without
+// dropping the final empty element, a HEAD blob ("a\n") against an editor
+// buffer ("a") rendered a phantom removed empty row. Trailing-newline-only
+// differences are therefore invisible to the viewer, by design.
 func splitLines(text string) []string {
 	if text == "" {
 		return nil
@@ -113,7 +117,11 @@ func splitLines(text string) []string {
 			start = i + 1
 		}
 	}
-	return append(out, text[start:])
+	out = append(out, text[start:])
+	if len(out) > 0 && out[len(out)-1] == "" {
+		out = out[:len(out)-1]
+	}
+	return out
 }
 
 // buildRows folds the edit script into aligned display rows: runs of deletes
