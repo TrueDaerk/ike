@@ -68,6 +68,18 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.fold.open", "Open Fold", "fold_open", "zo"),
 			action("editor.fold.closeAll", "Close All Folds", "fold_close_all", "zM"),
 			action("editor.fold.openAll", "Open All Folds", "fold_open_all", "zR"),
+			// Line-ending / encoding conversion (#66): one command per choice,
+			// theme-picker style — the palette's fuzzy match over
+			// "Line Endings:" / "Encoding:" is the picker. Conversions mark
+			// the buffer dirty and materialize on the next save.
+			action("file.setLineEndings.lf", "Line Endings: LF", "eol_lf", ""),
+			action("file.setLineEndings.crlf", "Line Endings: CRLF", "eol_crlf", ""),
+			action("file.setEncoding.utf8", "Encoding: UTF-8", "encoding_utf8", ""),
+			action("file.setEncoding.utf8bom", "Encoding: UTF-8 BOM", "encoding_utf8_bom", ""),
+			action("file.setEncoding.utf16le", "Encoding: UTF-16 LE", "encoding_utf16le", ""),
+			action("file.setEncoding.utf16be", "Encoding: UTF-16 BE", "encoding_utf16be", ""),
+			action("file.setEncoding.latin1", "Encoding: ISO 8859-1", "encoding_latin1", ""),
+			action("file.setEncoding.windows1252", "Encoding: Windows-1252", "encoding_windows1252", ""),
 			// Diagnostic navigation (#369) carries lsp.* ids — it steps through
 			// the LSP diagnostics — but lives here because the editor already
 			// caches the set; no server round-trip is involved.

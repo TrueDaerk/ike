@@ -24,6 +24,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
+	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/watch"
 )
@@ -131,6 +132,17 @@ type Model struct {
 
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
+	// eol/enc/mixedEOL describe how the open file is stored on disk (#66):
+	// the buffer itself is always LF-joined UTF-8; save re-applies this flavor.
+	// mixedEOL flags a load that saw both CRLF and LF (eol keeps the first
+	// occurrence) — the next save normalizes to eol, which is surfaced as a
+	// warning at load time. Document properties like dirty/stale: copied on
+	// share, mirrored via SyncMsg. Changed explicitly by the
+	// file.setLineEndings / file.setEncoding commands, which mark the buffer
+	// dirty so the conversion persists on the next save.
+	eol      textenc.LineEnding
+	enc      textenc.Encoding
+	mixedEOL bool
 	// diskHash is the content hash of the open file when buffer and disk last
 	// agreed (Load, save, external reload) — the adoption key for persistent
 	// undo (#148, see undopersist.go). A document property like dirty/stale:
@@ -224,6 +236,8 @@ func New() Model {
 		hlTheme:            highlight.NewTheme(nil, nil),
 		visualStart:        -1,
 		visualEnd:          -1,
+		eol:                textenc.LF,
+		enc:                textenc.UTF8,
 	}
 	m.view.LineNumbers = false
 	return m
@@ -296,14 +310,27 @@ func (m *Model) applyConfig() {
 	}
 }
 
-// Load reads path into the buffer, resetting cursor, mode, and history.
+// Load reads path into the buffer, resetting cursor, mode, and history. The
+// bytes are decoded (#66): a BOM or the files.encoding fallback picks the
+// character encoding, the line-ending flavor is detected and remembered for
+// save, and mixed line endings surface as a warning on the ex line.
 func (m *Model) Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
+	text, info, err := textenc.Decode(data, m.fallbackEncoding())
+	if err != nil {
+		return err
+	}
 	m.path = path
-	m.buf = buffer.FromString(string(data))
+	m.buf = buffer.FromString(text)
+	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
+	m.cmdMsg = ""
+	if info.MixedEOL {
+		m.cmdMsg = "W: mixed line endings, first is " + string(info.EOL) +
+			" — saving normalizes; file.setLineEndings converts explicitly"
+	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
@@ -336,6 +363,7 @@ func (m *Model) Load(path string) error {
 func (m *Model) NewFile(path string) {
 	m.path = path
 	m.buf = buffer.FromString(lang.TemplateFor(path))
+	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
 	m.largeFile = false // a template seed is never large
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0

@@ -2,6 +2,17 @@
 
 ## 2026-07-12
 
+- Encoding & line endings (#66): new `internal/textenc` package (BOM/UTF-8
+  detection, UTF-16 LE/BE + ISO 8859-1 + Windows-1252 transcoding via
+  `golang.org/x/text`). Load detects and save re-applies the on-disk
+  line-ending flavor and encoding, so CRLF/BOM/UTF-16 files round-trip
+  byte-identically; mixed line endings warn on the ex line. New `eol` +
+  `encoding` status segments, `file.setLineEndings.*` / `file.setEncoding.*`
+  palette commands (conversions mark the buffer dirty), new config key
+  `files.encoding` (fallback for BOM-less non-UTF-8 files). Updated
+  [editor.md](/architecture/editor.md) and
+  [status-line.md](/architecture/status-line.md).
+
 - Status line segments (#101): the editor status line became an extensible
   left/right slot model (`internal/app/statusline.go`) replacing string
   concatenation. Two new segments: the focused buffer's effective interpreter
