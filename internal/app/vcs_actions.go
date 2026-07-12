@@ -139,10 +139,15 @@ func (m Model) diffAgainstHead() (tea.Model, tea.Cmd) {
 	return m, vcs.HeadDiffCmd(snap.Root, path)
 }
 
-// openDiffHeadPane splits the focused leaf with a diff of the live buffer
-// (unsaved edits included) against the file's HEAD blob (#467).
+// openDiffHeadPane splits the editor area with a diff of the live buffer
+// (unsaved edits included) against the file's HEAD blob (#467). Requests can
+// originate in the VCS tool window (#483) — the diff still belongs beside
+// the editors, not inside the bottom strip (#489).
 func (m *Model) openDiffHeadPane(path, head string) {
-	target := m.panes.Focused()
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
 	if target == "" || m.tree == nil {
 		return
 	}
