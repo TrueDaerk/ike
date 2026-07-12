@@ -147,7 +147,9 @@ func buildHunk(res diff.Result, hi int) revertHunk {
 	}
 	if h.pureDeletion() {
 		// Insert before the buffer line that follows the last unchanged line
-		// above the hunk (0 when the hunk removes the head of the file).
+		// above the hunk (0 when the hunk removes the head of the file). The
+		// 1-based RightNo of that line IS the 0-based index of the line after
+		// it — no -1 here.
 		h.anchor = 0
 		for i := hk.Start - 1; i >= 0; i-- {
 			if res.Rows[i].RightNo > 0 {

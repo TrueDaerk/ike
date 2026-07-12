@@ -65,7 +65,10 @@ func revertFileFor(path string) string {
 	return filepath.Join(revertDir(), hex.EncodeToString(sum[:])+".json")
 }
 
-// SaveRevertSnapshot prepends one snapshot to the document's revert log.
+// SaveRevertSnapshot prepends one snapshot to the document's revert log. The
+// read-modify-write is unsynchronized: concurrent saves of the same document
+// can lose one snapshot — acceptable for a log fed by a single interactive
+// revert flow.
 func SaveRevertSnapshot(path, content string, changed int) {
 	if len(content) > maxRevertBytes {
 		return
