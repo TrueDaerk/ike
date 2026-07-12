@@ -172,8 +172,11 @@ scope.
 ## Python environment management (Roadmap 0180, #132)
 
 The toolchain settings page manages Python environments directly: `n` creates
-a project venv (`uv venv` when uv is on PATH, `python -m venv .venv`
-otherwise), `u` picks a version from `uv python list`'s download-available
+a venv (`uv venv` when uv is on PATH, `python -m venv` otherwise) — it first
+asks for the target directory (#547) in a path-completed input pre-filled
+with `.venv`; relative targets resolve against the project root, absolute and
+`~` targets are honored, so a shared env directory outside the project works.
+`u` picks a version from `uv python list`'s download-available
 entries and installs it in the background (`uv python install`, path resolved
 via `uv python find`). Both run asynchronously as `tea.Cmd`s; the result
 (`settings.EnvMsg`) is routed by the root model, which registers the new

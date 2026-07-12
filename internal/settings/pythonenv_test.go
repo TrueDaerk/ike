@@ -59,7 +59,7 @@ func TestCreateEnvPrefersUv(t *testing.T) {
 		mkInterp(t, filepath.Join(root, ".venv"))
 		return ""
 	}
-	msg := createEnv(root, f.run, f.look)()
+	msg := createEnv(root, ".venv", f.run, f.look)()
 	env := msg.(EnvMsg)
 	if env.Err != nil {
 		t.Fatal(env.Err)
@@ -79,7 +79,7 @@ func TestCreateEnvFallsBackToPython(t *testing.T) {
 		mkInterp(t, filepath.Join(root, ".venv"))
 		return ""
 	}
-	env := createEnv(root, f.run, f.look)().(EnvMsg)
+	env := createEnv(root, ".venv", f.run, f.look)().(EnvMsg)
 	if env.Err != nil {
 		t.Fatal(env.Err)
 	}
@@ -90,7 +90,7 @@ func TestCreateEnvFallsBackToPython(t *testing.T) {
 
 func TestCreateEnvNoToolchain(t *testing.T) {
 	f := &fakeEnv{binaries: map[string]string{}}
-	env := createEnv(t.TempDir(), f.run, f.look)().(EnvMsg)
+	env := createEnv(t.TempDir(), ".venv", f.run, f.look)().(EnvMsg)
 	if env.Err == nil || env.Interpreter != "" {
 		t.Fatalf("expected failure, got %+v", env)
 	}
@@ -163,12 +163,18 @@ func TestToolchainPageEnvActions(t *testing.T) {
 	}
 	p := pythonPage(t, f)
 
-	// n starts the create flow and marks the row busy.
-	if cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"}); cmd == nil {
-		t.Fatal("n should return the async create command")
+	// n opens the target input pre-filled with .venv (#547); enter creates.
+	if cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"}); cmd != nil {
+		t.Fatal("n should open the target input, not create yet")
 	}
-	if p.envState != envBusy {
-		t.Fatalf("envState = %q", p.envState)
+	if !p.envInput || p.envPath != ".venv" {
+		t.Fatalf("input state = %v %q", p.envInput, p.envPath)
+	}
+	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
+		t.Fatal("enter should return the async create command")
+	}
+	if p.envInput || p.envState != envBusy {
+		t.Fatalf("state after enter = %v %q", p.envInput, p.envState)
 	}
 
 	// u opens the uv picker; enter kicks the install.
@@ -191,5 +197,65 @@ func TestToolchainPageEnvActions(t *testing.T) {
 	p2.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if p2.uvPicking || !strings.Contains(p2.envState, "uv not found") {
 		t.Fatalf("state = %q picking=%v", p2.envState, p2.uvPicking)
+	}
+}
+
+// TestCreateEnvCustomTargets guards #547: relative targets resolve against
+// the project root, absolute and ~ targets are honored as typed.
+func TestCreateEnvCustomTargets(t *testing.T) {
+	root := t.TempDir()
+	abs := filepath.Join(t.TempDir(), "envs", "proj")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	cases := []struct{ target, want string }{
+		{"envs/dev", filepath.Join(root, "envs", "dev")},
+		{abs, abs},
+		{"~/venvs/x", filepath.Join(home, "venvs", "x")},
+	}
+	for _, c := range cases {
+		f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
+		f.onRun = func(string, ...string) string {
+			mkInterp(t, c.want)
+			return ""
+		}
+		env := createEnv(root, c.target, f.run, f.look)().(EnvMsg)
+		if env.Err != nil {
+			t.Fatalf("target %q: %v", c.target, env.Err)
+		}
+		if f.calls[0] != "uv venv "+c.want {
+			t.Fatalf("target %q: calls = %v, want uv venv %s", c.target, f.calls, c.want)
+		}
+		if env.Interpreter != filepath.Join(c.want, "bin", "python") {
+			t.Fatalf("target %q: interpreter = %q", c.target, env.Interpreter)
+		}
+	}
+}
+
+// TestEnvInputPathCompletion guards the target input's completion and cancel.
+func TestEnvInputPathCompletion(t *testing.T) {
+	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
+	p := pythonPage(t, f)
+	if err := os.Mkdir(filepath.Join(p.root, "environments"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+
+	// Replace the prefill with an absolute prefix and complete it.
+	for p.envPath != "" {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	for _, r := range filepath.Join(p.root, "env") {
+		p.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if want := filepath.Join(p.root, "environments") + string(filepath.Separator); p.envPath != want {
+		t.Fatalf("envPath after tab = %q, want %q", p.envPath, want)
+	}
+
+	// Esc cancels without creating.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if p.envInput || p.envState == envBusy || len(f.calls) != 0 {
+		t.Fatalf("esc must cancel: input=%v state=%q calls=%v", p.envInput, p.envState, f.calls)
 	}
 }
