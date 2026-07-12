@@ -68,10 +68,27 @@ type Snapshot struct {
 	// Files maps repo-relative slash-separated paths to their status. Clean
 	// files are absent.
 	Files map[string]FileStatus
+	// Entries lists every changed file with its index/worktree detail for the
+	// commit UI, in parse order.
+	Entries []FileEntry
 	// dirs holds every repo-relative directory (slash-separated, "" for the
 	// root) that contains at least one changed file, for explorer tinting.
 	dirs map[string]bool
 }
+
+// FileEntry is one changed file with the porcelain XY detail the commit UI
+// needs to tell staged from unstaged changes.
+type FileEntry struct {
+	Path   string
+	Status FileStatus
+	X, Y   byte // porcelain v2 staged/worktree letters; '?' for untracked
+}
+
+// Staged reports whether the entry has index (staged) changes.
+func (e FileEntry) Staged() bool { return e.X != '.' && e.X != '?' && e.X != 0 }
+
+// PartiallyStaged reports staged changes with further worktree edits on top.
+func (e FileEntry) PartiallyStaged() bool { return e.Staged() && e.Y != '.' }
 
 // NewSnapshot builds a snapshot from explicit per-file statuses (repo-relative
 // slash paths), propagating dirty directories — for tests and synthetic states.

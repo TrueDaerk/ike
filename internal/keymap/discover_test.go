@@ -36,8 +36,12 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	if got, _ := l.Binding("editor.duplicateLine"); !strings.Contains(got, "cmd+d ⚠") {
 		t.Fatalf("editor.duplicateLine = %q", got)
 	}
-	// Blocked commands are labelled, never hidden.
-	if got, _ := l.Binding("vcs.commit"); !strings.HasPrefix(got, "✗ blocked:") {
+	// Blocked commands are labelled, never hidden. (vcs.commit went live with
+	// 0320 #465 and now resolves to its leader mnemonic instead.)
+	if got, _ := l.Binding("vcs.updateProject"); !strings.HasPrefix(got, "✗ blocked:") {
+		t.Fatalf("vcs.updateProject = %q", got)
+	}
+	if got, _ := l.Binding("vcs.commit"); got != "space v c" {
 		t.Fatalf("vcs.commit = %q", got)
 	}
 	// Unbound ids degrade gracefully.

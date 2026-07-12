@@ -1,10 +1,12 @@
 package app
 
 import (
+	"sort"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/commitui"
 	"ike/internal/editor"
 	"ike/internal/pane"
 	"ike/internal/vcs"
@@ -66,6 +68,15 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	if m.panes.Has(pane.ExplorerKey) {
 		m.explorer().SetVCS(msg.Snap)
 	}
+	// The open commit dialog re-reads the changed files (#465); losing the
+	// repo underneath it closes it.
+	if m.commitUI.IsOpen() {
+		if msg.Snap == nil {
+			m.commitUI.Close()
+		} else {
+			m.commitUI.SetRows(commitRows(msg.Snap))
+		}
+	}
 	if m.vcs.dirty {
 		m.vcs.dirty = false
 		m.vcs.refreshing = true
@@ -110,6 +121,24 @@ func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
 	default:
 		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
 	}
+}
+
+// OpenCommitMsg opens the commit dialog (vcs.commit, #465).
+type OpenCommitMsg struct{}
+
+// commitRows converts snapshot entries into the dialog's rows, sorted by path.
+func commitRows(snap *vcs.Snapshot) []commitui.Row {
+	rows := make([]commitui.Row, 0, len(snap.Entries))
+	for _, e := range snap.Entries {
+		rows = append(rows, commitui.Row{
+			Path:    e.Path,
+			Status:  e.Status,
+			Staged:  e.Staged(),
+			Partial: e.PartiallyStaged(),
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
+	return rows
 }
 
 // VCSSnapshot exposes the current snapshot to tests and consumers; nil means

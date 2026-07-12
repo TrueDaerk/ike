@@ -22,6 +22,7 @@ import (
 	"ike/internal/backup"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
+	"ike/internal/commitui"
 	"ike/internal/config"
 	"ike/internal/diff"
 	"ike/internal/editor"
@@ -215,6 +216,10 @@ type Model struct {
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
+	// commitUI is the commit dialog (Roadmap 0320, #465): the changed-files
+	// list with stage toggles plus the commit message pane; the in-progress
+	// message survives close/reopen until a commit succeeds.
+	commitUI *commitui.Model
 	// inFileSearchRecent is true while a committed in-file search ("/", "?",
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
@@ -406,6 +411,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.callhier.SetPalette(themePal)
 	m.undoTree = undotree.New()
 	m.undoTree.SetPalette(themePal)
+	m.commitUI = commitui.New()
+	m.commitUI.SetPalette(themePal)
 	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
@@ -1448,6 +1455,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
 		m.undoTree.SetSize(m.width, m.height)
+		m.commitUI.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
 			w, h := m.settingsSize()
@@ -2287,6 +2295,55 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Recomputed gutter diff markers (#464): to every view of the path.
 		return m, m.routeToEditor(msg.Path, msg)
 
+	case OpenCommitMsg:
+		// vcs.commit (#465): the commit dialog over the current snapshot,
+		// with a background refresh for fresh truth.
+		if m.vcs.snap == nil {
+			m.host.Notify(host.Info, "not a git repository")
+			return m, nil
+		}
+		m.commitUI.SetSize(m.width, m.height)
+		m.commitUI.Open(commitRows(m.vcs.snap))
+		return m, m.scheduleVCSRefresh()
+
+	case commitui.ToggleMsg:
+		if snap := m.vcs.snap; snap != nil {
+			if msg.Stage {
+				return m, vcs.StageCmd(snap.Root, msg.Path)
+			}
+			return m, vcs.UnstageCmd(snap.Root, msg.Path)
+		}
+		return m, nil
+
+	case commitui.SubmitMsg:
+		if snap := m.vcs.snap; snap != nil {
+			return m, vcs.CommitCmd(snap.Root, msg.Message)
+		}
+		return m, nil
+
+	case commitui.HintMsg:
+		m.host.Notify(host.Info, msg.Text)
+		return m, nil
+
+	case vcs.OpDoneMsg:
+		// A stage/unstage finished: surface failures, then let the refresh
+		// re-derive the dialog rows from git's actual state.
+		if msg.Err != nil {
+			m.host.Notify(host.Error, msg.Op+" failed: "+msg.Err.Error())
+		}
+		return m, m.scheduleVCSRefresh()
+
+	case vcs.CommitDoneMsg:
+		if msg.Err != nil {
+			// Hook failures etc. keep the dialog (and message) for a retry.
+			m.host.Notify(host.Error, "commit failed: "+msg.Err.Error())
+			return m, m.scheduleVCSRefresh()
+		}
+		m.commitUI.ClearMessage()
+		m.commitUI.Close()
+		m.host.Notify(host.Info, "committed "+msg.Hash+" — "+msg.Summary)
+		return m, m.scheduleVCSRefresh()
+
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
 		// the external change.
@@ -2355,6 +2412,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.undoTree.IsOpen() {
 			// The undo-tree overlay owns the keyboard the same way (#59).
 			return m, m.undoTree.Update(msg)
+		}
+		if m.commitUI.IsOpen() {
+			// The commit dialog owns the keyboard the same way (0320, #465).
+			return m, m.commitUI.Update(msg)
 		}
 		if m.callhier.IsOpen() {
 			// The call-hierarchy overlay owns the keyboard the same way (#173).
@@ -4179,6 +4240,8 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.todo.View(), m.width, m.height)
 	case m.undoTree.IsOpen():
 		result = overlay.Center(base, m.undoTree.View(), m.width, m.height)
+	case m.commitUI.IsOpen():
+		result = overlay.Center(base, m.commitUI.View(), m.width, m.height)
 	case m.callhier.IsOpen():
 		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
 	case m.palette.IsOpen():

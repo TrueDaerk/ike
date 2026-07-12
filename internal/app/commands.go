@@ -239,6 +239,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
+			appCommand("vcs.commit", "Commit…", OpenCommitMsg{}),
 		), scratchCommands()...),
 	}
 }

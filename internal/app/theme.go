@@ -89,6 +89,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)
 	m.settings.SetPalette(p)
+	m.commitUI.SetPalette(p)
 }
 
 // selectTheme switches the active color scheme by name for this session:

@@ -58,20 +58,20 @@ func parseStatus(out []byte) *Snapshot {
 		case strings.HasPrefix(line, "1 "):
 			xy, p, ok := ordinaryEntry(line)
 			if ok {
-				snap.add(p, statusFromXY(xy))
+				snap.addEntry(p, statusFromXY(xy), xy)
 			}
 		case strings.HasPrefix(line, "2 "):
 			xy, p, ok := renameEntry(line)
 			if ok {
-				snap.add(p, statusFromXY(xy))
+				snap.addEntry(p, statusFromXY(xy), xy)
 			}
 			i++ // skip the trailing "original path" field of the -z record
 		case strings.HasPrefix(line, "u "):
-			if p, ok := unmergedEntry(line); ok {
-				snap.add(p, StatusConflicted)
+			if xy, p, ok := unmergedEntry(line); ok {
+				snap.addEntry(p, StatusConflicted, xy)
 			}
 		case strings.HasPrefix(line, "? "):
-			snap.add(strings.TrimPrefix(line, "? "), StatusUntracked)
+			snap.addEntry(strings.TrimPrefix(line, "? "), StatusUntracked, "??")
 		}
 	}
 	if snap.Branch == "(detached)" {
@@ -82,6 +82,20 @@ func parseStatus(out []byte) *Snapshot {
 		}
 	}
 	return snap
+}
+
+// addEntry records one parsed status record: the coloring map plus the
+// commit-UI entry carrying the staged/worktree letters.
+func (s *Snapshot) addEntry(p string, st FileStatus, xy string) {
+	if p == "" || st == StatusNone {
+		return
+	}
+	e := FileEntry{Path: p, Status: st}
+	if len(xy) == 2 {
+		e.X, e.Y = xy[0], xy[1]
+	}
+	s.Entries = append(s.Entries, e)
+	s.add(p, st)
 }
 
 // add records one changed file and tints every ancestor directory.
@@ -130,9 +144,8 @@ func renameEntry(line string) (xy, p string, ok bool) {
 }
 
 // unmergedEntry parses "u XY sub m1 m2 m3 mW h1 h2 h3 path" (10 header fields).
-func unmergedEntry(line string) (p string, ok bool) {
-	_, p, ok = entryAt(line, 10)
-	return p, ok
+func unmergedEntry(line string) (xy, p string, ok bool) {
+	return entryAt(line, 10)
 }
 
 // entryAt splits an entry into its first nFields space-separated header

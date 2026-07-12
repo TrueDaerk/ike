@@ -52,9 +52,10 @@ func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
 func TestKeymapBlockedBindingToasts(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	reg := registry.New()
-	// vcs.commit is a documented blocked default (idea #28); editor.replace
-	// left the ledger with 0240 phase 1 (#282).
-	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "vcs.commit"}
+	// vcs.updateProject is a documented blocked default (epic #461);
+	// vcs.commit left the ledger with 0320 (#465), editor.replace with 0240
+	// phase 1 (#282).
+	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "vcs.updateProject"}
 	m := NewWith(reg, cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -67,7 +68,7 @@ func TestKeymapBlockedBindingToasts(t *testing.T) {
 	if len(m.toasts) != 1 {
 		t.Fatalf("toasts = %d want 1", len(m.toasts))
 	}
-	if want := "vcs.commit is not available yet — VCS integration (idea #28)"; m.toasts[0].text != want {
+	if want := "vcs.updateProject is not available yet — VCS integration (epic #461)"; m.toasts[0].text != want {
 		t.Fatalf("toast text = %q want %q", m.toasts[0].text, want)
 	}
 }
