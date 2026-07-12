@@ -396,7 +396,8 @@ type SignatureInformation struct {
 // ParameterInformation's label is a substring of the signature label, or a
 // [start, end) offset pair in UTF-16 units — decoded leniently by consumers.
 type ParameterInformation struct {
-	Label json.RawMessage `json:"label"`
+	Label         json.RawMessage `json:"label"`
+	Documentation json.RawMessage `json:"documentation,omitempty"`
 }
 
 // --- code actions ---

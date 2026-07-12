@@ -23,6 +23,7 @@ func firstLine(m Model) string {
 // with the server-requested padding, without touching the buffer (#171).
 func TestInlayHintsRenderInline(t *testing.T) {
 	m, path := loaded(t, "add(1, 2)\n")
+	m.Configure(host.MapConfig{"lsp.inlay_hints": "true"}) // default off (#523)
 	m, _ = m.Update(hintsMsg(path,
 		ilsp.InlayHint{Line: 0, Col: 4, Label: "x:", Kind: protocol.InlayHintParameter, PadRight: true},
 		ilsp.InlayHint{Line: 0, Col: 7, Label: "y:", Kind: protocol.InlayHintParameter, PadRight: true},
@@ -45,6 +46,7 @@ func TestInlayHintsRenderInline(t *testing.T) {
 // line's text, where the render loop otherwise stops.
 func TestInlayHintsAtLineEnd(t *testing.T) {
 	m, path := loaded(t, "x := foo()\n")
+	m.Configure(host.MapConfig{"lsp.inlay_hints": "true"}) // default off (#523)
 	m, _ = m.Update(hintsMsg(path, ilsp.InlayHint{Line: 0, Col: 10, Label: "int", Kind: protocol.InlayHintType, PadLeft: true}))
 	if got, want := firstLine(m), "x := foo() int"; got != want {
 		t.Errorf("rendered = %q, want %q", got, want)
@@ -81,6 +83,7 @@ func TestInlayHintsConfigToggle(t *testing.T) {
 // its anchor (#171).
 func TestDisplayOffsetCountsTabsAndHints(t *testing.T) {
 	m, path := loaded(t, "\tab\n")
+	m.Configure(host.MapConfig{"lsp.inlay_hints": "true"}) // default off (#523)
 	if got := m.DisplayOffset(0, 2); got != 5 {
 		t.Errorf("tab-only DisplayOffset = %d, want 5", got)
 	}

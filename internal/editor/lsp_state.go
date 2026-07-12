@@ -420,10 +420,12 @@ const completionHint = "↹/⏎ accept · esc close"
 // label with the active parameter's rune highlight range, an optional first
 // doc line, and how many other overloads exist.
 type signatureState struct {
-	label      string
-	start, end int
-	doc        string
-	more       int
+	label       string
+	start, end  int
+	doc         string
+	more        int
+	params      []ilsp.SignatureParam
+	activeParam int
 }
 
 // applySignature installs or clears the popup from a SignatureHelpMsg: an
@@ -433,20 +435,31 @@ func (m *Model) applySignature(msg ilsp.SignatureHelpMsg) {
 		m.signature = nil
 		return
 	}
-	// A reply that lands after insert mode ended is stale (#315): the popup
-	// only lives while the call is being typed.
-	if m.mode != Insert && m.mode != Replace {
+	// A reply that lands after insert mode ended is stale (#315) — unless it
+	// answers the explicit parameter-info command (#523), which opens the
+	// popup in any mode, or updates a popup that is already showing (the
+	// cursor-follow retrigger works in normal mode too).
+	if m.mode != Insert && m.mode != Replace && !msg.Manual && m.signature == nil {
 		return
 	}
-	m.signature = &signatureState{label: msg.Label, start: msg.ParamStart, end: msg.ParamEnd, doc: msg.Doc, more: msg.More}
+	m.signature = &signatureState{
+		label:       msg.Label,
+		start:       msg.ParamStart,
+		end:         msg.ParamEnd,
+		doc:         msg.Doc,
+		more:        msg.More,
+		params:      msg.Params,
+		activeParam: msg.ActiveParam,
+	}
 }
 
 // SignatureOpen reports whether the signature popup is showing.
 func (m Model) SignatureOpen() bool { return m.signature != nil }
 
 // SignatureView renders the popup: the label with the active parameter
-// emphasised, the doc line dimmed below, an overload counter when applicable.
-// Long signatures wrap at the popup width cap instead of widening (#306).
+// emphasised, a parameter list with the active one marked (#523), the doc
+// line dimmed below, an overload counter when applicable. Long signatures
+// wrap at the popup width cap instead of widening (#306).
 func (m Model) SignatureView() string {
 	s := m.signature
 	if s == nil {
@@ -454,6 +467,7 @@ func (m Model) SignatureView() string {
 	}
 	box := m.popupFrame().Padding(0, 1)
 	param := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Underline(true)
+	active := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Border)
 
 	runes := []rune(s.label)
@@ -468,8 +482,33 @@ func (m Model) SignatureView() string {
 		line += dim.Render("  (+" + strconv.Itoa(s.more) + " overloads)")
 	}
 	rows := []string{line}
-	if s.doc != "" {
-		rows = append(rows, dim.Render(truncateTo(s.doc, 80)))
+	sep := dim.Render(strings.Repeat("─", min(lipgloss.Width(line), m.popupMaxWidth())))
+	if len(s.params) > 0 {
+		rows = append(rows, sep)
+		for i, p := range s.params {
+			if i == s.activeParam {
+				rows = append(rows, active.Render("▶ "+p.Label))
+			} else {
+				rows = append(rows, "  "+p.Label)
+			}
+		}
+	}
+	// The active parameter's doc wins the detail row; the signature doc
+	// follows when it adds anything.
+	docs := []string{}
+	if s.activeParam >= 0 && s.activeParam < len(s.params) {
+		if d := s.params[s.activeParam].Doc; d != "" {
+			docs = append(docs, d)
+		}
+	}
+	if s.doc != "" && (len(docs) == 0 || docs[0] != s.doc) {
+		docs = append(docs, s.doc)
+	}
+	if len(docs) > 0 {
+		rows = append(rows, sep)
+		for _, d := range docs {
+			rows = append(rows, dim.Render(truncateTo(d, 80)))
+		}
 	}
 	return m.clampPopup(box, strings.Join(rows, "\n"))
 }

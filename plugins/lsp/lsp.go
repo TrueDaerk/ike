@@ -44,6 +44,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().hover(h) },
 			},
 			{
+				ID:    "lsp.parameterInfo",
+				Title: "LSP: Parameter Info",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().parameterInfo(h) },
+			},
+			{
 				ID:    "lsp.definition",
 				Title: "LSP: Go to Definition",
 				Scope: plugin.PaneScope("editor"),
@@ -152,6 +158,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 func applyDefaults(c *config.Config) {
 	c.LSP.Enabled = true
 	c.LSP.AutoInstall = true
+	c.LSP.SignatureAuto = true
 	if c.LSP.Servers == nil {
 		c.LSP.Servers = map[string]map[string]any{}
 	}

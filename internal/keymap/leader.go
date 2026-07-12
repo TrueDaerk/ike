@@ -12,7 +12,7 @@ package keymap
 //     making it the universal variant that also works mid-edit.
 //
 // Actions without a curated mnemonic stay reachable through the palette
-// (ctrl+p, delivered everywhere); the completeness test in
+// (esc-esc, delivered everywhere); the completeness test in
 // reachability_test.go enforces that every fragile default has one of the
 // two escape routes.
 
