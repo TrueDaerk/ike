@@ -221,7 +221,13 @@ func (m Model) View() string {
 			}
 			continue
 		}
-		out = append(out, gutter+m.renderLine(i, textWidth, cursorStyle, selStyle))
+		row := m.renderLine(i, textWidth, cursorStyle, selStyle)
+		if m.blameOn && i == m.cursor.Line {
+			// Inline blame (0320, #468): the annotation splices into the
+			// cursor line's right padding when it fits.
+			row = m.blameAnnotate(row, i, textWidth)
+		}
+		out = append(out, gutter+row)
 	}
 	// An open find/replace panel (#283) renders as the pane's bottom rows;
 	// otherwise an active ":" / "/" / "?" input renders as the bottom row
