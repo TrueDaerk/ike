@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -124,7 +124,13 @@ reality-probe caveat).
 - The Tools menu carries "Terminal" (toggle) and "New Terminal"; all three
   commands are palette-reachable.
 - **Titles**: the shell's OSC 0/2 reports (the running command) append to
-  the pane title — `TERMINAL — zsh · goproj · npm run build`.
+  the pane title — `TERMINAL — zsh · goproj · npm run build`. Inside OSC
+  strings the raw byte `0x9C` (8-bit C1 ST) is kept as payload
+  (`internal/terminal/oscpatch.go`, #561): many UTF-8 runes carry it as a
+  continuation byte (the U+2700 dingbats, e.g. Claude Code's `✳` spinner
+  titles), and dispatching on it would split the rune and print the rest of
+  the title into the grid as ghost text. Only BEL and `ESC \` terminate,
+  matching xterm/Ghostty.
 
 ## Toolchain environment injection (#98)
 
