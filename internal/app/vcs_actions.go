@@ -144,6 +144,17 @@ func (m Model) diffAgainstHead() (tea.Model, tea.Cmd) {
 // originate in the VCS tool window (#483) — the diff still belongs beside
 // the editors, not inside the bottom strip (#489).
 func (m *Model) openDiffHeadPane(path, head string) {
+	// Re-opening the same diff focuses and refreshes the existing pane
+	// instead of splitting a duplicate (#509).
+	if key, ok := m.findDiffPane("", path, "HEAD", ""); ok {
+		right := readFileOrEmpty(path)
+		if ed := m.editorForPath(path); ed != nil {
+			right = ed.Text()
+		}
+		m.panes.Get(key).Diff().SetContents(head, right)
+		m.setFocus(key)
+		return
+	}
 	target := m.activeEditorKey()
 	if target == "" {
 		target = m.panes.Focused()

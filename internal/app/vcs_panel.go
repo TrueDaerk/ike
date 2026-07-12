@@ -70,6 +70,16 @@ func (m Model) vcsPanelLogReload() tea.Cmd {
 // splitting the focused leaf would carve a sliver out of the bottom tool
 // window the request came from (#489).
 func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
+	// The same commit file re-opens by focusing the existing pane (#509);
+	// revision contents are immutable, no refresh needed.
+	absPath := msg.Path
+	if snap := m.vcs.snap; snap != nil {
+		absPath = filepath.Join(snap.Root, filepath.FromSlash(msg.Path))
+	}
+	if key, ok := m.findDiffPane("", absPath, msg.Hash+"^", msg.Hash); ok {
+		m.setFocus(key)
+		return
+	}
 	target := m.activeEditorKey()
 	if target == "" {
 		target = m.panes.Focused()

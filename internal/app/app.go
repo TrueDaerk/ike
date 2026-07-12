@@ -1350,6 +1350,13 @@ func (m *Model) openMarkdownPreview() {
 // the files at leftPath and rightPath (#60). The new pane takes focus so n/N
 // and enter work immediately; an unreadable file diffs as empty text.
 func (m *Model) openDiffPane(leftPath, rightPath string) {
+	// The same file pair re-opens by focusing the existing pane with fresh
+	// contents (#509).
+	if key, ok := m.findDiffPane(leftPath, rightPath, "", ""); ok {
+		m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+		m.setFocus(key)
+		return
+	}
 	target := m.panes.Focused()
 	if target == "" || m.tree == nil {
 		return
@@ -1365,6 +1372,24 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)
+}
+
+// findDiffPane locates an open diff pane matching the identity: the file
+// pair plus the per-side revisions ("" = working tree). Re-opening the same
+// diff focuses it instead of splitting a duplicate (#509).
+func (m Model) findDiffPane(leftPath, rightPath, leftRev, rightRev string) (string, bool) {
+	for _, key := range m.panes.Keys() {
+		inst := m.panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindDiff {
+			continue
+		}
+		d := inst.Diff()
+		lr, rr := d.Revs()
+		if d.LeftPath() == leftPath && d.RightPath() == rightPath && lr == leftRev && rr == rightRev {
+			return key, true
+		}
+	}
+	return "", false
 }
 
 // revContentOrFile resolves one restored diff side (#508): a revision reads
