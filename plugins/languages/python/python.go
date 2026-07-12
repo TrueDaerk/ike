@@ -35,5 +35,13 @@ func init() {
 		IndentAfter: []string{":", "(", "[", "{"},
 		// Sticky-scroll scopes (#168).
 		ScopeNodes: []string{"function_definition", "class_definition"},
+		// Foldable regions (#144): definitions, compound statements,
+		// multi-line collections and multi-line strings (docstrings).
+		FoldNodes: []string{
+			"function_definition", "class_definition", "if_statement",
+			"for_statement", "while_statement", "with_statement",
+			"try_statement", "match_statement", "dictionary", "list",
+			"set", "tuple", "string",
+		},
 	})
 }

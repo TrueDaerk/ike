@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T20:00:00Z
+timestamp: 2026-07-12T21:00:00Z
 ---
 
 # Editor
@@ -89,6 +89,21 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   content and move the reference line down; capped by `sticky_scroll_depth`,
   innermost win), scrolling keeps the cursor from hiding behind the pinned
   rows, and a mouse click on a pinned row jumps to its declaration.
+  **Code folding** (#144) collapses the body of a function, block, import
+  list or multi-line comment behind its header line: the foldable ranges come
+  from the same parse (`SpansMsg.Folds`, node kinds per language via
+  `lang.Language.FoldNodes`, falling back to `ScopeNodes`), and `fold.go`
+  owns the per-view collapsed set (`folded`, header line → end line — views
+  of a shared document fold independently, like the cursor). A collapsed
+  fold renders as one row — the header plus a dimmed `⋯ N lines` placeholder
+  — and counts as one row for `j`/`k` (and counts), mouse clicks and wheel
+  scrolling. Jumping *into* a fold (search landing, `G`, go-to-definition)
+  auto-unfolds it via the `scroll()` choke point; an edit landing in a fold
+  dissolves it, edits above shift it, and every accepted reparse reconciles
+  the collapsed set against the fresh ranges (version-gated like the spans).
+  Keys: `za` toggle, `zc`/`zo` close/open (repeated `zc` closes outward),
+  `zM`/`zR` close/open all; the same operations are palette commands
+  (`editor.fold.*`).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
   Matching is **smartcase** (#257): an all-lowercase pattern is

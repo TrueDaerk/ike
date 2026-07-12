@@ -47,6 +47,11 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 		x = 0
 	}
 	line := m.view.Top + y
+	if m.hasFolds() {
+		// Collapsed folds render as one row (#144): map the clicked row
+		// through the visible lines, mirroring the View() render loop.
+		line = m.displayLineAt(y)
+	}
 	// A click on a pinned sticky-scroll header (#168) jumps to its declaration
 	// instead of the buffer line the row covers.
 	if sticky := m.stickyLines(); y < len(sticky) {
@@ -70,6 +75,22 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 // without moving the cursor, clamped to the buffer — a mouse-wheel scroll,
 // independent of mode. Vertical only; see ScrollXBy for horizontal.
 func (m *Model) ScrollBy(delta int) {
+	if m.hasFolds() {
+		// A collapsed fold scrolls past as a single row (#144).
+		top, dir := m.view.Top, 1
+		if delta < 0 {
+			dir, delta = -1, -delta
+		}
+		for ; delta > 0; delta-- {
+			n, ok := m.visibleStep(top, dir)
+			if !ok {
+				break
+			}
+			top = n
+		}
+		m.SetScroll(top, m.view.Left)
+		return
+	}
 	m.SetScroll(m.view.Top+delta, m.view.Left)
 }
 
@@ -120,7 +141,6 @@ func (m Model) View() string {
 		return lipgloss.NewStyle().Faint(true).Render("(no file open)")
 	}
 	lineCount := m.buf.LineCount()
-	bottom := m.view.Bottom(lineCount)
 	gutterStyle := lipgloss.NewStyle().Faint(true)
 	cursorStyle := lipgloss.NewStyle().Reverse(true)
 	textWidth := m.view.TextWidth(lineCount)
@@ -137,7 +157,18 @@ func (m Model) View() string {
 		body := m.renderLine(line, textWidth, cursorStyle, selStyle)
 		out = append(out, gutter+body)
 	}
-	for i := m.view.Top + len(sticky); i < bottom; i++ {
+	// Body rows: fill the remaining height, skipping lines hidden inside
+	// collapsed folds (#144) — a closed fold occupies exactly one row, its
+	// header, rendered with a hidden-line-count placeholder.
+	height := m.view.Height()
+	if height <= 0 {
+		// An unsized pane renders every line, matching viewport.Bottom.
+		height = lineCount + len(sticky)
+	}
+	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
+		if m.lineHidden(i) {
+			continue
+		}
 		gs := gutterStyle
 		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
 		// the cheap sign-column indicator that keeps the gutter width unchanged.
@@ -145,7 +176,12 @@ func (m Model) View() string {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		}
 		gutter := gs.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
-		body := m.renderLine(i, textWidth, cursorStyle, selStyle)
+		var body string
+		if end, ok := m.foldedAt(i); ok {
+			body = m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle)
+		} else {
+			body = m.renderLine(i, textWidth, cursorStyle, selStyle)
+		}
 		out = append(out, gutter+body)
 	}
 	// An open find/replace panel (#283) renders as the pane's bottom rows;

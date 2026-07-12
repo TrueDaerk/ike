@@ -39,8 +39,8 @@ func (m *Model) parseCmd() tea.Cmd {
 	version := m.docVersion
 	lines := m.buf.Lines()
 	return func() tea.Msg {
-		spans, scopes := highlight.HighlightScoped(path, lines)
-		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes}
+		spans, scopes, folds := highlight.HighlightScoped(path, lines)
+		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes, Folds: folds}
 	}
 }
 

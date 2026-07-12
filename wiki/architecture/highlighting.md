@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-12T15:00:00Z
+timestamp: 2026-07-12T21:00:00Z
 ---
 
 # Syntax Highlighting
@@ -51,6 +51,14 @@ pre-order so `EnclosingScopes(scopes, line)` can return the enclosing headers
 outermost-first (scope.go, pure Go). Scopes travel in `SpansMsg.Scopes`, so
 sticky scroll costs no second CGo pass.
 
+The same parse also collects the **code-folding ranges** (#144): every
+multi-line node whose kind the language lists in `lang.Language.FoldNodes`
+(falling back to `ScopeNodes` when unset) becomes a `Fold{HeaderLine,
+EndLine}` (fold.go, pure Go), emitted in pre-order with same-header nodes (a
+declaration and its body block) merged into one region. Folds travel in
+`SpansMsg.Folds`; the per-view collapse state lives in
+`internal/editor/fold.go` (see [editor](/architecture/editor.md)).
+
 ## Language injections (issue #299)
 
 `Highlight` also colours **embedded-language fragments** — an SQL string inside
@@ -80,7 +88,7 @@ cross-compiles regardless.
 Parsing runs **off the event loop**. The editor owns a monotonic `docVersion`
 (bumped on every buffer change). After a change — or on file open — the editor
 returns a `tea.Cmd` that runs the CGo parse on a goroutine and yields a
-`highlight.SpansMsg{Path, Version, Spans, Scopes}`. The app routes it back to the editor
+`highlight.SpansMsg{Path, Version, Spans, Scopes, Folds}`. The app routes it back to the editor
 leaf owning the path; the editor caches the spans **only if the version still
 matches** (a newer edit drops stale results). `renderLine` then looks up the
 capture per rune cell and wraps it in the themed style — in the default branch,

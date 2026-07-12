@@ -86,6 +86,9 @@ func (m *Model) SetEmitter(e Emitter) { m.emitter = e }
 func (m *Model) emit(kind EventKind) {
 	if kind == EventChange {
 		m.docVersion++
+		// Keep collapsed folds consistent with the mutation (#144): dissolve
+		// the fold the edit landed in, shift the ones below it (fold.go).
+		m.dissolveFoldsAtEdit()
 	}
 	if m.emitter == nil {
 		return

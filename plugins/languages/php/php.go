@@ -34,6 +34,14 @@ func init() {
 			"class_declaration", "interface_declaration", "trait_declaration",
 			"enum_declaration", "namespace_definition",
 		},
+		// Foldable regions (#144): declarations, statement blocks, array
+		// literals and multi-line /* */ comments.
+		FoldNodes: []string{
+			"function_definition", "method_declaration", "anonymous_function",
+			"class_declaration", "interface_declaration", "trait_declaration",
+			"enum_declaration", "namespace_definition", "compound_statement",
+			"declaration_list", "array_creation_expression", "comment",
+		},
 		// New .php files start with the opening tag (#170). Override via
 		// `[lang.php] template`.
 		Template: "<?php\n\n",

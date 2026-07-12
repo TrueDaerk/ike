@@ -29,5 +29,7 @@ func init() {
 		},
 		LineComment:  "--",
 		BlockComment: [2]string{"/*", "*/"},
+		// Foldable regions (#144): multi-line statements and /* */ comments.
+		FoldNodes: []string{"statement", "comment"},
 	})
 }

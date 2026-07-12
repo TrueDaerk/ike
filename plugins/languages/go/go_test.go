@@ -58,7 +58,7 @@ func TestGoScopes(t *testing.T) {
 		"",                 // 12
 		"func single() {}", // 13 — single line, no scope
 	}
-	_, scopes := highlight.HighlightScoped("main.go", lines)
+	_, scopes, _ := highlight.HighlightScoped("main.go", lines)
 	want := []highlight.Scope{
 		{HeaderLine: 2, EndLine: 7},  // outer
 		{HeaderLine: 3, EndLine: 5},  // func literal
@@ -74,5 +74,40 @@ func TestGoScopes(t *testing.T) {
 	}
 	if got := highlight.EnclosingScopes(scopes, 4); len(got) != 2 {
 		t.Errorf("EnclosingScopes(line 4) = %v, want outer + literal", got)
+	}
+}
+
+// TestGoFolds guards code folding (#144): the fold-collecting parse yields
+// the collapsible regions of Go source, pre-ordered and multi-line only, with
+// same-header nodes (declaration + body block) collapsed into one fold.
+func TestGoFolds(t *testing.T) {
+	lines := []string{
+		"package main",       // 0
+		"",                   // 1
+		"import (",           // 2
+		"\t\"fmt\"",          // 3
+		")",                  // 4
+		"",                   // 5
+		"func outer() {",     // 6
+		"\tif true {",        // 7
+		"\t\tfmt.Println(1)", // 8
+		"\t}",                // 9
+		"}",                  // 10
+		"",                   // 11
+		"func single() {}",   // 12 — single line, nothing to hide
+	}
+	_, _, folds := highlight.HighlightScoped("main.go", lines)
+	want := []highlight.Fold{
+		{HeaderLine: 2, EndLine: 4},  // import list
+		{HeaderLine: 6, EndLine: 10}, // func outer (declaration + block merged)
+		{HeaderLine: 7, EndLine: 9},  // if block
+	}
+	if len(folds) != len(want) {
+		t.Fatalf("folds = %v, want %v", folds, want)
+	}
+	for i := range want {
+		if folds[i] != want[i] {
+			t.Errorf("fold[%d] = %v, want %v", i, folds[i], want[i])
+		}
 	}
 }

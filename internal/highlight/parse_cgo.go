@@ -16,33 +16,34 @@ import (
 // the opaque token built by NewGrammar; a non-*grammarImpl or an uncompilable
 // query yields no spans.
 func parse(g lang.Grammar, lines []string) []Span {
-	spans, _ := parseScoped(g, nil, lines)
+	spans, _, _ := parseScoped(g, nil, nil, lines)
 	return spans
 }
 
-// parseScoped is parse plus sticky-scroll scope collection (#168): one Tree-sitter
-// parse yields both the highlight spans and, when scopeKinds is non-empty, the
-// multi-line nodes of those kinds as Scopes in pre-order (outer before inner).
-// Sharing the parse keeps sticky scroll free — no second CGo pass per edit.
-func parseScoped(g lang.Grammar, scopeKinds []string, lines []string) ([]Span, []Scope) {
+// parseScoped is parse plus sticky-scroll scope collection (#168) and fold-range
+// collection (#144): one Tree-sitter parse yields the highlight spans and, when
+// scopeKinds / foldKinds are non-empty, the multi-line nodes of those kinds as
+// Scopes / Folds in pre-order (outer before inner). Sharing the parse keeps both
+// features free — no second CGo pass per edit.
+func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string) ([]Span, []Scope, []Fold) {
 	gi, ok := g.(*grammarImpl)
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tsLang, query, ok := gi.compiled()
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 
 	src := []byte(strings.Join(lines, "\n"))
 	parser := ts.NewParser()
 	defer parser.Close()
 	if err := parser.SetLanguage(tsLang); err != nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	tree := parser.Parse(src, nil)
 	if tree == nil {
-		return nil, nil
+		return nil, nil, nil
 	}
 	defer tree.Close()
 
@@ -53,6 +54,14 @@ func parseScoped(g lang.Grammar, scopeKinds []string, lines []string) ([]Span, [
 			kinds[k] = true
 		}
 		collectScopes(tree.RootNode(), kinds, &scopes)
+	}
+	var folds []Fold
+	if len(foldKinds) > 0 {
+		kinds := make(map[string]bool, len(foldKinds))
+		for _, k := range foldKinds {
+			kinds[k] = true
+		}
+		collectFolds(tree.RootNode(), kinds, &folds)
 	}
 
 	// byteToRune[line] maps a byte offset within that line to a rune column.
@@ -75,7 +84,7 @@ func parseScoped(g lang.Grammar, scopeKinds []string, lines []string) ([]Span, [
 		end := cap.Node.EndPosition()
 		appendSpans(&spans, conv, name, start, end)
 	}
-	return spans, scopes
+	return spans, scopes, folds
 }
 
 // collectScopes walks the tree depth-first and appends every multi-line node
@@ -89,6 +98,24 @@ func collectScopes(n *ts.Node, kinds map[string]bool, out *[]Scope) {
 	}
 	for i := uint(0); i < n.NamedChildCount(); i++ {
 		collectScopes(n.NamedChild(i), kinds, out)
+	}
+}
+
+// collectFolds walks the tree depth-first and appends every multi-line node
+// whose kind is in kinds as a foldable region (#144) — pre-order, so outer
+// folds precede the folds they contain, which is the order InnermostFold
+// relies on. Single-line nodes are skipped (nothing to hide), and nodes
+// starting on the header line of the previous fold are collapsed into it
+// (e.g. a Go type_declaration and its type_spec fold as one region).
+func collectFolds(n *ts.Node, kinds map[string]bool, out *[]Fold) {
+	start, end := n.StartPosition(), n.EndPosition()
+	if kinds[n.Kind()] && end.Row > start.Row {
+		if l := len(*out); l == 0 || (*out)[l-1].HeaderLine != int(start.Row) {
+			*out = append(*out, Fold{HeaderLine: int(start.Row), EndLine: int(end.Row)})
+		}
+	}
+	for i := uint(0); i < n.NamedChildCount(); i++ {
+		collectFolds(n.NamedChild(i), kinds, out)
 	}
 }
 

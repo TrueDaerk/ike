@@ -494,6 +494,16 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.caretAddAll()
+	case "fold_toggle":
+		m.foldToggle()
+	case "fold_close":
+		m.foldCloseAtCursor()
+	case "fold_open":
+		m.foldOpenAtCursor()
+	case "fold_close_all":
+		m.foldCloseAll()
+	case "fold_open_all":
+		m.foldOpenAll()
 	}
 	m.scroll()
 	return m, nil
