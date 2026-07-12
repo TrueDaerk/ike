@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/clipboard"
+	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -27,6 +28,9 @@ const (
 	// KindMarkdown is a rendered markdown preview pane (#62); any number may
 	// exist, each bound to one source buffer path.
 	KindMarkdown
+	// KindDiff is a read-only diff viewer pane (#60); any number may exist,
+	// each comparing two text versions.
+	KindDiff
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -36,6 +40,7 @@ const (
 	ctxEditor   = "editor"
 	ctxTerminal = "terminal"
 	ctxPreview  = "preview"
+	ctxDiff     = "diff"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -51,6 +56,7 @@ type Instance struct {
 	exp  explorer.Model
 	term terminal.Model
 	md   preview.Model
+	df   diff.Model
 
 	// Editor state: the ordered tab list and the active index. cfg/pal/size
 	// and focus are remembered so tabs created later match the live pane.
@@ -79,6 +85,8 @@ func (i *Instance) ContextID() string {
 		return ctxTerminal
 	case KindMarkdown:
 		return ctxPreview
+	case KindDiff:
+		return ctxDiff
 	}
 	return ctxEditor
 }
@@ -94,6 +102,10 @@ func (i *Instance) Terminal() *terminal.Model { return &i.term }
 // Preview returns the underlying markdown preview model. It is only valid for
 // a markdown instance; callers gate on Kind first.
 func (i *Instance) Preview() *preview.Model { return &i.md }
+
+// Diff returns the underlying diff viewer model. It is only valid for a diff
+// instance; callers gate on Kind first.
+func (i *Instance) Diff() *diff.Model { return &i.df }
 
 // Editor returns the active tab's editor model. It is only valid for an editor
 // instance; callers gate on Kind first.
@@ -235,6 +247,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.term.SetSize(w, h)
 	case KindMarkdown:
 		i.md.SetSize(w, h)
+	case KindDiff:
+		i.df.SetSize(w, h)
 	}
 }
 
@@ -253,6 +267,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.term.SetFocused(f)
 	case KindMarkdown:
 		i.md.SetFocused(f)
+	case KindDiff:
+		i.df.SetFocused(f)
 	}
 }
 
@@ -267,6 +283,8 @@ func (i *Instance) View() string {
 		return i.term.View()
 	case KindMarkdown:
 		return i.md.View()
+	case KindDiff:
+		return i.df.View()
 	}
 	return ""
 }
@@ -287,6 +305,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		}
 	case KindMarkdown:
 		cmd = i.md.Update(msg)
+	case KindDiff:
+		cmd = i.df.Update(msg)
 	}
 	return cmd
 }
@@ -378,6 +398,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		}
 	case KindMarkdown:
 		i.md.SetPalette(p)
+	case KindDiff:
+		i.df.SetPalette(p)
 	}
 }
 

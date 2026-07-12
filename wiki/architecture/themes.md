@@ -29,7 +29,8 @@ set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 `OccurrenceRead`, `OccurrenceWrite`, `InlayHint`, `Whitespace`, `IndentGuide`,
 `Ruler`, `Primary`, `Secondary`,
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
-`Ghost`, `ScrollbarTrack`, `ScrollbarThumb`. The occurrence slots back the LSP
+`Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `DiffAdded`, `DiffRemoved`,
+`DiffChanged`. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
 `SelectionMuted` before the default theme's, so occurrences stay in-palette
 for sparse themes. `InlayHint` colours the inline LSP inlay-hint text (#171);
@@ -38,7 +39,10 @@ legible-but-dim foreground in every palette (the builtins set it to their
 comment tone). `Whitespace` and `IndentGuide` colour the visible-whitespace
 glyphs and indent guides (#64), falling back to the theme's own `Border`;
 `Ruler` is the column-ruler background tint, falling back to the theme's own
-`Panel`.
+`Panel`. `DiffAdded`, `DiffRemoved`, and `DiffChanged` are the diff viewer's
+line and intra-line backgrounds (#60); left empty they derive from the theme's
+own `Success`/`Error`/`Warning` tinted toward its `Surface` via `theme.Mix`,
+so sparse themes get in-palette diff colors without declaring the slots.
 
 ## Model
 

@@ -2,6 +2,17 @@
 
 ## 2026-07-12
 
+- Diff viewer pane (#60): new `internal/diff` package — reusable read-only
+  diff component as a fifth `pane.Kind` (`KindDiff`). Line-level Myers engine
+  with rune-level intra-line refinement and hunk grouping; side-by-side
+  (default) or unified (`u`) rendering with dual line-number gutters and
+  editor-style cell-budget wrapping; `n`/`N` hunk navigation, `enter` jumps
+  the editor to the hunk; `diff.files` palette command picking two files via
+  the `@` finder; three new theme ui slots (`DiffAdded`/`DiffRemoved`/
+  `DiffChanged`, defaulted by `theme.Mix` tinting for sparse themes); layout
+  persistence `{kind: "diff", path, path2}`. Shared infrastructure for #28,
+  #35, #53. New concept doc [Diff Viewer](/architecture/diff-viewer.md).
+
 - TODO index (#61): new `internal/todoindex` package — JetBrains' TODO tool
   window as a centered overlay over the reusable locations list. `todo.list`
   command (`cmd+6`, leader `space D`, palette); own `search.Service` scan

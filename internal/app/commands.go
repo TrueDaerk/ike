@@ -129,6 +129,12 @@ type TerminalToggleMsg struct{}
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
 
+// DiffFilesMsg asks the root model to compare two files (#60): it opens the
+// "@" file picker twice — left (old) side, then right (new) side — and splits
+// the focused leaf with a read-only diff viewer pane over the two picks.
+// Dispatched by diff.files.
+type DiffFilesMsg struct{}
+
 // MarkdownPreviewMsg asks the root model to open a rendered markdown preview
 // pane split right of the active editor, bound to its markdown buffer (#62).
 // With a preview for the buffer already open it focuses that pane instead.
@@ -216,6 +222,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
+			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),

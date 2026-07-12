@@ -23,6 +23,7 @@ import (
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
 	"ike/internal/config"
+	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/finder"
@@ -268,6 +269,11 @@ type Model struct {
 	// pasteHist is the palette mode over the focused editor's yank/delete
 	// history (#57), same pattern as refs.
 	pasteHist *pasteHistMode
+	// diffPick tracks diff.files' two-step file picking (#60): 0 idle, 1
+	// picking the left (old) file, 2 the right (new). diffLeft holds the
+	// first pick while the second is chosen.
+	diffPick int
+	diffLeft string
 	// zoomed is the pane key rendered alone while pane.maximize is active
 	// (#358); "" = normal layout. zoomSig is the tree's leaf signature at zoom
 	// time — layout() drops the zoom when it changes. Not persisted.
@@ -632,6 +638,13 @@ func (m *Model) restoreLayout(cfg host.Config) {
 				shell = v
 			}
 			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
+			continue
+		}
+		if id := ids[key]; id.Kind == "diff" {
+			// A diff pane restores from the two files on disk (#60); a vanished
+			// side restores as empty rather than breaking the layout.
+			inst := panes.AddDiffKey(key, id.Path, id.Path2)
+			inst.Diff().SetContents(readFileOrEmpty(id.Path), readFileOrEmpty(id.Path2))
 			continue
 		}
 		if id := ids[key]; id.Kind == "markdown" {
@@ -1270,6 +1283,40 @@ func (m *Model) openMarkdownPreview() {
 	saveLayout(m.tree, m.panes)
 }
 
+// openDiffPane splits the focused leaf with a read-only diff viewer comparing
+// the files at leftPath and rightPath (#60). The new pane takes focus so n/N
+// and enter work immediately; an unreadable file diffs as empty text.
+func (m *Model) openDiffPane(leftPath, rightPath string) {
+	target := m.panes.Focused()
+	if target == "" || m.tree == nil {
+		return
+	}
+	key := m.panes.AddDiff(leftPath, rightPath)
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	if !ok {
+		m.panes.Close(key)
+		return
+	}
+	m.tree = tree
+	m.layout()
+	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+	m.setFocus(key)
+	saveLayout(m.tree, m.panes)
+}
+
+// readFileOrEmpty reads path, degrading a missing or unreadable file to the
+// empty text so a diff side never breaks the pane.
+func readFileOrEmpty(path string) string {
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
 // isMarkdownPath reports whether path names a markdown document.
 func isMarkdownPath(path string) bool {
 	switch strings.ToLower(filepath.Ext(path)) {
@@ -1713,6 +1760,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openMarkdownPreview()
 		return m, nil
 
+	case DiffFilesMsg:
+		// diff.files (palette): compare two files picked one after the other
+		// via the "@" finder (#60); the picks land as palette.OpenFileMsg and
+		// are intercepted below while diffPick is armed.
+		m.diffPick = 1
+		m.diffLeft = ""
+		m.host.Notify(host.Info, "diff: pick the left (old) file")
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+		return m, nil
+
+	case diff.JumpMsg:
+		// enter on a hunk: open the diff's right-hand file with the cursor on
+		// the hunk's first line (JumpMsg lines are 1-based, openPathAt 0-based).
+		return m.openPathAt(msg.Path, msg.Line-1, 0)
+
 	case preview.RenderTickMsg:
 		// A preview's debounce timer fired: route it to the owning pane, which
 		// renders only when the tick is still the newest one.
@@ -1887,6 +1950,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.RunCommand(msg.ID)
 
 	case palette.OpenFileMsg:
+		switch m.diffPick {
+		case 1:
+			// First diff.files pick (#60): remember the left file and re-open
+			// the picker for the right one.
+			m.diffLeft = msg.Path
+			m.diffPick = 2
+			m.host.Notify(host.Info, "diff: pick the right (new) file")
+			m.palette.SetSize(m.width, m.height)
+			m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
+			return m, nil
+		case 2:
+			// Second pick: both sides known, open the diff pane.
+			left := m.diffLeft
+			m.diffPick, m.diffLeft = 0, ""
+			m.openDiffPane(left, msg.Path)
+			return m, nil
+		}
 		return m.openPath(msg.Path, false)
 
 	case host.OpenModalRequest:
@@ -2213,7 +2293,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.callhier.Update(msg)
 		}
 		if m.palette.IsOpen() {
-			return m, m.palette.Update(msg)
+			cmd := m.palette.Update(msg)
+			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
+				// The picker was dismissed mid diff.files flow (#60): abandon
+				// the pending picks so a later "@" open is a plain file open.
+				m.diffPick = 0
+				m.diffLeft = ""
+			}
+			return m, cmd
 		}
 		// The crash-recovery prompt (Roadmap 0210, #166) owns the keyboard at
 		// startup: r / d / s decide the highlighted file, j / k move, esc skips.
@@ -3429,6 +3516,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Preview().ScrollBy(wheelLines)
 			}
+		case pane.KindDiff:
+			// The wheel scrolls the diff by visual rows (#60).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Diff().ScrollBy(-wheelLines)
+			case tea.MouseWheelDown:
+				inst.Diff().ScrollBy(wheelLines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -4224,6 +4319,9 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title, content = m.terminalTitle(inst), inst.View()
 		case pane.KindMarkdown:
 			title, content = "PREVIEW "+baseName(inst.Preview().Path()), inst.View()
+		case pane.KindDiff:
+			l, r := inst.Diff().Titles()
+			title, content = "DIFF "+l+" ⇄ "+r, inst.View()
 		}
 	}
 
