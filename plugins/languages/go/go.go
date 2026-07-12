@@ -43,6 +43,14 @@ func init() {
 		// Sticky-scroll scopes (#168): declarations whose header line stays
 		// pinned while scrolling through the body.
 		ScopeNodes: []string{"function_declaration", "method_declaration", "func_literal", "type_declaration"},
+		// Foldable regions (#144): declarations, blocks, import/const/var
+		// groups, composite literals and multi-line /* */ comments.
+		FoldNodes: []string{
+			"function_declaration", "method_declaration", "func_literal",
+			"type_declaration", "struct_type", "interface_type", "block",
+			"import_declaration", "const_declaration", "var_declaration",
+			"literal_value", "comment",
+		},
 		// New .go files start with their package clause, named after the
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",

@@ -55,6 +55,13 @@ type Language struct {
 	// sticky scopes (the feature is simply inert for it).
 	ScopeNodes []string
 
+	// FoldNodes lists the Tree-sitter node kinds that define a foldable
+	// region (#144): multi-line nodes whose body can be collapsed behind the
+	// header line, e.g. function bodies, blocks, import lists, multi-line
+	// comments. Empty means folding falls back to ScopeNodes; both empty
+	// means the language has no code folding.
+	FoldNodes []string
+
 	// Template is the initial content seeded into newly created files of this
 	// language (#170), with ${FILENAME}/${NAME}/${DIR}/${PACKAGE}/${DATE}/${YEAR}
 	// substituted — see TemplateFor. Empty means new files start empty. Users

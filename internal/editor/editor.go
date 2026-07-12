@@ -56,6 +56,7 @@ type awaiting int
 const (
 	awaitNone awaiting = iota
 	awaitG
+	awaitZ // fold commands: za zc zo zM zR (#144)
 	awaitFind
 	awaitReplace
 	awaitObject // after operator + i/a; awaiting the object char
@@ -161,6 +162,15 @@ type Model struct {
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
 	scopes []highlight.Scope
+	// Code folding (#144): folds are the foldable ranges delivered by the
+	// same parse as hlIndex (pre-order); folded is this view's collapsed set,
+	// keyed by header line with the fold's end line as value — per-view state
+	// like the cursor, never shared between panes (#142). foldLines is the
+	// buffer line count the collapsed set is anchored against, so edits can
+	// shift/dissolve folds until the next parse reconciles them (fold.go).
+	folds     []highlight.Fold
+	folded    map[int]int
+	foldLines int
 	// semIndex is the LSP semantic-token overlay (#9), layered over hlIndex
 	// in styleAt; kept until the next result replaces it (stale positions may
 	// briefly lag an edit, like every semantic-token client).
@@ -309,6 +319,7 @@ func (m *Model) Load(path string) error {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
+	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -340,6 +351,7 @@ func (m *Model) NewFile(path string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
+	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -366,6 +378,7 @@ func (m *Model) RestoreText(text string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
+	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -388,6 +401,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.path = path
 	m.hlIndex = highlight.Index{}
 	m.scopes = nil
+	m.resetFolds()
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
@@ -501,6 +515,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if msg.Path == m.path && msg.Version == m.docVersion {
 			m.hlIndex = highlight.NewIndex(msg.Spans)
 			m.scopes = msg.Scopes
+			m.folds = msg.Folds
+			m.reconcileFolds()
 			m.hlVersion = msg.Version
 		}
 		return m, nil
@@ -592,9 +608,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 }
 
 // scroll keeps the cursor within the visible window, including the rows
-// covered by pinned sticky-scroll headers (#168).
+// covered by pinned sticky-scroll headers (#168). It first opens any
+// collapsed fold the cursor jumped into (#144) — every cursor-moving path
+// funnels through here — then corrects the viewport for folds rendered as
+// one row.
 func (m *Model) scroll() {
+	m.unfoldAtCursor()
 	m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount())
+	m.foldScrollFix()
 	m.unhideCursor()
 }
 

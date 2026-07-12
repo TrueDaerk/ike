@@ -33,6 +33,9 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case awaitG:
 		m.wait = awaitNone
 		return m.resolveAfterG(s, r, hasRune)
+	case awaitZ:
+		m.wait = awaitNone
+		return m.resolveAfterZ(s)
 	case awaitFind:
 		m.wait = awaitNone
 		if hasRune {
@@ -185,8 +188,15 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 	case "l", "right", " ":
 		return motion.Right(m.buf, m.cursor, count), true
 	case "j", "down":
+		if m.hasFolds() {
+			// A collapsed fold is one row for vertical motion (#144).
+			return m.foldVertical(count, 1), true
+		}
 		return motion.Down(m.buf, m.cursor, count), true
 	case "k", "up":
+		if m.hasFolds() {
+			return m.foldVertical(count, -1), true
+		}
 		return motion.Up(m.buf, m.cursor, count), true
 	case "0", "home":
 		return motion.LineStart(m.buf, m.cursor, count), true
@@ -410,6 +420,9 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "g":
 		m.wait = awaitG
 		return m, nil
+	case "z":
+		m.wait = awaitZ
+		return m, nil
 	case "v":
 		m.collapseCarets() // visual selections are single-caret (#145)
 		m.enterVisual(Visual)
@@ -451,6 +464,26 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		m.paste(m.pending.Register, true, m.pending.EffectiveCount(), true)
 		m.pending.Reset()
 	}
+	return m, nil
+}
+
+// resolveAfterZ handles the second key of a "z" sequence — the vim fold
+// commands (#144): toggle / close / open the fold at the cursor, close or
+// open all folds.
+func (m Model) resolveAfterZ(s string) (Model, tea.Cmd) {
+	switch s {
+	case "a":
+		m.foldToggle()
+	case "c":
+		m.foldCloseAtCursor()
+	case "o":
+		m.foldOpenAtCursor()
+	case "M":
+		m.foldCloseAll()
+	case "R":
+		m.foldOpenAll()
+	}
+	m.pending.Reset()
 	return m, nil
 }
 

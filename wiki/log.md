@@ -2,6 +2,17 @@
 
 ## 2026-07-12
 
+- Code folding (#144): collapse a function body, block, import list or
+  multi-line comment behind its header line. Fold ranges come from the same
+  Tree-sitter parse as the highlight spans (`SpansMsg.Folds`, kinds via
+  `lang.Language.FoldNodes`, `ScopeNodes` fallback); the collapsed set is
+  per-view (#142). A closed fold renders as one row (header + dimmed
+  `⋯ N lines` placeholder) and counts as one row for `j`/`k`, clicks and
+  wheel scrolling; jumps into a fold auto-unfold, overlapping edits dissolve
+  it, reparses reconcile it. Keys `za zc zo zM zR` + `editor.fold.*` palette
+  commands. See [editor](/architecture/editor.md),
+  [highlighting](/architecture/highlighting.md).
+
 - Multi-caret editing (#145): a primary caret plus secondary carets fan every
   edit out — insert-mode typing/kills, `x r`, `d c y` with motions and text
   objects, `dd cc yy`, `p/P`, `o/O`, completion — as **one undo unit**.

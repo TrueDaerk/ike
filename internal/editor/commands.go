@@ -61,6 +61,13 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
+			// Code folding (#144): the vim z-commands, reachable from the
+			// palette and rebindable through the keymap layer.
+			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),
+			action("editor.fold.close", "Close Fold", "fold_close", "zc"),
+			action("editor.fold.open", "Open Fold", "fold_open", "zo"),
+			action("editor.fold.closeAll", "Close All Folds", "fold_close_all", "zM"),
+			action("editor.fold.openAll", "Open All Folds", "fold_open_all", "zR"),
 			// Diagnostic navigation (#369) carries lsp.* ids — it steps through
 			// the LSP diagnostics — but lives here because the editor already
 			// caches the set; no server round-trip is involved.

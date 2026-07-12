@@ -56,6 +56,11 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.searching = false
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
+	// Fold ranges are document-derived and travel with the share; the
+	// collapsed set is per-view state (#144) and starts empty.
+	m.folds = src.folds
+	m.folded = nil
+	m.foldLines = m.buf.LineCount()
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
@@ -82,6 +87,15 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.largeFile = msg.Large
 	m.diskHash = msg.Hash
 	m.docVersion++
+	// This view's collapsed folds (#144) survive the remote edit where they
+	// can: drop the ones out of range now, and let the reparse scheduled
+	// below reconcile the rest against fresh fold ranges.
+	m.foldLines = m.buf.LineCount()
+	for h, e := range m.folded {
+		if e >= m.foldLines {
+			delete(m.folded, h)
+		}
+	}
 	m.hlIndex = highlight.Index{}
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
