@@ -2,6 +2,11 @@
 
 ## 2026-07-12
 
+- Quit-key crash on tool panes (#529): `q` on a focused diff / preview / VCS
+  pane nil-dereferenced the missing editor in `app.quitKey` and took the whole
+  IDE down. Those panes no longer quit on `q`, and a diff pane in edit mode
+  (#496) now counts as text-capturing, so `q`/`?`/`tab` typed into its
+  embedded editor reach the buffer instead of the global layer.
 - Completion auto-trigger (#527): completion now fires on the server's
   advertised trigger characters (PHP `->`/`::`/`$`, not just a hard-coded
   `.`; `.` stays the fallback while capabilities are unknown) and as-you-type
