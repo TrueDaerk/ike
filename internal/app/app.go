@@ -683,8 +683,14 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		}
 		if id := ids[key]; id.Kind == "vcs" {
 			// The VCS panel restores empty in its saved slot; the first
-			// status snapshot re-feeds it (0330, #482).
-			panes.Get(panes.AddVCS()).VCS().SetDraft(m.vcs.draft)
+			// status snapshot re-feeds it (0330, #482). Path carries the
+			// active tab (#504) — a restored Log view lazy-loads with the
+			// snapshot via EnsureLogLoaded.
+			p := panes.Get(panes.AddVCS()).VCS()
+			p.SetDraft(m.vcs.draft)
+			if id.Path == "log" {
+				p.SetTab(vcspanel.TabLog)
+			}
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {

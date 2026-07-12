@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/vcspanel"
 )
 
 // Layout persistence is runtime UI state, not user configuration, so it lives in
@@ -140,9 +141,13 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// shell spawns there (#96); the process itself never resurrects.
 			ids[key] = paneIdentity{Kind: "terminal", Path: inst.Terminal().Dir()}
 		case pane.KindVCS:
-			// Content is session-local; the slot restores empty and re-feeds
-			// from the first status snapshot (0330, #482).
-			ids[key] = paneIdentity{Kind: "vcs"}
+			// The slot restores empty and re-feeds from the first status
+			// snapshot (0330, #482); Path carries the active tab (#504).
+			tab := "changes"
+			if inst.VCS().ActiveTab() == vcspanel.TabLog {
+				tab = "log"
+			}
+			ids[key] = paneIdentity{Kind: "vcs", Path: tab}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
 			for i, ed := range inst.Editors() {

@@ -72,9 +72,15 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	if m.panes.Has(pane.ExplorerKey) {
 		m.explorer().SetVCS(msg.Snap)
 	}
-	// The VCS tool window re-reads the snapshot (0330, #482).
+	// The VCS tool window re-reads the snapshot (0330, #482); a restored
+	// Log view gets its first window now that a repo is known (#504).
+	var panelCmd tea.Cmd
 	if m.panes.Has(pane.VCSKey) {
-		m.panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
+		p := m.panes.Get(pane.VCSKey).VCS()
+		p.SetVCS(msg.Snap)
+		if msg.Snap != nil {
+			panelCmd = p.EnsureLogLoaded()
+		}
 	}
 	// The open commit dialog re-reads the changed files (#465); losing the
 	// repo underneath it closes it.
@@ -88,11 +94,11 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	if m.vcs.dirty {
 		m.vcs.dirty = false
 		m.vcs.refreshing = true
-		return vcs.Refresh(".")
+		return tea.Batch(vcs.Refresh("."), panelCmd)
 	}
 	// Recompute the gutter diff markers of every open buffer against the new
 	// snapshot (#464); clean/untracked buffers get their markers cleared.
-	return tea.Batch(m.vcsMarksCmds()...)
+	return tea.Batch(append(m.vcsMarksCmds(), panelCmd)...)
 }
 
 // ToggleBlameMsg runs vcs.blameLine (#468) on the focused document.

@@ -85,8 +85,27 @@ func (m *Model) SetVCS(snap *vcs.Snapshot) {
 	m.rebuildChanges()
 }
 
-// ActiveTab reports the visible view (tests).
+// ActiveTab reports the visible view (tests, persistence).
 func (m *Model) ActiveTab() Tab { return m.tab }
+
+// SetTab selects the visible view without side effects — the layout restore
+// uses it (#504); the log's first load rides EnsureLogLoaded once the
+// snapshot exists.
+func (m *Model) SetTab(t Tab) {
+	if t == TabChanges || t == TabLog {
+		m.tab = t
+	}
+}
+
+// EnsureLogLoaded requests the log's first window when the Log tab is
+// visible and empty (#504): a restored Log view loads as soon as the initial
+// status snapshot arrives instead of waiting for a key-driven tab entry.
+func (m *Model) EnsureLogLoaded() tea.Cmd {
+	if m.tab != TabLog {
+		return nil
+	}
+	return m.ensureLogLoaded()
+}
 
 // theme resolves the palette with the shared default fallback.
 func (m *Model) theme() *theme.Palette {
