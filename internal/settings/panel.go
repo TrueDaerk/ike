@@ -177,23 +177,16 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if x < 1+catWidth+3 {
 		return nil
 	}
-	// Recreate renderForm's row layout: the selected entry carries one extra
-	// detail line that shifts everything below it.
-	rows := m.rows()
-	target := row + m.formOff
-	line := 0
-	for i := range rows {
-		if line == target {
-			if i == m.sel && m.focus == formColumn {
-				return m.activate()
-			}
-			m.sel, m.focus = i, formColumn
-			return nil
+	// The description sits in a pinned footer (#535), so list lines map 1:1
+	// to rows; the footer line itself is not clickable.
+	if row >= m.height-4-1 {
+		return nil
+	}
+	if idx := row + m.formOff; idx < len(m.rows()) {
+		if idx == m.sel && m.focus == formColumn {
+			return m.activate()
 		}
-		line++
-		if i == m.sel {
-			line++ // the detail line under the selection
-		}
+		m.sel, m.focus = idx, formColumn
 	}
 	return nil
 }

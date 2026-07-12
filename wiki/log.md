@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- Settings detail footer (#535): the selected entry's description used to
+  render inline under the selected row, so ↑↓ inserted/removed a line
+  mid-list and shifted every row below the selection. The description (and
+  validation error) now lives in a footer pinned to the bottom of the form
+  column; list rows map 1:1 to screen lines (mouse click math simplified),
+  only the enum picker still expands inline.
+
 - Settings arrow-left (#533): ← on an enum row (Appearance → Theme) used to
   prev-cycle the value, so arrow keys could not leave the form column and
   every press wrote config. ←/h now always return to the category column;
