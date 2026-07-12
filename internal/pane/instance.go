@@ -1,6 +1,8 @@
 package pane
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/clipboard"
@@ -63,6 +65,9 @@ type Instance struct {
 	md   preview.Model
 	df   diff.Model
 	vp   vcspanel.Model
+	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
+	// the right column is a live editor of the underlying file.
+	dfEdit *editor.Model
 
 	// Editor state: the ordered tab list and the active index. cfg/pal/size
 	// and focus are remembered so tabs created later match the live pane.
@@ -118,6 +123,42 @@ func (i *Instance) Diff() *diff.Model { return &i.df }
 // VCS returns the underlying VCS tool-window model. It is only valid for a
 // vcs instance; callers gate on Kind first.
 func (i *Instance) VCS() *vcspanel.Model { return &i.vp }
+
+// DiffEditor returns the diff pane's edit-mode editor, nil while browsing.
+func (i *Instance) DiffEditor() *editor.Model { return i.dfEdit }
+
+// StartDiffEdit mounts ed as the diff pane's editable right column (#496):
+// keys route into it, the left column re-aligns per keystroke.
+func (i *Instance) StartDiffEdit(ed *editor.Model) {
+	if i.kind != KindDiff || ed == nil {
+		return
+	}
+	i.dfEdit = ed
+	i.df.SetEditMode(true)
+	i.sizeDiffEditor()
+	ed.SetFocused(i.focused)
+	i.df.Rediff(ed.Text())
+}
+
+// StopDiffEdit returns the pane to read-only browsing; the last buffer state
+// stays diffed.
+func (i *Instance) StopDiffEdit() {
+	if i.dfEdit == nil {
+		return
+	}
+	i.df.Rediff(i.dfEdit.Text())
+	i.dfEdit = nil
+	i.df.SetEditMode(false)
+}
+
+// sizeDiffEditor fits the embedded editor into the split's right column.
+func (i *Instance) sizeDiffEditor() {
+	if i.dfEdit == nil {
+		return
+	}
+	_, right := i.df.EditSplitWidths()
+	i.dfEdit.SetSize(right, i.h)
+}
 
 // Editor returns the active tab's editor model. It is only valid for an editor
 // instance; callers gate on Kind first.
@@ -260,7 +301,9 @@ func (i *Instance) SetSize(w, h int) {
 	case KindMarkdown:
 		i.md.SetSize(w, h)
 	case KindDiff:
+		i.w, i.h = w, h
 		i.df.SetSize(w, h)
+		i.sizeDiffEditor()
 	case KindVCS:
 		i.vp.SetSize(w, h)
 	}
@@ -283,6 +326,9 @@ func (i *Instance) SetFocused(f bool) {
 		i.md.SetFocused(f)
 	case KindDiff:
 		i.df.SetFocused(f)
+		if i.dfEdit != nil {
+			i.dfEdit.SetFocused(f)
+		}
 	case KindVCS:
 		i.vp.SetFocused(f)
 	}
@@ -300,6 +346,10 @@ func (i *Instance) View() string {
 	case KindMarkdown:
 		return i.md.View()
 	case KindDiff:
+		if i.dfEdit != nil {
+			lines := strings.Split(i.dfEdit.View(), "\n")
+			return i.df.RenderEditSplit(lines, i.dfEdit.ScrollTop(), i.h)
+		}
 		return i.df.View()
 	case KindVCS:
 		return i.vp.View()
@@ -324,6 +374,19 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 	case KindMarkdown:
 		cmd = i.md.Update(msg)
 	case KindDiff:
+		if i.dfEdit != nil {
+			// Edit mode (#496): keys belong to the embedded editor; ctrl+e
+			// returns to read-only browsing. The left column re-aligns from
+			// a re-diff after every message.
+			if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "ctrl+e" {
+				i.StopDiffEdit()
+				return nil
+			}
+			ed := i.dfEdit
+			*ed, cmd = ed.Update(msg)
+			i.df.Rediff(ed.Text())
+			return cmd
+		}
 		cmd = i.df.Update(msg)
 	case KindVCS:
 		cmd = i.vp.Update(msg)

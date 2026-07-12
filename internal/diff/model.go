@@ -62,6 +62,22 @@ type Model struct {
 	collapsed bool
 	gaps      []gap
 	sepLines  map[int]int // visual line → gap index
+
+	// Editable current side (0340, #496): worktree-backed diffs may swap
+	// their right column for a live editor; the pane layer owns the editor,
+	// this model re-diffs against the retained left text and renders the
+	// aligned left column. rightRow maps RightNo → row index for alignment.
+	editable   bool
+	leftText   string
+	rightRow   map[int]int
+	editModeOn bool
+}
+
+// EditRequestMsg asks the root model to start edit mode on the diff pane Key
+// (the 'e' key, #496); the root validates editability and builds the editor.
+type EditRequestMsg struct {
+	Key  string
+	Path string
 }
 
 // gap is one foldable run of RowSame rows: [start, end) row indices of the
@@ -139,11 +155,49 @@ func (m *Model) SetSize(w, h int) {
 // SetContents diffs the two texts and renders the result. The scroll position
 // resets; the current hunk and every gap expansion clear.
 func (m *Model) SetContents(left, right string) {
+	m.leftText = left
 	m.res = Compute(left, right)
 	m.cur = -1
 	m.top = 0
 	m.gaps = computeGaps(m.res, m.ctx)
+	m.buildRightRow()
 	m.render()
+}
+
+// SetEditable marks the right side as backed by the working tree (#496);
+// revision-only diffs stay read-only.
+func (m *Model) SetEditable(e bool) { m.editable = e }
+
+// Editable reports whether edit mode may start on this diff.
+func (m Model) Editable() bool { return m.editable && m.rightPath != "" }
+
+// SetEditMode flips the pane-owned edit mode flag; while on, View is unused
+// (the pane composes RenderEditSplit) and the model only re-diffs.
+func (m *Model) SetEditMode(on bool) { m.editModeOn = on }
+
+// EditMode reports whether the pane drives an embedded editor.
+func (m Model) EditMode() bool { return m.editModeOn }
+
+// Rediff recomputes the rows for new right-side content against the retained
+// left text (per keystroke in edit mode); scroll and hunk state stay.
+func (m *Model) Rediff(right string) {
+	m.res = Compute(m.leftText, right)
+	if m.cur >= len(m.res.Hunks) {
+		m.cur = len(m.res.Hunks) - 1
+	}
+	m.gaps = computeGaps(m.res, m.ctx)
+	m.buildRightRow()
+	m.render()
+}
+
+// buildRightRow indexes rows by their right line number for edit alignment.
+func (m *Model) buildRightRow() {
+	m.rightRow = make(map[int]int, len(m.res.Rows))
+	for i, r := range m.res.Rows {
+		if r.RightNo > 0 {
+			m.rightRow[r.RightNo] = i
+		}
+	}
 }
 
 // SetContext sets the context-line budget (config diff.context); n < 0
@@ -237,10 +291,60 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.scrollToHunk(m.cur)
 	case "o":
 		m.expandNearestGap()
+	case "e":
+		// Edit mode (#496): the root model validates and mounts the editor.
+		key, path := m.key, m.rightPath
+		return func() tea.Msg { return EditRequestMsg{Key: key, Path: path} }
 	case "enter":
 		return m.jump()
 	}
 	return nil
+}
+
+// EditSplitWidths returns the column budget of the edit-mode split: the left
+// (read-only) column including its gutter, and the right editor width.
+func (m Model) EditSplitWidths() (left, right int) {
+	lw, _ := m.gutterWidths()
+	avail := m.w - (lw + 1) - 3 // left gutter + " │ "
+	left = max(1, avail/2)
+	right = max(1, avail-avail/2)
+	return left, right
+}
+
+// RenderEditSplit composes the edit-mode frame: for each of the editor's
+// visible buffer lines (starting at topLine, 0-based) the aligned left-side
+// cell renders beside the editor's own row. Removed-only left lines have no
+// right counterpart and stay hidden while editing — the re-diff restores
+// them the moment the deletion is undone.
+func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
+	st := m.styles()
+	lw, _ := m.gutterWidths()
+	colL, colR := m.EditSplitWidths()
+	sep := st.gutter.Render(" │ ")
+	var b strings.Builder
+	for v := 0; v < height; v++ {
+		if v > 0 {
+			b.WriteByte('\n')
+		}
+		bufLine := topLine + v + 1 // 1-based right line number
+		left := strings.Repeat(" ", lw+1+colL)
+		if ri, ok := m.rightRow[bufLine]; ok {
+			row := m.res.Rows[ri]
+			runes := expand(row.Left)
+			segs := viewport.WrapSegments(runes, colL, 1)
+			if row.Kind == RowAdded {
+				segs = nil // no left counterpart: gap cell
+			}
+			left = m.gutterCell(row.LeftNo, lw, 0, row.Kind != RowAdded, st) +
+				renderSegment(runes, segs, 0, colL, st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans))
+		}
+		b.WriteString(left)
+		b.WriteString(sep)
+		if v < len(edLines) {
+			b.WriteString(ansi.Truncate(edLines[v], colR, "…"))
+		}
+	}
+	return b.String()
 }
 
 // expandNearestGap expands the separator closest to the viewport center; a
