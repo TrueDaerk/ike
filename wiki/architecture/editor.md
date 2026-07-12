@@ -346,6 +346,13 @@ The grammar is `[range] name[!] [args]`:
   opens vim-style as an unsaved buffer seeded with the path's
   [language template](./languages.md#file-templates-170) (#170) — clean until
   edited, so `:q` discards it and the first `:w` creates the file.
+- **Path completion (#543):** `tab` on a `:e` / `:w` (and `:wq`/`:x`) line
+  extends the path argument to the longest unambiguous prefix via the shared
+  `internal/pathcomplete` engine (`~` preserved, case-insensitive fallback);
+  a single directory match completes with its trailing separator so repeated
+  tab descends. While several entries match, their names render as a dim hint
+  after the cursor and typing narrows the list. `tab` is inert on non-path
+  commands and on the search line.
 - **Errors:** unknown names and unresolvable addresses (missing selection,
   pattern not found) surface a transient `E:` message on the command-line row
   (`m.cmdMsg`), cleared by the next normal-mode key. `:g` / `:v` (global) parse

@@ -95,10 +95,11 @@ type Model struct {
 	lastFind motion.Find     // last f/t/F/T for ; and ,
 
 	// Command line / search input.
-	cmdline   string
-	searching bool
-	searchDir search.Direction
-	query     search.Query
+	cmdline    string
+	cmdSuggest []string // path completion candidates on the ":" line (#543)
+	searching  bool
+	searchDir  search.Direction
+	query      search.Query
 
 	// Incremental search (#255): the live-compiled preview query while the
 	// "/" line is open, the cursor/viewport captured at search start (Esc
@@ -233,12 +234,12 @@ type Model struct {
 	// blameOn shows the inline blame annotation on the cursor line (#468);
 	// blame is the whole-file map behind it, refreshed by the app on save and
 	// vcs refresh, so positions may briefly lag an edit like gitMarks.
-	blameOn bool
-	blame   map[int]vcs.BlameLine
-	comp       *completionState
-	hover      *hoverState
-	signature  *signatureState
-	popupMaxW  int // app-set popup content-width cap (#316); 0 = pane-derived
+	blameOn   bool
+	blame     map[int]vcs.BlameLine
+	comp      *completionState
+	hover     *hoverState
+	signature *signatureState
+	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.
@@ -475,7 +476,7 @@ func (m *Model) NewFile(path string) {
 	if enc, ok := m.editorconfigCharset(); ok {
 		m.enc = enc
 	}
-	m.largeFile = false                                        // a template seed is never large
+	m.largeFile = false // a template seed is never large
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal

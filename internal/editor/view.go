@@ -277,7 +277,21 @@ func (m Model) commandLineRow() string {
 		}
 		return ""
 	}
-	return cl + lipgloss.NewStyle().Reverse(true).Render(" ") + m.searchCounter()
+	return cl + lipgloss.NewStyle().Reverse(true).Render(" ") + m.searchCounter() + m.suggestRow()
+}
+
+// suggestRow renders the path-completion hint after the ":"-line cursor
+// (#543): the ambiguous candidates' names, dimmed. Empty while searching or
+// without an ambiguous completion.
+func (m Model) suggestRow() string {
+	if m.searching {
+		return ""
+	}
+	hint := m.suggestHint()
+	if hint == "" {
+		return ""
+	}
+	return lipgloss.NewStyle().Faint(true).Render("  " + hint)
 }
 
 // searchCounter renders the incremental-search tally for the command-line row
