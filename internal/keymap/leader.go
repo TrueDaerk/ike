@@ -88,6 +88,8 @@ var leaderMnemonics = []leaderMnemonic{
 	{"v c", "vcs.commit", "Commit"},
 	{"v u", "vcs.updateProject", "Update project"},
 	{"v x", "vcs.revertFile", "Revert file"},
+	{"v b", "vcs.branches", "Switch branch"},
+	{"v d", "vcs.diff", "Diff file against HEAD"},
 	{"1", "editor.tab.select1", "Go to tab 1"},
 	{"2", "editor.tab.select2", "Go to tab 2"},
 	{"3", "editor.tab.select3", "Go to tab 3"},

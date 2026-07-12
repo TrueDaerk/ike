@@ -1,6 +1,7 @@
 package pane
 
 import (
+	"path/filepath"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -193,6 +194,21 @@ func (r *Registry) AddDiff(leftPath, rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)
+// against its live content (Roadmap 0320, #467). Contents arrive via
+// SetContents; a layout restore degrades to an empty left side.
+func (r *Registry) AddDiffHead(rightPath string) string {
+	r.diffs++
+	key := diffKeyBase
+	if r.diffs > 1 {
+		key = diffKeyBase + ":" + strconv.Itoa(r.diffs)
+	}
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.New(key, filepath.Base(rightPath)+" @ HEAD", filepath.Base(rightPath), rightPath, r.pal)
 	r.put(inst)
 	return key
 }
