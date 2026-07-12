@@ -4,7 +4,7 @@ title: Notifications
 description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
 tags: [architecture, notifications, host, ui]
-timestamp: 2026-07-11T12:00:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # Notifications
@@ -45,6 +45,10 @@ Every notification (toast-worthy or not) is recorded in a **ring of the newest
 100** entries with timestamp and severity. The `notifications.history` registry
 command (palette) opens the ring in the floating shell: newest first,
 severity-colored, `HH:MM:SS` timestamps.
+
+The status line shows an unseen-count segment (`● N`, #101): entries recorded
+since the history view was last opened; opening it resets the counter. See
+[Status Line Segments](/architecture/status-line.md).
 
 Config (typed section `[notifications]`, live-reloaded — the root model
 re-feeds the host's config view on `ConfigReloadedMsg`):

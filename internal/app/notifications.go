@@ -61,6 +61,7 @@ func (m *Model) drainNotifications() tea.Cmd {
 		if len(m.history) > historyCap {
 			m.history = m.history[:historyCap]
 		}
+		m.notifUnseen++ // status line counter (#101), reset by notifications.history
 		if n.Severity < floor {
 			continue // below the toast floor: history only
 		}

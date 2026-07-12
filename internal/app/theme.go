@@ -166,6 +166,12 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// re-read per invocation, so an interpreter change retargets even the
 	// already-running sessions.
 	terminalEnv()
+	// Drop the cached toolchain labels (#101): an interpreter change must
+	// re-resolve the status line's toolchain segment. Keys are deleted in
+	// place — the map pointer is shared across value-model copies.
+	for k := range m.toolchainSeg {
+		delete(m.toolchainSeg, k)
+	}
 	if warning != "" {
 		m.host.Notify(host.Warn, warning)
 	}
