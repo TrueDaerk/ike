@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-11T12:00:00Z
+timestamp: 2026-07-12T12:00:00Z
 ---
 
 # Foundation Slice
@@ -105,9 +105,12 @@ best-effort; a failed write never affects the editor.
 
 `Tab` toggles focus between panes. `Ctrl+C` always quits; `q` quits when the
 explorer is focused or when the editor is focused in normal mode
-(`app.quitKey`). While the editor is capturing text (insert or command mode),
-global single-letter keys are suppressed so typed characters reach the buffer
-(`app.editorCapturing`).
+(`app.quitKey`). Panes without an editor tab — diff viewer, markdown preview,
+VCS tool window — never quit on `q`; the key routes to the pane (#529). While
+the editor is capturing text (insert or command mode), global single-letter
+keys are suppressed so typed characters reach the buffer
+(`app.editorCapturing`); a diff pane in edit mode (#496) counts the same way,
+so text typed into its embedded editor is never stolen.
 
 ## Status line
 

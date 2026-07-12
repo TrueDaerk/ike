@@ -3211,12 +3211,17 @@ func (m Model) isCoreKey(keys string) bool {
 
 // quitKey reports whether "q" should quit in the current focus: from the
 // explorer, or from an editor while in normal mode (not typing into a file).
+// Panes without an editor tab (diff, preview, VCS — #529) keep the key.
 func (m Model) quitKey() bool {
 	inst := m.panes.FocusedInstance()
 	if inst == nil || inst.Kind() == pane.KindExplorer {
 		return true
 	}
-	return inst.Editor().ModeName() == editor.Normal
+	if inst.Kind() != pane.KindEditor {
+		return false
+	}
+	ed := inst.Editor()
+	return ed != nil && ed.ModeName() == editor.Normal
 }
 
 // readHead returns the leading bytes of path for content sniffing, or nil.
@@ -3233,12 +3238,21 @@ func readHead(path string) []byte {
 
 // editorCapturing reports whether the focused pane is an editor in a
 // text-capturing mode, in which case global single-letter keys are not stolen.
+// A diff pane counts while its edit-mode editor (#496) captures text (#529).
 func (m Model) editorCapturing() bool {
 	inst := m.panes.FocusedInstance()
-	if inst == nil || inst.Kind() != pane.KindEditor {
+	if inst == nil {
 		return false
 	}
-	return inst.Editor().Capturing()
+	if inst.Kind() == pane.KindDiff {
+		ed := inst.DiffEditor()
+		return ed != nil && ed.Capturing()
+	}
+	if inst.Kind() != pane.KindEditor {
+		return false
+	}
+	ed := inst.Editor()
+	return ed != nil && ed.Capturing()
 }
 
 // explorerCapturing reports whether the focused pane is the explorer with an
