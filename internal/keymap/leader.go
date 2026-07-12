@@ -86,6 +86,8 @@ var leaderMnemonics = []leaderMnemonic{
 	// taken by grep, so the #22 sheets' "space g c" family lands on "space v
 	// c/u/x" instead — v for VCS, then the JetBrains mnemonic.
 	{"v c", "vcs.commit", "Commit"},
+	{"v u", "vcs.updateProject", "Update project"},
+	{"v x", "vcs.revertFile", "Revert file"},
 	{"1", "editor.tab.select1", "Go to tab 1"},
 	{"2", "editor.tab.select2", "Go to tab 2"},
 	{"3", "editor.tab.select3", "Go to tab 3"},

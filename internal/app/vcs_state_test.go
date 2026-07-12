@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -124,6 +125,100 @@ func TestCommitDialogLifecycle(t *testing.T) {
 	m = out.(Model)
 	if m.commitUI.IsOpen() {
 		t.Fatal("losing the repo must close the dialog")
+	}
+}
+
+func TestUpdateProjectGuards(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+
+	// toastText drains the host queue and returns the newest toast.
+	toastText := func() string {
+		out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+		m = out.(Model)
+		if len(m.toasts) == 0 {
+			return ""
+		}
+		return m.toasts[0].text // newest first
+	}
+
+	// Outside a repo: hint instead of a git run.
+	out, _ = m.Update(UpdateProjectMsg{})
+	m = out.(Model)
+	if got := toastText(); got != "not a git repository" {
+		t.Fatalf("no-repo toast = %q", got)
+	}
+
+	// Dirty tree: blocked with a warning (0082/29 — no surprise loss).
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main",
+		Entries: []vcs.FileEntry{{Path: "a.go", Status: vcs.StatusModified}}}
+	out, _ = m.Update(UpdateProjectMsg{})
+	m = out.(Model)
+	if got := toastText(); !strings.Contains(got, "uncommitted changes") {
+		t.Fatalf("dirty-tree toast = %q", got)
+	}
+
+	// Clean tree launches the pull with a progress toast.
+	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
+	out, cmd := m.Update(UpdateProjectMsg{})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("clean tree must launch the update")
+	}
+	if got := toastText(); !strings.Contains(got, "updating project") {
+		t.Fatalf("progress toast = %q", got)
+	}
+}
+
+func TestRevertFlowPromptAndCancel(t *testing.T) {
+	m := vcsApp(t)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+	dir := t.TempDir()
+	path := writeTemp(t, dir, "f.go", "x\n")
+	tm, _ := m.openPath(path, false)
+	m = tm.(Model)
+
+	// Untracked file: clear warning, no prompt.
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusUntracked})
+	out, _ = m.Update(RevertActiveFileMsg{})
+	m = out.(Model)
+	if m.revertPromptOpen() {
+		t.Fatal("untracked file must not prompt")
+	}
+
+	// Clean file: no-op hint.
+	m.vcs.snap = vcs.NewSnapshot(dir, nil)
+	out, _ = m.Update(RevertActiveFileMsg{})
+	m = out.(Model)
+	if m.revertPromptOpen() {
+		t.Fatal("clean file must not prompt")
+	}
+
+	// Modified file: async info, then the confirmation prompt; esc cancels.
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusModified})
+	if _, cmd := m.Update(RevertActiveFileMsg{}); cmd == nil {
+		t.Fatal("modified file must fetch revert info")
+	}
+	out, _ = m.Update(vcs.RevertInfoMsg{Path: path, Changed: 3})
+	m = out.(Model)
+	if !m.revertPromptOpen() {
+		t.Fatal("prompt should be open")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.revertPromptOpen() {
+		t.Fatal("esc must cancel without reverting")
+	}
+
+	// Confirming launches the checkout.
+	out, _ = m.Update(vcs.RevertInfoMsg{Path: path, Changed: 3})
+	m = out.(Model)
+	out, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if m.revertPromptOpen() || cmd == nil {
+		t.Fatal("enter must confirm and launch the revert")
 	}
 }
 

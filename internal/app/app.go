@@ -220,6 +220,9 @@ type Model struct {
 	// list with stage toggles plus the commit message pane; the in-progress
 	// message survives close/reopen until a commit succeeds.
 	commitUI *commitui.Model
+	// revertPending is the file awaiting the vcs.revertFile confirmation
+	// (#466) while the shell shows the prompt; "" when none.
+	revertPending string
 	// inFileSearchRecent is true while a committed in-file search ("/", "?",
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
@@ -2333,6 +2336,49 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.scheduleVCSRefresh()
 
+	case UpdateProjectMsg:
+		return m.updateProject()
+
+	case vcs.UpdateDoneMsg:
+		switch {
+		case msg.Err != nil:
+			m.host.Notify(host.Error, "update failed: "+msg.Err.Error())
+		case msg.UpToDate:
+			m.host.Notify(host.Info, "already up to date")
+		default:
+			m.host.Notify(host.Info, "updated: "+strconv.Itoa(msg.Commits)+" commits, "+strconv.Itoa(msg.Files)+" files")
+		}
+		return m, m.scheduleVCSRefresh()
+
+	case RevertActiveFileMsg:
+		return m.revertActiveFile()
+
+	case vcs.RevertInfoMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "revert: "+msg.Err.Error())
+			return m, nil
+		}
+		if msg.Changed == 0 {
+			m.host.Notify(host.Info, "no changes to revert")
+			return m, nil
+		}
+		m.openRevertPrompt(msg.Path, msg.Changed)
+		return m, nil
+
+	case vcs.RevertDoneMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "revert failed: "+msg.Err.Error())
+			return m, m.scheduleVCSRefresh()
+		}
+		m.host.Notify(host.Info, "reverted to HEAD: "+displayPath(msg.Path))
+		// The open buffer reloads to the restored content, discarding any
+		// unsaved edits with it — that is what the prompt confirmed.
+		var reload tea.Cmd
+		if ed := m.editorForPath(msg.Path); ed != nil {
+			reload = ed.ResolveConflictReload()
+		}
+		return m, tea.Batch(reload, m.scheduleVCSRefresh())
+
 	case vcs.CommitDoneMsg:
 		if msg.Err != nil {
 			// Hook failures etc. keep the dialog (and message) for a retry.
@@ -2445,6 +2491,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// handling: k / r / esc answer it, everything else is swallowed.
 		if m.conflictOpen() {
 			return m.updateConflict(msg)
+		}
+		// The revert-file confirmation (0320, #466): enter / esc answer it.
+		if m.revertPromptOpen() {
+			return m.updateRevertPrompt(msg)
 		}
 		// The unsaved-changes guard before a project switch (0090, #3) owns the
 		// keyboard the same way: s / d / esc answer it.

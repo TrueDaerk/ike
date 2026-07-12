@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 )
@@ -52,10 +53,10 @@ func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
 func TestKeymapBlockedBindingToasts(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	reg := registry.New()
-	// vcs.updateProject is a documented blocked default (epic #461);
-	// vcs.commit left the ledger with 0320 (#465), editor.replace with 0240
-	// phase 1 (#282).
-	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "vcs.updateProject"}
+	// The real ledger emptied with 0320 (#466) — the machinery is exercised
+	// through a stubbed entry bound to a custom chord.
+	defer keymap.StubBlockedForTest("test.blockedCmd", "unit-test dependency")()
+	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "test.blockedCmd"}
 	m := NewWith(reg, cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -68,7 +69,7 @@ func TestKeymapBlockedBindingToasts(t *testing.T) {
 	if len(m.toasts) != 1 {
 		t.Fatalf("toasts = %d want 1", len(m.toasts))
 	}
-	if want := "vcs.updateProject is not available yet — VCS integration (epic #461)"; m.toasts[0].text != want {
+	if want := "test.blockedCmd is not available yet — unit-test dependency"; m.toasts[0].text != want {
 		t.Fatalf("toast text = %q want %q", m.toasts[0].text, want)
 	}
 }

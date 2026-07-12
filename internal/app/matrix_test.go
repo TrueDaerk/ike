@@ -32,14 +32,23 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["lsp.rename"]; r.Primary != "shift+f6" || r.Status() != "live" {
 		t.Errorf("lsp.rename = %+v", r)
 	}
-	// vcs.commit went live with 0320 (#465): cmd+k stays the fragile primary,
-	// the leader mnemonic is the delivered path. updateProject remains the
-	// blocked-ledger specimen until its sub-issue lands.
+	// The VCS ids went live with 0320: fragile Cmd primaries, leader
+	// mnemonics as the delivered path.
 	if r := byCmd["vcs.commit"]; r.Fallback != "space v c" || !strings.Contains(r.Status(), "live") {
 		t.Errorf("vcs.commit = %+v", r)
 	}
-	if r := byCmd["vcs.updateProject"]; !strings.Contains(r.Status(), "blocked:") {
+	if r := byCmd["vcs.updateProject"]; r.Fallback != "space v u" || !strings.Contains(r.Status(), "live") {
 		t.Errorf("vcs.updateProject = %+v", r)
+	}
+	// The blocked ledger emptied with 0320 (#466): the blocked-status label
+	// machinery is exercised through a stubbed entry.
+	remove := keymap.StubBlockedForTest("vcs.revertFile", "unit-test dependency")
+	blockedRows := keymap.StatusMatrix(func(string) bool { return true })
+	remove()
+	for _, r := range blockedRows {
+		if r.Command == "vcs.revertFile" && !strings.Contains(r.Status(), "blocked:") {
+			t.Errorf("stubbed blocked row = %+v", r)
+		}
 	}
 	if r := byCmd["editor.copy"]; r.Fallback != "vim y" {
 		t.Errorf("editor.copy = %+v", r)

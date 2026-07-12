@@ -36,11 +36,14 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	if got, _ := l.Binding("editor.duplicateLine"); !strings.Contains(got, "cmd+d ⚠") {
 		t.Fatalf("editor.duplicateLine = %q", got)
 	}
-	// Blocked commands are labelled, never hidden. (vcs.commit went live with
-	// 0320 #465 and now resolves to its leader mnemonic instead.)
-	if got, _ := l.Binding("vcs.updateProject"); !strings.HasPrefix(got, "✗ blocked:") {
-		t.Fatalf("vcs.updateProject = %q", got)
+	// Blocked commands are labelled, never hidden. The real ledger emptied
+	// with 0320 (#466), so the machinery is exercised through a stub entry.
+	remove := StubBlockedForTest("vcs.commit", "unit-test dependency")
+	if got, _ := l.Binding("vcs.commit"); !strings.HasPrefix(got, "✗ blocked:") {
+		t.Fatalf("stubbed blocked binding = %q", got)
 	}
+	remove()
+	// Without the stub the VCS ids resolve to their leader mnemonics (0320).
 	if got, _ := l.Binding("vcs.commit"); got != "space v c" {
 		t.Fatalf("vcs.commit = %q", got)
 	}
