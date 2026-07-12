@@ -151,6 +151,10 @@ var jetbrainsRows = []row{
 	{"cmd+k z", "pane.maximize", "Maximize pane", Global, "Zen & maximize (#358)"},
 	{"cmd+k shift+z", "view.zenMode", "Zen mode", Global, "Zen & maximize (#359)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
+	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
+	// select-all-occurrences chord (the JetBrains original needs alt).
+	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},
+	{"ctrl+shift+g", "editor.caret.addAll", "Add carets at all occurrences", Editor, "Multi-caret (#145)"},
 	{"cmd+k shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
 	{"cmd+k shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)"},

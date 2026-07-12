@@ -47,6 +47,9 @@ func (m *Model) mutate(fn func(rec *history.Recorder) buffer.Position) {
 	}
 	m.cursor = m.buf.ClampCursor(newCur)
 	m.desiredCol = m.cursor.Col
+	// A mutation that didn't fan out may have shifted text under the
+	// secondary carets; snap them back into the buffer (#145).
+	m.clampCarets()
 }
 
 // runOperator resolves op against target and applies it, recording a dot that
@@ -196,6 +199,14 @@ func (m *Model) commitInsert() {
 	}
 	m.cursor = m.buf.ClampCursor(m.cursor)
 	m.desiredCol = m.cursor.Col
+	// Secondary carets step back off the one-past-end column the same way;
+	// they stay active until an explicit Esc in normal mode collapses them (#145).
+	m.moveCarets(false, func(pos buffer.Position, _ int) (buffer.Position, int) {
+		if pos.Col > 0 {
+			pos.Col--
+		}
+		return pos, pos.Col
+	})
 }
 
 // repeatDot replays the last change count times.
@@ -208,10 +219,21 @@ func (m *Model) repeatDot(count int) {
 	}
 }
 
-// paste inserts the register entry relative to the cursor (p/P), recording a dot.
+// paste inserts the register entry relative to the cursor (p/P), recording a
+// dot. With carets active the paste lands at every caret as one undo unit (#145).
 func (m *Model) paste(reg rune, after bool, count int, gp bool) {
 	e := m.regs.Get(reg)
 	if e.Text == "" {
+		return
+	}
+	if m.hasCarets() {
+		if e.Linewise {
+			m.caretsOnePerLine()
+		}
+		m.fanMutate(func(rec *history.Recorder, pos, _ buffer.Position) buffer.Position {
+			return operator.Paste(m.buf, rec, e, pos, after, count, gp)
+		})
+		m.dot = &dotCommand{run: func(mm *Model) { mm.paste(reg, after, count, gp) }}
 		return
 	}
 	m.mutate(func(rec *history.Recorder) buffer.Position {
@@ -220,8 +242,25 @@ func (m *Model) paste(reg rune, after bool, count int, gp bool) {
 	m.dot = &dotCommand{run: func(mm *Model) { mm.paste(reg, after, count, gp) }}
 }
 
-// deleteUnderCursor implements x: delete count runes from the cursor.
+// deleteUnderCursor implements x: delete count runes from the cursor — and,
+// with carets active, from every caret as one undo unit (#145).
 func (m *Model) deleteUnderCursor(reg rune, count int) {
+	if m.hasCarets() {
+		m.fanMutate(func(rec *history.Recorder, pos, _ buffer.Position) buffer.Position {
+			max := m.buf.RuneLen(pos.Line)
+			if max == 0 || pos.Col >= max {
+				return pos
+			}
+			end := pos
+			if end.Col += count; end.Col > max {
+				end.Col = max
+			}
+			rec.Apply(buffer.Delete(buffer.Range{Start: pos, End: end}))
+			return m.buf.ClampCursor(pos)
+		})
+		m.dot = &dotCommand{run: func(mm *Model) { mm.deleteUnderCursor(reg, count) }}
+		return
+	}
 	if m.buf.RuneLen(m.cursor.Line) == 0 {
 		return
 	}
@@ -237,8 +276,21 @@ func (m *Model) deleteUnderCursor(reg rune, count int) {
 	m.dot = &dotCommand{run: func(mm *Model) { mm.deleteUnderCursor(reg, count) }}
 }
 
-// replaceChar implements r: overwrite the rune under the cursor with ch.
+// replaceChar implements r: overwrite the rune under the cursor with ch — at
+// every caret when carets are active (#145).
 func (m *Model) replaceChar(ch rune, count int) {
+	if m.hasCarets() {
+		m.fanMutate(func(rec *history.Recorder, pos, _ buffer.Position) buffer.Position {
+			if m.buf.RuneLen(pos.Line) < pos.Col+count {
+				return pos
+			}
+			end := buffer.Position{Line: pos.Line, Col: pos.Col + count}
+			rec.Apply(buffer.Edit{Range: buffer.Range{Start: pos, End: end}, Text: strings.Repeat(string(ch), count)})
+			return buffer.Position{Line: pos.Line, Col: pos.Col + count - 1}
+		})
+		m.dot = &dotCommand{run: func(mm *Model) { mm.replaceChar(ch, count) }}
+		return
+	}
 	if m.buf.RuneLen(m.cursor.Line) < m.cursor.Col+count {
 		return
 	}
@@ -286,6 +338,8 @@ func (m *Model) undo(count int) {
 	if m.insert.active {
 		m.commitInsert()
 	}
+	// Undo restores one cursor; the fan-out collapses with its change (#145).
+	m.collapseCarets()
 	undone := false
 	for i := 0; i < count; i++ {
 		cur, ok := m.hist.Undo(m.buf)
@@ -313,6 +367,7 @@ func (m *Model) redo(count int) {
 	if m.insert.active {
 		m.commitInsert()
 	}
+	m.collapseCarets()
 	redone := false
 	for i := 0; i < count; i++ {
 		cur, ok := m.hist.Redo(m.buf)
@@ -429,6 +484,16 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		cmd := m.diagnosticJump(action == "next_diagnostic")
 		return m, cmd
+	case "caret_add_next":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.caretAddNext()
+	case "caret_add_all":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.caretAddAll()
 	}
 	m.scroll()
 	return m, nil

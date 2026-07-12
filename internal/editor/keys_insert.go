@@ -29,25 +29,21 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case (key.Code == ' ' || key.Code == '@' || key.Code == tea.KeySpace) && key.Mod == tea.ModCtrl:
 		m.emit(EventCompletionTrigger)
 	case key.Code == tea.KeyEnter:
-		indent := ""
-		if m.autoIndent {
-			// Smart indent (Roadmap 0260) keys off what stays on the line: a
-			// mid-line split indents by the text left of the cursor.
-			left := []rune(m.buf.Line(m.cursor.Line))
-			col := min(m.cursor.Col, len(left))
-			indent = m.smartIndent(string(left[:col]))
-		}
-		m.insertText("\n" + indent)
+		m.insertNewline()
 	// Word/line kills (#246) come before the plain-backspace case, which
 	// matches KeyBackspace regardless of modifiers. alt+backspace mirrors the
 	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin;
 	// cmd+backspace / ctrl+u kill to the line start the same way.
 	case key.Code == tea.KeyBackspace && key.Mod&^tea.ModShift == tea.ModAlt,
 		key.Code == 'w' && key.Mod == tea.ModCtrl:
-		m.insertDeleteBack(motion.WordBackward(m.buf, m.cursor, 1).Pos)
+		m.insertKillBack(func(pos buffer.Position) buffer.Position {
+			return motion.WordBackward(m.buf, pos, 1).Pos
+		})
 	case key.Code == tea.KeyBackspace && (key.Mod&^tea.ModShift == tea.ModSuper || key.Mod&^tea.ModShift == tea.ModMeta),
 		key.Code == 'u' && key.Mod == tea.ModCtrl:
-		m.insertDeleteBack(buffer.Position{Line: m.cursor.Line, Col: 0})
+		m.insertKillBack(func(pos buffer.Position) buffer.Position {
+			return buffer.Position{Line: pos.Line, Col: 0}
+		})
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
 	// Shift+Tab dedents the whole current line one unit (Roadmap 0260),
@@ -69,15 +65,23 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	case key.Code == tea.KeyHome:
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: 0}
 		m.desiredCol = 0
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			return buffer.Position{Line: pos.Line, Col: 0}, 0
+		})
 	case key.Code == tea.KeyEnd:
 		m.cursor = buffer.Position{Line: m.cursor.Line, Col: m.buf.RuneLen(m.cursor.Line)}
 		m.desiredCol = m.cursor.Col
+		m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+			c := m.buf.RuneLen(pos.Line)
+			return buffer.Position{Line: pos.Line, Col: c}, c
+		})
 	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
 		// Printable input, including a bare space (Text == " ").
 		m.writeRunes(key.Text)
 	default:
 		// Alt/Ctrl+arrows (word nav), PgUp/PgDn and Ctrl motions also work mid-insert.
 		if res, ok := m.resolveMotion(key.String(), 0, 1); ok {
+			m.fanMotionSecondaries(key.String(), 0, 1, true)
 			m.cursor = m.buf.Clamp(res.Pos)
 			m.desiredCol = m.cursor.Col
 			m.emit(EventCursorMove)
@@ -113,6 +117,7 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 
 // insertMove nudges the cursor in insert mode, allowing the one-past-end column
 // (so typing can continue at the line end) rather than the normal-mode clamp.
+// Secondary carets move in parallel (#145).
 func (m *Model) insertMove(dLine, dCol int) {
 	// Arrow motion in insert mode emits no change event, so the popup would
 	// trail the cursor instead of being retriggered/dismissed (#315).
@@ -120,6 +125,10 @@ func (m *Model) insertMove(dLine, dCol int) {
 	p := buffer.Position{Line: m.cursor.Line + dLine, Col: m.cursor.Col + dCol}
 	m.cursor = m.buf.Clamp(p)
 	m.desiredCol = m.cursor.Col
+	m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
+		q := m.buf.Clamp(buffer.Position{Line: pos.Line + dLine, Col: pos.Col + dCol})
+		return q, q.Col
+	})
 	m.emit(EventCursorMove)
 }
 
@@ -136,15 +145,39 @@ func (m *Model) writeRunes(text string) {
 	}
 }
 
-// insertText splices text at the cursor through the session recorder.
+// insertText splices text at every caret through the session recorder (#145);
+// without secondary carets that is exactly the old single-cursor insert.
 func (m *Model) insertText(text string) {
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
-	end := m.insert.rec.Apply(buffer.Insert(m.cursor, text))
-	m.cursor = end
-	m.desiredCol = end.Col
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		return m.insert.rec.Apply(buffer.Insert(pos, text))
+	})
 	m.insert.typed += text
+	m.dirtyFromInsert()
+}
+
+// insertNewline splits the line at every caret, applying smart indent per
+// caret (a mid-line split indents by the text left of that caret).
+func (m *Model) insertNewline() {
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	indentAt := func(pos buffer.Position) string {
+		if !m.autoIndent {
+			return ""
+		}
+		left := []rune(m.buf.Line(pos.Line))
+		col := min(pos.Col, len(left))
+		return m.smartIndent(string(left[:col]))
+	}
+	// "." replays the primary caret's indent, like the single-cursor insert did.
+	typed := "\n" + indentAt(m.cursor)
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		return m.insert.rec.Apply(buffer.Insert(pos, "\n"+indentAt(pos)))
+	})
+	m.insert.typed += typed
 	m.dirtyFromInsert()
 }
 
@@ -166,29 +199,71 @@ func (m *Model) replaceText(text string) {
 	m.dirtyFromInsert()
 }
 
-// insertBackspace deletes the rune before the cursor, joining lines at column 0.
+// insertBackspace deletes the rune before every caret, joining lines at
+// column 0. Carets whose deletions collide merge (#145).
 func (m *Model) insertBackspace() {
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
-	switch {
-	case m.cursor.Col > 0:
-		start := buffer.Position{Line: m.cursor.Line, Col: m.cursor.Col - 1}
-		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: m.cursor}))
-		m.cursor = start
-	case m.cursor.Line > 0:
-		prevLen := m.buf.RuneLen(m.cursor.Line - 1)
-		start := buffer.Position{Line: m.cursor.Line - 1, Col: prevLen}
-		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: m.cursor}))
-		m.cursor = start
-	default:
+	edited := false
+	m.fanApply(func(pos, floor buffer.Position) buffer.Position {
+		var start buffer.Position
+		switch {
+		case pos.Col > 0:
+			start = buffer.Position{Line: pos.Line, Col: pos.Col - 1}
+		case pos.Line > 0:
+			start = buffer.Position{Line: pos.Line - 1, Col: m.buf.RuneLen(pos.Line - 1)}
+		default:
+			return pos
+		}
+		if floor.Line >= 0 && start.Before(floor) {
+			start = floor // never delete into an earlier caret's edit
+		}
+		if !start.Before(pos) {
+			return pos
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: pos}))
+		edited = true
+		return start
+	})
+	if !edited {
 		return
 	}
-	m.desiredCol = m.cursor.Col
 	// Backspace approximately rewinds the recorded text for "." replay.
 	if r := []rune(m.insert.typed); len(r) > 0 {
 		m.insert.typed = string(r[:len(r)-1])
 	}
+	m.dirtyFromInsert()
+}
+
+// insertKillBack fans a backward kill across every caret: startFor resolves,
+// per caret, the position the kill reaches back to (word start, line start).
+// The single-caret path keeps the old insertDeleteBack semantics.
+func (m *Model) insertKillBack(startFor func(pos buffer.Position) buffer.Position) {
+	if !m.hasCarets() {
+		m.insertDeleteBack(startFor(m.cursor))
+		return
+	}
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	edited := false
+	m.fanApply(func(pos, floor buffer.Position) buffer.Position {
+		start := m.buf.Clamp(startFor(pos))
+		if floor.Line >= 0 && start.Before(floor) {
+			start = floor
+		}
+		if !start.Before(pos) {
+			return pos
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: pos}))
+		edited = true
+		return start
+	})
+	if !edited {
+		return
+	}
+	m.insert.typed = "" // multi-caret kills clear the "." text, like a cross-line kill
 	m.dirtyFromInsert()
 }
 
@@ -227,21 +302,45 @@ func (m *Model) insertDeleteBack(start buffer.Position) {
 // with no leading whitespace is a no-op. Like insertBackspace, the recorded
 // "." text is only approximate (the dedent is not replayed).
 func (m *Model) insertDedentLine() {
-	n := dedentCols(m.buf.Line(m.cursor.Line), m.tabWidth)
-	if n == 0 {
+	// Every caret line dedents once, no matter how many carets sit on it (#145).
+	lines := map[int]bool{m.cursor.Line: true}
+	for _, c := range m.carets {
+		lines[c.pos.Line] = true
+	}
+	edited := false
+	for l := range lines {
+		n := dedentCols(m.buf.Line(l), m.tabWidth)
+		if n == 0 {
+			continue
+		}
+		if m.insert.rec == nil {
+			m.insert.rec = m.newRecorder()
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{
+			Start: buffer.Position{Line: l, Col: 0},
+			End:   buffer.Position{Line: l, Col: n},
+		}))
+		edited = true
+		if m.cursor.Line == l {
+			if m.cursor.Col -= n; m.cursor.Col < 0 {
+				m.cursor.Col = 0
+			}
+			m.desiredCol = m.cursor.Col
+		}
+		for i := range m.carets {
+			if m.carets[i].pos.Line != l {
+				continue
+			}
+			if m.carets[i].pos.Col -= n; m.carets[i].pos.Col < 0 {
+				m.carets[i].pos.Col = 0
+			}
+			m.carets[i].desiredCol = m.carets[i].pos.Col
+		}
+	}
+	if !edited {
 		return
 	}
-	if m.insert.rec == nil {
-		m.insert.rec = m.newRecorder()
-	}
-	m.insert.rec.Apply(buffer.Delete(buffer.Range{
-		Start: buffer.Position{Line: m.cursor.Line, Col: 0},
-		End:   buffer.Position{Line: m.cursor.Line, Col: n},
-	}))
-	if m.cursor.Col -= n; m.cursor.Col < 0 {
-		m.cursor.Col = 0
-	}
-	m.desiredCol = m.cursor.Col
+	m.sortCarets()
 	m.dirtyFromInsert()
 }
 

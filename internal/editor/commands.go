@@ -57,6 +57,8 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.find", "Find in File", "find", "/"),
 			action("editor.replace", "Replace in File", "replace", ":s"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
+			action("editor.caret.addNext", "Add Caret at Next Occurrence", "caret_add_next", ""),
+			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 			// Diagnostic navigation (#369) carries lsp.* ids — it steps through

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T18:00:00Z
+timestamp: 2026-07-12T20:00:00Z
 ---
 
 # Editor
@@ -180,6 +180,60 @@ Insert, Visual, etc., unlike the vim-motion scroll commands. Horizontal wheel
 (or shift+wheel) scrolls sideways via `ScrollXBy(delta)`, moving `view.Left`
 clamped so the longest visible line keeps its last character on screen (#230);
 the next cursor motion re-derives the offset to follow the cursor again.
+
+## Multi-caret editing (#145)
+
+`multicaret.go` generalizes the single cursor to a primary caret plus an
+ordered set of secondary carets (`carets []caret`, each with its own
+`desiredCol`). Carets are **per-view state** like the cursor — two panes
+sharing a document (#142) each keep their own set, and a `SyncMsg`/reload
+re-clamps them into the mutated buffer like the cursor.
+
+**Creation paths**
+
+- `editor.caret.addNext` (`ctrl+g`, JetBrains): the first invocation locks
+  onto the word under the primary caret (exact match, like `*`) and snaps to
+  its start; each following one leaves a caret behind and jumps the primary to
+  the next occurrence, wrapping and skipping occurrences that already hold a
+  caret.
+- `editor.caret.addAll` (`ctrl+shift+g`, leader `space G`): a caret on every
+  occurrence at once.
+- `alt+click` toggles a secondary caret at the clicked cell; a plain click
+  collapses back to a single cursor.
+- Visual block `I`/`A` converts the rectangle into carets — `I` at the block's
+  left edge (skipping shorter lines, vim-style), `A` one past its right edge,
+  clamped to each line's end — and enters insert mode.
+- `Esc` in normal mode collapses the set to the primary caret. Leaving insert
+  mode keeps the carets (JetBrains semantics); the next `Esc` collapses.
+
+**Edit fan-out.** `fanApply` runs an edit closure once per caret in ascending
+buffer order, measuring how much each application grew or shrank the buffer
+(in rune-offset space) and shifting the remaining carets by that delta — so no
+caret drifts when an earlier caret's edit moves the text. Backward deletes
+clamp to the previous caret's landing position, and carets that collide merge.
+All per-caret edits go through **one `history.Recorder`**, so the whole
+fan-out is a single undo unit — insert-mode typing joins the open insert
+session recorder, one-shot operations commit via `fanMutate`. Fanned today:
+insert-mode typing / Enter (per-caret smart indent) / backspace / word- and
+line-kills / Tab / Shift+Tab (one dedent per line), `x`, `r`, operators
+`d c y` with motions and text objects, `dd cc yy` (merged to one caret per
+line first), `p`/`P`, `o`/`O`, `a A I s`, and completion accept (the popup
+applies at every caret, JetBrains-style). A multi-caret yank/delete joins the
+per-caret spans with newlines in the register. Motions (`h j k l w b` …,
+arrows, `Home`/`End`) move every caret in parallel; each keeps its own
+`desiredCol`.
+
+**Explicitly single-caret** (the set collapses first): the command line and
+search (`:` `/` `?`), the replace panel, visual selections (`v V ctrl+v`),
+replace mode (`R`), undo/redo (history stores one cursor), and `.` — the dot
+repeats the recorded change at the primary caret. The indent operators `>`/`<`
+apply at the primary only; mutations that don't fan re-clamp the carets.
+Out of scope (per the issue): carets across panes, regex-based caret
+placement.
+
+**Rendering.** `renderLine` draws secondary carets with the cursor's reverse
+style dimmed (`Faint`); the primary keeps the full-strength cell. Selection
+and search-match overlays compose as before.
 
 ## Command line (ex commands, Roadmap 0200)
 
