@@ -23,15 +23,24 @@ func sized(t *testing.T, w, h int) Model {
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	m = out.(Model)
-	// Drain the explorer's async root scan so the tree has visible rows.
-	for cmd := m.Init(); cmd != nil; {
-		msg := cmd()
-		if msg == nil {
-			break
+	// Drain the explorer's async root scan so the tree has visible rows. Init
+	// batches several startup commands (explorer scan, git status 0320), so
+	// unwrap tea.BatchMsg and apply each command's message once.
+	queue := []tea.Cmd{m.Init()}
+	for len(queue) > 0 {
+		cmd := queue[0]
+		queue = queue[1:]
+		if cmd == nil {
+			continue
 		}
-		out, _ := m.Update(msg)
-		m = out.(Model)
-		cmd = nil
+		switch msg := cmd().(type) {
+		case nil:
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		default:
+			out, _ := m.Update(msg)
+			m = out.(Model)
+		}
 	}
 	return m
 }

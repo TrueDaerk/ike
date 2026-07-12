@@ -41,8 +41,8 @@ import (
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
-	"ike/internal/preview"
 	"ike/internal/plugin"
+	"ike/internal/preview"
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/search"
@@ -53,6 +53,7 @@ import (
 	"ike/internal/todoindex"
 	"ike/internal/ui"
 	"ike/internal/undotree"
+	"ike/internal/vcs"
 	"ike/internal/wasm"
 	"ike/internal/watch"
 )
@@ -101,8 +102,8 @@ type Model struct {
 	// large-file toast (#149), so re-activating the tab stays quiet. Held as
 	// a map so value-receiver open paths mutate the shared set.
 	largeToasted map[string]bool
-	host       *host.Host
-	reg        *registry.Registry
+	host         *host.Host
+	reg          *registry.Registry
 	// toasts is the active notification stack (Roadmap 0130): drained from the
 	// host after every Update pass, rendered bottom-right above the status line.
 	toasts   []toast
@@ -118,6 +119,10 @@ type Model struct {
 	// costly per frame. Shared by pointer across the value-model copies (like
 	// largeToasted); its keys are dropped on config reload.
 	toolchainSeg map[string]string
+	// vcs is the git status state (Roadmap 0320): the latest snapshot plus
+	// refresh scheduling, shared by pointer across value-model copies. A nil
+	// snapshot means "not a git repository".
+	vcs *vcsState
 	// watcher is the external-file-change service (Roadmap 0140). It is
 	// constructed with the model (so save epochs record from the start) but
 	// only started by main.go via StartWatcher, keeping tests watcher-free.
@@ -132,7 +137,7 @@ type Model struct {
 	// (Roadmap 0310, #446).
 	marketPage *settings.MarketplacePage
 	cfgOpts    config.Options
-	help     *help.Help
+	help       *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
@@ -384,6 +389,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		focusKeys:    focusKeys(cfg),
 		keys:         buildKeymap(cfg, bindings),
 	}
+	m.vcs = &vcsState{}
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
@@ -529,6 +535,10 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// indirection as the SyncMsg below: Emit runs inside Update, so a
 		// direct send into the program's own loop would deadlock.
 		go e.host.Send(todoSavedMsg{path: ev.Path})
+		// The save also invalidates the git status snapshot (Roadmap 0320);
+		// IKE's own writes are watcher-suppressed (MarkSaved above), so this
+		// is the only refresh trigger for in-IDE saves.
+		go e.host.Send(vcsInvalidateMsg{})
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -1351,6 +1361,9 @@ func (m Model) explorer() *explorer.Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
+	// Initial git status load (Roadmap 0320): Init runs at startup and again
+	// after a project switch, so the snapshot follows the workspace.
+	cmds = append(cmds, m.startVCSRefresh())
 	// The TODO index's initial full scan (#61): Init runs after main.go wires
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.
@@ -2227,12 +2240,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case watch.EventMsg:
 		// External file changes (Roadmap 0140): directory events refresh the
-		// explorer, file events go to the editor leaf owning the path.
+		// explorer, file events go to the editor leaf owning the path. Every
+		// event also invalidates the git status snapshot (Roadmap 0320); the
+		// debounce collapses bursts into one refresh.
+		vcsCmd := m.scheduleVCSRefresh()
 		if msg.Kind == watch.DirChanged {
 			if m.panes.Has(pane.ExplorerKey) {
-				return m, m.panes.Get(pane.ExplorerKey).Update(msg)
+				return m, tea.Batch(m.panes.Get(pane.ExplorerKey).Update(msg), vcsCmd)
 			}
-			return m, nil
+			return m, vcsCmd
 		}
 		if msg.Kind == watch.FileRemoved {
 			if _, err := os.Stat(msg.Path); err == nil {
@@ -2245,11 +2261,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 					// explorer's delete flow — close the pane (#83). A dirty
 					// buffer instead stays open, marked stale by the editor.
 					m.closeEditorsForPath(msg.Path, false)
-					return m, nil
+					return m, vcsCmd
 				}
 			}
 		}
-		return m, m.routeToEditor(msg.Path, msg)
+		return m, tea.Batch(m.routeToEditor(msg.Path, msg), vcsCmd)
+
+	case vcsInvalidateMsg:
+		// Something changed the working tree (a buffer save, a mutating VCS
+		// command): refresh the git status snapshot after the debounce.
+		return m, m.scheduleVCSRefresh()
+
+	case vcsTickMsg:
+		// The git status debounce expired (Roadmap 0320): run the refresh.
+		m.vcs.tickArmed = false
+		return m, m.startVCSRefresh()
+
+	case vcs.SnapshotMsg:
+		return m, m.applyVCSSnapshot(msg)
 
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
