@@ -198,3 +198,42 @@ func TestKeymapActionsAfterFilter(t *testing.T) {
 		t.Fatal("u after leaving the filter input must unbind")
 	}
 }
+
+// TestKeymapDetailFooterPinnedAndScrolls guards #537: the detail line renders
+// as a footer pinned to the window's last line, moving the selection does not
+// shift the other rows, and the list scrolls so the selection stays visible.
+func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
+	k, _ := keymapPage(t)
+	rows := k.rows()
+	if len(rows) < 8 {
+		t.Fatalf("default table too small for the test: %d rows", len(rows))
+	}
+	const h = 8
+	lines := strings.Split(k.View(160, h), "\n")
+	if len(lines) != h {
+		t.Fatalf("view height = %d, want %d", len(lines), h)
+	}
+	if !strings.Contains(lines[h-1], rows[0].Command) {
+		t.Fatalf("footer must show the selected command:\n%s", strings.Join(lines, "\n"))
+	}
+	// Moving the selection must not shift unselected rows: line 3 (third
+	// binding) is identical before and after one step down.
+	before := lines[3]
+	k.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	lines = strings.Split(k.View(160, h), "\n")
+	if lines[3] != before {
+		t.Fatalf("selection move shifted an unselected row:\n%q\n%q", before, lines[3])
+	}
+	// Walking to the last binding scrolls the list so it stays visible.
+	for range rows {
+		k.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	}
+	last := rows[len(rows)-1]
+	v := k.View(160, h)
+	if !strings.Contains(v, last.Chord.String()) {
+		t.Fatalf("list must scroll to the selected binding %q:\n%s", last.Chord.String(), v)
+	}
+	if !strings.Contains(strings.Split(v, "\n")[h-1], last.Command) {
+		t.Fatalf("footer must follow the selection:\n%s", v)
+	}
+}

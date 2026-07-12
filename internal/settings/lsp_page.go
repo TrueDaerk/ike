@@ -49,6 +49,7 @@ type LSPPage struct {
 	pal         *theme.Palette
 
 	sel     int
+	off     int // list scroll offset (#537)
 	status  map[string]lspStatus
 	editing lspEditField
 	input   string
@@ -402,16 +403,20 @@ func (p *LSPPage) View(w, h int) string {
 			compAuto = "off"
 		}
 	}
-	lines := []string{
+	head := []string{
 		sec.Render(" LSP master switch: " + master + "  (E toggles) · auto-install: " + auto + "  (A toggles)"),
 		sec.Render(" inlay hints: " + inlay + "  (I toggles) · signature auto-popup: " + sigAuto + "  (S toggles) · completion as-you-type: " + compAuto + "  (C toggles)"),
 		sec.Render(" language · status · command · source"),
 	}
+	var list []string
 	for i, l := range p.servers() {
-		lines = append(lines, p.renderRow(l, i == p.sel))
-		if i != p.sel {
-			continue
-		}
+		list = append(list, p.renderRow(l, i == p.sel))
+	}
+	// Failure detail, key hints and the override input live in a constant
+	// two-line footer pinned below the list (#537), so moving the selection
+	// never shifts the rows.
+	var footer []string
+	if l, ok := p.current(); ok {
 		_, detail := p.rowStatus(l.ID)
 		switch {
 		case p.editing != lspEditNone:
@@ -420,22 +425,23 @@ func (p *LSPPage) View(w, h int) string {
 				lspEditArgs:     "args (space-separated)",
 				lspEditSettings: "settings (JSON object)",
 			}[p.editing]
-			line := "   " + prompt + ": " + p.input + "▌  (empty = reset)"
+			line := " " + prompt + ": " + p.input + "▌  (empty = reset)"
 			if p.invalid != "" {
 				line += "  ✗ " + p.invalid
 			}
-			lines = append(lines, sec.Render(line))
+			footer = []string{sec.Render(line), sec.Render(" enter apply · esc cancel")}
 		default:
+			detailLine := ""
 			if detail != "" {
-				lines = append(lines, lipgloss.NewStyle().Foreground(pal.Error).Render("   "+detail))
+				detailLine = lipgloss.NewStyle().Foreground(pal.Error).Render(" " + detail)
 			}
-			lines = append(lines, sec.Render("   e enable · c command · a args · s settings · i install · r restart · R restart all · x reset"))
+			footer = []string{
+				detailLine,
+				sec.Render(" e enable · c command · a args · s settings · i install · r restart · R restart all · x reset"),
+			}
 		}
 	}
-	if len(lines) > h {
-		lines = lines[:h]
-	}
-	return strings.Join(lines, "\n")
+	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)
 }
 
 // renderRow renders one language row.

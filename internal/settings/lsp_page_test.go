@@ -200,3 +200,23 @@ func TestLSPPageMissingBinaryDetail(t *testing.T) {
 		t.Fatalf("the failure reason and install hint must render:\n%s", v)
 	}
 }
+
+// TestLSPFooterPinned guards #537: hints and failure detail render in a
+// two-line footer pinned to the bottom instead of inline under the selection.
+func TestLSPFooterPinned(t *testing.T) {
+	p, _, _ := lspPageFixture(t)
+	const h = 12
+	lines := strings.Split(p.View(120, h), "\n")
+	if len(lines) != h {
+		t.Fatalf("view height = %d, want %d", len(lines), h)
+	}
+	if !strings.Contains(lines[h-1], "e enable") {
+		t.Fatalf("key hints must be pinned to the last line:\n%s", strings.Join(lines, "\n"))
+	}
+	// The override editor renders in the footer too.
+	p.Update(key("c"))
+	lines = strings.Split(p.View(120, h), "\n")
+	if !strings.Contains(lines[h-2], "command:") {
+		t.Fatalf("override input must render in the footer:\n%s", strings.Join(lines, "\n"))
+	}
+}

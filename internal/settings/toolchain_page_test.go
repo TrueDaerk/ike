@@ -148,3 +148,27 @@ func drainBatch(t *testing.T, p *ToolchainPage, cmd tea.Cmd) {
 		}
 	}
 }
+
+// TestToolchainFooterPinned guards #537: the key hints render in a footer
+// pinned to the bottom, and moving the selection does not shift other rows.
+func TestToolchainFooterPinned(t *testing.T) {
+	restoreConfig(t)
+	lang.Register(lang.Language{ID: "tcfoot1", Extensions: []string{"tcfoot1"}, Toolchain: fakeTC{detected: "/bin/a"}})
+	lang.Register(lang.Language{ID: "tcfoot2", Extensions: []string{"tcfoot2"}, Toolchain: fakeTC{detected: "/bin/b"}})
+	p := NewToolchainPage(testOpts(t), t.TempDir(), nil)
+	p.look = func(string) string { return "" }
+	p.run = func(string, ...string) string { return "" }
+	const h = 10
+	lines := strings.Split(p.View(120, h), "\n")
+	if len(lines) != h {
+		t.Fatalf("view height = %d, want %d", len(lines), h)
+	}
+	if !strings.Contains(lines[h-2], "enter pick interpreter") {
+		t.Fatalf("hint must be pinned above the status line:\n%s", strings.Join(lines, "\n"))
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	lines = strings.Split(p.View(120, h), "\n")
+	if len(lines) != h || !strings.Contains(lines[h-2], "enter pick interpreter") {
+		t.Fatalf("footer must stay pinned after a selection move:\n%s", strings.Join(lines, "\n"))
+	}
+}

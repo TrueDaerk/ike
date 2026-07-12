@@ -44,6 +44,7 @@ type ToolchainPage struct {
 	pal     *theme.Palette
 
 	sel      int
+	off      int               // list scroll offset (#537)
 	versions map[string]string // interpreter path -> probed version line
 
 	picking    bool
@@ -324,13 +325,21 @@ func (t *ToolchainPage) theme() *theme.Palette {
 	return theme.DefaultPalette()
 }
 
-// View implements PageModel.
+// View implements PageModel. The header is pinned on top and the key hints /
+// env status render in a constant-height footer pinned to the bottom (#537),
+// so moving the selection never shifts the rows; only the pickers and the
+// custom-path input still expand inline (explicit actions).
 func (t *ToolchainPage) View(w, h int) string {
 	pal := t.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	lines := []string{sec.Render(" language · interpreter · source · version")}
+	head := sec.Render(" language · interpreter · source · version")
+	var list []string
+	selStart, selEnd := 0, 0
 	for i, l := range t.languages() {
-		lines = append(lines, t.renderLang(l, i == t.sel))
+		if i == t.sel {
+			selStart = len(list)
+		}
+		list = append(list, t.renderLang(l, i == t.sel))
 		if i == t.sel {
 			switch {
 			case t.custom:
@@ -338,9 +347,9 @@ func (t *ToolchainPage) View(w, h int) string {
 				if t.invalid != "" {
 					detail += "  ✗ " + t.invalid
 				}
-				lines = append(lines, sec.Render(detail))
+				list = append(list, sec.Render(detail))
 			case t.picking:
-				lines = append(lines, t.renderPicker()...)
+				list = append(list, t.renderPicker()...)
 			case t.uvPicking:
 				for i, v := range t.uvVersions {
 					line := "   install python " + v
@@ -348,27 +357,36 @@ func (t *ToolchainPage) View(w, h int) string {
 					if i == t.uvPick {
 						style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
 					}
-					lines = append(lines, style.Render(line))
-				}
-			default:
-				hint := "   enter pick interpreter · p probe version · r reset to detection"
-				if l.ID == "python" {
-					hint += " · n new venv · u uv install"
-				}
-				lines = append(lines, sec.Render(hint))
-				if l.ID == "python" && t.envState != "" {
-					lines = append(lines, sec.Render("   "+t.envState))
+					list = append(list, style.Render(line))
 				}
 			}
-		}
-		if len(lines) >= h {
-			break
+			selEnd = len(list) - 1
 		}
 	}
-	if len(lines) > h {
-		lines = lines[:h]
+	return head + "\n" + pinFooter(list, t.footer(sec), selStart, selEnd, h-1, &t.off)
+}
+
+// footer renders the pinned two-line footer: key hints for the current mode
+// plus the python environment status (empty lines keep the height constant).
+func (t *ToolchainPage) footer(sec lipgloss.Style) []string {
+	l, ok := t.current()
+	if !ok {
+		return nil
 	}
-	return strings.Join(lines, "\n")
+	hint := " enter pick interpreter · p probe version · r reset to detection"
+	switch {
+	case t.custom:
+		hint = " enter apply · esc cancel"
+	case t.picking, t.uvPicking:
+		hint = " ↑↓ choose · enter apply · esc cancel"
+	case l.ID == "python":
+		hint += " · n new venv · u uv install"
+	}
+	status := ""
+	if l.ID == "python" && t.envState != "" {
+		status = " " + t.envState
+	}
+	return []string{sec.Render(hint), sec.Render(status)}
 }
 
 // renderLang renders one language row.
