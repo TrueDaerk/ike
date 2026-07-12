@@ -53,13 +53,37 @@ type Model struct {
 	top       int // first visible visual row
 	lines     []string
 	rowStarts []int // visual row each Row starts on, for hunk navigation
+
+	// Collapsed context (0340, #494): unchanged runs longer than the context
+	// budget fold into separator rows. gaps records the foldable runs and
+	// their per-gap expansion; sepLines maps each rendered separator's visual
+	// line to its gap for the expand key.
+	ctx       int // context lines kept around changes; <0 disables collapsing
+	collapsed bool
+	gaps      []gap
+	sepLines  map[int]int // visual line → gap index
 }
+
+// gap is one foldable run of RowSame rows: [start, end) row indices of the
+// hidden middle (context rows around it stay visible).
+type gap struct {
+	start, end int
+	expanded   bool
+}
+
+// defaultContext is the context-line budget when no config overrides it.
+const defaultContext = 3
+
+// minHidden is the smallest run worth a separator: folding one or two lines
+// reads worse than showing them.
+const minHidden = 3
 
 // New returns a diff view keyed to its owning pane, comparing the two texts.
 // leftTitle/rightTitle label the columns (file names, "HEAD", "snapshot", …);
 // rightPath, when non-empty, is the file enter jumps the editor to.
 func New(key, leftTitle, rightTitle, rightPath string, pal *theme.Palette) Model {
-	return Model{key: key, leftTitle: leftTitle, rightTitle: rightTitle, rightPath: rightPath, pal: pal, cur: -1}
+	return Model{key: key, leftTitle: leftTitle, rightTitle: rightTitle, rightPath: rightPath,
+		pal: pal, cur: -1, ctx: defaultContext, collapsed: true}
 }
 
 // NewFiles returns a diff view over two file paths, labelled by their base
@@ -113,12 +137,57 @@ func (m *Model) SetSize(w, h int) {
 }
 
 // SetContents diffs the two texts and renders the result. The scroll position
-// resets; the current hunk clears.
+// resets; the current hunk and every gap expansion clear.
 func (m *Model) SetContents(left, right string) {
 	m.res = Compute(left, right)
 	m.cur = -1
 	m.top = 0
+	m.gaps = computeGaps(m.res, m.ctx)
 	m.render()
+}
+
+// SetContext sets the context-line budget (config diff.context); n < 0
+// disables collapsing entirely.
+func (m *Model) SetContext(n int) {
+	m.ctx = n
+	m.gaps = computeGaps(m.res, m.ctx)
+	m.render()
+}
+
+// Collapsed reports whether the view folds unchanged runs.
+func (m Model) Collapsed() bool { return m.collapsed && m.ctx >= 0 }
+
+// computeGaps finds the foldable RowSame runs: each keeps ctx context rows
+// toward any adjacent change (none toward the file edges) and folds the rest
+// when at least minHidden rows would hide.
+func computeGaps(res Result, ctx int) []gap {
+	if ctx < 0 {
+		return nil
+	}
+	var gaps []gap
+	i := 0
+	for i < len(res.Rows) {
+		if res.Rows[i].Kind != RowSame {
+			i++
+			continue
+		}
+		j := i
+		for j < len(res.Rows) && res.Rows[j].Kind == RowSame {
+			j++
+		}
+		lead, trail := ctx, ctx
+		if i == 0 {
+			lead = 0 // run touches the file start: no change above to anchor context
+		}
+		if j == len(res.Rows) {
+			trail = 0 // run touches the file end
+		}
+		if hidden := (j - i) - lead - trail; hidden >= minHidden {
+			gaps = append(gaps, gap{start: i + lead, end: j - trail})
+		}
+		i = j
+	}
+	return gaps
 }
 
 // SetUnified switches between unified and side-by-side layout.
@@ -161,10 +230,41 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.stepHunk(-1)
 	case "u":
 		m.SetUnified(!m.unified)
+	case "c":
+		// Toggle collapsed context (#494); the current hunk stays in view.
+		m.collapsed = !m.collapsed
+		m.render()
+		m.scrollToHunk(m.cur)
+	case "o":
+		m.expandNearestGap()
 	case "enter":
 		return m.jump()
 	}
 	return nil
+}
+
+// expandNearestGap expands the separator closest to the viewport center; a
+// view without visible separators is a no-op.
+func (m *Model) expandNearestGap() {
+	if len(m.sepLines) == 0 {
+		return
+	}
+	center := m.top + m.h/2
+	best, bestDist := -1, 1<<30
+	for line, gi := range m.sepLines {
+		d := line - center
+		if d < 0 {
+			d = -d
+		}
+		if d < bestDist {
+			best, bestDist = gi, d
+		}
+	}
+	if best < 0 {
+		return
+	}
+	m.gaps[best].expanded = true
+	m.render()
 }
 
 // stepHunk moves the current hunk by delta, clamped, and scrolls to it.
@@ -249,20 +349,74 @@ func (m Model) View() string {
 	return b.String()
 }
 
+// displayItem is one render unit: a row index, or a separator for gap gi.
+type displayItem struct {
+	row int // index into res.Rows; -1 for a separator
+	gi  int // gap index when row == -1
+}
+
+// displayItems folds the collapsed gaps into separators. Rows hidden behind
+// a separator keep a rowStart pointing at it, so hunk navigation and jumps
+// stay well-defined (hunks themselves are never hidden).
+func (m *Model) displayItems() []displayItem {
+	if !m.Collapsed() || len(m.gaps) == 0 {
+		out := make([]displayItem, len(m.res.Rows))
+		for i := range out {
+			out[i] = displayItem{row: i}
+		}
+		return out
+	}
+	var out []displayItem
+	gi := 0
+	for i := 0; i < len(m.res.Rows); {
+		if gi < len(m.gaps) && m.gaps[gi].start == i && !m.gaps[gi].expanded {
+			out = append(out, displayItem{row: -1, gi: gi})
+			i = m.gaps[gi].end
+			gi++
+			continue
+		}
+		if gi < len(m.gaps) && i >= m.gaps[gi].end {
+			gi++
+			continue
+		}
+		out = append(out, displayItem{row: i})
+		i++
+	}
+	return out
+}
+
 // render rebuilds the styled visual lines at the current width, layout, and
 // theme, and records each row's first visual line for hunk navigation.
 func (m *Model) render() {
 	m.lines = nil
 	m.rowStarts = make([]int, len(m.res.Rows))
+	m.sepLines = map[int]int{}
 	if m.w <= 0 {
 		return
 	}
+	items := m.displayItems()
 	if m.unified {
-		m.renderUnified()
+		m.renderUnified(items)
 	} else {
-		m.renderSideBySide()
+		m.renderSideBySide(items)
 	}
 	m.scrollTo(m.top)
+}
+
+// emitSeparator renders one collapsed-gap row and stamps the hidden rows'
+// rowStarts onto it.
+func (m *Model) emitSeparator(gi int, st styles) {
+	g := m.gaps[gi]
+	line := len(m.lines)
+	m.sepLines[line] = gi
+	for r := g.start; r < g.end; r++ {
+		m.rowStarts[r] = line
+	}
+	label := fmt.Sprintf("··· %d unchanged lines (o expands, c shows all) ···", g.end-g.start)
+	if pad := (m.w - len([]rune(label))) / 2; pad > 0 {
+		label = strings.Repeat(" ", pad) + label
+	}
+	m.lines = append(m.lines, st.gutter.Render(label))
 }
 
 // styles bundles the resolved lipgloss styles one render pass reuses.
@@ -307,14 +461,20 @@ func (st styles) base(kind Kind, right bool) lipgloss.Style {
 // renderSideBySide paints two aligned columns with a dual gutter:
 // "NNN old │ NNN new". Both sides wrap to their column budget; the shorter
 // side pads with gap rows so the pair stays aligned.
-func (m *Model) renderSideBySide() {
+func (m *Model) renderSideBySide(items []displayItem) {
 	st := m.styles()
 	lw, rw := m.gutterWidths()
 	avail := m.w - (lw + 1) - (rw + 1) - 3 // two gutters + " │ "
 	colL := max(1, avail/2)
 	colR := max(1, avail-avail/2)
 	sep := st.gutter.Render(" │ ")
-	for ri, row := range m.res.Rows {
+	for _, it := range items {
+		if it.row < 0 {
+			m.emitSeparator(it.gi, st)
+			continue
+		}
+		ri := it.row
+		row := m.res.Rows[ri]
 		m.rowStarts[ri] = len(m.lines)
 		leftRunes := expand(row.Left)
 		rightRunes := expand(row.Right)
@@ -341,7 +501,7 @@ func (m *Model) renderSideBySide() {
 
 // renderUnified paints a single column with a dual line-number gutter; a
 // changed pair renders as its removed line followed by its added line.
-func (m *Model) renderUnified() {
+func (m *Model) renderUnified(items []displayItem) {
 	st := m.styles()
 	lw, rw := m.gutterWidths()
 	col := max(1, m.w-(lw+1)-(rw+1))
@@ -357,7 +517,13 @@ func (m *Model) renderUnified() {
 			m.lines = append(m.lines, b.String())
 		}
 	}
-	for ri, row := range m.res.Rows {
+	for _, it := range items {
+		if it.row < 0 {
+			m.emitSeparator(it.gi, st)
+			continue
+		}
+		ri := it.row
+		row := m.res.Rows[ri]
 		m.rowStarts[ri] = len(m.lines)
 		switch row.Kind {
 		case RowSame:
