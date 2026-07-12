@@ -725,6 +725,18 @@ func (m *Manager) SignatureHelp(ctx context.Context, path string, pos buffer.Pos
 	})
 }
 
+// Line returns the synced text of one line of an open document — the exact
+// text the server has seen, unlike a disk read that misses unsaved edits.
+func (m *Manager) Line(path string, line int) (string, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	doc, ok := m.docs[path]
+	if !ok || line < 0 || line >= len(doc.lines) {
+		return "", false
+	}
+	return doc.lines[line], true
+}
+
 // SignatureTriggers returns the trigger (and retrigger) characters the server
 // handling path advertises for signature help.
 func (m *Manager) SignatureTriggers(path string) []string {

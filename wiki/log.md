@@ -2,6 +2,10 @@
 
 ## 2026-07-12
 
+- Parameter info inside string arguments (#525): an empty signatureHelp
+  answer retries once at the string literal's opening delimiter — gopls
+  answers null inside string literals, so `t.Error("abc")` with the cursor on
+  the string now shows the popup.
 - Parameter info on demand (#523): new `lsp.parameterInfo` command
   (`ctrl+p`, `cmd+p` on Cmd-forwarding terminals) opens the signature-help
   popup in insert and normal mode; the popup now lists every parameter with
