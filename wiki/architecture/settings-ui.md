@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-11T12:00:00Z
+timestamp: 2026-07-12T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -143,3 +143,14 @@ per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
 binary renders the launch-failure reason; `i` runs the plugin's install
 recipe manually and `A` toggles `lsp.auto_install` (#131 — the automatic
 install on first use, with the manual action as fallback/retry).
+
+## Marketplace page (0310, #446)
+
+A custom `PageModel` (`internal/settings/marketplace_page.go`) over
+`internal/market`: browse the plugin catalog, review a plugin's requested
+capabilities, install/update/remove. Install (`i`) is only reachable from the
+expanded detail (`enter`) where the full capability list renders — the trust
+model's review step; `x` removes, `r` re-fetches. Async results arrive as
+`MarketCatalogMsg`/`MarketActionMsg` through `Model.Deliver`; opening the
+panel prefetches the catalog once. See
+[Plugin Marketplace](./marketplace.md).

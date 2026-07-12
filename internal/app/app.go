@@ -34,6 +34,7 @@ import (
 	"ike/internal/largefile"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
+	"ike/internal/market"
 	"ike/internal/menu"
 	"ike/internal/nav"
 	"ike/internal/overlay"
@@ -47,6 +48,7 @@ import (
 	"ike/internal/terminal"
 	"ike/internal/theme"
 	"ike/internal/ui"
+	"ike/internal/wasm"
 	"ike/internal/watch"
 )
 
@@ -113,7 +115,10 @@ type Model struct {
 	// settings is the full-window settings panel (Roadmap 0160, #91); cfgOpts
 	// names the layer files its edits write back to.
 	settings *settings.Model
-	cfgOpts  config.Options
+	// marketPage is kept aside so opening the panel can prefetch the catalog
+	// (Roadmap 0310, #446).
+	marketPage *settings.MarketplacePage
+	cfgOpts    config.Options
 	help     *help.Help
 	// shell is the single active floating overlay (Roadmap 0035).
 	shell *ui.Floating
@@ -403,6 +408,14 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 			return write
 		},
 	)})
+	// The marketplace page (Roadmap 0310, #446): production engine over the
+	// conventional plugins dir, catalog fetch through the market client.
+	marketClient := market.NewClient()
+	m.marketPage = settings.NewMarketplacePage(
+		market.NewEngine(marketClient, wasm.DefaultDir()),
+		marketClient.FetchIndex,
+	)
+	pages = append(pages, settings.Page{Title: "Marketplace", Custom: m.marketPage})
 	m.settings = settings.New(append(pages, reg.SettingsPages()...), m.cfgOpts)
 	// Thread the startup palette through every chrome component; without this
 	// the settings panel, command palette, shell, help, and menu render with
@@ -1442,6 +1455,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.Deliver(msg)
 		return m, nil
 
+	case settings.MarketCatalogMsg:
+		// A finished marketplace catalog fetch (Roadmap 0310, #446).
+		m.settings.Deliver(msg)
+		if msg.Err != nil {
+			m.host.Notify(host.Warn, "marketplace: "+msg.Err.Error())
+		}
+		return m, nil
+
+	case settings.MarketActionMsg:
+		// A finished marketplace install/update/remove; the page shows the
+		// detail, the toast carries the headline.
+		m.settings.Deliver(msg)
+		if msg.Err != nil {
+			m.host.Notify(host.Warn, "marketplace: "+msg.Action+" "+msg.Name+": "+msg.Err.Error())
+		} else if msg.Action == "remove" {
+			m.host.Notify(host.Info, "marketplace: removed "+msg.Name)
+		} else {
+			done := map[string]string{"install": "installed", "update": "updated"}[msg.Action]
+			m.host.Notify(host.Info, "marketplace: "+done+" "+msg.Name+" — restart to load")
+		}
+		return m, nil
+
 	case settings.EnvMsg:
 		// Python environment action finished (#132): show the result on the
 		// page, and on success register the interpreter through write-back
@@ -1487,10 +1522,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the floating settings panel.
+		// Opening prefetches the marketplace catalog once (no-op when it is
+		// already loaded, in flight, or unconfigured).
 		w, h := m.settingsSize()
 		m.settings.SetSize(w, h)
 		m.settings.Open()
-		return m, nil
+		return m, m.marketPage.RefreshCmd()
 
 	case ToggleMenuMsg:
 		// menu.open (f10 / palette): open the first menu, or close an open one.

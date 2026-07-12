@@ -2,6 +2,14 @@
 
 ## 2026-07-12
 
+- Plugin marketplace (Roadmap 0310, #444-#446): new `internal/market` package
+  (static HTTPS `index.json` catalog with strict per-entry validation, install
+  engine with SHA-256 verification and atomic .wasm+manifest writes pinning
+  the reviewed capability list) and a Marketplace settings page (browse,
+  capability review before install, install/update/remove, restart notice).
+  New config key `marketplace.catalog_url`; new doc
+  [marketplace.md](/architecture/marketplace.md).
+
 - Code folding (#144): collapse a function body, block, import list or
   multi-line comment behind its header line. Fold ranges come from the same
   Tree-sitter parse as the highlight spans (`SpansMsg.Folds`, kinds via
