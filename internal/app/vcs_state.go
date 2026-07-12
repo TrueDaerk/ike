@@ -88,7 +88,11 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	return tea.Batch(m.vcsMarksCmds()...)
 }
 
-// vcsMarksCmds fans one marks recompute out per open document.
+// ToggleBlameMsg runs vcs.blameLine (#468) on the focused document.
+type ToggleBlameMsg struct{}
+
+// vcsMarksCmds fans one marks recompute out per open document; documents
+// with inline blame enabled refresh their blame map too (#468).
 func (m Model) vcsMarksCmds() []tea.Cmd {
 	seen := map[string]bool{}
 	var cmds []tea.Cmd
@@ -103,6 +107,9 @@ func (m Model) vcsMarksCmds() []tea.Cmd {
 			}
 			seen[ed.Path()] = true
 			cmds = append(cmds, m.vcsMarksCmd(ed))
+			if ed.BlameOn() && m.vcs.snap != nil {
+				cmds = append(cmds, vcs.BlameCmd(m.vcs.snap.Root, ed.Path()))
+			}
 		}
 	}
 	return cmds

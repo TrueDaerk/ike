@@ -230,6 +230,11 @@ type Model struct {
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
 	// external change, and vcs refresh, so positions may briefly lag an edit.
 	gitMarks map[int]vcs.LineMark
+	// blameOn shows the inline blame annotation on the cursor line (#468);
+	// blame is the whole-file map behind it, refreshed by the app on save and
+	// vcs refresh, so positions may briefly lag an edit like gitMarks.
+	blameOn bool
+	blame   map[int]vcs.BlameLine
 	comp       *completionState
 	hover      *hoverState
 	signature  *signatureState
@@ -694,6 +699,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// nil clears them (clean file, untracked, not a repo).
 		if msg.Path == m.path {
 			m.gitMarks = msg.Marks
+		}
+		return m, nil
+	case vcs.BlameMsg:
+		// A refreshed inline-blame map (#468); errors clear it so a stale
+		// annotation never outlives its file.
+		if msg.Path == m.path {
+			m.blame = msg.Lines
 		}
 		return m, nil
 	// ilsp.FormatEditsMsg is deliberately NOT handled here: views of a shared

@@ -2388,6 +2388,31 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openDiffHeadPane(msg.Path, msg.Head)
 		return m, nil
 
+	case ToggleBlameMsg:
+		// vcs.blameLine (#468): flip the focused document's annotation and
+		// fetch the blame map when it just turned on.
+		ed := m.activeEditor()
+		if ed == nil || !ed.HasFile() {
+			m.host.Notify(host.Info, "no file to annotate")
+			return m, nil
+		}
+		if !ed.ToggleBlame() {
+			return m, nil
+		}
+		if m.vcs.snap == nil {
+			ed.ToggleBlame() // back off: nothing to annotate outside a repo
+			m.host.Notify(host.Info, "not a git repository")
+			return m, nil
+		}
+		return m, vcs.BlameCmd(m.vcs.snap.Root, ed.Path())
+
+	case vcs.BlameMsg:
+		if msg.Err != nil {
+			// Untracked files etc.: plain hint, annotation stays empty.
+			m.host.Notify(host.Info, "blame: "+msg.Err.Error())
+		}
+		return m, m.routeToEditor(msg.Path, msg)
+
 	case UpdateProjectMsg:
 		return m.updateProject()
 
