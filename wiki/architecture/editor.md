@@ -228,7 +228,11 @@ language rules involved. The closer is only added when sensible: the cursor
 sits at the line end, before whitespace, or before another closer; directly
 before other text the opener inserts alone. Typing a closer whose rune already
 sits at the cursor **skips over** it instead of duplicating it, and backspacing
-the opener of an empty pair removes both runes. Everything applies per caret
+the opener of an empty pair removes both runes. Quotes (`"`, `'`, `` ` ``, #521)
+pair under the same gate with symmetric rules: the same quote at the cursor is
+skipped (that is the closing keystroke), and no pair opens when the rune before
+the caret is a word rune or the same quote — so the apostrophe in `don't` and
+doubled quotes insert alone. Everything applies per caret
 (one fan-out can mix pairing, plain insert, and skip-over) and stays inside the
 open insert's undo unit. The `.`-replay text records only the keystrokes, so a
 fully typed `(x)` run replays exactly; an insert that never types the closer

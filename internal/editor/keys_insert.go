@@ -235,7 +235,7 @@ func (m *Model) insertBackspace() {
 		// Backspacing the opener of an empty pair removes the closer with
 		// it (#517), undoing an auto-close in one keystroke.
 		if m.autoClosePairs && start.Line == pos.Line && pos.Col-start.Col == 1 {
-			if c, ok := closePairs[m.runeAt(start)]; ok && m.runeAt(pos) == c {
+			if c, ok := pairCloser(m.runeAt(start)); ok && m.runeAt(pos) == c {
 				end.Col++
 			}
 		}
