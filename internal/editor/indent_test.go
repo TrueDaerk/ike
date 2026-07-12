@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor/buffer"
 	"ike/internal/lang"
 )
 
@@ -179,5 +180,108 @@ func TestEnterSmartIndentIsOneUndoUnit(t *testing.T) {
 	m = send(m, special(tea.KeyEscape), key('u'))
 	if got := line(m, 0); got != "def m():" || m.buf.LineCount() > 2 {
 		t.Fatalf("undo must revert the whole insert: %q lines=%d", got, m.buf.LineCount())
+	}
+}
+
+// blockSplitModel loads a brace-language buffer with the caret placed between
+// the pair at line/col, in insert mode, ready for Enter (#518).
+func blockSplitModel(t *testing.T, ext, content string, col int) Model {
+	t.Helper()
+	m := loadedExt(t, ext, content)
+	m.autoIndent = true
+	m.useSpaces = true
+	m.cursor = buffer.Position{Line: 0, Col: col}
+	return m
+}
+
+func TestEnterBetweenBracesOpensBlock(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "function abc() {}\n", 16)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 0); got != "function abc() {" {
+		t.Fatalf("line 0 = %q", got)
+	}
+	if got := line(m, 1); got != "    " {
+		t.Fatalf("middle line = %q, want one deepened indent", got)
+	}
+	if got := line(m, 2); got != "}" {
+		t.Fatalf("closer line = %q, want %q", got, "}")
+	}
+	if m.cursor.Line != 1 || m.cursor.Col != 4 {
+		t.Fatalf("cursor = %+v, want end of middle line", m.cursor)
+	}
+}
+
+func TestEnterBetweenBracesKeepsOuterIndent(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "    if (x) {}\n", 12)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 1); got != "        " {
+		t.Fatalf("middle line = %q, want indent deepened from 4 to 8", got)
+	}
+	if got := line(m, 2); got != "    }" {
+		t.Fatalf("closer line = %q, want closer at the reference indent", got)
+	}
+}
+
+func TestEnterBetweenBracesMidLine(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "foo({})\n", 5)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 0); got != "foo({" {
+		t.Fatalf("line 0 = %q", got)
+	}
+	if got := line(m, 2); got != "})" {
+		t.Fatalf("closer line = %q, want %q — text right of the pair follows", got, "})")
+	}
+}
+
+func TestEnterBetweenBracesPlainTextCopiesIndent(t *testing.T) {
+	m := blockSplitModel(t, "itestnone", "  {}\n", 3)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 1); got != "  " {
+		t.Fatalf("middle line = %q, want plain copy-indent without lang rules", got)
+	}
+	if got := line(m, 2); got != "  }" {
+		t.Fatalf("closer line = %q", got)
+	}
+}
+
+func TestEnterMismatchedPairSplitsNormally(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "(]\n", 1)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if m.buf.LineCount() != 2 { // "(", "    ]"
+		t.Fatalf("lines = %d, want a plain split", m.buf.LineCount())
+	}
+	if got := line(m, 1); got != "    ]" {
+		t.Fatalf("line 1 = %q, want the closer to stay on the cursor line", got)
+	}
+}
+
+func TestEnterBlockSplitNeedsAutoIndent(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "{}\n", 1)
+	m.autoIndent = false
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 1); got != "}" {
+		t.Fatalf("line 1 = %q — auto_indent off must keep the plain split", got)
+	}
+}
+
+func TestEnterBlockSplitIsOneUndoUnit(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "{}\n", 1)
+	m = send(m, key('i'), special(tea.KeyEnter))
+	m = send(m, keys("x")...)
+	m = send(m, special(tea.KeyEscape), key('u'))
+	if got := line(m, 0); got != "{}" || m.buf.LineCount() > 2 {
+		t.Fatalf("undo must revert the whole insert: %q lines=%d", got, m.buf.LineCount())
+	}
+}
+
+func TestEnterBlockSplitMultiCaret(t *testing.T) {
+	m := blockSplitModel(t, "itestb", "a {}\nb {}\n", 3)
+	m.addCaret(buffer.Position{Line: 1, Col: 3})
+	m = send(m, key('i'), special(tea.KeyEnter))
+	if got := line(m, 2); got != "}" {
+		t.Fatalf("first closer line = %q", got)
+	}
+	if got := line(m, 3); got != "b {" || line(m, 5) != "}" {
+		t.Fatalf("second block wrong: %q / %q", line(m, 3), line(m, 5))
 	}
 }

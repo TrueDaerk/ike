@@ -3,6 +3,7 @@ package editor
 import (
 	"strings"
 
+	"ike/internal/editor/buffer"
 	"ike/internal/lang"
 )
 
@@ -29,6 +30,27 @@ func (m *Model) smartIndent(ref string) string {
 		}
 	}
 	return indent
+}
+
+// splitBlock handles Enter with the caret between a bracket pair (#518):
+// "{|}" opens a three-line block — the closer moves to its own line at the
+// reference line's indent, the caret lands on the (smart-indented) middle
+// line. Returns ok=false when the caret is not between a matching pair, so
+// the plain newline insert proceeds. In languages without IndentAfter rules
+// (and plain text) the middle line keeps the copy-indent.
+func (m *Model) splitBlock(pos buffer.Position) (buffer.Position, bool) {
+	if pos.Col == 0 {
+		return pos, false
+	}
+	closer, ok := closePairs[m.runeAt(buffer.Position{Line: pos.Line, Col: pos.Col - 1})]
+	if !ok || m.runeAt(pos) != closer {
+		return pos, false
+	}
+	left := []rune(m.buf.Line(pos.Line))
+	ref := string(left[:min(pos.Col, len(left))])
+	mid := m.smartIndent(ref)
+	m.insert.rec.Apply(buffer.Insert(pos, "\n"+mid+"\n"+leadingWhitespace(ref)))
+	return buffer.Position{Line: pos.Line + 1, Col: len([]rune(mid))}, true
 }
 
 // leadingWhitespace returns s's leading run of spaces and tabs.

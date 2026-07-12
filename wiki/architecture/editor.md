@@ -215,6 +215,11 @@ and `Shift+Tab` dedents the **whole current line** by one unit (the same
 wherever the cursor sits; the cursor follows the removed columns, and the edit
 stays inside the open insert's undo unit. While the completion popup is open a
 plain `Tab` still accepts the completion; `Shift+Tab` dedents regardless.
+`Enter` with the caret **between a matching bracket pair** (`{|}`, typically
+right after an auto-close) opens a three-line block (#518): the closer moves to
+its own line at the reference line's indent and the caret lands on the
+smart-indented middle line. Gated on `editor.auto_indent`, per caret; without
+language rules (plain text) the middle line keeps the copy-indent.
 
 Auto-closing pairs (#517, `autoclose.go`): with `editor.auto_close_pairs` on
 (default), typing `(`, `[` or `{` in insert mode also inserts the matching

@@ -175,9 +175,15 @@ func (m *Model) insertNewline() {
 		col := min(pos.Col, len(left))
 		return m.smartIndent(string(left[:col]))
 	}
-	// "." replays the primary caret's indent, like the single-cursor insert did.
+	// "." replays the primary caret's indent, like the single-cursor insert
+	// did; a block split (#518) replays only its pre-cursor half.
 	typed := "\n" + indentAt(m.cursor)
 	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		if m.autoIndent {
+			if mid, ok := m.splitBlock(pos); ok {
+				return mid
+			}
+		}
 		return m.insert.rec.Apply(buffer.Insert(pos, "\n"+indentAt(pos)))
 	})
 	m.insert.typed += typed
