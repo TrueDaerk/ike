@@ -73,6 +73,16 @@ type Snapshot struct {
 	dirs map[string]bool
 }
 
+// NewSnapshot builds a snapshot from explicit per-file statuses (repo-relative
+// slash paths), propagating dirty directories — for tests and synthetic states.
+func NewSnapshot(root string, files map[string]FileStatus) *Snapshot {
+	s := &Snapshot{Root: root, Files: map[string]FileStatus{}, dirs: map[string]bool{}}
+	for p, st := range files {
+		s.add(p, st)
+	}
+	return s
+}
+
 // Status reports the status of path, which may be absolute or repo-relative.
 // It returns StatusNone for clean files, paths outside the repo, or a nil
 // snapshot.

@@ -17,6 +17,7 @@ import (
 
 	"ike/internal/overlay"
 	"ike/internal/theme"
+	"ike/internal/vcs"
 	"ike/internal/watch"
 )
 
@@ -77,6 +78,7 @@ type Model struct {
 	colors     colorTable     // per-filetype colour resolution
 	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
 	cfgColors  colorTable     // [explorer.colors] overrides retained for re-theming
+	vcsSnap    *vcs.Snapshot  // git status snapshot (Roadmap 0320); nil = not a repo
 
 	// File-operation state (fileops.go). prompt is the active modal (new-file
 	// name entry, or a delete confirmation); ops/redoOps are the undo and redo
@@ -1038,13 +1040,33 @@ func (m Model) activeStyle() lipgloss.Style {
 }
 
 // nodeStyle is a row's base style: its per-filetype colour, plus italics for
-// hidden (dot-prefixed) entries.
+// hidden (dot-prefixed) entries. A git status overrides the filetype colour
+// (Roadmap 0320): changed files read in their status hue, JetBrains-style,
+// and directories containing changes take the modified tint.
 func (m Model) nodeStyle(n *node) lipgloss.Style {
 	s := m.colors.style(n)
+	if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
+		s = s.Foreground(c)
+	}
 	if isHidden(n.name) {
 		s = s.Italic(true)
 	}
 	return s
+}
+
+// nodeVCSStatus resolves the snapshot status backing a row's coloring; a
+// dirty directory reads as modified.
+func (m Model) nodeVCSStatus(n *node) vcs.FileStatus {
+	if m.vcsSnap == nil {
+		return vcs.StatusNone
+	}
+	if n.isDir {
+		if m.vcsSnap.DirDirty(n.path) {
+			return vcs.StatusModified
+		}
+		return vcs.StatusNone
+	}
+	return m.vcsSnap.Status(n.path)
 }
 
 // View renders the tree, clipping each row to the horizontal window and drawing
