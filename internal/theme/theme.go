@@ -46,6 +46,9 @@ type UI struct {
 	Ghost           string // pane-move ghost preview
 	ScrollbarTrack  string
 	ScrollbarThumb  string
+	DiffAdded       string // diff viewer: added-line background (#60)
+	DiffRemoved     string // diff viewer: removed-line background
+	DiffChanged     string // diff viewer: intra-line changed-range background
 }
 
 // Theme is one named color scheme: ui chrome slots plus the default sources
@@ -97,6 +100,9 @@ type Palette struct {
 	Ghost           color.Color
 	ScrollbarTrack  color.Color
 	ScrollbarThumb  color.Color
+	DiffAdded       color.Color
+	DiffRemoved     color.Color
+	DiffChanged     color.Color
 }
 
 // firstNonEmpty returns the first non-empty token, for slot fallback chains.
@@ -132,7 +138,7 @@ func NewPalette(t Theme) *Palette {
 	if files == nil {
 		files = def.Files
 	}
-	return &Palette{
+	p := &Palette{
 		Name:     t.Name,
 		Dark:     t.Dark,
 		Captures: captures,
@@ -177,4 +183,38 @@ func NewPalette(t Theme) *Palette {
 		ScrollbarTrack: slot(t.UI.ScrollbarTrack, def.UI.ScrollbarTrack),
 		ScrollbarThumb: slot(t.UI.ScrollbarThumb, def.UI.ScrollbarThumb),
 	}
+	// Diff backgrounds (#60) default to the theme's own semantic hues tinted
+	// toward its surface, so every theme — including sparse third-party ones —
+	// gets readable diff colors without declaring the slots.
+	p.DiffAdded = slotOrMix(t.UI.DiffAdded, p.Success, p.Surface, 0.22)
+	p.DiffRemoved = slotOrMix(t.UI.DiffRemoved, p.Error, p.Surface, 0.22)
+	p.DiffChanged = slotOrMix(t.UI.DiffChanged, p.Warning, p.Surface, 0.42)
+	return p
+}
+
+// slotOrMix resolves a slot token, falling back to fg mixed over bg by frac
+// when the slot is empty.
+func slotOrMix(token string, fg, bg color.Color, frac float64) color.Color {
+	if token != "" {
+		return Resolve(token)
+	}
+	return Mix(fg, bg, frac)
+}
+
+// Mix returns fg blended over bg: frac of fg, the rest bg. It backs the
+// derived diff backgrounds and is exported for renderers needing the same
+// tinting (a span emphasis over a line background, say).
+func Mix(fg, bg color.Color, frac float64) color.Color {
+	if fg == nil || bg == nil {
+		if fg != nil {
+			return fg
+		}
+		return bg
+	}
+	fr, fg16, fb, _ := fg.RGBA()
+	br, bg16, bb, _ := bg.RGBA()
+	mix := func(f, b uint32) uint8 {
+		return uint8((float64(f)*frac + float64(b)*(1-frac)) / 257)
+	}
+	return color.RGBA{R: mix(fr, br), G: mix(fg16, bg16), B: mix(fb, bb), A: 0xff}
 }

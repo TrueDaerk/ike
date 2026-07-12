@@ -270,6 +270,16 @@ func (m Model) statusLine() string {
 			}
 		case pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
+		case pane.KindDiff:
+			l, r := inst.Diff().Titles()
+			left += "DIFF │ " + l + " ⇄ " + r
+			if n := inst.Diff().HunkCount(); n > 0 {
+				hunk := "–"
+				if c := inst.Diff().CurrentHunk(); c >= 0 {
+					hunk = strconv.Itoa(c + 1)
+				}
+				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
+			}
 		default:
 			left += "EXPLORER"
 		}

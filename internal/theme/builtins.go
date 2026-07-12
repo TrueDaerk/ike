@@ -65,6 +65,9 @@ func defaultTheme() Theme {
 			Ghost:           "#af8700",
 			ScrollbarTrack:  "#585858",
 			ScrollbarThumb:  "#8a8a8a",
+			DiffAdded:       "#223d22",
+			DiffRemoved:     "#462424",
+			DiffChanged:     "#4d4d0a",
 		},
 		Captures: map[string]string{
 			"keyword":          "magenta",
@@ -133,6 +136,9 @@ func tokyoNight() Theme {
 			Ghost:           "#ff9e64",
 			ScrollbarTrack:  "#24283b",
 			ScrollbarThumb:  "#414868",
+			DiffAdded:       "#374234",
+			DiffRemoved:     "#4a2f3c",
+			DiffChanged:     "#6d5941",
 		},
 		Captures: map[string]string{
 			"keyword":          "#bb9af7",
@@ -201,6 +207,9 @@ func nord() Theme {
 			Ghost:           "#d08770",
 			ScrollbarTrack:  "#3b4252",
 			ScrollbarThumb:  "#4c566a",
+			DiffAdded:       "#475250",
+			DiffRemoved:     "#534b56",
+			DiffChanged:     "#7d735f",
 		},
 		Captures: map[string]string{
 			"keyword":          "#81a1c1",
@@ -269,6 +278,9 @@ func gruvbox() Theme {
 			Ghost:           "#fe8019",
 			ScrollbarTrack:  "#3c3836",
 			ScrollbarThumb:  "#665c54",
+			DiffAdded:       "#474827",
+			DiffRemoved:     "#563a37",
+			DiffChanged:     "#80662a",
 		},
 		Captures: gruvboxCaptures(false),
 		Files: map[string]string{
@@ -317,6 +329,9 @@ func gruvboxLight() Theme {
 			Ghost:           "#d65d0e",
 			ScrollbarTrack:  "#ebdbb2",
 			ScrollbarThumb:  "#bdae93",
+			DiffAdded:       "#dcd49f",
+			DiffRemoved:     "#ecc3a0",
+			DiffChanged:     "#c5b07b",
 		},
 		Captures: gruvboxCaptures(true),
 		Files: map[string]string{
@@ -405,6 +420,9 @@ func rosePine() Theme {
 			Ghost:           "#ebbcba",
 			ScrollbarTrack:  "#26233a",
 			ScrollbarThumb:  "#524f67",
+			DiffAdded:       "#353f4b",
+			DiffRemoved:     "#472a3c",
+			DiffChanged:     "#755e46",
 		},
 		Captures: map[string]string{
 			"keyword":          "#31748f",
@@ -473,6 +491,9 @@ func rosePineDawn() Theme {
 			Ghost:           "#d7827e",
 			ScrollbarTrack:  "#f2e9e1",
 			ScrollbarThumb:  "#9893a5",
+			DiffAdded:       "#d1d6d3",
+			DiffRemoved:     "#e6cfcf",
+			DiffChanged:     "#cfb48f",
 		},
 		Captures: map[string]string{
 			"keyword":          "#286983",
@@ -541,6 +562,9 @@ func catppuccinMocha() Theme {
 			Ghost:           "#fab387",
 			ScrollbarTrack:  "#313244",
 			ScrollbarThumb:  "#585b70",
+			DiffAdded:       "#3b4947",
+			DiffRemoved:     "#4c3548",
+			DiffChanged:     "#797064",
 		},
 		Captures: map[string]string{
 			"keyword":          "#cba6f7",
@@ -613,6 +637,9 @@ func kanagawa() Theme {
 			Ghost:           "#ffa066",
 			ScrollbarTrack:  "#2a2a37",
 			ScrollbarThumb:  "#54546d",
+			DiffAdded:       "#394136",
+			DiffRemoved:     "#502c34",
+			DiffChanged:     "#7d542f",
 		},
 		Captures: map[string]string{
 			"keyword":          "#957fb8", // oniViolet
@@ -684,6 +711,9 @@ func oneDark() Theme {
 			Ghost:           "#5c6370", // mono3 / comment gray
 			ScrollbarTrack:  "#21252b",
 			ScrollbarThumb:  "#4b5263", // gutter gray
+			DiffAdded:       "#404d43",
+			DiffRemoved:     "#523f46",
+			DiffChanged:     "#776a51",
 		},
 		Captures: map[string]string{
 			"keyword":          "#c678dd", // purple
@@ -757,6 +787,9 @@ func solarizedDark() Theme {
 			Ghost:           "#cb4b16", // orange
 			ScrollbarTrack:  "#073642",
 			ScrollbarThumb:  "#586e75",
+			DiffAdded:       "#1d432a",
+			DiffRemoved:     "#333b43",
+			DiffChanged:     "#4e5628",
 		},
 		Captures: solarizedCaptures(false),
 		Files: map[string]string{
@@ -808,6 +841,9 @@ func solarizedLight() Theme {
 			Ghost:           "#cb4b16", // orange
 			ScrollbarTrack:  "#eee8d5",
 			ScrollbarThumb:  "#93a1a1",
+			DiffAdded:       "#dcdab1",
+			DiffRemoved:     "#f0c9ba",
+			DiffChanged:     "#cab883",
 		},
 		Captures: solarizedCaptures(true),
 		Files: map[string]string{
@@ -900,6 +936,9 @@ func dracula() Theme {
 			Ghost:           "#6272a4", // comment
 			ScrollbarTrack:  "#21222c",
 			ScrollbarThumb:  "#44475a",
+			DiffAdded:       "#305745",
+			DiffRemoved:     "#57333c",
+			DiffChanged:     "#7c815a",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff79c6", // pink
@@ -968,6 +1007,9 @@ func catppuccinLatte() Theme {
 			Ghost:           "#fe640b",
 			ScrollbarTrack:  "#ccd0da",
 			ScrollbarThumb:  "#9ca0b0",
+			DiffAdded:       "#c5d7c6",
+			DiffRemoved:     "#e1bec9",
+			DiffChanged:     "#beac94",
 		},
 		Captures: map[string]string{
 			"keyword":          "#8839ef",

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/diff"
 	"ike/internal/host"
 	"ike/internal/preview"
 	"ike/internal/terminal"
@@ -24,6 +25,9 @@ const terminalKeyBase = "terminal"
 // previewKeyBase is the key of the first markdown preview; later ones append ":N".
 const previewKeyBase = "preview"
 
+// diffKeyBase is the key of the first diff viewer; later ones append ":N".
+const diffKeyBase = "diff"
+
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
 // editors are allocated monotonic keys ("editor", "editor:2", "editor:3", …)
@@ -38,6 +42,7 @@ type Registry struct {
 	editors   int      // count of editors ever allocated, for key minting
 	terminals int      // count of terminals ever allocated, for key minting
 	previews  int      // count of markdown previews ever allocated, for key minting
+	diffs     int      // count of diff viewers ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -175,6 +180,44 @@ func (r *Registry) AddMarkdownKey(key, path string) *Instance {
 	r.put(inst)
 	r.advancePastPreview(key)
 	return inst
+}
+
+// AddDiff creates a diff viewer instance comparing the files at leftPath and
+// rightPath, returning the new instance's key ("diff", then "diff:N").
+// Contents arrive afterwards via the diff model's SetContents.
+func (r *Registry) AddDiff(leftPath, rightPath string) string {
+	r.diffs++
+	key := diffKeyBase
+	if r.diffs > 1 {
+		key = diffKeyBase + ":" + strconv.Itoa(r.diffs)
+	}
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddDiffKey recreates a diff viewer under an exact key, used by layout
+// restore. The minting counter advances past the key.
+func (r *Registry) AddDiffKey(key, leftPath, rightPath string) *Instance {
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	r.put(inst)
+	r.advancePastDiff(key)
+	return inst
+}
+
+// advancePastDiff bumps the diff counter past key's numeric suffix.
+func (r *Registry) advancePastDiff(key string) {
+	n := 1
+	if len(key) > len(diffKeyBase)+1 && key[:len(diffKeyBase)+1] == diffKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(diffKeyBase)+1:]); err == nil {
+			n = v
+		}
+	}
+	if n > r.diffs {
+		r.diffs = n
+	}
 }
 
 // advancePastPreview bumps the preview counter past key's numeric suffix.
