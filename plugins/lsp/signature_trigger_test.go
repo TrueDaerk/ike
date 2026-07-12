@@ -98,12 +98,12 @@ func TestStringRetryCols(t *testing.T) {
 	}
 }
 
-func TestIsSignatureTrigger(t *testing.T) {
+func TestIsTriggerChar(t *testing.T) {
 	trig := []string{"(", ","}
-	if !isSignatureTrigger("(", trig) || !isSignatureTrigger(",", trig) {
+	if !isTriggerChar("(", trig) || !isTriggerChar(",", trig) {
 		t.Fatal("advertised chars should trigger")
 	}
-	if isSignatureTrigger(")", trig) || isSignatureTrigger("", trig) {
+	if isTriggerChar(")", trig) || isTriggerChar("", trig) {
 		t.Fatal("other chars must not trigger")
 	}
 }

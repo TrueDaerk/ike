@@ -63,8 +63,8 @@ Sections and their default-bearing slots (`schema.go`):
   `[explorer.colors]` slot (Roadmap 0050 fills entries).
 - `[keymap]` — `preset` + an empty `[keymap.bindings]` slot (Roadmap 0080).
 - `[lsp]` — enabled, log-level, `inlay_hints` (default `false`, #523),
-  `signature_auto` (default `true`, #523) + an empty `[lsp.servers]` slot
-  (Roadmap 0100).
+  `signature_auto` (default `true`, #523), `completion_auto` (default `true`,
+  #527) + an empty `[lsp.servers]` slot (Roadmap 0100).
 - `[theme]` — `name`, `dark` (the selector; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries
   (`path` absolute, `name` display name, `last_opened` RFC3339), plus

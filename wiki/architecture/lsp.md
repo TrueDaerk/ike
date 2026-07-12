@@ -83,7 +83,24 @@ hook, which then didOpens normally. Files
 already open at startup restore straight into editors (bypassing the interactive
 open path), so the app also fires the file-open hook for each restored file from
 `Model.Init` — once per file even when it is shared across tabs — so a
-session-restored buffer gets its `didOpen` and diagnostics without a reopen (#332). `ctrl+space` (Kitty `ctrl+' '` or the legacy `ctrl+@`/NUL spelling) emits the same completion trigger manually (#302), so completion opens without typing a trigger character; a re-press with the popup open re-queries. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
+session-restored buffer gets its `didOpen` and diagnostics without a reopen (#332).
+
+**Completion triggering (#527).** Every typed character emits a completion
+trigger carrying the character (`Event.Char`); the *bridge* decides whether it
+warrants a `textDocument/completion` request: the server's advertised
+`completionProvider.triggerCharacters` always fire (falling back to `.` while
+no capabilities are known, e.g. before the handshake), and an
+identifier-starting rune (letter or `_`) fires the as-you-type popup, gated on
+the `lsp.completion_auto` config toggle (default on). Characters handled by
+auto-close pairing still trigger. Identifier runes typed while the popup is
+already open re-emit nothing — they only narrow the client-side prefix filter.
+`ctrl+space` (Kitty `ctrl+' '` or the legacy `ctrl+@`/NUL spelling) emits a
+char-less trigger the bridge honours unconditionally (#302); a re-press with
+the popup open re-queries. The popup anchors at the start of the identifier
+under the request position (widened past sigils like PHP's `$` while the
+widened prefix still matches an item, mirroring the accept path's
+`extendPrefixMatch`), so the partial word typed before the request counts into
+the prefix filter. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
 
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
@@ -397,8 +414,10 @@ fragment language with no configured server degrades silently. The
 The `[lsp]` section: `enabled` (master switch), `inlay_hints` (inline
 parameter/type hints, default `false`, #523), `signature_auto` (automatic
 signature popup on trigger characters, default `true`; the manual
-`lsp.parameterInfo` command works regardless), and a per-language `servers`
-table.
+`lsp.parameterInfo` command works regardless), `completion_auto` (as-you-type
+completion popup on identifier characters, default `true`, #527; server
+trigger characters and `ctrl+space` work regardless), and a per-language
+`servers` table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The

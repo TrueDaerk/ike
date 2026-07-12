@@ -134,19 +134,33 @@ func (m *Model) insertMove(dLine, dCol int) {
 }
 
 // writeRunes inserts text, overwriting in replace mode and triggering a
-// completion event after a ".".
+// completion event for the typed character.
 func (m *Model) writeRunes(text string) {
 	if m.mode == Replace {
 		m.replaceText(text)
 		return
 	}
-	if m.autoClosePairs && m.autoCloseWrite(text) {
+	if !m.autoClosePairs || !m.autoCloseWrite(text) {
+		m.insertText(text)
+	}
+	m.maybeAutoComplete(text)
+}
+
+// maybeAutoComplete emits a completion trigger for a single typed character —
+// after the insert, so the bridge syncs the new text before the request
+// (#527). Which characters actually fire a server request is the bridge's
+// call (server trigger characters, identifier runes); the editor only skips
+// identifier runes while the popup is showing, because those merely narrow
+// the client-side prefix filter and need no re-query.
+func (m *Model) maybeAutoComplete(text string) {
+	r := []rune(text)
+	if len(r) != 1 {
+		return // paste or multi-rune input never auto-triggers
+	}
+	if m.CompletionOpen() && isIdentRune(r[0]) {
 		return
 	}
-	m.insertText(text)
-	if text == "." {
-		m.emit(EventCompletionTrigger)
-	}
+	m.emitChar(EventCompletionTrigger, text)
 }
 
 // insertText splices text at every caret through the session recorder (#145);

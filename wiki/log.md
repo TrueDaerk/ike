@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Completion auto-trigger (#527): completion now fires on the server's
+  advertised trigger characters (PHP `->`/`::`/`$`, not just a hard-coded
+  `.`; `.` stays the fallback while capabilities are unknown) and as-you-type
+  on identifier characters (new `lsp.completion_auto` toggle, default on,
+  settings `C` key). Auto-closed characters trigger too, and the popup
+  anchors at the identifier start so the already-typed prefix filters.
 - Parameter info inside string arguments (#525): an empty signatureHelp
   answer retries once at the string literal's opening delimiter — gopls
   answers null inside string literals, so `t.Error("abc")` with the cursor on

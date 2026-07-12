@@ -737,6 +737,15 @@ func (m *Manager) Line(path string, line int) (string, bool) {
 	return doc.lines[line], true
 }
 
+// CompletionTriggers returns the trigger characters the server handling path
+// advertises for completion.
+func (m *Manager) CompletionTriggers(path string) []string {
+	if srv, _, ok := m.docServer(path); ok {
+		return srv.cl.Caps().CompletionTriggers
+	}
+	return nil
+}
+
 // SignatureTriggers returns the trigger (and retrigger) characters the server
 // handling path advertises for signature help.
 func (m *Manager) SignatureTriggers(path string) []string {

@@ -90,6 +90,9 @@ type EditorEvent struct {
 	// intentionally absent, so the LSP bridge stops syncing the document
 	// instead of treating the event as "the file is now empty".
 	Large bool
+	// Char carries the just-typed character on EditorCompletionTrigger
+	// (#527); empty means a manual request the bridge honours unconditionally.
+	Char string
 }
 
 // EditorEvent selection kinds (mirrors editor.SelKind).
