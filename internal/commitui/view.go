@@ -110,8 +110,8 @@ func (m *Model) renderList(pal *theme.Palette, width, height int) string {
 // renderMessage draws the message pane with a visible cursor block while the
 // pane holds focus.
 func (m *Model) renderMessage(pal *theme.Palette, width int) string {
-	text := m.message
-	cursorAt := m.msgPos
+	text := m.draft.Text
+	cursorAt := m.draft.Pos
 	lines := strings.Split(text, "\n")
 	if len(lines) == 0 {
 		lines = []string{""}

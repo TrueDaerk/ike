@@ -55,6 +55,7 @@ import (
 	"ike/internal/ui"
 	"ike/internal/undotree"
 	"ike/internal/vcs"
+	"ike/internal/vcspanel"
 	"ike/internal/wasm"
 	"ike/internal/watch"
 )
@@ -375,7 +376,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	pasteHist := &pasteHistMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{} // shared before the literal: the branch picker mode reads it
+	vcsSt := &vcsState{draft: &vcs.MessageDraft{}} // shared before the literal: the branch picker mode reads it
 	m := Model{
 		panes:        panes,
 		recentEditor: edKey,
@@ -419,6 +420,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.undoTree.SetPalette(themePal)
 	m.commitUI = commitui.New()
 	m.commitUI.SetPalette(themePal)
+	m.commitUI.SetDraft(vcsSt.draft)
 	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
@@ -680,7 +682,7 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		if id := ids[key]; id.Kind == "vcs" {
 			// The VCS panel restores empty in its saved slot; the first
 			// status snapshot re-feeds it (0330, #482).
-			panes.AddVCS()
+			panes.Get(panes.AddVCS()).VCS().SetDraft(m.vcs.draft)
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2334,6 +2336,40 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, vcs.UnstageCmd(snap.Root, msg.Path)
 		}
 		return m, nil
+
+	case vcspanel.ToggleMsg:
+		// The tool window's staging toggles reuse the 0320 ops (#483).
+		if snap := m.vcs.snap; snap != nil {
+			if msg.Stage {
+				return m, vcs.StageCmd(snap.Root, msg.Path)
+			}
+			return m, vcs.UnstageCmd(snap.Root, msg.Path)
+		}
+		return m, nil
+
+	case vcspanel.SubmitMsg:
+		if snap := m.vcs.snap; snap != nil {
+			return m, vcs.CommitCmd(snap.Root, msg.Message)
+		}
+		return m, nil
+
+	case vcspanel.HintMsg:
+		m.host.Notify(host.Info, msg.Text)
+		return m, nil
+
+	case vcspanel.OpenDiffMsg:
+		// enter on a changes row (#483): the file's diff against HEAD. Rows
+		// carry repo-relative paths; untracked files have no HEAD side.
+		snap := m.vcs.snap
+		if snap == nil {
+			return m, nil
+		}
+		abs := filepath.Join(snap.Root, filepath.FromSlash(msg.Path))
+		if snap.Status(abs) == vcs.StatusUntracked {
+			m.host.Notify(host.Info, "untracked file — there is no HEAD version to diff against")
+			return m, nil
+		}
+		return m, vcs.HeadDiffCmd(snap.Root, abs)
 
 	case commitui.SubmitMsg:
 		if snap := m.vcs.snap; snap != nil {

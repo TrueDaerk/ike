@@ -59,6 +59,7 @@ func (m *Model) openVCSPanel() {
 		return
 	}
 	m.tree = tree
+	m.panes.Get(key).VCS().SetDraft(m.vcs.draft)
 	m.panes.Get(key).VCS().SetVCS(m.vcs.snap)
 	m.setFocus(key)
 	m.layout()

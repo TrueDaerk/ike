@@ -36,6 +36,9 @@ type vcsState struct {
 	refreshing bool          // a git status run is in flight
 	dirty      bool          // triggers arrived mid-flight: run again after
 	branches   []vcs.Branch  // last fetched branch list, behind the picker (#467)
+	// draft is the shared in-progress commit message (0330, #483): the modal
+	// dialog and the tool window edit the same text.
+	draft *vcs.MessageDraft
 }
 
 // scheduleVCSRefresh arms the debounce tick unless one is already pending.
