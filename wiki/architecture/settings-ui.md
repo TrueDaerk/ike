@@ -56,8 +56,10 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   every render reads `config.Get().Flat()`, and every edit returns a
   `config.WriteAndReload` command — the write-back layer persists the key and
   the reload pipeline re-applies it. Bool toggles apply on enter; Enum opens a
-  **picker list** on enter (↑↓ move, enter commits, esc cancels) while ←/→ on
-  the row quick-cycle prev/next without opening it (#383); Int/String/Path
+  **picker list** on enter (↑↓ move, enter commits, esc cancels) while →/l on
+  the row quick-cycles to the next option (wrapping) without opening it
+  (#383); ← never cycles — it always returns to the category column, the
+  mirror of → (#533); Int/String/Path
   open an inline input (int parses + clamps to bounds, path validates
   existence); Chord captures the next key press.
 - **Layer indicator + reset.** Each row shows `@default` / `@user` /
