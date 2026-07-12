@@ -127,8 +127,10 @@ func follow(off, selStart, selEnd, n, h int) int {
 	return off
 }
 
-// renderForm renders the visible entries with value, layer badge and — for the
-// selected entry — description, edit input and validation error.
+// renderForm renders the visible entries with value and layer badge. The
+// selected entry's description lives in a footer pinned to the bottom of the
+// column — never inline — so moving the selection cannot shift the rows below
+// it (#535). Only the enum picker still expands inline (an explicit action).
 func (m *Model) renderForm(w, h int) string {
 	pal := m.theme()
 	rows := m.rows()
@@ -136,6 +138,10 @@ func (m *Model) renderForm(w, h int) string {
 		return lipgloss.NewStyle().Foreground(pal.Secondary).Render("no matching settings")
 	}
 	clip := lipgloss.NewStyle().MaxWidth(w)
+	listH := h - 1 // the last line is the pinned detail footer
+	if listH < 1 {
+		listH = 1
+	}
 	var lines []string
 	selStart, selEnd := 0, 0
 	for i, r := range rows {
@@ -146,16 +152,6 @@ func (m *Model) renderForm(w, h int) string {
 		if i == m.sel {
 			if m.picking {
 				lines = append(lines, m.renderPicker(r.entry, clip)...)
-			} else {
-				detail := "   " + r.entry.Description + "  (" + r.entry.Key + ")"
-				if m.invalid != "" {
-					detail = "   ✗ " + m.invalid
-				}
-				style := lipgloss.NewStyle().Foreground(pal.Secondary)
-				if m.invalid != "" {
-					style = style.Foreground(pal.Error)
-				}
-				lines = append(lines, clip.Render(style.Render(detail)))
 			}
 			selEnd = len(lines) - 1
 		}
@@ -166,12 +162,36 @@ func (m *Model) renderForm(w, h int) string {
 				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
 		}
 	}
-	m.formOff = follow(m.formOff, selStart, selEnd, len(lines), h)
-	end := m.formOff + h
+	m.formOff = follow(m.formOff, selStart, selEnd, len(lines), listH)
+	end := m.formOff + listH
 	if end > len(lines) {
 		end = len(lines)
 	}
-	return strings.Join(lines[m.formOff:end], "\n")
+	out := lines[m.formOff:end]
+	if h > 1 {
+		for len(out) < listH {
+			out = append(out, "")
+		}
+		out = append(out, clip.Render(m.renderDetail()))
+	}
+	return strings.Join(out, "\n")
+}
+
+// renderDetail renders the pinned footer line: the selected entry's
+// description and key, or the current validation error.
+func (m *Model) renderDetail() string {
+	r, ok := m.current()
+	if !ok {
+		return ""
+	}
+	pal := m.theme()
+	style := lipgloss.NewStyle().Foreground(pal.Secondary)
+	text := " " + r.entry.Description + "  (" + r.entry.Key + ")"
+	if m.invalid != "" {
+		text = " ✗ " + m.invalid
+		style = style.Foreground(pal.Error)
+	}
+	return style.Render(text)
 }
 
 // renderPicker renders the open enum dropdown under the selected row.

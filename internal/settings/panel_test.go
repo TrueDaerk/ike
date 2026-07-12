@@ -359,18 +359,18 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 		t.Fatalf("category click must switch back, cat=%d", m.cat)
 	}
 
-	// Click the second entry row in the form column: selection has a detail
-	// line under it, so with sel=0 the second entry renders on body row 2.
+	// Click the second entry row in the form column: the description sits in
+	// the pinned footer (#535), so list lines map 1:1 to rows — the second
+	// entry renders on body row 1.
 	formX := 1 + catWidth + 4
-	if cmd := m.Click(formX, 2+2); cmd != nil {
+	if cmd := m.Click(formX, 2+1); cmd != nil {
 		t.Fatal("first click must only select")
 	}
 	if m.sel != 1 || m.focus != formColumn {
 		t.Fatalf("entry click must select row 1, sel=%d focus=%v", m.sel, m.focus)
 	}
-	// Second click on the now-selected row (it moved up to body row 1... it is
-	// row index 1 → line 1 since the selection sits below row 0's line).
-	// Row 1 is the Int entry (tab width): activation opens an inline edit.
+	// Second click on the same row: row 1 is the Int entry (tab width),
+	// activation opens an inline edit.
 	m.Click(formX, 2+1)
 	if !m.editing {
 		t.Fatal("second click must activate the entry")
@@ -386,6 +386,44 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	apply(t, wcmd)
 	if config.Get().UI.MenuBar {
 		t.Fatal("bool click-activation must toggle the value")
+	}
+}
+
+// TestDetailFooterPinned guards #535: the selected entry's description renders
+// in a footer pinned to the bottom of the form column, so moving the selection
+// never shifts the other rows.
+func TestDetailFooterPinned(t *testing.T) {
+	restoreConfig(t)
+	pages := []Page{{Title: "Interface", Entries: []Entry{
+		{Key: "ui.menu_bar", Type: Bool, Title: "First entry", Scope: config.UserScope, Description: "first description"},
+		{Key: "editor.tab_width", Type: Int, Title: "Second entry", Scope: config.UserScope, Description: "second description"},
+		{Key: "ui.menu_bar", Type: Bool, Title: "Third entry", Scope: config.UserScope, Description: "third description"},
+	}}}
+	m := New(pages, testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("tab"))
+
+	lineOf := func(v, needle string) int {
+		for i, l := range strings.Split(v, "\n") {
+			if strings.Contains(l, needle) {
+				return i
+			}
+		}
+		return -1
+	}
+	v := m.View()
+	if lineOf(v, "first description") != 20-3 { // last body line above the hint+border rows
+		t.Fatalf("description must be pinned to the bottom of the form column:\n%s", v)
+	}
+	third := lineOf(v, "Third entry")
+	m.Update(key("down"))
+	v = m.View()
+	if got := lineOf(v, "Third entry"); got != third {
+		t.Fatalf("moving the selection must not shift other rows: line %d -> %d\n%s", third, got, v)
+	}
+	if lineOf(v, "second description") != 20-3 {
+		t.Fatalf("footer must follow the selection:\n%s", v)
 	}
 }
 
