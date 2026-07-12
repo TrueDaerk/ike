@@ -198,6 +198,7 @@ func (r *Registry) AddDiff(leftPath, rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	inst.df.SetEditable(true) // both sides are working-tree files (#496)
 	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
@@ -239,6 +240,7 @@ func (r *Registry) AddDiffHead(rightPath string) string {
 	}
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.New(key, filepath.Base(rightPath)+" @ HEAD", filepath.Base(rightPath), rightPath, r.pal)
+	inst.df.SetEditable(true) // the right side is the working tree (#496)
 	r.applyDiffConfig(inst)
 	r.put(inst)
 	return key
@@ -264,6 +266,7 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 func (r *Registry) AddDiffKey(key, leftPath, rightPath string) *Instance {
 	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
 	inst.df = diff.NewFiles(key, leftPath, rightPath, r.pal)
+	inst.df.SetEditable(true)
 	r.applyDiffConfig(inst)
 	r.put(inst)
 	r.advancePastDiff(key)

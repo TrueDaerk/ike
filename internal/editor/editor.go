@@ -638,6 +638,10 @@ func (m *Model) SetSize(width, height int) {
 // SetFocused toggles whether this pane receives key input.
 func (m *Model) SetFocused(f bool) { m.focused = f }
 
+// ScrollTop returns the first visible buffer line (0-based) — the diff
+// pane's edit mode aligns its left column to it (0340, #496).
+func (m Model) ScrollTop() int { return m.view.Top }
+
 // SetClipboard wires the system-clipboard implementation for the "+ register.
 func (m *Model) SetClipboard(c register.Clipboard) { m.regs.SetClipboard(c) }
 

@@ -1874,6 +1874,37 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleVCSPanel()
 		return m, nil
 
+	case diff.EditRequestMsg:
+		// 'e' in a diff pane (0340, #496): mount a live editor as the right
+		// column. Revision-only diffs (the log's parent-vs-commit view) stay
+		// read-only with a hint.
+		inst := m.panes.Get(msg.Key)
+		if inst == nil || inst.Kind() != pane.KindDiff || inst.DiffEditor() != nil {
+			return m, nil
+		}
+		if !inst.Diff().Editable() || msg.Path == "" {
+			m.host.Notify(host.Info, "this diff compares revisions — read-only")
+			return m, nil
+		}
+		ed := editor.New()
+		ed.SetPalette(m.themePal)
+		ed.Configure(m.host.Config())
+		if c := clipboard.System(); c != nil {
+			ed.SetClipboard(c)
+		}
+		if prev := m.editorForPath(msg.Path); prev != nil {
+			// The file is open elsewhere: edit the same document (#142), so
+			// the tab and the diff column never diverge.
+			ed.ShareDocumentWith(prev)
+		} else if err := ed.Load(msg.Path); err != nil {
+			m.host.Notify(host.Error, "edit: "+err.Error())
+			return m, nil
+		}
+		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key})
+		inst.StartDiffEdit(&ed)
+		m.host.Notify(host.Info, "editing "+displayPath(msg.Path)+" — ctrl+e returns to the diff")
+		return m, ed.Reparse()
+
 	case DiffStepMsg:
 		// diff.nextChange / diff.prevChange (F7 / shift+F7, 0340 #495): step
 		// the focused diff pane's hunk; a non-diff focus is a quiet no-op
