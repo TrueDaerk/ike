@@ -629,6 +629,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as a fresh shell in the saved position (#96)
 		} else if ids[key].Kind == "markdown" {
 			continue // restored below re-reading the source file (#62)
+		} else if ids[key].Kind == "diff" {
+			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
 			continue // restored below as the empty singleton panel (0330)
 		} else if !isEditorKey(key) {
