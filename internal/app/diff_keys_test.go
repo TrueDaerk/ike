@@ -8,7 +8,46 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/pane"
+	"ike/internal/vcs"
 )
+
+// TestDiffReopenFocusesExisting guards #509: opening the same diff again
+// focuses the existing pane instead of splitting a duplicate.
+func TestDiffReopenFocusesExisting(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.txt")
+	right := filepath.Join(dir, "r.txt")
+	os.WriteFile(left, []byte("a\n"), 0o644)
+	os.WriteFile(right, []byte("b\n"), 0o644)
+
+	m := newSized()
+	m.openDiffPane(left, right)
+	key := m.panes.Focused()
+	m.setFocus(pane.ExplorerKey)
+	count := len(m.panes.Keys())
+
+	m.openDiffPane(left, right)
+	if len(m.panes.Keys()) != count {
+		t.Fatal("re-open must not create a second pane")
+	}
+	if m.panes.Focused() != key {
+		t.Fatalf("focus = %q, want the existing diff %q", m.panes.Focused(), key)
+	}
+
+	// A HEAD diff of the same file also dedupes.
+	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"r.txt": vcs.StatusModified})
+	out, _ := m.Update(vcs.HeadDiffMsg{Path: right, Head: "old\n"})
+	m2 := out.(Model)
+	headKey := m2.panes.Focused()
+	m2.setFocus(pane.ExplorerKey)
+	count = len(m2.panes.Keys())
+	out, _ = m2.Update(vcs.HeadDiffMsg{Path: right, Head: "old\n"})
+	m2 = out.(Model)
+	if len(m2.panes.Keys()) != count || m2.panes.Focused() != headKey {
+		t.Fatalf("head diff re-open: panes=%d focus=%q want %q", len(m2.panes.Keys()), m2.panes.Focused(), headKey)
+	}
+}
 
 // TestDiffF7StepsHunks guards #495: F7 / shift+F7 drive the focused diff
 // pane's hunk navigation through the diff-scoped default bindings.
