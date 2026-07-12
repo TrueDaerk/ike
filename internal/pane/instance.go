@@ -11,6 +11,7 @@ import (
 	"ike/internal/preview"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/vcspanel"
 )
 
 // Kind is the type of component an Instance wraps. The explorer is a singleton;
@@ -31,6 +32,9 @@ const (
 	// KindDiff is a read-only diff viewer pane (#60); any number may exist,
 	// each comparing two text versions.
 	KindDiff
+	// KindVCS is the VCS tool window (Roadmap 0330): a singleton bottom-split
+	// panel with the changes list and the git log, under key "vcs".
+	KindVCS
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -41,6 +45,7 @@ const (
 	ctxTerminal = "terminal"
 	ctxPreview  = "preview"
 	ctxDiff     = "diff"
+	ctxVCS      = "vcs"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -57,6 +62,7 @@ type Instance struct {
 	term terminal.Model
 	md   preview.Model
 	df   diff.Model
+	vp   vcspanel.Model
 
 	// Editor state: the ordered tab list and the active index. cfg/pal/size
 	// and focus are remembered so tabs created later match the live pane.
@@ -87,6 +93,8 @@ func (i *Instance) ContextID() string {
 		return ctxPreview
 	case KindDiff:
 		return ctxDiff
+	case KindVCS:
+		return ctxVCS
 	}
 	return ctxEditor
 }
@@ -106,6 +114,10 @@ func (i *Instance) Preview() *preview.Model { return &i.md }
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
 func (i *Instance) Diff() *diff.Model { return &i.df }
+
+// VCS returns the underlying VCS tool-window model. It is only valid for a
+// vcs instance; callers gate on Kind first.
+func (i *Instance) VCS() *vcspanel.Model { return &i.vp }
 
 // Editor returns the active tab's editor model. It is only valid for an editor
 // instance; callers gate on Kind first.
@@ -249,6 +261,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.md.SetSize(w, h)
 	case KindDiff:
 		i.df.SetSize(w, h)
+	case KindVCS:
+		i.vp.SetSize(w, h)
 	}
 }
 
@@ -269,6 +283,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.md.SetFocused(f)
 	case KindDiff:
 		i.df.SetFocused(f)
+	case KindVCS:
+		i.vp.SetFocused(f)
 	}
 }
 
@@ -285,6 +301,8 @@ func (i *Instance) View() string {
 		return i.md.View()
 	case KindDiff:
 		return i.df.View()
+	case KindVCS:
+		return i.vp.View()
 	}
 	return ""
 }
@@ -307,6 +325,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.md.Update(msg)
 	case KindDiff:
 		cmd = i.df.Update(msg)
+	case KindVCS:
+		cmd = i.vp.Update(msg)
 	}
 	return cmd
 }
@@ -400,6 +420,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.md.SetPalette(p)
 	case KindDiff:
 		i.df.SetPalette(p)
+	case KindVCS:
+		i.vp.SetPalette(p)
 	}
 }
 

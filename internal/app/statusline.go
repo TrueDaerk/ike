@@ -318,6 +318,11 @@ func (m Model) statusLine() string {
 				}
 				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
 			}
+		case pane.KindVCS:
+			left += "VCS"
+			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
+				left += " │ ⎇ " + snap.Branch
+			}
 		default:
 			left += "EXPLORER"
 		}

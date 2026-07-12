@@ -188,6 +188,8 @@ type Model struct {
 	// terminalReturnFocus remembers the pane focused before terminal.toggle
 	// moved focus into a terminal, so toggling again returns there (#97).
 	terminalReturnFocus string
+	// vcsReturnFocus is the same dance for the VCS tool window (0330, #482).
+	vcsReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -625,6 +627,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as a fresh shell in the saved position (#96)
 		} else if ids[key].Kind == "markdown" {
 			continue // restored below re-reading the source file (#62)
+		} else if ids[key].Kind == "vcs" {
+			continue // restored below as the empty singleton panel (0330)
 		} else if !isEditorKey(key) {
 			return // unknown leaf kind / malformed key: fall back to default
 		}
@@ -671,6 +675,12 @@ func (m *Model) restoreLayout(cfg host.Config) {
 				shell = v
 			}
 			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
+			continue
+		}
+		if id := ids[key]; id.Kind == "vcs" {
+			// The VCS panel restores empty in its saved slot; the first
+			// status snapshot re-feeds it (0330, #482).
+			panes.AddVCS()
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -1853,6 +1863,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
 		// machine — create, focus, or return focus (#97).
 		m.toggleTerminal()
+		return m, nil
+
+	case VCSPanelToggleMsg:
+		// vcs.panel (0330, #482): same state machine for the VCS tool window.
+		m.toggleVCSPanel()
 		return m, nil
 
 	case TerminalClearMsg:
@@ -4602,6 +4617,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		case pane.KindDiff:
 			l, r := inst.Diff().Titles()
 			title, content = "DIFF "+l+" ⇄ "+r, inst.View()
+		case pane.KindVCS:
+			title, content = "VCS", inst.View()
 		}
 	}
 
