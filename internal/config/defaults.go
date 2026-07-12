@@ -83,5 +83,8 @@ func defaults() *Config {
 			MaxAgeDays: 7,
 		},
 		Lang: map[string]map[string]string{},
+		Todo: Todo{
+			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
+		},
 	}
 }

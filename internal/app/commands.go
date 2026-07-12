@@ -96,6 +96,10 @@ type OpenFindInPathMsg struct{}
 // (cmd+shift+r / palette).
 type OpenReplaceInPathMsg struct{}
 
+// OpenTodoIndexMsg asks the root model to open the TODO/FIXME index overlay
+// (#61). Dispatched by todo.list (cmd+k t / palette).
+type OpenTodoIndexMsg struct{}
+
 // MatchStepMsg asks the root model to jump to the next (Delta 1) or previous
 // (Delta -1) retained find-in-path match, without the overlay open.
 // Dispatched by search.nextMatch / search.prevMatch.
@@ -202,6 +206,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("palette.searchEverywhere", "Search Everywhere", ShowSearchEverywhereMsg{}),
 			appCommand("project.findInPath", "Find in Path", OpenFindInPathMsg{}),
 			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
+			appCommand("todo.list", "TODO Index", OpenTodoIndexMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),

@@ -32,3 +32,4 @@ Component-level concepts for the IKE codebase.
 * [Status Line Segments](/architecture/status-line.md) - extensible left/right slot model behind the bottom status bar: mode/file/diagnostics plus toolchain interpreter and notification counter segments (#101)
 * [Plugin Marketplace](/architecture/marketplace.md) - discover/install/update/remove WASM plugins in-IDE: static HTTPS JSON catalog, checksum-verified atomic installs pinning the reviewed capability list, marketplace settings page (Roadmap 0310)
 * [Markdown Preview](/architecture/markdown-preview.md) - rendered live preview pane for markdown buffers: glamour ANSI output beside the editor, debounced re-render, heading-anchored cursor scroll sync, theme-aware (#62)
+* [TODO Index](/architecture/todo-index.md) - project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable): overlay over the locations list, own scan service, per-file rescan on save, tag/current-file filters, status-line count (#61)

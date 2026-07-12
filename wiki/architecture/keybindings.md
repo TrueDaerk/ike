@@ -256,7 +256,7 @@ the existing multi-step resolver (no new engine):
   making this the universal variant that also works mid-edit.
 
 Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
-path, `r` replace in path, `p` switch project, `P` markdown preview, `t` toggle terminal, `T` new
+path, `r` replace in path, `p` switch project, `P` markdown preview, `D` TODO index, `t` toggle terminal, `T` new
 terminal, `h` notification history, `e` explorer/editor toggle, `s` save all,
 `w` save, `d` definition, `u` usages, `a` code actions, `n` rename, `l`
 reformat, `c` comment line, `x` close tab, `o` reopen tab, `m` recent files
@@ -368,6 +368,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `space ,` | live via space , |
+| `todo.list` | `cmd+6` | fragile | `space shift+d` | live via space shift+d |
 | `terminal.new` | `space shift+t` | delivered | `—` | live |
 | `terminal.toggle` | `alt+f12` | fragile | `space t` | live via space t |
 | `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
