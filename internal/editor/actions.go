@@ -22,6 +22,15 @@ import (
 // editor — there is no parallel command-dispatch mechanism.
 type ActionMsg struct{ Action string }
 
+// OpenUndoTreeMsg asks the root model to open the undo-tree overlay (#59) for
+// the editor that emitted it (always the focused one — the message rises from
+// an action dispatched there).
+type OpenUndoTreeMsg struct{}
+
+// HistoryJumpMsg asks the focused editor to restore the buffer to the history
+// state identified by Seq. Dispatched by the undo-tree overlay.
+type HistoryJumpMsg struct{ Seq int }
+
 // insertSession records an in-progress insert so the whole insert commits as one
 // undo unit and "." can replay it. pre recreates the structural part (the line
 // opened by o/O, or the text deleted by c) when the command is repeated.
@@ -385,6 +394,61 @@ func (m *Model) redo(count int) {
 	}
 }
 
+// undoChrono walks count states back in global (seq) order across branches —
+// vim's g-. Unlike u it can land on a sibling branch's state.
+func (m *Model) undoChrono(count int) {
+	m.walkChrono(count, (*history.History).UndoChrono)
+}
+
+// redoChrono walks count states forward in global (seq) order — vim's g+.
+func (m *Model) redoChrono(count int) {
+	m.walkChrono(count, (*history.History).RedoChrono)
+}
+
+// walkChrono shares the undo/redo bookkeeping for the chronological walks:
+// commit an open insert, collapse carets, step, restore cursor and dirty flag.
+func (m *Model) walkChrono(count int, step func(*history.History, *buffer.Buffer) (buffer.Position, bool)) {
+	if m.insert.active {
+		m.commitInsert()
+	}
+	m.collapseCarets()
+	moved := false
+	for i := 0; i < count; i++ {
+		cur, ok := step(m.hist, m.buf)
+		if !ok {
+			break
+		}
+		moved = true
+		m.cursor = m.buf.ClampCursor(cur)
+	}
+	if moved {
+		m.desiredCol = m.cursor.Col
+		m.dirty = !m.hist.AtSaved()
+		m.emit(EventChange)
+	}
+}
+
+// jumpHistory restores the buffer to history state seq (undo-tree overlay).
+func (m *Model) jumpHistory(seq int) {
+	if m.insert.active {
+		m.commitInsert()
+	}
+	m.collapseCarets()
+	cur, ok := m.hist.JumpTo(m.buf, seq)
+	if !ok {
+		return
+	}
+	m.cursor = m.buf.ClampCursor(cur)
+	m.desiredCol = m.cursor.Col
+	m.dirty = !m.hist.AtSaved()
+	m.emit(EventChange)
+}
+
+// HistoryTree exposes the undo tree for the overlay (#59). The undo_tree
+// action commits any open insert session before the overlay opens, so the
+// tree already includes the in-flight typing.
+func (m *Model) HistoryTree() []history.NodeInfo { return m.hist.Tree() }
+
 // save writes the buffer to disk, applying the trim-trailing-whitespace and
 // final-newline policies, and clears the dirty flag. No-op without a file.
 func (m *Model) save() error { return m.saveAs(m.path) }
@@ -455,6 +519,15 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.undo(1)
 	case "redo":
 		m.redo(1)
+	case "undo_chrono":
+		m.undoChrono(1)
+	case "redo_chrono":
+		m.redoChrono(1)
+	case "undo_tree":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		return m, func() tea.Msg { return OpenUndoTreeMsg{} }
 	case "copy":
 		cmd := m.clipboardCopy()
 		m.scroll()

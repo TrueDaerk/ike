@@ -690,6 +690,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		before := m.docVersion
 		m, cmd := m.runAction(msg.Action)
 		return m.maybeReparse(before, cmd)
+	case HistoryJumpMsg:
+		// The undo-tree overlay picked a state (#59): restore the buffer to it.
+		before := m.docVersion
+		m.jumpHistory(msg.Seq)
+		m.scroll()
+		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
 		m.dismissHover() // any key dismisses a hover popup
 		if msg.Code == tea.KeyEscape {
