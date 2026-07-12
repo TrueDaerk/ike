@@ -3932,6 +3932,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Diff().ScrollBy(wheelLines)
 			}
+		case pane.KindVCS:
+			// The wheel scrolls the tool window's active list (#503).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.VCS().Wheel(-wheelLines)
+			case tea.MouseWheelDown:
+				inst.VCS().Wheel(wheelLines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -4327,6 +4335,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseLeft {
 			inst.Terminal().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+		}
+	case pane.KindVCS:
+		// Tool-window clicks (#503): tabs, row select/activate, staging
+		// checkboxes; emitted messages route like the key-driven ones.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.VCS().Click(localX, localY)
 		}
 	}
 	return m, nil
