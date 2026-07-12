@@ -47,8 +47,8 @@ func TestCollapsedContextFoldsUnchangedRuns(t *testing.T) {
 	if got := m.gaps[0]; got.start != 0 || got.end != 7 {
 		t.Fatalf("leading gap = %+v (file edge keeps no context)", got)
 	}
-	// Collapsed view is much shorter than the full 31 rows.
-	if len(m.lines) >= 31 {
+	// Collapsed view is much shorter than the full 30 rows.
+	if len(m.lines) >= 30 {
 		t.Fatalf("collapsed lines = %d", len(m.lines))
 	}
 	// Hunk navigation still lands on the change.
@@ -63,8 +63,8 @@ func TestCollapseToggleAndExpand(t *testing.T) {
 	collapsedLen := len(m.lines)
 
 	press(&m, "c") // show all
-	if len(m.lines) != 31 {
-		t.Fatalf("full view lines = %d, want 31", len(m.lines))
+	if len(m.lines) != 30 {
+		t.Fatalf("full view lines = %d, want 30", len(m.lines))
 	}
 	press(&m, "c") // collapse again
 	if len(m.lines) != collapsedLen {
@@ -73,12 +73,12 @@ func TestCollapseToggleAndExpand(t *testing.T) {
 
 	// o expands the nearest gap only.
 	press(&m, "o")
-	if len(m.lines) <= collapsedLen || len(m.lines) >= 31 {
-		t.Fatalf("after one expand: %d lines (collapsed %d, full 31)", len(m.lines), collapsedLen)
+	if len(m.lines) <= collapsedLen || len(m.lines) >= 30 {
+		t.Fatalf("after one expand: %d lines (collapsed %d, full 30)", len(m.lines), collapsedLen)
 	}
 	press(&m, "o")
-	if len(m.lines) != 31 {
-		t.Fatalf("after both expands: %d lines, want 31", len(m.lines))
+	if len(m.lines) != 30 {
+		t.Fatalf("after both expands: %d lines, want 30", len(m.lines))
 	}
 	// New contents reset the expansion.
 	m.SetContents(collapseTexts())
@@ -90,7 +90,7 @@ func TestCollapseToggleAndExpand(t *testing.T) {
 func TestCollapseDisabledByNegativeContext(t *testing.T) {
 	m := collapseModel(t)
 	m.SetContext(-1)
-	if len(m.lines) != 31 || m.Collapsed() {
+	if len(m.lines) != 30 || m.Collapsed() {
 		t.Fatalf("ctx<0 must disable collapsing (lines=%d)", len(m.lines))
 	}
 }

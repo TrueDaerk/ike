@@ -162,7 +162,15 @@ func TestSplitLines(t *testing.T) {
 	if got := splitLines(""); got != nil {
 		t.Fatalf("empty text should split to nil, got %q", got)
 	}
-	if got := splitLines("a\nb\n"); !reflect.DeepEqual(got, []string{"a", "b", ""}) {
+	// A trailing newline terminates the last line instead of opening a
+	// phantom empty one (#507); a real trailing empty line still counts.
+	if got := splitLines("a\nb\n"); !reflect.DeepEqual(got, []string{"a", "b"}) {
 		t.Fatalf("trailing newline: got %q", got)
+	}
+	if got := splitLines("a\nb\n\n"); !reflect.DeepEqual(got, []string{"a", "b", ""}) {
+		t.Fatalf("trailing empty line: got %q", got)
+	}
+	if got := splitLines("a\nb"); !reflect.DeepEqual(got, []string{"a", "b"}) {
+		t.Fatalf("no trailing newline: got %q", got)
 	}
 }
