@@ -2,6 +2,13 @@
 
 ## 2026-07-12
 
+- Terminal OSC ghost text (#561): OSC 0/2 titles containing runes whose
+  UTF-8 encoding carries the byte `0x9C` (U+2700 dingbats — Claude Code's
+  `✳` spinner titles) terminated the sequence mid-rune and printed the rest
+  of the title into the grid as ghost cells. The parser table now keeps raw
+  `0x9C` as OSC payload (`internal/terminal/oscpatch.go`); BEL and `ESC \`
+  still terminate.
+
 - Move-drag engage threshold (#559): a plain title-bar click flashed the
   move overlay (status hint, source marker, ghost). A move or tab drag now
   stays latent until the pointer travels one row or `moveEngageCols`
