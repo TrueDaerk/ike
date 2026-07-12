@@ -588,6 +588,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		AnchorLine: ev.AnchorLine,
 		AnchorCol:  ev.AnchorCol,
 		Large:      ev.Large,
+		Char:       ev.Char,
 	})
 }
 

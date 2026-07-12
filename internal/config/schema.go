@@ -161,9 +161,13 @@ type LSP struct {
 	// SignatureAuto gates the automatic signature-help popup on trigger
 	// characters ("(", ","). The manual lsp.parameterInfo command works
 	// regardless (#523).
-	SignatureAuto bool                      `toml:"signature_auto"`
-	LogLevel      string                    `toml:"log_level"`
-	Servers       map[string]map[string]any `toml:"servers"`
+	SignatureAuto bool `toml:"signature_auto"`
+	// CompletionAuto gates the automatic completion popup while typing
+	// identifier characters (#527). Server trigger characters ("." etc.) and
+	// the manual ctrl+space request work regardless.
+	CompletionAuto bool                      `toml:"completion_auto"`
+	LogLevel       string                    `toml:"log_level"`
+	Servers        map[string]map[string]any `toml:"servers"`
 	// Onboarded records that the first-start server-install dialog (#301) has
 	// had its say (answered or skipped); it is never shown again once set.
 	Onboarded bool `toml:"onboarded"`

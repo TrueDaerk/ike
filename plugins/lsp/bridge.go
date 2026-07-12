@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -135,7 +136,9 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		}
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
-		b.requestCompletion(ev.Path, ev.Line, ev.Col)
+		if b.shouldComplete(ev) {
+			b.requestCompletion(ev.Path, ev.Line, ev.Col)
+		}
 	}
 }
 
@@ -692,7 +695,7 @@ func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
 	// The auto toggle (#523) only gates the initial open; a showing popup —
 	// however it was opened — keeps following the cursor.
 	if !active && (!b.signatureAutoEnabled() ||
-		!isSignatureTrigger(typedChar(ev), mgr.SignatureTriggers(ev.Path))) {
+		!isTriggerChar(typedChar(ev), mgr.SignatureTriggers(ev.Path))) {
 		return
 	}
 	b.requestSignature(ev.Path, ev.Line, ev.Col, false)
@@ -813,9 +816,49 @@ func typedChar(ev host.EditorEvent) string {
 	return string(runes[ev.Col-1])
 }
 
-// isSignatureTrigger reports whether ch is one of the server's trigger (or
+// shouldComplete decides whether a completion-trigger event warrants a server
+// request (#527). A manual request (no character) always does. A typed
+// character does when it is one of the server's completion trigger characters
+// — falling back to "." while no server capabilities are known, preserving
+// the old hard-coded behavior — or when it starts an identifier and the
+// lsp.completion_auto toggle allows the as-you-type popup.
+func (b *bridge) shouldComplete(ev host.EditorEvent) bool {
+	if ev.Char == "" {
+		return true
+	}
+	mgr := b.manager()
+	if mgr == nil {
+		return false
+	}
+	return completionWarranted(ev.Char, mgr.CompletionTriggers(ev.Path), b.completionAutoEnabled())
+}
+
+// completionWarranted is the trigger decision for a typed character: a server
+// trigger character (defaulting to "." while none are known) always fires; an
+// identifier-starting rune fires when the as-you-type popup is enabled.
+func completionWarranted(ch string, triggers []string, autoIdent bool) bool {
+	if len(triggers) == 0 {
+		triggers = []string{"."}
+	}
+	if isTriggerChar(ch, triggers) {
+		return true
+	}
+	r := []rune(ch)
+	return autoIdent && len(r) == 1 && (r[0] == '_' || unicode.IsLetter(r[0]))
+}
+
+// completionAutoEnabled reads the lsp.completion_auto config toggle (#527);
+// unset means enabled, matching the config default. It only gates the
+// identifier-rune auto-trigger — server trigger characters and the manual
+// ctrl+space request work regardless.
+func (b *bridge) completionAutoEnabled() bool {
+	v, ok := b.configGet("lsp.completion_auto")
+	return !ok || v != "false"
+}
+
+// isTriggerChar reports whether ch is one of the server's trigger (or
 // retrigger) characters.
-func isSignatureTrigger(ch string, triggers []string) bool {
+func isTriggerChar(ch string, triggers []string) bool {
 	if ch == "" {
 		return false
 	}

@@ -205,7 +205,17 @@ func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 		m.comp = nil
 		return
 	}
-	m.comp = &completionState{items: msg.Items, anchor: buffer.Position{Line: msg.Line, Col: msg.Col}}
+	// Anchor at the start of the identifier under the request position, not
+	// the position itself: an identifier-rune auto-trigger (#527) fires after
+	// the first typed letter, and the partial word before the cursor must
+	// count into the prefix filter or further typing filters against the
+	// wrong span. Sigil-carrying items ("$he" → "$hello", #427) widen the
+	// anchor past the sigil the same way the accept path does, so the sigil
+	// counts into the prefix instead of failing the filter. For "."-style
+	// triggers nothing precedes the anchor, so this is the old behavior.
+	pos := buffer.Position{Line: msg.Line, Col: msg.Col}
+	anchor := m.extendAnchorMatch(m.identifierStart(pos), pos, msg.Items)
+	m.comp = &completionState{items: msg.Items, anchor: anchor}
 	if m.filteredCompletion() == nil {
 		m.comp = nil
 	}
@@ -318,6 +328,35 @@ func (m Model) extendPrefixMatch(start, cursor buffer.Position, insertText strin
 	}
 	col := start.Col
 	for col > 0 && strings.HasPrefix(insertText, string(runes[col-1:end])) {
+		col--
+	}
+	return buffer.Position{Line: start.Line, Col: col}
+}
+
+// extendAnchorMatch widens the popup anchor leftwards beyond the identifier
+// boundary while the widened prefix still case-insensitively prefixes some
+// item's label or insert text — the filter-side twin of extendPrefixMatch, so
+// a sigil-carrying prefix ("$he" against "$hello") keeps matching.
+func (m Model) extendAnchorMatch(start, pos buffer.Position, items []ilsp.CompletionItem) buffer.Position {
+	runes := []rune(m.buf.Line(start.Line))
+	end := pos.Col
+	if end > len(runes) {
+		end = len(runes)
+	}
+	col := start.Col
+	for col > 0 && col <= end {
+		widened := strings.ToLower(string(runes[col-1 : end]))
+		ok := false
+		for _, it := range items {
+			if strings.HasPrefix(strings.ToLower(it.Label), widened) ||
+				strings.HasPrefix(strings.ToLower(it.InsertText), widened) {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			break
+		}
 		col--
 	}
 	return buffer.Position{Line: start.Line, Col: col}

@@ -143,9 +143,12 @@ per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
 binary renders the launch-failure reason; `i` runs the plugin's install
 recipe manually and `A` toggles `lsp.auto_install` (#131 — the automatic
 install on first use, with the manual action as fallback/retry). `I` toggles
-`lsp.inlay_hints` (default off, #523) and `S` toggles `lsp.signature_auto`
+`lsp.inlay_hints` (default off, #523), `S` toggles `lsp.signature_auto`
 (the automatic signature popup on trigger characters; the manual
-`lsp.parameterInfo` command works regardless), both shown in the header row.
+`lsp.parameterInfo` command works regardless) and `C` toggles
+`lsp.completion_auto` (the as-you-type completion popup on identifier
+characters, #527; server trigger characters and `ctrl+space` work
+regardless), all shown in the header row.
 
 ## Marketplace page (0310, #446)
 

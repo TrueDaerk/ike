@@ -58,6 +58,11 @@ type Event struct {
 	Sel        SelKind
 	AnchorLine int
 	AnchorCol  int
+	// Char carries the just-typed character on EventCompletionTrigger, so the
+	// LSP bridge can match it against the server's completion trigger
+	// characters (#527). Empty means a manual request (ctrl+space), which the
+	// bridge honours unconditionally.
+	Char string
 	// Large marks a change on a document in large-file mode (#149): Text is
 	// intentionally absent (not "the file became empty"), so the LSP bridge
 	// must stop syncing instead of shipping an empty didChange — a reload can
@@ -83,7 +88,10 @@ func (m *Model) SetEmitter(e Emitter) { m.emitter = e }
 // emit sends an event when an emitter is installed. A buffer change also bumps
 // the document version (independent of any emitter) so the syntax highlighter can
 // tag and order async parse results.
-func (m *Model) emit(kind EventKind) {
+func (m *Model) emit(kind EventKind) { m.emitChar(kind, "") }
+
+// emitChar is emit with the typed character attached (EventCompletionTrigger).
+func (m *Model) emitChar(kind EventKind, ch string) {
 	if kind == EventChange {
 		m.docVersion++
 		// Keep collapsed folds consistent with the mutation (#144): dissolve
@@ -99,6 +107,7 @@ func (m *Model) emit(kind EventKind) {
 		Line: m.cursor.Line,
 		Col:  m.cursor.Col,
 		Mode: m.mode,
+		Char: ch,
 	}
 	if m.mode.IsVisual() {
 		ev.Sel = SelChar

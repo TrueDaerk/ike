@@ -43,11 +43,12 @@ func defaults() *Config {
 			Bindings: map[string]string{},
 		},
 		LSP: LSP{
-			Enabled:       true,
-			InlayHints:    false,
-			SignatureAuto: true,
-			LogLevel:      "warn",
-			Servers:       map[string]map[string]any{},
+			Enabled:        true,
+			InlayHints:     false,
+			SignatureAuto:  true,
+			CompletionAuto: true,
+			LogLevel:       "warn",
+			Servers:        map[string]map[string]any{},
 		},
 		Theme: Theme{
 			Name: "default",

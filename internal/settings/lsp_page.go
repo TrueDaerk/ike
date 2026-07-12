@@ -260,6 +260,14 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			v = true
 		}
 		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.signature_auto"), "lsp.signature_auto", v)
+	case "C":
+		// As-you-type completion popup on identifier characters (#527);
+		// server trigger characters and ctrl+space work regardless.
+		v := false
+		if c := config.Get(); c != nil && !c.LSP.CompletionAuto {
+			v = true
+		}
+		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.completion_auto"), "lsp.completion_auto", v)
 	case "R":
 		if p.restartAll != nil {
 			return p.restartAll()
@@ -382,7 +390,7 @@ func (p *LSPPage) View(w, h int) string {
 	if c := config.Get(); c != nil && !c.LSP.AutoInstall {
 		auto = "off"
 	}
-	inlay, sigAuto := "off", "on"
+	inlay, sigAuto, compAuto := "off", "on", "on"
 	if c := config.Get(); c != nil {
 		if c.LSP.InlayHints {
 			inlay = "on"
@@ -390,10 +398,13 @@ func (p *LSPPage) View(w, h int) string {
 		if !c.LSP.SignatureAuto {
 			sigAuto = "off"
 		}
+		if !c.LSP.CompletionAuto {
+			compAuto = "off"
+		}
 	}
 	lines := []string{
 		sec.Render(" LSP master switch: " + master + "  (E toggles) · auto-install: " + auto + "  (A toggles)"),
-		sec.Render(" inlay hints: " + inlay + "  (I toggles) · signature auto-popup: " + sigAuto + "  (S toggles)"),
+		sec.Render(" inlay hints: " + inlay + "  (I toggles) · signature auto-popup: " + sigAuto + "  (S toggles) · completion as-you-type: " + compAuto + "  (C toggles)"),
 		sec.Render(" language · status · command · source"),
 	}
 	for i, l := range p.servers() {
