@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-12T23:59:00Z
+timestamp: 2026-07-13T00:30:00Z
 ---
 
 # Status Line Segments
@@ -23,6 +23,7 @@ segments.
 | id | content | hidden when |
 |---|---|---|
 | `mode` | editor input mode (`NORMAL`, `INSERT`, …) | never |
+| `macro` | `recording @x` while a macro recording is active (#58) | idle |
 | `file` | project-relative path + `[+]` / `[disk changed]` / `[large file]` markers | never (`no file`) |
 | `eol` | on-disk line-ending flavor, `LF` / `CRLF` (+ ` (mixed)` when the load saw both, #66) | no file |
 | `encoding` | on-disk character encoding (`UTF-8`, `UTF-16 LE`, …, #66) | no file |

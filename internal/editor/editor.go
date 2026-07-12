@@ -61,7 +61,9 @@ const (
 	awaitZ // fold commands: za zc zo zM zR (#144)
 	awaitFind
 	awaitReplace
-	awaitObject // after operator + i/a; awaiting the object char
+	awaitObject    // after operator + i/a; awaiting the object char
+	awaitRecordReg // after a bare q; awaiting the macro register name (#58)
+	awaitPlayReg   // after @; awaiting the macro register name or a second @ (#58)
 )
 
 // Model is the editor pane.
@@ -130,6 +132,18 @@ type Model struct {
 	// Insert-session recording for "." repeat.
 	insert insertSession
 	dot    *dotCommand
+
+	// Macro recording & replay (#58). Macros are keystroke lists, not text, so
+	// they live beside the register store rather than in it; like registers
+	// they are per-view state (#142). recordReg is the register being recorded
+	// into (0 when idle), recordKeys the keys captured so far, replayDepth the
+	// live @-replay nesting (replayed keys are not re-recorded and the depth is
+	// capped against runaway recursive macros), lastMacro the register @@ repeats.
+	macros      map[rune][]tea.KeyPressMsg
+	recordReg   rune
+	recordKeys  []tea.KeyPressMsg
+	replayDepth int
+	lastMacro   rune
 
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
@@ -700,6 +714,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.dismissHover() // any key dismisses a hover popup
 		if msg.Code == tea.KeyEscape {
 			m.dismissSignature() // esc also drops the signature popup
+		}
+		// Macro recording (#58) taps every keypress here, before dispatch, so
+		// inserts, visual selections and ex commands are captured alike. Keys
+		// fed back by an @-replay are not re-recorded — a macro replayed while
+		// recording stores the literal `@x`, vim-style. The stopping `q` is
+		// popped again by stopRecording.
+		if m.recordReg != 0 && m.replayDepth == 0 {
+			m.recordKeys = append(m.recordKeys, msg)
 		}
 		before := m.docVersion
 		var cmd tea.Cmd

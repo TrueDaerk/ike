@@ -2,6 +2,12 @@
 
 ## 2026-07-12
 
+- Vim macros (#58): `q{a-z}` records every keypress (mode-agnostic tap in
+  `editor.Update`), `q` stops, `@{a-z}` / `@@` replay with count support
+  (`5@a`). Payload is the keystroke list, kept per view beside the register
+  store; replay feeds keys back through `Update` with a depth-capped recursion
+  guard, and replayed keys are never re-recorded (nested `@` stays literal).
+  New `recording @x` status-line segment. Editor and status-line docs updated.
 - Undo tree (#59): `internal/editor/history` turned from linear past/future
   stacks into a change tree — an edit after an undo branches instead of
   discarding the redo chain; `u`/`ctrl+r` walk the active branch (unchanged

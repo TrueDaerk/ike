@@ -31,6 +31,7 @@ type statusSegment struct {
 // point for future plugin segments.
 var statusLeft = []statusSegment{
 	{id: "mode", render: modeSegment},
+	{id: "macro", render: macroSegment},
 	{id: "file", render: fileSegment},
 	{id: "eol", render: eolSegment},
 	{id: "encoding", render: encodingSegment},
@@ -80,6 +81,18 @@ func modeSegment(_ Model, ed *editor.Model) string {
 		return "NORMAL"
 	}
 	return ed.ModeName().String()
+}
+
+// macroSegment shows "recording @x" while a macro recording is active (#58),
+// JetBrains/vim-style; hidden when idle.
+func macroSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	if r := ed.Recording(); r != 0 {
+		return "recording @" + string(r)
+	}
+	return ""
 }
 
 // fileSegment is the focused file's display path plus its state markers.

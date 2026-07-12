@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T23:30:00Z
+timestamp: 2026-07-13T00:30:00Z
 ---
 
 # Editor
@@ -166,7 +166,8 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
 
 Normal mode resolves an optional `"reg`, an optional count, an operator, and a
 motion / text object before committing. Secondary-key states (`awaitG`,
-`awaitFind`, `awaitReplace`, `awaitObject`) park the handler between keys.
+`awaitFind`, `awaitReplace`, `awaitObject`, `awaitRecordReg`, `awaitPlayReg`)
+park the handler between keys.
 Visual mode accumulates counts with the same 1–9/continuing-0 rule (#265), so
 `V3j` extends the selection three lines and `3G` jumps inside a selection;
 the count is consumed by its motion and Esc clears the pending state.
@@ -214,6 +215,21 @@ and `Shift+Tab` dedents the **whole current line** by one unit (the same
 wherever the cursor sits; the cursor follows the removed columns, and the edit
 stays inside the open insert's undo unit. While the completion popup is open a
 plain `Tab` still accepts the completion; `Shift+Tab` dedents regardless.
+
+**Macros** (#58, `macro.go`): `q{a-z}` records, `q` stops, `@{a-z}` replays,
+`@@` repeats the last replay, and a count multiplies (`5@a`). Recording taps
+every keypress in `Update` *before* mode dispatch, so inserts, visual
+selections and ex commands are captured alike; the payload is the keystroke
+list itself (`macros map[rune][]tea.KeyPressMsg`), kept per view beside the
+register store rather than in it (registers hold text). Replay feeds the
+recorded keys back through `Update` synchronously; a `replayDepth` counter
+keeps replayed keys out of an active recording (a macro replayed while
+recording stores the literal `@x`, vim-style) and caps nesting at 100 — the
+recursion guard for self-invoking macros, since there is no vim-style
+stop-on-error. A `q` arriving from a replay neither stops nor starts a
+recording, and `q` as a pending find/replace target stays literal. While
+recording, the status line shows a `recording @x` segment
+(see [status-line](./status-line.md)).
 
 Visual, V-Line and V-Block extend a selection that `View` highlights cell by
 cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and
