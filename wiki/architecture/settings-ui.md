@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-12T23:45:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -150,6 +150,11 @@ path input with tab completion and a live suggestion list (#541, same
 `internal/pathcomplete` engine as the schema Path entries). A choice writes
 the **project** config and triggers `lsp.restart`
 so servers respawn against the new interpreter; `r` resets to detection.
+Python rows additionally show an environment **provenance** column
+(`uv venv`/`venv`/`uv managed`/`pyenv`/`system`), `i` opens an inline
+installed-packages listing (name + version, async, j/k scroll) and `n` runs
+the guided environment-creation wizard (tool → Python → target directory) —
+see [Language Registry](./languages.md) (#569).
 
 ## Language Servers page (0180, #130)
 

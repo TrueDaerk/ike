@@ -165,18 +165,24 @@ func TestToolchainPageEnvActions(t *testing.T) {
 	}
 	p := pythonPage(t, f)
 
-	// n opens the target input pre-filled with .venv (#547); enter creates.
+	// n opens the guided wizard (#569). With only uv on PATH the tool step
+	// is skipped; the download-available 3.13.1 makes a version step.
 	if cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"}); cmd != nil {
-		t.Fatal("n should open the target input, not create yet")
+		t.Fatal("n should open the wizard, not create yet")
 	}
-	if !p.envInput || p.envPath != ".venv" {
-		t.Fatalf("input state = %v %q", p.envInput, p.envPath)
+	if p.wizStep != 2 || p.wizTool != "uv" || len(p.wizPys) != 2 || p.wizPys[0] != "default" {
+		t.Fatalf("wizard state = step %d tool %q pys %v", p.wizStep, p.wizTool, p.wizPys)
+	}
+	// Accept "default", then the target input pre-filled with .venv (#547).
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !p.envInput || p.envPath != ".venv" || p.wizPython != "" {
+		t.Fatalf("input state = %v %q python %q", p.envInput, p.envPath, p.wizPython)
 	}
 	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
 		t.Fatal("enter should return the async create command")
 	}
-	if p.envInput || p.envState != envBusy {
-		t.Fatalf("state after enter = %v %q", p.envInput, p.envState)
+	if p.envInput || p.wizStep != 0 || p.envState != envBusy {
+		t.Fatalf("state after enter = %v %d %q", p.envInput, p.wizStep, p.envState)
 	}
 
 	// u opens the uv picker; enter kicks the install.
@@ -261,10 +267,16 @@ func TestEnvInputPathCompletion(t *testing.T) {
 		t.Fatalf("envPath after tab = %q, want %q", p.envPath, want)
 	}
 
-	// Esc cancels without creating.
+	// Esc cancels without creating (only the wizard's `uv python list`
+	// discovery ran).
 	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if p.envInput || p.envState == envBusy || len(f.calls) != 0 {
-		t.Fatalf("esc must cancel: input=%v state=%q calls=%v", p.envInput, p.envState, f.calls)
+	for _, call := range f.calls {
+		if !strings.HasPrefix(call, "uv python list") {
+			t.Fatalf("esc must cancel: calls=%v", f.calls)
+		}
+	}
+	if p.envInput || p.wizStep != 0 || p.envState == envBusy {
+		t.Fatalf("esc must cancel: input=%v step=%d state=%q", p.envInput, p.wizStep, p.envState)
 	}
 }
 
@@ -353,7 +365,7 @@ func TestCreateEnvSkipsExistingLock(t *testing.T) {
 	if len(f.calls) != 1 || f.calls[0] != "uv venv "+filepath.Join(root, ".venv") {
 		t.Fatalf("calls = %v, want only the venv", f.calls)
 	}
-	if env.Label != "created "+filepath.Join(root, ".venv") {
+	if env.Label != "created "+filepath.Join(root, ".venv")+" (uv)" {
 		t.Fatalf("label = %q", env.Label)
 	}
 }

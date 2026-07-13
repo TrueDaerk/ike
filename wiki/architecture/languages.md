@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Language Registry
@@ -171,11 +171,16 @@ scope.
 
 ## Python environment management (Roadmap 0180, #132)
 
-The toolchain settings page manages Python environments directly: `n` creates
-a venv (`uv venv` when uv is on PATH, `python -m venv` otherwise) — it first
-asks for the target directory (#547) in a path-completed input pre-filled
-with `.venv`; relative targets resolve against the project root, absolute and
-`~` targets are honored, so a shared env directory outside the project works.
+The toolchain settings page manages Python environments directly: `n` opens a
+guided create wizard (#569, PyCharm-style): step 1 picks the tool — uv or the
+stdlib `venv` module, filtered by what's on PATH and skipped when only one is
+available; step 2 picks the Python — for uv a version from `uv python list`
+(default first; uv downloads a missing version on demand, so the env lands as
+`uv venv --python <version>`), for venv a base interpreter from the discovery
+candidates (`<base> -m venv`); step 3 asks for the target directory (#547) in
+a path-completed input pre-filled with `.venv`. Relative targets resolve
+against the project root, absolute and `~` targets are honored, so a shared
+env directory outside the project works.
 On the uv path the project is scaffolded too (#548): a missing
 `pyproject.toml` is generated via `uv init --bare` (manifest only, no sample
 sources) and a missing `uv.lock` via `uv lock` — best effort, existing files
@@ -190,3 +195,11 @@ language servers against it. IKE shells out to `uv`/`python`; it never bundles
 toolchains. The integrated terminal (Roadmap 0170, #98) injects the same
 explicit choice via per-project shims — see
 [Integrated Terminal](./terminal.md).
+
+The page also answers *what is this environment* (#569): each python row and
+picker candidate carries a **provenance** badge — `uv venv` / `venv` (from
+`pyvenv.cfg`, where uv stamps a `uv = <version>` key), `uv managed`, `pyenv`
+or `system` (path heuristics) — and `i` lists the effective interpreter's
+installed packages with versions (async; `uv pip list --python <interp>` when
+uv is present — it works even in envs without pip — else
+`<interp> -m pip list --format=freeze`), scrollable inline with `j`/`k`.

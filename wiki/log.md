@@ -2,6 +2,13 @@
 
 ## 2026-07-13
 
+- Toolchain page streamlined for Python (#569, PyCharm-style): provenance
+  badge per interpreter (`uv venv`/`venv`/`uv managed`/`pyenv`/`system`, from
+  `pyvenv.cfg`'s uv stamp + path heuristics), `i` lists installed packages
+  with versions (uv pip list / pip list fallback, inline + scrollable), and
+  `n` became a guided create wizard: tool (uv / venv) → Python (uv version or
+  base interpreter) → target directory, honored as `uv venv --python <v>` /
+  `<base> -m venv`.
 - Keymap defaults aligned to a user's JetBrains macOS keymap export: tab
   cycling moved to `ctrl+cmd+arrow` primaries with `ctrl+alt+arrow` secondaries
   (was `ctrl+pgup/pgdown` + `alt+home/end`), `project.switch` moved to
