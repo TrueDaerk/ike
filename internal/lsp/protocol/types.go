@@ -70,6 +70,19 @@ type WorkspaceFolder struct {
 type ClientCapabilities struct {
 	General      *GeneralClientCapabilities `json:"general,omitempty"`
 	TextDocument *TextDocumentClientCaps    `json:"textDocument,omitempty"`
+	Workspace    *WorkspaceClientCaps       `json:"workspace,omitempty"`
+}
+
+// WorkspaceClientCaps announces workspace-level support. Configuration lets a
+// server pull settings via workspace/configuration (pyright reads the Python
+// interpreter path this way); DidChangeConfiguration lets it react to updates.
+type WorkspaceClientCaps struct {
+	Configuration          bool                        `json:"configuration,omitempty"`
+	DidChangeConfiguration *DidChangeConfigurationCaps `json:"didChangeConfiguration,omitempty"`
+}
+
+type DidChangeConfigurationCaps struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
 }
 
 // GeneralClientCapabilities carries position-encoding preferences.

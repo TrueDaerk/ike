@@ -925,16 +925,12 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	if err != nil {
 		return nil, err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout*2)
-	defer cancel()
-	if _, err := cl.Initialize(ctx, client.InitParams{RootURI: protocol.PathToURI(root), ProcessID: os.Getpid(), InitializationOptions: spec.SettingsJSON()}); err != nil {
-		if stop != nil {
-			stop()
-		}
-		return nil, err
-	}
-
 	srv := &server{lang: lang, root: root, cl: cl, stop: stop, spec: spec}
+	// Register before Initialize: a server may issue workspace/configuration as
+	// soon as it receives our "initialized" notification (sent inside
+	// Initialize), and onRequest must find the server to answer it with the
+	// toolchain-detected settings — otherwise the request is dropped and e.g.
+	// pyright never learns the Python interpreter path (#563).
 	m.mu.Lock()
 	// Another goroutine may have raced us; keep the first winner.
 	if existing, ok := m.servers[k]; ok {
@@ -946,6 +942,20 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	}
 	m.servers[k] = srv
 	m.mu.Unlock()
+
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout*2)
+	defer cancel()
+	if _, err := cl.Initialize(ctx, client.InitParams{RootURI: protocol.PathToURI(root), ProcessID: os.Getpid(), InitializationOptions: spec.SettingsJSON()}); err != nil {
+		m.mu.Lock()
+		if m.servers[k] == srv {
+			delete(m.servers, k)
+		}
+		m.mu.Unlock()
+		if stop != nil {
+			stop()
+		}
+		return nil, err
+	}
 
 	m.status(lang, lang+" language server ready", lsp.ServerState)
 	go m.watchExit(srv)
