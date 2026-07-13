@@ -23,10 +23,12 @@ var jetbrainsRows = []row{
 	{"cmd+shift+a", "palette.searchEverywhere", "Search everywhere", Global, "Palette (07)"},
 	{"shift shift", "palette.searchEverywhere", "Search everywhere (double-shift)", Global, "Palette (07)"},
 	{"cmd+shift+o", "project.goToFile", "Go to file", Global, "Project (09)"},
-	// alt+shift+p mirrors the project plugin's default Keymap slot: the chord
-	// table resolves modified chords even in a capturing editor, which the
-	// registry keymap layer does not.
-	{"alt+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
+	// cmd+shift+p mirrors JetBrains' Recent Projects popup (macOS keymap
+	// export); ctrl+shift+p is the delivered secondary. The chord table
+	// resolves modified chords even in a capturing editor, which the registry
+	// keymap layer does not.
+	{"cmd+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
+	{"ctrl+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)"},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)"},
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
@@ -85,6 +87,7 @@ var jetbrainsRows = []row{
 	// the terminal (fragile); the palette stays the delivered fallback.
 	{"alt+f1", "explorer.reveal", "Reveal open file in explorer", Global, "Explorer (05)"},
 	{"cmd+left", "editor.lineStart", "Move to line start", Editor, "Editor (06)"},
+	{"home", "editor.lineStart", "Move to line start", Editor, "Editor (06)"},
 	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)"},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
@@ -123,25 +126,17 @@ var jetbrainsRows = []row{
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)"},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)"},
 	// Editor tabs (0190, #158). Alt+digits jump straight to a tab (digits sit
-	// identically on QWERTZ). The delivered tab-cycling primaries are
-	// ctrl+pgup/pgdn (#248): on macOS Option is a composition key (QWERTZ needs
-	// it for brackets), so alt chords never arrive there; the page keys carry
-	// modifiers in their CSI parameter and follow the terminal-tab-cycling
-	// convention. The alt+arrow secondaries were freed for word-wise cursor
-	// motion in the editor (#303) — they now fall through the chord table to
-	// the editor's vim layer.
-	{"ctrl+pgdown", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
-	{"ctrl+pgup", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
+	// identically on QWERTZ). Tab cycling mirrors JetBrains' macOS keymap
+	// export: Next/Previous Tab = ctrl+cmd+arrow (primary) and ctrl+alt+arrow
+	// (secondary). Delivery to a TUI needs a terminal that forwards Cmd/Option
+	// (Ghostty with the Kitty protocol) — accepted per user preference; the
+	// ctrl+shift+pgup/pgdn move-tab pair stays for tab reordering.
+	{"ctrl+cmd+right", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
+	{"ctrl+alt+right", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
+	{"ctrl+cmd+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
+	{"ctrl+alt+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgdown", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgup", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
-	// alt+home/end mirror the page-key pair for Macs without physical PgUp/PgDn
-	// (#328): fn+ctrl+arrows is claimed globally by macOS, while fn+option+left/
-	// right arrives as alt+home/alt+end — named special keys keep their modifier
-	// in the CSI parameter, so they survive Option-as-compose terminals.
-	{"alt+end", "editor.tab.next", "Next tab", Global, "Editor tabs (0190)"},
-	{"alt+home", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
-	{"alt+shift+end", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
-	{"alt+shift+home", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},

@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-12T23:45:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -118,17 +118,14 @@ context (Global first) for the `palette.keymapHelp` cheatsheet.
 Actions whose JetBrains chord uses `Cmd` — undeliverable in macOS terminals —
 additionally get an everywhere-deliverable `Ctrl` chord: undo (`ctrl+z`), redo
 (`ctrl+shift+z`), and save (`ctrl+s`, alongside `cmd+s`; raw mode disables XOFF
-flow control, so `ctrl+s` arrives as a normal key). Likewise the tab family
-(#248): on macOS Option is a composition key (no Alt at all — and QWERTZ needs
-Option for `{}[]|~@`, so option-as-meta is not viable), so the tab commands get
-delivered primaries following the terminal-tab-cycling convention —
-`ctrl+pgdown`/`ctrl+pgup` cycle tabs, `ctrl+shift+pgdown`/`ctrl+shift+pgup`
-move the active tab. Because Macs without physical page keys lose
-`fn+ctrl+arrows` to macOS globals, the tab family carries an `alt+end`/
-`alt+home` pair (`alt+shift+end`/`alt+shift+home` to move) as additional
-defaults (#328) — `fn+option+left/right` arrives as exactly these chords, and
-named CSI-parameter keys keep their Alt modifier even in Option-as-compose
-terminals. Save targets `editor.write`,
+flow control, so `ctrl+s` arrives as a normal key). Tab cycling follows
+JetBrains' macOS keymap export: `ctrl+cmd+right`/`ctrl+cmd+left` cycle tabs
+(with `ctrl+alt+right`/`ctrl+alt+left` as secondaries), while
+`ctrl+shift+pgdown`/`ctrl+shift+pgup` move the active tab. These Cmd/Option
+chords only reach a TUI in a terminal that forwards the modifiers (Ghostty with
+the Kitty protocol) — accepted per user preference; the palette is the
+delivered fallback for `editor.tab.next`/`editor.tab.prev`. Save targets
+`editor.write`,
 the command the editor registers for `:w`, and works from insert mode because
 modified chords stay eligible for the keymap layer.
 
@@ -171,12 +168,11 @@ Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
 `editor.paste` commands (visual selection or current line, through the system
 clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
-`editor.lineStart` / `editor.lineEnd`. Word/paragraph navigation
+`editor.lineStart` (also `home`) / `editor.lineEnd`. Word/paragraph navigation
 (`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` /
 `shift+alt+arrow` selection are vim-layer keys handled inside the editor, not
-rows in this table — the alt+arrow tab-cycling secondaries were removed for
-this (#303); tab cycling keeps its delivered `ctrl+pgup/pgdown` primaries plus
-the `alt+home/end` pair (#328).
+rows in this table. Tab cycling uses JetBrains' `ctrl+cmd+arrow` primaries with
+`ctrl+alt+arrow` secondaries (see above).
 
 ## Keymap editor (Roadmap 0160, #93)
 
@@ -328,8 +324,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.splitViewRight` | `cmd+k shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
-| `editor.tab.next` | `ctrl+pgdown` | delivered | `—` | live |
-| `editor.tab.prev` | `ctrl+pgup` | delivered | `—` | live |
+| `editor.tab.next` | `ctrl+cmd+right` | fragile | `palette` | live via palette |
+| `editor.tab.prev` | `ctrl+cmd+left` | fragile | `palette` | live via palette |
 | `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `space o` | live via space o |
 | `editor.tab.select1` | `alt+1` | fragile | `space 1` | live via space 1 |
 | `editor.tab.select2` | `alt+2` | fragile | `space 2` | live via space 2 |
@@ -376,7 +372,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.goToClass` | `cmd+o` | fragile | `space shift+s` | live via space shift+s |
 | `project.goToFile` | `cmd+shift+o` | fragile | `space f` | live via space f |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `space r` | live via space r |
-| `project.switch` | `alt+shift+p` | fragile | `space p` | live via space p |
+| `project.switch` | `cmd+shift+p` | fragile | `space p` | live via space p |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `space ,` | live via space , |

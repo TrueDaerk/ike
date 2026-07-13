@@ -32,10 +32,10 @@ func (commands) Capabilities() plugin.Capabilities {
 			Run:   open,
 		}},
 		// Default binding slot only — the canonical chord is owned by Roadmap
-		// 0080/0081. alt+shift+p is layout-safe (letters sit identically on
-		// QWERTZ) and free in the JetBrains default table.
+		// 0080/0081. cmd+shift+p mirrors JetBrains' Recent Projects popup
+		// (macOS keymap export); ctrl+shift+p is the delivered secondary.
 		Keymaps: []plugin.Keymap{{
-			Keys:      "alt+shift+p",
+			Keys:      "cmd+shift+p",
 			Scope:     plugin.GlobalScope(),
 			CommandID: "project.switch",
 			Priority:  plugin.CorePriority,

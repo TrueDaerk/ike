@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered document list with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, shared-documents, close]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Editor Tabs
@@ -105,19 +105,19 @@ one):
 
 | Command | Default chord | Behaviour |
 |---|---|---|
-| `editor.tab.next` / `editor.tab.prev` | `ctrl+pgdown` / `ctrl+pgup` (also `alt+end` / `alt+home` — fn+option+right/left on Mac) | cycle the active tab, wrapping |
+| `editor.tab.next` / `editor.tab.prev` | `ctrl+cmd+right` / `ctrl+cmd+left` (also `ctrl+alt+right` / `ctrl+alt+left`) — JetBrains' macOS keymap; palette is the delivered fallback | cycle the active tab, wrapping |
 | `editor.tab.select1…9` | `alt+1`…`alt+9` (leader `space 1…9`) | jump straight to tab N |
-| `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` (also `alt+shift+home/end`) | reorder the active tab |
+| `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` | reorder the active tab |
 | `editor.tab.reopenClosed` | `alt+shift+t` (leader `space o`) | pop the reopen ring |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
 
-Chords follow the 0081 rules: the delivered primaries are the ctrl+page keys
-(#248) — terminal-tab-cycling convention, and their modifiers survive the
-legacy CSI encoding everywhere, including macOS where Option composes
-characters instead of acting as Alt. The former `alt+arrow` cycling/reorder
-secondaries were freed for word-wise cursor motion in the editor (#303);
-digits sit identically on QWERTZ (layout-safe), and tab cycling stays distinct
-from the `ctrl+tab` pane switcher.
+Tab cycling now mirrors JetBrains' macOS keymap export: `ctrl+cmd+arrow`
+primaries with `ctrl+alt+arrow` secondaries. These Cmd/Option chords only reach
+a TUI in a terminal that forwards the modifiers (Ghostty with the Kitty
+protocol) — accepted per user preference; the palette is the delivered fallback.
+Reorder stays on the `ctrl+shift+pgup/pgdown` page keys, whose modifiers survive
+the legacy CSI encoding everywhere. Select-tab digits sit identically on QWERTZ
+(layout-safe), and tab cycling stays distinct from the `ctrl+tab` pane switcher.
 
 The **reopen ring** keeps the last 10 closed tabs (path + caret), fed by both
 tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping

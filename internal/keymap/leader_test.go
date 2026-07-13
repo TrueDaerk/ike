@@ -151,18 +151,14 @@ func TestUnboundCommandDefaults(t *testing.T) {
 		{[]string{"ctrl+k", "shift+t"}, "terminal.new"},
 		{[]string{"space", "h"}, "notifications.history"},
 		{[]string{"ctrl+k", "h"}, "notifications.history"},
-		// Delivered tab-cycling primaries (#248): the alt chords never arrive
-		// on macOS (Option composes characters), ctrl+page keys always do.
-		{[]string{"ctrl+pgdown"}, "editor.tab.next"},
-		{[]string{"ctrl+pgup"}, "editor.tab.prev"},
+		// Tab cycling mirrors JetBrains' macOS keymap export: ctrl+cmd+arrow
+		// (primary) and ctrl+alt+arrow (secondary).
+		{[]string{"ctrl+cmd+right"}, "editor.tab.next"},
+		{[]string{"ctrl+alt+right"}, "editor.tab.next"},
+		{[]string{"ctrl+cmd+left"}, "editor.tab.prev"},
+		{[]string{"ctrl+alt+left"}, "editor.tab.prev"},
 		{[]string{"ctrl+shift+pgdown"}, "editor.tab.moveRight"},
 		{[]string{"ctrl+shift+pgup"}, "editor.tab.moveLeft"},
-		// alt+home/end pair (#328): fn+option+left/right on Macs without
-		// physical page keys, where fn+ctrl+arrows is claimed by macOS.
-		{[]string{"alt+end"}, "editor.tab.next"},
-		{[]string{"alt+home"}, "editor.tab.prev"},
-		{[]string{"alt+shift+end"}, "editor.tab.moveRight"},
-		{[]string{"alt+shift+home"}, "editor.tab.moveLeft"},
 	}
 	for _, c := range cases {
 		r := NewResolver(leaderTable(t, "space"))

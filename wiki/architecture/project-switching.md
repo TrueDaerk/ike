@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -38,8 +38,9 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
 
 - **`project.switch`** (`command.go`): a compile-in plugin (id `project`)
   registering the command (global scope, title "Switch Project…") plus a
-  default Keymap slot on `alt+shift+p` — layout-safe on QWERTZ; the canonical
-  chord is owned by Roadmap 0080/0081. The command only dispatches
+  default Keymap slot on `cmd+shift+p` — JetBrains' Recent Projects popup
+  (macOS keymap export), with `ctrl+shift+p` as the delivered secondary; the
+  canonical chord is owned by Roadmap 0080/0081. The command only dispatches
   `OpenPickerMsg`; the root model opens the palette locked to the picker mode.
   The File menu's "Switch Project" entry resolves against the same command id.
 - **Picker** (`picker.go`): a palette `Mode` (prefix `#`, always opened
@@ -56,7 +57,7 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   `palette.Completer`. Entry details render through `compactPath`
   (home → `~`, middle-ellipsis) so long roots never crowd out the title.
   Activation emits `PickedMsg{Path}`, which the root model turns into the
-  switch transaction below. `alt+shift+p` is also in the JetBrains chord table
+  switch transaction below. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
 

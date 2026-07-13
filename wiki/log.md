@@ -2,6 +2,14 @@
 
 ## 2026-07-13
 
+- Keymap defaults aligned to a user's JetBrains macOS keymap export: tab
+  cycling moved to `ctrl+cmd+arrow` primaries with `ctrl+alt+arrow` secondaries
+  (was `ctrl+pgup/pgdown` + `alt+home/end`), `project.switch` moved to
+  `cmd+shift+p` (+ `ctrl+shift+p`; was `alt+shift+p`), and `editor.lineStart`
+  gained a `home` binding. Cmd/Option chords only fire in a terminal that
+  forwards the modifiers (Ghostty + Kitty protocol); the palette is the
+  documented fallback for the now-fragile tab commands.
+
 - Dependency-file edit guard (#565): a buffer under a dependency directory
   (`.venv`/`site-packages`/`node_modules`/`vendor`/…) — e.g. a go-to-definition
   jump into a library — opens read-only. The first edit is blocked, a floating
