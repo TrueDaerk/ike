@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-13
+
+- LSP workspace configuration (#563): the client now advertises
+  `workspace.configuration`, so a server (pyright) issues `workspace/configuration`
+  and receives the toolchain-detected Python interpreter path. Previously the
+  capability was unset, the server never asked, and venv imports (e.g.
+  `import fastapi`) resolved against the system interpreter and showed as errors.
+  The server is also registered before `initialize` so a request arriving on
+  `initialized` is answered rather than dropped.
+
 ## 2026-07-12
 
 - Revert history (#556): `vcs.revertFile` snapshots the pre-revert content

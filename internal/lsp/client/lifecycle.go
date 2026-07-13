@@ -29,6 +29,14 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 			General: &protocol.GeneralClientCapabilities{
 				PositionEncodings: []string{protocol.EncodingUTF8, protocol.EncodingUTF16},
 			},
+			// Without workspace.configuration a server never issues
+			// workspace/configuration, so pyright never pulls the detected
+			// Python interpreter (python.pythonPath) and falls back to the
+			// system interpreter — venv imports then resolve as errors (#563).
+			Workspace: &protocol.WorkspaceClientCaps{
+				Configuration:          true,
+				DidChangeConfiguration: &protocol.DidChangeConfigurationCaps{DynamicRegistration: true},
+			},
 			TextDocument: &protocol.TextDocumentClientCaps{
 				Synchronization: &protocol.SyncClientCaps{DidSave: true},
 				Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: false}},

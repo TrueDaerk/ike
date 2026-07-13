@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-12T23:45:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -408,6 +408,11 @@ fragment language with no configured server degrades silently. The
   into the server settings and answers `workspace/configuration` from them, so a
   version-aware server (pyright) checks against the project's real toolchain. IKE
   never reimplements the server's version logic. See [Language Registry](./languages.md).
+  For the server to *ask*, the client advertises `workspace.configuration` in its
+  capabilities (`client/lifecycle.go`); without it pyright never pulls the interpreter
+  path and resolves venv imports against the system Python (#563). The server is
+  registered before `initialize` so a `workspace/configuration` request arriving on
+  `initialized` is answered rather than dropped.
 
 ## Configuration
 

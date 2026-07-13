@@ -163,6 +163,27 @@ func TestInitializeNegotiatesCapabilities(t *testing.T) {
 	}
 }
 
+// TestInitializeAdvertisesWorkspaceConfiguration guards the capability pyright
+// needs to issue workspace/configuration (and thus pull the Python interpreter
+// path); without it venv imports resolve as errors (#563).
+func TestInitializeAdvertisesWorkspaceConfiguration(t *testing.T) {
+	var got protocol.InitializeParams
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"initialize": func(p json.RawMessage) any {
+			_ = json.Unmarshal(p, &got)
+			return protocol.InitializeResult{Capabilities: protocol.ServerCapabilities{}}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	if _, err := c.Initialize(ctx, InitParams{RootURI: "file:///tmp"}); err != nil {
+		t.Fatal(err)
+	}
+	if got.Capabilities.Workspace == nil || !got.Capabilities.Workspace.Configuration {
+		t.Fatalf("workspace.configuration not advertised: %+v", got.Capabilities.Workspace)
+	}
+}
+
 func TestCompletionNormalisesList(t *testing.T) {
 	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
 		"textDocument/completion": func(json.RawMessage) any {
