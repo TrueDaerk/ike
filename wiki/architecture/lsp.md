@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-13T01:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -109,7 +109,10 @@ and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,
 `host.Send`. The app routes each (by file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
-is handled by the app (navigate + place cursor). Hover markdown is rendered,
+is handled by the app (navigate + place cursor); a jump that lands in a vendored
+dependency (`.venv`/`site-packages`/`node_modules`/…) opens the file read-only —
+the first edit prompts for confirmation before unlocking it (the editor's
+[dependency-file edit guard](./editor.md), #565). Hover markdown is rendered,
 not shown raw (#379): fence markers (```` ```go ````) are stripped, the fenced
 block is syntax-highlighted through the language registry (`HighlightFenced`,
 fence tag resolved as language id then extension; an unresolvable tag falls

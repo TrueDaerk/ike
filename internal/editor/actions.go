@@ -48,6 +48,18 @@ type dotCommand struct{ run func(m *Model) }
 // edits and return the new cursor, then commits to history (when non-empty),
 // marks the buffer dirty and emits a change event.
 func (m *Model) mutate(fn func(rec *history.Recorder) buffer.Position) {
+	// A locked dependency file (#565) blocks the edit and stashes it: the host
+	// prompts, and a confirm replays exactly this mutation via applyMutate.
+	if m.blockDep() {
+		m.stashDep(func(mm *Model) { mm.applyMutate(fn) })
+		return
+	}
+	m.applyMutate(fn)
+}
+
+// applyMutate is mutate without the dependency-file guard: the recorder-based
+// change itself. ConfirmDepEdit replays through here after unlocking.
+func (m *Model) applyMutate(fn func(rec *history.Recorder) buffer.Position) {
 	rec := history.NewRecorder(m.buf, m.cursor)
 	newCur := fn(rec)
 	if !rec.Empty() {
@@ -157,6 +169,12 @@ func swapCase(r rune) rune {
 // beginInsertChange performs the delete half of a change and enters insert mode
 // with the recorder still open, so the typed text joins the same undo unit.
 func (m *Model) beginInsertChange(reg rune, target operator.Target) {
+	// The change deletes before entering insert, so guard before any mutation
+	// on a locked dependency file (#565); a confirm replays the whole change.
+	if m.blockDep() {
+		m.stashDep(func(mm *Model) { mm.beginInsertChange(reg, target) })
+		return
+	}
 	rec := history.NewRecorder(m.buf, m.cursor)
 	at := operator.Change(m.buf, rec, m.regs, reg, target)
 	m.cursor = m.buf.Clamp(at)
@@ -169,6 +187,14 @@ func (m *Model) beginInsertChange(reg rune, target operator.Target) {
 // startInsert enters insert mode for i/a/o/O with the structural edit (if any)
 // already applied to rec; pre lets "." recreate that structural edit.
 func (m *Model) startInsertWith(rec *history.Recorder, pre func(*Model, *history.Recorder) buffer.Position) {
+	// Backstop for insert entries that bypass normalCommand (gi, multi-caret): on
+	// a locked dependency file, don't enter insert; stash a replay that opens a
+	// fresh (unlocked) recorder once confirmed (#565). The common i/a/o/… entries
+	// are already blocked in normalCommand and never reach here while locked.
+	if m.blockDep() {
+		m.stashDep(func(mm *Model) { mm.startInsertWith(mm.newRecorder(), pre) })
+		return
+	}
 	m.mode = Insert
 	m.insert = insertSession{active: true, rec: rec, pre: pre}
 	m.emit(EventCursorMove)

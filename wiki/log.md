@@ -2,6 +2,15 @@
 
 ## 2026-07-13
 
+- Dependency-file edit guard (#565): a buffer under a dependency directory
+  (`.venv`/`site-packages`/`node_modules`/`vendor`/…) — e.g. a go-to-definition
+  jump into a library — opens read-only. The first edit is blocked, a floating
+  confirmation appears, and accepting unlocks the file for the session and
+  replays the blocked edit; declining leaves it untouched. Guards sit at the
+  editor's mutation entry points with a locked-recorder safety net, so no
+  vendored file is modified without confirmation. New `internal/editor/depedit.go`
+  + `internal/app/depedit_prompt.go`; `history.Recorder.Lock`.
+
 - LSP workspace configuration (#563): the client now advertises
   `workspace.configuration`, so a server (pyright) issues `workspace/configuration`
   and receives the toolchain-detected Python interpreter path. Previously the

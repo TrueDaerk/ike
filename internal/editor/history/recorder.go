@@ -12,6 +12,7 @@ type Recorder struct {
 	forwards []buffer.Edit
 	inverses []buffer.Edit
 	before   buffer.Position
+	locked   bool
 }
 
 // NewRecorder starts recording against buf, capturing cursorBefore for undo.
@@ -19,9 +20,20 @@ func NewRecorder(buf *buffer.Buffer, cursorBefore buffer.Position) *Recorder {
 	return &Recorder{buf: buf, before: cursorBefore}
 }
 
+// Lock makes every Apply a no-op: the buffer is left untouched and no edit is
+// recorded, so Empty() stays true and the caller commits nothing. It is the
+// editor's safety net for a read-only buffer (a dependency file awaiting the
+// edit confirmation) — any mutation path that reaches a locked recorder does
+// nothing rather than silently modifying the file.
+func (r *Recorder) Lock() { r.locked = true }
+
 // Apply performs e and remembers it together with its inverse. It returns the
-// end position of the inserted text so the caller can place the cursor.
+// end position of the inserted text so the caller can place the cursor. A
+// locked recorder applies nothing and returns e's own start position.
 func (r *Recorder) Apply(e buffer.Edit) buffer.Position {
+	if r.locked {
+		return e.Range.Start
+	}
 	inv, end := r.buf.Apply(e)
 	r.forwards = append(r.forwards, e)
 	r.inverses = append(r.inverses, inv)

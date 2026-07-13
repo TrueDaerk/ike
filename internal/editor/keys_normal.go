@@ -369,8 +369,30 @@ func (m *Model) pageMotion(pages int, half bool) motion.Result {
 	return motion.Result{Pos: buffer.Position{Line: line, Col: m.desiredCol}, Kind: motion.Linewise}
 }
 
+// insertEntryCmd reports whether a normal-mode command enters insert/replace
+// mode (possibly after a structural edit). These are guarded ahead of the
+// switch on a locked dependency file (#565) — the destructive one-shots (x, d,
+// p, …) are already guarded deeper, at mutate/beginInsertChange.
+func insertEntryCmd(s string) bool {
+	switch s {
+	case "i", "I", "a", "A", "o", "O", "s", "R":
+		return true
+	}
+	return false
+}
+
 // normalCommand handles non-motion normal-mode keys (edits, mode changes, etc.).
 func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
+	// Entering insert/replace on a locked dependency file blocks and stashes the
+	// whole command, so a confirm replays it (including any structural edit like
+	// o/O's new line or s's delete). See depedit.go (#565).
+	if m.blockDep() && insertEntryCmd(s) {
+		m.stashDep(func(mm *Model) {
+			nm, _ := mm.normalCommand(s, r, count)
+			*mm = nm
+		})
+		return m, nil
+	}
 	switch s {
 	case "i":
 		m.startInsertWith(m.newRecorder(), nil)

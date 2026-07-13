@@ -9,8 +9,17 @@ import (
 	"ike/internal/editor/textobject"
 )
 
-// newRecorder opens a history recorder anchored at the current cursor.
-func (m *Model) newRecorder() *history.Recorder { return history.NewRecorder(m.buf, m.cursor) }
+// newRecorder opens a history recorder anchored at the current cursor. On a
+// locked dependency buffer (#565) the recorder is returned locked, so any
+// mutation path that was not caught by an explicit guard applies nothing rather
+// than silently editing a vendored file.
+func (m *Model) newRecorder() *history.Recorder {
+	rec := history.NewRecorder(m.buf, m.cursor)
+	if m.blockDep() {
+		rec.Lock()
+	}
+	return rec
+}
 
 // cursorRightForAppend moves the cursor one column right for "a", allowing the
 // one-past-end position insert mode uses.

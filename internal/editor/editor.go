@@ -149,6 +149,16 @@ type Model struct {
 
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
+	// Dependency-file edit guard (#565): depFile is set at Load when the path
+	// lives under a dependency directory (.venv, node_modules, …); such a buffer
+	// is read-only until the user confirms the first edit, which flips depOK for
+	// the session. depPending holds the blocked edit so a confirm can replay it;
+	// depSignal is set for one Update cycle when an edit was blocked, so Update
+	// emits the DepEditBlockedMsg that opens the host's confirmation prompt.
+	depFile    bool
+	depOK      bool
+	depPending func(*Model)
+	depSignal  bool
 	// eol/enc/mixedEOL describe how the open file is stored on disk (#66):
 	// the buffer itself is always LF-joined UTF-8; save re-applies this flavor.
 	// mixedEOL flags a load that saw both CRLF and LF (eol keeps the first
@@ -443,6 +453,12 @@ func (m *Model) Load(path string) error {
 	m.searching = false
 	m.dirty = false
 	m.stale = false
+	// Dependency-file guard (#565): lock a vendored file on open. A reload of the
+	// same path keeps a prior confirmation; loading a different file re-locks it.
+	m.depFile = dependencyDir(path)
+	if path != prevPath {
+		m.depOK = false
+	}
 	m.hist = history.New()
 	m.restoreUndo(data)
 	m.docVersion++
@@ -486,6 +502,10 @@ func (m *Model) NewFile(path string) {
 	m.searching = false
 	m.dirty = false
 	m.stale = false
+	// A newly created file is authored by the user even under a dependency dir,
+	// so it is never guarded (#565).
+	m.depFile = false
+	m.depOK = false
 	m.hist = history.New()
 	m.diskHash = "" // nothing on disk yet; the first :w stamps it
 	m.docVersion++
@@ -741,6 +761,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.jumpHistory(msg.Seq)
 		m.scroll()
 		return m.maybeReparse(before, nil)
+	case ConfirmDepEditMsg:
+		// The host's dependency-file prompt was accepted (#565): unlock and
+		// replay the blocked edit, reparsing as a normal change would.
+		before := m.docVersion
+		m.ConfirmDepEdit()
+		m.scroll()
+		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
 		m.dismissHover() // any key dismisses a hover popup
 		if msg.Code == tea.KeyEscape {
@@ -779,6 +806,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			} else {
 				m, cmd = m.updateNormal(msg)
 			}
+		}
+		// A blocked edit on a dependency file asks the host to confirm (#565).
+		if dep := m.takeDepSignal(); dep != nil {
+			cmd = tea.Batch(cmd, dep)
 		}
 		m.scroll()
 		return m.maybeReparse(before, cmd)

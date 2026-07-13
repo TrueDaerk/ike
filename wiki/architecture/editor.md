@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-13T00:00:00Z
 ---
 
 # Editor
@@ -488,6 +488,30 @@ git checkout) is downgraded to a content change and reloads normally.
 
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
+
+## Dependency-file edit guard (#565)
+
+A go-to-definition (F4) commonly jumps into a **vendored dependency** — the
+source under `.venv/…/site-packages`, `node_modules`, `vendor`, etc. Opening
+such a file is unrestricted, but editing it is guarded so a stray keystroke does
+not modify code a reinstall will overwrite. `depedit.go` classifies a buffer at
+`Load` (`dependencyDir(path)` matches any known dependency-directory path
+segment) and marks it `depFile`; the buffer is then read-only until the user
+confirms the first edit, which flips `depOK` **for the session** (a same-path
+reload keeps a prior confirmation; a freshly created file is never guarded).
+
+The guard sits at the editor's mutation entry points — `mutate`,
+`beginInsertChange`, the insert/replace entries in `normalCommand`
+(`i I a A o O s R`), and `startInsertWith` as a backstop — each of which, on a
+locked buffer, blocks the change, stashes a closure that re-runs it, and raises a
+one-shot signal. `newRecorder()` additionally returns a **locked** recorder
+(`history.Recorder.Lock`, whose `Apply` is a no-op) so any unguarded path cannot
+silently mutate the file. `Update` turns the signal into a `DepEditBlockedMsg`
+Cmd; the host shows a floating confirmation (`internal/app/depedit_prompt.go`,
+mirroring the revert prompt) and on **enter** routes `ConfirmDepEditMsg` back to
+the editor, which unlocks the buffer and replays the stashed edit through
+`Update` so it reparses like any change — **esc** drops it and leaves the file
+untouched and still locked.
 
 ## Git gutter & inline blame (Epic 0320)
 
