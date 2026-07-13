@@ -149,9 +149,9 @@ func TestTabKeymapChords(t *testing.T) {
 	m, paths := tabApp(t)
 	inst := m.panes.FocusedInstance()
 
-	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyPgDown, Mod: tea.ModCtrl})
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModAlt})
 	if inst.Editor().Path() != paths[0] {
-		t.Fatalf("ctrl+pgdown must cycle to the next tab, got %q", inst.Editor().Path())
+		t.Fatalf("ctrl+alt+right must cycle to the next tab, got %q", inst.Editor().Path())
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: '2', Mod: tea.ModAlt})
 	if inst.Editor().Path() != paths[1] {

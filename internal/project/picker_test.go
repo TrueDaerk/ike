@@ -24,7 +24,7 @@ func TestSwitchCommandRegistered(t *testing.T) {
 	if c.Owner != "project" || c.Title == "" || c.Run == nil || !c.Scope.Global {
 		t.Errorf("command wrong: %+v", c)
 	}
-	if keys, ok := r.Binding("project.switch"); !ok || keys != "alt+shift+p" {
+	if keys, ok := r.Binding("project.switch"); !ok || keys != "cmd+shift+p" {
 		t.Errorf("default keymap slot missing, got %q, %v", keys, ok)
 	}
 	if len(r.Conflicts()) != 0 {
