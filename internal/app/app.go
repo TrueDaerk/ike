@@ -226,6 +226,10 @@ type Model struct {
 	// revertPending is the file awaiting the vcs.revertFile confirmation
 	// (#466) while the shell shows the prompt; "" when none.
 	revertPending string
+	// depEditPending is the dependency file awaiting the edit confirmation
+	// (#565) while the shell shows the prompt; "" when none. Confirming replays
+	// the blocked edit on the active editor via ConfirmDepEdit.
+	depEditPending string
 	// inFileSearchRecent is true while a committed in-file search ("/", "?",
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
@@ -2721,6 +2725,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openConflictPrompt(msg.Path)
 		return m, nil
 
+	case editor.DepEditBlockedMsg:
+		// First edit to a dependency file (#565): confirm before it is unlocked.
+		m.openDepEditPrompt(msg.Path)
+		return m, nil
+
 	case editor.NoticeMsg:
 		// Editor action feedback ("no comment syntax for this file") → toast.
 		m.host.Notify(host.Info, msg.Text)
@@ -2820,6 +2829,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The revert-file confirmation (0320, #466): enter / esc answer it.
 		if m.revertPromptOpen() {
 			return m.updateRevertPrompt(msg)
+		}
+		// The dependency-file edit confirmation (#565): enter / esc answer it.
+		if m.depEditPromptOpen() {
+			return m.updateDepEditPrompt(msg)
 		}
 		// The unsaved-changes guard before a project switch (0090, #3) owns the
 		// keyboard the same way: s / d / esc answer it.
