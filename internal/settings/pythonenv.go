@@ -35,11 +35,31 @@ type EnvMsg struct {
 // envBusy is the in-flight marker the view shows while an action runs.
 const envBusy = "working…"
 
-// createEnv builds the async create-environment command: uv when present,
-// the stdlib venv module otherwise. target is where the environment lands
-// (#547) — relative paths resolve against the project root, ~ expands.
+// envSpec captures the guided create-wizard's choices (#569): the tool
+// ("uv" or "venv"), the Python to build on (uv: a version, "" = uv's
+// default; venv: the base interpreter path, "" = python3/python from PATH)
+// and the target directory.
+type envSpec struct {
+	Tool   string
+	Python string
+	Target string
+}
+
+// createEnv builds the async create-environment command with automatic tool
+// selection: uv when present, the stdlib venv module otherwise. target is
+// where the environment lands (#547).
 func createEnv(root, target string, run runCommand, look lookPath) tea.Cmd {
-	venv := pathcomplete.Expand(target)
+	tool := "venv"
+	if look("uv") != "" {
+		tool = "uv"
+	}
+	return createEnvWith(root, envSpec{Tool: tool, Target: target}, run, look)
+}
+
+// createEnvWith builds the async create-environment command for an explicit
+// spec (#569). Relative targets resolve against the project root, ~ expands.
+func createEnvWith(root string, spec envSpec, run runCommand, look lookPath) tea.Cmd {
+	venv := pathcomplete.Expand(spec.Target)
 	if !filepath.IsAbs(venv) {
 		venv = filepath.Join(root, venv)
 	}
@@ -51,24 +71,42 @@ func createEnv(root, target string, run runCommand, look lookPath) tea.Cmd {
 	interp := filepath.Join(venv, "bin", "python")
 	return func() tea.Msg {
 		var scaffolded []string
-		switch {
-		case look("uv") != "":
+		detail := spec.Tool
+		switch spec.Tool {
+		case "uv":
+			if look("uv") == "" {
+				return EnvMsg{LangID: "python", Err: fmt.Errorf("uv not found on PATH")}
+			}
 			scaffolded = uvScaffold(root, run) // pyproject.toml before the env (#548)
-			run("uv", "venv", venv)
-		case look("python3") != "":
-			run("python3", "-m", "venv", venv)
-		case look("python") != "":
-			run("python", "-m", "venv", venv)
+			args := []string{"venv"}
+			if spec.Python != "" {
+				args = append(args, "--python", spec.Python)
+				detail += ", python " + spec.Python
+			}
+			run("uv", append(args, venv)...)
 		default:
-			return EnvMsg{LangID: "python", Err: fmt.Errorf("neither uv nor python found on PATH")}
+			base := spec.Python
+			if base == "" {
+				for _, name := range []string{"python3", "python"} {
+					if look(name) != "" {
+						base = name
+						break
+					}
+				}
+			}
+			if base == "" {
+				return EnvMsg{LangID: "python", Err: fmt.Errorf("neither uv nor python found on PATH")}
+			}
+			detail = base + " -m venv"
+			run(base, "-m", "venv", venv)
 		}
 		if !fileExists(interp) {
 			return EnvMsg{LangID: "python", Err: fmt.Errorf("environment creation left no interpreter at %s", interp)}
 		}
-		if look("uv") != "" {
+		if spec.Tool == "uv" {
 			scaffolded = append(scaffolded, uvLock(root, run)...)
 		}
-		label := "created " + venv
+		label := "created " + venv + " (" + detail + ")"
 		for _, s := range scaffolded {
 			label += " + " + s
 		}
@@ -121,6 +159,28 @@ func uvInstallable(listOutput string) []string {
 		// cpython-3.12.8-macos-aarch64-none -> 3.12.8
 		parts := strings.Split(fields[0], "-")
 		if len(parts) >= 2 && parts[0] == "cpython" {
+			out = append(out, parts[1])
+		}
+	}
+	return out
+}
+
+// uvVersionsAll parses `uv python list` output into every cpython version uv
+// can provide — installed or downloadable — deduplicated in list order. The
+// create wizard (#569) offers these for `uv venv --python <version>` (uv
+// downloads a missing version on demand).
+func uvVersionsAll(listOutput string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, line := range strings.Split(listOutput, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 0 {
+			continue
+		}
+		// cpython-3.12.8-macos-aarch64-none -> 3.12.8
+		parts := strings.Split(fields[0], "-")
+		if len(parts) >= 2 && parts[0] == "cpython" && !seen[parts[1]] {
+			seen[parts[1]] = true
 			out = append(out, parts[1])
 		}
 	}

@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -63,10 +64,30 @@ type ToolchainPage struct {
 	envState   string
 
 	// Create-environment target input (#547): pre-filled with ".venv",
-	// path-completed, resolved against the project root on enter.
+	// path-completed, resolved against the project root on enter. Since #569
+	// it is the last step of the guided create wizard.
 	envInput   bool
 	envPath    string
 	envSuggest pathSuggest
+
+	// Guided create wizard (#569): step 1 picks the tool (uv / venv), step 2
+	// the Python (uv: version, venv: base interpreter), step 3 is envInput.
+	wizStep   int // 0 = inactive
+	wizTools  []string
+	wizPick   int
+	wizTool   string
+	wizPys    []string
+	wizPyPick int
+	wizPython string
+
+	// Package listing (#569): `i` fetches the effective interpreter's
+	// installed packages asynchronously; j/k scroll the inline window.
+	pkgViewing bool
+	pkgs       []pkgInfo
+	pkgErr     string
+	pkgOff     int
+
+	prov map[string]string // interpreter path -> provenance (cached stats)
 }
 
 // NewToolchainPage builds the page. restart may be nil (no LSP integration).
@@ -87,7 +108,7 @@ func (t *ToolchainPage) SetPalette(p *theme.Palette) { t.pal = p }
 // Capturing implements PageModel: the pickers and the custom-path input need
 // keys verbatim.
 func (t *ToolchainPage) Capturing() bool {
-	return t.picking || t.custom || t.uvPicking || t.envInput
+	return t.picking || t.custom || t.uvPicking || t.envInput || t.wizStep > 0 || t.pkgViewing
 }
 
 // Receive implements MsgReceiver: async version probes land in the cache,
@@ -103,6 +124,15 @@ func (t *ToolchainPage) Receive(msg tea.Msg) {
 			t.envState = "✗ " + v.Err.Error()
 		} else {
 			t.envState = "✓ " + v.Label
+		}
+	case PackagesMsg:
+		if !t.pkgViewing {
+			return
+		}
+		if v.Err != nil {
+			t.pkgErr = v.Err.Error()
+		} else {
+			t.pkgs, t.pkgErr = v.Pkgs, ""
 		}
 	}
 }
@@ -147,8 +177,14 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.uvPicking {
 		return t.updateUvPicker(key)
 	}
+	if t.wizStep == 1 || t.wizStep == 2 {
+		return t.updateWizard(key)
+	}
 	if t.envInput {
 		return t.updateEnvInput(key)
+	}
+	if t.pkgViewing {
+		return t.updatePkgView(key)
 	}
 	switch key.String() {
 	case "up", "k":
@@ -175,11 +211,18 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	case "n":
-		// Create a project environment (#132): uv venv, python -m venv
-		// fallback. The target directory is asked first (#547).
+		// Create a project environment via the guided wizard (#569): tool,
+		// Python, then target directory.
 		if l, ok := t.current(); ok && l.ID == "python" {
-			t.envInput, t.envPath = true, ".venv"
-			t.envSuggest.clear()
+			t.startWizard()
+		}
+	case "i":
+		// List the effective interpreter's installed packages (#569).
+		if l, ok := t.current(); ok && l.ID == "python" {
+			if path, _ := t.interpreter(l.ID); path != "" {
+				t.pkgViewing, t.pkgs, t.pkgErr, t.pkgOff = true, nil, "", 0
+				return listPackages(path, t.run, t.look)
+			}
 		}
 	case "u":
 		// Install a managed Python via uv (#132): pick from `uv python list`.
@@ -199,21 +242,121 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// updateEnvInput handles the create-environment target input (#547).
+// startWizard opens the guided create wizard (#569): the tool step is
+// skipped when only one tool is available.
+func (t *ToolchainPage) startWizard() {
+	t.wizTools = nil
+	if t.look("uv") != "" {
+		t.wizTools = append(t.wizTools, "uv")
+	}
+	if t.look("python3") != "" || t.look("python") != "" {
+		t.wizTools = append(t.wizTools, "venv")
+	}
+	if len(t.wizTools) == 0 {
+		t.envState = "✗ neither uv nor python found on PATH"
+		return
+	}
+	t.wizPick = 0
+	if len(t.wizTools) == 1 {
+		t.chooseTool(t.wizTools[0])
+		return
+	}
+	t.wizStep = 1
+}
+
+// chooseTool advances to the Python step: uv offers its versions (default
+// first), venv offers the discovered base interpreters. With nothing to
+// choose the step is skipped.
+func (t *ToolchainPage) chooseTool(tool string) {
+	t.wizTool, t.wizPyPick = tool, 0
+	if tool == "uv" {
+		t.wizPys = append([]string{"default"}, uvVersionsAll(t.run("uv", "python", "list"))...)
+	} else {
+		t.wizPys = pythonCandidates(t.root, t.run, t.look)
+	}
+	if len(t.wizPys) <= 1 {
+		python := ""
+		if tool == "venv" && len(t.wizPys) == 1 {
+			python = t.wizPys[0]
+		}
+		t.choosePython(python)
+		return
+	}
+	t.wizStep = 2
+}
+
+// choosePython advances to the target-directory step (the pre-#569 input).
+func (t *ToolchainPage) choosePython(python string) {
+	t.wizPython = python
+	t.wizStep = 3
+	t.envInput, t.envPath = true, ".venv"
+	t.envSuggest.clear()
+}
+
+// updateWizard handles keys in the wizard's tool and Python steps.
+func (t *ToolchainPage) updateWizard(key tea.KeyPressMsg) tea.Cmd {
+	items, pick := t.wizTools, &t.wizPick
+	if t.wizStep == 2 {
+		items, pick = t.wizPys, &t.wizPyPick
+	}
+	switch key.String() {
+	case "esc":
+		t.wizStep = 0
+	case "up", "k":
+		if *pick > 0 {
+			*pick--
+		}
+	case "down", "j":
+		if *pick < len(items)-1 {
+			*pick++
+		}
+	case "enter":
+		if t.wizStep == 1 {
+			t.chooseTool(t.wizTools[t.wizPick])
+			return nil
+		}
+		python := t.wizPys[t.wizPyPick]
+		if t.wizTool == "uv" && python == "default" {
+			python = ""
+		}
+		t.choosePython(python)
+	}
+	return nil
+}
+
+// updatePkgView handles keys in the package listing: j/k scroll, esc closes.
+func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
+	switch key.String() {
+	case "esc", "i", "q":
+		t.pkgViewing = false
+	case "up", "k":
+		if t.pkgOff > 0 {
+			t.pkgOff--
+		}
+	case "down", "j":
+		if t.pkgOff < len(t.pkgs)-pkgWindow {
+			t.pkgOff++
+		}
+	}
+	return nil
+}
+
+// updateEnvInput handles the create-environment target input (#547), the
+// wizard's final step since #569.
 func (t *ToolchainPage) updateEnvInput(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
-		t.envInput = false
+		t.envInput, t.wizStep = false, 0
 		t.envSuggest.clear()
 	case tea.KeyEnter:
 		target := strings.TrimSpace(t.envPath)
 		if target == "" {
 			target = ".venv"
 		}
-		t.envInput = false
+		t.envInput, t.wizStep = false, 0
 		t.envSuggest.clear()
 		t.envState = envBusy
-		return createEnv(t.root, target, t.run, t.look)
+		return createEnvWith(t.root, envSpec{Tool: t.wizTool, Python: t.wizPython, Target: target}, t.run, t.look)
 	case tea.KeyTab:
 		t.envPath = t.envSuggest.complete(t.envPath)
 	case tea.KeyBackspace:
@@ -381,7 +524,7 @@ func (t *ToolchainPage) theme() *theme.Palette {
 func (t *ToolchainPage) View(w, h int) string {
 	pal := t.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	head := sec.Render(" language · interpreter · source · version")
+	head := sec.Render(" language · interpreter · source · env · version")
 	var list []string
 	selStart, selEnd := 0, 0
 	for i, l := range t.languages() {
@@ -401,10 +544,14 @@ func (t *ToolchainPage) View(w, h int) string {
 					list = append(list, sec.Render(s))
 				}
 			case t.envInput:
-				list = append(list, sec.Render("   create env at: "+t.envPath+"▌"))
+				list = append(list, sec.Render("   create "+t.wizardLabel()+" at: "+t.envPath+"▌"))
 				for _, s := range t.envSuggest.lines() {
 					list = append(list, sec.Render(s))
 				}
+			case t.wizStep == 1 || t.wizStep == 2:
+				list = append(list, t.renderWizard()...)
+			case t.pkgViewing:
+				list = append(list, t.renderPackages()...)
 			case t.picking:
 				list = append(list, t.renderPicker()...)
 			case t.uvPicking:
@@ -435,12 +582,20 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	switch {
 	case t.custom:
 		hint = " tab complete path · enter apply · esc cancel"
+	case t.wizStep == 1:
+		hint = " ↑↓ choose tool · enter next · esc cancel"
+	case t.wizStep == 2 && t.wizTool == "uv":
+		hint = " ↑↓ python version (uv downloads missing ones) · enter next · esc cancel"
+	case t.wizStep == 2:
+		hint = " ↑↓ base interpreter · enter next · esc cancel"
 	case t.envInput:
 		hint = " target directory (relative to project root) · tab complete · enter create · esc cancel"
+	case t.pkgViewing:
+		hint = " j/k scroll packages · esc close"
 	case t.picking, t.uvPicking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
 	case l.ID == "python":
-		hint += " · n new venv · u uv install"
+		hint += " · n new env · i packages · u uv install"
 	}
 	status := ""
 	if l.ID == "python" && t.envState != "" {
@@ -448,6 +603,95 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	}
 	out := wrapFooter([]footerLine{{text: hint, style: sec}}, w, 2)
 	return append(out, sec.Render(status))
+}
+
+// provenance classifies (and caches) how an interpreter's environment was
+// created (#569); only meaningful for python paths.
+func (t *ToolchainPage) provenance(path string) string {
+	if path == "" {
+		return ""
+	}
+	if t.prov == nil {
+		t.prov = map[string]string{}
+	}
+	if p, ok := t.prov[path]; ok {
+		return p
+	}
+	p := envProvenance(path)
+	t.prov[path] = p
+	return p
+}
+
+// wizardLabel phrases the wizard's tool + Python choice for the target step.
+func (t *ToolchainPage) wizardLabel() string {
+	label := t.wizTool
+	if label == "" {
+		label = "env"
+	}
+	if t.wizPython != "" {
+		if t.wizTool == "uv" {
+			label += " (python " + t.wizPython + ")"
+		} else {
+			label += " (" + t.wizPython + ")"
+		}
+	}
+	return label
+}
+
+// renderWizard renders the tool / Python pick steps.
+func (t *ToolchainPage) renderWizard() []string {
+	pal := t.theme()
+	items, pick := t.wizTools, t.wizPick
+	describe := func(s string) string {
+		if s == "uv" {
+			return "uv — fast, manages pyproject.toml + uv.lock"
+		}
+		return "venv — stdlib python -m venv"
+	}
+	if t.wizStep == 2 {
+		items, pick = t.wizPys, t.wizPyPick
+		if t.wizTool == "uv" {
+			describe = func(s string) string { return "python " + s }
+		} else {
+			describe = func(s string) string { return s + "  " + t.provenance(s) }
+		}
+	}
+	var out []string
+	for i, item := range items {
+		style := lipgloss.NewStyle().Foreground(pal.Secondary)
+		if i == pick {
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
+		}
+		out = append(out, style.Render("   "+describe(item)))
+	}
+	return out
+}
+
+// pkgWindow is how many package rows render inline at once.
+const pkgWindow = 12
+
+// renderPackages renders the inline package listing window.
+func (t *ToolchainPage) renderPackages() []string {
+	pal := t.theme()
+	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
+	switch {
+	case t.pkgErr != "":
+		return []string{sec.Render("   ✗ " + t.pkgErr)}
+	case t.pkgs == nil:
+		return []string{sec.Render("   loading packages…")}
+	}
+	out := []string{sec.Render("   packages (" + strconv.Itoa(len(t.pkgs)) + ")")}
+	end := t.pkgOff + pkgWindow
+	if end > len(t.pkgs) {
+		end = len(t.pkgs)
+	}
+	for _, p := range t.pkgs[t.pkgOff:end] {
+		out = append(out, sec.Render("   "+pad(p.Name, 32)+p.Version))
+	}
+	if end < len(t.pkgs) {
+		out = append(out, sec.Render("   … "+strconv.Itoa(len(t.pkgs)-end)+" more (j to scroll)"))
+	}
+	return out
 }
 
 // renderLang renders one language row.
@@ -458,8 +702,12 @@ func (t *ToolchainPage) renderLang(l lang.Language, selected bool) string {
 	if display == "" {
 		display, source = "(not found)", "-"
 	}
+	env := ""
+	if l.ID == "python" {
+		env = t.provenance(path)
+	}
 	version := t.versions[path]
-	label := " " + pad(l.ID, 10) + pad(display, 52) + pad("@"+source, 12) + version
+	label := " " + pad(l.ID, 10) + pad(display, 52) + pad("@"+source, 12) + pad(env, 12) + version
 	style := lipgloss.NewStyle()
 	switch {
 	case selected:
@@ -473,9 +721,18 @@ func (t *ToolchainPage) renderLang(l lang.Language, selected bool) string {
 // renderPicker renders the candidate list plus the custom-path entry.
 func (t *ToolchainPage) renderPicker() []string {
 	pal := t.theme()
+	python := false
+	if l, ok := t.current(); ok {
+		python = l.ID == "python"
+	}
 	var out []string
 	for i, c := range t.candidates {
 		line := "   " + c
+		if python {
+			if p := t.provenance(c); p != "" {
+				line += "  [" + p + "]"
+			}
+		}
 		if v := t.versions[c]; v != "" {
 			line += "  " + v
 		}
