@@ -2455,6 +2455,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ilsp.DiagnosticsMsg:
 		return m, m.routeToEditor(msg.Path, msg)
+
+	case ilsp.DiagnosticsBatchMsg:
+		// Coalesced diagnostics (#597): route each document's set to its editor
+		// leaf in one Update pass, so a workspace publish storm re-renders once
+		// instead of once per file. Unopened paths route to nothing (cheap).
+		var cmds []tea.Cmd
+		for _, d := range msg.Items {
+			if cmd := m.routeToEditor(d.Path, d); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 	case ilsp.CompletionMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.HoverMsg:

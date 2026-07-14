@@ -119,7 +119,13 @@ the prefix filter. Accepting an item replaces the partial identifier before the 
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,
 `HoverMsg`, `DefinitionMsg`, `ReferencesMsg`, `ServerStatusMsg` — injected with
-`host.Send`. The app routes each (by file path) to the editor leaf that owns it;
+`host.Send`. Diagnostics are **coalesced** before injection (#597): a
+workspace-diagnostic server (pyright over a populated `.venv`) publishes for
+hundreds of library files, and one `tea.Msg` per file would mean one Update pass
++ re-render per file, starving keystrokes. Publishes accumulate in the bridge
+(latest per path) over a 50ms `diagCoalesce` window and flush as a single
+`DiagnosticsBatchMsg`, so the storm costs one re-render. The app routes each (by
+file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
 is handled by the app (navigate + place cursor); a jump that lands in a vendored

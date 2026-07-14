@@ -24,6 +24,15 @@ type DiagnosticsMsg struct {
 	Diagnostics []Diagnostic
 }
 
+// DiagnosticsBatchMsg carries several documents' diagnostics in one message so a
+// publish storm (a workspace-diagnostic server reporting hundreds of library
+// files) collapses into a single Update pass + re-render instead of one per file
+// (#597). Items hold at most one entry per path (latest wins within the coalesce
+// window).
+type DiagnosticsBatchMsg struct {
+	Items []DiagnosticsMsg
+}
+
 // Diagnostic is one diagnostic in editor coordinates.
 type Diagnostic struct {
 	Range    buffer.Range
