@@ -22,6 +22,12 @@ type Model struct {
 	focused bool
 	w, h    int
 	pal     *theme.Palette
+	// send is remembered so StartCommand (0350, #574) can respawn a session
+	// in place with the same async injector.
+	send func(tea.Msg)
+	// occupied marks that the user sent input (keys or a paste) to the
+	// session — an occupied terminal is never reused for a run (#574).
+	occupied bool
 	// scroll is the scrollback offset in lines (0 = live view). Paging keys
 	// (shift+pgup/pgdn) and the mouse wheel move it; any other key snaps back
 	// to live and goes to the shell.
@@ -46,7 +52,7 @@ func (p vpos) before(q vpos) bool {
 // rendering the error instead of a grid — the pane stays usable (closable)
 // rather than crashing the layout.
 func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
-	m := Model{w: w, h: h}
+	m := Model{w: w, h: h, send: send}
 	sess, err := StartSession(key, shell, dir, w, h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
@@ -54,6 +60,64 @@ func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)
 	}
 	m.sess = sess
 	return m
+}
+
+// NewCommand starts a terminal model running argv instead of a shell (0350,
+// #574): the run-in-terminal seam. A failed spawn renders the error like New.
+func NewCommand(key string, argv []string, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
+	m := Model{w: w, h: h, send: send}
+	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, send)
+	if err != nil {
+		m.err = err.Error()
+		return m
+	}
+	m.sess = sess
+	return m
+}
+
+// StartCommand replaces the model's session with a fresh command session
+// (#574): the reuse path when a run takes over an unoccupied terminal. Any
+// previous session ends; scroll, selection and the occupied flag reset.
+func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []string) {
+	if m.sess != nil {
+		m.sess.Close()
+	}
+	m.scroll = 0
+	m.ClearSelection()
+	m.occupied = false
+	m.err = ""
+	w, h := m.w, m.h
+	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, m.send)
+	if err != nil {
+		m.sess = nil
+		m.err = err.Error()
+		return
+	}
+	m.sess = sess
+}
+
+// Occupied reports whether the user has sent any input to the session; a run
+// never takes over an occupied terminal (#574).
+func (m Model) Occupied() bool { return m.occupied }
+
+// SessionKey returns the underlying session's routing key ("" for a failed
+// spawn) — output/exit messages carry it.
+func (m Model) SessionKey() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.key
+}
+
+// IsCommand reports whether the session runs a program rather than a shell.
+func (m Model) IsCommand() bool { return m.sess != nil && m.sess.IsCommand() }
+
+// ExitCode proxies the session's exit status (ok=false while running).
+func (m Model) ExitCode() (int, bool) {
+	if m.sess == nil {
+		return 0, false
+	}
+	return m.sess.ExitCode()
 }
 
 // SetPalette threads the active theme palette (chrome only; the grid's colors
@@ -140,6 +204,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	m.scroll = 0
 	m.ClearSelection()
+	m.occupied = true // input reached the session: never reuse it for a run (#574)
 	if ev, ok := motionKey(msg); ok {
 		m.sess.SendKey(ev)
 		return nil
@@ -343,6 +408,7 @@ func (m *Model) MouseWheel(x, y, delta int) {
 // PasteText forwards pasted text through the bracketed-paste path.
 func (m *Model) PasteText(text string) {
 	if m.sess != nil {
+		m.occupied = true
 		m.sess.Paste(text)
 	}
 }
@@ -390,12 +456,21 @@ func (m Model) View() string {
 	}
 	if !m.focused || !m.sess.Running() {
 		if !m.sess.Running() {
-			view += "\n[process exited]"
+			view += "\n" + m.exitLine()
 		}
 		return view
 	}
 	cx, cy := m.sess.CursorPosition()
 	return overlayCursor(view, cx, cy)
+}
+
+// exitLine renders the completion marker: command sessions (#574) report the
+// exit code so a run's outcome is visible at a glance.
+func (m Model) exitLine() string {
+	if code, ok := m.sess.ExitCode(); ok && m.sess.IsCommand() {
+		return "[process exited with code " + strconv.Itoa(code) + "]"
+	}
+	return "[process exited]"
 }
 
 // scrolledView renders the paging window: scroll lines above the live screen,

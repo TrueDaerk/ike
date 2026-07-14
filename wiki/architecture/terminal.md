@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches.
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
-tags: [architecture, terminal, pty, vt, pane]
-timestamp: 2026-07-12T00:00:00Z
+tags: [architecture, terminal, pty, vt, pane, run]
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -12,6 +12,23 @@ timestamp: 2026-07-12T00:00:00Z
 `internal/terminal` embeds a real shell as a pane (spec: epic #88), complete
 across the epic's four slices: PTY + VT core (#95), workspace integration
 (#96), commands & UX (#97) and toolchain environment injection (#98).
+
+## Command sessions & run reuse (0350, #574)
+
+- `StartCommandSession(key, argv, dir, …)` / `terminal.NewCommand` spawn a
+  **program with arguments directly on the PTY** (no wrapping shell) — the
+  run-in-terminal seam for run configurations (Epic #572). The program is
+  interactive (stdin is the PTY); `Session.ExitCode()` keeps the exit status,
+  and a finished command session renders `[process exited with code N]`
+  instead of the bare marker. `IsCommand()`/`Argv()` distinguish it from a
+  shell.
+- `Model.Occupied()` tracks whether the user ever sent input (a forwarded key
+  or a paste; scrollback paging does not count). `Model.StartCommand` replaces
+  a model's session in place — the reuse path when a run takes over a
+  terminal — resetting scroll, selection and occupancy.
+- `Registry.ReusableRunTerminal()` (internal/pane) scans panes and terminal
+  tabs in insertion order for a take-over candidate: never typed into, or its
+  process already ended (a finished run's terminal is fair game again).
 
 ## Session (`session.go`)
 

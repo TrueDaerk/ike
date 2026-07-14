@@ -170,6 +170,37 @@ func (r *Registry) AdoptTerminal(inst *Instance) (tookOver bool) {
 	return false
 }
 
+// ReusableRunTerminal returns the first terminal a run may take over (0350,
+// #574): one the user never sent input to — a terminal pane or an
+// editor-hosted terminal tab (#573) — in insertion order. It returns the
+// owning instance, the tab index (-1 for a terminal pane) and the model; nil
+// when every terminal is occupied or none exists.
+func (r *Registry) ReusableRunTerminal() (*Instance, int, *terminal.Model) {
+	for _, key := range r.order {
+		inst := r.instances[key]
+		switch inst.Kind() {
+		case KindTerminal:
+			if reusableTerminal(&inst.term) {
+				return inst, -1, &inst.term
+			}
+		case KindEditor:
+			for i, t := range inst.tabs {
+				if term := t.Terminal(); term != nil && reusableTerminal(term) {
+					return inst, i, term
+				}
+			}
+		}
+	}
+	return nil, -1, nil
+}
+
+// reusableTerminal is the take-over predicate: never typed into, or its
+// process already ended (a finished run's terminal is fair game again, like
+// the JetBrains run tool window reusing its tab).
+func reusableTerminal(t *terminal.Model) bool {
+	return !t.Occupied() || !t.Running()
+}
+
 // AddMarkdownPreview creates a markdown preview instance bound to the source
 // buffer at path, returning the new instance's key ("preview", then
 // "preview:N"). Content arrives afterwards via the preview model's setters.
