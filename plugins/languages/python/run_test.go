@@ -87,3 +87,21 @@ func TestDebugAdapterAndLaunchArgs(t *testing.T) {
 		t.Fatal("empty env must be omitted")
 	}
 }
+
+// TestDebugAdapterInstaller verifies the preflight probe and the install
+// candidate order (#589).
+func TestDebugAdapterInstaller(t *testing.T) {
+	tc := toolchain{}
+	// /usr/bin/true accepts any args and exits 0: the import probe "passes".
+	if missing, _ := tc.DebugAdapterMissing("/r", "/usr/bin/true"); missing {
+		t.Fatal("a zero-exit probe means the runtime is present")
+	}
+	missing, reason := tc.DebugAdapterMissing("/r", "/usr/bin/false")
+	if !missing || reason == "" {
+		t.Fatalf("a failing probe must report missing with a reason, got %v %q", missing, reason)
+	}
+	cands := tc.DebugAdapterInstall("/r", "/venv/bin/python")
+	if len(cands) != 2 || cands[0][0] != "/venv/bin/python" || cands[1][0] != "uv" {
+		t.Fatalf("install candidates = %v, want interpreter pip then uv", cands)
+	}
+}

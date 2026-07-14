@@ -2,6 +2,11 @@
 
 ## 2026-07-14
 
+- Debug adapter auto-install (#589): debug.start preflights debugpy in the
+  resolved interpreter, installs it on demand (pip, then uv) with clear
+  notifications and relaunches; handshake errors now carry the adapter's
+  stderr tail instead of a bare "connection closed".
+
 - Debug tool window (0350, #580): `internal/debugpanel` bottom-split panel
   (`pane.KindDebug`) with frames view and variables tree; frame selection
   re-scopes variables and navigates the editor, variable nodes expand via

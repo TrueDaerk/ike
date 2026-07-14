@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-14T12:00:00Z
 ---
 
 # Debugger (0350)
@@ -12,6 +12,18 @@ timestamp: 2026-07-14T00:00:00Z
 Epic #572. `internal/app/debugsession.go` orchestrates one live DAP session
 (#579) on top of the DAP client (`internal/dap`, #578), the run
 configurations (#575/#576) and the breakpoint store (#577).
+
+## Adapter runtime auto-install (#589)
+
+`debug.start` preflights the adapter runtime before spawning anything
+(`lang.DebugAdapterInstaller`): Python probes `interpreter -c "import
+debugpy"`. A missing runtime notifies ("… installing…") and installs
+asynchronously — `interpreter -m pip install debugpy` first, then
+`uv pip install --python <interpreter> debugpy` (uv-managed pythons ship
+without pip) — and relaunches the session on success. A runtime still
+missing after the install surfaces the manual command instead of looping.
+Handshake errors carry the adapter's stderr tail, so a dead adapter is
+diagnosable from the notification alone.
 
 ## Session lifecycle
 
