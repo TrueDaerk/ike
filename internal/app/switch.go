@@ -48,7 +48,7 @@ func (m Model) dirtyEditorCount() int {
 			continue
 		}
 		for i := 0; i < inst.TabCount(); i++ {
-			if inst.TabEditor(i).Dirty() {
+			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
 				n++
 			}
 		}
@@ -126,7 +126,7 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 			continue
 		}
 		for i := 0; i < inst.TabCount(); i++ {
-			if inst.TabEditor(i).Dirty() {
+			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
 				cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
 			}
 		}
@@ -145,7 +145,13 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 func (m *Model) adoptTerminals(old *Model) {
 	for _, key := range old.panes.Keys() {
 		inst := old.panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindTerminal {
+		if inst == nil {
+			continue
+		}
+		if inst.Kind() != pane.KindTerminal {
+			// Terminal tabs (#573) are session-local: the new workspace does
+			// not carry them over, so their shells end with the switch.
+			inst.CloseTerminalTabs()
 			continue
 		}
 		if !inst.Terminal().Running() {

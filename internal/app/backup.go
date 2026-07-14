@@ -84,6 +84,9 @@ func (m *Model) backupOnSync(fromKey, path string) tea.Cmd {
 	if ed == nil {
 		ed = origin.Editor() // pathless scratch buffer
 	}
+	if ed == nil {
+		return nil // active tab hosts a terminal (#573): nothing to back up
+	}
 	key := backupKey(ed, fromKey)
 	if ed.Dirty() {
 		m.backupDeb.Mark(key, time.Now())

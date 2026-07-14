@@ -49,7 +49,10 @@ func tabLabels(inst *pane.Instance) []string {
 	counts := map[string]int{}
 	for i := 0; i < n; i++ {
 		name := "untitled"
-		if ed := inst.TabEditor(i); ed.HasFile() {
+		if t := inst.Tab(i); t != nil && t.IsTerminal() {
+			// Terminal tabs (#573) label themselves: OSC title or shell name.
+			name = "⌨ " + t.Title()
+		} else if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
 			name = baseName(ed.Path())
 		}
 		names[i] = name
@@ -59,6 +62,10 @@ func tabLabels(inst *pane.Instance) []string {
 	for i := 0; i < n; i++ {
 		ed := inst.TabEditor(i)
 		label := names[i]
+		if ed == nil {
+			labels[i] = label // terminal tab: no dirty/stale markers
+			continue
+		}
 		if counts[names[i]] > 1 && ed.HasFile() {
 			if dir := filepath.Dir(displayPath(ed.Path())); dir != "" && dir != "." {
 				label += " — " + dir

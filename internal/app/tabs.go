@@ -84,7 +84,7 @@ func (m *Model) switchTab(inst *pane.Instance, idx int) {
 		return
 	}
 	m.activateTab(inst, idx)
-	if ed := inst.Editor(); ed.HasFile() {
+	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.explorer().SetActive(ed.Path())
 	}
 	saveLayout(m.tree, m.panes)

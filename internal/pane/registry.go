@@ -111,16 +111,23 @@ func (r *Registry) AddEditorKey(key string) *Instance {
 // program's async injector (host.Send) for output/exit notifications. It
 // returns the new instance's key ("terminal", then "terminal:N").
 func (r *Registry) AddTerminal(shell, dir string, env []string, send func(tea.Msg)) string {
-	r.terminals++
-	key := terminalKeyBase
-	if r.terminals > 1 {
-		key = terminalKeyBase + ":" + strconv.Itoa(r.terminals)
-	}
+	key := r.MintTerminalKey()
 	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
 	inst.term = terminal.New(key, shell, dir, 80, 24, env, send)
 	inst.term.SetPalette(r.pal)
 	r.put(inst)
 	return key
+}
+
+// MintTerminalKey allocates the next terminal session key without creating a
+// pane — terminal tabs (#573) live inside an editor instance but their
+// sessions still need a unique key for output/exit message routing.
+func (r *Registry) MintTerminalKey() string {
+	r.terminals++
+	if r.terminals == 1 {
+		return terminalKeyBase
+	}
+	return terminalKeyBase + ":" + strconv.Itoa(r.terminals)
 }
 
 // AddTerminalKey recreates a terminal under an exact key with a fresh shell
@@ -394,6 +401,7 @@ func (r *Registry) Close(key string) {
 	if inst.Kind() == KindTerminal {
 		inst.term.Close()
 	}
+	inst.CloseTerminalTabs() // editor panes may host terminal tabs (#573)
 	delete(r.instances, key)
 	for i, k := range r.order {
 		if k == key {

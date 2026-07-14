@@ -284,12 +284,15 @@ func (m Model) statusLine() string {
 	// A non-editor focus names itself instead of implying editor input (#381):
 	// mirroring the active editor while a terminal owns the keystrokes made it
 	// hard to tell where input goes.
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() != pane.KindEditor {
+	if inst := m.panes.FocusedInstance(); inst != nil &&
+		(inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil) {
 		left := " "
-		switch inst.Kind() {
-		case pane.KindTerminal:
+		switch {
+		case inst.ActiveTerminal() != nil:
+			// A terminal pane, or an editor pane whose active tab hosts a
+			// terminal (#573) — either way the keystrokes go to a shell.
 			left += "TERMINAL"
-			t := inst.Terminal()
+			t := inst.ActiveTerminal()
 			seg := ""
 			if s := t.ShellPath(); s != "" {
 				seg = filepath.Base(s)
@@ -306,9 +309,9 @@ func (m Model) statusLine() string {
 			if !t.Running() {
 				left += " [exited]"
 			}
-		case pane.KindMarkdown:
+		case inst.Kind() == pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
-		case pane.KindDiff:
+		case inst.Kind() == pane.KindDiff:
 			l, r := inst.Diff().Titles()
 			left += "DIFF │ " + l + " ⇄ " + r
 			if n := inst.Diff().HunkCount(); n > 0 {
@@ -318,7 +321,7 @@ func (m Model) statusLine() string {
 				}
 				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
 			}
-		case pane.KindVCS:
+		case inst.Kind() == pane.KindVCS:
 			left += "VCS"
 			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
 				left += " │ ⎇ " + snap.Branch

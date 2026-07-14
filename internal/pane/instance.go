@@ -69,9 +69,10 @@ type Instance struct {
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
 
-	// Editor state: the ordered tab list and the active index. cfg/pal/size
-	// and focus are remembered so tabs created later match the live pane.
-	tabs    []*editor.Model
+	// Editor state: the ordered tab list and the active index. A tab holds a
+	// document editor or an embedded terminal (#573). cfg/pal/size and focus
+	// are remembered so tabs created later match the live pane.
+	tabs    []*Tab
 	active  int
 	cfg     host.Config
 	pal     *theme.Palette
@@ -92,6 +93,14 @@ func (i *Instance) ContextID() string {
 	switch i.kind {
 	case KindExplorer:
 		return ctxExplorer
+	case KindEditor:
+		// An editor pane whose active tab is a terminal (#573) resolves
+		// under the terminal context, so terminal bindings apply while it
+		// owns the keystrokes.
+		if t := i.activeTab(); t != nil && t.IsTerminal() {
+			return ctxTerminal
+		}
+		return ctxEditor
 	case KindTerminal:
 		return ctxTerminal
 	case KindMarkdown:
@@ -161,12 +170,54 @@ func (i *Instance) sizeDiffEditor() {
 }
 
 // Editor returns the active tab's editor model. It is only valid for an editor
-// instance; callers gate on Kind first.
+// instance; callers gate on Kind first. It is nil when the active tab hosts a
+// terminal (#573), so callers must nil-check before dereferencing.
 func (i *Instance) Editor() *editor.Model {
+	if t := i.activeTab(); t != nil {
+		return t.Editor()
+	}
+	return nil
+}
+
+// activeTab returns the active tab slot, or nil when no tabs exist.
+func (i *Instance) activeTab() *Tab {
 	if len(i.tabs) == 0 {
 		return nil
 	}
 	return i.tabs[i.active]
+}
+
+// Tab returns the tab slot at idx, or nil when out of range.
+func (i *Instance) Tab(idx int) *Tab {
+	if idx < 0 || idx >= len(i.tabs) {
+		return nil
+	}
+	return i.tabs[idx]
+}
+
+// TabTerminal returns the terminal model of tab idx, nil for editor tabs or
+// an out-of-range index.
+func (i *Instance) TabTerminal(idx int) *terminal.Model {
+	if t := i.Tab(idx); t != nil {
+		return t.Terminal()
+	}
+	return nil
+}
+
+// ActiveTerminal returns the terminal the instance's input currently reaches:
+// the wrapped terminal for a terminal pane, the active tab's terminal for an
+// editor pane hosting one (#573), nil otherwise.
+func (i *Instance) ActiveTerminal() *terminal.Model {
+	if i.kind == KindTerminal {
+		return &i.term
+	}
+	if i.kind != KindEditor {
+		return nil
+	}
+	if t := i.activeTab(); t != nil {
+		return t.Terminal()
+	}
+	return nil
 }
 
 // TabCount reports how many tabs the editor instance holds (0 for explorers).
@@ -175,27 +226,33 @@ func (i *Instance) TabCount() int { return len(i.tabs) }
 // ActiveTab returns the index of the active tab.
 func (i *Instance) ActiveTab() int { return i.active }
 
-// TabEditor returns the editor model of tab idx, or nil when out of range.
+// TabEditor returns the editor model of tab idx, nil when out of range or
+// when that tab hosts a terminal (#573).
 func (i *Instance) TabEditor(idx int) *editor.Model {
 	if idx < 0 || idx >= len(i.tabs) {
 		return nil
 	}
-	return i.tabs[idx]
+	return i.tabs[idx].Editor()
 }
 
-// Editors returns every tab's editor model in tab order. Callers that iterate
-// "all documents of this pane" (emitters, autosave sweeps, backup drops) use
-// this instead of Editor, which only sees the active tab.
+// Editors returns every editor tab's model in tab order; terminal tabs are
+// skipped. Callers that iterate "all documents of this pane" (emitters,
+// autosave sweeps, backup drops) use this instead of Editor, which only sees
+// the active tab.
 func (i *Instance) Editors() []*editor.Model {
-	out := make([]*editor.Model, len(i.tabs))
-	copy(out, i.tabs)
+	out := make([]*editor.Model, 0, len(i.tabs))
+	for _, t := range i.tabs {
+		if ed := t.Editor(); ed != nil {
+			out = append(out, ed)
+		}
+	}
 	return out
 }
 
 // TabForPath returns the index of the first tab showing path, or -1.
 func (i *Instance) TabForPath(path string) int {
 	for idx, t := range i.tabs {
-		if t.HasFile() && t.Path() == path {
+		if ed := t.Editor(); ed != nil && ed.HasFile() && ed.Path() == path {
 			return idx
 		}
 	}
@@ -205,7 +262,7 @@ func (i *Instance) TabForPath(path string) int {
 // EditorForPath returns the first tab's editor model showing path, or nil.
 func (i *Instance) EditorForPath(path string) *editor.Model {
 	if idx := i.TabForPath(path); idx >= 0 {
-		return i.tabs[idx]
+		return i.tabs[idx].Editor()
 	}
 	return nil
 }
@@ -219,9 +276,32 @@ func (i *Instance) AddTab() *editor.Model {
 	}
 	ed := newEditorModel(i.cfg, i.pal)
 	ed.SetSize(i.w, i.h)
-	i.tabs = append(i.tabs, &ed)
+	i.tabs = append(i.tabs, newEditorTab(&ed))
 	i.activate(len(i.tabs) - 1)
-	return i.tabs[i.active]
+	return i.tabs[i.active].Editor()
+}
+
+// AddTerminalTab appends a tab hosting term, makes it active, and returns the
+// hosted model (#573): run output opens next to the file tabs. Only valid on
+// editor instances.
+func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
+	if i.kind != KindEditor {
+		return nil
+	}
+	term.SetPalette(i.pal)
+	term.SetSize(i.w, i.h)
+	i.tabs = append(i.tabs, newTerminalTab(&term))
+	i.activate(len(i.tabs) - 1)
+	return i.tabs[i.active].Terminal()
+}
+
+// CloseTerminalTabs ends every terminal tab's session; the tab slots stay (a
+// registry Close drops the whole instance right after, a project switch just
+// stops the shells the new workspace does not carry over).
+func (i *Instance) CloseTerminalTabs() {
+	for _, t := range i.tabs {
+		t.close()
+	}
 }
 
 // ActivateTab makes tab idx the active one, moving the pane's focus state onto
@@ -238,7 +318,7 @@ func (i *Instance) ActivateTab(idx int) bool {
 func (i *Instance) activate(idx int) {
 	i.active = idx
 	for n, t := range i.tabs {
-		t.SetFocused(i.focused && n == i.active)
+		t.setFocused(i.focused && n == i.active)
 	}
 }
 
@@ -254,7 +334,7 @@ func (i *Instance) MoveTab(from, to int) bool {
 	activeTab := i.tabs[i.active]
 	t := i.tabs[from]
 	i.tabs = append(i.tabs[:from], i.tabs[from+1:]...)
-	rest := append([]*editor.Model{}, i.tabs[to:]...)
+	rest := append([]*Tab{}, i.tabs[to:]...)
 	i.tabs = append(append(i.tabs[:to:to], t), rest...)
 	for n, tab := range i.tabs {
 		if tab == activeTab {
@@ -273,6 +353,7 @@ func (i *Instance) CloseTab(idx int) bool {
 	if i.kind != KindEditor || idx < 0 || idx >= len(i.tabs) || len(i.tabs) == 1 {
 		return false
 	}
+	i.tabs[idx].close() // a terminal tab's session ends with its tab (#573)
 	i.tabs = append(i.tabs[:idx], i.tabs[idx+1:]...)
 	switch {
 	case i.active > idx:
@@ -294,7 +375,7 @@ func (i *Instance) SetSize(w, h int) {
 	case KindEditor:
 		i.w, i.h = w, h
 		for _, t := range i.tabs {
-			t.SetSize(w, h)
+			t.setSize(w, h)
 		}
 	case KindTerminal:
 		i.term.SetSize(w, h)
@@ -318,7 +399,7 @@ func (i *Instance) SetFocused(f bool) {
 	case KindEditor:
 		i.focused = f
 		for n, t := range i.tabs {
-			t.SetFocused(f && n == i.active)
+			t.setFocused(f && n == i.active)
 		}
 	case KindTerminal:
 		i.term.SetFocused(f)
@@ -340,7 +421,10 @@ func (i *Instance) View() string {
 	case KindExplorer:
 		return i.exp.View()
 	case KindEditor:
-		return i.Editor().View()
+		if t := i.activeTab(); t != nil {
+			return t.view()
+		}
+		return ""
 	case KindTerminal:
 		return i.term.View()
 	case KindMarkdown:
@@ -365,8 +449,7 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 	case KindExplorer:
 		i.exp, cmd = i.exp.Update(msg)
 	case KindEditor:
-		t := i.tabs[i.active]
-		*t, cmd = t.Update(msg)
+		cmd = i.tabs[i.active].update(msg)
 	case KindTerminal:
 		if k, ok := msg.(tea.KeyPressMsg); ok {
 			cmd = i.term.Update(k)
@@ -404,12 +487,11 @@ func (i *Instance) UpdateForPath(path string, skip *editor.Model, msg tea.Msg) t
 	}
 	var cmds []tea.Cmd
 	for _, t := range i.tabs {
-		if t == skip || !t.HasFile() || t.Path() != path {
+		ed := t.Editor()
+		if ed == nil || ed == skip || !ed.HasFile() || ed.Path() != path {
 			continue
 		}
-		var cmd tea.Cmd
-		*t, cmd = t.Update(msg)
-		if cmd != nil {
+		if cmd := t.update(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -424,10 +506,7 @@ func (i *Instance) UpdateTab(idx int, msg tea.Msg) tea.Cmd {
 	if i.kind != KindEditor || idx < 0 || idx >= len(i.tabs) {
 		return nil
 	}
-	t := i.tabs[idx]
-	var cmd tea.Cmd
-	*t, cmd = t.Update(msg)
-	return cmd
+	return i.tabs[idx].update(msg)
 }
 
 // Init returns the wrapped component's initialisation command.
@@ -436,7 +515,9 @@ func (i *Instance) Init() tea.Cmd {
 	case KindExplorer:
 		return i.exp.Init()
 	case KindEditor:
-		return i.Editor().Init()
+		if ed := i.Editor(); ed != nil {
+			return ed.Init()
+		}
 	}
 	return nil
 }
@@ -453,7 +534,7 @@ func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette) *In
 		i.exp.Configure(cfg)
 	case KindEditor:
 		ed := newEditorModel(cfg, pal)
-		i.tabs = []*editor.Model{&ed}
+		i.tabs = []*Tab{newEditorTab(&ed)}
 	}
 	return i
 }
@@ -477,7 +558,7 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.exp.SetPalette(p)
 	case KindEditor:
 		for _, t := range i.tabs {
-			t.SetPalette(p)
+			t.setPalette(p)
 		}
 	case KindMarkdown:
 		i.md.SetPalette(p)
@@ -496,7 +577,7 @@ func (i *Instance) configure(cfg host.Config) {
 		i.exp.Configure(cfg)
 	case KindEditor:
 		for _, t := range i.tabs {
-			t.Configure(cfg)
+			t.configure(cfg)
 		}
 	}
 }

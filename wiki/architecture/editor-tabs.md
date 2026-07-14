@@ -1,18 +1,21 @@
 ---
 type: concept
 title: Editor Tabs
-description: The per-pane tab model — each editor pane hosts an ordered document list with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
+description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
-tags: [architecture, panes, tabs, editors, shared-documents, close]
-timestamp: 2026-07-13T00:00:00Z
+tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 # Editor Tabs
 
 Roadmap 0190 (#156). An editor pane no longer hosts exactly one document: each
-`pane.Instance` of `KindEditor` holds an **ordered tab list** (`[]*editor.Model`)
+`pane.Instance` of `KindEditor` holds an **ordered tab list** (`[]*pane.Tab`)
 plus an **active index**, JetBrains-style. The layout tree is untouched — a leaf
-is still one pane; tabs live entirely inside the instance.
+is still one pane; tabs live entirely inside the instance. Since 0350 (#573) a
+tab slot holds **either a document editor or an embedded terminal** (`pane.Tab`
+is a sum type over `*editor.Model` / `*terminal.Model`), so run output and
+shells can live next to the files they belong to.
 
 ## The tab model (`internal/pane`)
 
@@ -35,6 +38,28 @@ is still one pane; tabs live entirely inside the instance.
   msg)` reaches every tab showing path (background tabs included) and
   `UpdateTab(i, msg)` a specific one — the seams path-routed messages (sync,
   highlight, LSP results, save-all) travel through.
+
+### Terminal tabs (0350, #573)
+
+- `AddTerminalTab(term)` appends a tab hosting a `terminal.Model` and activates
+  it; `terminal.newTab` (Tools menu / palette) opens one in the active editor
+  pane, falling back to the classic bottom-split terminal when no editor pane
+  exists. Session keys are minted via `Registry.MintTerminalKey()` so tab
+  sessions never collide with terminal panes.
+- While a terminal tab is active, `Editor()` is **nil** — app code nil-checks —
+  and `ActiveTerminal()` returns the hosted terminal; `ContextID()` flips to
+  `terminal` so terminal keybindings and the raw-key routing
+  (`terminalFocused`) apply exactly like in a terminal pane, mouse included
+  (selection drag, wheel scrollback/child routing).
+- Document sweeps (`Editors()`, `TabForPath`, autosave, backups, dirty guards)
+  skip terminal tabs; `TabEditor(i)` returns nil for them, `TabTerminal(i)`
+  the terminal.
+- The tab bar labels a terminal tab `⌨ ` + its OSC title (else the shell's base
+  name); no dirty/stale markers.
+- Closing a terminal tab (middle-click, `editor.closeTab`) **ends its shell
+  session**; a pane close, `Registry.Close`, and a project switch end every
+  hosted session the same way. Terminal tabs are session-local: like scratch
+  tabs they are not persisted, and layout restore drops them.
 
 ## Opening routes into the tab list (`internal/app`)
 

@@ -120,6 +120,10 @@ type MoveFileMsg struct{}
 // split off the focused leaf (Roadmap 0170, #95). Dispatched by terminal.new.
 type TerminalNewMsg struct{}
 
+// TerminalNewTabMsg asks the root model to open a shell in a new tab of the
+// active editor pane (#573), next to the file tabs.
+type TerminalNewTabMsg struct{}
+
 // TerminalToggleMsg drives the JetBrains alt+f12 state machine (#97): no
 // terminal → create one; unfocused → focus it; focused → return focus to the
 // previously focused pane. Dispatched by terminal.toggle.
@@ -227,6 +231,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
+			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
