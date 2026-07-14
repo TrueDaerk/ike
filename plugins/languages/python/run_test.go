@@ -64,3 +64,26 @@ func TestRunCommandForms(t *testing.T) {
 		t.Fatalf("module form = %v", argv)
 	}
 }
+
+// TestDebugAdapterAndLaunchArgs verifies the debugpy contribution (#578).
+func TestDebugAdapterAndLaunchArgs(t *testing.T) {
+	tc := toolchain{}
+	argv, ok := tc.DebugAdapter("/r", "/venv/bin/python")
+	if !ok || len(argv) != 3 || argv[0] != "/venv/bin/python" || argv[2] != "debugpy.adapter" {
+		t.Fatalf("adapter argv = %v", argv)
+	}
+	args := tc.DebugLaunchArgs("/r", lang.RunSpec{File: "/r/x.py", Args: []string{"-v"}}, "/r", map[string]string{"K": "V"})
+	if args["program"] != "/r/x.py" || args["request"] != "launch" {
+		t.Fatalf("launch args = %v", args)
+	}
+	if _, hasModule := args["module"]; hasModule {
+		t.Fatal("file form must not carry module")
+	}
+	margs := tc.DebugLaunchArgs("/r", lang.RunSpec{Module: "pkg.m"}, "/r", nil)
+	if margs["module"] != "pkg.m" {
+		t.Fatalf("module launch args = %v", margs)
+	}
+	if _, hasEnv := margs["env"]; hasEnv {
+		t.Fatal("empty env must be omitted")
+	}
+}

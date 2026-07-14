@@ -101,7 +101,27 @@ load empty.
   deletions, collapsing ones inside a removed range. Wholesale buffer
   replacements (load, share, remote sync) re-baseline instead of shifting.
 
+## DAP client (#578)
+
+`internal/dap` is the Debug Adapter Protocol client: the LSP base-protocol
+framing (`jsonrpc.WriteFrame`/`ReadFrame`, shared with the language servers)
+carrying DAP's `seq`/`type` envelope. `Conn` correlates requests with
+responses (bounded by a call timeout) and dispatches events (stopped,
+continued, terminated, output, initialized) to a handler; reverse requests
+(runInTerminal) are refused so adapters fall back. `Session` types the
+vocabulary IKE uses: `Initialize`, `LaunchAsync` (adapters like debugpy
+answer launch only after `ConfigurationDone`), `SetBreakpoints` (0-based in,
+1-based on the wire), stepping (`Next`/`StepIn`/`StepOut`/`Continue`),
+`Threads`/`StackTrace`/`Scopes`/`Variables`, `Disconnect`. Adapter processes
+spawn through `internal/lsp/transport` exactly like language servers.
+
+Languages contribute adapters via `lang.DebugAdapterProvider`
+(`DebugAdapter` argv + `DebugLaunchArgs`): Python uses debugpy
+(`<interpreter> -m debugpy.adapter`; module or program launch form matching
+the run config). Go's `dlv dap` only speaks DAP over a socket, so it waits
+for a socket transport.
+
 ## Consumers
 
-- The DAP debugger (#578/#579) launches from the same configuration with
-  kind `debug`, stopping at the stored breakpoints.
+- The debug session orchestration (#579) drives Session from a run
+  configuration with kind `debug`, stopping at the stored breakpoints.

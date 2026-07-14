@@ -12,6 +12,15 @@ import (
 // prefixed with a `Content-Length: N\r\n\r\n` header block (other headers, e.g.
 // Content-Type, are tolerated and ignored).
 
+// WriteFrame writes payload with its Content-Length header. Exported for the
+// DAP client (0350, #578): the Debug Adapter Protocol shares the LSP base
+// protocol framing with a different message envelope.
+func WriteFrame(w io.Writer, payload []byte) error { return writeFrame(w, payload) }
+
+// ReadFrame reads one framed message, returning its JSON payload (see
+// WriteFrame for why it is exported).
+func ReadFrame(r *bufio.Reader) ([]byte, error) { return readFrame(r) }
+
 // writeFrame writes payload with its Content-Length header.
 func writeFrame(w io.Writer, payload []byte) error {
 	if _, err := io.WriteString(w, fmt.Sprintf("Content-Length: %d\r\n\r\n", len(payload))); err != nil {

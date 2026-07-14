@@ -2,6 +2,14 @@
 
 ## 2026-07-14
 
+- DAP client (0350, #578): `internal/dap` — LSP base-protocol framing with
+  the DAP seq/type envelope, request/response correlation, event dispatch,
+  and a typed Session (initialize/launch/setBreakpoints/configurationDone,
+  stepping, threads/stackTrace/scopes/variables, disconnect); adapters spawn
+  through the LSP transport. `internal/lang` gains `DebugAdapterProvider`;
+  Python contributes debugpy (`python -m debugpy.adapter`). Go's `dlv dap`
+  needs a socket transport and stays deferred.
+
 - Breakpoints (0350, #577): per-project store (`internal/debug`,
   `.ike/breakpoints.json`), toggled via ctrl+f8 or a gutter click, rendered
   as a bold error-tone line number (wins over diagnostics/VCS marks), and
