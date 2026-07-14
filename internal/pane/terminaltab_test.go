@@ -132,3 +132,26 @@ func TestMintTerminalKeyAdvances(t *testing.T) {
 		t.Fatalf("second minted key = %q, want terminal:2", k)
 	}
 }
+
+// TestReusableRunTerminal verifies the run-reuse scan (#574): the first
+// never-typed-in terminal wins — pane or tab — and occupied ones are skipped.
+func TestReusableRunTerminal(t *testing.T) {
+	r := newReg()
+	r.AddExplorer()
+	ed := r.Get(r.AddEditor())
+	if inst, _, _ := r.ReusableRunTerminal(); inst != nil {
+		t.Fatal("no terminals: nothing to reuse")
+	}
+	term := termTab(t, ed)
+	inst, idx, got := r.ReusableRunTerminal()
+	if inst != ed || idx != 1 || got != term {
+		t.Fatalf("expected the fresh terminal tab to be reusable (inst=%v idx=%d)", inst, idx)
+	}
+	// The test terminal's spawn failed (no live process), so it stays
+	// reusable even after input — a dead terminal is always fair game; the
+	// occupied-and-running skip is unit-tested in internal/terminal.
+	term.PasteText("typed")
+	if inst, _, _ := r.ReusableRunTerminal(); inst != ed {
+		t.Fatal("a dead terminal must stay reusable")
+	}
+}

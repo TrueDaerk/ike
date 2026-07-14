@@ -43,16 +43,21 @@ const notifyQuiet = 8 * time.Millisecond
 type Session struct {
 	key   string
 	shell string
-	dir   string
-	em    *vt.SafeEmulator
-	send  func(tea.Msg)
+	// argv is the full command line when the session runs a program instead
+	// of an interactive shell (0350, #574); nil for plain shell sessions.
+	argv []string
+	dir  string
+	em   *vt.SafeEmulator
+	send func(tea.Msg)
 
-	mu     sync.Mutex
-	ptmx   *os.File
-	cmd    *exec.Cmd
-	w, h   int
-	title  string // last OSC 0/2 title the application set ("" until then)
-	closed atomic.Bool
+	mu       sync.Mutex
+	ptmx     *os.File
+	cmd      *exec.Cmd
+	w, h     int
+	title    string // last OSC 0/2 title the application set ("" until then)
+	exitCode int
+	exited   bool
+	closed   atomic.Bool
 	// mouseModes holds the DEC mouse-reporting modes the child currently has
 	// enabled (?9/?1000/…); non-empty means wheel events belong to the child.
 	mouseModes map[ansi.Mode]struct{}
@@ -77,6 +82,22 @@ func Shell(override string) string {
 // extraEnv entries override the inherited environment (toolchain injection,
 // #98); nil leaves it untouched beyond TERM.
 func StartSession(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) (*Session, error) {
+	return startSession(key, []string{shell}, false, dir, w, h, extraEnv, send)
+}
+
+// StartCommandSession spawns argv (a program with arguments, not a shell) on
+// a PTY — the run-in-terminal seam (0350, #574). The program is interactive
+// like any shell child (stdin is the PTY); its exit code is kept for the
+// pane's completion line.
+func StartCommandSession(key string, argv []string, dir string, w, h int, extraEnv []string, send func(tea.Msg)) (*Session, error) {
+	if len(argv) == 0 {
+		return nil, fmt.Errorf("terminal: empty command")
+	}
+	return startSession(key, argv, true, dir, w, h, extraEnv, send)
+}
+
+// startSession is the shared spawn path; isCommand marks a program session.
+func startSession(key string, argv []string, isCommand bool, dir string, w, h int, extraEnv []string, send func(tea.Msg)) (*Session, error) {
 	if w < 2 || h < 2 {
 		w, h = 80, 24
 	}
@@ -85,22 +106,25 @@ func StartSession(key, shell, dir string, w, h int, extraEnv []string, send func
 	if abs, err := filepath.Abs(dir); err == nil {
 		dir = abs
 	}
-	cmd := exec.Command(shell)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
 	cmd.Env = MergeEnv(append(os.Environ(), "TERM=xterm-256color"), extraEnv)
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	if err != nil {
-		return nil, fmt.Errorf("terminal: start %s: %w", shell, err)
+		return nil, fmt.Errorf("terminal: start %s: %w", argv[0], err)
 	}
 	s := &Session{
 		key:   key,
-		shell: shell,
+		shell: argv[0],
 		dir:   dir,
 		em:    vt.NewSafeEmulator(w, h),
 		send:  send,
 		ptmx:  ptmx,
 		cmd:   cmd,
 		w:     w, h: h,
+	}
+	if isCommand {
+		s.argv = append([]string(nil), argv...)
 	}
 	s.mouseModes = make(map[ansi.Mode]struct{})
 	// OSC 0/2 titles (the shell's running-command reporting) feed the pane
@@ -146,6 +170,11 @@ func (s *Session) writeLoop() {
 // waitExit closes the session when the shell process ends and tells the app.
 func (s *Session) waitExit() {
 	_ = s.cmd.Wait()
+	s.mu.Lock()
+	if state := s.cmd.ProcessState; state != nil {
+		s.exitCode, s.exited = state.ExitCode(), true
+	}
+	s.mu.Unlock()
 	if s.closed.CompareAndSwap(false, true) {
 		s.teardown()
 		if s.send != nil {
@@ -247,6 +276,21 @@ func (s *Session) CursorPosition() (x, y int) {
 
 // Running reports whether the shell is still alive.
 func (s *Session) Running() bool { return !s.closed.Load() }
+
+// IsCommand reports whether the session runs a program (0350, #574) rather
+// than an interactive shell.
+func (s *Session) IsCommand() bool { return s.argv != nil }
+
+// Argv returns the command session's full command line, nil for shells.
+func (s *Session) Argv() []string { return s.argv }
+
+// ExitCode returns the child's exit status once it ended; ok is false while
+// it still runs (or when the session was torn down before Wait observed it).
+func (s *Session) ExitCode() (code int, ok bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.exitCode, s.exited
+}
 
 // Shell returns the spawned shell binary; Dir the directory it started in
 // (the session's origin root — the live cwd is the shell's business).

@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Terminal command sessions (0350, #574): `StartCommandSession`/`NewCommand`
+  run a program directly on the PTY with a kept exit code and a
+  `[process exited with code N]` completion line; `Model.Occupied()` input
+  tracking, `Model.StartCommand` in-place session take-over, and
+  `Registry.ReusableRunTerminal()` for run reuse.
+
 - Editor-pane tabs generalized to host terminals (0350, #573): `pane.Tab` sum
   type over editor/terminal, `AddTerminalTab` + `terminal.newTab` command,
   terminal-context key/mouse routing while a terminal tab is active, `⌨` tab
