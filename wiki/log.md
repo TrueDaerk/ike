@@ -2,6 +2,14 @@
 
 ## 2026-07-14
 
+- Coalesced didChange (0400, #595): the LSP bridge no longer runs the
+  O(document) diff + sync on the bubbletea Update goroutine per keystroke. Each
+  edit stores the latest text and arms a 40ms `changeDebounce`; the flush (diff,
+  notification, follow-up semantic/inlay/highlight requests) runs on the timer
+  goroutine. Requests flush the pending change first (via `cur()`, plus
+  completion/signature/save), so nothing reads stale server text; close cancels
+  it. A typing burst collapses to one sync. Epic #593.
+
 - Watcher vendored-dir pruning (0400, #596): the fsnotify watcher no longer
   registers a watch for every directory under the root. `skipWatchDir` prunes
   dot-directories (`.git`, `.venv`, caches) and a deny-list of non-dotted noise
