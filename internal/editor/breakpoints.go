@@ -37,6 +37,16 @@ func (m *Model) notifyBreakpointEdit() {
 // replacement, so the swap never reads as an edit.
 func (m *Model) seedBreakpointLines() { m.bpLines = m.buf.LineCount() }
 
+// SetPausedLine marks the debugger's current line (0350, #579): the gutter
+// renders it in the warning tone, winning over every other marker.
+func (m *Model) SetPausedLine(line int) { m.paused, m.pausedLine = true, line }
+
+// ClearPausedLine removes the paused marker (resume, step, session end).
+func (m *Model) ClearPausedLine() { m.paused = false }
+
+// PausedLine reports the marker, ok=false when none is set.
+func (m *Model) PausedLine() (int, bool) { return m.pausedLine, m.paused }
+
 // breakpointSet snapshots the current breakpoint lines as a set, empty when
 // no source is wired or the buffer has no file.
 func (m Model) breakpointSet() map[int]bool {

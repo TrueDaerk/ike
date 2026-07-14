@@ -193,7 +193,10 @@ func (m Model) View() string {
 		// A git diff marker (Roadmap 0320, #464) colours the same way; a
 		// diagnostic wins the cell when both apply — and a breakpoint (0350,
 		// #577) wins over both, rendered bold in the error tone.
-		if bps[i] {
+		if m.paused && i == m.pausedLine {
+			// The debugger's current line (#579) outranks every marker.
+			gs = lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true).Reverse(true)
+		} else if bps[i] {
 			gs = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))

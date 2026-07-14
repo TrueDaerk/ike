@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Debug sessions (0350, #579): `debug.start` (shift+f9) launches the active
+  file's run configuration under its DAP adapter, stops at stored
+  breakpoints with an editor jump + warning-tone paused marker, and steps
+  via F8/F7/shift+F8/F9; `debug.stop`, live breakpoint sync, one session at
+  a time. New debugger concept doc.
+
 - DAP client (0350, #578): `internal/dap` — LSP base-protocol framing with
   the DAP seq/type envelope, request/response correlation, event dispatch,
   and a typed Session (initialize/launch/setBreakpoints/configurationDone,

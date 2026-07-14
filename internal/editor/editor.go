@@ -249,6 +249,10 @@ type Model struct {
 	bpSource func(path string) []int
 	bpAdjust func(path string, cursorAfter, delta int)
 	bpLines  int
+	// paused/pausedLine mark the debugger's current line (#579), set by the
+	// app while a session is stopped in this buffer.
+	paused     bool
+	pausedLine int
 	// blameOn shows the inline blame annotation on the cursor line (#468);
 	// blame is the whole-file map behind it, refreshed by the app on save and
 	// vcs refresh, so positions may briefly lag an edit like gitMarks.

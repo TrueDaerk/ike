@@ -131,6 +131,18 @@ type RunFileMsg struct{}
 // cursor line (0350, #577).
 type DebugToggleBreakpointMsg struct{}
 
+// DebugStartMsg launches the active file's configuration under the debugger
+// (0350, #579); DebugStopMsg ends the session. The step messages drive a
+// paused session: over (F8), into (F7), out (shift+F8), continue (F9).
+type (
+	DebugStartMsg    struct{}
+	DebugStopMsg     struct{}
+	DebugStepOverMsg struct{}
+	DebugStepIntoMsg struct{}
+	DebugStepOutMsg  struct{}
+	DebugContinueMsg struct{}
+)
+
 // RunRerunMsg reruns the last-used run configuration (#576).
 type RunRerunMsg struct{}
 
@@ -245,6 +257,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.file", "Run File", RunFileMsg{}),
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
+			appCommand("debug.start", "Debug File", DebugStartMsg{}),
+			appCommand("debug.stop", "Stop Debug Session", DebugStopMsg{}),
+			appCommand("debug.stepOver", "Step Over", DebugStepOverMsg{}),
+			appCommand("debug.stepInto", "Step Into", DebugStepIntoMsg{}),
+			appCommand("debug.stepOut", "Step Out", DebugStepOutMsg{}),
+			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
