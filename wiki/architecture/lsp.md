@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-13T01:00:00Z
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -27,6 +27,13 @@ Highlighting](./highlighting.md).
 internal/lsp/
   jsonrpc/   JSON-RPC 2.0 over an io.ReadWriteCloser: Content-Length framing,
              request/response/notification, async read loop, id correlation.
+             Outbound writes are async too (#594): callers marshal on their own
+             goroutine and enqueue the framed payload onto an unbounded queue
+             drained by a single dedicated writer goroutine. A caller therefore
+             never blocks on the server draining its stdin — critical because the
+             bubbletea Update goroutine sends didChange from here per keystroke,
+             and a busy server (indexing a large workspace) that stalls its stdin
+             would otherwise freeze the whole event loop.
   transport/ spawn a server over stdio (cmd/args/env/cwd), capture stderr,
              watch for exit. Pure Go — no CGo — so the client cross-compiles.
   protocol/  LSP wire types + the SINGLE position-encoding boundary (convert.go):
@@ -382,7 +389,10 @@ fragment language with no configured server degrades silently. The
 ## Design rules
 
 - **Never block the event loop.** Requests run as goroutines; results return via
-  `host.Send`. `Update`/`View` never do LSP I/O.
+  `host.Send`. `Update`/`View` never do LSP I/O. Even notifications sent from the
+  Update goroutine (didOpen/didChange/didSave/didClose) are safe: the jsonrpc
+  layer enqueues them and a dedicated writer goroutine owns the blocking pipe
+  write (#594), so a stalled server never stalls a caller.
 - **One manager owns all servers.** Spawning, routing, capability gating and
   restart live in `manager`/`client`; features never touch a raw connection.
 - **Position mapping is centralised.** `protocol/convert.go` is the only place

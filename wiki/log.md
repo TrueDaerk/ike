@@ -2,6 +2,13 @@
 
 ## 2026-07-14
 
+- Async LSP transport (0400, #594): the jsonrpc connection no longer blocks the
+  caller on the server draining stdin. Callers marshal + enqueue onto an
+  unbounded outbound queue; a dedicated writer goroutine owns every framed pipe
+  write. This fixes the large-project freeze where per-keystroke didChange sent
+  from the bubbletea Update goroutine stalled behind a busy language server, so
+  keystrokes and mouse events trickled in one-by-one. Epic #593.
+
 - Debug auto-install for non-venv interpreters: `--break-system-packages`
   fallbacks let debugpy install into an externally-managed interpreter (PEP
   668 Homebrew/system python, uv-managed standalone python) where the plain
