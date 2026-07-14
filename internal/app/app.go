@@ -2093,6 +2093,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Error, "debug: "+msg.err.Error())
 		return m, nil
 
+	case debugInstallResultMsg:
+		// The adapter-runtime auto-install finished (#589): success retries
+		// the pending launch once; failure surfaces the manual command.
+		if msg.err != nil {
+			m.host.Notify(host.Error, "debug: install failed: "+msg.err.Error())
+			return m, nil
+		}
+		m.host.Notify(host.Info, "debug: adapter runtime installed — starting session")
+		m.launchOrInstall(msg.root, msg.cfg, true)
+		return m, nil
+
 	case debugEndedMsg:
 		m.finishDebugSession(msg)
 		return m, nil

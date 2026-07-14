@@ -1,9 +1,14 @@
 package app
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"ike/internal/dap"
 	"ike/internal/debugpanel"
@@ -61,6 +66,13 @@ type (
 		ref  int
 		vars []dap.Variable
 	}
+	// debugInstallResultMsg reports the adapter-runtime auto-install (#589);
+	// success relaunches the pending debug configuration.
+	debugInstallResultMsg struct {
+		cfg  run.Config
+		root string
+		err  error
+	}
 )
 
 // startDebug is the debug.start handler: it resolves the active file's run
@@ -84,7 +96,69 @@ func (m *Model) startDebug() {
 	}
 	store.Touch(cfg.Name)
 	_ = run.Save(store)
-	m.launchDebug(root, *cfg)
+	m.launchOrInstall(root, *cfg, false)
+}
+
+// launchOrInstall preflights the adapter runtime (#589): a missing runtime
+// (debugpy) auto-installs asynchronously and the launch retries once after;
+// a runtime still missing then surfaces the manual command instead of
+// looping.
+func (m *Model) launchOrInstall(root string, cfg run.Config, afterInstall bool) {
+	explicit := m.explicitInterpreter(cfg.Lang)
+	missing, reason := lang.DebugAdapterMissing(cfg.Lang, root, explicit)
+	if !missing {
+		m.launchDebug(root, cfg)
+		return
+	}
+	candidates := lang.DebugAdapterInstallCommands(cfg.Lang, root, explicit)
+	if afterInstall || len(candidates) == 0 {
+		hint := ""
+		if len(candidates) > 0 {
+			hint = " — install manually: " + strings.Join(candidates[len(candidates)-1], " ")
+		}
+		m.host.Notify(host.Error, "debug: "+reason+hint)
+		return
+	}
+	m.host.Notify(host.Info, "debug: "+reason+" — installing…")
+	send := m.host.Send
+	go func() {
+		err := runAdapterInstall(candidates)
+		send(debugInstallResultMsg{cfg: cfg, root: root, err: err})
+	}()
+}
+
+// adapterInstallTimeout bounds one install attempt.
+const adapterInstallTimeout = 3 * time.Minute
+
+// runAdapterInstall tries the candidates in order until one succeeds,
+// returning the last failure (with its output tail) otherwise.
+func runAdapterInstall(candidates [][]string) error {
+	var lastErr error
+	for _, argv := range candidates {
+		if len(argv) == 0 {
+			continue
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), adapterInstallTimeout)
+		out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).CombinedOutput()
+		cancel()
+		if err == nil {
+			return nil
+		}
+		lastErr = fmt.Errorf("%s: %v — %s", strings.Join(argv, " "), err, tailOf(string(out), 200))
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no install command available")
+	}
+	return lastErr
+}
+
+// tailOf clips s to its last n bytes, single-line.
+func tailOf(s string, n int) string {
+	s = strings.TrimSpace(s)
+	if len(s) > n {
+		s = "…" + s[len(s)-n:]
+	}
+	return strings.ReplaceAll(s, "\n", " · ")
 }
 
 // launchDebug spawns the adapter and runs the DAP handshake asynchronously.
@@ -120,13 +194,23 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	m.host.Notify(host.Info, "debug: "+cfg.Name+" starting")
 	go func() {
 		if err := sess.Initialize(); err != nil {
-			send(debugErrMsg{err: err})
+			send(debugErrMsg{err: withAdapterStderr(err, sess)})
 			return
 		}
 		if err := <-sess.LaunchAsync(launchArgs); err != nil {
-			send(debugErrMsg{err: err})
+			send(debugErrMsg{err: withAdapterStderr(err, sess)})
 		}
 	}()
+}
+
+// withAdapterStderr appends the adapter's captured stderr tail to a
+// handshake error, so a dead adapter (missing module, wrong binary) is
+// diagnosable from the notification alone (#589).
+func withAdapterStderr(err error, sess *dap.Session) error {
+	if tail := tailOf(sess.Stderr(), 200); tail != "" {
+		return fmt.Errorf("%v — adapter: %s", err, tail)
+	}
+	return err
 }
 
 // handleDebugEvent routes one adapter event.
