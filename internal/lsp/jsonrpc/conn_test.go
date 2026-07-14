@@ -151,6 +151,47 @@ func TestCallFailsAfterClose(t *testing.T) {
 	}
 }
 
+// TestNotifyDoesNotBlockOnStalledServer models a server that never drains its
+// stdin (io.Pipe writes block until read): the sole writer goroutine stalls on
+// the first frame, but callers must still enqueue-and-return. This is the #594
+// guarantee — a busy language server can no longer freeze the caller (the
+// bubbletea Update goroutine sends didChange from here per keystroke).
+func TestNotifyDoesNotBlockOnStalledServer(t *testing.T) {
+	cli, _ := newPipePair() // the server end is never read from
+	conn := NewConn(cli, Handler{})
+	defer conn.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- conn.Notify("textDocument/didChange", map[string]any{"text": "hello"})
+	}()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Notify err = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Notify blocked on a stalled server stdin")
+	}
+
+	// A burst of further notifications also never blocks the caller, even though
+	// the writer goroutine is still stalled on the very first frame.
+	for i := 0; i < 200; i++ {
+		if err := conn.Notify("textDocument/didChange", map[string]any{"n": i}); err != nil {
+			t.Fatalf("Notify %d err = %v", i, err)
+		}
+	}
+}
+
+func TestNotifyReturnsErrClosedAfterClose(t *testing.T) {
+	cli, _ := newPipePair()
+	conn := NewConn(cli, Handler{})
+	_ = conn.Close()
+	if err := conn.Notify("textDocument/didChange", nil); err != ErrClosed {
+		t.Fatalf("Notify after close = %v, want ErrClosed", err)
+	}
+}
+
 func TestIDMarshalRoundTrip(t *testing.T) {
 	for _, id := range []ID{{Num: 7}, {Str: "abc", IsStr: true}} {
 		b, err := id.MarshalJSON()

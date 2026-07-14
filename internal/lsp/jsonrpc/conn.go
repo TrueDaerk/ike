@@ -22,13 +22,24 @@ type Handler struct {
 }
 
 // Conn is a JSON-RPC 2.0 connection over a single duplex stream (an LSP server's
-// stdin/stdout). A background goroutine reads frames and dispatches them;
-// outgoing writes are serialised by a mutex. It is safe for concurrent use.
+// stdin/stdout). A background read goroutine reads frames and dispatches them; a
+// separate write goroutine drains an unbounded outbound queue and is the sole
+// writer to the stream. It is safe for concurrent use.
+//
+// Outbound writes are asynchronous on purpose (#594): callers marshal on their
+// own goroutine (so a marshal error is still returned synchronously) and then
+// enqueue the framed payload, which never blocks on the server draining its
+// stdin. A busy server that stalls its stdin therefore can no longer freeze a
+// caller — in particular the bubbletea Update goroutine, which sends didChange
+// notifications per keystroke.
 type Conn struct {
 	rwc     io.ReadWriteCloser
 	handler Handler
 
-	writeMu sync.Mutex // serialises frame writes
+	sendMu     sync.Mutex // guards sendBuf/sendClosed and the cond
+	sendCond   *sync.Cond // signalled when sendBuf gains work or the writer must stop
+	sendBuf    [][]byte   // unbounded outbound queue drained by writeLoop
+	sendClosed bool       // writer stops once true and the queue is empty
 
 	mu      sync.Mutex // guards nextID, pending, closed
 	nextID  int64
@@ -54,7 +65,9 @@ func NewConn(rwc io.ReadWriteCloser, handler Handler) *Conn {
 		pending: make(map[int64]chan result),
 		done:    make(chan struct{}),
 	}
+	c.sendCond = sync.NewCond(&c.sendMu)
 	go c.readLoop()
+	go c.writeLoop()
 	return c
 }
 
@@ -152,18 +165,67 @@ func (c *Conn) Close() error {
 	}
 	c.closed = true
 	c.mu.Unlock()
-	return c.rwc.Close()
+	// Stop the writer: closing the stream unblocks a write stalled on a full
+	// pipe, and stopWriter wakes an idle writer waiting on the queue.
+	err := c.rwc.Close()
+	c.stopWriter()
+	return err
 }
 
-// write serialises and frames one message.
+// write marshals one message and hands the framed payload to the writer
+// goroutine. It never touches the stream, so it never blocks on the server
+// draining stdin — the enqueue is a slice append under a short-held mutex.
 func (c *Conn) write(msg *message) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
 	}
-	c.writeMu.Lock()
-	defer c.writeMu.Unlock()
-	return writeFrame(c.rwc, data)
+	c.sendMu.Lock()
+	if c.sendClosed {
+		c.sendMu.Unlock()
+		return ErrClosed
+	}
+	c.sendBuf = append(c.sendBuf, data)
+	c.sendMu.Unlock()
+	c.sendCond.Signal()
+	return nil
+}
+
+// writeLoop is the sole writer to the stream. It drains the outbound queue in
+// FIFO order (preserving message ordering) and blocks only itself when the
+// server stalls its stdin; producers enqueue without blocking. It exits once the
+// connection is stopping and the queue is empty, or on the first write error.
+func (c *Conn) writeLoop() {
+	for {
+		c.sendMu.Lock()
+		for len(c.sendBuf) == 0 && !c.sendClosed {
+			c.sendCond.Wait()
+		}
+		if len(c.sendBuf) == 0 && c.sendClosed {
+			c.sendMu.Unlock()
+			return
+		}
+		batch := c.sendBuf
+		c.sendBuf = nil
+		c.sendMu.Unlock()
+
+		for _, data := range batch {
+			if err := writeFrame(c.rwc, data); err != nil {
+				// The stream is gone; drop the rest. The read loop's shutdown
+				// surfaces the terminating error and fails pending calls.
+				c.stopWriter()
+				return
+			}
+		}
+	}
+}
+
+// stopWriter wakes writeLoop and tells it to drain-and-exit. Idempotent.
+func (c *Conn) stopWriter() {
+	c.sendMu.Lock()
+	c.sendClosed = true
+	c.sendMu.Unlock()
+	c.sendCond.Broadcast()
 }
 
 // readLoop reads frames until the stream ends, dispatching each message.
@@ -227,6 +289,9 @@ func (c *Conn) shutdown(err error) {
 	for _, ch := range pending {
 		ch <- result{err: &Error{Code: CodeInternalError, Message: c.err.Error()}}
 	}
+	// The stream is gone (server exited or Close): stop the writer so a queued
+	// or in-flight write does not linger, and enqueues return ErrClosed.
+	c.stopWriter()
 	close(c.done)
 }
 
