@@ -124,6 +124,12 @@ type TerminalNewMsg struct{}
 // active editor pane (#573), next to the file tabs.
 type TerminalNewTabMsg struct{}
 
+// RunFileMsg runs the active file through its run configuration (0350, #576).
+type RunFileMsg struct{}
+
+// RunRerunMsg reruns the last-used run configuration (#576).
+type RunRerunMsg struct{}
+
 // TerminalToggleMsg drives the JetBrains alt+f12 state machine (#97): no
 // terminal → create one; unfocused → focus it; focused → return focus to the
 // previously focused pane. Dispatched by terminal.toggle.
@@ -232,6 +238,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
+			appCommand("run.file", "Run File", RunFileMsg{}),
+			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),

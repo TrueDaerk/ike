@@ -91,5 +91,8 @@ func defaults() *Config {
 		Todo: Todo{
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},
+		Run: Run{
+			Placement: "in_pane",
+		},
 	}
 }

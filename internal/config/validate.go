@@ -87,6 +87,10 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "files.auto_reload", Message: fmt.Sprintf("unknown mode %q, using \"clean\"", c.Files.AutoReload)})
 		c.Files.AutoReload = "clean"
 	}
+	if c.Run.Placement != "in_pane" && c.Run.Placement != "new_terminal" {
+		diags = append(diags, Diagnostic{Field: "run.placement", Message: fmt.Sprintf("unknown placement %q, using \"in_pane\"", c.Run.Placement)})
+		c.Run.Placement = "in_pane"
+	}
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})
 		c.LSP.LogLevel = "warn"

@@ -42,6 +42,9 @@ func (t *Tab) Title() string {
 	if t.term == nil {
 		return ""
 	}
+	if l := t.term.Label(); l != "" {
+		return l
+	}
 	if osc := t.term.Title(); osc != "" {
 		return osc
 	}

@@ -175,6 +175,9 @@ var jetbrainsRows = []row{
 	// hence fragile; inside a focused terminal the reserved-set handler picks
 	// it up before the chord layer (raw pass-through).
 	{"alt+f12", "terminal.toggle", "Toggle terminal", Global, "Terminal (0170)"},
+	// JetBrains Run (Windows keymap's shift+f10; macOS ctrl+r would shadow
+	// vim's redo in the editor, so the F-key is the delivered primary, 0350).
+	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 }

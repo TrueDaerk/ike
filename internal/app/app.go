@@ -1970,6 +1970,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openTerminalTab()
 		return m, nil
 
+	case RunFileMsg:
+		// run.file (shift+f10 / Run menu / palette, #576): run the active
+		// file through its run configuration.
+		m.runCurrentFile()
+		return m, nil
+
+	case RunRerunMsg:
+		// run.rerun (Run menu / palette, #576): repeat the last run.
+		m.rerunLast()
+		return m, nil
+
 	case MarkdownPreviewMsg:
 		// markdown.preview (cmd+k m / palette): split the active editor with a
 		// rendered live preview of its markdown buffer (#62).
@@ -2072,7 +2083,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case terminal.ExitedMsg:
 		// The shell ended: close its pane like ctrl+w would; when the layout
-		// refuses (last leaf), the pane stays showing [process exited].
+		// refuses (last leaf), the pane stays showing [process exited]. A
+		// command session (#576) stays open instead — its output is the point
+		// of the run; terminal tabs (#573) stay open the same way.
+		if inst := m.panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().IsCommand() {
+			return m, nil
+		}
 		if m.panes.Has(msg.Key) {
 			if m.closeKey(msg.Key) {
 				m.setFocus(m.focusAfterClose())

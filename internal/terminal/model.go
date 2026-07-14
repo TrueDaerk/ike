@@ -28,6 +28,9 @@ type Model struct {
 	// occupied marks that the user sent input (keys or a paste) to the
 	// session — an occupied terminal is never reused for a run (#574).
 	occupied bool
+	// label is a caller-set display name (the run configuration's name,
+	// #576); it wins over the OSC title in tab labels.
+	label string
 	// scroll is the scrollback offset in lines (0 = live view). Paging keys
 	// (shift+pgup/pgdn) and the mouse wheel move it; any other key snaps back
 	// to live and goes to the shell.
@@ -99,6 +102,13 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 // Occupied reports whether the user has sent any input to the session; a run
 // never takes over an occupied terminal (#574).
 func (m Model) Occupied() bool { return m.occupied }
+
+// SetLabel names the terminal for chrome (tab labels, pane titles): run
+// terminals carry their configuration's name (#576).
+func (m *Model) SetLabel(l string) { m.label = l }
+
+// Label returns the caller-set display name, "" when none.
+func (m Model) Label() string { return m.label }
 
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
