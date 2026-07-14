@@ -101,7 +101,22 @@ func TestDebugAdapterInstaller(t *testing.T) {
 		t.Fatalf("a failing probe must report missing with a reason, got %v %q", missing, reason)
 	}
 	cands := tc.DebugAdapterInstall("/r", "/venv/bin/python")
-	if len(cands) != 2 || cands[0][0] != "/venv/bin/python" || cands[1][0] != "uv" {
+	if len(cands) != 4 || cands[0][0] != "/venv/bin/python" || cands[1][0] != "uv" {
 		t.Fatalf("install candidates = %v, want interpreter pip then uv", cands)
 	}
+	// The last two candidates override the externally-managed guard for a
+	// non-venv interpreter.
+	if !containsArg(cands[2], "--break-system-packages") || !containsArg(cands[3], "--break-system-packages") {
+		t.Fatalf("candidates 3 and 4 must pass --break-system-packages, got %v", cands)
+	}
+}
+
+// containsArg reports whether argv includes the flag.
+func containsArg(argv []string, flag string) bool {
+	for _, a := range argv {
+		if a == flag {
+			return true
+		}
+	}
+	return false
 }

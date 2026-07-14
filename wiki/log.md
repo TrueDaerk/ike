@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Debug auto-install for non-venv interpreters: `--break-system-packages`
+  fallbacks let debugpy install into an externally-managed interpreter (PEP
+  668 Homebrew/system python, uv-managed standalone python) where the plain
+  pip/uv install was refused outright; absent installer tools are skipped and
+  the error now leads with the real cause.
+
 - Debug adapter auto-install (#589): debug.start preflights debugpy in the
   resolved interpreter, installs it on demand (pip, then uv) with clear
   notifications and relaunches; handshake errors now carry the adapter's

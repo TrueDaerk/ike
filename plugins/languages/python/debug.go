@@ -39,10 +39,19 @@ func (toolchain) DebugAdapterMissing(_ string, interpreter string) (bool, string
 	return false, ""
 }
 
-// DebugAdapterInstall implements lang.DebugAdapterInstaller: pip inside the
-// interpreter first, uv as the fallback — uv-managed pythons ship without
-// pip, and `uv pip install --python <interpreter>` targets exactly that
-// environment.
+// DebugAdapterInstall implements lang.DebugAdapterInstaller. Candidates run in
+// order until one succeeds:
+//  1. pip inside the interpreter — works in a virtualenv that ships pip.
+//  2. uv targeting the interpreter — for uv-created venvs, which have no pip.
+//  3. pip with --break-system-packages — for an externally-managed interpreter
+//     (PEP 668: Homebrew/system python) where a plain install is refused.
+//  4. uv with --break-system-packages — for a uv-managed standalone python,
+//     which is both pip-less and marked externally managed.
+//
+// The last two override the environment guard on purpose: when a project has no
+// virtualenv, the detected interpreter is the only environment the debug
+// adapter can run in, and debugpy is a developer tool. Without these fallbacks
+// auto-install fails outright for every non-venv interpreter (#589).
 func (toolchain) DebugAdapterInstall(_ string, interpreter string) [][]string {
 	if interpreter == "" {
 		interpreter = "python3"
@@ -50,6 +59,8 @@ func (toolchain) DebugAdapterInstall(_ string, interpreter string) [][]string {
 	return [][]string{
 		{interpreter, "-m", "pip", "install", "debugpy"},
 		{"uv", "pip", "install", "--python", interpreter, "debugpy"},
+		{interpreter, "-m", "pip", "install", "--break-system-packages", "debugpy"},
+		{"uv", "pip", "install", "--break-system-packages", "--python", interpreter, "debugpy"},
 	}
 }
 

@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-14T12:00:00Z
+timestamp: 2026-07-14T14:00:00Z
 ---
 
 # Debugger (0350)
@@ -17,13 +17,20 @@ configurations (#575/#576) and the breakpoint store (#577).
 
 `debug.start` preflights the adapter runtime before spawning anything
 (`lang.DebugAdapterInstaller`): Python probes `interpreter -c "import
-debugpy"`. A missing runtime notifies ("… installing…") and installs
-asynchronously — `interpreter -m pip install debugpy` first, then
-`uv pip install --python <interpreter> debugpy` (uv-managed pythons ship
-without pip) — and relaunches the session on success. A runtime still
-missing after the install surfaces the manual command instead of looping.
-Handshake errors carry the adapter's stderr tail, so a dead adapter is
-diagnosable from the notification alone.
+debugpy"`. A missing runtime notifies ("… installing…") and installs asynchronously,
+trying four candidates in order until one succeeds: `interpreter -m pip
+install debugpy` (a venv with pip), `uv pip install --python <interpreter>
+debugpy` (uv-created venvs ship without pip), then the same two again with
+`--break-system-packages` for an externally-managed interpreter — a
+Homebrew/system python (PEP 668) or a uv-managed standalone python, where a
+plain install is otherwise refused. When a project has no virtualenv the
+detected interpreter is the only environment the adapter can run in, so
+overriding the guard is deliberate; debugpy is a developer tool. Candidates
+whose program is absent from `PATH` (e.g. uv when not installed) are skipped
+rather than reported, and the surfaced error leads with the install failure's
+cause. A runtime still missing after the install surfaces the manual command
+instead of looping. Handshake errors carry the adapter's stderr tail, so a
+dead adapter is diagnosable from the notification alone.
 
 ## Session lifecycle
 

@@ -130,24 +130,37 @@ func (m *Model) launchOrInstall(root string, cfg run.Config, afterInstall bool) 
 // adapterInstallTimeout bounds one install attempt.
 const adapterInstallTimeout = 3 * time.Minute
 
-// runAdapterInstall tries the candidates in order until one succeeds,
-// returning the last failure (with its output tail) otherwise.
+// runAdapterInstall tries the candidates in order until one succeeds. A
+// candidate whose program is not on PATH (e.g. uv on a machine without it) is
+// skipped rather than reported, so the surfaced error is the real install
+// failure and not a misleading "executable not found". The returned error
+// leads with the failure cause — the command follows — because the
+// notification renderer truncates on width and the cause is what matters.
 func runAdapterInstall(candidates [][]string) error {
 	var lastErr error
+	ran := false
 	for _, argv := range candidates {
 		if len(argv) == 0 {
 			continue
 		}
+		if _, err := exec.LookPath(argv[0]); err != nil {
+			continue // installer tool absent: skip, don't report it as the cause
+		}
+		ran = true
 		ctx, cancel := context.WithTimeout(context.Background(), adapterInstallTimeout)
 		out, err := exec.CommandContext(ctx, argv[0], argv[1:]...).CombinedOutput()
 		cancel()
 		if err == nil {
 			return nil
 		}
-		lastErr = fmt.Errorf("%s: %v — %s", strings.Join(argv, " "), err, tailOf(string(out), 200))
+		cause := tailOf(string(out), 300)
+		if cause == "" {
+			cause = err.Error()
+		}
+		lastErr = fmt.Errorf("%s (%s)", cause, strings.Join(argv, " "))
 	}
-	if lastErr == nil {
-		lastErr = errors.New("no install command available")
+	if !ran {
+		return errors.New("no installer available — need pip in the interpreter or uv on PATH")
 	}
 	return lastErr
 }
