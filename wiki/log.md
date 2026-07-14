@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Coalesced diagnostics (0400, #597): a workspace-diagnostic server publishing
+  for hundreds of library files no longer pushes one tea.Msg (one Update pass +
+  re-render) per file. The bridge accumulates publishes (latest per path) over a
+  50ms window and flushes one `DiagnosticsBatchMsg`; the app routes each set to
+  its editor leaf in a single Update pass. Epic #593.
+
 - Coalesced didChange (0400, #595): the LSP bridge no longer runs the
   O(document) diff + sync on the bubbletea Update goroutine per keystroke. Each
   edit stores the latest text and arms a 40ms `changeDebounce`; the flush (diff,

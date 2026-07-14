@@ -66,7 +66,19 @@ type bridge struct {
 	// to hold the latest text. Typing bursts collapse to far fewer syncs.
 	pendingChange map[string]host.EditorEvent
 	changeTimer   map[string]*time.Timer
+	// pendingDiags/diagTimer coalesce diagnostics publishes (#597): a
+	// workspace-diagnostic server reporting hundreds of library files would
+	// otherwise push one tea.Msg — one Update pass + re-render — per file,
+	// starving keystrokes. Publishes accumulate here (latest per path) and flush
+	// as one DiagnosticsBatchMsg.
+	pendingDiags map[string]ilsp.DiagnosticsMsg
+	diagTimer    *time.Timer
 }
+
+// diagCoalesce is how long diagnostics publishes accumulate before one batched
+// message is sent. Short enough that squiggles feel live, long enough to fold a
+// workspace publish storm into a single re-render.
+const diagCoalesce = 50 * time.Millisecond
 
 // changeDebounce is how long a didChange is held to coalesce a typing burst.
 // Short enough to feel instant, long enough to collapse fast keystrokes; any
@@ -1183,7 +1195,36 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	if b.h == nil {
 		return
 	}
-	b.h.Send(ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)})
+	// Convert here (on the server read-loop goroutine, off the UI thread), then
+	// coalesce the delivery so a publish storm folds into one batched message.
+	msg := ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)}
+	b.mu.Lock()
+	if b.pendingDiags == nil {
+		b.pendingDiags = map[string]ilsp.DiagnosticsMsg{}
+	}
+	b.pendingDiags[path] = msg
+	if b.diagTimer == nil {
+		b.diagTimer = time.AfterFunc(diagCoalesce, b.flushDiagnostics)
+	}
+	b.mu.Unlock()
+}
+
+// flushDiagnostics sends every accumulated publish as one DiagnosticsBatchMsg, so
+// a workspace publish storm costs a single Update pass + re-render (#597).
+func (b *bridge) flushDiagnostics() {
+	b.mu.Lock()
+	batch := make([]ilsp.DiagnosticsMsg, 0, len(b.pendingDiags))
+	for _, m := range b.pendingDiags {
+		batch = append(batch, m)
+	}
+	b.pendingDiags = nil
+	b.diagTimer = nil
+	h := b.h
+	b.mu.Unlock()
+	if h == nil || len(batch) == 0 {
+		return
+	}
+	h.Send(ilsp.DiagnosticsBatchMsg{Items: batch})
 }
 
 // onApplyEdit lands a server-initiated workspace/applyEdit (the effect of an
