@@ -51,6 +51,21 @@ func (m *Model) toggleBreakpoint(path string, line int) {
 		state = "set"
 	}
 	m.host.Notify(host.Info, "breakpoint "+state+" — "+displayPath(path)+":"+strconv.Itoa(line+1))
+	// A live debug session (#579) sees the change immediately.
+	if dbg := m.dbg; dbg != nil {
+		abs, err := filepath.Abs(path)
+		if err != nil {
+			abs = path
+		}
+		lines := m.bpts.Lines(bpKey(path))
+		send := m.host.Send
+		sess := dbg.sess
+		go func() {
+			if _, err := sess.SetBreakpoints(abs, lines); err != nil {
+				send(debugErrMsg{err: err})
+			}
+		}()
+	}
 }
 
 // toggleBreakpointAtCursor is the debug.toggleBreakpoint handler: the focused

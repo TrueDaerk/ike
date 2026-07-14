@@ -180,6 +180,14 @@ var jetbrainsRows = []row{
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
 	// JetBrains toggle breakpoint (ctrl+f8 on every platform's keymap).
 	{"ctrl+f8", "debug.toggleBreakpoint", "Toggle breakpoint", Global, "Run (0350)"},
+	// JetBrains debug chords, identical across platforms: shift+f9 debug,
+	// F8/F7/shift+F8/F9 stepping (no-ops without a paused session; the diff
+	// pane's context-scoped f7 stays more specific and wins there).
+	{"shift+f9", "debug.start", "Debug file", Global, "Run (0350)"},
+	{"f8", "debug.stepOver", "Step over", Global, "Run (0350)"},
+	{"f7", "debug.stepInto", "Step into", Global, "Run (0350)"},
+	{"shift+f8", "debug.stepOut", "Step out", Global, "Run (0350)"},
+	{"f9", "debug.continue", "Continue (debug)", Global, "Run (0350)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 }

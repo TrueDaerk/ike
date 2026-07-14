@@ -91,6 +91,9 @@ type Model struct {
 	// rendered by editors through an injected source, persisted on toggle and
 	// on file save.
 	bpts *debug.Breakpoints
+	// dbg is the live DAP session's state (0350, #579), nil while no
+	// session runs; a pointer so Update's value copies share it.
+	dbg *debugState
 	navSkip bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
@@ -1996,6 +1999,58 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DebugToggleBreakpointMsg:
 		// debug.toggleBreakpoint (ctrl+f8 / Run menu / palette, #577).
 		m.toggleBreakpointAtCursor()
+		return m, nil
+
+	case DebugStartMsg:
+		// debug.start (shift+f9 / Run menu / palette, #579).
+		m.startDebug()
+		return m, nil
+
+	case DebugStopMsg:
+		m.stopDebugSession(true)
+		return m, nil
+
+	case DebugStepOverMsg:
+		m.debugStep("over")
+		return m, nil
+	case DebugStepIntoMsg:
+		m.debugStep("into")
+		return m, nil
+	case DebugStepOutMsg:
+		m.debugStep("out")
+		return m, nil
+	case DebugContinueMsg:
+		m.debugStep("continue")
+		return m, nil
+
+	case debugEventMsg:
+		// Raw adapter events (initialized, stopped, output, terminated, …).
+		m.handleDebugEvent(msg.ev)
+		return m, nil
+
+	case debugStoppedMsg:
+		// The stop context arrived: jump to the top frame and mark its line.
+		if top := m.applyDebugStop(msg); top != nil {
+			col := top.Column - 1
+			if col < 0 {
+				col = 0
+			}
+			model, cmd := m.openPathAt(top.Source.Path, top.Line-1, col)
+			mm, ok := model.(Model)
+			if !ok {
+				return model, cmd
+			}
+			mm.markPausedLine(canonicalPath(top.Source.Path), top.Line-1)
+			return mm, cmd
+		}
+		return m, nil
+
+	case debugErrMsg:
+		m.host.Notify(host.Error, "debug: "+msg.err.Error())
+		return m, nil
+
+	case debugEndedMsg:
+		m.finishDebugSession(msg)
 		return m, nil
 
 	case MarkdownPreviewMsg:
