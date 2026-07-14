@@ -98,9 +98,35 @@ func New(send func(tea.Msg)) *Service {
 	}
 }
 
-// Start begins watching root recursively (skipping .git). Idempotent per
-// service: a running watcher is stopped first, which is also the project-switch
-// (Roadmap 0090) restart path.
+// vendorNoiseDirs are non-dotted directory names never worth watching: they hold
+// vendored dependencies or generated artefacts, exist in the thousands on large
+// projects, and their churn is not an external edit the user cares about. Dotted
+// directories (.git, .venv, .tox, .mypy_cache, …) are skipped separately, which
+// is what tames the dominant Python case — all of site-packages lives under
+// .venv/lib. Kept as a small deny-list rather than full gitignore parsing so the
+// watch walk stays cheap and dependency-free (#596).
+var vendorNoiseDirs = map[string]bool{
+	"node_modules":  true,
+	"__pycache__":   true,
+	"site-packages": true,
+	"vendor":        true,
+}
+
+// skipWatchDir reports whether a directory should be excluded from the recursive
+// watch. It skips dot-prefixed directories (the project's convention everywhere —
+// the explorer hides them, search ignores them) and the vendored-noise names.
+// The watch root itself is always added before this filter runs, so a project
+// living under a dotted path still works.
+func skipWatchDir(name string) bool {
+	if strings.HasPrefix(name, ".") {
+		return true
+	}
+	return vendorNoiseDirs[name]
+}
+
+// Start begins watching root recursively, skipping dot-directories and vendored
+// noise (see skipWatchDir). Idempotent per service: a running watcher is stopped
+// first, which is also the project-switch (Roadmap 0090) restart path.
 func (s *Service) Start(root string) error {
 	s.Stop()
 	w, err := fsnotify.NewWatcher()
@@ -115,7 +141,9 @@ func (s *Service) Start(root string) error {
 		if err != nil || !d.IsDir() {
 			return nil
 		}
-		if d.Name() == ".git" {
+		// The root is always watched, even if its own name is dotted or noisy;
+		// the filter only prunes descendants (#596).
+		if path != root && skipWatchDir(d.Name()) {
 			return filepath.SkipDir
 		}
 		_ = w.Add(path)
@@ -185,12 +213,16 @@ func (s *Service) ingest(ev fsnotify.Event) {
 	switch {
 	case ev.Has(fsnotify.Create):
 		if st, err := os.Stat(path); err == nil && st.IsDir() {
-			// A new directory: watch it and refresh its parent.
-			s.mu.Lock()
-			if s.w != nil {
-				_ = s.w.Add(path)
+			// A new directory: watch it (unless it is vendored noise — e.g. a
+			// mid-session `pip install` populating .venv, which would otherwise
+			// start thousands of new watches, #596) and refresh its parent.
+			if !skipWatchDir(filepath.Base(path)) {
+				s.mu.Lock()
+				if s.w != nil {
+					_ = s.w.Add(path)
+				}
+				s.mu.Unlock()
 			}
-			s.mu.Unlock()
 			s.note(filepath.Dir(path), DirChanged)
 			return
 		}

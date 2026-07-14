@@ -128,6 +128,68 @@ func TestFsnotifyEndToEnd(t *testing.T) {
 	}
 }
 
+func TestSkipWatchDir(t *testing.T) {
+	skip := []string{".git", ".venv", ".tox", ".mypy_cache", ".idea", "node_modules", "__pycache__", "site-packages", "vendor"}
+	for _, n := range skip {
+		if !skipWatchDir(n) {
+			t.Errorf("skipWatchDir(%q) = false, want true", n)
+		}
+	}
+	keep := []string{"src", "internal", "cmd", "app", "lib", "my_package"}
+	for _, n := range keep {
+		if skipWatchDir(n) {
+			t.Errorf("skipWatchDir(%q) = true, want false", n)
+		}
+	}
+}
+
+// TestStartSkipsVendorDirs verifies the recursive watch prunes vendored/noise
+// subtrees (#596): a write deep inside node_modules produces no event, while a
+// normal source file still does. This is the mechanism that stops a populated
+// .venv / node_modules from registering thousands of watches and flooding the
+// event loop.
+func TestStartSkipsVendorDirs(t *testing.T) {
+	dir := t.TempDir()
+	noise := filepath.Join(dir, "node_modules", "pkg")
+	src := filepath.Join(dir, "src")
+	for _, d := range []string{noise, src} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	// A write inside the pruned subtree must not be reported (its dir is unwatched).
+	if err := os.WriteFile(filepath.Join(noise, "index.js"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A write in a watched source dir must be reported; waiting for it also
+	// gives the (unwanted) node_modules event time to arrive if it were coming.
+	srcFile := filepath.Join(src, "main.go")
+	if err := os.WriteFile(srcFile, []byte("package main"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	for _, ev := range got {
+		if filepath.Dir(ev.Path) == noise || filepath.Base(filepath.Dir(ev.Path)) == "pkg" {
+			t.Fatalf("got an event for a pruned vendored path: %v", ev)
+		}
+	}
+	sawSrc := false
+	for _, ev := range got {
+		if ev.Path == srcFile {
+			sawSrc = true
+		}
+	}
+	if !sawSrc {
+		t.Fatalf("expected an event for %s, got %v", srcFile, got)
+	}
+}
+
 func TestPollDetectsChangeAndIgnoresTouch(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "p.txt")

@@ -2,6 +2,14 @@
 
 ## 2026-07-14
 
+- Watcher vendored-dir pruning (0400, #596): the fsnotify watcher no longer
+  registers a watch for every directory under the root. `skipWatchDir` prunes
+  dot-directories (`.git`, `.venv`, caches) and a deny-list of non-dotted noise
+  (`node_modules`, `__pycache__`, `site-packages`, `vendor`) at `Start` and when
+  auto-watching newly-created dirs. A populated `.venv`/`node_modules` used to
+  register thousands of watches — FD exhaustion + an event-loop flood — which is
+  a main cause of large-project lag. Epic #593.
+
 - Async LSP transport (0400, #594): the jsonrpc connection no longer blocks the
   caller on the server draining stdin. Callers marshal + enqueue onto an
   unbounded outbound queue; a dedicated writer goroutine owns every framed pipe
