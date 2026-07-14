@@ -2,6 +2,11 @@
 
 ## 2026-07-14
 
+- Breakpoints (0350, #577): per-project store (`internal/debug`,
+  `.ike/breakpoints.json`), toggled via ctrl+f8 or a gutter click, rendered
+  as a bold error-tone line number (wins over diagnostics/VCS marks), and
+  shifted on edits like folds.
+
 - Run current file (0350, #576): `run.file` (shift+f10, Run menu) and
   `run.rerun` launch the active file's run configuration in a terminal;
   reusable terminals are taken over, else the new `run.placement` setting

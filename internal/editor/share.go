@@ -46,6 +46,7 @@ type SyncMsg struct {
 func (m *Model) ShareDocumentWith(src *Model) {
 	m.path = src.path
 	m.buf = src.buf
+	m.seedBreakpointLines()
 	m.hist = src.hist
 	m.dirty = src.dirty
 	m.stale = src.stale

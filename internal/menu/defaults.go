@@ -41,6 +41,7 @@ func Defaults() []Menu {
 		{Title: "Run", Items: []Item{
 			{Title: "Run File", Command: "run.file"},
 			{Title: "Rerun Last", Command: "run.rerun"},
+			{Title: "Toggle Breakpoint", Command: "debug.toggleBreakpoint"},
 		}},
 		{Title: "Tools", Items: []Item{
 			{Title: "Terminal", Command: "terminal.toggle"},

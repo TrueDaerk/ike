@@ -23,6 +23,7 @@ import (
 	"ike/internal/backup"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
+	"ike/internal/debug"
 	"ike/internal/commitui"
 	"ike/internal/config"
 	"ike/internal/diff"
@@ -86,6 +87,10 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// bpts is the per-project breakpoint store (0350, #577): loaded at start,
+	// rendered by editors through an injected source, persisted on toggle and
+	// on file save.
+	bpts *debug.Breakpoints
 	navSkip bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
@@ -407,6 +412,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		largeToasted: map[string]bool{},
 		toolchainSeg: map[string]string{},
 		navHist:      &nav.History{},
+		bpts:         debug.Load(),
 		host:         h,
 		reg:          reg,
 		themePal:     themePal,
@@ -628,8 +634,11 @@ func (m *Model) wireEditorEmitters() {
 // pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
 	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+		source, adjust := breakpointHooks(m.bpts)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
+			ed.SetBreakpointSource(source)
+			ed.SetBreakpointAdjuster(adjust)
 		}
 	}
 }
@@ -1673,6 +1682,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case todoSavedMsg:
 		// A buffer save (#61): rescan just the saved file off the update loop.
+		// The save is also the persistence point for edit-shifted breakpoints
+		// (#577) — cheap, and the on-disk lines match the saved file.
+		_ = m.bpts.Save()
 		return m, m.todo.RescanFile(msg.path)
 
 	case todoindex.FileScanMsg:
@@ -1979,6 +1991,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RunRerunMsg:
 		// run.rerun (Run menu / palette, #576): repeat the last run.
 		m.rerunLast()
+		return m, nil
+
+	case DebugToggleBreakpointMsg:
+		// debug.toggleBreakpoint (ctrl+f8 / Run menu / palette, #577).
+		m.toggleBreakpointAtCursor()
 		return m, nil
 
 	case MarkdownPreviewMsg:
@@ -4576,6 +4593,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 			}
 			return m, nil
+		}
+		// A left click in the gutter toggles a breakpoint on that line
+		// (0350, #577), JetBrains-style.
+		if ed := inst.Editor(); ed != nil && ed.HasFile() && msg.Button == tea.MouseLeft && msg.Mod&tea.ModAlt == 0 {
+			if line, ok := ed.GutterHit(localX, localY); ok {
+				m.toggleBreakpoint(ed.Path(), line)
+				return m, nil
+			}
 		}
 		// alt+click toggles a secondary caret (#145); a plain click moves the
 		// cursor and collapses the caret set.

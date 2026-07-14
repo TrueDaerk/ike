@@ -182,6 +182,7 @@ func (m Model) View() string {
 		// An unsized pane renders every line, matching viewport.Bottom.
 		height = lineCount + len(sticky)
 	}
+	bps := m.breakpointSet()
 	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
 		if m.lineHidden(i) {
 			continue
@@ -190,8 +191,11 @@ func (m Model) View() string {
 		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
 		// the cheap sign-column indicator that keeps the gutter width unchanged.
 		// A git diff marker (Roadmap 0320, #464) colours the same way; a
-		// diagnostic wins the cell when both apply.
-		if sev, ok := m.worstSeverityOnLine(i); ok {
+		// diagnostic wins the cell when both apply — and a breakpoint (0350,
+		// #577) wins over both, rendered bold in the error tone.
+		if bps[i] {
+			gs = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok {
 			gs = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk))
