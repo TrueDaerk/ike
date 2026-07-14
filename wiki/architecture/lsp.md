@@ -75,8 +75,14 @@ common-prefix/suffix diffing against the previously synced lines
 full-sync server gets the whole document, a SyncNone server nothing. Range
 positions cross into the negotiated encoding through `protocol/convert.go`
 only; per-document versions stay monotonic and only advance when a
-notification is actually sent (an unchanged text sends nothing). A file-open
-hook drives `didOpen`, save drives `didSave`, close drives `didClose`. The
+notification is actually sent (an unchanged text sends nothing). The change is
+**coalesced** (#595): each edit only stores the latest text and (re)arms a short
+`changeDebounce` (40ms), so a typing burst collapses to one sync and the
+O(document) diff runs on the debounce goroutine, not the bubbletea Update loop.
+Any request (`cur()` is the choke point; completion, signature and save flush
+explicitly) drains the pending change first, so a completion or hover never acts
+on stale server text; a close cancels it so no sync lands after `didClose`. A
+file-open hook drives `didOpen`, save drives `didSave`, close drives `didClose`. The
 `didOpen` is gated by large-file mode (#149): a file over the
 `files.large_file_kb` / `files.large_file_lines` thresholds
 (`largeFileGated`, policy in `internal/largefile`) is never opened with the

@@ -59,7 +59,20 @@ type bridge struct {
 	// move re-arms it, so only the last position of a motion burst reaches
 	// the server.
 	hlTimer *time.Timer
+	// pendingChange/changeTimer coalesce didChange per path (#595): each edit
+	// stores its latest event and (re)arms a short debounce; the flush runs the
+	// O(document) diff + notification off the Update goroutine (on the timer
+	// goroutine), or synchronously just before any request that needs the server
+	// to hold the latest text. Typing bursts collapse to far fewer syncs.
+	pendingChange map[string]host.EditorEvent
+	changeTimer   map[string]*time.Timer
 }
+
+// changeDebounce is how long a didChange is held to coalesce a typing burst.
+// Short enough to feel instant, long enough to collapse fast keystrokes; any
+// request (completion, hover, …) flushes the pending change first, so a stale
+// sync never reaches the server ahead of a request.
+const changeDebounce = 40 * time.Millisecond
 
 var (
 	sharedOnce sync.Once
@@ -114,11 +127,11 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			return
 		}
 		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
-			_ = b.manager().Change(ev.Path, ev.Text)
-			b.maybeSignatureHelp(ev)
-			b.requestSemanticTokens(ev.Path)
-			b.requestInlayHints(ev.Path)
-			b.scheduleDocumentHighlight(ev.Path)
+			// Coalesce the sync off the Update goroutine (#595): the O(document)
+			// diff + notification and the follow-up requests run from the flush,
+			// not on every keystroke. A request flushes first, so nothing reads
+			// stale server text.
+			b.scheduleChange(ev)
 		}
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
@@ -201,12 +214,17 @@ func largeFileGated(cfg host.Config, path string, data []byte) bool {
 
 func (b *bridge) fileSaved(h host.API, path string) {
 	b.ensure(h)
+	// Sync the latest edits before didSave so the server's document matches the
+	// bytes now on disk (#595).
+	b.flushChange(path)
 	if mgr := b.manager(); mgr != nil {
 		go func() { _ = mgr.Save(path) }()
 	}
 }
 
 func (b *bridge) fileClosed(path string) {
+	// Drop any queued change so a debounced sync never lands after didClose (#595).
+	b.cancelChange(path)
 	if mgr := b.manager(); mgr != nil {
 		go func() { _ = mgr.Close(path) }()
 	}
@@ -709,6 +727,9 @@ func (b *bridge) maybeSignatureHelp(ev host.EditorEvent) {
 // retries once at the literal's opening delimiter, which is still inside the
 // argument and yields the correct active parameter (#525).
 func (b *bridge) requestSignature(path string, line, col int, manual bool) {
+	// Flush a pending change so signature help reflects the latest text (#595);
+	// a no-op when called from flushChange, which has already drained it.
+	b.flushChange(path)
 	mgr := b.manager()
 	if mgr == nil {
 		return
@@ -984,6 +1005,67 @@ func (b *bridge) requestInlayHints(path string) {
 	}()
 }
 
+// scheduleChange stores the latest change for a path and (re)arms the coalescing
+// debounce (#595). It only appends to state and arms a timer, so it is cheap on
+// the Update goroutine — the O(document) diff and the notification happen in the
+// flush.
+func (b *bridge) scheduleChange(ev host.EditorEvent) {
+	b.mu.Lock()
+	if b.pendingChange == nil {
+		b.pendingChange = map[string]host.EditorEvent{}
+		b.changeTimer = map[string]*time.Timer{}
+	}
+	b.pendingChange[ev.Path] = ev
+	if t := b.changeTimer[ev.Path]; t != nil {
+		t.Reset(changeDebounce)
+	} else {
+		path := ev.Path
+		b.changeTimer[path] = time.AfterFunc(changeDebounce, func() { b.flushChange(path) })
+	}
+	b.mu.Unlock()
+}
+
+// flushChange syncs any pending change for path to the server now and fires the
+// follow-up requests (signature/semantic/inlay/highlight). It is called from the
+// debounce timer (off the Update goroutine) and synchronously from cur()/the
+// completion+signature paths, so a request never sees stale server text. With no
+// pending change it is a cheap no-op. Popping under the lock makes it safe for
+// the timer and a request to race — only one drains the change.
+func (b *bridge) flushChange(path string) {
+	b.mu.Lock()
+	ev, ok := b.pendingChange[path]
+	if ok {
+		delete(b.pendingChange, path)
+	}
+	if t := b.changeTimer[path]; t != nil {
+		t.Stop()
+		delete(b.changeTimer, path)
+	}
+	b.mu.Unlock()
+	if !ok {
+		return
+	}
+	if mgr := b.manager(); mgr != nil {
+		_ = mgr.Change(ev.Path, ev.Text)
+	}
+	b.maybeSignatureHelp(ev)
+	b.requestSemanticTokens(ev.Path)
+	b.requestInlayHints(ev.Path)
+	b.scheduleDocumentHighlight(ev.Path)
+}
+
+// cancelChange drops any pending change for path without syncing it — used when
+// the document is closed so a queued sync never lands after didClose.
+func (b *bridge) cancelChange(path string) {
+	b.mu.Lock()
+	delete(b.pendingChange, path)
+	if t := b.changeTimer[path]; t != nil {
+		t.Stop()
+		delete(b.changeTimer, path)
+	}
+	b.mu.Unlock()
+}
+
 // highlightDebounce delays the occurrence-highlight request after a cursor
 // move so a hjkl motion sequence fires one request, not one per step (#172).
 const highlightDebounce = 150 * time.Millisecond
@@ -1071,6 +1153,10 @@ func (b *bridge) runningLangs() []string {
 // requestCompletion fires a completion request on a goroutine and sends the
 // result as a CompletionMsg anchored at the trigger position.
 func (b *bridge) requestCompletion(path string, line, col int) {
+	// The server must hold the just-typed text before completing at this
+	// position (#595); the completion trigger arrives via ev.Path, bypassing
+	// cur(), so flush explicitly here.
+	b.flushChange(path)
 	mgr := b.manager()
 	if mgr == nil || b.h == nil {
 		return
@@ -1181,7 +1267,17 @@ func (b *bridge) sel() (start, end buffer.Position, ok bool) {
 	return start, end, true
 }
 
+// cur returns the tracked cursor position. Every request path funnels through
+// here, so it first flushes any pending debounced change (#595) — the server
+// therefore always holds the latest text before a completion/hover/definition/
+// … request that reads this position acts on it.
 func (b *bridge) cur() (string, int, int) {
+	b.mu.Lock()
+	path := b.curPath
+	b.mu.Unlock()
+	if path != "" {
+		b.flushChange(path)
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.curPath, b.curLine, b.curCol
