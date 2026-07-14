@@ -40,26 +40,26 @@ func TestHorizontalScroll(t *testing.T) {
 
 func TestGutterWidthAndAbsolute(t *testing.T) {
 	v := &Viewport{LineNumbers: true}
-	if w := v.GutterWidth(5); w != 4 { // min 3 digits + 1
-		t.Fatalf("gutter width=%d want 4", w)
-	}
-	if w := v.GutterWidth(1000); w != 5 { // 4 digits + 1
+	if w := v.GutterWidth(5); w != 5 { // sign + min 3 digits + 1
 		t.Fatalf("gutter width=%d want 5", w)
 	}
-	if g := v.Gutter(0, 3, 10); g != "  1 " {
-		t.Fatalf("abs gutter=%q want '  1 '", g)
+	if w := v.GutterWidth(1000); w != 6 { // sign + 4 digits + 1
+		t.Fatalf("gutter width=%d want 6", w)
+	}
+	if g := v.Gutter(0, 3, 10); g != "   1 " {
+		t.Fatalf("abs gutter=%q want '   1 '", g)
 	}
 }
 
 func TestGutterRelative(t *testing.T) {
 	v := &Viewport{LineNumbers: true, RelativeNumbers: true}
 	// current line shows absolute, left-aligned.
-	if g := v.Gutter(3, 3, 10); g != "4   " {
-		t.Fatalf("rel current=%q want '4   '", g)
+	if g := v.Gutter(3, 3, 10); g != " 4   " {
+		t.Fatalf("rel current=%q want ' 4   '", g)
 	}
 	// other line shows distance, right-aligned.
-	if g := v.Gutter(0, 3, 10); g != "  3 " {
-		t.Fatalf("rel other=%q want '  3 '", g)
+	if g := v.Gutter(0, 3, 10); g != "   3 " {
+		t.Fatalf("rel other=%q want '   3 '", g)
 	}
 }
 

@@ -15,7 +15,7 @@ func (v *Viewport) Gutter(line, cursorLine, lineCount int) string {
 	if w == 0 {
 		return ""
 	}
-	num := w - 1 // reserve the trailing separator space
+	num := w - 2 // reserve the leading sign column and trailing separator
 	var s string
 	switch {
 	case v.RelativeNumbers && line == cursorLine:
@@ -25,7 +25,9 @@ func (v *Viewport) Gutter(line, cursorLine, lineCount int) string {
 	default:
 		s = rightPad(strconv.Itoa(line+1), num)
 	}
-	return s + " "
+	// Leading blank is the sign column; editors overwrite it with a breakpoint
+	// or debug-line glyph. Trailing blank separates the gutter from the text.
+	return " " + s + " "
 }
 
 // leftPad pads s on the right to width w (left-aligned content).

@@ -30,8 +30,9 @@ func (v *Viewport) SetSize(width, height int) {
 func (v *Viewport) Height() int { return v.height }
 
 // GutterWidth returns the width reserved for the line-number gutter given the
-// total line count, or 0 when line numbers are disabled. It is the digit count
-// of the largest line number plus a one-cell separator.
+// total line count, or 0 when line numbers are disabled. It is a one-cell sign
+// column (breakpoint/debug markers, #577/#579) plus the digit count of the
+// largest line number plus a one-cell separator.
 func (v *Viewport) GutterWidth(lineCount int) int {
 	if !v.LineNumbers {
 		return 0
@@ -40,7 +41,7 @@ func (v *Viewport) GutterWidth(lineCount int) int {
 	if digits < 3 {
 		digits = 3 // keep a stable minimum so the text edge doesn't jitter
 	}
-	return digits + 1
+	return digits + 2 // leading sign column + digits + trailing separator
 }
 
 // TextWidth returns the columns available for buffer text after the gutter.

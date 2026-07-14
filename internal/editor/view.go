@@ -191,19 +191,33 @@ func (m Model) View() string {
 		// Colour the gutter for a line carrying diagnostics (red error / yellow warn),
 		// the cheap sign-column indicator that keeps the gutter width unchanged.
 		// A git diff marker (Roadmap 0320, #464) colours the same way; a
-		// diagnostic wins the cell when both apply — and a breakpoint (0350,
-		// #577) wins over both, rendered bold in the error tone.
+		// diagnostic wins the cell when both apply. A breakpoint (0350, #577)
+		// and the debugger's current line (#579) outrank both and, unlike the
+		// colour-only markers, draw a distinct glyph in the separator cell so
+		// they never read as a git highlight: ● breakpoint, ▶ paused line.
+		var sign string
+		var signStyle lipgloss.Style
 		if m.paused && i == m.pausedLine {
-			// The debugger's current line (#579) outranks every marker.
-			gs = lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true).Reverse(true)
+			sign = "▶"
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true)
 		} else if bps[i] {
-			gs = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+			sign = "●"
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok {
 			gs = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk))
 		}
-		gutter := gs.Render(m.view.Gutter(i, m.cursor.Line, lineCount))
+		raw := m.view.Gutter(i, m.cursor.Line, lineCount)
+		var gutter string
+		if sign != "" && raw != "" {
+			// Overwrite the leading sign column with the glyph so the marker
+			// sits before the line number; the gutter width stays constant so
+			// the body never reflows.
+			gutter = signStyle.Render(sign) + gs.Render(raw[1:])
+		} else {
+			gutter = gs.Render(raw)
+		}
 		if end, ok := m.foldedAt(i); ok {
 			out = append(out, gutter+m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle))
 			continue
