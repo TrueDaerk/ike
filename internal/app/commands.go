@@ -127,6 +127,10 @@ type TerminalNewTabMsg struct{}
 // RunFileMsg runs the active file through its run configuration (0350, #576).
 type RunFileMsg struct{}
 
+// DebugToggleBreakpointMsg flips the breakpoint on the focused editor's
+// cursor line (0350, #577).
+type DebugToggleBreakpointMsg struct{}
+
 // RunRerunMsg reruns the last-used run configuration (#576).
 type RunRerunMsg struct{}
 
@@ -240,6 +244,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
+			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),

@@ -241,6 +241,14 @@ type Model struct {
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
 	// external change, and vcs refresh, so positions may briefly lag an edit.
 	gitMarks map[int]vcs.LineMark
+	// bpSource reports the current breakpoint lines for a file (0350, #577):
+	// injected by the app so the gutter always renders the live store without
+	// per-view push bookkeeping. Nil means no breakpoints feature. bpAdjust
+	// reports edit-driven line-count deltas back to the store; bpLines is the
+	// last observed count (the folds' foldLines pattern).
+	bpSource func(path string) []int
+	bpAdjust func(path string, cursorAfter, delta int)
+	bpLines  int
 	// blameOn shows the inline blame annotation on the cursor line (#468);
 	// blame is the whole-file map behind it, refreshed by the app on save and
 	// vcs refresh, so positions may briefly lag an edit like gitMarks.
@@ -432,6 +440,7 @@ func (m *Model) Load(path string) error {
 		return err
 	}
 	m.buf = buffer.FromString(text)
+	m.seedBreakpointLines()
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
 	if eol, ok := m.editorconfigEOL(); ok {
 		// end_of_line applies on save, like every EditorConfig client: the
@@ -483,6 +492,7 @@ func (m *Model) NewFile(path string) {
 	m.path = path
 	m.resolveEditorconfig()
 	m.buf = buffer.FromString(lang.TemplateFor(path))
+	m.seedBreakpointLines()
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
 	// A new file has no on-disk flavor to preserve, so .editorconfig picks
 	// the initial line endings and charset outright (#63).
@@ -526,6 +536,7 @@ func (m *Model) NewFile(path string) {
 // or leave it empty (untitled restore).
 func (m *Model) RestoreText(text string) {
 	m.buf = buffer.FromString(text)
+	m.seedBreakpointLines()
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0

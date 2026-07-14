@@ -81,7 +81,27 @@ Registered providers:
   `new_terminal` a bottom-split terminal pane. A command session's pane stays
   open on exit — the output is the point of the run.
 
+## Breakpoints (#577)
+
+`internal/debug` holds the per-project breakpoint store: line breakpoints
+keyed by project-relative path (0-based lines), persisted at
+`.ike/breakpoints.json` on toggle and on file save; missing/malformed files
+load empty.
+
+- **Toggling**: `debug.toggleBreakpoint` (ctrl+f8, Run menu, palette) on the
+  focused editor's cursor line, or a **left click in the gutter**
+  (`editor.GutterHit` maps the click through folds/wrap/sticky headers).
+- **Rendering**: the editor queries an injected breakpoint source per frame
+  (`SetBreakpointSource` — no push bookkeeping; shared documents and every
+  view stay current) and renders the line number bold in the error tone,
+  winning over diagnostic and VCS gutter colours.
+- **Edit adjustment**: the editor reports line-count deltas at the edit site
+  (`SetBreakpointAdjuster`, same pattern as fold shifting in
+  `dissolveFoldsAtEdit`); the store shifts breakpoints below insertions and
+  deletions, collapsing ones inside a removed range. Wholesale buffer
+  replacements (load, share, remote sync) re-baseline instead of shifting.
+
 ## Consumers
 
 - The DAP debugger (#578/#579) launches from the same configuration with
-  kind `debug`.
+  kind `debug`, stopping at the stored breakpoints.

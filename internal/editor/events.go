@@ -97,6 +97,8 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		// Keep collapsed folds consistent with the mutation (#144): dissolve
 		// the fold the edit landed in, shift the ones below it (fold.go).
 		m.dissolveFoldsAtEdit()
+		// Breakpoints shift the same way (0350, #577), through the app's store.
+		m.notifyBreakpointEdit()
 	}
 	if m.emitter == nil {
 		return
