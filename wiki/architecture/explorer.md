@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 # File Explorer
@@ -28,7 +28,15 @@ instead of collapsing everything.
 The tree keeps itself in sync with the filesystem without a manual `r`
 (which stays as the escape hatch). Two mechanisms feed it:
 
-**Watcher events (Roadmap 0140, #83).** The root model routes the file
+**Watcher events (Roadmap 0140, #83).** The `internal/watch` service registers
+one fsnotify watch per directory under the project root, but prunes
+dot-directories (`.git`, `.venv`, `.tox`, caches) and a small deny-list of
+vendored/noise names (`node_modules`, `__pycache__`, `site-packages`, `vendor`)
+from the walk — and from the mid-session auto-watch of newly-created dirs, so a
+`pip install` into `.venv` does not start thousands of watches (`skipWatchDir`,
+#596). Without this a large Python project registered one watch per directory
+across a populated `.venv`, exhausting file descriptors and flooding the event
+loop. The root model routes the file
 watcher's `watch.EventMsg{Kind: DirChanged}` to the explorer;
 `externalRefresh` re-scans just the affected directory — not a full re-scan.
 The `setChildren` merge preserves expansion state and loaded subtrees, and
