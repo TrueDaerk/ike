@@ -35,6 +35,15 @@ type Config struct {
 	Marketplace Marketplace `toml:"marketplace"`
 	// Todo holds the TODO/FIXME index settings (#61).
 	Todo Todo `toml:"todo"`
+	// Run holds run-configuration behaviour (0350, #576).
+	Run Run `toml:"run"`
+}
+
+// Run holds run-configuration behaviour (0350, #576). Placement decides where
+// a run without a reusable terminal opens: "in_pane" (a terminal tab in the
+// focused editor pane) or "new_terminal" (a bottom-split terminal pane).
+type Run struct {
+	Placement string `toml:"placement"`
 }
 
 // Todo holds the comment-tag index settings (#61). Patterns is the list of tag

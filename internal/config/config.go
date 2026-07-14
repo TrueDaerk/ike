@@ -166,6 +166,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("terminal.shell", c.Terminal.Shell)
 
+	put("run.placement", c.Run.Placement)
+
 	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))

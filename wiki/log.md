@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Run current file (0350, #576): `run.file` (shift+f10, Run menu) and
+  `run.rerun` launch the active file's run configuration in a terminal;
+  reusable terminals are taken over, else the new `run.placement` setting
+  (`in_pane` terminal tab / `new_terminal` bottom pane) decides; run panes
+  survive process exit and show the exit code.
+
 - Run-configuration model (0350, #575): `internal/run` store persisted at
   `.ike/runconfigs.json` with default synthesis on first run (`EnsureFor`)
   and rerun-last tracking; `internal/lang` gains the `RunCommandProvider` /

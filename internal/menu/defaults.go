@@ -38,6 +38,10 @@ func Defaults() []Menu {
 			{Title: "Back", Command: "nav.back"},
 			{Title: "Forward", Command: "nav.forward"},
 		}},
+		{Title: "Run", Items: []Item{
+			{Title: "Run File", Command: "run.file"},
+			{Title: "Rerun Last", Command: "run.rerun"},
+		}},
 		{Title: "Tools", Items: []Item{
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "New Terminal", Command: "terminal.new"},

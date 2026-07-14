@@ -119,6 +119,19 @@ func (r *Registry) AddTerminal(shell, dir string, env []string, send func(tea.Ms
 	return key
 }
 
+// AddCommandTerminal creates a terminal pane running argv as a command
+// session (0350, #576): the new-terminal placement of a run. label names the
+// pane/tab after the run configuration.
+func (r *Registry) AddCommandTerminal(argv []string, label, dir string, env []string, send func(tea.Msg)) string {
+	key := r.MintTerminalKey()
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = terminal.NewCommand(key, argv, dir, 80, 24, env, send)
+	inst.term.SetPalette(r.pal)
+	inst.term.SetLabel(label)
+	r.put(inst)
+	return key
+}
+
 // MintTerminalKey allocates the next terminal session key without creating a
 // pane — terminal tabs (#573) live inside an editor instance but their
 // sessions still need a unique key for output/exit message routing.

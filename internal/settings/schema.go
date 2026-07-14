@@ -88,6 +88,9 @@ func BasePages(themes []string) []Page {
 			{Key: "backup.debounce_ms", Type: Int, Title: "Snapshot debounce", Description: "Milliseconds a dirty buffer must stay quiet before it is snapshotted", Scope: config.UserScope, Min: 100, Max: 60000},
 			{Key: "backup.max_age_days", Type: Int, Title: "Snapshot max age", Description: "Days before leftover snapshots are pruned at startup (after the restore prompt)", Scope: config.UserScope, Min: 1, Max: 365},
 		}},
+		{Title: "Run", Entries: []Entry{
+			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},
+		}},
 		{Title: "Notifications", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
