@@ -134,7 +134,7 @@ func (m Model) historyView() string {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		line := e.at.Format("15:04:05") + " ● " + e.text
+		line := e.at.Format("15:04:05") + " " + toastIcon(e.sev) + " " + e.text
 		b.WriteString(lipgloss.NewStyle().Foreground(m.toastColor(e.sev)).Render(line))
 	}
 	return b.String()
@@ -151,8 +151,22 @@ func (m Model) toastColor(sev host.Severity) color.Color {
 	return m.pal().Info
 }
 
+// toastIcon maps a severity to its leading glyph (single-width, text
+// presentation so it never reflows the box).
+func toastIcon(sev host.Severity) string {
+	switch sev {
+	case host.Error:
+		return "✖"
+	case host.Warn:
+		return "▲"
+	}
+	return "●"
+}
+
 // compositeToasts overlays the visible toast stack bottom-right, directly
-// above the status line, newest on top.
+// above the status line, newest on top. Each toast is a rounded card whose
+// border and icon carry the severity color; the text stays in the theme
+// foreground for legibility on the raised panel surface.
 func (m Model) compositeToasts(base string) string {
 	if len(m.toasts) == 0 || m.width < 8 || m.height < 4 {
 		return base
@@ -161,24 +175,37 @@ func (m Model) compositeToasts(base string) string {
 	if len(visible) > maxVisibleToasts {
 		visible = visible[:maxVisibleToasts]
 	}
-	maxW := m.width - 4
-	if maxW > 60 {
-		maxW = 60
+	// Leave room for the border (2), padding (2) and icon+gap (2).
+	maxW := m.width - 6
+	if maxW > 54 {
+		maxW = 54
 	}
-	for i, t := range visible {
-		text := " ● " + t.text + " "
+	if maxW < 1 {
+		return base
+	}
+	pal := m.pal()
+	y := m.height - 2 // bottom content row, above the status line
+	for _, t := range visible {
+		sc := m.toastColor(t.sev)
+		icon := lipgloss.NewStyle().Foreground(sc).Bold(true).Render(toastIcon(t.sev))
+		msg := lipgloss.NewStyle().Foreground(pal.Foreground).MaxWidth(maxW).Render(t.text)
+		body := lipgloss.JoinHorizontal(lipgloss.Top, icon, " ", msg)
 		box := lipgloss.NewStyle().
-			MaxWidth(maxW).
-			Background(m.pal().Surface).
-			Foreground(m.toastColor(t.sev)).
-			Render(text)
-		w := lipgloss.Width(box)
-		x := m.width - w - 1
-		y := m.height - 2 - i // row above the status line, stacking upward
-		if y < 0 {
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(sc).
+			BorderBackground(pal.Panel).
+			Background(pal.Panel).
+			Padding(0, 1).
+			Render(body)
+		h := lipgloss.Height(box)
+		top := y - h + 1
+		if top < 0 {
 			break
 		}
-		base = overlay.Place(base, box, x, y, m.width, m.height)
+		w := lipgloss.Width(box)
+		x := m.width - w - 1
+		base = overlay.Place(base, box, x, top, m.width, m.height)
+		y = top - 1 // next card one row higher, leaving a gap
 	}
 	return base
 }
