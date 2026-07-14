@@ -24,6 +24,7 @@ import (
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
 	"ike/internal/debug"
+	"ike/internal/debugpanel"
 	"ike/internal/commitui"
 	"ike/internal/config"
 	"ike/internal/diff"
@@ -669,6 +670,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
 			continue // restored below as the empty singleton panel (0330)
+		} else if ids[key].Kind == "debug" {
+			continue // restored below as the empty singleton panel (#580)
 		} else if !isEditorKey(key) {
 			return // unknown leaf kind / malformed key: fall back to default
 		}
@@ -727,6 +730,12 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			if id.Path == "log" {
 				p.SetTab(vcspanel.TabLog)
 			}
+			continue
+		}
+		if id := ids[key]; id.Kind == "debug" {
+			// The debug panel restores empty (#580): sessions never
+			// resurrect, the next stop re-feeds it.
+			panes.AddDebug()
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2029,7 +2038,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case debugStoppedMsg:
-		// The stop context arrived: jump to the top frame and mark its line.
+		// The stop context arrived: jump to the top frame, mark its line,
+		// and feed the tool window (#580).
 		if top := m.applyDebugStop(msg); top != nil {
 			col := top.Column - 1
 			if col < 0 {
@@ -2041,8 +2051,42 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return model, cmd
 			}
 			mm.markPausedLine(canonicalPath(top.Source.Path), top.Line-1)
+			mm.openDebugPanel()
+			if p := mm.debugPanel(); p != nil {
+				p.SetFrames(msg.frames)
+			}
+			mm.fetchScopes(top.ID)
 			return mm, cmd
 		}
+		return m, nil
+
+	case debugScopesMsg:
+		if p := m.debugPanel(); p != nil {
+			p.SetScopes(msg.scopes)
+		}
+		return m, nil
+
+	case debugVarsMsg:
+		if p := m.debugPanel(); p != nil {
+			p.SetChildren(msg.ref, msg.vars)
+		}
+		return m, nil
+
+	case debugpanel.SelectFrameMsg:
+		// A frame was activated in the tool window: show that frame's state
+		// — navigate the editor to its location and re-scope the variables.
+		m.fetchScopes(msg.Frame.ID)
+		if msg.Frame.Source.Path != "" {
+			col := msg.Frame.Column - 1
+			if col < 0 {
+				col = 0
+			}
+			return m.openPathAt(msg.Frame.Source.Path, msg.Frame.Line-1, col)
+		}
+		return m, nil
+
+	case debugpanel.ExpandVarMsg:
+		m.fetchVariables(msg.Ref)
 		return m, nil
 
 	case debugErrMsg:
@@ -5093,6 +5137,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title, content = "DIFF "+l+" ⇄ "+r, inst.View()
 		case pane.KindVCS:
 			title, content = "VCS", inst.View()
+		case pane.KindDebug:
+			title, content = "DEBUG", inst.View()
 		}
 	}
 

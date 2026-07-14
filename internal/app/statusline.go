@@ -321,6 +321,8 @@ func (m Model) statusLine() string {
 				}
 				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
 			}
+		case inst.Kind() == pane.KindDebug:
+			left += "DEBUG"
 		case inst.Kind() == pane.KindVCS:
 			left += "VCS"
 			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {

@@ -45,7 +45,23 @@ configurations (#575/#576) and the breakpoint store (#577).
 - Toggling a breakpoint during a live session pushes the file's new set to
   the adapter immediately.
 
-## Consumers
+## Debug tool window (#580)
 
-- The debug tool window (#580) renders the frames and variables of the
-  paused session and re-scopes on frame selection.
+`internal/debugpanel` + `pane.KindDebug` (singleton key `debug`, vcspanel
+pattern): a bottom-split panel that opens on the first stop — without
+stealing focus from the paused line — and closes when the session ends.
+Session-local like the terminal tabs: it persists in the layout as an empty
+slot and re-feeds on the next stop.
+
+- **Frames view** (left): the paused thread's stack; `j`/`k` move, `enter`
+  emits `SelectFrameMsg` — the app navigates the editor to the frame's
+  location and re-fetches its scopes, so the variables show the state
+  *outside* the current function too.
+- **Variables tree** (right, `tab`/`h`/`l` switch columns): roots are the
+  selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
+  a node — unloaded references emit `ExpandVarMsg` and the app answers with
+  the adapter's `variables` response (`SetChildren`), loaded ones toggle
+  locally.
+- The panel is pure view/state: data arrives via `SetFrames`/`SetScopes`/
+  `SetChildren`/`SetRunning`; the app resolves intents against the live
+  session (`fetchScopes`/`fetchVariables`).

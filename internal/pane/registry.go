@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/host"
 	"ike/internal/preview"
@@ -33,6 +34,9 @@ const diffKeyBase = "diff"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
+
+// DebugKey is the stable key of the singleton debug tool window (0350, #580).
+const DebugKey = "debug"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -279,6 +283,18 @@ func (r *Registry) AddVCS() string {
 	inst.vp = vcspanel.New(r.pal)
 	r.put(inst)
 	return VCSKey
+}
+
+// AddDebug creates the singleton debug tool window under DebugKey (0350,
+// #580) and returns its key; a second call returns the existing key.
+func (r *Registry) AddDebug() string {
+	if _, ok := r.instances[DebugKey]; ok {
+		return DebugKey
+	}
+	inst := &Instance{key: DebugKey, kind: KindDebug, cfg: r.cfg, pal: r.pal}
+	inst.dp = debugpanel.New(r.pal)
+	r.put(inst)
+	return DebugKey
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)

@@ -6,9 +6,12 @@ import (
 	"strings"
 
 	"ike/internal/dap"
+	"ike/internal/debugpanel"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/layout"
 	"ike/internal/lsp/transport"
+	"ike/internal/pane"
 	"ike/internal/run"
 )
 
@@ -50,6 +53,13 @@ type (
 	debugEndedMsg struct {
 		exitCode int
 		hasCode  bool
+	}
+	// debugScopesMsg carries a frame's fetched scopes for the panel (#580).
+	debugScopesMsg struct{ scopes []dap.Scope }
+	// debugVarsMsg carries one variablesReference's fetched children.
+	debugVarsMsg struct {
+		ref  int
+		vars []dap.Variable
 	}
 )
 
@@ -243,12 +253,104 @@ func (m *Model) debugStep(kind string) {
 	}
 	m.clearPausedMarker()
 	dbg.paused = false
+	if p := m.debugPanel(); p != nil {
+		p.SetRunning()
+	}
 	send := m.host.Send
 	threadID := dbg.threadID
 	go func() {
 		if err := do(threadID); err != nil {
 			send(debugErrMsg{err: err})
 		}
+	}()
+}
+
+// debugPanel returns the singleton panel model, nil while it is not open.
+func (m Model) debugPanel() *debugpanel.Model {
+	if !m.panes.Has(pane.DebugKey) {
+		return nil
+	}
+	return m.panes.Get(pane.DebugKey).Debug()
+}
+
+// openDebugPanel splits the active editor (fallback: focused leaf) at the
+// bottom with the singleton panel — without stealing focus; the stop already
+// moved the caret to the paused line.
+func (m *Model) openDebugPanel() {
+	if m.panes.Has(pane.DebugKey) {
+		return
+	}
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
+	if target == "" || m.tree == nil {
+		return
+	}
+	key := m.panes.AddDebug()
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	if !ok {
+		m.panes.Close(key)
+		return
+	}
+	m.tree = tree
+	m.layout()
+	saveLayout(m.tree, m.panes)
+}
+
+// closeDebugPanel removes the panel when the session ends.
+func (m *Model) closeDebugPanel() {
+	if !m.panes.Has(pane.DebugKey) {
+		return
+	}
+	if m.closeKey(pane.DebugKey) {
+		if !m.panes.Has(m.panes.Focused()) {
+			m.setFocus(m.focusAfterClose())
+		}
+		m.layout()
+		saveLayout(m.tree, m.panes)
+	}
+}
+
+// fetchScopes loads a frame's scopes plus the first scope's variables and
+// feeds the panel via messages.
+func (m *Model) fetchScopes(frameID int) {
+	dbg := m.dbg
+	if dbg == nil {
+		return
+	}
+	sess := dbg.sess
+	send := m.host.Send
+	go func() {
+		scopes, err := sess.Scopes(frameID)
+		if err != nil {
+			send(debugErrMsg{err: err})
+			return
+		}
+		send(debugScopesMsg{scopes: scopes})
+		if len(scopes) > 0 && scopes[0].VariablesReference > 0 {
+			if vars, err := sess.Variables(scopes[0].VariablesReference); err == nil {
+				send(debugVarsMsg{ref: scopes[0].VariablesReference, vars: vars})
+			}
+		}
+	}()
+}
+
+// fetchVariables expands one variablesReference for the panel.
+func (m *Model) fetchVariables(ref int) {
+	dbg := m.dbg
+	if dbg == nil {
+		return
+	}
+	sess := dbg.sess
+	send := m.host.Send
+	go func() {
+		vars, err := sess.Variables(ref)
+		if err != nil {
+			send(debugErrMsg{err: err})
+			return
+		}
+		send(debugVarsMsg{ref: ref, vars: vars})
 	}()
 }
 
@@ -261,6 +363,7 @@ func (m *Model) stopDebugSession(notify bool) {
 	}
 	m.clearPausedMarker()
 	m.dbg = nil
+	m.closeDebugPanel()
 	sess := dbg.sess
 	go func() {
 		_ = sess.Disconnect()
@@ -279,6 +382,7 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	}
 	m.clearPausedMarker()
 	m.dbg = nil
+	m.closeDebugPanel()
 	go dbg.sess.Close()
 	note := "debug: " + dbg.cfgName + " finished"
 	if msg.hasCode {

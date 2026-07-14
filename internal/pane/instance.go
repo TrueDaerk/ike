@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/clipboard"
+	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -37,6 +38,10 @@ const (
 	// KindVCS is the VCS tool window (Roadmap 0330): a singleton bottom-split
 	// panel with the changes list and the git log, under key "vcs".
 	KindVCS
+	// KindDebug is the debug tool window (0350, #580): a singleton
+	// bottom-split panel with the frames list and the variables tree,
+	// under key "debug".
+	KindDebug
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -48,6 +53,7 @@ const (
 	ctxPreview  = "preview"
 	ctxDiff     = "diff"
 	ctxVCS      = "vcs"
+	ctxDebug    = "debug"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -65,6 +71,7 @@ type Instance struct {
 	md   preview.Model
 	df   diff.Model
 	vp   vcspanel.Model
+	dp   debugpanel.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -109,6 +116,8 @@ func (i *Instance) ContextID() string {
 		return ctxDiff
 	case KindVCS:
 		return ctxVCS
+	case KindDebug:
+		return ctxDebug
 	}
 	return ctxEditor
 }
@@ -132,6 +141,10 @@ func (i *Instance) Diff() *diff.Model { return &i.df }
 // VCS returns the underlying VCS tool-window model. It is only valid for a
 // vcs instance; callers gate on Kind first.
 func (i *Instance) VCS() *vcspanel.Model { return &i.vp }
+
+// Debug returns the underlying debug tool-window model. It is only valid for
+// a debug instance; callers gate on Kind first.
+func (i *Instance) Debug() *debugpanel.Model { return &i.dp }
 
 // DiffEditor returns the diff pane's edit-mode editor, nil while browsing.
 func (i *Instance) DiffEditor() *editor.Model { return i.dfEdit }
@@ -387,6 +400,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.sizeDiffEditor()
 	case KindVCS:
 		i.vp.SetSize(w, h)
+	case KindDebug:
+		i.dp.SetSize(w, h)
 	}
 }
 
@@ -412,6 +427,8 @@ func (i *Instance) SetFocused(f bool) {
 		}
 	case KindVCS:
 		i.vp.SetFocused(f)
+	case KindDebug:
+		i.dp.SetFocused(f)
 	}
 }
 
@@ -437,6 +454,8 @@ func (i *Instance) View() string {
 		return i.df.View()
 	case KindVCS:
 		return i.vp.View()
+	case KindDebug:
+		return i.dp.View()
 	}
 	return ""
 }
@@ -473,6 +492,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.df.Update(msg)
 	case KindVCS:
 		cmd = i.vp.Update(msg)
+	case KindDebug:
+		cmd = i.dp.Update(msg)
 	}
 	return cmd
 }
@@ -566,6 +587,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.df.SetPalette(p)
 	case KindVCS:
 		i.vp.SetPalette(p)
+	case KindDebug:
+		i.dp.SetPalette(p)
 	}
 }
 
