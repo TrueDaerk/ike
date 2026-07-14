@@ -13,6 +13,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/dap"
+	"ike/internal/debugpanel"
+	"ike/internal/pane"
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/lsp/jsonrpc"
@@ -204,4 +206,43 @@ func TestDebugStopCommand(t *testing.T) {
 		t.Fatal("debug.stop must clear the session state")
 	}
 	waitForCommand(t, sa, "disconnect")
+}
+
+// TestDebugPanelOpensAndFrameSelection verifies the tool window (#580): a
+// stop opens the bottom panel fed with the frames, and activating an outer
+// frame re-scopes variables (adapter sees scopes) and navigates the editor.
+func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
+	m, sa, path := debugModel(t)
+	frames := []dap.StackFrame{
+		{ID: 1, Name: "inner", Source: dap.Source{Path: path}, Line: 3, Column: 1},
+		{ID: 2, Name: "outer", Source: dap.Source{Path: path}, Line: 4, Column: 1},
+	}
+	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
+	m = tm.(Model)
+	if !m.panes.Has(pane.DebugKey) {
+		t.Fatal("a stop must open the debug panel")
+	}
+	if m.panes.Get(pane.DebugKey).Kind() != pane.KindDebug {
+		t.Fatal("the panel leaf must be the debug kind")
+	}
+	waitForCommand(t, sa, "scopes") // top frame scopes fetched eagerly
+	// Selecting the outer frame re-scopes and navigates to its line.
+	tm, cmd := m.Update(debugpanel.SelectFrameMsg{Frame: frames[1]})
+	m = tm.(Model)
+	if cmd != nil {
+		if msg := cmd(); msg != nil {
+			tm, _ = m.Update(msg)
+			m = tm.(Model)
+		}
+	}
+	ed := m.editorForPath(canonicalPath(path))
+	if line, _ := ed.CursorPos(); line != 3 {
+		t.Fatalf("cursor line = %d, want 3 (outer frame)", line)
+	}
+	// Session end closes the panel again.
+	tm, _ = m.Update(debugEndedMsg{})
+	m = tm.(Model)
+	if m.panes.Has(pane.DebugKey) {
+		t.Fatal("session end must close the debug panel")
+	}
 }

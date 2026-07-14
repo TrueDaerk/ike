@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Debug tool window (0350, #580): `internal/debugpanel` bottom-split panel
+  (`pane.KindDebug`) with frames view and variables tree; frame selection
+  re-scopes variables and navigates the editor, variable nodes expand via
+  DAP `variables` requests; opens on stop, closes with the session. Epic
+  #572 complete.
+
 - Debug sessions (0350, #579): `debug.start` (shift+f9) launches the active
   file's run configuration under its DAP adapter, stops at stored
   breakpoints with an editor jump + warning-tone paused marker, and steps
