@@ -32,8 +32,10 @@ func (m *Model) refactorTarget() (string, bool) {
 		path, _, ok := m.explorer().Selected()
 		return path, ok
 	}
-	if inst.Kind() == pane.KindEditor && inst.Editor().HasFile() {
-		return inst.Editor().Path(), true
+	if inst.Kind() == pane.KindEditor {
+		if ed := inst.Editor(); ed != nil && ed.HasFile() {
+			return ed.Path(), true
+		}
 	}
 	return "", false
 }
@@ -209,7 +211,7 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 		}
 	}
 	if key := m.activeEditorKey(); key != "" {
-		if ed := m.panes.Get(key).Editor(); ed.HasFile() {
+		if ed := m.panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			m.explorer().SetActive(ed.Path())
 		}
 	}

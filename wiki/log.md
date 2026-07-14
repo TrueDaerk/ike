@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-14
+
+- Editor-pane tabs generalized to host terminals (0350, #573): `pane.Tab` sum
+  type over editor/terminal, `AddTerminalTab` + `terminal.newTab` command,
+  terminal-context key/mouse routing while a terminal tab is active, `⌨` tab
+  labels, sessions end with their tab; terminal tabs are session-local (not
+  persisted). Groundwork for run configurations (Epic #572).
+
 ## 2026-07-13
 
 - Toolchain page streamlined for Python (#569, PyCharm-style): provenance

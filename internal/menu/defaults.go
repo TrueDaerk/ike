@@ -41,6 +41,7 @@ func Defaults() []Menu {
 		{Title: "Tools", Items: []Item{
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "New Terminal", Command: "terminal.new"},
+			{Title: "New Terminal Tab", Command: "terminal.newTab"},
 			{Title: "Restart Language Servers", Command: "lsp.restart"},
 			{Title: "Plugins", Command: "tools.plugins"},
 		}},

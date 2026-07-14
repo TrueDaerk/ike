@@ -153,10 +153,16 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			}
 			ids[key] = paneIdentity{Kind: "vcs", Path: tab}
 		case pane.KindEditor:
-			id := paneIdentity{Kind: "editor", Path: inst.Editor().Path()}
-			for i, ed := range inst.Editors() {
-				if !ed.HasFile() {
-					continue // scratch tabs restore as nothing, not as ""
+			id := paneIdentity{Kind: "editor"}
+			if ed := inst.Editor(); ed != nil {
+				id.Path = ed.Path()
+			}
+			// Terminal tabs (#573) are session-local like scratch tabs: their
+			// processes never resurrect, so only file-backed tabs persist.
+			for i := 0; i < inst.TabCount(); i++ {
+				ed := inst.TabEditor(i)
+				if ed == nil || !ed.HasFile() {
+					continue // scratch/terminal tabs restore as nothing
 				}
 				if i == inst.ActiveTab() {
 					id.Active = len(id.Tabs)

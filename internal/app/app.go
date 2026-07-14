@@ -7,6 +7,7 @@
 package app
 
 import (
+	"fmt"
 	"image/color"
 	"os"
 	"path/filepath"
@@ -1155,11 +1156,20 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 	}
 }
 
-// terminalFocused reports whether the focused pane is a live terminal; a dead
-// one (shell exited) falls back to normal key handling so ctrl+w can close it.
+// terminalFocused reports whether input currently goes to a live terminal —
+// a terminal pane, or an editor pane whose active tab hosts one (#573); a
+// dead one (shell exited) falls back to normal key handling so ctrl+w can
+// close it.
 func (m Model) terminalFocused() bool {
 	inst := m.panes.FocusedInstance()
-	return inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Running()
+	if inst == nil {
+		return false
+	}
+	if inst.Kind() != pane.KindTerminal && inst.Kind() != pane.KindEditor {
+		return false
+	}
+	t := inst.ActiveTerminal()
+	return t != nil && t.Running()
 }
 
 // terminalTitle renders the pane title: shell name plus the session's origin
@@ -1329,6 +1339,27 @@ func (m *Model) openTerminal() {
 	m.tree = tree
 	m.setFocus(key)
 	m.layout()
+	saveLayout(m.tree, m.panes)
+}
+
+// openTerminalTab opens a fresh shell session as a new tab of the active
+// editor pane (#573), so the terminal sits next to the files it belongs to.
+// Without an editor pane it falls back to the classic bottom-split terminal.
+func (m *Model) openTerminalTab() {
+	target := m.activeEditorKey()
+	if target == "" {
+		m.openTerminal()
+		return
+	}
+	inst := m.panes.Get(target)
+	shell := ""
+	if v, ok := m.host.Config().Get("terminal.shell"); ok {
+		shell = v
+	}
+	key := m.panes.MintTerminalKey()
+	term := terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
+	inst.AddTerminalTab(term)
+	m.setFocus(target)
 	saveLayout(m.tree, m.panes)
 }
 
@@ -1805,7 +1836,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				continue
 			}
 			for i := 0; i < inst.TabCount(); i++ {
-				if inst.TabEditor(i).Dirty() {
+				if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
 					cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
 				}
 			}
@@ -1931,6 +1962,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal.new (palette / menu): split the focused leaf with a fresh
 		// shell session rooted in the project (Roadmap 0170, #95).
 		m.openTerminal()
+		return m, nil
+
+	case TerminalNewTabMsg:
+		// terminal.newTab (palette / menu, #573): open a shell in a new tab
+		// of the active editor pane, next to the file tabs.
+		m.openTerminalTab()
 		return m, nil
 
 	case MarkdownPreviewMsg:
@@ -2073,7 +2110,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "paste history needs a focused editor")
 			return m, nil
 		}
-		hist := inst.Editor().RegisterHistory()
+		ed := inst.Editor()
+		if ed == nil {
+			m.host.Notify(host.Info, "paste history needs a focused editor")
+			return m, nil
+		}
+		hist := ed.RegisterHistory()
 		if len(hist) == 0 {
 			m.host.Notify(host.Info, "clipboard history is empty — yank or delete something first")
 			return m, nil
@@ -2087,7 +2129,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A picker row was chosen: paste that entry into the focused editor
 		// with Cmd+V semantics (it also becomes the current clipboard).
 		if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
-			inst.Editor().PasteHistoryEntry(msg.Index)
+			if ed := inst.Editor(); ed != nil {
+				ed.PasteHistoryEntry(msg.Index)
+			}
 		}
 		return m, nil
 
@@ -2859,7 +2903,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// cmd+c copies an active mouse selection (#227); without one the
 			// key stays with the shell.
-			if term := m.panes.FocusedInstance().Terminal(); term.HasSelection() {
+			if term := m.panes.FocusedInstance().ActiveTerminal(); term.HasSelection() {
 				if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "c" {
 					m.copyTerminalSelection(term)
 					return m, nil
@@ -3068,10 +3112,12 @@ func (m *Model) openInTab(key, path string) bool {
 		return true
 	}
 	added := false
-	if inst.Editor().HasFile() {
-		if m.autosaveEnabled() {
+	// A terminal-hosting active tab (#573) has no document to fill: append a
+	// fresh tab for the file, like a file-backed active tab.
+	if ed := inst.Editor(); ed == nil || ed.HasFile() {
+		if ed != nil && m.autosaveEnabled() {
 			// Leaving the active tab's document counts as leaving it (#174).
-			inst.Editor().Autosave()
+			ed.Autosave()
 		}
 		inst.AddTab()
 		m.installEmitter(key)
@@ -3093,12 +3139,12 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 	if idx == inst.ActiveTab() {
 		return
 	}
-	if m.autosaveEnabled() {
-		inst.Editor().Autosave()
+	if ed := inst.Editor(); ed != nil && m.autosaveEnabled() {
+		ed.Autosave()
 	}
 	inst.ActivateTab(idx)
 	// Returning to a background tab counts as using its file (MRU, 0230).
-	if ed := inst.Editor(); ed.HasFile() {
+	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.recent.Touch(ed.Path())
 	}
 }
@@ -3106,7 +3152,7 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 // activeFilePath is the focused (else most recent) editor's file, or "".
 func (m Model) activeFilePath() string {
 	if key := m.activeEditorKey(); key != "" {
-		if ed := m.panes.Get(key).Editor(); ed.HasFile() {
+		if ed := m.panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			return ed.Path()
 		}
 	}
@@ -3119,6 +3165,9 @@ func (m Model) activeFilePath() string {
 // of loading a divergent copy; otherwise the file is read from disk.
 func (m *Model) loadOrShare(key, path string) error {
 	target := m.panes.Get(key).Editor()
+	if target == nil {
+		return fmt.Errorf("no editor tab to load %s into", path)
+	}
 	if src := m.editorForPath(path); src != nil && src != target {
 		target.ShareDocumentWith(src)
 		return nil
@@ -3356,8 +3405,8 @@ func (m *Model) setFocus(key string) {
 		m.recentEditor = key
 		// The explorer's accent always tracks the focused editor's file, so
 		// switching panes (click, focus cycling) moves the highlight with it.
-		if inst.Editor().HasFile() {
-			m.explorer().SetActive(inst.Editor().Path())
+		if ed := inst.Editor(); ed != nil && ed.HasFile() {
+			m.explorer().SetActive(ed.Path())
 		}
 	}
 }
@@ -3375,7 +3424,9 @@ func (m *Model) autosaveOnBlur(next string) {
 		return
 	}
 	if inst := m.panes.Get(old); inst != nil && inst.Kind() == pane.KindEditor {
-		inst.Editor().Autosave()
+		if ed := inst.Editor(); ed != nil {
+			ed.Autosave()
+		}
 	}
 }
 
@@ -3436,11 +3487,15 @@ func (m *Model) SplitFocused(zone layout.Zone) {
 func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 	target := m.panes.Focused()
 	inst := m.panes.Get(target)
-	if inst == nil || inst.Kind() != pane.KindEditor || !inst.Editor().HasFile() {
+	if inst == nil || inst.Kind() != pane.KindEditor {
 		m.host.Notify(host.Info, "no file to split — open one first")
 		return m, nil
 	}
 	src := inst.Editor()
+	if src == nil || !src.HasFile() {
+		m.host.Notify(host.Info, "no file to split — open one first")
+		return m, nil
+	}
 	line, col := src.CursorPos()
 	top, left := src.ScrollOffset()
 	m.SplitFocused(zone)
@@ -3539,16 +3594,19 @@ func (m *Model) closeKey(key string) bool {
 // the pane holds more than one tab; the pane's chrome, explorer accent and
 // persisted layout follow the tab that takes over.
 func (m *Model) closeTab(inst *pane.Instance, idx int) {
-	ed := inst.TabEditor(idx)
-	if ed == nil || inst.TabCount() <= 1 {
+	if inst.TabCount() <= 1 {
 		return
 	}
-	m.rememberClosedTab(ed)
-	ed.PersistUndo() // undo survives the close (#148); no-op while dirty
-	m.backupDropOnCloseTab(ed, inst.Key())
+	if ed := inst.TabEditor(idx); ed != nil {
+		m.rememberClosedTab(ed)
+		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
+		m.backupDropOnCloseTab(ed, inst.Key())
+	}
+	// A terminal tab (#573) has no document bookkeeping; CloseTab ends its
+	// session.
 	inst.CloseTab(idx)
 	m.syncExplorerOpen()
-	if next := inst.Editor(); next.HasFile() && inst.Key() == m.panes.Focused() {
+	if next := inst.Editor(); next != nil && next.HasFile() && inst.Key() == m.panes.Focused() {
 		m.explorer().SetActive(next.Path())
 	}
 	saveLayout(m.tree, m.panes)
@@ -3661,7 +3719,7 @@ func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
 func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	prefix := path + string(os.PathSeparator)
 	match := func(ed *editor.Model) bool {
-		if !ed.HasFile() {
+		if ed == nil || !ed.HasFile() {
 			return false
 		}
 		ep := ed.Path()
@@ -4109,6 +4167,21 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				}
 				return m, nil
 			}
+			// An active terminal tab (#573) routes the wheel like a terminal
+			// pane: mouse-reporting children get the event, alt-screen
+			// children arrow keys, a plain shell pages the scrollback.
+			if term := inst.ActiveTerminal(); term != nil {
+				if r, ok := m.lay.Panes[key]; ok {
+					lx, ly := msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY)
+					switch msg.Button {
+					case tea.MouseWheelUp:
+						term.MouseWheel(lx, ly, wheelLines)
+					case tea.MouseWheelDown:
+						term.MouseWheel(lx, ly, -wheelLines)
+					}
+				}
+				return m, nil
+			}
 			// Scrolls the viewport regardless of mode (normal, insert,
 			// visual, …); the cursor stays put until the user clicks or moves.
 			// Horizontal wheel and shift+wheel scroll sideways (#230), like
@@ -4187,7 +4260,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.layout()
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				m.panes.Get(m.drag.srcPane).Terminal().MouseDrag(lx, ly)
+				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+					term.MouseDrag(lx, ly)
+				}
 			}
 		}
 	case mouseRelease:
@@ -4211,7 +4286,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				m.panes.Get(m.drag.srcPane).Terminal().MouseRelease(lx, ly)
+				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+					term.MouseRelease(lx, ly)
+				}
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
@@ -4475,6 +4552,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		*exp, cmd = exp.MouseClick(localX, localY)
 		return m, cmd
 	case pane.KindEditor:
+		// An active terminal tab (#573) takes the click like a terminal pane:
+		// forward to a mouse-reporting child, else anchor a text selection.
+		if term := inst.ActiveTerminal(); term != nil {
+			if msg.Button == tea.MouseLeft {
+				term.MousePress(localX, localY)
+				m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
+			return m, nil
+		}
 		// alt+click toggles a secondary caret (#145); a plain click moves the
 		// cursor and collapses the caret set.
 		if msg.Mod&tea.ModAlt != 0 {
@@ -4561,6 +4647,9 @@ func (m Model) compositeLSPPopups(base string) string {
 		return base
 	}
 	ed := inst.Editor()
+	if ed == nil {
+		return base // active tab hosts a terminal (#573): no popups
+	}
 	// The popups carry their own frame (#316), so they may overflow the owning
 	// pane; cap their content width at the terminal instead of the pane
 	// (frame + padding take 4 columns).
@@ -4889,6 +4978,11 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title, content = "EXPLORER", inst.View()
 		case pane.KindEditor:
 			title, content = m.editorTitle(inst.Editor()), inst.View()
+			if term := inst.ActiveTerminal(); term != nil {
+				// The active tab hosts a terminal (#573): title it like a
+				// terminal pane, from the tab's own label.
+				title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
+			}
 			// The tab bar takes over the title row once the pane holds
 			// multiple tabs (#157); paneBox draws it like any title.
 			if bar, ok := m.tabBar(inst, r.W-paneChromeW); ok {
@@ -4954,7 +5048,7 @@ func (m Model) dividerH(w int) string {
 
 // editorTitle returns an editor pane title: file basename with a dirty marker.
 func (m Model) editorTitle(ed *editor.Model) string {
-	if !ed.HasFile() {
+	if ed == nil || !ed.HasFile() {
 		return "EDITOR"
 	}
 	name := baseName(ed.Path())
