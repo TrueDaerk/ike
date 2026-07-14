@@ -27,6 +27,7 @@ Component-level concepts for the IKE codebase.
 * [Themes / Color Schemes](/architecture/themes.md) - semantic-slot palette system: one [theme].name recolors syntax + explorer + chrome, built-in themes, plugin registration (Roadmap 0110)
 * [Project Switching](/architecture/project-switching.md) - recent-projects history data layer: typed [[project.history]] entries, root validation, upsert/dedupe/cap persisted via config; picker + switch orchestration upcoming (Roadmap 0090)
 * [Integrated Terminal](/architecture/terminal.md) - PTY-spawned shell through a VT emulator as a pane: raw key routing with ctrl+tab escape hatch, coalesced output, resize propagation (Roadmap 0170)
+* [Run Configurations](/architecture/run-configurations.md) - named, persisted run/debug configurations synthesized into command lines through the language registry's RunCommandProvider seam; per-project .ike/runconfigs.json store (0350)
 * [Writing WASM Plugins](/architecture/plugin-authoring.md) - plugin-author guide: Go guest SDK, build & install (wasip1 c-shared), sandbox posture, raw ABI reference for other languages (Roadmap 9900)
 * [Navigation History (Back/Forward)](/architecture/navigation-history.md) - per-jump cursor history with JetBrains Back/Forward semantics: open-funnel recording, nav.back/nav.forward, leader mnemonics space b / space i (Roadmap 0220)
 * [Status Line Segments](/architecture/status-line.md) - extensible left/right slot model behind the bottom status bar: mode/file/diagnostics plus toolchain interpreter and notification counter segments (#101)

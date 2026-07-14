@@ -2,6 +2,12 @@
 
 ## 2026-07-14
 
+- Run-configuration model (0350, #575): `internal/run` store persisted at
+  `.ike/runconfigs.json` with default synthesis on first run (`EnsureFor`)
+  and rerun-last tracking; `internal/lang` gains the `RunCommandProvider` /
+  `ModuleResolver` seams; Python (`-m` package detection), PHP and Go
+  contribute run commands.
+
 - Terminal command sessions (0350, #574): `StartCommandSession`/`NewCommand`
   run a program directly on the PTY with a kept exit code and a
   `[process exited with code N]` completion line; `Model.Occupied()` input
