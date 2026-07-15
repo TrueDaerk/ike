@@ -2,6 +2,16 @@
 
 ## 2026-07-15
 
+- Fullscreen render lag fix (0400, #608): `os.Getwd()` — a stat syscall on macOS —
+  was called every frame from the terminal title, status line, and breakpoint
+  gutter (once per pane), ~49% of all CPU under a fullscreen scroll, so latency
+  scaled with window size. Cached the working directory (`cachedGetwd`,
+  invalidated on project switch); the per-frame syscall is gone (`rawsyscalln`
+  50% -> ~4% in the re-profile), roughly halving render CPU. Residual hotspot is
+  now lipgloss frame composition (grapheme-width), deferred. Epic #593.
+
+## 2026-07-15
+
 - Mouse coalescer backpressure fix (0400, #606): the input coalescer cleared its
   `armed` flag before the blocking re-inject `send`, so under a render-bound
   scroll every 16ms tick spawned another flush goroutine that blocked in send —

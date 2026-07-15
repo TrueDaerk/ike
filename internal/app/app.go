@@ -1221,7 +1221,7 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 // displayDir shortens a directory for chrome: the base name when it is the
 // working directory's base, the compacted path otherwise.
 func displayDir(dir string) string {
-	if cwd, err := os.Getwd(); err == nil && cwd == dir {
+	if cwd, err := cachedGetwd(); err == nil && cwd == dir {
 		return filepath.Base(dir)
 	}
 	return project.CompactPath(dir)
@@ -5315,7 +5315,7 @@ func displayPath(path string) string {
 	if err != nil {
 		return path
 	}
-	cwd, err := os.Getwd()
+	cwd, err := cachedGetwd()
 	if err != nil {
 		return abs
 	}
