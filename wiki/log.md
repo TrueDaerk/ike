@@ -2,6 +2,17 @@
 
 ## 2026-07-15
 
+- Mouse coalescer backpressure fix (0400, #606): the input coalescer cleared its
+  `armed` flag before the blocking re-inject `send`, so under a render-bound
+  scroll every 16ms tick spawned another flush goroutine that blocked in send —
+  the pending-message pile grew without bound and scrolling degraded back to the
+  old lag after a while. `armed` now stays set across the whole flush and re-arms
+  only after the send returns (and only if events piled up), bounding it to one
+  in-flight flush. Confirmed via pprof that render (full-frame terminal write) is
+  the syscall-bound bottleneck the backlog was forming behind. Epic #593.
+
+## 2026-07-15
+
 - Bracketed paste as one block (0400, #603): a `tea.PasteMsg` now routes to the
   focused editor's new `PasteText`, inserting the whole pasted block as a single
   edit and one undo unit (visual replaces, mid-insert splices, normal pastes

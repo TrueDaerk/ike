@@ -76,7 +76,10 @@ func (c *MouseCoalescer) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
 	}
 }
 
-// absorb records an event under the lock and arms the flush timer.
+// absorb records an event under the lock and arms the flush timer if one is not
+// already in flight. `armed` stays true for the entire lifetime of a flush —
+// including its (possibly blocking) send — so only ever ONE flush goroutine
+// exists; see flush for why that matters.
 func (c *MouseCoalescer) absorb(record func()) {
 	c.mu.Lock()
 	record()
@@ -87,8 +90,22 @@ func (c *MouseCoalescer) absorb(record func()) {
 	c.mu.Unlock()
 }
 
-// flush drains the accumulator and re-injects it as one coalescedInputMsg. A
-// drain that finds nothing (already emptied) is a no-op.
+// flush drains the accumulator and re-injects it as one coalescedInputMsg, then
+// self-paces: it re-arms only AFTER the send returns, and only if new events
+// arrived meanwhile.
+//
+// The send blocks until the event loop accepts the message (an unbuffered
+// channel). Under a sustained scroll the loop is render-bound (a full-frame
+// terminal write is syscall-heavy), so it accepts messages slower than the wheel
+// emits them. Clearing `armed` up front would let every 16ms tick spawn another
+// flush goroutine that blocks in send, and that pile — one pending
+// coalescedInputMsg per tick — grows without bound the longer you scroll: latency
+// creeps up until it feels stuck again (#602 regression seen in the wild).
+//
+// Keeping `armed` set across the send bounds it to a single in-flight flush.
+// Everything that arrives while the loop is busy folds into the next batch, so
+// scrolling stays at the loop's real throughput with constant latency instead of
+// an ever-growing backlog.
 func (c *MouseCoalescer) flush() {
 	c.mu.Lock()
 	wheels := c.wheels
@@ -99,13 +116,23 @@ func (c *MouseCoalescer) flush() {
 		motion = &m
 		c.haveMotion = false
 	}
-	c.armed = false
 	send := c.send
 	c.mu.Unlock()
-	if send == nil || (len(wheels) == 0 && motion == nil) {
-		return
+
+	if send != nil && (len(wheels) > 0 || motion != nil) {
+		send(coalescedInputMsg{wheels: wheels, motion: motion}) // may block on the loop
 	}
-	send(coalescedInputMsg{wheels: wheels, motion: motion})
+
+	// Re-arm only now (after delivery). If events piled up during the send,
+	// schedule the next flush; otherwise disarm so a later event re-arms. `armed`
+	// was never cleared, so no absorb could have spawned a second flush meanwhile.
+	c.mu.Lock()
+	if len(c.wheels) > 0 || c.haveMotion {
+		time.AfterFunc(coalesceInterval, c.flush)
+	} else {
+		c.armed = false
+	}
+	c.mu.Unlock()
 }
 
 // overlayCapturesKeyboard reports whether a modal overlay or prompt owns the
