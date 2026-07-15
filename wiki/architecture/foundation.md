@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-15T14:00:00Z
+timestamp: 2026-07-15T15:00:00Z
 ---
 
 # Foundation Slice
@@ -148,6 +148,33 @@ pane — ~49% of all CPU under a fullscreen scroll. It is now cached
 switch invalidates it (`invalidateCwd`, right after the switch's `os.Chdir`). The
 guideline: `View` and everything it calls must avoid syscalls, config reads, and
 filesystem work — memoize or cache anything that does not change per frame.
+
+## Incremental frame composition (#612)
+
+bubbletea's terminal *write* is already incremental (the renderer diffs cells),
+but the *computation* of the frame string was not: `Model.render` recomposed every
+pane each frame — every `inst.View()` plus lipgloss `paneBox`/`JoinHorizontal`/
+`JoinVertical`, which re-measure every line via `StringWidth` — even panes the user
+was not touching. Two caches plus a measurement-free compositor make it
+incremental:
+
+- **Per-pane box cache** (`pane.Instance.CachedBox`): the bordered box is keyed by
+  a hash of the freshly-rendered content plus the chrome (title, size, border). The
+  content is always recomputed, so the cache can never be stale — it only skips
+  re-composing an identical box, which is the common case for the panes not being
+  interacted with. (An earlier version cached `View()` behind a dirty flag, but
+  programmatic mutations through direct accessors — preview scroll on cursor-move,
+  editor `SetCursor` from go-to-definition/nav — bypass the flag and rendered
+  stale; the content-hash key avoids that class of bug.)
+- **Measurement-free compositor** (`joinH`/`joinV`): every leaf box is already
+  exactly its rect's width×height (`paneBox` clamps it), so the layout tree and the
+  body/status/menu stack are stitched by direct line placement instead of
+  `lipgloss.Join*` re-measuring every line. It falls back to lipgloss if a block's
+  line count is ever unexpected.
+
+Together they roughly halved render CPU on a fullscreen scroll (`Model.render` cum
+~69% → ~42%, `StringWidth` ~32% → ~15%). With the render-budget pacing (#610)
+capping CPU, cheaper frames buy a higher scroll frame-rate at the same ceiling.
 
 ## Slow-update diagnostics (#125)
 
