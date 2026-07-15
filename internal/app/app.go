@@ -1658,6 +1658,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case wheelFlushMsg:
 		return m.flushWheel()
 
+	case coalescedInputMsg:
+		// A folded mouse burst from the input coalescer (#602): applied in one
+		// pass so a scroll/drag storm costs a single render, never queuing up
+		// behind (or ahead of) keystrokes.
+		return m.applyCoalescedInput(msg)
+
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
 
