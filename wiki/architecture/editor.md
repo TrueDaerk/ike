@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-15T00:00:00Z
 ---
 
 # Editor
@@ -40,6 +40,13 @@ split into focused sub-packages under `internal/editor/`; `editor.go` plus the
   `Cmd+C/X/V` (keymap commands `editor.copy/cut/paste`) yank / delete the
   visual selection — or the current line without one — through `"+`, and paste
   from it (mid-insert the paste joins the open insert session's undo unit).
+  A **bracketed paste** from the terminal (external text) arrives as one
+  `tea.PasteMsg`; the app routes it to the focused editor's `PasteText`, which
+  inserts the whole block as a single edit and one undo unit — visual mode
+  replaces the selection, mid-insert it splices in, normal mode pastes after the
+  cursor like `p` — without touching the yank registers or system clipboard
+  (#603). A modal overlay owning the keyboard suppresses the route; a focused
+  terminal pane gets the block through its own bracketed-paste path.
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
   #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
   Every yank/delete also feeds a bounded 20-entry **history** (#57,

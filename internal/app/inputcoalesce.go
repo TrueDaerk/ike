@@ -5,6 +5,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/pane"
 )
 
 // inputcoalesce.go keeps a burst of mouse events from starving keystrokes (#602).
@@ -104,6 +106,47 @@ func (c *MouseCoalescer) flush() {
 		return
 	}
 	send(coalescedInputMsg{wheels: wheels, motion: motion})
+}
+
+// overlayCapturesKeyboard reports whether a modal overlay or prompt owns the
+// keyboard right now — mirroring the guard chain in the KeyPressMsg handler. When
+// true, a paste is not routed into the (hidden) editor/terminal below.
+func (m Model) overlayCapturesKeyboard() bool {
+	return m.settings.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
+		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
+		m.commitUI.IsOpen() || m.callhier.IsOpen() || m.palette.IsOpen() ||
+		m.shell.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
+		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
+		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||
+		m.lspRenameOpen() || m.explorerCapturing()
+}
+
+// handlePaste routes a bracketed-paste block (#603) to the focused editable
+// surface: a terminal pane through its bracketed-paste path, otherwise the
+// focused editor as a single block insert. It is a no-op while a modal overlay
+// owns the keyboard (the paste would otherwise land in a hidden buffer).
+func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
+	if text == "" || m.overlayCapturesKeyboard() {
+		return m, nil
+	}
+	if m.terminalFocused() {
+		if inst := m.panes.FocusedInstance(); inst != nil {
+			if term := inst.ActiveTerminal(); term != nil {
+				term.PasteText(text)
+			}
+		}
+		return m, nil
+	}
+	inst := m.panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return m, nil
+	}
+	ed := inst.Editor()
+	if ed == nil {
+		return m, nil
+	}
+	ed.PasteText(text)
+	return m, nil
 }
 
 // applyCoalescedInput replays a folded mouse burst in a single Update pass: the
