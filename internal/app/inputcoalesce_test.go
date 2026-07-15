@@ -90,6 +90,79 @@ func TestFilterAbsorbsMouseAndFlushes(t *testing.T) {
 	}
 }
 
+// TestFlushSingleInFlightUnderBackpressure verifies that when the event loop is
+// slow to accept messages (a blocked sender, standing in for a render-bound loop
+// during a sustained scroll), the coalescer keeps at most ONE flush in flight —
+// it does not spawn a growing pile of blocked flush goroutines. Every wheel is
+// still delivered once the consumer catches up (#602 regression guard).
+func TestFlushSingleInFlightUnderBackpressure(t *testing.T) {
+	c := NewMouseCoalescer()
+
+	var mu sync.Mutex
+	inFlight, maxInFlight, delivered := 0, 0, 0
+	gate := make(chan struct{}) // each send blocks until handed a token
+	send := func(m tea.Msg) {
+		mu.Lock()
+		inFlight++
+		if inFlight > maxInFlight {
+			maxInFlight = inFlight
+		}
+		mu.Unlock()
+		<-gate // stall like a busy loop
+		mu.Lock()
+		if ci, ok := m.(coalescedInputMsg); ok {
+			delivered += len(ci.wheels)
+		}
+		inFlight--
+		mu.Unlock()
+	}
+	c.SetSender(send)
+
+	// A releaser drains sends slower than they are produced, so a flush is
+	// usually blocked when the next wheels arrive.
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case gate <- struct{}{}:
+				time.Sleep(5 * time.Millisecond)
+			}
+		}
+	}()
+
+	fired := 0
+	deadline := time.Now().Add(300 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		c.Filter(nil, tea.MouseWheelMsg{Button: tea.MouseWheelDown})
+		fired++
+		time.Sleep(1 * time.Millisecond)
+	}
+
+	// Let the backlog drain.
+	drainBy := time.Now().Add(2 * time.Second)
+	for time.Now().Before(drainBy) {
+		mu.Lock()
+		d := delivered
+		mu.Unlock()
+		if d >= fired {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	close(done)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if maxInFlight > 1 {
+		t.Fatalf("max concurrent flushes = %d, want 1 (backlog pile-up)", maxInFlight)
+	}
+	if delivered != fired {
+		t.Fatalf("delivered %d wheels, fired %d (lost or duplicated under backpressure)", delivered, fired)
+	}
+}
+
 // TestFilterDoesNotReabsorbInjected verifies the re-injected batch passes through
 // the filter (it must not be re-absorbed, which would loop forever).
 func TestFilterDoesNotReabsorbInjected(t *testing.T) {

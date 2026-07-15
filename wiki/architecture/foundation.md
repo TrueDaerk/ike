@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-15T00:00:00Z
+timestamp: 2026-07-15T12:00:00Z
 ---
 
 # Foundation Slice
@@ -113,6 +113,16 @@ distance and the latest motion. Every other message — keys, mouse
 press/release/click, resize, paste — passes straight through, so keys are never
 dropped or delayed. `main.go` wires the coalescer's flush sender to the program's
 `Send` alongside the host's.
+
+The flush is **single-in-flight with backpressure** (#606). The re-inject `Send`
+blocks until the loop accepts it, and a sustained scroll is render-bound (a
+full-frame terminal write is syscall-heavy), so the loop accepts slower than the
+wheel emits. The `armed` flag therefore stays set across the whole flush —
+including the blocking send — and is re-armed only *after* the send returns, and
+only if new events arrived meanwhile. That bounds the coalescer to one in-flight
+flush; without it every 16ms tick spawned another flush goroutine that blocked in
+`send`, and the pile grew without bound the longer you scrolled — latency creeping
+back up to the pre-coalescer feel.
 
 ## Slow-update diagnostics (#125)
 
