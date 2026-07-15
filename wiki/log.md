@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-15
+
+- Mouse input coalescing (0400, #602): a `tea.WithFilter` hook
+  (`internal/app/inputcoalesce.go`) absorbs `MouseWheelMsg`/`MouseMotionMsg` and
+  returns nil, so bubbletea skips Update + render for them — a scroll/drag burst
+  no longer queues ahead of keystrokes. A ~16ms timer re-injects the folded
+  events as one `coalescedInputMsg` applied in a single pass, preserving net
+  scroll distance. Keys, clicks, resize and paste pass straight through. Fixes
+  the "scroll a lot then cmd+k, everything drains one-by-one" unresponsiveness.
+  Epic #593.
+
 ## 2026-07-14
 
 - Coalesced diagnostics (0400, #597): a workspace-diagnostic server publishing

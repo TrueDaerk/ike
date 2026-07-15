@@ -115,11 +115,18 @@ func main() {
 		m = m.OpenStdinBuffer(stdinText)
 	}
 	wasmHost.SetAPI(m.Host())
+	// The mouse coalescer (#602) folds wheel/motion bursts before Update so they
+	// never queue ahead of keystrokes; it re-injects the folded batch via the
+	// program's Send, wired below. Installed as a message filter.
+	mouse := app.NewMouseCoalescer()
+	progOpts = append(progOpts, tea.WithFilter(mouse.Filter))
 	p := tea.NewProgram(m, progOpts...)
 	// Wire the program's Send into the host so background workers (the LSP bridge)
-	// can inject async results. The host is shared by pointer with the program's
-	// model copy, so this takes effect for the running model.
+	// can inject async results, and into the mouse coalescer's flush timer. The
+	// host is shared by pointer with the program's model copy, so this takes
+	// effect for the running model.
 	m.SetSender(p.Send)
+	mouse.SetSender(p.Send)
 	// Watch the project root for external file changes (Roadmap 0140); events
 	// arrive through the host's Send as watch.EventMsg.
 	m.StartWatcher(".")

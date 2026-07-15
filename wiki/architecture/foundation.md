@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-12T12:00:00Z
+timestamp: 2026-07-15T00:00:00Z
 ---
 
 # Foundation Slice
@@ -73,9 +73,11 @@ would hang).
 ## External file changes (Roadmap 0140)
 
 `internal/watch` is the file-watcher service (#80): fsnotify on the project
-root, recursive (skipping `.git`, watching newly created directories),
-debounced ~100ms with per-path coalescing (removal wins; create survives a
-follow-up write). It emits `watch.EventMsg{Kind, Path}` — `FileChanged` /
+root, recursive (watching newly created directories) but pruning
+dot-directories and vendored/noise dirs (`node_modules`, `__pycache__`,
+`site-packages`, `vendor`) via `skipWatchDir` so a populated `.venv` does not
+register thousands of watches (#596), debounced ~100ms with per-path coalescing
+(removal wins; create survives a follow-up write). It emits `watch.EventMsg{Kind, Path}` — `FileChanged` /
 `FileCreated` / `FileRemoved` / `DirChanged` — through `host.Send`; the root
 model routes file kinds to the editor leaf owning the path
 (`editorKeyForPath`) and `DirChanged` to the explorer (consumers land in
@@ -92,6 +94,25 @@ model routes file kinds to the editor leaf owning the path
 - **Config:** `files.watch = true|false` (default true). `main.go` starts the
   watcher after wiring `Send`; a project switch (Roadmap 0090) calls
   `StartWatcher` again, which restarts on the new root.
+
+## Input coalescing (#602)
+
+bubbletea reads one message at a time from an unbuffered channel and runs
+`Update` + a full `View` render for **every** message, with no lookahead. A mouse
+burst — one `MouseWheelMsg` per scroll notch, one `MouseMotionMsg` per drag cell —
+would therefore make a keystroke typed right after wait behind dozens of
+Update+render passes: the IDE stays correct but feels frozen.
+
+`internal/app/inputcoalesce.go` installs a `tea.WithFilter` hook
+(`MouseCoalescer`). Wheel and motion events are absorbed into an accumulator and
+the filter returns `nil`, so bubbletea skips both Update and the render for them
+and the queue drains at channel speed — a following key is reached at once. A
+~16ms timer re-injects the folded events as one `coalescedInputMsg`, which
+`applyCoalescedInput` replays in a single pass (one render), preserving net scroll
+distance and the latest motion. Every other message — keys, mouse
+press/release/click, resize, paste — passes straight through, so keys are never
+dropped or delayed. `main.go` wires the coalescer's flush sender to the program's
+`Send` alongside the host's.
 
 ## Slow-update diagnostics (#125)
 
