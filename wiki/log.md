@@ -2,6 +2,14 @@
 
 ## 2026-07-15
 
+- Bracketed paste as one block (0400, #603): a `tea.PasteMsg` now routes to the
+  focused editor's new `PasteText`, inserting the whole pasted block as a single
+  edit and one undo unit (visual replaces, mid-insert splices, normal pastes
+  after the cursor) without touching the yank registers or clipboard — no more
+  character-by-character insertion of a large paste. Terminal panes get the block
+  through their own bracketed-paste path; a modal overlay suppresses the route.
+  Epic #593.
+
 - Mouse input coalescing (0400, #602): a `tea.WithFilter` hook
   (`internal/app/inputcoalesce.go`) absorbs `MouseWheelMsg`/`MouseMotionMsg` and
   returns nil, so bubbletea skips Update + render for them — a scroll/drag burst

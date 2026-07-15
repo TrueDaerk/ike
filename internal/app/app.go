@@ -1664,6 +1664,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// behind (or ahead of) keystrokes.
 		return m.applyCoalescedInput(msg)
 
+	case tea.PasteMsg:
+		// Bracketed paste (#603): the terminal delivers the whole pasted block as
+		// one message. Insert it in a single pass (one edit, one undo unit) rather
+		// than letting it arrive as per-character key input.
+		return m.handlePaste(msg.Content)
+
 	case explorer.OpenFileMsg:
 		return m.openPath(msg.Path, msg.NewPane)
 

@@ -713,6 +713,45 @@ func (m *Model) clipboardPaste() {
 	m.paste('+', false, 1, false)
 }
 
+// PasteText inserts external (bracketed-paste) text as a single block and one
+// undo unit (#603), so a large paste lands at once — not character by character —
+// without disturbing the yank registers or the system clipboard. Visual mode
+// replaces the selection; mid-insert it splices into the open insert; normal
+// mode pastes after the cursor like `p`. The change emits through mutate, so LSP
+// sync and highlighting see one edit.
+func (m *Model) PasteText(text string) {
+	if text == "" {
+		return
+	}
+	e := register.Entry{Text: text, Linewise: strings.HasSuffix(text, "\n")}
+	if m.mode.IsVisual() {
+		target := m.visualSelection()
+		start := target.Range.Start
+		m.mode = Normal
+		m.mutate(func(rec *history.Recorder) buffer.Position {
+			operator.Delete(m.buf, rec, m.regs, m.pending.Register, target)
+			if e.Linewise {
+				return operator.Paste(m.buf, rec, e, start, false, 1, false)
+			}
+			at := m.buf.Clamp(start)
+			end := rec.Apply(buffer.Insert(at, e.Text))
+			if end.Col > at.Col {
+				end.Col--
+			}
+			return end
+		})
+		m.pending.Reset()
+		return
+	}
+	if m.insert.active {
+		m.insertText(text)
+		return
+	}
+	m.mutate(func(rec *history.Recorder) buffer.Position {
+		return operator.Paste(m.buf, rec, e, m.cursor, true, 1, false)
+	})
+}
+
 // RegisterHistory exposes the yank/delete history, newest first, for the
 // paste-from-history picker (#57).
 func (m Model) RegisterHistory() []register.Entry { return m.regs.History() }
