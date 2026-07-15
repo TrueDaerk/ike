@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -4886,6 +4887,12 @@ func (m Model) pal() *theme.Palette {
 	return theme.DefaultPalette()
 }
 
+// renderNanos holds the wall-clock cost of the last full-frame composition. The
+// input coalescer reads it to pace scroll re-injection under a render budget
+// (#610), so an expensive fullscreen frame throttles fps instead of pegging a
+// core.
+var renderNanos atomic.Int64
+
 // render composes the full frame as a styled string: the pane tree, the status
 // line, and any floating overlay (move ghost, palette, modal shell) on top.
 // The palette's background/foreground are painted behind and under the whole
@@ -4895,6 +4902,8 @@ func (m Model) render() string {
 	if m.width == 0 {
 		return "starting ike…"
 	}
+	start := time.Now()
+	defer func() { renderNanos.Store(int64(time.Since(start))) }()
 	body := ""
 	if m.zoomed != "" {
 		// Zoomed (#358): render only that pane; the tree survives untouched.

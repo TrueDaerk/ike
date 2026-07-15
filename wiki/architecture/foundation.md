@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-15T13:00:00Z
+timestamp: 2026-07-15T14:00:00Z
 ---
 
 # Foundation Slice
@@ -123,6 +123,17 @@ only if new events arrived meanwhile. That bounds the coalescer to one in-flight
 flush; without it every 16ms tick spawned another flush goroutine that blocked in
 `send`, and the pile grew without bound the longer you scrolled — latency creeping
 back up to the pre-coalescer feel.
+
+The flush cadence is also **adaptive to render cost** (#610). `Model.render`
+records its wall-clock cost in `renderNanos`; the coalescer waits
+`renderCost × renderBudgetDivisor` before the next batch (clamped to a 16ms floor
+and a 66ms ceiling), so rendering coalesced input stays near `1/divisor` of a core
+no matter how expensive a single frame is. A fixed 60fps cadence would recompose
+the whole fullscreen frame — every pane's `View` plus lipgloss `paneBox`/`Join`
+re-measuring every line — back-to-back and peg a core during a sustained scroll.
+With pacing, cheap frames still flush at ~60fps while an expensive fullscreen
+frame throttles toward ~15–22fps, bounding CPU instead of saturating it. Keys and
+clicks bypass the coalescer, so they are never paced.
 
 ## Render hot path (#608)
 
