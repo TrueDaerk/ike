@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"strings"
 
 	"ike/internal/host"
@@ -141,7 +140,7 @@ func (m Model) explicitInterpreter(langID string) string {
 
 // projectRoot is the absolute working directory (IKE chdirs into the project).
 func projectRoot() string {
-	if wd, err := os.Getwd(); err == nil {
+	if wd, err := cachedGetwd(); err == nil {
 		return wd
 	}
 	return "."

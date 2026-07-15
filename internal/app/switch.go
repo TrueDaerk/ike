@@ -196,6 +196,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	if err := os.Chdir(root); err != nil {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }
 	}
+	invalidateCwd() // the render hot path caches the working directory (#608)
 	m.watcher.Stop()
 
 	cfg, _ := config.Load(config.Discover("."))

@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-15T12:00:00Z
+timestamp: 2026-07-15T13:00:00Z
 ---
 
 # Foundation Slice
@@ -123,6 +123,20 @@ only if new events arrived meanwhile. That bounds the coalescer to one in-flight
 flush; without it every 16ms tick spawned another flush goroutine that blocked in
 `send`, and the pile grew without bound the longer you scrolled — latency creeping
 back up to the pre-coalescer feel.
+
+## Render hot path (#608)
+
+bubbletea recomputes the whole frame (`Model.View`) and writes it every message,
+so anything `View` touches runs at frame rate and its cost scales with window
+size — a fullscreen multi-pane layout is the worst case. The working directory is
+the notable trap: `os.Getwd()` is a `stat` syscall on macOS, and it was called
+every frame from the terminal title (`displayDir`), the status line
+(`displayPath`), and the breakpoint gutter (`projectRoot`→`bpKey`), once per
+pane — ~49% of all CPU under a fullscreen scroll. It is now cached
+(`cachedGetwd`, `internal/app/cwdcache.go`), read once and reused until a project
+switch invalidates it (`invalidateCwd`, right after the switch's `os.Chdir`). The
+guideline: `View` and everything it calls must avoid syscalls, config reads, and
+filesystem work — memoize or cache anything that does not change per frame.
 
 ## Slow-update diagnostics (#125)
 
