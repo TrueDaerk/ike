@@ -24,10 +24,37 @@ import (
 // single pass (one render), preserving net scroll distance. Every other message —
 // keys, mouse press/release/click, resize, paste — passes straight through.
 
-// coalesceInterval bounds how long wheel/motion events accumulate before the
-// batch is re-injected: about one 60fps frame — long enough to fold a burst,
-// short enough that scrolling still tracks the wheel.
+// coalesceInterval is the floor delay between re-injected batches: about one
+// 60fps frame. Cheap frames flush at this rate; expensive ones back off (see
+// nextInterval).
 const coalesceInterval = 16 * time.Millisecond
+
+// coalesceCeiling caps the adaptive back-off so scrolling never drops below ~15
+// fps even when a frame is very expensive.
+const coalesceCeiling = 66 * time.Millisecond
+
+// renderBudgetDivisor is the target share of wall-time spent rendering coalesced
+// input: the next batch waits renderCost × this factor, so rendering stays around
+// 1/this of a core no matter how expensive a single frame is. This is what caps
+// CPU on a big fullscreen frame — the fixed 60fps cadence would otherwise render
+// back-to-back and peg a core (#610).
+const renderBudgetDivisor = 3
+
+// nextInterval picks the delay before the next flush from the last measured
+// render cost (renderNanos, set in Model.render). At ~2.5ms/frame it stays near
+// the 16ms floor (≈60fps); at ~15ms/frame it stretches toward the ceiling
+// (≈22fps), holding render CPU near 1/renderBudgetDivisor.
+func nextInterval() time.Duration {
+	cost := time.Duration(renderNanos.Load())
+	d := cost * renderBudgetDivisor
+	if d < coalesceInterval {
+		return coalesceInterval
+	}
+	if d > coalesceCeiling {
+		return coalesceCeiling
+	}
+	return d
+}
 
 // coalescedInputMsg carries mouse events folded from a burst. Update replays the
 // wheel notches in order and then the latest motion, so the whole burst costs one
@@ -85,7 +112,7 @@ func (c *MouseCoalescer) absorb(record func()) {
 	record()
 	if !c.armed && c.send != nil {
 		c.armed = true
-		time.AfterFunc(coalesceInterval, c.flush)
+		time.AfterFunc(nextInterval(), c.flush)
 	}
 	c.mu.Unlock()
 }
@@ -128,7 +155,7 @@ func (c *MouseCoalescer) flush() {
 	// was never cleared, so no absorb could have spawned a second flush meanwhile.
 	c.mu.Lock()
 	if len(c.wheels) > 0 || c.haveMotion {
-		time.AfterFunc(coalesceInterval, c.flush)
+		time.AfterFunc(nextInterval(), c.flush)
 	} else {
 		c.armed = false
 	}

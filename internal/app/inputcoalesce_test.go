@@ -40,6 +40,28 @@ func waitForFlush(t *testing.T, snapshot func() []tea.Msg) coalescedInputMsg {
 	return coalescedInputMsg{}
 }
 
+// TestNextIntervalAdaptsToRenderCost verifies the scroll flush cadence tracks the
+// measured render cost (#610): cheap frames stay at the floor (~60fps), expensive
+// frames back off toward the ceiling so render CPU stays bounded.
+func TestNextIntervalAdaptsToRenderCost(t *testing.T) {
+	defer renderNanos.Store(0)
+
+	renderNanos.Store(int64(1 * time.Millisecond)) // cheap frame
+	if d := nextInterval(); d != coalesceInterval {
+		t.Fatalf("cheap frame interval = %v, want floor %v", d, coalesceInterval)
+	}
+
+	renderNanos.Store(int64(8 * time.Millisecond)) // 8ms * 3 = 24ms, between floor and ceiling
+	if d := nextInterval(); d != 8*time.Millisecond*renderBudgetDivisor {
+		t.Fatalf("mid frame interval = %v, want %v", d, 8*time.Millisecond*renderBudgetDivisor)
+	}
+
+	renderNanos.Store(int64(50 * time.Millisecond)) // very expensive -> clamp to ceiling
+	if d := nextInterval(); d != coalesceCeiling {
+		t.Fatalf("expensive frame interval = %v, want ceiling %v", d, coalesceCeiling)
+	}
+}
+
 // TestFilterPassesNonMouseThrough verifies keys and other messages are never
 // dropped or delayed by the coalescer.
 func TestFilterPassesNonMouseThrough(t *testing.T) {

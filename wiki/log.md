@@ -2,6 +2,17 @@
 
 ## 2026-07-15
 
+- Adaptive scroll-render pacing (0400, #610): sustained fullscreen scrolling
+  pegged a core because the coalescer re-injected a batch every ~16ms and each
+  triggered a full-frame recomposition (every pane's View + lipgloss re-measuring
+  every line). No leak — fixed render cost x fixed 60fps cadence. `Model.render`
+  now records its cost (`renderNanos`) and the coalescer paces the next batch at
+  cost x 3 (16ms floor, 66ms ceiling), holding scroll-render CPU near 1/3 of a
+  core: cheap frames stay ~60fps, expensive fullscreen frames throttle to
+  ~15-22fps instead of saturating. Keys/clicks bypass pacing. Epic #593.
+
+## 2026-07-15
+
 - Fullscreen render lag fix (0400, #608): `os.Getwd()` — a stat syscall on macOS —
   was called every frame from the terminal title, status line, and breakpoint
   gutter (once per pane), ~49% of all CPU under a fullscreen scroll, so latency
