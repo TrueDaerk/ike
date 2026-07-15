@@ -85,6 +85,39 @@ type Instance struct {
 	pal     *theme.Palette
 	w, h    int
 	focused bool
+
+	// Box render cache (#612): the app hands CachedBox a signature that includes
+	// a hash of the freshly-computed content plus the chrome. While the signature
+	// is unchanged, the whole bordered box — the expensive lipgloss composition
+	// (border, padding, per-line width measurement) — is reused. The content is
+	// always recomputed and re-hashed by the caller, so the cache can never go
+	// stale: it only skips re-composing an identical box.
+	bxSig   BoxSig
+	bxBox   string
+	bxValid bool
+}
+
+// BoxSig is the render-cache key for a pane's bordered box. Content is captured
+// by hash (of the freshly rendered content) rather than by a change flag, so two
+// equal signatures render byte-identical.
+type BoxSig struct {
+	ContentHash uint64
+	Title       string
+	W, H        int
+	Border      string // border color, hex
+}
+
+// CachedBox returns the pane's bordered box, running compute only when sig
+// differs from the last render. compute must be a pure function of the same
+// inputs sig captures.
+func (i *Instance) CachedBox(sig BoxSig, compute func() string) string {
+	if i.bxValid && i.bxSig == sig {
+		return i.bxBox
+	}
+	i.bxBox = compute()
+	i.bxSig = sig
+	i.bxValid = true
+	return i.bxBox
 }
 
 // Key returns the instance's stable identity, the same string used as the

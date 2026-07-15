@@ -4692,6 +4692,8 @@ func (m *Model) updateHover(msg mouseEvent) {
 	if !ok {
 		return
 	}
+	if inst := m.panes.Get(pane.ExplorerKey); inst != nil {
+	}
 	if p, in := m.lay.PaneAt(msg.X, msg.Y); in && p == pane.ExplorerKey {
 		m.explorer().SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
 		return
@@ -4918,7 +4920,10 @@ func (m Model) render() string {
 	if m.menuEnabled() {
 		rows = append([]string{m.menu.Bar()}, rows...)
 	}
-	base := lipgloss.JoinVertical(lipgloss.Left, rows...)
+	// The body (renderNode) and the status/menu rows are each already exactly
+	// m.width wide, so stack them by plain join instead of lipgloss measuring the
+	// whole body to pad it (#612).
+	base := joinV(rows...)
 	if m.menu.IsOpen() {
 		base = overlay.Place(base, m.menu.Dropdown(), m.menu.DropdownX(), 1, m.width, m.height)
 	}
@@ -5129,6 +5134,10 @@ func ghostBox(w, h int, label string, ghost color.Color) string {
 }
 
 // renderNode walks the layout tree, rendering each leaf into its rectangle.
+// The composition uses joinH/joinV rather than lipgloss.Join* (#612): every leaf
+// box is already exactly its rect's width×height (paneBox clamps it), so the
+// panes can be stitched by direct line placement — no per-line StringWidth
+// re-measurement, which profiling showed dominated a fullscreen scroll.
 func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	switch t := n.(type) {
 	case *layout.Leaf:
@@ -5136,13 +5145,43 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	case *layout.Split:
 		a, _, b := t.Children(r)
 		if t.Orient == layout.Horizontal {
-			return lipgloss.JoinHorizontal(lipgloss.Top,
-				m.renderNode(t.A, a), m.dividerV(r.H), m.renderNode(t.B, b))
+			return joinH(r.H, m.renderNode(t.A, a), m.dividerV(r.H), m.renderNode(t.B, b))
 		}
-		return lipgloss.JoinVertical(lipgloss.Left,
-			m.renderNode(t.A, a), m.dividerH(r.W), m.renderNode(t.B, b))
+		return joinV(m.renderNode(t.A, a), m.dividerH(r.W), m.renderNode(t.B, b))
 	}
 	return ""
+}
+
+// joinH stitches equal-height columns side by side by concatenating the same
+// line index of each — no width measurement, since each column's lines are
+// already exactly their own width. rows is the expected line count (the shared
+// rect height); if any column disagrees it falls back to lipgloss, which pads
+// defensively (should not happen — paneBox and dividerV both produce exactly
+// rows lines).
+func joinH(rows int, cols ...string) string {
+	split := make([][]string, len(cols))
+	for i, c := range cols {
+		split[i] = strings.Split(c, "\n")
+		if len(split[i]) != rows {
+			return lipgloss.JoinHorizontal(lipgloss.Top, cols...)
+		}
+	}
+	var sb strings.Builder
+	for row := 0; row < rows; row++ {
+		if row > 0 {
+			sb.WriteByte('\n')
+		}
+		for _, lines := range split {
+			sb.WriteString(lines[row])
+		}
+	}
+	return sb.String()
+}
+
+// joinV stacks blocks vertically. Each block already fills the shared width, so
+// stacking is a plain newline join — no padding, no measurement.
+func joinV(blocks ...string) string {
+	return strings.Join(blocks, "\n")
 }
 
 // renderPane renders a single leaf at its outer rectangle, resolving its key to
@@ -5151,7 +5190,9 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 // renders an empty titled box rather than crashing.
 func (m Model) renderPane(key string, r layout.Rect) string {
 	inst := m.panes.Get(key)
-	var title, content string
+	// Title (chrome) is computed without touching the content, so a cached pane
+	// never calls inst.View() (#612). Content is pulled lazily inside paneBox.
+	var title string
 	var focused bool
 	if inst == nil {
 		title = strings.ToUpper(key)
@@ -5159,9 +5200,9 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 		focused = m.panes.Focused() == key
 		switch inst.Kind() {
 		case pane.KindExplorer:
-			title, content = "EXPLORER", inst.View()
+			title = "EXPLORER"
 		case pane.KindEditor:
-			title, content = m.editorTitle(inst.Editor()), inst.View()
+			title = m.editorTitle(inst.Editor())
 			if term := inst.ActiveTerminal(); term != nil {
 				// The active tab hosts a terminal (#573): title it like a
 				// terminal pane, from the tab's own label.
@@ -5173,16 +5214,16 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 				title = bar
 			}
 		case pane.KindTerminal:
-			title, content = m.terminalTitle(inst), inst.View()
+			title = m.terminalTitle(inst)
 		case pane.KindMarkdown:
-			title, content = "PREVIEW "+baseName(inst.Preview().Path()), inst.View()
+			title = "PREVIEW " + baseName(inst.Preview().Path())
 		case pane.KindDiff:
-			l, r := inst.Diff().Titles()
-			title, content = "DIFF "+l+" ⇄ "+r, inst.View()
+			l, rr := inst.Diff().Titles()
+			title = "DIFF " + l + " ⇄ " + rr
 		case pane.KindVCS:
-			title, content = "VCS", inst.View()
+			title = "VCS"
 		case pane.KindDebug:
-			title, content = "DEBUG", inst.View()
+			title = "DEBUG"
 		}
 	}
 
@@ -5201,7 +5242,39 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			}
 		}
 	}
-	return paneBox(title, content, r.W, r.H, border)
+
+	if inst == nil {
+		return paneBox(title, "", r.W, r.H, border)
+	}
+	// Cache the composed box keyed by a hash of the freshly-rendered content plus
+	// the chrome (#612). The content is always recomputed, so the cache is never
+	// stale; it only skips the expensive lipgloss box composition (border,
+	// padding, per-line width measurement) when the pane's output is identical to
+	// the last frame — the common case for the panes the user is not touching.
+	content := inst.View()
+	sig := pane.BoxSig{
+		ContentHash: hashString(content),
+		Title:       title,
+		W:           r.W,
+		H:           r.H,
+		Border:      fmt.Sprintf("%v", border),
+	}
+	return inst.CachedBox(sig, func() string { return paneBox(title, content, r.W, r.H, border) })
+}
+
+// hashString is a fast non-cryptographic hash (FNV-1a) used to key the pane box
+// cache on rendered content without storing the whole string for comparison.
+func hashString(s string) uint64 {
+	const (
+		offset = 1469598103934665603
+		prime  = 1099511628211
+	)
+	h := uint64(offset)
+	for i := 0; i < len(s); i++ {
+		h ^= uint64(s[i])
+		h *= prime
+	}
+	return h
 }
 
 // zoneArrow is the short drop-zone marker shown in a target pane's title.

@@ -2,6 +2,18 @@
 
 ## 2026-07-15
 
+- Incremental frame composition (0400, #612): render was recomposing every pane
+  each frame (each inst.View + lipgloss paneBox/Join re-measuring every line),
+  even unchanged ones. Added a per-pane box cache keyed by a hash of the freshly
+  rendered content + chrome (never stale — content is always recomputed, only the
+  identical-box composition is skipped), and replaced the layout-tree and
+  body/status/menu lipgloss.Join* with a measurement-free compositor (joinH/joinV)
+  that places exact-size boxes by direct line concatenation. Fullscreen scroll:
+  Model.render cum ~69% -> ~42%, StringWidth ~32% -> ~15%. Combined with the #610
+  pacing this buys higher fps at the same CPU ceiling. Epic #593.
+
+## 2026-07-15
+
 - Adaptive scroll-render pacing (0400, #610): sustained fullscreen scrolling
   pegged a core because the coalescer re-injected a batch every ~16ms and each
   triggered a full-frame recomposition (every pane's View + lipgloss re-measuring
