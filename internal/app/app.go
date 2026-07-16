@@ -1797,6 +1797,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// instead of closing (#175).
 		return m, m.followMovedFile(msg)
 
+	case explorer.HiddenToggledMsg:
+		// Persist the show-hidden toggle immediately so it survives a kill/crash,
+		// not only a clean quit (#629).
+		saveSession(m.snapshotSession())
+		return m, nil
+
 	case RenameFileMsg:
 		// file.rename (shift+f6 / palette): explorer prompt on the selection,
 		// or the shell prompt for the focused editor's file.

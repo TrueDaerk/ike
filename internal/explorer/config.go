@@ -26,8 +26,13 @@ func (m *Model) Configure(cfg host.Config) {
 	if cfg == nil {
 		return
 	}
-	if v, ok := cfg.Get(cfgShowHidden); ok {
+	// Apply show_hidden only when the config value actually changed since the
+	// last Configure (or on first configure). Live reloads fire on unrelated
+	// events (plugin toggle, interpreter change, project switch); re-applying an
+	// unchanged default would clobber the runtime `.` toggle every time (#629).
+	if v, ok := cfg.Get(cfgShowHidden); ok && v != m.hiddenCfg {
 		m.showHidden = v == "true"
+		m.hiddenCfg = v
 	}
 	if v, ok := cfg.Get(cfgTreeIndent); ok {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {

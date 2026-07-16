@@ -2,6 +2,13 @@
 
 ## 2026-07-16
 
+- Explorer show-hidden toggle stability (#629): `Configure` now re-applies
+  `explorer.show_hidden` only when the config value actually changed (tracked in
+  `hiddenCfg`), so an unrelated live reload (plugin/interpreter/project switch)
+  no longer clobbers the runtime `.` toggle. Toggling also emits
+  `HiddenToggledMsg`, which the app persists to the session immediately so the
+  state survives a kill/crash, not only a clean quit.
+
 - Debug adapter tty isolation (0350, #620): the DAP adapter now spawns detached
   in its own session (`transport.Spec.Detached` → `setsid`). debugpy's launcher
   was `tcsetpgrp`-ing the inherited controlling terminal to give the debuggee
