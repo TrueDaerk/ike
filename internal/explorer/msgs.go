@@ -75,6 +75,12 @@ type FileMovedMsg struct {
 	IsDir bool
 }
 
+// HiddenToggledMsg announces that show-hidden visibility flipped, carrying the
+// new value, so the app can persist the session immediately — the toggle must
+// survive a kill/crash, not only a clean quit (#629). Like FileDeletedMsg it is
+// handled by the app and deliberately does not implement Msg.
+type HiddenToggledMsg struct{ ShowHidden bool }
+
 func (ToggleHiddenMsg) explorerMsg() {}
 func (CollapseAllMsg) explorerMsg()  {}
 func (RefreshMsg) explorerMsg()      {}

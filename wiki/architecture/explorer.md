@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-16T19:00:00Z
 ---
 
 # File Explorer
@@ -173,7 +173,11 @@ restart; the next toggle brings the tree back.
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
 rebuilds (no re-scan), since all children — hidden included — are cached on the
-node.
+node. The runtime `.` toggle is authoritative: `Configure` re-applies
+`explorer.show_hidden` only when the config value actually changed since the last
+call (tracked in `hiddenCfg`), so an unrelated live reload never clobbers it.
+Toggling also emits `HiddenToggledMsg`, which the app persists to the session
+immediately — the state survives a kill/crash, not only a clean quit (#629).
 
 ## File operations
 

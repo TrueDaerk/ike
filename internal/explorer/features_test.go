@@ -169,3 +169,54 @@ func TestConfigureReadsExplorerSection(t *testing.T) {
 		t.Errorf("go colour = %q want #ff5555 (red)", got)
 	}
 }
+
+// TestReconfigureDoesNotClobberToggle guards #629: a live reload whose
+// show_hidden value is unchanged must not reset the runtime `.` toggle.
+func TestReconfigureDoesNotClobberToggle(t *testing.T) {
+	cfg := host.MapConfig{"explorer.show_hidden": "false"}
+	m := New(".")
+	m.Configure(cfg) // initial: default off
+	if m.showHidden {
+		t.Fatal("show_hidden should start off")
+	}
+
+	// User toggles it on at runtime.
+	m, _ = m.Update(ToggleHiddenMsg{})
+	if !m.showHidden {
+		t.Fatal("toggle did not enable show_hidden")
+	}
+
+	// An unrelated reload re-applies the same (unchanged) config.
+	m.Configure(cfg)
+	if !m.showHidden {
+		t.Fatal("reconfigure clobbered the runtime toggle (#629)")
+	}
+
+	// A genuine settings change to show_hidden still applies (off -> on -> off).
+	m.Configure(host.MapConfig{"explorer.show_hidden": "true"})
+	if !m.showHidden {
+		t.Fatal("config change to true should apply")
+	}
+	m.Configure(host.MapConfig{"explorer.show_hidden": "false"})
+	if m.showHidden {
+		t.Fatal("config change to false should apply")
+	}
+}
+
+// TestToggleEmitsPersist guards #629: toggling emits a HiddenToggledMsg so the
+// app can persist immediately (survive a kill/crash, not only a clean quit).
+func TestToggleEmitsPersist(t *testing.T) {
+	m := New(".")
+	_, cmd := m.Update(ToggleHiddenMsg{})
+	if cmd == nil {
+		t.Fatal("toggle produced no command")
+	}
+	msg := cmd()
+	tg, ok := msg.(HiddenToggledMsg)
+	if !ok {
+		t.Fatalf("toggle emitted %T, want HiddenToggledMsg", msg)
+	}
+	if !tg.ShowHidden {
+		t.Fatal("HiddenToggledMsg.ShowHidden = false after enabling")
+	}
+}

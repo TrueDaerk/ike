@@ -73,6 +73,11 @@ type Model struct {
 	polling     bool          // a poll loop is running (or armed by Restore)
 
 	showHidden bool           // render dot-entries; toggled by explorer.toggleHidden
+	// hiddenCfg is the last explorer.show_hidden config string actually applied
+	// by Configure. A live reload only re-applies show_hidden when the config
+	// value genuinely changed, so an unrelated Reconfigure never clobbers the
+	// runtime `.` toggle (#629). "" means "not yet configured".
+	hiddenCfg string
 	indent     int            // spaces per depth level (config explorer.tree_indent)
 	sort       string         // ordering within a level (config explorer.sort)
 	colors     colorTable     // per-filetype colour resolution
@@ -329,7 +334,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ToggleHiddenMsg:
 		m.showHidden = !m.showHidden
 		m.rebuild()
-		return m, nil
+		show := m.showHidden
+		// Persist right away so a kill/crash keeps the toggle (#629).
+		return m, func() tea.Msg { return HiddenToggledMsg{ShowHidden: show} }
 	case CollapseAllMsg:
 		m.collapseAll()
 		return m, nil
