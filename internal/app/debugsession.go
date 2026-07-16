@@ -204,7 +204,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 
 	send := m.host.Send
-	sess, err := dap.Start(transport.Spec{Command: argv[0], Args: argv[1:], Dir: root}, func(ev dap.Event) {
+	sess, err := dap.Start(transport.Spec{Command: argv[0], Args: argv[1:], Dir: root, Detached: true}, func(ev dap.Event) {
 		send(debugEventMsg{ev: ev})
 	})
 	if err != nil {

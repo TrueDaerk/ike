@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-14T14:00:00Z
+timestamp: 2026-07-16T18:00:00Z
 ---
 
 # Debugger (0350)
@@ -37,8 +37,15 @@ dead adapter is diagnosable from the notification alone.
 - **`debug.start`** (shift+f9, Run menu, palette) resolves the active file's
   run configuration (`EnsureFor`, same as `run.file`) and requires the
   language to contribute a debug adapter (`lang.SupportsDebug`; Python via
-  debugpy today). The adapter spawns like a language server; the handshake
-  runs asynchronously: `initialize` → `launch` (answered late by design) —
+  debugpy today). The adapter spawns like a language server, but **detached
+  into its own session** (`transport.Spec.Detached` → `setsid`, #620):
+  debugpy's launcher otherwise `tcsetpgrp`s the inherited controlling terminal
+  to hand the debuggee terminal foreground, which steals the tty from the TUI
+  and stops it with SIGTTIN. A concurrent `debug.start` while a launch is in
+  flight is ignored (`dbgLaunching` guard) so a second adapter never tears down
+  the first. Empty program `args` are omitted from the `launch` request — a
+  JSON `null` trips debugpy's vectorizing validator (`"args"[0] must be str`).
+  The handshake runs asynchronously: `initialize` → `launch` (answered late by design) —
   and on the adapter's `initialized` event every stored breakpoint is pushed
   (`setBreakpoints` per file, absolute paths, 1-based on the wire) before
   `configurationDone` releases the debuggee.

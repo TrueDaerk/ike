@@ -18,6 +18,14 @@ type Spec struct {
 	Args    []string
 	Env     []string // extra environment, appended to the inherited environment
 	Dir     string   // working directory (workspace root); "" = inherit
+	// Detached starts the process in a new session (setsid), detached from the
+	// controlling terminal. DAP adapters set this: debugpy's launcher otherwise
+	// calls tcsetpgrp on the inherited tty to hand the debuggee terminal
+	// foreground, which steals the terminal from the TUI — the TUI's next tty
+	// read then takes SIGTTIN and the whole process group stops (#620). With no
+	// controlling terminal there is nothing for debugpy to grab; DAP is pure
+	// stdio, so nothing is lost.
+	Detached bool
 }
 
 // Process is a running language server. Its ReadWriteCloser reads the server's
@@ -70,6 +78,9 @@ func Start(spec Spec) (*Process, error) {
 	cmd.Dir = spec.Dir
 	if len(spec.Env) > 0 {
 		cmd.Env = append(os.Environ(), spec.Env...)
+	}
+	if spec.Detached {
+		detach(cmd)
 	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
