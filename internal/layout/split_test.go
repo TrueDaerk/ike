@@ -106,3 +106,32 @@ func TestSplitThenCloseRoundTrips(t *testing.T) {
 		t.Fatalf("did not round-trip to the original pair: %v", got)
 	}
 }
+
+// TestReplaceRenamesLeafInPlace verifies Replace swaps a leaf's pane id while
+// keeping the tree shape and geometry (#628).
+func TestReplaceRenamesLeafInPlace(t *testing.T) {
+	root := Node(&Split{Orient: Horizontal, Ratio: 0.3,
+		A: &Leaf{Pane: "explorer"}, B: &Leaf{Pane: "editor"}})
+	out, ok := Replace(root, "editor", "diff:1")
+	if !ok {
+		t.Fatal("Replace should find the target leaf")
+	}
+	s := out.(*Split)
+	if s.A.(*Leaf).Pane != "explorer" || s.B.(*Leaf).Pane != "diff:1" {
+		t.Fatalf("Replace changed shape or wrong leaf: A=%+v B=%+v", s.A, s.B)
+	}
+	if s.Ratio != 0.3 || s.Orient != Horizontal {
+		t.Fatalf("Replace altered geometry: %+v", s)
+	}
+}
+
+// TestReplaceMissingTarget returns ok=false and leaves the tree untouched.
+func TestReplaceMissingTarget(t *testing.T) {
+	root := Node(&Leaf{Pane: "editor"})
+	if _, ok := Replace(root, "nope", "diff:1"); ok {
+		t.Fatal("Replace should fail on a missing target")
+	}
+	if root.(*Leaf).Pane != "editor" {
+		t.Fatal("Replace mutated the tree on a miss")
+	}
+}

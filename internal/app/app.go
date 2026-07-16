@@ -1450,18 +1450,10 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 		saveLayout(m.tree, m.panes)
 		return
 	}
-	target := m.panes.Focused()
-	if target == "" || m.tree == nil {
-		return
-	}
 	key := m.panes.AddDiff(leftPath, rightPath)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.panes.Close(key)
+	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.tree = tree
-	m.layout()
 	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)

@@ -277,6 +277,19 @@ func (i *Instance) ActiveTerminal() *terminal.Model {
 // TabCount reports how many tabs the editor instance holds (0 for explorers).
 func (i *Instance) TabCount() int { return len(i.tabs) }
 
+// IsEmptyEditor reports whether this pane is a reusable blank editor: a single
+// editor tab with no file and no text. Opening a file or a diff can take over
+// such a pane in place instead of splitting a new one (#628). A pathless tab
+// that already holds typed scratch text is not reusable — its content would be
+// lost.
+func (i *Instance) IsEmptyEditor() bool {
+	if i.kind != KindEditor || len(i.tabs) != 1 {
+		return false
+	}
+	ed := i.Editor()
+	return ed != nil && !ed.HasFile() && ed.Text() == ""
+}
+
 // ActiveTab returns the index of the active tab.
 func (i *Instance) ActiveTab() int { return i.active }
 

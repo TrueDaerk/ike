@@ -2,6 +2,12 @@
 
 ## 2026-07-16
 
+- Diff-open reuses an empty editor pane (#628): every diff-open (HEAD/commit/
+  diff.files) now routes through `placeDiffLeaf` — when the active editor is an
+  empty scratch pane (`Instance.IsEmptyEditor`), the diff takes over its slot in
+  place via the new `layout.Replace` instead of splitting a new pane; a
+  file-backed or dirty editor is preserved and the diff splits beside it.
+
 - Explorer show-hidden toggle stability (#629): `Configure` now re-applies
   `explorer.show_hidden` only when the config value actually changed (tracked in
   `hiddenCfg`), so an unrelated live reload (plugin/interpreter/project switch)

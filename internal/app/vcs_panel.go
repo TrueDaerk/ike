@@ -95,22 +95,11 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 		saveLayout(m.tree, m.panes)
 		return
 	}
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.panes.Focused()
-	}
-	if target == "" || m.tree == nil {
-		return
-	}
 	key := m.panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, absPath)
 	m.panes.Get(key).Diff().SetRevs(msg.Hash+"^", msg.Hash)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.panes.Close(key)
+	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.tree = tree
-	m.layout()
 	m.panes.Get(key).Diff().SetContents(msg.Parent, msg.Content)
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/registry"
 	"ike/internal/vcs"
@@ -152,5 +153,66 @@ func TestDiffF7StepsHunks(t *testing.T) {
 	press(tea.KeyPressMsg{Code: tea.KeyF7, Mod: tea.ModShift})
 	if got := m.panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
 		t.Fatalf("after shift+F7: hunk = %d, want 0", got)
+	}
+}
+
+// TestDiffReusesEmptyEditor guards #628: opening a diff while the active editor
+// is an empty scratch pane takes over that pane in place instead of splitting a
+// new one — leaf count stays the same and the empty editor is gone.
+func TestDiffReusesEmptyEditor(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	left := filepath.Join(dir, "l.txt")
+	right := filepath.Join(dir, "r.txt")
+	os.WriteFile(left, []byte("a\n"), 0o644)
+	os.WriteFile(right, []byte("b\n"), 0o644)
+
+	m := newSized() // default layout: explorer + one empty editor
+	editorKey := m.activeEditorKey()
+	if editorKey == "" || !m.panes.Get(editorKey).IsEmptyEditor() {
+		t.Fatalf("expected an empty editor pane, got %q", editorKey)
+	}
+	before := len(layout.Leaves(m.tree))
+
+	m.openDiffPane(left, right)
+
+	if got := len(layout.Leaves(m.tree)); got != before {
+		t.Fatalf("diff split a new pane: leaves %d -> %d", before, got)
+	}
+	if m.panes.Has(editorKey) {
+		t.Fatal("the empty editor pane should have been taken over, not kept")
+	}
+	if k := m.panes.Focused(); m.panes.Get(k) == nil || m.panes.Get(k).Kind() != pane.KindDiff {
+		t.Fatalf("focused pane is not the diff (key %q)", k)
+	}
+}
+
+// TestDiffDoesNotClobberNonEmptyEditor: a file-backed editor is preserved — the
+// diff splits a new pane rather than replacing it.
+func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	f := filepath.Join(dir, "open.txt")
+	left := filepath.Join(dir, "l.txt")
+	right := filepath.Join(dir, "r.txt")
+	os.WriteFile(f, []byte("content\n"), 0o644)
+	os.WriteFile(left, []byte("a\n"), 0o644)
+	os.WriteFile(right, []byte("b\n"), 0o644)
+
+	m := newSized()
+	m.openPath(f, false) // active editor now holds a file
+	editorKey := m.activeEditorKey()
+	if m.panes.Get(editorKey).IsEmptyEditor() {
+		t.Fatal("editor should be file-backed now")
+	}
+	before := len(layout.Leaves(m.tree))
+
+	m.openDiffPane(left, right)
+
+	if got := len(layout.Leaves(m.tree)); got != before+1 {
+		t.Fatalf("diff should split beside a file-backed editor: leaves %d -> %d", before, got)
+	}
+	if !m.panes.Has(editorKey) {
+		t.Fatal("the file-backed editor pane must be preserved")
 	}
 }
