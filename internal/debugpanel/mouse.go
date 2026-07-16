@@ -33,13 +33,18 @@ func (m *Model) doubleClicked(col column, row int) bool {
 	return hit
 }
 
-// leftWidth is the frames-column width, identical to View's split.
-func (m Model) leftWidth() int {
-	leftW := m.w * 2 / 5
-	if leftW < 16 {
-		leftW = min(16, m.w/2)
+// columnAt maps a content-local x to the column under it, matching View's
+// three-column split (frames │ variables │ output).
+func (m Model) columnAt(x int) column {
+	fw, vw, _ := m.colWidths()
+	switch {
+	case x < fw:
+		return colFrames
+	case x < fw+1+vw:
+		return colVars
+	default:
+		return colOutput
 	}
-	return leftW
 }
 
 // Wheel scrolls the focused column by delta rows (positive = down).
@@ -47,11 +52,14 @@ func (m *Model) Wheel(delta int) {
 	if m.running {
 		return
 	}
-	if m.col == colFrames {
+	switch m.col {
+	case colFrames:
 		m.frameTop = clamp(m.frameTop+delta, 0, max(0, len(m.frames)-m.bodyHeight()))
-		return
+	case colOutput:
+		m.outTop = clamp(m.outTop+delta, 0, max(0, m.outputRowCount()-m.bodyHeight()))
+	default:
+		m.varTop = clamp(m.varTop+delta, 0, max(0, len(m.flat())-m.bodyHeight()))
 	}
-	m.varTop = clamp(m.varTop+delta, 0, max(0, len(m.flat())-m.bodyHeight()))
 }
 
 // Click handles one left click at content-local (x, y): it focuses the column
@@ -61,7 +69,8 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if m.running || y == 0 { // the title row has nothing to click
 		return nil
 	}
-	if x < m.leftWidth() {
+	switch m.columnAt(x) {
+	case colFrames:
 		i := m.frameTop + (y - 1)
 		if i < 0 || i >= len(m.frames) {
 			return nil
@@ -71,18 +80,21 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		if m.doubleClicked(colFrames, i) {
 			return m.activate()
 		}
-		return nil
-	}
-	// x >= leftWidth: the separator column and beyond belong to variables.
-	rows := m.flat()
-	i := m.varTop + (y - 1)
-	if i < 0 || i >= len(rows) {
-		return nil
-	}
-	m.col = colVars
-	m.varSel = i
-	if m.doubleClicked(colVars, i) {
-		return m.activate()
+	case colOutput:
+		// Clicking the output column only focuses it (for wheel/keys); output
+		// rows have no activation.
+		m.col = colOutput
+	default:
+		rows := m.flat()
+		i := m.varTop + (y - 1)
+		if i < 0 || i >= len(rows) {
+			return nil
+		}
+		m.col = colVars
+		m.varSel = i
+		if m.doubleClicked(colVars, i) {
+			return m.activate()
+		}
 	}
 	return nil
 }

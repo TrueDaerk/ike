@@ -160,11 +160,11 @@ func TestClickExpandsVariable(t *testing.T) {
 	clk := time.Unix(0, 0)
 	m.now = func() time.Time { return clk }
 
-	// Variables column: x past the separator, y 1 = first var row (the scope).
-	// SetScopes eagerly expands the first scope, so a double-click collapses it;
-	// select a different behaviour by using an unexpanded ref would need
-	// children — here assert the click targets the vars column + selects.
-	if cmd := m.Click(70, 1); cmd != nil {
+	// Variables column: x inside the middle column (frames|vars|output), y 1 =
+	// first var row (the scope). SetScopes eagerly expands the first scope, so a
+	// double-click would collapse it; here assert the click targets the vars
+	// column + selects.
+	if cmd := m.Click(40, 1); cmd != nil {
 		t.Fatal("single click should not activate")
 	}
 	if m.col != colVars || m.varSel != 0 {
@@ -270,5 +270,38 @@ func TestScopeRootNotEditable(t *testing.T) {
 	m.Update(key("e"))
 	if m.Editing() {
 		t.Fatal("a scope root has no settable value")
+	}
+}
+
+// TestAppendOutputSplitsLinesAndPartials verifies output chunking: complete
+// lines are stored, an incomplete trailing chunk is held as a partial until its
+// newline arrives, and stderr is tagged.
+func TestAppendOutputSplitsLinesAndPartials(t *testing.T) {
+	m := New(nil)
+	m.SetSize(90, 10)
+	m.AppendOutput(false, "hello\nwor")
+	m.AppendOutput(false, "ld\n")
+	m.AppendOutput(true, "boom\n")
+	rows := m.outputRows()
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d (%+v), want 3", len(rows), rows)
+	}
+	if rows[0].text != "hello" || rows[1].text != "world" {
+		t.Fatalf("lines = %q,%q", rows[0].text, rows[1].text)
+	}
+	if !rows[2].stderr || rows[2].text != "boom" {
+		t.Fatalf("stderr line = %+v", rows[2])
+	}
+}
+
+// TestOutputVisibleInView verifies the OUTPUT column renders the debuggee text.
+func TestOutputVisibleInView(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 8)
+	m.SetFrames(frames())
+	m.AppendOutput(false, "computed 42\n")
+	v := m.View()
+	if !strings.Contains(v, "OUTPUT") || !strings.Contains(v, "computed 42") {
+		t.Fatalf("output not rendered:\n%s", v)
 	}
 }

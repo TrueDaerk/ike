@@ -41,3 +41,20 @@ func TestFastUpdateDoesNotLog(t *testing.T) {
 		t.Fatal("a fast Update pass must not log")
 	}
 }
+
+// TestDebugSessionLog verifies debuggee output is appended verbatim to
+// debug-session.log, with stderr chunks prefixed (#624).
+func TestDebugSessionLog(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	logDebugOutput(false, "hello world\n")
+	logDebugOutput(true, "a warning\n")
+	data, err := os.ReadFile(filepath.Join(dir, "debug-session.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	if got != "hello world\n[stderr] a warning\n" {
+		t.Fatalf("session log = %q", got)
+	}
+}
