@@ -196,6 +196,12 @@ type Model struct {
 	cfg     host.Config
 	emitter Emitter
 
+	// Render-line cache (#614): renderEpoch bumps on every mutation that can
+	// change a rendered line body; lineCache memoizes per-line bodies within an
+	// epoch so a vertical scroll reuses them. See linecache.go.
+	renderEpoch uint64
+	lineCache   *lineCacheStore
+
 	// Syntax highlighting (Roadmap 0100). docVersion is a monotonic document
 	// version bumped on every buffer change; it tags async parse results so stale
 	// spans (a newer edit already landed) are dropped. hlIndex caches the spans
@@ -328,6 +334,7 @@ func New() Model {
 		visualEnd:          -1,
 		eol:                textenc.LF,
 		enc:                textenc.UTF8,
+		lineCache:          newLineCache(),
 	}
 	m.view.LineNumbers = false
 	return m
@@ -336,6 +343,7 @@ func New() Model {
 // Configure applies the [editor] configuration section and keeps a reference so
 // later changes are re-read live. Unset keys keep their built-in defaults.
 func (m *Model) Configure(cfg host.Config) {
+	m.bumpRender() // a live config reload can change wrap/whitespace/gutter/colors (#614)
 	m.cfg = cfg
 	m.rebuildTheme()
 	m.applyConfig()
@@ -345,6 +353,7 @@ func (m *Model) Configure(cfg host.Config) {
 // become the highlight defaults under any theme.captures.* overrides, and
 // chrome (selection, LSP popups, diagnostics) reads its ui slots.
 func (m *Model) SetPalette(p *theme.Palette) {
+	m.bumpRender() // theme colors change every rendered line (#614)
 	m.pal = p
 	m.rebuildTheme()
 }
@@ -656,6 +665,7 @@ func (m Model) CursorPos() (line, col int) { return m.cursor.Line, m.cursor.Col 
 // interactive motions — otherwise position-based actions (rename, references)
 // right after a jump would query the pre-jump location (#371).
 func (m *Model) SetCursor(line, col int) {
+	m.bumpRender() // the cursor cell + current-line styling move (#614)
 	m.cursor = m.buf.ClampCursor(buffer.Position{Line: line, Col: col})
 	m.desiredCol = m.cursor.Col
 	m.scroll()
@@ -667,6 +677,9 @@ func (m Model) HasFile() bool { return m.path != "" }
 
 // SetSize sets the available width and number of text rows.
 func (m *Model) SetSize(width, height int) {
+	if width != m.width {
+		m.bumpRender() // the text width changes every line body (#614)
+	}
 	m.width = width
 	m.height = height
 	m.view.SetSize(width, height)
@@ -674,7 +687,12 @@ func (m *Model) SetSize(width, height int) {
 }
 
 // SetFocused toggles whether this pane receives key input.
-func (m *Model) SetFocused(f bool) { m.focused = f }
+func (m *Model) SetFocused(f bool) {
+	if f != m.focused {
+		m.bumpRender() // focus toggles the cursor cell / current-line styling (#614)
+	}
+	m.focused = f
+}
 
 // ScrollTop returns the first visible buffer line (0-based) — the diff
 // pane's edit mode aligns its left column to it (0340, #496).
@@ -688,6 +706,11 @@ func (m Model) Init() tea.Cmd { return nil }
 
 // Update routes a message to the handler for the current mode.
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	// Every routed message (a key, or an async decoration update — syntax,
+	// semantic, diagnostics, git marks, occurrences, inlay hints, sync) may change
+	// a rendered line, so invalidate the line cache (#614). Vertical scroll does
+	// not come through here, so the cache stays warm across a scroll.
+	m.renderEpoch++
 	m.applyConfig()
 	switch msg := msg.(type) {
 	case highlight.SpansMsg:
@@ -931,6 +954,11 @@ func (m *Model) SetScroll(top, left int) {
 	}
 	if left < 0 {
 		left = 0
+	}
+	if left != m.view.Left {
+		// Horizontal scroll shifts the rendered column window of every line, so
+		// it invalidates the cache; a pure vertical move (Top only) does not (#614).
+		m.bumpRender()
 	}
 	m.view.Top = top
 	m.view.Left = left

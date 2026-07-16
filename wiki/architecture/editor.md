@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-15T00:00:00Z
+timestamp: 2026-07-16T00:00:00Z
 ---
 
 # Editor
@@ -14,6 +14,23 @@ the current `mode.Mode`, and the supporting stores (registers, history,
 viewport), and dispatches each key through the mode state machine. The engine is
 split into focused sub-packages under `internal/editor/`; `editor.go` plus the
 `keys_*.go` handlers wire them together.
+
+
+## Render caching (#614)
+
+`View()` renders the visible window line by line; the per-line body (`renderSpan`
+— syntax highlight, selection, search, inlay, whitespace) is the expensive part.
+It is memoized in a per-view line cache (`linecache.go`) keyed by
+`(line, from, to, width)` and guarded by `renderEpoch`: a counter bumped on every
+mutation that can change a body — edits, cursor/selection moves, resize,
+horizontal scroll, focus, theme/config, and (via the `Update` choke point) every
+decoration message (syntax, semantic, diagnostics, git marks, occurrences, inlay
+hints). A **vertical** scroll deliberately does not bump it (`renderSpan` never
+reads `view.Top`), so scrolling reuses cached bodies instead of re-highlighting
+every visible line. The gutter (line numbers, diagnostic/git/breakpoint/paused
+signs) renders fresh each frame, so those decorations can never go stale from the
+cache. The cache is per-view: `New` and `ShareDocumentWith` each install a fresh
+one so split views of a shared document (#142) never collide.
 
 ## Sub-packages
 

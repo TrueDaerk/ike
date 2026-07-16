@@ -129,6 +129,9 @@ func (m *Model) ScrollXBy(delta int) {
 	if left < 0 {
 		left = 0
 	}
+	if left != m.view.Left {
+		m.bumpRender() // horizontal scroll shifts every line's column window (#614)
+	}
 	m.view.Left = left
 }
 
@@ -150,6 +153,7 @@ func (m Model) CommandLine() string {
 // View renders the buffer: a line-number gutter (when enabled), horizontally and
 // vertically scrolled text, and the cursor cell highlighted when focused.
 func (m Model) View() string {
+	m.syncEpoch() // drop stale line-cache entries if the render epoch moved (#614)
 	if m.path == "" && m.buf.LineCount() == 1 && m.buf.Line(0) == "" {
 		// The command line must show even on the empty scratch buffer (":q").
 		if cl := m.commandLineRow(); cl != "" {
@@ -363,12 +367,26 @@ func (m Model) renderLine(line, width int, cursorStyle, selStyle lipgloss.Style)
 	return m.renderSpan(line, m.view.Left, -1, width, cursorStyle, selStyle)
 }
 
-// renderSpan renders the columns [from, to) of one buffer line (to < 0 means
-// unbounded — through the content end). Under soft wrap (#64) each wrap
+// renderSpan renders the columns [from, to) of one buffer line, memoized by the
+// line cache (#614): within a render epoch the same span renders byte-identically,
+// so a vertical scroll — which changes no epoch input — reuses the cached body
+// instead of recomputing highlight, selection and width for every visible line.
+func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
+	key := lineKey{line: line, from: from, to: to, width: width}
+	if body, ok := m.cachedSpan(key); ok {
+		return body
+	}
+	body := m.renderSpanUncached(line, from, to, width, cursorStyle, selStyle)
+	m.storeSpan(key, body)
+	return body
+}
+
+// renderSpanUncached renders the columns [from, to) of one buffer line (to < 0
+// means unbounded — through the content end). Under soft wrap (#64) each wrap
 // segment is one span; the unwrapped renderLine is the single span starting at
 // the horizontal scroll offset. Whitespace glyphs, indent guides, and ruler
 // tints (#64) overlay here so both paths share them.
-func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
+func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
 	runes := []rune(m.buf.Line(line))
 	left := from
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
