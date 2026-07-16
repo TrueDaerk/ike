@@ -25,6 +25,15 @@ type SelectFrameMsg struct{ Frame dap.StackFrame }
 // ExpandVarMsg asks the app to fetch a variablesReference's children.
 type ExpandVarMsg struct{ Ref int }
 
+// SetVarMsg asks the app to change a variable's value via the DAP setVariable
+// request: Ref is the containing variablesReference, Name the variable, Value
+// the new expression. The app refreshes the tree from the adapter's response.
+type SetVarMsg struct {
+	Ref   int
+	Name  string
+	Value string
+}
+
 // column identifies the focused half of the panel.
 type column int
 
@@ -35,11 +44,12 @@ const (
 
 // varNode is one row of the variables tree.
 type varNode struct {
-	v        dap.Variable
-	depth    int
-	expanded bool
-	loaded   bool
-	children []*varNode
+	v         dap.Variable
+	depth     int
+	expanded  bool
+	loaded    bool
+	children  []*varNode
+	parentRef int // the variablesReference this node lives under (0 for scope roots)
 }
 
 // Model is the panel component (value type, pointer receivers — the pane
@@ -67,6 +77,16 @@ type Model struct {
 	lastClickCol column
 	lastClickRow int
 	lastClickAt  time.Time
+
+	// Variable-value editing (#627). canEdit mirrors the adapter's
+	// supportsSetVariable capability; while editing, editRef/editName identify
+	// the target and editBuf/editCur hold the inline line editor.
+	canEdit  bool
+	editing  bool
+	editRef  int
+	editName string
+	editBuf  []rune
+	editCur  int
 }
 
 // New returns an empty panel.
@@ -81,6 +101,23 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 // SetPalette re-threads the theme palette.
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
+// SetEditable records whether the adapter supports setVariable (#627); when
+// false, the edit affordance is disabled.
+func (m *Model) SetEditable(v bool) { m.canEdit = v }
+
+// Editing reports whether an inline value editor is open, so the app routes
+// every key to the panel instead of the global keymap.
+func (m Model) Editing() bool { return m.editing }
+
+// cancelEdit closes the inline editor without committing.
+func (m *Model) cancelEdit() {
+	m.editing = false
+	m.editBuf = nil
+	m.editCur = 0
+	m.editName = ""
+	m.editRef = 0
+}
+
 // SetFrames replaces the stack (a fresh stop) and resets the selection; the
 // variables tree empties until scopes arrive.
 func (m *Model) SetFrames(frames []dap.StackFrame) {
@@ -91,6 +128,7 @@ func (m *Model) SetFrames(frames []dap.StackFrame) {
 	m.varSel = 0
 	m.varTop = 0
 	m.running = false
+	m.cancelEdit()
 }
 
 // SetRunning blanks the paused data while the debuggee runs.
@@ -100,6 +138,7 @@ func (m *Model) SetRunning() {
 	m.roots = nil
 	m.frameSel, m.varSel = 0, 0
 	m.frameTop, m.varTop = 0, 0
+	m.cancelEdit()
 }
 
 // SetScopes replaces the variables tree's roots with the selected frame's
@@ -130,7 +169,7 @@ func (m *Model) SetChildren(ref int, vars []dap.Variable) {
 			if n.v.VariablesReference == ref {
 				n.children = n.children[:0]
 				for _, v := range vars {
-					n.children = append(n.children, &varNode{v: v, depth: n.depth + 1})
+					n.children = append(n.children, &varNode{v: v, depth: n.depth + 1, parentRef: ref})
 				}
 				n.loaded = true
 				n.expanded = true
@@ -173,6 +212,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if m.editing {
+		return m.editKey(k)
+	}
 	switch k.String() {
 	case "tab", "l", "right":
 		m.col = colVars
@@ -182,8 +224,73 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		m.move(1)
 	case "k", "up":
 		m.move(-1)
+	case "e":
+		m.startEdit()
 	case "enter", " ":
 		return m.activate()
+	}
+	return nil
+}
+
+// startEdit opens the inline value editor on the selected variable, when the
+// adapter supports setVariable and the row is an editable child (not a scope).
+func (m *Model) startEdit() {
+	if !m.canEdit || m.col != colVars {
+		return
+	}
+	rows := m.flat()
+	if m.varSel < 0 || m.varSel >= len(rows) {
+		return
+	}
+	n := rows[m.varSel]
+	if n.parentRef == 0 { // a scope root has no settable value
+		return
+	}
+	m.editing = true
+	m.editRef = n.parentRef
+	m.editName = n.v.Name
+	m.editBuf = []rune(n.v.Value)
+	m.editCur = len(m.editBuf)
+}
+
+// editKey drives the inline line editor: printable runes insert, the usual
+// motions edit, enter commits (emitting SetVarMsg), esc cancels.
+func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
+	switch k.Code {
+	case tea.KeyEnter:
+		ref, name, val := m.editRef, m.editName, string(m.editBuf)
+		m.cancelEdit()
+		return func() tea.Msg { return SetVarMsg{Ref: ref, Name: name, Value: val} }
+	case tea.KeyEscape:
+		m.cancelEdit()
+		return nil
+	case tea.KeyBackspace:
+		if m.editCur > 0 {
+			m.editBuf = append(m.editBuf[:m.editCur-1], m.editBuf[m.editCur:]...)
+			m.editCur--
+		}
+		return nil
+	case tea.KeyLeft:
+		if m.editCur > 0 {
+			m.editCur--
+		}
+		return nil
+	case tea.KeyRight:
+		if m.editCur < len(m.editBuf) {
+			m.editCur++
+		}
+		return nil
+	case tea.KeyHome:
+		m.editCur = 0
+		return nil
+	case tea.KeyEnd:
+		m.editCur = len(m.editBuf)
+		return nil
+	}
+	if k.Text != "" {
+		runes := []rune(k.Text)
+		m.editBuf = append(m.editBuf[:m.editCur], append(runes, m.editBuf[m.editCur:]...)...)
+		m.editCur += len(runes)
 	}
 	return nil
 }
@@ -340,6 +447,19 @@ func (m Model) renderVars(w int) []string {
 			if n.expanded {
 				marker = "▾ "
 			}
+		}
+		// The row being edited shows the inline value editor with a cursor.
+		if m.editing && i == m.varSel {
+			prefix := " " + strings.Repeat("  ", n.depth) + marker + n.v.Name + " = "
+			before, after := string(m.editBuf[:m.editCur]), string(m.editBuf[m.editCur:])
+			cursor := lipgloss.NewStyle().Reverse(true).Render(" ")
+			if len(after) > 0 {
+				cursor = lipgloss.NewStyle().Reverse(true).Render(string([]rune(after)[0]))
+				after = string([]rune(after)[1:])
+			}
+			editStyle := lipgloss.NewStyle().Foreground(m.theme().Accent)
+			out = append(out, editStyle.Render(truncate(prefix+before, w))+cursor+editStyle.Render(after))
+			continue
 		}
 		label := " " + strings.Repeat("  ", n.depth) + marker + n.v.Name
 		if n.v.Value != "" {

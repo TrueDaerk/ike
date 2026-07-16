@@ -13,6 +13,15 @@ import (
 type Session struct {
 	proc *transport.Process
 	conn *Conn
+
+	// caps are the adapter capabilities from the initialize response; only the
+	// flags IKE gates on are decoded.
+	caps capabilities
+}
+
+// capabilities is the subset of the initialize response IKE reads.
+type capabilities struct {
+	SupportsSetVariable bool `json:"supportsSetVariable"`
 }
 
 // Start spawns the adapter described by spec and connects. Events (stopped,
@@ -34,9 +43,10 @@ func Start(spec transport.Spec, onEvent func(Event)) (*Session, error) {
 // NewSession wraps an existing connection (tests use an in-memory pipe).
 func NewSession(conn *Conn) *Session { return &Session{conn: conn} }
 
-// Initialize performs the capability handshake.
+// Initialize performs the capability handshake, retaining the adapter
+// capabilities IKE gates features on (e.g. setVariable).
 func (s *Session) Initialize() error {
-	_, err := s.conn.Call("initialize", map[string]any{
+	body, err := s.conn.Call("initialize", map[string]any{
 		"adapterID":                    "ike",
 		"clientID":                     "ike",
 		"linesStartAt1":                true,
@@ -44,8 +54,15 @@ func (s *Session) Initialize() error {
 		"pathFormat":                   "path",
 		"supportsRunInTerminalRequest": false,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	_ = json.Unmarshal(body, &s.caps) // capabilities are best-effort
+	return nil
 }
+
+// SupportsSetVariable reports whether the adapter accepts setVariable requests.
+func (s *Session) SupportsSetVariable() bool { return s.caps.SupportsSetVariable }
 
 // LaunchAsync sends the launch request; many adapters (debugpy) answer it
 // only after configurationDone, so the response is delivered on the returned
@@ -170,6 +187,30 @@ func (s *Session) Variables(ref int) ([]Variable, error) {
 		return nil, err
 	}
 	return resp.Variables, nil
+}
+
+// SetVariable changes the variable named name within variablesReference ref to
+// value (setVariable). It returns the adapter's echo of the new value/type and
+// any structured reference, so the panel can refresh the row. Only valid while
+// paused and when SupportsSetVariable reports true.
+func (s *Session) SetVariable(ref int, name, value string) (Variable, error) {
+	body, err := s.conn.Call("setVariable", map[string]any{
+		"variablesReference": ref,
+		"name":               name,
+		"value":              value,
+	})
+	if err != nil {
+		return Variable{}, err
+	}
+	var resp struct {
+		Value              string `json:"value"`
+		Type               string `json:"type"`
+		VariablesReference int    `json:"variablesReference"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return Variable{}, err
+	}
+	return Variable{Name: name, Value: resp.Value, Type: resp.Type, VariablesReference: resp.VariablesReference}, nil
 }
 
 // Disconnect asks the adapter to end the session (terminating the debuggee).

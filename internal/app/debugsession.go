@@ -380,6 +380,13 @@ func (m Model) debugPanel() *debugpanel.Model {
 	return m.panes.Get(pane.DebugKey).Debug()
 }
 
+// debugPanelEditing reports whether the focused pane is the debug panel with an
+// open inline value editor, so the app routes every key straight to it (#627).
+func (m Model) debugPanelEditing() bool {
+	inst := m.panes.FocusedInstance()
+	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().Editing()
+}
+
 // openDebugPanel splits the active editor (fallback: focused leaf) at the
 // bottom with the singleton panel — without stealing focus; the stop already
 // moved the caret to the paused line.
@@ -401,6 +408,11 @@ func (m *Model) openDebugPanel() {
 		return
 	}
 	m.tree = tree
+	// Gate the variable-edit affordance on the adapter's setVariable support
+	// (#627); the handshake has completed by the first stop.
+	if p := m.panes.Get(key).Debug(); p != nil && m.dbg != nil {
+		p.SetEditable(m.dbg.sess.SupportsSetVariable())
+	}
 	m.layout()
 	saveLayout(m.tree, m.panes)
 }
@@ -458,6 +470,27 @@ func (m *Model) fetchVariables(ref int) {
 			return
 		}
 		send(debugVarsMsg{ref: ref, vars: vars})
+	}()
+}
+
+// setDebugVariable pushes an edited value to the adapter (setVariable) and, on
+// success, refetches the containing reference so the panel shows the new value
+// (#627). A failure surfaces as a notification; the tree is left unchanged.
+func (m *Model) setDebugVariable(ref int, name, value string) {
+	dbg := m.dbg
+	if dbg == nil {
+		return
+	}
+	sess := dbg.sess
+	send := m.host.Send
+	go func() {
+		if _, err := sess.SetVariable(ref, name, value); err != nil {
+			send(debugErrMsg{err: err})
+			return
+		}
+		if vars, err := sess.Variables(ref); err == nil {
+			send(debugVarsMsg{ref: ref, vars: vars})
+		}
 	}()
 }
 

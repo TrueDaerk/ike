@@ -192,3 +192,83 @@ func TestWheelScrollsFocusedColumn(t *testing.T) {
 		t.Fatalf("frameTop = %d, want 0 after wheel-up", m.frameTop)
 	}
 }
+
+// TestVariableEditFlow verifies the inline editor: 'e' opens it on an editable
+// child (only when the adapter supports setVariable), typing edits the value,
+// and enter emits SetVarMsg with the containing ref.
+func TestVariableEditFlow(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	m.SetChildren(100, []dap.Variable{{Name: "x", Value: "42", Type: "int"}})
+	m.col = colVars
+	m.varSel = 1 // the "x" child (row 0 is the Locals scope)
+
+	// Without capability, 'e' does nothing.
+	m.Update(key("e"))
+	if m.Editing() {
+		t.Fatal("edit must be gated on supportsSetVariable")
+	}
+
+	m.SetEditable(true)
+	m.Update(key("e"))
+	if !m.Editing() {
+		t.Fatal("'e' should open the editor on an editable child")
+	}
+	// Replace "42" with "99": backspace twice, type 99.
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m.Update(key("9"))
+	cmd := m.Update(key("9")) // still editing until enter
+	if cmd != nil {
+		t.Fatal("typing should not emit a command")
+	}
+	cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter should commit")
+	}
+	sv, ok := cmd().(SetVarMsg)
+	if !ok || sv.Ref != 100 || sv.Name != "x" || sv.Value != "99" {
+		t.Fatalf("commit emitted %#v, want ref100 x=99", cmd())
+	}
+	if m.Editing() {
+		t.Fatal("editor should close after commit")
+	}
+}
+
+// TestVariableEditEscapeCancels verifies esc closes the editor without a
+// command and leaves the value untouched.
+func TestVariableEditEscapeCancels(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	m.SetChildren(100, []dap.Variable{{Name: "x", Value: "42"}})
+	m.SetEditable(true)
+	m.col = colVars
+	m.varSel = 1
+	m.Update(key("e"))
+	m.Update(key("7"))
+	if cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape}); cmd != nil {
+		t.Fatal("escape should not emit a command")
+	}
+	if m.Editing() {
+		t.Fatal("escape should close the editor")
+	}
+}
+
+// TestScopeRootNotEditable verifies a scope root (parentRef 0) cannot be edited.
+func TestScopeRootNotEditable(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	m.SetEditable(true)
+	m.col = colVars
+	m.varSel = 0 // the Locals scope row
+	m.Update(key("e"))
+	if m.Editing() {
+		t.Fatal("a scope root has no settable value")
+	}
+}

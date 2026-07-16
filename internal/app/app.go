@@ -24,10 +24,10 @@ import (
 	"ike/internal/backup"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
-	"ike/internal/debug"
-	"ike/internal/debugpanel"
 	"ike/internal/commitui"
 	"ike/internal/config"
+	"ike/internal/debug"
+	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/explorer"
@@ -101,7 +101,7 @@ type Model struct {
 	// not spawn a rival adapter that then tears down the first — one session
 	// at a time (#579).
 	dbgLaunching bool
-	navSkip bool
+	navSkip      bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
 	// the registry's focused key, which always names a layout leaf.
@@ -2105,6 +2105,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fetchVariables(msg.Ref)
 		return m, nil
 
+	case debugpanel.SetVarMsg:
+		// A variable value was edited in the tool window (#627): push it to the
+		// adapter, then refetch the container so the panel shows the new value.
+		m.setDebugVariable(msg.Ref, msg.Name, msg.Value)
+		return m, nil
+
 	case debugErrMsg:
 		m.dbgLaunching = false
 		m.host.Notify(host.Error, "debug: "+msg.err.Error())
@@ -3121,6 +3127,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.routeKey(msg)
 		}
 		m.lastEsc = false
+		// While the debug panel edits a variable value it captures every key
+		// (incl. enter/esc/plain letters), like an editor in insert mode (#627).
+		if m.debugPanelEditing() {
+			return m.routeKey(msg)
+		}
 		// "@" in an editor's normal mode opens a slimmed, file-only palette floated
 		// over that editor pane.
 		if keys == "@" && m.editorNormalMode() {
