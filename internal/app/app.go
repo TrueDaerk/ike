@@ -4314,6 +4314,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.VCS().Wheel(wheelLines)
 			}
+		case pane.KindDebug:
+			// The wheel scrolls the debug panel's focused column (#626).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Debug().Wheel(-wheelLines)
+			case tea.MouseWheelDown:
+				inst.Debug().Wheel(wheelLines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -4763,6 +4771,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// checkboxes; emitted messages route like the key-driven ones.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.VCS().Click(localX, localY)
+		}
+	case pane.KindDebug:
+		// Debug-panel clicks (#626): select a frame/variable, double-click to
+		// activate (frame select / variable expand); messages route like keys.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Debug().Click(localX, localY)
 		}
 	}
 	return m, nil

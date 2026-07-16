@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-16T18:00:00Z
+timestamp: 2026-07-16T20:00:00Z
 ---
 
 # Debugger (0350)
@@ -91,3 +91,10 @@ slot and re-feeds on the next stop.
 - The panel is pure view/state: data arrives via `SetFrames`/`SetScopes`/
   `SetChildren`/`SetRunning`; the app resolves intents against the live
   session (`fetchScopes`/`fetchVariables`).
+- **Mouse** (#626, `mouse.go`, vcspanel pattern): the app routes wheel and
+  left-click over `KindDebug` to the panel. A click focuses the column under
+  the cursor (x against the separator) and selects the row; a **double-click**
+  (same row within 400ms) activates it, mirroring `enter`. The wheel scrolls
+  the focused column. Both columns carry a scroll offset (`frameTop`/`varTop`),
+  and keyboard `j`/`k` auto-scroll to keep the selection visible — the panel
+  previously clipped long stacks/var lists at the pane height.
