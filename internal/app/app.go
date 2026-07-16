@@ -96,6 +96,11 @@ type Model struct {
 	// dbg is the live DAP session's state (0350, #579), nil while no
 	// session runs; a pointer so Update's value copies share it.
 	dbg *debugState
+	// dbgLaunching guards the launch/auto-install window before dbg is set:
+	// a second debug.start (e.g. a terminal delivering the chord twice) must
+	// not spawn a rival adapter that then tears down the first — one session
+	// at a time (#579).
+	dbgLaunching bool
 	navSkip bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
@@ -2103,6 +2108,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case debugErrMsg:
+		m.dbgLaunching = false
 		m.host.Notify(host.Error, "debug: "+msg.err.Error())
 		return m, nil
 
@@ -2110,6 +2116,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The adapter-runtime auto-install finished (#589): success retries
 		// the pending launch once; failure surfaces the manual command.
 		if msg.err != nil {
+			m.dbgLaunching = false
 			m.host.Notify(host.Error, "debug: install failed: "+msg.err.Error())
 			return m, nil
 		}

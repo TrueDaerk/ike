@@ -74,7 +74,12 @@ func (toolchain) DebugLaunchArgs(_ string, spec lang.RunSpec, cwd string, env ma
 		"redirectOutput": true,
 		"justMyCode":     true,
 		"cwd":            cwd,
-		"args":           spec.Args,
+	}
+	// Emit "args" only when non-empty: a nil slice marshals to JSON null,
+	// which debugpy's vectorizing array validator turns into [null] and
+	// rejects with `"args"[0] must be str`. Absent, it defaults to [].
+	if len(spec.Args) > 0 {
+		args["args"] = spec.Args
 	}
 	if spec.Module != "" {
 		args["module"] = spec.Module
