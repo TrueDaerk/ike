@@ -76,6 +76,12 @@ func TestDebugAdapterAndLaunchArgs(t *testing.T) {
 	if args["program"] != "/r/x.py" || args["request"] != "launch" {
 		t.Fatalf("launch args = %v", args)
 	}
+	// A nil Args slice must not emit "args": a JSON null makes debugpy's
+	// vectorizing validator reject the launch with `"args"[0] must be str`.
+	bare := tc.DebugLaunchArgs("/r", lang.RunSpec{File: "/r/x.py"}, "/r", nil)
+	if _, hasArgs := bare["args"]; hasArgs {
+		t.Fatalf("empty args must be omitted, got %v", bare["args"])
+	}
 	if _, hasModule := args["module"]; hasModule {
 		t.Fatal("file form must not carry module")
 	}

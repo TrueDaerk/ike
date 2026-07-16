@@ -94,8 +94,13 @@ func (m *Model) startDebug() {
 		m.host.Notify(host.Info, "debug: "+cfg.Lang+" has no debug adapter yet")
 		return
 	}
+	if m.dbg != nil || m.dbgLaunching {
+		m.host.Notify(host.Info, "debug: a session is already running")
+		return
+	}
 	store.Touch(cfg.Name)
 	_ = run.Save(store)
+	m.dbgLaunching = true
 	m.launchOrInstall(root, *cfg, false)
 }
 
@@ -117,6 +122,7 @@ func (m *Model) launchOrInstall(root string, cfg run.Config, afterInstall bool) 
 			hint = " — install manually: " + strings.Join(candidates[len(candidates)-1], " ")
 		}
 		m.host.Notify(host.Error, "debug: "+reason+hint)
+		m.dbgLaunching = false
 		return
 	}
 	m.host.Notify(host.Info, "debug: "+reason+" — installing…")
@@ -182,6 +188,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	argv, ok := lang.DebugAdapter(cfg.Lang, root, explicit)
 	if !ok {
 		m.host.Notify(host.Error, "debug: no adapter for "+cfg.Lang)
+		m.dbgLaunching = false
 		return
 	}
 	absFile := cfg.File
@@ -192,6 +199,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	launchArgs, ok := lang.DebugLaunchArgs(cfg.Lang, root, spec, cfg.Dir(root), cfg.Env)
 	if !ok {
 		m.host.Notify(host.Error, "debug: no launch template for "+cfg.Lang)
+		m.dbgLaunching = false
 		return
 	}
 
@@ -201,9 +209,11 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	})
 	if err != nil {
 		m.host.Notify(host.Error, "debug: adapter failed to start: "+err.Error())
+		m.dbgLaunching = false
 		return
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
+	m.dbgLaunching = false
 	m.host.Notify(host.Info, "debug: "+cfg.Name+" starting")
 	go func() {
 		if err := sess.Initialize(); err != nil {
@@ -460,6 +470,7 @@ func (m *Model) stopDebugSession(notify bool) {
 	}
 	m.clearPausedMarker()
 	m.dbg = nil
+	m.dbgLaunching = false
 	m.closeDebugPanel()
 	sess := dbg.sess
 	go func() {
@@ -479,6 +490,7 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	}
 	m.clearPausedMarker()
 	m.dbg = nil
+	m.dbgLaunching = false
 	m.closeDebugPanel()
 	go dbg.sess.Close()
 	note := "debug: " + dbg.cfgName + " finished"
