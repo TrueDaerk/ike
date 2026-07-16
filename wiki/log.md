@@ -2,6 +2,12 @@
 
 ## 2026-07-16
 
+- Debug variable editing (#627): `e` on a variable row in the tool window opens
+  an inline editor; commit pushes the new value via a new `Session.SetVariable`
+  (DAP `setVariable`) and refetches the container to show the result. Gated on
+  the adapter's `supportsSetVariable` capability, now read from the initialize
+  response. While editing, the app routes every key to the panel.
+
 - Debug tool window mouse support (#626): wheel scrolls the focused column and
   left-click selects a frame/variable (double-click activates, mirroring enter),
   routed via a new `debugpanel/mouse.go` on the vcspanel pattern. The panel now

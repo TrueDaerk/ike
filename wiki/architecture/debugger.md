@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-16T20:00:00Z
+timestamp: 2026-07-16T20:30:00Z
 ---
 
 # Debugger (0350)
@@ -98,3 +98,13 @@ slot and re-feeds on the next stop.
   the focused column. Both columns carry a scroll offset (`frameTop`/`varTop`),
   and keyboard `j`/`k` auto-scroll to keep the selection visible — the panel
   previously clipped long stacks/var lists at the pane height.
+- **Editing values** (#627): `e` on a variable row opens an inline line editor
+  (prefilled with the current value); typing/backspace/←→/home/end edit it,
+  `enter` commits and `esc` cancels. Commit emits `SetVarMsg{Ref, Name, Value}`;
+  the app calls `Session.SetVariable` (DAP `setVariable`, targeting the row's
+  *containing* `variablesReference`) then refetches that reference so the panel
+  shows the adapter's new value. The affordance is gated on the adapter's
+  `supportsSetVariable` capability (read from the initialize response and pushed
+  to the panel via `SetEditable` when it opens); scope roots aren't editable.
+  While the editor is open the app routes every key to the panel
+  (`debugPanelEditing`), like an editor in insert mode.

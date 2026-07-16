@@ -84,8 +84,14 @@ func (f *fakeAdapter) serve() {
 		f.mu.Unlock()
 		switch req.Command {
 		case "initialize":
-			f.respond(req, map[string]any{"supportsConfigurationDoneRequest": true})
+			f.respond(req, map[string]any{"supportsConfigurationDoneRequest": true, "supportsSetVariable": true})
 			f.event("initialized", map[string]any{})
+		case "setVariable":
+			var args struct {
+				Value string `json:"value"`
+			}
+			_ = json.Unmarshal(req.Arguments, &args)
+			f.respond(req, map[string]any{"value": args.Value, "type": "int"})
 		case "launch":
 			f.respond(req, map[string]any{})
 		case "setBreakpoints":
@@ -252,5 +258,27 @@ func TestFailedRequestSurfacesMessage(t *testing.T) {
 	defer c.Close()
 	if _, err := c.Call("no-such-command", nil); err == nil {
 		t.Fatal("a failed response must surface as an error")
+	}
+}
+
+// TestSetVariable verifies the setVariable request round-trips and the
+// capability is read from the initialize response (#627).
+func TestSetVariable(t *testing.T) {
+	pipe, _ := startFake(t)
+	s := NewSession(NewConn(pipe, func(string, json.RawMessage) {}))
+	defer s.Close()
+
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if !s.SupportsSetVariable() {
+		t.Fatal("capability supportsSetVariable not read from initialize")
+	}
+	v, err := s.SetVariable(100, "x", "99")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Name != "x" || v.Value != "99" || v.Type != "int" {
+		t.Fatalf("setVariable echoed %+v, want x=99 int", v)
 	}
 }
