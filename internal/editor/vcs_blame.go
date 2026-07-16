@@ -16,6 +16,7 @@ import (
 // ToggleBlame flips the inline-blame annotation and reports the new state;
 // the app fetches the blame map when it just turned on.
 func (m *Model) ToggleBlame() bool {
+	m.bumpRender() // the cursor-line blame annotation appears/disappears (#614)
 	m.blameOn = !m.blameOn
 	if !m.blameOn {
 		m.blame = nil // drop the cache; a re-toggle refetches fresh data

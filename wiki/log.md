@@ -2,6 +2,18 @@
 
 ## 2026-07-16
 
+- Pane-level View cache (0400, #615): a pane whose content did not change now
+  skips its inst.View() recompute. Editors expose a complete RenderVersion (the
+  #614 render epoch folded with vertical scroll, viewport height, and a hash of
+  the external breakpoint set); Instance.View reuses the cached string while the
+  version and active-tab index are unchanged. A never-stale test compares the
+  cached render against a fresh one after every mutation (scroll/cursor/resize/
+  focus/edit/paused/blame/breakpoint) — proven to catch an incomplete version.
+  Marginal on top of #614 (View was already cheap there) but completes the
+  "render only changed parts" goal. Epic #593.
+
+## 2026-07-16
+
 - Editor line-body cache (0400, #614): the editor memoizes rendered line bodies
   (renderSpan output) keyed by (line, from, to, width) and guarded by a
   renderEpoch that bumps on every body-affecting mutation but NOT on vertical
