@@ -4798,13 +4798,19 @@ func (m *Model) copyTerminalSelection(term *terminal.Model) {
 // View implements tea.Model. Under bubbletea v2 the alternate screen, mouse mode
 // and keyboard enhancements (the kitty keyboard protocol) are declared on the
 // View rather than via program options. Basic key disambiguation is requested by
-// default; ReportEventTypes asks the terminal for key repeat and release events,
-// which we deliberately ignore in Update (only KeyPressMsg is dispatched).
+// default, which is all we need — Update only ever dispatches KeyPressMsg.
+//
+// ReportEventTypes (repeat + release reporting) is deliberately left OFF: we
+// ignore those events anyway, and requesting them makes a full Kitty terminal
+// (e.g. Ghostty) emit a release after every key. ultraviolet's
+// parseKittyKeyboardExt mis-parses the release of a CSI-`~` function key (F7/F8/
+// F9…, first param is the key number, not 1) as a *second* KeyPressEvent, so a
+// single F8 tap stepped the debugger twice (#622). Legacy `~` keys carry no
+// event type without the flag, so leaving it off is a clean fix.
 func (m Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
-	v.KeyboardEnhancements.ReportEventTypes = true
 	// Set the screen-wide default background/foreground at the renderer level.
 	// A pane body's inner styled spans (syntax colors, selection) emit a full SGR
 	// reset ("\x1b[m") after each span, which clears any background set by an
