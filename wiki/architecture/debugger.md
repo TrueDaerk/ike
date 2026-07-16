@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-16T20:30:00Z
+timestamp: 2026-07-16T21:00:00Z
 ---
 
 # Debugger (0350)
@@ -83,7 +83,15 @@ slot and re-feeds on the next stop.
   emits `SelectFrameMsg` — the app navigates the editor to the frame's
   location and re-fetches its scopes, so the variables show the state
   *outside* the current function too.
-- **Variables tree** (right, `tab`/`h`/`l` switch columns): roots are the
+- **Output column** (#624): the debuggee's captured stdout/stderr, streamed
+  from DAP `output` events. stderr lines take the error tone; the column has its
+  own scroll offset (`outTop`, pinned to the newest line) reachable via the
+  `tab`/`h`/`l` column cycle and the wheel. Output that arrives before the panel
+  opens (a program printing before the first stop) is buffered on `debugState`
+  and flushed in on open, so nothing is lost. Every chunk is also appended
+  verbatim to a per-project transcript, `.ike/debug-session.log` (stderr chunks
+  prefixed `[stderr] `), reusing the `debug.log` append-logger pattern.
+- **Variables tree** (middle, `tab`/`h`/`l` switch columns): roots are the
   selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
   a node — unloaded references emit `ExpandVarMsg` and the app answers with
   the adapter's `variables` response (`SetChildren`), loaded ones toggle

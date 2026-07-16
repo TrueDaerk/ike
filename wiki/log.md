@@ -2,6 +2,12 @@
 
 ## 2026-07-16
 
+- Debug console output + logging (#624): the debug tool window gained an OUTPUT
+  column streaming the debuggee's stdout/stderr (stderr tinted, own scroll,
+  pre-open output buffered and flushed on open). Every chunk is also appended
+  verbatim to a per-project transcript `.ike/debug-session.log`. Previously the
+  captured output was written to a dead buffer, never shown or persisted.
+
 - Debug variable editing (#627): `e` on a variable row in the tool window opens
   an inline editor; commit pushes the new value via a new `Session.SetVariable`
   (DAP `setVariable`) and refetches the container to show the result. Gated on

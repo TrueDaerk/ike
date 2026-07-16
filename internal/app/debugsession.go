@@ -38,9 +38,16 @@ type debugState struct {
 	frames     []dap.StackFrame
 	pausedPath string // file carrying the paused-line marker
 
-	// output collects the debuggee's DAP output events; the debug tool
-	// window (#580) renders it.
-	output strings.Builder
+	// pendingOut buffers debuggee output that arrived before the tool window
+	// opened (output can precede the first stop); openDebugPanel flushes it into
+	// the panel so nothing is lost from the live console (#624).
+	pendingOut []debugOut
+}
+
+// debugOut is one buffered output chunk with its stream.
+type debugOut struct {
+	stderr bool
+	text   string
 }
 
 // Messages carrying async session activity back into Update.
@@ -283,7 +290,18 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		m.clearPausedMarker()
 		dbg.paused = false
 	case "output":
-		dbg.output.WriteString(ev.Output().Output)
+		o := ev.Output()
+		// Adapter/telemetry categories aren't program output; skip them.
+		if o.Category == "telemetry" {
+			break
+		}
+		stderr := o.Category == "stderr"
+		logDebugOutput(stderr, o.Output) // persist the transcript (#624)
+		if p := m.debugPanel(); p != nil {
+			p.AppendOutput(stderr, o.Output)
+		} else {
+			dbg.pendingOut = append(dbg.pendingOut, debugOut{stderr: stderr, text: o.Output})
+		}
 	case "exited":
 		x := ev.Exited()
 		go func() { send(debugEndedMsg{exitCode: x.ExitCode, hasCode: true}) }()
@@ -412,6 +430,11 @@ func (m *Model) openDebugPanel() {
 	// (#627); the handshake has completed by the first stop.
 	if p := m.panes.Get(key).Debug(); p != nil && m.dbg != nil {
 		p.SetEditable(m.dbg.sess.SupportsSetVariable())
+		// Flush output captured before the panel existed (#624).
+		for _, o := range m.dbg.pendingOut {
+			p.AppendOutput(o.stderr, o.text)
+		}
+		m.dbg.pendingOut = nil
 	}
 	m.layout()
 	saveLayout(m.tree, m.panes)

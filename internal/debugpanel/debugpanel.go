@@ -40,7 +40,18 @@ type column int
 const (
 	colFrames column = iota
 	colVars
+	colOutput
 )
+
+// maxOutputLines caps the retained debuggee output so a chatty program cannot
+// grow the panel's memory without bound (#624).
+const maxOutputLines = 5000
+
+// outLine is one line of debuggee output, tagged with its stream.
+type outLine struct {
+	text   string
+	stderr bool
+}
 
 // varNode is one row of the variables tree.
 type varNode struct {
@@ -70,6 +81,12 @@ type Model struct {
 
 	col     column
 	running bool // true between steps (no paused data to show)
+
+	// Debuggee output (#624): completed lines plus a pending partial (DAP
+	// output events can split mid-line); outTop is the scroll offset.
+	outLines   []outLine
+	outPartial outLine
+	outTop     int
 
 	// Mouse double-click tracking (#626), mirroring the vcs panel; now is
 	// injectable so tests drive the clock.
@@ -104,6 +121,47 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 // SetEditable records whether the adapter supports setVariable (#627); when
 // false, the edit affordance is disabled.
 func (m *Model) SetEditable(v bool) { m.canEdit = v }
+
+// AppendOutput appends a debuggee output chunk (#624), splitting it into lines
+// and carrying an incomplete trailing line as a pending partial (DAP output
+// events can split mid-line). The view stays pinned to the newest output.
+func (m *Model) AppendOutput(stderr bool, text string) {
+	if text == "" {
+		return
+	}
+	// A stream switch mid-line flushes the pending partial as its own line.
+	if m.outPartial.text != "" && m.outPartial.stderr != stderr {
+		m.outLines = append(m.outLines, m.outPartial)
+		m.outPartial = outLine{}
+	}
+	parts := strings.Split(m.outPartial.text+text, "\n")
+	for _, p := range parts[:len(parts)-1] {
+		m.outLines = append(m.outLines, outLine{text: p, stderr: stderr})
+	}
+	m.outPartial = outLine{text: parts[len(parts)-1], stderr: stderr}
+	if len(m.outLines) > maxOutputLines {
+		m.outLines = m.outLines[len(m.outLines)-maxOutputLines:]
+	}
+	m.outTop = max(0, m.outputRowCount()-m.bodyHeight()) // pin to the newest
+}
+
+// outputRowCount is the number of visible output rows (completed lines plus a
+// non-empty pending partial).
+func (m Model) outputRowCount() int {
+	n := len(m.outLines)
+	if m.outPartial.text != "" {
+		n++
+	}
+	return n
+}
+
+// outputRows returns the output as display lines including the pending partial.
+func (m Model) outputRows() []outLine {
+	if m.outPartial.text == "" {
+		return m.outLines
+	}
+	return append(append([]outLine(nil), m.outLines...), m.outPartial)
+}
 
 // Editing reports whether an inline value editor is open, so the app routes
 // every key to the panel instead of the global keymap.
@@ -217,9 +275,13 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 	switch k.String() {
 	case "tab", "l", "right":
-		m.col = colVars
+		if m.col < colOutput {
+			m.col++
+		}
 	case "h", "left":
-		m.col = colFrames
+		if m.col > colFrames {
+			m.col--
+		}
 	case "j", "down":
 		m.move(1)
 	case "k", "up":
@@ -298,13 +360,16 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 // move shifts the focused column's selection by delta, clamped, and scrolls
 // the column so the selection stays visible.
 func (m *Model) move(delta int) {
-	if m.col == colFrames {
+	switch m.col {
+	case colFrames:
 		m.frameSel = clamp(m.frameSel+delta, 0, len(m.frames)-1)
 		m.frameTop = scrollToShow(m.frameTop, m.frameSel, m.bodyHeight(), len(m.frames))
-		return
+	case colOutput:
+		m.outTop = clamp(m.outTop+delta, 0, max(0, m.outputRowCount()-m.bodyHeight()))
+	default:
+		m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
+		m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
 	}
-	m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
-	m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
 }
 
 // bodyHeight is the number of list rows visible under the column title.
@@ -382,26 +447,40 @@ func (m Model) View() string {
 	if len(m.frames) == 0 {
 		return " no paused debug session"
 	}
-	leftW := m.w * 2 / 5
-	if leftW < 16 {
-		leftW = min(16, m.w/2)
-	}
-	rightW := m.w - leftW - 1
-	left := m.renderFrames(leftW)
-	right := m.renderVars(rightW)
+	fw, vw, ow := m.colWidths()
+	frames := m.renderFrames(fw)
+	vars := m.renderVars(vw)
+	output := m.renderOutput(ow)
 	sep := lipgloss.NewStyle().Foreground(m.theme().Border).Render("│")
 	rows := make([]string, 0, m.h)
 	for i := 0; i < m.h; i++ {
-		l, r := "", ""
-		if i < len(left) {
-			l = left[i]
-		}
-		if i < len(right) {
-			r = right[i]
-		}
-		rows = append(rows, pad(l, leftW)+sep+r)
+		rows = append(rows, pad(rowAt(frames, i), fw)+sep+pad(rowAt(vars, i), vw)+sep+rowAt(output, i))
 	}
 	return strings.Join(rows, "\n")
+}
+
+// colWidths splits the interior into frames | variables | output, reserving one
+// cell for each of the two separators.
+func (m Model) colWidths() (frames, vars, output int) {
+	usable := m.w - 2 // two separators
+	if usable < 3 {
+		usable = 3
+	}
+	frames = usable * 2 / 5
+	if frames < 12 {
+		frames = min(12, usable/3)
+	}
+	rest := usable - frames
+	vars = rest / 2
+	output = rest - vars
+	return frames, vars, output
+}
+
+func rowAt(rows []string, i int) string {
+	if i < len(rows) {
+		return rows[i]
+	}
+	return ""
 }
 
 // renderFrames renders the stack rows, selection highlighted.
@@ -474,6 +553,31 @@ func (m Model) renderVars(w int) []string {
 			}
 		}
 		out = append(out, style.Render(label))
+	}
+	return out
+}
+
+// renderOutput renders the debuggee's captured stdout/stderr (#624); stderr
+// lines take the error tone.
+func (m Model) renderOutput(w int) []string {
+	title := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Render(" OUTPUT")
+	out := []string{title}
+	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
+	errStyle := lipgloss.NewStyle().Foreground(m.theme().Error)
+	rows := m.outputRows()
+	// Clamp against the current size: output may have been appended before the
+	// panel was sized (flush-on-open), leaving outTop pinned past the content.
+	top := clamp(m.outTop, 0, max(0, len(rows)-m.bodyHeight()))
+	for i := top; i < len(rows); i++ {
+		if len(out) >= m.h {
+			break
+		}
+		ln := rows[i]
+		style := dim
+		if ln.stderr {
+			style = errStyle
+		}
+		out = append(out, style.Render(truncate(" "+ln.text, w)))
 	}
 	return out
 }
