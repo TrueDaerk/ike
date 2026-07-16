@@ -14,6 +14,36 @@ func SplitLeaf(root Node, target, newPane string, zone Zone) (Node, bool) {
 	return insert(root, target, &Leaf{Pane: newPane}, zone)
 }
 
+// Replace renames the leaf carrying pane id old to newPane, keeping its exact
+// place and geometry in the tree — the swap half of the pane manager, used to
+// reuse an empty editor's slot for a diff pane instead of splitting a new one
+// (#628). A missing old, an empty newPane, or old already present as a different
+// leaf that would collide, returns root unchanged with ok=false.
+func Replace(root Node, old, newPane string) (Node, bool) {
+	if old == "" || newPane == "" {
+		return root, false
+	}
+	if old == newPane {
+		return root, true
+	}
+	var found bool
+	var walk func(Node)
+	walk = func(n Node) {
+		switch t := n.(type) {
+		case *Leaf:
+			if t.Pane == old {
+				t.Pane = newPane
+				found = true
+			}
+		case *Split:
+			walk(t.A)
+			walk(t.B)
+		}
+	}
+	walk(root)
+	return root, found
+}
+
 // Close removes the leaf with id pane, its parent split collapsing so the
 // sibling takes the parent's place — the first-class promotion of move.remove.
 // Closing the only leaf (root is that leaf) returns root unchanged with

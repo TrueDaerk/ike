@@ -4,7 +4,7 @@ title: Diff Viewer
 description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-16T19:30:00Z
 ---
 
 # Diff Viewer (#60)
@@ -62,9 +62,20 @@ left/right" staging is a later increment for #28. The status line shows
 `diff.files` (palette) picks two files via the `@` fuzzy finder: the root
 model arms a two-step pick state, intercepts the two `palette.OpenFileMsg`
 picks (left/old first, right/new second, with toasts prompting each step),
-then splits the focused leaf right with the diff pane and focuses it.
-Dismissing the picker mid-flow disarms the state so a later `@` open is a
-plain file open. Unreadable files diff as empty text.
+then places the diff pane and focuses it. Dismissing the picker mid-flow
+disarms the state so a later `@` open is a plain file open. Unreadable files
+diff as empty text.
+
+## Pane placement
+
+Every diff-open (HEAD diff, commit diff, `diff.files`) routes its freshly
+created pane through `placeDiffLeaf`: if the active editor is an **empty
+scratch pane** (`Instance.IsEmptyEditor` — a single tab, no file, no text), the
+diff takes over that pane's slot in place via `layout.Replace` (renaming the
+leaf) and the empty editor is dropped; otherwise it splits the target leaf right
+with `layout.SplitLeaf`. This avoids leaving a blank editor stranded beside a
+new diff (#628). A file-backed or dirty-scratch editor is never reused — its
+content is preserved and the diff splits beside it.
 
 ## Persistence
 

@@ -213,26 +213,45 @@ func (m *Model) openDiffHeadPane(path, head string) {
 		saveLayout(m.tree, m.panes)
 		return
 	}
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.panes.Focused()
-	}
-	if target == "" || m.tree == nil {
-		return
-	}
 	right := readFileOrEmpty(path)
 	if ed := m.editorForPath(path); ed != nil {
 		right = ed.Text()
 	}
 	key := m.panes.AddDiffHead(path)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
-	if !ok {
-		m.panes.Close(key)
+	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.tree = tree
-	m.layout()
 	m.panes.Get(key).Diff().SetContents(head, right)
 	m.setFocus(key)
 	saveLayout(m.tree, m.panes)
+}
+
+// placeDiffLeaf positions the freshly-created diff pane key beside the active
+// editor — or, when that editor is an empty scratch pane, takes over its slot in
+// place instead of splitting a new pane (#628). It closes key and returns false
+// when there is nowhere to place it.
+func (m *Model) placeDiffLeaf(key string) bool {
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
+	if target == "" || m.tree == nil {
+		m.panes.Close(key)
+		return false
+	}
+	if inst := m.panes.Get(target); inst != nil && inst.IsEmptyEditor() {
+		if _, ok := layout.Replace(m.tree, target, key); ok {
+			m.panes.Close(target)
+			m.layout()
+			return true
+		}
+	}
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	if !ok {
+		m.panes.Close(key)
+		return false
+	}
+	m.tree = tree
+	m.layout()
+	return true
 }
