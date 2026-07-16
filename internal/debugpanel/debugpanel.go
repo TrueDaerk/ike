@@ -9,6 +9,7 @@ package debugpanel
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -50,17 +51,26 @@ type Model struct {
 
 	frames   []dap.StackFrame
 	frameSel int
+	frameTop int // first visible frame row (wheel/keyboard scroll)
 
 	// The variables tree: roots are the selected frame's scopes.
 	roots  []*varNode
 	varSel int
+	varTop int // first visible variable row
 
 	col     column
 	running bool // true between steps (no paused data to show)
+
+	// Mouse double-click tracking (#626), mirroring the vcs panel; now is
+	// injectable so tests drive the clock.
+	now          func() time.Time
+	lastClickCol column
+	lastClickRow int
+	lastClickAt  time.Time
 }
 
 // New returns an empty panel.
-func New(pal *theme.Palette) Model { return Model{pal: pal} }
+func New(pal *theme.Palette) Model { return Model{pal: pal, now: time.Now} }
 
 // SetSize records the pane's interior size.
 func (m *Model) SetSize(w, h int) { m.w, m.h = w, h }
@@ -76,8 +86,10 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 func (m *Model) SetFrames(frames []dap.StackFrame) {
 	m.frames = frames
 	m.frameSel = 0
+	m.frameTop = 0
 	m.roots = nil
 	m.varSel = 0
+	m.varTop = 0
 	m.running = false
 }
 
@@ -87,6 +99,7 @@ func (m *Model) SetRunning() {
 	m.frames = nil
 	m.roots = nil
 	m.frameSel, m.varSel = 0, 0
+	m.frameTop, m.varTop = 0, 0
 }
 
 // SetScopes replaces the variables tree's roots with the selected frame's
@@ -100,6 +113,7 @@ func (m *Model) SetScopes(scopes []dap.Scope) {
 		})
 	}
 	m.varSel = 0
+	m.varTop = 0
 	// The first scope (Locals by convention) expands eagerly; its children
 	// arrive via SetChildren once the app fetched them.
 	if len(m.roots) > 0 {
@@ -174,13 +188,38 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// move shifts the focused column's selection by delta, clamped.
+// move shifts the focused column's selection by delta, clamped, and scrolls
+// the column so the selection stays visible.
 func (m *Model) move(delta int) {
 	if m.col == colFrames {
 		m.frameSel = clamp(m.frameSel+delta, 0, len(m.frames)-1)
+		m.frameTop = scrollToShow(m.frameTop, m.frameSel, m.bodyHeight(), len(m.frames))
 		return
 	}
 	m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
+	m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
+}
+
+// bodyHeight is the number of list rows visible under the column title.
+func (m Model) bodyHeight() int {
+	if m.h <= 1 {
+		return 0
+	}
+	return m.h - 1
+}
+
+// scrollToShow nudges top so sel lands within [top, top+body-1], clamped to the
+// row count.
+func scrollToShow(top, sel, body, count int) int {
+	if body <= 0 {
+		return clamp(top, 0, max(0, count-1))
+	}
+	if sel < top {
+		top = sel
+	} else if sel > top+body-1 {
+		top = sel - body + 1
+	}
+	return clamp(top, 0, max(0, count-body))
 }
 
 // activate runs enter on the focused column.
@@ -264,10 +303,11 @@ func (m Model) renderFrames(w int) []string {
 	out := []string{title}
 	sel := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
-	for i, f := range m.frames {
+	for i := m.frameTop; i < len(m.frames); i++ {
 		if len(out) >= m.h {
 			break
 		}
+		f := m.frames[i]
 		label := " " + f.Name + " — " + baseOf(f.Source.Path) + ":" + strconv.Itoa(f.Line)
 		label = truncate(label, w)
 		style := dim
@@ -288,10 +328,12 @@ func (m Model) renderVars(w int) []string {
 	out := []string{title}
 	sel := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
-	for i, n := range m.flat() {
+	rows := m.flat()
+	for i := m.varTop; i < len(rows); i++ {
 		if len(out) >= m.h {
 			break
 		}
+		n := rows[i]
 		marker := "  "
 		if n.v.VariablesReference != 0 {
 			marker = "▸ "
@@ -350,4 +392,3 @@ func baseOf(path string) string {
 	}
 	return path
 }
-

@@ -2,6 +2,12 @@
 
 ## 2026-07-16
 
+- Debug tool window mouse support (#626): wheel scrolls the focused column and
+  left-click selects a frame/variable (double-click activates, mirroring enter),
+  routed via a new `debugpanel/mouse.go` on the vcspanel pattern. The panel now
+  carries per-column scroll offsets so long stacks/variable lists scroll instead
+  of clipping, and keyboard nav auto-scrolls the selection into view.
+
 - Diff-open reuses an empty editor pane (#628): every diff-open (HEAD/commit/
   diff.files) now routes through `placeDiffLeaf` — when the active editor is an
   empty scratch pane (`Instance.IsEmptyEditor`), the diff takes over its slot in
