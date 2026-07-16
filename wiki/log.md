@@ -2,6 +2,15 @@
 
 ## 2026-07-16
 
+- Debug adapter tty isolation (0350, #620): the DAP adapter now spawns detached
+  in its own session (`transport.Spec.Detached` → `setsid`). debugpy's launcher
+  was `tcsetpgrp`-ing the inherited controlling terminal to give the debuggee
+  terminal foreground, stealing the tty from the TUI and stopping it with
+  SIGTTIN (input leaked to the shell mid-raw-mode). Also: empty launch `args`
+  are omitted (a JSON null tripped debugpy's `"args"[0] must be str` validator),
+  and a `dbgLaunching` guard drops a second `debug.start` mid-launch so it can't
+  tear down the in-flight session (`dap: connection closed`).
+
 - Pane-level View cache (0400, #615): a pane whose content did not change now
   skips its inst.View() recompute. Editors expose a complete RenderVersion (the
   #614 render epoch folded with vertical scroll, viewport height, and a hash of
