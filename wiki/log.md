@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-16
+
+- Editor line-body cache (0400, #614): the editor memoizes rendered line bodies
+  (renderSpan output) keyed by (line, from, to, width) and guarded by a
+  renderEpoch that bumps on every body-affecting mutation but NOT on vertical
+  scroll (renderSpan never reads view.Top). So a scroll reuses cached lines
+  instead of re-highlighting the whole window each frame; renderSpan/editor.View
+  drop out of the render hot path. The gutter renders fresh (decorations never
+  stale); the cache is per-view (fresh on New/ShareDocumentWith). A never-stale
+  test compares every mutation's cached render against a forced-fresh one. Epic #593.
+
 ## 2026-07-15
 
 - Incremental frame composition (0400, #612): render was recomposing every pane

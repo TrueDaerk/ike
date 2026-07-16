@@ -44,6 +44,10 @@ type SyncMsg struct {
 // and this view's cursor starts at the top. Load is not called — the document
 // is already in memory.
 func (m *Model) ShareDocumentWith(src *Model) {
+	// A separate view of the same document needs its own line cache — its cursor,
+	// scroll and size differ, so it must never share cached bodies (#614/#142).
+	m.lineCache = newLineCache()
+	m.renderEpoch++
 	m.path = src.path
 	m.buf = src.buf
 	m.seedBreakpointLines()
