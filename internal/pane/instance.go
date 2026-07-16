@@ -95,6 +95,14 @@ type Instance struct {
 	bxSig   BoxSig
 	bxBox   string
 	bxValid bool
+
+	// View cache (#615): the active editor tab's rendered content, reused while
+	// its RenderVersion and the active tab index are unchanged — so a pane the
+	// user is not touching skips its View() recomputation entirely.
+	cvView  string
+	cvVer   uint64
+	cvTab   int
+	cvValid bool
 }
 
 // BoxSig is the render-cache key for a pane's bordered box. Content is captured
@@ -471,10 +479,24 @@ func (i *Instance) View() string {
 	case KindExplorer:
 		return i.exp.View()
 	case KindEditor:
-		if t := i.activeTab(); t != nil {
-			return t.view()
+		t := i.activeTab()
+		if t == nil {
+			return ""
 		}
-		return ""
+		if t.IsTerminal() {
+			return t.view() // live terminal output — never cached
+		}
+		// Skip recomputing the editor's View when nothing it renders changed
+		// (#615): a scroll of another pane, or an idle frame, reuses the cached
+		// string. RenderVersion is a complete identity of everything View draws,
+		// so this can never serve a stale frame.
+		ver := t.ed.RenderVersion()
+		if i.cvValid && i.cvTab == i.active && i.cvVer == ver {
+			return i.cvView
+		}
+		v := t.view()
+		i.cvView, i.cvVer, i.cvTab, i.cvValid = v, ver, i.active, true
+		return v
 	case KindTerminal:
 		return i.term.View()
 	case KindMarkdown:

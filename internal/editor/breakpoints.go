@@ -39,10 +39,16 @@ func (m *Model) seedBreakpointLines() { m.bpLines = m.buf.LineCount() }
 
 // SetPausedLine marks the debugger's current line (0350, #579): the gutter
 // renders it in the warning tone, winning over every other marker.
-func (m *Model) SetPausedLine(line int) { m.paused, m.pausedLine = true, line }
+func (m *Model) SetPausedLine(line int) {
+	m.bumpRender() // the paused ▶ marker moves (#614)
+	m.paused, m.pausedLine = true, line
+}
 
 // ClearPausedLine removes the paused marker (resume, step, session end).
-func (m *Model) ClearPausedLine() { m.paused = false }
+func (m *Model) ClearPausedLine() {
+	m.bumpRender() // the paused ▶ marker clears (#614)
+	m.paused = false
+}
 
 // PausedLine reports the marker, ok=false when none is set.
 func (m *Model) PausedLine() (int, bool) { return m.pausedLine, m.paused }

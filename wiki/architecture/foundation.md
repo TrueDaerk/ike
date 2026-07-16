@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-07-15T15:00:00Z
+timestamp: 2026-07-16T00:00:00Z
 ---
 
 # Foundation Slice
@@ -171,6 +171,15 @@ incremental:
   body/status/menu stack are stitched by direct line placement instead of
   `lipgloss.Join*` re-measuring every line. It falls back to lipgloss if a block's
   line count is ever unexpected.
+
+- **Per-pane View cache** (`Instance.View`, editors): the active editor tab's
+  rendered content is reused while its `RenderVersion()` and active-tab index are
+  unchanged, so a pane the user is not touching skips its `View()` recomputation
+  entirely. `RenderVersion` is a complete identity of everything `View` draws —
+  the line-cache render epoch folded with the vertical scroll position, viewport
+  height, and the breakpoint set (external, hashed) — verified by a never-stale
+  test that compares the cached render against a fresh one after every mutation
+  vector. (#615)
 
 Together they roughly halved render CPU on a fullscreen scroll (`Model.render` cum
 ~69% → ~42%, `StringWidth` ~32% → ~15%). With the render-budget pacing (#610)

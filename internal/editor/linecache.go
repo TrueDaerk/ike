@@ -71,3 +71,24 @@ func (m Model) storeSpan(key lineKey, body string) {
 // from every mutation that can change a rendered line body — but NOT from
 // vertical scroll, whose whole point is to keep the cache warm.
 func (m *Model) bumpRender() { m.renderEpoch++ }
+
+// RenderVersion is a complete identity of everything View() renders (#615), for
+// the pane-level View cache: renderEpoch (line bodies + all Update-routed and
+// direct body mutations) folded with the inputs it deliberately omits — the
+// vertical scroll position and viewport height (which change *which* lines show
+// but not their bodies) and the breakpoint set (external, read fresh each frame
+// via bpSource, so hashed here). Two equal versions render byte-identical.
+func (m Model) RenderVersion() uint64 {
+	const prime = 1099511628211
+	h := uint64(1469598103934665603)
+	mix := func(v uint64) { h ^= v; h *= prime }
+	mix(m.renderEpoch)
+	mix(uint64(m.view.Top))
+	mix(uint64(m.height))
+	if m.bpSource != nil {
+		for _, ln := range m.bpSource(m.path) {
+			mix(uint64(ln) + 1)
+		}
+	}
+	return h
+}
