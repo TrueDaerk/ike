@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Tour first-run wiring (#658): the welcome tour auto-opens on a first start,
+  sequenced crash recovery → tour → LSP onboarding dialog. New `ui.onboarded`
+  config flag, written when the tour opens so a mid-tour quit neither
+  re-triggers the tour nor suppresses the LSP dialog; the LSP dialog's scan
+  now gates on `lsp.onboarded` alone instead of settings-file existence.
+
 - Welcome tour (#657): new `internal/tour` package — a passive five-page
   walkthrough (entry keys & quitting, vim modes, layout & navigation, tools
   incl. the terminal escape hatch, customization) hosted in the floating

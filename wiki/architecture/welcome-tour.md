@@ -18,8 +18,22 @@ line to the LSP server setup dialog. It executes nothing and is deliberately
 not interactive: no guided exercises, no tips-of-the-day.
 
 Opened via the registered command `help.welcomeTour` ("Welcome Tour" in the
-palette; also listed in the help Essentials view). First-run auto-open and
-the `ui.onboarded` flag are #658.
+palette; also listed in the help Essentials view).
+
+## First-run wiring (#658)
+
+On a first start (no user settings file, `ui.onboarded` unset) the tour opens
+automatically once the window is sized. Startup-prompt precedence: **crash
+recovery → welcome tour → LSP onboarding dialog** — the tour waits while the
+recovery prompt holds the shell, and the LSP dialog queues behind the tour
+(`closeTour` re-triggers it explicitly, since its `maybeOpen` refuses while
+the shell is open).
+
+`ui.onboarded = true` persists to the user-scope settings the moment the tour
+**opens** — not when it closes — so quitting mid-tour never re-triggers it
+and, crucially, never leaves a half-created settings file that would suppress
+the LSP dialog. For the same reason the LSP dialog's first-run scan gates on
+`lsp.onboarded` alone rather than on the settings file's existence.
 
 ## Structure
 

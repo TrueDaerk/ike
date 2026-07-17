@@ -66,8 +66,12 @@ type Terminal struct {
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.
+// Onboarded records that the welcome tour (#658) has been shown once; it is
+// written when the tour opens (not closes), so quitting mid-tour never
+// re-triggers it — the tour stays reachable via the palette.
 type UI struct {
-	MenuBar bool `toml:"menu_bar"`
+	MenuBar   bool `toml:"menu_bar"`
+	Onboarded bool `toml:"onboarded"`
 }
 
 // Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns

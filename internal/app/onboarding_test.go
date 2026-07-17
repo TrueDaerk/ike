@@ -70,17 +70,34 @@ func TestOnboardingShownOnFirstStart(t *testing.T) {
 	}
 }
 
-func TestOnboardingNotShownWhenConfigExists(t *testing.T) {
+func TestOnboardingGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
+	// #658: the gate is lsp.onboarded alone, not the settings file's
+	// existence — the welcome tour creates the file when it opens, and a
+	// mid-tour quit must not suppress this dialog on the next launch.
 	onboardLang(t, "obgo")
+
+	// A settings file without the flag (the post-tour launch path): dialog due.
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[theme]\nname = \"default\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[ui]\nonboarded = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if !tm.(Model).onboardingOpen() {
+		t.Fatal("without lsp.onboarded the dialog is still due, file or no file")
+	}
+
+	// With the flag set the dialog never returns.
+	dir = t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[lsp]\nonboarded = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = New()
+	tm, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if tm.(Model).onboardingOpen() {
-		t.Fatal("an existing user config is not a first start — no dialog")
+		t.Fatal("lsp.onboarded = true must suppress the dialog")
 	}
 }
 

@@ -183,8 +183,10 @@ type Model struct {
 	// window is sized. Both nil/false when idle.
 	onboarding        *onboardingState
 	onboardingPending bool
-	// tour holds the welcome tour (#657) while the shell shows it; nil when idle.
-	tour *tour.Tour
+	// tour holds the welcome tour (#657) while the shell shows it; tourPending
+	// flags the first-run auto-open (#658) until the window is sized.
+	tour        *tour.Tour
+	tourPending bool
 	// backupSvc/backupDeb are the crash-recovery write side (Roadmap 0210,
 	// #167): the change seam marks dirty buffers, one armed tick
 	// (backupTickArmed) snapshots the ones that went quiet. backupIv caches the
@@ -534,6 +536,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.restoreLayout(cfg)
 	m.restoreSession()
 	m.scanRecovery()
+	m.scanTour()
 	m.scanOnboarding()
 	m.wireEditorEmitters()
 	if themeWarning != "" {
@@ -1679,11 +1682,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.settings.SetSize(w, h)
 		}
 		// Now that the window is sized, surface any crash-recovery snapshots found
-		// at startup (Roadmap 0210, #166), then the first-start LSP onboarding
-		// dialog (#301) — recovery wins the shell when both are due.
+		// at startup (Roadmap 0210, #166), then the first-run welcome tour
+		// (#658), then the first-start LSP onboarding dialog (#301) — recovery
+		// wins the shell, and the LSP dialog queues behind the tour (its
+		// maybeOpen refuses while the shell is open; closeTour re-triggers it).
 		m.maybeOpenRecovery()
+		tourCmd := m.maybeOpenTour()
 		m.maybeOpenOnboarding()
-		return m, nil
+		return m, tourCmd
 
 	case tea.MouseClickMsg:
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mousePress})
