@@ -2,6 +2,14 @@
 
 ## 2026-07-17
 
+- Version-manager shim resolution (#650): interpreter detection no longer
+  surfaces pyenv/mise/asdf shims — `lang.ResolveShim` asks the owning manager
+  (`<mgr> which <bin>`, run in the project root so per-project pins apply) for
+  the real executable, best-effort with the shim as fallback; the python/php/go
+  plugin detectors resolve their PATH hits through it and toolchain discovery
+  resolves + dedupes shim candidates (the hardcoded pyenv shim entry now shows
+  the resolved versioned path).
+
 - runInTerminal robustness (#638): every bail-out path of the reverse request
   now sends an error response (gone session, empty argv, split/spawn failure —
   the adapter blocks on the answer); a failed spawn closes the just-split pane

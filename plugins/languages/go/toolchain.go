@@ -3,6 +3,8 @@ package langgo
 import (
 	"os"
 	"os/exec"
+
+	"ike/internal/lang"
 )
 
 // toolchain resolves the go binary (#538): PATH first, then the common install
@@ -12,19 +14,21 @@ import (
 // choice, and the terminal PATH shims.
 type toolchain struct{}
 
-// goLook and goFallbacks are seams for tests.
+// goLook, goResolve and goFallbacks are seams for tests.
 var (
 	goLook      = exec.LookPath
+	goResolve   = lang.ResolveShim
 	goFallbacks = []string{"/opt/homebrew/bin/go", "/usr/local/bin/go", "/usr/local/go/bin/go", "/usr/bin/go"}
 )
 
 // Detect implements lang.Toolchain: nothing to inject into the server.
 func (toolchain) Detect(string) (map[string]any, bool) { return nil, false }
 
-// Interpreter implements lang.InterpreterDetector.
-func (toolchain) Interpreter(string) (string, bool) {
+// Interpreter implements lang.InterpreterDetector. A PATH hit that is a
+// version-manager shim (mise/asdf) is resolved to the real executable (#650).
+func (toolchain) Interpreter(root string) (string, bool) {
 	if p, err := goLook("go"); err == nil {
-		return p, true
+		return goResolve(root, p), true
 	}
 	for _, p := range goFallbacks {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
