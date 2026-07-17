@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Welcome Tour
-description: Passive, paged first-orientation walkthrough in the floating shell — five pages of entry keys, vim-mode basics, layout, tools, and customization, with resolver-truth shortcuts; opened via the help.welcomeTour palette command.
+description: Passive, paged first-orientation walkthrough in the floating shell — five pages of entry keys, vim-mode basics, layout, tools, and customization, with resolver-first platform-normalized shortcuts; opened via the help.welcomeTour palette command.
 resource: internal/tour/tour.go
 tags: [architecture, onboarding, tour, help, overlay]
 timestamp: 2026-07-17T00:00:00Z
@@ -61,13 +61,21 @@ budget.
 
 ## Resolver-truth shortcuts
 
-Shortcuts render through a `BindingResolver` (the same narrow seam help
-uses), so a user remap displays truthfully. Multi-bound or fragile commands
-carry a curated preferred-order default ("shift shift · cmd+shift+a") that
-the resolver only replaces when the resolved chord is *outside* that list —
-the tour never teaches a possibly-dead chord (double-shift needs kitty-
-protocol modifier reporting) alone. Unresolved commands keep their curated
-default text; commands without a reliable default say "via palette".
+Shortcuts resolve through a `BindingResolver` (the same narrow seam help
+uses) **first** (#678), so the shown chord is always the live keymap's
+preferred one (custom > default), read from the platform-normalized
+effective table. Multi-bound or fragile commands carry a curated
+preferred-order default ("shift shift · cmd+shift+a") that is kept whenever
+the resolved chord is one of its options or another known default — the tour
+never teaches a possibly-dead chord (double-shift needs kitty-protocol
+modifier reporting) alone. A resolved chord outside all known defaults is a
+real remap and leads the display; curated vim hints (":w", "?", handled
+outside the keymap layer) survive it as secondary options, replaced keymap
+chords are dropped. The curated list is only the fallback for unbound
+commands, and even then it is platform-normalized for display (Meta→Ctrl off
+macOS) — no row ever renders a hardcoded mac chord on Linux/Windows. Every
+row with a real command id goes through this path, including the help
+cheat-sheet row.
 
 ## Design rules
 

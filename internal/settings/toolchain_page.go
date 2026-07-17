@@ -89,6 +89,8 @@ type ToolchainPage struct {
 	pkgOff     int
 
 	prov map[string]string // interpreter path -> provenance (cached stats)
+
+	listH int // list-window height of the last render (mouse hit-testing, #674)
 }
 
 // NewToolchainPage builds the page. restart may be nil (no LSP integration).
@@ -569,7 +571,85 @@ func (t *ToolchainPage) View(w, h int) string {
 			selEnd = len(list) - 1
 		}
 	}
-	return head + "\n" + pinFooter(list, t.footer(sec, w), selStart, selEnd, h-1, &t.off)
+	foot := t.footer(sec, w)
+	t.listH = h - 1 - len(foot)
+	return head + "\n" + pinFooter(list, foot, selStart, selEnd, h-1, &t.off)
+}
+
+// listLine maps a page-local click to a list-line index (the same indexing
+// View uses, so inline expansions line up); ok is false outside the list
+// window — the header row and the pinned footer are not row clicks.
+func (t *ToolchainPage) listLine(y int) (int, bool) {
+	row := y - 1 // header line
+	if row < 0 || (t.listH > 0 && row >= t.listH) {
+		return 0, false
+	}
+	return row + t.off, true
+}
+
+// Click implements the optional PageClicker seam (#674): in the plain list a
+// press selects the row and a press on the selection opens the picker (enter
+// semantics); with the picker open a press chooses the candidate under the
+// pointer (the trailing entry is "custom path…") and a press anywhere else
+// closes it. The other modal flows (custom input, wizard, package view) stay
+// keyboard-driven.
+func (t *ToolchainPage) Click(x, y int) tea.Cmd {
+	if t.picking {
+		idx, ok := t.listLine(y)
+		if !ok {
+			t.picking = false
+			return nil
+		}
+		// Candidate i renders on list line t.sel+1+i (rows above the
+		// selection are 1:1 with lines; expansions only happen there).
+		opt := idx - t.sel - 1
+		switch {
+		case opt < 0 || opt > len(t.candidates):
+			t.picking = false
+		case opt == len(t.candidates): // "custom path…"
+			t.picking, t.custom, t.input = false, true, ""
+		default:
+			t.pick = opt
+			return t.choose(t.candidates[opt])
+		}
+		return nil
+	}
+	if t.Capturing() { // custom input / wizard / env input / package view
+		return nil
+	}
+	idx, ok := t.listLine(y)
+	if !ok || idx >= len(t.languages()) {
+		return nil
+	}
+	if idx == t.sel {
+		if l, hit := t.current(); hit {
+			t.openPicker(l)
+		}
+		return nil
+	}
+	t.sel = idx
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): the plain list moves
+// its selection (it follows, like j/k), the picker moves its highlight and
+// the package view scrolls its window.
+func (t *ToolchainPage) Wheel(delta int) {
+	switch {
+	case t.picking:
+		t.pick = clamp(t.pick+delta, 0, len(t.candidates)) // one past = custom
+	case t.pkgViewing:
+		max := len(t.pkgs) - pkgWindow
+		if max < 0 {
+			max = 0
+		}
+		t.pkgOff = clamp(t.pkgOff+delta, 0, max)
+	case t.Capturing(): // other modal flows: inert
+	default:
+		if n := len(t.languages()); n > 0 {
+			t.sel = clamp(t.sel+delta, 0, n-1)
+		}
+	}
 }
 
 // footer renders the pinned footer: key hints for the current mode (wrapped

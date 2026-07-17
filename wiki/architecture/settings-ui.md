@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -100,10 +100,25 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 - **Focus clarity.** The focused column shows the vivid selection bar; the
   unfocused column keeps a dimmed (faint) selection background, so keyboard
   ownership is always visible (#383).
-- **Mouse (#127).** Clicking a category selects that page; clicking a form
-  entry selects it, and a second click on the selection activates it (enter
-  semantics). Clicks outside the panel dismiss it (#116); custom pages stay
-  keyboard-driven for row interaction.
+- **Mouse (#127, #673).** Clicking a category selects that page; clicking a
+  form entry selects it, and a second click on the selection activates it
+  (enter semantics). The wheel scrolls the column under the pointer by moving
+  its selection (categories switch pages, form rows move like j/k). While an
+  enum picker is open, clicking an option applies it and clicking anywhere
+  else closes the picker; while an inline edit is active, a click on the row
+  keeps the edit and a click elsewhere commits it (cancelling instead when
+  the input does not validate — chord capture just cancels). Clicks outside
+  the panel dismiss it (#116). Custom pages take part through optional
+  `PageClicker` / `PageWheeler` interfaces on the `PageModel` seam (#674):
+  the panel forwards form-column presses page-locally ((0,0) = the page's
+  render origin) and wheel deltas via type assertion, so pages without the
+  seams stay valid. All five custom pages implement them — click selects a
+  row, a click on the selection performs the page's enter-equivalent action
+  (Toolchain opens the picker and picker rows are clickable, Keymap starts
+  the chord capture and the header row opens the filter, LSP toggles the
+  per-server enable, Plugins/Marketplace toggle the detail expansion), and
+  the wheel moves the selection (picker highlight / package window in their
+  modes); clicks cancel modal captures/inputs instead of being swallowed.
 - **Registry seam.** Plugins contribute pages via
   `Capabilities.SettingsPages`; the app appends `reg.SettingsPages()` to the
   built-in `settings.BasePages()` (the toolchain page #94 uses this).

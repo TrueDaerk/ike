@@ -54,6 +54,8 @@ type LSPPage struct {
 	editing lspEditField
 	input   string
 	invalid string
+
+	listH int // list-window height of the last render (mouse hit-testing, #674)
 }
 
 // NewLSPPage builds the page. The closures may be nil (no restart wiring).
@@ -440,7 +442,49 @@ func (p *LSPPage) View(w, h int) string {
 			}, w, 3)
 		}
 	}
+	p.listH = h - len(head) - len(footer)
 	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)
+}
+
+// lspHeadLines is the pinned header's height (mouse hit-testing, #674).
+const lspHeadLines = 3
+
+// Click implements the optional PageClicker seam (#674): a press on a server
+// row selects it, a press on the selection toggles the per-server enable (the
+// page's primary action, `e`). A press while the inline override input is
+// open cancels it (esc semantics).
+func (p *LSPPage) Click(_, y int) tea.Cmd {
+	if p.editing != lspEditNone {
+		p.editing, p.invalid = lspEditNone, ""
+		return nil
+	}
+	row := y - lspHeadLines
+	if row < 0 || (p.listH > 0 && row >= p.listH) {
+		return nil
+	}
+	idx := row + p.off
+	if idx >= len(p.servers()) {
+		return nil
+	}
+	if idx == p.sel {
+		if l, ok := p.current(); ok {
+			return p.write(l.ID, "enabled", !serverOn(l.ID))
+		}
+		return nil
+	}
+	p.sel = idx
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): the list moves its
+// selection (it follows, like j/k); inert while the override input is open.
+func (p *LSPPage) Wheel(delta int) {
+	if p.editing != lspEditNone {
+		return
+	}
+	if n := len(p.servers()); n > 0 {
+		p.sel = clamp(p.sel+delta, 0, n-1)
+	}
 }
 
 // renderRow renders one language row.
