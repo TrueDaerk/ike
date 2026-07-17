@@ -77,18 +77,36 @@ func TestFirstRunTourThenLSPDialogThenNeverAgain(t *testing.T) {
 	}
 }
 
-func TestNoTourWhenConfigExists(t *testing.T) {
+func TestTourGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
+	// #671: main records the project open into the settings file BEFORE the
+	// model is built, so the file exists on every launch — the flag alone
+	// decides whether the tour is due.
 	tourAutoOpen = true
 	t.Cleanup(func() { tourAutoOpen = false })
+
+	// An existing settings file without the flag (every real first launch,
+	// thanks to the project-history write): tour due.
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
-	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[theme]\nname = \"default\"\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[project]\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if !tm.(Model).tourOpen() {
+		t.Fatal("without ui.onboarded the tour is due, settings file or not")
+	}
+
+	// With the flag set the tour never returns.
+	dir = t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[ui]\nonboarded = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = New()
+	tm, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if tm.(Model).tourOpen() {
-		t.Fatal("an existing user config is not a first start — no tour")
+		t.Fatal("ui.onboarded = true must suppress the tour")
 	}
 }
 

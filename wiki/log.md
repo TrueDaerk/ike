@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Tour first-run gate fix (#671): the tour scan keys on `ui.onboarded` alone —
+  the settings file always exists at scan time because main records the
+  project open into the recent-projects history before the model is built, so
+  the file-existence heuristic meant the tour never auto-opened in the real
+  binary (the LSP dialog appeared instead).
+
 - Wheel batch delivery (#669): coalesced wheel bursts now reach each pane
   handler once, carrying the tick count (consumers scroll the whole distance
   in one call) instead of being replayed per event; the terminal caps what it

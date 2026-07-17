@@ -1,8 +1,6 @@
 package app
 
 import (
-	"os"
-
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
@@ -28,15 +26,15 @@ type ShowWelcomeTourMsg struct{}
 // Production never touches it.
 var tourAutoOpen = true
 
-// scanTour decides at startup whether the first-run tour is due: a first
-// start (no user settings file yet) that has not been marked onboarded. The
-// tour itself waits for the first window size (maybeOpenTour).
+// scanTour decides at startup whether the first-run tour is due: the
+// ui.onboarded flag alone gates it (#671) — NOT the settings file's
+// existence, because main records the project open into the recent-projects
+// history before the model is built, so the user settings file exists on
+// every launch, including the very first. The tour itself waits for the
+// first window size (maybeOpenTour).
 func (m *Model) scanTour() {
 	if !tourAutoOpen || m.cfgOpts.UserPath == "" {
 		return
-	}
-	if _, err := os.Stat(m.cfgOpts.UserPath); err == nil {
-		return // an existing config is not a first start
 	}
 	if c := config.Get(); c == nil || c.UI.Onboarded {
 		return
