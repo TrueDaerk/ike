@@ -4,14 +4,14 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
 
 `internal/terminal` embeds a real shell as a pane (spec: epic #88), complete
 across the epic's four slices: PTY + VT core (#95), workspace integration
-(#96), commands & UX (#97) and toolchain environment injection (#98).
+(#96), commands & UX (#97) and toolchain environment activation (#98, #652).
 
 ## Command sessions & run reuse (0350, #574)
 
@@ -149,25 +149,43 @@ reality-probe caveat).
   the title into the grid as ghost text. Only BEL and `ESC \` terminate,
   matching xterm/Ghostty.
 
-## Toolchain environment injection (#98)
+## Toolchain environment activation (#98, #652)
 
-The interpreter chosen on the **settings page** — and only that; silent
-detection never injects — is what `php` / `python` / `python3` resolve to
-inside the IDE terminal (`internal/terminal/env.go`):
+The **effective** interpreter per language — the explicit settings-page
+choice beating project detection, through the same `lang.Interpreter` seam
+LSP, debug and the statusline read — is activated in fresh IDE terminals the
+way JetBrains does it, so `which python3` shows the real interpreter
+(`internal/terminal/env.go`, `PlanActivation`). Per mapping, one of four
+modes applies:
 
-- A per-project **shim directory** (`.ike/shims`, IKE_CONFIG_DIR-overridable)
-  holds `#!/bin/sh` exec scripts for `php`, `python`, `python3` (python
-  covers both names). Shims exec by absolute path and are re-read per
-  invocation, so regenerating them — on every config reload — retargets even
-  already-running sessions. Stale shims sweep when a setting is removed.
-- The **spawn environment** prepends the shim dir to PATH; a venv interpreter
-  (its bin's parent carries `pyvenv.cfg`) additionally sets `VIRTUAL_ENV` and
-  puts the venv bin on PATH, per convention. uv-managed interpreters resolve
-  through their absolute path in the shim. With no explicit setting the
+- **venv** (the interpreter's bin parent carries `pyvenv.cfg`): activate like
+  `source bin/activate` — `<venv>/bin` is prepended to PATH and
+  `VIRTUAL_ENV` is set. No shim; `which python3`/`python`/`pip` all print
+  the venv paths. A detected project `.venv` activates too — the old
+  "silent detection never injects" rule is gone.
+- **PATH prepend** (private toolchain dir — pyenv versions, mise/asdf
+  installs, `/usr/local/go/bin`, anything outside the shared-system list):
+  the interpreter's own directory goes ahead of PATH, so real versioned
+  paths win `which`. A *detected* interpreter whose directory already wins
+  the base-PATH lookup for its own name is skipped (env untouched — it is
+  what PATH gives anyway).
+- **shim** (explicit choice in a shared system dir: `/bin`, `/usr/bin`,
+  `/usr/local/bin`, `/opt/homebrew/bin`, sbin variants): prepending would
+  reorder the whole PATH and shadow unrelated tools, so the per-project
+  **shim directory** (`.ike/shims`, IKE_CONFIG_DIR-overridable) keeps
+  `#!/bin/sh` exec wrappers for just that language's command names (python
+  covers `python` + `python3`). Stale shims sweep when the setting is
+  removed or the mapping moves to venv/prepend mode.
+- **none** (detected interpreter in a shared system dir): ambient — the
   environment stays untouched.
-- The pane **title indicates the mapping**: `… · python→~/proj/.venv/bin/python`.
-- The mapping reads through the same `lang.Interpreter` seam the LSP
-  toolchain uses — one source of truth, `source == "config"` only.
+
+With nothing to inject the spawn environment is exactly the inherited one.
+The overlay applies to **new** terminals; running sessions keep their
+environment (a PATH prepend cannot retarget a live shell — JetBrains behaves
+the same). A config reload re-plans, so the next terminal picks up changes.
+
+- The pane **title indicates the active mappings**:
+  `… · python→~/proj/.venv/bin/python` (only mappings that actually inject).
 - **Windows**: the shims are POSIX `sh` scripts; a windows port writes
   `<name>.cmd` wrappers into the same directory (`@"%target%" %*`) —
   documented here, darwin/linux land first like the rest of the PTY stack.
@@ -178,5 +196,5 @@ Verified inside the pane: `vim` (alt screen, insert/normal, `:wq` writes),
 `less` (paging), shell line editing and wrapping, colored output, `stty size`
 reflecting pane resizes, scrollback paging over `seq` output, layout restore
 with a fresh prompt, a session surviving a project switch with its
-origin-root title, and `command -v python3` resolving to the shim with
-`sys.executable` reporting the configured venv interpreter.
+origin-root title, and `command -v python3` in a project with an active venv
+mapping resolving to the venv interpreter itself (`VIRTUAL_ENV` set).

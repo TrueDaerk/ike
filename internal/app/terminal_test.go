@@ -345,43 +345,94 @@ func TestTerminalCommandsRegistered(t *testing.T) {
 	}
 }
 
-// TestTerminalEnvFromSettings guards #98: an explicit [lang.python]
-// interpreter yields shims + PATH overlay and the title indicator; no
-// setting leaves the environment untouched.
+// venvDetector is a stub python toolchain for the env tests: it detects the
+// interpreter of a `.venv` under root, like the real plugin's top priority.
+type venvDetector struct{}
+
+func (venvDetector) Detect(root string) (map[string]any, bool) { return nil, false }
+func (venvDetector) Interpreter(root string) (string, bool) {
+	p := filepath.Join(root, ".venv", "bin", "python3")
+	if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		return p, true
+	}
+	return "", false
+}
+
+// registerEnvTestPython registers a python language whose detection only
+// fires on a project-local .venv (idempotent; last writer wins) and strips
+// the toolchain from every other language: the registry is global, so stubs
+// other tests registered would leak into effectiveMappings. Tests that need
+// a toolchain register their own at their start.
+func registerEnvTestPython() {
+	lang.Register(lang.Language{
+		ID:        "python",
+		Server:    &lang.ServerSpec{Language: "python", Command: "x"},
+		Toolchain: venvDetector{},
+	})
+	for _, l := range lang.All() {
+		if l.ID != "python" && l.Toolchain != nil {
+			l.Toolchain = nil
+			lang.Register(l)
+		}
+	}
+}
+
+// TestTerminalEnvFromSettings guards #98/#652: an explicit [lang.python]
+// interpreter injects — private dirs by PATH prepend, shared system dirs via
+// shim — plus the title indicator; no explicit setting and no detected
+// project env leaves the environment untouched.
 func TestTerminalEnvFromSettings(t *testing.T) {
 	dir := t.TempDir()
 	t.Chdir(dir)
+	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
+	// working directory must compare equal.
+	if wd, err := os.Getwd(); err == nil {
+		dir = wd
+	}
 	t.Setenv("IKE_CONFIG_DIR", "")
+	registerEnvTestPython()
 
-	// Register a python language for the mapping walk (idempotent).
-	lang.Register(lang.Language{ID: "python", Server: &lang.ServerSpec{Language: "python", Command: "x"}})
-
-	// No explicit setting: env untouched, no shims.
+	// No explicit setting and no detected project env: untouched, no shims.
 	base, _ := config.Load(config.Options{})
 	config.Set(base)
 	if env := terminalEnv(); env != nil {
-		t.Fatalf("no setting must not inject, got %v", env)
+		t.Fatalf("no setting and no detection must not inject, got %v", env)
 	}
 
-	// Explicit setting: shims written, PATH overlay present.
+	// Explicit interpreter in a private toolchain dir: its directory is
+	// prepended to PATH, no shim (#652).
 	c, _ := config.Load(config.Options{})
 	c.Lang = map[string]map[string]string{"python": {"interpreter": "/opt/py/bin/python"}}
 	config.Set(c)
 	t.Cleanup(func() { fresh, _ := config.Load(config.Options{}); config.Set(fresh) })
 
 	env := terminalEnv()
-	if len(env) == 0 || !strings.Contains(env[len(env)-1], "PATH=") {
+	if len(env) == 0 || !strings.HasPrefix(env[len(env)-1], "PATH=/opt/py/bin"+string(os.PathListSeparator)) {
+		t.Fatalf("overlay = %v", env)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".ike", "shims", "python3")); !os.IsNotExist(err) {
+		t.Fatal("private-dir interpreter must not write a shim")
+	}
+
+	// Explicit interpreter in a shared system dir: shim fallback, shim dir
+	// on PATH, base order untouched.
+	c2, _ := config.Load(config.Options{})
+	c2.Lang = map[string]map[string]string{"python": {"interpreter": "/usr/bin/python3"}}
+	config.Set(c2)
+	env = terminalEnv()
+	if len(env) == 0 || !strings.Contains(env[len(env)-1], "PATH=") ||
+		strings.Contains(env[len(env)-1], "PATH=/usr/bin") {
 		t.Fatalf("overlay = %v", env)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, ".ike", "shims", "python3"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(data), "/opt/py/bin/python") {
+	if !strings.Contains(string(data), "/usr/bin/python3") {
 		t.Fatalf("shim = %q", data)
 	}
 
-	// The pane title indicates the mapping.
+	// The pane title indicates the active mapping.
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -389,6 +440,51 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 	t.Cleanup(func() { inst.Terminal().Close() })
 	if title := m.terminalTitle(inst); !strings.Contains(title, "python→") {
 		t.Fatalf("title should indicate the mapping, got %q", title)
+	}
+}
+
+// TestTerminalEnvDetectedVenv guards #652: a detected project .venv — no
+// explicit setting — activates in new terminals: VIRTUAL_ENV set, venv bin
+// first on PATH, no shim. The old "silent detection never injects" rule is
+// gone; the JetBrains behavior is the project interpreter being active.
+func TestTerminalEnvDetectedVenv(t *testing.T) {
+	dir := t.TempDir()
+	t.Chdir(dir)
+	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
+	// working directory must compare equal.
+	if wd, err := os.Getwd(); err == nil {
+		dir = wd
+	}
+	t.Setenv("IKE_CONFIG_DIR", "")
+	registerEnvTestPython()
+
+	venvBin := filepath.Join(dir, ".venv", "bin")
+	if err := os.MkdirAll(venvBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".venv", "pyvenv.cfg"), []byte("home = x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(venvBin, "python3"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	base, _ := config.Load(config.Options{})
+	config.Set(base)
+	t.Cleanup(func() { fresh, _ := config.Load(config.Options{}); config.Set(fresh) })
+
+	env := terminalEnv()
+	if len(env) != 2 {
+		t.Fatalf("overlay = %v", env)
+	}
+	if env[0] != "VIRTUAL_ENV="+filepath.Join(dir, ".venv") {
+		t.Fatalf("VIRTUAL_ENV = %q", env[0])
+	}
+	if !strings.HasPrefix(env[1], "PATH="+venvBin+string(os.PathListSeparator)) {
+		t.Fatalf("PATH should start with the venv bin, got %q", env[1])
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".ike", "shims", "python3")); !os.IsNotExist(err) {
+		t.Fatal("venv activation must not write a shim")
 	}
 }
 

@@ -172,9 +172,11 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)
-	// Regenerate the terminal shims (#98): they exec by absolute path and are
-	// re-read per invocation, so an interpreter change retargets even the
-	// already-running sessions.
+	// Re-plan the terminal toolchain activation (#98, #652): shims regenerate
+	// or sweep and the overlay recomputes, so NEW terminals pick up an
+	// interpreter change. Running sessions keep their environment (a PATH
+	// prepend cannot retarget a live shell); only surviving shims — being
+	// re-read per invocation — retarget live sessions too.
 	terminalEnv()
 	// Drop the cached toolchain labels (#101): an interpreter change must
 	// re-resolve the status line's toolchain segment. Keys are deleted in
