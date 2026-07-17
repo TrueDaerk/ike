@@ -25,6 +25,10 @@ func answer(m Model, k tea.KeyPressMsg) Model {
 func staleApp(t *testing.T) (Model, string) {
 	t.Helper()
 	m := newSized()
+	// The temp path in the file segment is long; widen the bar so the #659
+	// truncation guard cannot clip the segments asserted on.
+	tm0, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm0.(Model)
 	path := filepath.Join(t.TempDir(), "c.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)

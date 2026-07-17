@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
 	"ike/internal/editor"
@@ -33,6 +34,7 @@ var statusLeft = []statusSegment{
 	{id: "mode", render: modeSegment},
 	{id: "macro", render: macroSegment},
 	{id: "file", render: fileSegment},
+	{id: "hint", render: emptyHintSegment},
 	{id: "eol", render: eolSegment},
 	{id: "encoding", render: encodingSegment},
 	{id: "indent", render: indentSegment},
@@ -42,6 +44,32 @@ var statusLeft = []statusSegment{
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
+}
+
+// emptyHintSegment is the empty-editor discovery hint (#659): while the
+// focused editor pane has no file it points at the two entry surfaces. Keys
+// render resolver-truth (a remapped search-everywhere shows the live chord);
+// the hint is deliberately short (≤ ~30 cells) and dropped on narrow
+// terminals so it never crowds the bar into a wrap.
+func emptyHintSegment(m Model, ed *editor.Model) string {
+	if ed != nil && ed.HasFile() {
+		return ""
+	}
+	if m.width > 0 && m.width < 70 {
+		return ""
+	}
+	// The known default chords for search-everywhere (primary, delivered
+	// fallback, leader mnemonic); a resolver hit outside this set is a real
+	// user remap and replaces the short display form.
+	const searchDefaults = "shift shift · cmd+shift+a · space space"
+	chord := "shift shift"
+	if m.bindings != nil {
+		if s, ok := m.bindings.Binding("palette.searchEverywhere"); ok && s != "" &&
+			!strings.Contains(searchDefaults, s) {
+			chord = s
+		}
+	}
+	return "? help · " + chord + " find"
 }
 
 // todoSegment is the project's comment-tag count from the TODO index (#61);
@@ -349,7 +377,13 @@ func (m Model) statusLine() string {
 	if gap < 1 {
 		gap = 1
 	}
-	return style.Render(left + strings.Repeat(" ", gap) + right)
+	line := left + strings.Repeat(" ", gap) + right
+	// Never wider than the terminal (#659): lipgloss pads but does not clip,
+	// and an over-wide bar wraps onto a second row, corrupting the layout.
+	if m.width > 0 && lipgloss.Width(line) > m.width {
+		line = ansi.Truncate(line, m.width, "…")
+	}
+	return style.Render(line)
 }
 
 // focusedLangStatus returns the tracked server state for the focused editor's

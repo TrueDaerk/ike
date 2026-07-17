@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/host"
@@ -60,7 +62,11 @@ func TestStatusLineToolchainSegment(t *testing.T) {
 	if err := os.WriteFile(code, []byte("hello\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tm, _ := m.openPath(code, false)
+	// The temp path in the file segment is long; widen the bar so the #659
+	// truncation guard cannot clip the segment under test.
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.openPath(code, false)
 	m = tm.(Model)
 	if line := m.statusLine(); !strings.Contains(line, "segtc:proj-env") {
 		t.Fatalf("toolchain segment should name the venv: %q", line)

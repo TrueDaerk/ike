@@ -129,6 +129,11 @@ func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
 		}
 	}
 
+	// The temp path in the file segment is long; widen the bar so the #659
+	// truncation guard cannot clip the segment under test.
+	tm, _ = m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+
 	tm, _ = m.openPath(code, false)
 	m = tm.(Model)
 	if line := m.statusLine(); !strings.Contains(line, "statest language server ready") {
