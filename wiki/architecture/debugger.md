@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T18:00:00Z
+timestamp: 2026-07-17T21:00:00Z
 ---
 
 # Debugger (0350)
@@ -152,7 +152,16 @@ slot and re-feeds on the next stop.
   (same row within 400ms) activates it, mirroring `enter`. The wheel scrolls
   the focused column. Both columns carry a scroll offset (`frameTop`/`varTop`),
   and keyboard `j`/`k` auto-scroll to keep the selection visible — the panel
-  previously clipped long stacks/var lists at the pane height.
+  previously clipped long stacks/var lists at the pane height. Hardening
+  (#639): coordinates outside the pane interior (border clicks — the layout
+  hit-test spans the whole pane rectangle) are rejected instead of mapping onto
+  a row/column; every click — including output-column and title-row clicks —
+  records into the double-click tracker, so an intervening click elsewhere
+  resets a pending double-click; the wheel drags the selection along to stay
+  inside the visible window (vcspanel behavior); a click while the inline value
+  editor is open cancels the edit first and then selects normally, and a wheel
+  while editing scrolls without moving the selection (which would re-anchor the
+  editor onto a different row).
 - **Editing values** (#627): `e` on a variable row opens an inline line editor
   (prefilled with the current value); typing/backspace/←→/home/end edit it,
   `enter` commits and `esc` cancels. Commit emits `SetVarMsg{Ref, Name, Value}`;

@@ -176,24 +176,36 @@ func TestClickSelectsAndDoubleClickActivatesFrame(t *testing.T) {
 }
 
 // TestClickExpandsVariable verifies a double-click in the variables column
-// emits ExpandVarMsg for an unexpanded ref.
+// emits ExpandVarMsg for an unexpanded ref (#639: the old test only asserted
+// selection).
 func TestClickExpandsVariable(t *testing.T) {
 	m := New(nil)
 	m.SetSize(80, 10)
 	m.SetFrames(frames())
-	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 42}})
+	// Two scopes: Locals expands eagerly, Globals stays collapsed + unloaded so
+	// activating it must emit ExpandVarMsg.
+	m.SetScopes([]dap.Scope{
+		{Name: "Locals", VariablesReference: 42},
+		{Name: "Globals", VariablesReference: 200},
+	})
 	clk := time.Unix(0, 0)
 	m.now = func() time.Time { return clk }
 
-	// Variables column: x inside the middle column (frames|vars|output), y 1 =
-	// first var row (the scope). SetScopes eagerly expands the first scope, so a
-	// double-click would collapse it; here assert the click targets the vars
-	// column + selects.
-	if cmd := m.Click(40, 1); cmd != nil {
+	// Variables column: x inside the middle column (frames|vars|output), y 2 =
+	// second var row (the Globals scope; Locals has no loaded children).
+	if cmd := m.Click(40, 2); cmd != nil {
 		t.Fatal("single click should not activate")
 	}
-	if m.col != colVars || m.varSel != 0 {
-		t.Fatalf("vars click col=%d sel=%d, want vars/0", m.col, m.varSel)
+	if m.col != colVars || m.varSel != 1 {
+		t.Fatalf("vars click col=%d sel=%d, want vars/1", m.col, m.varSel)
+	}
+	clk = clk.Add(100 * time.Millisecond)
+	cmd := m.Click(40, 2)
+	if cmd == nil {
+		t.Fatal("double click on an unloaded ref must emit ExpandVarMsg")
+	}
+	if msg, ok := cmd().(ExpandVarMsg); !ok || msg.Ref != 200 {
+		t.Fatalf("double click emitted %#v, want ExpandVarMsg{Ref: 200}", cmd())
 	}
 }
 
