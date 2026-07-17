@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -1226,9 +1227,11 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	if osc := t.Title(); osc != "" && osc != filepath.Base(t.ShellPath()) {
 		title += " · " + osc
 	}
-	// Active interpreter mappings (#98): what php/python resolve to inside
-	// this terminal, straight from the settings choice.
-	for _, mp := range explicitMappings() {
+	// Active interpreter mappings (#98, #652): what php/python resolve to
+	// inside new terminals — only mappings that actually inject (venv,
+	// PATH prepend or shim), from the cache terminalEnv maintains
+	// (recomputing detection per render would fork subprocesses).
+	for _, mp := range activeMappings() {
 		title += " · " + mp.Lang + "→" + project.CompactPath(mp.Interpreter)
 	}
 	return title
@@ -1305,26 +1308,44 @@ func (m *Model) toggleTerminal() {
 	m.setFocus(target)
 }
 
-// explicitMappings collects the settings-page interpreter choices (#98):
-// only [lang.<id>] interpreter entries — silent detection never injects, per
-// the epic rule. The same lang.Interpreter seam the LSP toolchain reads.
-func explicitMappings() []terminal.Mapping {
+// effectiveMappings collects the effective interpreter per registered
+// language (#98, #652): the explicit [lang.<id>] interpreter setting beats
+// project detection — the same lang.Interpreter seam LSP, debug and the
+// statusline read. Detection runs against the working directory (the project
+// root by convention, like explicit settings always did).
+func effectiveMappings() []terminal.Mapping {
 	c := config.Get()
-	if c == nil {
-		return nil
-	}
 	var out []terminal.Mapping
 	for _, l := range lang.All() {
-		explicit := c.Lang[l.ID]["interpreter"]
-		if explicit == "" {
-			continue
+		explicit := ""
+		if c != nil {
+			explicit = c.Lang[l.ID]["interpreter"]
 		}
-		if path, source := lang.Interpreter(l.ID, ".", explicit); source == "config" && path != "" {
-			out = append(out, terminal.Mapping{Lang: l.ID, Interpreter: path})
+		if path, source := lang.Interpreter(l.ID, ".", explicit); path != "" {
+			// Detection against "." can yield relative paths; PATH
+			// entries must survive the shell changing directories.
+			if abs, err := filepath.Abs(path); err == nil {
+				path = abs
+			}
+			out = append(out, terminal.Mapping{Lang: l.ID, Interpreter: path, Source: source})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Lang < out[j].Lang })
 	return out
+}
+
+// termActive caches the mappings the last terminalEnv run actually injected,
+// for the pane-title indicator: titles render every frame and must not
+// re-run toolchain detection (which can fork version managers).
+var termActive struct {
+	sync.Mutex
+	mappings []terminal.Mapping
+}
+
+func activeMappings() []terminal.Mapping {
+	termActive.Lock()
+	defer termActive.Unlock()
+	return termActive.mappings
 }
 
 // shimDir is the per-project shim directory, mirroring the state stores'
@@ -1336,19 +1357,25 @@ func shimDir() string {
 	return filepath.Join(".ike", "shims")
 }
 
-// terminalEnv regenerates the shims for the current settings and returns the
-// spawn-environment overlay (nil when no explicit interpreter is chosen).
+// terminalEnv plans the toolchain activation for the effective mappings
+// (#652), regenerates/sweeps the shims accordingly and returns the
+// spawn-environment overlay — nil when nothing injects (no explicit setting
+// and no project-local detection difference). It applies to NEW terminals;
+// running sessions keep their environment.
 func terminalEnv() []string {
-	mappings := explicitMappings()
+	plan := terminal.PlanActivation(effectiveMappings(), os.Getenv("PATH"))
 	dir := shimDir()
-	if ok, err := terminal.WriteShims(dir, mappings); err != nil || !ok {
+	if _, err := terminal.WriteShims(dir, plan.Shims); err != nil {
 		return nil
 	}
+	termActive.Lock()
+	termActive.mappings = plan.Active
+	termActive.Unlock()
 	abs, err := filepath.Abs(dir)
 	if err != nil {
 		abs = dir
 	}
-	return terminal.EnvOverlay(abs, mappings, os.Getenv("PATH"))
+	return plan.Overlay(abs, os.Getenv("PATH"))
 }
 
 // openTerminal opens a fresh terminal pane rooted in the working directory

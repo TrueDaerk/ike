@@ -2,6 +2,15 @@
 
 ## 2026-07-17
 
+- Terminal toolchain activation (#652): the effective interpreter (explicit
+  beats detected) now activates JetBrains-style in fresh IDE terminals —
+  venv interpreters prepend `<venv>/bin` + set `VIRTUAL_ENV`, private
+  toolchain dirs (pyenv/mise/asdf/go) prepend their own directory so `which`
+  shows real paths, and shims remain only as the fallback for explicit
+  choices in shared system dirs (detected shared-dir interpreters inject
+  nothing). Detected project `.venv`s activate too. Running sessions keep
+  their env; new terminals pick up changes on config reload.
+
 - Version-manager shim resolution (#650): interpreter detection no longer
   surfaces pyenv/mise/asdf shims — `lang.ResolveShim` asks the owning manager
   (`<mgr> which <bin>`, run in the project root so per-project pins apply) for
