@@ -70,7 +70,7 @@ func TestPythonCandidatesVenvAndUv(t *testing.T) {
 		return ""
 	}
 	look := func(string) string { return "" }
-	got := pythonCandidates(root, run, look, noResolve)
+	got := pythonCandidates(root, run, look, noResolve, noGlob)
 	if len(got) != 2 || got[0] != venvPy || got[1] != uvPy {
 		t.Fatalf("candidates = %v, want [%s %s]", got, venvPy, uvPy)
 	}
@@ -186,16 +186,16 @@ func TestDefaultCandidatesWellKnownDirs(t *testing.T) {
 	wellKnownBinDirs = []string{filepath.Join(dir, "missing"), dir}
 
 	// PATH miss: the well-known location is still offered.
-	got := defaultCandidates("xlang", ".", func(string) string { return "" }, noResolve)
+	got := defaultCandidates("xlang", ".", func(string) string { return "" }, noResolve, noGlob)
 	if len(got) != 1 || got[0] != fake {
 		t.Fatalf("candidates = %v, want [%s]", got, fake)
 	}
 	// PATH hit first, deduplicated against the same well-known path.
-	got = defaultCandidates("xlang", ".", func(string) string { return fake }, noResolve)
+	got = defaultCandidates("xlang", ".", func(string) string { return fake }, noResolve, noGlob)
 	if len(got) != 1 || got[0] != fake {
 		t.Fatalf("candidates must dedupe PATH vs well-known, got %v", got)
 	}
-	got = defaultCandidates("xlang", ".", func(string) string { return "/elsewhere/xlang" }, noResolve)
+	got = defaultCandidates("xlang", ".", func(string) string { return "/elsewhere/xlang" }, noResolve, noGlob)
 	if len(got) != 2 || got[0] != "/elsewhere/xlang" || got[1] != fake {
 		t.Fatalf("PATH must come first, got %v", got)
 	}
@@ -221,6 +221,9 @@ func TestToolchainFooterHintWraps(t *testing.T) {
 
 // noResolve is the identity resolveShim for tests not exercising #650.
 func noResolve(_, p string) string { return p }
+
+// noGlob is a globList matching nothing (tests that predate #675).
+func noGlob(string) []string { return nil }
 
 // TestPythonCandidatesResolveShims guards #650: version-manager shims returned
 // by PATH lookup (and the hardcoded pyenv shim) are resolved to the real
@@ -261,13 +264,13 @@ func TestPythonCandidatesResolveShims(t *testing.T) {
 		}
 		return p
 	}
-	got := pythonCandidates(root, run, look, resolve)
+	got := pythonCandidates(root, run, look, resolve, noGlob)
 	if len(got) != 1 || got[0] != real {
 		t.Fatalf("candidates = %v, want the single resolved path [%s]", got, real)
 	}
 
 	// Resolution failure keeps the shim (identity resolve).
-	got = pythonCandidates(root, run, look, noResolve)
+	got = pythonCandidates(root, run, look, noResolve, noGlob)
 	if len(got) != 1 || got[0] != shim {
 		t.Fatalf("candidates = %v, want unresolved shim [%s]", got, shim)
 	}
@@ -290,7 +293,7 @@ func TestPhpAndDefaultCandidatesResolveShims(t *testing.T) {
 
 	// The well-known php fallbacks may exist on the host; only the PATH hit
 	// (first entry) matters here.
-	got := phpCandidates(".", func(name string) string { return "/x/.asdf/shims/php" }, resolve)
+	got := phpCandidates(".", func(name string) string { return "/x/.asdf/shims/php" }, resolve, noGlob)
 	if len(got) == 0 || got[0] != real {
 		t.Fatalf("php candidates = %v, want resolved %s first", got, real)
 	}
@@ -303,8 +306,164 @@ func TestPhpAndDefaultCandidatesResolveShims(t *testing.T) {
 	prev := wellKnownBinDirs
 	t.Cleanup(func() { wellKnownBinDirs = prev })
 	wellKnownBinDirs = nil
-	got = defaultCandidates("go", ".", func(string) string { return "/x/mise/shims/go" }, resolve)
+	got = defaultCandidates("go", ".", func(string) string { return "/x/mise/shims/go" }, resolve, noGlob)
 	if len(got) != 1 || got[0] != real {
 		t.Fatalf("default candidates = %v, want [%s]", got, real)
+	}
+}
+
+// stubPrefixes points the Homebrew scan at a sandbox for the test.
+func stubPrefixes(t *testing.T, dirs ...string) {
+	t.Helper()
+	prev := homebrewPrefixes
+	t.Cleanup(func() { homebrewPrefixes = prev })
+	homebrewPrefixes = dirs
+}
+
+// writeExe creates an executable fixture file (parents included).
+func writeExe(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestVersionedCandidatesHomebrew guards #675: versioned Homebrew formulas
+// (opt/<formula>@*/bin/<bin>) are discovered newest first behind the
+// unversioned formula, and symlinked duplicates collapse onto the first
+// spelling.
+func TestVersionedCandidatesHomebrew(t *testing.T) {
+	prefix := t.TempDir()
+	stubPrefixes(t, prefix)
+	prevPHP := phpWellKnown
+	t.Cleanup(func() { phpWellKnown = prevPHP })
+	phpWellKnown = nil
+	writeExe(t, filepath.Join(prefix, "opt", "php@7.4", "bin", "php"))
+	writeExe(t, filepath.Join(prefix, "opt", "php@8.1", "bin", "php"))
+	unversioned := filepath.Join(prefix, "opt", "php", "bin", "php")
+	if err := os.MkdirAll(filepath.Dir(unversioned), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// The unversioned formula is a symlink onto the current version — the
+	// Homebrew layout — so it must dedupe against php@8.1.
+	if err := os.Symlink(filepath.Join(prefix, "opt", "php@8.1", "bin", "php"), unversioned); err != nil {
+		t.Fatal(err)
+	}
+
+	got := phpCandidates(".", func(string) string { return "" }, noResolve, execGlob)
+	want := []string{unversioned, filepath.Join(prefix, "opt", "php@7.4", "bin", "php")}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("candidates = %v, want %v", got, want)
+	}
+}
+
+// TestPythonCandidatesPyenvVersions guards #675: ~/.pyenv/versions/* are
+// discovered, newest first.
+func TestPythonCandidatesPyenvVersions(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("VIRTUAL_ENV", "")
+	stubPrefixes(t, filepath.Join(home, "no-brew"))
+	old := filepath.Join(home, ".pyenv", "versions", "3.11.9", "bin", "python")
+	new_ := filepath.Join(home, ".pyenv", "versions", "3.12.4", "bin", "python")
+	writeExe(t, old)
+	writeExe(t, new_)
+
+	run := func(string, ...string) string { return "" }
+	look := func(string) string { return "" }
+	got := pythonCandidates(t.TempDir(), run, look, noResolve, execGlob)
+	if len(got) != 2 || got[0] != new_ || got[1] != old {
+		t.Fatalf("candidates = %v, want [%s %s]", got, new_, old)
+	}
+}
+
+// TestDefaultCandidatesGoSDKs guards #675: ~/sdk/go* toolchains are
+// discovered for go, newest first.
+func TestDefaultCandidatesGoSDKs(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	stubPrefixes(t, filepath.Join(home, "no-brew"))
+	prevDirs := wellKnownBinDirs
+	t.Cleanup(func() { wellKnownBinDirs = prevDirs })
+	wellKnownBinDirs = nil
+	old := filepath.Join(home, "sdk", "go1.21.0", "bin", "go")
+	new_ := filepath.Join(home, "sdk", "go1.22.3", "bin", "go")
+	writeExe(t, old)
+	writeExe(t, new_)
+
+	got := defaultCandidates("go", ".", func(string) string { return "" }, noResolve, execGlob)
+	if len(got) != 2 || got[0] != new_ || got[1] != old {
+		t.Fatalf("candidates = %v, want [%s %s]", got, new_, old)
+	}
+}
+
+// TestPathVersionExtraction pins the version parsing the newest-first sort
+// relies on (#675).
+func TestPathVersionExtraction(t *testing.T) {
+	cases := []struct {
+		path string
+		want []int
+	}{
+		{"/opt/homebrew/opt/php@8.1/bin/php", []int{8, 1}},
+		{"/home/x/sdk/go1.22.3/bin/go", []int{1, 22, 3}},
+		{"/home/x/.pyenv/versions/3.12.4/bin/python", []int{3, 12, 4}},
+		{"/opt/homebrew/opt/php/bin/php", nil},
+	}
+	for _, c := range cases {
+		got := pathVersion(c.path)
+		if len(got) != len(c.want) {
+			t.Fatalf("pathVersion(%q) = %v, want %v", c.path, got, c.want)
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Fatalf("pathVersion(%q) = %v, want %v", c.path, got, c.want)
+			}
+		}
+	}
+	if !versionAfter(nil, []int{9}) || versionAfter([]int{1}, nil) || !versionAfter([]int{8, 1}, []int{7, 4}) {
+		t.Fatal("versionAfter ordering broken")
+	}
+}
+
+// TestOpenPickerPreselectsAndProbes guards #675: the picker opens on the
+// currently effective interpreter instead of index 0, and eagerly probes
+// every candidate's version.
+func TestOpenPickerPreselectsAndProbes(t *testing.T) {
+	restoreConfig(t)
+	stubPrefixes(t) // no Homebrew leakage from the host
+	dir1, dir2 := t.TempDir(), t.TempDir()
+	a, b := filepath.Join(dir1, "tcpre"), filepath.Join(dir2, "tcpre")
+	writeExe(t, a)
+	writeExe(t, b)
+	prevDirs := wellKnownBinDirs
+	t.Cleanup(func() { wellKnownBinDirs = prevDirs })
+	wellKnownBinDirs = []string{dir1, dir2}
+
+	lang.Register(lang.Language{ID: "tcpre", Extensions: []string{"tcpre"}, Toolchain: fakeTC{detected: b}})
+	p := NewToolchainPage(testOpts(t), t.TempDir(), nil)
+	p.run = func(name string, _ ...string) string { return "V 1.0 of " + name }
+	p.look = func(string) string { return "" }
+	p.glob = noGlob
+	var l lang.Language
+	for i, ll := range p.languages() {
+		if ll.ID == "tcpre" {
+			p.sel, l = i, ll
+		}
+	}
+
+	cmd := p.openPicker(l)
+	if !p.picking || len(p.candidates) != 2 {
+		t.Fatalf("picker must open over both candidates, got %v", p.candidates)
+	}
+	if p.pick != 1 {
+		t.Fatalf("picker must pre-select the effective interpreter (%s), pick=%d", b, p.pick)
+	}
+	// The returned command batch probes both candidates eagerly.
+	drainBatch(t, p, cmd)
+	if p.versions[a] == "" || p.versions[b] == "" {
+		t.Fatalf("open must probe candidate versions, got %v", p.versions)
 	}
 }

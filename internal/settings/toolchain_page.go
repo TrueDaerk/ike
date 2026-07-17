@@ -2,6 +2,7 @@ package settings
 
 import (
 	"os"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -43,6 +44,7 @@ type ToolchainPage struct {
 	run     runCommand
 	look    lookPath
 	resolve resolveShim // version-manager shim resolution (#650)
+	glob    globList    // versioned-directory discovery (#675)
 	pal     *theme.Palette
 
 	sel      int
@@ -102,6 +104,7 @@ func NewToolchainPage(opts config.Options, root string, restart func() tea.Cmd) 
 		run:      execRun,
 		look:     execLook,
 		resolve:  lang.ResolveShim,
+		glob:     execGlob,
 		versions: map[string]string{},
 	}
 }
@@ -201,7 +204,7 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 	case "enter":
 		if l, ok := t.current(); ok {
-			t.openPicker(l)
+			return t.openPicker(l)
 		}
 	case "r":
 		if l, ok := t.current(); ok {
@@ -276,7 +279,7 @@ func (t *ToolchainPage) chooseTool(tool string) {
 	if tool == "uv" {
 		t.wizPys = append([]string{"default"}, uvVersionsAll(t.run("uv", "python", "list"))...)
 	} else {
-		t.wizPys = pythonCandidates(t.root, t.run, t.look, t.resolve)
+		t.wizPys = pythonCandidates(t.root, t.run, t.look, t.resolve, t.glob)
 	}
 	if len(t.wizPys) <= 1 {
 		python := ""
@@ -399,19 +402,47 @@ func (t *ToolchainPage) updateUvPicker(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// openPicker builds the language's candidate list.
-func (t *ToolchainPage) openPicker(l lang.Language) {
+// openPicker builds the language's candidate list, pre-selects the currently
+// effective interpreter (#675) and returns eager version probes for every
+// candidate the cache does not know yet — the list shows versions without
+// pressing p.
+func (t *ToolchainPage) openPicker(l lang.Language) tea.Cmd {
 	switch l.ID {
 	case "python":
-		t.candidates = pythonCandidates(t.root, t.run, t.look, t.resolve)
+		t.candidates = pythonCandidates(t.root, t.run, t.look, t.resolve, t.glob)
 	case "php":
-		t.candidates = phpCandidates(t.root, t.look, t.resolve)
+		t.candidates = phpCandidates(t.root, t.look, t.resolve, t.glob)
 	default:
 		// No specific discovery: PATH lookup by language id, then the
-		// well-known install directories (#538).
-		t.candidates = defaultCandidates(l.ID, t.root, t.look, t.resolve)
+		// well-known install directories (#538) and versioned installs (#675).
+		t.candidates = defaultCandidates(l.ID, t.root, t.look, t.resolve, t.glob)
 	}
 	t.picking, t.pick, t.invalid = true, 0, ""
+	if cur, _ := t.interpreter(l.ID); cur != "" {
+		key := resolvedKey(cur)
+		for i, c := range t.candidates {
+			if c == cur || resolvedKey(c) == key {
+				t.pick = i
+				break
+			}
+		}
+	}
+	var probes []tea.Cmd
+	for _, c := range t.candidates {
+		if _, known := t.versions[c]; !known {
+			probes = append(probes, t.probe(l.ID, c))
+		}
+	}
+	return tea.Batch(probes...)
+}
+
+// resolvedKey is the symlink-resolved identity of a path (the path itself
+// when resolution fails), matching candidateSet's deduplication (#675).
+func resolvedKey(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return p
 }
 
 // updatePicker handles keys inside the candidate picker.
@@ -623,7 +654,7 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 	}
 	if idx == t.sel {
 		if l, hit := t.current(); hit {
-			t.openPicker(l)
+			return t.openPicker(l)
 		}
 		return nil
 	}
