@@ -65,7 +65,9 @@ func (m Model) OpenStdinBuffer(text string) Model {
 		key = m.spawnEditor()
 	}
 	inst := m.panes.Get(key)
-	if inst.Editor().HasFile() {
+	// Only a truly empty tab (no file, no text — the shared predicate, #641)
+	// is filled in place; anything else gets a fresh tab appended.
+	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
 		inst.AddTab()
 		m.installEmitter(key)
 	}
@@ -85,7 +87,8 @@ func (m Model) openMissing(path string) Model {
 		key = m.spawnEditor()
 	}
 	inst := m.panes.Get(key)
-	if inst.Editor().HasFile() {
+	// Same reuse rule as openInTab: fill only a truly empty tab (#641).
+	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
 		inst.AddTab()
 		m.installEmitter(key)
 	}

@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Editor Tabs
@@ -71,10 +71,16 @@ through `openPath`; it now lands the file in the focused pane's tab list via
   `openPath`/`openPathAt` canonicalise the incoming path to its cleaned
   absolute form first (#272), so the explorer's absolute spelling and the
   palette's root-relative one land on the same tab;
-- a pathless scratch tab is **filled in place** (fresh panes keep the old feel);
+- an **empty** scratch tab is **filled in place** (fresh panes keep the old
+  feel). Empty means no file *and* no text — `editor.Model.IsEmpty`, the same
+  predicate `Instance.IsEmptyEditor` and the diff path use (#628, #641). A
+  pathless tab that already holds typed text is *not* reused, so its content
+  is never clobbered;
 - otherwise a **new tab is appended**, after autosaving the document being left
   (#174) — tab switches autosave the same way (`activateTab`).
-- **Open-in-new-pane keeps its split behaviour** unchanged.
+- **Open-in-new-pane splits** — unless the active editor is an empty scratch
+  pane, which is reused in place instead of stranding a blank pane beside the
+  new one (#641), mirroring the diff viewer's `placeDiffLeaf` behavior.
 
 Shared documents (#142) are reused verbatim: `loadOrShare` scans all tabs of all
 panes, so one file open in two tabs — same pane or different panes — aliases one

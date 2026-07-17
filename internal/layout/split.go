@@ -17,8 +17,10 @@ func SplitLeaf(root Node, target, newPane string, zone Zone) (Node, bool) {
 // Replace renames the leaf carrying pane id old to newPane, keeping its exact
 // place and geometry in the tree — the swap half of the pane manager, used to
 // reuse an empty editor's slot for a diff pane instead of splitting a new one
-// (#628). A missing old, an empty newPane, or old already present as a different
-// leaf that would collide, returns root unchanged with ok=false.
+// (#628). The tree is mutated in place (root is returned for convenience).
+// A missing old or an empty old/newPane returns root unchanged with ok=false;
+// callers must ensure newPane is not already a leaf elsewhere — Replace does
+// not check for collisions.
 func Replace(root Node, old, newPane string) (Node, bool) {
 	if old == "" || newPane == "" {
 		return root, false

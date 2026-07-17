@@ -14,6 +14,14 @@
   on generation mismatch, with a "launch cancelled" toast. Previously the stop
   was a silent no-op and the retry started a session anyway.
 
+- Shared empty-editor predicate (#641, follow-up to #628): `editor.Model.IsEmpty`
+  (no file, no text) is now the one emptiness definition — `Instance.IsEmptyEditor`,
+  `openInTab`, and the CLI stdin/missing-path opens all use it, so a scratch tab
+  with typed text gets a new tab appended instead of being clobbered. Open-in-new-pane
+  (`openPath` with NewPane) reuses an empty active editor instead of splitting past
+  it, mirroring the diff path. `layout.Replace`'s doc comment now matches its
+  behavior (in-place mutation, no collision check).
+
 - Interactive debug input via runInTerminal (#625): Python now debugs with
   `console: integratedTerminal`; debugpy's runInTerminal reverse request spawns
   the debuggee in an IKE command-terminal pane with a real tty, so `input()`

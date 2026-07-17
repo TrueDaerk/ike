@@ -3213,7 +3213,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 // openPath opens path honouring the open target: a registered FileHandler claims
 // it first regardless of target; otherwise the file lands in the active editor's
 // tab list (#156) — activating an existing tab, appending a new one, or filling
-// a scratch tab — and NewPane splits off a fresh editor and loads there.
+// a scratch tab — and NewPane splits off a fresh editor and loads there
+// (unless the active editor is empty, which is reused in place, #641).
 // EventFileOpened hooks fire either way.
 func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	// Every open source spells paths differently (explorer: absolute, palette
@@ -3230,7 +3231,10 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
 		key := m.activeEditorKey()
-		if newPane || key == "" {
+		// NewPane with an empty active editor reuses it instead of splitting —
+		// otherwise the blank pane is stranded beside the new one, the exact
+		// scenario the diff path already guards against (#628, #641).
+		if key == "" || (newPane && !m.panes.Get(key).IsEmptyEditor()) {
 			key = m.spawnEditor()
 		}
 		if m.openInTab(key, path) {
@@ -3300,10 +3304,12 @@ func (m Model) forceCodeInsight() (tea.Model, tea.Cmd) {
 }
 
 // openInTab lands path in the editor pane key's tab list (#156): a tab already
-// showing the file is activated; a pathless scratch tab is filled in place
-// (fresh panes keep today's behavior); otherwise a new tab is appended after
-// autosaving the document being left (#174). It reports whether the file is
-// now open and active in the pane.
+// showing the file is activated; an empty scratch tab (no file, no text —
+// editor.IsEmpty, the predicate shared with the diff path, #641) is filled in
+// place (fresh panes keep today's behavior); otherwise a new tab is appended
+// after autosaving the document being left (#174) — a pathless tab with typed
+// text keeps its content that way. It reports whether the file is now open and
+// active in the pane.
 func (m *Model) openInTab(key, path string) bool {
 	inst := m.panes.Get(key)
 	if idx := inst.TabForPath(path); idx >= 0 {
@@ -3312,8 +3318,8 @@ func (m *Model) openInTab(key, path string) bool {
 	}
 	added := false
 	// A terminal-hosting active tab (#573) has no document to fill: append a
-	// fresh tab for the file, like a file-backed active tab.
-	if ed := inst.Editor(); ed == nil || ed.HasFile() {
+	// fresh tab for the file, like a file-backed or scratch-text active tab.
+	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
 		if ed != nil && m.autosaveEnabled() {
 			// Leaving the active tab's document counts as leaving it (#174).
 			ed.Autosave()
