@@ -2,6 +2,13 @@
 
 ## 2026-07-17
 
+- Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
+  interfaces on the `PageModel` seam; the panel forwards form-column clicks
+  (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,
+  Plugins and Marketplace — click selects, a click on the selection runs the
+  page's enter-equivalent action, picker rows are clickable, the wheel moves
+  the selection.
+
 - Tour resolver-first shortcuts (#678): tour rows resolve through the live
   keymap first (custom > default) with the curated preferred-order list kept
   when the resolved chord is among its options; curated fallbacks are

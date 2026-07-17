@@ -108,8 +108,17 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   else closes the picker; while an inline edit is active, a click on the row
   keeps the edit and a click elsewhere commits it (cancelling instead when
   the input does not validate — chord capture just cancels). Clicks outside
-  the panel dismiss it (#116); custom pages stay keyboard-driven for row
-  interaction.
+  the panel dismiss it (#116). Custom pages take part through optional
+  `PageClicker` / `PageWheeler` interfaces on the `PageModel` seam (#674):
+  the panel forwards form-column presses page-locally ((0,0) = the page's
+  render origin) and wheel deltas via type assertion, so pages without the
+  seams stay valid. All five custom pages implement them — click selects a
+  row, a click on the selection performs the page's enter-equivalent action
+  (Toolchain opens the picker and picker rows are clickable, Keymap starts
+  the chord capture and the header row opens the filter, LSP toggles the
+  per-server enable, Plugins/Marketplace toggle the detail expansion), and
+  the wheel moves the selection (picker highlight / package window in their
+  modes); clicks cancel modal captures/inputs instead of being swallowed.
 - **Registry seam.** Plugins contribute pages via
   `Capabilities.SettingsPages`; the app appends `reg.SettingsPages()` to the
   built-in `settings.BasePages()` (the toolchain page #94 uses this).
