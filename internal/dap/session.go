@@ -52,7 +52,7 @@ func (s *Session) Initialize() error {
 		"linesStartAt1":                true,
 		"columnsStartAt1":              true,
 		"pathFormat":                   "path",
-		"supportsRunInTerminalRequest": false,
+		"supportsRunInTerminalRequest": true,
 	})
 	if err != nil {
 		return err
@@ -63,6 +63,34 @@ func (s *Session) Initialize() error {
 
 // SupportsSetVariable reports whether the adapter accepts setVariable requests.
 func (s *Session) SupportsSetVariable() bool { return s.caps.SupportsSetVariable }
+
+// OnRunInTerminal registers the handler for the adapter's runInTerminal reverse
+// request (#625). fn runs on the read-loop goroutine and MUST hand off (it may
+// not block); it replies asynchronously with RespondRunInTerminal or
+// RefuseReverse. Other reverse requests keep being refused. Call before launch.
+func (s *Session) OnRunInTerminal(fn func(seq int, args RunInTerminalArgs)) {
+	s.conn.SetReverseHandler(func(seq int, command string, raw json.RawMessage) bool {
+		if command != "runInTerminal" {
+			return false
+		}
+		var args RunInTerminalArgs
+		_ = json.Unmarshal(raw, &args)
+		fn(seq, args)
+		return true
+	})
+}
+
+// RespondRunInTerminal answers a runInTerminal request with the launched
+// process id.
+func (s *Session) RespondRunInTerminal(seq, processID int) error {
+	return s.conn.Respond(seq, "runInTerminal", map[string]any{"processId": processID})
+}
+
+// RefuseReverse rejects an adapter-initiated request (e.g. terminal spawn
+// failed), so the adapter can surface the error.
+func (s *Session) RefuseReverse(seq int, command, message string) error {
+	return s.conn.RefuseRequest(seq, command, message)
+}
 
 // LaunchAsync sends the launch request; many adapters (debugpy) answer it
 // only after configurationDone, so the response is delivered on the returned

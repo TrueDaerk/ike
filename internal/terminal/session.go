@@ -284,6 +284,16 @@ func (s *Session) IsCommand() bool { return s.argv != nil }
 // Argv returns the command session's full command line, nil for shells.
 func (s *Session) Argv() []string { return s.argv }
 
+// Pid returns the child process id, or 0 before it starts / after it is torn
+// down. Used to answer a DAP runInTerminal reverse request with the debuggee's
+// process id (#625).
+func (s *Session) Pid() int {
+	if s.cmd != nil && s.cmd.Process != nil {
+		return s.cmd.Process.Pid
+	}
+	return 0
+}
+
 // ExitCode returns the child's exit status once it ended; ok is false while
 // it still runs (or when the session was torn down before Wait observed it).
 func (s *Session) ExitCode() (code int, ok bool) {

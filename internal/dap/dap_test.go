@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"io"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,10 @@ type fakeAdapter struct {
 	mu   sync.Mutex
 	seq  int
 	seen []string // commands received, in order
+
+	emitRunInTerminal bool            // send a runInTerminal request on configurationDone
+	ritResp           json.RawMessage // the client's response body to it
+	ritDone           chan struct{}   // closed when ritResp is set
 }
 
 // pipes builds the duplex streams: the client side implements io.ReadWriteCloser.
@@ -76,7 +81,21 @@ func (f *fakeAdapter) serve() {
 			return
 		}
 		var req envelope
-		if json.Unmarshal(data, &req) != nil || req.Type != typeRequest {
+		if json.Unmarshal(data, &req) != nil {
+			continue
+		}
+		// Capture the client's response to our runInTerminal reverse request.
+		if req.Type == typeResponse && req.Command == "runInTerminal" {
+			f.mu.Lock()
+			f.ritResp = req.Body
+			if f.ritDone != nil {
+				close(f.ritDone)
+				f.ritDone = nil
+			}
+			f.mu.Unlock()
+			continue
+		}
+		if req.Type != typeRequest {
 			continue
 		}
 		f.mu.Lock()
@@ -106,6 +125,14 @@ func (f *fakeAdapter) serve() {
 			f.respond(req, map[string]any{"breakpoints": out})
 		case "configurationDone":
 			f.respond(req, map[string]any{})
+			f.mu.Lock()
+			emit := f.emitRunInTerminal
+			f.mu.Unlock()
+			if emit {
+				f.send(envelope{Type: typeRequest, Command: "runInTerminal", Arguments: mustJSON(map[string]any{
+					"kind": "integrated", "cwd": "/p", "args": []string{"python", "prog.py"},
+				})})
+			}
 			f.event("stopped", StoppedEvent{Reason: "breakpoint", ThreadID: 1})
 		case "threads":
 			f.respond(req, map[string]any{"threads": []Thread{{ID: 1, Name: "MainThread"}}})
@@ -280,5 +307,60 @@ func TestSetVariable(t *testing.T) {
 	}
 	if v.Name != "x" || v.Value != "99" || v.Type != "int" {
 		t.Fatalf("setVariable echoed %+v, want x=99 int", v)
+	}
+}
+
+func mustJSON(v any) json.RawMessage {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+// TestRunInTerminalReverseRequest verifies the adapter's runInTerminal request
+// reaches the registered handler and the client's reply carries the pid (#625).
+func TestRunInTerminalReverseRequest(t *testing.T) {
+	pipe, fa := startFake(t)
+	fa.mu.Lock()
+	fa.emitRunInTerminal = true
+	fa.ritDone = make(chan struct{})
+	fa.mu.Unlock()
+
+	s := NewSession(NewConn(pipe, func(string, json.RawMessage) {}))
+	defer s.Close()
+
+	argsCh := make(chan RunInTerminalArgs, 1)
+	s.OnRunInTerminal(func(seq int, args RunInTerminalArgs) {
+		argsCh <- args
+		// Hand off like the app does — the handler must not block the read loop
+		// (the synchronous pipe deadlocks otherwise).
+		go func() { _ = s.RespondRunInTerminal(seq, 4242) }()
+	})
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ConfigurationDone(); err != nil {
+		t.Fatal(err)
+	}
+	var gotArgs RunInTerminalArgs
+	select {
+	case gotArgs = <-argsCh:
+	case <-time.After(3 * time.Second):
+		t.Fatal("handler was not called")
+	}
+	fa.mu.Lock()
+	done := fa.ritDone
+	fa.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timed out waiting for runInTerminal response")
+	}
+	if len(gotArgs.Args) != 2 || gotArgs.Args[0] != "python" || gotArgs.Cwd != "/p" {
+		t.Fatalf("handler got args = %+v", gotArgs)
+	}
+	fa.mu.Lock()
+	resp := string(fa.ritResp)
+	fa.mu.Unlock()
+	if !strings.Contains(resp, `"processId":4242`) {
+		t.Fatalf("response body = %s, want processId 4242", resp)
 	}
 }

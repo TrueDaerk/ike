@@ -54,6 +54,17 @@ type Variable struct {
 	VariablesReference int    `json:"variablesReference"`
 }
 
+// RunInTerminalArgs is the adapter's runInTerminal reverse request (#625): the
+// client must launch Args in a terminal it controls and reply with the
+// process id, so the debuggee gets a real tty for interactive stdin.
+type RunInTerminalArgs struct {
+	Kind  string            `json:"kind"` // "integrated" or "external"
+	Title string            `json:"title,omitempty"`
+	Cwd   string            `json:"cwd"`
+	Args  []string          `json:"args"`
+	Env   map[string]string `json:"env,omitempty"`
+}
+
 // StoppedEvent is the body of a "stopped" event.
 type StoppedEvent struct {
 	Reason            string `json:"reason"`

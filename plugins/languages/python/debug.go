@@ -69,11 +69,14 @@ func (toolchain) DebugAdapterInstall(_ string, interpreter string) [][]string {
 // redirected through DAP output events so the debug UI owns it.
 func (toolchain) DebugLaunchArgs(_ string, spec lang.RunSpec, cwd string, env map[string]string) map[string]any {
 	args := map[string]any{
-		"request":        "launch",
-		"console":        "internalConsole",
-		"redirectOutput": true,
-		"justMyCode":     true,
-		"cwd":            cwd,
+		"request": "launch",
+		// integratedTerminal makes debugpy launch the debuggee via the
+		// runInTerminal reverse request, giving it a real tty so input() works
+		// (#625). Output then flows to that terminal rather than DAP output
+		// events. redirectOutput stays off — the terminal owns the streams.
+		"console":    "integratedTerminal",
+		"justMyCode": true,
+		"cwd":        cwd,
 	}
 	// Emit "args" only when non-empty: a nil slice marshals to JSON null,
 	// which debugpy's vectorizing array validator turns into [null] and

@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-17
+
+- Interactive debug input via runInTerminal (#625): Python now debugs with
+  `console: integratedTerminal`; debugpy's runInTerminal reverse request spawns
+  the debuggee in an IKE command-terminal pane with a real tty, so `input()`
+  works. Added the DAP reverse-request seam (`Conn.SetReverseHandler`/`Respond`,
+  `Session.OnRunInTerminal`/`RespondRunInTerminal`) and terminal `Pid()`.
+  Trade-off: the debuggee's output now lives in that terminal, so #624's OUTPUT
+  column/log stay empty for Python.
+
 ## 2026-07-16
 
 - Debug console output + logging (#624): the debug tool window gained an OUTPUT
