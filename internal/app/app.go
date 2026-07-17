@@ -107,13 +107,7 @@ type Model struct {
 	// during the launching window bumps it, and the deferred post-install
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
-	// dbgTermKey names the last debuggee terminal pane spawned by a
-	// runInTerminal reverse request (#638). It deliberately outlives the
-	// session (the pane stays open for output review); the next session's
-	// runInTerminal closes it — if it still exists and its process has exited
-	// — before splitting a fresh one. Cleared when the pane closes.
-	dbgTermKey string
-	navSkip    bool
+	navSkip      bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
 	// the registry's focused key, which always names a layout leaf.
@@ -362,6 +356,7 @@ const (
 	dragMove                       // dragging a pane title bar to relocate or spawn
 	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
+	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -3202,6 +3197,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastEsc = false
 			return m.routeKey(msg)
 		}
+		// A running debuggee terminal embedded in the debug panel's Output
+		// column takes keys raw like a terminal pane (#676): plain letters
+		// must reach the debuggee's stdin, not the keymap. shift+tab leaves
+		// the column (panel-side); the spatial focus moves leave the pane.
+		if m.debugPanelTermCapturing() {
+			m.lastEsc = false
+			if dir, ok := m.focusKeys[msg.String()]; ok {
+				m.FocusDir(dir)
+				return m, nil
+			}
+			return m.routeKey(msg)
+		}
 		keys := msg.String()
 		if m.paletteKey != "" && keys == m.paletteKey {
 			m.lastEsc = false
@@ -3862,9 +3869,6 @@ func (m *Model) closeKey(key string) bool {
 	m.panes.Close(key)
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
-	}
-	if m.dbgTermKey == key {
-		m.dbgTermKey = "" // the debuggee terminal is gone; don't chase a stale key (#638)
 	}
 	return true
 }
@@ -4565,6 +4569,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					term.MouseDrag(lx, ly)
 				}
 			}
+		case dragDebugTerm:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+					inst.Debug().TermDrag(lx, ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -4589,6 +4599,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
 					term.MouseRelease(lx, ly)
+				}
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
+		case dragDebugTerm:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+					inst.Debug().TermRelease(lx, ly)
 				}
 			}
 			m.drag = nil
@@ -4911,7 +4929,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
 		// activate (frame select / variable expand); messages route like keys.
+		// A press on the embedded debuggee terminal (#676) also tracks a
+		// selection drag, like a terminal pane.
 		if msg.Button == tea.MouseLeft {
+			if inst.Debug().OutputTermHit(localX, localY) {
+				m.drag = &dragState{kind: dragDebugTerm, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
 			return m, inst.Debug().Click(localX, localY)
 		}
 	}
