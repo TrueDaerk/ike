@@ -157,10 +157,20 @@ func value(key string) string {
 // selects its entry, and a press on the already-selected entry activates it —
 // the same semantics as enter.
 func (m *Model) Click(x, y int) tea.Cmd {
-	if !m.open || m.editing || m.filtering || m.picking {
+	if !m.open {
 		return nil
 	}
 	const bodyTop = 2 // border row + title row
+	if m.picking {
+		return m.clickPick(x, y-bodyTop)
+	}
+	if m.editing {
+		return m.clickEdit(x, y-bodyTop)
+	}
+	if m.filtering {
+		// A click ends filter typing (like enter) and then hit-tests normally.
+		m.filtering = false
+	}
 	row := y - bodyTop
 	if row < 0 || row >= m.height-4 {
 		return nil
@@ -192,6 +202,88 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		m.sel, m.focus = idx, formColumn
 	}
 	return nil
+}
+
+// formLine maps a body-local click to a form-column line index (the same
+// indexing renderForm uses, so inline expansions like the picker line up).
+// ok is false when the click is outside the form list area.
+func (m *Model) formLine(x, row int) (int, bool) {
+	if x < 1+catWidth+3 || row < 0 || row >= m.height-4-detailLines {
+		return 0, false
+	}
+	return row + m.formOff, true
+}
+
+// clickPick handles a press while the enum picker is open: an option chooses
+// it (like enter), anything else closes the picker. The options render
+// directly under the selected row, which occupies line m.sel — rows above the
+// selection are 1:1 with lines, expansions only happen at the selection.
+func (m *Model) clickPick(x, row int) tea.Cmd {
+	m.picking = false
+	r, ok := m.current()
+	if !ok || len(r.entry.Options) == 0 {
+		return nil
+	}
+	idx, ok := m.formLine(x, row)
+	if !ok {
+		return nil
+	}
+	if opt := idx - m.sel - 1; opt >= 0 && opt < len(r.entry.Options) {
+		e := r.entry
+		return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[opt])
+	}
+	return nil
+}
+
+// clickEdit handles a press while an inline edit is active: a click on the
+// row being edited keeps the edit, anything else commits the input (falling
+// back to cancel when the value does not validate — a click cannot fix it).
+func (m *Model) clickEdit(x, row int) tea.Cmd {
+	r, ok := m.current()
+	if !ok {
+		m.editing = false
+		return nil
+	}
+	if idx, hit := m.formLine(x, row); hit && idx == m.sel {
+		return nil // stay in the edit
+	}
+	if r.entry.Type == Chord {
+		// There is nothing to commit mid-capture; the click cancels.
+		m.editing = false
+		return nil
+	}
+	cmd := m.commit(r.entry)
+	if m.editing { // validation rejected the input: cancel instead
+		m.editing = false
+		m.invalid = ""
+		m.suggest.clear()
+	}
+	return cmd
+}
+
+// Wheel scrolls the column under the pointer by moving its selection (the
+// lists follow their selection, like every other overlay panel): the category
+// column when hovered, the form column otherwise. x is panel-local.
+func (m *Model) Wheel(x, delta int) {
+	if !m.open || m.editing || m.picking || m.filtering {
+		return
+	}
+	if x >= 1 && x < 1+catWidth && m.filter == "" {
+		old := m.cat
+		m.cat = clamp(m.cat+delta, 0, len(m.pages)-1)
+		if m.cat != old {
+			m.sel = 0
+		}
+		return
+	}
+	// Form column. Custom pages own their scrolling (mouse support for them
+	// is a separate seam, #674).
+	if m.customPage() != nil && m.filter == "" {
+		return
+	}
+	if n := len(m.rows()); n > 0 {
+		m.sel = clamp(m.sel+delta, 0, n-1)
+	}
 }
 
 // Deliver forwards a non-key message (async probe results) to every custom

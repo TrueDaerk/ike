@@ -4294,11 +4294,20 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.settings.Close()
 			return m, nil
 		}
-		if msg.action == mousePress && msg.Button == tea.MouseLeft {
+		switch {
+		case msg.action == mousePress && msg.Button == tea.MouseLeft:
 			// Translate to panel-local coordinates (the box is centered).
 			v := m.settings.View()
 			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			return m, m.settings.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
+			v := m.settings.View()
+			bx := (m.width - lipgloss.Width(v)) / 2
+			m.settings.Wheel(msg.X-bx, -wheelLines*msg.ticks())
+		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
+			v := m.settings.View()
+			bx := (m.width - lipgloss.Width(v)) / 2
+			m.settings.Wheel(msg.X-bx, wheelLines*msg.ticks())
 		}
 		return m, nil
 	}

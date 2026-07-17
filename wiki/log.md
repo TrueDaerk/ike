@@ -9,6 +9,12 @@
   row resolves like every other, and a guard test keeps help's doc-hint
   `Shortcut` fallbacks platform-neutral.
 
+- Settings schema-page mouse (#673): the wheel scrolls the panel column under
+  the pointer (categories switch pages, form rows follow); with an enum picker
+  open a click chooses the option or closes the picker; with an inline edit
+  active an outside click commits (or cancels when invalid) instead of being
+  ignored.
+
 - Tour first-run gate fix (#671): the tour scan keys on `ui.onboarded` alone —
   the settings file always exists at scan time because main records the
   project open into the recent-projects history before the model is built, so
