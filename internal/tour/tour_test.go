@@ -102,3 +102,18 @@ func TestRemappedBindingDisplays(t *testing.T) {
 		t.Fatalf("curated multi-chord list must survive a matching binding:\n%s", body)
 	}
 }
+
+func TestKnownDefaultIsNotARemap(t *testing.T) {
+	// #665: the resolver picks ONE default per command, and for
+	// search-everywhere that is the space-space leader mnemonic — which is
+	// not in the curated display list. Known defaults must keep the curated
+	// display; only a chord outside all known defaults is a real remap.
+	tr := New(mapResolver{"palette.searchEverywhere": "space space"})
+	if body := tr.Render(72); !strings.Contains(body, "shift shift · cmd+shift+a") {
+		t.Fatalf("a known default must keep the curated display:\n%s", body)
+	}
+	tr = New(mapResolver{"palette.searchEverywhere": "ctrl+alt+s"})
+	if body := tr.Render(72); !strings.Contains(body, "ctrl+alt+s") {
+		t.Fatalf("a chord outside the known defaults is a remap and must display:\n%s", body)
+	}
+}

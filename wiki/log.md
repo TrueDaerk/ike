@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Tour known-defaults fix (#665): the tour's chord resolution now knows every
+  default binding per command (leader mnemonics, delivered secondaries), so
+  the resolver picking e.g. the `space space` leader default no longer
+  masquerades as a remap and replace the curated preferred-order display;
+  vcs.panel and menu.open show their real defaults instead of "via palette".
+
 - Status-bar empty-editor hint (#659): a focused editor with no file shows
   `? help · shift shift find` (resolver-truth chord, dropped under ~70
   columns), and the status line now truncates instead of wrapping when the
