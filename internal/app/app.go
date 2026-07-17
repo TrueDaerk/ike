@@ -105,7 +105,13 @@ type Model struct {
 	// during the launching window bumps it, and the deferred post-install
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
-	navSkip      bool
+	// dbgTermKey names the last debuggee terminal pane spawned by a
+	// runInTerminal reverse request (#638). It deliberately outlives the
+	// session (the pane stays open for output review); the next session's
+	// runInTerminal closes it — if it still exists and its process has exited
+	// — before splitting a fresh one. Cleared when the pane closes.
+	dbgTermKey string
+	navSkip    bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
 	// the registry's focused key, which always names a layout leaf.
@@ -3792,6 +3798,9 @@ func (m *Model) closeKey(key string) bool {
 	m.panes.Close(key)
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
+	}
+	if m.dbgTermKey == key {
+		m.dbgTermKey = "" // the debuggee terminal is gone; don't chase a stale key (#638)
 	}
 	return true
 }
