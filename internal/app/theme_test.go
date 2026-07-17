@@ -3,8 +3,10 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
@@ -93,61 +95,93 @@ func TestSelectThemeCommand(t *testing.T) {
 	}
 }
 
-// TestReloadKeepsRuntimeTheme (#241): a config reload triggered by an
-// unrelated settings edit must not revert a palette-selected theme; only an
-// explicit [theme].name change wins (and clears the override).
-func TestReloadKeepsRuntimeTheme(t *testing.T) {
+// TestSelectThemePersistsUserScope (#667): a palette theme choice applies
+// immediately AND lands as theme.name in the USER settings file — the same
+// write the Settings page does — so it follows the user across projects and
+// restarts instead of living in the per-project session.
+func TestSelectThemePersistsUserScope(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(themeReg(), host.FromConfig(cfg))
-	next, _ := m.Update(SelectThemeMsg{Name: "nord"})
-	m = next.(Model)
-	if m.pal().Name != "nord" {
-		t.Fatalf("after select: theme = %q, want nord", m.pal().Name)
-	}
 
-	// Unrelated edit: theme.name is unchanged, the runtime pick survives.
-	cfg2, _ := config.Load(config.Options{})
-	cfg2.Editor.TabWidth = 2
-	tm, _ := m.Update(config.ConfigReloadedMsg{Config: cfg2})
+	tm, cmd := m.Update(SelectThemeMsg{Name: "nord"})
 	m = tm.(Model)
 	if m.pal().Name != "nord" {
-		t.Errorf("unrelated reload reverted theme to %q, want nord", m.pal().Name)
+		t.Fatalf("theme must apply immediately, got %q", m.pal().Name)
 	}
-	if m.themeOverride != "nord" {
-		t.Errorf("override = %q, want nord", m.themeOverride)
+	if cmd == nil {
+		t.Fatal("selection must return the user-scope config write")
 	}
-
-	// Explicit theme edit: the config choice wins and clears the override.
-	cfg3, _ := config.Load(config.Options{})
-	cfg3.Theme.Name = "tokyo-night"
-	tm, _ = m.Update(config.ConfigReloadedMsg{Config: cfg3})
+	msg := runUntilReload(t, cmd)
+	data, err := os.ReadFile(filepath.Join(dir, "settings.toml"))
+	if err != nil {
+		t.Fatalf("user settings must exist after the write: %v", err)
+	}
+	if s := string(data); !strings.Contains(s, "nord") {
+		t.Fatalf("theme.name missing from the user settings: %q", s)
+	}
+	// The reload keeps the selection (config is now the source of truth).
+	tm, _ = m.Update(msg)
 	m = tm.(Model)
-	if m.pal().Name != "tokyo-night" {
-		t.Errorf("theme edit: theme = %q, want tokyo-night", m.pal().Name)
+	if m.pal().Name != "nord" {
+		t.Errorf("after reload: theme = %q, want nord", m.pal().Name)
 	}
-	if m.themeOverride != "" {
-		t.Errorf("theme edit should clear the override, got %q", m.themeOverride)
+	// Nothing theme-shaped goes into the per-project session anymore.
+	if got := m.snapshotSession().Theme; got != "" {
+		t.Errorf("session must not carry a theme, got %q", got)
+	}
+	// An unknown name applies the fallback and writes nothing.
+	tm, _ = m.Update(SelectThemeMsg{Name: "bogus"})
+	m = tm.(Model)
+	if m.pal().Name != theme.DefaultName {
+		t.Errorf("unknown name: theme = %q, want %s", m.pal().Name, theme.DefaultName)
+	}
+	if cmd := m.selectTheme("bogus"); cmd != nil {
+		t.Error("unknown name must not return a config write")
+	}
+	if data, err := os.ReadFile(filepath.Join(dir, "settings.toml")); err == nil && strings.Contains(string(data), "bogus") {
+		t.Error("unknown name leaked into the user settings")
 	}
 }
 
-// TestThemeOverridePersists: a runtime theme selection is snapshotted into the
-// session and re-applied on restore, surviving a restart.
-func TestThemeOverridePersists(t *testing.T) {
-	m := NewWith(themeReg(), host.MapConfig{})
-	// No runtime pick yet: nothing persisted, so config still wins next launch.
-	if got := m.snapshotSession().Theme; got != "" {
-		t.Errorf("fresh session theme = %q, want empty", got)
+// runUntilReload executes cmd (unwrapping a root-Update batch) and returns the
+// ConfigReloadedMsg it produces.
+func runUntilReload(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c == nil {
+				continue
+			}
+			if m := c(); m != nil {
+				if _, ok := m.(config.ConfigReloadedMsg); ok {
+					return m
+				}
+			}
+		}
+		t.Fatal("batch carried no config reload")
 	}
-	next, _ := m.Update(SelectThemeMsg{Name: "nord"})
-	m = next.(Model)
-	if got := m.snapshotSession().Theme; got != "nord" {
-		t.Fatalf("session theme = %q, want nord", got)
+	if _, ok := msg.(config.ConfigReloadedMsg); !ok {
+		t.Fatalf("write must reload the config, got %T", msg)
 	}
-	// A fresh model restoring that session lands on nord, not the config default.
-	m2 := NewWith(themeReg(), host.MapConfig{})
-	m2.restoreTheme("nord")
-	if m2.pal().Name != "nord" {
-		t.Errorf("restored theme = %q, want nord", m2.pal().Name)
+	return msg
+}
+
+// TestStaleSessionThemeIgnored (#667): a pre-#667 session.json carrying a
+// per-project theme override no longer beats the config at startup.
+func TestStaleSessionThemeIgnored(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(filepath.Join(state, "session.json"), []byte(`{"theme":"nord"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(themeReg(), host.FromConfig(cfg))
+	if m.pal().Name != theme.DefaultName {
+		t.Fatalf("stale session theme must be ignored, got %q", m.pal().Name)
 	}
 }
 

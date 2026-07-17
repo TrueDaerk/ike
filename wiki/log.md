@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Theme is a user setting (#667): palette theme commands now write
+  `theme.name` to user-scope `~/.ike/settings.toml` (like the Settings page)
+  instead of a per-project session override; the override mechanism is
+  removed and stale `session.json` theme entries are ignored, so one theme
+  follows the user across projects.
+
 - Tour known-defaults fix (#665): the tour's chord resolution now knows every
   default binding per command (leader mnemonics, delivered secondaries), so
   the resolver picking e.g. the `space space` leader default no longer
