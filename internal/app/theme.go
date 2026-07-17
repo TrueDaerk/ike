@@ -156,7 +156,16 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 		pal, warning = resolveTheme(m.reg, hcfg)
 		m.applyTheme(pal)
 	}
+	// Persist a config-driven show_hidden change like the runtime `.` toggle
+	// does (#642): Configure applies it live, but until now only the toggle and
+	// a clean quit wrote the session, so after a kill/crash restoreSession
+	// re-applied the stale value over the settings edit. Comparing before and
+	// after keeps unrelated reloads from touching session.json.
+	prevHidden := m.explorer().ShowingHidden()
 	m.panes.Reconfigure(hcfg)
+	if m.explorer().ShowingHidden() != prevHidden {
+		saveSession(m.snapshotSession())
+	}
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)

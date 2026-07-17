@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Explorer show_hidden persistence (#642): a config-driven change to
+  `explorer.show_hidden` now saves the session immediately (after
+  `panes.Reconfigure`, when the explorer's `ShowingHidden()` actually changed),
+  so a settings edit survives a kill/crash instead of being clobbered by the
+  stale session at next boot. Unrelated reloads still never write session.json.
+
 - debug.stop cancels an in-flight launch (#636): a stop during the
   auto-install/handshake window (dbg still nil) now clears `dbgLaunching`,
   bumps a launch generation counter and drops the deferred post-install retry
