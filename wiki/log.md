@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Wheel batch delivery (#669): coalesced wheel bursts now reach each pane
+  handler once, carrying the tick count (consumers scroll the whole distance
+  in one call) instead of being replayed per event; the terminal caps what it
+  forwards to the child (~one screenful) so alt-screen/mouse-reporting
+  children stop lagging behind trackpad bursts.
+
 - Theme is a user setting (#667): palette theme commands now write
   `theme.name` to user-scope `~/.ike/settings.toml` (like the Settings page)
   instead of a per-project session override; the override mechanism is

@@ -4247,9 +4247,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			return m, m.finder.Click(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.finder.Wheel(-3)
+			m.finder.Wheel(-wheelLines * msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.finder.Wheel(3)
+			m.finder.Wheel(wheelLines * msg.ticks())
 		}
 		return m, nil
 	}
@@ -4265,9 +4265,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			return m, m.todo.Click(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.todo.Wheel(-3)
+			m.todo.Wheel(-wheelLines * msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.todo.Wheel(3)
+			m.todo.Wheel(wheelLines * msg.ticks())
 		}
 		return m, nil
 	}
@@ -4283,9 +4283,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			return m, m.undoTree.Click(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.undoTree.Wheel(-3)
+			m.undoTree.Wheel(-wheelLines * msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.undoTree.Wheel(3)
+			m.undoTree.Wheel(wheelLines * msg.ticks())
 		}
 		return m, nil
 	}
@@ -4353,6 +4353,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	shift := msg.Mod&tea.ModShift != 0
 	if msg.action == mouseWheel {
+		// One coalesced batch arrives as a single event carrying its tick
+		// count (#669); every consumer scrolls by the whole distance at once.
+		lines := wheelLines * msg.ticks()
 		key, ok := m.lay.PaneAt(msg.X, msg.Y)
 		if !ok {
 			return m, nil
@@ -4365,50 +4368,50 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case pane.KindExplorer:
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
-				m.explorer().ScrollXBy(-wheelLines)
+				m.explorer().ScrollXBy(-lines)
 			case msg.Button == tea.MouseWheelRight:
-				m.explorer().ScrollXBy(wheelLines)
+				m.explorer().ScrollXBy(lines)
 			case msg.Button == tea.MouseWheelUp && shift:
-				m.explorer().ScrollXBy(-wheelLines)
+				m.explorer().ScrollXBy(-lines)
 			case msg.Button == tea.MouseWheelDown && shift:
-				m.explorer().ScrollXBy(wheelLines)
+				m.explorer().ScrollXBy(lines)
 			case msg.Button == tea.MouseWheelUp:
-				m.explorer().ScrollBy(-wheelLines)
+				m.explorer().ScrollBy(-lines)
 			case msg.Button == tea.MouseWheelDown:
-				m.explorer().ScrollBy(wheelLines)
+				m.explorer().ScrollBy(lines)
 			}
 		case pane.KindMarkdown:
 			// The wheel scrolls the rendered document (#62); the next cursor
 			// move in the source editor re-syncs the view.
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				inst.Preview().ScrollBy(-wheelLines)
+				inst.Preview().ScrollBy(-lines)
 			case tea.MouseWheelDown:
-				inst.Preview().ScrollBy(wheelLines)
+				inst.Preview().ScrollBy(lines)
 			}
 		case pane.KindDiff:
 			// The wheel scrolls the diff by visual rows (#60).
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				inst.Diff().ScrollBy(-wheelLines)
+				inst.Diff().ScrollBy(-lines)
 			case tea.MouseWheelDown:
-				inst.Diff().ScrollBy(wheelLines)
+				inst.Diff().ScrollBy(lines)
 			}
 		case pane.KindVCS:
 			// The wheel scrolls the tool window's active list (#503).
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				inst.VCS().Wheel(-wheelLines)
+				inst.VCS().Wheel(-lines)
 			case tea.MouseWheelDown:
-				inst.VCS().Wheel(wheelLines)
+				inst.VCS().Wheel(lines)
 			}
 		case pane.KindDebug:
 			// The wheel scrolls the debug panel's focused column (#626).
 			switch msg.Button {
 			case tea.MouseWheelUp:
-				inst.Debug().Wheel(-wheelLines)
+				inst.Debug().Wheel(-lines)
 			case tea.MouseWheelDown:
-				inst.Debug().Wheel(wheelLines)
+				inst.Debug().Wheel(lines)
 			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
@@ -4418,9 +4421,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				lx, ly := msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY)
 				switch msg.Button {
 				case tea.MouseWheelUp:
-					inst.Terminal().MouseWheel(lx, ly, wheelLines)
+					inst.Terminal().MouseWheel(lx, ly, lines)
 				case tea.MouseWheelDown:
-					inst.Terminal().MouseWheel(lx, ly, -wheelLines)
+					inst.Terminal().MouseWheel(lx, ly, -lines)
 				}
 			}
 		case pane.KindEditor:
@@ -4444,9 +4447,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					lx, ly := msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY)
 					switch msg.Button {
 					case tea.MouseWheelUp:
-						term.MouseWheel(lx, ly, wheelLines)
+						term.MouseWheel(lx, ly, lines)
 					case tea.MouseWheelDown:
-						term.MouseWheel(lx, ly, -wheelLines)
+						term.MouseWheel(lx, ly, -lines)
 					}
 				}
 				return m, nil
@@ -4457,17 +4460,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// the explorer.
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
-				inst.Editor().ScrollXBy(-wheelLines)
+				inst.Editor().ScrollXBy(-lines)
 			case msg.Button == tea.MouseWheelRight:
-				inst.Editor().ScrollXBy(wheelLines)
+				inst.Editor().ScrollXBy(lines)
 			case msg.Button == tea.MouseWheelUp && shift:
-				inst.Editor().ScrollXBy(-wheelLines)
+				inst.Editor().ScrollXBy(-lines)
 			case msg.Button == tea.MouseWheelDown && shift:
-				inst.Editor().ScrollXBy(wheelLines)
+				inst.Editor().ScrollXBy(lines)
 			case msg.Button == tea.MouseWheelUp:
-				inst.Editor().ScrollBy(-wheelLines)
+				inst.Editor().ScrollBy(-lines)
 			case msg.Button == tea.MouseWheelDown:
-				inst.Editor().ScrollBy(wheelLines)
+				inst.Editor().ScrollBy(lines)
 			}
 		}
 		return m, nil
@@ -4731,6 +4734,19 @@ const (
 type mouseEvent struct {
 	tea.Mouse
 	action mouseAction
+	// count is the number of identical coalesced wheel ticks this event
+	// stands for (#669); 0 and 1 both mean a single tick. Wheel consumers
+	// multiply their per-tick line delta by it instead of the event being
+	// replayed count times.
+	count int
+}
+
+// ticks normalises count for consumers: a plain (unbatched) event is one tick.
+func (e mouseEvent) ticks() int {
+	if e.count < 1 {
+		return 1
+	}
+	return e.count
 }
 
 // wheelFlushMsg asks the model to apply the accumulated wheel batch (#238). It
@@ -4762,9 +4778,12 @@ func (m Model) queueWheel(ev mouseEvent) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg { return wheelFlushMsg{} }
 }
 
-// flushWheel replays the accumulated wheel events through handleMouse in one
-// update pass. A stale flush — the batch was already applied inline by a
-// non-wheel message — is a no-op.
+// flushWheel applies the accumulated wheel batches through handleMouse in one
+// update pass: each batch is delivered ONCE carrying its tick count (#669) —
+// consumers multiply their line delta — instead of being replayed per event,
+// which for terminal panes meant one PTY write per tick and a child working
+// off the burst for seconds. A stale flush — the batch was already applied
+// inline by a non-wheel message — is a no-op.
 func (m Model) flushWheel() (tea.Model, tea.Cmd) {
 	batches := m.pendingWheel
 	m.pendingWheel = nil
@@ -4772,16 +4791,16 @@ func (m Model) flushWheel() (tea.Model, tea.Cmd) {
 	var tm tea.Model = m
 	var cmds []tea.Cmd
 	for _, b := range batches {
-		for i := 0; i < b.count; i++ {
-			mm, ok := tm.(Model)
-			if !ok {
-				return tm, tea.Batch(cmds...)
-			}
-			var cmd tea.Cmd
-			tm, cmd = mm.handleMouse(b.ev)
-			if cmd != nil {
-				cmds = append(cmds, cmd)
-			}
+		mm, ok := tm.(Model)
+		if !ok {
+			return tm, tea.Batch(cmds...)
+		}
+		ev := b.ev
+		ev.count = b.count
+		var cmd tea.Cmd
+		tm, cmd = mm.handleMouse(ev)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 	}
 	return tm, tea.Batch(cmds...)
