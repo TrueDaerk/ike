@@ -35,6 +35,8 @@ type KeymapPage struct {
 	conflict  string       // colliding command id awaiting confirmation
 	warn      string       // fragile-chord honesty warning
 	invalid   string
+
+	listH int // list-window height of the last render (mouse hit-testing, #674)
 }
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
@@ -312,7 +314,55 @@ func (k *KeymapPage) View(w, h int) string {
 		footer = wrapFooter([]footerLine{k.detailLine(b)}, w, 2)
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
+	k.listH = h - 1 - len(footer)
 	return headLine + "\n" + pinFooter(list, footer, k.sel, k.sel, h-1, &k.off)
+}
+
+// Click implements the optional PageClicker seam (#674): the header row opens
+// the filter input, a press on a binding selects it and a press on the
+// selection starts the chord capture (enter semantics). A press during a
+// capture or its conflict confirmation cancels it (the mouse cannot be part
+// of a chord); a press while the filter input is open keeps the filter and
+// returns to the list (enter semantics).
+func (k *KeymapPage) Click(_, y int) tea.Cmd {
+	if k.capturing {
+		k.capturing, k.conflict, k.steps, k.warn = false, "", nil, ""
+		return nil
+	}
+	if k.filtering {
+		k.filtering = false
+		return nil
+	}
+	if y == 0 { // header row carries the filter display
+		k.filtering = true
+		return nil
+	}
+	row := y - 1
+	if row < 0 || (k.listH > 0 && row >= k.listH) {
+		return nil
+	}
+	idx := row + k.off
+	if idx >= len(k.rows()) {
+		return nil
+	}
+	if idx == k.sel {
+		k.capturing = true
+		k.steps, k.conflict, k.warn, k.invalid = nil, "", "", ""
+		return nil
+	}
+	k.sel = idx
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): the list moves its
+// selection (it follows, like j/k); inert during capture/filter input.
+func (k *KeymapPage) Wheel(delta int) {
+	if k.capturing || k.filtering {
+		return
+	}
+	if n := len(k.rows()); n > 0 {
+		k.sel = clamp(k.sel+delta, 0, n-1)
+	}
 }
 
 // renderRow renders one binding line.

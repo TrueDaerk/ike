@@ -304,6 +304,52 @@ func (p *MarketplacePage) View(width, height int) string {
 	return lipgloss.NewStyle().MaxHeight(height).MaxWidth(width).Render(b.String())
 }
 
+// headLines counts the view's lines above the first catalog row (the status
+// line plus the optional restart notice) — mouse hit-testing needs the same
+// arithmetic View uses (#674).
+func (p *MarketplacePage) headLines() int {
+	n := 1
+	if p.restart {
+		n++
+	}
+	return n
+}
+
+// Click implements the optional PageClicker seam (#674): a press on a catalog
+// row (or its note / expanded detail) selects it, and a press on the
+// selection toggles the detail expansion (enter semantics — install stays on
+// `i`, keeping the capability-review step).
+func (p *MarketplacePage) Click(_, y int) tea.Cmd {
+	line := p.headLines()
+	for i, e := range p.rows() {
+		span := 1
+		if p.rowNote[e.Name] != "" {
+			span++
+		}
+		if p.expanded[e.Name] {
+			span += len(p.inspectEntry(e))
+		}
+		if y >= line && y < line+span {
+			if i == p.sel && y == line {
+				p.expanded[e.Name] = !p.expanded[e.Name]
+			} else {
+				p.sel = i
+			}
+			return nil
+		}
+		line += span
+	}
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): moves the selection
+// like j/k.
+func (p *MarketplacePage) Wheel(delta int) {
+	if n := len(p.rows()); n > 0 {
+		p.sel = clamp(p.sel+delta, 0, n-1)
+	}
+}
+
 // inspectEntry renders the expanded detail: versions, homepage and — the
 // review step — the full capability list.
 func (p *MarketplacePage) inspectEntry(e market.Entry) []string {

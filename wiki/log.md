@@ -2,6 +2,13 @@
 
 ## 2026-07-17
 
+- Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
+  interfaces on the `PageModel` seam; the panel forwards form-column clicks
+  (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,
+  Plugins and Marketplace — click selects, a click on the selection runs the
+  page's enter-equivalent action, picker rows are clickable, the wheel moves
+  the selection.
+
 - Settings schema-page mouse (#673): the wheel scrolls the panel column under
   the pointer (categories switch pages, form rows follow); with an enum picker
   open a click chooses the option or closes the picker; with an inline edit

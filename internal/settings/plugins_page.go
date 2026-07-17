@@ -222,6 +222,37 @@ func (p *PluginsPage) View(width, height int) string {
 	return lipgloss.NewStyle().MaxHeight(height).MaxWidth(width).Render(b.String())
 }
 
+// Click implements the optional PageClicker seam (#674): a press on a plugin
+// row (or its expanded detail) selects it, and a press on the selection
+// toggles the capability inspection (enter semantics).
+func (p *PluginsPage) Click(_, y int) tea.Cmd {
+	line := 1 // the header row is line 0
+	for i, row := range p.rows() {
+		span := 1
+		if p.expanded[row.ID] {
+			span += len(inspect(row))
+		}
+		if y >= line && y < line+span {
+			if i == p.sel && y == line {
+				p.expanded[row.ID] = !p.expanded[row.ID]
+			} else {
+				p.sel = i
+			}
+			return nil
+		}
+		line += span
+	}
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): moves the selection
+// like j/k.
+func (p *PluginsPage) Wheel(delta int) {
+	if n := len(p.rows()); n > 0 {
+		p.sel = clamp(p.sel+delta, 0, n-1)
+	}
+}
+
 // padCol right-pads s to width columns.
 func padCol(s string, width int) string {
 	if len(s) >= width {
