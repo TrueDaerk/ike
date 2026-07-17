@@ -57,6 +57,7 @@ var essentialGroups = []essentialGroup{
 		"settings.open",
 		"menu.open",
 		"scratch.new",
+		"help.welcomeTour",
 	}},
 }
 

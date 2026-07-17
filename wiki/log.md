@@ -2,6 +2,13 @@
 
 ## 2026-07-17
 
+- Welcome tour (#657): new `internal/tour` package — a passive five-page
+  walkthrough (entry keys & quitting, vim modes, layout & navigation, tools
+  incl. the terminal escape hatch, customization) hosted in the floating
+  shell with host-level paging keys; opened via the new `help.welcomeTour`
+  palette command and listed in help Essentials. Shortcuts render
+  resolver-truth with curated multi-chord defaults.
+
 - Help essentials view (#656): `?` now opens a curated Essentials cheat sheet
   (~25 commands in feature groups, one screen) instead of the full registry
   dump; `tab` toggles to the full list and back, a non-empty filter always
