@@ -112,7 +112,7 @@ func (m Model) recoveryBody() string {
 func (m Model) updateRecovery(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	rc := m.recovery
 	if rc == nil || len(rc.items) == 0 {
-		return m.closeRecovery(), nil
+		return m.closeRecovery()
 	}
 	switch msg.String() {
 	case "j", "down":
@@ -128,23 +128,23 @@ func (m Model) updateRecovery(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.restoreSnapshot(it.snap)
 		_ = backupService().Remove(it.snap.Key)
 		m.host.Notify(host.Info, "recovered "+recoveryName(it.snap))
-		return m.dropRecoveryItem(), nil
+		return m.dropRecoveryItem()
 	case "d":
 		it := rc.items[rc.cursor]
 		_ = backupService().Remove(it.snap.Key)
-		return m.dropRecoveryItem(), nil
+		return m.dropRecoveryItem()
 	case "s":
 		// Keep the snapshot for next launch; just remove it from this prompt.
-		return m.dropRecoveryItem(), nil
+		return m.dropRecoveryItem()
 	case "esc":
-		return m.closeRecovery(), nil
+		return m.closeRecovery()
 	}
 	return m, nil
 }
 
 // dropRecoveryItem removes the highlighted item and closes the prompt when the
 // list empties.
-func (m Model) dropRecoveryItem() tea.Model {
+func (m Model) dropRecoveryItem() (tea.Model, tea.Cmd) {
 	rc := m.recovery
 	rc.items = append(rc.items[:rc.cursor], rc.items[rc.cursor+1:]...)
 	if rc.cursor >= len(rc.items) {
@@ -153,22 +153,24 @@ func (m Model) dropRecoveryItem() tea.Model {
 	if len(rc.items) == 0 {
 		return m.closeRecovery()
 	}
-	return m
+	return m, nil
 }
 
 // closeRecovery dismisses the prompt, leaving any undecided snapshots on disk so
 // they are offered again next launch. The prompt has had its say now, so the
 // age-based GC (#167) may prune what remains — never silently before it.
-func (m Model) closeRecovery() tea.Model {
+func (m Model) closeRecovery() (tea.Model, tea.Cmd) {
 	m.recovery = nil
 	m.shell.Close()
 	if m.backupEnabled() {
 		_, _ = backupService().Prune(backupMaxAge(m.host.Config()))
 	}
-	// The shell is free again: a first-start onboarding dialog (#301) that was
-	// waiting behind the recovery prompt may open now.
+	// The shell is free again: the first-run welcome tour (#658) and then the
+	// first-start onboarding dialog (#301) that were waiting behind the
+	// recovery prompt may open now (the tour's command persists ui.onboarded).
+	cmd := m.maybeOpenTour()
 	m.maybeOpenOnboarding()
-	return m
+	return m, cmd
 }
 
 // restoreSnapshot opens the recovered text as a dirty buffer: onto the base file

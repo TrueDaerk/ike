@@ -35,6 +35,10 @@ import (
 var testStoreRoot string
 
 func TestMain(m *testing.M) {
+	// Every test model on a fresh config dir is a "first start"; without this
+	// the welcome tour (#658) would auto-open and swallow scripted input. The
+	// first-run tests re-enable it locally.
+	tourAutoOpen = false
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir

@@ -1,7 +1,6 @@
 package app
 
 import (
-	"os"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -44,16 +43,16 @@ func onboardingLangs() []lang.Language {
 	return out
 }
 
-// scanOnboarding decides at startup whether the dialog is due: first start
-// (no user settings file), the LSP subsystem and auto-install on, not
-// onboarded yet, and at least one server to offer. The prompt itself waits for
-// the first window size (maybeOpenOnboarding).
+// scanOnboarding decides at startup whether the dialog is due: the LSP
+// subsystem and auto-install on, not onboarded yet, and at least one server
+// to offer. The gate is the lsp.onboarded flag alone, NOT the settings file's
+// existence (#658): the welcome tour writes ui.onboarded when it opens, so on
+// a launch after a mid-tour quit the file already exists while this dialog
+// still hasn't had its say. The prompt itself waits for the first window size
+// (maybeOpenOnboarding).
 func (m *Model) scanOnboarding() {
 	if m.cfgOpts.UserPath == "" {
 		return
-	}
-	if _, err := os.Stat(m.cfgOpts.UserPath); err == nil {
-		return // an existing config is not a first start
 	}
 	c := config.Get()
 	if c == nil || !c.LSP.Enabled || !c.LSP.AutoInstall || c.LSP.Onboarded {
