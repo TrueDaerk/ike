@@ -11,8 +11,8 @@ import (
 )
 
 // SelectThemeMsg asks the root model to switch the active color scheme by
-// name, session-only (the config write path belongs to Roadmap 0040/0090).
-// Dispatched by the "themes.select.*" palette commands.
+// name and persist it as a user setting (#667). Dispatched by the
+// "themes.select.*" palette commands.
 type SelectThemeMsg struct{ Name string }
 
 // themeProvider is the compile-in plugin that contributes the built-in color
@@ -92,30 +92,21 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.commitUI.SetPalette(p)
 }
 
-// selectTheme switches the active color scheme by name for this session:
-// resolve against built-ins + plugin themes, re-thread everywhere, and confirm
-// (or warn) with a toast. It does not write the choice back to config.
-func (m *Model) selectTheme(name string) {
+// selectTheme switches the active color scheme by name: resolve against
+// built-ins + plugin themes, apply immediately, and persist the choice as a
+// USER setting (#667) — theme.name in ~/.ike/settings.toml, the same write
+// the Settings → Appearance page performs. The returned command carries the
+// write + reload; a theme is a user preference, so it follows the user across
+// projects instead of living in the per-project session.
+func (m *Model) selectTheme(name string) tea.Cmd {
 	sel, found := theme.Select(name, m.reg.Themes())
 	m.applyTheme(theme.NewPalette(sel))
-	m.themeOverride = sel.Name // persisted in the session so the choice sticks
 	if !found {
 		m.host.Notify(host.Warn, "unknown theme "+strconvQuote(name)+", using "+theme.DefaultName)
-		return
+		return nil
 	}
 	m.host.Notify(host.Info, "theme: "+sel.Name)
-}
-
-// restoreTheme re-applies a session-persisted runtime theme override, if any,
-// so a palette-selected scheme survives a restart. It threads the palette
-// without touching the status line (startup should be quiet).
-func (m *Model) restoreTheme(name string) {
-	if name == "" {
-		return
-	}
-	sel, _ := theme.Select(name, m.reg.Themes())
-	m.applyTheme(theme.NewPalette(sel))
-	m.themeOverride = sel.Name
+	return config.WriteAndReload(m.cfgOpts, config.UserScope, "theme.name", sel.Name)
 }
 
 // reloadConfig applies a reloaded configuration (config.ConfigReloadedMsg):
@@ -125,14 +116,6 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	// Capture the pre-reload [theme].name so an explicit theme edit is
-	// distinguishable from an unrelated config change (#241).
-	prevName := ""
-	if old := m.host.Config(); old != nil {
-		if v, ok := old.Get("theme.name"); ok {
-			prevName = v
-		}
-	}
 	config.Set(cfg)
 	hcfg := host.FromConfig(cfg)
 	m.host.SetConfig(hcfg)
@@ -140,22 +123,11 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// registry live, so SetEnabled plus the keymap rebuild below is the whole
 	// re-resolution.
 	applyPluginConfig(m.reg, hcfg)
-	// Theme (#241): an edited [theme].name is an explicit choice — it wins and
-	// clears any palette-selected runtime override. Any other config change
-	// leaves an active override (and thus the current palette) alone.
-	newName := ""
-	if v, ok := hcfg.Get("theme.name"); ok {
-		newName = v
-	}
-	warning := ""
-	if newName != prevName {
-		m.themeOverride = ""
-	}
-	if m.themeOverride == "" {
-		var pal *theme.Palette
-		pal, warning = resolveTheme(m.reg, hcfg)
-		m.applyTheme(pal)
-	}
+	// Theme: config is the single source of truth (#667 dropped the runtime
+	// override) — re-resolve and re-thread on every reload so a [theme].name
+	// change lands without a restart.
+	pal, warning := resolveTheme(m.reg, hcfg)
+	m.applyTheme(pal)
 	// Persist a config-driven show_hidden change like the runtime `.` toggle
 	// does (#642): Configure applies it live, but until now only the toggle and
 	// a clean quit wrote the session, so after a kill/crash restoreSession

@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-12T23:30:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -175,18 +175,15 @@ The `themes` plugin registers one global palette command per built-in
 and re-threads the palette via `applyTheme`. An unknown name falls back to
 `default` with a status warning.
 
-The runtime choice is **persisted in the session store** (`session.json`,
-field `theme`), not in `settings.toml` — it is runtime UI state like the
-layout, so `settings.toml` stays untouched (that write path belongs to Roadmap
-0040/0090). `restoreSession` re-applies it on the next launch, overriding the
-config-derived theme. Only an *explicit* palette pick is recorded
-(`Model.themeOverride`); a purely config-driven theme leaves the field empty,
-so editing `[theme].name` keeps working until a runtime pick overrides it.
-
-Live config reloads respect the override (#241): `reloadConfig` re-resolves
-the theme from config only when `[theme].name` itself changed in that reload
-— an explicit theme edit wins and clears the override — while any unrelated
-settings change leaves the runtime-selected palette in place.
+The choice is **persisted as a user setting** (#667): `selectTheme` applies
+the palette immediately and writes `theme.name` to the user-scope
+`~/.ike/settings.toml` — the same write the Settings → Appearance page
+performs — so the theme follows the user across projects and restarts. The
+pre-#667 per-project session override (`session.json` field `theme`,
+`Model.themeOverride`) is gone; a stale session entry is ignored at startup.
+Config is the single source of truth: `reloadConfig` re-resolves and
+re-threads the palette on every reload, so both the palette pick and a manual
+`[theme].name` edit land the same way.
 
 ## Boundaries
 

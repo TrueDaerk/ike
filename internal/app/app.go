@@ -276,10 +276,6 @@ type Model struct {
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
 	// at construction and on config reloads.
 	themePal *theme.Palette
-	// themeOverride is the theme name chosen at runtime via a palette command,
-	// "" when the theme still follows config. It persists in the session so the
-	// choice survives a restart; a config edit only wins again once it is cleared.
-	themeOverride string
 	// lastEsc records that the previous key was an esc in a non-capturing context,
 	// so a second esc opens the palette (esc-esc toggle).
 	lastEsc bool
@@ -843,7 +839,8 @@ func (m *Model) restoreSession() {
 	if !ok {
 		return
 	}
-	m.restoreTheme(s.Theme)
+	// s.Theme (the pre-#667 per-project runtime override) is deliberately
+	// ignored: the theme is a user setting now, resolved from config alone.
 	m.recent.Set(s.RecentFiles)
 	m.explorer().Restore(explorer.State{
 		Expanded:   s.Explorer.Expanded,
@@ -896,7 +893,6 @@ func (m Model) editorWithFile(path string) string {
 func (m Model) snapshotSession() sessionState {
 	st := m.explorer().Snapshot()
 	s := sessionState{
-		Theme:       m.themeOverride,
 		RecentFiles: m.recent.List(),
 		Explorer: explorerSession{
 			Expanded:   st.Expanded,
@@ -2433,9 +2429,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, config.Reload(m.cfgOpts)
 
 	case SelectThemeMsg:
-		// Session-only theme switch from the palette's "Theme: <name>" commands.
-		m.selectTheme(msg.Name)
-		return m, nil
+		// Theme switch from the palette's "Theme: <name>" commands. The choice
+		// is a user preference, not a project trait (#667): it writes
+		// theme.name to the user scope — exactly what the Settings page does —
+		// and the config reload applies the palette live everywhere.
+		return m, m.selectTheme(msg.Name)
 
 	case config.ConfigReloadedMsg:
 		// Live re-theme (Roadmap 0110): publish the fresh config and re-resolve
