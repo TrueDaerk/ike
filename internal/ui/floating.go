@@ -137,10 +137,24 @@ type Filterable interface {
 	Filter() string
 }
 
+// KeyHandler is an optional Content extension: when the installed content
+// implements it, keys that neither fed the live filter nor matched a dismiss
+// key are offered to the content before scroll handling. Returning true
+// consumes the key; false falls through to the scroller. This is the seam
+// that lets content own view toggles or paging keys without the shell
+// knowing about them.
+type KeyHandler interface {
+	Content
+	// HandleKey processes one key (tea.KeyMsg's String form), reporting
+	// whether it was consumed.
+	HandleKey(key string) bool
+}
+
 // Update handles shell keys while open: a dismiss key closes it, printable
-// keys feed a Filterable content's live filter, every other key is a scroll
-// key. It reports whether the message was consumed, so the host can suppress
-// all other routing while the shell is open.
+// keys feed a Filterable content's live filter, a KeyHandler content gets the
+// next look, every other key is a scroll key. It reports whether the message
+// was consumed, so the host can suppress all other routing while the shell is
+// open.
 func (f *Floating) Update(msg tea.Msg) bool {
 	if !f.open {
 		return false
@@ -155,6 +169,10 @@ func (f *Floating) Update(msg tea.Msg) bool {
 		}
 		if f.dismiss[msg.String()] {
 			f.Close()
+			return true
+		}
+		if kh, ok := f.content.(KeyHandler); ok && kh.HandleKey(msg.String()) {
+			f.relayout()
 			return true
 		}
 		f.scroll.Update(msg)

@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Floating Shell
@@ -62,6 +62,18 @@ title row, clamped by an optional max width fraction), hands it to
 `Content.Render`, then frames and scrolls the result. `ModelContent` adapts any
 view-only model (`func() string`) into `Content`, ignoring the width budget — it
 is the seam that lets a plugin float its `plugin.Pane` as a modal for free.
+
+Two optional Content extensions refine key routing while the shell is open
+(checked in this order: filter → dismiss → key handler → scroll):
+
+- **`ui.Filterable`** (#271): printable keys become a live filter string
+  instead of scroll keys; `esc` first clears an active filter.
+- **`ui.KeyHandler`** (#655): keys that neither fed the filter nor matched a
+  dismiss key are offered to the content via `HandleKey(key) bool` before
+  scroll handling. Returning `true` consumes the key (the shell relayouts);
+  `false` falls through to the scroller. This lets content own view toggles
+  (help's essentials/all `tab` switch) or paging keys without the shell
+  knowing about them. Dismiss keys never reach the content.
 
 ## Sizing & scrolling
 
