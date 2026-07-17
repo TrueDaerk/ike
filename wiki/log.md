@@ -2,6 +2,15 @@
 
 ## 2026-07-17
 
+- Debug panel mouse hardening (#639): border clicks (coordinates outside the
+  pane interior, which the layout hit-test still routes to the pane) no longer
+  select an off-by-one row or the wrong column; every click — output column and
+  title row included — records into the double-click tracker so an intervening
+  click resets a pending double-click; the wheel pulls the selection along to
+  stay in the visible window (vcspanel behavior); a click while the inline
+  value editor is open cancels the edit first, and a wheel while editing
+  scrolls without moving the selection.
+
 - Debug output console made live (#637): the tool window renders its columns in
   every state (placeholder in FRAMES while running / not paused, OUTPUT keeps
   streaming) and opens on the first output event if closed (once per session);
