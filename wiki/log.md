@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- JetBrains keymap XML import (#677): `internal/keymap/jbimport` parses a
+  JetBrains keymap export (keystroke grammar incl. second-keystroke chords),
+  maps IntelliJ action ids onto IKE command ids and writes the result as
+  `keymap.bindings.*` user-scope overrides, unbinding replaced preset
+  defaults. Entry points: the `keymap.importJetBrains` palette command (shell
+  path prompt with tab completion) and `i` on the settings Keymap page.
 - Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
   interfaces on the `PageModel` seam; the panel forwards form-column clicks
   (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,
