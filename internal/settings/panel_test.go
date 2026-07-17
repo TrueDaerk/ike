@@ -489,3 +489,128 @@ func TestDetailFooterWraps(t *testing.T) {
 		t.Fatalf("short description must sit on the first footer line:\n%s", v)
 	}
 }
+
+// TestWheelScrollsColumns guards #673: the wheel moves the selection of the
+// column under the pointer — categories on the left, the form on the right —
+// clamped at both ends.
+func TestWheelScrollsColumns(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+
+	formX := 1 + catWidth + 4
+
+	// Category column hovered: wheel switches pages.
+	m.Wheel(2, 1)
+	if m.cat != 1 {
+		t.Fatalf("wheel over categories must move the page, cat=%d", m.cat)
+	}
+	m.Wheel(2, 5) // clamped at the last page
+	if m.cat != 1 {
+		t.Fatalf("category wheel must clamp, cat=%d", m.cat)
+	}
+	m.Wheel(2, -3)
+	if m.cat != 0 {
+		t.Fatalf("wheel up must move back to the first page, cat=%d", m.cat)
+	}
+
+	// Form column hovered: wheel moves the entry selection.
+	m.Wheel(formX, 1)
+	if m.sel != 1 {
+		t.Fatalf("wheel over the form must move the selection, sel=%d", m.sel)
+	}
+	m.Wheel(formX, -9)
+	if m.sel != 0 {
+		t.Fatalf("form wheel must clamp at the top, sel=%d", m.sel)
+	}
+
+	// Wheel is inert while a picker or edit is open.
+	m.picking = true
+	m.Wheel(formX, 1)
+	if m.sel != 0 {
+		t.Fatal("wheel must be inert while picking")
+	}
+	m.picking = false
+}
+
+// TestPickerClicks guards #673: with an enum picker open, clicking an option
+// applies it and clicking anywhere else closes the picker.
+func TestPickerClicks(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	formX := 1 + catWidth + 4
+
+	openPicker := func() {
+		m.Update(key("down")) // Appearance page
+		m.Update(key("tab"))
+		if m.Update(key("enter")); !m.picking {
+			t.Fatal("enter on the enum row must open the picker")
+		}
+	}
+	openPicker()
+
+	// The options render directly under the selected row (body row 0), so
+	// option 1 ("tokyo-night") sits on body row 2 = y 4.
+	cmd := m.Click(formX, 2+2)
+	if m.picking {
+		t.Fatal("clicking an option must close the picker")
+	}
+	apply(t, cmd)
+	if got := config.Get().Theme.Name; got != "tokyo-night" {
+		t.Fatalf("option click must apply the value, got %q", got)
+	}
+
+	// A click outside the options (category column) only closes the picker.
+	m.Open()
+	openPicker()
+	if cmd := m.Click(2, 3); cmd != nil || m.picking {
+		t.Fatalf("outside click must close the picker without writing, picking=%v", m.picking)
+	}
+}
+
+// TestEditClicks guards #673: with an inline edit active, a click on the row
+// keeps the edit, a click elsewhere commits (or cancels when invalid).
+func TestEditClicks(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(90, 20)
+	m.Open()
+	formX := 1 + catWidth + 4
+
+	startEdit := func() {
+		m.Update(key("tab"))
+		m.Update(key("down")) // Int row (tab width)
+		m.Update(key("enter"))
+		if !m.editing {
+			t.Fatal("enter must start the inline edit")
+		}
+	}
+	startEdit()
+
+	// Click on the edited row itself: the edit stays active.
+	if m.Click(formX, 2+1); !m.editing {
+		t.Fatal("clicking the edited row must keep the edit")
+	}
+
+	// Click elsewhere: the input commits like enter.
+	m.input = "8"
+	cmd := m.Click(formX, 2+0)
+	if m.editing {
+		t.Fatal("outside click must end the edit")
+	}
+	apply(t, cmd)
+	if got := config.Get().Editor.TabWidth; got != 8 {
+		t.Fatalf("outside click must commit the input, got %d", got)
+	}
+
+	// Invalid input: the outside click cancels instead of committing.
+	m.Open()
+	startEdit()
+	m.input = "not a number"
+	if cmd := m.Click(2, 3); cmd != nil || m.editing || m.invalid != "" {
+		t.Fatalf("invalid input must cancel on outside click, editing=%v invalid=%q", m.editing, m.invalid)
+	}
+}
