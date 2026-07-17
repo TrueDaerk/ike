@@ -675,6 +675,12 @@ func (m *Model) SetCursor(line, col int) {
 // HasFile reports whether a file is currently open.
 func (m Model) HasFile() bool { return m.path != "" }
 
+// IsEmpty reports whether this tab is a reusable blank: no file and no text.
+// It is the single emptiness predicate shared by the file-open and diff-open
+// paths (#628, #641) — a pathless tab that already holds typed scratch text is
+// not empty, so opens must not fill it in place and lose the content.
+func (m Model) IsEmpty() bool { return !m.HasFile() && m.buf.String() == "" }
+
 // SetSize sets the available width and number of text rows.
 func (m *Model) SetSize(width, height int) {
 	if width != m.width {
