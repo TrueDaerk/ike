@@ -2,6 +2,14 @@
 
 ## 2026-07-17
 
+- Interactive tour try-it steps (#680): selected tour pages carry checkbox
+  tasks (search everywhere, file-tree toggle, terminal toggle); non-paging
+  keys pass through to the app while a page's task is unfinished, the
+  command-executed signal (#679) ticks the box (the header flips to "all done
+  — press → to continue"), overlay-opening tasks cover or suspend the tour
+  and it resumes on the same page, and paging/skipping works regardless of
+  task state.
+
 - Command-executed event (#679): every command dispatch — palette, keymap
   resolution (including chord timeouts and plugin key aliases), and inline
   invocations — now emits `plugin.EventCommandExecuted` (payload: command id)

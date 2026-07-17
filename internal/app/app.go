@@ -1918,6 +1918,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openTour()
 		return m, nil
 
+	case CommandExecutedMsg:
+		// The command-executed signal (#679): the tour ticks a matching
+		// try-it task (#680). A suspended tour resumes lazily via
+		// maybeResumeTour once the covering overlay is gone.
+		if m.tour != nil {
+			m.tour.NoteExecuted(msg.ID)
+		}
+		return m, nil
+
 	case CyclePaneFocusMsg:
 		// pane.switcher (ctrl+tab / palette): same cycle as the hardcoded tab.
 		m.cycleFocus()
@@ -3118,10 +3127,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
 		}
+		// A tour suspended behind a try-it overlay (#680) resumes as soon as
+		// the screen is free — this key then behaves as if the tour never
+		// left (paging, closing, or the next try-it pass-through).
+		m.maybeResumeTour()
 		// The welcome tour (#657) pages host-level — the shell scroller must
-		// never see its space/arrow keys.
+		// never see its space/arrow keys. On a page with an unfinished try-it
+		// task (#680), non-paging keys are not consumed and fall through to
+		// normal key handling below.
 		if m.tourOpen() {
-			return m.updateTour(msg)
+			if tm, cmd, consumed := m.updateTour(msg); consumed {
+				return tm, cmd
+			}
 		}
 		// The save-conflict prompt owns the keyboard ahead of the generic shell
 		// handling: k / r / esc answer it, everything else is swallowed.
@@ -3183,7 +3200,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
 		}
-		if m.shell.IsOpen() {
+		if m.shell.IsOpen() && !m.tourOpen() {
+			// The tour never reaches this branch: its keys are handled (or
+			// deliberately passed through, #680) above, and the shell scroller
+			// must not swallow a try-it chord.
 			m.shell.Update(msg)
 			return m, nil
 		}

@@ -46,17 +46,71 @@ func TestPagingClampsAndIndicator(t *testing.T) {
 
 func TestPagesFitTheShellBudget(t *testing.T) {
 	// Every page (body + legend) must fit ~72×16 so the shell never scrolls
-	// it — scrolling would make space ambiguous with paging.
+	// it — scrolling would make space ambiguous with paging. Ticking every
+	// try-it task must not change the budget either (#680: the header becomes
+	// the done hint in place).
 	tr := New(nil)
-	for i := 0; i < tr.PageCount(); i++ {
-		tr.page = i
-		body := tr.Render(72)
-		if w := lipgloss.Width(body); w > 90 {
-			t.Errorf("page %d is %d cells wide", i+1, w)
+	check := func(label string) {
+		t.Helper()
+		for i := 0; i < tr.PageCount(); i++ {
+			tr.page = i
+			body := tr.Render(72)
+			if w := lipgloss.Width(body); w > 90 {
+				t.Errorf("%s page %d is %d cells wide", label, i+1, w)
+			}
+			if h := lipgloss.Height(body); h > 16 {
+				t.Errorf("%s page %d is %d rows tall, budget 16", label, i+1, h)
+			}
 		}
-		if h := lipgloss.Height(body); h > 16 {
-			t.Errorf("page %d is %d rows tall, budget 16", i+1, h)
+	}
+	check("fresh")
+	for i := range pages {
+		for _, task := range pages[i].tasks {
+			tr.NoteExecuted(task.CommandID)
 		}
+	}
+	check("all-done")
+}
+
+func TestTryTasksTickOnExecution(t *testing.T) {
+	// #680: try-it tasks render as checkboxes, tick when the command
+	// executes (on any page), and flip the header to the continue hint.
+	tr := New(nil)
+	if !tr.HasPendingTasks() {
+		t.Fatal("the welcome page must carry a pending try-it task")
+	}
+	if body := tr.Render(72); !strings.Contains(body, "[ ] Open search everywhere") {
+		t.Fatalf("pending task must render unchecked:\n%s", body)
+	}
+	if tr.NoteExecuted("no.such.command") {
+		t.Fatal("an unrelated command must not tick anything")
+	}
+	if !tr.NoteExecuted("palette.searchEverywhere") {
+		t.Fatal("executing the task command must tick it")
+	}
+	if tr.NoteExecuted("palette.searchEverywhere") {
+		t.Fatal("a second execution must not report a new tick")
+	}
+	if tr.HasPendingTasks() {
+		t.Fatal("the welcome page's only task is done — no pending tasks")
+	}
+	body := tr.Render(72)
+	if !strings.Contains(body, "[x] Open search everywhere") {
+		t.Fatalf("done task must render checked:\n%s", body)
+	}
+	if !strings.Contains(body, "all done") {
+		t.Fatalf("completed page must show the continue hint:\n%s", body)
+	}
+	// Ticking ahead counts: the layout page's task, done from page 1.
+	tr.NoteExecuted("explorer.toggle")
+	tr.page = 2
+	if tr.HasPendingTasks() {
+		t.Fatal("a task executed ahead of its page must already be ticked")
+	}
+	// Passive pages have no tasks and never report pending ones.
+	tr.page = 1
+	if len(tr.Tasks()) != 0 || tr.HasPendingTasks() {
+		t.Fatal("the editor page is passive")
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/tour"
+	"ike/internal/ui"
 )
 
 // tour.go hosts the Welcome Tour (#657): a passive, paged first-orientation
@@ -63,29 +64,63 @@ func (m *Model) maybeOpenTour() tea.Cmd {
 // openTour shows the tour from its first page.
 func (m *Model) openTour() {
 	m.tour = tour.New(m.bindings)
+	m.showTourShell()
+}
+
+// showTourShell (re)installs the tour as the floating shell's content — on
+// open, and on resume after a try-it overlay (#680) took the shell or the
+// screen.
+func (m *Model) showTourShell() {
 	m.shell.SetContent(m.tour)
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
 }
 
-// tourOpen reports whether the tour is showing.
-func (m Model) tourOpen() bool { return m.tour != nil && m.shell.IsOpen() }
+// tourOpen reports whether the tour is showing: it exists AND the shell is
+// open on it. A try-it key (#680) may hand the shell to other content (f1
+// help) — the tour is then suspended, not open, and keys must not route to
+// it.
+func (m Model) tourOpen() bool {
+	return m.tour != nil && m.shell.IsOpen() && m.shell.Content() == ui.Content(m.tour)
+}
 
-// updateTour consumes every key while the tour is open: right/l/space page
-// forward (finishing on the last page), left/h page back, esc closes.
-// Everything else is swallowed so nothing leaks past the modal.
-func (m Model) updateTour(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+// tourSuspended reports whether a tour exists but is not showing — a try-it
+// overlay (palette, search everywhere, f1 help) covers it or took the shell.
+// maybeResumeTour brings it back once the screen is free.
+func (m Model) tourSuspended() bool { return m.tour != nil && !m.tourOpen() }
+
+// maybeResumeTour reopens a suspended tour once no overlay holds the screen
+// (#680): the palette family is closed and the shell is free. It returns to
+// the page the user left, with the completed task ticked.
+func (m *Model) maybeResumeTour() {
+	if m.tourSuspended() && !m.shell.IsOpen() && !m.palette.IsOpen() && !m.finder.IsOpen() {
+		m.showTourShell()
+	}
+}
+
+// updateTour handles a key while the tour is showing. Paging keys always
+// belong to the tour: right/l/space page forward (finishing on the last page),
+// left/h page back, esc/q closes — pages stay skippable regardless of task
+// state. Any other key is swallowed on passive pages; on a page with an
+// unfinished try-it task it is NOT consumed (#680) — the caller lets it fall
+// through to normal key handling so the taught chord really drives the app,
+// and the command-executed signal (#679) ticks the task.
+func (m Model) updateTour(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	switch msg.String() {
 	case "right", "l", "space", " ", "enter":
 		if !m.tour.Next() {
-			return m.closeTour(), nil // finishing the last page closes
+			return m.closeTour(), nil, true // finishing the last page closes
 		}
 	case "left", "h":
 		m.tour.Prev()
 	case "esc", "q":
-		return m.closeTour(), nil
+		return m.closeTour(), nil, true
+	default:
+		if m.tour.HasPendingTasks() {
+			return m, nil, false // try-it pass-through (#680)
+		}
 	}
-	return m, nil
+	return m, nil, true
 }
 
 // closeTour dismisses the tour and lets the next queued startup prompt (the
