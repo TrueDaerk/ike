@@ -111,6 +111,12 @@ func (f *Floating) SetContent(c Content) {
 	f.relayout()
 }
 
+// Content returns the currently installed child (nil before the first
+// SetContent). Hosts use it to tell whether the shell still shows their
+// content or was taken over by another overlay (e.g. the suspended tour,
+// #680).
+func (f *Floating) Content() Content { return f.content }
+
 // Open shows the shell, resetting scroll to the top of the current content.
 func (f *Floating) Open() {
 	f.open = true
