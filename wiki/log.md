@@ -2,6 +2,14 @@
 
 ## 2026-07-17
 
+- Command-executed event (#679): every command dispatch — palette, keymap
+  resolution (including chord timeouts and plugin key aliases), and inline
+  invocations — now emits `plugin.EventCommandExecuted` (payload: command id)
+  to hooks plus an in-app `CommandExecutedMsg` through the Update loop, so
+  internal consumers like the interactive tour can observe executions without
+  plugin machinery. Exposed to WASM guests as `command_executed`
+  (`sdk.CommandExecuted`).
+
 - Tour resolver-first shortcuts (#678): tour rows resolve through the live
   keymap first (custom > default) with the curated preferred-order list kept
   when the resolved chord is among its options; curated fallbacks are

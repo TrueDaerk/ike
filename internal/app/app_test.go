@@ -324,21 +324,35 @@ func newSized() Model {
 	return tm.(Model)
 }
 
-// drainKey feeds a key into the app and runs the single Cmd it produces (a
+// drainKey feeds a key into the app and runs the Cmd tree it produces (a
 // keymap-resolved command dispatches an ActionMsg/Msg back into Update), so a
-// test sees the end-to-end effect of a key press.
+// test sees the end-to-end effect of a key press. Batches are expanded by
+// drainCmd — every command dispatch is a batch since the command-executed
+// signal (#679).
 func drainKey(m Model, k tea.KeyPressMsg) Model {
 	tm, cmd := m.Update(k)
-	m = tm.(Model)
-	for cmd != nil {
-		msg := cmd()
-		if msg == nil {
-			break
-		}
-		tm, cmd = m.Update(msg)
-		m = tm.(Model)
+	return drainCmd(tm.(Model), cmd)
+}
+
+// cmdMsgs flattens the message tree cmd produces (following tea.Batch nesting,
+// without feeding anything into Update), for asserting that a dispatch emitted
+// a particular message.
+func cmdMsgs(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
 	}
-	return m
+	msg := cmd()
+	if msg == nil {
+		return nil
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, cmdMsgs(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
 }
 
 // TestCtrlZUndoesInEditor guards the deliverable undo binding: ctrl+z (cmd+z is

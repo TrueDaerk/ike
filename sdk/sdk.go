@@ -50,6 +50,9 @@ const (
 	FileOpened   = "file_opened"
 	BufferSaved  = "buffer_saved"
 	BufferClosed = "buffer_closed"
+	// CommandExecuted fires when a registered command is dispatched (palette,
+	// keybinding, or internal invocation); the payload is the command id.
+	CommandExecuted = "command_executed"
 )
 
 // capabilities mirrors the ABI's registration payload (abi.Capabilities).

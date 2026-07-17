@@ -123,6 +123,11 @@ const (
 	EventFileOpened Event = iota
 	EventBufferSaved
 	EventBufferClosed
+	// EventCommandExecuted fires when a registered command is dispatched —
+	// via the palette, a keybinding, or an internal invocation (#679). The
+	// payload is the command id (string). It fires at dispatch time; the
+	// command's own tea.Cmd may still be running.
+	EventCommandExecuted
 )
 
 // Hook subscribes to a lifecycle Event.

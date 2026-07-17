@@ -75,7 +75,7 @@ type KeymapDesc struct {
 type HookDesc struct {
 	ID string `json:"id"`
 	// Event names the lifecycle moment: "file_opened", "buffer_saved",
-	// "buffer_closed" (mirrors plugin.Event).
+	// "buffer_closed", "command_executed" (mirrors plugin.Event).
 	Event string `json:"event"`
 }
 
