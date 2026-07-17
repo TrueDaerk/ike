@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/keymap"
 )
 
 // mapResolver is a trivial command-id -> shortcut resolver for tests.
@@ -100,6 +102,68 @@ func TestRemappedBindingDisplays(t *testing.T) {
 	tr.page = 0
 	if body := tr.Render(72); !strings.Contains(body, "shift shift · cmd+shift+a") {
 		t.Fatalf("curated multi-chord list must survive a matching binding:\n%s", body)
+	}
+}
+
+func TestRemapKeepsNonChordHints(t *testing.T) {
+	// #678: on a real remap the live chord leads, replaced chord options are
+	// dropped, but curated vim hints (":w" is handled by the editor, not the
+	// keymap) stay valid and are kept as secondary options.
+	tr := New(mapResolver{"editor.write": "f5"})
+	tr.page = 1
+	if body := tr.Render(72); !strings.Contains(body, "f5 · :w") {
+		t.Fatalf("remapped save must keep the vim hint: %s", body)
+	}
+}
+
+func TestUnboundFallsBackToCurated(t *testing.T) {
+	// A resolver that knows nothing must leave every curated default in place.
+	tr := New(mapResolver{})
+	tr.page = 1
+	if body := tr.Render(72); !strings.Contains(body, "cmd+s · :w") {
+		t.Fatalf("unbound command must keep the curated default: %s", body)
+	}
+}
+
+func TestHelpRowResolves(t *testing.T) {
+	// #678: the help cheat-sheet row goes through the resolver like every
+	// other row — a remap of palette.keymapHelp must display.
+	tr := New(mapResolver{"palette.keymapHelp": "f9"})
+	if body := tr.Render(72); !strings.Contains(body, "f9") {
+		t.Fatalf("remapped help must display the live chord: %s", body)
+	}
+	// The default f1 is part of the curated list; the list survives.
+	tr = New(mapResolver{"palette.keymapHelp": "f1"})
+	if body := tr.Render(72); !strings.Contains(body, "? · f1") {
+		t.Fatalf("default help binding must keep the curated list: %s", body)
+	}
+}
+
+func TestLinuxShowsCtrlChords(t *testing.T) {
+	// #678: off macOS the curated cmd+… defaults must render platform-
+	// normalized (Meta→Ctrl) — never as hardcoded mac strings.
+	defer func(g string) { keymap.GOOS = g }(keymap.GOOS)
+	keymap.GOOS = "linux"
+	tr := New(nil)
+	wants := []struct {
+		page int
+		want string
+	}{
+		{0, "shift shift · ctrl+shift+a"},
+		{1, "ctrl+s · :w"},
+		{2, "ctrl+1"},
+		{2, "ctrl+k right"},
+		{4, "ctrl+,"},
+	}
+	for _, w := range wants {
+		tr.page = w.page
+		body := tr.Render(72)
+		if !strings.Contains(body, w.want) {
+			t.Errorf("page %d missing normalized %q:\n%s", w.page+1, w.want, body)
+		}
+		if strings.Contains(body, "cmd+") {
+			t.Errorf("page %d still renders a mac chord:\n%s", w.page+1, body)
+		}
 	}
 }
 

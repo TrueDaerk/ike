@@ -9,6 +9,14 @@
   page's enter-equivalent action, picker rows are clickable, the wheel moves
   the selection.
 
+- Tour resolver-first shortcuts (#678): tour rows resolve through the live
+  keymap first (custom > default) with the curated preferred-order list kept
+  when the resolved chord is among its options; curated fallbacks are
+  platform-normalized for display (Meta→Ctrl off macOS), the help cheat-sheet
+  row resolves like every other, and a guard test keeps help's doc-hint
+  `Shortcut` fallbacks platform-neutral.
+>>>>>>> origin/main
+
 - Settings schema-page mouse (#673): the wheel scrolls the panel column under
   the pointer (categories switch pages, form rows follow); with an enum picker
   open a click chooses the option or closes the picker; with an inline edit
