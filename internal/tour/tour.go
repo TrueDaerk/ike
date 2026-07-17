@@ -80,14 +80,25 @@ func (t *Tour) Render(int) string {
 
 // chord resolves the display shortcut for a command: the curated default
 // (which may list several chords in preferred order) unless the resolver
-// reports a binding outside that list — a real user remap.
-func (t *Tour) chord(id, curated string) string {
-	if t.res != nil {
-		if s, ok := t.res.Binding(id); ok && s != "" && !strings.Contains(curated, s) {
-			return s
+// reports a binding that is neither in that list nor among the command's
+// other known defaults (leader mnemonics, delivered secondaries) — i.e. a
+// real user remap (#665). Without the known set, the resolver returning the
+// space-space leader default would masquerade as a remap and replace the
+// curated display.
+func (t *Tour) chord(id, curated string, known ...string) string {
+	if t.res == nil {
+		return curated
+	}
+	s, ok := t.res.Binding(id)
+	if !ok || s == "" || strings.Contains(curated, s) {
+		return curated
+	}
+	for _, k := range known {
+		if s == k {
+			return curated
 		}
 	}
-	return curated
+	return s
 }
 
 // key renders one "title   chord" row with the chord column aligned.
@@ -114,9 +125,9 @@ func pageWelcome(t *Tour) string {
 	b.WriteString("IKE is a terminal IDE: JetBrains-style keybindings around a vim\n")
 	b.WriteString("modal editor.\n\n")
 	b.WriteString("The keys that open everything:\n\n")
-	b.WriteString(key("Search everywhere", t.chord("palette.searchEverywhere", "shift shift · cmd+shift+a")))
+	b.WriteString(key("Search everywhere", t.chord("palette.searchEverywhere", "shift shift · cmd+shift+a", "space space", "space A")))
 	b.WriteString(key("Help cheat sheet", "? · f1"))
-	b.WriteString(key("Switch project", t.chord("project.switch", "cmd+shift+p")))
+	b.WriteString(key("Switch project", t.chord("project.switch", "cmd+shift+p", "ctrl+shift+p", "space p")))
 	b.WriteString("\nTo quit IKE: press q (in the file tree, or in an editor while not\n")
 	b.WriteString("typing) or ctrl+c — unsaved changes always prompt first.\n")
 	return b.String()
@@ -128,10 +139,10 @@ func pageEditor(t *Tour) string {
 	b.WriteString("If you type and nothing appears: you are in NORMAL mode. Press i\n")
 	b.WriteString("to insert text; esc returns to normal mode. The current mode is\n")
 	b.WriteString("always shown at the left of the status bar.\n\n")
-	b.WriteString(key("Save", t.chord("editor.write", "cmd+s · :w")))
+	b.WriteString(key("Save", t.chord("editor.write", "cmd+s · :w", "ctrl+s", "space w")))
 	b.WriteString(key("Undo", t.chord("editor.undo", "ctrl+z · u")))
 	b.WriteString(key("Find in file", t.chord("editor.find", "cmd+f · /")))
-	b.WriteString(key("Comment line", t.chord("editor.commentLine", "cmd+7")))
+	b.WriteString(key("Comment line", t.chord("editor.commentLine", "cmd+7", "cmd+k cmd+c", "space c")))
 	return b.String()
 }
 
@@ -139,10 +150,10 @@ func pageLayout(t *Tour) string {
 	var b strings.Builder
 	b.WriteString("Everything lives in panes: the file tree, editors with tabs, and\n")
 	b.WriteString("tool windows. Any pane can be split, moved, and resized.\n\n")
-	b.WriteString(key("Toggle file tree", t.chord("explorer.toggle", "cmd+1")))
+	b.WriteString(key("Toggle file tree", t.chord("explorer.toggle", "cmd+1", "space e")))
 	b.WriteString(key("Switch pane focus", t.chord("pane.switcher", "ctrl+tab · ctrl+arrows")))
-	b.WriteString(key("Go to file", t.chord("project.goToFile", "cmd+shift+o")))
-	b.WriteString(key("Recent files", t.chord("palette.recentFiles", "cmd+e")))
+	b.WriteString(key("Go to file", t.chord("project.goToFile", "cmd+shift+o", "space f")))
+	b.WriteString(key("Recent files", t.chord("palette.recentFiles", "cmd+e", "space m")))
 	b.WriteString(key("Split right", t.chord("pane.splitRight", "cmd+k right")))
 	b.WriteString(key("Maximize pane", t.chord("pane.maximize", "cmd+k z")))
 	return b.String()
@@ -151,13 +162,13 @@ func pageLayout(t *Tour) string {
 func pageTools(t *Tour) string {
 	var b strings.Builder
 	b.WriteString("The tool windows, all also reachable from the palette:\n\n")
-	b.WriteString(key("Terminal", t.chord("terminal.toggle", "alt+f12")))
+	b.WriteString(key("Terminal", t.chord("terminal.toggle", "alt+f12", "space t")))
 	b.WriteString(key("Run file", t.chord("run.file", "shift+f10")))
 	b.WriteString(key("Debug file", t.chord("debug.start", "shift+f9")))
-	b.WriteString(key("Git tool window", t.chord("vcs.panel", "via palette")))
-	b.WriteString(key("Find in path", t.chord("project.findInPath", "cmd+shift+f")))
+	b.WriteString(key("Git tool window", t.chord("vcs.panel", "space v v")))
+	b.WriteString(key("Find in path", t.chord("project.findInPath", "cmd+shift+f", "space g")))
 	b.WriteString("\nInside a focused terminal every key goes to the shell. To get\n")
-	b.WriteString("out, toggle it again (" + t.chord("terminal.toggle", "alt+f12") + ") or move focus with\n")
+	b.WriteString("out, toggle it again (" + t.chord("terminal.toggle", "alt+f12", "space t") + ") or move focus with\n")
 	b.WriteString("ctrl+arrows.\n")
 	return b.String()
 }
@@ -165,8 +176,8 @@ func pageTools(t *Tour) string {
 func pageCustomize(t *Tour) string {
 	var b strings.Builder
 	b.WriteString("Make it yours:\n\n")
-	b.WriteString(key("Settings", t.chord("settings.open", "cmd+,")))
-	b.WriteString(key("Menu bar", t.chord("menu.open", "via palette")))
+	b.WriteString(key("Settings", t.chord("settings.open", "cmd+,", "space ,")))
+	b.WriteString(key("Menu bar", t.chord("menu.open", "f10")))
 	b.WriteString("\nThemes, keybindings, and plugins live in Settings and in\n")
 	b.WriteString("~/.ike/settings.toml; the palette finds every action by name.\n")
 	b.WriteString("The help sheet (?) opens on the essentials — tab shows all.\n\n")
