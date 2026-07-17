@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Floating shell key seam (#655): new optional `ui.KeyHandler` Content
+  extension — keys that neither fed the live filter nor matched a dismiss key
+  are offered to the content (`HandleKey(key) bool`) before scroll handling,
+  letting content own view toggles or paging keys. Routing order is now
+  filter → dismiss → key handler → scroll.
+
 - Terminal toolchain activation (#652): the effective interpreter (explicit
   beats detected) now activates JetBrains-style in fresh IDE terminals —
   venv interpreters prepend `<venv>/bin` + set `VIRTUAL_ENV`, private

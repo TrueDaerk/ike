@@ -205,6 +205,98 @@ func TestModelContentAdapter(t *testing.T) {
 	}
 }
 
+// keyedContent is a KeyHandler stub consuming a configurable key set and
+// recording every key offered to it.
+type keyedContent struct {
+	ModelContent
+	consume map[string]bool
+	seen    []string
+}
+
+func (k *keyedContent) HandleKey(key string) bool {
+	k.seen = append(k.seen, key)
+	return k.consume[key]
+}
+
+func TestKeyHandlerConsumeAndFallThrough(t *testing.T) {
+	tall := strings.TrimRight(strings.Repeat("line\n", 200), "\n")
+	kc := &keyedContent{
+		ModelContent: ModelContent{Heading: "T", Body: func() string { return tall }},
+		consume:      map[string]bool{"tab": true},
+	}
+	f := New(Config{})
+	f.SetContent(kc)
+	f.SetSize(80, 24)
+	f.Open()
+
+	// tab is consumed by the content; the shell stays open, scroll untouched.
+	if !f.Update(tea.KeyPressMsg{Code: tea.KeyTab}) {
+		t.Fatal("open shell should consume tab")
+	}
+	if len(kc.seen) != 1 || kc.seen[0] != "tab" {
+		t.Fatalf("content should have been offered tab, saw %v", kc.seen)
+	}
+	if off := f.scroll.vp.YOffset(); off != 0 {
+		t.Fatalf("consumed key must not scroll, offset = %d", off)
+	}
+
+	// An unconsumed key falls through to the scroller.
+	f.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if kc.seen[len(kc.seen)-1] != "down" {
+		t.Fatalf("content should see unconsumed keys first, saw %v", kc.seen)
+	}
+	if off := f.scroll.vp.YOffset(); off == 0 {
+		t.Fatal("unconsumed key should fall through to scroll")
+	}
+
+	// Dismiss keys never reach the content.
+	f.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if f.IsOpen() {
+		t.Fatal("esc should still dismiss with a KeyHandler installed")
+	}
+	for _, k := range kc.seen {
+		if k == "esc" {
+			t.Fatal("dismiss key must not be offered to the content")
+		}
+	}
+}
+
+// filterKeyedContent is both Filterable and a KeyHandler, like the help pane.
+type filterKeyedContent struct {
+	filterableContent
+	consume map[string]bool
+	seen    []string
+}
+
+func (c *filterKeyedContent) HandleKey(key string) bool {
+	c.seen = append(c.seen, key)
+	return c.consume[key]
+}
+
+func TestKeyHandlerAfterFilter(t *testing.T) {
+	// Printable keys feed the filter and are never offered as handler keys;
+	// tab still reaches HandleKey.
+	c := &filterKeyedContent{
+		filterableContent: filterableContent{ModelContent: ModelContent{Heading: "T", Body: func() string { return "b" }}},
+		consume:           map[string]bool{"tab": true},
+	}
+	f := New(Config{})
+	f.SetContent(c)
+	f.SetSize(80, 24)
+	f.Open()
+
+	f.Update(tea.KeyPressMsg{Text: "a", Code: 'a'})
+	if c.filter != "a" {
+		t.Fatalf("printable key should feed the filter, filter = %q", c.filter)
+	}
+	if len(c.seen) != 0 {
+		t.Fatalf("filtered key must not reach HandleKey, saw %v", c.seen)
+	}
+	if !f.Update(tea.KeyPressMsg{Code: tea.KeyTab}) || len(c.seen) != 1 || c.seen[0] != "tab" {
+		t.Fatalf("tab should reach HandleKey even while filtering, saw %v", c.seen)
+	}
+}
+
 // filterableContent is a Filterable stub recording its filter.
 type filterableContent struct {
 	ModelContent
