@@ -83,10 +83,14 @@ type Model struct {
 	running bool // true between steps (no paused data to show)
 
 	// Debuggee output (#624): completed lines plus a pending partial (DAP
-	// output events can split mid-line); outTop is the scroll offset.
+	// output events can split mid-line); outTop is the scroll offset. outHold
+	// is set by a manual scroll away from the bottom (#637): while held,
+	// AppendOutput stops re-pinning outTop; scrolling back to the bottom
+	// releases it (auto-follow resumes).
 	outLines   []outLine
 	outPartial outLine
 	outTop     int
+	outHold    bool
 
 	// Mouse double-click tracking (#626), mirroring the vcs panel; now is
 	// injectable so tests drive the clock.
@@ -124,25 +128,30 @@ func (m *Model) SetEditable(v bool) { m.canEdit = v }
 
 // AppendOutput appends a debuggee output chunk (#624), splitting it into lines
 // and carrying an incomplete trailing line as a pending partial (DAP output
-// events can split mid-line). The view stays pinned to the newest output.
+// events can split mid-line). Completed lines are sanitized (ANSI/\r/\t, #637)
+// — the partial stays raw so an escape split across chunks is stripped whole
+// once its line completes. The view stays pinned to the newest output unless
+// the user scrolled away (outHold).
 func (m *Model) AppendOutput(stderr bool, text string) {
 	if text == "" {
 		return
 	}
 	// A stream switch mid-line flushes the pending partial as its own line.
 	if m.outPartial.text != "" && m.outPartial.stderr != stderr {
-		m.outLines = append(m.outLines, m.outPartial)
+		m.outLines = append(m.outLines, outLine{text: sanitizeLine(m.outPartial.text), stderr: m.outPartial.stderr})
 		m.outPartial = outLine{}
 	}
 	parts := strings.Split(m.outPartial.text+text, "\n")
 	for _, p := range parts[:len(parts)-1] {
-		m.outLines = append(m.outLines, outLine{text: p, stderr: stderr})
+		m.outLines = append(m.outLines, outLine{text: sanitizeLine(p), stderr: stderr})
 	}
 	m.outPartial = outLine{text: parts[len(parts)-1], stderr: stderr}
 	if len(m.outLines) > maxOutputLines {
 		m.outLines = m.outLines[len(m.outLines)-maxOutputLines:]
 	}
-	m.outTop = max(0, m.outputRowCount()-m.bodyHeight()) // pin to the newest
+	if !m.outHold {
+		m.outTop = max(0, m.outputRowCount()-m.bodyHeight()) // follow the newest
+	}
 }
 
 // outputRowCount is the number of visible output rows (completed lines plus a
@@ -155,12 +164,23 @@ func (m Model) outputRowCount() int {
 	return n
 }
 
-// outputRows returns the output as display lines including the pending partial.
+// outputRows returns the output as display lines including the pending
+// partial, sanitized for display (its stored text stays raw, see AppendOutput).
 func (m Model) outputRows() []outLine {
 	if m.outPartial.text == "" {
 		return m.outLines
 	}
-	return append(append([]outLine(nil), m.outLines...), m.outPartial)
+	p := outLine{text: sanitizeLine(m.outPartial.text), stderr: m.outPartial.stderr}
+	return append(append([]outLine(nil), m.outLines...), p)
+}
+
+// scrollOutput shifts the output scroll offset by delta, clamped, and tracks
+// auto-follow (#637): moving away from the bottom holds the view in place,
+// returning to the bottom resumes following new output.
+func (m *Model) scrollOutput(delta int) {
+	maxTop := max(0, m.outputRowCount()-m.bodyHeight())
+	m.outTop = clamp(m.outTop+delta, 0, maxTop)
+	m.outHold = m.outTop < maxTop
 }
 
 // Editing reports whether an inline value editor is open, so the app routes
@@ -365,7 +385,7 @@ func (m *Model) move(delta int) {
 		m.frameSel = clamp(m.frameSel+delta, 0, len(m.frames)-1)
 		m.frameTop = scrollToShow(m.frameTop, m.frameSel, m.bodyHeight(), len(m.frames))
 	case colOutput:
-		m.outTop = clamp(m.outTop+delta, 0, max(0, m.outputRowCount()-m.bodyHeight()))
+		m.scrollOutput(delta)
 	default:
 		m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
 		m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
@@ -436,16 +456,13 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// View renders the two columns side by side: frames left, variables right.
+// View renders the three columns side by side: frames, variables, output. The
+// columns render in every state (#637) — while the debuggee runs or before the
+// first stop the frames column shows a placeholder, but the OUTPUT column keeps
+// streaming: that is exactly when output arrives.
 func (m Model) View() string {
 	if m.w < 4 || m.h < 1 {
 		return ""
-	}
-	if m.running {
-		return " running…"
-	}
-	if len(m.frames) == 0 {
-		return " no paused debug session"
 	}
 	fw, vw, ow := m.colWidths()
 	frames := m.renderFrames(fw)
@@ -483,12 +500,20 @@ func rowAt(rows []string, i int) string {
 	return ""
 }
 
-// renderFrames renders the stack rows, selection highlighted.
+// renderFrames renders the stack rows, selection highlighted. With no paused
+// data (running, or no stop yet) a placeholder row stands in (#637) — the
+// other columns render regardless.
 func (m Model) renderFrames(w int) []string {
 	title := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Render(" FRAMES")
 	out := []string{title}
 	sel := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
+	if m.running {
+		return append(out, dim.Render(truncate(" running…", w)))
+	}
+	if len(m.frames) == 0 {
+		return append(out, dim.Render(truncate(" not paused", w)))
+	}
 	for i := m.frameTop; i < len(m.frames); i++ {
 		if len(out) >= m.h {
 			break

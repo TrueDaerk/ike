@@ -8,6 +8,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/debugpanel"
 )
 
 // debuglog.go is the slow-operation diagnostic (#125), motivated by the #123
@@ -58,10 +60,27 @@ func debugSessionLogFile() string {
 	return filepath.Join(".ike", "debug-session.log")
 }
 
-// logDebugOutput appends a debuggee output chunk to the session log verbatim,
-// so the transcript reads exactly as the program printed it. stderr chunks are
-// prefixed so the two streams stay distinguishable in the file. Best-effort.
+// logDebugOutput appends a debuggee output chunk to the session log. ANSI
+// escape sequences are stripped (#637) so the transcript stays readable in
+// any pager; other than that the text is kept as printed (\r/\t included —
+// only the panel normalizes those for rendering). stderr chunks are prefixed
+// so the two streams stay distinguishable in the file. Best-effort.
 func logDebugOutput(stderr bool, text string) {
+	text = debugpanel.StripANSI(text)
+	if stderr {
+		text = prefixLines(text, "[stderr] ")
+	}
+	appendDebugSessionLog(text)
+}
+
+// logDebugSessionStart writes a delimiter line so consecutive sessions stay
+// distinguishable in the transcript (#637).
+func logDebugSessionStart(name string) {
+	appendDebugSessionLog("──── debug session: " + name + " · " + time.Now().Format(time.RFC3339) + " ────\n")
+}
+
+// appendDebugSessionLog appends text to debug-session.log, best-effort.
+func appendDebugSessionLog(text string) {
 	path := debugSessionLogFile()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
@@ -71,9 +90,6 @@ func logDebugOutput(stderr bool, text string) {
 		return
 	}
 	defer f.Close()
-	if stderr {
-		text = prefixLines(text, "[stderr] ")
-	}
 	_, _ = f.WriteString(text)
 }
 

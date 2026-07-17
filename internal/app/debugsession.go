@@ -42,8 +42,29 @@ type debugState struct {
 
 	// pendingOut buffers debuggee output that arrived before the tool window
 	// opened (output can precede the first stop); openDebugPanel flushes it into
-	// the panel so nothing is lost from the live console (#624).
+	// the panel so nothing is lost from the live console (#624). Capped at
+	// maxPendingOut chunks, oldest dropped (#637).
 	pendingOut []debugOut
+
+	// panelOpened records that the tool window opened once this session (#637):
+	// the first output event opens it so a program that never pauses is still
+	// visible, but a panel the user closed afterwards stays closed.
+	panelOpened bool
+}
+
+// maxPendingOut caps the pre-panel output buffer, the same order as the
+// panel's maxOutputLines, so a chatty debuggee cannot grow it without bound
+// (#637). Chunks, not lines — close enough for a memory bound.
+const maxPendingOut = 5000
+
+// appendPendingOut buffers one pre-panel output chunk, dropping the oldest
+// past the cap.
+func appendPendingOut(buf []debugOut, o debugOut) []debugOut {
+	buf = append(buf, o)
+	if len(buf) > maxPendingOut {
+		buf = buf[len(buf)-maxPendingOut:]
+	}
+	return buf
 }
 
 // debugOut is one buffered output chunk with its stream.
@@ -234,6 +255,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false
+	logDebugSessionStart(cfg.Name) // delimit consecutive sessions in the transcript (#637)
 	// integratedTerminal (#625): debugpy asks the client to launch the debuggee
 	// in a terminal it owns. Hand the reverse request to the Update loop.
 	sess.OnRunInTerminal(func(seq int, args dap.RunInTerminalArgs) {
@@ -265,6 +287,14 @@ func withAdapterStderr(err error, sess *dap.Session) error {
 func (m *Model) handleDebugEvent(ev dap.Event) {
 	dbg := m.dbg
 	if dbg == nil {
+		// Trailing output after the session finished (the adapter flushes the
+		// debuggee's last writes past `terminated`) still reaches the
+		// transcript, even though the panel is gone (#637).
+		if ev.Name == "output" {
+			if o := ev.Output(); o.Category != "telemetry" {
+				logDebugOutput(o.Category == "stderr", o.Output)
+			}
+		}
 		return
 	}
 	send := m.host.Send
@@ -315,10 +345,18 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		}
 		stderr := o.Category == "stderr"
 		logDebugOutput(stderr, o.Output) // persist the transcript (#624)
-		if p := m.debugPanel(); p != nil {
+		p := m.debugPanel()
+		if p == nil && !dbg.panelOpened {
+			// First output with the panel closed opens it (#637): a program
+			// that never hits a breakpoint is otherwise invisible. Once per
+			// session — a panel the user closes stays closed.
+			m.openDebugPanel()
+			p = m.debugPanel()
+		}
+		if p != nil {
 			p.AppendOutput(stderr, o.Output)
 		} else {
-			dbg.pendingOut = append(dbg.pendingOut, debugOut{stderr: stderr, text: o.Output})
+			dbg.pendingOut = appendPendingOut(dbg.pendingOut, debugOut{stderr: stderr, text: o.Output})
 		}
 	case "exited":
 		x := ev.Exited()
@@ -428,6 +466,9 @@ func (m Model) debugPanelEditing() bool {
 // moved the caret to the paused line.
 func (m *Model) openDebugPanel() {
 	if m.panes.Has(pane.DebugKey) {
+		if m.dbg != nil {
+			m.dbg.panelOpened = true
+		}
 		return
 	}
 	target := m.activeEditorKey()
@@ -453,6 +494,7 @@ func (m *Model) openDebugPanel() {
 			p.AppendOutput(o.stderr, o.text)
 		}
 		m.dbg.pendingOut = nil
+		m.dbg.panelOpened = true
 	}
 	m.layout()
 	saveLayout(m.tree, m.panes)

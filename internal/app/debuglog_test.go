@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -42,19 +43,55 @@ func TestFastUpdateDoesNotLog(t *testing.T) {
 	}
 }
 
-// TestDebugSessionLog verifies debuggee output is appended verbatim to
-// debug-session.log, with stderr chunks prefixed (#624).
+// TestDebugSessionLog verifies debuggee output is appended to
+// debug-session.log with stderr chunks prefixed (#624) and ANSI escapes
+// stripped (#637).
 func TestDebugSessionLog(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	logDebugOutput(false, "hello world\n")
 	logDebugOutput(true, "a warning\n")
+	logDebugOutput(false, "\x1b[31mred\x1b[0m\n")
 	data, err := os.ReadFile(filepath.Join(dir, "debug-session.log"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := string(data)
-	if got != "hello world\n[stderr] a warning\n" {
+	if got != "hello world\n[stderr] a warning\nred\n" {
 		t.Fatalf("session log = %q", got)
+	}
+}
+
+// TestDebugSessionLogDelimiter: a session start writes a delimiter line naming
+// the configuration, so consecutive sessions stay distinguishable (#637).
+func TestDebugSessionLogDelimiter(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	logDebugSessionStart("main.py")
+	data, err := os.ReadFile(filepath.Join(dir, "debug-session.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := string(data)
+	if !strings.Contains(line, "debug session: main.py") || !strings.HasSuffix(line, "\n") {
+		t.Fatalf("delimiter = %q", line)
+	}
+	if !strings.Contains(line, time.Now().Format("2006-01-02")) {
+		t.Fatalf("delimiter missing timestamp: %q", line)
+	}
+}
+
+// TestAppendPendingOutCapped: the pre-panel output buffer drops its oldest
+// chunks past maxPendingOut (#637).
+func TestAppendPendingOutCapped(t *testing.T) {
+	var buf []debugOut
+	for i := 0; i < maxPendingOut+10; i++ {
+		buf = appendPendingOut(buf, debugOut{text: strconv.Itoa(i)})
+	}
+	if len(buf) != maxPendingOut {
+		t.Fatalf("len = %d, want cap %d", len(buf), maxPendingOut)
+	}
+	if buf[0].text != "10" || buf[len(buf)-1].text != strconv.Itoa(maxPendingOut+9) {
+		t.Fatalf("cap must drop the oldest: first=%q last=%q", buf[0].text, buf[len(buf)-1].text)
 	}
 }

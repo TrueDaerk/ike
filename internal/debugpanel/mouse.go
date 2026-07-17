@@ -47,16 +47,15 @@ func (m Model) columnAt(x int) column {
 	}
 }
 
-// Wheel scrolls the focused column by delta rows (positive = down).
+// Wheel scrolls the focused column by delta rows (positive = down). It works
+// in every panel state (#637): the OUTPUT column keeps streaming while the
+// debuggee runs, and scrolling it toggles auto-follow (see scrollOutput).
 func (m *Model) Wheel(delta int) {
-	if m.running {
-		return
-	}
 	switch m.col {
 	case colFrames:
 		m.frameTop = clamp(m.frameTop+delta, 0, max(0, len(m.frames)-m.bodyHeight()))
 	case colOutput:
-		m.outTop = clamp(m.outTop+delta, 0, max(0, m.outputRowCount()-m.bodyHeight()))
+		m.scrollOutput(delta)
 	default:
 		m.varTop = clamp(m.varTop+delta, 0, max(0, len(m.flat())-m.bodyHeight()))
 	}
@@ -66,7 +65,7 @@ func (m *Model) Wheel(delta int) {
 // under the cursor, selects the row, and activates it on a double-click (frame
 // select / variable expand-collapse) — mirroring enter.
 func (m *Model) Click(x, y int) tea.Cmd {
-	if m.running || y == 0 { // the title row has nothing to click
+	if y == 0 { // the title row has nothing to click
 		return nil
 	}
 	switch m.columnAt(x) {
