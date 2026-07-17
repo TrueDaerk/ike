@@ -117,6 +117,14 @@ without mouse reporting gets arrow keys, three per notch (the xterm
 "alternate scroll" convention — this is how `less`/`man` scroll); a plain
 shell pages the pane's scrollback.
 
+A coalesced wheel burst (#238) arrives as **one call carrying the whole line
+delta** (#669) — `flushWheel` no longer replays the batch event-by-event.
+What may be forwarded to the child is bounded by `wheelChildBudget`
+(~one screenful of arrow keys, wheel events per notch derived from it), so a
+fast trackpad burst can no longer flood the PTY and leave the child scrolling
+for seconds after the user stopped; the pane's own scrollback path applies
+the full distance (cheap, clamped to history).
+
 **macOS editing chords** (#225, #240, `motionKey` in `model.go`): the pane
 translates the iTerm "natural text editing" motions to the readline/ZLE
 emacs-mode defaults — `option+left`/`right` → `ESC b`/`ESC f` (word jump),

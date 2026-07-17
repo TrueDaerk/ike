@@ -391,16 +391,31 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// wheelChildCap bounds what one wheel call forwards to the CHILD (#669): a
+// coalesced trackpad burst can stand for hundreds of lines, and a child that
+// receives one PTY sequence per line keeps scrolling for seconds after the
+// user stopped — the exact backlog the batch was meant to kill. Roughly one
+// screenful; the pane's own scrollback path is cheap and never capped.
+const wheelChildCap = 40
+
+// wheelEventLines is how many lines one wheel notch stands for when
+// translating a line delta back into discrete wheel events for a
+// mouse-reporting child (mirrors the app's per-notch scroll of 3 rows).
+const wheelEventLines = 3
+
 // MouseWheel routes one wheel movement at the pane-local cell (x, y); delta
-// is in lines, positive = up/towards history (#226). The convention every
+// is in lines, positive = up/towards history (#226) — a coalesced burst
+// arrives as one call with the whole distance (#669). The convention every
 // terminal emulator implements: a child that enabled mouse reporting gets
-// the wheel event; an alt-screen child without it gets arrow keys (the xterm
-// "alternate scroll" behaviour); a plain shell pages the pane's scrollback.
+// wheel events (one per notch, capped); an alt-screen child without it gets
+// arrow keys (the xterm "alternate scroll" behaviour, capped); a plain shell
+// pages the pane's scrollback by the full delta.
 func (m *Model) MouseWheel(x, y, delta int) {
 	if m.sess == nil || delta == 0 {
 		return
 	}
 	up := delta > 0
+	lines, events := wheelChildBudget(delta)
 	switch {
 	case m.sess.WantsMouse():
 		m.scroll = 0
@@ -408,19 +423,36 @@ func (m *Model) MouseWheel(x, y, delta int) {
 		if up {
 			btn = vt.MouseWheelUp
 		}
-		m.sess.SendMouse(vt.MouseWheel{X: x, Y: y, Button: btn})
+		for i := 0; i < events; i++ {
+			m.sess.SendMouse(vt.MouseWheel{X: x, Y: y, Button: btn})
+		}
 	case m.sess.AltScreen():
 		m.scroll = 0
 		code := vt.KeyDown
 		if up {
 			code = vt.KeyUp
 		}
-		for i := 0; i < delta || i < -delta; i++ {
+		for i := 0; i < lines; i++ {
 			m.sess.SendKey(vt.KeyPressEvent{Code: code})
 		}
 	default:
 		m.ScrollBy(delta)
 	}
+}
+
+// wheelChildBudget converts a (possibly coalesced) line delta into what may
+// be forwarded to the child: the capped line count for alt-screen arrow keys
+// and the number of discrete wheel events for a mouse-reporting child.
+func wheelChildBudget(delta int) (lines, events int) {
+	lines = delta
+	if lines < 0 {
+		lines = -lines
+	}
+	if lines > wheelChildCap {
+		lines = wheelChildCap
+	}
+	events = (lines + wheelEventLines - 1) / wheelEventLines
+	return lines, events
 }
 
 // PasteText forwards pasted text through the bracketed-paste path.
