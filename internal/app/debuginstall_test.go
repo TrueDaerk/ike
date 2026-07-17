@@ -102,6 +102,53 @@ func TestDebugPreflightInstallsAndRetries(t *testing.T) {
 	}
 }
 
+// TestDebugStopCancelsInFlightLaunch drives the cancel path (#636): a
+// debug.stop while the launch is still in the install window clears the
+// launching guard, and the deferred post-install retry must not start a
+// session when its result arrives.
+func TestDebugStopCancelsInFlightLaunch(t *testing.T) {
+	m, cfg, root := dbgInstallModel(t)
+	tm, _ := m.Update(DebugStartMsg{})
+	m = tm.(Model)
+	if !m.dbgLaunching {
+		t.Fatal("a missing runtime must leave the model in the launching window")
+	}
+	gen := m.dbgLaunchGen
+	// Stop during the launching window: dbg is still nil.
+	tm, _ = m.Update(DebugStopMsg{})
+	m = tm.(Model)
+	if m.dbgLaunching {
+		t.Fatal("debug.stop while launching must clear dbgLaunching")
+	}
+	// The install goroutine eventually creates the marker; wait so the retry
+	// below would succeed if it were (wrongly) allowed to run.
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(dbgMarker); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("install command never ran")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	// The install result carries the cancelled launch's generation: dropped.
+	tm, _ = m.Update(debugInstallResultMsg{cfg: cfg, root: root, gen: gen})
+	m = tm.(Model)
+	if m.dbg != nil {
+		t.Fatal("a cancelled launch must not start a session after the install resolves")
+	}
+	if m.dbgLaunching {
+		t.Fatal("a dropped retry must not re-arm the launching guard")
+	}
+	// A fresh debug.start still works after the cancel (runtime now present).
+	tm, _ = m.Update(DebugStartMsg{})
+	m = tm.(Model)
+	if m.dbg == nil {
+		t.Fatal("a new debug.start after a cancelled launch must start a session")
+	}
+}
+
 // TestDebugPreflightNoInstallLoop: still missing after an install surfaces
 // an error instead of reinstalling.
 func TestDebugPreflightNoInstallLoop(t *testing.T) {

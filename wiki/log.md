@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- debug.stop cancels an in-flight launch (#636): a stop during the
+  auto-install/handshake window (dbg still nil) now clears `dbgLaunching`,
+  bumps a launch generation counter and drops the deferred post-install retry
+  on generation mismatch, with a "launch cancelled" toast. Previously the stop
+  was a silent no-op and the retry started a session anyway.
+
 - Interactive debug input via runInTerminal (#625): Python now debugs with
   `console: integratedTerminal`; debugpy's runInTerminal reverse request spawns
   the debuggee in an IKE command-terminal pane with a real tty, so `input()`
