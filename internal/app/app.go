@@ -57,6 +57,7 @@ import (
 	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/todoindex"
+	"ike/internal/tour"
 	"ike/internal/ui"
 	"ike/internal/undotree"
 	"ike/internal/vcs"
@@ -182,6 +183,8 @@ type Model struct {
 	// window is sized. Both nil/false when idle.
 	onboarding        *onboardingState
 	onboardingPending bool
+	// tour holds the welcome tour (#657) while the shell shows it; nil when idle.
+	tour *tour.Tour
 	// backupSvc/backupDeb are the crash-recovery write side (Roadmap 0210,
 	// #167): the change seam marks dirty buffers, one armed tick
 	// (backupTickArmed) snapshots the ones that went quiet. backupIv caches the
@@ -1898,6 +1901,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openHelp()
 		return m, nil
 
+	case ShowWelcomeTourMsg:
+		// help.welcomeTour (palette): the paged welcome tour (#657).
+		m.openTour()
+		return m, nil
+
 	case CyclePaneFocusMsg:
 		// pane.switcher (ctrl+tab / palette): same cycle as the hardcoded tab.
 		m.cycleFocus()
@@ -3091,6 +3099,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same way: space toggles, enter installs, esc skips.
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
+		}
+		// The welcome tour (#657) pages host-level — the shell scroller must
+		// never see its space/arrow keys.
+		if m.tourOpen() {
+			return m.updateTour(msg)
 		}
 		// The save-conflict prompt owns the keyboard ahead of the generic shell
 		// handling: k / r / esc answer it, everything else is swallowed.

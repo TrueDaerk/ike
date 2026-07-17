@@ -235,6 +235,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 	return plugin.Capabilities{
 		Commands: append(append(cmds,
 			appCommand("palette.keymapHelp", "Keymap Cheatsheet", ShowKeymapHelpMsg{}),
+			appCommand("help.welcomeTour", "Welcome Tour", ShowWelcomeTourMsg{}),
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
 			appCommand("palette.recentFiles", "Recent Files", ShowRecentFilesMsg{}),
