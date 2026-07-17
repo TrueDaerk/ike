@@ -58,11 +58,14 @@ type Variable struct {
 // client must launch Args in a terminal it controls and reply with the
 // process id, so the debuggee gets a real tty for interactive stdin.
 type RunInTerminalArgs struct {
-	Kind  string            `json:"kind"` // "integrated" or "external"
-	Title string            `json:"title,omitempty"`
-	Cwd   string            `json:"cwd"`
-	Args  []string          `json:"args"`
-	Env   map[string]string `json:"env,omitempty"`
+	Kind  string   `json:"kind"` // "integrated" or "external"
+	Title string   `json:"title,omitempty"`
+	Cwd   string   `json:"cwd"`
+	Args  []string `json:"args"`
+	// Env maps variable names to values; the spec allows a JSON null value
+	// (nil here) meaning "unset the variable" — a plain string map would fail
+	// to unmarshal such a request (#638).
+	Env map[string]*string `json:"env,omitempty"`
 }
 
 // StoppedEvent is the body of a "stopped" event.

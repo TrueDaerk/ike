@@ -2,6 +2,16 @@
 
 ## 2026-07-17
 
+- runInTerminal robustness (#638): every bail-out path of the reverse request
+  now sends an error response (gone session, empty argv, split/spawn failure —
+  the adapter blocks on the answer); a failed spawn closes the just-split pane
+  and re-saves the layout; the debuggee terminal stays open after the session
+  for output review and the next session's runInTerminal replaces it once its
+  process exited (`Model.dbgTermKey`, cleared on user close); `env` JSON nulls
+  (= unset) unmarshal (`map[string]*string`, nil skipped) and malformed
+  arguments are refused with a diagnostic; reverse-request refusals moved off
+  the read loop (write deadlock).
+
 - Debug variable-edit hardening (#640): a panel restored from a saved layout
   becomes editable at the first stop (`attachDebugPanel` runs on the
   panel-already-exists path too); `SetScopes`/`SetChildren` cancel an open

@@ -165,7 +165,11 @@ func (c *Conn) readLoop() {
 			h := c.onReverse
 			c.mu.Unlock()
 			if h == nil || !h(msg.Seq, msg.Command, msg.Arguments) {
-				_ = c.RefuseRequest(msg.Seq, msg.Command, "unsupported")
+				// Refuse off the read loop: a synchronous write here can
+				// deadlock against an adapter that is itself mid-write (#638).
+				go func(seq int, command string) {
+					_ = c.RefuseRequest(seq, command, "unsupported")
+				}(msg.Seq, msg.Command)
 			}
 		}
 	}

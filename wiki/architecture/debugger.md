@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T23:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -81,6 +81,23 @@ instead of running it under the adapter's `/dev/null` stdin.
   child's pid (`terminal.Model.Pid`). The debuggee connects back to the adapter
   on its own; breakpoints, stepping, frames and variables all work as usual —
   only its stdio now lives in that terminal, where the user types input.
+- **Every bail-out path answers** (#638): once the reverse handler claims the
+  request the adapter blocks on the response, so a gone session (the message
+  carries its own `*dap.Session`), an empty argv, a failed layout split and a
+  failed spawn all send an error refusal. A failed spawn also closes the
+  just-split pane again and re-saves the layout, so no dead pane lingers or
+  gets persisted. Malformed `runInTerminal` arguments are refused with a
+  diagnostic in `Session.OnRunInTerminal` instead of being silently zeroed;
+  `RunInTerminalArgs.Env` is `map[string]*string` because the spec allows
+  JSON `null` values (= unset; the spawn path skips them). Other reverse
+  requests are still refused "unsupported" (off the read loop — a synchronous
+  write there can deadlock against a mid-write adapter).
+- **Terminal lifetime** (#638): the debuggee terminal deliberately stays open
+  after the session ends so its output can be reviewed. The app model tracks
+  the last debuggee terminal (`dbgTermKey`); the next session's runInTerminal
+  closes it before splitting a fresh one — only if the pane still exists (a
+  user close clears the key in `closeKey`) and its process has exited (a live
+  terminal is never yanked).
 - Trade-off: with `integratedTerminal` the debuggee's output goes to the
   terminal, so the tool window's OUTPUT column and `.ike/debug-session.log`
   (#624) stay empty for Python sessions.

@@ -14,20 +14,32 @@ import (
 
 	"ike/internal/dap"
 	"ike/internal/debugpanel"
-	"ike/internal/pane"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/layout"
 	"ike/internal/lsp/jsonrpc"
+	"ike/internal/pane"
 	"ike/internal/registry"
 )
 
 // stubAdapter answers every DAP request with success over an in-memory pipe
-// and records the commands it saw.
+// and records the commands it saw plus the client's responses to reverse
+// requests (#638).
 type stubAdapter struct {
-	in  *io.PipeReader
-	out *io.PipeWriter
-	mu  sync.Mutex
-	cmd []string
+	in   *io.PipeReader
+	out  *io.PipeWriter
+	mu   sync.Mutex
+	cmd  []string
+	resp []reverseResp
+}
+
+// reverseResp is one client response to an adapter-initiated request.
+type reverseResp struct {
+	RequestSeq int             `json:"request_seq"`
+	Command    string          `json:"command"`
+	Success    bool            `json:"success"`
+	Message    string          `json:"message"`
+	Body       json.RawMessage `json:"body"`
 }
 
 type stubPipe struct {
@@ -68,7 +80,19 @@ func (s *stubAdapter) serve() {
 			Type    string `json:"type"`
 			Command string `json:"command"`
 		}
-		if json.Unmarshal(data, &req) != nil || req.Type != "request" {
+		if json.Unmarshal(data, &req) != nil {
+			continue
+		}
+		if req.Type == "response" {
+			var rr reverseResp
+			if json.Unmarshal(data, &rr) == nil {
+				s.mu.Lock()
+				s.resp = append(s.resp, rr)
+				s.mu.Unlock()
+			}
+			continue
+		}
+		if req.Type != "request" {
 			continue
 		}
 		s.mu.Lock()
@@ -125,6 +149,26 @@ func waitForCommand(t *testing.T, sa *stubAdapter, want string) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("adapter never saw %q (saw %v)", want, sa.commands())
+}
+
+// waitForReverseResp blocks until the stub saw the client's response to the
+// reverse request with request_seq seq (#638).
+func waitForReverseResp(t *testing.T, sa *stubAdapter, seq int) reverseResp {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		sa.mu.Lock()
+		for _, r := range sa.resp {
+			if r.RequestSeq == seq {
+				sa.mu.Unlock()
+				return r
+			}
+		}
+		sa.mu.Unlock()
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("no response for reverse request %d", seq)
+	return reverseResp{}
 }
 
 // TestDebugStopJumpsAndMarks verifies a stopped message records the frames,
@@ -254,5 +298,113 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 	m = tm.(Model)
 	if m.panes.Has(pane.DebugKey) {
 		t.Fatal("session end must close the debug panel")
+	}
+}
+
+// TestRunInTerminalRefusedWithoutSession verifies the dbg==nil bail-out still
+// answers the reverse request — a silent return would hang the adapter (#638).
+func TestRunInTerminalRefusedWithoutSession(t *testing.T) {
+	m, sa, _ := debugModel(t)
+	sess := m.dbg.sess
+	m.dbg = nil
+	tm, _ := m.Update(debugRunInTerminalMsg{seq: 42, sess: sess, args: dap.RunInTerminalArgs{Args: []string{"/bin/sh"}}})
+	m = tm.(Model)
+	resp := waitForReverseResp(t, sa, 42)
+	if resp.Success || resp.Command != "runInTerminal" || resp.Message == "" {
+		t.Fatalf("response = %+v, want a refusal with a reason", resp)
+	}
+	if m.dbgTermKey != "" {
+		t.Fatal("no terminal must be tracked after a refusal")
+	}
+}
+
+// TestRunInTerminalRefusedWithoutCommand verifies the empty-argv bail-out
+// answers with an error instead of hanging the adapter (#638).
+func TestRunInTerminalRefusedWithoutCommand(t *testing.T) {
+	m, sa, _ := debugModel(t)
+	tm, _ := m.Update(debugRunInTerminalMsg{seq: 43, sess: m.dbg.sess})
+	_ = tm
+	resp := waitForReverseResp(t, sa, 43)
+	if resp.Success || resp.Message != "no command" {
+		t.Fatalf("response = %+v, want the no-command refusal", resp)
+	}
+}
+
+// TestRunInTerminalSpawnFailureClosesPane verifies a failed debuggee spawn
+// refuses the request AND removes the just-split terminal pane again, so no
+// dead pane lingers or gets persisted (#638).
+func TestRunInTerminalSpawnFailureClosesPane(t *testing.T) {
+	m, sa, _ := debugModel(t)
+	before := len(layout.Leaves(m.tree))
+	tm, _ := m.Update(debugRunInTerminalMsg{seq: 44, sess: m.dbg.sess,
+		args: dap.RunInTerminalArgs{Args: []string{"/nonexistent-ike-binary-638"}}})
+	m = tm.(Model)
+	resp := waitForReverseResp(t, sa, 44)
+	if resp.Success || resp.Message != "debuggee failed to start" {
+		t.Fatalf("response = %+v, want the spawn-failure refusal", resp)
+	}
+	if got := len(layout.Leaves(m.tree)); got != before {
+		t.Fatalf("leaves = %d, want %d — the dead pane must be closed again", got, before)
+	}
+	if m.dbgTermKey != "" {
+		t.Fatal("a failed spawn must not track a terminal key")
+	}
+}
+
+// TestRunInTerminalReplacesStaleTerminal verifies the debuggee terminal stays
+// open after its process ends (output review) and the next runInTerminal
+// closes it before splitting a fresh one; a user-closed pane clears the
+// tracked key (#638).
+func TestRunInTerminalReplacesStaleTerminal(t *testing.T) {
+	m, sa, _ := debugModel(t)
+	argv := []string{"/bin/sh", "-c", "exit 0"}
+	tm, _ := m.Update(debugRunInTerminalMsg{seq: 45, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
+	m = tm.(Model)
+	if resp := waitForReverseResp(t, sa, 45); !resp.Success {
+		t.Fatalf("first spawn refused: %+v", resp)
+	}
+	old := m.dbgTermKey
+	if old == "" || !m.panes.Has(old) {
+		t.Fatalf("first spawn must track its terminal pane, got %q", old)
+	}
+	// Wait for the short-lived debuggee to exit; the pane must survive it.
+	deadline := time.Now().Add(3 * time.Second)
+	for m.panes.Get(old).Terminal().Running() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if m.panes.Get(old).Terminal().Running() {
+		t.Fatal("debuggee process never exited")
+	}
+	// A new session's runInTerminal replaces the stale pane.
+	tm, _ = m.Update(debugRunInTerminalMsg{seq: 46, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
+	m = tm.(Model)
+	if resp := waitForReverseResp(t, sa, 46); !resp.Success {
+		t.Fatalf("second spawn refused: %+v", resp)
+	}
+	if m.panes.Has(old) {
+		t.Fatal("the stale debuggee terminal must be closed on relaunch")
+	}
+	if m.dbgTermKey == "" || m.dbgTermKey == old || !m.panes.Has(m.dbgTermKey) {
+		t.Fatalf("dbgTermKey = %q, want the fresh terminal pane", m.dbgTermKey)
+	}
+	// A user close clears the tracked key, so nothing chases it later.
+	if !m.closeKey(m.dbgTermKey) {
+		t.Fatal("closing the debuggee terminal pane must succeed")
+	}
+	if m.dbgTermKey != "" {
+		t.Fatal("closing the pane must clear dbgTermKey")
+	}
+}
+
+// TestEnvMapToSliceSkipsNulls verifies null env values (unset per DAP) are
+// tolerated and skipped (#638).
+func TestEnvMapToSliceSkipsNulls(t *testing.T) {
+	v := "1"
+	got := envMapToSlice(map[string]*string{"A": &v, "B": nil})
+	if len(got) != 1 || got[0] != "A=1" {
+		t.Fatalf("envMapToSlice = %v, want [A=1]", got)
+	}
+	if envMapToSlice(nil) != nil {
+		t.Fatal("empty map must yield nil")
 	}
 }

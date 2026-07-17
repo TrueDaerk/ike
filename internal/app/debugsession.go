@@ -38,7 +38,6 @@ type debugState struct {
 	paused     bool
 	frames     []dap.StackFrame
 	pausedPath string // file carrying the paused-line marker
-	termKey    string // debuggee terminal pane (runInTerminal, #625), "" if none
 
 	// pendingOut buffers debuggee output that arrived before the tool window
 	// opened (output can precede the first stop); openDebugPanel flushes it into
@@ -108,10 +107,13 @@ type (
 	}
 	// debugRunInTerminalMsg carries the adapter's runInTerminal reverse request
 	// (#625) from the read-loop goroutine onto the Update loop, where the
-	// debuggee terminal pane is spawned and the request answered.
+	// debuggee terminal pane is spawned and the request answered. It carries
+	// its own session so the request can still be refused — the adapter is
+	// blocked waiting — when the session ended in between (#638).
 	debugRunInTerminalMsg struct {
 		seq  int
 		args dap.RunInTerminalArgs
+		sess *dap.Session
 	}
 )
 
@@ -259,7 +261,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	// integratedTerminal (#625): debugpy asks the client to launch the debuggee
 	// in a terminal it owns. Hand the reverse request to the Update loop.
 	sess.OnRunInTerminal(func(seq int, args dap.RunInTerminalArgs) {
-		send(debugRunInTerminalMsg{seq: seq, args: args})
+		send(debugRunInTerminalMsg{seq: seq, args: args, sess: sess})
 	})
 	m.host.Notify(host.Info, "debug: "+cfg.Name+" starting")
 	go func() {
@@ -574,17 +576,37 @@ func (m *Model) fetchVariables(ref int) {
 // spawns the debuggee command in a bottom-split terminal pane — giving it a
 // real tty so input() works — and replies with the process id. The debuggee
 // connects back to the adapter on its own; the pid is for process tracking.
+// Every bail-out path refuses the request — the reverse handler claimed it,
+// so a silent return would leave the adapter waiting forever (#638).
 func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
-	dbg := m.dbg
-	if dbg == nil {
-		return
-	}
 	refuse := func(reason string) {
-		go func() { _ = dbg.sess.RefuseReverse(msg.seq, "runInTerminal", reason) }()
+		sess := msg.sess
+		go func() { _ = sess.RefuseReverse(msg.seq, "runInTerminal", reason) }()
+	}
+	dbg := m.dbg
+	if dbg == nil || dbg.sess != msg.sess {
+		// The requesting session ended (or was replaced) between the reverse
+		// request and this handler; the write fails harmlessly on a torn-down
+		// connection.
+		refuse("no debug session")
+		return
 	}
 	if len(msg.args.Args) == 0 {
 		refuse("no command")
 		return
+	}
+	// The previous debuggee terminal stays open after its session ends so the
+	// user can review output (#638); replace it now that a new debuggee
+	// spawns — but only when the pane still exists (the user may have closed
+	// it, closeKey cleared the key then) and its process has exited (never
+	// yank a live terminal).
+	if old := m.dbgTermKey; old != "" {
+		m.dbgTermKey = ""
+		if inst := m.panes.Get(old); inst != nil && inst.Kind() == pane.KindTerminal && !inst.Terminal().Running() {
+			if m.closeKey(old) && !m.panes.Has(m.panes.Focused()) {
+				m.setFocus(m.focusAfterClose())
+			}
+		}
 	}
 	target := m.activeEditorKey()
 	if target == "" {
@@ -603,35 +625,53 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
 	if !ok {
 		m.panes.Close(key)
+		m.layout() // a stale-pane close above may have changed the tree
+		saveLayout(m.tree, m.panes)
 		refuse("layout split failed")
 		return
 	}
 	m.tree = tree
 	m.layout()
 	saveLayout(m.tree, m.panes)
-	dbg.termKey = key
 
 	pid := 0
 	if inst := m.panes.Get(key); inst != nil {
 		pid = inst.Terminal().Pid()
 	}
 	if pid == 0 {
+		// The spawn failed (bad binary, PTY failure): tear the dead pane back
+		// out so the broken layout doesn't stay — or stay persisted (#638).
+		if m.closeKey(key) {
+			if !m.panes.Has(m.panes.Focused()) {
+				m.setFocus(m.focusAfterClose())
+			}
+			m.layout()
+			saveLayout(m.tree, m.panes)
+		}
 		refuse("debuggee failed to start")
 		return
 	}
+	m.dbgTermKey = key
 	seq := msg.seq
-	sess := dbg.sess
+	sess := msg.sess
 	go func() { _ = sess.RespondRunInTerminal(seq, pid) }()
 }
 
-// envMapToSlice converts a runInTerminal env map into "K=V" entries.
-func envMapToSlice(env map[string]string) []string {
+// envMapToSlice converts a runInTerminal env map into "K=V" entries. A nil
+// value means "unset" (JSON null on the wire, #638): the spawn path has no
+// removal seam over the inherited environment, so those keys are skipped —
+// close enough, since adapters use null to drop variables they injected
+// themselves.
+func envMapToSlice(env map[string]*string) []string {
 	if len(env) == 0 {
 		return nil
 	}
 	out := make([]string, 0, len(env))
 	for k, v := range env {
-		out = append(out, k+"="+v)
+		if v == nil {
+			continue
+		}
+		out = append(out, k+"="+*v)
 	}
 	return out
 }

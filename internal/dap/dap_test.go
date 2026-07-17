@@ -23,9 +23,8 @@ type fakeAdapter struct {
 	seq  int
 	seen []string // commands received, in order
 
-	emitRunInTerminal bool            // send a runInTerminal request on configurationDone
-	ritResp           json.RawMessage // the client's response body to it
-	ritDone           chan struct{}   // closed when ritResp is set
+	emitReverse []envelope                 // reverse requests to send on configurationDone
+	revResp     map[string]json.RawMessage // client responses to them (whole frame), by command
 }
 
 // pipes builds the duplex streams: the client side implements io.ReadWriteCloser.
@@ -84,14 +83,13 @@ func (f *fakeAdapter) serve() {
 		if json.Unmarshal(data, &req) != nil {
 			continue
 		}
-		// Capture the client's response to our runInTerminal reverse request.
-		if req.Type == typeResponse && req.Command == "runInTerminal" {
+		// Capture the client's responses to our reverse requests.
+		if req.Type == typeResponse {
 			f.mu.Lock()
-			f.ritResp = req.Body
-			if f.ritDone != nil {
-				close(f.ritDone)
-				f.ritDone = nil
+			if f.revResp == nil {
+				f.revResp = map[string]json.RawMessage{}
 			}
+			f.revResp[req.Command] = append(json.RawMessage(nil), data...)
 			f.mu.Unlock()
 			continue
 		}
@@ -126,12 +124,10 @@ func (f *fakeAdapter) serve() {
 		case "configurationDone":
 			f.respond(req, map[string]any{})
 			f.mu.Lock()
-			emit := f.emitRunInTerminal
+			emit := append([]envelope(nil), f.emitReverse...)
 			f.mu.Unlock()
-			if emit {
-				f.send(envelope{Type: typeRequest, Command: "runInTerminal", Arguments: mustJSON(map[string]any{
-					"kind": "integrated", "cwd": "/p", "args": []string{"python", "prog.py"},
-				})})
+			for _, rev := range emit {
+				f.send(rev)
 			}
 			f.event("stopped", StoppedEvent{Reason: "breakpoint", ThreadID: 1})
 		case "threads":
@@ -315,13 +311,39 @@ func mustJSON(v any) json.RawMessage {
 	return b
 }
 
+// reverseResponse returns the captured response frame for a reverse request.
+func (f *fakeAdapter) reverseResponse(command string) (json.RawMessage, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	data, ok := f.revResp[command]
+	return data, ok
+}
+
+// waitReverseResponse blocks until the client answered the reverse request and
+// returns the decoded response envelope.
+func waitReverseResponse(t *testing.T, fa *fakeAdapter, command string) envelope {
+	t.Helper()
+	waitFor(t, command+" response", func() bool {
+		_, ok := fa.reverseResponse(command)
+		return ok
+	})
+	data, _ := fa.reverseResponse(command)
+	var resp envelope
+	if err := json.Unmarshal(data, &resp); err != nil {
+		t.Fatalf("response frame %s does not parse: %v", data, err)
+	}
+	return resp
+}
+
 // TestRunInTerminalReverseRequest verifies the adapter's runInTerminal request
 // reaches the registered handler and the client's reply carries the pid (#625).
 func TestRunInTerminalReverseRequest(t *testing.T) {
 	pipe, fa := startFake(t)
 	fa.mu.Lock()
-	fa.emitRunInTerminal = true
-	fa.ritDone = make(chan struct{})
+	fa.emitReverse = []envelope{{Type: typeRequest, Command: "runInTerminal", Arguments: mustJSON(map[string]any{
+		"kind": "integrated", "cwd": "/p", "args": []string{"python", "prog.py"},
+		"env": map[string]any{"A": "1", "DROPPED": nil}, // null value = unset (#638)
+	})}}
 	fa.mu.Unlock()
 
 	s := NewSession(NewConn(pipe, func(string, json.RawMessage) {}))
@@ -346,21 +368,78 @@ func TestRunInTerminalReverseRequest(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("handler was not called")
 	}
-	fa.mu.Lock()
-	done := fa.ritDone
-	fa.mu.Unlock()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for runInTerminal response")
-	}
 	if len(gotArgs.Args) != 2 || gotArgs.Args[0] != "python" || gotArgs.Cwd != "/p" {
 		t.Fatalf("handler got args = %+v", gotArgs)
 	}
+	if v, ok := gotArgs.Env["A"]; !ok || v == nil || *v != "1" {
+		t.Fatalf("env A = %v, want \"1\"", v)
+	}
+	if v, ok := gotArgs.Env["DROPPED"]; !ok || v != nil {
+		t.Fatalf("env DROPPED = %v/%v, want present nil (JSON null)", v, ok)
+	}
+	resp := waitReverseResponse(t, fa, "runInTerminal")
+	if !resp.Success || !strings.Contains(string(resp.Body), `"processId":4242`) {
+		t.Fatalf("response = %+v, want success with processId 4242", resp)
+	}
+}
+
+// TestRunInTerminalMalformedArgsRefused verifies undecodable runInTerminal
+// arguments are refused with a diagnostic instead of reaching the handler as a
+// zero value — previously the unmarshal error was discarded and the request
+// failed later as a misleading "no command" (#638).
+func TestRunInTerminalMalformedArgsRefused(t *testing.T) {
+	pipe, fa := startFake(t)
 	fa.mu.Lock()
-	resp := string(fa.ritResp)
+	fa.emitReverse = []envelope{{Type: typeRequest, Command: "runInTerminal", Arguments: mustJSON(map[string]any{
+		"kind": "integrated", "args": 42, // args must be a string array
+	})}}
 	fa.mu.Unlock()
-	if !strings.Contains(resp, `"processId":4242`) {
-		t.Fatalf("response body = %s, want processId 4242", resp)
+
+	s := NewSession(NewConn(pipe, func(string, json.RawMessage) {}))
+	defer s.Close()
+
+	called := make(chan struct{}, 1)
+	s.OnRunInTerminal(func(int, RunInTerminalArgs) { called <- struct{}{} })
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ConfigurationDone(); err != nil {
+		t.Fatal(err)
+	}
+	resp := waitReverseResponse(t, fa, "runInTerminal")
+	if resp.Success || !strings.Contains(resp.Message, "invalid runInTerminal arguments") {
+		t.Fatalf("response = %+v, want refusal with a diagnostic", resp)
+	}
+	select {
+	case <-called:
+		t.Fatal("the handler must not see malformed arguments")
+	default:
+	}
+}
+
+// TestReverseRequestUnsupportedRefused verifies non-runInTerminal reverse
+// requests are still refused as "unsupported" while a runInTerminal handler is
+// registered (#638).
+func TestReverseRequestUnsupportedRefused(t *testing.T) {
+	pipe, fa := startFake(t)
+	fa.mu.Lock()
+	fa.emitReverse = []envelope{{Type: typeRequest, Command: "startDebugging", Arguments: mustJSON(map[string]any{})}}
+	fa.mu.Unlock()
+
+	s := NewSession(NewConn(pipe, func(string, json.RawMessage) {}))
+	defer s.Close()
+
+	s.OnRunInTerminal(func(seq int, _ RunInTerminalArgs) {
+		go func() { _ = s.RespondRunInTerminal(seq, 1) }()
+	})
+	if err := s.Initialize(); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ConfigurationDone(); err != nil {
+		t.Fatal(err)
+	}
+	resp := waitReverseResponse(t, fa, "startDebugging")
+	if resp.Success || resp.Message != "unsupported" {
+		t.Fatalf("response = %+v, want the unsupported refusal", resp)
 	}
 }

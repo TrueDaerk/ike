@@ -74,7 +74,16 @@ func (s *Session) OnRunInTerminal(fn func(seq int, args RunInTerminalArgs)) {
 			return false
 		}
 		var args RunInTerminalArgs
-		_ = json.Unmarshal(raw, &args)
+		if err := json.Unmarshal(raw, &args); err != nil {
+			// Malformed arguments: still claim the request and refuse it with
+			// a diagnostic — silently dropping it would hang the adapter, and
+			// the generic "unsupported" refusal would hide the cause (#638).
+			// Reply off the read loop, like every other reverse reply.
+			go func() {
+				_ = s.conn.RefuseRequest(seq, command, "invalid runInTerminal arguments: "+err.Error())
+			}()
+			return true
+		}
 		fn(seq, args)
 		return true
 	})
