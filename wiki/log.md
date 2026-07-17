@@ -15,7 +15,6 @@
   platform-normalized for display (Meta→Ctrl off macOS), the help cheat-sheet
   row resolves like every other, and a guard test keeps help's doc-hint
   `Shortcut` fallbacks platform-neutral.
->>>>>>> origin/main
 
 - Settings schema-page mouse (#673): the wheel scrolls the panel column under
   the pointer (categories switch pages, form rows follow); with an enum picker
