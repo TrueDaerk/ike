@@ -22,8 +22,10 @@ palette; also listed in the help Essentials view).
 
 ## First-run wiring (#658)
 
-On a first start (no user settings file, `ui.onboarded` unset) the tour opens
-automatically once the window is sized. Startup-prompt precedence: **crash
+On a first start (`ui.onboarded` unset — the flag ALONE gates it, #671: main
+records the project open into the settings file before the model is built, so
+the file exists on every launch) the tour opens automatically once the window
+is sized. Startup-prompt precedence: **crash
 recovery → welcome tour → LSP onboarding dialog** — the tour waits while the
 recovery prompt holds the shell, and the LSP dialog queues behind the tour
 (`closeTour` re-triggers it explicitly, since its `maybeOpen` refuses while
