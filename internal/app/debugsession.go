@@ -257,6 +257,11 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false
+	// A still-open panel from the previous session starts clean (#689): drop
+	// the finished marker, the old output, and the dead embedded terminal.
+	if p := m.debugPanel(); p != nil {
+		p.ResetSession()
+	}
 	logDebugSessionStart(cfg.Name) // delimit consecutive sessions in the transcript (#637)
 	// integratedTerminal (#625): debugpy asks the client to launch the debuggee
 	// in a terminal it owns. Hand the reverse request to the Update loop.
@@ -291,10 +296,14 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 	if dbg == nil {
 		// Trailing output after the session finished (the adapter flushes the
 		// debuggee's last writes past `terminated`) still reaches the
-		// transcript, even though the panel is gone (#637).
+		// transcript (#637) — and the still-open finished panel (#689).
 		if ev.Name == "output" {
 			if o := ev.Output(); o.Category != "telemetry" {
-				logDebugOutput(o.Category == "stderr", o.Output)
+				stderr := o.Category == "stderr"
+				logDebugOutput(stderr, o.Output)
+				if p := m.debugPanel(); p != nil {
+					p.AppendOutput(stderr, o.Output)
+				}
 			}
 		}
 		return
@@ -516,20 +525,6 @@ func (m *Model) attachDebugPanel(p *debugpanel.Model) {
 	m.dbg.panelOpened = true
 }
 
-// closeDebugPanel removes the panel when the session ends.
-func (m *Model) closeDebugPanel() {
-	if !m.panes.Has(pane.DebugKey) {
-		return
-	}
-	if m.closeKey(pane.DebugKey) {
-		if !m.panes.Has(m.panes.Focused()) {
-			m.setFocus(m.focusAfterClose())
-		}
-		m.layout()
-		saveLayout(m.tree, m.panes)
-	}
-}
-
 // fetchScopes loads a frame's scopes plus the first scope's variables and
 // feeds the panel via messages.
 func (m *Model) fetchScopes(frameID int) {
@@ -709,7 +704,11 @@ func (m *Model) stopDebugSession(notify bool) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
-	m.closeDebugPanel()
+	// The panel stays open (#689): the Output column keeps the program's
+	// output reviewable until the user closes it or a new launch resets it.
+	if p := m.debugPanel(); p != nil {
+		p.SetFinished(0, false)
+	}
 	sess := dbg.sess
 	go func() {
 		_ = sess.Disconnect()
@@ -729,7 +728,11 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
-	m.closeDebugPanel()
+	// Keep the panel open in a finished state (#689) so the final output —
+	// including the embedded terminal's scrollback — stays visible.
+	if p := m.debugPanel(); p != nil {
+		p.SetFinished(msg.exitCode, msg.hasCode)
+	}
 	go dbg.sess.Close()
 	note := "debug: " + dbg.cfgName + " finished"
 	if msg.hasCode {

@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -250,6 +251,20 @@ func TestDebugEndedCleansUp(t *testing.T) {
 	if _, ok := ed.PausedLine(); ok {
 		t.Fatal("termination must clear the paused marker")
 	}
+	// Trailing output flushed past `terminated` still lands in the surviving
+	// panel (#689), not only in the transcript.
+	tm, _ = m.Update(debugEventMsg{ev: dap.Event{
+		Name: "output",
+		Body: []byte(`{"category":"stdout","output":"late flush\n"}`),
+	}})
+	m = tm.(Model)
+	p := m.debugPanel()
+	if p == nil || !p.Finished() {
+		t.Fatal("the panel must survive termination in a finished state")
+	}
+	if !strings.Contains(p.View(), "late flush") {
+		t.Fatal("trailing output must append to the finished panel")
+	}
 }
 
 // TestDebugStopCommand verifies debug.stop disconnects and clears state.
@@ -294,11 +309,15 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 	if line, _ := ed.CursorPos(); line != 3 {
 		t.Fatalf("cursor line = %d, want 3 (outer frame)", line)
 	}
-	// Session end closes the panel again.
+	// Session end keeps the panel open in a finished state (#689) so the
+	// output stays reviewable.
 	tm, _ = m.Update(debugEndedMsg{})
 	m = tm.(Model)
-	if m.panes.Has(pane.DebugKey) {
-		t.Fatal("session end must close the debug panel")
+	if !m.panes.Has(pane.DebugKey) {
+		t.Fatal("session end must keep the debug panel open")
+	}
+	if p := m.debugPanel(); p == nil || !p.Finished() {
+		t.Fatal("the surviving panel must show the finished state")
 	}
 }
 
@@ -395,12 +414,24 @@ func TestRunInTerminalEmbedsInDebugPanel(t *testing.T) {
 	if p.Terminal().SessionKey() == old.SessionKey() {
 		t.Fatal("the fresh terminal must carry a fresh session key")
 	}
-	// Session end closes the panel — and with it the embedded terminal.
+	// Session end keeps the panel — and the embedded terminal's scrollback —
+	// open for review (#689); closing the panel then kills the PTY.
 	term := p.Terminal()
 	tm, _ = m.Update(debugEndedMsg{})
 	m = tm.(Model)
+	if !m.panes.Has(pane.DebugKey) {
+		t.Fatal("session end must keep the debug panel open")
+	}
+	p = m.debugPanel()
+	if p == nil || !p.HasTerminal() {
+		t.Fatal("the finished panel must keep the embedded terminal")
+	}
+	if !p.Finished() {
+		t.Fatal("the surviving panel must show the finished state")
+	}
+	m.closeKey(pane.DebugKey)
 	if m.panes.Has(pane.DebugKey) {
-		t.Fatal("session end must close the debug panel")
+		t.Fatal("closing the pane must remove the debug panel")
 	}
 	waitNotRunning(t, term)
 }

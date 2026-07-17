@@ -115,6 +115,40 @@ func TestViewStates(t *testing.T) {
 	}
 }
 
+// TestFinishedState (#689): a terminated session keeps the panel usable — the
+// FRAMES column shows the exit status, output stays rendered, and a new
+// session's ResetSession clears both.
+func TestFinishedState(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 8)
+	m.SetFrames(frames())
+	m.AppendOutput(false, "final words\n")
+	m.SetFinished(3, true)
+	v := m.View()
+	if !strings.Contains(v, "finished (exit code 3)") {
+		t.Fatalf("finished state must show the exit code:\n%s", v)
+	}
+	if !strings.Contains(v, "final words") {
+		t.Fatalf("finished state must keep the output visible:\n%s", v)
+	}
+	if !m.Finished() {
+		t.Fatal("Finished() must report the terminated session")
+	}
+	m.AppendOutput(false, "trailing flush\n")
+	if v := m.View(); !strings.Contains(v, "trailing flush") {
+		t.Fatalf("trailing output must still append while finished:\n%s", v)
+	}
+	m.SetFinished(0, false)
+	if v := m.View(); !strings.Contains(v, "finished") || strings.Contains(v, "exit code") {
+		t.Fatalf("codeless termination must render plain 'finished':\n%s", v)
+	}
+	m.ResetSession()
+	v = m.View()
+	if m.Finished() || strings.Contains(v, "finished") || strings.Contains(v, "final words") {
+		t.Fatalf("ResetSession must clear the finished marker and old output:\n%s", v)
+	}
+}
+
 // TestOutputVisibleWhileRunning guards #637's headline defect: output streams
 // exactly while the debuggee runs (or before the first stop), so the OUTPUT
 // column must render it in both states.
