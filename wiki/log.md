@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Toolchain versioned-install discovery (#675): the interpreter picker globs
+  Homebrew `opt/<formula>@*/bin` (both prefixes, unversioned formula first,
+  newest version first), pyenv `~/.pyenv/versions/*` and Go `~/sdk/go*`,
+  deduplicated by resolved path; opening the picker pre-selects the currently
+  effective interpreter and eagerly probes every candidate's version.
+
 - Command-executed event (#679): every command dispatch — palette, keymap
   resolution (including chord timeouts and plugin key aliases), and inline
   invocations — now emits `plugin.EventCommandExecuted` (payload: command id)
