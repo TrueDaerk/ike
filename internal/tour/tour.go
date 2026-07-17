@@ -4,16 +4,21 @@
 // paging keys are handled host-level (internal/app), never by the shell's
 // scroller, so each page must fit the shell without vertical overflow.
 //
-// Shortcuts render through a BindingResolver (the same seam help uses) so a
-// user remap displays truthfully; multi-bound or fragile commands carry a
-// curated preferred-order default ("shift shift · cmd+shift+a") that is never
-// replaced by the resolver when the resolved chord is already part of it —
-// the tour must never teach a possibly-dead chord alone.
+// Shortcuts resolve through a BindingResolver (the same seam help uses)
+// FIRST, so a user remap displays truthfully and the shown chord is always
+// the live keymap's preferred one (custom > default). Curated preferred-order
+// defaults ("shift shift · cmd+shift+a") are kept whenever the resolved chord
+// is one of their options — the tour must never teach a possibly-dead chord
+// alone — and serve as the fallback when a command is unbound. All curated
+// chord text is platform-normalized for display (Meta→Ctrl off macOS, #678),
+// never rendered from hardcoded mac strings.
 package tour
 
 import (
 	"strconv"
 	"strings"
+
+	"ike/internal/keymap"
 )
 
 // BindingResolver maps a command id to its current shortcut string; it is the
@@ -78,27 +83,75 @@ func (t *Tour) Render(int) string {
 	return b.String()
 }
 
-// chord resolves the display shortcut for a command: the curated default
-// (which may list several chords in preferred order) unless the resolver
-// reports a binding that is neither in that list nor among the command's
-// other known defaults (leader mnemonics, delivered secondaries) — i.e. a
-// real user remap (#665). Without the known set, the resolver returning the
-// space-space leader default would masquerade as a remap and replace the
-// curated display.
+// optionSep separates the options of a curated preferred-order display list.
+const optionSep = " · "
+
+// normalizeOption canonicalises one curated display option for the current
+// platform: an option that parses as a keymap chord is normalized (Meta→Ctrl
+// off macOS) and canonically formatted; non-chord hints (vim keys like ":w",
+// prose like "ctrl+arrows") pass through verbatim.
+func normalizeOption(opt string) string {
+	c, err := keymap.ParseChord(opt)
+	if err != nil {
+		return opt
+	}
+	return keymap.NormalizeChord(c, keymap.GOOS).String()
+}
+
+// normalizeCurated platform-normalizes every option of a curated list.
+func normalizeCurated(curated string) string {
+	opts := strings.Split(curated, optionSep)
+	for i, o := range opts {
+		opts[i] = normalizeOption(o)
+	}
+	return strings.Join(opts, optionSep)
+}
+
+// vimHints are curated options handled outside the keymap layer — vim
+// ex-commands and modal keys, and the hardcoded "?" help key. They stay
+// valid regardless of any remap, so a remapped display keeps them; every
+// other curated option is a keymap chord the remap replaced. (They cannot
+// be detected by parse failure: any bare token parses as a key base.)
+var vimHints = map[string]bool{":w": true, "u": true, "/": true, "?": true}
+
+// chord resolves the display shortcut for a command, resolver-first (#678):
+// the live keymap value (custom > default, read from the platform-normalized
+// effective table) decides what is shown. When the resolved chord is one of
+// the curated options — or one of the command's other known defaults (leader
+// mnemonics, delivered secondaries, #665), which would otherwise masquerade
+// as remaps — the full curated preferred-order list is kept, platform-
+// normalized. A resolved chord outside all known defaults is a real user
+// remap and leads the display, with only the curated non-chord hints (vim
+// keys, which remain valid regardless of the keymap) kept as secondary
+// options. The curated list alone is the fallback when the command is
+// unbound or no resolver is wired.
 func (t *Tour) chord(id, curated string, known ...string) string {
+	norm := normalizeCurated(curated)
 	if t.res == nil {
-		return curated
+		return norm
 	}
 	s, ok := t.res.Binding(id)
-	if !ok || s == "" || strings.Contains(curated, s) {
-		return curated
+	if !ok || s == "" {
+		return norm
 	}
-	for _, k := range known {
-		if s == k {
-			return curated
+	opts := strings.Split(norm, optionSep)
+	for _, o := range opts {
+		if o == s {
+			return norm
 		}
 	}
-	return s
+	for _, k := range known {
+		if normalizeOption(k) == s {
+			return norm
+		}
+	}
+	out := s
+	for _, o := range opts {
+		if vimHints[o] {
+			out += optionSep + o
+		}
+	}
+	return out
 }
 
 // key renders one "title   chord" row with the chord column aligned.
@@ -126,7 +179,7 @@ func pageWelcome(t *Tour) string {
 	b.WriteString("modal editor.\n\n")
 	b.WriteString("The keys that open everything:\n\n")
 	b.WriteString(key("Search everywhere", t.chord("palette.searchEverywhere", "shift shift · cmd+shift+a", "space space", "space A")))
-	b.WriteString(key("Help cheat sheet", "? · f1"))
+	b.WriteString(key("Help cheat sheet", t.chord("palette.keymapHelp", "? · f1", "cmd+k cmd+s")))
 	b.WriteString(key("Switch project", t.chord("project.switch", "cmd+shift+p", "ctrl+shift+p", "space p")))
 	b.WriteString("\nTo quit IKE: press q (in the file tree, or in an editor while not\n")
 	b.WriteString("typing) or ctrl+c — unsaved changes always prompt first.\n")
