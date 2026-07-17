@@ -2111,6 +2111,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setDebugVariable(msg.Ref, msg.Name, msg.Value)
 		return m, nil
 
+	case debugRunInTerminalMsg:
+		// debugpy asked us to launch the debuggee in a terminal it can read
+		// stdin from (#625): spawn it and answer with the pid.
+		m.runDebuggeeInTerminal(msg)
+		return m, nil
+
 	case debugErrMsg:
 		m.dbgLaunching = false
 		m.host.Notify(host.Error, "debug: "+msg.err.Error())

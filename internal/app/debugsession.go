@@ -18,6 +18,7 @@ import (
 	"ike/internal/lsp/transport"
 	"ike/internal/pane"
 	"ike/internal/run"
+	"ike/internal/terminal"
 )
 
 // debugsession.go orchestrates one live DAP session (0350, #579): debug.start
@@ -37,6 +38,7 @@ type debugState struct {
 	paused     bool
 	frames     []dap.StackFrame
 	pausedPath string // file carrying the paused-line marker
+	termKey    string // debuggee terminal pane (runInTerminal, #625), "" if none
 
 	// pendingOut buffers debuggee output that arrived before the tool window
 	// opened (output can precede the first stop); openDebugPanel flushes it into
@@ -79,6 +81,13 @@ type (
 		cfg  run.Config
 		root string
 		err  error
+	}
+	// debugRunInTerminalMsg carries the adapter's runInTerminal reverse request
+	// (#625) from the read-loop goroutine onto the Update loop, where the
+	// debuggee terminal pane is spawned and the request answered.
+	debugRunInTerminalMsg struct {
+		seq  int
+		args dap.RunInTerminalArgs
 	}
 )
 
@@ -221,6 +230,11 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false
+	// integratedTerminal (#625): debugpy asks the client to launch the debuggee
+	// in a terminal it owns. Hand the reverse request to the Update loop.
+	sess.OnRunInTerminal(func(seq int, args dap.RunInTerminalArgs) {
+		send(debugRunInTerminalMsg{seq: seq, args: args})
+	})
 	m.host.Notify(host.Info, "debug: "+cfg.Name+" starting")
 	go func() {
 		if err := sess.Initialize(); err != nil {
@@ -494,6 +508,72 @@ func (m *Model) fetchVariables(ref int) {
 		}
 		send(debugVarsMsg{ref: ref, vars: vars})
 	}()
+}
+
+// runDebuggeeInTerminal answers a runInTerminal reverse request (#625): it
+// spawns the debuggee command in a bottom-split terminal pane — giving it a
+// real tty so input() works — and replies with the process id. The debuggee
+// connects back to the adapter on its own; the pid is for process tracking.
+func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
+	dbg := m.dbg
+	if dbg == nil {
+		return
+	}
+	refuse := func(reason string) {
+		go func() { _ = dbg.sess.RefuseReverse(msg.seq, "runInTerminal", reason) }()
+	}
+	if len(msg.args.Args) == 0 {
+		refuse("no command")
+		return
+	}
+	target := m.activeEditorKey()
+	if target == "" {
+		target = m.panes.Focused()
+	}
+	if target == "" || m.tree == nil {
+		refuse("no pane to place the debuggee terminal")
+		return
+	}
+	dir := msg.args.Cwd
+	if dir == "" {
+		dir = dbg.root
+	}
+	env := terminal.MergeEnv(terminalEnv(), envMapToSlice(msg.args.Env))
+	key := m.panes.AddCommandTerminal(msg.args.Args, "debug: "+dbg.cfgName, dir, env, m.host.Send)
+	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	if !ok {
+		m.panes.Close(key)
+		refuse("layout split failed")
+		return
+	}
+	m.tree = tree
+	m.layout()
+	saveLayout(m.tree, m.panes)
+	dbg.termKey = key
+
+	pid := 0
+	if inst := m.panes.Get(key); inst != nil {
+		pid = inst.Terminal().Pid()
+	}
+	if pid == 0 {
+		refuse("debuggee failed to start")
+		return
+	}
+	seq := msg.seq
+	sess := dbg.sess
+	go func() { _ = sess.RespondRunInTerminal(seq, pid) }()
+}
+
+// envMapToSlice converts a runInTerminal env map into "K=V" entries.
+func envMapToSlice(env map[string]string) []string {
+	if len(env) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(env))
+	for k, v := range env {
+		out = append(out, k+"="+v)
+	}
+	return out
 }
 
 // setDebugVariable pushes an edited value to the adapter (setVariable) and, on

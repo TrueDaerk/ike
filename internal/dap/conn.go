@@ -27,6 +27,33 @@ type Conn struct {
 	// onEvent receives every adapter event (stopped, terminated, output, …)
 	// on the read-loop goroutine — handlers must hand off, not block.
 	onEvent func(event string, body json.RawMessage)
+
+	// onReverse handles adapter-initiated requests (runInTerminal, #625) on the
+	// read-loop goroutine. It must hand off and reply asynchronously via Respond
+	// — it MUST NOT block. When nil, or when it returns false, the request is
+	// refused. Guarded by mu.
+	onReverse func(seq int, command string, args json.RawMessage) bool
+}
+
+// SetReverseHandler installs the adapter-initiated request handler (#625).
+func (c *Conn) SetReverseHandler(fn func(seq int, command string, args json.RawMessage) bool) {
+	c.mu.Lock()
+	c.onReverse = fn
+	c.mu.Unlock()
+}
+
+// Respond replies to an adapter-initiated request with a success body.
+func (c *Conn) Respond(seq int, command string, body any) error {
+	data, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	return c.write(envelope{Type: typeResponse, RequestSeq: seq, Command: command, Success: true, Body: data})
+}
+
+// RefuseRequest replies to an adapter-initiated request with a failure.
+func (c *Conn) RefuseRequest(seq int, command, message string) error {
+	return c.write(envelope{Type: typeResponse, RequestSeq: seq, Command: command, Success: false, Message: message})
 }
 
 // callTimeout bounds a single request/response round trip; a hung adapter
@@ -131,9 +158,15 @@ func (c *Conn) readLoop() {
 				c.onEvent(msg.Event, msg.Body)
 			}
 		case typeRequest:
-			// Reverse requests (runInTerminal, startDebugging) are not
-			// supported: refuse politely so the adapter falls back.
-			_ = c.write(envelope{Type: typeResponse, RequestSeq: msg.Seq, Command: msg.Command, Success: false, Message: "unsupported"})
+			// Adapter-initiated requests: route to the reverse handler when one
+			// is registered and willing (runInTerminal, #625); otherwise refuse
+			// politely so the adapter falls back.
+			c.mu.Lock()
+			h := c.onReverse
+			c.mu.Unlock()
+			if h == nil || !h(msg.Seq, msg.Command, msg.Arguments) {
+				_ = c.RefuseRequest(msg.Seq, msg.Command, "unsupported")
+			}
 		}
 	}
 }

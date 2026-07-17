@@ -110,6 +110,14 @@ func (m *Model) SetLabel(l string) { m.label = l }
 // Label returns the caller-set display name, "" when none.
 func (m Model) Label() string { return m.label }
 
+// Pid returns the running child's process id, or 0 when there is none (#625).
+func (m Model) Pid() int {
+	if m.sess == nil {
+		return 0
+	}
+	return m.sess.Pid()
+}
+
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
 func (m Model) SessionKey() string {

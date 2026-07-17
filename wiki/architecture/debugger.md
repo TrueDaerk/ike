@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-16T21:00:00Z
+timestamp: 2026-07-17T09:00:00Z
 ---
 
 # Debugger (0350)
@@ -56,6 +56,30 @@ dead adapter is diagnosable from the notification alone.
   thread id, paused flag, the current stack frames, and the debuggee's DAP
   `output` events (rendered by the debug tool window, #580).
 
+## Interactive input — runInTerminal (#625)
+
+Programs that read stdin (Python `input()`) need a real tty. The Python launch
+config uses `console: "integratedTerminal"`, so debugpy asks the client to
+launch the debuggee itself via the DAP **runInTerminal** reverse request
+instead of running it under the adapter's `/dev/null` stdin.
+
+- The client advertises `supportsRunInTerminalRequest: true`. `internal/dap`'s
+  `Conn` gained a reverse-request seam: `SetReverseHandler` routes an
+  adapter-initiated request to a handler (else it is politely refused, as
+  before), and `Respond`/`RefuseRequest` reply on the wire. `Session` exposes
+  `OnRunInTerminal(fn)` (decodes `RunInTerminalArgs`), `RespondRunInTerminal(seq,
+  pid)`, and `RefuseReverse`.
+- The handler runs on the read-loop goroutine and MUST hand off — it sends a
+  `debugRunInTerminalMsg` onto the Update loop. There `runDebuggeeInTerminal`
+  spawns the given argv in a bottom-split **command terminal pane**
+  (`AddCommandTerminal`, the same infra `run.file` uses) and answers with the
+  child's pid (`terminal.Model.Pid`). The debuggee connects back to the adapter
+  on its own; breakpoints, stepping, frames and variables all work as usual —
+  only its stdio now lives in that terminal, where the user types input.
+- Trade-off: with `integratedTerminal` the debuggee's output goes to the
+  terminal, so the tool window's OUTPUT column and `.ike/debug-session.log`
+  (#624) stay empty for Python sessions.
+
 ## Stops and stepping
 
 - A `stopped` event fetches the thread's stack asynchronously and lands as
@@ -90,7 +114,10 @@ slot and re-feeds on the next stop.
   opens (a program printing before the first stop) is buffered on `debugState`
   and flushed in on open, so nothing is lost. Every chunk is also appended
   verbatim to a per-project transcript, `.ike/debug-session.log` (stderr chunks
-  prefixed `[stderr] `), reusing the `debug.log` append-logger pattern.
+  prefixed `[stderr] `), reusing the `debug.log` append-logger pattern. Note:
+  this column is populated only for adapters using `internalConsole`; Python now
+  launches with `integratedTerminal` (see below), so its I/O lives in the
+  debuggee terminal instead.
 - **Variables tree** (middle, `tab`/`h`/`l` switch columns): roots are the
   selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
   a node — unloaded references emit `ExpandVarMsg` and the app answers with
