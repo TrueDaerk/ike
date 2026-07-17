@@ -335,8 +335,14 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 			send(debugStoppedMsg{threadID: threadID, frames: frames})
 		}()
 	case "continued":
+		// A spontaneous resume (another client, a conditional breakpoint the
+		// adapter continued past) blanks the panel like debugStep does, so no
+		// stale rows stay visible — or editable — while running (#640).
 		m.clearPausedMarker()
 		dbg.paused = false
+		if p := m.debugPanel(); p != nil {
+			p.SetRunning()
+		}
 	case "output":
 		o := ev.Output()
 		// Adapter/telemetry categories aren't program output; skip them.
@@ -466,9 +472,10 @@ func (m Model) debugPanelEditing() bool {
 // moved the caret to the paused line.
 func (m *Model) openDebugPanel() {
 	if m.panes.Has(pane.DebugKey) {
-		if m.dbg != nil {
-			m.dbg.panelOpened = true
-		}
+		// The panel already exists — restored from a saved layout, or left
+		// open across stops. The session still attaches to it: the editable
+		// gate and any buffered output must reach the panel too (#640).
+		m.attachDebugPanel(m.panes.Get(pane.DebugKey).Debug())
 		return
 	}
 	target := m.activeEditorKey()
@@ -485,19 +492,26 @@ func (m *Model) openDebugPanel() {
 		return
 	}
 	m.tree = tree
-	// Gate the variable-edit affordance on the adapter's setVariable support
-	// (#627); the handshake has completed by the first stop.
-	if p := m.panes.Get(key).Debug(); p != nil && m.dbg != nil {
-		p.SetEditable(m.dbg.sess.SupportsSetVariable())
-		// Flush output captured before the panel existed (#624).
-		for _, o := range m.dbg.pendingOut {
-			p.AppendOutput(o.stderr, o.text)
-		}
-		m.dbg.pendingOut = nil
-		m.dbg.panelOpened = true
-	}
+	m.attachDebugPanel(m.panes.Get(key).Debug())
 	m.layout()
 	saveLayout(m.tree, m.panes)
+}
+
+// attachDebugPanel binds the live session to the panel: it gates the
+// variable-edit affordance on the adapter's setVariable capability (#627 —
+// the handshake has completed by the first stop) and flushes output captured
+// before the panel existed (#624). Runs on every openDebugPanel, including
+// when the panel pre-exists from a restored layout (#640).
+func (m *Model) attachDebugPanel(p *debugpanel.Model) {
+	if p == nil || m.dbg == nil {
+		return
+	}
+	p.SetEditable(m.dbg.sess.SupportsSetVariable())
+	for _, o := range m.dbg.pendingOut {
+		p.AppendOutput(o.stderr, o.text)
+	}
+	m.dbg.pendingOut = nil
+	m.dbg.panelOpened = true
 }
 
 // closeDebugPanel removes the panel when the session ends.
@@ -624,10 +638,17 @@ func envMapToSlice(env map[string]string) []string {
 
 // setDebugVariable pushes an edited value to the adapter (setVariable) and, on
 // success, refetches the containing reference so the panel shows the new value
-// (#627). A failure surfaces as a notification; the tree is left unchanged.
+// (#627). Refused while the debuggee runs — the DAP request is only valid
+// paused, and the rows on screen would be stale (#640). A failure surfaces as
+// a notification; the tree is left unchanged. A refetch failure after a
+// successful set surfaces too: the panel would silently keep the old value.
 func (m *Model) setDebugVariable(ref int, name, value string) {
 	dbg := m.dbg
 	if dbg == nil {
+		return
+	}
+	if !dbg.paused {
+		m.host.Notify(host.Info, "debug: not paused — cannot set variables")
 		return
 	}
 	sess := dbg.sess
@@ -637,7 +658,9 @@ func (m *Model) setDebugVariable(ref int, name, value string) {
 			send(debugErrMsg{err: err})
 			return
 		}
-		if vars, err := sess.Variables(ref); err == nil {
+		if vars, err := sess.Variables(ref); err != nil {
+			send(debugErrMsg{err: fmt.Errorf("value set, refresh failed: %w", err)})
+		} else {
 			send(debugVarsMsg{ref: ref, vars: vars})
 		}
 	}()

@@ -3124,6 +3124,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.explorerCapturing() {
 			return m.routeKey(msg)
 		}
+		// While the debug panel edits a variable value it captures every key
+		// (incl. enter/esc/plain letters), like an editor in insert mode (#627).
+		// Routed ahead of the esc-esc detector: an esc the editor consumes to
+		// cancel must not arm the double-esc palette (#640).
+		if m.debugPanelEditing() {
+			m.lastEsc = false
+			return m.routeKey(msg)
+		}
 		keys := msg.String()
 		if m.paletteKey != "" && keys == m.paletteKey {
 			m.lastEsc = false
@@ -3142,11 +3150,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.routeKey(msg)
 		}
 		m.lastEsc = false
-		// While the debug panel edits a variable value it captures every key
-		// (incl. enter/esc/plain letters), like an editor in insert mode (#627).
-		if m.debugPanelEditing() {
-			return m.routeKey(msg)
-		}
 		// "@" in an editor's normal mode opens a slimmed, file-only palette floated
 		// over that editor pane.
 		if keys == "@" && m.editorNormalMode() {

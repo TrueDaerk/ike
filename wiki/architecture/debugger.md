@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T21:00:00Z
+timestamp: 2026-07-17T23:00:00Z
 ---
 
 # Debugger (0350)
@@ -171,4 +171,18 @@ slot and re-feeds on the next stop.
   `supportsSetVariable` capability (read from the initialize response and pushed
   to the panel via `SetEditable` when it opens); scope roots aren't editable.
   While the editor is open the app routes every key to the panel
-  (`debugPanelEditing`), like an editor in insert mode.
+  (`debugPanelEditing`), like an editor in insert mode. Hardening (#640):
+  `openDebugPanel` runs the attach step (`attachDebugPanel`: `SetEditable` gate
+  + pending-output flush) even when the panel already exists — a panel restored
+  from a saved layout becomes editable at the session's first stop instead of
+  staying read-only; `SetScopes`/`SetChildren` cancel an open inline editor
+  (an async refresh replaces the tree, and enter would commit a stale
+  ref/name); `setDebugVariable` refuses with an Info notice while the debuggee
+  runs, and a spontaneous `continued` event blanks the panel (`SetRunning`)
+  like stepping does, so no stale rows stay editable; a refetch failure after a
+  successful set surfaces as an error toast ("value set, refresh failed")
+  instead of silently showing the old value; the inline editor row is windowed
+  to the variables column width around the cursor, so a long value cannot
+  overflow into the output column; and the esc that cancels an edit is consumed
+  by the panel *before* the double-esc detector, so it never arms the esc-esc
+  palette shortcut.

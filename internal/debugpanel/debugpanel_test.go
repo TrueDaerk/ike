@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/dap"
 )
@@ -307,6 +308,81 @@ func TestScopeRootNotEditable(t *testing.T) {
 	m.Update(key("e"))
 	if m.Editing() {
 		t.Fatal("a scope root has no settable value")
+	}
+}
+
+// TestScopesRefreshCancelsEdit verifies #640: an async scopes replacement
+// (frame switch, step) closes an open inline editor instead of leaving it
+// over the new tree.
+func TestScopesRefreshCancelsEdit(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	m.SetChildren(100, []dap.Variable{{Name: "x", Value: "42"}})
+	m.SetEditable(true)
+	m.col = colVars
+	m.varSel = 1
+	m.Update(key("e"))
+	if !m.Editing() {
+		t.Fatal("precondition: editor open")
+	}
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 300}})
+	if m.Editing() {
+		t.Fatal("SetScopes must cancel an open editor")
+	}
+}
+
+// TestChildrenRefreshCancelsEdit verifies #640: a children refresh (the rows
+// under the edited ref may be replaced) closes an open inline editor so enter
+// cannot commit a stale ref/name.
+func TestChildrenRefreshCancelsEdit(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	m.SetChildren(100, []dap.Variable{{Name: "x", Value: "42"}})
+	m.SetEditable(true)
+	m.col = colVars
+	m.varSel = 1
+	m.Update(key("e"))
+	if !m.Editing() {
+		t.Fatal("precondition: editor open")
+	}
+	m.SetChildren(100, []dap.Variable{{Name: "y", Value: "1"}})
+	if m.Editing() {
+		t.Fatal("SetChildren must cancel an open editor")
+	}
+}
+
+// TestEditorRowWindowedToColumn verifies #640: the inline editor row is
+// windowed to the variables column width — a long value neither overflows
+// into the next column nor hides the cursor.
+func TestEditorRowWindowedToColumn(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 100}})
+	long := strings.Repeat("abcdefghij", 20) // far wider than any column
+	m.SetChildren(100, []dap.Variable{{Name: "x", Value: long}})
+	m.SetEditable(true)
+	m.col = colVars
+	m.varSel = 1
+	m.Update(key("e"))
+	if !m.Editing() {
+		t.Fatal("precondition: editor open")
+	}
+	_, vw, _ := m.colWidths()
+	for i, row := range m.renderVars(vw) {
+		if got := lipgloss.Width(row); got > vw {
+			t.Fatalf("row %d width = %d, exceeds column width %d", i, got, vw)
+		}
+	}
+	// The cursor (at the buffer end) stays visible: the window shows the
+	// value's tail followed by the cursor cell.
+	rows := m.renderVars(vw)
+	if got := StripANSI(rows[2]); !strings.HasSuffix(got, "abcdefghij ") {
+		t.Fatalf("editor row must window to the cursor at the tail, got %q", got)
 	}
 }
 
