@@ -2,6 +2,12 @@
 
 ## 2026-07-17
 
+- Help essentials view (#656): `?` now opens a curated Essentials cheat sheet
+  (~25 commands in feature groups, one screen) instead of the full registry
+  dump; `tab` toggles to the full list and back, a non-empty filter always
+  searches the full set, and a footer line shows counts + the toggle hint.
+  Curated IDs are drift-guarded by a registry test.
+
 - Floating shell key seam (#655): new optional `ui.KeyHandler` Content
   extension — keys that neither fed the live filter nor matched a dismiss key
   are offered to the content (`HandleKey(key) bool`) before scroll handling,
