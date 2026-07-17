@@ -48,7 +48,8 @@ Declaration (call from `init()`):
   (bubbletea syntax, e.g. `"ctrl+k g"`) to a declared command
 - `KeymapFunc(keys, fn)` / `KeymapFuncIn(...)` — standalone binding
 - `Hook(id, event, fn)` — lifecycle subscription; events `sdk.FileOpened`,
-  `sdk.BufferSaved`, `sdk.BufferClosed`; `fn` receives event-specific JSON
+  `sdk.BufferSaved`, `sdk.BufferClosed`, `sdk.CommandExecuted` (payload: the
+  dispatched command id); `fn` receives event-specific JSON
 
 Host calls (from any callback):
 

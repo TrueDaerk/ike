@@ -483,7 +483,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	pages = append(pages, settings.Page{Title: "Toolchain", Custom: settings.NewToolchainPage(m.cfgOpts, ".", func() tea.Cmd {
 		// An interpreter change respawns the servers against the new value.
 		if c, ok := reg.Command("lsp.restart"); ok {
-			return c.Run(m.host)
+			return m.dispatchCommand("lsp.restart", c)
 		}
 		return nil
 	})})
@@ -508,7 +508,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 			// write regardless of reload ordering.
 			if enable && strings.HasPrefix(id, "lang-") {
 				if c, ok := reg.Command("lsp.installMissing"); ok {
-					return tea.Batch(write, c.Run(m.host))
+					return tea.Batch(write, m.dispatchCommand("lsp.installMissing", c))
 				}
 			}
 			return write
@@ -1044,7 +1044,7 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	case keymap.Resolved:
 		m.whichKey = nil
 		if c, ok := m.reg.Command(res.Command); ok {
-			return c.Run(m.host), true
+			return m.dispatchCommand(res.Command, c), true
 		}
 		// A documented blocked default (0081/20 ledger): consume the chord and
 		// say why it does nothing — a silent no-op is indistinguishable from a
@@ -1989,7 +1989,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, msg.Label+" — registered as project interpreter")
 		cmds := []tea.Cmd{config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
 		if c, ok := m.reg.Command("lsp.restart"); ok {
-			cmds = append(cmds, c.Run(m.host))
+			cmds = append(cmds, m.dispatchCommand("lsp.restart", c))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -2390,6 +2390,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.symbols.request == nil {
 			if c, ok := m.reg.Command("project.goToClass"); ok {
 				m.symbolPriming = true
+				// Deliberately NOT dispatchCommand (#679): this is silent
+				// internal priming of the workspace-symbol bridge, not a user
+				// invocation of project.goToClass — the executed signal would
+				// lie to observers (e.g. tick a tour task the user never did).
 				prime = c.Run(m.host)
 			}
 		}
@@ -3055,7 +3059,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.whichKey = nil
 		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
 			if c, ok := m.reg.Command(res.Command); ok {
-				return m, c.Run(m.host)
+				return m, m.dispatchCommand(res.Command, c)
 			}
 		}
 		return m, nil
@@ -3259,7 +3263,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
 			if k.Priority > plugin.CorePriority || !m.isCoreKey(keys) {
-				return m, k.Action(m.host)
+				cmd := k.Action(m.host)
+				// A binding that aliases a registered command emits the
+				// command-executed signal like every other dispatch (#679).
+				if k.CommandID != "" {
+					cmd = tea.Batch(cmd, m.commandExecuted(k.CommandID))
+				}
+				return m, cmd
 			}
 		}
 		if dir, ok := m.focusKeys[keys]; ok {
@@ -3490,10 +3500,37 @@ func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 	return cmds
 }
 
+// CommandExecutedMsg is the in-app command-executed signal (#679): it is
+// delivered through the normal Update loop whenever a registered command is
+// dispatched (palette, keybinding, or internal invocation), carrying the
+// command id. App-internal consumers (e.g. the interactive tour) observe it
+// with a plain switch case — no plugin hook registration needed.
+type CommandExecutedMsg struct {
+	ID string
+}
+
+// commandExecuted builds the command-executed signal for a dispatched
+// command id: the plugin EventCommandExecuted hooks plus the in-app
+// CommandExecutedMsg. It fires at dispatch time — the command's own tea.Cmd
+// may still be running — and is a cheap batch when no hook subscribes.
+func (m Model) commandExecuted(id string) tea.Cmd {
+	cmds := append(m.fireHooks(plugin.EventCommandExecuted, id),
+		func() tea.Msg { return CommandExecutedMsg{ID: id} })
+	return tea.Batch(cmds...)
+}
+
+// dispatchCommand runs a registered command and emits the executed signal.
+// Every command dispatch path — palette RunCommand, keymap resolution, and
+// inline invocations — funnels through it (#679), so "command X ran" is
+// observable regardless of how it was triggered.
+func (m Model) dispatchCommand(id string, c registry.OwnedCommand) tea.Cmd {
+	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
+}
+
 // RunCommand looks up and runs a registered command by id.
 func (m Model) RunCommand(id string) tea.Cmd {
 	if c, ok := m.reg.Command(id); ok {
-		return c.Run(m.host)
+		return m.dispatchCommand(id, c)
 	}
 	return nil
 }

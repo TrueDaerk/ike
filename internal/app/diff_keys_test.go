@@ -127,19 +127,11 @@ func TestDiffF7StepsHunks(t *testing.T) {
 	}
 
 	// The chord resolves to a command whose Run dispatches the step message;
-	// run the returned command chain like the program loop would.
+	// run the returned command tree (a batch since #679) like the program
+	// loop would.
 	press := func(k tea.KeyPressMsg) {
 		t.Helper()
-		out, cmd := m.Update(k)
-		m = out.(Model)
-		for cmd != nil {
-			msg := cmd()
-			if msg == nil {
-				return
-			}
-			out, cmd = m.Update(msg)
-			m = out.(Model)
-		}
+		m = drainKey(m, k)
 	}
 
 	press(tea.KeyPressMsg{Code: tea.KeyF7})

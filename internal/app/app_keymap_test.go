@@ -42,8 +42,72 @@ func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("ctrl+y should fire the bound command")
 	}
-	if _, ok := cmd().(kbFiredMsg); !ok {
-		t.Fatalf("expected kbFiredMsg from the bound command, got %T", cmd())
+	var fired, executed bool
+	for _, msg := range cmdMsgs(cmd) {
+		switch v := msg.(type) {
+		case kbFiredMsg:
+			fired = true
+		case CommandExecutedMsg:
+			executed = v.ID == "kbtest.fire"
+		}
+	}
+	if !fired {
+		t.Fatal("expected kbFiredMsg from the bound command")
+	}
+	// #679: keymap dispatch emits the in-app command-executed signal too.
+	if !executed {
+		t.Fatal("want CommandExecutedMsg{kbtest.fire} from key dispatch")
+	}
+}
+
+// hookPlugin registers a command plus a hook on EventCommandExecuted (#679),
+// recording every payload it is notified with.
+type hookPlugin struct {
+	executed *[]string
+}
+
+func (hookPlugin) ID() string { return "hooktest" }
+func (p hookPlugin) Capabilities() plugin.Capabilities {
+	return plugin.Capabilities{
+		Commands: []plugin.Command{{
+			ID:    "hooktest.fire",
+			Title: "Fire",
+			Scope: plugin.GlobalScope(),
+			Run:   func(host.API) tea.Cmd { return nil },
+		}},
+		Hooks: []plugin.Hook{{
+			ID:    "hooktest.onExec",
+			Event: plugin.EventCommandExecuted,
+			Notify: func(_ host.API, payload any) tea.Cmd {
+				if id, ok := payload.(string); ok {
+					*p.executed = append(*p.executed, id)
+				}
+				return nil
+			},
+		}},
+	}
+}
+
+// TestCommandExecutedHookFires verifies EventCommandExecuted (#679) reaches
+// plugin hooks with the command id, for both the palette path (RunCommand)
+// and the keybinding path.
+func TestCommandExecutedHookFires(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	var executed []string
+	reg := registry.New()
+	reg.Add(hookPlugin{executed: &executed})
+	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "hooktest.fire"}
+	m := NewWith(reg, cfg)
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m = out.(Model)
+
+	m.RunCommand("hooktest.fire") // palette path; Notify runs synchronously
+	if len(executed) != 1 || executed[0] != "hooktest.fire" {
+		t.Fatalf("palette dispatch: executed = %v, want [hooktest.fire]", executed)
+	}
+	m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl}) // keybinding path
+	if len(executed) != 2 || executed[1] != "hooktest.fire" {
+		t.Fatalf("key dispatch: executed = %v, want a second hooktest.fire", executed)
 	}
 }
 
