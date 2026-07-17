@@ -1,6 +1,7 @@
 package help
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -26,9 +27,11 @@ type Help struct {
 	minCol int            // configured minimum column width (0 -> default)
 	pal    *theme.Palette // active theme (Roadmap 0110); nil = default
 
-	groups []Group
-	extra  Group
-	filter string // live typed filter (#271); "" shows everything
+	groups     []Group
+	essentials []Group
+	extra      Group
+	filter     string // live typed filter (#271); "" shows everything
+	showAll    bool   // false = curated Essentials view (#656); tab toggles
 }
 
 // SetFilter installs the live filter typed into the floating shell (#271);
@@ -66,6 +69,24 @@ func (h *Help) Snapshot(contextID string) {
 	if len(h.extra.Entries) > 0 {
 		h.groups = append(h.groups, h.extra)
 	}
+	h.essentials = EssentialsSnapshot(h.src, h.res)
+	// Every open starts on the curated Essentials view (#656); the full dump
+	// stays one tab away. Degrade to the full view when nothing curated
+	// resolved (stub registries).
+	h.showAll = len(h.essentials) == 0
+}
+
+// HandleKey implements ui.KeyHandler: tab toggles between the Essentials and
+// full views. The toggle is a no-op while a filter is active — the filter
+// already searches the full set, so switching views means nothing there.
+func (h *Help) HandleKey(key string) bool {
+	if key != "tab" {
+		return false
+	}
+	if h.filter == "" && len(h.essentials) > 0 {
+		h.showAll = !h.showAll
+	}
+	return true
 }
 
 // SetExtra appends one caller-supplied group to every snapshot — the honest
@@ -78,6 +99,9 @@ func (h *Help) SetExtra(g Group) { h.extra = g }
 func (h *Help) Title() string {
 	if h.filter != "" {
 		return "HELP — filter: " + h.filter
+	}
+	if !h.showAll {
+		return "HELP — essentials"
 	}
 	return "HELP — commands & shortcuts"
 }
@@ -101,13 +125,49 @@ func (h *Help) Render(width int) string {
 	if cols > maxColumns {
 		cols = maxColumns
 	}
-	return h.renderBody(groups, colW, cols)
+	body := h.renderBody(groups, colW, cols)
+	if footer := h.footer(groups); footer != "" {
+		hintStyle := lipgloss.NewStyle().Foreground(h.theme().Border)
+		body = lipgloss.JoinVertical(lipgloss.Left, body, "", hintStyle.Render(footer))
+	}
+	return body
 }
 
-// visibleGroups applies the live filter: a case-insensitive substring match
-// over title and shortcut keeps an entry; empty groups drop out.
+// footer renders the one-line view/filter legend under the body (#656).
+func (h *Help) footer(visible []Group) string {
+	total := countEntries(h.groups)
+	if h.filter != "" {
+		return strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " matches · searching all commands"
+	}
+	if !h.showAll {
+		return strconv.Itoa(countEntries(visible)) + " of " + strconv.Itoa(total) + " commands — press tab for the full list"
+	}
+	if len(h.essentials) > 0 {
+		return "press tab for essentials"
+	}
+	return ""
+}
+
+// countEntries totals the rows across groups.
+func countEntries(groups []Group) int {
+	n := 0
+	for _, g := range groups {
+		n += len(g.Entries)
+	}
+	return n
+}
+
+
+// visibleGroups picks the current view: the curated Essentials groups by
+// default, the full snapshot after a tab toggle. A live filter always searches
+// the FULL set — typing means hunting for something specific, so the curated
+// subset would only hide the answer. Matching is a case-insensitive substring
+// over title and shortcut; empty groups drop out.
 func (h *Help) visibleGroups() []Group {
 	if h.filter == "" {
+		if !h.showAll {
+			return h.essentials
+		}
 		return h.groups
 	}
 	needle := strings.ToLower(h.filter)

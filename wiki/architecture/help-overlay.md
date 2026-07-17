@@ -4,7 +4,7 @@ title: Help Overlay
 description: Read-only command & shortcut cheat sheet — snapshots the plugin registry scoped to the focused pane, joins bindings, packs entries into width-responsive columns with right-aligned shortcuts, hosted in the reusable floating shell.
 resource: internal/help/help.go
 tags: [architecture, help, overlay, responsive, bubbletea]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Help Overlay
@@ -39,13 +39,38 @@ with an active filter, `q`/`?` act as letters, `backspace` edits, and `esc`
 first clears the filter before a second `esc` closes; each open starts
 unfiltered. See [Floating Shell](/architecture/floating-shell.md).
 
+## Essentials view (#656)
+
+The sheet opens on a curated **Essentials** view, not the full registry dump:
+~25 hand-picked commands in feature groups (Get around / Edit / Panes & tabs /
+Project & tools / Customize), each group ≤6 entries so the view fits one
+screen. `tab` toggles Essentials ⇄ the full list (`Help` implements the
+shell's `ui.KeyHandler` extension); each open resets to Essentials; the title
+reflects the view (`HELP — essentials` vs `HELP — commands & shortcuts`) and a
+dim footer line shows the count and the toggle hint.
+
+Curation lives in `essentials.go` as command IDs joined against the same
+registry + resolver as the full snapshot — deliberately hand-maintained, since
+`Binding.Owner` values are internal roadmap tags unusable as user-facing
+groups. Unregistered curated IDs drop silently (stub registries degrade to the
+full view); a drift test in `internal/app` asserts every curated ID resolves
+against the real global registry. Essentials ignores the focus context — the
+starter set is the same everywhere. The caller-supplied "blocked" extra group
+(`SetExtra`) appears in the full view only.
+
+A **non-empty filter always searches the full set** (typing means hunting for
+something specific, so the curated subset would only hide the answer); the
+footer switches to `N of M matches · searching all commands` and `tab` is a
+no-op until the filter clears, which restores the prior view.
+
 ## Structure
 
 ```
 internal/help/
-  source.go    snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort
-  layout.go    width -> column count; column-major balanced packing; min-column-width; single-column fallback
-  help.go      ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
+  source.go      snapshot registry Commands, join 08 resolver bindings, group by scope, deterministic sort
+  essentials.go  hand-curated Essentials spec + EssentialsSnapshot join (#656)
+  layout.go      width -> column count; column-major balanced packing; min-column-width; single-column fallback
+  help.go        ui.Content: Snapshot(ctxID) refresh; Title(); Render(width) -> column-packed body (max two columns)
 ```
 
 The root model (`internal/app`) holds a single `*ui.Floating`. Its `openHelp`
