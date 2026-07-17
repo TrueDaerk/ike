@@ -15,6 +15,11 @@ type State struct {
 	Cursor     string
 }
 
+// ShowingHidden reports whether dot-entries are currently rendered, whichever
+// path set it last (config apply or the runtime `.` toggle). The app compares
+// it around a live reconfigure to persist config-driven changes (#642).
+func (m Model) ShowingHidden() bool { return m.showHidden }
+
 // Snapshot returns the current restorable state.
 func (m Model) Snapshot() State {
 	var expanded []string

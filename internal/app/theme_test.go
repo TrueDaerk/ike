@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -146,5 +148,56 @@ func TestThemeOverridePersists(t *testing.T) {
 	m2.restoreTheme("nord")
 	if m2.pal().Name != "nord" {
 		t.Errorf("restored theme = %q, want nord", m2.pal().Name)
+	}
+}
+
+// TestReloadPersistsConfigShowHidden (#642): a genuine settings edit to
+// explorer.show_hidden applied by a live config reload must persist to the
+// session like the runtime `.` toggle does — otherwise a kill/crash (no clean
+// quit) leaves a stale session.json that restoreSession re-applies over the
+// edit at next boot. An unrelated reload must not touch session.json at all.
+func TestReloadPersistsConfigShowHidden(t *testing.T) {
+	proj := t.TempDir()
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(proj)
+	sessionPath := filepath.Join(state, "session.json")
+
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(registry.New(), host.FromConfig(cfg))
+	if m.explorer().ShowingHidden() {
+		t.Fatal("show_hidden should start off")
+	}
+	// A previously persisted session holds the old value (e.g. written by an
+	// earlier clean quit).
+	saveSession(m.snapshotSession())
+
+	// Settings edit: show_hidden flips on and the config reloads live.
+	cfg2, _ := config.Load(config.Options{})
+	cfg2.Explorer.ShowHidden = true
+	tm, _ := m.Update(config.ConfigReloadedMsg{Config: cfg2})
+	m = tm.(Model)
+	if !m.explorer().ShowingHidden() {
+		t.Fatal("config change did not apply live")
+	}
+
+	// Simulated kill/crash: no quit. A fresh model restores the session, which
+	// must already carry the new value instead of clobbering the edit.
+	m2 := NewWith(registry.New(), host.FromConfig(cfg2))
+	if !m2.explorer().ShowingHidden() {
+		t.Fatal("config-driven show_hidden change did not survive a restart without clean quit (#642)")
+	}
+
+	// An unrelated reload (show_hidden unchanged) must not write the session.
+	if err := os.Remove(sessionPath); err != nil {
+		t.Fatal(err)
+	}
+	cfg3, _ := config.Load(config.Options{})
+	cfg3.Explorer.ShowHidden = true
+	cfg3.Editor.TabWidth = 2
+	tm, _ = m2.Update(config.ConfigReloadedMsg{Config: cfg3})
+	_ = tm
+	if _, err := os.Stat(sessionPath); err == nil {
+		t.Error("unrelated reload wrote session.json; expected no write")
 	}
 }
