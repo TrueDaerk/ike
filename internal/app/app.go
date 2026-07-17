@@ -198,6 +198,11 @@ type Model struct {
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
+	// jbImportOpen marks the JetBrains keymap import prompt (#677) while the
+	// shell shows it; jbImportInput/jbImportPos are the typed path and cursor.
+	jbImportOpen  bool
+	jbImportInput string
+	jbImportPos   int
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -1843,6 +1848,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startMoveFile()
 		return m, nil
 
+	case ImportJetBrainsKeymapMsg:
+		// keymap.importJetBrains (palette, #677): prompt for the exported
+		// XML's path, then translate it into keymap.bindings.* overrides.
+		m.startJBImport()
+		return m, nil
+
+	case jbImportDoneMsg:
+		// The finished import: toast the summary and apply the config reload.
+		return m, m.finishJBImport(msg)
+
 	case palette.MoveTargetMsg:
 		return m, m.finishMoveFile(msg.Dir)
 
@@ -3154,6 +3169,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// characters build the new name, enter applies, esc cancels.
 		if m.renameOpen() {
 			return m.updateRenamePrompt(msg)
+		}
+		// The JetBrains keymap import prompt (#677) mirrors it, plus tab
+		// path completion.
+		if m.jbImportPromptOpen() {
+			return m.updateJBImportPrompt(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {

@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -235,5 +237,77 @@ func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
 	}
 	if !strings.Contains(strings.Split(v, "\n")[h-2], last.Command) {
 		t.Fatalf("footer must follow the selection:\n%s", v)
+	}
+}
+
+// TestKeymapPageImportsJetBrainsXML drives the "i" import flow (#677): the
+// inline path input captures keys, enter runs the import, the overrides land
+// at user scope and the effective table re-resolves.
+func TestKeymapPageImportsJetBrainsXML(t *testing.T) {
+	k, opts := keymapPage(t)
+	xml := `<keymap version="1" name="test">
+  <action id="GotoDeclaration">
+    <keyboard-shortcut first-keystroke="meta pressed B"/>
+  </action>
+  <action id="SomeUnknownAction">
+    <keyboard-shortcut first-keystroke="meta pressed Y"/>
+  </action>
+</keymap>`
+	path := filepath.Join(t.TempDir(), "export.xml")
+	if err := os.WriteFile(path, []byte(xml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	k.Update(key("i"))
+	if !k.Capturing() {
+		t.Fatal("import input must capture keys")
+	}
+	// Replace the seeded "~/" with the fixture's absolute path.
+	k.importInput = ""
+	for _, r := range path {
+		k.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	apply(t, k.Update(key("enter")))
+	if k.Capturing() {
+		t.Fatal("import input must close on enter")
+	}
+	if !strings.Contains(k.importNote, "imported 1 binding") || !strings.Contains(k.importNote, "1 action(s) unmapped") {
+		t.Fatalf("importNote = %q", k.importNote)
+	}
+	// The effective table now binds cmd+b to lsp.definition at the user layer
+	// and the replaced f4 default is gone.
+	var found bool
+	for _, b := range k.table().Bindings() {
+		switch b.Chord.String() {
+		case "cmd+b":
+			found = b.Command == "lsp.definition" && b.Layer == keymap.LayerUser
+		case "f4":
+			t.Fatalf("f4 default must be unbound after import: %+v", b)
+		}
+	}
+	if !found {
+		t.Fatal("cmd+b → lsp.definition override missing after import")
+	}
+	// The write landed in the user settings file.
+	raw, err := os.ReadFile(opts.UserPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"cmd+b"`) || !strings.Contains(string(raw), "lsp.definition") {
+		t.Fatalf("user settings missing imported binding:\n%s", raw)
+	}
+}
+
+// TestKeymapPageImportEscCancels ensures esc closes the input untouched.
+func TestKeymapPageImportEscCancels(t *testing.T) {
+	k, opts := keymapPage(t)
+	k.Update(key("i"))
+	if cmd := k.Update(key("esc")); cmd != nil {
+		t.Fatal("esc must not write anything")
+	}
+	if k.Capturing() {
+		t.Fatal("esc must close the import input")
+	}
+	if _, err := os.Stat(opts.UserPath); !os.IsNotExist(err) {
+		t.Fatalf("no settings file expected, err=%v", err)
 	}
 }
