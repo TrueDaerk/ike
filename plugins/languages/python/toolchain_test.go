@@ -79,3 +79,47 @@ func TestPyenvVersionPin(t *testing.T) {
 		t.Errorf("interpreter = %q, want pyenv %q", got, want)
 	}
 }
+
+// TestPathHitResolvesShims guards #650: with no venv or pyenv pin, a PATH hit
+// that is a version-manager shim resolves to the real interpreter.
+func TestPathHitResolvesShims(t *testing.T) {
+	t.Setenv("VIRTUAL_ENV", "")
+	prevLook, prevResolve := pyLook, pyResolve
+	t.Cleanup(func() { pyLook, pyResolve = prevLook, prevResolve })
+
+	root := t.TempDir() // no venv, no .python-version
+	pyLook = func(name string) (string, error) {
+		if name == "python3" {
+			return "/home/u/.pyenv/shims/python3", nil
+		}
+		return "", os.ErrNotExist
+	}
+	pyResolve = func(gotRoot, p string) string {
+		if gotRoot != root {
+			t.Errorf("resolve root = %q, want %q", gotRoot, root)
+		}
+		return "/home/u/.pyenv/versions/3.12.4/bin/python3.12"
+	}
+	p, ok := interpreter(root)
+	if !ok || p != "/home/u/.pyenv/versions/3.12.4/bin/python3.12" {
+		t.Fatalf("interpreter = %q %v, want resolved shim", p, ok)
+	}
+}
+
+// TestVenvNotShimResolved guards #650: venv interpreters are real paths and
+// must not be passed through the shim resolver.
+func TestVenvNotShimResolved(t *testing.T) {
+	t.Setenv("VIRTUAL_ENV", "")
+	prevResolve := pyResolve
+	t.Cleanup(func() { pyResolve = prevResolve })
+	pyResolve = func(_, p string) string {
+		t.Errorf("resolver must not run for venv path %q", p)
+		return p
+	}
+
+	root := t.TempDir()
+	want := mkPython(t, filepath.Join(root, ".venv"))
+	if p, ok := interpreter(root); !ok || p != want {
+		t.Fatalf("interpreter = %q %v, want %q", p, ok, want)
+	}
+}

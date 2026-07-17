@@ -17,6 +17,11 @@ type runCommand func(name string, args ...string) string
 // lookPath resolves a binary on PATH ("" when absent).
 type lookPath func(name string) string
 
+// resolveShim resolves a version-manager shim (pyenv/mise/asdf) to the real
+// executable, returning the input unchanged when it is not a shim or the
+// resolution fails (#650). Production is lang.ResolveShim.
+type resolveShim func(root, path string) string
+
 // execRun is the production runCommand.
 func execRun(name string, args ...string) string {
 	out, err := exec.Command(name, args...).Output()
@@ -36,9 +41,10 @@ func execLook(name string) string {
 }
 
 // pythonCandidates lists Python interpreter candidates in pick order: the
-// active virtualenv, project-local venvs, uv-managed interpreters, pyenv
-// shims, then PATH.
-func pythonCandidates(root string, run runCommand, look lookPath) []string {
+// active virtualenv, project-local venvs, uv-managed interpreters, the pyenv
+// interpreter, then PATH. Version-manager shims are resolved to the real
+// executable before listing (#650); an unresolvable shim stays as-is.
+func pythonCandidates(root string, run runCommand, look lookPath, resolve resolveShim) []string {
 	var out []string
 	add := func(p string) {
 		if p == "" {
@@ -64,10 +70,14 @@ func pythonCandidates(root string, run runCommand, look lookPath) []string {
 		add(p)
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		add(filepath.Join(home, ".pyenv", "shims", "python"))
+		add(resolve(root, filepath.Join(home, ".pyenv", "shims", "python")))
 	}
-	add(look("python3"))
-	add(look("python"))
+	if p := look("python3"); p != "" {
+		add(resolve(root, p))
+	}
+	if p := look("python"); p != "" {
+		add(resolve(root, p))
+	}
 	return out
 }
 
@@ -89,9 +99,9 @@ func parseUvPythonList(out string) []string {
 	return paths
 }
 
-// phpCandidates lists PHP interpreter candidates: PATH first, then common
-// install locations.
-func phpCandidates(look lookPath) []string {
+// phpCandidates lists PHP interpreter candidates: PATH first (shims resolved,
+// #650), then common install locations.
+func phpCandidates(root string, look lookPath, resolve resolveShim) []string {
 	var out []string
 	seen := map[string]bool{}
 	add := func(p string) {
@@ -104,7 +114,9 @@ func phpCandidates(look lookPath) []string {
 		seen[p] = true
 		out = append(out, p)
 	}
-	add(look("php"))
+	if p := look("php"); p != "" {
+		add(resolve(root, p))
+	}
 	for _, p := range []string{"/opt/homebrew/bin/php", "/usr/local/bin/php", "/usr/bin/php"} {
 		add(p)
 	}
@@ -117,12 +129,13 @@ func phpCandidates(look lookPath) []string {
 var wellKnownBinDirs = []string{"/opt/homebrew/bin", "/usr/local/bin", "/usr/local/go/bin", "/usr/bin"}
 
 // defaultCandidates lists interpreter candidates for languages without
-// specific discovery (#538): PATH lookup by language id, then the id in the
-// well-known install directories.
-func defaultCandidates(id string, look lookPath) []string {
+// specific discovery (#538): PATH lookup by language id (shims resolved,
+// #650), then the id in the well-known install directories.
+func defaultCandidates(id, root string, look lookPath, resolve resolveShim) []string {
 	var out []string
 	seen := map[string]bool{}
 	if p := look(id); p != "" {
+		p = resolve(root, p)
 		out, seen[p] = append(out, p), true
 	}
 	for _, dir := range wellKnownBinDirs {

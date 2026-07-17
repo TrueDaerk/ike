@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Language Registry
@@ -119,6 +119,27 @@ common install locations — for Go `/opt/homebrew/bin`, `/usr/local/bin`,
 misses homebrew's bin on PATH. The toolchain settings page's generic
 interpreter picker probes the same well-known directories after PATH
 (`defaultCandidates` in `internal/settings/toolchain_discover.go`).
+
+### Version-manager shim resolution (#650)
+
+pyenv, mise and asdf put dispatcher scripts on PATH (`~/.pyenv/shims/python`,
+`…/mise/shims/php`, `~/.asdf/shims/go`), so a plain `LookPath` reports the
+shim, hiding which interpreter version is actually active. Like JetBrains,
+IKE resolves shims to the real executable: `lang.ResolveShim(root, path)`
+(`internal/lang/shims.go`) detects the owning manager by path component and
+asks it — `pyenv|mise|asdf which <bin>` — running the command with the project
+root as working directory so per-project pins (`.python-version`,
+`.tool-versions`, `mise.toml`) resolve to that project's version. Resolution
+is best-effort: a non-shim path, a missing manager binary, a failing command
+or output that is not an existing file all return the input unchanged.
+
+The three plugin `Interpreter()` detectors resolve their PATH hits through it
+(venv and pyenv-versions paths are already real and skip it), which covers
+every consumer of `lang.Interpreter` — settings page, statusline, terminal
+PATH shims, debug launch and LSP injection. Discovery
+(`internal/settings/toolchain_discover.go`) resolves shim candidates before
+listing too (including the hardcoded pyenv shim entry) and dedupes identical
+resolutions, so the picker shows versioned paths.
 
 ## File templates (#170)
 

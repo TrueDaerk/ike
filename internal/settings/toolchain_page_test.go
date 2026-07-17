@@ -70,7 +70,7 @@ func TestPythonCandidatesVenvAndUv(t *testing.T) {
 		return ""
 	}
 	look := func(string) string { return "" }
-	got := pythonCandidates(root, run, look)
+	got := pythonCandidates(root, run, look, noResolve)
 	if len(got) != 2 || got[0] != venvPy || got[1] != uvPy {
 		t.Fatalf("candidates = %v, want [%s %s]", got, venvPy, uvPy)
 	}
@@ -186,16 +186,16 @@ func TestDefaultCandidatesWellKnownDirs(t *testing.T) {
 	wellKnownBinDirs = []string{filepath.Join(dir, "missing"), dir}
 
 	// PATH miss: the well-known location is still offered.
-	got := defaultCandidates("xlang", func(string) string { return "" })
+	got := defaultCandidates("xlang", ".", func(string) string { return "" }, noResolve)
 	if len(got) != 1 || got[0] != fake {
 		t.Fatalf("candidates = %v, want [%s]", got, fake)
 	}
 	// PATH hit first, deduplicated against the same well-known path.
-	got = defaultCandidates("xlang", func(string) string { return fake })
+	got = defaultCandidates("xlang", ".", func(string) string { return fake }, noResolve)
 	if len(got) != 1 || got[0] != fake {
 		t.Fatalf("candidates must dedupe PATH vs well-known, got %v", got)
 	}
-	got = defaultCandidates("xlang", func(string) string { return "/elsewhere/xlang" })
+	got = defaultCandidates("xlang", ".", func(string) string { return "/elsewhere/xlang" }, noResolve)
 	if len(got) != 2 || got[0] != "/elsewhere/xlang" || got[1] != fake {
 		t.Fatalf("PATH must come first, got %v", got)
 	}
@@ -216,5 +216,95 @@ func TestToolchainFooterHintWraps(t *testing.T) {
 	lines := strings.Split(v, "\n")
 	if len(lines) != h {
 		t.Fatalf("view height = %d, want %d", len(lines), h)
+	}
+}
+
+// noResolve is the identity resolveShim for tests not exercising #650.
+func noResolve(_, p string) string { return p }
+
+// TestPythonCandidatesResolveShims guards #650: version-manager shims returned
+// by PATH lookup (and the hardcoded pyenv shim) are resolved to the real
+// interpreter, and identical resolutions dedupe to one entry.
+func TestPythonCandidatesResolveShims(t *testing.T) {
+	t.Setenv("VIRTUAL_ENV", "")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	shim := filepath.Join(home, ".pyenv", "shims", "python")
+	if err := os.MkdirAll(filepath.Dir(shim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(shim, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(home, "versions", "3.12.4", "python3.12")
+	if err := os.MkdirAll(filepath.Dir(real), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(real, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	root := t.TempDir()
+	run := func(string, ...string) string { return "" }
+	look := func(name string) string {
+		if name == "python3" {
+			return shim // PATH also serves the shim
+		}
+		return ""
+	}
+	resolve := func(gotRoot, p string) string {
+		if gotRoot != root {
+			t.Errorf("resolve root = %q, want %q", gotRoot, root)
+		}
+		if strings.Contains(p, string(filepath.Separator)+".pyenv"+string(filepath.Separator)+"shims"+string(filepath.Separator)) {
+			return real
+		}
+		return p
+	}
+	got := pythonCandidates(root, run, look, resolve)
+	if len(got) != 1 || got[0] != real {
+		t.Fatalf("candidates = %v, want the single resolved path [%s]", got, real)
+	}
+
+	// Resolution failure keeps the shim (identity resolve).
+	got = pythonCandidates(root, run, look, noResolve)
+	if len(got) != 1 || got[0] != shim {
+		t.Fatalf("candidates = %v, want unresolved shim [%s]", got, shim)
+	}
+}
+
+// TestPhpAndDefaultCandidatesResolveShims guards #650 for the other discovery
+// helpers: PATH hits go through the resolver.
+func TestPhpAndDefaultCandidatesResolveShims(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real-bin")
+	if err := os.WriteFile(real, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	resolve := func(_, p string) string {
+		if strings.Contains(p, "shims") {
+			return real
+		}
+		return p
+	}
+
+	// The well-known php fallbacks may exist on the host; only the PATH hit
+	// (first entry) matters here.
+	got := phpCandidates(".", func(name string) string { return "/x/.asdf/shims/php" }, resolve)
+	if len(got) == 0 || got[0] != real {
+		t.Fatalf("php candidates = %v, want resolved %s first", got, real)
+	}
+	for _, p := range got {
+		if strings.Contains(p, "shims") {
+			t.Fatalf("shim leaked into candidates: %v", got)
+		}
+	}
+
+	prev := wellKnownBinDirs
+	t.Cleanup(func() { wellKnownBinDirs = prev })
+	wellKnownBinDirs = nil
+	got = defaultCandidates("go", ".", func(string) string { return "/x/mise/shims/go" }, resolve)
+	if len(got) != 1 || got[0] != real {
+		t.Fatalf("default candidates = %v, want [%s]", got, real)
 	}
 }

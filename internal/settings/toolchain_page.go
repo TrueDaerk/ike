@@ -42,6 +42,7 @@ type ToolchainPage struct {
 	restart func() tea.Cmd // dispatches lsp.restart after an interpreter change
 	run     runCommand
 	look    lookPath
+	resolve resolveShim // version-manager shim resolution (#650)
 	pal     *theme.Palette
 
 	sel      int
@@ -98,6 +99,7 @@ func NewToolchainPage(opts config.Options, root string, restart func() tea.Cmd) 
 		restart:  restart,
 		run:      execRun,
 		look:     execLook,
+		resolve:  lang.ResolveShim,
 		versions: map[string]string{},
 	}
 }
@@ -272,7 +274,7 @@ func (t *ToolchainPage) chooseTool(tool string) {
 	if tool == "uv" {
 		t.wizPys = append([]string{"default"}, uvVersionsAll(t.run("uv", "python", "list"))...)
 	} else {
-		t.wizPys = pythonCandidates(t.root, t.run, t.look)
+		t.wizPys = pythonCandidates(t.root, t.run, t.look, t.resolve)
 	}
 	if len(t.wizPys) <= 1 {
 		python := ""
@@ -399,13 +401,13 @@ func (t *ToolchainPage) updateUvPicker(key tea.KeyPressMsg) tea.Cmd {
 func (t *ToolchainPage) openPicker(l lang.Language) {
 	switch l.ID {
 	case "python":
-		t.candidates = pythonCandidates(t.root, t.run, t.look)
+		t.candidates = pythonCandidates(t.root, t.run, t.look, t.resolve)
 	case "php":
-		t.candidates = phpCandidates(t.look)
+		t.candidates = phpCandidates(t.root, t.look, t.resolve)
 	default:
 		// No specific discovery: PATH lookup by language id, then the
 		// well-known install directories (#538).
-		t.candidates = defaultCandidates(l.ID, t.look)
+		t.candidates = defaultCandidates(l.ID, t.root, t.look, t.resolve)
 	}
 	t.picking, t.pick, t.invalid = true, 0, ""
 }

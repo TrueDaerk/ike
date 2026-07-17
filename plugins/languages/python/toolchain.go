@@ -18,6 +18,13 @@ type toolchain struct{}
 
 var _ lang.Toolchain = toolchain{}
 
+// pyLook and pyResolve are seams for tests: PATH lookup and version-manager
+// shim resolution (#650).
+var (
+	pyLook    = exec.LookPath
+	pyResolve = lang.ResolveShim
+)
+
 func (toolchain) Detect(root string) (map[string]any, bool) {
 	p, ok := interpreter(root)
 	if !ok {
@@ -48,7 +55,9 @@ func (toolchain) Explicit(path string) map[string]any {
 
 // interpreter resolves the Python interpreter path in priority order: an active
 // virtualenv, a project-local venv, a pyenv .python-version pin, then any python
-// on PATH. ok=false means "let pyright pick its own default".
+// on PATH. A PATH hit that is a version-manager shim (pyenv/mise/asdf) is
+// resolved to the real executable (#650); venv and pyenv-versions paths are
+// already real. ok=false means "let pyright pick its own default".
 func interpreter(root string) (string, bool) {
 	if v := os.Getenv("VIRTUAL_ENV"); v != "" {
 		if p, ok := venvPython(v); ok {
@@ -64,8 +73,8 @@ func interpreter(root string) (string, bool) {
 		return p, true
 	}
 	for _, name := range []string{"python3", "python"} {
-		if p, err := exec.LookPath(name); err == nil {
-			return p, true
+		if p, err := pyLook(name); err == nil {
+			return pyResolve(root, p), true
 		}
 	}
 	return "", false

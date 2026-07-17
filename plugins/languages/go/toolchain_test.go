@@ -39,3 +39,31 @@ func TestInterpreterFallsBackToWellKnownLocations(t *testing.T) {
 		t.Fatal("no binary anywhere must report not found")
 	}
 }
+
+// TestInterpreterResolvesShims guards #650: a PATH hit that is a
+// version-manager shim is resolved to the real executable; resolution failure
+// keeps the shim.
+func TestInterpreterResolvesShims(t *testing.T) {
+	prevLook, prevResolve := goLook, goResolve
+	t.Cleanup(func() { goLook, goResolve = prevLook, prevResolve })
+
+	goLook = func(string) (string, error) { return "/home/u/.asdf/shims/go", nil }
+	goResolve = func(root, p string) string {
+		if root != "/proj" {
+			t.Errorf("resolve root = %q, want /proj", root)
+		}
+		if p != "/home/u/.asdf/shims/go" {
+			t.Errorf("resolve path = %q", p)
+		}
+		return "/home/u/.asdf/installs/golang/1.22.4/go/bin/go"
+	}
+	if p, ok := (toolchain{}).Interpreter("/proj"); !ok || p != "/home/u/.asdf/installs/golang/1.22.4/go/bin/go" {
+		t.Fatalf("Interpreter = %q %v, want resolved shim", p, ok)
+	}
+
+	// Identity resolver (resolution failed): shim path survives.
+	goResolve = func(_, p string) string { return p }
+	if p, ok := (toolchain{}).Interpreter("/proj"); !ok || p != "/home/u/.asdf/shims/go" {
+		t.Fatalf("Interpreter = %q %v, want shim unchanged", p, ok)
+	}
+}
