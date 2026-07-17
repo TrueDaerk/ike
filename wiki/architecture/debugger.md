@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-17T21:00:00Z
 ---
 
 # Debugger (0350)
@@ -98,9 +98,9 @@ instead of running it under the adapter's `/dev/null` stdin.
 - **Terminal lifetime** (#638, #676): the embedded debuggee terminal
   deliberately stays in the panel after its process exits so the output can be
   reviewed; the next session's runInTerminal replaces it (`SetTerminal` closes
-  the old model). It dies with its host: closing the debug panel — by the user
-  or on session end — closes the embedded session (`CloseTerminal` in the pane
-  registry's `Close`).
+  the old model). It dies with its host: closing the debug panel — by the user,
+  or via a new launch's `ResetSession` — closes the embedded session
+  (`CloseTerminal` in the pane registry's `Close`).
 - Trade-off: with `integratedTerminal` the debuggee's output goes to the PTY,
   so the DAP `output` stream and `.ike/debug-session.log` (#624) stay empty
   for Python sessions — but the PTY now renders inside the Output column, so
@@ -125,9 +125,13 @@ instead of running it under the adapter's `/dev/null` stdin.
 
 `internal/debugpanel` + `pane.KindDebug` (singleton key `debug`, vcspanel
 pattern): a bottom-split panel that opens on the first stop — without
-stealing focus from the paused line — and closes when the session ends.
-Session-local like the terminal tabs: it persists in the layout as an empty
-slot and re-feeds on the next stop.
+stealing focus from the paused line. When the session ends the panel **stays
+open in a finished state** (#689): frames/variables clear to a
+`finished (exit code N)` placeholder while the Output column — text lines or
+the embedded terminal's scrollback — remains reviewable; trailing adapter
+output flushed past `terminated` still appends. The user closes it like any
+pane; the next launch reuses it after `ResetSession` wipes the previous
+session's output and dead terminal.
 
 - **Frames view** (left): the paused thread's stack; `j`/`k` move, `enter`
   emits `SelectFrameMsg` — the app navigates the editor to the frame's

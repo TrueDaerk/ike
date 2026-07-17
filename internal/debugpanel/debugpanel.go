@@ -83,6 +83,12 @@ type Model struct {
 	col     column
 	running bool // true between steps (no paused data to show)
 
+	// finished marks a terminated session (#689): the panel stays open so the
+	// Output column remains reviewable; frames show the exit status instead.
+	finished bool
+	exitCode int
+	hasExit  bool
+
 	// Debuggee output (#624): completed lines plus a pending partial (DAP
 	// output events can split mid-line); outTop is the scroll offset. outHold
 	// is set by a manual scroll away from the bottom (#637): while held,
@@ -225,16 +231,56 @@ func (m *Model) SetFrames(frames []dap.StackFrame) {
 	m.varSel = 0
 	m.varTop = 0
 	m.running = false
+	m.finished = false
 	m.cancelEdit()
 }
 
 // SetRunning blanks the paused data while the debuggee runs.
 func (m *Model) SetRunning() {
 	m.running = true
+	m.finished = false
 	m.frames = nil
 	m.roots = nil
 	m.frameSel, m.varSel = 0, 0
 	m.frameTop, m.varTop = 0, 0
+	m.cancelEdit()
+}
+
+// SetFinished marks the session as terminated (#689): paused data is cleared
+// but the output (text lines or the embedded terminal's scrollback) stays for
+// review until the user closes the panel or a new session resets it.
+func (m *Model) SetFinished(exitCode int, hasCode bool) {
+	m.finished = true
+	m.exitCode = exitCode
+	m.hasExit = hasCode
+	m.running = false
+	m.frames = nil
+	m.roots = nil
+	m.frameSel, m.varSel = 0, 0
+	m.frameTop, m.varTop = 0, 0
+	m.cancelEdit()
+}
+
+// Finished reports whether the panel shows a terminated session.
+func (m Model) Finished() bool { return m.finished }
+
+// ResetSession clears everything a previous session left behind — finished
+// marker, output lines, and the embedded terminal — for a fresh launch that
+// reuses the still-open panel (#689).
+func (m *Model) ResetSession() {
+	m.finished = false
+	m.hasExit = false
+	m.exitCode = 0
+	m.running = false
+	m.frames = nil
+	m.roots = nil
+	m.frameSel, m.varSel = 0, 0
+	m.frameTop, m.varTop = 0, 0
+	m.outLines = nil
+	m.outPartial = outLine{}
+	m.outTop = 0
+	m.outHold = false
+	m.CloseTerminal()
 	m.cancelEdit()
 }
 
@@ -542,6 +588,13 @@ func (m Model) renderFrames(w int) []string {
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
 	if m.running {
 		return append(out, dim.Render(truncate(" running…", w)))
+	}
+	if m.finished {
+		label := " finished"
+		if m.hasExit {
+			label += " (exit code " + strconv.Itoa(m.exitCode) + ")"
+		}
+		return append(out, dim.Render(truncate(label, w)))
 	}
 	if len(m.frames) == 0 {
 		return append(out, dim.Render(truncate(" not paused", w)))

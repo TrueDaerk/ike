@@ -2,6 +2,11 @@
 
 ## 2026-07-17
 
+- Debug panel survives session end (#689): termination flips the panel into a
+  `finished (exit code N)` state instead of closing it — output lines and the
+  embedded terminal's scrollback stay reviewable, trailing adapter output
+  still appends, and the next launch resets the reused panel
+  (`debugpanel.SetFinished`/`ResetSession`).
 - Interactive tour try-it steps (#680): selected tour pages carry checkbox
   tasks (search everywhere, file-tree toggle, terminal toggle); non-paging
   keys pass through to the app while a page's task is unfinished, the
