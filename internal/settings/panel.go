@@ -24,6 +24,20 @@ type PageModel interface {
 	Capturing() bool
 }
 
+// PageClicker is an optional PageModel extension (#674): pages implementing
+// it receive left presses at page-local coordinates — (0,0) is the top-left
+// cell of the area their View renders into.
+type PageClicker interface {
+	Click(x, y int) tea.Cmd
+}
+
+// PageWheeler is an optional PageModel extension (#674): pages implementing
+// it receive wheel deltas (negative = up) while the pointer hovers the form
+// column.
+type PageWheeler interface {
+	Wheel(delta int)
+}
+
 // column names the focused panel column.
 type column int
 
@@ -182,8 +196,13 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		}
 		return nil
 	}
-	// Form column (schema-driven pages only; custom pages stay keyboard-driven).
-	if m.customPage() != nil && m.filter == "" {
+	// Custom pages own their form column: forward the press page-locally
+	// through the optional PageClicker seam (#674).
+	if page := m.customPage(); page != nil && m.filter == "" {
+		if c, ok := page.(PageClicker); ok && x >= 1+catWidth+3 {
+			m.focus = formColumn
+			return c.Click(x-(1+catWidth+3), row)
+		}
 		return nil
 	}
 	if x < 1+catWidth+3 {
@@ -276,9 +295,12 @@ func (m *Model) Wheel(x, delta int) {
 		}
 		return
 	}
-	// Form column. Custom pages own their scrolling (mouse support for them
-	// is a separate seam, #674).
-	if m.customPage() != nil && m.filter == "" {
+	// Custom pages own their scrolling: forward through the optional
+	// PageWheeler seam (#674).
+	if page := m.customPage(); page != nil && m.filter == "" {
+		if w, ok := page.(PageWheeler); ok {
+			w.Wheel(delta)
+		}
 		return
 	}
 	if n := len(m.rows()); n > 0 {

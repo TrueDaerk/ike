@@ -15,6 +15,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/dap"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -92,6 +93,10 @@ type Model struct {
 	outTop     int
 	outHold    bool
 
+	// term is the embedded debuggee terminal (#676): while set, its PTY view
+	// replaces the DAP output rows in the Output column (see terminal.go).
+	term *terminal.Model
+
 	// Mouse double-click tracking (#626), mirroring the vcs panel; now is
 	// injectable so tests drive the clock.
 	now          func() time.Time
@@ -113,14 +118,25 @@ type Model struct {
 // New returns an empty panel.
 func New(pal *theme.Palette) Model { return Model{pal: pal, now: time.Now} }
 
-// SetSize records the pane's interior size.
-func (m *Model) SetSize(w, h int) { m.w, m.h = w, h }
+// SetSize records the pane's interior size and refits the embedded terminal.
+func (m *Model) SetSize(w, h int) {
+	m.w, m.h = w, h
+	m.sizeTerminal()
+}
 
 // SetFocused records focus.
-func (m *Model) SetFocused(f bool) { m.focused = f }
+func (m *Model) SetFocused(f bool) {
+	m.focused = f
+	m.syncTermFocus()
+}
 
 // SetPalette re-threads the theme palette.
-func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	if m.term != nil {
+		m.term.SetPalette(p)
+	}
+}
 
 // SetEditable records whether the adapter supports setVariable (#627); when
 // false, the edit affordance is disabled.
@@ -301,14 +317,22 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if m.editing {
 		return m.editKey(k)
 	}
+	// The Output column with an embedded terminal has its own key routing
+	// (#676): a running debuggee takes keys raw, an exited one restores the
+	// panel's navigation (see terminal.go).
+	if m.col == colOutput && m.term != nil {
+		return m.outputTermKey(k)
+	}
 	switch k.String() {
 	case "tab", "l", "right":
 		if m.col < colOutput {
 			m.col++
+			m.syncTermFocus()
 		}
 	case "h", "left":
 		if m.col > colFrames {
 			m.col--
+			m.syncTermFocus()
 		}
 	case "j", "down":
 		m.move(1)
@@ -605,6 +629,17 @@ func (m Model) renderVars(w int) []string {
 func (m Model) renderOutput(w int) []string {
 	title := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Render(" OUTPUT")
 	out := []string{title}
+	// An embedded debuggee terminal wins over the DAP output rows (#676): its
+	// grid is already sized to the column, so its lines splice in verbatim.
+	if m.term != nil {
+		for _, ln := range strings.Split(m.term.View(), "\n") {
+			if len(out) >= m.h {
+				break
+			}
+			out = append(out, ln)
+		}
+		return out
+	}
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
 	errStyle := lipgloss.NewStyle().Foreground(m.theme().Error)
 	rows := m.outputRows()

@@ -20,6 +20,7 @@ import (
 	"ike/internal/lsp/jsonrpc"
 	"ike/internal/pane"
 	"ike/internal/registry"
+	"ike/internal/terminal"
 )
 
 // stubAdapter answers every DAP request with success over an in-memory pipe
@@ -313,8 +314,8 @@ func TestRunInTerminalRefusedWithoutSession(t *testing.T) {
 	if resp.Success || resp.Command != "runInTerminal" || resp.Message == "" {
 		t.Fatalf("response = %+v, want a refusal with a reason", resp)
 	}
-	if m.dbgTermKey != "" {
-		t.Fatal("no terminal must be tracked after a refusal")
+	if m.panes.Has(pane.DebugKey) {
+		t.Fatal("a refusal without a session must not open the debug panel")
 	}
 }
 
@@ -330,12 +331,11 @@ func TestRunInTerminalRefusedWithoutCommand(t *testing.T) {
 	}
 }
 
-// TestRunInTerminalSpawnFailureClosesPane verifies a failed debuggee spawn
-// refuses the request AND removes the just-split terminal pane again, so no
-// dead pane lingers or gets persisted (#638).
-func TestRunInTerminalSpawnFailureClosesPane(t *testing.T) {
+// TestRunInTerminalSpawnFailureLeavesNoTerminal verifies a failed debuggee
+// spawn refuses the request and embeds nothing — the panel's Output column
+// keeps showing DAP output (#638, #676).
+func TestRunInTerminalSpawnFailureLeavesNoTerminal(t *testing.T) {
 	m, sa, _ := debugModel(t)
-	before := len(layout.Leaves(m.tree))
 	tm, _ := m.Update(debugRunInTerminalMsg{seq: 44, sess: m.dbg.sess,
 		args: dap.RunInTerminalArgs{Args: []string{"/nonexistent-ike-binary-638"}}})
 	m = tm.(Model)
@@ -343,56 +343,77 @@ func TestRunInTerminalSpawnFailureClosesPane(t *testing.T) {
 	if resp.Success || resp.Message != "debuggee failed to start" {
 		t.Fatalf("response = %+v, want the spawn-failure refusal", resp)
 	}
-	if got := len(layout.Leaves(m.tree)); got != before {
-		t.Fatalf("leaves = %d, want %d — the dead pane must be closed again", got, before)
-	}
-	if m.dbgTermKey != "" {
-		t.Fatal("a failed spawn must not track a terminal key")
+	if p := m.debugPanel(); p != nil && p.HasTerminal() {
+		t.Fatal("a failed spawn must not embed a terminal")
 	}
 }
 
-// TestRunInTerminalReplacesStaleTerminal verifies the debuggee terminal stays
-// open after its process ends (output review) and the next runInTerminal
-// closes it before splitting a fresh one; a user-closed pane clears the
-// tracked key (#638).
-func TestRunInTerminalReplacesStaleTerminal(t *testing.T) {
+// TestRunInTerminalEmbedsInDebugPanel verifies the debuggee runs inside the
+// debug panel's Output column (#676): the panel opens, hosts the terminal
+// (no separate terminal pane splits), and the adapter gets the real pid. A
+// later runInTerminal replaces the exited terminal with the fresh one, and
+// closing the panel ends the embedded session.
+func TestRunInTerminalEmbedsInDebugPanel(t *testing.T) {
 	m, sa, _ := debugModel(t)
+	before := len(layout.Leaves(m.tree))
 	argv := []string{"/bin/sh", "-c", "exit 0"}
 	tm, _ := m.Update(debugRunInTerminalMsg{seq: 45, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
 	m = tm.(Model)
 	if resp := waitForReverseResp(t, sa, 45); !resp.Success {
 		t.Fatalf("first spawn refused: %+v", resp)
 	}
-	old := m.dbgTermKey
-	if old == "" || !m.panes.Has(old) {
-		t.Fatalf("first spawn must track its terminal pane, got %q", old)
+	if !m.panes.Has(pane.DebugKey) {
+		t.Fatal("runInTerminal must open the debug panel")
 	}
-	// Wait for the short-lived debuggee to exit; the pane must survive it.
+	p := m.debugPanel()
+	if p == nil || !p.HasTerminal() {
+		t.Fatal("the debuggee terminal must be embedded in the panel")
+	}
+	if got := len(layout.Leaves(m.tree)); got != before+1 {
+		t.Fatalf("leaves = %d, want %d — only the panel splits, no terminal pane", got, before+1)
+	}
+	old := p.Terminal()
+	// Wait for the short-lived debuggee to exit; the terminal must survive it
+	// (output review).
 	deadline := time.Now().Add(3 * time.Second)
-	for m.panes.Get(old).Terminal().Running() && time.Now().Before(deadline) {
+	for old.Running() && time.Now().Before(deadline) {
 		time.Sleep(5 * time.Millisecond)
 	}
-	if m.panes.Get(old).Terminal().Running() {
+	if old.Running() {
 		t.Fatal("debuggee process never exited")
 	}
-	// A new session's runInTerminal replaces the stale pane.
+	// The next runInTerminal replaces the exited terminal in place.
 	tm, _ = m.Update(debugRunInTerminalMsg{seq: 46, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
 	m = tm.(Model)
 	if resp := waitForReverseResp(t, sa, 46); !resp.Success {
 		t.Fatalf("second spawn refused: %+v", resp)
 	}
-	if m.panes.Has(old) {
-		t.Fatal("the stale debuggee terminal must be closed on relaunch")
+	p = m.debugPanel()
+	if p == nil || !p.HasTerminal() || p.Terminal() == old {
+		t.Fatal("the second spawn must embed a fresh terminal")
 	}
-	if m.dbgTermKey == "" || m.dbgTermKey == old || !m.panes.Has(m.dbgTermKey) {
-		t.Fatalf("dbgTermKey = %q, want the fresh terminal pane", m.dbgTermKey)
+	if p.Terminal().SessionKey() == old.SessionKey() {
+		t.Fatal("the fresh terminal must carry a fresh session key")
 	}
-	// A user close clears the tracked key, so nothing chases it later.
-	if !m.closeKey(m.dbgTermKey) {
-		t.Fatal("closing the debuggee terminal pane must succeed")
+	// Session end closes the panel — and with it the embedded terminal.
+	term := p.Terminal()
+	tm, _ = m.Update(debugEndedMsg{})
+	m = tm.(Model)
+	if m.panes.Has(pane.DebugKey) {
+		t.Fatal("session end must close the debug panel")
 	}
-	if m.dbgTermKey != "" {
-		t.Fatal("closing the pane must clear dbgTermKey")
+	waitNotRunning(t, term)
+}
+
+// waitNotRunning polls until the terminal's process is gone.
+func waitNotRunning(t *testing.T, term *terminal.Model) {
+	t.Helper()
+	deadline := time.Now().Add(3 * time.Second)
+	for term.Running() && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if term.Running() {
+		t.Fatal("the embedded terminal must be closed with its host")
 	}
 }
 

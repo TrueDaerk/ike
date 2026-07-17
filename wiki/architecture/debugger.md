@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -76,31 +76,35 @@ instead of running it under the adapter's `/dev/null` stdin.
   pid)`, and `RefuseReverse`.
 - The handler runs on the read-loop goroutine and MUST hand off — it sends a
   `debugRunInTerminalMsg` onto the Update loop. There `runDebuggeeInTerminal`
-  spawns the given argv in a bottom-split **command terminal pane**
-  (`AddCommandTerminal`, the same infra `run.file` uses) and answers with the
-  child's pid (`terminal.Model.Pid`). The debuggee connects back to the adapter
-  on its own; breakpoints, stepping, frames and variables all work as usual —
-  only its stdio now lives in that terminal, where the user types input.
+  builds a command terminal (`terminal.NewCommand`, the same infra `run.file`
+  uses) and **embeds it in the debug panel's Output column** (#676,
+  `debugpanel.SetTerminal`) — the panel is force-opened first so the PTY has a
+  host even when the program never pauses. It answers with the child's pid
+  (`terminal.Model.Pid`). The debuggee connects back to the adapter on its
+  own; breakpoints, stepping, frames and variables all work as usual — its
+  stdio lives in the embedded terminal, where the user types input. The
+  session key is minted via `Registry.MintTerminalKey` so output/exit messages
+  route uniquely (an `ExitedMsg` for a non-pane key is a no-op).
 - **Every bail-out path answers** (#638): once the reverse handler claims the
   request the adapter blocks on the response, so a gone session (the message
-  carries its own `*dap.Session`), an empty argv, a failed layout split and a
-  failed spawn all send an error refusal. A failed spawn also closes the
-  just-split pane again and re-saves the layout, so no dead pane lingers or
-  gets persisted. Malformed `runInTerminal` arguments are refused with a
-  diagnostic in `Session.OnRunInTerminal` instead of being silently zeroed;
-  `RunInTerminalArgs.Env` is `map[string]*string` because the spec allows
-  JSON `null` values (= unset; the spawn path skips them). Other reverse
-  requests are still refused "unsupported" (off the read loop — a synchronous
-  write there can deadlock against a mid-write adapter).
-- **Terminal lifetime** (#638): the debuggee terminal deliberately stays open
-  after the session ends so its output can be reviewed. The app model tracks
-  the last debuggee terminal (`dbgTermKey`); the next session's runInTerminal
-  closes it before splitting a fresh one — only if the pane still exists (a
-  user close clears the key in `closeKey`) and its process has exited (a live
-  terminal is never yanked).
-- Trade-off: with `integratedTerminal` the debuggee's output goes to the
-  terminal, so the tool window's OUTPUT column and `.ike/debug-session.log`
-  (#624) stay empty for Python sessions.
+  carries its own `*dap.Session`), an empty argv, a missing panel host and a
+  failed spawn all send an error refusal. A failed spawn embeds nothing — the
+  Output column keeps showing DAP output. Malformed `runInTerminal` arguments
+  are refused with a diagnostic in `Session.OnRunInTerminal` instead of being
+  silently zeroed; `RunInTerminalArgs.Env` is `map[string]*string` because the
+  spec allows JSON `null` values (= unset; the spawn path skips them). Other
+  reverse requests are still refused "unsupported" (off the read loop — a
+  synchronous write there can deadlock against a mid-write adapter).
+- **Terminal lifetime** (#638, #676): the embedded debuggee terminal
+  deliberately stays in the panel after its process exits so the output can be
+  reviewed; the next session's runInTerminal replaces it (`SetTerminal` closes
+  the old model). It dies with its host: closing the debug panel — by the user
+  or on session end — closes the embedded session (`CloseTerminal` in the pane
+  registry's `Close`).
+- Trade-off: with `integratedTerminal` the debuggee's output goes to the PTY,
+  so the DAP `output` stream and `.ike/debug-session.log` (#624) stay empty
+  for Python sessions — but the PTY now renders inside the Output column, so
+  the tool window shows the live program anyway.
 
 ## Stops and stepping
 
@@ -152,9 +156,25 @@ slot and re-feeds on the next stop.
   too, `\r`/`\t` kept as printed; a `──── debug session: <name> · <time> ────`
   delimiter separates sessions, and trailing output arriving after `terminated`
   still reaches the log), reusing the `debug.log` append-logger pattern. Note:
-  this column is populated only for adapters using `internalConsole`; Python now
-  launches with `integratedTerminal` (see below), so its I/O lives in the
-  debuggee terminal instead.
+  the DAP-event rows are populated only for adapters using `internalConsole`;
+  Python launches with `integratedTerminal`, so its I/O lives in the
+  **embedded debuggee terminal** that renders in this very column (see below).
+- **Embedded debuggee terminal** (#676, `debugpanel/terminal.go`): a
+  `runInTerminal` debuggee's PTY (`terminal.Model`) embeds into the Output
+  column via `SetTerminal` — while set, its grid view replaces the DAP output
+  rows (they return when it detaches) and is sized to the column
+  (`colWidths` × rows under the title) on every `SetSize`. **Keys**: with the
+  Output column focused and the process running, the app routes keys raw to
+  the panel (`debugPanelTermCapturing`, bypassing the keymap like a terminal
+  pane) and the panel forwards them to the PTY; `shift+tab` is the reserved
+  escape back to the variables column, and the spatial focus moves
+  (ctrl+arrows) still leave the pane. After the process exits the panel's
+  navigation returns (`h` leaves, `j`/`k` page the dead terminal's
+  scrollback). **Mouse**: clicks/wheel/drags forward with column-local
+  coordinates (`MousePress`/`MouseWheel`; drags via the app's `dragDebugTerm`
+  gesture → `TermDrag`/`TermRelease`), so child mouse reporting and text
+  selection work as in a terminal pane. Lifecycle: the terminal is replaced
+  across sessions and closed with the panel (see "Terminal lifetime" above).
 - **Variables tree** (middle, `tab`/`h`/`l` switch columns): roots are the
   selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
   a node — unloaded references emit `ExpandVarMsg` and the app answers with

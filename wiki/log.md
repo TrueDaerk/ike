@@ -10,6 +10,28 @@
   plugin machinery. Exposed to WASM guests as `command_executed`
   (`sdk.CommandExecuted`).
 
+- Debuggee terminal embeds in the debug panel (#676): a DAP `runInTerminal`
+  debuggee now runs inside the panel's Output column (`debugpanel.SetTerminal`)
+  instead of a separate bottom-split terminal pane — keys route raw to the PTY
+  while the column is focused and the process runs (`shift+tab` escapes),
+  mouse forwards column-local, the exited terminal stays reviewable and is
+  replaced by the next session, and it closes with the panel. DAP output rows
+  still render when no terminal is embedded.
+
+- JetBrains keymap XML import (#677): `internal/keymap/jbimport` parses a
+  JetBrains keymap export (keystroke grammar incl. second-keystroke chords),
+  maps IntelliJ action ids onto IKE command ids and writes the result as
+  `keymap.bindings.*` user-scope overrides, unbinding replaced preset
+  defaults. Entry points: the `keymap.importJetBrains` palette command (shell
+  path prompt with tab completion) and `i` on the settings Keymap page.
+
+- Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
+  interfaces on the `PageModel` seam; the panel forwards form-column clicks
+  (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,
+  Plugins and Marketplace — click selects, a click on the selection runs the
+  page's enter-equivalent action, picker rows are clickable, the wheel moves
+  the selection.
+
 - Tour resolver-first shortcuts (#678): tour rows resolve through the live
   keymap first (custom > default) with the curated preferred-order list kept
   when the resolved chord is among its options; curated fallbacks are
