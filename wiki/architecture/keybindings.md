@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -197,6 +197,40 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   old chord (`= ""`) in one write-back + reload; `u` unbinds, `r` resets to
   the preset (removes the override). The root model rebuilds its resolver on
   `ConfigReloadedMsg`, so edits re-resolve live.
+
+## JetBrains keymap XML import (#677)
+
+`internal/keymap/jbimport` translates a JetBrains IDE keymap export
+(`<keymap version="1"><action id="SaveDocument"><keyboard-shortcut
+first-keystroke="meta pressed S"/></action></keymap>`) into
+`keymap.bindings.*` overrides:
+
+- **Keystroke grammar** — `ParseKeystroke` reads the Swing keystroke tokens
+  (modifiers `meta`/`ctrl`/`control`/`alt`/`shift`, the `pressed`/`typed`
+  filler, then one key token: letters, digits, `F1`…`F24`, or `VK_` names like
+  `ENTER`/`BACK_SPACE`/`OPEN_BRACKET`) and emits a canonical logical IKE step
+  (`meta` stays `cmd`; platform folding happens at table build). A
+  `second-keystroke` becomes a multi-step chord (`cmd+k cmd+s`).
+  Mouse shortcuts are ignored; untranslatable keystrokes (e.g. `PERIOD`,
+  whose `.` cannot round-trip the dotted config key) are collected in
+  `Result.Skipped`, never fatal.
+- **Action mapping** — a table maps IntelliJ action ids onto IKE command ids
+  (`SaveDocument`→`editor.write`, `GotoDeclaration`→`lsp.definition`,
+  `FindInPath`→`project.findInPath`, `ReformatCode`→`lsp.format`, run/debug,
+  VCS, tabs, tool windows, …), covering every default-set command with a
+  plausible JetBrains counterpart. Unmapped ids land in `Result.Unmapped`.
+- **Semantics** — `Plan` yields `Bind` (chord→command overrides) and `Unbind`:
+  preset-default chords of imported commands the export did not keep are
+  written `= ""`, so the imported chord *replaces* the default rather than
+  joining it (matching the keymap page's unbind semantics — an unbind drops
+  the whole chord across contexts). `Apply` writes both sets through the
+  caller's writer (config.WriteKey at **user scope**) and the normal reload
+  pipeline re-resolves the table.
+- **Entry points** — the palette command `keymap.importJetBrains`
+  (`internal/app/jbimport_prompt.go`: a shell prompt with tab filesystem
+  completion via `pathcomplete`, summary toast via `host.Notify`) and the
+  settings Keymap page's `i` action (inline path input with the shared
+  `pathSuggest` completion; the summary lands in the pinned footer).
 
 ## Boundaries
 

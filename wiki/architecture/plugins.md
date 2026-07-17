@@ -4,7 +4,7 @@ title: Plugin Extension Contract
 description: Compile-in plugin registry — the extension points (Command, Keymap, Pane, FileHandler, Hook), the host API, and how the root model consumes them.
 resource: internal/plugin/plugin.go
 tags: [architecture, plugins, extension, bubbletea]
-timestamp: 2026-07-10T17:45:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Plugin Extension Contract
@@ -51,7 +51,10 @@ returns them all from `Capabilities()`:
 - **Pane** — a `tea.Model`-shaped component the window manager can host.
 - **FileHandler** — opener keyed by file extension or a content sniff (`Match`).
 - **Hook** — subscribes to a lifecycle `Event` (`EventFileOpened`,
-  `EventBufferSaved`, `EventBufferClosed`).
+  `EventBufferSaved`, `EventBufferClosed`, `EventCommandExecuted` — fired at
+  every command dispatch with the command id as payload, #679). App-internal
+  consumers can instead observe the equivalent `CommandExecutedMsg` in the
+  Update loop without registering a hook.
 
 ### Scope and pane context
 

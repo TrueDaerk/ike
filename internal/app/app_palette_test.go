@@ -72,8 +72,21 @@ func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("RunCommandMsg should run the command")
 	}
-	if _, ok := cmd().(sentinelMsg); !ok {
-		t.Fatalf("want sentinelMsg from command, got %T", cmd())
+	var ran, executed bool
+	for _, msg := range cmdMsgs(cmd) {
+		switch v := msg.(type) {
+		case sentinelMsg:
+			ran = true
+		case CommandExecutedMsg:
+			executed = v.ID == "test.ping"
+		}
+	}
+	if !ran {
+		t.Fatal("want sentinelMsg from command dispatch")
+	}
+	// #679: palette dispatch emits the in-app command-executed signal.
+	if !executed {
+		t.Fatal("want CommandExecutedMsg{test.ping} from palette dispatch")
 	}
 }
 

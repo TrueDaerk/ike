@@ -37,9 +37,10 @@ func (p *Plugin) Capabilities() plugin.Capabilities { return p.caps }
 
 // hookEvents maps the ABI's event names onto plugin.Event.
 var hookEvents = map[string]plugin.Event{
-	"file_opened":   plugin.EventFileOpened,
-	"buffer_saved":  plugin.EventBufferSaved,
-	"buffer_closed": plugin.EventBufferClosed,
+	"file_opened":      plugin.EventFileOpened,
+	"buffer_saved":     plugin.EventBufferSaved,
+	"buffer_closed":    plugin.EventBufferClosed,
+	"command_executed": plugin.EventCommandExecuted, // payload: command id (#679)
 }
 
 // adapt builds the plugin face for a module from its declared capabilities.

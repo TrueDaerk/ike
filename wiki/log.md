@@ -8,6 +8,29 @@
   deduplicated by resolved path; opening the picker pre-selects the currently
   effective interpreter and eagerly probes every candidate's version.
 
+- Command-executed event (#679): every command dispatch — palette, keymap
+  resolution (including chord timeouts and plugin key aliases), and inline
+  invocations — now emits `plugin.EventCommandExecuted` (payload: command id)
+  to hooks plus an in-app `CommandExecutedMsg` through the Update loop, so
+  internal consumers like the interactive tour can observe executions without
+  plugin machinery. Exposed to WASM guests as `command_executed`
+  (`sdk.CommandExecuted`).
+
+- Debuggee terminal embeds in the debug panel (#676): a DAP `runInTerminal`
+  debuggee now runs inside the panel's Output column (`debugpanel.SetTerminal`)
+  instead of a separate bottom-split terminal pane — keys route raw to the PTY
+  while the column is focused and the process runs (`shift+tab` escapes),
+  mouse forwards column-local, the exited terminal stays reviewable and is
+  replaced by the next session, and it closes with the panel. DAP output rows
+  still render when no terminal is embedded.
+
+- JetBrains keymap XML import (#677): `internal/keymap/jbimport` parses a
+  JetBrains keymap export (keystroke grammar incl. second-keystroke chords),
+  maps IntelliJ action ids onto IKE command ids and writes the result as
+  `keymap.bindings.*` user-scope overrides, unbinding replaced preset
+  defaults. Entry points: the `keymap.importJetBrains` palette command (shell
+  path prompt with tab completion) and `i` on the settings Keymap page.
+
 - Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
   interfaces on the `PageModel` seam; the panel forwards form-column clicks
   (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,

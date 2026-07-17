@@ -461,6 +461,9 @@ func (r *Registry) Close(key string) {
 	if inst.Kind() == KindTerminal {
 		inst.term.Close()
 	}
+	if inst.Kind() == KindDebug {
+		inst.dp.CloseTerminal() // the embedded debuggee PTY dies with the panel (#676)
+	}
 	inst.CloseTerminalTabs() // editor panes may host terminal tabs (#573)
 	delete(r.instances, key)
 	for i, k := range r.order {

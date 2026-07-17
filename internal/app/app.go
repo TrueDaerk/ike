@@ -107,13 +107,7 @@ type Model struct {
 	// during the launching window bumps it, and the deferred post-install
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
-	// dbgTermKey names the last debuggee terminal pane spawned by a
-	// runInTerminal reverse request (#638). It deliberately outlives the
-	// session (the pane stays open for output review); the next session's
-	// runInTerminal closes it — if it still exists and its process has exited
-	// — before splitting a fresh one. Cleared when the pane closes.
-	dbgTermKey string
-	navSkip    bool
+	navSkip      bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
 	// the registry's focused key, which always names a layout leaf.
@@ -204,6 +198,11 @@ type Model struct {
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
+	// jbImportOpen marks the JetBrains keymap import prompt (#677) while the
+	// shell shows it; jbImportInput/jbImportPos are the typed path and cursor.
+	jbImportOpen  bool
+	jbImportInput string
+	jbImportPos   int
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -357,6 +356,7 @@ const (
 	dragMove                       // dragging a pane title bar to relocate or spawn
 	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
+	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -483,7 +483,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	pages = append(pages, settings.Page{Title: "Toolchain", Custom: settings.NewToolchainPage(m.cfgOpts, ".", func() tea.Cmd {
 		// An interpreter change respawns the servers against the new value.
 		if c, ok := reg.Command("lsp.restart"); ok {
-			return c.Run(m.host)
+			return m.dispatchCommand("lsp.restart", c)
 		}
 		return nil
 	})})
@@ -508,7 +508,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 			// write regardless of reload ordering.
 			if enable && strings.HasPrefix(id, "lang-") {
 				if c, ok := reg.Command("lsp.installMissing"); ok {
-					return tea.Batch(write, c.Run(m.host))
+					return tea.Batch(write, m.dispatchCommand("lsp.installMissing", c))
 				}
 			}
 			return write
@@ -1044,7 +1044,7 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	case keymap.Resolved:
 		m.whichKey = nil
 		if c, ok := m.reg.Command(res.Command); ok {
-			return c.Run(m.host), true
+			return m.dispatchCommand(res.Command, c), true
 		}
 		// A documented blocked default (0081/20 ledger): consume the chord and
 		// say why it does nothing — a silent no-op is indistinguishable from a
@@ -1848,6 +1848,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startMoveFile()
 		return m, nil
 
+	case ImportJetBrainsKeymapMsg:
+		// keymap.importJetBrains (palette, #677): prompt for the exported
+		// XML's path, then translate it into keymap.bindings.* overrides.
+		m.startJBImport()
+		return m, nil
+
+	case jbImportDoneMsg:
+		// The finished import: toast the summary and apply the config reload.
+		return m, m.finishJBImport(msg)
+
 	case palette.MoveTargetMsg:
 		return m, m.finishMoveFile(msg.Dir)
 
@@ -1979,7 +1989,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, msg.Label+" — registered as project interpreter")
 		cmds := []tea.Cmd{config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
 		if c, ok := m.reg.Command("lsp.restart"); ok {
-			cmds = append(cmds, c.Run(m.host))
+			cmds = append(cmds, m.dispatchCommand("lsp.restart", c))
 		}
 		return m, tea.Batch(cmds...)
 
@@ -2380,6 +2390,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.symbols.request == nil {
 			if c, ok := m.reg.Command("project.goToClass"); ok {
 				m.symbolPriming = true
+				// Deliberately NOT dispatchCommand (#679): this is silent
+				// internal priming of the workspace-symbol bridge, not a user
+				// invocation of project.goToClass — the executed signal would
+				// lie to observers (e.g. tick a tour task the user never did).
 				prime = c.Run(m.host)
 			}
 		}
@@ -3045,7 +3059,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.whichKey = nil
 		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
 			if c, ok := m.reg.Command(res.Command); ok {
-				return m, c.Run(m.host)
+				return m, m.dispatchCommand(res.Command, c)
 			}
 		}
 		return m, nil
@@ -3160,6 +3174,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.renameOpen() {
 			return m.updateRenamePrompt(msg)
 		}
+		// The JetBrains keymap import prompt (#677) mirrors it, plus tab
+		// path completion.
+		if m.jbImportPromptOpen() {
+			return m.updateJBImportPrompt(msg)
+		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
@@ -3180,6 +3199,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// cancel must not arm the double-esc palette (#640).
 		if m.debugPanelEditing() {
 			m.lastEsc = false
+			return m.routeKey(msg)
+		}
+		// A running debuggee terminal embedded in the debug panel's Output
+		// column takes keys raw like a terminal pane (#676): plain letters
+		// must reach the debuggee's stdin, not the keymap. shift+tab leaves
+		// the column (panel-side); the spatial focus moves leave the pane.
+		if m.debugPanelTermCapturing() {
+			m.lastEsc = false
+			if dir, ok := m.focusKeys[msg.String()]; ok {
+				m.FocusDir(dir)
+				return m, nil
+			}
 			return m.routeKey(msg)
 		}
 		keys := msg.String()
@@ -3232,7 +3263,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
 			if k.Priority > plugin.CorePriority || !m.isCoreKey(keys) {
-				return m, k.Action(m.host)
+				cmd := k.Action(m.host)
+				// A binding that aliases a registered command emits the
+				// command-executed signal like every other dispatch (#679).
+				if k.CommandID != "" {
+					cmd = tea.Batch(cmd, m.commandExecuted(k.CommandID))
+				}
+				return m, cmd
 			}
 		}
 		if dir, ok := m.focusKeys[keys]; ok {
@@ -3463,10 +3500,37 @@ func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 	return cmds
 }
 
+// CommandExecutedMsg is the in-app command-executed signal (#679): it is
+// delivered through the normal Update loop whenever a registered command is
+// dispatched (palette, keybinding, or internal invocation), carrying the
+// command id. App-internal consumers (e.g. the interactive tour) observe it
+// with a plain switch case — no plugin hook registration needed.
+type CommandExecutedMsg struct {
+	ID string
+}
+
+// commandExecuted builds the command-executed signal for a dispatched
+// command id: the plugin EventCommandExecuted hooks plus the in-app
+// CommandExecutedMsg. It fires at dispatch time — the command's own tea.Cmd
+// may still be running — and is a cheap batch when no hook subscribes.
+func (m Model) commandExecuted(id string) tea.Cmd {
+	cmds := append(m.fireHooks(plugin.EventCommandExecuted, id),
+		func() tea.Msg { return CommandExecutedMsg{ID: id} })
+	return tea.Batch(cmds...)
+}
+
+// dispatchCommand runs a registered command and emits the executed signal.
+// Every command dispatch path — palette RunCommand, keymap resolution, and
+// inline invocations — funnels through it (#679), so "command X ran" is
+// observable regardless of how it was triggered.
+func (m Model) dispatchCommand(id string, c registry.OwnedCommand) tea.Cmd {
+	return tea.Batch(c.Run(m.host), m.commandExecuted(id))
+}
+
 // RunCommand looks up and runs a registered command by id.
 func (m Model) RunCommand(id string) tea.Cmd {
 	if c, ok := m.reg.Command(id); ok {
-		return c.Run(m.host)
+		return m.dispatchCommand(id, c)
 	}
 	return nil
 }
@@ -3842,9 +3906,6 @@ func (m *Model) closeKey(key string) bool {
 	m.panes.Close(key)
 	if m.recentEditor == key {
 		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
-	}
-	if m.dbgTermKey == key {
-		m.dbgTermKey = "" // the debuggee terminal is gone; don't chase a stale key (#638)
 	}
 	return true
 }
@@ -4545,6 +4606,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					term.MouseDrag(lx, ly)
 				}
 			}
+		case dragDebugTerm:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+					inst.Debug().TermDrag(lx, ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -4569,6 +4636,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
 					term.MouseRelease(lx, ly)
+				}
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
+		case dragDebugTerm:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+					inst.Debug().TermRelease(lx, ly)
 				}
 			}
 			m.drag = nil
@@ -4891,7 +4966,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
 		// activate (frame select / variable expand); messages route like keys.
+		// A press on the embedded debuggee terminal (#676) also tracks a
+		// selection drag, like a terminal pane.
 		if msg.Button == tea.MouseLeft {
+			if inst.Debug().OutputTermHit(localX, localY) {
+				m.drag = &dragState{kind: dragDebugTerm, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
 			return m, inst.Debug().Click(localX, localY)
 		}
 	}

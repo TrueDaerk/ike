@@ -4,7 +4,7 @@ title: Writing WASM Plugins
 description: Plugin-author guide — the Go guest SDK, building a .wasm plugin, installing it, and the raw ABI reference for other languages.
 resource: sdk/sdk.go
 tags: [plugins, wasm, sdk, guide]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Writing WASM Plugins
@@ -40,7 +40,8 @@ func main() {}
 Declaration API: `SetName`, `Command`/`CommandIn` (context `"editor"`,
 `"explorer"`, … scopes to a pane kind; empty = global), `Keymap`/`KeymapIn`
 (alias a declared command), `KeymapFunc`/`KeymapFuncIn` (standalone binding),
-`Hook` (events `FileOpened`, `BufferSaved`, `BufferClosed`).
+`Hook` (events `FileOpened`, `BufferSaved`, `BufferClosed`, `CommandExecuted`
+— payload: the dispatched command id).
 
 Host calls from any callback: `Notify(sev, text)`, `SetStatus(text)`,
 `OpenFile(path)`, `Dispatch(msgType, payload)`, `ConfigGet(key)`.
