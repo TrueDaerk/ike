@@ -153,6 +153,10 @@ func (m *Model) SetSize(w, h int) {
 // SetFocused records focus; the cursor cell renders only while focused.
 func (m *Model) SetFocused(on bool) { m.focused = on }
 
+// Size reports the current grid size (#676): hosts embedding the model
+// (the debug panel's Output column) assert their sizing through it.
+func (m Model) Size() (w, h int) { return m.w, m.h }
+
 // Running reports whether the shell is alive.
 func (m Model) Running() bool { return m.sess != nil && m.sess.Running() }
 

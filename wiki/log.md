@@ -2,6 +2,14 @@
 
 ## 2026-07-17
 
+- Debuggee terminal embeds in the debug panel (#676): a DAP `runInTerminal`
+  debuggee now runs inside the panel's Output column (`debugpanel.SetTerminal`)
+  instead of a separate bottom-split terminal pane — keys route raw to the PTY
+  while the column is focused and the process runs (`shift+tab` escapes),
+  mouse forwards column-local, the exited terminal stays reviewable and is
+  replaced by the next session, and it closes with the panel. DAP output rows
+  still render when no terminal is embedded.
+
 - Tour first-run gate fix (#671): the tour scan keys on `ui.onboarded` alone —
   the settings file always exists at scan time because main records the
   project open into the recent-projects history before the model is built, so

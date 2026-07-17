@@ -573,11 +573,12 @@ func (m *Model) fetchVariables(ref int) {
 }
 
 // runDebuggeeInTerminal answers a runInTerminal reverse request (#625): it
-// spawns the debuggee command in a bottom-split terminal pane — giving it a
-// real tty so input() works — and replies with the process id. The debuggee
-// connects back to the adapter on its own; the pid is for process tracking.
-// Every bail-out path refuses the request — the reverse handler claimed it,
-// so a silent return would leave the adapter waiting forever (#638).
+// spawns the debuggee command in a terminal embedded in the debug panel's
+// Output column (#676) — giving it a real tty so input() works — and replies
+// with the process id. The debuggee connects back to the adapter on its own;
+// the pid is for process tracking. Every bail-out path refuses the request —
+// the reverse handler claimed it, so a silent return would leave the adapter
+// waiting forever (#638).
 func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	refuse := func(reason string) {
 		sess := msg.sess
@@ -595,24 +596,11 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 		refuse("no command")
 		return
 	}
-	// The previous debuggee terminal stays open after its session ends so the
-	// user can review output (#638); replace it now that a new debuggee
-	// spawns — but only when the pane still exists (the user may have closed
-	// it, closeKey cleared the key then) and its process has exited (never
-	// yank a live terminal).
-	if old := m.dbgTermKey; old != "" {
-		m.dbgTermKey = ""
-		if inst := m.panes.Get(old); inst != nil && inst.Kind() == pane.KindTerminal && !inst.Terminal().Running() {
-			if m.closeKey(old) && !m.panes.Has(m.panes.Focused()) {
-				m.setFocus(m.focusAfterClose())
-			}
-		}
-	}
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.panes.Focused()
-	}
-	if target == "" || m.tree == nil {
+	// The debuggee terminal lives inside the debug panel (#676): force the
+	// panel open — the PTY needs a host, even when the program never pauses.
+	m.openDebugPanel()
+	p := m.debugPanel()
+	if p == nil {
 		refuse("no pane to place the debuggee terminal")
 		return
 	}
@@ -621,40 +609,35 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 		dir = dbg.root
 	}
 	env := terminal.MergeEnv(terminalEnv(), envMapToSlice(msg.args.Env))
-	key := m.panes.AddCommandTerminal(msg.args.Args, "debug: "+dbg.cfgName, dir, env, m.host.Send)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
-	if !ok {
-		m.panes.Close(key)
-		m.layout() // a stale-pane close above may have changed the tree
-		saveLayout(m.tree, m.panes)
-		refuse("layout split failed")
-		return
-	}
-	m.tree = tree
-	m.layout()
-	saveLayout(m.tree, m.panes)
-
-	pid := 0
-	if inst := m.panes.Get(key); inst != nil {
-		pid = inst.Terminal().Pid()
-	}
+	// The session key is minted from the terminal registry so output/exit
+	// messages route uniquely; an ExitedMsg for a non-pane key is a no-op, so
+	// the embedded session's exit never closes anything by accident.
+	key := m.panes.MintTerminalKey()
+	t := terminal.NewCommand(key, msg.args.Args, dir, 80, 24, env, m.host.Send)
+	t.SetLabel("debug: " + dbg.cfgName)
+	pid := t.Pid()
 	if pid == 0 {
-		// The spawn failed (bad binary, PTY failure): tear the dead pane back
-		// out so the broken layout doesn't stay — or stay persisted (#638).
-		if m.closeKey(key) {
-			if !m.panes.Has(m.panes.Focused()) {
-				m.setFocus(m.focusAfterClose())
-			}
-			m.layout()
-			saveLayout(m.tree, m.panes)
-		}
+		// The spawn failed (bad binary, PTY failure): don't embed the dead
+		// model — the Output column keeps showing DAP output instead (#638).
+		t.Close()
 		refuse("debuggee failed to start")
 		return
 	}
-	m.dbgTermKey = key
+	// SetTerminal replaces (and closes) the previous session's terminal — it
+	// stayed embedded after that debuggee exited so its output was reviewable.
+	p.SetTerminal(&t)
 	seq := msg.seq
 	sess := msg.sess
 	go func() { _ = sess.RespondRunInTerminal(seq, pid) }()
+}
+
+// debugPanelTermCapturing reports whether the focused pane is the debug panel
+// with its embedded debuggee terminal owning the keyboard (#676): the Output
+// column is focused and the process runs. The app then routes keys raw to the
+// panel, bypassing the keymap layer like it does for terminal panes.
+func (m Model) debugPanelTermCapturing() bool {
+	inst := m.panes.FocusedInstance()
+	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().OutputTermCapturing()
 }
 
 // envMapToSlice converts a runInTerminal env map into "K=V" entries. A nil
