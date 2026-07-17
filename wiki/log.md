@@ -10,6 +10,26 @@
   replaced by the next session, and it closes with the panel. DAP output rows
   still render when no terminal is embedded.
 
+- Settings custom-page mouse (#674): optional `PageClicker`/`PageWheeler`
+  interfaces on the `PageModel` seam; the panel forwards form-column clicks
+  (page-local coordinates) and wheel deltas to Toolchain, Keymap, LSP,
+  Plugins and Marketplace — click selects, a click on the selection runs the
+  page's enter-equivalent action, picker rows are clickable, the wheel moves
+  the selection.
+
+- Tour resolver-first shortcuts (#678): tour rows resolve through the live
+  keymap first (custom > default) with the curated preferred-order list kept
+  when the resolved chord is among its options; curated fallbacks are
+  platform-normalized for display (Meta→Ctrl off macOS), the help cheat-sheet
+  row resolves like every other, and a guard test keeps help's doc-hint
+  `Shortcut` fallbacks platform-neutral.
+
+- Settings schema-page mouse (#673): the wheel scrolls the panel column under
+  the pointer (categories switch pages, form rows follow); with an enum picker
+  open a click chooses the option or closes the picker; with an inline edit
+  active an outside click commits (or cancels when invalid) instead of being
+  ignored.
+
 - Tour first-run gate fix (#671): the tour scan keys on `ui.onboarded` alone —
   the settings file always exists at scan time because main records the
   project open into the recent-projects history before the model is built, so
