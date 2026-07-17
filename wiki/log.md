@@ -2,6 +2,11 @@
 
 ## 2026-07-17
 
+- Status-bar empty-editor hint (#659): a focused editor with no file shows
+  `? help · shift shift find` (resolver-truth chord, dropped under ~70
+  columns), and the status line now truncates instead of wrapping when the
+  segments outgrow the terminal width.
+
 - Tour first-run wiring (#658): the welcome tour auto-opens on a first start,
   sequenced crash recovery → tour → LSP onboarding dialog. New `ui.onboarded`
   config flag, written when the tour opens so a mid-tour quit neither

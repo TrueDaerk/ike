@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 # Status Line Segments
@@ -25,6 +25,7 @@ segments.
 | `mode` | editor input mode (`NORMAL`, `INSERT`, …) | never |
 | `macro` | `recording @x` while a macro recording is active (#58) | idle |
 | `file` | project-relative path + `[+]` / `[disk changed]` / `[large file]` markers | never (`no file`) |
+| `hint` | empty-editor discovery hint, `? help · shift shift find` (#659); the search chord renders resolver-truth (a remap outside the known defaults shows the live chord) | a file is open, or the terminal is narrower than ~70 columns |
 | `eol` | on-disk line-ending flavor, `LF` / `CRLF` (+ ` (mixed)` when the load saw both, #66) | no file |
 | `encoding` | on-disk character encoding (`UTF-8`, `UTF-16 LE`, …, #66) | no file |
 | `indent` | effective indent style + width, `Spaces: 2` / `Tab: 4`, including any `.editorconfig` override (#63) | no file |
@@ -37,6 +38,11 @@ segments.
 The drag hint and the non-editor focus branches (terminal/explorer, #381) keep
 their dedicated rendering; the terminal/explorer line appends the host status
 and the notification counter.
+
+The rendered bar is clamped to the terminal width (#659): lipgloss pads but
+does not clip, so without the guard an over-wide segment set would wrap the
+bar onto a second row and corrupt the layout. Overflow truncates on the right
+with an ellipsis.
 
 ## Toolchain segment
 
