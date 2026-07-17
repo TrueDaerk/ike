@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T12:00:00Z
+timestamp: 2026-07-17T18:00:00Z
 ---
 
 # Debugger (0350)
@@ -112,14 +112,29 @@ slot and re-feeds on the next stop.
   emits `SelectFrameMsg` — the app navigates the editor to the frame's
   location and re-fetches its scopes, so the variables show the state
   *outside* the current function too.
-- **Output column** (#624): the debuggee's captured stdout/stderr, streamed
-  from DAP `output` events. stderr lines take the error tone; the column has its
-  own scroll offset (`outTop`, pinned to the newest line) reachable via the
-  `tab`/`h`/`l` column cycle and the wheel. Output that arrives before the panel
-  opens (a program printing before the first stop) is buffered on `debugState`
-  and flushed in on open, so nothing is lost. Every chunk is also appended
-  verbatim to a per-project transcript, `.ike/debug-session.log` (stderr chunks
-  prefixed `[stderr] `), reusing the `debug.log` append-logger pattern. Note:
+- **Output column** (#624, live behavior #637): the debuggee's captured
+  stdout/stderr, streamed from DAP `output` events. The panel renders its
+  columns in **every state** — while the debuggee runs or before the first stop
+  the frames column shows a placeholder (`running…` / `not paused`) but the
+  OUTPUT column keeps streaming, which is exactly when output arrives; the
+  first output event **opens the tool window** if it is closed (once per
+  session, so a panel the user closes stays closed) — a program that never hits
+  a breakpoint is still visible. stderr lines take the error tone; the column
+  has its own scroll offset (`outTop`) reachable via the `tab`/`h`/`l` column
+  cycle, `j`/`k` and the wheel. **Auto-follow**: the view pins to the newest
+  line; a manual scroll away from the bottom holds the position (appends stop
+  re-pinning), scrolling back to the bottom resumes following. Chunks are
+  **sanitized before buffering** (`sanitize.go`): ANSI escapes (CSI/OSC/two-byte
+  ESC) are stripped per completed line — so an escape split across chunks is
+  still removed whole — a `\r` keeps only the text after it (progress-bar
+  overwrites; CRLF endings survive), tabs expand to 8-column stops and other
+  control bytes are dropped. Output that arrives before the panel opens is
+  buffered on `debugState` (capped at 5000 chunks, oldest dropped) and flushed
+  in on open. Every chunk is also appended to a per-project transcript,
+  `.ike/debug-session.log` (stderr chunks prefixed `[stderr] `, ANSI stripped
+  too, `\r`/`\t` kept as printed; a `──── debug session: <name> · <time> ────`
+  delimiter separates sessions, and trailing output arriving after `terminated`
+  still reaches the log), reusing the `debug.log` append-logger pattern. Note:
   this column is populated only for adapters using `internalConsole`; Python now
   launches with `integratedTerminal` (see below), so its I/O lives in the
   debuggee terminal instead.

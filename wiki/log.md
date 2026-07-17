@@ -2,6 +2,15 @@
 
 ## 2026-07-17
 
+- Debug output console made live (#637): the tool window renders its columns in
+  every state (placeholder in FRAMES while running / not paused, OUTPUT keeps
+  streaming) and opens on the first output event if closed (once per session);
+  output auto-follows the newest line unless the user scrolled up (bottom
+  re-follows); ANSI escapes are stripped and `\r`/`\t` normalized before
+  buffering (log too — ANSI stripped, plus a per-session delimiter line and
+  trailing post-termination output); the pre-panel buffer is capped at 5000
+  chunks.
+
 - Explorer show_hidden persistence (#642): a config-driven change to
   `explorer.show_hidden` now saves the session immediately (after
   `panes.Reconfigure`, when the explorer's `ShowingHidden()` actually changed),

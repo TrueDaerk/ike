@@ -91,20 +91,45 @@ func TestScopesAndVariableExpansion(t *testing.T) {
 	}
 }
 
-// TestViewStates covers the running and empty placeholders.
+// TestViewStates covers the running and empty placeholders: the frames column
+// shows them, but the columns (OUTPUT above all) render in every state (#637).
 func TestViewStates(t *testing.T) {
 	m := New(nil)
 	m.SetSize(60, 6)
-	if !strings.Contains(m.View(), "no paused debug session") {
-		t.Fatal("empty panel must say so")
+	v := m.View()
+	if !strings.Contains(v, "not paused") {
+		t.Fatalf("empty panel must show the placeholder:\n%s", v)
+	}
+	if !strings.Contains(v, "OUTPUT") {
+		t.Fatalf("OUTPUT column must render without frames:\n%s", v)
 	}
 	m.SetFrames(frames())
 	if !strings.Contains(m.View(), "FRAMES") || !strings.Contains(m.View(), "VARIABLES") {
-		t.Fatal("panel must render both columns")
+		t.Fatal("panel must render the columns")
 	}
 	m.SetRunning()
-	if !strings.Contains(m.View(), "running") {
-		t.Fatal("running state must render the placeholder")
+	v = m.View()
+	if !strings.Contains(v, "running") || !strings.Contains(v, "OUTPUT") {
+		t.Fatalf("running state must keep the columns with a placeholder:\n%s", v)
+	}
+}
+
+// TestOutputVisibleWhileRunning guards #637's headline defect: output streams
+// exactly while the debuggee runs (or before the first stop), so the OUTPUT
+// column must render it in both states.
+func TestOutputVisibleWhileRunning(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 8)
+	m.AppendOutput(false, "before first stop\n")
+	if v := m.View(); !strings.Contains(v, "before first stop") {
+		t.Fatalf("output not rendered without frames:\n%s", v)
+	}
+	m.SetFrames(frames())
+	m.SetRunning()
+	m.AppendOutput(false, "while running\n")
+	v := m.View()
+	if !strings.Contains(v, "before first stop") || !strings.Contains(v, "while running") {
+		t.Fatalf("output not rendered while running:\n%s", v)
 	}
 }
 
@@ -291,6 +316,82 @@ func TestAppendOutputSplitsLinesAndPartials(t *testing.T) {
 	}
 	if !rows[2].stderr || rows[2].text != "boom" {
 		t.Fatalf("stderr line = %+v", rows[2])
+	}
+}
+
+// TestOutputScrollFollow verifies auto-follow (#637): appends pin the view to
+// the newest line, a manual scroll up holds the position across appends, and
+// scrolling back to the bottom resumes following.
+func TestOutputScrollFollow(t *testing.T) {
+	m := New(nil)
+	m.SetSize(90, 4) // bodyHeight = 3
+	for i := 0; i < 10; i++ {
+		m.AppendOutput(false, "line\n")
+	}
+	if m.outTop != 7 { // 10 rows, 3 visible → pinned at 7
+		t.Fatalf("outTop = %d, want pinned at 7", m.outTop)
+	}
+	m.col = colOutput
+	m.Wheel(-2) // scroll up: unfollow
+	if m.outTop != 5 {
+		t.Fatalf("outTop = %d, want 5 after wheel-up", m.outTop)
+	}
+	m.AppendOutput(false, "more\n")
+	if m.outTop != 5 {
+		t.Fatalf("outTop = %d, append must not clobber a held scroll", m.outTop)
+	}
+	// Keyboard scroll behaves the same (j/k route through move → scrollOutput).
+	m.Update(key("j"))
+	m.AppendOutput(false, "again\n")
+	if m.outTop != 6 {
+		t.Fatalf("outTop = %d, want 6 held after keyboard scroll", m.outTop)
+	}
+	m.Wheel(100) // back to the bottom: refollow
+	m.AppendOutput(false, "tail\n")
+	if want := m.outputRowCount() - 3; m.outTop != want {
+		t.Fatalf("outTop = %d, want %d (following again)", m.outTop, want)
+	}
+}
+
+// TestAppendOutputSanitizes verifies ANSI escapes are stripped and \r/\t are
+// normalized before buffering (#637), including an escape split across chunks
+// within one line.
+func TestAppendOutputSanitizes(t *testing.T) {
+	m := New(nil)
+	m.SetSize(90, 10)
+	m.AppendOutput(false, "\x1b[31mred\x1b[0m text\n")
+	m.AppendOutput(false, "progress 1\rprogress 2\n")
+	m.AppendOutput(false, "a\tb\n")
+	m.AppendOutput(false, "split \x1b[3")
+	m.AppendOutput(false, "2mgreen\x1b[0m\n")
+	rows := m.outputRows()
+	want := []string{"red text", "progress 2", "a       b", "split green"}
+	if len(rows) != len(want) {
+		t.Fatalf("rows = %d (%+v), want %d", len(rows), rows, len(want))
+	}
+	for i, w := range want {
+		if rows[i].text != w {
+			t.Fatalf("row %d = %q, want %q", i, rows[i].text, w)
+		}
+	}
+}
+
+// TestStripANSI covers the escape classes: CSI, OSC (BEL and ESC\ terminated)
+// and two-byte ESC sequences; \n/\r/\t pass through.
+func TestStripANSI(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"plain", "plain"},
+		{"\x1b[1;32mbold green\x1b[0m", "bold green"},
+		{"\x1b]0;title\x07after", "after"},
+		{"\x1b]8;;http://x\x1b\\link", "link"},
+		{"\x1bcreset", "reset"},
+		{"keep\r\n\ttabs", "keep\r\n\ttabs"},
+		{"cut mid\x1b[", "cut mid"},
+	}
+	for _, c := range cases {
+		if got := StripANSI(c.in); got != c.want {
+			t.Errorf("StripANSI(%q) = %q, want %q", c.in, got, c.want)
+		}
 	}
 }
 
