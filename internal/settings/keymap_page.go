@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -9,6 +11,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/keymap"
+	"ike/internal/keymap/jbimport"
 	"ike/internal/theme"
 )
 
@@ -35,6 +38,13 @@ type KeymapPage struct {
 	conflict  string       // colliding command id awaiting confirmation
 	warn      string       // fragile-chord honesty warning
 	invalid   string
+
+	// JetBrains keymap import (#677): "i" opens an inline path input with
+	// filesystem completion; enter runs the import, importNote reports it.
+	importing   bool
+	importInput string
+	importSug   pathSuggest
+	importNote  string
 }
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
@@ -50,7 +60,7 @@ func (k *KeymapPage) SetPalette(p *theme.Palette) { k.pal = p }
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
 // verbatim — filter text may contain the page's own action letters (u/r/j/k).
-func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering }
+func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering || k.importing }
 
 // table builds the effective binding table from the live config — the same
 // construction the app's resolver uses, so the page always shows reality.
@@ -104,6 +114,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if k.filtering {
 		return k.updateFilter(key)
 	}
+	if k.importing {
+		return k.updateImport(key)
+	}
 	switch key.String() {
 	case "up", "k":
 		if k.sel > 0 {
@@ -138,6 +151,12 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		// is open every printable key is filter text, so terms containing the
 		// action letters (u/r/j/k) type instead of firing actions.
 		k.filtering = true
+	case "i":
+		// JetBrains keymap import (#677): inline path input with completion.
+		k.importing = true
+		k.importInput = "~" + string(filepath.Separator)
+		k.importNote = ""
+		k.importSug.refresh(k.importInput)
 	}
 	return nil
 }
@@ -165,6 +184,76 @@ func (k *KeymapPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// updateImport handles keys while the JetBrains import path input is open
+// (#677): tab completes against the filesystem, enter runs the import, esc
+// cancels, backspace edits, printable text appends verbatim.
+func (k *KeymapPage) updateImport(key tea.KeyPressMsg) tea.Cmd {
+	switch key.Code {
+	case tea.KeyEscape:
+		k.importing = false
+		k.importInput = ""
+		k.importSug.clear()
+	case tea.KeyEnter:
+		k.importing = false
+		k.importSug.clear()
+		return k.commitImport()
+	case tea.KeyTab:
+		k.importInput = k.importSug.complete(k.importInput)
+	case tea.KeyBackspace:
+		if k.importInput != "" {
+			k.importInput = k.importInput[:len(k.importInput)-1]
+			k.importSug.refresh(k.importInput)
+		}
+	default:
+		if key.Text != "" {
+			k.importInput += key.Text
+			k.importSug.refresh(k.importInput)
+		}
+	}
+	return nil
+}
+
+// commitImport runs the JetBrains keymap import for the typed path: the
+// export's shortcuts become keymap.bindings.* overrides at user scope
+// (replaced default chords are unbound), then the config reloads through the
+// normal pipeline. The outcome lands in importNote for the footer.
+func (k *KeymapPage) commitImport() tea.Cmd {
+	path := strings.TrimSpace(k.importInput)
+	k.importInput = ""
+	if path == "" {
+		return nil
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if path == "~" || strings.HasPrefix(path, "~"+string(filepath.Separator)) {
+			path = home + path[1:]
+		}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		k.importNote = "import failed: " + err.Error()
+		return nil
+	}
+	defer f.Close()
+	c := config.Get()
+	preset := strings.TrimSpace(c.Keymap.Preset)
+	if preset == "" {
+		preset = keymap.PresetJetBrains
+	}
+	opts := k.opts
+	res, err := jbimport.Apply(f, keymap.Defaults(preset), func(key, value string) error {
+		return config.WriteKey(opts, config.UserScope, key, value)
+	})
+	if err != nil {
+		k.importNote = "import failed: " + err.Error()
+		return nil
+	}
+	k.importNote = res.Summary()
+	return func() tea.Msg {
+		cfg, diags := config.Load(opts)
+		return config.ConfigReloadedMsg{Config: cfg, Diags: diags}
+	}
 }
 
 // updateCapture accumulates chord steps; enter confirms (running conflict
@@ -308,7 +397,9 @@ func (k *KeymapPage) View(w, h int) string {
 	// selection never shifts the rows, and the list scrolls to follow it.
 	// It wraps to the column width over a constant two lines (#553).
 	var footer []string
-	if b, ok := k.current(); ok {
+	if k.importing {
+		footer = k.importFooter(w)
+	} else if b, ok := k.current(); ok {
 		footer = wrapFooter([]footerLine{k.detailLine(b)}, w, 2)
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
@@ -365,12 +456,33 @@ func (k *KeymapPage) detailLine(b keymap.Binding) footerLine {
 		return footerLine{text: "   ⚠ " + k.warn, style: lipgloss.NewStyle().Foreground(pal.Warning)}
 	case k.capturing:
 		return footerLine{text: "   esc cancels the capture", style: lipgloss.NewStyle().Foreground(pal.Secondary)}
+	case k.importNote != "":
+		return footerLine{
+			text:  "   " + k.importNote + " — " + b.Command + " · enter rebind · u unbind · r reset · i import",
+			style: lipgloss.NewStyle().Foreground(pal.Info),
+		}
 	default:
 		return footerLine{
-			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset",
+			text:  "   " + b.Command + " — enter rebind · u unbind · r reset to preset · i import JetBrains XML",
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	}
+}
+
+// importFooter renders the JetBrains import path input pinned under the list
+// (#677): the typed path plus the completion candidates.
+func (k *KeymapPage) importFooter(w int) []string {
+	pal := k.theme()
+	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
+	lines := []footerLine{
+		{text: "   import JetBrains keymap XML: " + k.importInput + "▌", style: lipgloss.NewStyle()},
+		{text: "   tab completes · enter imports · esc cancels", style: sec},
+	}
+	sug := k.importSug.lines()
+	for _, s := range sug {
+		lines = append(lines, footerLine{text: s, style: sec})
+	}
+	return wrapFooter(lines, w, 2+len(sug))
 }
 
 // pad right-pads (or trims) s to width n.

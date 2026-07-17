@@ -2,6 +2,13 @@
 
 ## 2026-07-17
 
+- JetBrains keymap XML import (#677): `internal/keymap/jbimport` parses a
+  JetBrains keymap export (keystroke grammar incl. second-keystroke chords),
+  maps IntelliJ action ids onto IKE command ids and writes the result as
+  `keymap.bindings.*` user-scope overrides, unbinding replaced preset
+  defaults. Entry points: the `keymap.importJetBrains` palette command (shell
+  path prompt with tab completion) and `i` on the settings Keymap page.
+
 - Tour first-run gate fix (#671): the tour scan keys on `ui.onboarded` alone —
   the settings file always exists at scan time because main records the
   project open into the recent-projects history before the model is built, so
