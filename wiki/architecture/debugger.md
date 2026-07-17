@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T09:00:00Z
+timestamp: 2026-07-17T12:00:00Z
 ---
 
 # Debugger (0350)
@@ -51,7 +51,12 @@ dead adapter is diagnosable from the notification alone.
   `configurationDone` releases the debuggee.
 - **One session at a time** (MVP): starting a new session stops the old.
   `debug.stop` disconnects (terminating the debuggee); `terminated`/`exited`
-  events clean up and toast the exit code.
+  events clean up and toast the exit code. A `debug.stop` **during the
+  launching window** (auto-install/handshake, `dbg` still nil) cancels the
+  pending launch (#636): it clears `dbgLaunching`, bumps a launch generation
+  counter (`dbgLaunchGen`), and toasts "launch cancelled"; the deferred
+  post-install retry carries the generation it was started under and is
+  dropped on mismatch, so no session starts after the install resolves.
 - Session state lives in a `debugState` behind a pointer on the root model:
   thread id, paused flag, the current stack frames, and the debuggee's DAP
   `output` events (rendered by the debug tool window, #580).

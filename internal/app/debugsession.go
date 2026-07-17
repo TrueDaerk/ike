@@ -81,6 +81,9 @@ type (
 		cfg  run.Config
 		root string
 		err  error
+		// gen is the launch generation the install was started under (#636);
+		// a mismatch on arrival means the launch was cancelled meanwhile.
+		gen int
 	}
 	// debugRunInTerminalMsg carries the adapter's runInTerminal reverse request
 	// (#625) from the read-loop goroutine onto the Update loop, where the
@@ -143,9 +146,10 @@ func (m *Model) launchOrInstall(root string, cfg run.Config, afterInstall bool) 
 	}
 	m.host.Notify(host.Info, "debug: "+reason+" — installing…")
 	send := m.host.Send
+	gen := m.dbgLaunchGen
 	go func() {
 		err := runAdapterInstall(candidates)
-		send(debugInstallResultMsg{cfg: cfg, root: root, err: err})
+		send(debugInstallResultMsg{cfg: cfg, root: root, err: err, gen: gen})
 	}()
 }
 
@@ -602,6 +606,16 @@ func (m *Model) setDebugVariable(ref int, name, value string) {
 func (m *Model) stopDebugSession(notify bool) {
 	dbg := m.dbg
 	if dbg == nil {
+		if m.dbgLaunching {
+			// A stop during the install/handshake window cancels the pending
+			// launch (#636): the generation bump makes the deferred
+			// post-install retry a no-op when its result arrives.
+			m.dbgLaunching = false
+			m.dbgLaunchGen++
+			if notify {
+				m.host.Notify(host.Info, "debug: launch cancelled")
+			}
+		}
 		return
 	}
 	m.clearPausedMarker()

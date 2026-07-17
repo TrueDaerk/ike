@@ -101,6 +101,10 @@ type Model struct {
 	// not spawn a rival adapter that then tears down the first — one session
 	// at a time (#579).
 	dbgLaunching bool
+	// dbgLaunchGen invalidates in-flight launch work (#636): a debug.stop
+	// during the launching window bumps it, and the deferred post-install
+	// retry only fires when its message still carries the current generation.
+	dbgLaunchGen int
 	navSkip      bool
 	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
 	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
@@ -2125,6 +2129,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case debugInstallResultMsg:
 		// The adapter-runtime auto-install finished (#589): success retries
 		// the pending launch once; failure surfaces the manual command.
+		if msg.gen != m.dbgLaunchGen {
+			// The launch was cancelled by debug.stop while installing (#636):
+			// drop the retry silently — the stop already notified.
+			return m, nil
+		}
 		if msg.err != nil {
 			m.dbgLaunching = false
 			m.host.Notify(host.Error, "debug: install failed: "+msg.err.Error())
