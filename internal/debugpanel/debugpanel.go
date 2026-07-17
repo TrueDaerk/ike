@@ -126,6 +126,9 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 // false, the edit affordance is disabled.
 func (m *Model) SetEditable(v bool) { m.canEdit = v }
 
+// Editable reports the recorded setVariable capability (#640).
+func (m Model) Editable() bool { return m.canEdit }
+
 // AppendOutput appends a debuggee output chunk (#624), splitting it into lines
 // and carrying an incomplete trailing line as a pending partial (DAP output
 // events can split mid-line). Completed lines are sanitized (ANSI/\r/\t, #637)
@@ -220,8 +223,10 @@ func (m *Model) SetRunning() {
 }
 
 // SetScopes replaces the variables tree's roots with the selected frame's
-// scopes (each expandable via its variablesReference).
+// scopes (each expandable via its variablesReference). An open inline editor
+// is cancelled — the tree it edited is being replaced (#640).
 func (m *Model) SetScopes(scopes []dap.Scope) {
+	m.cancelEdit()
 	m.roots = m.roots[:0]
 	for _, s := range scopes {
 		m.roots = append(m.roots, &varNode{
@@ -239,8 +244,11 @@ func (m *Model) SetScopes(scopes []dap.Scope) {
 }
 
 // SetChildren fills every tree node holding ref with the fetched variables
-// and marks it expanded.
+// and marks it expanded. An open inline editor is cancelled: the refresh may
+// replace the very row being edited, and Enter would commit a stale
+// ref/name (#640).
 func (m *Model) SetChildren(ref int, vars []dap.Variable) {
+	m.cancelEdit()
 	var fill func(nodes []*varNode)
 	fill = func(nodes []*varNode) {
 		for _, n := range nodes {
@@ -553,16 +561,26 @@ func (m Model) renderVars(w int) []string {
 			}
 		}
 		// The row being edited shows the inline value editor with a cursor.
+		// The assembled line is windowed to the column width around the
+		// cursor so a long value cannot overflow into the next column (#640).
 		if m.editing && i == m.varSel {
 			prefix := " " + strings.Repeat("  ", n.depth) + marker + n.v.Name + " = "
-			before, after := string(m.editBuf[:m.editCur]), string(m.editBuf[m.editCur:])
-			cursor := lipgloss.NewStyle().Reverse(true).Render(" ")
-			if len(after) > 0 {
-				cursor = lipgloss.NewStyle().Reverse(true).Render(string([]rune(after)[0]))
-				after = string([]rune(after)[1:])
+			line := append([]rune(prefix), m.editBuf...)
+			ci := len([]rune(prefix)) + m.editCur
+			if ci == len(line) {
+				line = append(line, ' ') // the cursor sits past the buffer end
+			}
+			if w < 1 {
+				continue
+			}
+			if len(line) > w {
+				start := clamp(ci-w+1, 0, len(line)-w)
+				line = line[start : start+w]
+				ci -= start
 			}
 			editStyle := lipgloss.NewStyle().Foreground(m.theme().Accent)
-			out = append(out, editStyle.Render(truncate(prefix+before, w))+cursor+editStyle.Render(after))
+			cursor := lipgloss.NewStyle().Reverse(true).Render(string(line[ci]))
+			out = append(out, editStyle.Render(string(line[:ci]))+cursor+editStyle.Render(string(line[ci+1:])))
 			continue
 		}
 		label := " " + strings.Repeat("  ", n.depth) + marker + n.v.Name

@@ -74,9 +74,14 @@ func (s *stubAdapter) serve() {
 		s.mu.Lock()
 		s.cmd = append(s.cmd, req.Command)
 		seq++
+		body := map[string]any{}
+		if req.Command == "initialize" {
+			// Advertise setVariable so the app-level edit gating is exercisable.
+			body["supportsSetVariable"] = true
+		}
 		resp, _ := json.Marshal(map[string]any{
 			"seq": seq, "type": "response", "request_seq": req.Seq,
-			"command": req.Command, "success": true, "body": map[string]any{},
+			"command": req.Command, "success": true, "body": body,
 		})
 		_ = jsonrpc.WriteFrame(s.out, resp)
 		s.mu.Unlock()
@@ -99,6 +104,11 @@ func debugModel(t *testing.T) (Model, *stubAdapter, string) {
 	m = tm.(Model)
 	pipe, sa := startStub(t)
 	sess := dap.NewSession(dap.NewConn(pipe, nil))
+	// Run the capability handshake so the session carries the stub's
+	// supportsSetVariable, like a real post-launch session would (#640).
+	if err := sess.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 	m.dbg = &debugState{sess: sess, cfgName: "prog.rfake", root: projectRoot()}
 	return m, sa, path
 }

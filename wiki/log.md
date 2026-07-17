@@ -2,6 +2,15 @@
 
 ## 2026-07-17
 
+- Debug variable-edit hardening (#640): a panel restored from a saved layout
+  becomes editable at the first stop (`attachDebugPanel` runs on the
+  panel-already-exists path too); `SetScopes`/`SetChildren` cancel an open
+  inline editor; `setVariable` is refused with a notice while the debuggee
+  runs and a spontaneous `continued` event blanks the panel like stepping; a
+  failed refetch after a successful set surfaces an error toast; the editor
+  row windows to the column width around the cursor; and the edit-cancelling
+  esc no longer arms the double-esc palette.
+
 - Debug panel mouse hardening (#639): border clicks (coordinates outside the
   pane interior, which the layout hit-test still routes to the pane) no longer
   select an off-by-one row or the wrong column; every click — output column and
