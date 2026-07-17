@@ -160,7 +160,12 @@ interpreter` beats detection), source badge (`@config`/`@detected`) and an
 async version probe (`p`, `python --version` / `php -v` as `tea.Cmd`s routed
 back via `settings.VersionMsg` → `Model.Deliver`). Enter opens the discovery
 picker — Python: active venv, project `.venv`/`venv`, `uv python list`, pyenv
-shims, PATH; PHP: PATH + common install locations — plus a validated custom
+shims, PATH; PHP: PATH + common install locations; every language: the
+versioned install directories (#675 — Homebrew `opt/<formula>[@*]/bin`,
+pyenv `~/.pyenv/versions/*`, Go `~/sdk/go*`, newest first, deduplicated by
+resolved path). The picker opens pre-selected on the currently effective
+interpreter and probes every candidate's version eagerly, so versions render
+without pressing `p` — plus a validated custom
 path input with tab completion and a live suggestion list (#541, same
 `internal/pathcomplete` engine as the schema Path entries). A choice writes
 the **project** config and triggers `lsp.restart`

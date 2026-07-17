@@ -118,7 +118,15 @@ common install locations — for Go `/opt/homebrew/bin`, `/usr/local/bin`,
 `/usr/local/go/bin`, `/usr/bin` (#538), since a GUI-launched process often
 misses homebrew's bin on PATH. The toolchain settings page's generic
 interpreter picker probes the same well-known directories after PATH
-(`defaultCandidates` in `internal/settings/toolchain_discover.go`).
+(`defaultCandidates` in `internal/settings/toolchain_discover.go`), and every
+picker additionally globs the **versioned install directories** (#675):
+Homebrew `opt/<formula>[@*]/bin/<bin>` under `/opt/homebrew` and `/usr/local`
+(unversioned formula first, then newest version first), pyenv
+`~/.pyenv/versions/*/bin/python` and Go `~/sdk/go*/bin/go` — deduplicated by
+symlink-resolved path, so switching to e.g. `php@7.4` no longer needs a typed
+custom path. Opening the picker pre-selects the currently effective
+interpreter and probes every candidate's version eagerly (async `VersionMsg`s),
+so the list shows versions without pressing `p`.
 
 ### Version-manager shim resolution (#650)
 

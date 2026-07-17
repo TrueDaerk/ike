@@ -145,6 +145,7 @@ func pythonPage(t *testing.T, f *fakeEnv) *ToolchainPage {
 	t.Helper()
 	p := NewToolchainPage(config.Options{}, t.TempDir(), nil)
 	p.run, p.look = f.run, f.look
+	p.glob = noGlob // keep the host's real versioned installs out of fixtures
 	for i, l := range p.languages() {
 		if l.ID == "python" {
 			p.sel = i
