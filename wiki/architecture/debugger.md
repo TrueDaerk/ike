@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Debugger
-description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
-tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-18T00:00:00Z
+tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
+timestamp: 2026-07-18T12:00:00Z
 ---
 
 # Debugger (0350)
@@ -12,6 +12,46 @@ timestamp: 2026-07-18T00:00:00Z
 Epic #572. `internal/app/debugsession.go` orchestrates one live DAP session
 (#579) on top of the DAP client (`internal/dap`, #578), the run
 configurations (#575/#576) and the breakpoint store (#577).
+
+## PHP: in-process Xdebug/DBGp bridge (0360, epic #697)
+
+PHP needs no external adapter (and no Node): IKE speaks **DBGp**, Xdebug's
+native protocol, itself. `internal/dbgp` is the protocol client (NUL-delimited
+XML packets over TCP, transaction-id correlated commands, latin-1-tolerant XML
+decoding — real Xdebug declares `iso-8859-1`, #705). `internal/dbgp/bridge` is
+an **in-process DAP adapter**: the debug manager talks DAP to it over a
+`net.Pipe` (seam: `lang.DebugAdapterInProcess` → `dap.Connect`; preferred over
+argv adapters, single code path past session construction), and the bridge
+translates:
+
+- **launch** opens an ephemeral loopback listener and asks the client to spawn
+  `php -dxdebug.mode=debug -dxdebug.start_with_request=yes
+  -dxdebug.client_host=127.0.0.1 -dxdebug.client_port=<port> script.php` via
+  runInTerminal — DBGp's direction is reversed (the engine dials the IDE); the
+  per-run `-d` overrides leave the user's php.ini untouched. One connection is
+  accepted, then the listener closes (CLI debugging only; web/request debugging
+  is out of scope for 0360).
+- Breakpoints map to `breakpoint_remove`/`breakpoint_set`, stepping to
+  `step_into`/`step_over`/`step_out`/`run`, the stack to `stack_get` (frame id =
+  DBGp depth + 1); a `status="break"` continuation response becomes a DAP
+  `stopped` event, end-of-run becomes `terminated`. One synthetic thread.
+- **Variables**: scopes ↔ `context_names` (non-Locals marked expensive),
+  variables ↔ `context_get`/paged fullname-based `property_get` (≤1000 children),
+  `setVariable` ↔ `property_set` + echo. `variablesReference`s live per paused
+  state and die on resume (stale refs answer empty). Strings render quoted with
+  a `…` clip marker when `max_data` truncated them; arrays as `array(N)`,
+  objects as their class name.
+- Bridge goroutines are recover-guarded: a bridge bug fails the session, never
+  the app. A real-Xdebug end-to-end test (`e2e_real_test.go`) runs when
+  php+Xdebug are present and self-skips otherwise.
+
+**Xdebug preflight** rides the #589 installer seam: missing = `xdebug` absent
+from `php -m` of the resolved interpreter; candidates are `pecl install xdebug`
+then `brew install shivammathur/extensions/xdebug@<major.minor>` (version from
+`php -r`). Note Homebrew's tap-trust gate: the brew candidate needs
+`brew tap shivammathur/php && brew trust shivammathur/php` (and
+`…/extensions`) once — until then the auto-install surfaces the brew command as
+the manual instruction.
 
 ## Adapter runtime auto-install (#589)
 

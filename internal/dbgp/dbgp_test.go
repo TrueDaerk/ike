@@ -281,3 +281,22 @@ func TestCloseFailsPending(t *testing.T) {
 		t.Fatal("pending call did not fail on close")
 	}
 }
+
+func TestLatin1EncodedPacket(t *testing.T) {
+	// Real Xdebug declares iso-8859-1 (#705); the payload here carries a
+	// >0x7F byte (0xFC = ü in latin-1) to prove the conversion.
+	raw := []byte(`<?xml version="1.0" encoding="iso-8859-1"?>` + "\n" +
+		`<response xmlns="urn:debugger_protocol_v1" command="stack_get" transaction_id="1">` +
+		`<stack where="f` + string([]byte{0xFC}) + `r" level="0" type="file" filename="file:///a.php" lineno="2"/></response>`)
+	pkt, err := parsePacket(raw)
+	if err != nil {
+		t.Fatalf("parsePacket: %v", err)
+	}
+	resp, ok := pkt.(*Response)
+	if !ok || len(resp.Stack) != 1 {
+		t.Fatalf("unexpected packet: %#v", pkt)
+	}
+	if resp.Stack[0].Where != "für" {
+		t.Fatalf("latin-1 conversion failed: %q", resp.Stack[0].Where)
+	}
+}

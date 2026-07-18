@@ -1,12 +1,15 @@
 package dbgp
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 // protocol.go holds the typed slices of the DBGp XML vocabulary IKE reads.
@@ -155,19 +158,19 @@ func parsePacket(data []byte) (any, error) {
 	switch root {
 	case "init":
 		var init Init
-		if err := xml.Unmarshal(data, &init); err != nil {
+		if err := unmarshalXML(data, &init); err != nil {
 			return nil, err
 		}
 		return &init, nil
 	case "response":
 		var resp Response
-		if err := xml.Unmarshal(data, &resp); err != nil {
+		if err := unmarshalXML(data, &resp); err != nil {
 			return nil, err
 		}
 		return &resp, nil
 	case "stream":
 		var st Stream
-		if err := xml.Unmarshal(data, &st); err != nil {
+		if err := unmarshalXML(data, &st); err != nil {
 			return nil, err
 		}
 		return &st, nil
@@ -176,9 +179,60 @@ func parsePacket(data []byte) (any, error) {
 	}
 }
 
+// unmarshalXML decodes with charset tolerance: real Xdebug declares
+// iso-8859-1 (#705), which encoding/xml refuses without a CharsetReader.
+func unmarshalXML(data []byte, v any) error {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec.CharsetReader = charsetReader
+	return dec.Decode(v)
+}
+
+// charsetReader converts iso-8859-1/latin-1 input to UTF-8 and passes any
+// other declared charset through unchanged (payloads are base64 anyway;
+// attribute values are effectively ASCII in the tolerated cases).
+func charsetReader(charset string, input io.Reader) (io.Reader, error) {
+	switch strings.ToLower(charset) {
+	case "iso-8859-1", "latin1", "latin-1":
+		return &latin1Reader{r: input}, nil
+	default:
+		return input, nil
+	}
+}
+
+// latin1Reader converts ISO-8859-1 bytes to UTF-8 (every byte is exactly
+// the code point of the same value).
+type latin1Reader struct {
+	r    io.Reader
+	rest []byte
+}
+
+func (l *latin1Reader) Read(p []byte) (int, error) {
+	n := copy(p, l.rest)
+	l.rest = l.rest[n:]
+	if n > 0 {
+		return n, nil
+	}
+	buf := make([]byte, 1024)
+	m, err := l.r.Read(buf)
+	if m == 0 {
+		return 0, err
+	}
+	out := make([]byte, 0, m*2)
+	for _, b := range buf[:m] {
+		out = utf8.AppendRune(out, rune(b))
+	}
+	n = copy(p, out)
+	l.rest = out[n:]
+	if len(l.rest) > 0 {
+		return n, nil // deliver the rest before surfacing EOF
+	}
+	return n, err
+}
+
 // rootElement returns the local name of the document's root element.
 func rootElement(data []byte) string {
-	dec := xml.NewDecoder(strings.NewReader(string(data)))
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	dec.CharsetReader = charsetReader
 	for {
 		tok, err := dec.Token()
 		if err != nil {
