@@ -357,6 +357,7 @@ const (
 	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
 	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
+	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -368,6 +369,7 @@ type dragState struct {
 	divider layout.Divider
 	srcPane string
 	srcTab  int // dragTab: index of the grabbed tab (#305)
+	sep     int // dragDebugDiv: which column separator is grabbed (#691)
 	curX    int
 	curY    int
 	startX  int // press cell, for the move/tab engage threshold (#559)
@@ -4632,6 +4634,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.Debug().TermDrag(lx, ly)
 				}
 			}
+		case dragDebugDiv:
+			if lx, _, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+					inst.Debug().ResizeSeparator(m.drag.sep, lx)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -4668,6 +4676,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
+		case dragDebugDiv:
+			m.drag = nil
+			return m, nil // column ratios are panel-local, nothing to persist
 		}
 		m.drag = nil
 		saveLayout(m.tree, m.panes)
@@ -4989,6 +5000,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// A press on the embedded debuggee terminal (#676) also tracks a
 		// selection drag, like a terminal pane.
 		if msg.Button == tea.MouseLeft {
+			// A press on a column separator starts a resize drag (#691),
+			// mirroring the layout divider gesture; it never selects a row.
+			if sep := inst.Debug().SeparatorHit(localX); sep >= 0 {
+				m.drag = &dragState{kind: dragDebugDiv, srcPane: key, sep: sep, curX: msg.X, curY: msg.Y}
+				return m, nil
+			}
 			if inst.Debug().OutputTermHit(localX, localY) {
 				m.drag = &dragState{kind: dragDebugTerm, srcPane: key, curX: msg.X, curY: msg.Y}
 			}
