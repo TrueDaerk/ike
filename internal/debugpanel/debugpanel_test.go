@@ -115,6 +115,54 @@ func TestViewStates(t *testing.T) {
 	}
 }
 
+// TestStaleDataWhileRunning (#693): a resumed debuggee (input wait, sleep, IO)
+// keeps the last stop's frames and variables on screen behind the running
+// indicator, while paused-only interactions are gated off.
+func TestStaleDataWhileRunning(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 10)
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 9}})
+	m.SetRunning()
+	v := m.View()
+	if !strings.Contains(v, "running") {
+		t.Fatalf("running indicator missing:\n%s", v)
+	}
+	if !strings.Contains(v, "inner") || !strings.Contains(v, "Locals") {
+		t.Fatalf("stale frames/variables must stay visible while running:\n%s", v)
+	}
+	// Paused-only interactions are no-ops on stale rows.
+	if cmd := m.activate(); cmd != nil {
+		t.Fatal("frame activation must be gated while running")
+	}
+	m.col = colVars
+	if cmd := m.activate(); cmd != nil {
+		t.Fatal("variable expansion must be gated while running")
+	}
+	m.SetEditable(true)
+	m.startEdit()
+	if m.Editing() {
+		t.Fatal("inline editing must be gated while running")
+	}
+	// A resume with the editor open cancels it (#640).
+	m.SetFrames(frames())
+	m.SetScopes([]dap.Scope{{Name: "Locals", VariablesReference: 9}})
+	if cmd := m.Update(key("enter")); cmd != nil { // expand request path sanity
+		_ = cmd
+	}
+	m.editing = true
+	m.SetRunning()
+	if m.Editing() {
+		t.Fatal("SetRunning must cancel an open inline editor")
+	}
+	// The next stop replaces the stale data and re-enables interaction.
+	m.SetFrames(frames())
+	m.col = colFrames
+	if cmd := m.activate(); cmd == nil {
+		t.Fatal("a fresh stop must re-enable frame activation")
+	}
+}
+
 // TestColumnResize (#691): the two separators hit-test at their rendered x,
 // dragging moves them proportionally with min-width clamping, and untouched
 // panels keep the built-in proportions.

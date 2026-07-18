@@ -90,10 +90,11 @@ func TestRestoredPanelBecomesEditable(t *testing.T) {
 	}
 }
 
-// TestContinuedEventBlanksPanel verifies #640 defect 3b: a spontaneous
-// continued event blanks the panel (like stepping does) so no stale rows stay
-// visible or editable while the debuggee runs.
-func TestContinuedEventBlanksPanel(t *testing.T) {
+// TestContinuedEventGatesPanel verifies #640 defect 3b under the #693
+// semantics: a spontaneous continued event keeps the last stop's rows visible
+// as stale context, but nothing stale is activatable or editable while the
+// debuggee runs.
+func TestContinuedEventGatesPanel(t *testing.T) {
 	m, _, path := debugModel(t)
 	m = stopAt(t, m, path)
 	if _, ok := m.debugPanel().SelectedFrame(); !ok {
@@ -104,8 +105,15 @@ func TestContinuedEventBlanksPanel(t *testing.T) {
 	if m.dbg.paused {
 		t.Fatal("continued must clear the paused state")
 	}
-	if _, ok := m.debugPanel().SelectedFrame(); ok {
-		t.Fatal("continued must blank the panel's frames")
+	p := m.debugPanel()
+	if _, ok := p.SelectedFrame(); !ok {
+		t.Fatal("continued must keep the stale frames visible (#693)")
+	}
+	if p.Editing() {
+		t.Fatal("continued must close an inline editor")
+	}
+	if !strings.Contains(p.View(), "running") {
+		t.Fatal("continued must show the running indicator over the stale rows")
 	}
 }
 

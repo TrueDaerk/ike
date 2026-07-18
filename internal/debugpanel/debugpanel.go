@@ -240,14 +240,14 @@ func (m *Model) SetFrames(frames []dap.StackFrame) {
 	m.cancelEdit()
 }
 
-// SetRunning blanks the paused data while the debuggee runs.
+// SetRunning marks the debuggee as running. The last stop's frames and
+// variables stay visible as stale context (#693) — rendered dimmed behind a
+// `running…` indicator — but every interaction that needs a paused adapter
+// (frame activation, variable expansion, inline editing) is gated off, and an
+// open inline editor is cancelled (#640).
 func (m *Model) SetRunning() {
 	m.running = true
 	m.finished = false
-	m.frames = nil
-	m.roots = nil
-	m.frameSel, m.varSel = 0, 0
-	m.frameTop, m.varTop = 0, 0
 	m.cancelEdit()
 }
 
@@ -400,7 +400,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // startEdit opens the inline value editor on the selected variable, when the
 // adapter supports setVariable and the row is an editable child (not a scope).
 func (m *Model) startEdit() {
-	if !m.canEdit || m.col != colVars {
+	if !m.canEdit || m.col != colVars || m.running {
 		return
 	}
 	rows := m.flat()
@@ -499,6 +499,11 @@ func scrollToShow(top, sel, body, count int) int {
 
 // activate runs enter on the focused column.
 func (m *Model) activate() tea.Cmd {
+	if m.running {
+		// Stale rows (#693): frame scopes, variable expansion and navigation
+		// all need a paused adapter — a running one refuses or hangs.
+		return nil
+	}
 	if m.col == colFrames {
 		frame, ok := m.SelectedFrame()
 		if !ok {
@@ -649,7 +654,19 @@ func (m Model) renderFrames(w int) []string {
 	sel := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
 	if m.running {
-		return append(out, dim.Render(truncate(" running…", w)))
+		// Stale context (#693): the indicator row leads, the last stop's
+		// frames follow faint so they read as historical, not live.
+		out = append(out, dim.Render(truncate(" running…", w)))
+		stale := lipgloss.NewStyle().Foreground(m.theme().Foreground).Faint(true)
+		for i := m.frameTop; i < len(m.frames); i++ {
+			if len(out) >= m.h {
+				break
+			}
+			f := m.frames[i]
+			label := " " + f.Name + " — " + baseOf(f.Source.Path) + ":" + strconv.Itoa(f.Line)
+			out = append(out, stale.Render(truncate(label, w)))
+		}
+		return out
 	}
 	if m.finished {
 		label := " finished"
@@ -686,6 +703,12 @@ func (m Model) renderVars(w int) []string {
 	out := []string{title}
 	sel := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
+	if m.running {
+		// Stale context while the debuggee runs (#693): everything faint, no
+		// selection emphasis — the tree is historical until the next stop.
+		sel = lipgloss.NewStyle().Foreground(m.theme().Foreground).Faint(true)
+		dim = sel
+	}
 	rows := m.flat()
 	for i := m.varTop; i < len(rows); i++ {
 		if len(out) >= m.h {
@@ -730,7 +753,7 @@ func (m Model) renderVars(w int) []string {
 		style := dim
 		if i == m.varSel {
 			style = sel
-			if m.focused && m.col == colVars {
+			if m.focused && m.col == colVars && !m.running {
 				style = style.Reverse(true)
 			}
 		}

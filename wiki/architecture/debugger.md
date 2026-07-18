@@ -145,9 +145,11 @@ resizes; they are session-local like scroll state.
   *outside* the current function too.
 - **Output column** (#624, live behavior #637): the debuggee's captured
   stdout/stderr, streamed from DAP `output` events. The panel renders its
-  columns in **every state** — while the debuggee runs or before the first stop
-  the frames column shows a placeholder (`running…` / `not paused`) but the
-  OUTPUT column keeps streaming, which is exactly when output arrives; the
+  columns in **every state** — before the first stop the frames column shows a
+  `not paused` placeholder; while the debuggee runs (input wait, sleep, IO) a
+  `running…` indicator leads and the **last stop's frames/variables stay
+  visible faint as stale context** (#693). The OUTPUT column keeps streaming,
+  which is exactly when output arrives; the
   first output event **opens the tool window** if it is closed (once per
   session, so a panel the user closes stays closed) — a program that never hits
   a breakpoint is still visible. stderr lines take the error tone; the column
@@ -225,8 +227,10 @@ resizes; they are session-local like scroll state.
   staying read-only; `SetScopes`/`SetChildren` cancel an open inline editor
   (an async refresh replaces the tree, and enter would commit a stale
   ref/name); `setDebugVariable` refuses with an Info notice while the debuggee
-  runs, and a spontaneous `continued` event blanks the panel (`SetRunning`)
-  like stepping does, so no stale rows stay editable; a refetch failure after a
+  runs, and a spontaneous `continued` event flips the panel into the running
+  state (`SetRunning`) like stepping does — the stale rows remain visible
+  (#693) but frame activation, variable expansion and inline editing are gated
+  until the next stop, and an open editor is cancelled; a refetch failure after a
   successful set surfaces as an error toast ("value set, refresh failed")
   instead of silently showing the old value; the inline editor row is windowed
   to the variables column width around the cursor, so a long value cannot

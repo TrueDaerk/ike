@@ -2,6 +2,11 @@
 
 ## 2026-07-18
 
+- Debug panel keeps stale frames/variables while the debuggee runs (#693):
+  input waits, sleeps and IO no longer blank the columns — the last stop's
+  data renders faint behind a `running…` indicator, with frame activation,
+  variable expansion and inline editing gated until the next stop.
+
 - Debug panel columns resizable (#691): the frames/variables/output separators
   drag like pane dividers (`dragDebugDiv` gesture), with min-width clamping and
   proportions that stick across panel resizes.
