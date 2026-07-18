@@ -363,6 +363,19 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 	return i.tabs[i.active].Terminal()
 }
 
+// DetachTerminal hands the live terminal model to the caller and leaves the
+// instance with a session-less placeholder, so a following registry Close no
+// longer ends the moved shell (#708): a terminal pane dropped on an editor's
+// center zone becomes a terminal tab there. Only valid on terminal instances.
+func (i *Instance) DetachTerminal() (terminal.Model, bool) {
+	if i.kind != KindTerminal {
+		return terminal.Model{}, false
+	}
+	t := i.term
+	i.term = terminal.Model{}
+	return t, true
+}
+
 // CloseTerminalTabs ends every terminal tab's session; the tab slots stay (a
 // registry Close drops the whole instance right after, a project switch just
 // stops the shells the new workspace does not carry over).
