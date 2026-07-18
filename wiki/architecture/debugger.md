@@ -134,10 +134,15 @@ pane; the next launch reuses it after `ResetSession` wipes the previous
 session's output and dead terminal.
 
 The three columns are **resizable** (#691): dragging a column separator with
-the mouse adjusts the proportions (`SeparatorHit`/`ResizeSeparator`, app
-gesture `dragDebugDiv` mirroring the pane-divider drag), clamped to a minimum
-column width. Proportions are stored as fractions, so they survive panel
-resizes; they are session-local like scroll state.
+the mouse adjusts the widths (`SeparatorHit`/`ResizeSeparator`, app gesture
+`dragDebugDiv` mirroring the pane-divider drag), clamped to a minimum column
+width. Drag semantics (#695): the frames│vars separator moves the vars│output
+separator along by the same amount (variables keep their width, frames trade
+with output, clamped so output — and its separator — never vanishes); the
+vars│output separator leaves the left one untouched. Widths are stored in
+exact cells (no fraction re-encoding, so the untouched column never drifts)
+and rescale proportionally only on panel resize; they are session-local like
+scroll state.
 
 - **Frames view** (left): the paused thread's stack; `j`/`k` move, `enter`
   emits `SelectFrameMsg` — the app navigates the editor to the frame's

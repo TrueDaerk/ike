@@ -83,10 +83,13 @@ type Model struct {
 	col     column
 	running bool // true between steps (no paused data to show)
 
-	// User-dragged column proportions in thousandths of the usable width
-	// (#691); zero means the built-in defaults. Session-local, like scroll.
-	fracFrames int
-	fracVars   int
+	// User-dragged column widths in cells (#691); zero means the built-in
+	// defaults. Stored exact — not as re-encoded fractions — so the column a
+	// drag does not touch never drifts (#695). SetSize rescales them
+	// proportionally via lastUsable. Session-local, like scroll.
+	colFW      int
+	colVW      int
+	lastUsable int
 
 	// finished marks a terminated session (#689): the panel stays open so the
 	// Output column remains reviewable; frames show the exit status instead.
@@ -130,8 +133,15 @@ type Model struct {
 func New(pal *theme.Palette) Model { return Model{pal: pal, now: time.Now} }
 
 // SetSize records the pane's interior size and refits the embedded terminal.
+// User-dragged column widths rescale proportionally — the only place they are
+// converted, so drags themselves stay drift-free (#695).
 func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
+	if usable := w - 2; m.colFW > 0 && m.lastUsable > 0 && usable > 0 && usable != m.lastUsable {
+		m.colFW = m.colFW * usable / m.lastUsable
+		m.colVW = m.colVW * usable / m.lastUsable
+		m.lastUsable = usable
+	}
 	m.sizeTerminal()
 }
 
@@ -575,11 +585,11 @@ func (m Model) colWidths() (frames, vars, output int) {
 	if usable < 3 {
 		usable = 3
 	}
-	if m.fracFrames > 0 && m.fracVars > 0 {
-		// User-adjusted proportions (#691): thousandths of the usable width,
-		// clamped so every column keeps its minimum where space allows.
-		frames = clampCol(usable*m.fracFrames/1000, usable-2*minColWidth)
-		vars = clampCol(usable*m.fracVars/1000, usable-frames-minColWidth)
+	if m.colFW > 0 && m.colVW > 0 {
+		// User-adjusted widths (#691), exact cells (#695), clamped so every
+		// column keeps its minimum where space allows.
+		frames = clampCol(m.colFW, usable-2*minColWidth)
+		vars = clampCol(m.colVW, usable-frames-minColWidth)
 		output = usable - frames - vars
 		return frames, vars, output
 	}
@@ -616,9 +626,14 @@ func (m Model) SeparatorHit(x int) int {
 	return -1
 }
 
-// ResizeSeparator drags separator sep to content-local x, updating the
-// proportional column fractions (#691). Proportions stick across panel
-// resizes; clamping keeps every column at minColWidth.
+// ResizeSeparator drags separator sep to content-local x (#691). Widths are
+// stored in exact cells so the untouched column never drifts (#695):
+//   - sep 0 (frames│vars): the variables column keeps its width — the right
+//     separator follows by the same amount, frames trade with output. The
+//     push clamps when output reaches minColWidth, so the right separator
+//     always stays on screen.
+//   - sep 1 (vars│output): the left separator stays put — variables trade
+//     with output.
 func (m *Model) ResizeSeparator(sep, x int) {
 	fw, vw, _ := m.colWidths()
 	usable := m.w - 2
@@ -633,8 +648,8 @@ func (m *Model) ResizeSeparator(sep, x int) {
 	default:
 		return
 	}
-	m.fracFrames = fw * 1000 / usable
-	m.fracVars = vw * 1000 / usable
+	m.colFW, m.colVW = fw, vw
+	m.lastUsable = usable
 	m.sizeTerminal()
 }
 
