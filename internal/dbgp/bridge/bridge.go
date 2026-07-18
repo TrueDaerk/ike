@@ -69,6 +69,7 @@ type bridge struct {
 	dc         *dbgp.Conn
 	listener   net.Listener
 	bpIDs      map[string][]string // path → engine breakpoint ids
+	vars       *varTable           // live variablesReferences; nil while running
 	ended      bool
 	revPending map[int]chan revReply
 }
@@ -219,7 +220,7 @@ func (b *bridge) handleRequest(req envelope) {
 	case "initialize":
 		b.respond(req, map[string]any{
 			"supportsConfigurationDoneRequest": true,
-			// setVariable lands with #700; not advertised until then.
+			"supportsSetVariable":              true,
 		})
 	case "launch":
 		b.handleLaunch(req)
@@ -245,10 +246,11 @@ func (b *bridge) handleRequest(req envelope) {
 	case "stackTrace":
 		b.handleStackTrace(req)
 	case "scopes":
-		// Variables land with #700.
-		b.respond(req, map[string]any{"scopes": []any{}})
+		b.handleScopes(req)
 	case "variables":
-		b.respond(req, map[string]any{"variables": []any{}})
+		b.handleVariables(req)
+	case "setVariable":
+		b.handleSetVariable(req)
 	case "disconnect":
 		b.respond(req, map[string]any{})
 		b.shutdown()
@@ -428,6 +430,9 @@ func (b *bridge) resume(req envelope, stopReason string, cmd func(*dbgp.Conn) (*
 	if dc == nil {
 		return
 	}
+	// The debuggee runs: every variablesReference handed out while paused
+	// dies with the resume.
+	b.resetVars()
 	resp, err := cmd(dc)
 	if err != nil {
 		// A dead connection mid-run means the script finished (Xdebug drops
