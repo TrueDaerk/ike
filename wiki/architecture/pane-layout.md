@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -80,9 +80,13 @@ the four edge zones (split/relocate exactly as before), the interior is
 drag released there moves every file of the source editor into the target's
 tab list (`openInTab` dedupes onto existing tabs) and closes the emptied
 source pane (`mergePaneTabs`); a tab drag released there joins the target's
-tab list with just that file. Drags without files to merge — an explorer or
-terminal pane, or an empty editor — keep the plain four-zone relocate
-behaviour everywhere.
+tab list with just that file. A whole-pane drag of a **terminal pane** also
+shows the center zone on editor targets (#708): releasing there moves the
+live shell session into the target's tab list as a terminal tab — the model
+is detached via `Instance.DetachTerminal` so closing the vacated pane does
+not end the session (`adoptTerminalPane`); edge drops keep the plain
+relocate. Drags with nothing to merge — an explorer pane or an empty editor —
+keep the four-zone relocate behaviour everywhere.
 
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an

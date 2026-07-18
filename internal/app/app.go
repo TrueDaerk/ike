@@ -4705,12 +4705,18 @@ func (m *Model) commitMove(x, y int) {
 	if target != m.drag.srcPane {
 		r := m.lay.Panes[target]
 		zone := layout.DropZone(r, x, y)
-		if inst := m.panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && m.dragCarriesFiles(m.drag) {
+		if inst := m.panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
 			zone = layout.DropZoneWithCenter(r, x, y)
 		}
 		if zone == layout.ZoneCenter {
 			// Center drop on an editor merges the source pane's files into
-			// the target's tab list instead of relocating the pane (#318).
+			// the target's tab list instead of relocating the pane (#318); a
+			// terminal pane moves its live session there as a terminal tab
+			// (#708).
+			if m.dragCarriesTerminal(m.drag) {
+				m.adoptTerminalPane(m.drag.srcPane, target)
+				return
+			}
 			m.mergePaneTabs(m.drag.srcPane, target)
 			return
 		}
@@ -5304,10 +5310,21 @@ func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone
 	if d.kind == dragTab && !isEditor {
 		return edgeZone(r, d.curX, d.curY)
 	}
-	if isEditor && m.dragCarriesFiles(d) {
+	if isEditor && (m.dragCarriesFiles(d) || m.dragCarriesTerminal(d)) {
 		return layout.DropZoneWithCenter(r, d.curX, d.curY), true
 	}
 	return layout.DropZone(r, d.curX, d.curY), true
+}
+
+// dragCarriesTerminal reports whether the drag moves a whole terminal pane
+// (#708): an editor target then shows the center merge zone that adopts the
+// live session as a terminal tab.
+func (m Model) dragCarriesTerminal(d *dragState) bool {
+	if d.kind != dragMove {
+		return false
+	}
+	inst := m.panes.Get(d.srcPane)
+	return inst != nil && inst.Kind() == pane.KindTerminal
 }
 
 // dragCarriesFiles reports whether the drag has files an editor target could
@@ -5346,6 +5363,24 @@ func (m *Model) mergePaneTabs(src, target string) {
 	m.closeKey(src)
 	m.setFocus(target)
 	m.syncExplorerOpen()
+	m.layout()
+}
+
+// adoptTerminalPane finishes a terminal pane's center drop on an editor pane
+// (#708): the live shell session moves into the target's tab list as a
+// terminal tab (no restart), then the vacated terminal pane closes.
+func (m *Model) adoptTerminalPane(src, target string) {
+	sinst, tinst := m.panes.Get(src), m.panes.Get(target)
+	if sinst == nil || tinst == nil || tinst.Kind() != pane.KindEditor {
+		return
+	}
+	term, ok := sinst.DetachTerminal()
+	if !ok {
+		return
+	}
+	tinst.AddTerminalTab(term)
+	m.closeKey(src)
+	m.setFocus(target)
 	m.layout()
 }
 

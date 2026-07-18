@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Terminal pane adopts into a tab list (#708): dragging a terminal pane's
+  title bar onto an editor's center zone moves the live shell session into
+  that pane's tab list as a terminal tab (`Instance.DetachTerminal` +
+  `adoptTerminalPane` — no shell restart); edge drops still relocate the
+  whole pane.
+
 - PHP debugging landed (0360, epic #697): `debug.start` on a PHP file runs it
   under Xdebug with breakpoints, stepping, frames, variables and value editing
   in the existing debug UI. IKE speaks DBGp natively — `internal/dbgp`
