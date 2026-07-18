@@ -2,7 +2,7 @@ package keymap
 
 // reachability.go is the ground-truth table of Roadmap 0081/10: per chord,
 // does the terminal actually deliver it to a TUI? Downstream work keys off
-// these classes — leader defaults (#14) re-pick primaries from them, the
+// these classes — default primaries are picked from them (#14), the
 // discoverability layer (#15) labels fragile chords honestly, and the status
 // matrix (#16) reports them. Terminal truth beats aspiration: the classes
 // come from the probe (cmd/keyprobe) run against real terminals, plus the

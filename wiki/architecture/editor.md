@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-16T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Editor
@@ -305,7 +305,7 @@ re-clamps them into the mutated buffer like the cursor.
   its start; each following one leaves a caret behind and jumps the primary to
   the next occurrence, wrapping and skipping occurrences that already hold a
   caret.
-- `editor.caret.addAll` (`ctrl+shift+g`, leader `space G`): a caret on every
+- `editor.caret.addAll` (`ctrl+shift+g`): a caret on every
   occurrence at once.
 - `alt+click` toggles a secondary caret at the clicked cell; a plain click
   collapses back to a single cursor.
@@ -385,7 +385,7 @@ The grammar is `[range] name[!] [args]`:
 ### `:substitute` (`substitute.go`)
 
 `:[range]s/pat/repl/[flags]` rewrites lines over the resolved range (default: the
-current line). `editor.replace` (`cmd+r`, leader `R`; Epic 0240, #283) fronts
+current line). `editor.replace` (`cmd+r`; Epic 0240, #283) fronts
 this same engine with a **two-field panel** (`replace_panel.go`) rendered as
 the pane's bottom rows: Find (seeded from the committed literal search,
 driving the incremental-search preview — live highlight, match tally, jump to
@@ -613,7 +613,7 @@ Two editor panes showing the same file are two **views of one document**
   sharing (it re-points that pane's document); `:w otherfile` re-targets only
   the saving view's path.
 - **Split view (#147):** `editor.splitViewRight` / `editor.splitViewDown`
-  (`cmd+k shift+right` / `cmd+k shift+down`, View menu, palette) split the
+  (`cmd+alt+shift+right` / `cmd+alt+shift+down`, View menu, palette) split the
   focused editor and make the new pane a second view directly — no explorer
   detour. Unlike an explorer open (which starts at the top), cursor and scroll
   are **copied from the source view**, and the new view gets focus

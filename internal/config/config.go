@@ -120,7 +120,6 @@ func (c *Config) Flat() map[string]string {
 	}
 
 	put("keymap.preset", c.Keymap.Preset)
-	put("keymap.leader", c.Keymap.Leader)
 	for k, v := range c.Keymap.Bindings {
 		put("keymap.bindings."+k, v)
 	}

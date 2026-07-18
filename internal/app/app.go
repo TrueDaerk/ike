@@ -1068,17 +1068,11 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 // by the table builder.
 func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolver {
 	preset := keymap.PresetJetBrains
-	leader := keymap.DefaultLeader
 	overrides := map[string]string{}
 	if cfg != nil {
 		if v, ok := cfg.Get("keymap.preset"); ok {
 			if p := strings.TrimSpace(v); p != "" {
 				preset = p
-			}
-		}
-		if v, ok := cfg.Get("keymap.leader"); ok {
-			if l := strings.TrimSpace(v); l != "" {
-				leader = l
 			}
 		}
 		const pfx = "keymap.bindings."
@@ -1090,8 +1084,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 			}
 		}
 	}
-	rows := append(keymap.Defaults(preset), keymap.LeaderRows(leader)...)
-	table := keymap.BuildTable(rows, overrides, keymap.GOOS)
+	table := keymap.BuildTable(keymap.Defaults(preset), overrides, keymap.GOOS)
 	if bindings != nil {
 		bindings.Set(table)
 	}
@@ -2060,7 +2053,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ToggleExplorerFocusMsg:
-		// explorer.toggle (cmd+1 / space e): the JetBrains cmd+1 state machine
+		// explorer.toggle (cmd+1): the JetBrains cmd+1 state machine
 		// (#268) — focused tree hides, visible unfocused tree gains focus, a
 		// hidden tree comes back at its remembered width and takes focus.
 		m.toggleExplorer()
@@ -2338,7 +2331,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ShowRecentFilesMsg:
-		// palette.recentFiles (cmd+e / leader m / menu): the MRU file list,
+		// palette.recentFiles (cmd+e / menu): the MRU file list,
 		// locked to its mode. The active file is excluded so opening the
 		// palette and pressing enter jumps to the previously used file.
 		m.palette.SetSize(m.width, m.height)
@@ -2393,7 +2386,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ShowSearchEverywhereMsg:
-		// palette.searchEverywhere (cmd+shift+a / space space): one query
+		// palette.searchEverywhere (cmd+shift+a / shift shift): one query
 		// ranked across commands and files, locked to its mode. ActivePath
 		// lets the empty-query recents listing exclude the open file (#263).
 		// The workspace-symbol seat (#295) needs the bridge continuation;
@@ -2617,7 +2610,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ilsp.SymbolPromptMsg:
-		// project.goToClass (cmd+o / leader S): install the bridge
+		// project.goToClass (cmd+o): install the bridge
 		// continuation as the live mode's re-query hook (#295) and open the
 		// palette locked to it — unless this run only primes the hook for
 		// the search-everywhere seat.

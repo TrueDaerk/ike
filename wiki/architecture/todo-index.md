@@ -4,7 +4,7 @@ title: TODO Index
 description: "#61 — JetBrains-style TODO tool window: project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable) as a centered overlay over the locations list, own search.Service scan, per-file rescan on save, tag/current-file filters, status-line count."
 resource: internal/todoindex
 tags: [architecture, todo, comment-tags, overlay, search]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # TODO Index (#61)
@@ -16,8 +16,8 @@ file and navigable. It is the second consumer of the reusable
 
 ## Opening and navigation
 
-`todo.list` (palette, `cmd+6` — JetBrains' TODO-window chord — or leader
-`space D` / `ctrl+k D`) opens a centered overlay, the same floating pattern as
+`todo.list` (palette, `cmd+6` — JetBrains' TODO-window chord) opens a
+centered overlay, the same floating pattern as
 the finder. `up`/`down`/`j`/`k` and the page keys walk entries (file headers
 are labels, not stops), `enter` opens the file with the cursor on the tag
 (`OpenLocationMsg`), `esc` closes. Mouse: click selects, click-again opens,

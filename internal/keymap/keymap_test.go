@@ -223,9 +223,6 @@ func TestHoverBindsToCtrlQ(t *testing.T) {
 	if got := Classify(MustParseChord("ctrl+q")); got != Delivered {
 		t.Fatalf("ctrl+q classifies as %v, want delivered", got)
 	}
-	if !LeaderCommands()["lsp.hover"] {
-		t.Fatal("lsp.hover missing from the leader mnemonic table")
-	}
 }
 
 // TestParameterInfoBindsToCtrlP guards the parameter-info chords (#523):
@@ -255,15 +252,15 @@ func TestMultiStepChordAndTimeout(t *testing.T) {
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
 	r := NewResolver(table)
 	// First step ctrl+k (cmd+k normalised) is both an exact binding (vcs.commit)
-	// and a prefix of ctrl+k ctrl+c / ctrl+k ctrl+s → must wait.
+	// and a prefix of the ctrl+k split/maximize sequences → must wait.
 	res := r.Feed(Key{Base: "k", Mods: ModCtrl}, Editor)
 	if res.Status != Pending {
 		t.Fatalf("after ctrl+k: status=%v, want Pending", res.Status)
 	}
-	// Second step ctrl+c completes the editor.commentLine chord.
-	res = r.Feed(Key{Base: "c", Mods: ModCtrl}, Editor)
-	if res.Status != Resolved || res.Command != "editor.commentLine" {
-		t.Fatalf("ctrl+k ctrl+c = %+v, want editor.commentLine", res)
+	// Second step completes the pane.splitDown chord.
+	res = r.Feed(Key{Base: "down"}, Editor)
+	if res.Status != Resolved || res.Command != "pane.splitDown" {
+		t.Fatalf("ctrl+k down = %+v, want pane.splitDown", res)
 	}
 	// Timeout path: ctrl+k then nothing → exact match vcs.commit resolves.
 	res = r.Feed(Key{Base: "k", Mods: ModCtrl}, Global)

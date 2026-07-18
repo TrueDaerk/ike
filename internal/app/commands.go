@@ -52,7 +52,7 @@ type GoToFileMsg struct{}
 
 // ShowRecentFilesMsg asks the root model to open the palette locked to the
 // recent-files (MRU) mode (Roadmap 0230). Dispatched by palette.recentFiles
-// (cmd+e / leader m / menu).
+// (cmd+e / menu).
 type ShowRecentFilesMsg struct{}
 
 // ShowSearchEverywhereMsg asks the root model to open the palette locked to

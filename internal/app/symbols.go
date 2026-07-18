@@ -15,7 +15,7 @@ import (
 )
 
 // symbols.go is the live workspace-symbol palette mode (0250 phase 2, #295):
-// project.goToClass (cmd+o / leader S) opens the palette locked to this mode,
+// project.goToClass (cmd+o) opens the palette locked to this mode,
 // every settled keystroke re-queries workspace/symbol through the palette's
 // debounced live plumbing, and the same mode holds the search-everywhere seat
 // (#236). It replaces the phase-1 floating prompt as the cmd+o front end.

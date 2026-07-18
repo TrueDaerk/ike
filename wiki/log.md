@@ -2,6 +2,19 @@
 
 ## 2026-07-18
 
+- Leader layer retired (#711): all `space <key>` / `ctrl+k <key>` mnemonic
+  bindings and the `[keymap] leader` config key are gone — every default is a
+  single modifier chord, JetBrains-verbatim where a default exists. Exactly
+  five multi-step sequences remain (`cmd+k down/up/left/right` pane splits,
+  `cmd+k z` maximize) plus JetBrains' `shift shift` double-tap. Re-homed
+  chords: `cmd+shift+t` reopen closed tab, `cmd+alt+z` revert file (JetBrains
+  rollback), `cmd+9` VCS tool window, `cmd+alt+m` markdown preview,
+  `cmd+alt+t` new terminal, `cmd+alt+n` notification history,
+  `cmd+alt+shift+right/down` split view. Zen mode, the leader VCS family
+  (undo revert, revert hunk, branches, diff, blame) and the cheatsheet's
+  `cmd+k cmd+s` are palette/menu-only now. A policy test
+  (`TestAllDefaultsAreModifierChords`) enforces the rule.
+
 - Terminal tabs are draggable like file tabs (#707): another editor's center
   zone moves the live session into that tab list, any edge zone splits it off
   as its own terminal pane (`DetachTerminalTab`, `AddTerminalPaneFrom`); the

@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-10T20:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -13,8 +13,7 @@ Roadmap 0220, promoted from idea #51. `nav.back` / `nav.forward` return the
 caret to where it was before a jump and re-traverse after going back —
 JetBrains Navigate Back/Forward semantics. The commands back the
 `cmd+left-bracket` / `cmd+right-bracket` defaults (fragile on many
-terminals and awkward on QWERTZ), the leader mnemonics `space b` /
-`space i` (and `ctrl+k b` / `ctrl+k i`), the Navigate menu entries, and the
+terminals and awkward on QWERTZ), the Navigate menu entries, and the
 palette.
 
 ## Semantics
@@ -76,4 +75,4 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
 
 With the commands registered, both ids left the 0081 blocked ledger
 (`internal/keymap/blocked.go`); the status matrix rows read "live via
-space b / space i". See [Keybindings & Shortcuts](/architecture/keybindings.md).
+palette". See [Keybindings & Shortcuts](/architecture/keybindings.md).

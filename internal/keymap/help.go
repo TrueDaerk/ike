@@ -21,7 +21,7 @@ type HelpGroup struct {
 // Help returns the effective bindings grouped by context (Global first, then
 // pane contexts alphabetically), each group sorted by chord. It drives the
 // palette.keymapHelp overlay; fragile entries are flagged so the view can show
-// the palette/leader fallback.
+// the palette fallback.
 func (t *BindingTable) Help() []HelpGroup {
 	byCtx := map[Context][]HelpEntry{}
 	for _, b := range t.bindings {

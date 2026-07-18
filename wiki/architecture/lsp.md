@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -173,7 +173,7 @@ site (interface implementations, build-tag variants) opens the same palette
 list — placeholder "Definitions — pick a target…" — instead of guessing the
 first location; a single site still jumps directly.
 
-**Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, leader
+**Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, also
 `H` — lowercase `h` is the notification history) sends
 `textDocument/prepareCallHierarchy` from the cursor and opens the prepared
 items in the call-hierarchy overlay (`internal/callhier`): a centered modal
@@ -188,7 +188,7 @@ not on a callable, or the server lacks `callHierarchyProvider`) is an info
 toast.
 
 **Workspace symbols (0250, #294/#295).** `project.goToClass` (default
-`cmd+o`, leader `S` — off macOS `ctrl+o` is vim jump-back) opens the palette
+`cmd+o` — off macOS `ctrl+o` is vim jump-back; palette fallback) opens the palette
 locked to the **live symbol mode** (`internal/app/symbols.go`): every settled
 keystroke (150 ms debounce, `palette.LiveMode`) re-sends `workspace/symbol`,
 fanned out by the manager to every running server advertising
@@ -244,7 +244,7 @@ is rewritten on disk
 Gated on `renameProvider`. The 0082 sheet-13 verdict landed (#18): `shift+f6`
 binds `lsp.rename` in the Editor context — JetBrains' context-aware
 refactor-rename — while the Global `file.rename` row keeps the chord in the
-explorer; `space n` stays as the leader path. Go-to-declaration's sheet-11
+explorer. Go-to-declaration's sheet-11
 verdict made `f4` the delivered primary for `lsp.definition` (`cmd+b` stays a
 secondary).
 
