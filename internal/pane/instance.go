@@ -426,6 +426,26 @@ func (i *Instance) MoveTab(from, to int) bool {
 	return true
 }
 
+// DetachTerminalTab removes tab idx without ending its session and returns
+// the hosted terminal model (#707): a dragged terminal tab moves into another
+// pane or splits off as its own terminal pane. Valid only on editor instances
+// holding more than one tab with a terminal at idx.
+func (i *Instance) DetachTerminalTab(idx int) (terminal.Model, bool) {
+	if i.kind != KindEditor || idx < 0 || idx >= len(i.tabs) || len(i.tabs) == 1 || !i.tabs[idx].IsTerminal() {
+		return terminal.Model{}, false
+	}
+	t := *i.tabs[idx].term
+	i.tabs = append(i.tabs[:idx], i.tabs[idx+1:]...)
+	switch {
+	case i.active > idx:
+		i.active--
+	case i.active == idx && i.active >= len(i.tabs):
+		i.active = len(i.tabs) - 1
+	}
+	i.activate(i.active)
+	return t, true
+}
+
 // CloseTab removes tab idx. The neighbour that slides into its position becomes
 // active when the active tab itself closes (the last position falls back to its
 // left neighbour). Closing the only tab is refused — the caller closes the pane

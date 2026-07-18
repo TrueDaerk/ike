@@ -107,7 +107,17 @@ splits that pane and opens the file in the fresh editor leaf (#317). A drop in a
 non-editor pane's interior is a no-op — there is no tab list to join — and the
 drag feedback (zone arrow, ghost, status hint) only signals a target there when
 the cursor is in an edge zone. The ghost for a tab drag is labelled with the
-dragged file's basename.
+dragged file's basename (a terminal tab uses its tab title).
+
+**Terminal-tab drag (#707).** A grabbed **terminal tab** follows the same
+release rules (`commitTerminalTabMove`): another editor's center zone moves
+the live session into that tab list (`DetachTerminalTab` + `AddTerminalTab`
+— no shell restart); every edge zone — an editor's, a non-editor pane's, or
+the source pane's own — splits the session off as its own terminal pane
+(`splitTerminalTabTo` via `Registry.AddTerminalPaneFrom`). The split pane
+keeps its original session routing key under a fresh pane key, so the shell's
+`ExitedMsg` is resolved through `terminalPaneForSession` rather than by pane
+key alone.
 
 ## Create / close ops (Roadmap 0037)
 
