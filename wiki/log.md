@@ -2,6 +2,16 @@
 
 ## 2026-07-18
 
+- PHP debugging landed (0360, epic #697): `debug.start` on a PHP file runs it
+  under Xdebug with breakpoints, stepping, frames, variables and value editing
+  in the existing debug UI. IKE speaks DBGp natively — `internal/dbgp`
+  (protocol client, #698; latin-1 XML tolerance #705) plus an in-process
+  DAP↔DBGp bridge (`internal/dbgp/bridge`, #699, variables #700) behind the
+  new `lang.DebugAdapterInProcess`/`dap.Connect` seam; no Node, no external
+  adapter. The PHP plugin (#701) contributes launch args and the Xdebug
+  preflight: missing extension detected via `php -m`, auto-install tries
+  `pecl` then Homebrew's `shivammathur/extensions/xdebug@<version>`.
+
 - Debug panel column-resize drift fixed (#695): widths are stored in exact
   cells instead of re-encoded fractions, so the untouched column no longer
   creeps during a drag; frames|vars pushes the right separator along (output
