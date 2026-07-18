@@ -123,6 +123,19 @@ func (r *Registry) AddTerminal(shell, dir string, env []string, send func(tea.Ms
 	return key
 }
 
+// AddTerminalPaneFrom wraps an already-running terminal model as a fresh
+// terminal instance (#707): a terminal tab dragged out of a tab list becomes
+// its own pane without restarting the shell. The pane key is freshly minted;
+// the model keeps its original session routing key.
+func (r *Registry) AddTerminalPaneFrom(term terminal.Model) string {
+	key := r.MintTerminalKey()
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = term
+	inst.term.SetPalette(r.pal)
+	r.put(inst)
+	return key
+}
+
 // AddCommandTerminal creates a terminal pane running argv as a command
 // session (0350, #576): the new-terminal placement of a run. label names the
 // pane/tab after the run configuration.

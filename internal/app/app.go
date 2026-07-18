@@ -2316,11 +2316,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// refuses (last leaf), the pane stays showing [process exited]. A
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
-		if inst := m.panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().IsCommand() {
+		key := m.terminalPaneForSession(msg.Key)
+		if key != "" && m.panes.Get(key).Terminal().IsCommand() {
 			return m, nil
 		}
-		if m.panes.Has(msg.Key) {
-			if m.closeKey(msg.Key) {
+		if key != "" {
+			if m.closeKey(key) {
 				m.setFocus(m.focusAfterClose())
 				m.syncExplorerOpen()
 				m.layout()
@@ -4750,6 +4751,10 @@ func (m *Model) commitTabMove(x, y int) {
 	if inst == nil || !rok {
 		return
 	}
+	if tab := inst.Tab(m.drag.srcTab); tab != nil && tab.IsTerminal() {
+		m.commitTerminalTabMove(x, y, inst, r)
+		return
+	}
 	ed := inst.TabEditor(m.drag.srcTab)
 	if ed == nil || !ed.HasFile() {
 		return
@@ -4791,6 +4796,72 @@ func (m *Model) commitTabMove(x, y int) {
 	if zone, near := edgeZone(r, x, y); near {
 		m.splitTabTo(src, zone, path, ed)
 	}
+}
+
+// commitTerminalTabMove applies a terminal tab's drag release (#707),
+// mirroring commitTabMove: another editor's center zone moves the live
+// session into that pane's tab list; any edge zone — an editor's, a
+// non-editor pane's (#317 semantics) or the source pane's own — splits the
+// session off as its own terminal pane. The shell never restarts.
+func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Rect) {
+	src := m.drag.srcPane
+	target, ok := m.lay.PaneAt(x, y)
+	if !ok || (target == src && y < r.Y+layout.TitleBarRows) {
+		return // dropped outside any pane, or a plain click (#304 semantics)
+	}
+	if target == src {
+		if zone, near := edgeZone(r, x, y); near {
+			m.splitTerminalTabTo(src, zone)
+		}
+		return
+	}
+	tinst := m.panes.Get(target)
+	if tinst == nil {
+		return
+	}
+	if tinst.Kind() != pane.KindEditor {
+		if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
+			m.splitTerminalTabTo(target, zone)
+		}
+		return
+	}
+	if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
+		m.splitTerminalTabTo(target, zone)
+		return
+	}
+	term, ok := inst.DetachTerminalTab(m.drag.srcTab)
+	if !ok {
+		return
+	}
+	tinst.AddTerminalTab(term)
+	m.setFocus(target)
+	m.layout()
+}
+
+// splitTerminalTabTo finishes a terminal tab's drag by splitting pane target
+// at zone into a fresh terminal pane hosting the dragged tab's live session
+// (#707). When the split is refused the tab is re-adopted, never dropped.
+func (m *Model) splitTerminalTabTo(target string, zone layout.Zone) {
+	inst := m.panes.Get(m.drag.srcPane)
+	if inst == nil {
+		return
+	}
+	term, ok := inst.DetachTerminalTab(m.drag.srcTab)
+	if !ok {
+		return
+	}
+	newKey := m.panes.AddTerminalPaneFrom(term)
+	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	if !ok {
+		if t, ok := m.panes.Get(newKey).DetachTerminal(); ok {
+			inst.AddTerminalTab(t)
+		}
+		m.panes.Close(newKey) // session-less after the detach: harmless
+		return
+	}
+	m.tree = tree
+	m.setFocus(newKey)
+	m.layout()
 }
 
 // splitTabTo finishes a tab drag by splitting pane target at zone into a fresh
@@ -5388,11 +5459,29 @@ func (m *Model) adoptTerminalPane(src, target string) {
 // basename.
 func (m Model) tabDragLabel(d *dragState) string {
 	if inst := m.panes.Get(d.srcPane); inst != nil {
+		if tab := inst.Tab(d.srcTab); tab != nil && tab.IsTerminal() {
+			return tab.Title()
+		}
 		if ed := inst.TabEditor(d.srcTab); ed != nil && ed.HasFile() {
 			return baseName(ed.Path())
 		}
 	}
 	return "tab"
+}
+
+// terminalPaneForSession resolves the terminal pane hosting session sess. The
+// pane key usually is the session key, but a terminal tab split into its own
+// pane (#707) keeps its original session key under a freshly minted pane key.
+func (m Model) terminalPaneForSession(sess string) string {
+	if inst := m.panes.Get(sess); inst != nil && inst.Kind() == pane.KindTerminal {
+		return sess
+	}
+	for _, k := range m.panes.Keys() {
+		if inst := m.panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().SessionKey() == sess {
+			return k
+		}
+	}
+	return ""
 }
 
 // dropRect is the sub-rectangle of r the dragged pane would occupy for zone z.

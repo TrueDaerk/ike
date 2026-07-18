@@ -2,6 +2,12 @@
 
 ## 2026-07-18
 
+- Terminal tabs are draggable like file tabs (#707): another editor's center
+  zone moves the live session into that tab list, any edge zone splits it off
+  as its own terminal pane (`DetachTerminalTab`, `AddTerminalPaneFrom`); the
+  shell never restarts, and its exit still closes a split-off pane via
+  session-key routing (`terminalPaneForSession`).
+
 - Terminal pane adopts into a tab list (#708): dragging a terminal pane's
   title bar onto an editor's center zone moves the live shell session into
   that pane's tab list as a terminal tab (`Instance.DetachTerminal` +
