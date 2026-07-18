@@ -2,6 +2,11 @@
 
 ## 2026-07-18
 
+- Debug panel column-resize drift fixed (#695): widths are stored in exact
+  cells instead of re-encoded fractions, so the untouched column no longer
+  creeps during a drag; frames|vars pushes the right separator along (output
+  clamps at its minimum), vars|output leaves the left separator put.
+
 - Debug panel keeps stale frames/variables while the debuggee runs (#693):
   input waits, sleeps and IO no longer blank the columns — the last stop's
   data renders faint behind a `running…` indicator, with frame activation,

@@ -200,8 +200,46 @@ func TestColumnResize(t *testing.T) {
 	m.SetSize(20, 8)
 	before := m
 	m.ResizeSeparator(0, 15)
-	if m.fracFrames != before.fracFrames || m.fracVars != before.fracVars {
+	if m.colFW != before.colFW || m.colVW != before.colVW {
 		t.Fatal("a drag below the minimum panel width must be a no-op")
+	}
+}
+
+// TestResizeNoDrift (#695): repeated motion events on one separator must
+// leave the untouched column bit-for-bit stable — no integer-rounding drift —
+// and dragging sep0 right clamps once output reaches its minimum, keeping the
+// pushed right separator on screen.
+func TestResizeNoDrift(t *testing.T) {
+	m := New(nil)
+	m.SetSize(102, 8) // usable 100: defaults 40 | 30 | 30
+	// Wiggle sep0 many times: vars must never change.
+	for i := 0; i < 50; i++ {
+		m.ResizeSeparator(0, 41+i%3)
+		if _, vw, _ := m.colWidths(); vw != 30 {
+			t.Fatalf("vars drifted to %d while dragging sep0 (iteration %d)", vw, i)
+		}
+	}
+	// Wiggle sep1: frames must never change.
+	fw0, _, _ := m.colWidths()
+	for i := 0; i < 50; i++ {
+		m.ResizeSeparator(1, fw0+10+i%3)
+		if fw, _, _ := m.colWidths(); fw != fw0 {
+			t.Fatalf("frames drifted to %d while dragging sep1 (iteration %d)", fw, i)
+		}
+	}
+	// Pushing sep0 far right shoves sep1 along but clamps at output's
+	// minimum: both separators stay visible.
+	m.ResizeSeparator(1, fw0+1+30) // vars back to 30
+	m.ResizeSeparator(0, 500)
+	fw, vw, ow := m.colWidths()
+	if ow != minColWidth {
+		t.Fatalf("output = %d after max push, want %d", ow, minColWidth)
+	}
+	if vw != 30 {
+		t.Fatalf("vars = %d after max push, want 30 (right separator follows)", vw)
+	}
+	if fw != 100-30-minColWidth {
+		t.Fatalf("frames = %d after max push, want %d", fw, 100-30-minColWidth)
 	}
 }
 
