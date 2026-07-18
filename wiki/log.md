@@ -1,5 +1,11 @@
 # Log
 
+## 2026-07-18
+
+- Debug panel columns resizable (#691): the frames/variables/output separators
+  drag like pane dividers (`dragDebugDiv` gesture), with min-width clamping and
+  proportions that stick across panel resizes.
+
 ## 2026-07-17
 
 - Debug panel survives session end (#689): termination flips the panel into a

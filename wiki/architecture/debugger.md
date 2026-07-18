@@ -4,7 +4,7 @@ title: Debugger
 description: Work stream 0350 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, run, breakpoints]
-timestamp: 2026-07-17T21:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -132,6 +132,12 @@ the embedded terminal's scrollback — remains reviewable; trailing adapter
 output flushed past `terminated` still appends. The user closes it like any
 pane; the next launch reuses it after `ResetSession` wipes the previous
 session's output and dead terminal.
+
+The three columns are **resizable** (#691): dragging a column separator with
+the mouse adjusts the proportions (`SeparatorHit`/`ResizeSeparator`, app
+gesture `dragDebugDiv` mirroring the pane-divider drag), clamped to a minimum
+column width. Proportions are stored as fractions, so they survive panel
+resizes; they are session-local like scroll state.
 
 - **Frames view** (left): the paused thread's stack; `j`/`k` move, `enter`
   emits `SelectFrameMsg` — the app navigates the editor to the frame's

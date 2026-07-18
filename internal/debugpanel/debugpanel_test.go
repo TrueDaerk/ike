@@ -115,6 +115,48 @@ func TestViewStates(t *testing.T) {
 	}
 }
 
+// TestColumnResize (#691): the two separators hit-test at their rendered x,
+// dragging moves them proportionally with min-width clamping, and untouched
+// panels keep the built-in proportions.
+func TestColumnResize(t *testing.T) {
+	m := New(nil)
+	m.SetSize(102, 8) // usable 100: defaults 40 | 30 | 30
+	fw, vw, ow := m.colWidths()
+	if fw != 40 || vw != 30 || ow != 30 {
+		t.Fatalf("default widths = %d/%d/%d, want 40/30/30", fw, vw, ow)
+	}
+	if m.SeparatorHit(fw) != 0 || m.SeparatorHit(fw+1+vw) != 1 {
+		t.Fatal("separators must hit-test at their rendered columns")
+	}
+	if m.SeparatorHit(fw-1) != -1 || m.SeparatorHit(fw+1) != -1 {
+		t.Fatal("column interiors must not hit-test as separators")
+	}
+	// Drag the first separator right: frames grow, output untouched.
+	m.ResizeSeparator(0, 60)
+	fw, vw, _ = m.colWidths()
+	if fw != 60 {
+		t.Fatalf("frames = %d after drag, want 60", fw)
+	}
+	// Drag the second separator far left: vars clamp to the minimum.
+	m.ResizeSeparator(1, fw+1)
+	if _, vw, _ = m.colWidths(); vw != minColWidth {
+		t.Fatalf("vars = %d after clamped drag, want %d", vw, minColWidth)
+	}
+	// Proportions stick across a panel resize instead of snapping back.
+	m.SetSize(52, 8)
+	fw, vw, ow = m.colWidths()
+	if fw <= vw || vw < minColWidth || ow < minColWidth {
+		t.Fatalf("resized widths = %d/%d/%d, want proportional with minima", fw, vw, ow)
+	}
+	// A drag on a too-narrow panel is ignored rather than corrupting state.
+	m.SetSize(20, 8)
+	before := m
+	m.ResizeSeparator(0, 15)
+	if m.fracFrames != before.fracFrames || m.fracVars != before.fracVars {
+		t.Fatal("a drag below the minimum panel width must be a no-op")
+	}
+}
+
 // TestFinishedState (#689): a terminated session keeps the panel usable — the
 // FRAMES column shows the exit status, output stays rendered, and a new
 // session's ResetSession clears both.
