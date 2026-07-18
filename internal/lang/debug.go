@@ -1,5 +1,7 @@
 package lang
 
+import "io"
+
 // Debug-adapter seam (0350, #578): a language plugin contributes how to
 // spawn its DAP adapter and how to phrase the launch request for a run
 // configuration. The interpreter resolution is shared with run commands and
@@ -14,6 +16,32 @@ type DebugAdapterProvider interface {
 	DebugAdapter(root, interpreter string) (argv []string, ok bool)
 	// DebugLaunchArgs builds the DAP launch-request arguments for spec.
 	DebugLaunchArgs(root string, spec RunSpec, cwd string, env map[string]string) map[string]any
+}
+
+// DebugAdapterInProcess is an optional extension for languages whose DAP
+// adapter runs inside IKE (PHP's DBGp bridge, 0360): instead of an argv to
+// spawn, the provider returns a ready connection speaking DAP. The debug
+// manager prefers this over DebugAdapter when both are present.
+type DebugAdapterInProcess interface {
+	// DebugAdapterConnect starts the in-process adapter and returns the
+	// client end of its DAP connection.
+	DebugAdapterConnect(root, interpreter string) (io.ReadWriteCloser, error)
+}
+
+// DebugAdapterConnect resolves langID's in-process adapter at root; found is
+// false when the language contributes no in-process adapter.
+func DebugAdapterConnect(langID, root, explicit string) (rwc io.ReadWriteCloser, found bool, err error) {
+	p, ok := debugProvider(langID)
+	if !ok {
+		return nil, false, nil
+	}
+	inproc, ok := p.(DebugAdapterInProcess)
+	if !ok {
+		return nil, false, nil
+	}
+	interpreter, _ := Interpreter(langID, root, explicit)
+	rwc, err = inproc.DebugAdapterConnect(root, interpreter)
+	return rwc, true, err
 }
 
 // DebugAdapter resolves langID's adapter argv at root; explicit is the

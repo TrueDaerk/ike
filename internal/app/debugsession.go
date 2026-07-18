@@ -228,12 +228,6 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	m.stopDebugSession(false) // one session at a time (MVP)
 
 	explicit := m.explicitInterpreter(cfg.Lang)
-	argv, ok := lang.DebugAdapter(cfg.Lang, root, explicit)
-	if !ok {
-		m.host.Notify(host.Error, "debug: no adapter for "+cfg.Lang)
-		m.dbgLaunching = false
-		return
-	}
 	absFile := cfg.File
 	if !filepath.IsAbs(absFile) {
 		absFile = filepath.Join(root, absFile)
@@ -247,13 +241,31 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 
 	send := m.host.Send
-	sess, err := dap.Start(transport.Spec{Command: argv[0], Args: argv[1:], Dir: root, Detached: true}, func(ev dap.Event) {
-		send(debugEventMsg{ev: ev})
-	})
-	if err != nil {
-		m.host.Notify(host.Error, "debug: adapter failed to start: "+err.Error())
-		m.dbgLaunching = false
-		return
+	onEvent := func(ev dap.Event) { send(debugEventMsg{ev: ev}) }
+	// An in-process adapter (PHP's DBGp bridge, 0360) wins over an argv spawn;
+	// past construction both session kinds behave identically.
+	var sess *dap.Session
+	if rwc, inproc, err := lang.DebugAdapterConnect(cfg.Lang, root, explicit); inproc {
+		if err != nil {
+			m.host.Notify(host.Error, "debug: adapter failed to start: "+err.Error())
+			m.dbgLaunching = false
+			return
+		}
+		sess = dap.Connect(rwc, onEvent)
+	} else {
+		argv, ok := lang.DebugAdapter(cfg.Lang, root, explicit)
+		if !ok {
+			m.host.Notify(host.Error, "debug: no adapter for "+cfg.Lang)
+			m.dbgLaunching = false
+			return
+		}
+		var err error
+		sess, err = dap.Start(transport.Spec{Command: argv[0], Args: argv[1:], Dir: root, Detached: true}, onEvent)
+		if err != nil {
+			m.host.Notify(host.Error, "debug: adapter failed to start: "+err.Error())
+			m.dbgLaunching = false
+			return
+		}
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false

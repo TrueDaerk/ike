@@ -2,6 +2,7 @@ package dap
 
 import (
 	"encoding/json"
+	"io"
 
 	"ike/internal/lsp/transport"
 )
@@ -38,6 +39,17 @@ func Start(spec transport.Spec, onEvent func(Event)) (*Session, error) {
 		}
 	}
 	return &Session{proc: proc, conn: NewConn(proc.Conn(), handler)}, nil
+}
+
+// Connect wraps an in-process adapter connection (0360: PHP's DBGp bridge
+// runs inside IKE; there is no adapter process to spawn).
+func Connect(rwc io.ReadWriteCloser, onEvent func(Event)) *Session {
+	handler := func(name string, body json.RawMessage) {
+		if onEvent != nil {
+			onEvent(Event{Name: name, Body: body})
+		}
+	}
+	return &Session{conn: NewConn(rwc, handler)}
 }
 
 // NewSession wraps an existing connection (tests use an in-memory pipe).
