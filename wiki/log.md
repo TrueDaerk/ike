@@ -2,6 +2,17 @@
 
 ## 2026-07-19
 
+- LSP server logs (#715): every server's stderr now tees into
+  `~/.ike/logs/lsp-<lang>.log` (start header, exit footer, manager lifecycle
+  markers: crashed / restarting n/3 / disabled; >1 MiB rotates to `.old`).
+  New palette command `lsp.showLog` ("LSP: Show Server Log") opens the most
+  recent log in a new pane; the disabled-after-repeated-crashes toast points
+  at it.
+
+- The example reference plugin no longer ships in the ike binary (#716): its
+  EventFileOpened hook toasted "example saw open: <path>" on every file open.
+  The package remains as the documented plugin reference with its tests.
+
 - Post-tour setup flow (#713): finishing the Welcome Tour now chains three
   setup dialogs through the floating shell — a theme picker (j/k previews
   live, enter persists `theme.name`, esc restores), the LSP server picker

@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-19T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -509,6 +509,24 @@ gate).
 entirely: ask me nothing, install nothing. When the crash-recovery prompt is
 due on the same start, recovery wins the shell and onboarding follows once it
 closes.
+
+## Server logs & crash diagnostics (#715)
+
+Every spawned server's **stderr is teed into a per-language log file**
+(`internal/lsp/transport` `Spec.LogPath`): `$IKE_CONFIG_DIR/logs/lsp-<lang>.log`
+(`~/.ike/logs` fallback, `manager.LogPath`). The transport writes a
+timestamped start header and an exit footer (the exit error); the manager
+appends its lifecycle markers — `server crashed`, `restarting (attempt n/3)`,
+`disabled after repeated crashes` — so one file tells the whole story. Files
+above 1 MiB rotate to `<path>.old` on the next start; the in-memory ring
+buffer (`Process.Stderr`) is unchanged. Logging is best-effort: any file
+error silently degrades to today's behaviour.
+
+The palette command **`lsp.showLog`** ("LSP: Show Server Log",
+`plugins/lsp/showlog.go`) opens the most recently modified log — the crashed
+server's, in the common case — in a new editor pane, and points at the logs
+directory when more exist. The disabled-after-repeated-crashes toast names
+the command. No default chord (#711 policy).
 
 ## Testing
 

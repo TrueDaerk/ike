@@ -109,6 +109,12 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Scope: plugin.GlobalScope(),
 				Run:   func(h host.API) tea.Cmd { return shared().restart(h) },
 			},
+			{
+				ID:    "lsp.showLog",
+				Title: "LSP: Show Server Log",
+				Scope: plugin.GlobalScope(),
+				Run:   showLog,
+			},
 		},
 		SettingsPages: []settings.Page{
 			{Title: "Language Servers", Custom: settings.NewLSPPage(
