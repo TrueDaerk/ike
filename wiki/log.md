@@ -3,8 +3,8 @@
 ## 2026-07-19
 
 - Terminal capability check (#720): startup probe (Kitty keyboard protocol
-  handshake with grace tick, tmux/screen env, color profile) toasts one
-  specific warning per deficiency; the palette/cheatsheet "⚠
+  handshake with grace tick, tmux/screen env, color profile) opens a centered
+  floating report — one headline + fix per deficiency, esc dismisses; the palette/cheatsheet "⚠
   terminal-dependent" suffix on fragile-only bindings is gone. Per-chord
   classes remain in the settings keymap page and reachability matrix.
 

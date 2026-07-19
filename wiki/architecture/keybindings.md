@@ -115,9 +115,10 @@ suffix marked the whole table and carried no signal. Instead the app probes
 the environment at startup (`internal/app/termcheck.go`): it collects
 bubbletea's `KeyboardEnhancementsMsg` (Kitty keyboard protocol handshake —
 silence within a 3s grace tick means "unsupported") and `ColorProfileMsg`,
-and detects tmux/screen from `$TMUX`/`$TERM`. Each detected deficiency raises
-one specific warning toast (missing Kitty protocol, tmux without
-extended-keys, sub-true-color profile). The per-chord `Fragile` classes stay
+and detects tmux/screen from `$TMUX`/`$TERM`. Detected deficiencies open one
+centered floating report at startup (headline + fix per issue — missing Kitty
+protocol, tmux without extended-keys, sub-true-color profile), dismissed with
+esc; it waits for the tour/recovery/onboarding modals to clear first. The per-chord `Fragile` classes stay
 visible in the settings keymap page (per-row ⚠) and the reachability matrix.
 
 ## Default set
