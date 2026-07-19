@@ -2,6 +2,12 @@
 
 ## 2026-07-19
 
+- Terminal capability check (#720): startup probe (Kitty keyboard protocol
+  handshake with grace tick, tmux/screen env, color profile) toasts one
+  specific warning per deficiency; the palette/cheatsheet "⚠
+  terminal-dependent" suffix on fragile-only bindings is gone. Per-chord
+  classes remain in the settings keymap page and reachability matrix.
+
 - LSP server logs (#715): every server's stderr now tees into
   `~/.ike/logs/lsp-<lang>.log` (start header, exit footer, manager lifecycle
   markers: crashed / restarting n/3 / disabled; >1 MiB rotates to `.old`).
