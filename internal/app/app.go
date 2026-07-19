@@ -1262,9 +1262,10 @@ func displayDir(dir string) string {
 //	ctrl+tab    move focus to the next pane (the global escape hatch)
 //	alt+f12     terminal.toggle — return focus to the previous pane (#97)
 //
-// The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*) and
-// cmd+c over an active mouse selection are reserved in the caller (#228,
-// #227). Everything else, including tab, ctrl+c, esc and the F-keys, belongs
+// The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*),
+// cmd+c over an active mouse selection, and cmd+v (system-clipboard paste)
+// are reserved in the caller (#228, #227, #727). Everything else, including
+// tab, ctrl+c, esc and the F-keys, belongs
 // to the shell. shift+pgup/pgdn page the scrollback inside the pane itself.
 func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	switch keys {
@@ -3186,10 +3187,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			// cmd+c copies an active mouse selection (#227); without one the
-			// key stays with the shell.
-			if term := m.panes.FocusedInstance().ActiveTerminal(); term.HasSelection() {
-				if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "c" {
+			// key stays with the shell. cmd+v pastes the system clipboard
+			// through the bracketed-paste path (#727) — under the Kitty
+			// protocol the host terminal delivers cmd+v as a key event, so
+			// the bracketed-paste route (#603) never fires for it.
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta {
+				term := m.panes.FocusedInstance().ActiveTerminal()
+				switch {
+				case k.Base == "c" && term.HasSelection():
 					m.copyTerminalSelection(term)
+					return m, nil
+				case k.Base == "v":
+					if text := clipboardRead(); text != "" {
+						term.PasteText(text)
+					}
 					return m, nil
 				}
 			}
@@ -3238,6 +3249,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastEsc = false
 			if dir, ok := m.focusKeys[msg.String()]; ok {
 				m.FocusDir(dir)
+				return m, nil
+			}
+			// cmd+v pastes the system clipboard into the embedded debuggee
+			// terminal, mirroring the terminal-pane path (#727).
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
+				if term := m.panes.FocusedInstance().Debug().Terminal(); term != nil {
+					if text := clipboardRead(); text != "" {
+						term.PasteText(text)
+					}
+				}
 				return m, nil
 			}
 			return m.routeKey(msg)
@@ -5114,6 +5135,16 @@ var clipboardWrite = func(text string) {
 	if c := clipboard.System(); c != nil {
 		_ = c.Write(text)
 	}
+}
+
+// clipboardRead is the matching read-side seam (#727).
+var clipboardRead = func() string {
+	if c := clipboard.System(); c != nil {
+		if text, err := c.Read(); err == nil {
+			return text
+		}
+	}
+	return ""
 }
 
 // copyTerminalSelection writes the terminal's mouse selection to the system

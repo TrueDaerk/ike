@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-19
+
+- cmd+v pastes the system clipboard into a focused terminal pane and the debug
+  panel's embedded debuggee terminal (#727): the key is caught before raw
+  forwarding and fed through the bracketed-paste path (`PasteText`), since a
+  Kitty-protocol host delivers cmd+v as a key event, not a paste.
+
 ## 2026-07-18
 
 - Terminal tabs are draggable like file tabs (#707): another editor's center
