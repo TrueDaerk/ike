@@ -71,6 +71,11 @@ func (r *Registry) SetPalette(p *theme.Palette) {
 	}
 }
 
+// Palette returns the recorded theme palette (nil before the first
+// SetPalette) — the seam that lets the root model assert a rebuilt registry
+// was re-themed (#722).
+func (r *Registry) Palette() *theme.Palette { return r.pal }
+
 // Reconfigure replaces the registry's config and re-applies it — together with
 // the current palette — to every instance, used on live config reloads.
 func (r *Registry) Reconfigure(cfg host.Config) {
