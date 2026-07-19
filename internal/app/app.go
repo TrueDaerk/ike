@@ -533,6 +533,12 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
 	m.restoreSession()
+	// restoreLayout replaces m.panes with a fresh registry that never saw the
+	// applyTheme above (#722): without re-threading, every restored pane
+	// (explorer file colors, editor highlight captures) renders the default
+	// dark theme's tokens — near-white identifiers on a light theme's
+	// background. Idempotent when no layout was restored.
+	m.panes.SetPalette(themePal)
 	m.scanRecovery()
 	m.scanTour()
 	m.scanOnboarding()
