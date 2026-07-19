@@ -20,8 +20,12 @@ Build from source (all platforms):
 ```sh
 git clone https://github.com/TrueDaerk/ike.git
 cd ike
-go build -o ike ./cmd/ike
+make install                        # installs to ~/.local/bin/ike
+make install BINDIR=/usr/local/bin  # or pick another directory
 ```
+
+(Or build without installing: `make` produces `./ike`; plain
+`go build -o ike ./cmd/ike` works too.)
 
 Then run `ike` from the directory you want to open as a project — the current
 working directory becomes the project root:
