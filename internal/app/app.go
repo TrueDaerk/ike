@@ -1692,8 +1692,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tick
 
 	case termCheckMsg:
-		m.runTermCheck()
-		return m, nil
+		return m, m.runTermCheck()
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
