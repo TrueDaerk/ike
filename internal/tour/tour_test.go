@@ -124,7 +124,7 @@ func TestPageContent(t *testing.T) {
 		{1, []string{"NORMAL mode", "Press i", "cmd+s · :w"}},
 		{2, []string{"cmd+1", "cmd+shift+o", "cmd+k right"}},
 		{3, []string{"alt+f12", "shift+f10", "every key goes to the shell"}},
-		{4, []string{"Settings", "Next: pick language servers to install", "essentials"}},
+		{4, []string{"Settings", "Next: choose a theme", "essentials"}},
 	}
 	for _, c := range checks {
 		tr.page = c.page

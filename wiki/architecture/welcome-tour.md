@@ -4,7 +4,7 @@ title: Welcome Tour
 description: Paged first-orientation walkthrough in the floating shell — five pages of entry keys, vim-mode basics, layout, tools, and customization, with resolver-first platform-normalized shortcuts and interactive try-it tasks; opened via the help.welcomeTour palette command.
 resource: internal/tour/tour.go
 tags: [architecture, onboarding, tour, help, overlay]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-19T00:00:00Z
 ---
 
 # Welcome Tour
@@ -14,7 +14,7 @@ orient a new user — the entry keys (search everywhere, help, project switch,
 how to quit), the vim modal editor trap ("you type and nothing appears —
 press `i`"), pane layout and navigation, the tool windows (including the
 terminal focus-escape hatch), and customization — ending with the handoff
-line to the LSP server setup dialog. The tour itself executes nothing;
+into the post-tour setup flow (#713, below). The tour itself executes nothing;
 since #680 selected pages carry **try-it tasks** (see below) where the
 taught key passes through and really drives the app.
 
@@ -29,8 +29,9 @@ the file exists on every launch) the tour opens automatically once the window
 is sized. Startup-prompt precedence: **crash
 recovery → welcome tour → LSP onboarding dialog** — the tour waits while the
 recovery prompt holds the shell, and the LSP dialog queues behind the tour
-(`closeTour` re-triggers it explicitly, since its `maybeOpen` refuses while
-the shell is open).
+(esc/q: `closeTour` re-triggers it explicitly, since its `maybeOpen` refuses
+while the shell is open; finishing instead runs the setup flow, whose forced
+LSP step replaces the pending dialog).
 
 `ui.onboarded = true` persists to the user-scope settings the moment the tour
 **opens** — not when it closes — so quitting mid-tour never re-triggers it
@@ -45,9 +46,35 @@ internal/tour/
   tour.go     Tour: ui.Content (Title with "n/5" indicator, Render), page
               state (Next/Prev clamp), curated page copy, chord resolution
 internal/app/
-  tour.go     host: openTour / updateTour / closeTour; ShowWelcomeTourMsg
+  tour.go     host: openTour / updateTour / closeTour / finishTour;
+              ShowWelcomeTourMsg
+  setup.go    post-tour setup flow (#713): theme picker + toolchain summary
   commands.go registers help.welcomeTour
 ```
+
+## Post-tour setup flow (#713)
+
+Paging past the last page (`finishTour`) starts a queued chain of setup
+dialogs in the floating shell — `startSetupFlow`/`advanceSetup` in
+`internal/app/setup.go`; steps with nothing to show are skipped:
+
+1. **Theme picker** — the registered theme names with the current one
+   marked; `j`/`k` moves AND previews the highlighted theme live
+   (`applyTheme`, nothing persisted), `enter` persists it (`selectTheme` —
+   the same user-scope `theme.name` write as Settings → Appearance), `esc`
+   restores the pre-dialog theme. Both continue the flow.
+2. **LSP server picker** — the onboarding dialog (#301), **force-opened
+   past the `lsp.onboarded` gate** (`openOnboardingDialog`), so a
+   re-taken tour honours its closing promise; skipped when LSP is disabled
+   or no registered server ships an install recipe. Its close paths
+   (`closeOnboarding`) advance the flow — a no-op outside it.
+3. **Toolchain check** — a read-only summary: one row per language with a
+   toolchain capability, showing the resolved interpreter
+   (`lang.Interpreter`, explicit config beats detection) or `✗ not found`,
+   pointing at Settings → Toolchains; `enter`/`esc` ends the flow.
+
+Escaping the tour mid-way (esc/q) skips the flow entirely — on a first run
+the pending LSP onboarding then still opens as before.
 
 ## Key routing
 

@@ -177,6 +177,12 @@ type Model struct {
 	// window is sized. Both nil/false when idle.
 	onboarding        *onboardingState
 	onboardingPending bool
+	// setupQueue is the post-tour setup flow (#713): the step names still to
+	// run after the tour finishes; themePick/toolchainInfo hold the open
+	// step dialogs while the shell shows them.
+	setupQueue    []string
+	themePick     *themePickState
+	toolchainInfo *toolchainInfoState
 	// tour holds the welcome tour (#657) while the shell shows it; tourPending
 	// flags the first-run auto-open (#658) until the window is sized.
 	tour        *tour.Tour
@@ -3122,6 +3128,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same way: space toggles, enter installs, esc skips.
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
+		}
+		// The post-tour setup dialogs (#713) own the keyboard the same way.
+		if m.themePickOpen() {
+			return m.updateThemePick(msg)
+		}
+		if m.toolchainInfoOpen() {
+			return m.updateToolchainInfo(msg)
 		}
 		// A tour suspended behind a try-it overlay (#680) resumes as soon as
 		// the screen is free — this key then behaves as if the tour never

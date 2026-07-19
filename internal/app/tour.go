@@ -109,7 +109,9 @@ func (m Model) updateTour(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	switch msg.String() {
 	case "right", "l", "space", " ", "enter":
 		if !m.tour.Next() {
-			return m.closeTour(), nil, true // finishing the last page closes
+			// Finishing the last page closes the tour and starts the setup
+			// flow (#713): theme picker → LSP servers → toolchain check.
+			return m.finishTour(), nil, true
 		}
 	case "left", "h":
 		m.tour.Prev()
@@ -123,12 +125,23 @@ func (m Model) updateTour(msg tea.KeyPressMsg) (tea.Model, tea.Cmd, bool) {
 	return m, nil, true
 }
 
-// closeTour dismisses the tour and lets the next queued startup prompt (the
-// first-start LSP onboarding dialog, #658) take the freed shell — its
-// maybeOpen refuses while the shell is open, so the handoff must be explicit.
+// closeTour dismisses the tour (esc/q — a skip) and lets the next queued
+// startup prompt (the first-start LSP onboarding dialog, #658) take the freed
+// shell — its maybeOpen refuses while the shell is open, so the handoff must
+// be explicit.
 func (m Model) closeTour() tea.Model {
 	m.tour = nil
 	m.shell.Close()
 	m.maybeOpenOnboarding()
+	return m
+}
+
+// finishTour dismisses the tour after its last page and starts the setup
+// flow (#713). The flow's forced LSP step replaces the first-run pending
+// dialog (startSetupFlow clears the flag).
+func (m Model) finishTour() tea.Model {
+	m.tour = nil
+	m.shell.Close()
+	m.startSetupFlow()
 	return m
 }

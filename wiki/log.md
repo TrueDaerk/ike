@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-19
+
+- Post-tour setup flow (#713): finishing the Welcome Tour now chains three
+  setup dialogs through the floating shell — a theme picker (j/k previews
+  live, enter persists `theme.name`, esc restores), the LSP server picker
+  (force-opened past the `lsp.onboarded` gate so a re-taken tour delivers
+  on its closing promise), and a read-only toolchain summary (resolved
+  interpreter per toolchain-capable language, pointer to Settings →
+  Toolchains). Esc/q mid-tour skips the flow; first-run LSP onboarding
+  still queues behind an escaped tour. New `internal/app/setup.go`; last
+  tour page names the steps.
+
 ## 2026-07-18
 
 - Leader layer retired (#711): all `space <key>` / `ctrl+k <key>` mnemonic

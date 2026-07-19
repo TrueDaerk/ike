@@ -73,12 +73,21 @@ func (m *Model) maybeOpenOnboarding() {
 	if m.recovery != nil || len(m.recoveryPending) > 0 || m.shell.IsOpen() {
 		return
 	}
+	m.onboardingPending = false
+	m.openOnboardingDialog()
+}
+
+// openOnboardingDialog shows the server picker unconditionally (no pending /
+// onboarded gate) — the first-run path above and the post-tour setup flow
+// (#713) both land here. False when LSP is off or no server ships a recipe.
+func (m *Model) openOnboardingDialog() bool {
+	if c := config.Get(); c == nil || !c.LSP.Enabled {
+		return false
+	}
 	items := onboardingLangs()
 	if len(items) == 0 {
-		m.onboardingPending = false
-		return
+		return false
 	}
-	m.onboardingPending = false
 	checked := make(map[string]bool, len(items))
 	for _, l := range items {
 		checked[l.ID] = true
@@ -87,6 +96,7 @@ func (m *Model) maybeOpenOnboarding() {
 	m.shell.SetContent(ui.ModelContent{Heading: "Set up language servers", Body: m.onboardingBody})
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
+	return true
 }
 
 // onboardingOpen reports whether the dialog is showing.
@@ -190,5 +200,7 @@ func (m Model) onboardingConfirm() (tea.Model, tea.Cmd) {
 func (m Model) closeOnboarding() tea.Model {
 	m.onboarding = nil
 	m.shell.Close()
+	// Continue the post-tour setup flow (#713); a no-op outside it.
+	m.advanceSetup()
 	return m
 }
