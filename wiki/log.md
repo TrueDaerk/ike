@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- terminal.toggle ignores custom tool panes (#772): with only tool panes
+  open it spawns a new regular terminal; terminal.clear follows the same
+  rule. terminal.md updated.
 - Keymap page lists never-bound registered commands (#771): every registry
   command without a binding — including configured tool commands — appears
   as a `(no binding)` row, filterable via `/`, enter captures its first

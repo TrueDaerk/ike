@@ -213,3 +213,36 @@ func TestToolSpawnEnvCarriesTheme(t *testing.T) {
 		t.Fatalf("IKE_THEME_BACKGROUND = %q, want #rrggbb", bg)
 	}
 }
+
+// terminal.toggle must ignore tool panes (#772): with only a tool pane open
+// it spawns a new regular terminal instead of focusing the tool.
+func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
+	withTools(t, sleepTool("watcher"))
+	m := sized(t, 100, 40)
+
+	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	tool := m.toolPane("watcher")
+	if tool == nil {
+		t.Fatal("tool.watcher must open a pane")
+	}
+	t.Cleanup(func() { tool.Terminal().Close() })
+
+	out, _ = m.Update(TerminalToggleMsg{})
+	m = out.(Model)
+	focused := m.panes.FocusedInstance()
+	if focused == nil || focused.Kind() != pane.KindTerminal {
+		t.Fatalf("toggle must open and focus a terminal, focused %v", m.panes.Focused())
+	}
+	if focused.Terminal().Tool() != "" {
+		t.Fatal("toggle must not focus the tool pane; want a regular terminal")
+	}
+	t.Cleanup(func() { focused.Terminal().Close() })
+
+	// A second toggle from the terminal returns focus (unchanged semantics).
+	out, _ = m.Update(TerminalToggleMsg{})
+	m = out.(Model)
+	if got := m.panes.FocusedInstance(); got != nil && got.Kind() == pane.KindTerminal && got.Terminal().Tool() == "" {
+		t.Fatal("second toggle must leave the regular terminal")
+	}
+}

@@ -1376,14 +1376,18 @@ func (m *Model) newTerminalSibling() {
 	}
 }
 
-// currentTerminal returns the focused terminal instance, else the first
-// terminal in pane order, else nil.
+// currentTerminal returns the focused regular terminal instance, else the
+// first regular terminal in pane order, else nil. Tool panes (#741) never
+// count (#772).
 func (m Model) currentTerminal() *pane.Instance {
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindTerminal {
+	// Custom tool panes (#741) reuse the terminal machinery but are not
+	// regular terminals: terminal.toggle/clear must not treat them as the
+	// terminal to focus or clear (#772).
+	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
 		return inst
 	}
 	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal {
+		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
 			return inst
 		}
 	}
