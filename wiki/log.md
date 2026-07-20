@@ -1,5 +1,11 @@
 # Log
 
+## 2026-07-20
+
+- Terminal forward word kill (#733): `option+forward-delete` in a focused
+  terminal pane now translates to `ESC d` (readline `kill-word`), completing
+  the #240 macOS editing-chord set.
+
 ## 2026-07-19
 
 - cmd+v pastes the system clipboard into a focused terminal pane and the debug

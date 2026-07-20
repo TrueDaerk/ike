@@ -241,7 +241,8 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 // readline/ZLE emacs-mode defaults — the iTerm "natural text editing"
 // convention (#225, #240): option+arrows jump words (ESC b / ESC f),
 // cmd+arrows go to line start/end (ctrl+a / ctrl+e), option+backspace kills
-// the previous word (ESC DEL), cmd+backspace kills to line start (ctrl+u).
+// the previous word (ESC DEL), option+forward-delete kills the next word
+// (ESC d, #733), cmd+backspace kills to line start (ctrl+u).
 // Shift-augmented variants behave the same; a PTY has no selection to extend.
 func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
 	mod := k.Mod &^ textMods
@@ -253,6 +254,8 @@ func motionKey(k tea.KeyPressMsg) (vt.KeyPressEvent, bool) {
 		return vt.KeyPressEvent{Code: 'f', Mod: vt.ModAlt}, true
 	case mod == tea.ModAlt && k.Code == tea.KeyBackspace:
 		return vt.KeyPressEvent{Code: vt.KeyBackspace, Mod: vt.ModAlt}, true
+	case mod == tea.ModAlt && k.Code == tea.KeyDelete:
+		return vt.KeyPressEvent{Code: 'd', Mod: vt.ModAlt}, true
 	case isCmd && k.Code == tea.KeyLeft:
 		return vt.KeyPressEvent{Code: 'a', Mod: vt.ModCtrl}, true
 	case isCmd && k.Code == tea.KeyRight:
