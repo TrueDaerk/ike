@@ -2457,6 +2457,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case terminal.OutputMsg:
 		// The grid changed; returning repaints. The msg is send-coalesced.
+		// The completion popup (#740) recomputes here: the shell has echoed
+		// the keystrokes, so the cursor row reads current.
+		if t := m.terminalModelForSession(msg.Key); t != nil {
+			t.OnOutput()
+		}
 		return m, nil
 
 	case terminal.ExitedMsg:
@@ -5737,6 +5742,31 @@ func (m Model) terminalPaneForSession(sess string) string {
 		}
 	}
 	return ""
+}
+
+// terminalModelForSession resolves a session key to its live terminal model —
+// dedicated terminal panes and editor-hosted terminal tabs (#573) alike; nil
+// when the session's pane is gone.
+func (m Model) terminalModelForSession(sess string) *terminal.Model {
+	for _, k := range m.panes.Keys() {
+		inst := m.panes.Get(k)
+		if inst == nil {
+			continue
+		}
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			if inst.Terminal().SessionKey() == sess {
+				return inst.Terminal()
+			}
+		case pane.KindEditor:
+			for i := 0; i < inst.TabCount(); i++ {
+				if t := inst.TabTerminal(i); t != nil && t.SessionKey() == sess {
+					return t
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // dropRect is the sub-rectangle of r the dragged pane would occupy for zone z.

@@ -88,6 +88,9 @@ func defaults() *Config {
 			DebounceMs: 2000,
 			MaxAgeDays: 7,
 		},
+		Terminal: Terminal{
+			Autosuggest: true,
+		},
 		Lang: map[string]map[string]string{},
 		Todo: Todo{
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},

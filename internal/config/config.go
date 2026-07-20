@@ -166,6 +166,7 @@ func (c *Config) Flat() map[string]string {
 	put("ui.menu_bar", c.UI.MenuBar)
 
 	put("terminal.shell", c.Terminal.Shell)
+	put("terminal.autosuggest", c.Terminal.Autosuggest)
 
 	put("run.placement", c.Run.Placement)
 

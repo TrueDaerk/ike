@@ -89,6 +89,9 @@ func (t *Tab) configure(cfg host.Config) {
 	if t.ed != nil {
 		t.ed.Configure(cfg)
 	}
+	if t.term != nil {
+		t.term.SetAutoSuggest(autosuggestOn(cfg))
+	}
 }
 
 // view renders the tab's component content.

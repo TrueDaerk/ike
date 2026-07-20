@@ -124,6 +124,7 @@ func (r *Registry) AddTerminal(shell, dir string, env []string, send func(tea.Ms
 	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
 	inst.term = terminal.New(key, shell, dir, 80, 24, env, send)
 	inst.term.SetPalette(r.pal)
+	inst.term.SetAutoSuggest(autosuggestOn(r.cfg))
 	r.put(inst)
 	return key
 }
