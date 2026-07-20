@@ -39,7 +39,7 @@ sleep 2
   unreliable; verify cursor motions by inserting a marker char (`i X Escape`
   or `a X Escape`) and reading the buffer, then `u` to undo.
 - The bottom status line (`NORMAL │ … Ln, Col`) is always present; event
-  messages (e.g. the example plugin's "example saw open:") render as toasts
+  messages (e.g. LSP server status changes) render as toasts
   above it and expire after ~4s.
 - Clipboard flows are real on macOS: back up with `pbpaste > backup` first,
   assert with `pbpaste`, restore afterwards.

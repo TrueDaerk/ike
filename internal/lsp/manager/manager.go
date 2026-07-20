@@ -137,6 +137,7 @@ func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler)
 		Args:    spec.Args,
 		Env:     spec.Env,
 		Dir:     root,
+		LogPath: LogPath(spec.Language),
 	})
 	if err != nil {
 		return nil, nil, err
@@ -977,6 +978,7 @@ func (m *Manager) watchExit(srv *server) {
 		return
 	}
 	m.status(srv.lang, srv.lang+" language server crashed", lsp.ServerEventWarn)
+	appendLog(srv.lang, "server crashed")
 	go m.restart(srv, docs)
 }
 

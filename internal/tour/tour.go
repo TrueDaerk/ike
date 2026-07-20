@@ -336,6 +336,7 @@ func pageCustomize(t *Tour) string {
 	b.WriteString("\nThemes, keybindings, and plugins live in Settings and in\n")
 	b.WriteString("~/.ike/settings.toml; the palette finds every action by name.\n")
 	b.WriteString("The help sheet (?) opens on the essentials — tab shows all.\n\n")
-	b.WriteString("Next: pick language servers to install.\n")
+	b.WriteString("Next: choose a theme, pick language servers to install, and\n")
+	b.WriteString("check your toolchains.\n")
 	return b.String()
 }

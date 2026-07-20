@@ -1,6 +1,7 @@
 package manager
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,12 +28,14 @@ func (m *Manager) restart(old *server, docs []*document) {
 
 	if n > maxRestarts {
 		// Persistent state for the status line, plus an error toast so the user
-		// notices the subsystem went away.
+		// notices the subsystem went away — pointing at the log (#715).
 		m.status(old.lang, old.lang+" language server disabled", lsp.ServerState)
-		m.status(old.lang, old.lang+" language server disabled after repeated crashes", lsp.ServerEventError)
+		m.status(old.lang, old.lang+" language server disabled after repeated crashes — details: \"LSP: Show Server Log\"", lsp.ServerEventError)
+		appendLog(old.lang, "disabled after repeated crashes")
 		return
 	}
 
+	appendLog(old.lang, "restarting (attempt "+strconv.Itoa(n)+"/"+strconv.Itoa(maxRestarts)+")")
 	time.Sleep(backoff(n))
 
 	srv, err := m.ensureServer(old.lang, old.root, old.spec)

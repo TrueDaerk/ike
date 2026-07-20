@@ -9,7 +9,10 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 )
 
 // Spec describes how to launch a server.
@@ -26,6 +29,12 @@ type Spec struct {
 	// controlling terminal there is nothing for debugpy to grab; DAP is pure
 	// stdio, so nothing is lost.
 	Detached bool
+	// LogPath, when set, tees the server's stderr into this file (append; the
+	// parent directory is created, an existing file above logRotateBytes is
+	// rotated to "<path>.old" first). Each start writes a header line and each
+	// exit a footer with the exit error, so crash reasons survive the process
+	// (#715). Log failures are silent — logging must never block the server.
+	LogPath string
 }
 
 // Process is a running language server. Its ReadWriteCloser reads the server's
@@ -36,6 +45,7 @@ type Process struct {
 	stdout io.ReadCloser
 
 	stderr   *ringBuffer
+	log      *os.File // nil without Spec.LogPath
 	exited   chan struct{}
 	waitErr  error
 	waitOnce sync.Once
@@ -91,9 +101,19 @@ func Start(spec Spec) (*Process, error) {
 		return nil, err
 	}
 	stderr := newRingBuffer(64 * 1024)
-	cmd.Stderr = stderr
+	logFile := openLog(spec.LogPath)
+	if logFile != nil {
+		writeLogLine(logFile, "--- started: "+bin+" "+strings.Join(spec.Args, " "))
+		cmd.Stderr = io.MultiWriter(stderr, logFile)
+	} else {
+		cmd.Stderr = stderr
+	}
 
 	if err := cmd.Start(); err != nil {
+		if logFile != nil {
+			writeLogLine(logFile, "--- failed to start: "+err.Error())
+			_ = logFile.Close()
+		}
 		return nil, err
 	}
 
@@ -102,10 +122,38 @@ func Start(spec Spec) (*Process, error) {
 		stdin:  stdin,
 		stdout: stdout,
 		stderr: stderr,
+		log:    logFile,
 		exited: make(chan struct{}),
 	}
 	go p.watch()
 	return p, nil
+}
+
+// logRotateBytes caps a server log; a bigger file rotates to .old on start.
+const logRotateBytes = 1 << 20
+
+// openLog opens (and rotates) the stderr log file; nil when path is "" or on
+// any error — logging is strictly best-effort.
+func openLog(path string) *os.File {
+	if path == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return nil
+	}
+	if st, err := os.Stat(path); err == nil && st.Size() > logRotateBytes {
+		_ = os.Rename(path, path+".old")
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return nil
+	}
+	return f
+}
+
+// writeLogLine appends one timestamped marker line.
+func writeLogLine(f *os.File, line string) {
+	_, _ = f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " " + line + "\n")
 }
 
 // Conn returns the duplex stream over the server's stdio.
@@ -141,6 +189,14 @@ func (p *Process) watch() {
 	err := p.cmd.Wait()
 	p.waitOnce.Do(func() {
 		p.waitErr = err
+		if p.log != nil {
+			exit := "clean"
+			if err != nil {
+				exit = err.Error()
+			}
+			writeLogLine(p.log, "--- exited: "+exit)
+			_ = p.log.Close()
+		}
 		close(p.exited)
 	})
 }

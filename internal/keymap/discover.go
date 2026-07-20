@@ -24,11 +24,16 @@ func (l *LiveBindings) Set(t *BindingTable) { l.table = t }
 // Table returns the current table (nil before the first Set).
 func (l *LiveBindings) Table() *BindingTable { return l.table }
 
-// Binding implements the help/palette BindingResolver with honest labelling:
+// Binding implements the help/palette BindingResolver:
 //
-//	blocked command      → "✗ blocked: <dependency>"
-//	delivered chord      → "ctrl+s"
-//	fragile only         → "cmd+d ⚠ terminal-dependent"
+//	blocked command → "✗ blocked: <dependency>"
+//	bound command   → its shortest chord, delivered class preferred ("ctrl+s")
+//
+// Fragile chords are no longer flagged per binding: post-#711 every default
+// is a Cmd/Alt chord, so the "⚠ terminal-dependent" suffix marked nearly the
+// whole table and carried no signal. A deficient terminal now raises one
+// specific startup notification instead (#720); per-chord classes stay
+// visible in the reachability matrix.
 func (l *LiveBindings) Binding(id string) (string, bool) {
 	if id == "" || l.table == nil {
 		return "", false
@@ -59,7 +64,7 @@ func (l *LiveBindings) Binding(id string) (string, bool) {
 	if len(fragileChords) == 0 {
 		return "", false
 	}
-	return fragileChords[0] + " ⚠ terminal-dependent", true
+	return fragileChords[0], true
 }
 
 // shorterThen orders chord labels fewest-steps-first, then short-first, then

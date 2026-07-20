@@ -7,6 +7,33 @@
   forwarding and fed through the bracketed-paste path (`PasteText`), since a
   Kitty-protocol host delivers cmd+v as a key event, not a paste.
 
+- Terminal capability check (#720): startup probe (Kitty keyboard protocol
+  handshake with grace tick, tmux/screen env, color profile) opens a centered
+  floating report — one headline + fix per deficiency, esc dismisses; the palette/cheatsheet "⚠
+  terminal-dependent" suffix on fragile-only bindings is gone. Per-chord
+  classes remain in the settings keymap page and reachability matrix.
+
+- LSP server logs (#715): every server's stderr now tees into
+  `~/.ike/logs/lsp-<lang>.log` (start header, exit footer, manager lifecycle
+  markers: crashed / restarting n/3 / disabled; >1 MiB rotates to `.old`).
+  New palette command `lsp.showLog` ("LSP: Show Server Log") opens the most
+  recent log in a new pane; the disabled-after-repeated-crashes toast points
+  at it.
+
+- The example reference plugin no longer ships in the ike binary (#716): its
+  EventFileOpened hook toasted "example saw open: <path>" on every file open.
+  The package remains as the documented plugin reference with its tests.
+
+- Post-tour setup flow (#713): finishing the Welcome Tour now chains three
+  setup dialogs through the floating shell — a theme picker (j/k previews
+  live, enter persists `theme.name`, esc restores), the LSP server picker
+  (force-opened past the `lsp.onboarded` gate so a re-taken tour delivers
+  on its closing promise), and a read-only toolchain summary (resolved
+  interpreter per toolchain-capable language, pointer to Settings →
+  Toolchains). Esc/q mid-tour skips the flow; first-run LSP onboarding
+  still queues behind an escaped tour. New `internal/app/setup.go`; last
+  tour page names the steps.
+
 ## 2026-07-18
 
 - Leader layer retired (#711): all `space <key>` / `ctrl+k <key>` mnemonic

@@ -138,6 +138,10 @@ type Model struct {
 	// notifUnseen counts history entries added since the history view was last
 	// opened, shown as the status line's counter segment (#101).
 	notifUnseen int
+	// caps accumulates the terminal capability reports until the startup
+	// verdict toasts any deficiencies (#720). Value state is fine: the
+	// reports and the verdict all flow through Update's model copies.
+	caps termCaps
 	// toolchainSeg caches the status line's toolchain label per language ID
 	// (#101): resolving an interpreter stats the filesystem and scans PATH, too
 	// costly per frame. Shared by pointer across the value-model copies (like
@@ -177,6 +181,12 @@ type Model struct {
 	// window is sized. Both nil/false when idle.
 	onboarding        *onboardingState
 	onboardingPending bool
+	// setupQueue is the post-tour setup flow (#713): the step names still to
+	// run after the tour finishes; themePick/toolchainInfo hold the open
+	// step dialogs while the shell shows them.
+	setupQueue    []string
+	themePick     *themePickState
+	toolchainInfo *toolchainInfoState
 	// tour holds the welcome tour (#657) while the shell shows it; tourPending
 	// flags the first-run auto-open (#658) until the window is sized.
 	tour        *tour.Tour
@@ -1664,6 +1674,33 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	switch msg := msg.(type) {
+	// Terminal capability probing (#720): collect the async reports, then a
+	// grace tick draws the verdict. A terminal without the Kitty protocol
+	// never sends KeyboardEnhancementsMsg, so the tick treats silence as
+	// "unsupported" and toasts the specific deficiency.
+	case tea.KeyboardEnhancementsMsg:
+		m.caps.kitty = msg.SupportsKeyDisambiguation()
+		return m, nil
+
+	case tea.ColorProfileMsg:
+		m.caps.profile = msg.Profile
+		m.caps.profileSeen = true
+		// The profile report is the "running under a real bubbletea program"
+		// signal (it always arrives at startup, before any user input), so it
+		// also schedules the verdict tick. Deliberately not done in Init: the
+		// test harness (sized()) executes Init's commands synchronously, and a
+		// tea.Tick there would sleep the grace period and toast capability
+		// warnings into unrelated tests.
+		var tick tea.Cmd
+		if !m.caps.scheduled {
+			m.caps.scheduled = true
+			tick = termCheckTick()
+		}
+		return m, tick
+
+	case termCheckMsg:
+		return m, m.runTermCheck()
+
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
@@ -3129,6 +3166,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// same way: space toggles, enter installs, esc skips.
 		if m.onboardingOpen() {
 			return m.updateOnboarding(msg)
+		}
+		// The post-tour setup dialogs (#713) own the keyboard the same way.
+		if m.themePickOpen() {
+			return m.updateThemePick(msg)
+		}
+		if m.toolchainInfoOpen() {
+			return m.updateToolchainInfo(msg)
 		}
 		// A tour suspended behind a try-it overlay (#680) resumes as soon as
 		// the screen is free — this key then behaves as if the tour never

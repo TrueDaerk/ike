@@ -24,11 +24,13 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	if got, _ := l.Binding("lsp.definition"); got != "f4" {
 		t.Fatalf("lsp.definition = %q", got)
 	}
-	// Fragile-only commands carry the honest warning.
-	if got, _ := l.Binding("lsp.references"); !strings.Contains(got, "alt+f7 ⚠") {
+	// Fragile-only commands show their chord unadorned: the per-binding
+	// "⚠ terminal-dependent" suffix is gone (#720) — a deficient terminal
+	// raises one startup notification instead.
+	if got, _ := l.Binding("lsp.references"); got != "alt+f7" {
 		t.Fatalf("lsp.references = %q", got)
 	}
-	if got, _ := l.Binding("editor.duplicateLine"); !strings.Contains(got, "cmd+d ⚠") {
+	if got, _ := l.Binding("editor.duplicateLine"); got != "cmd+d" {
 		t.Fatalf("editor.duplicateLine = %q", got)
 	}
 	// Blocked commands are labelled, never hidden. The real ledger emptied
@@ -38,8 +40,8 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 		t.Fatalf("stubbed blocked binding = %q", got)
 	}
 	remove()
-	// Without the stub the fragile cmd+k chord is shown with its warning.
-	if got, _ := l.Binding("vcs.commit"); !strings.Contains(got, "cmd+k ⚠") {
+	// Without the stub the fragile cmd+k chord is shown plain.
+	if got, _ := l.Binding("vcs.commit"); got != "cmd+k" {
 		t.Fatalf("vcs.commit = %q", got)
 	}
 	// Unbound ids degrade gracefully.
