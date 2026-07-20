@@ -14,6 +14,19 @@ import (
 // rune never needs typing; it only has to be unique among modes.
 const RecentPrefix = '%'
 
+// SideMode is an optional Mode extension (#778): a locked mode exposing a
+// secondary left column next to the main result list. The palette renders
+// both side by side; tab (or left/right on an empty query) moves the column
+// focus, up/down navigates the focused column, enter activates its
+// selection.
+type SideMode interface {
+	Mode
+	// SideTitle is the left column's dim heading.
+	SideTitle() string
+	// SideResults lists the left column's items for the query.
+	SideResults(query string, cx Context) []Item
+}
+
 // RecentMode is the recent-files mode (Roadmap 0230): the most-recently-used
 // file list, JetBrains' Recent Files popup palette-style. The palette owns no
 // MRU store of its own — the list func is injected by the root model, which
@@ -27,6 +40,10 @@ type RecentMode struct {
 	// exists filters vanished files out of the listing. Injectable for tests;
 	// defaults to an on-disk stat.
 	exists func(path string) bool
+	// projects supplies the Recent Projects column (#778): items already
+	// carrying their activation Msg (the app injects project.PickedMsg
+	// values, so the palette stays project-agnostic). Nil hides the column.
+	projects func() []Item
 }
 
 // NewRecentMode builds the recent-files mode over the injected MRU source.
@@ -38,6 +55,41 @@ func NewRecentMode(list func() []string) *RecentMode {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
+}
+
+// SetProjects installs the recent-projects source for the left column
+// (#778); nil keeps the dialog single-column.
+func (r *RecentMode) SetProjects(list func() []Item) { r.projects = list }
+
+// SideTitle implements SideMode.
+func (r *RecentMode) SideTitle() string { return "Recent Projects" }
+
+// SideResults implements SideMode: the injected recent projects, filtered by
+// the query (fuzzy on the title, ties keeping recency order).
+func (r *RecentMode) SideResults(query string, _ Context) []Item {
+	if r.projects == nil {
+		return nil
+	}
+	type scored struct {
+		item  Item
+		score int
+	}
+	var out []scored
+	for _, it := range r.projects() {
+		m, ok := fuzzy.Match(query, it.Title)
+		if !ok {
+			continue
+		}
+		it.Spans = m.Positions
+		it.Score = m.Score
+		out = append(out, scored{item: it, score: m.Score})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
+	items := make([]Item, len(out))
+	for i, s := range out {
+		items[i] = s.item
+	}
+	return items
 }
 
 // Prefix implements Mode.

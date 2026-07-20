@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Recent Projects column in Recent Files (#778, 0370 M3): cmd+e grows a
+  left column listing recent projects; tab/arrows switch columns, enter
+  switches project seamlessly. Generic palette SideMode extension.
+  command-palette.md updated.
 - Working-directory re-anchor audit (#779): pinned the invariant that the
   process cwd equals the active workspace root and everything root-derived
   resolves at call time; audit tests added. workspace.md updated.

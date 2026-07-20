@@ -1239,6 +1239,23 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(recent.List)
+	// The Recent Files dialog grows a Recent Projects column (#778): entries
+	// from project.history (current project excluded), whose activation goes
+	// through the normal validated seamless-switch path (project.PickedMsg).
+	mru.SetProjects(func() []palette.Item {
+		cur, _ := os.Getwd()
+		var items []palette.Item
+		for _, e := range project.History(config.Get()) {
+			if e.Path == cur {
+				continue
+			}
+			items = append(items, palette.Item{
+				Title: e.Name,
+				Msg:   project.PickedMsg{Path: e.Path},
+			})
+		}
+		return items
+	})
 	scr := palette.NewScratchMode(scratchList)
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)

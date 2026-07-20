@@ -2,7 +2,10 @@ package palette
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // testRecentMode builds a RecentMode over a fixed MRU list with every file
@@ -84,5 +87,92 @@ func TestRecentModeEmitsOpenFileMsgWithOriginalPath(t *testing.T) {
 	msg, ok := items[0].Msg.(OpenFileMsg)
 	if !ok || msg.Path != "internal/app/app.go" {
 		t.Fatalf("Msg = %#v, want OpenFileMsg with original path", items[0].Msg)
+	}
+}
+
+// projectsMsg is the stand-in activation msg for side-column tests (#778) —
+// the real app injects project.PickedMsg, which the palette never imports.
+type projectsMsg struct{ Path string }
+
+func sideRecentMode() *RecentMode {
+	m := testRecentMode([]string{"a.go", "b.go"})
+	m.SetProjects(func() []Item {
+		return []Item{
+			{Title: "alpha", Msg: projectsMsg{Path: "/p/alpha"}},
+			{Title: "beta", Msg: projectsMsg{Path: "/p/beta"}},
+		}
+	})
+	return m
+}
+
+func TestRecentModeSideResultsFilterAndOrder(t *testing.T) {
+	m := sideRecentMode()
+	side := m.SideResults("", Context{})
+	if len(side) != 2 || side[0].Title != "alpha" || side[1].Title != "beta" {
+		t.Fatalf("empty query must keep recency order, got %+v", side)
+	}
+	side = m.SideResults("bet", Context{})
+	if len(side) != 1 || side[0].Title != "beta" {
+		t.Fatalf("query must fuzzy-filter the projects, got %+v", side)
+	}
+	if m.SideTitle() != "Recent Projects" {
+		t.Fatalf("side title = %q", m.SideTitle())
+	}
+}
+
+func keyPress(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code} }
+func downKey() tea.KeyPressMsg           { return tea.KeyPressMsg{Code: tea.KeyDown} }
+func enterKey() tea.KeyPressMsg          { return tea.KeyPressMsg{Code: tea.KeyEnter} }
+func leftKey() tea.KeyPressMsg           { return tea.KeyPressMsg{Code: tea.KeyLeft} }
+func rightKey() tea.KeyPressMsg          { return tea.KeyPressMsg{Code: tea.KeyRight} }
+
+func TestPaletteSideColumnFocusAndActivate(t *testing.T) {
+	m := sideRecentMode()
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	if v := p.View(); !strings.Contains(v, "Recent Projects") {
+		t.Fatalf("view must render the side column heading:\n%s", v)
+	}
+	// tab moves the focus into the projects column; down + enter picks the
+	// second project and emits its injected msg.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !p.sideFocus {
+		t.Fatal("tab must focus the side column")
+	}
+	p.Update(downKey())
+	cmd := p.Update(enterKey())
+	if cmd == nil {
+		t.Fatal("enter on a side row must emit its msg")
+	}
+	got, ok := cmd().(projectsMsg)
+	if !ok || got.Path != "/p/beta" {
+		t.Fatalf("side activation msg = %#v", cmd())
+	}
+	if p.IsOpen() {
+		t.Fatal("side activation must close the palette")
+	}
+}
+
+func TestPaletteSideColumnArrowsOnEmptyQuery(t *testing.T) {
+	m := sideRecentMode()
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	p.Update(leftKey())
+	if !p.sideFocus {
+		t.Fatal("left on an empty query must focus the side column")
+	}
+	p.Update(rightKey())
+	if p.sideFocus {
+		t.Fatal("right must return focus to the files column")
+	}
+	// With query text, arrows stay cursor keys.
+	p.Update(runes("a"))
+	p.Update(leftKey())
+	if p.sideFocus {
+		t.Fatal("left with query text must stay a cursor key")
 	}
 }

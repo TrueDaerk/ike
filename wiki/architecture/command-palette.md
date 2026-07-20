@@ -146,6 +146,19 @@ fuzzy-matches the project-relative path; equal scores keep MRU order. Files
 that vanished from disk are dropped from the listing. Activation emits the same
 `OpenFileMsg` as the `@` mode.
 
+### Recent Projects column (#778)
+
+The locked Recent Files dialog renders a second, left column listing
+`project.history` (current project excluded), through the generic `SideMode`
+extension (`recent_mode.go`): a locked mode implementing
+`SideTitle`/`SideResults` gets the two-column layout. `tab` toggles the
+column focus (plain `left`/`right` switch too while the query is empty;
+with text they stay cursor keys), `up`/`down` navigate the focused column,
+and `enter` on a project emits `project.PickedMsg` — the normal validated
+path into the seamless workspace switch (#777), so terminals and runs keep
+running. The query fuzzy-filters both columns at once. Anchored palettes
+and search everywhere never show the column.
+
 ## Search-everywhere mode (`cmd+shift+a` / double-shift, Roadmap 0230)
 
 JetBrains' Search Everywhere, palette-style (`search_mode.go`). Locked-only like
