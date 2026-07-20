@@ -1,8 +1,9 @@
 package layout
 
-// ResizeTo updates the owning split's ratio so its divider follows mouse cell
-// (x,y), clamped so neither child drops below minCell along the split axis. A
-// span too small to honour both minimums leaves the ratio unchanged.
+// ResizeTo updates the owning split's ratio so the children's shared edge
+// follows mouse cell (x,y), clamped so neither child drops below minCell along
+// the split axis. A span too small to honour both minimums leaves the ratio
+// unchanged.
 func (d Divider) ResizeTo(x, y int) {
 	pos := x
 	if d.Orient == Vertical {

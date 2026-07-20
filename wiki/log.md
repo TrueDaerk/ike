@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Divider gutters removed (#761): panes tile the viewport exactly, their own
+  rounded borders forming the seam; the resize handle is now a two-cell hit
+  band over the borders meeting at a split boundary (divider precedence over
+  the title band, so a shared border resizes and the title text row moves).
+  Updated `/architecture/pane-layout.md`.
+
 - Tool-pane setup (#751–#753, #759): new curated catalog
   `internal/toolcatalog` (lazygit, lazydocker, sqlit, k9s, htop, btop —
   requirement gates, ordered install recipes with PATH re-verification). The

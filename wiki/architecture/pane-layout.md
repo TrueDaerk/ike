@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — divider resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -25,16 +25,20 @@ no I/O, so it is fully unit-testable.
   a global pane id; Roadmap 0037 reinterprets it as a **pane instance key** (see
   [Pane Registry](./pane-registry.md)) — the layout package stays oblivious to
   what a leaf means. A **split** (`Split{Orient, Ratio, A, B}`) divides a region
-  between two children at a ratio in `(0,1)`: `Horizontal` puts A left / B right
-  with a one-column vertical divider; `Vertical` stacks A top / B bottom with a
-  one-row horizontal divider.
+  between two children at a ratio in `(0,1)`: `Horizontal` puts A left / B right;
+  `Vertical` stacks A top / B bottom. The children tile the region exactly with
+  no gutter between them (#761) — each pane's own rounded border forms the
+  visible seam.
 - `Default(width, explorerCols)` reproduces the historical layout: a horizontal
   split with the explorer on the left at roughly `explorerCols` columns.
 - `Compute(root, viewport)` walks the tree and returns a `Layout`: a map of every
   leaf's integer `Rect` plus the live `Divider`s. Children always tile their
-  parent exactly — one cell is reserved per divider and rounding is handled so
-  there are no gaps or overlaps. `Split.Children(rect)` is the shared seam that
-  both `Compute` and the renderer use, so geometry and drawing never diverge.
+  parent exactly — rounding is handled so there are no gaps or overlaps.
+  A `Divider` is no longer a reserved gutter cell but a **two-cell resize hit
+  band** over the pane borders meeting at the children's shared edge (A's
+  right/bottom border plus B's left/top border, #761). `Split.Children(rect)` is
+  the shared seam that both `Compute` and the renderer use, so geometry and
+  drawing never diverge.
 
 ## Mouse drag model
 
@@ -42,8 +46,11 @@ no I/O, so it is fully unit-testable.
 mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
 `tea.MouseMsg` branch runs a small state machine:
 
-- **Press** hit-tests the cached `Layout` (`Layout.Hit`). A divider gutter starts
-  a **resize**; a pane's first row (its title bar) starts a **move**. A move (or
+- **Press** hit-tests the cached `Layout` (`Layout.Hit`). The shared pane edge —
+  the two border cells straddling a split boundary — starts a **resize** (#761);
+  a pane's title bar starts a **move**. The resize band wins over the title band
+  where they overlap (a pane's top border row on a split boundary), so the move
+  handle there is the title *text* row just inside the border. A move (or
   tab drag) stays latent until the pointer travels an **engage threshold** from
   the press cell — one row vertically or `moveEngageCols` columns sideways
   (#559): before that, no move feedback (status hint, source marker, ghost)
@@ -160,8 +167,8 @@ release — the relevant half of the target pane per the resolved zone, or the
 **whole** target pane for the center merge zone (#318), whose ghost carries the
 merge label — labelled with the dragged pane. It is drawn with `overlay.Place`, the arbitrary-position
 sibling of `overlay.Center` (both splice ANSI-aware rows so styling survives the
-seam). Resize feedback is the divider tracking the cursor in real time as the
-ratio updates per motion frame.
+seam). Resize feedback is the shared pane edge tracking the cursor in real time
+as the ratio updates per motion frame.
 
 ## Maximize / zoom (Roadmap 0290, #358)
 

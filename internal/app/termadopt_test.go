@@ -42,7 +42,7 @@ func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
 
 	tr := m.lay.Panes[termKey]
 	er := m.lay.Panes[edKey]
-	m = step(m, press(tr.X+2, tr.Y)) // grab the terminal pane's title bar
+	m = step(m, press(tr.X+2, tr.Y+1)) // grab the terminal pane title text row (top border is the resize band, #761)
 	m = step(m, release(er.X+er.W/2, er.Y+er.H/2))
 
 	if _, ok := m.lay.Panes[termKey]; ok {
@@ -71,7 +71,7 @@ func TestTerminalPaneEdgeDropStillRelocates(t *testing.T) {
 	m, edKey, termKey := terminalDragApp(t)
 	tr := m.lay.Panes[termKey]
 	er := m.lay.Panes[edKey]
-	m = step(m, press(tr.X+2, tr.Y))
+	m = step(m, press(tr.X+2, tr.Y+1))
 	m = step(m, release(er.X+er.W-1, er.Y+er.H/2)) // right edge zone
 
 	if _, ok := m.lay.Panes[termKey]; !ok {
@@ -91,7 +91,7 @@ func TestTerminalPaneCenterHoverShowsMerge(t *testing.T) {
 	m, edKey, termKey := terminalDragApp(t)
 	tr := m.lay.Panes[termKey]
 	er := m.lay.Panes[edKey]
-	m = step(m, press(tr.X+2, tr.Y))
+	m = step(m, press(tr.X+2, tr.Y+1))
 	m = step(m, motion(er.X+er.W/2, er.Y+er.H/2))
 
 	if view := m.render(); !strings.Contains(view, "⧉ merge as tab") {

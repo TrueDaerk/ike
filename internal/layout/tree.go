@@ -1,8 +1,10 @@
 // Package layout is the pure split-tree model behind IKE's tiled pane layout.
 // It owns geometry and structure only: no bubbletea, no I/O. A tree is a binary
 // split tree whose leaves are pane ids; Compute walks it to assign each leaf an
-// integer cell rectangle that exactly tiles a viewport, reserving one cell for
-// every divider. The host (internal/app) holds the mutable drag state, turns
+// integer cell rectangle that exactly tiles a viewport — children touch directly,
+// their own borders forming the visual seam (#761). Each split still exposes a
+// Divider: a two-cell hit band over the adjacent borders that the host uses as
+// the resize handle. The host (internal/app) holds the mutable drag state, turns
 // mouse events into Resize/Move calls on the tree, and renders each leaf into
 // its rectangle. state.go converts the tree to/from plain data for persistence.
 package layout
@@ -13,11 +15,11 @@ import "math"
 type Orient int
 
 const (
-	// Horizontal lays children side by side (A left, B right); the divider is a
-	// one-column vertical gutter between them.
+	// Horizontal lays children side by side (A left, B right); the resize band
+	// covers the two border columns at their shared edge.
 	Horizontal Orient = iota
-	// Vertical stacks children (A top, B bottom); the divider is a one-row
-	// horizontal gutter between them.
+	// Vertical stacks children (A top, B bottom); the resize band covers the
+	// two border rows at their shared edge.
 	Vertical
 )
 
@@ -34,7 +36,7 @@ type Node interface{ isNode() }
 type Leaf struct{ Pane string }
 
 // Split divides a region between two children at Ratio in (0,1): A receives the
-// left/top fraction, B the remainder, with one cell reserved for the divider.
+// left/top fraction, B the remainder; the children tile the region exactly.
 type Split struct {
 	Orient Orient
 	Ratio  float64
@@ -49,42 +51,45 @@ func (*Split) isNode() {}
 // explorerCols columns and the editor filling the rest.
 func Default(width, explorerCols int) Node {
 	r := 0.3
-	if width > 1 {
-		r = float64(explorerCols) / float64(width-1)
+	if width > 0 {
+		r = float64(explorerCols) / float64(width)
 	}
 	r = clampRatio(r)
 	return &Split{Orient: Horizontal, Ratio: r, A: &Leaf{Pane: "explorer"}, B: &Leaf{Pane: "editor"}}
 }
 
-// Children splits r into the rectangles for A, the divider gutter, and B.
-// It is shared by Compute (geometry) and the host renderer so both agree on the
-// exact cell boundaries.
-func (s *Split) Children(r Rect) (a, div, b Rect) {
+// Children splits r into the rectangles for A and B, which tile r exactly with
+// no gutter between them (#761). It is shared by Compute (geometry) and the
+// host renderer so both agree on the exact cell boundaries.
+func (s *Split) Children(r Rect) (a, b Rect) {
 	if s.Orient == Horizontal {
-		usable := r.W - 1
-		if usable < 0 {
-			usable = 0
-		}
-		aw := clampInt(int(math.Round(s.Ratio*float64(usable))), 0, usable)
-		bw := usable - aw
+		aw := clampInt(int(math.Round(s.Ratio*float64(r.W))), 0, r.W)
 		a = Rect{X: r.X, Y: r.Y, W: aw, H: r.H}
-		div = Rect{X: r.X + aw, Y: r.Y, W: 1, H: r.H}
-		b = Rect{X: r.X + aw + 1, Y: r.Y, W: bw, H: r.H}
-		return a, div, b
+		b = Rect{X: r.X + aw, Y: r.Y, W: r.W - aw, H: r.H}
+		return a, b
 	}
-	usable := r.H - 1
-	if usable < 0 {
-		usable = 0
-	}
-	ah := clampInt(int(math.Round(s.Ratio*float64(usable))), 0, usable)
-	bh := usable - ah
+	ah := clampInt(int(math.Round(s.Ratio*float64(r.H))), 0, r.H)
 	a = Rect{X: r.X, Y: r.Y, W: r.W, H: ah}
-	div = Rect{X: r.X, Y: r.Y + ah, W: r.W, H: 1}
-	b = Rect{X: r.X, Y: r.Y + ah + 1, W: r.W, H: bh}
-	return a, div, b
+	b = Rect{X: r.X, Y: r.Y + ah, W: r.W, H: r.H - ah}
+	return a, b
 }
 
-// Divider is a draggable gutter between a split's children, paired with the
+// band returns the resize hit band for the boundary between a and b: the two
+// border cells that meet at the shared edge (A's right/bottom border plus B's
+// left/top border), clamped to r. This is what the mouse grabs to resize (#761).
+func (s *Split) band(r, b Rect) Rect {
+	if s.Orient == Horizontal {
+		x := clampInt(b.X-1, r.X, r.X+r.W)
+		w := clampInt(2, 0, r.X+r.W-x)
+		return Rect{X: x, Y: r.Y, W: w, H: r.H}
+	}
+	y := clampInt(b.Y-1, r.Y, r.Y+r.H)
+	h := clampInt(2, 0, r.Y+r.H-y)
+	return Rect{X: r.X, Y: y, W: r.W, H: h}
+}
+
+// Divider is the draggable resize handle of a split: a two-cell band over the
+// pane borders meeting at the children's shared edge (#761), paired with the
 // geometry Resize needs: the span (usable cells along the split axis) and its
 // start offset so a mouse position maps back to a ratio.
 type Divider struct {
@@ -92,7 +97,7 @@ type Divider struct {
 	Rect   Rect
 	Orient Orient
 	Start  int // cell offset of the usable span's origin (X if Horizontal, Y if Vertical)
-	Span   int // usable cells along the axis, excluding the divider
+	Span   int // usable cells along the axis (the parent's full extent)
 }
 
 // Layout is the result of Compute: every leaf's rectangle plus the live dividers
@@ -113,15 +118,15 @@ func Compute(root Node, vp Rect) Layout {
 		case *Leaf:
 			l.Panes[t.Pane] = r
 		case *Split:
-			a, div, b := t.Children(r)
-			start, span := r.X, r.W-1
+			a, b := t.Children(r)
+			start, span := r.X, r.W
 			if t.Orient == Vertical {
-				start, span = r.Y, r.H-1
+				start, span = r.Y, r.H
 			}
 			if span < 0 {
 				span = 0
 			}
-			l.Dividers = append(l.Dividers, Divider{Split: t, Rect: div, Orient: t.Orient, Start: start, Span: span})
+			l.Dividers = append(l.Dividers, Divider{Split: t, Rect: t.band(r, b), Orient: t.Orient, Start: start, Span: span})
 			walk(t.A, a)
 			walk(t.B, b)
 		}
