@@ -50,6 +50,13 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   uppercase letters reach the shell as their produced text (#224).
 - **Batching**: output notifications are coalesced (`OutputMsg`, one per 8ms
   quiet interval), so `yes` or a build log cannot flood the render loop.
+- **Output spooling** (#734, `spool.go`): the PTY read loop no longer writes
+  into the emulator directly — it drains the kernel TTY queue into an
+  in-process FIFO (`spool`, 16 MiB soft cap) and a separate feed loop replays
+  the chunks into the emulator in order. A stalled emulator or render loop
+  (app suspend/resume around a macOS lock/sleep window) therefore cannot
+  backpressure into the kernel queue, where buffered output can be flushed
+  and lost; everything buffers in-process and replays on resume.
 
 ## Pane citizenship (#96)
 
