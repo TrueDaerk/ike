@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Terminal output survives lock/sleep/resume (#734): the PTY read loop now
+  drains into an in-process spool (16 MiB soft cap) and a separate feed loop
+  replays chunks into the emulator — a stalled render loop can no longer
+  backpressure into the kernel TTY queue where output around a suspend/resume
+  window could be flushed and lost.
+
 - Keymap page lists unbound defaults (#736): a preset default whose chord was
   unbound or rebound away stays visible as an `(unbound)` row — enter captures
   a new chord for the command, `r` is a per-binding reset restoring the shipped

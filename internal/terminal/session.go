@@ -63,6 +63,12 @@ type Session struct {
 	mouseModes map[ansi.Mode]struct{}
 
 	notifyPending atomic.Bool
+
+	// out decouples the PTY read loop from the emulator feed (#734): PTY
+	// output is spooled immediately so the kernel TTY queue stays drained
+	// even while the emulator or render loop stalls (lock/sleep/resume);
+	// buffered bytes replay into the emulator in order, nothing drops.
+	out *spool
 }
 
 // Shell resolves the shell to spawn: the config override first, $SHELL next,
@@ -139,25 +145,42 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
 		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
 	})
+	s.out = newSpool()
 	go s.readLoop()
+	go s.feedLoop()
 	go s.writeLoop()
 	go s.waitExit()
 	return s, nil
 }
 
-// readLoop pumps PTY output into the emulator and requests repaints,
-// coalesced so a burst of output paints once per quiet interval.
+// readLoop drains PTY output into the spool as fast as the kernel delivers
+// it. It deliberately does not touch the emulator (#734): a stalled emulator
+// or render loop must not backpressure into the kernel TTY queue, where
+// output around a suspend/resume window can be flushed and lost.
 func (s *Session) readLoop() {
+	defer s.out.close()
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.ptmx.Read(buf)
 		if n > 0 {
-			_, _ = s.em.Write(buf[:n])
-			s.notify()
+			s.out.put(buf[:n])
 		}
 		if err != nil {
 			return
 		}
+	}
+}
+
+// feedLoop replays spooled PTY output into the emulator in order and requests
+// repaints, coalesced so a burst of output paints once per quiet interval.
+func (s *Session) feedLoop() {
+	for {
+		chunk, ok := s.out.take()
+		if !ok {
+			return
+		}
+		_, _ = s.em.Write(chunk)
+		s.notify()
 	}
 }
 
@@ -390,5 +413,8 @@ func (s *Session) teardown() {
 		_ = s.cmd.Process.Kill()
 	}
 	_ = s.ptmx.Close()
+	if s.out != nil {
+		s.out.close()
+	}
 	_ = s.em.Close()
 }
