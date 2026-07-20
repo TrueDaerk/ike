@@ -104,7 +104,14 @@ finds `example.hello`), and ranks **context-first**:
 3. **off-context** — scoped to a different context (ranked last, or hidden when
    `palette.off_context = "hide"`).
 
-Within a tier, higher fuzzy score wins, then title. The dim detail shows the
+Within a tier, higher fuzzy score wins, then **most-used** (#773), then title.
+The usage counter (`usage.go`, persisted per project in `.ike/cmdusage.json`,
+`IKE_CONFIG_DIR`-redirectable) counts only selections confirmed **from the
+palette window** — the root model bumps it on `palette.RunCommandMsg`, a path
+keybind invocations never take — so shortcut users don't skew the listing. On
+an empty query all scores tie, so the listing opens most-used-first; a typed
+query's match quality still wins over usage. Search everywhere inherits the
+order through its composed command source. The dim detail shows the
 command's resolved key binding (`registry.Binding`), else its documentation-only
 `Shortcut`, else its owner. Context-aware filtering relies on the additive
 `Scope` field on `plugin.Command` (`plugin.GlobalScope()` / `PaneScope(ctxID)`),

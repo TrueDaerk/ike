@@ -58,6 +58,15 @@ func layoutFile() string {
 	return filepath.Join(".ike", "layout.json")
 }
 
+// usageFile returns the path of the per-project command-usage counter (#773),
+// following the layout store's IKE_CONFIG_DIR redirection seam.
+func usageFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "cmdusage.json")
+	}
+	return filepath.Join(".ike", "cmdusage.json")
+}
+
 // loadLayout reads the saved tree and identity table. It returns ok=false on any
 // missing, unreadable, or structurally malformed file so the caller falls back
 // to the default layout. Identity validation (explorer singleton, well-formed

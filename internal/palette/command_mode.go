@@ -35,7 +35,8 @@ const (
 type CommandMode struct {
 	src     CommandSource
 	res     BindingResolver
-	hideOff bool // drop off-context commands instead of ranking them last
+	usage   *Usage // optional most-used ranking (#773); nil-safe
+	hideOff bool   // drop off-context commands instead of ranking them last
 	prefix  rune
 }
 
@@ -45,6 +46,11 @@ func NewCommandMode(src CommandSource, res BindingResolver, hideOff bool) *Comma
 	return &CommandMode{src: src, res: res, hideOff: hideOff, prefix: ':'}
 }
 
+// SetUsage installs the most-used counter (#773): among equal tier and match
+// score — notably the whole listing on an empty query — more-often-chosen
+// commands rank first. Match quality still wins over usage.
+func (c *CommandMode) SetUsage(u *Usage) { c.usage = u }
+
 // Prefix implements Mode.
 func (c *CommandMode) Prefix() rune { return c.prefix }
 
@@ -53,8 +59,9 @@ func (c *CommandMode) Placeholder() string { return "Run a command…" }
 
 // rankedCommand is a command with its computed tier and match for sorting.
 type rankedCommand struct {
-	item Item
-	tier int
+	item  Item
+	tier  int
+	usage int
 }
 
 // Results implements Mode. It snapshots all registered commands, keeps those
@@ -79,7 +86,8 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 			m = fuzzy.Result{Score: im.Score} // id match: score only, no Title spans
 		}
 		ranked = append(ranked, rankedCommand{
-			tier: tier,
+			tier:  tier,
+			usage: c.usage.Count(cmd.ID),
 			item: Item{
 				Title:  cmd.Title,
 				Detail: c.detail(cmd),
@@ -95,6 +103,9 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 		}
 		if ranked[i].item.Score != ranked[j].item.Score {
 			return ranked[i].item.Score > ranked[j].item.Score
+		}
+		if ranked[i].usage != ranked[j].usage {
+			return ranked[i].usage > ranked[j].usage
 		}
 		return ranked[i].item.Title < ranked[j].item.Title
 	})
