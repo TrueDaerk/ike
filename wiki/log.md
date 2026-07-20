@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Most-used command ranking in the palette (#773): palette-window selections
+  bump a persisted per-project counter (.ike/cmdusage.json); equal-score
+  results rank most-used first, keybind invocations never count.
+  command-palette.md updated.
 - terminal.toggle ignores custom tool panes (#772): with only tool panes
   open it spawns a new regular terminal; terminal.clear follows the same
   rule. terminal.md updated.

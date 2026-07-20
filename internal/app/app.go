@@ -296,6 +296,7 @@ type Model struct {
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette    *palette.Palette
+	cmdUsage   *palette.Usage // most-used command ranking (#773)
 	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -455,7 +456,9 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	vcsSt := &vcsState{draft: &vcs.MessageDraft{}} // shared before the literal: the branch picker mode reads it
+	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
 	m := Model{
+		cmdUsage:     cmdUsage,
 		panes:        panes,
 		recentEditor: edKey,
 		recent:       recent,
@@ -470,7 +473,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
 		vcs:          vcsSt,
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage),
 		refs:         refs,
 		lspStatus:    map[string]string{},
 		symbols:      symbols,
@@ -1161,12 +1164,13 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState, usage *palette.Usage) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
 	}
 	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
+	cmd.SetUsage(usage)
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
@@ -2639,6 +2643,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case palette.RunCommandMsg:
+		// A palette-window selection — never a keybind invocation — bumps the
+		// most-used counter (#773).
+		m.cmdUsage.Bump(msg.ID)
 		return m, m.RunCommand(msg.ID)
 
 	case palette.OpenFileMsg:
