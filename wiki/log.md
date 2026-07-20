@@ -2,6 +2,15 @@
 
 ## 2026-07-20
 
+- Custom TUI tool panes landed (#741): `[[tools.custom]]` config entries
+  (name, command, args, cwd, placement) become `tool.<name>` palette
+  commands opening a pane that runs the program directly. Toggle-focus
+  semantics like terminal.toggle, tool chrome (`⚙ NAME`, not terminal
+  chrome, also in the statusline), program exit closes the pane, layout
+  restore restarts the tool (a de-configured tool degrades to a shell), and
+  the process gets `IKE_THEME_*` env vars for theme following. New concept
+  doc `/architecture/tool-panes.md`.
+
 - Terminal session teardown is race-free (#748): `go test -race` failed on
   main because upstream vt's `Emulator.Close` races concurrent `Read`/`Write`
   (plain-bool closed flag). Teardown now joins read/feed loops, stops the

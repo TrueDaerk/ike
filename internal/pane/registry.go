@@ -154,6 +154,34 @@ func (r *Registry) AddCommandTerminal(argv []string, label, dir string, env []st
 	return key
 }
 
+// AddTool creates a terminal pane running argv as a custom TUI tool session
+// (#741): a command session marked with the tool name, so chrome, persistence
+// and exit handling treat it as a tool pane rather than a terminal.
+func (r *Registry) AddTool(name string, argv []string, dir string, env []string, send func(tea.Msg)) string {
+	key := r.MintTerminalKey()
+	r.put(r.newToolInstance(key, name, argv, dir, env, send))
+	return key
+}
+
+// AddToolKey recreates a tool pane under an exact key with a fresh process —
+// layout restore re-spawns tools in their saved position, like terminals.
+func (r *Registry) AddToolKey(key, name string, argv []string, dir string, env []string, send func(tea.Msg)) *Instance {
+	inst := r.newToolInstance(key, name, argv, dir, env, send)
+	r.put(inst)
+	r.advancePastTerminal(key)
+	return inst
+}
+
+// newToolInstance builds the shared tool-pane instance (#741).
+func (r *Registry) newToolInstance(key, name string, argv []string, dir string, env []string, send func(tea.Msg)) *Instance {
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal}
+	inst.term = terminal.NewCommand(key, argv, dir, 80, 24, env, send)
+	inst.term.SetPalette(r.pal)
+	inst.term.SetLabel(name)
+	inst.term.SetTool(name)
+	return inst
+}
+
 // MintTerminalKey allocates the next terminal session key without creating a
 // pane — terminal tabs (#573) live inside an editor instance but their
 // sessions still need a unique key for output/exit message routing.

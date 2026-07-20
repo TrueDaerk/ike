@@ -37,6 +37,27 @@ type Config struct {
 	Todo Todo `toml:"todo"`
 	// Run holds run-configuration behaviour (0350, #576).
 	Run Run `toml:"run"`
+	// Tools holds user-defined TUI tool panes (#741).
+	Tools Tools `toml:"tools"`
+}
+
+// Tools holds the custom TUI tool panes (#741): [[tools.custom]] entries, each
+// exposed as a palette command "tool.<name>" that opens a pane running the
+// configured program directly (lazygit, htop, k9s, …).
+type Tools struct {
+	Custom []ToolEntry `toml:"custom"`
+}
+
+// ToolEntry is one configured TUI tool. Name is the display/command suffix
+// ("lazygit" → command id "tool.lazygit"); Command is the program to run with
+// Args; Cwd is the working directory (empty: the project root). Placement
+// decides where the pane splits open: "bottom" (default) or "right".
+type ToolEntry struct {
+	Name      string   `toml:"name"`
+	Command   string   `toml:"command"`
+	Args      []string `toml:"args"`
+	Cwd       string   `toml:"cwd"`
+	Placement string   `toml:"placement"`
 }
 
 // Run holds run-configuration behaviour (0350, #576). Placement decides where

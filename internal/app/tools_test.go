@@ -1,0 +1,215 @@
+package app
+
+import (
+	"os"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/config"
+	"ike/internal/host"
+	"ike/internal/pane"
+	"ike/internal/registry"
+	"ike/internal/terminal"
+	"ike/internal/theme"
+)
+
+// withTools installs a config carrying the given tool entries, restoring the
+// previous one on cleanup.
+func withTools(t *testing.T, entries ...config.ToolEntry) {
+	t.Helper()
+	prev := config.Get()
+	c := *prev
+	c.Tools.Custom = entries
+	config.Set(&c)
+	t.Cleanup(func() { config.Set(prev) })
+}
+
+// sleepTool is a tool entry whose process stays alive for the test.
+func sleepTool(name string) config.ToolEntry {
+	return config.ToolEntry{Name: name, Command: "sleep", Args: []string{"60"}}
+}
+
+func TestToolCommandsFromConfig(t *testing.T) {
+	withTools(t,
+		config.ToolEntry{Name: "lazygit", Command: "lazygit"},
+		config.ToolEntry{Name: "My Tool", Command: "mytool"},
+		config.ToolEntry{Name: "", Command: "nameless"},   // skipped
+		config.ToolEntry{Name: "no-command", Command: ""}, // skipped
+	)
+	cmds := toolCommands()
+	if len(cmds) != 2 {
+		t.Fatalf("toolCommands = %d entries, want 2", len(cmds))
+	}
+	if cmds[0].ID != "tool.lazygit" || cmds[0].Title != "Tool: lazygit" {
+		t.Fatalf("first command = %q / %q", cmds[0].ID, cmds[0].Title)
+	}
+	if cmds[1].ID != "tool.my-tool" {
+		t.Fatalf("slugged id = %q, want tool.my-tool", cmds[1].ID)
+	}
+}
+
+func TestToolSlug(t *testing.T) {
+	for in, want := range map[string]string{
+		"lazygit":   "lazygit",
+		"My Tool":   "my-tool",
+		"k9s":       "k9s",
+		"a__b!!c":   "a-b-c",
+		"Trailing ": "trailing",
+	} {
+		if got := toolSlug(in); got != want {
+			t.Fatalf("toolSlug(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
+	withTools(t, sleepTool("watcher"))
+	m := sized(t, 100, 40)
+	editorKey := m.panes.Focused()
+
+	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	inst := m.toolPane("watcher")
+	if inst == nil {
+		t.Fatal("tool.watcher must open a pane")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if m.panes.Focused() != inst.Key() {
+		t.Fatalf("tool pane must take focus, focused %q", m.panes.Focused())
+	}
+	if inst.Terminal().Tool() != "watcher" {
+		t.Fatalf("tool marker = %q", inst.Terminal().Tool())
+	}
+
+	// Re-invoking while focused returns focus to the remembered pane.
+	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	if m.panes.Focused() != editorKey {
+		t.Fatalf("second invoke must return focus, got %q want %q", m.panes.Focused(), editorKey)
+	}
+
+	// Re-invoking from elsewhere focuses the existing pane, no second spawn.
+	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	if m.panes.Focused() != inst.Key() {
+		t.Fatal("third invoke must focus the existing pane")
+	}
+	count := 0
+	for _, key := range m.panes.Keys() {
+		if p := m.panes.Get(key); p != nil && p.Kind() == pane.KindTerminal && p.Terminal().Tool() == "watcher" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("tool panes = %d, want 1 (toggle, not respawn)", count)
+	}
+}
+
+func TestToolPaneChromeIsNotATerminal(t *testing.T) {
+	withTools(t, sleepTool("statuswatch"))
+	m := sized(t, 100, 40)
+	out, _ := m.Update(ToolOpenMsg{Name: "statuswatch"})
+	m = out.(Model)
+	inst := m.toolPane("statuswatch")
+	if inst == nil {
+		t.Fatal("tool pane must open")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	v := m.render()
+	if !strings.Contains(v, "⚙ STATUSWATCH") {
+		t.Fatal("tool pane chrome must title the tool")
+	}
+	if strings.Contains(v, "TERMINAL") {
+		t.Fatal("tool pane chrome must not look like a terminal")
+	}
+}
+
+func TestToolExitClosesPane(t *testing.T) {
+	withTools(t, sleepTool("shortlived"))
+	m := sized(t, 100, 40)
+	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
+	m = out.(Model)
+	inst := m.toolPane("shortlived")
+	if inst == nil {
+		t.Fatal("tool pane must open")
+	}
+	key := inst.Key()
+	sessKey := inst.Terminal().SessionKey()
+	inst.Terminal().Close()
+	out, _ = m.Update(terminal.ExitedMsg{Key: sessKey})
+	m = out.(Model)
+	if m.panes.Has(key) {
+		t.Fatal("tool pane must close when its program exits")
+	}
+}
+
+func TestToolUnknownNameIsNoop(t *testing.T) {
+	withTools(t)
+	m := sized(t, 100, 40)
+	before := m.panes.Len()
+	out, _ := m.Update(ToolOpenMsg{Name: "ghost"})
+	m = out.(Model)
+	if m.panes.Len() != before {
+		t.Fatal("unknown tool must not open a pane")
+	}
+}
+
+func TestToolIdentityPersistsAndRestores(t *testing.T) {
+	withTools(t, sleepTool("persisted"))
+	m := sized(t, 100, 40)
+	dir := os.Getenv("IKE_CONFIG_DIR")
+	out, _ := m.Update(ToolOpenMsg{Name: "persisted"})
+	m = out.(Model)
+	inst := m.toolPane("persisted")
+	if inst == nil {
+		t.Fatal("tool pane must open")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	// The open already saved the layout; its identity must say "tool".
+	_, ids, ok := loadLayout()
+	if !ok {
+		t.Fatal("layout must be saved")
+	}
+	id, found := ids[inst.Key()]
+	if !found || id.Kind != "tool" || id.Tool != "persisted" {
+		t.Fatalf("persisted identity = %+v", id)
+	}
+
+	// A fresh model over the same store restores the tool pane, restarting
+	// the configured program.
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	m2 := NewWith(registry.New(), host.MapConfig{})
+	out2, _ := m2.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	m2 = out2.(Model)
+	restored := m2.toolPane("persisted")
+	if restored == nil {
+		t.Fatal("restore must recreate the tool pane")
+	}
+	t.Cleanup(func() { restored.Terminal().Close() })
+	if restored.Key() != inst.Key() {
+		t.Fatalf("restored key = %q, want %q", restored.Key(), inst.Key())
+	}
+}
+
+func TestToolSpawnEnvCarriesTheme(t *testing.T) {
+	pal := theme.DefaultPalette()
+	env := toolSpawnEnv(pal)
+	var name, bg string
+	for _, e := range env {
+		if v, ok := strings.CutPrefix(e, "IKE_THEME_NAME="); ok {
+			name = v
+		}
+		if v, ok := strings.CutPrefix(e, "IKE_THEME_BACKGROUND="); ok {
+			bg = v
+		}
+	}
+	if name == "" {
+		t.Fatal("env must carry IKE_THEME_NAME")
+	}
+	if !strings.HasPrefix(bg, "#") || len(bg) != 7 {
+		t.Fatalf("IKE_THEME_BACKGROUND = %q, want #rrggbb", bg)
+	}
+}

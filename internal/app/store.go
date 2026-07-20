@@ -36,6 +36,7 @@ type paneIdentity struct {
 	Path2  string   `json:"path2,omitempty"` // diff panes: the right-hand file (#60)
 	Rev    string   `json:"rev,omitempty"`   // diff panes: revision backing the left side (#508)
 	Rev2   string   `json:"rev2,omitempty"`  // diff panes: revision backing the right side
+	Tool   string   `json:"tool,omitempty"`  // tool panes: the configured tool name (#741)
 	Tabs   []string `json:"tabs,omitempty"`
 	Active int      `json:"active,omitempty"`
 }
@@ -143,7 +144,13 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindTerminal:
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.
-			ids[key] = paneIdentity{Kind: "terminal", Path: inst.Terminal().Dir()}
+			// A tool pane (#741) persists its tool name instead and restarts
+			// the configured program on restore.
+			if tool := inst.Terminal().Tool(); tool != "" {
+				ids[key] = paneIdentity{Kind: "tool", Tool: tool}
+			} else {
+				ids[key] = paneIdentity{Kind: "terminal", Path: inst.Terminal().Dir()}
+			}
 		case pane.KindVCS:
 			// The slot restores empty and re-feeds from the first status
 			// snapshot (0330, #482); Path carries the active tab (#504).
