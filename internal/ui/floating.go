@@ -72,6 +72,7 @@ type Floating struct {
 	width   int // terminal width
 	height  int // terminal height
 	scroll  scroller
+	sizes   *WinSizes // optional per-content resize persistence (#774)
 }
 
 // New returns a closed Floating configured by cfg.
@@ -100,6 +101,19 @@ func (f *Floating) theme() *theme.Palette {
 		return f.pal
 	}
 	return theme.DefaultPalette()
+}
+
+// SetSizeStore installs the persisted per-window size deltas (#774):
+// ctrl+shift+arrows resize the open shell, keyed by the content's title.
+func (f *Floating) SetSizeStore(s *WinSizes) { f.sizes = s }
+
+// sizeKind is the persistence key for the current content: its title, so
+// each hosted window (help, settings dialogs, …) remembers its own size.
+func (f *Floating) sizeKind() string {
+	if f.content == nil {
+		return ""
+	}
+	return f.content.Title()
 }
 
 // IsOpen reports whether the shell is currently shown.
@@ -170,6 +184,13 @@ func (f *Floating) Update(msg tea.Msg) bool {
 		f.SetSize(msg.Width, msg.Height)
 		return true
 	case tea.KeyMsg:
+		// Resize chords (#774) act on the shell before any content handling —
+		// they are non-printable, so no filter text is lost.
+		if ddw, ddh, ok := ResizeDelta(msg.String()); ok && f.sizes != nil {
+			f.sizes.Adjust(f.sizeKind(), ddw, ddh)
+			f.layout(true)
+			return true
+		}
 		if flt, ok := f.content.(Filterable); ok && f.filterKey(flt, msg.String()) {
 			return true
 		}
@@ -235,6 +256,14 @@ func (f *Floating) layout(preserveScroll bool) {
 		return
 	}
 	cw, ch := budget(f.width, f.height, f.margin(), f.cfg.MaxWidthFrac, f.cfg.MaxHeightFrac)
+	// User resize (#774): the stored delta adjusts the content budget, never
+	// past the terminal-bound budget (so a shrunken terminal re-clamps) and
+	// never below a readable floor.
+	if dw, dh := f.sizes.Get(f.sizeKind()); dw != 0 || dh != 0 {
+		maxW, maxH := budget(f.width, f.height, f.margin(), 0, 0)
+		cw = ClampDelta(cw, dw, 16, maxW)
+		ch = ClampDelta(ch, dh, 3, maxH)
+	}
 	body := f.content.Render(cw)
 	bodyW := lipgloss.Width(body)
 	viewH := lipgloss.Height(body)

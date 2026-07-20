@@ -297,6 +297,7 @@ type Model struct {
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette    *palette.Palette
 	cmdUsage   *palette.Usage // most-used command ranking (#773)
+	winSizes   *ui.WinSizes   // persisted floating-window resize deltas (#774)
 	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -457,8 +458,10 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	recent := &recentFiles{}
 	vcsSt := &vcsState{draft: &vcs.MessageDraft{}} // shared before the literal: the branch picker mode reads it
 	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
+	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
 	m := Model{
 		cmdUsage:     cmdUsage,
+		winSizes:     winSizes,
 		panes:        panes,
 		recentEditor: edKey,
 		recent:       recent,
@@ -484,6 +487,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		focusKeys:    focusKeys(cfg),
 		keys:         buildKeymap(cfg, bindings),
 	}
+	m.shell.SetSizeStore(winSizes)   // resizable modal shell (#774)
+	m.palette.SetSizeStore(winSizes) // resizable palette box (#774)
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
@@ -3290,6 +3295,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// The settings panel is a full-window modal: it owns the keyboard.
 		if m.settings.IsOpen() {
+			// Resize chords (#774) adjust the panel size — unless a page is
+			// capturing keys verbatim (chord capture, text input).
+			if ddw, ddh, ok := ui.ResizeDelta(msg.String()); ok && !m.settings.Capturing() {
+				m.winSizes.Adjust("settings", ddw, ddh)
+				w, h := m.settingsSize()
+				m.settings.SetSize(w, h)
+				return m, nil
+			}
 			return m, m.settings.Update(msg)
 		}
 		// An open menu dropdown owns the keyboard (arrows/enter/esc).
@@ -4505,6 +4518,13 @@ func (m Model) settingsSize() (w, h int) {
 	h = m.height - 4
 	if h > 32 {
 		h = 32
+	}
+	// User resize (#774): the stored delta adjusts the computed default,
+	// re-clamped to the terminal so a shrunken window stays inside.
+	dw, dh := m.winSizes.Get("settings")
+	if dw != 0 || dh != 0 {
+		w = ui.ClampDelta(w, dw, 40, m.width-2)
+		h = ui.ClampDelta(h, dh, 10, m.height-2)
 	}
 	return w, h
 }

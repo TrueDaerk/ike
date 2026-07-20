@@ -116,6 +116,19 @@ func (m *Model) Open() {
 // Close hides the panel.
 func (m *Model) Close() { m.open = false }
 
+// Capturing reports whether the panel currently needs every key verbatim —
+// an edit/pick/filter input or a custom page's capture mode — so the host
+// must not intercept chrome chords like the resize keys (#774).
+func (m *Model) Capturing() bool {
+	if m.editing || m.picking || m.filtering {
+		return true
+	}
+	if page := m.customPage(); page != nil {
+		return page.Capturing()
+	}
+	return false
+}
+
 // customPage returns the active page's PageModel, if it has one.
 func (m *Model) customPage() PageModel {
 	if m.cat >= 0 && m.cat < len(m.pages) {

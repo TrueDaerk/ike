@@ -1,6 +1,7 @@
 package palette
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -8,6 +9,7 @@ import (
 
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/ui"
 )
 
 // fakeSource is an in-memory CommandSource for command-mode tests.
@@ -383,5 +385,45 @@ func TestQueryViewCursorPosition(t *testing.T) {
 	}
 	if strings.Contains(v, "@") {
 		t.Fatalf("queryView must strip the prefix: %q", v)
+	}
+}
+
+func TestPaletteResizeChordsAdjustWidthAndRows(t *testing.T) {
+	var cmds []registry.OwnedCommand
+	for _, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l"} {
+		cmds = append(cmds, owned("cmd."+id, "Command "+id, plugin.GlobalScope()))
+	}
+	p := New(Config{DefaultPrefix: ':', MaxResults: 10}, NewCommandMode(fakeSource{cmds}, nil, false), fileMode())
+	store := filepath.Join(t.TempDir(), "winsize.json")
+	s := ui.LoadWinSizes(store)
+	p.SetSizeStore(s)
+	p.SetSize(120, 40)
+	p.Open(Context{})
+
+	baseW := p.boxWidth()
+	baseRows := p.visibleRows()
+	p.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModShift})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl | tea.ModShift})
+	if got := p.boxWidth(); got != baseW+4 {
+		t.Fatalf("box width = %d, want %d", got, baseW+4)
+	}
+	if got := p.visibleRows(); got != baseRows+1 {
+		t.Fatalf("visible rows = %d, want %d", got, baseRows+1)
+	}
+	// Shrinking floors at 3 rows and the minimum box width.
+	for i := 0; i < 30; i++ {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl | tea.ModShift})
+		p.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl | tea.ModShift})
+	}
+	if got := p.visibleRows(); got != 3 {
+		t.Fatalf("rows floor = %d, want 3", got)
+	}
+	if got := p.boxWidth(); got != minBoxWidth {
+		t.Fatalf("width floor = %d, want %d", got, minBoxWidth)
+	}
+	// The deltas persist for the next session.
+	re := ui.LoadWinSizes(store)
+	if dw, dh := re.Get("palette"); dw >= 0 || dh >= 0 {
+		t.Fatalf("persisted deltas = (%d,%d), want negative", dw, dh)
 	}
 }

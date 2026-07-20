@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Floating Shell
@@ -85,6 +85,13 @@ Two optional Content extensions refine key routing while the shell is open
   `bubbles/viewport` (↑/↓, pgup/pgdn, ctrl+u/ctrl+d, plus g/G for top/bottom) and
   appends a position indicator (`▲ … ▼  NN%`) only when the content overflows.
   The pane therefore never grows past the terminal.
+- **User resize** (#774): `ctrl+shift+arrows` (CSI-parameter-encoded, so
+  delivered everywhere) adjust the open shell's content budget; the delta is
+  persisted per content title in the per-project `winsize.json` store
+  (`ui.WinSizes`, `IKE_CONFIG_DIR`-redirectable) and re-clamped against the
+  live terminal budget on every layout, flooring at a readable minimum.
+  Growth past the content's natural size is a no-op (the shell stays
+  content-sized); shrinking engages the scroller.
 - **The body re-renders on every `View()`** (#409), preserving the scroll
   offset. Content that mutates its state in place after opening — a modal
   moving its cursor or dropping list items — shows the change on the very next
@@ -125,7 +132,7 @@ host per shell.
 
 ## Boundaries
 
-- Stacked/nested modals, animations, and drag/move/resize of the pane are out of
+- Stacked/nested modals, animations, and drag/move of the pane are out of
   scope (windowing belongs to the broader pane manager).
 - Specific modal content (confirm dialogs, pickers) are separate features that
   *consume* this shell.

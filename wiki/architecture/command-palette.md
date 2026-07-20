@@ -167,6 +167,17 @@ reserved seat (#295): a **live source** — `palette.LiveMode`, re-queried
 per settled keystroke through the debounce plumbing (`live.go`), its cached
 rows composed and capped like any other source.
 
+## Resizing (#774)
+
+`ctrl+shift+left/right` widen/narrow the centered box (the width delta feeds
+`boxWidth()` before its floor/room clamps; anchored palettes ignore it) and
+`ctrl+shift+up/down` grow/shrink the visible result rows
+(`visibleRows() = maxResults + delta`, floored at 3). Deltas persist in the
+shared per-project `winsize.json` store (kind `"palette"`), so Run a Command,
+Search Everywhere, Recent Files and the go-to modes share one remembered
+size. Handled before the plain-arrow selection keys, which match on the key
+code alone.
+
 ## Fuzzy matching
 
 `internal/fuzzy` is pure and dependency-free: `Match(pattern, text) (Result, ok)`
