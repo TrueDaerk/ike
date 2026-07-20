@@ -1306,6 +1306,7 @@ func displayDir(dir string) string {
 //
 //	ctrl+tab    move focus to the next pane (the global escape hatch)
 //	alt+f12     terminal.toggle — return focus to the previous pane (#97)
+//	cmd+t       new sibling terminal tab in the focused pane (#729)
 //
 // The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*),
 // cmd+c over an active mouse selection, and cmd+v (system-clipboard paste)
@@ -1320,8 +1321,49 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	case "alt+f12":
 		m.toggleTerminal()
 		return true, m, nil
+	case "cmd+t":
+		// iTerm-style: cmd+t inside a terminal spawns a sibling terminal
+		// (#729); outside terminals the chord keeps its global binding —
+		// the reserved set only fires while a live terminal is focused.
+		m.newTerminalSibling()
+		return true, m, nil
 	}
 	return false, m, nil
+}
+
+// newTerminalSibling spawns a terminal next to the focused one (#729): a
+// terminal tab hosted by an editor pane gets a sibling tab in the same pane
+// (#573); a dedicated single-session terminal pane gets a fresh terminal
+// pane split below it. The new session is focused either way.
+func (m *Model) newTerminalSibling() {
+	key := m.panes.Focused()
+	inst := m.panes.Get(key)
+	if inst == nil {
+		return
+	}
+	shell := ""
+	if v, ok := m.host.Config().Get("terminal.shell"); ok {
+		shell = v
+	}
+	switch inst.Kind() {
+	case pane.KindEditor:
+		tkey := m.panes.MintTerminalKey()
+		term := terminal.New(tkey, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
+		inst.AddTerminalTab(term)
+		m.setFocus(key)
+		saveLayout(m.tree, m.panes)
+	case pane.KindTerminal:
+		nkey := m.panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+		tree, ok := layout.SplitLeaf(m.tree, key, nkey, layout.ZoneBottom)
+		if !ok {
+			m.panes.Close(nkey)
+			return
+		}
+		m.tree = tree
+		m.setFocus(nkey)
+		m.layout()
+		saveLayout(m.tree, m.panes)
+	}
 }
 
 // currentTerminal returns the focused terminal instance, else the first

@@ -592,3 +592,55 @@ func TestStatusLineNamesFocusedExplorer(t *testing.T) {
 		t.Fatalf("status line must not show editor mode/cursor while the explorer is focused: %q", line)
 	}
 }
+
+// TestReservedCmdTSplitsSiblingTerminal guards #729: cmd+t inside a focused
+// dedicated terminal pane spawns and focuses a second terminal pane.
+func TestReservedCmdTSplitsSiblingTerminal(t *testing.T) {
+	m, key := openTestTerminal(t)
+	handled, out, _ := m.terminalReservedKey("cmd+t")
+	if !handled {
+		t.Fatal("cmd+t must be reserved while a terminal is focused (#729)")
+	}
+	m = out.(Model)
+	nkey := m.panes.Focused()
+	inst := m.panes.Get(nkey)
+	if nkey == key || inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("cmd+t must focus a fresh terminal pane, got %q", nkey)
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if old := m.panes.Get(key); old == nil || old.Kind() != pane.KindTerminal {
+		t.Fatal("the original terminal pane must survive")
+	}
+}
+
+// TestReservedCmdTAddsTabInEditorHostedTerminal: with a terminal tab active
+// in an editor pane (#573), cmd+t adds a sibling terminal tab to that pane.
+func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
+	m := sized(t, 100, 40)
+	out, _ := m.Update(TerminalNewTabMsg{})
+	m = out.(Model)
+	key := m.panes.Focused()
+	inst := m.panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindEditor || inst.ActiveTerminal() == nil {
+		t.Fatalf("terminal.newTab should host a terminal tab in the editor pane, got %q", key)
+	}
+	t.Cleanup(func() { inst.ActiveTerminal().Close() })
+	tabs := inst.TabCount()
+
+	handled, out, _ := m.terminalReservedKey("cmd+t")
+	if !handled {
+		t.Fatal("cmd+t must be reserved while the terminal tab is focused")
+	}
+	m = out.(Model)
+	if m.panes.Focused() != key {
+		t.Fatalf("sibling tab must keep the pane focused, got %q", m.panes.Focused())
+	}
+	nt := inst.ActiveTerminal()
+	if nt == nil {
+		t.Fatal("cmd+t must activate the fresh terminal tab")
+	}
+	t.Cleanup(func() { nt.Close() })
+	if got := inst.TabCount(); got != tabs+1 {
+		t.Fatalf("cmd+t must add a tab, %d -> %d", tabs, got)
+	}
+}
