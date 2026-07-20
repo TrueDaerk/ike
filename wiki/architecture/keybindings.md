@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -208,6 +208,10 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   old chord (`= ""`) in one write-back + reload; `u` unbinds, `r` resets to
   the preset (removes the override). The root model rebuilds its resolver on
   `ConfigReloadedMsg`, so edits re-resolve live.
+- A preset default that is no longer effective — its chord unbound or rebound
+  to another command — stays listed as an `(unbound)` row (#736): enter
+  captures a fresh chord for the command, `r` removes exactly that chord's
+  override (per-binding reset to the shipped default), `u` is a no-op.
 
 ## JetBrains keymap XML import (#677)
 

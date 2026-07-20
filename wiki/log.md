@@ -2,6 +2,11 @@
 
 ## 2026-07-20
 
+- Keymap page lists unbound defaults (#736): a preset default whose chord was
+  unbound or rebound away stays visible as an `(unbound)` row — enter captures
+  a new chord for the command, `r` is a per-binding reset restoring the shipped
+  default, `u` no-ops. Unbinding can no longer strand a command permanently.
+
 - Terminal forward word kill (#733): `option+forward-delete` in a focused
   terminal pane now translates to `ESC d` (readline `kill-word`), completing
   the #240 macOS editing-chord set.

@@ -64,26 +64,62 @@ func (k *KeymapPage) SetPalette(p *theme.Palette) { k.pal = p }
 // verbatim — filter text may contain the page's own action letters (u/r/j/k).
 func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering || k.importing }
 
+// keymapRow is one list entry: an effective binding, or a preset default that
+// is no longer effective (#736). An unbound row keeps the default chord so "r"
+// can remove exactly that override; enter captures a fresh chord for the
+// command.
+type keymapRow struct {
+	keymap.Binding
+	unbound bool
+}
+
 // table builds the effective binding table from the live config — the same
 // construction the app's resolver uses, so the page always shows reality.
 func (k *KeymapPage) table() *keymap.BindingTable {
+	c := config.Get()
+	return keymap.BuildTable(k.defaults(), c.Keymap.Bindings, keymap.GOOS)
+}
+
+// defaults returns the active preset's default bindings.
+func (k *KeymapPage) defaults() []keymap.Binding {
 	c := config.Get()
 	preset := strings.TrimSpace(c.Keymap.Preset)
 	if preset == "" {
 		preset = keymap.PresetJetBrains
 	}
-	return keymap.BuildTable(keymap.Defaults(preset), c.Keymap.Bindings, keymap.GOOS)
+	return keymap.Defaults(preset)
 }
 
-// rows returns the visible bindings, filtered and deterministically sorted
-// (context, then chord).
-func (k *KeymapPage) rows() []keymap.Binding {
+// rows returns the visible rows, filtered and deterministically sorted
+// (context, then chord): the effective bindings plus one unbound row per
+// preset default that is no longer effective — its chord was unbound or
+// rebound to another command (#736). The row keeps the command reachable for
+// rebinding and carries the default chord for a per-binding reset.
+func (k *KeymapPage) rows() []keymapRow {
 	all := k.table().Bindings()
-	needle := strings.ToLower(k.filter)
-	var out []keymap.Binding
+	have := make(map[string]bool, len(all))
 	for _, b := range all {
+		have[b.Command+"\x00"+b.Chord.String()] = true
+	}
+	rows := make([]keymapRow, 0, len(all))
+	for _, b := range all {
+		rows = append(rows, keymapRow{Binding: b})
+	}
+	for _, d := range k.defaults() {
+		d.Chord = keymap.NormalizeChord(d.Chord, keymap.GOOS)
+		if have[d.Command+"\x00"+d.Chord.String()] {
+			continue
+		}
+		rows = append(rows, keymapRow{Binding: d, unbound: true})
+	}
+	needle := strings.ToLower(k.filter)
+	var out []keymapRow
+	for _, b := range rows {
 		if needle != "" {
 			hay := strings.ToLower(b.Chord.String() + " " + b.Command + " " + b.Title + " " + string(b.Context))
+			if b.unbound {
+				hay += " unbound"
+			}
 			if !strings.Contains(hay, needle) {
 				continue
 			}
@@ -99,11 +135,11 @@ func (k *KeymapPage) rows() []keymap.Binding {
 	return out
 }
 
-// current returns the selected binding, if any.
-func (k *KeymapPage) current() (keymap.Binding, bool) {
+// current returns the selected row, if any.
+func (k *KeymapPage) current() (keymapRow, bool) {
 	rows := k.rows()
 	if k.sel < 0 || k.sel >= len(rows) {
-		return keymap.Binding{}, false
+		return keymapRow{}, false
 	}
 	return rows[k.sel], true
 }
@@ -134,8 +170,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			k.steps, k.conflict, k.warn, k.invalid = nil, "", "", ""
 		}
 	case "u":
-		// Unbind: an override chord→"" drops the binding on reload.
-		if b, ok := k.current(); ok {
+		// Unbind: an override chord→"" drops the binding on reload. An
+		// already-unbound row has nothing to drop.
+		if b, ok := k.current(); ok && !b.unbound {
 			return config.WriteAndReload(k.opts, config.UserScope, "keymap.bindings."+b.Chord.String(), "")
 		}
 	case "r":
@@ -305,7 +342,7 @@ func (k *KeymapPage) captured() keymap.Chord { return keymap.Chord{Steps: k.step
 
 // conflictWith reports the command a chord would collide with in the effective
 // table (same chord, overlapping context), ignoring the binding being rebound.
-func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymap.Binding) (string, bool) {
+func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (string, bool) {
 	cs := chord.String()
 	for _, b := range k.table().Bindings() {
 		if b.Chord.String() != cs {
@@ -322,10 +359,12 @@ func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymap.Binding) (stri
 	return "", false
 }
 
-// commitRebind writes the captured chord for the selected binding's command
+// commitRebind writes the captured chord for the selected row's command
 // and unbinds the old chord when it changed. Both writes land before one
-// reload, so the table re-resolves atomically.
-func (k *KeymapPage) commitRebind(b keymap.Binding) tea.Cmd {
+// reload, so the table re-resolves atomically. An unbound row (#736) has no
+// live chord to drop — its default chord's ""-override stays as-is (it is what
+// keeps that chord unbound) and the new chord simply binds the command again.
+func (k *KeymapPage) commitRebind(b keymapRow) tea.Cmd {
 	chord := k.captured()
 	k.capturing, k.conflict, k.steps = false, "", nil
 	if chord.Len() == 0 {
@@ -336,12 +375,13 @@ func (k *KeymapPage) commitRebind(b keymap.Binding) tea.Cmd {
 	oldKey := "keymap.bindings." + b.Chord.String()
 	command := b.Command
 	sameChord := chord.Equal(b.Chord)
+	unbound := b.unbound
 	return func() tea.Msg {
 		var diags []config.Diagnostic
 		if err := config.WriteKey(opts, config.UserScope, newKey, command); err != nil {
 			diags = append(diags, config.Diagnostic{Field: newKey, Message: err.Error()})
 		}
-		if !sameChord {
+		if !sameChord && !unbound {
 			if err := config.WriteKey(opts, config.UserScope, oldKey, ""); err != nil {
 				diags = append(diags, config.Diagnostic{Field: oldKey, Message: err.Error()})
 			}
@@ -457,9 +497,12 @@ func (k *KeymapPage) Wheel(delta int) {
 }
 
 // renderRow renders one binding line.
-func (k *KeymapPage) renderRow(b keymap.Binding, selected bool, w int) string {
+func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	pal := k.theme()
 	chord := b.Chord.String()
+	if b.unbound {
+		chord = "(unbound)"
+	}
 	if selected && k.capturing {
 		if len(k.steps) > 0 {
 			chord = k.captured().String() + "…"
@@ -494,7 +537,7 @@ func (k *KeymapPage) renderRow(b keymap.Binding, selected bool, w int) string {
 
 // detailLine names the capture status / warning / hint under the selection,
 // as text + style (wrapped by the caller, #553).
-func (k *KeymapPage) detailLine(b keymap.Binding) footerLine {
+func (k *KeymapPage) detailLine(b keymapRow) footerLine {
 	pal := k.theme()
 	switch {
 	case k.conflict != "":
@@ -510,6 +553,11 @@ func (k *KeymapPage) detailLine(b keymap.Binding) footerLine {
 		return footerLine{
 			text:  "   " + k.importNote + " — " + b.Command + " · enter rebind · u unbind · r reset · i import",
 			style: lipgloss.NewStyle().Foreground(pal.Info),
+		}
+	case b.unbound:
+		return footerLine{
+			text:  "   " + b.Command + " — unbound (default " + b.Chord.String() + ") · enter set binding · r reset to preset",
+			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	default:
 		return footerLine{
