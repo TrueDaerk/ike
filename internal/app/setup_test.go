@@ -107,6 +107,7 @@ func TestThemePickEscRestores(t *testing.T) {
 func TestSetupFlowChainsLSPAndToolchain(t *testing.T) {
 	onboardLang(t, "setuplang")
 	toolchainLang(t, "setuptool", "/usr/bin/setuptool")
+	catalogStub(t, nil, stubEntry("chaintool"))
 	// Not a first run: lsp.onboarded is already set, so the flow's LSP step
 	// must force-open the dialog past the gate.
 	dir := t.TempDir()
@@ -143,8 +144,14 @@ func TestSetupFlowChainsLSPAndToolchain(t *testing.T) {
 	}
 	tm2, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = tm2.(Model)
-	if m.toolchainInfoOpen() || m.shell.IsOpen() || len(m.setupQueue) != 0 {
-		t.Fatal("enter must end the setup flow")
+	if !m.toolSetupOpen() {
+		t.Fatal("step 4 must be the tool-pane setup dialog (#751–#753)")
+	}
+	// esc skips the tools step and ends the flow.
+	tm2, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = tm2.(Model)
+	if m.toolSetupOpen() || m.shell.IsOpen() || len(m.setupQueue) != 0 {
+		t.Fatal("esc must end the setup flow")
 	}
 }
 

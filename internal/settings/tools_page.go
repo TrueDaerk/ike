@@ -9,11 +9,14 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/theme"
+	"ike/internal/toolcatalog"
 )
 
 // tools_page.go is the [[tools.custom]] list editor (#755): a custom settings
 // page managing the custom TUI tool panes (#741) from the UI. The list shows
-// the configured entries; "a" adds, enter edits, "d" deletes. Edits go
+// the configured entries; "a" adds, enter edits, "d" deletes, "s" opens the
+// curated suggestions (#759) — common TUIs from the tool catalog, added with
+// one keypress and installed when their binary is missing. Edits go
 // through the write-back layer at user scope and reload through the normal
 // pipeline, so the tool.<name> palette commands re-shape live.
 
@@ -39,6 +42,10 @@ type ToolsPage struct {
 	field   int
 	form    [toolFieldCount]string
 
+	// The suggestion picker (#759): catalog entries not yet configured.
+	suggesting bool
+	sugSel     int
+
 	listH int // list-window height of the last render (mouse hit-testing)
 }
 
@@ -51,8 +58,9 @@ func NewToolsPage(opts config.Options) *ToolsPage {
 func (t *ToolsPage) SetPalette(p *theme.Palette) { t.pal = p }
 
 // Capturing implements PageModel: while the form is open every key is field
-// text — names may contain the page's own action letters (a/d/j/k).
-func (t *ToolsPage) Capturing() bool { return t.editing }
+// text — names may contain the page's own action letters (a/d/j/k) — and the
+// suggestion picker owns esc/enter the same way.
+func (t *ToolsPage) Capturing() bool { return t.editing || t.suggesting }
 
 // entries returns the configured tools from the live config.
 func (t *ToolsPage) entries() []config.ToolEntry {
@@ -63,10 +71,31 @@ func (t *ToolsPage) entries() []config.ToolEntry {
 	return c.Tools.Custom
 }
 
+// suggestionCatalog lists the offerable catalog entries; a seam for tests.
+var suggestionCatalog = toolcatalog.Offered
+
+// suggestions returns the catalog entries not yet configured.
+func (t *ToolsPage) suggestions() []toolcatalog.Entry {
+	configured := map[string]bool{}
+	for _, e := range t.entries() {
+		configured[e.Name] = true
+	}
+	var out []toolcatalog.Entry
+	for _, e := range suggestionCatalog() {
+		if !configured[e.Name] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // Update implements PageModel.
 func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.editing {
 		return t.updateForm(key)
+	}
+	if t.suggesting {
+		return t.updateSuggest(key)
 	}
 	switch key.String() {
 	case "up", "k":
@@ -87,8 +116,60 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if t.sel >= 0 && t.sel < len(t.entries()) {
 			return t.deleteEntry(t.sel)
 		}
+	case "s":
+		if len(t.suggestions()) == 0 {
+			t.note = "no suggestions — every catalog tool is already configured"
+			return nil
+		}
+		t.suggesting, t.sugSel, t.note = true, 0, ""
 	}
 	return nil
+}
+
+// updateSuggest handles keys while the suggestion picker is open: j/k move,
+// enter adds the highlighted tool (writing the config entry and installing
+// the binary when missing), esc returns to the list.
+func (t *ToolsPage) updateSuggest(key tea.KeyPressMsg) tea.Cmd {
+	sugs := t.suggestions()
+	switch key.String() {
+	case "up", "k":
+		if t.sugSel > 0 {
+			t.sugSel--
+		}
+	case "down", "j":
+		if t.sugSel < len(sugs)-1 {
+			t.sugSel++
+		}
+	case "enter":
+		if t.sugSel < 0 || t.sugSel >= len(sugs) {
+			return nil
+		}
+		return t.addSuggestion(sugs[t.sugSel])
+	case "esc":
+		t.suggesting = false
+	}
+	return nil
+}
+
+// addSuggestion writes the catalog entry into tools.custom and kicks the
+// install when the binary is missing; the install result surfaces as a toast
+// (toolcatalog.InstallResultMsg). The picker closes — the new entry appears
+// in the list as soon as the reload lands.
+func (t *ToolsPage) addSuggestion(e toolcatalog.Entry) tea.Cmd {
+	entries := append([]config.ToolEntry(nil), t.entries()...)
+	entries = append(entries, config.ToolEntry{
+		Name:      e.Name,
+		Command:   e.Command,
+		Args:      e.Args,
+		Placement: e.Placement,
+	})
+	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	t.suggesting = false
+	write := t.writeEntries(entries)
+	if e.Installed() {
+		return write
+	}
+	return tea.Batch(write, toolcatalog.Install(e))
 }
 
 // openForm opens the add (idx -1) or edit form, seeding the fields.
@@ -223,6 +304,9 @@ func (t *ToolsPage) theme() *theme.Palette {
 
 // View implements PageModel.
 func (t *ToolsPage) View(w, h int) string {
+	if t.suggesting {
+		return t.viewSuggestions(w, h)
+	}
 	pal := t.theme()
 	head := " name · command · placement   (custom TUI tool panes, #741)"
 	entries := t.entries()
@@ -242,14 +326,52 @@ func (t *ToolsPage) View(w, h int) string {
 	if t.editing {
 		footer = t.formFooter(w)
 	} else {
-		footer = wrapFooter([]footerLine{{
-			text:  "   a add · enter edit · d delete — each tool is a tool.<name> palette command",
-			style: lipgloss.NewStyle().Foreground(pal.Secondary),
-		}}, w, 2)
+		hint := "   a add · enter edit · d delete · s suggestions — each tool is a tool.<name> palette command"
+		lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
+		if t.note != "" {
+			lines = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines...)
+		}
+		footer = wrapFooter(lines, w, 3)
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
 	t.listH = h - 1 - len(footer)
 	return headLine + "\n" + pinFooter(list, footer, t.sel, t.sel, h-1, &t.off)
+}
+
+// viewSuggestions renders the suggestion picker (#759): the catalog entries
+// not yet configured, each with its install state.
+func (t *ToolsPage) viewSuggestions(w, h int) string {
+	pal := t.theme()
+	head := lipgloss.NewStyle().Foreground(pal.Secondary).
+		Render(" suggested tools — enter adds the entry and installs a missing binary")
+	sugs := t.suggestions()
+	var list []string
+	for i, e := range sugs {
+		state := "installs via …"
+		switch {
+		case e.Installed():
+			state = "installed"
+		default:
+			if argv, ok := e.InstallArgv(); ok {
+				state = "installs via " + strings.Join(argv, " ")
+			} else {
+				state = "no installer found"
+			}
+		}
+		line := " " + pad(e.Name, 14) + pad(e.Description, 52) + state
+		style := lipgloss.NewStyle()
+		if i == t.sugSel {
+			style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+		}
+		list = append(list, style.Render(line))
+	}
+	footer := wrapFooter([]footerLine{{
+		text:  "   j/k move · enter add · esc back",
+		style: lipgloss.NewStyle().Foreground(pal.Secondary),
+	}}, w, 2)
+	t.listH = h - 1 - len(footer)
+	var off int
+	return head + "\n" + pinFooter(list, footer, t.sugSel, t.sugSel, h-1, &off)
 }
 
 // formFooter renders the add/edit form pinned under the list: one line per
@@ -302,8 +424,8 @@ func placementLabel(p string) string {
 // it, a press on the selected row opens the edit form (enter semantics); a
 // press while the form is open cancels it.
 func (t *ToolsPage) Click(_, y int) tea.Cmd {
-	if t.editing {
-		t.editing, t.note = false, ""
+	if t.editing || t.suggesting {
+		t.editing, t.suggesting, t.note = false, false, ""
 		return nil
 	}
 	row := y - 1
@@ -325,7 +447,7 @@ func (t *ToolsPage) Click(_, y int) tea.Cmd {
 // Wheel implements the optional PageWheeler seam: the list moves its
 // selection; inert while the form is open.
 func (t *ToolsPage) Wheel(delta int) {
-	if t.editing {
+	if t.editing || t.suggesting {
 		return
 	}
 	if n := len(t.entries()); n > 0 {

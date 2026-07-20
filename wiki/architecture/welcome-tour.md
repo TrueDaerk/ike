@@ -4,7 +4,7 @@ title: Welcome Tour
 description: Paged first-orientation walkthrough in the floating shell — five pages of entry keys, vim-mode basics, layout, tools, and customization, with resolver-first platform-normalized shortcuts and interactive try-it tasks; opened via the help.welcomeTour palette command.
 resource: internal/tour/tour.go
 tags: [architecture, onboarding, tour, help, overlay]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Welcome Tour
@@ -49,7 +49,8 @@ internal/app/
   tour.go     host: openTour / updateTour / closeTour / finishTour;
               ShowWelcomeTourMsg
   setup.go    post-tour setup flow (#713): theme picker + toolchain summary
-  commands.go registers help.welcomeTour
+  tools_setup.go tool-pane setup dialog (#751–#753), also via tools.setup
+  commands.go registers help.welcomeTour and tools.setup
 ```
 
 ## Post-tour setup flow (#713)
@@ -71,7 +72,23 @@ dialogs in the floating shell — `startSetupFlow`/`advanceSetup` in
 3. **Toolchain check** — a read-only summary: one row per language with a
    toolchain capability, showing the resolved interpreter
    (`lang.Interpreter`, explicit config beats detection) or `✗ not found`,
-   pointing at Settings → Toolchains; `enter`/`esc` ends the flow.
+   pointing at Settings → Toolchains; `enter`/`esc` advances the flow.
+4. **Tool-pane setup** (#751–#753, `internal/app/tools_setup.go`) — a
+   checkbox list of curated TUI tools from `internal/toolcatalog` (lazygit,
+   lazydocker, sqlit, k9s, htop, btop). Requirement-gated entries are hidden
+   when their gate binary is absent (lazydocker without `docker`, k9s
+   without `kubectl`); already-configured tools are not offered again — with
+   nothing left to offer the step is skipped. Already-installed tools start
+   checked (adding them is a pure config write), missing ones start
+   unchecked so an install is always explicit; each row shows its install
+   state (`installed` / `installs via <recipe>` / `no installer found`).
+   `enter` writes the checked entries into `[[tools.custom]]` at user scope
+   (the `tool.<name>` palette commands appear with the reload) and installs
+   missing binaries via the catalog recipes (first recipe whose installer is
+   on PATH; success re-verified against PATH, results toasted — a failed
+   install keeps the config entry). `esc` skips. Re-runnable any time via
+   the **`tools.setup`** palette command ("Set Up Tool Panes"); the Tools
+   settings page offers the same catalog under `s` (#759).
 
 Escaping the tour mid-way (esc/q) skips the flow entirely — on a first run
 the pending LSP onboarding then still opens as before.

@@ -2,6 +2,15 @@
 
 ## 2026-07-20
 
+- Tool-pane setup (#751–#753, #759): new curated catalog
+  `internal/toolcatalog` (lazygit, lazydocker, sqlit, k9s, htop, btop —
+  requirement gates, ordered install recipes with PATH re-verification). The
+  post-tour setup flow gains a fourth step (checkbox list; writes
+  `[[tools.custom]]`, installs missing binaries, results toasted),
+  re-runnable via the new `tools.setup` palette command; Settings → Tools
+  gains `s` suggestions adding a catalog tool with one keypress. Updated
+  `/architecture/welcome-tour.md` and `/architecture/tool-panes.md`.
+
 - Diagnostic details popup (#739): `lsp.diagnosticInfo` (default `ctrl+f1`)
   shows the caret line's diagnostics on the hover popup surface — severity
   header colored like the gutter, server attribution (`source · code`,

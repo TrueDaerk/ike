@@ -35,6 +35,35 @@ Writes go through the write-back layer at user scope (the whole list, the
 `project.history` pattern) and reload through the normal pipeline, so the
 `tool.<name>` commands re-shape live.
 
+## Curated tool catalog & setup (#751–#753, #759)
+
+`internal/toolcatalog` holds a curated list of common TUIs — lazygit,
+lazydocker, sqlit (Maxteabag/sqlit, binary from the `sqlit-tui` Python
+package), k9s, htop, btop — each with the `[[tools.custom]]` entry it maps
+to, an optional requirement gate (`Requires`: lazydocker needs `docker`, k9s
+needs `kubectl` on PATH to be offered) and ordered install recipes (plain
+argvs like the LSP recipes: brew, `go install`, pipx/uv). `InstallArgv` picks
+the first recipe whose installer is on PATH; `Install` runs it and
+re-verifies the binary resolves afterwards (exit 0 without the binary on
+PATH is a failure, the LSP #370 semantics), reporting a
+`toolcatalog.InstallResultMsg` that the app toasts.
+
+Two surfaces draw from the catalog:
+
+- **Post-tour setup step** (`internal/app/tools_setup.go`) — the last step of
+  the #713 setup flow and the `tools.setup` palette command ("Set Up Tool
+  Panes"): a checkbox list of the offered entries not yet configured; enter
+  writes the checked ones into `[[tools.custom]]` (user scope, palette
+  commands live immediately) and installs missing binaries; esc skips. See
+  the welcome-tour doc for the flow details.
+- **Settings → Tools suggestions** (#759) — `s` on the Tools page opens the
+  same catalog filtered to unconfigured entries with their install state;
+  enter adds the entry (write-back + reload) and installs the binary when
+  missing, esc returns to the list.
+
+A failed install keeps the written config entry — the tool works as soon as
+the binary is installed by hand.
+
 ## Commands & toggle semantics
 
 `toolCommands()` (`internal/app/tools.go`) builds one command per entry on
@@ -74,5 +103,6 @@ values follows the IDE theme:
 `BACKGROUND`, `FOREGROUND`, `ACCENT`, `SELECTION`, `BORDER`, `SUCCESS`,
 `WARNING`, `ERROR`, `INFO`.
 
-IKE never rewrites a tool's own config files; wiring the variables into e.g.
-a lazygit theme config is the setup-step follow-ups' job (#751–#753).
+IKE never rewrites a tool's own config files; the setup surfaces (#751–#753,
+#759) write only `[[tools.custom]]` entries and install binaries — wiring the
+variables into e.g. a lazygit theme config stays the user's choice.

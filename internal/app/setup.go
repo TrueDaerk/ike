@@ -14,12 +14,13 @@ import (
 // setup.go is the post-tour setup flow (#713): finishing the Welcome Tour
 // chains a queue of one-shot setup dialogs through the floating shell —
 // theme picker, LSP server picker (the onboarding dialog, force-opened
-// regardless of lsp.onboarded), and a read-only toolchain summary. Escaping
+// regardless of lsp.onboarded), a read-only toolchain summary, and the
+// tool-pane setup dialog (#751–#753, tools_setup.go). Escaping
 // the tour mid-way skips the flow; the first-run LSP onboarding then still
 // queues behind it as before (#658).
 
 // setupSteps is the flow order.
-var setupSteps = []string{"theme", "lsp", "toolchain"}
+var setupSteps = []string{"theme", "lsp", "toolchain", "tools"}
 
 // themePickState is the open theme-picker dialog: the registered theme
 // names, the cursor, and the theme active when the dialog opened (restored
@@ -68,6 +69,10 @@ func (m *Model) advanceSetup() {
 			}
 		case "toolchain":
 			if m.openToolchainInfo() {
+				return
+			}
+		case "tools":
+			if m.openToolSetup() {
 				return
 			}
 		}
