@@ -13,6 +13,7 @@ func defaults() *Config {
 	return &Config{
 		Editor: Editor{
 			AutoSave:               "focus",
+			AutoSaveIdleMs:         2000,
 			TabWidth:               4,
 			UseSpaces:              true,
 			LineNumbers:            true,

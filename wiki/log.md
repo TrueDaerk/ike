@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- Idle autosave (#731): editor.auto_save gains "idle" — a dirty titled
+  buffer saves itself after editor.auto_save_idle_ms of quiet, riding the
+  backup change seam; editor.md updated.
 - Palette and finder inputs are full single-line editors (#763): shared
   `internal/ui.EditKey` helper gives them a movable cursor (arrows, home/end,
   word jumps, word deletion, forward delete, insert-at-cursor);

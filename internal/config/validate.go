@@ -28,7 +28,7 @@ var (
 	sortModes   = map[string]bool{"name": true, "type": true, "size": true, "modified": true}
 	logLevels   = map[string]bool{"error": true, "warn": true, "info": true, "debug": true}
 	reloadModes = map[string]bool{"clean": true, "never": true}
-	saveModes   = map[string]bool{"off": true, "focus": true}
+	saveModes   = map[string]bool{"off": true, "focus": true, "idle": true}
 	severities  = map[string]bool{"info": true, "warn": true, "error": true}
 	// whitespaceModes are the editor.show_whitespace values (#64).
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
@@ -72,6 +72,7 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "explorer.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Explorer.Sort)})
 		c.Explorer.Sort = "name"
 	}
+	clampMin("editor.auto_save_idle_ms", &c.Editor.AutoSaveIdleMs, 100)
 	clampMin("backup.debounce_ms", &c.Backup.DebounceMs, 100)
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)

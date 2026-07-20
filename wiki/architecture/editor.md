@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Editor
@@ -547,10 +547,10 @@ annotation at the end of the cursor line — "author, when · summary", or
 change, and vcs refresh, so marker positions may briefly lag unsaved edits.
 See [VCS / Git Integration](/architecture/vcs.md).
 
-## Auto-save (#174)
+## Auto-save (#174, #731)
 
-With `editor.auto_save = focus` (the default; `off` disables, an `idle` mode
-is reserved for #54), a dirty buffer saves itself when focus leaves its pane
+With `editor.auto_save = focus` (the default; `off` disables), a dirty
+buffer saves itself when focus leaves its pane
 — every focus transition funnels through the root model's `setFocus`, so one
 hook covers Ctrl+arrows, the pane switcher, mouse clicks and the explorer
 toggle — and when its document is about to be replaced by opening another
@@ -560,6 +560,18 @@ history is untouched** — returning to the pane, undo/redo work as usual, and
 an undo past the saved state re-dirties the buffer so the next blur persists
 it. A **stale** buffer is never auto-saved: it stays dirty for the explicit-
 save conflict prompt above. Cmd+S remains the explicit save.
+
+`editor.auto_save = idle` (#731) is a superset of `focus`: additionally, a
+dirty **titled** buffer writes itself after staying quiet for
+`editor.auto_save_idle_ms` (default 2000, clamped ≥ 100). The idle side rides
+the same change seam and debouncer shape as the crash-recovery snapshots
+(`internal/app/autosave_idle.go` mirrors `backup.go`): every `SyncMsg` from a
+dirty buffer (re)arms its deadline, a clean one cancels it, and a single
+armed `tea.Tick` saves the buffers that went quiet — through `Autosave()`, so
+all the guarantees above (EventSave, untouched undo, stale-skip) hold and
+the modified indicator clears. Untitled buffers are never idle-saved; crash
+recovery covers them. Config edits apply live: an interval change re-arms,
+leaving idle mode drops pending marks.
 
 ## Line endings & encodings (#66)
 

@@ -89,6 +89,7 @@ func (c *Config) Flat() map[string]string {
 	put := func(k string, v any) { m[k] = fmt.Sprint(v) }
 
 	put("editor.auto_save", c.Editor.AutoSave)
+	put("editor.auto_save_idle_ms", c.Editor.AutoSaveIdleMs)
 	put("editor.tab_width", c.Editor.TabWidth)
 	put("editor.use_spaces", c.Editor.UseSpaces)
 	put("editor.line_numbers", c.Editor.LineNumbers)
