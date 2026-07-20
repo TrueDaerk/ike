@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- cmd+t in a focused terminal spawns a sibling terminal (#729): sibling tab
+  in an editor-hosted terminal pane, split pane below a dedicated one;
+  reserved-set entry, global cmd+t binding untouched. terminal.md updated.
 - Untitled buffers save as new files (#730): saving a pathless buffer opens
   a save-as prompt; accepting writes the file and binds the tab (watcher,
   MRU, highlighting, hooks) like a disk open. editor.md updated.
