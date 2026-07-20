@@ -67,6 +67,15 @@ func usageFile() string {
 	return filepath.Join(".ike", "cmdusage.json")
 }
 
+// winSizeFile returns the path of the per-project floating-window size store
+// (#774), following the layout store's IKE_CONFIG_DIR redirection seam.
+func winSizeFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "winsize.json")
+	}
+	return filepath.Join(".ike", "winsize.json")
+}
+
 // loadLayout reads the saved tree and identity table. It returns ok=false on any
 // missing, unreadable, or structurally malformed file so the caller falls back
 // to the default layout. Identity validation (explorer singleton, well-formed

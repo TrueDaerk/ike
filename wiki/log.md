@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Resizable floating windows (#774): ctrl+shift+arrows resize the settings
+  panel, the centered palette (width + visible rows) and the floating shell;
+  deltas persist per window kind in .ike/winsize.json and re-clamp to the
+  terminal. floating-shell.md, settings-ui.md, command-palette.md updated.
 - Most-used command ranking in the palette (#773): palette-window selections
   bump a persisted per-project counter (.ike/cmdusage.json); equal-score
   results rank most-used first, keybind invocations never count.

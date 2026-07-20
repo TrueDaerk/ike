@@ -63,6 +63,7 @@ type Palette struct {
 	anchorW          int
 
 	width, height int
+	sizes         *ui.WinSizes // optional persisted resize deltas (#774)
 	maxResults    int
 	accent        string         // config override; "" follows the theme
 	pal           *theme.Palette // active theme (Roadmap 0110); nil = default
@@ -181,12 +182,33 @@ func (p *Palette) Close() { p.open = false }
 // SetSize records the terminal size used to size the centered box.
 func (p *Palette) SetSize(width, height int) { p.width, p.height = width, height }
 
+// SetSizeStore installs the persisted resize deltas (#774): ctrl+shift+arrows
+// widen/narrow the centered box and grow/shrink the visible result rows.
+func (p *Palette) SetSizeStore(s *ui.WinSizes) { p.sizes = s }
+
+// winKind is the persistence key for the palette window.
+const winKind = "palette"
+
+// visibleRows is the effective result-window height: the configured
+// maxResults plus the user's stored resize delta, floored at 3 (#774).
+func (p *Palette) visibleRows() int {
+	_, dh := p.sizes.Get(winKind)
+	return ui.ClampDelta(p.maxResults, dh, 3, 99)
+}
+
 // Update handles a key while the palette is open and returns a command for the
 // activated item, if any. esc closes; enter activates the selection and closes;
 // up/down/ctrl+p/ctrl+n navigate; backspace/ctrl+u edit; typed runes extend the
 // query. The root model calls this only while IsOpen, and the palette consumes
 // every key (the overlay is modal).
 func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
+	// Resize chords (#774) first — the plain-arrow cases below match on Code
+	// alone and would swallow the modified presses.
+	if ddw, ddh, ok := ui.ResizeDelta(msg.String()); ok && p.sizes != nil {
+		p.sizes.Adjust(winKind, ddw, ddh)
+		p.scrollToSelected()
+		return nil
+	}
 	switch {
 	case msg.Code == tea.KeyEscape:
 		p.Close()
@@ -291,8 +313,8 @@ func (p *Palette) scrollToSelected() {
 	if p.selected < p.top {
 		p.top = p.selected
 	}
-	if p.selected >= p.top+p.maxResults {
-		p.top = p.selected - p.maxResults + 1
+	if p.selected >= p.top+p.visibleRows() {
+		p.top = p.selected - p.visibleRows() + 1
 	}
 }
 
@@ -359,7 +381,7 @@ func (p *Palette) list(width int) string {
 	if len(p.items) == 0 {
 		return lipgloss.NewStyle().Foreground(p.theme().Border).Render("no results")
 	}
-	end := p.top + p.maxResults
+	end := p.top + p.visibleRows()
 	if end > len(p.items) {
 		end = len(p.items)
 	}
@@ -451,6 +473,10 @@ func (p *Palette) boxWidth() int {
 		w, floor, room = p.anchorW, minAnchorWidth, p.width-p.anchorX
 	} else {
 		w, floor, room = p.width/2, minBoxWidth, p.width-4
+		// User resize (#774): the stored width delta widens/narrows the
+		// centered box; the floor/room clamps below re-bound it live.
+		dw, _ := p.sizes.Get(winKind)
+		w += dw
 	}
 	if w < floor {
 		w = floor

@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -122,6 +122,15 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 - **Registry seam.** Plugins contribute pages via
   `Capabilities.SettingsPages`; the app appends `reg.SettingsPages()` to the
   built-in `settings.BasePages()` (the toolchain page #94 uses this).
+
+## Resizing (#774)
+
+`ctrl+shift+arrows` resize the open panel (width ±4, height ±1) unless the
+panel is capturing keys verbatim (`Model.Capturing()`: an edit/pick/filter
+input or a custom page's chord capture). The root model owns the chord: it
+adjusts the shared `ui.WinSizes` store (kind `"settings"`, persisted in the
+per-project `winsize.json`) and re-derives `settingsSize()`, which clamps
+base+delta into the live terminal bounds.
 
 ## Page catalog (#92)
 
