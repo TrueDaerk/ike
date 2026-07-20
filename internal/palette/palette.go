@@ -64,6 +64,12 @@ type Palette struct {
 
 	width, height int
 	sizes         *ui.WinSizes // optional persisted resize deltas (#774)
+
+	// The optional left column of a SideMode (#778): its items for the
+	// current query, its selection, and whether it holds the column focus.
+	sideItems []Item
+	sideSel   int
+	sideFocus bool
 	maxResults    int
 	accent        string         // config override; "" follows the theme
 	pal           *theme.Palette // active theme (Roadmap 0110); nil = default
@@ -169,6 +175,18 @@ func (p *Palette) reset(cx Context) {
 	p.selected = 0
 	p.top = 0
 	p.cx = cx
+	p.sideFocus = false
+	p.sideSel = 0
+	p.sideItems = nil
+}
+
+// side returns the locked mode's SideMode extension, nil when the current
+// open has no left column (#778).
+func (p *Palette) side() SideMode {
+	if s, ok := p.locked.(SideMode); ok && !p.anchored {
+		return s
+	}
+	return nil
 }
 
 // Anchored reports whether the box should be placed at its anchor rather than
@@ -208,6 +226,38 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		p.sizes.Adjust(winKind, ddw, ddh)
 		p.scrollToSelected()
 		return nil
+	}
+	// Column focus for a SideMode open (#778): tab toggles between the left
+	// (projects) and right (files) columns; on an empty query the plain
+	// arrows switch too (with text present they stay cursor keys).
+	if len(p.sideItems) > 0 {
+		switch {
+		case msg.Code == tea.KeyTab && msg.Mod == 0:
+			p.sideFocus = !p.sideFocus
+			return nil
+		case msg.Code == tea.KeyLeft && msg.Mod == 0 && p.query == "":
+			p.sideFocus = true
+			return nil
+		case msg.Code == tea.KeyRight && msg.Mod == 0 && p.query == "":
+			p.sideFocus = false
+			return nil
+		}
+		if p.sideFocus {
+			switch {
+			case msg.Code == tea.KeyUp, msg.Code == 'p' && msg.Mod == tea.ModCtrl:
+				if p.sideSel > 0 {
+					p.sideSel--
+				}
+				return nil
+			case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
+				if p.sideSel < len(p.sideItems)-1 {
+					p.sideSel++
+				}
+				return nil
+			case msg.Code == tea.KeyEnter:
+				return p.activateSide()
+			}
+		}
 	}
 	switch {
 	case msg.Code == tea.KeyEscape:
@@ -265,6 +315,20 @@ func (p *Palette) activate() tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
+// activateSide emits the selected left-column item's message and closes the
+// palette (#778). With no side selection it is a no-op.
+func (p *Palette) activateSide() tea.Cmd {
+	if p.sideSel < 0 || p.sideSel >= len(p.sideItems) {
+		return nil
+	}
+	msg := p.sideItems[p.sideSel].Msg
+	p.Close()
+	if msg == nil {
+		return nil
+	}
+	return func() tea.Msg { return msg }
+}
+
 // move changes the selection by delta, clamped, and scrolls the visible window.
 func (p *Palette) move(delta int) {
 	if len(p.items) == 0 {
@@ -306,6 +370,17 @@ func (p *Palette) recompute() {
 	}
 	p.selected = 0
 	p.top = 0
+	if s := p.side(); s != nil {
+		p.sideItems = s.SideResults(body, p.cx)
+	} else {
+		p.sideItems = nil
+	}
+	if p.sideSel >= len(p.sideItems) {
+		p.sideSel = 0
+	}
+	if len(p.sideItems) == 0 {
+		p.sideFocus = false
+	}
 }
 
 // scrollToSelected keeps the selected row within the visible window.
@@ -335,7 +410,32 @@ func (p *Palette) View() string {
 
 	prompt := dim.Render(p.promptGlyph()) + " " + p.queryView(inner-2)
 	sep := dim.Render(strings.Repeat("─", inner))
-	body := lipgloss.JoinVertical(lipgloss.Left, prompt, sep, p.list(inner))
+	rows := p.list(inner)
+	// A SideMode open (#778) renders the left column (e.g. Recent Projects)
+	// beside the main list, separated by a dim rule.
+	if len(p.sideItems) > 0 {
+		sideW := inner / 3
+		if sideW < 18 {
+			sideW = 18
+		}
+		if sideW > 34 {
+			sideW = 34
+		}
+		mainW := inner - sideW - 3
+		if mainW < 10 {
+			mainW = 10
+		}
+		side := p.sideView(sideW)
+		main := p.list(mainW)
+		h := lipgloss.Height(side)
+		if mh := lipgloss.Height(main); mh > h {
+			h = mh
+		}
+		div := strings.TrimRight(strings.Repeat(dim.Render("│")+"\n", h), "\n")
+		rows = lipgloss.JoinHorizontal(lipgloss.Top,
+			lipgloss.NewStyle().Width(sideW).Render(side), " ", div, " ", main)
+	}
+	body := lipgloss.JoinVertical(lipgloss.Left, prompt, sep, rows)
 
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -390,6 +490,46 @@ func (p *Palette) list(width int) string {
 		rows = append(rows, p.row(p.items[i], i == p.selected, width))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
+}
+
+// sideView renders the left column (#778): the SideMode's dim heading — the
+// accent color marks which column holds the focus — and its items, capped at
+// the visible-row window.
+func (p *Palette) sideView(width int) string {
+	s := p.side()
+	if s == nil {
+		return ""
+	}
+	head := lipgloss.NewStyle().Foreground(p.theme().Border)
+	if p.sideFocus {
+		head = lipgloss.NewStyle().Foreground(p.accentColor()).Bold(true)
+	}
+	lines := []string{head.Render(s.SideTitle())}
+	end := len(p.sideItems)
+	if max := p.visibleRows() - 1; end > max {
+		end = max
+	}
+	for i := 0; i < end; i++ {
+		lines = append(lines, p.sideRow(p.sideItems[i], p.sideFocus && i == p.sideSel, width))
+	}
+	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// sideRow renders one left-column line: marker + highlighted title, truncated
+// to the column width.
+func (p *Palette) sideRow(it Item, selected bool, width int) string {
+	const markerW = 2
+	marker := "  "
+	if selected {
+		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
+	}
+	title, _ := highlight(it.Title, it.Spans, p.accentColor(), width-markerW)
+	line := marker + title
+	style := lipgloss.NewStyle().MaxWidth(width)
+	if selected {
+		style = style.Background(p.theme().Panel).Width(width)
+	}
+	return style.Render(line)
 }
 
 // row renders a single result line: a selection marker, the highlighted title on
