@@ -10,7 +10,6 @@ import (
 	"ike/internal/config"
 	"ike/internal/editor"
 	"ike/internal/host"
-	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/ui"
@@ -24,17 +23,15 @@ import (
 // record the open into the recent-projects history.
 
 // handleSwitchProject routes a validated switch request: a root equal to the
-// current one is a friendly no-op, dirty buffers gate the switch behind the
-// unsaved-changes prompt, otherwise the re-root runs immediately.
+// current one is a friendly no-op, otherwise the seamless switch runs
+// immediately. Since #777 dirty buffers no longer gate the switch — the whole
+// workspace (buffers included) parks in the background and comes back on the
+// next switch; the unsaved-changes prompt returns as the M4 eviction guard
+// (#780).
 func (m Model) handleSwitchProject(msg project.SwitchProjectMsg) (tea.Model, tea.Cmd) {
 	if cwd, err := os.Getwd(); err == nil && cwd == msg.Root {
 		m.host.Notify(host.Info, "already in "+msg.Root)
 		return m, nil
-	}
-	if m.dirtyEditorCount() > 0 {
-		// Emit the guard msg rather than opening the prompt inline, keeping the
-		// transaction observable (and testable) step by step.
-		return m, func() tea.Msg { return project.UnsavedChangesMsg{Root: msg.Root} }
 	}
 	return m.performSwitch(msg.Root)
 }
@@ -134,60 +131,18 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 	return cmds
 }
 
-// adoptTerminals carries the old model's live terminal sessions across a
-// project switch (#96): existing shells keep running, split below the new
-// workspace's active editor and titled with their origin root. Dead sessions
-// are closed for good. When the target workspace's layout restore already
-// recreated a terminal under the same key (a fresh placeholder shell for this
-// very session), the live session takes over that pane instead of gaining a
-// second leaf — a duplicate key in the tree would render the same instance
-// twice (#320).
-func (m *Model) adoptTerminals(old *Model) {
-	for _, key := range old.activeWS().Panes.Keys() {
-		inst := old.activeWS().Panes.Get(key)
-		if inst == nil {
-			continue
-		}
-		if inst.Kind() != pane.KindTerminal {
-			// Terminal tabs (#573) are session-local: the new workspace does
-			// not carry them over, so their shells end with the switch.
-			inst.CloseTerminalTabs()
-			continue
-		}
-		if !inst.Terminal().Running() {
-			inst.Terminal().Close()
-			continue
-		}
-		if m.activeWS().Panes.AdoptTerminal(inst) {
-			continue // took over the restored placeholder's leaf (#320)
-		}
-		if !m.activeWS().Panes.Has(inst.Key()) {
-			inst.Terminal().Close() // key collision with a non-terminal pane
-			continue
-		}
-		target := m.activeEditorKey()
-		if target == "" {
-			target = m.activeWS().Panes.Focused()
-		}
-		if target == "" || m.activeWS().Tree == nil {
-			m.activeWS().Panes.Close(inst.Key())
-			continue
-		}
-		if tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, inst.Key(), layout.ZoneBottom); ok {
-			m.activeWS().Tree = tree
-		} else {
-			m.activeWS().Panes.Close(inst.Key())
-		}
-	}
-	m.layout()
-}
-
-// performSwitch re-roots the IDE at root, which must already be validated and
-// absolute. The old project's session and layout are persisted first, then the
-// process chdirs and the model is rebuilt through the fresh-start path — config
-// discovery, theme, panes, layout/session restore and the watcher all resolve
-// against the new root — with the live host carried over so the program sender
-// and the LSP bridge stay wired. Nothing is mutated when the chdir fails.
+// performSwitch is the seamless project switch (#777). The old project's
+// session and layout persist first, then the process chdirs and the live
+// workspace — panes, split tree, running terminals, run panes and the debug
+// session (stashed in Aux) — parks in the manager's background set instead of
+// being torn down (the old #96 terminal adoption is retired: terminals now
+// stay with their project and keep running in the background). The model is
+// rebuilt through the fresh-start path with the manager carried over: a
+// previously parked workspace for the target root resumes exactly as left,
+// a first visit builds panes from the saved layout as before. Everything not
+// part of the workspace unit (config layer, theme, watcher, MRU,
+// breakpoints) re-resolves against the new root. Nothing is mutated when the
+// chdir fails.
 func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	saveSession(m.snapshotSession())
 	if m.activeWS().Tree != nil {
@@ -199,9 +154,15 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	invalidateCwd() // the render hot path caches the working directory (#608)
 	m.watcher.Stop()
 
+	// Park the live workspace under its root; the debug session rides along
+	// in Aux (its bridge goroutines keep running while parked, though events
+	// arriving in the background are not applied until re-attach).
+	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen}
+	m.ws.Park()
+
 	cfg, _ := config.Load(config.Discover("."))
 	config.Set(cfg)
-	fresh := newWithHost(m.reg, host.FromConfig(cfg), m.host)
+	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
 	fresh.StartWatcher(".")
 
 	// Size the fresh model like the first WindowSizeMsg would, then run its
@@ -209,9 +170,6 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// past every failure point) and announce the switch.
 	sizedTM, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	sized := sizedTM.(Model)
-	// Live terminal sessions survive the switch (#96): adopt them into the
-	// freshly laid-out workspace, titled with their origin root.
-	sized.adoptTerminals(&m)
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,

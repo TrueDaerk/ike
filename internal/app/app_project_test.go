@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/registry"
 )
@@ -122,10 +123,10 @@ func TestSwitchFailedSurfacesError(t *testing.T) {
 	}
 }
 
-// dirtySwitchFixture builds a model in src with a dirty buffer and a pending
-// switch to dst, stopped at the open unsaved-changes prompt.
-func dirtySwitchFixture(t *testing.T) (Model, string, string) {
-	t.Helper()
+// TestSwitchWithDirtyBufferIsSeamless (#777): dirty buffers no longer gate
+// the switch — the workspace (buffers included) parks in the background, the
+// file stays unwritten, and switching back resumes the edit in place.
+func TestSwitchWithDirtyBufferIsSeamless(t *testing.T) {
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -143,123 +144,91 @@ func dirtySwitchFixture(t *testing.T) (Model, string, string) {
 
 	out, cmd := m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
+	if !sameDir(t, cwd(t), dst) {
+		t.Fatalf("dirty switch must proceed seamlessly, cwd = %s", cwd(t))
+	}
+	if m.switchPromptOpen() {
+		t.Fatal("seamless switch must not open the unsaved-changes prompt")
+	}
 	if cmd == nil {
-		t.Fatal("dirty buffers should gate the switch")
-	}
-	guard, ok := cmd().(project.UnsavedChangesMsg)
-	if !ok {
-		t.Fatalf("expected UnsavedChangesMsg, got %#v", cmd())
-	}
-	out, _ = m.Update(guard)
-	m = out.(Model)
-	if !m.switchPromptOpen() {
-		t.Fatal("guard should open the prompt")
-	}
-	return m, file, dst
-}
-
-// TestSwitchUnsavedCancelStays: esc keeps the current project untouched.
-func TestSwitchUnsavedCancelStays(t *testing.T) {
-	m, file, _ := dirtySwitchFixture(t)
-	src := filepath.Dir(file)
-
-	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	m = out.(Model)
-	if m.switchPromptOpen() || m.switchPending != "" {
-		t.Fatal("esc should cancel the pending switch")
-	}
-	if !sameDir(t, cwd(t), src) {
-		t.Fatalf("cancel must stay in the current project, cwd = %s", cwd(t))
+		t.Fatal("switch should return the follow-up batch")
 	}
 	if data, _ := os.ReadFile(file); string(data) != "one\n" {
-		t.Fatalf("cancel must not write the buffer, file = %q", data)
+		t.Fatalf("parking must not write the buffer, file = %q", data)
 	}
-}
 
-// TestSwitchUnsavedDiscardSwitches: d switches without writing the buffer.
-func TestSwitchUnsavedDiscardSwitches(t *testing.T) {
-	m, file, dst := dirtySwitchFixture(t)
-
-	out, _ := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	// Switching back resumes the parked workspace: the edit is still there,
+	// still unsaved.
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src})
 	m = out.(Model)
-	if !sameDir(t, cwd(t), dst) {
-		t.Fatalf("discard should switch, cwd = %s", cwd(t))
+	found := false
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			ed := inst.TabEditor(i)
+			if ed == nil || ed.Path() != file {
+				continue
+			}
+			found = true
+			if !ed.Dirty() {
+				t.Fatal("resumed buffer must still be dirty")
+			}
+			if !strings.HasPrefix(ed.Text(), "Xone") {
+				t.Fatalf("resumed buffer lost the edit, text = %q", ed.Text())
+			}
+		}
 	}
-	if data, _ := os.ReadFile(file); string(data) != "one\n" {
-		t.Fatalf("discard must not write the buffer, file = %q", data)
-	}
-	if !sameDir(t, m.explorer().Root(), dst) {
-		t.Fatalf("explorer should re-root, got %s", m.explorer().Root())
-	}
-}
-
-// TestSwitchUnsavedSaveAllSwitches: s writes every dirty buffer, then switches.
-func TestSwitchUnsavedSaveAllSwitches(t *testing.T) {
-	m, file, dst := dirtySwitchFixture(t)
-
-	out, _ := m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
-	m = out.(Model)
-	if !sameDir(t, cwd(t), dst) {
-		t.Fatalf("save-all should switch, cwd = %s", cwd(t))
-	}
-	data, err := os.ReadFile(file)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(string(data), "Xone") {
-		t.Fatalf("save-all should write the dirty buffer first, file = %q", data)
+	if !found {
+		t.Fatal("resumed workspace must still hold the dirty buffer")
 	}
 }
 
-// TestSwitchOtherKeysSwallowed: the modal guard consumes unrelated keys.
-func TestSwitchOtherKeysSwallowed(t *testing.T) {
-	m, _, _ := dirtySwitchFixture(t)
-	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
-	m = out.(Model)
-	if !m.switchPromptOpen() {
-		t.Fatal("unrelated keys must not dismiss the guard")
-	}
-	if cmd != nil {
-		t.Fatal("unrelated keys must not leak past the modal prompt")
-	}
-}
-
-// TestSecondSwitchStillGuards reproduces the real-TUI sequence: switch once,
-// dirty a buffer in the new project, switch again — the guard must still open.
-func TestSecondSwitchStillGuards(t *testing.T) {
+// TestSwitchRoundTripResumesWorkspaceLive (#777): the parked workspace comes
+// back as the same live unit — same registry, same running terminal session.
+func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 	base := t.TempDir()
-	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
-	for _, d := range []string{a, b} {
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
 		if err := os.Mkdir(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
-	file := filepath.Join(b, "two.txt")
-	if err := os.WriteFile(file, []byte("zulu\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	t.Chdir(a)
+	t.Chdir(src)
 	m := switchModel(t)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	srcPanes := m.activeWS().Panes
+	termKey := srcPanes.Focused()
+	sess := srcPanes.Get(termKey).Terminal()
+	t.Cleanup(func() { sess.Close() })
 
-	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
-	if !sameDir(t, cwd(t), b) {
-		t.Fatal("first switch should land in b")
+	if m.activeWS().Panes == srcPanes {
+		t.Fatal("the new project must get its own pane registry")
 	}
-	m = openDirty(t, m, file)
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal {
+			t.Fatal("the src terminal must stay parked, not follow into dst")
+		}
+	}
+	if !sess.Running() {
+		t.Fatal("the parked terminal must keep running in the background")
+	}
 
-	out, cmd := m.Update(project.SwitchProjectMsg{Root: a})
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src})
 	m = out.(Model)
-	if cmd == nil {
-		t.Fatal("second switch with dirty buffer should gate")
+	if m.activeWS().Panes != srcPanes {
+		t.Fatal("switching back must resume the parked registry, not rebuild")
 	}
-	guard, ok := cmd().(project.UnsavedChangesMsg)
-	if !ok {
-		t.Fatalf("expected UnsavedChangesMsg, got %#v", cmd())
+	inst := m.activeWS().Panes.Get(termKey)
+	if inst == nil || inst.Kind() != pane.KindTerminal || inst.Terminal() != sess {
+		t.Fatal("the resumed workspace must hold the same live terminal session")
 	}
-	out, _ = m.Update(guard)
-	m = out.(Model)
-	if !m.switchPromptOpen() {
-		t.Fatal("guard prompt should open after a prior switch")
+	if !inst.Terminal().Running() {
+		t.Fatal("the resumed session must still be running")
 	}
 }

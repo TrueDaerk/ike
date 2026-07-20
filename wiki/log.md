@@ -2,6 +2,11 @@
 
 ## 2026-07-20
 
+- Background workspaces (#777, 0370 M2): project switches park the live
+  workspace (terminals, runs, dirty buffers, debug state) instead of tearing
+  it down; switching back resumes it as-is. Unsaved-changes prompt removed
+  from the switch path; #96 terminal adoption retired; terminal session keys
+  globally unique. workspace.md updated.
 - Workspace extraction (#776, Roadmap 0370 M1): internal/workspace bundles
   pane registry + split tree + terminal return-focus behind a Manager; the
   root model reaches them via m.activeWS() only. Behavior unchanged; the
