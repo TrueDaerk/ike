@@ -13,7 +13,7 @@ type HitKind int
 
 const (
 	HitNone    HitKind = iota
-	HitDivider         // a split's gutter — start a resize
+	HitDivider         // a split's edge resize band — start a resize
 	HitTitle           // a pane's title-bar row — start a move
 	HitPane            // a pane interior below the title bar
 )
@@ -31,8 +31,11 @@ type Hit struct {
 // border) works.
 const TitleBarRows = 2
 
-// Hit classifies cell (x,y): a divider takes precedence (gutters never overlap
-// pane interiors), then a pane — its top TitleBarRows are the move handle.
+// Hit classifies cell (x,y): a divider takes precedence, then a pane — its top
+// TitleBarRows are the move handle. The divider band overlaps the border cells
+// of the adjacent panes (#761), so checking it first is what turns a shared
+// pane border into the resize handle; the title text row (inside the border)
+// stays a move handle because the band only covers the border row itself.
 func (l *Layout) Hit(x, y int) Hit {
 	for i := range l.Dividers {
 		if l.Dividers[i].Rect.Contains(x, y) {

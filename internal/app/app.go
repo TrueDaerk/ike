@@ -5701,11 +5701,11 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 	case *layout.Leaf:
 		return m.renderPane(t.Pane, r)
 	case *layout.Split:
-		a, _, b := t.Children(r)
+		a, b := t.Children(r)
 		if t.Orient == layout.Horizontal {
-			return joinH(r.H, m.renderNode(t.A, a), m.dividerV(r.H), m.renderNode(t.B, b))
+			return joinH(r.H, m.renderNode(t.A, a), m.renderNode(t.B, b))
 		}
-		return joinV(m.renderNode(t.A, a), m.dividerH(r.W), m.renderNode(t.B, b))
+		return joinV(m.renderNode(t.A, a), m.renderNode(t.B, b))
 	}
 	return ""
 }
@@ -5714,8 +5714,7 @@ func (m Model) renderNode(n layout.Node, r layout.Rect) string {
 // line index of each — no width measurement, since each column's lines are
 // already exactly their own width. rows is the expected line count (the shared
 // rect height); if any column disagrees it falls back to lipgloss, which pads
-// defensively (should not happen — paneBox and dividerV both produce exactly
-// rows lines).
+// defensively (should not happen — paneBox produces exactly rows lines).
 func joinH(rows int, cols ...string) string {
 	split := make([][]string, len(cols))
 	for i, c := range cols {
@@ -5855,18 +5854,6 @@ func zoneArrow(z layout.Zone) string {
 	default:
 		return "⬓ bottom"
 	}
-}
-
-// dividerV renders the vertical gutter between two horizontally-arranged panes.
-func (m Model) dividerV(h int) string {
-	style := lipgloss.NewStyle().Foreground(m.pal().Border).Background(m.pal().Background)
-	return style.Render(strings.TrimRight(strings.Repeat("│\n", h), "\n"))
-}
-
-// dividerH renders the horizontal gutter between two vertically-stacked panes.
-func (m Model) dividerH(w int) string {
-	style := lipgloss.NewStyle().Foreground(m.pal().Border).Background(m.pal().Background)
-	return style.Render(strings.Repeat("─", w))
 }
 
 // editorTitle returns an editor pane title: file basename with a dirty marker.

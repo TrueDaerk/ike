@@ -2,8 +2,9 @@ package layout
 
 import "testing"
 
-// tilesExactly asserts the leaf rects cover vp with no gap or overlap by summing
-// their areas and checking bounds.
+// tilesExactly asserts the leaf rects alone cover vp with no gap or overlap
+// (#761: dividers are hit bands over pane borders, not reserved cells) and that
+// every divider band lies inside vp.
 func tilesExactly(t *testing.T, root Node, vp Rect) Layout {
 	t.Helper()
 	l := Compute(root, vp)
@@ -15,18 +16,17 @@ func tilesExactly(t *testing.T, root Node, vp Rect) Layout {
 			}
 		}
 	}
-	for _, d := range l.Dividers {
-		for x := d.Rect.X; x < d.Rect.X+d.Rect.W; x++ {
-			for y := d.Rect.Y; y < d.Rect.Y+d.Rect.H; y++ {
-				cover[[2]int{x, y}]++
-			}
-		}
-	}
 	for x := vp.X; x < vp.X+vp.W; x++ {
 		for y := vp.Y; y < vp.Y+vp.H; y++ {
 			if cover[[2]int{x, y}] != 1 {
 				t.Fatalf("cell (%d,%d) covered %d times, want 1", x, y, cover[[2]int{x, y}])
 			}
+		}
+	}
+	for _, d := range l.Dividers {
+		r := d.Rect
+		if r.X < vp.X || r.Y < vp.Y || r.X+r.W > vp.X+vp.W || r.Y+r.H > vp.Y+vp.H {
+			t.Fatalf("divider band %+v escapes viewport %+v", r, vp)
 		}
 	}
 	return l
@@ -89,6 +89,55 @@ func TestHitDividerTitlePane(t *testing.T) {
 	}
 	if h := l.Hit(2, 5); h.Kind != HitPane || h.Pane != "explorer" {
 		t.Fatalf("expected explorer pane, got %+v", h)
+	}
+}
+
+// The resize band covers the two border cells at the children's shared edge:
+// A's right border column and B's left border column (#761).
+func TestEdgeBandCoversAdjacentBorders(t *testing.T) {
+	root := &Split{Orient: Horizontal, Ratio: 0.3, A: &Leaf{"explorer"}, B: &Leaf{"editor"}}
+	l := Compute(root, Rect{0, 0, 100, 40})
+	a, b := l.Panes["explorer"], l.Panes["editor"]
+	band := l.Dividers[0].Rect
+	if band.X != a.X+a.W-1 || band.W != 2 || band.X+1 != b.X {
+		t.Fatalf("band %+v does not straddle boundary between %+v and %+v", band, a, b)
+	}
+	// Both border columns start a resize, even on the border rows of the panes.
+	for _, x := range []int{band.X, band.X + 1} {
+		if h := l.Hit(x, 5); h.Kind != HitDivider {
+			t.Fatalf("Hit(%d,5)=%v, want HitDivider", x, h.Kind)
+		}
+		if h := l.Hit(x, 0); h.Kind != HitDivider {
+			t.Fatalf("Hit(%d,0)=%v, want HitDivider (band beats title band)", x, h.Kind)
+		}
+	}
+	// One cell beyond the band on either side is pane territory again.
+	if h := l.Hit(band.X-1, 5); h.Kind != HitPane || h.Pane != "explorer" {
+		t.Fatalf("left of band: %+v", h)
+	}
+	if h := l.Hit(band.X+2, 5); h.Kind != HitPane || h.Pane != "editor" {
+		t.Fatalf("right of band: %+v", h)
+	}
+}
+
+// Vertical splits get the same band, over A's bottom and B's top border rows.
+func TestEdgeBandVertical(t *testing.T) {
+	root := &Split{Orient: Vertical, Ratio: 0.5, A: &Leaf{"a"}, B: &Leaf{"b"}}
+	l := Compute(root, Rect{0, 0, 50, 21})
+	a, b := l.Panes["a"], l.Panes["b"]
+	band := l.Dividers[0].Rect
+	if band.Y != a.Y+a.H-1 || band.H != 2 || band.Y+1 != b.Y {
+		t.Fatalf("band %+v does not straddle boundary between %+v and %+v", band, a, b)
+	}
+	if h := l.Hit(10, band.Y); h.Kind != HitDivider {
+		t.Fatalf("Hit on A's bottom border: %v", h.Kind)
+	}
+	if h := l.Hit(10, band.Y+1); h.Kind != HitDivider {
+		t.Fatalf("Hit on B's top border: %v", h.Kind)
+	}
+	// B's title text row (one below its top border) still starts a move.
+	if h := l.Hit(10, b.Y+1); h.Kind != HitTitle || h.Pane != "b" {
+		t.Fatalf("B title row: %+v", h)
 	}
 }
 

@@ -13,7 +13,7 @@ Component-level concepts for the IKE codebase.
 * [Command Palette](/architecture/command-palette.md) - centered overlay fronting every action: ":" registry commands (context-ranked) + "@" fuzzy file finder, prefix-dispatched modes (Roadmap 0070)
 * [Keybindings & Shortcuts](/architecture/keybindings.md) - chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords + timeout, conflict detection, platform normalisation, cheatsheet (Roadmap 0080)
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)
-* [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse divider-resize & title-bar move, split/close ops, per-project persistence (Roadmap 0036/0037)
+* [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse pane-edge resize & title-bar move, split/close ops, per-project persistence (Roadmap 0036/0037)
 * [Pane Registry & Multiple Editors](/architecture/pane-registry.md) - instance registry behind layout leaves, N editors, focused-leaf focus model, open-in-new-pane intent (Roadmap 0037)
 * [Editor Tabs](/architecture/editor-tabs.md) - per-pane ordered document list with one active tab: open appends/activates, close peels tabs before the pane, shared buffers across tabs (Roadmap 0190)
 * [Session Restore](/architecture/session-restore.md) - per-project workspace persistence: open file + cursor, explorer expansion/hidden/cursor, saved on quit

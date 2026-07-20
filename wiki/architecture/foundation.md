@@ -33,7 +33,7 @@ Each pane is a `tea.Model`-shaped component (Init/Update/View) embedded in the
 root `app.Model`. The root forwards `tea.Msg` to the focused child and owns
 layout. Layout geometry itself is no longer hard-coded: the root drives a pure
 split tree (see [Pane Layout & Drag](/architecture/pane-layout.md)) that computes
-each pane's rectangle and supports mouse divider-resize and title-bar move.
+each pane's rectangle and supports mouse pane-edge resize and title-bar move.
 
 ## CLI open targets (Roadmap 0270)
 
