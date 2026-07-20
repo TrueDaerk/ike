@@ -232,3 +232,92 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 		t.Fatal("the resumed session must still be running")
 	}
 }
+
+// TestSwitchNewTerminalSpawnsInNewRoot (#779): everything root-derived spawns
+// against the active workspace's root after a switch — a fresh terminal lands
+// in the new project, not the old one.
+func TestSwitchNewTerminalSpawnsInNewRoot(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	out, _ = m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatal("terminal.new must open a terminal after the switch")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if !sameDir(t, inst.Terminal().Dir(), dst) {
+		t.Fatalf("new terminal must anchor at the new root, dir = %q", inst.Terminal().Dir())
+	}
+}
+
+// TestResumeNewTerminalSpawnsInResumedRoot (#779): after switching back, new
+// root-derived work anchors at the resumed project again — while the parked
+// project's existing terminals kept their own origin dir untouched.
+func TestResumeNewTerminalSpawnsInResumedRoot(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	first := m.activeWS().Panes.FocusedInstance()
+	t.Cleanup(func() { first.Terminal().Close() })
+
+	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src})
+	m = out.(Model)
+	if !sameDir(t, first.Terminal().Dir(), src) {
+		t.Fatalf("parked terminal's origin dir must survive, got %q", first.Terminal().Dir())
+	}
+	out, _ = m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	second := m.activeWS().Panes.FocusedInstance()
+	if second == nil || second.Kind() != pane.KindTerminal {
+		t.Fatal("terminal.new must open a terminal after the resume")
+	}
+	t.Cleanup(func() { second.Terminal().Close() })
+	if !sameDir(t, second.Terminal().Dir(), src) {
+		t.Fatalf("post-resume terminal must anchor at the resumed root, dir = %q", second.Terminal().Dir())
+	}
+}
+
+// TestSwitchReAnchorsConfigLayer (#779): the project config layer follows the
+// switch — a [ui] setting in the target's .ike/settings.toml is effective
+// right after switching, and the config options point at the new root.
+func TestSwitchReAnchorsConfigLayer(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst, filepath.Join(dst, ".ike")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dst, ".ike", "settings.toml"),
+		[]byte("[palette]\nmax_results = 3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	if v, ok := m.host.Config().Get("palette.max_results"); !ok || v != "3" {
+		t.Fatalf("project config layer must re-resolve on switch, got %q ok=%v", v, ok)
+	}
+}
