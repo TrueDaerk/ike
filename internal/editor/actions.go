@@ -527,13 +527,13 @@ func (m *Model) saveAs(path string) error {
 func (m Model) runAction(action string) (Model, tea.Cmd) {
 	switch action {
 	case "write":
-		if cmd, _ := m.saveGuarded(m.path); cmd != nil {
+		if cmd, _ := m.saveGuarded(m.path, false); cmd != nil {
 			return m, cmd
 		}
 	case "quit":
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "write_quit":
-		cmd, ok := m.saveGuarded(m.path)
+		cmd, ok := m.saveGuarded(m.path, true)
 		if cmd != nil {
 			return m, cmd // conflict: prompt first, keep the pane open
 		}

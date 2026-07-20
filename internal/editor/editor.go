@@ -51,6 +51,13 @@ type CloseMsg struct {
 	Force bool
 }
 
+// SaveAsPromptMsg asks the root model to prompt for a path for an untitled
+// buffer's first save (#730). CloseAfter carries the ":wq" intent through the
+// prompt: accepting it saves and then closes the pane.
+type SaveAsPromptMsg struct {
+	CloseAfter bool
+}
+
 // awaiting enumerates the secondary-key states the normal-mode handler can be
 // parked in: waiting for a second 'g', a find target char, a replace char, a
 // register name, or a text-object selector after an operator.

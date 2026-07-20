@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- Untitled buffers save as new files (#730): saving a pathless buffer opens
+  a save-as prompt; accepting writes the file and binds the tab (watcher,
+  MRU, highlighting, hooks) like a disk open. editor.md updated.
 - Idle autosave (#731): editor.auto_save gains "idle" — a dirty titled
   buffer saves itself after editor.auto_save_idle_ms of quiet, riding the
   backup change seam; editor.md updated.
