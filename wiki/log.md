@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Editor tab limit (#742): `editor.tabs.limit` (default 5, 0 disables, also
+  in Settings → Editor) caps document tabs per pane. Opening beyond it closes
+  the least recently used eligible tab into the reopen ring; the active tab,
+  dirty tabs, scratch tabs and terminal tabs are exempt — an all-exempt pane
+  exceeds the limit instead of risking data.
+
 - Tools settings page (#755): Settings → Tools edits the `[[tools.custom]]`
   list from the UI — add/edit/delete with a five-field inline form (name,
   command, args, cwd, placement), validation (required fields, duplicate

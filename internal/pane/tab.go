@@ -17,6 +17,9 @@ import (
 type Tab struct {
 	ed   *editor.Model
 	term *terminal.Model
+	// lastUsed is the instance's use-sequence stamp of the last activation,
+	// the recency the tab-limit eviction orders by (#742).
+	lastUsed int
 }
 
 // newEditorTab wraps an editor model as a tab slot.

@@ -3546,7 +3546,38 @@ func (m *Model) openInTab(key, path string) bool {
 		}
 		return false
 	}
+	if added {
+		m.enforceTabLimit(inst)
+	}
 	return true
+}
+
+// enforceTabLimit applies the editor.tabs.limit cap (#742, the JetBrains tab
+// limit) to a pane after a file open appended a tab: while the pane holds
+// more document tabs than the limit, the least recently used non-dirty file
+// tab closes, landing in the reopen ring (#158) so it stays restorable.
+// Dirty, scratch and terminal tabs are exempt — when nothing is eligible the
+// limit is exceeded rather than data risked. 0 (or negative) disables.
+func (m *Model) enforceTabLimit(inst *pane.Instance) {
+	limit := 0
+	if c := config.Get(); c != nil {
+		limit = c.Editor.Tabs.Limit
+	}
+	if limit <= 0 {
+		return
+	}
+	for inst.FileTabCount() > limit {
+		idx, ok := inst.EvictableLRUTab()
+		if !ok {
+			return
+		}
+		if ed := inst.TabEditor(idx); ed != nil {
+			m.rememberClosedTab(ed)
+		}
+		if !inst.CloseTab(idx) {
+			return
+		}
+	}
 }
 
 // activateTab switches pane inst to tab idx, autosaving the document being
