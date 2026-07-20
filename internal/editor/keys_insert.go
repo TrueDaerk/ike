@@ -46,6 +46,8 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		})
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
+	case key.Code == tea.KeyDelete && key.Mod&^tea.ModShift == 0:
+		m.insertForwardDelete()
 	// Shift+Tab dedents the whole current line one unit (Roadmap 0260),
 	// regardless of the cursor column; plain Tab inserts one unit at the cursor.
 	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0:
@@ -264,6 +266,35 @@ func (m *Model) insertBackspace() {
 	// Backspace approximately rewinds the recorded text for "." replay.
 	if r := []rune(m.insert.typed); len(r) > 0 {
 		m.insert.typed = string(r[:len(r)-1])
+	}
+	m.dirtyFromInsert()
+}
+
+// insertForwardDelete deletes the rune after every caret (Del, #732), joining
+// with the next line at a line end like vim's <Del>; at the very end of the
+// buffer it is a no-op. The caret stays put and the recorded "." text is left
+// alone — the deletion happens ahead of anything typed this session.
+func (m *Model) insertForwardDelete() {
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	edited := false
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		var end buffer.Position
+		switch {
+		case pos.Col < m.buf.RuneLen(pos.Line):
+			end = buffer.Position{Line: pos.Line, Col: pos.Col + 1}
+		case pos.Line < m.buf.LineCount()-1:
+			end = buffer.Position{Line: pos.Line + 1, Col: 0}
+		default:
+			return pos
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: pos, End: end}))
+		edited = true
+		return pos
+	})
+	if !edited {
+		return
 	}
 	m.dirtyFromInsert()
 }
