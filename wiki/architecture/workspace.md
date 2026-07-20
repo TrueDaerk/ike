@@ -57,6 +57,21 @@ layout as before. Consequences:
   parked workspace waits until re-attach (the pane then shows its final
   state); nothing is torn down.
 
+## Working-directory invariant (#779)
+
+**The process cwd always equals the active workspace's root.** Everything
+root-derived resolves against `"."` (or `cachedGetwd`, invalidated on
+switch) *at call time*, never at construction: new terminals, run configs,
+the config project layer (`config.Discover(".")` keeps `ProjectRoot`
+relative), palette file/dir walks, find-in-path, VCS detection, toolchain
+shims and the status line. The audit tests
+(`TestSwitchNewTerminalSpawnsInNewRoot`,
+`TestResumeNewTerminalSpawnsInResumedRoot`,
+`TestSwitchReAnchorsConfigLayer` in `internal/app`) pin the contract.
+Existing background terminals are exempt by design: a session pins its
+origin dir absolutely at spawn (`internal/terminal.startSession`), so a
+parked shell never re-anchors.
+
 ## Boundaries
 
 Everything not per-project (theme, registry, host, config options, overlay

@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- Working-directory re-anchor audit (#779): pinned the invariant that the
+  process cwd equals the active workspace root and everything root-derived
+  resolves at call time; audit tests added. workspace.md updated.
 - Background workspaces (#777, 0370 M2): project switches park the live
   workspace (terminals, runs, dirty buffers, debug state) instead of tearing
   it down; switching back resumes it as-is. Unsaved-changes prompt removed
