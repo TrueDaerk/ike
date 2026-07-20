@@ -5,34 +5,29 @@ import (
 	"testing"
 )
 
-func liveTable(t *testing.T, withLeader bool) *LiveBindings {
+func liveTable(t *testing.T) *LiveBindings {
 	t.Helper()
-	rows := Defaults(PresetJetBrains)
-	if withLeader {
-		rows = append(rows, LeaderRows(DefaultLeader)...)
-	}
 	l := &LiveBindings{}
-	l.Set(BuildTable(rows, nil, "darwin"))
+	l.Set(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
 	return l
 }
 
 func TestLiveBindingsHonestLabels(t *testing.T) {
-	l := liveTable(t, true)
+	l := liveTable(t)
 
 	// Delivered primary wins the label outright.
 	if got, ok := l.Binding("editor.write"); !ok || got != "ctrl+s" {
 		t.Fatalf("editor.write = %q ok=%v", got, ok)
 	}
-	// A delivered default primary wins even when a leader mnemonic exists
-	// (0082 sheet 11, #18: f4 outranks both cmd+b and space d).
+	// A delivered default primary wins over the fragile JetBrains chord
+	// (0082 sheet 11, #18: f4 outranks cmd+b).
 	if got, _ := l.Binding("lsp.definition"); got != "f4" {
 		t.Fatalf("lsp.definition = %q", got)
 	}
-	// A leader row is a delivered chord, so covered fragile commands show it.
-	if got, _ := l.Binding("lsp.references"); got != "space u" {
+	// Fragile-only commands carry the honest warning.
+	if got, _ := l.Binding("lsp.references"); !strings.Contains(got, "alt+f7 ⚠") {
 		t.Fatalf("lsp.references = %q", got)
 	}
-	// Fragile-only with no alternative: honest warning.
 	if got, _ := l.Binding("editor.duplicateLine"); !strings.Contains(got, "cmd+d ⚠") {
 		t.Fatalf("editor.duplicateLine = %q", got)
 	}
@@ -43,8 +38,8 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 		t.Fatalf("stubbed blocked binding = %q", got)
 	}
 	remove()
-	// Without the stub the VCS ids resolve to their leader mnemonics (0320).
-	if got, _ := l.Binding("vcs.commit"); got != "space v c" {
+	// Without the stub the fragile cmd+k chord is shown with its warning.
+	if got, _ := l.Binding("vcs.commit"); !strings.Contains(got, "cmd+k ⚠") {
 		t.Fatalf("vcs.commit = %q", got)
 	}
 	// Unbound ids degrade gracefully.
@@ -53,18 +48,8 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	}
 }
 
-func TestLiveBindingsFragileUseAlternative(t *testing.T) {
-	// Without the leader layer in the table, the label points at the leader
-	// path as the escape route.
-	l := liveTable(t, false)
-	got, _ := l.Binding("lsp.references")
-	if !strings.Contains(got, "alt+f7 ⚠ use space u") {
-		t.Fatalf("lsp.references = %q", got)
-	}
-}
-
 func TestLiveBindingsFollowReloads(t *testing.T) {
-	l := liveTable(t, true)
+	l := liveTable(t)
 	before, _ := l.Binding("project.goToFile")
 	l.Set(BuildTable(Defaults(PresetJetBrains), map[string]string{"f9": "project.goToFile"}, "darwin"))
 	after, _ := l.Binding("project.goToFile")
@@ -74,11 +59,10 @@ func TestLiveBindingsFollowReloads(t *testing.T) {
 }
 
 func TestContinuationsForHeldPrefix(t *testing.T) {
-	rows := append(Defaults(PresetJetBrains), LeaderRows(DefaultLeader)...)
-	table := BuildTable(rows, nil, "darwin")
-	conts := table.Continuations(MustParseChord(DefaultLeader), Global)
+	table := BuildTable(Defaults(PresetJetBrains), nil, "darwin")
+	conts := table.Continuations(MustParseChord("cmd+k"), Global)
 	if len(conts) == 0 {
-		t.Fatal("leader prefix should offer continuations")
+		t.Fatal("cmd+k prefix should offer continuations")
 	}
 	byKey := map[string]Continuation{}
 	for i, c := range conts {
@@ -90,12 +74,11 @@ func TestContinuationsForHeldPrefix(t *testing.T) {
 			}
 		}
 	}
-	if byKey["f"].Command != "project.goToFile" || byKey["f"].Title == "" {
-		t.Fatalf("f continuation = %+v", byKey["f"])
+	if byKey["z"].Command != "pane.maximize" || byKey["z"].Title == "" {
+		t.Fatalf("z continuation = %+v", byKey["z"])
 	}
-	// Editor context sees the universal ctrl+k continuations too.
-	if got := table.Continuations(MustParseChord("ctrl+k"), Editor); len(got) == 0 {
-		t.Fatal("ctrl+k should offer continuations in the editor")
+	if byKey["down"].Command != "pane.splitDown" {
+		t.Fatalf("down continuation = %+v", byKey["down"])
 	}
 	// A non-prefix chord offers nothing.
 	if got := table.Continuations(MustParseChord("f6"), Global); len(got) != 0 {
@@ -104,14 +87,13 @@ func TestContinuationsForHeldPrefix(t *testing.T) {
 }
 
 func TestResolverPendingContinuations(t *testing.T) {
-	rows := append(Defaults(PresetJetBrains), LeaderRows(DefaultLeader)...)
-	r := NewResolver(BuildTable(rows, nil, "darwin"))
+	r := NewResolver(BuildTable(Defaults(PresetJetBrains), nil, "darwin"))
 	if prefix, conts := r.PendingContinuations(Global); prefix != "" || conts != nil {
 		t.Fatal("idle resolver offers nothing")
 	}
-	r.Feed(key(t, "space"), Global)
+	r.Feed(key(t, "cmd+k"), Global)
 	prefix, conts := r.PendingContinuations(Global)
-	if prefix != "space" || len(conts) == 0 {
+	if prefix != "cmd+k" || len(conts) == 0 {
 		t.Fatalf("pending = %q %v", prefix, conts)
 	}
 }

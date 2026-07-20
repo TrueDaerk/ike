@@ -116,7 +116,10 @@ func TestTryTasksTickOnExecution(t *testing.T) {
 
 func TestPageContent(t *testing.T) {
 	tr := New(nil)
-	checks := []struct{ page int; want []string }{
+	checks := []struct {
+		page int
+		want []string
+	}{
 		{0, []string{"shift shift · cmd+shift+a", "quit IKE", "ctrl+c"}},
 		{1, []string{"NORMAL mode", "Press i", "cmd+s · :w"}},
 		{2, []string{"cmd+1", "cmd+shift+o", "cmd+k right"}},
@@ -222,11 +225,10 @@ func TestLinuxShowsCtrlChords(t *testing.T) {
 }
 
 func TestKnownDefaultIsNotARemap(t *testing.T) {
-	// #665: the resolver picks ONE default per command, and for
-	// search-everywhere that is the space-space leader mnemonic — which is
-	// not in the curated display list. Known defaults must keep the curated
-	// display; only a chord outside all known defaults is a real remap.
-	tr := New(mapResolver{"palette.searchEverywhere": "space space"})
+	// #665: the resolver picks ONE default per command; a resolved chord that
+	// is already in the curated display list must keep the full curated
+	// display. Only a chord outside all known defaults is a real remap.
+	tr := New(mapResolver{"palette.searchEverywhere": "cmd+shift+a"})
 	if body := tr.Render(72); !strings.Contains(body, "shift shift · cmd+shift+a") {
 		t.Fatalf("a known default must keep the curated display:\n%s", body)
 	}

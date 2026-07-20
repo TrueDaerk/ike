@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-12T23:45:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Command Palette
@@ -65,10 +65,9 @@ Four entry points, all from a non-capturing context:
   opens the **centered** palette locked to the `@` file mode via
   `OpenLocked(cx, '@')`, so go-to-file works from any context, not just an
   editor pane.
-- **`palette.recentFiles`** (default `cmd+e`, leader `m`, Navigate menu) — opens
+- **`palette.recentFiles`** (default `cmd+e`, Navigate menu) — opens
   the centered palette locked to the recent-files mode (below).
-- **`palette.searchEverywhere`** (default `cmd+shift+a` / double-shift, leader
-  `A`, **`space space`** — the terminal stand-in for JetBrains' double-shift,
+- **`palette.searchEverywhere`** (default `cmd+shift+a` / double-shift,
   #263) — opens the centered palette locked to the search-everywhere mode
   (below).
 
@@ -138,7 +137,7 @@ that vanished from disk are dropped from the listing. Activation emits the same
 JetBrains' Search Everywhere, palette-style (`search_mode.go`). Locked-only like
 the recent-files mode (`palette.searchEverywhere` opens it via `OpenLocked`);
 `shift shift` resolves through the ordinary multi-step chord engine, so it works
-off macOS too (it needs key-up reporting, hence leader `A` as the universal
+off macOS too (it needs key-up reporting, hence the palette as the universal
 escape). One query is ranked across **commands and files** by *composing* the
 already-built `CommandMode` and `FileMode` — no duplicated ranking. Each
 source's top rows (per-kind cap, `searchAllPerKind`) interleave by fuzzy score,

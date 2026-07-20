@@ -4,7 +4,7 @@ title: Markdown Preview
 description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence."
 resource: internal/preview
 tags: [architecture, markdown, preview, pane, glamour]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Markdown Preview (#62)
@@ -15,8 +15,8 @@ the feature is self-hosting.
 
 ## Opening and closing
 
-`markdown.preview` (palette, `cmd+k m` in the editor, leader `space P` /
-`ctrl+k P`) splits the active editor's leaf to the right with a preview pane
+`markdown.preview` (palette, `cmd+alt+m` in the editor)
+splits the active editor's leaf to the right with a preview pane
 bound to the buffer's path. The editor keeps focus — the preview follows the
 typing, it does not receive it. Invoking the command again while a preview for
 the buffer exists focuses that pane instead of duplicating it; a non-markdown

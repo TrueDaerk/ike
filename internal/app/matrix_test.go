@@ -32,12 +32,12 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["lsp.rename"]; r.Primary != "shift+f6" || r.Status() != "live" {
 		t.Errorf("lsp.rename = %+v", r)
 	}
-	// The VCS ids went live with 0320: fragile Cmd primaries, leader
-	// mnemonics as the delivered path.
-	if r := byCmd["vcs.commit"]; r.Fallback != "space v c" || !strings.Contains(r.Status(), "live") {
+	// The VCS ids went live with 0320: fragile Cmd primaries, the palette as
+	// the delivered path since the leader layer retired (#711).
+	if r := byCmd["vcs.commit"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
 		t.Errorf("vcs.commit = %+v", r)
 	}
-	if r := byCmd["vcs.updateProject"]; r.Fallback != "space v u" || !strings.Contains(r.Status(), "live") {
+	if r := byCmd["vcs.updateProject"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
 		t.Errorf("vcs.updateProject = %+v", r)
 	}
 	// The blocked ledger emptied with 0320 (#466): the blocked-status label

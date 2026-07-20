@@ -58,14 +58,15 @@ func emptyHintSegment(m Model, ed *editor.Model) string {
 	if m.width > 0 && m.width < 70 {
 		return ""
 	}
-	// The known default chords for search-everywhere (primary, delivered
-	// fallback, leader mnemonic); a resolver hit outside this set is a real
-	// user remap and replaces the short display form.
-	const searchDefaults = "shift shift · cmd+shift+a · space space"
+	// The known default chords for search-everywhere; a resolver hit outside
+	// this set is a real user remap and replaces the short display form.
+	// Fragile-warning labels ("… ⚠ terminal-dependent") stay on the short
+	// form — the hint has no room for the honest long label.
+	const searchDefaults = "shift shift · cmd+shift+a"
 	chord := "shift shift"
 	if m.bindings != nil {
 		if s, ok := m.bindings.Binding("palette.searchEverywhere"); ok && s != "" &&
-			!strings.Contains(searchDefaults, s) {
+			!strings.Contains(searchDefaults, s) && !strings.Contains(s, "⚠") {
 			chord = s
 		}
 	}

@@ -32,7 +32,7 @@ type replacePanel struct {
 	preselect bool
 }
 
-// beginReplacePanel opens the panel (editor.replace, cmd+r / leader R). The
+// beginReplacePanel opens the panel (editor.replace, cmd+r). The
 // committed literal search seeds the Find field, else the panel's last use
 // does (#292); Replace always starts from the last use. Cursor and viewport
 // are captured so Esc restores them exactly, sharing the search-origin

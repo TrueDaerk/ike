@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -34,7 +34,7 @@ than as a typo.
   `right-bracket`), so a modified press like `cmd+[` normalises the same way
   as a bare one and matches the default table (#284).
 - **`Chord`** (`chord.go`) — an ordered list of `Key` steps. One type models all
-  three shapes: single (`esc`), modified (`cmd+t`), multi-step (`cmd+k cmd+c`).
+  three shapes: single (`esc`), modified (`cmd+t`), multi-step (`cmd+k z`).
 - **`parse.go`** — `ParseChord`/`ParseKey` accept whitespace-separated steps with
   `+`-joined modifier tokens; `String()` renders the canonical form (modifiers in
   fixed order meta, ctrl, alt, shift), so parse→format→parse is idempotent. A bare
@@ -76,7 +76,7 @@ multi-step state. Each `Feed(key, context)` returns:
 
 - **Pending** — the sequence is a prefix of a longer chord; the caller arms a
   `TimeoutDuration` (600ms) timer. A prefix wins over an equal-length exact match
-  (so `cmd+k cmd+c` stays reachable); the exact `cmd+k` is recovered on `Timeout`.
+  (so `cmd+k down` stays reachable); the exact `cmd+k` is recovered on `Timeout`.
 - **Resolved** — a binding matched; `Command` carries the id.
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
@@ -106,7 +106,7 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 
 Many modifier combos (`Cmd+T`, `Ctrl+Tab`, `Cmd+1`) are intercepted by the
 terminal/OS and never reach the program; such bindings carry a `Fragile` flag so
-the cheatsheet can show the palette/leader fallback. Every bound action stays
+the cheatsheet can show the palette fallback. Every bound action stays
 reachable from the command palette (07), the universal escape hatch.
 
 ## Default set
@@ -132,8 +132,8 @@ modified chords stay eligible for the keymap layer.
 Root-model actions are exposed as registry commands by the compile-in `app`
 plugin (`internal/app/commands.go`), so their default bindings are live and the
 palette can invoke them: `editor.closeTab` (`cmd+w`, same behavior as the
-hardcoded `ctrl+w` / the editor's `:q`), `palette.keymapHelp` (`f1`,
-`cmd+k cmd+s` — the cheatsheet overlay; the hardcoded `?`/`f1` branch remains
+hardcoded `ctrl+w` / the editor's `:q`), `palette.keymapHelp` (`f1` —
+the cheatsheet overlay; the hardcoded `?`/`f1` branch remains
 as the registry-less fallback), `pane.switcher` (`ctrl+tab`, still flagged
 fragile; same cycle as the hardcoded `tab`), and `project.goToFile`
 (`cmd+shift+o`, the centered palette locked to the `@` file mode).
@@ -152,8 +152,7 @@ primary, and `shift+f6` is context-aware refactor-rename: `lsp.rename` with an
 editor focused, `file.rename` everywhere else (the Editor row shadows the
 Global one). Quick documentation (`lsp.hover`, #378) binds `ctrl+q` — the
 JetBrains Windows/Linux quick-doc chord, delivered everywhere because raw mode
-disables XON flow control — plus the `space k` / `ctrl+k k` leader path
-(vim's K keyword lookup). Diagnostic navigation (#369) binds `f2` /
+disables XON flow control. Diagnostic navigation (#369) binds `f2` /
 `shift+f2` — the JetBrains next/previous-highlighted-error keys, both
 delivered — to `lsp.nextDiagnostic` / `lsp.prevDiagnostic`, which walk the
 focused document's cached diagnostics in document order (wrapping) and toast
@@ -238,8 +237,8 @@ Vim-internal keymaps inside the editor (normal/insert/visual motions, operators,
 text objects) belong to Roadmap 0060 and are **not** in this table — this package
 owns only global / IDE-level shortcuts. The VCS ids (`vcs.commit`,
 `vcs.updateProject`, `vcs.revertFile`, …) went live with Epic 0320 — see
-[VCS / Git Integration](/architecture/vcs.md); their fragile Cmd primaries are
-escaped by the leader `space v` family (`c`/`u`/`x`/`b`/`d`/`a`), and the
+[VCS / Git Integration](/architecture/vcs.md); their fragile Cmd primaries stay
+reachable through the palette, and the
 blocked ledger is currently empty (its machinery stays test-covered through
 `keymap.StubBlockedForTest`).
 
@@ -247,7 +246,7 @@ blocked ledger is currently empty (its machinery stays test-covered through
 
 Terminal truth beats aspiration: every default chord is classified in
 `internal/keymap/reachability.go` (`Classify`/`ReachabilityNote`/
-`ReachabilityReport`), and the downstream 0081 work — leader defaults (#14),
+`ReachabilityReport`), and the downstream 0081 work — default re-picks (#14),
 discoverability labels (#15), the status matrix (#16) — keys off these
 classes, not off JetBrains nostalgia.
 
@@ -284,36 +283,27 @@ protocol):
   terminals without the protocol swallow them.
 - plain keys, `ctrl+letter`, `f1/f6/f10`, `shift+f6` — delivered.
 
-## Leader key (0081/30)
+## Modifier-chord policy (#711)
 
-Every fragile-primary action has a reachable two-keystroke path, driven by
-the existing multi-step resolver (no new engine):
-
-- **`space <mnemonic>`** — plain keys never reach the chord layer inside a
-  capturing editor, so the space leader is automatically scoped to "outside
-  the editor" (explorer, terminal-less panes). Tunable via `[keymap]
-  leader = "<key>"`.
-- **`ctrl+k <mnemonic>`** — ctrl-modified chords are eligible everywhere,
-  making this the universal variant that also works mid-edit.
-
-Curated mnemonics (`internal/keymap/leader.go`): `f` go to file, `g` find in
-path, `r` replace in path, `p` switch project, `P` markdown preview, `D` TODO index, `t` toggle terminal, `T` new
-terminal, `h` notification history, `e` explorer/editor toggle, `s` save all,
-`w` save, `d` definition, `u` usages, `a` code actions, `n` rename, `l`
-reformat, `c` comment line, `x` close tab, `o` reopen tab, `m` recent files
-(MRU), `b` navigate back, `i` navigate forward, `,` settings, `1–9` tab N. The long tail stays reachable through the palette (esc-esc,
-delivered everywhere).
+The leader layer (space/`ctrl+k` mnemonics, 0081/30) is **retired**: every
+default binding is a single modifier chord (`cmd`/`ctrl`/`alt`/`shift` + key,
+or a delivered F-key/named key), matching JetBrains wherever a JetBrains
+default exists. Exactly five multi-step sequences remain, all under the
+`cmd+k` prefix: `cmd+k down/up/left/right` (pane splits) and `cmd+k z`
+(maximize pane). `shift shift` stays as JetBrains' double-shift double-tap.
+A policy test (`TestAllDefaultsAreModifierChords`) enforces both rules. The
+`[keymap] leader` config key is gone.
 
 **Honest fragility**: the per-row `fragile` flags are no longer
 hand-maintained — `Defaults()` derives them from the reachability table
 (`Classify`), so every `cmd+*`/`alt+*`/collapsing chord now reports itself
 truthfully. A completeness test enforces that every fragile, non-blocked
-default has a leader mnemonic, another delivered chord, or a documented
-exception (vim-native equivalents, palette reach).
+default has another delivered chord or a documented exception (vim-native
+equivalents, palette reach via esc-esc).
 
 ## Discoverability (0081/40)
 
-- **Which-key**: holding a chord prefix (the leader, `ctrl+k`, `cmd+k`)
+- **Which-key**: holding a chord prefix (`cmd+k`)
   pops a bottom-centered panel listing the available continuations — letter
   mnemonics first, digits next — built live from the resolver's pending
   state (`Resolver.PendingContinuations` / `BindingTable.Continuations`).
@@ -321,13 +311,10 @@ exception (vim-native equivalents, palette reach).
 - **Live, honest labels** (`keymap.LiveBindings`): the cheatsheet and the
   palette's shortcut column read the *effective* table through a stable
   holder that follows every keymap reload. Labelling is honest by rule:
-  a delivered chord shows plainly (`ctrl+s`; leader rows count, so
-  `lsp.references` shows `space u` instead of the fragile `alt+f7`, and
-  fewer keystrokes win before shorter labels, so `lsp.rename` shows the
-  single-step `shift+f6` over `space n`); a
-  fragile-only binding warns and names the escape (`cmd+d ⚠
-  terminal-dependent`, or `… ⚠ use space d`); blocked commands render
-  `✗ blocked: <dependency>`.
+  a delivered chord shows plainly (`ctrl+s`; fewer keystrokes win before
+  shorter labels, so `lsp.rename` shows the single-step `shift+f6`); a
+  fragile-only binding warns (`cmd+d ⚠ terminal-dependent`); blocked
+  commands render `✗ blocked: <dependency>`.
 - **Cheatsheet blocked section**: `palette.keymapHelp` appends a
   "blocked (dependency not landed)" group listing every default binding
   whose command has no owner yet, with its dependency — never hidden,
@@ -340,80 +327,91 @@ Generated from `keymap.StatusMatrix` against the shipped plugin set (run
 regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
-| `editor.closeTab` | `cmd+w` | fragile | `space x` | live via space x |
+| `debug.continue` | `f9` | delivered | `—` | live |
+| `debug.start` | `shift+f9` | delivered | `—` | live |
+| `debug.stepInto` | `f7` | delivered | `—` | live |
+| `debug.stepOut` | `shift+f8` | delivered | `—` | live |
+| `debug.stepOver` | `f8` | delivered | `—` | live |
+| `debug.toggleBreakpoint` | `ctrl+f8` | delivered | `—` | live |
+| `diff.nextChange` | `f7` | delivered | `—` | live |
+| `diff.prevChange` | `shift+f7` | delivered | `—` | live |
+| `editor.caret.addAll` | `ctrl+shift+g` | fragile | `palette` | live via palette |
+| `editor.caret.addNext` | `ctrl+g` | delivered | `—` | live |
+| `editor.closeTab` | `cmd+w` | fragile | `palette` | live via palette |
 | `editor.commentBlock` | `cmd+shift+7` | fragile | `palette` | live via palette |
-| `editor.commentLine` | `cmd+7` | fragile | `space c` | live via space c |
+| `editor.commentLine` | `cmd+7` | fragile | `palette` | live via palette |
 | `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
 | `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
-| `editor.lineStart` | `cmd+left` | fragile | `vim 0` | live via vim 0 |
+| `editor.lineStart` | `cmd+left` | fragile | `home` | live via home |
 | `editor.paste` | `cmd+v` | fragile | `vim p` | live via vim p |
 | `editor.pasteFromHistory` | `cmd+shift+v` | fragile | `palette` | live via palette |
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
-| `editor.replace` | `cmd+r` | fragile | `space shift+r` | live via space shift+r |
-| `editor.saveAll` | `cmd+shift+s` | fragile | `space s` | live via space s |
-| `editor.splitViewDown` | `cmd+k shift+down` | fragile | `palette` | live via palette |
-| `editor.splitViewRight` | `cmd+k shift+right` | fragile | `palette` | live via palette |
+| `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
+| `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
+| `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
+| `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
-| `editor.tab.next` | `ctrl+cmd+right` | fragile | `palette` | live via palette |
-| `editor.tab.prev` | `ctrl+cmd+left` | fragile | `palette` | live via palette |
-| `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `space o` | live via space o |
-| `editor.tab.select1` | `alt+1` | fragile | `space 1` | live via space 1 |
-| `editor.tab.select2` | `alt+2` | fragile | `space 2` | live via space 2 |
-| `editor.tab.select3` | `alt+3` | fragile | `space 3` | live via space 3 |
-| `editor.tab.select4` | `alt+4` | fragile | `space 4` | live via space 4 |
-| `editor.tab.select5` | `alt+5` | fragile | `space 5` | live via space 5 |
-| `editor.tab.select6` | `alt+6` | fragile | `space 6` | live via space 6 |
-| `editor.tab.select7` | `alt+7` | fragile | `space 7` | live via space 7 |
-| `editor.tab.select8` | `alt+8` | fragile | `space 8` | live via space 8 |
-| `editor.tab.select9` | `alt+9` | fragile | `space 9` | live via space 9 |
+| `editor.tab.next` | `cmd+ctrl+right` | fragile | `palette` | live via palette |
+| `editor.tab.prev` | `cmd+ctrl+left` | fragile | `palette` | live via palette |
+| `editor.tab.reopenClosed` | `alt+shift+t` | fragile | `palette` | live via palette |
+| `editor.tab.select1` | `alt+1` | fragile | `palette` | live via palette |
+| `editor.tab.select2` | `alt+2` | fragile | `palette` | live via palette |
+| `editor.tab.select3` | `alt+3` | fragile | `palette` | live via palette |
+| `editor.tab.select4` | `alt+4` | fragile | `palette` | live via palette |
+| `editor.tab.select5` | `alt+5` | fragile | `palette` | live via palette |
+| `editor.tab.select6` | `alt+6` | fragile | `palette` | live via palette |
+| `editor.tab.select7` | `alt+7` | fragile | `palette` | live via palette |
+| `editor.tab.select8` | `alt+8` | fragile | `palette` | live via palette |
+| `editor.tab.select9` | `alt+9` | fragile | `palette` | live via palette |
 | `editor.undo` | `ctrl+z` | delivered | `—` | live |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
-| `explorer.toggle` | `cmd+1` | fragile | `space e` | live via space e |
+| `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
 | `explorer.undo` | `ctrl+z` | delivered | `—` | live |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
-| `lsp.codeAction` | `alt+enter` | fragile | `space a` | live via space a |
+| `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
+| `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
-| `lsp.format` | `cmd+alt+l` | fragile | `space l` | live via space l |
+| `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
-| `lsp.parameterInfo` | `ctrl+p` | delivered | `—` | live |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
+| `lsp.parameterInfo` | `cmd+p` | fragile | `ctrl+p` | live via ctrl+p |
 | `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
-| `lsp.references` | `alt+f7` | fragile | `space u` | live via space u |
-| `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `space H` | live via space H |
+| `lsp.references` | `alt+f7` | fragile | `palette` | live via palette |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
-| `markdown.preview` | `cmd+k m` | fragile | `space shift+p` | live via space shift+p |
+| `markdown.preview` | `cmd+alt+m` | fragile | `palette` | live via palette |
 | `menu.open` | `f10` | delivered | `—` | live |
-| `nav.back` | `cmd+left-bracket` | fragile | `space b` | live via space b |
-| `nav.forward` | `cmd+right-bracket` | fragile | `space i` | live via space i |
-| `notifications.history` | `space h` | delivered | `—` | live |
-| `palette.keymapHelp` | `cmd+k cmd+s` | fragile | `f1` | live via f1 |
-| `palette.recentFiles` | `cmd+e` | fragile | `space m` | live via space m |
-| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `space space` | live via space space |
+| `nav.back` | `cmd+left-bracket` | fragile | `palette` | live via palette |
+| `nav.forward` | `cmd+right-bracket` | fragile | `palette` | live via palette |
+| `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
+| `palette.keymapHelp` | `f1` | delivered | `—` | live |
+| `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
+| `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
 | `pane.maximize` | `cmd+k z` | fragile | `palette` | live via palette |
 | `pane.splitDown` | `cmd+k down` | fragile | `palette` | live via palette |
 | `pane.splitLeft` | `cmd+k left` | fragile | `palette` | live via palette |
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
-| `project.findInPath` | `cmd+shift+f` | fragile | `space g` | live via space g |
-| `project.goToClass` | `cmd+o` | fragile | `space shift+s` | live via space shift+s |
-| `project.goToFile` | `cmd+shift+o` | fragile | `space f` | live via space f |
-| `project.replaceInPath` | `cmd+shift+r` | fragile | `space r` | live via space r |
-| `project.switch` | `cmd+shift+p` | fragile | `space p` | live via space p |
+| `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
+| `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
+| `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
+| `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
+| `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
+| `run.file` | `shift+f10` | delivered | `—` | live |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
-| `settings.open` | `cmd+,` | fragile | `space ,` | live via space , |
-| `todo.list` | `cmd+6` | fragile | `space shift+d` | live via space shift+d |
-| `terminal.new` | `space shift+t` | delivered | `—` | live |
-| `terminal.toggle` | `alt+f12` | fragile | `space t` | live via space t |
-| `vcs.commit` | `cmd+k` | fragile | `—` | blocked: VCS integration (idea #28) |
-| `vcs.revertFile` | `cmd+shift+t` | fragile | `—` | blocked: VCS integration (idea #28) |
-| `vcs.updateProject` | `cmd+t` | fragile | `—` | blocked: VCS integration (idea #28) |
-| `view.zenMode` | `cmd+k shift+z` | fragile | `palette` | live via palette |
+| `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
+| `terminal.new` | `cmd+alt+t` | fragile | `palette` | live via palette |
+| `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
+| `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
+| `vcs.commit` | `cmd+k` | fragile | `palette` | live via palette |
+| `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
+| `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
+| `vcs.updateProject` | `cmd+t` | fragile | `palette` | live via palette |

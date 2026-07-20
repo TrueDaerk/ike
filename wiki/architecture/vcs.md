@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, commit dialog, update/revert, branch picker, file-vs-HEAD diff, inline blame, persistent tool window (changes + log); all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330)
@@ -43,7 +43,7 @@ commit dialog, gutter marks, and enabled blame maps.
   the line below (EOF removals fold onto the last line). Diagnostics win the
   cell. Recomputed per snapshot and on open; only modified/conflicted/renamed
   files spawn a git subprocess.
-- **Inline blame** (`internal/vcs/blame.go`, `vcs.blameLine`, `space v a`) —
+- **Inline blame** (`internal/vcs/blame.go`, `vcs.blameLine`, palette) —
   toggleable dimmed EOL annotation on the cursor line ("author, when ·
   summary", "not committed yet"); whole-file porcelain blame cached per
   document, refreshed with each snapshot.
@@ -51,19 +51,19 @@ commit dialog, gutter marks, and enabled blame maps.
 ## Commands
 
 All registered through the `appCommands` plugin (palette-visible); Cmd chords
-stay the JetBrains defaults, the leader `space v` family is the delivered
-path (`space g` belongs to grep):
+stay the JetBrains defaults; the palette (esc-esc) is the delivered path
+since the leader layer retired (#711):
 
 | Command | Keys | Behavior |
 |---|---|---|
-| `vcs.commit` | `cmd+k` / `space v c` | Commit dialog (`internal/commitui`): changed files with `[x]/[~]/[ ]` stage toggles (space), message pane (tab), `ctrl+s` commits, esc keeps the in-progress message; disabled-commit hints. |
-| `vcs.updateProject` | `cmd+t` / `space v u` | `git pull` (merge, or rebase via config `vcs.update = "rebase"`); dirty tree blocks with a warning; summary toast (commits/files). |
-| `vcs.revertFile` | `cmd+shift+t` / `space v x` | Restore the focused file to HEAD behind a confirmation prompt showing the changed-line count; buffer reloads. The pre-revert content is snapshotted into the revert history first (`internal/vcs/revertlog.go`, under the state store, capped + age-pruned). |
-| `vcs.undoRevert` | `space v z` | Palette picker over the focused file's revert-history snapshots (newest first, timestamp + changed-line count); selecting one re-applies it to the buffer as a single undo-tree change — dirty, undoable, saved only explicitly. |
-| `vcs.revertHunk` | `space v h` | JetBrains "Rollback Lines": restore the contiguous change under the caret (the gutter-marked region, deletion anchors included) to its HEAD content. Applied as one buffer edit through the undo tree — plain undo brings the hunk back; works against unsaved edits too (`internal/editor/vcs_revert.go`). |
-| `vcs.branches` | `space v b` | Palette picker of local branches (current first), checkout on select. |
-| `vcs.diff` | `space v d` | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
-| `vcs.blameLine` | `space v a` | Toggle the inline blame annotation. |
+| `vcs.commit` | `cmd+k` | Commit dialog (`internal/commitui`): changed files with `[x]/[~]/[ ]` stage toggles (space), message pane (tab), `ctrl+s` commits, esc keeps the in-progress message; disabled-commit hints. |
+| `vcs.updateProject` | `cmd+t` | `git pull` (merge, or rebase via config `vcs.update = "rebase"`); dirty tree blocks with a warning; summary toast (commits/files). |
+| `vcs.revertFile` | `cmd+alt+z` (JetBrains rollback) | Restore the focused file to HEAD behind a confirmation prompt showing the changed-line count; buffer reloads. The pre-revert content is snapshotted into the revert history first (`internal/vcs/revertlog.go`, under the state store, capped + age-pruned). |
+| `vcs.undoRevert` | palette | Palette picker over the focused file's revert-history snapshots (newest first, timestamp + changed-line count); selecting one re-applies it to the buffer as a single undo-tree change — dirty, undoable, saved only explicitly. |
+| `vcs.revertHunk` | palette | JetBrains "Rollback Lines": restore the contiguous change under the caret (the gutter-marked region, deletion anchors included) to its HEAD content. Applied as one buffer edit through the undo tree — plain undo brings the hunk back; works against unsaved edits too (`internal/editor/vcs_revert.go`). |
+| `vcs.branches` | palette | Palette picker of local branches (current first), checkout on select. |
+| `vcs.diff` | palette | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
+| `vcs.blameLine` | palette | Toggle the inline blame annotation. |
 
 Stage/unstage/commit/checkout/pull/revert live in `internal/vcs` as async
 commands resolving to result messages; errors surface as toasts carrying the
@@ -71,7 +71,7 @@ decisive git stderr line.
 
 ## VCS tool window (Epic 0330)
 
-`vcs.panel` (`space v v`) toggles the persistent JetBrains-style tool window
+`vcs.panel` (`cmd+9`, JetBrains' Version Control window chord) toggles the persistent JetBrains-style tool window
 (`internal/vcspanel`, pane kind `KindVCS`, singleton key `vcs`): a bottom
 split below the active editor with terminal-style focus-return semantics.
 Two tabs, switched with `1`/`2`/`tab`:

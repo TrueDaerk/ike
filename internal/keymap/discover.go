@@ -28,9 +28,7 @@ func (l *LiveBindings) Table() *BindingTable { return l.table }
 //
 //	blocked command      → "✗ blocked: <dependency>"
 //	delivered chord      → "ctrl+s"
-//	fragile only, with a delivered alternative in the table or the leader
-//	layer                → "cmd+d ⚠ use <alternative>"
-//	fragile only, no alternative → "cmd+d ⚠ terminal-dependent"
+//	fragile only         → "cmd+d ⚠ terminal-dependent"
 func (l *LiveBindings) Binding(id string) (string, bool) {
 	if id == "" || l.table == nil {
 		return "", false
@@ -61,19 +59,14 @@ func (l *LiveBindings) Binding(id string) (string, bool) {
 	if len(fragileChords) == 0 {
 		return "", false
 	}
-	label := fragileChords[0] + " ⚠ "
-	if alt := leaderAlternative(id); alt != "" {
-		return label + "use " + alt, true
-	}
-	return label + "terminal-dependent", true
+	return fragileChords[0] + " ⚠ terminal-dependent", true
 }
 
 // shorterThen orders chord labels fewest-steps-first, then short-first, then
-// lexically, so single-step delivered chords beat leader sequences in the
-// primary slot. Pure string length is not enough for the step rule: "space n"
-// is shorter than "shift+f6" yet takes two keystrokes (#18). Steps are counted
-// by the separating space in Chord.String's format; key bases never contain
-// spaces.
+// lexically, so single-step delivered chords beat multi-step sequences in the
+// primary slot. Pure string length is not enough for the step rule: "cmd+k z"
+// takes two keystrokes yet compares short. Steps are counted by the separating
+// space in Chord.String's format; key bases never contain spaces.
 func shorterThen(a, b string) bool {
 	if sa, sb := strings.Count(a, " "), strings.Count(b, " "); sa != sb {
 		return sa < sb
@@ -82,17 +75,6 @@ func shorterThen(a, b string) bool {
 		return len(a) < len(b)
 	}
 	return a < b
-}
-
-// leaderAlternative names the leader path for a command covered by the
-// mnemonic table ("space d"), "" otherwise.
-func leaderAlternative(id string) string {
-	for _, m := range leaderMnemonics {
-		if m.command == id {
-			return DefaultLeader + " " + m.key
-		}
-	}
-	return ""
 }
 
 // Continuation is one which-key hint: the next key of a longer chord that

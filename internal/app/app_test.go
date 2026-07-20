@@ -905,7 +905,7 @@ func (togglePlugin) ID() string                        { return "toggle" }
 func (togglePlugin) Capabilities() plugin.Capabilities { return plugin.Capabilities{} }
 
 // TestCheatsheetLiveAndBlocked guards 0081/40: the help sheet reads the live
-// table (leader chords appear) and shows blocked bindings with their
+// table and shows blocked bindings with their
 // dependency instead of hiding them.
 func TestCheatsheetLiveAndBlocked(t *testing.T) {
 	// The real blocked ledger emptied with 0320 (#466): stub one entry so the

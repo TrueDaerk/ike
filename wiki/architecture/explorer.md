@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # File Explorer
@@ -162,7 +162,7 @@ these are defaults.
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
 
-`explorer.toggle` (global, `cmd+1` / leader `e`) is the JetBrains cmd+1 state
+`explorer.toggle` (global, `cmd+1`) is the JetBrains cmd+1 state
 machine (#268, `internal/app/explorer_toggle.go`): a focused tree **hides**
 (the layout leaf is removed, editors reclaim the width; the pane instance
 stays registered so expansion/selection/scroll survive), a visible unfocused

@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 
 # Editor Tabs
@@ -137,9 +137,9 @@ one):
 | Command | Default chord | Behaviour |
 |---|---|---|
 | `editor.tab.next` / `editor.tab.prev` | `ctrl+cmd+right` / `ctrl+cmd+left` (also `ctrl+alt+right` / `ctrl+alt+left`) — JetBrains' macOS keymap; palette is the delivered fallback | cycle the active tab, wrapping |
-| `editor.tab.select1…9` | `alt+1`…`alt+9` (leader `space 1…9`) | jump straight to tab N |
+| `editor.tab.select1…9` | `alt+1`…`alt+9` | jump straight to tab N |
 | `editor.tab.moveLeft` / `editor.tab.moveRight` | `ctrl+shift+pgup/pgdown` | reorder the active tab |
-| `editor.tab.reopenClosed` | `alt+shift+t` (leader `space o`) | pop the reopen ring |
+| `editor.tab.reopenClosed` | `cmd+shift+t` (JetBrains) / `alt+shift+t` | pop the reopen ring |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
 
 Tab cycling now mirrors JetBrains' macOS keymap export: `ctrl+cmd+arrow`

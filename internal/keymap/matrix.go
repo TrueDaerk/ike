@@ -8,8 +8,9 @@ import (
 // matrix.go is the acceptance ledger of Roadmap 0081/50: one row per default
 // binding command, aggregating everything the audit established — does the
 // command exist (live), does its primary chord reach the program
-// (reachability, 0081/10), what is the reachable fallback (leader layer,
-// 0081/30), and how it is surfaced (discoverability, 0081/40). The matrix is
+// (reachability, 0081/10), what is the reachable fallback (delivered chord,
+// vim equivalent or palette), and how it is surfaced (discoverability,
+// 0081/40). The matrix is
 // generated, never hand-maintained; the final-gate test asserts that every
 // row is resolved: live with a reachable path, or honestly blocked with its
 // dependency recorded.
@@ -54,42 +55,82 @@ func (r MatrixRow) Status() string {
 }
 
 // reachableAlternatives documents the escape route for fragile-primary
-// commands that have neither a delivered chord nor a leader mnemonic: the
-// vim-native equivalent or the palette. Data here resolves the matrix row
-// and feeds the completeness test.
+// commands without a delivered chord: the vim-native equivalent or the
+// palette (esc esc, delivered everywhere). Since the leader layer retired
+// (#711) the palette is the universal escape for the Cmd/Alt-modified
+// JetBrains chords. Data here resolves the matrix row and feeds the
+// completeness test.
 var reachableAlternatives = map[string]string{
-	"editor.copy":             "vim y",
-	"editor.cut":              "vim d",
-	"editor.paste":            "vim p",
-	"editor.duplicateLine":    "vim yyp",
-	"editor.redo":             "vim ctrl+r",
-	"editor.commentBlock":     "palette",
-	"editor.lineStart":        "vim 0",
-	"editor.lineEnd":          "vim $",
-	"editor.find":             "vim /",
-	"palette.keymapHelp":      "f1",
-	"pane.switcher":           "tab key",
-	"pane.splitDown":          "palette",
-	"pane.splitUp":            "palette",
-	"pane.splitRight":         "palette",
-	"pane.splitLeft":          "palette",
-	"editor.splitViewRight":   "palette",
-	"editor.splitViewDown":    "palette",
-	"editor.pasteFromHistory": "palette",
-	"editor.tab.next":         "palette",
-	"editor.tab.prev":         "palette",
-	"pane.maximize":           "palette",
-	"view.zenMode":            "palette",
-	"explorer.undo":           "palette",
-	"explorer.redo":           "palette",
-	"explorer.reveal":         "palette",
+	"editor.copy":              "vim y",
+	"editor.cut":               "vim d",
+	"editor.paste":             "vim p",
+	"editor.duplicateLine":     "vim yyp",
+	"editor.redo":              "vim ctrl+r",
+	"editor.commentBlock":      "palette",
+	"editor.commentLine":       "palette",
+	"editor.lineStart":         "vim 0",
+	"editor.lineEnd":           "vim $",
+	"editor.find":              "vim /",
+	"editor.replace":           "palette",
+	"editor.saveAll":           "palette",
+	"editor.closeTab":          "palette",
+	"editor.caret.addAll":      "palette",
+	"palette.keymapHelp":       "f1",
+	"palette.searchEverywhere": "palette (esc esc)",
+	"palette.recentFiles":      "palette",
+	"pane.switcher":            "tab key",
+	"pane.splitDown":           "palette",
+	"pane.splitUp":             "palette",
+	"pane.splitRight":          "palette",
+	"pane.splitLeft":           "palette",
+	"editor.splitViewRight":    "palette",
+	"editor.splitViewDown":     "palette",
+	"editor.pasteFromHistory":  "palette",
+	"editor.tab.next":          "palette",
+	"editor.tab.prev":          "palette",
+	"editor.tab.reopenClosed":  "palette",
+	"editor.tab.select1":       "palette",
+	"editor.tab.select2":       "palette",
+	"editor.tab.select3":       "palette",
+	"editor.tab.select4":       "palette",
+	"editor.tab.select5":       "palette",
+	"editor.tab.select6":       "palette",
+	"editor.tab.select7":       "palette",
+	"editor.tab.select8":       "palette",
+	"editor.tab.select9":       "palette",
+	"pane.maximize":            "palette",
+	"explorer.undo":            "palette",
+	"explorer.redo":            "palette",
+	"explorer.reveal":          "palette",
+	"explorer.toggle":          "palette",
+	"project.goToFile":         "palette",
+	"project.goToClass":        "palette",
+	"project.switch":           "palette",
+	"project.findInPath":       "palette",
+	"project.replaceInPath":    "palette",
+	"lsp.references":           "palette",
+	"lsp.format":               "palette",
+	"lsp.codeAction":           "palette",
+	"lsp.callHierarchy":        "palette",
+	"nav.back":                 "palette",
+	"nav.forward":              "palette",
+	"settings.open":            "palette",
+	"terminal.toggle":          "palette",
+	"terminal.new":             "palette",
+	"notifications.history":    "palette",
+	"markdown.preview":         "palette",
+	"todo.list":                "palette",
+	"vcs.commit":               "palette",
+	"vcs.updateProject":        "palette",
+	"vcs.revertFile":           "palette",
+	"vcs.panel":                "palette",
 }
 
-// StatusMatrix builds the ledger over the default table plus the leader
-// layer. commandExists resolves an id against the live registry (nil treats
-// every non-blocked command as live — the data-only view).
+// StatusMatrix builds the ledger over the default table. commandExists
+// resolves an id against the live registry (nil treats every non-blocked
+// command as live — the data-only view).
 func StatusMatrix(commandExists func(id string) bool) []MatrixRow {
-	rows := append(Defaults(PresetJetBrains), LeaderRows(DefaultLeader)...)
+	rows := Defaults(PresetJetBrains)
 	byCmd := map[string]*MatrixRow{}
 	for _, b := range rows {
 		if b.Command == "" {
@@ -134,9 +175,7 @@ func StatusMatrix(commandExists func(id string) bool) []MatrixRow {
 		if r.Class == Delivered {
 			r.Fallback = "" // the primary already delivers
 		} else if r.Fallback == "" {
-			if alt := leaderAlternative(id); alt != "" {
-				r.Fallback = alt
-			} else if alt := reachableAlternatives[id]; alt != "" {
+			if alt := reachableAlternatives[id]; alt != "" {
 				r.Fallback = alt
 			}
 		}

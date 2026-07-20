@@ -38,8 +38,7 @@ var jetbrainsRows = []row{
 	// n/N remain the vim-flavored equivalents inside the pane.
 	{"f7", "diff.nextChange", "Next change (diff)", Diff, "Diff (0340)"},
 	{"shift+f7", "diff.prevChange", "Previous change (diff)", Diff, "Diff (0340)"},
-	// JetBrains' call-hierarchy chord (#173); alt is fragile, so the leader
-	// mnemonic (space H) is the delivered escape route.
+	// JetBrains' call-hierarchy chord (#173).
 	{"ctrl+alt+h", "lsp.callHierarchy", "Call hierarchy", Editor, "LSP (0100)"},
 	// shift+f6 is JetBrains' context-aware refactor-rename (0082 sheet 13):
 	// with an editor focused it renames the *symbol* at the cursor (LSP #6);
@@ -137,6 +136,10 @@ var jetbrainsRows = []row{
 	{"ctrl+alt+left", "editor.tab.prev", "Previous tab", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgdown", "editor.tab.moveRight", "Move tab right", Global, "Editor tabs (0190)"},
 	{"ctrl+shift+pgup", "editor.tab.moveLeft", "Move tab left", Global, "Editor tabs (0190)"},
+	// Reopen closed tab: cmd+shift+t is the JetBrains chord; alt+shift+t stays
+	// as the secondary. (vcs.revertFile moved to JetBrains' rollback chord
+	// cmd+alt+z to free the primary, #711.)
+	{"cmd+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+1", "editor.tab.select1", "Go to tab 1", Global, "Editor tabs (0190)"},
 	{"alt+2", "editor.tab.select2", "Go to tab 2", Global, "Editor tabs (0190)"},
@@ -147,34 +150,39 @@ var jetbrainsRows = []row{
 	{"alt+7", "editor.tab.select7", "Go to tab 7", Global, "Editor tabs (0190)"},
 	{"alt+8", "editor.tab.select8", "Go to tab 8", Global, "Editor tabs (0190)"},
 	{"alt+9", "editor.tab.select9", "Go to tab 9", Global, "Editor tabs (0190)"},
-	{"cmd+shift+t", "vcs.revertFile", "Revert file", Global, "VCS (future)"},
-	{"cmd+k cmd+c", "editor.commentLine", "Comment (chord example)", Editor, "Editor (06)"},
-	{"cmd+k cmd+s", "palette.keymapHelp", "Show keymap cheatsheet", Global, "Keymap (08)"},
+	// JetBrains' rollback chord (cmd+alt+z); cmd+shift+t went to reopen-closed
+	// above (#711).
+	{"cmd+alt+z", "vcs.revertFile", "Revert file", Global, "VCS (future)"},
+	// JetBrains Version Control tool window (#711).
+	{"cmd+9", "vcs.panel", "Toggle VCS tool window", Global, "VCS (0320)"},
+	// The cmd+k sequence family below is the deliberate multi-step exception
+	// set (#711): pane splits plus maximize, five sequences total. Everything
+	// else binds a single modifier chord.
 	{"cmd+k down", "pane.splitDown", "Split down", Global, "App (01)"},
 	{"cmd+k up", "pane.splitUp", "Split up", Global, "App (01)"},
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)"},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)"},
 	{"cmd+k z", "pane.maximize", "Maximize pane", Global, "Zen & maximize (#358)"},
-	{"cmd+k shift+z", "view.zenMode", "Zen mode", Global, "Zen & maximize (#359)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).
 	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},
 	{"ctrl+shift+g", "editor.caret.addAll", "Add carets at all occurrences", Editor, "Multi-caret (#145)"},
-	// Rendered markdown preview (#62): the cmd+k leader keeps it off fragile
-	// alt chords; the palette remains the universal route.
-	{"cmd+k m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
-	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord; where it
-	// is fragile the leader mnemonic (space D / ctrl+k D) is the delivered
-	// route ("ctrl+k t" would shadow the terminal-toggle mnemonic).
+	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
+	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
+	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.
 	{"cmd+6", "todo.list", "TODO index", Global, "TODO index (#61)"},
-	{"cmd+k shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
-	{"cmd+k shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
+	{"cmd+alt+shift+right", "editor.splitViewRight", "Split view right", Global, "Split view (#147)"},
+	{"cmd+alt+shift+down", "editor.splitViewDown", "Split view down", Global, "Split view (#147)"},
 	{"f1", "palette.keymapHelp", "Help / cheatsheet", Global, "Keymap (08)"},
 	// JetBrains terminal toggle. Alt+F-key delivery depends on the terminal,
 	// hence fragile; inside a focused terminal the reserved-set handler picks
 	// it up before the chord layer (raw pass-through).
 	{"alt+f12", "terminal.toggle", "Toggle terminal", Global, "Terminal (0170)"},
+	// New terminal session and notification history: single chords since the
+	// leader layer retired (#711); JetBrains has no defaults for either.
+	{"cmd+alt+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
+	{"cmd+alt+n", "notifications.history", "Notification history", Global, "Notifications (#242)"},
 	// JetBrains Run (Windows keymap's shift+f10; macOS ctrl+r would shadow
 	// vim's redo in the editor, so the F-key is the delivered primary, 0350).
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
