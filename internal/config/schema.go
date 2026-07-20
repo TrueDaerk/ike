@@ -225,6 +225,11 @@ type Project struct {
 	History     []ProjectHistoryEntry `toml:"history"`
 	MaxHistory  int                   `toml:"max_history"`
 	RestoreLast bool                  `toml:"restore_last"`
+	// MaxWorkspaces caps the live background workspaces kept across seamless
+	// project switches (0370, #780); exceeding it evicts the
+	// least-recently-used one (with a confirm when unsaved buffers or
+	// running processes would die). <=0 selects the default (3).
+	MaxWorkspaces int `toml:"max_workspaces"`
 }
 
 // ProjectHistoryEntry is one recently opened project as persisted in

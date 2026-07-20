@@ -170,6 +170,9 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// past every failure point) and announce the switch.
 	sizedTM, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	sized := sizedTM.(Model)
+	// Hold the background set to project.max_workspaces (#780): idle LRU
+	// workspaces drop silently, a busy one asks first.
+	sized.enforceWorkspaceCap()
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,

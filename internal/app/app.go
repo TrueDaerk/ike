@@ -253,6 +253,9 @@ type Model struct {
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
 	switchPending string
+	// evictPending is the busy LRU background workspace root awaiting the
+	// eviction-guard answer (0370 M4, #780).
+	evictPending string
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -3469,6 +3472,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// keyboard the same way: s / d / esc answer it.
 		if m.switchPromptOpen() {
 			return m.updateSwitchPrompt(msg)
+		}
+		// The background-workspace eviction guard (0370 M4, #780): e / esc.
+		if m.evictPromptOpen() {
+			return m.updateEvictPrompt(msg)
 		}
 		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
 		if m.closePromptOpen() {

@@ -321,3 +321,86 @@ func TestSwitchReAnchorsConfigLayer(t *testing.T) {
 		t.Fatalf("project config layer must re-resolve on switch, got %q ok=%v", v, ok)
 	}
 }
+
+// evictFixture builds three projects; c's config caps background workspaces
+// at one, so arriving there forces an eviction decision about a (#780).
+func evictFixture(t *testing.T) (a, b, c string) {
+	t.Helper()
+	base := t.TempDir()
+	a, b, c = filepath.Join(base, "a"), filepath.Join(base, "b"), filepath.Join(base, "c")
+	for _, d := range []string{a, b, filepath.Join(c, ".ike")} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(c, ".ike", "settings.toml"),
+		[]byte("[project]\nmax_workspaces = 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return a, b, c
+}
+
+// TestWorkspaceCapEvictsIdleLRU (#780): past project.max_workspaces the
+// least-recently-used idle background workspace drops silently.
+func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
+	a, b, c := evictFixture(t)
+	t.Chdir(a)
+	m := switchModel(t)
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
+	m = out.(Model)
+	if m.evictPromptOpen() {
+		t.Fatal("an idle workspace must evict without a prompt")
+	}
+	bg := m.ws.Background()
+	if len(bg) != 1 || !sameDir(t, bg[0], b) {
+		t.Fatalf("background = %v, want just b", bg)
+	}
+}
+
+// TestWorkspaceCapGuardsBusyEviction (#780): a busy LRU workspace (dirty
+// buffer) asks first; e evicts, esc keeps it over the limit.
+func TestWorkspaceCapGuardsBusyEviction(t *testing.T) {
+	a, b, c := evictFixture(t)
+	file := filepath.Join(a, "a.txt")
+	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(a)
+	m := switchModel(t)
+	m = openDirty(t, m, file)
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
+	m = out.(Model)
+	if !m.evictPromptOpen() {
+		t.Fatal("a busy LRU workspace must open the eviction guard")
+	}
+	if len(m.ws.Background()) != 2 {
+		t.Fatal("nothing may be evicted before the answer")
+	}
+	// esc keeps it (over the limit).
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.evictPromptOpen() || len(m.ws.Background()) != 2 {
+		t.Fatal("esc must keep the busy workspace")
+	}
+	// Trigger again via another switch round and confirm with e.
+	out, _ = m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: c})
+	m = out.(Model)
+	if !m.evictPromptOpen() {
+		t.Fatal("the guard must re-ask on the next switch")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	m = out.(Model)
+	bg := m.ws.Background()
+	if len(bg) != 1 || !sameDir(t, bg[0], b) {
+		t.Fatalf("e must evict the busy workspace, background = %v", bg)
+	}
+	if data, _ := os.ReadFile(file); string(data) != "one\n" {
+		t.Fatalf("eviction discards, never writes, file = %q", data)
+	}
+}
