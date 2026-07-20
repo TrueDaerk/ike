@@ -22,10 +22,19 @@ import (
 // one), unbinding writes chord→"", and reset removes the override so the
 // preset default falls back through the layers.
 
+// CommandEntry is a registered command the keymap page can offer for binding
+// (#771): id plus human-facing title. Configured tool commands (tool.<name>,
+// #741) are registry commands and therefore appear too.
+type CommandEntry struct {
+	ID    string
+	Title string
+}
+
 // KeymapPage implements PageModel.
 type KeymapPage struct {
 	opts       config.Options
 	registered func(commandID string) bool
+	commands   func() []CommandEntry
 	pal        *theme.Palette
 
 	sel       int
@@ -51,9 +60,11 @@ type KeymapPage struct {
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
 // registered reports whether a command id resolves in the registry (blocked
-// ids render disabled-with-reason instead of hidden).
-func NewKeymapPage(opts config.Options, registered func(commandID string) bool) *KeymapPage {
-	return &KeymapPage{opts: opts, registered: registered}
+// ids render disabled-with-reason instead of hidden). commands lists every
+// registered command so ids without any binding — plugin commands, configured
+// tools — appear as bindable "(no binding)" rows (#771); nil hides none.
+func NewKeymapPage(opts config.Options, registered func(commandID string) bool, commands func() []CommandEntry) *KeymapPage {
+	return &KeymapPage{opts: opts, registered: registered, commands: commands}
 }
 
 // SetPalette implements PageModel.
@@ -71,6 +82,9 @@ func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering || k.i
 type keymapRow struct {
 	keymap.Binding
 	unbound bool
+	// nobind marks a registered command with no binding at all (#771): no
+	// chord to unbind or reset, enter captures its first chord.
+	nobind bool
 }
 
 // table builds the effective binding table from the live config — the same
@@ -105,12 +119,31 @@ func (k *KeymapPage) rows() []keymapRow {
 	for _, b := range all {
 		rows = append(rows, keymapRow{Binding: b})
 	}
+	haveCmd := make(map[string]bool, len(all))
+	for _, b := range all {
+		haveCmd[b.Command] = true
+	}
 	for _, d := range k.defaults() {
 		d.Chord = keymap.NormalizeChord(d.Chord, keymap.GOOS)
+		haveCmd[d.Command] = true
 		if have[d.Command+"\x00"+d.Chord.String()] {
 			continue
 		}
 		rows = append(rows, keymapRow{Binding: d, unbound: true})
+	}
+	// Registered commands with no binding at all — plugin commands, configured
+	// tools — are listed as bindable "(no binding)" rows (#771).
+	if k.commands != nil {
+		for _, c := range k.commands() {
+			if c.ID == "" || haveCmd[c.ID] {
+				continue
+			}
+			haveCmd[c.ID] = true
+			rows = append(rows, keymapRow{
+				Binding: keymap.Binding{Command: c.ID, Title: c.Title, Context: keymap.Global},
+				nobind:  true,
+			})
+		}
 	}
 	needle := strings.ToLower(k.filter)
 	var out []keymapRow
@@ -120,6 +153,9 @@ func (k *KeymapPage) rows() []keymapRow {
 			if b.unbound {
 				hay += " unbound"
 			}
+			if b.nobind {
+				hay += " no binding"
+			}
 			if !strings.Contains(hay, needle) {
 				continue
 			}
@@ -127,6 +163,14 @@ func (k *KeymapPage) rows() []keymapRow {
 		out = append(out, b)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
+		// Bound (and unbound-default) rows first; never-bound commands trail
+		// the list, sorted by id (#771).
+		if out[i].nobind != out[j].nobind {
+			return !out[i].nobind
+		}
+		if out[i].nobind {
+			return out[i].Command < out[j].Command
+		}
 		if out[i].Context != out[j].Context {
 			return out[i].Context < out[j].Context
 		}
@@ -172,12 +216,13 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "u":
 		// Unbind: an override chord→"" drops the binding on reload. An
 		// already-unbound row has nothing to drop.
-		if b, ok := k.current(); ok && !b.unbound {
+		if b, ok := k.current(); ok && !b.unbound && !b.nobind {
 			return config.WriteAndReload(k.opts, config.UserScope, "keymap.bindings."+b.Chord.String(), "")
 		}
 	case "r":
-		// Reset to preset: remove the override; the default falls back.
-		if b, ok := k.current(); ok {
+		// Reset to preset: remove the override; the default falls back. A
+		// never-bound command has no override to remove.
+		if b, ok := k.current(); ok && !b.nobind {
 			return config.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings."+b.Chord.String())
 		}
 	case "backspace":
@@ -375,7 +420,7 @@ func (k *KeymapPage) commitRebind(b keymapRow) tea.Cmd {
 	oldKey := "keymap.bindings." + b.Chord.String()
 	command := b.Command
 	sameChord := chord.Equal(b.Chord)
-	unbound := b.unbound
+	unbound := b.unbound || b.nobind
 	return func() tea.Msg {
 		var diags []config.Diagnostic
 		if err := config.WriteKey(opts, config.UserScope, newKey, command); err != nil {
@@ -503,6 +548,9 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	if b.unbound {
 		chord = "(unbound)"
 	}
+	if b.nobind {
+		chord = "(no binding)"
+	}
 	if selected && k.capturing {
 		if len(k.steps) > 0 {
 			chord = k.captured().String() + "…"
@@ -557,6 +605,11 @@ func (k *KeymapPage) detailLine(b keymapRow) footerLine {
 	case b.unbound:
 		return footerLine{
 			text:  "   " + b.Command + " — unbound (default " + b.Chord.String() + ") · enter set binding · r reset to preset",
+			style: lipgloss.NewStyle().Foreground(pal.Secondary),
+		}
+	case b.nobind:
+		return footerLine{
+			text:  "   " + b.Command + " — no binding · enter set binding",
 			style: lipgloss.NewStyle().Foreground(pal.Secondary),
 		}
 	default:

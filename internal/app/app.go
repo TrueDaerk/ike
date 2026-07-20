@@ -509,6 +509,16 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	pages = append(pages, settings.Page{Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok
+	}, func() []settings.CommandEntry {
+		// Every registered command — including configured tools (#741),
+		// whose tool.<name> commands the registry rebuilds per query — so
+		// the page can offer never-bound ids for binding (#771).
+		cmds := reg.Commands()
+		out := make([]settings.CommandEntry, len(cmds))
+		for i, c := range cmds {
+			out[i] = settings.CommandEntry{ID: c.ID, Title: c.Title}
+		}
+		return out
 	})})
 	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
 	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
