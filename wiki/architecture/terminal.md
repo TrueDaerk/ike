@@ -180,7 +180,10 @@ reality-probe caveat).
   editor; one exists unfocused → focus it (remembering where focus was);
   focused → return focus to the remembered pane (falling back to the active
   editor, then the explorer). Inside a focused terminal the reserved-set
-  handler catches `alt+f12` before the raw pass-through.
+  handler catches `alt+f12` before the raw pass-through. Custom tool panes
+  (#741) never count as "the terminal" here (#772): with only tool panes
+  open, toggle spawns a new regular terminal instead of focusing a tool —
+  the same rule keeps `terminal.clear` off tool panes.
 - **`terminal.new`** opens an additional session; **`terminal.clear`** wipes
   screen and scrollback via the canonical `CSI 2J` + `CSI 3J` pair (2J alone
   pushes the visible lines *into* the scrollback — the xterm behaviour) and
