@@ -24,11 +24,11 @@ func TestLSPPopupOverflowsPaneButNotTerminal(t *testing.T) {
 	m.SplitFocused(layout.ZoneRight) // focus lands on the fresh right editor
 	tm, _ := m.openPath(p, false)
 	m = tm.(Model)
-	r := m.lay.Panes[m.panes.Focused()]
+	r := m.lay.Panes[m.activeWS().Panes.Focused()]
 
 	wide := strings.Repeat("x", 70) // wider than the split pane
 	m = dispatch(t, m, ilsp.HoverMsg{Path: p, Contents: wide})
-	if !m.panes.FocusedInstance().Editor().HoverOpen() {
+	if !m.activeWS().Panes.FocusedInstance().Editor().HoverOpen() {
 		t.Fatal("setup: hover popup should be open")
 	}
 
@@ -62,7 +62,7 @@ func TestLSPPopupsCarryRoundedFrame(t *testing.T) {
 	p := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, p)
 	m = dispatch(t, m, ilsp.HoverMsg{Path: p, Contents: "info"})
-	v := ansi.Strip(m.panes.FocusedInstance().Editor().HoverView())
+	v := ansi.Strip(m.activeWS().Panes.FocusedInstance().Editor().HoverView())
 	for _, corner := range []string{"╭", "╮", "╰", "╯"} {
 		if !strings.Contains(v, corner) {
 			t.Fatalf("hover popup misses frame corner %q:\n%s", corner, v)

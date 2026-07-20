@@ -33,7 +33,7 @@ type pendingClose struct {
 // last tab) unless that would drop unsaved changes, in which case the guard
 // prompt opens and the close waits for the user's answer.
 func (m *Model) guardedCloseFocused() {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst != nil && inst.Kind() == pane.KindEditor {
 		idx := -1
 		if inst.TabCount() > 1 {
@@ -63,8 +63,8 @@ func (m Model) guardedQuit() (tea.Model, tea.Cmd) {
 func (m *Model) dirtyEverywhere() []string {
 	var dirty []string
 	seen := map[string]bool{}
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -161,7 +161,7 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		m.closePending = nil
 		m.shell.Close()
-		inst := m.panes.Get(pending.key)
+		inst := m.activeWS().Panes.Get(pending.key)
 		if inst == nil {
 			return m, nil
 		}

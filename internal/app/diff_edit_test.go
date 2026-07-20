@@ -38,7 +38,7 @@ func TestDiffEditMode(t *testing.T) {
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.txt": vcs.StatusModified})
 	out, _ := m.Update(vcs.HeadDiffMsg{Path: path, Head: "ONE\ntwo\nthree\n"})
 	m = out.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindDiff || !inst.Diff().Editable() {
 		t.Fatalf("setup: kind=%v editable=%v", inst.Kind(), inst.Diff().Editable())
 	}
@@ -47,7 +47,7 @@ func TestDiffEditMode(t *testing.T) {
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	m = out.(Model)
 	m = chain(t, m, cmd)
-	inst = m.panes.FocusedInstance()
+	inst = m.activeWS().Panes.FocusedInstance()
 	ed := inst.DiffEditor()
 	if ed == nil || ed.Path() != path {
 		t.Fatal("edit mode did not mount the editor")
@@ -63,7 +63,7 @@ func TestDiffEditMode(t *testing.T) {
 		out, _ := m.Update(k)
 		m = out.(Model)
 	}
-	inst = m.panes.FocusedInstance()
+	inst = m.activeWS().Panes.FocusedInstance()
 	if inst.Diff().HunkCount() == hunks && inst.DiffEditor().Text() == "one\ntwo\nthree\n" {
 		t.Fatal("edit did not reach the embedded editor / re-diff")
 	}
@@ -71,7 +71,7 @@ func TestDiffEditMode(t *testing.T) {
 	// ctrl+e returns to browsing; the last state stays diffed.
 	out, _ = m.Update(tea.KeyPressMsg{Code: 'e', Mod: tea.ModCtrl})
 	m = out.(Model)
-	if m.panes.FocusedInstance().DiffEditor() != nil {
+	if m.activeWS().Panes.FocusedInstance().DiffEditor() != nil {
 		t.Fatal("ctrl+e must leave edit mode")
 	}
 }
@@ -84,14 +84,14 @@ func TestDiffEditModeReadOnlyForRevisions(t *testing.T) {
 	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
 	out, _ := m.Update(vcs.FileAtMsg{Hash: "aaaaaaaa", Path: "f.txt", Parent: "v1\n", Content: "v2\n"})
 	m = out.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindDiff || inst.Diff().Editable() {
 		t.Fatalf("setup: revision diff must not be editable")
 	}
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
 	m = out.(Model)
 	m = chain(t, m, cmd)
-	if m.panes.FocusedInstance().DiffEditor() != nil {
+	if m.activeWS().Panes.FocusedInstance().DiffEditor() != nil {
 		t.Fatal("revision diff mounted an editor")
 	}
 }

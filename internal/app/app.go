@@ -65,6 +65,7 @@ import (
 	"ike/internal/vcspanel"
 	"ike/internal/wasm"
 	"ike/internal/watch"
+	"ike/internal/workspace"
 )
 
 // Context ids the core panes advertise for context-scoped command/keymap
@@ -109,10 +110,11 @@ type Model struct {
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
 	navSkip      bool
-	// panes is the registry of live pane instances (Roadmap 0037). It replaces the
-	// two hard-coded explorer/editor fields and the two-value focus enum: focus is
-	// the registry's focused key, which always names a layout leaf.
-	panes *pane.Registry
+	// ws manages the active workspace (Roadmap 0370, #776): the pane registry,
+	// the split tree and the terminal return-focus live behind it so a project
+	// switch can later swap the whole unit atomically. Focus is the registry's
+	// focused key, which always names a layout leaf.
+	ws *workspace.Manager
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
@@ -243,9 +245,8 @@ type Model struct {
 	// search-everywhere seat, which must not open the palette.
 	symbols       *symbolMode
 	symbolPriming bool
-	// terminalReturnFocus remembers the pane focused before terminal.toggle
-	// moved focus into a terminal, so toggling again returns there (#97).
-	terminalReturnFocus string
+	// The terminal return-focus (#97) moved into the workspace (#776):
+	// m.activeWS().ReturnFocus.
 	// vcsReturnFocus is the same dance for the VCS tool window (0330, #482).
 	vcsReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
@@ -306,9 +307,8 @@ type Model struct {
 	// lastEsc records that the previous key was an esc in a non-capturing context,
 	// so a second esc opens the palette (esc-esc toggle).
 	lastEsc bool
-	// tree is the pure split-tree layout (Roadmap 0036/0037). Leaves are instance
-	// keys resolved through panes.
-	tree layout.Node
+	// The split-tree layout (Roadmap 0036/0037) lives in the workspace (#776):
+	// m.activeWS().Tree. Leaves are instance keys resolved through the panes.
 	// lay caches the rectangles + dividers computed from tree for the current
 	// viewport, so mouse hit-testing and rendering share one geometry.
 	lay layout.Layout
@@ -462,7 +462,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m := Model{
 		cmdUsage:     cmdUsage,
 		winSizes:     winSizes,
-		panes:        panes,
+		ws:           workspace.NewManager(workspace.New("", panes)),
 		recentEditor: edKey,
 		recent:       recent,
 		largeToasted: map[string]bool{},
@@ -581,12 +581,12 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	// or stale layout is dropped and the default is built on first size.
 	m.restoreLayout(cfg)
 	m.restoreSession()
-	// restoreLayout replaces m.panes with a fresh registry that never saw the
+	// restoreLayout replaces m.activeWS().Panes with a fresh registry that never saw the
 	// applyTheme above (#722): without re-threading, every restored pane
 	// (explorer file colors, editor highlight captures) renders the default
 	// dark theme's tokens — near-white identifiers on a light theme's
 	// background. Idempotent when no layout was restored.
-	m.panes.SetPalette(themePal)
+	m.activeWS().Panes.SetPalette(themePal)
 	m.scanRecovery()
 	m.scanTour()
 	m.scanOnboarding()
@@ -704,7 +704,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 // edits flow to the LSP bridge. It is idempotent and re-run whenever editors are
 // created.
 func (m *Model) wireEditorEmitters() {
-	for _, key := range m.panes.Keys() {
+	for _, key := range m.activeWS().Panes.Keys() {
 		m.installEmitter(key)
 	}
 }
@@ -712,7 +712,7 @@ func (m *Model) wireEditorEmitters() {
 // installEmitter wires the editor-emitter adapter onto every tab of one editor
 // pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
-	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		source, adjust := breakpointHooks(m.bpts)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
@@ -892,9 +892,9 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		inst.ActivateTab(active)
 	}
 	panes.SetFocused(pane.ExplorerKey)
-	m.panes = panes
+	m.activeWS().Panes = panes
 	m.recentEditor = firstEditorKey(leaves)
-	m.tree = tree
+	m.activeWS().Tree = tree
 }
 
 // firstEditorKey returns the first editor leaf key in walk order, or "".
@@ -934,12 +934,12 @@ func (m *Model) restoreSession() {
 			if key == "" {
 				key = m.spawnEditor()
 			}
-			if err := m.panes.Get(key).Editor().Load(s.Editor.Path); err != nil {
+			if err := m.activeWS().Panes.Get(key).Editor().Load(s.Editor.Path); err != nil {
 				key = ""
 			}
 		}
 		if key != "" {
-			ed := m.panes.Get(key).Editor()
+			ed := m.activeWS().Panes.Get(key).Editor()
 			ed.SetCursor(s.Editor.Line, s.Editor.Col)
 			// Defer the viewport framing until the editor is sized.
 			m.pendingScroll = &editorScroll{key: key, top: s.Editor.Top, left: s.Editor.Left}
@@ -954,8 +954,8 @@ func (m *Model) restoreSession() {
 // editorWithFile returns the key of an editor instance holding path in any of
 // its tabs, activating that tab, or "" if none does.
 func (m Model) editorWithFile(path string) string {
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -979,7 +979,7 @@ func (m Model) snapshotSession() sessionState {
 		},
 	}
 	if key := m.activeEditorKey(); key != "" {
-		ed := m.panes.Get(key).Editor()
+		ed := m.activeWS().Panes.Get(key).Editor()
 		if ed.HasFile() {
 			line, col := ed.CursorPos()
 			top, left := ed.ScrollOffset()
@@ -993,8 +993,8 @@ func (m Model) snapshotSession() sessionState {
 func (m Model) quit() (tea.Model, tea.Cmd) {
 	saveSession(m.snapshotSession())
 	m.persistUndoAll()
-	if m.tree != nil {
-		saveLayout(m.tree, m.panes)
+	if m.activeWS().Tree != nil {
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 	m.backupCleanShutdown()
 	return m, tea.Quit
@@ -1005,8 +1005,8 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 // view covers them all.
 func (m Model) persistUndoAll() {
 	seen := map[string]bool{}
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -1273,7 +1273,7 @@ func applyPluginConfig(reg *registry.Registry, cfg host.Config) {
 // dead one (shell exited) falls back to normal key handling so ctrl+w can
 // close it.
 func (m Model) terminalFocused() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
 		return false
 	}
@@ -1355,8 +1355,8 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 // (#573); a dedicated single-session terminal pane gets a fresh terminal
 // pane split below it. The new session is focused either way.
 func (m *Model) newTerminalSibling() {
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return
 	}
@@ -1366,24 +1366,28 @@ func (m *Model) newTerminalSibling() {
 	}
 	switch inst.Kind() {
 	case pane.KindEditor:
-		tkey := m.panes.MintTerminalKey()
+		tkey := m.activeWS().Panes.MintTerminalKey()
 		term := terminal.New(tkey, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
 		inst.AddTerminalTab(term)
 		m.setFocus(key)
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	case pane.KindTerminal:
-		nkey := m.panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
-		tree, ok := layout.SplitLeaf(m.tree, key, nkey, layout.ZoneBottom)
+		nkey := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+		tree, ok := layout.SplitLeaf(m.activeWS().Tree, key, nkey, layout.ZoneBottom)
 		if !ok {
-			m.panes.Close(nkey)
+			m.activeWS().Panes.Close(nkey)
 			return
 		}
-		m.tree = tree
+		m.activeWS().Tree = tree
 		m.setFocus(nkey)
 		m.layout()
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 }
+
+// activeWS returns the active workspace (Roadmap 0370, #776): the single
+// access path to the pane registry, split tree and terminal return-focus.
+func (m Model) activeWS() *workspace.Workspace { return m.ws.Active() }
 
 // currentTerminal returns the focused regular terminal instance, else the
 // first regular terminal in pane order, else nil. Tool panes (#741) never
@@ -1392,11 +1396,11 @@ func (m Model) currentTerminal() *pane.Instance {
 	// Custom tool panes (#741) reuse the terminal machinery but are not
 	// regular terminals: terminal.toggle/clear must not treat them as the
 	// terminal to focus or clear (#772).
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
 		return inst
 	}
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == "" {
 			return inst
 		}
 	}
@@ -1410,20 +1414,20 @@ func (m Model) currentTerminal() *pane.Instance {
 func (m *Model) toggleTerminal() {
 	inst := m.currentTerminal()
 	if inst == nil {
-		m.terminalReturnFocus = m.panes.Focused()
+		m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
 		m.openTerminal()
 		return
 	}
-	if m.panes.Focused() != inst.Key() {
-		m.terminalReturnFocus = m.panes.Focused()
+	if m.activeWS().Panes.Focused() != inst.Key() {
+		m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
 		m.setFocus(inst.Key())
 		return
 	}
-	target := m.terminalReturnFocus
-	if target == "" || !m.panes.Has(target) {
+	target := m.activeWS().ReturnFocus
+	if target == "" || !m.activeWS().Panes.Has(target) {
 		target = m.activeEditorKey()
 	}
-	if target == "" || !m.panes.Has(target) {
+	if target == "" || !m.activeWS().Panes.Has(target) {
 		target = pane.ExplorerKey
 	}
 	m.setFocus(target)
@@ -1506,25 +1510,25 @@ func terminalEnv() []string {
 func (m *Model) openTerminal() {
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
 	shell := ""
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	key := m.panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	key := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.setFocus(key)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // openTerminalTab opens a fresh shell session as a new tab of the active
@@ -1536,16 +1540,16 @@ func (m *Model) openTerminalTab() {
 		m.openTerminal()
 		return
 	}
-	inst := m.panes.Get(target)
+	inst := m.activeWS().Panes.Get(target)
 	shell := ""
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	key := m.panes.MintTerminalKey()
+	key := m.activeWS().Panes.MintTerminalKey()
 	term := terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
 	inst.AddTerminalTab(term)
 	m.setFocus(target)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // openMarkdownPreview opens a rendered preview pane for the active editor's
@@ -1555,35 +1559,35 @@ func (m *Model) openTerminalTab() {
 // no-op with a toast.
 func (m *Model) openMarkdownPreview() {
 	target := m.activeEditorKey()
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		m.host.Notify(host.Info, "markdown preview needs an open markdown file")
 		return
 	}
-	ed := m.panes.Get(target).Editor()
+	ed := m.activeWS().Panes.Get(target).Editor()
 	if ed == nil || !ed.HasFile() || !isMarkdownPath(ed.Path()) {
 		m.host.Notify(host.Info, "markdown preview needs an open markdown file")
 		return
 	}
 	path := ed.Path()
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
 			m.setFocus(key)
 			return
 		}
 	}
-	key := m.panes.AddMarkdownPreview(path)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	key := m.activeWS().Panes.AddMarkdownPreview(path)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.layout()
-	pv := m.panes.Get(key).Preview()
+	pv := m.activeWS().Panes.Get(key).Preview()
 	pv.SetSourceImmediate(ed.Text())
 	line, _ := ed.CursorPos()
 	pv.SetCursorLine(line)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // openDiffPane splits the focused leaf with a read-only diff viewer comparing
@@ -1593,28 +1597,28 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	// The same file pair re-opens by focusing the existing pane with fresh
 	// contents (#509).
 	if key, ok := m.findDiffPane(leftPath, rightPath, "", ""); ok {
-		m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+		m.activeWS().Panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 		m.setFocus(key)
 		return
 	}
 	// Single diff window (#513): retarget the existing pane instead of
 	// splitting another one.
 	if key, ok := m.diffSlot(); ok {
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(baseName(leftPath), baseName(rightPath), leftPath, rightPath, "", "", true)
 		inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 		m.setFocus(key)
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.panes.AddDiff(leftPath, rightPath)
+	key := m.activeWS().Panes.AddDiff(leftPath, rightPath)
 	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
+	m.activeWS().Panes.Get(key).Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 	m.setFocus(key)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // diffSlot returns the diff pane to reuse in single-window mode (#513): the
@@ -1624,8 +1628,8 @@ func (m Model) diffSlot() (string, bool) {
 	if v, ok := m.host.Config().Get("diff.windows"); ok && v == "multi" {
 		return "", false
 	}
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
 			return key, true
 		}
 	}
@@ -1636,8 +1640,8 @@ func (m Model) diffSlot() (string, bool) {
 // pair plus the per-side revisions ("" = working tree). Re-opening the same
 // diff focuses it instead of splitting a duplicate (#509).
 func (m Model) findDiffPane(leftPath, rightPath, leftRev, rightRev string) (string, bool) {
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindDiff {
 			continue
 		}
@@ -1693,8 +1697,8 @@ func isMarkdownPath(path string) bool {
 // previewsForPath returns every markdown preview instance bound to path.
 func (m Model) previewsForPath(path string) []*pane.Instance {
 	var out []*pane.Instance
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
 			out = append(out, inst)
 		}
 	}
@@ -1703,7 +1707,7 @@ func (m Model) previewsForPath(path string) []*pane.Instance {
 
 // explorer returns the singleton explorer model.
 func (m Model) explorer() *explorer.Model {
-	return m.panes.Get(pane.ExplorerKey).Explorer()
+	return m.activeWS().Panes.Get(pane.ExplorerKey).Explorer()
 }
 
 // Init implements tea.Model.
@@ -1720,8 +1724,8 @@ func (m Model) Init() tea.Cmd {
 	// files already open at launch and they get no diagnostics until reopened.
 	// Init runs after main.go wires the sender, so the bridge's async results land.
 	opened := map[string]bool{} // one EventFileOpened per file — shared tabs/leaves (#142)
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -1919,7 +1923,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A selected state (#59): restore the focused editor's buffer to it,
 		// then refresh the overlay so the current marker follows the jump.
 		if key := m.activeEditorKey(); key != "" {
-			cmd := m.panes.Get(key).Update(editor.HistoryJumpMsg{Seq: msg.Seq})
+			cmd := m.activeWS().Panes.Get(key).Update(editor.HistoryJumpMsg{Seq: msg.Seq})
 			if ed := m.activeEditor(); ed != nil {
 				m.undoTree.SetNodes(ed.HistoryTree())
 			}
@@ -2082,8 +2086,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// editor.saveAll (cmd+shift+s / palette): write every dirty editor,
 		// background tabs included.
 		var cmds []tea.Cmd
-		for _, key := range m.panes.Keys() {
-			inst := m.panes.Get(key)
+		for _, key := range m.activeWS().Panes.Keys() {
+			inst := m.activeWS().Panes.Get(key)
 			if inst == nil || inst.Kind() != pane.KindEditor {
 				continue
 			}
@@ -2380,7 +2384,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case preview.RenderTickMsg:
 		// A preview's debounce timer fired: route it to the owning pane, which
 		// renders only when the tick is still the newest one.
-		if inst := m.panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindMarkdown {
+		if inst := m.activeWS().Panes.Get(msg.Key); inst != nil && inst.Kind() == pane.KindMarkdown {
 			return m, inst.Update(msg)
 		}
 		return m, nil
@@ -2408,7 +2412,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
 		// column. Revision-only diffs (the log's parent-vs-commit view) stay
 		// read-only with a hint.
-		inst := m.panes.Get(msg.Key)
+		inst := m.activeWS().Panes.Get(msg.Key)
 		if inst == nil || inst.Kind() != pane.KindDiff || inst.DiffEditor() != nil {
 			return m, nil
 		}
@@ -2439,7 +2443,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// diff.nextChange / diff.prevChange (F7 / shift+F7, 0340 #495): step
 		// the focused diff pane's hunk; a non-diff focus is a quiet no-op
 		// (the bindings are diff-scoped, so this is belt and braces).
-		if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindDiff {
+		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindDiff {
 			inst.Diff().StepHunk(msg.Delta)
 		}
 		return m, nil
@@ -2496,8 +2500,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A tool pane (#741) closes with its program (quitting lazygit closes
 		// the pane); other command sessions (#576) stay open — their output
 		// is the point of the run.
-		if key != "" && m.panes.Get(key).Terminal().IsCommand() &&
-			m.panes.Get(key).Terminal().Tool() == "" {
+		if key != "" && m.activeWS().Panes.Get(key).Terminal().IsCommand() &&
+			m.activeWS().Panes.Get(key).Terminal().Tool() == "" {
 			return m, nil
 		}
 		if key != "" {
@@ -2505,7 +2509,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.setFocus(m.focusAfterClose())
 				m.syncExplorerOpen()
 				m.layout()
-				saveLayout(m.tree, m.panes)
+				saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 			}
 		}
 		return m, nil
@@ -2532,7 +2536,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ShowPasteHistoryMsg:
 		// editor.pasteFromHistory (cmd+shift+v / Edit menu, #57): snapshot the
 		// focused editor's yank/delete history into the picker.
-		inst := m.panes.FocusedInstance()
+		inst := m.activeWS().Panes.FocusedInstance()
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			m.host.Notify(host.Info, "paste history needs a focused editor")
 			return m, nil
@@ -2555,7 +2559,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case PasteHistoryEntryMsg:
 		// A picker row was chosen: paste that entry into the focused editor
 		// with Cmd+V semantics (it also becomes the current clipboard).
-		if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
 			if ed := inst.Editor(); ed != nil {
 				ed.PasteHistoryEntry(msg.Index)
 			}
@@ -2682,7 +2686,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case editor.ActionMsg:
 		// A registry command drives the focused editor through this message path.
 		if key := m.activeEditorKey(); key != "" {
-			cmd := m.panes.Get(key).Update(msg)
+			cmd := m.activeWS().Panes.Get(key).Update(msg)
 			return m, cmd
 		}
 		return m, nil
@@ -2699,7 +2703,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the originating pane *now* (not at emit time), so late or reordered
 		// broadcasts always converge on the current document state.
 		var skip *editor.Model
-		if origin := m.panes.Get(msg.FromKey); origin != nil && origin.Kind() == pane.KindEditor {
+		if origin := m.activeWS().Panes.Get(msg.FromKey); origin != nil && origin.Kind() == pane.KindEditor {
 			if ed := origin.EditorForPath(msg.Path); ed != nil {
 				skip = ed
 				msg.Dirty = ed.Dirty()
@@ -2725,7 +2729,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Deliver to every other view of the document — other panes and this
 		// pane's background tabs alike; only the originating tab is skipped.
 		for _, key := range m.editorKeysForPath(msg.Path) {
-			if cmd := m.panes.Get(key).UpdateForPath(msg.Path, skip, msg); cmd != nil {
+			if cmd := m.activeWS().Panes.Get(key).UpdateForPath(msg.Path, skip, msg); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -2735,7 +2739,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			src := skip
 			if src == nil {
 				if key := m.editorWithFile(msg.Path); key != "" {
-					src = m.panes.Get(key).EditorForPath(msg.Path)
+					src = m.activeWS().Panes.Get(key).EditorForPath(msg.Path)
 				}
 			}
 			if src != nil {
@@ -2936,8 +2940,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// debounce collapses bursts into one refresh.
 		vcsCmd := m.scheduleVCSRefresh()
 		if msg.Kind == watch.DirChanged {
-			if m.panes.Has(pane.ExplorerKey) {
-				return m, tea.Batch(m.panes.Get(pane.ExplorerKey).Update(msg), vcsCmd)
+			if m.activeWS().Panes.Has(pane.ExplorerKey) {
+				return m, tea.Batch(m.activeWS().Panes.Get(pane.ExplorerKey).Update(msg), vcsCmd)
 			}
 			return m, vcsCmd
 		}
@@ -3414,7 +3418,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// protocol the host terminal delivers cmd+v as a key event, so
 			// the bracketed-paste route (#603) never fires for it.
 			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta {
-				term := m.panes.FocusedInstance().ActiveTerminal()
+				term := m.activeWS().Panes.FocusedInstance().ActiveTerminal()
 				switch {
 				case k.Base == "c" && term.HasSelection():
 					m.copyTerminalSelection(term)
@@ -3480,7 +3484,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// cmd+v pastes the system clipboard into the embedded debuggee
 			// terminal, mirroring the terminal-pane path (#727).
 			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
-				if term := m.panes.FocusedInstance().Debug().Terminal(); term != nil {
+				if term := m.activeWS().Panes.FocusedInstance().Debug().Terminal(); term != nil {
 					if text := clipboardRead(); text != "" {
 						term.PasteText(text)
 					}
@@ -3600,21 +3604,21 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		// NewPane with an empty active editor reuses it instead of splitting —
 		// otherwise the blank pane is stranded beside the new one, the exact
 		// scenario the diff path already guards against (#628, #641).
-		if key == "" || (newPane && !m.panes.Get(key).IsEmptyEditor()) {
+		if key == "" || (newPane && !m.activeWS().Panes.Get(key).IsEmptyEditor()) {
 			key = m.spawnEditor()
 		}
 		if m.openInTab(key, path) {
-			m.notifyLargeFile(m.panes.Get(key).Editor())
+			m.notifyLargeFile(m.activeWS().Panes.Get(key).Editor())
 			m.recent.Touch(path)  // MRU for the recent-files palette mode (0230)
 			m.watcher.Track(path) // poll-fallback comparison for open buffers
 			m.explorer().SetActive(path)
 			m.syncExplorerOpen()
 			m.setFocus(key)
 			m.layout()
-			saveLayout(m.tree, m.panes)
-			cmds = append(cmds, m.panes.Get(key).Editor().Reparse())
+			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+			cmds = append(cmds, m.activeWS().Panes.Get(key).Editor().Reparse())
 			// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
-			cmds = append(cmds, m.vcsMarksCmd(m.panes.Get(key).Editor()))
+			cmds = append(cmds, m.vcsMarksCmd(m.activeWS().Panes.Get(key).Editor()))
 		}
 	}
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
@@ -3651,8 +3655,8 @@ func (m Model) forceCodeInsight() (tea.Model, tea.Cmd) {
 		cmds = append(cmds, c)
 	}
 	// Shared views of the document (#142) resume highlighting too.
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -3677,7 +3681,7 @@ func (m Model) forceCodeInsight() (tea.Model, tea.Cmd) {
 // text keeps its content that way. It reports whether the file is now open and
 // active in the pane.
 func (m *Model) openInTab(key, path string) bool {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if idx := inst.TabForPath(path); idx >= 0 {
 		m.activateTab(inst, idx)
 		return true
@@ -3754,7 +3758,7 @@ func (m *Model) activateTab(inst *pane.Instance, idx int) {
 // activeFilePath is the focused (else most recent) editor's file, or "".
 func (m Model) activeFilePath() string {
 	if key := m.activeEditorKey(); key != "" {
-		if ed := m.panes.Get(key).Editor(); ed != nil && ed.HasFile() {
+		if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			return ed.Path()
 		}
 	}
@@ -3766,7 +3770,7 @@ func (m Model) activeFilePath() string {
 // second view of the same document (shared buffer + undo stack, #142) instead
 // of loading a divergent copy; otherwise the file is read from disk.
 func (m *Model) loadOrShare(key, path string) error {
-	target := m.panes.Get(key).Editor()
+	target := m.activeWS().Panes.Get(key).Editor()
 	if target == nil {
 		return fmt.Errorf("no editor tab to load %s into", path)
 	}
@@ -3782,8 +3786,8 @@ func (m *Model) loadOrShare(key, path string) error {
 // anything that opens or closes an editor.
 func (m *Model) syncExplorerOpen() {
 	var open []string
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -3891,7 +3895,7 @@ func (m *Model) openPalette() {
 // palette if the pane has no computed rectangle yet.
 func (m *Model) openFilePaletteAnchored() {
 	m.palette.SetSize(m.width, m.height)
-	r, ok := m.lay.Panes[m.panes.Focused()]
+	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
 	if !ok {
 		m.openPalette()
 		return
@@ -3903,14 +3907,14 @@ func (m *Model) openFilePaletteAnchored() {
 // editorNormalMode reports whether the focused pane is an editor in normal mode
 // (not capturing text), the context in which "@" opens the file finder.
 func (m Model) editorNormalMode() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	return inst != nil && inst.Kind() == pane.KindEditor &&
 		inst.Editor().ModeName() == editor.Normal
 }
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
-	if inst := m.panes.FocusedInstance(); inst != nil {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 		return inst.ContextID()
 	}
 	return ctxExplorer
@@ -3935,7 +3939,7 @@ func (m Model) isCoreKey(keys string) bool {
 // explorer, or from an editor while in normal mode (not typing into a file).
 // Panes without an editor tab (diff, preview, VCS — #529) keep the key.
 func (m Model) quitKey() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() == pane.KindExplorer {
 		return true
 	}
@@ -3962,7 +3966,7 @@ func readHead(path string) []byte {
 // text-capturing mode, in which case global single-letter keys are not stolen.
 // A diff pane counts while its edit-mode editor (#496) captures text (#529).
 func (m Model) editorCapturing() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
 		return false
 	}
@@ -3980,7 +3984,7 @@ func (m Model) editorCapturing() bool {
 // explorerCapturing reports whether the focused pane is the explorer with an
 // open modal prompt, in which case keys go straight to it (see Update).
 func (m Model) explorerCapturing() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindExplorer {
 		return false
 	}
@@ -3989,7 +3993,7 @@ func (m Model) explorerCapturing() bool {
 
 // routeKey forwards a key to the focused pane.
 func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
 		return m, nil
 	}
@@ -4001,16 +4005,16 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // editor action: the focused editor, else the most-recent editor, else the first
 // editor in tree order, else "".
 func (m Model) activeEditorKey() string {
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
-		return m.panes.Focused()
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+		return m.activeWS().Panes.Focused()
 	}
 	if m.recentEditor != "" {
-		if inst := m.panes.Get(m.recentEditor); inst != nil && inst.Kind() == pane.KindEditor {
+		if inst := m.activeWS().Panes.Get(m.recentEditor); inst != nil && inst.Kind() == pane.KindEditor {
 			return m.recentEditor
 		}
 	}
 	for _, key := range m.leafOrder() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 			return key
 		}
 	}
@@ -4020,17 +4024,17 @@ func (m Model) activeEditorKey() string {
 // leafOrder returns the leaf keys in tree walk order, falling back to registry
 // insertion order before the tree exists (e.g. during construction).
 func (m Model) leafOrder() []string {
-	if m.tree != nil {
-		return layout.Leaves(m.tree)
+	if m.activeWS().Tree != nil {
+		return layout.Leaves(m.activeWS().Tree)
 	}
-	return m.panes.Keys()
+	return m.activeWS().Panes.Keys()
 }
 
 // setFocus focuses key and remembers it as the recent editor when it is one.
 func (m *Model) setFocus(key string) {
 	m.autosaveOnBlur(key)
-	m.panes.SetFocused(key)
-	if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+	m.activeWS().Panes.SetFocused(key)
+	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		m.recentEditor = key
 		// The explorer's accent always tracks the focused editor's file, so
 		// switching panes (click, focus cycling) moves the highlight with it.
@@ -4048,11 +4052,11 @@ func (m *Model) autosaveOnBlur(next string) {
 	if !m.autosaveEnabled() {
 		return
 	}
-	old := m.panes.Focused()
+	old := m.activeWS().Panes.Focused()
 	if old == "" || old == next {
 		return
 	}
-	if inst := m.panes.Get(old); inst != nil && inst.Kind() == pane.KindEditor {
+	if inst := m.activeWS().Panes.Get(old); inst != nil && inst.Kind() == pane.KindEditor {
 		if ed := inst.Editor(); ed != nil {
 			ed.Autosave()
 		}
@@ -4067,7 +4071,7 @@ func (m *Model) autosaveEnabled() bool {
 }
 
 // syncFocus re-asserts the registry's focus marking across all instances.
-func (m *Model) syncFocus() { m.panes.SetFocused(m.panes.Focused()) }
+func (m *Model) syncFocus() { m.activeWS().Panes.SetFocused(m.activeWS().Panes.Focused()) }
 
 // cycleFocus moves focus to the next leaf in tree order (tab).
 func (m *Model) cycleFocus() {
@@ -4075,7 +4079,7 @@ func (m *Model) cycleFocus() {
 	if len(order) == 0 {
 		return
 	}
-	cur := m.panes.Focused()
+	cur := m.activeWS().Panes.Focused()
 	idx := 0
 	for i, k := range order {
 		if k == cur {
@@ -4090,21 +4094,21 @@ func (m *Model) cycleFocus() {
 // zone, moving focus to the new pane. It is a binding-agnostic op (Roadmap 0080
 // binds keys; the mouse reaches it too).
 func (m *Model) SplitFocused(zone layout.Zone) {
-	target := m.panes.Focused()
-	if target == "" || m.tree == nil {
+	target := m.activeWS().Panes.Focused()
+	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	newKey := m.panes.AddEditor()
+	newKey := m.activeWS().Panes.AddEditor()
 	m.installEmitter(newKey)
-	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
 	if !ok {
-		m.panes.Close(newKey)
+		m.activeWS().Panes.Close(newKey)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.setFocus(newKey)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // splitView implements editor.splitViewRight/Down (#147): split the focused
@@ -4114,8 +4118,8 @@ func (m *Model) SplitFocused(zone layout.Zone) {
 // gives it. A pane without a file (scratch editor, explorer, terminal) is a
 // no-op with a toast — there is no document to share.
 func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
-	target := m.panes.Focused()
-	inst := m.panes.Get(target)
+	target := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(target)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		m.host.Notify(host.Info, "no file to split — open one first")
 		return m, nil
@@ -4128,11 +4132,11 @@ func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 	line, col := src.CursorPos()
 	top, left := src.ScrollOffset()
 	m.SplitFocused(zone)
-	newKey := m.panes.Focused()
+	newKey := m.activeWS().Panes.Focused()
 	if newKey == target {
 		return m, nil // split failed (leaf vanished mid-flight); nothing changed
 	}
-	ed := m.panes.Get(newKey).Editor()
+	ed := m.activeWS().Panes.Get(newKey).Editor()
 	ed.ShareDocumentWith(src)
 	ed.SetCursor(line, col)
 	ed.SetScroll(top, left)
@@ -4148,23 +4152,23 @@ func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 func (m *Model) spawnEditor() string {
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	newKey := m.panes.AddEditor()
+	newKey := m.activeWS().Panes.AddEditor()
 	m.installEmitter(newKey)
-	if m.tree == nil || target == "" {
+	if m.activeWS().Tree == nil || target == "" {
 		// Pre-layout: no tree to split yet; the default tree will adopt the key on
 		// first layout only if it is the canonical first editor. Otherwise leave the
 		// instance registered and let layout() build around it.
 		return newKey
 	}
-	tree, ok := layout.SplitLeaf(m.tree, target, newKey, m.splitZone)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, m.splitZone)
 	if !ok {
 		// Target not in the tree (e.g. focused leaf already gone): drop the spare.
-		m.panes.Close(newKey)
-		return m.panes.Focused()
+		m.activeWS().Panes.Close(newKey)
+		return m.activeWS().Panes.Focused()
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	return newKey
 }
 
@@ -4176,17 +4180,17 @@ func (m *Model) spawnEditor() string {
 func (m *Model) CloseFocused() { m.guardedCloseFocused() }
 
 func (m *Model) closeFocused() {
-	if inst := m.panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor && inst.TabCount() > 1 {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor && inst.TabCount() > 1 {
 		m.closeTab(inst, inst.ActiveTab())
 		return
 	}
-	if m.closeKey(m.panes.Focused()) {
+	if m.closeKey(m.activeWS().Panes.Focused()) {
 		// Focus the leaf that now occupies the closed pane's position: the first
 		// leaf in walk order is a safe, always-present choice (explorer at minimum).
 		m.setFocus(m.focusAfterClose())
 		m.syncExplorerOpen()
 		m.layout()
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 }
 
@@ -4196,11 +4200,11 @@ func (m *Model) closeFocused() {
 // relayout once). recentEditor is repaired here since it is bookkeeping local to
 // the close.
 func (m *Model) closeKey(key string) bool {
-	inst := m.panes.Get(key)
-	if inst == nil || inst.Kind() == pane.KindExplorer || m.tree == nil {
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.Kind() == pane.KindExplorer || m.activeWS().Tree == nil {
 		return false
 	}
-	tree, ok := layout.Close(m.tree, key)
+	tree, ok := layout.Close(m.activeWS().Tree, key)
 	if !ok {
 		return false // last leaf: never empty the workspace
 	}
@@ -4209,10 +4213,10 @@ func (m *Model) closeKey(key string) bool {
 		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
 	}
 	m.backupDropOnClose(inst, key)
-	m.tree = tree
-	m.panes.Close(key)
+	m.activeWS().Tree = tree
+	m.activeWS().Panes.Close(key)
 	if m.recentEditor == key {
-		m.recentEditor = firstEditorKey(layout.Leaves(m.tree))
+		m.recentEditor = firstEditorKey(layout.Leaves(m.activeWS().Tree))
 	}
 	return true
 }
@@ -4235,10 +4239,10 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 	// session.
 	inst.CloseTab(idx)
 	m.syncExplorerOpen()
-	if next := inst.Editor(); next != nil && next.HasFile() && inst.Key() == m.panes.Focused() {
+	if next := inst.Editor(); next != nil && next.HasFile() && inst.Key() == m.activeWS().Panes.Focused() {
 		m.explorer().SetActive(next.Path())
 	}
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // closeEditorsForPath closes every editor leaf showing path (or, when isDir,
@@ -4260,8 +4264,8 @@ func (m Model) editorKeyForPath(path string) string {
 // messages must reach all of them, not just the first.
 func (m Model) editorKeysForPath(path string) []string {
 	var keys []string
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst != nil && inst.Kind() == pane.KindEditor && inst.TabForPath(path) >= 0 {
 			keys = append(keys, key)
 		}
@@ -4274,12 +4278,12 @@ func (m Model) editorKeysForPath(path string) []string {
 // file is open nowhere.
 func (m Model) editorForPath(path string) *editor.Model {
 	if key := m.activeEditorKey(); key != "" {
-		if ed := m.panes.Get(key).EditorForPath(path); ed != nil {
+		if ed := m.activeWS().Panes.Get(key).EditorForPath(path); ed != nil {
 			return ed
 		}
 	}
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -4294,8 +4298,8 @@ func (m Model) editorForPath(path string) *editor.Model {
 // panes — the per-view fan-out shared documents (#142) and tabs (#156) need.
 func (m Model) editorViewsForPath(path string) []*editor.Model {
 	var out []*editor.Model
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -4313,7 +4317,7 @@ func (m Model) editorViewsForPath(path string) []*editor.Model {
 func (m *Model) routeToEditor(path string, msg tea.Msg) tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.editorKeysForPath(path) {
-		if cmd := m.panes.Get(key).UpdateForPath(path, nil, msg); cmd != nil {
+		if cmd := m.activeWS().Panes.Get(key).UpdateForPath(path, nil, msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -4355,8 +4359,8 @@ func (m *Model) closeEditorsForPath(path string, isDir bool) {
 		return ep == path || (isDir && strings.HasPrefix(ep, prefix))
 	}
 	closed := false
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -4375,19 +4379,19 @@ func (m *Model) closeEditorsForPath(path string, isDir bool) {
 	if !closed {
 		return
 	}
-	if !m.panes.Has(m.panes.Focused()) {
+	if !m.activeWS().Panes.Has(m.activeWS().Panes.Focused()) {
 		m.setFocus(m.focusAfterClose())
 	}
 	m.syncExplorerOpen()
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // focusAfterClose picks the leaf to focus once the focused one is gone: the
 // recent editor if it survived, else the first remaining leaf.
 func (m *Model) focusAfterClose() string {
-	leaves := layout.Leaves(m.tree)
-	if m.recentEditor != "" && m.panes.Has(m.recentEditor) {
+	leaves := layout.Leaves(m.activeWS().Tree)
+	if m.recentEditor != "" && m.activeWS().Panes.Has(m.recentEditor) {
 		return m.recentEditor
 	}
 	if len(leaves) > 0 {
@@ -4399,7 +4403,7 @@ func (m *Model) focusAfterClose() string {
 // FocusDir moves focus to the pane neighbouring the current one in dir, using
 // the computed rectangles. A binding-agnostic op for 0080.
 func (m *Model) FocusDir(dir Direction) {
-	if best := focusTarget(m.lay.Panes, m.panes.Focused(), dir); best != "" {
+	if best := focusTarget(m.lay.Panes, m.activeWS().Panes.Focused(), dir); best != "" {
 		m.setFocus(best)
 	}
 }
@@ -4571,17 +4575,17 @@ func (m *Model) layout() {
 	if m.width == 0 || m.height == 0 {
 		return
 	}
-	if m.tree == nil {
-		m.tree = layout.Default(m.width, explorerWidth)
+	if m.activeWS().Tree == nil {
+		m.activeWS().Tree = layout.Default(m.width, explorerWidth)
 	}
 	if m.zoomActive() {
 		// Zoomed (#358): the one pane owns the whole body; no dividers.
 		m.lay = layout.Layout{Panes: map[string]layout.Rect{m.zoomed: m.bodyRect()}}
 	} else {
-		m.lay = layout.Compute(m.tree, m.bodyRect())
+		m.lay = layout.Compute(m.activeWS().Tree, m.bodyRect())
 	}
 	for key, r := range m.lay.Panes {
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil {
 			continue
 		}
@@ -4744,7 +4748,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if !ok {
 			return m, nil
 		}
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil {
 			return m, nil
 		}
@@ -4880,7 +4884,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// segment — and the row outside the segments — still starts a
 			// pane move, keeping the title row as the drag handle.
 			if key, idx, ok := m.tabBarHit(msg.X, msg.Y); ok {
-				inst := m.panes.Get(key)
+				inst := m.activeWS().Panes.Get(key)
 				if msg.Button == tea.MouseMiddle {
 					m.closeBarTab(key, idx)
 					return m, nil
@@ -4916,19 +4920,19 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.layout()
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
 					term.MouseDrag(lx, ly)
 				}
 			}
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
 					inst.Debug().TermDrag(lx, ly)
 				}
 			}
 		case dragDebugDiv:
 			if lx, _, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
 					inst.Debug().ResizeSeparator(m.drag.sep, lx)
 				}
 			}
@@ -4954,7 +4958,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
 					term.MouseRelease(lx, ly)
 				}
 			}
@@ -4962,7 +4966,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil // a selection drag never moved the layout
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
 					inst.Debug().TermRelease(lx, ly)
 				}
 			}
@@ -4973,7 +4977,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil // column ratios are panel-local, nothing to persist
 		}
 		m.drag = nil
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 	return m, nil
 }
@@ -4997,7 +5001,7 @@ func (m *Model) commitMove(x, y int) {
 	if target != m.drag.srcPane {
 		r := m.lay.Panes[target]
 		zone := layout.DropZone(r, x, y)
-		if inst := m.panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
+		if inst := m.activeWS().Panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
 			zone = layout.DropZoneWithCenter(r, x, y)
 		}
 		if zone == layout.ZoneCenter {
@@ -5012,20 +5016,20 @@ func (m *Model) commitMove(x, y int) {
 			m.mergePaneTabs(m.drag.srcPane, target)
 			return
 		}
-		m.tree = layout.Move(m.tree, m.drag.srcPane, target, zone)
+		m.activeWS().Tree = layout.Move(m.activeWS().Tree, m.drag.srcPane, target, zone)
 		m.layout()
 		return
 	}
 	// Dropped on the source pane: spawn a split only when near an edge.
 	if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
-		newKey := m.panes.AddEditor()
+		newKey := m.activeWS().Panes.AddEditor()
 		m.installEmitter(newKey)
-		if tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone); ok {
-			m.tree = tree
+		if tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone); ok {
+			m.activeWS().Tree = tree
 			m.setFocus(newKey)
 			m.layout()
 		} else {
-			m.panes.Close(newKey)
+			m.activeWS().Panes.Close(newKey)
 		}
 	}
 }
@@ -5037,7 +5041,7 @@ func (m *Model) commitMove(x, y int) {
 // click (the tab already switched on press); everything else is a no-op.
 func (m *Model) commitTabMove(x, y int) {
 	src := m.drag.srcPane
-	inst := m.panes.Get(src)
+	inst := m.activeWS().Panes.Get(src)
 	r, rok := m.lay.Panes[src]
 	if inst == nil || !rok {
 		return
@@ -5056,7 +5060,7 @@ func (m *Model) commitTabMove(x, y int) {
 		return // dropped outside any pane, or a plain click (#304 semantics)
 	}
 	if target != src {
-		tinst := m.panes.Get(target)
+		tinst := m.activeWS().Panes.Get(target)
 		if tinst == nil {
 			return
 		}
@@ -5106,7 +5110,7 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 		}
 		return
 	}
-	tinst := m.panes.Get(target)
+	tinst := m.activeWS().Panes.Get(target)
 	if tinst == nil {
 		return
 	}
@@ -5133,7 +5137,7 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 // at zone into a fresh terminal pane hosting the dragged tab's live session
 // (#707). When the split is refused the tab is re-adopted, never dropped.
 func (m *Model) splitTerminalTabTo(target string, zone layout.Zone) {
-	inst := m.panes.Get(m.drag.srcPane)
+	inst := m.activeWS().Panes.Get(m.drag.srcPane)
 	if inst == nil {
 		return
 	}
@@ -5141,16 +5145,16 @@ func (m *Model) splitTerminalTabTo(target string, zone layout.Zone) {
 	if !ok {
 		return
 	}
-	newKey := m.panes.AddTerminalPaneFrom(term)
-	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	newKey := m.activeWS().Panes.AddTerminalPaneFrom(term)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
 	if !ok {
-		if t, ok := m.panes.Get(newKey).DetachTerminal(); ok {
+		if t, ok := m.activeWS().Panes.Get(newKey).DetachTerminal(); ok {
 			inst.AddTerminalTab(t)
 		}
-		m.panes.Close(newKey) // session-less after the detach: harmless
+		m.activeWS().Panes.Close(newKey) // session-less after the detach: harmless
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.setFocus(newKey)
 	m.layout()
 }
@@ -5158,18 +5162,18 @@ func (m *Model) splitTerminalTabTo(target string, zone layout.Zone) {
 // splitTabTo finishes a tab drag by splitting pane target at zone into a fresh
 // editor leaf holding path, then closing the dragged tab in the source pane.
 func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *editor.Model) {
-	newKey := m.panes.AddEditor()
+	newKey := m.activeWS().Panes.AddEditor()
 	m.installEmitter(newKey)
-	tree, ok := layout.SplitLeaf(m.tree, target, newKey, zone)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
 	if !ok {
-		m.panes.Close(newKey)
+		m.activeWS().Panes.Close(newKey)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.layout()
 	m.openInTab(newKey, path)
 	m.backupDropOnCloseTab(ed, m.drag.srcPane)
-	m.panes.Get(m.drag.srcPane).CloseTab(m.drag.srcTab)
+	m.activeWS().Panes.Get(m.drag.srcPane).CloseTab(m.drag.srcTab)
 	m.setFocus(newKey)
 	m.syncExplorerOpen()
 	m.layout()
@@ -5295,7 +5299,7 @@ func (m *Model) updateHover(msg mouseEvent) {
 	if !ok {
 		return
 	}
-	if inst := m.panes.Get(pane.ExplorerKey); inst != nil {
+	if inst := m.activeWS().Panes.Get(pane.ExplorerKey); inst != nil {
 	}
 	if p, in := m.lay.PaneAt(msg.X, msg.Y); in && p == pane.ExplorerKey {
 		m.explorer().SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
@@ -5311,7 +5315,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return m, nil
 	}
@@ -5387,7 +5391,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 // coordinates for the given terminal pane key.
 func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 	r, found := m.lay.Panes[key]
-	if !found || m.panes.Get(key) == nil {
+	if !found || m.activeWS().Panes.Get(key) == nil {
 		return 0, 0, false
 	}
 	return msg.X - (r.X + paneContentX), msg.Y - (r.Y + paneContentY), true
@@ -5451,8 +5455,8 @@ func (m Model) View() tea.View {
 // the cursor cell. Only the editor knows the buffer-relative anchor; only the app
 // knows the absolute screen geometry, so the placement is computed here.
 func (m Model) compositeLSPPopups(base string) string {
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return base
 	}
@@ -5547,7 +5551,7 @@ func (m Model) render() string {
 		// Zoomed (#358): render only that pane; the tree survives untouched.
 		body = m.renderPane(m.zoomed, m.bodyRect())
 	} else {
-		body = m.renderNode(m.tree, m.bodyRect())
+		body = m.renderNode(m.activeWS().Tree, m.bodyRect())
 	}
 	rows := []string{body}
 	if !m.zen {
@@ -5677,7 +5681,7 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 // editor target whose drag carries files shows the five-zone set with the
 // center merge zone (#318).
 func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone, bool) {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	isEditor := inst != nil && inst.Kind() == pane.KindEditor
 	if d.kind == dragTab && !isEditor {
 		return edgeZone(r, d.curX, d.curY)
@@ -5695,7 +5699,7 @@ func (m Model) dragCarriesTerminal(d *dragState) bool {
 	if d.kind != dragMove {
 		return false
 	}
-	inst := m.panes.Get(d.srcPane)
+	inst := m.activeWS().Panes.Get(d.srcPane)
 	return inst != nil && inst.Kind() == pane.KindTerminal
 }
 
@@ -5707,7 +5711,7 @@ func (m Model) dragCarriesFiles(d *dragState) bool {
 	if d.kind == dragTab {
 		return true
 	}
-	inst := m.panes.Get(d.srcPane)
+	inst := m.activeWS().Panes.Get(d.srcPane)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return false
 	}
@@ -5723,7 +5727,7 @@ func (m Model) dragCarriesFiles(d *dragState) bool {
 // source editor joins the target's tab list (openInTab dedupes onto existing
 // tabs), then the emptied source pane closes.
 func (m *Model) mergePaneTabs(src, target string) {
-	inst := m.panes.Get(src)
+	inst := m.activeWS().Panes.Get(src)
 	if inst == nil {
 		return
 	}
@@ -5742,7 +5746,7 @@ func (m *Model) mergePaneTabs(src, target string) {
 // (#708): the live shell session moves into the target's tab list as a
 // terminal tab (no restart), then the vacated terminal pane closes.
 func (m *Model) adoptTerminalPane(src, target string) {
-	sinst, tinst := m.panes.Get(src), m.panes.Get(target)
+	sinst, tinst := m.activeWS().Panes.Get(src), m.activeWS().Panes.Get(target)
 	if sinst == nil || tinst == nil || tinst.Kind() != pane.KindEditor {
 		return
 	}
@@ -5759,7 +5763,7 @@ func (m *Model) adoptTerminalPane(src, target string) {
 // tabDragLabel is the ghost/status label for a tab drag: the dragged file's
 // basename.
 func (m Model) tabDragLabel(d *dragState) string {
-	if inst := m.panes.Get(d.srcPane); inst != nil {
+	if inst := m.activeWS().Panes.Get(d.srcPane); inst != nil {
 		if tab := inst.Tab(d.srcTab); tab != nil && tab.IsTerminal() {
 			return tab.Title()
 		}
@@ -5774,11 +5778,11 @@ func (m Model) tabDragLabel(d *dragState) string {
 // pane key usually is the session key, but a terminal tab split into its own
 // pane (#707) keeps its original session key under a freshly minted pane key.
 func (m Model) terminalPaneForSession(sess string) string {
-	if inst := m.panes.Get(sess); inst != nil && inst.Kind() == pane.KindTerminal {
+	if inst := m.activeWS().Panes.Get(sess); inst != nil && inst.Kind() == pane.KindTerminal {
 		return sess
 	}
-	for _, k := range m.panes.Keys() {
-		if inst := m.panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().SessionKey() == sess {
+	for _, k := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().SessionKey() == sess {
 			return k
 		}
 	}
@@ -5789,8 +5793,8 @@ func (m Model) terminalPaneForSession(sess string) string {
 // dedicated terminal panes and editor-hosted terminal tabs (#573) alike; nil
 // when the session's pane is gone.
 func (m Model) terminalModelForSession(sess string) *terminal.Model {
-	for _, k := range m.panes.Keys() {
-		inst := m.panes.Get(k)
+	for _, k := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(k)
 		if inst == nil {
 			continue
 		}
@@ -5896,7 +5900,7 @@ func joinV(blocks ...string) string {
 // pane and the hovered drop target are recolored. An unknown key (no instance)
 // renders an empty titled box rather than crashing.
 func (m Model) renderPane(key string, r layout.Rect) string {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	// Title (chrome) is computed without touching the content, so a cached pane
 	// never calls inst.View() (#612). Content is pulled lazily inside paneBox.
 	var title string
@@ -5904,7 +5908,7 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	if inst == nil {
 		title = strings.ToUpper(key)
 	} else {
-		focused = m.panes.Focused() == key
+		focused = m.activeWS().Panes.Focused() == key
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			title = "EXPLORER"
@@ -6033,7 +6037,7 @@ func (m Model) selfDropZone(d *dragState) (layout.Zone, bool) {
 // activeEditor returns the active editor model, or nil when no editor exists.
 func (m Model) activeEditor() *editor.Model {
 	if key := m.activeEditorKey(); key != "" {
-		return m.panes.Get(key).Editor()
+		return m.activeWS().Panes.Get(key).Editor()
 	}
 	return nil
 }
@@ -6111,7 +6115,7 @@ func displayPath(path string) string {
 
 // paneLabel is the human label for a leaf key used in the drag status hint.
 func (m Model) paneLabel(key string) string {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst != nil && inst.Kind() == pane.KindEditor {
 		return m.editorTitle(inst.Editor())
 	}

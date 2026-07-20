@@ -18,7 +18,7 @@ func TestMaximizeZoomsAndRestores(t *testing.T) {
 	if before < 2 {
 		t.Fatalf("setup: want at least 2 panes, got %d", before)
 	}
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	origRect := m.lay.Panes[key]
 
 	m = dispatch(t, m, MaximizePaneMsg{})

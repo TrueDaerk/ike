@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Workspace extraction (#776, Roadmap 0370 M1): internal/workspace bundles
+  pane registry + split tree + terminal return-focus behind a Manager; the
+  root model reaches them via m.activeWS() only. Behavior unchanged; the
+  seam for background workspaces (M2). workspace.md added.
 - Resizable floating windows (#774): ctrl+shift+arrows resize the settings
   panel, the centered palette (width + visible rows) and the floating shell;
   deltas persist per window kind in .ike/winsize.json and re-clamp to the

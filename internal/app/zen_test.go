@@ -34,7 +34,7 @@ func TestZenHidesChromeAndRestores(t *testing.T) {
 	if strings.Contains(zen, "NORMAL") {
 		t.Fatal("zen render must hide the status line")
 	}
-	if bar, ok := m.tabBar(m.panes.Get(m.zoomed), 80); ok || bar != "" {
+	if bar, ok := m.tabBar(m.activeWS().Panes.Get(m.zoomed), 80); ok || bar != "" {
 		t.Fatal("zen must hide the tab bar")
 	}
 

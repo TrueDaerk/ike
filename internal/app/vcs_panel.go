@@ -28,21 +28,21 @@ func (m *Model) toggleVCSPanel() {
 		m.host.Notify(host.Info, "not a git repository")
 		return
 	}
-	if !m.panes.Has(pane.VCSKey) {
-		m.vcsReturnFocus = m.panes.Focused()
+	if !m.activeWS().Panes.Has(pane.VCSKey) {
+		m.vcsReturnFocus = m.activeWS().Panes.Focused()
 		m.openVCSPanel()
 		return
 	}
-	if m.panes.Focused() != pane.VCSKey {
-		m.vcsReturnFocus = m.panes.Focused()
+	if m.activeWS().Panes.Focused() != pane.VCSKey {
+		m.vcsReturnFocus = m.activeWS().Panes.Focused()
 		m.setFocus(pane.VCSKey)
 		return
 	}
 	target := m.vcsReturnFocus
-	if target == "" || !m.panes.Has(target) {
+	if target == "" || !m.activeWS().Panes.Has(target) {
 		target = m.activeEditorKey()
 	}
-	if target == "" || !m.panes.Has(target) {
+	if target == "" || !m.activeWS().Panes.Has(target) {
 		target = pane.ExplorerKey
 	}
 	m.setFocus(target)
@@ -50,10 +50,10 @@ func (m *Model) toggleVCSPanel() {
 
 // vcsPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) vcsPanel() *vcspanel.Model {
-	if !m.panes.Has(pane.VCSKey) {
+	if !m.activeWS().Panes.Has(pane.VCSKey) {
 		return nil
 	}
-	return m.panes.Get(pane.VCSKey).VCS()
+	return m.activeWS().Panes.Get(pane.VCSKey).VCS()
 }
 
 // vcsPanelLogReload refreshes the panel's log after a mutating command
@@ -87,22 +87,22 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 	name := filepath.Base(msg.Path)
 	// Single diff window (#513): retarget the existing pane.
 	if key, ok := m.diffSlot(); ok {
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(name+" @ "+short+"^", name+" @ "+short, "", absPath, msg.Hash+"^", msg.Hash, false)
 		inst.Diff().SetContents(msg.Parent, msg.Content)
 		m.setFocus(key)
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
-	key := m.panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, absPath)
-	m.panes.Get(key).Diff().SetRevs(msg.Hash+"^", msg.Hash)
+	key := m.activeWS().Panes.AddDiffTitled(name+" @ "+short+"^", name+" @ "+short, absPath)
+	m.activeWS().Panes.Get(key).Diff().SetRevs(msg.Hash+"^", msg.Hash)
 	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.panes.Get(key).Diff().SetContents(msg.Parent, msg.Content)
+	m.activeWS().Panes.Get(key).Diff().SetContents(msg.Parent, msg.Content)
 	m.setFocus(key)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // openVCSPanel splits the active editor (fallback: focused leaf) at the
@@ -110,21 +110,21 @@ func (m *Model) openCommitDiffPane(msg vcs.FileAtMsg) {
 func (m *Model) openVCSPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	key := m.panes.AddVCS()
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	key := m.activeWS().Panes.AddVCS()
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
-	m.panes.Get(key).VCS().SetDraft(m.vcs.draft)
-	m.panes.Get(key).VCS().SetVCS(m.vcs.snap)
+	m.activeWS().Tree = tree
+	m.activeWS().Panes.Get(key).VCS().SetDraft(m.vcs.draft)
+	m.activeWS().Panes.Get(key).VCS().SetVCS(m.vcs.snap)
 	m.setFocus(key)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }

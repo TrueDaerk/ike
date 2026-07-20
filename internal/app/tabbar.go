@@ -177,7 +177,7 @@ func (m Model) tabBarHit(x, y int) (string, int, bool) {
 		if y != r.Y+1 || x < r.X+paneContentX || x >= r.X+r.W-paneContentX {
 			continue
 		}
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}

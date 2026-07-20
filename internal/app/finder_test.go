@@ -64,7 +64,7 @@ func TestFinderEnterOpensFileAtMatch(t *testing.T) {
 	if key == "" {
 		t.Fatal("enter must open the matched file")
 	}
-	ed := m.panes.Get(key).Editor()
+	ed := m.activeWS().Panes.Get(key).Editor()
 	if line, col := ed.Cursor(); line != 2 || col != 5 {
 		t.Fatalf("cursor at %d,%d, want 2,5 (1-based)", line, col)
 	}

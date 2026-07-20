@@ -14,8 +14,8 @@ import (
 
 // closeTerms ends every terminal session the model still holds.
 func closeTerms(m Model) {
-	for _, k := range m.panes.Keys() {
-		inst := m.panes.Get(k)
+	for _, k := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(k)
 		if inst == nil {
 			continue
 		}
@@ -34,7 +34,7 @@ func termTabDragApp(t *testing.T) (Model, string, string, string) {
 	m, _, src, dst := splitTabApp(t)
 	m.setFocus(src)
 	m = dispatch(t, m, TerminalNewTabMsg{})
-	inst := m.panes.Get(src)
+	inst := m.activeWS().Panes.Get(src)
 	if inst.TabCount() != 3 || inst.Tab(2) == nil || !inst.Tab(2).IsTerminal() {
 		t.Fatalf("setup: src should hold a.txt, b.txt and a terminal tab, got %d tabs", inst.TabCount())
 	}
@@ -56,10 +56,10 @@ func TestTerminalTabCenterDropMovesToOtherPane(t *testing.T) {
 	dr := m.lay.Panes[dst]
 	m = step(m, release(dr.X+dr.W/2, dr.Y+dr.H/2))
 
-	if got := m.panes.Get(src).TabCount(); got != 2 {
+	if got := m.activeWS().Panes.Get(src).TabCount(); got != 2 {
 		t.Fatalf("src should be down to its 2 file tabs, got %d", got)
 	}
-	dinst := m.panes.Get(dst)
+	dinst := m.activeWS().Panes.Get(dst)
 	if dinst.TabCount() != 2 {
 		t.Fatalf("dst should hold c.txt plus the terminal tab, got %d", dinst.TabCount())
 	}
@@ -70,8 +70,8 @@ func TestTerminalTabCenterDropMovesToOtherPane(t *testing.T) {
 	if got := term.SessionKey(); got != sess {
 		t.Fatalf("the shell session must move, not restart: key %q want %q", got, sess)
 	}
-	if m.panes.Focused() != dst {
-		t.Fatalf("focus should land on the adopting pane, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != dst {
+		t.Fatalf("focus should land on the adopting pane, got %q", m.activeWS().Panes.Focused())
 	}
 }
 
@@ -90,13 +90,13 @@ func TestTerminalTabEdgeDropSplitsOwnPane(t *testing.T) {
 	if got := len(m.lay.Panes); got != leavesBefore+1 {
 		t.Fatalf("edge drop should add a pane: %d want %d", got, leavesBefore+1)
 	}
-	if got := m.panes.Get(src).TabCount(); got != 2 {
+	if got := m.activeWS().Panes.Get(src).TabCount(); got != 2 {
 		t.Fatalf("src should be down to its 2 file tabs, got %d", got)
 	}
-	if got := m.panes.Get(dst).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(dst).TabCount(); got != 1 {
 		t.Fatalf("dst's tab list must stay untouched, got %d", got)
 	}
-	finst := m.panes.FocusedInstance()
+	finst := m.activeWS().Panes.FocusedInstance()
 	if finst == nil || finst.Kind() != pane.KindTerminal {
 		t.Fatal("the fresh split should be a focused terminal pane")
 	}
@@ -116,10 +116,10 @@ func TestTerminalTabSelfEdgeSplit(t *testing.T) {
 	sr := m.lay.Panes[src]
 	m = step(m, release(sr.X+sr.W/2, sr.Y+sr.H-1)) // own bottom edge
 
-	if got := m.panes.Get(src).TabCount(); got != 2 {
+	if got := m.activeWS().Panes.Get(src).TabCount(); got != 2 {
 		t.Fatalf("src should be down to its 2 file tabs, got %d", got)
 	}
-	finst := m.panes.FocusedInstance()
+	finst := m.activeWS().Panes.FocusedInstance()
 	if finst == nil || finst.Kind() != pane.KindTerminal {
 		t.Fatal("the self-edge drop should split off a focused terminal pane")
 	}
@@ -139,7 +139,7 @@ func TestExitedSessionClosesSplitTerminalPane(t *testing.T) {
 	m = step(m, press(x, y))
 	dr := m.lay.Panes[dst]
 	m = step(m, release(dr.X+dr.W-1, dr.Y+dr.H/2))
-	paneKey := m.panes.Focused()
+	paneKey := m.activeWS().Panes.Focused()
 	if paneKey == sess {
 		t.Fatal("setup: the split pane should carry a fresh key, not the session key")
 	}

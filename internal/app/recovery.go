@@ -184,12 +184,12 @@ func (m *Model) restoreSnapshot(snap backup.Snapshot) {
 			}
 			// Establish the path from the base file when it still exists; a deleted
 			// base just leaves the recovered text under no path.
-			_ = m.panes.Get(key).Editor().Load(snap.Path)
+			_ = m.activeWS().Panes.Get(key).Editor().Load(snap.Path)
 		}
 	} else {
 		key = m.spawnEditor()
 	}
-	if inst := m.panes.Get(key); inst != nil {
+	if inst := m.activeWS().Panes.Get(key); inst != nil {
 		inst.Editor().RestoreText(snap.Text)
 	}
 	m.setFocus(key)

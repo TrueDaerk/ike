@@ -44,7 +44,7 @@ func TestOpenSecondFileAppendsTab(t *testing.T) {
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindEditor || inst.TabCount() != 2 {
 		t.Fatalf("want 2 tabs in the focused editor, got %d", inst.TabCount())
 	}
@@ -65,7 +65,7 @@ func TestOpenSameFileDifferentSpellingReusesTab(t *testing.T) {
 	t.Chdir(dir)
 	m := openApp(t, abs, "a.txt")
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 1 {
 		t.Fatalf("want 1 tab after reopening by relative path, got %d", inst.TabCount())
 	}
@@ -80,7 +80,7 @@ func TestOpenExistingFileActivatesTab(t *testing.T) {
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b, a)
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 2 {
 		t.Fatalf("re-opening an open file must not add a tab, got %d", inst.TabCount())
 	}
@@ -99,8 +99,8 @@ func TestOpenInNewPaneKeepsSplitBehavior(t *testing.T) {
 	m = tm.(Model)
 
 	editors := 0
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst.Kind() == pane.KindEditor {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst.Kind() == pane.KindEditor {
 			editors++
 			if inst.TabCount() != 1 {
 				t.Fatalf("pane %s: open-in-new-pane must not grow tab lists, tabs=%d",
@@ -122,7 +122,7 @@ func TestSyncReachesBackgroundTab(t *testing.T) {
 	tm, _ := m.openPath(a, true)
 	m = tm.(Model)
 
-	background := m.panes.Get("editor").TabEditor(0)
+	background := m.activeWS().Panes.Get("editor").TabEditor(0)
 	if background.Path() != a {
 		t.Fatalf("setup: first tab of pane 1 should hold %q", a)
 	}
@@ -153,11 +153,11 @@ func TestCloseTabKeepsPaneAndActivatesNeighbour(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 
 	m.CloseFocused()
 
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		t.Fatal("closing one of two tabs must keep the pane alive")
 	}
@@ -168,7 +168,7 @@ func TestCloseTabKeepsPaneAndActivatesNeighbour(t *testing.T) {
 
 	// The pane holds one tab now: the next close removes the pane itself.
 	m.CloseFocused()
-	if m.panes.Has(key) {
+	if m.activeWS().Panes.Has(key) {
 		t.Fatal("closing the last tab must close the pane")
 	}
 }
@@ -182,11 +182,11 @@ func TestCloseTabViaKeymap(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 
 	m = drainKey(m, tea.KeyPressMsg{Code: 'w', Mod: tea.ModSuper})
 
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.TabCount() != 1 || inst.Editor().Path() != a {
 		t.Fatal("cmd+w on a multi-tab pane must close only the active tab")
 	}
@@ -197,11 +197,11 @@ func TestExternallyDeletedFileClosesItsTab(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 
 	m.closeEditorsForPath(a, false)
 
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		t.Fatal("a pane with a surviving tab must stay open")
 	}
@@ -217,7 +217,7 @@ func TestExternallyDeletedFileClosesItsTab(t *testing.T) {
 func dirtyActive(t *testing.T, m Model) Model {
 	t.Helper()
 	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
-	if !m.panes.FocusedInstance().Editor().Dirty() {
+	if !m.activeWS().Panes.FocusedInstance().Editor().Dirty() {
 		t.Fatal("setup: active editor should be dirty")
 	}
 	return m
@@ -249,7 +249,7 @@ func TestQuitGuardPromptsOnDirty(t *testing.T) {
 		t.Fatal("dirty quit must open the unsaved-changes guard")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.closePromptOpen() || !m.panes.FocusedInstance().Editor().Dirty() {
+	if m.closePromptOpen() || !m.activeWS().Panes.FocusedInstance().Editor().Dirty() {
 		t.Fatal("esc must cancel the quit and keep the dirty buffer")
 	}
 }
@@ -291,7 +291,7 @@ func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m = dirtyActive(t, m)
 
 	tm, _ := m.Update(CloseTabMsg{})
@@ -299,16 +299,16 @@ func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
 	if !m.closePromptOpen() {
 		t.Fatal("closing a dirty tab must open the unsaved-changes guard (#259)")
 	}
-	if m.panes.Get(key).TabCount() != 2 {
+	if m.activeWS().Panes.Get(key).TabCount() != 2 {
 		t.Fatal("the tab must stay open while the guard is up")
 	}
 
 	// esc cancels: prompt gone, tab still open and still dirty.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.closePromptOpen() || m.panes.Get(key).TabCount() != 2 {
+	if m.closePromptOpen() || m.activeWS().Panes.Get(key).TabCount() != 2 {
 		t.Fatal("esc must cancel the close and keep the tab")
 	}
-	if !m.panes.Get(key).Editor().Dirty() {
+	if !m.activeWS().Panes.Get(key).Editor().Dirty() {
 		t.Fatal("esc must not touch the buffer")
 	}
 }
@@ -318,7 +318,7 @@ func TestCloseGuardDiscardCloses(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m = dirtyActive(t, m)
 
 	tm, _ := m.Update(CloseTabMsg{})
@@ -327,7 +327,7 @@ func TestCloseGuardDiscardCloses(t *testing.T) {
 	if m.closePromptOpen() {
 		t.Fatal("d must dismiss the guard")
 	}
-	if got := m.panes.Get(key).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(key).TabCount(); got != 1 {
 		t.Fatalf("d must close the tab, got %d tabs", got)
 	}
 	if data, _ := os.ReadFile(b); string(data) != "bbb\n" {
@@ -340,13 +340,13 @@ func TestCloseGuardSaveCloses(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m = dirtyActive(t, m)
 
 	tm, _ := m.Update(CloseTabMsg{})
 	m = tm.(Model)
 	m = drainKey(m, tea.KeyPressMsg{Code: 's', Text: "s"})
-	if got := m.panes.Get(key).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(key).TabCount(); got != 1 {
 		t.Fatalf("s must save and close, got %d tabs", got)
 	}
 	if data, _ := os.ReadFile(b); string(data) != "bb\n" {
@@ -359,7 +359,7 @@ func TestCloseGuardSaveFailureKeepsTab(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m = dirtyActive(t, m)
 	if err := os.Chmod(b, 0o444); err != nil {
 		t.Fatal(err)
@@ -369,7 +369,7 @@ func TestCloseGuardSaveFailureKeepsTab(t *testing.T) {
 	tm, _ := m.Update(CloseTabMsg{})
 	m = tm.(Model)
 	m = drainKey(m, tea.KeyPressMsg{Code: 's', Text: "s"})
-	if got := m.panes.Get(key).TabCount(); got != 2 {
+	if got := m.activeWS().Panes.Get(key).TabCount(); got != 2 {
 		t.Fatalf("a failed save must keep the tab open, got %d tabs", got)
 	}
 }
@@ -379,7 +379,7 @@ func TestCloseGuardForceSkipsPrompt(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	m := openApp(t, a, b)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m = dirtyActive(t, m)
 
 	tm, _ := m.Update(editor.CloseMsg{Force: true}) // :q!
@@ -387,7 +387,7 @@ func TestCloseGuardForceSkipsPrompt(t *testing.T) {
 	if m.closePromptOpen() {
 		t.Fatal(":q! must not open the guard")
 	}
-	if got := m.panes.Get(key).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(key).TabCount(); got != 1 {
 		t.Fatalf(":q! must close the tab, got %d tabs", got)
 	}
 }

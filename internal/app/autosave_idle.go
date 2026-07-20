@@ -49,7 +49,7 @@ func (m *Model) autosaveIdleOnSync(fromKey, path string) tea.Cmd {
 	if m.autosaveIdleDeb == nil || !m.autosaveIdle() {
 		return nil
 	}
-	origin := m.panes.Get(fromKey)
+	origin := m.activeWS().Panes.Get(fromKey)
 	if origin == nil || origin.Kind() != pane.KindEditor {
 		return nil
 	}
@@ -93,7 +93,7 @@ func (m *Model) saveDueIdleBuffers(now time.Time) {
 	}
 	for _, key := range m.autosaveIdleDeb.Due(now) {
 		for _, paneKey := range m.editorKeysForPath(key) {
-			if inst := m.panes.Get(paneKey); inst != nil {
+			if inst := m.activeWS().Panes.Get(paneKey); inst != nil {
 				if ed := inst.EditorForPath(key); ed != nil {
 					ed.Autosave()
 					break // one write per document; other views sync off EventSave

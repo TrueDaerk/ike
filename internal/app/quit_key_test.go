@@ -49,7 +49,7 @@ func TestQKeyOnVCSPane(t *testing.T) {
 	m.vcs.snap = vcs.NewSnapshot(t.TempDir(), map[string]vcs.FileStatus{})
 	out, _ := m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	if inst := m.panes.FocusedInstance(); inst == nil || inst.Kind() != pane.KindVCS {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst == nil || inst.Kind() != pane.KindVCS {
 		t.Fatal("precondition: VCS pane must be focused")
 	}
 	_, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -63,10 +63,10 @@ func TestQKeyOnVCSPane(t *testing.T) {
 // embedded editor instead of the global layer.
 func TestDiffEditInsertTyping(t *testing.T) {
 	m, _, right := diffFixture(t)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	out, _ := m.Update(diff.EditRequestMsg{Key: key, Path: right})
 	m = out.(Model)
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst.DiffEditor() == nil {
 		t.Fatal("precondition: diff edit mode must be active")
 	}
@@ -84,7 +84,7 @@ func TestDiffEditInsertTyping(t *testing.T) {
 	if m.shell.IsOpen() {
 		t.Fatal("? while typing in the diff editor must not open help")
 	}
-	got := m.panes.Get(key).DiffEditor().Text()
+	got := m.activeWS().Panes.Get(key).DiffEditor().Text()
 	if !strings.Contains(got, "q?") {
 		t.Fatalf("typed text must reach the diff editor, got %q", got)
 	}

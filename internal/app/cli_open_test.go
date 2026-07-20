@@ -19,7 +19,7 @@ func TestCLITargetsOpenAsTabsFirstFocused(t *testing.T) {
 
 	m = m.OpenCLITargets([]cli.Target{{Path: a, Line: 2}, {Path: b}})
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindEditor || inst.TabCount() != 2 {
 		t.Fatalf("want 2 tabs, got %d", inst.TabCount())
 	}
@@ -45,7 +45,7 @@ func TestCLITargetLineColPlacementAndClamp(t *testing.T) {
 	m := newSized()
 
 	m = m.OpenCLITargets([]cli.Target{{Path: a, Line: 2, Col: 7}})
-	line, col := m.panes.FocusedInstance().Editor().CursorPos()
+	line, col := m.activeWS().Panes.FocusedInstance().Editor().CursorPos()
 	if line != 1 || col != 6 {
 		t.Fatalf("cursor = %d,%d, want 1,6", line, col)
 	}
@@ -53,12 +53,12 @@ func TestCLITargetLineColPlacementAndClamp(t *testing.T) {
 	// Out-of-range line clamps to the last line; unset line/col stay at 0,0.
 	m = newSized()
 	m = m.OpenCLITargets([]cli.Target{{Path: a, Line: 99}})
-	if line, _ := m.panes.FocusedInstance().Editor().CursorPos(); line != 1 {
+	if line, _ := m.activeWS().Panes.FocusedInstance().Editor().CursorPos(); line != 1 {
 		t.Fatalf("clamped line = %d, want 1", line)
 	}
 	m = newSized()
 	m = m.OpenCLITargets([]cli.Target{{Path: a}})
-	line, col = m.panes.FocusedInstance().Editor().CursorPos()
+	line, col = m.activeWS().Panes.FocusedInstance().Editor().CursorPos()
 	if line != 0 || col != 0 {
 		t.Fatalf("unset position = %d,%d, want 0,0", line, col)
 	}
@@ -70,7 +70,7 @@ func TestCLITargetMissingPathOpensUnsavedBuffer(t *testing.T) {
 	m := newSized()
 
 	m = m.OpenCLITargets([]cli.Target{{Path: missing}})
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 	if !ed.HasFile() || ed.Path() != canonicalPath(missing) {
 		t.Fatalf("path = %q, want %q", ed.Path(), canonicalPath(missing))
 	}
@@ -82,7 +82,7 @@ func TestCLITargetMissingPathOpensUnsavedBuffer(t *testing.T) {
 func TestStdinBufferOpensPathlessDirtyFocused(t *testing.T) {
 	m := newSized()
 	m = m.OpenStdinBuffer("piped line 1\npiped line 2\n")
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 	if ed.HasFile() {
 		t.Fatalf("scratch buffer must be pathless, got %q", ed.Path())
 	}
@@ -104,7 +104,7 @@ func TestStdinBufferAppendsAfterFileTargets(t *testing.T) {
 	m = m.OpenCLITargets([]cli.Target{{Path: a}})
 	m = m.OpenStdinBuffer("piped\n")
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 2 {
 		t.Fatalf("want 2 tabs (file + scratch), got %d", inst.TabCount())
 	}
@@ -119,9 +119,9 @@ func TestStdinBufferAppendsAfterFileTargets(t *testing.T) {
 
 func TestCLITargetsZeroIsNoop(t *testing.T) {
 	m := newSized()
-	before := m.panes.Focused()
+	before := m.activeWS().Panes.Focused()
 	m = m.OpenCLITargets(nil)
-	if m.panes.Focused() != before {
+	if m.activeWS().Panes.Focused() != before {
 		t.Fatal("zero targets must not change focus")
 	}
 }

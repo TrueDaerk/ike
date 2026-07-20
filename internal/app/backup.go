@@ -76,7 +76,7 @@ func (m *Model) backupOnSync(fromKey, path string) tea.Cmd {
 	if m.backupDeb == nil || !m.backupEnabled() {
 		return nil
 	}
-	origin := m.panes.Get(fromKey)
+	origin := m.activeWS().Panes.Get(fromKey)
 	if origin == nil || origin.Kind() != pane.KindEditor {
 		return nil
 	}
@@ -150,7 +150,7 @@ func (m *Model) snapshotDueBackups(now time.Time) tea.Cmd {
 // titled buffers, by pane key for untitled ones. nil when the buffer is gone.
 func (m *Model) backupEditorFor(key string) *editor.Model {
 	if pk, ok := strings.CutPrefix(key, untitledPrefix); ok {
-		if inst := m.panes.Get(pk); inst != nil && inst.Kind() == pane.KindEditor {
+		if inst := m.activeWS().Panes.Get(pk); inst != nil && inst.Kind() == pane.KindEditor {
 			for _, ed := range inst.Editors() {
 				if !ed.HasFile() {
 					return ed
@@ -196,8 +196,8 @@ func (m *Model) backupCleanShutdown() {
 	if m.backupSvc == nil {
 		return
 	}
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}

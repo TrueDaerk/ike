@@ -184,14 +184,14 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.terminalFocused() {
-		if inst := m.panes.FocusedInstance(); inst != nil {
+		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 			if term := inst.ActiveTerminal(); term != nil {
 				term.PasteText(text)
 			}
 		}
 		return m, nil
 	}
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return m, nil
 	}

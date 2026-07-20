@@ -28,8 +28,8 @@ func openMarkdownFile(t *testing.T, content string) (Model, string) {
 
 // previewKeyFor returns the key of the first preview pane bound to path, or "".
 func previewKeyFor(m Model, path string) string {
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().Path() == path {
 			return key
 		}
 	}
@@ -41,15 +41,15 @@ func previewKeyFor(m Model, path string) string {
 // the editor, and renders the document.
 func TestMarkdownPreviewOpensSplit(t *testing.T) {
 	m, path := openMarkdownFile(t, "# Hello Preview\n\nbody text\n")
-	editorKey := m.panes.Focused()
+	editorKey := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
 	key := previewKeyFor(m, path)
 	if key == "" {
 		t.Fatal("markdown.preview should open a preview pane bound to the buffer")
 	}
-	if m.panes.Focused() != editorKey {
-		t.Fatalf("focus should stay on the editor, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != editorKey {
+		t.Fatalf("focus should stay on the editor, got %q", m.activeWS().Panes.Focused())
 	}
 	if v := m.render(); !strings.Contains(v, "PREVIEW") || !strings.Contains(v, "Hello Preview") {
 		t.Fatal("the rendered workspace should show the titled preview with the document")
@@ -68,8 +68,8 @@ func TestMarkdownPreviewNeedsMarkdownBuffer(t *testing.T) {
 	m = tm.(Model)
 	tm, _ = m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
-	for _, key := range m.panes.Keys() {
-		if m.panes.Get(key).Kind() == pane.KindMarkdown {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if m.activeWS().Panes.Get(key).Kind() == pane.KindMarkdown {
 			t.Fatal("a .txt buffer must not open a markdown preview")
 		}
 	}
@@ -85,16 +85,16 @@ func TestMarkdownPreviewRefocusesExisting(t *testing.T) {
 	tm, _ = m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
 	count := 0
-	for _, key := range m.panes.Keys() {
-		if m.panes.Get(key).Kind() == pane.KindMarkdown {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if m.activeWS().Panes.Get(key).Kind() == pane.KindMarkdown {
 			count++
 		}
 	}
 	if count != 1 {
 		t.Fatalf("second invocation must not duplicate the pane, got %d previews", count)
 	}
-	if m.panes.Focused() != first {
-		t.Fatalf("second invocation should focus the existing preview, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != first {
+		t.Fatalf("second invocation should focus the existing preview, got %q", m.activeWS().Panes.Focused())
 	}
 }
 
@@ -103,7 +103,7 @@ func TestMarkdownPreviewRefocusesExisting(t *testing.T) {
 // buffer text.
 func TestMarkdownPreviewLiveUpdate(t *testing.T) {
 	m, path := openMarkdownFile(t, "# Draft\n")
-	editorKey := m.panes.Focused()
+	editorKey := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
 	// Type new text into the source buffer, then deliver the change broadcast
@@ -127,7 +127,7 @@ func TestMarkdownPreviewLiveUpdate(t *testing.T) {
 	// RenderTickMsg, which drains back into Update like the program loop would.
 	m = drainCmd(m, cmd)
 	key := previewKeyFor(m, path)
-	if v := m.panes.Get(key).View(); !strings.Contains(v, "Uniq") {
+	if v := m.activeWS().Panes.Get(key).View(); !strings.Contains(v, "Uniq") {
 		t.Fatalf("preview should re-render the edited text, got:\n%s", v)
 	}
 }
@@ -145,10 +145,10 @@ func TestMarkdownPreviewCursorSync(t *testing.T) {
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
 	key := previewKeyFor(m, path)
-	before := m.panes.Get(key).View()
+	before := m.activeWS().Panes.Get(key).View()
 	tm, _ = m.Update(preview.CursorMsg{Path: path, Line: strings.Count(b.String(), "\n") - 1})
 	m = tm.(Model)
-	after := m.panes.Get(key).View()
+	after := m.activeWS().Panes.Get(key).View()
 	if before == after {
 		t.Fatal("a cursor move to the bottom should scroll the preview")
 	}
@@ -166,7 +166,7 @@ func TestMarkdownPreviewClosesLikeAPane(t *testing.T) {
 	key := previewKeyFor(m, path)
 	m.setFocus(key)
 	m.closeFocused()
-	if m.panes.Has(key) {
+	if m.activeWS().Panes.Has(key) {
 		t.Fatal("closing the focused preview must remove its pane")
 	}
 }
@@ -178,7 +178,7 @@ func TestMarkdownPreviewPersistsAndRestores(t *testing.T) {
 	m, path := openMarkdownFile(t, "# Persisted\n")
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	// A fresh model in the same config dir restores the saved layout.
 	m2 := New()
 	tm, _ = m2.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -187,7 +187,7 @@ func TestMarkdownPreviewPersistsAndRestores(t *testing.T) {
 	if key == "" {
 		t.Fatal("layout restore should rebuild the preview pane")
 	}
-	if v := m2.panes.Get(key).View(); !strings.Contains(v, "Persisted") {
+	if v := m2.activeWS().Panes.Get(key).View(); !strings.Contains(v, "Persisted") {
 		t.Fatalf("restored preview should render the file from disk, got:\n%s", v)
 	}
 }

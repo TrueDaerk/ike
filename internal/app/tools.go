@@ -80,8 +80,8 @@ func toolEntry(name string) (config.ToolEntry, bool) {
 
 // toolPane returns the pane instance hosting the named tool, nil when none.
 func (m Model) toolPane(name string) *pane.Instance {
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == name {
 			return inst
 		}
@@ -95,16 +95,16 @@ func (m Model) toolPane(name string) *pane.Instance {
 // remembered pane.
 func (m *Model) openTool(name string) {
 	if inst := m.toolPane(name); inst != nil {
-		if m.panes.Focused() != inst.Key() {
-			m.terminalReturnFocus = m.panes.Focused()
+		if m.activeWS().Panes.Focused() != inst.Key() {
+			m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
 			m.setFocus(inst.Key())
 			return
 		}
-		target := m.terminalReturnFocus
-		if target == "" || !m.panes.Has(target) {
+		target := m.activeWS().ReturnFocus
+		if target == "" || !m.activeWS().Panes.Has(target) {
 			target = m.activeEditorKey()
 		}
-		if target == "" || !m.panes.Has(target) {
+		if target == "" || !m.activeWS().Panes.Has(target) {
 			target = pane.ExplorerKey
 		}
 		m.setFocus(target)
@@ -116,9 +116,9 @@ func (m *Model) openTool(name string) {
 	}
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
 	zone := layout.ZoneBottom
@@ -130,17 +130,17 @@ func (m *Model) openTool(name string) {
 		dir = "."
 	}
 	argv := append([]string{entry.Command}, entry.Args...)
-	m.terminalReturnFocus = m.panes.Focused()
-	key := m.panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, zone)
+	m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
+	key := m.activeWS().Panes.AddTool(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, zone)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.setFocus(key)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // toolSpawnEnv is the environment overlay for tool processes: the toolchain

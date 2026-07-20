@@ -28,10 +28,10 @@ func TestRestoredLayoutKeepsThemePalette(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
 	m.openPath(file, false)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 
 	m2 := NewWith(registry.New(), cfg)
-	p := m2.panes.Palette()
+	p := m2.activeWS().Panes.Palette()
 	if p == nil {
 		t.Fatal("restored registry lost the palette entirely")
 	}

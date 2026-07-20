@@ -42,8 +42,8 @@ func (m Model) handleSwitchProject(msg project.SwitchProjectMsg) (tea.Model, tea
 // dirtyEditorCount counts dirty editor buffers across every pane and tab.
 func (m Model) dirtyEditorCount() int {
 	n := 0
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -120,8 +120,8 @@ func (m Model) updateSwitchPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // returns the editors' follow-up cmds — the same walk editor.saveAll performs.
 func (m *Model) saveAllDirty() []tea.Cmd {
 	var cmds []tea.Cmd
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -143,8 +143,8 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 // second leaf — a duplicate key in the tree would render the same instance
 // twice (#320).
 func (m *Model) adoptTerminals(old *Model) {
-	for _, key := range old.panes.Keys() {
-		inst := old.panes.Get(key)
+	for _, key := range old.activeWS().Panes.Keys() {
+		inst := old.activeWS().Panes.Get(key)
 		if inst == nil {
 			continue
 		}
@@ -158,25 +158,25 @@ func (m *Model) adoptTerminals(old *Model) {
 			inst.Terminal().Close()
 			continue
 		}
-		if m.panes.AdoptTerminal(inst) {
+		if m.activeWS().Panes.AdoptTerminal(inst) {
 			continue // took over the restored placeholder's leaf (#320)
 		}
-		if !m.panes.Has(inst.Key()) {
+		if !m.activeWS().Panes.Has(inst.Key()) {
 			inst.Terminal().Close() // key collision with a non-terminal pane
 			continue
 		}
 		target := m.activeEditorKey()
 		if target == "" {
-			target = m.panes.Focused()
+			target = m.activeWS().Panes.Focused()
 		}
-		if target == "" || m.tree == nil {
-			m.panes.Close(inst.Key())
+		if target == "" || m.activeWS().Tree == nil {
+			m.activeWS().Panes.Close(inst.Key())
 			continue
 		}
-		if tree, ok := layout.SplitLeaf(m.tree, target, inst.Key(), layout.ZoneBottom); ok {
-			m.tree = tree
+		if tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, inst.Key(), layout.ZoneBottom); ok {
+			m.activeWS().Tree = tree
 		} else {
-			m.panes.Close(inst.Key())
+			m.activeWS().Panes.Close(inst.Key())
 		}
 	}
 	m.layout()
@@ -190,8 +190,8 @@ func (m *Model) adoptTerminals(old *Model) {
 // and the LSP bridge stay wired. Nothing is mutated when the chdir fails.
 func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	saveSession(m.snapshotSession())
-	if m.tree != nil {
-		saveLayout(m.tree, m.panes)
+	if m.activeWS().Tree != nil {
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 	if err := os.Chdir(root); err != nil {
 		return m, func() tea.Msg { return project.SwitchFailedMsg{Path: root, Err: err} }

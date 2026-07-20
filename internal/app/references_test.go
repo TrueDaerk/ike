@@ -72,7 +72,7 @@ func TestReferencesMsgRouting(t *testing.T) {
 	if m.palette.IsOpen() {
 		t.Fatal("single result must navigate, not list")
 	}
-	ed := m.panes.Get(m.activeEditorKey()).Editor()
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
 	if ed.Path() != file {
 		t.Fatalf("single result should open the target, got %q", ed.Path())
 	}

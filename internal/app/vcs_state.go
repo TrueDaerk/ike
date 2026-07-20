@@ -73,14 +73,14 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	m.vcs.snap = msg.Snap
 	// Consumers read the snapshot per frame; the explorer holds its own
 	// reference (#463).
-	if m.panes.Has(pane.ExplorerKey) {
+	if m.activeWS().Panes.Has(pane.ExplorerKey) {
 		m.explorer().SetVCS(msg.Snap)
 	}
 	// The VCS tool window re-reads the snapshot (0330, #482); a restored
 	// Log view gets its first window now that a repo is known (#504).
 	var panelCmd tea.Cmd
-	if m.panes.Has(pane.VCSKey) {
-		p := m.panes.Get(pane.VCSKey).VCS()
+	if m.activeWS().Panes.Has(pane.VCSKey) {
+		p := m.activeWS().Panes.Get(pane.VCSKey).VCS()
 		p.SetVCS(msg.Snap)
 		if msg.Snap != nil {
 			panelCmd = p.EnsureLogLoaded()
@@ -113,8 +113,8 @@ type ToggleBlameMsg struct{}
 func (m Model) vcsMarksCmds() []tea.Cmd {
 	seen := map[string]bool{}
 	var cmds []tea.Cmd
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}

@@ -27,15 +27,15 @@ func (m *Model) toggleMaximize() {
 		m.layout()
 		return
 	}
-	key := m.panes.Focused()
-	if key == "" || m.tree == nil {
+	key := m.activeWS().Panes.Focused()
+	if key == "" || m.activeWS().Tree == nil {
 		return
 	}
 	if _, ok := m.lay.Panes[key]; !ok {
 		return
 	}
 	m.zoomed = key
-	m.zoomSig = leavesSignature(m.tree)
+	m.zoomSig = leavesSignature(m.activeWS().Tree)
 	m.layout()
 }
 
@@ -46,7 +46,7 @@ func (m *Model) zoomActive() bool {
 	if m.zoomed == "" {
 		return false
 	}
-	if !m.panes.Has(m.zoomed) || leavesSignature(m.tree) != m.zoomSig {
+	if !m.activeWS().Panes.Has(m.zoomed) || leavesSignature(m.activeWS().Tree) != m.zoomSig {
 		m.zoomed = ""
 		m.zen = false
 		return false
@@ -76,7 +76,7 @@ func (m *Model) toggleZen() {
 	m.zenKeepZoom = m.zoomed == key
 	m.zen = true
 	m.zoomed = key
-	m.zoomSig = leavesSignature(m.tree)
+	m.zoomSig = leavesSignature(m.activeWS().Tree)
 	m.layout()
 }
 

@@ -15,12 +15,12 @@ import (
 func splitTabApp(t *testing.T) (Model, [3]string, string, string) {
 	t.Helper()
 	m, paths := tabApp(t)
-	src := m.panes.Focused()
+	src := m.activeWS().Panes.Focused()
 	r := m.lay.Panes[src]
 	x, y := barCell(t, m, 17) // c.txt segment of " a.txt │ b.txt │ c.txt "
 	m = step(m, press(x, y))
 	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
-	dst := m.panes.Focused()
+	dst := m.activeWS().Panes.Focused()
 	if dst == src {
 		t.Fatal("setup: expected a split pane")
 	}
@@ -34,7 +34,7 @@ func TestPaneDragCenterMergesTabs(t *testing.T) {
 	m, paths, src, dst := splitTabApp(t)
 	// Pre-open a.txt in the target too, so the merge has a duplicate to skip.
 	m.openInTab(dst, paths[0])
-	if got := m.panes.Get(dst).TabCount(); got != 2 {
+	if got := m.activeWS().Panes.Get(dst).TabCount(); got != 2 {
 		t.Fatalf("setup: target should hold 2 tabs, got %d", got)
 	}
 
@@ -46,7 +46,7 @@ func TestPaneDragCenterMergesTabs(t *testing.T) {
 	if _, ok := m.lay.Panes[src]; ok {
 		t.Fatal("source pane should close after the center merge")
 	}
-	dinst := m.panes.Get(dst)
+	dinst := m.activeWS().Panes.Get(dst)
 	if dinst == nil || dinst.TabCount() != 3 {
 		t.Fatalf("target should hold c+a+b (deduped) = 3 tabs, got %v", dinst.TabCount())
 	}
@@ -55,8 +55,8 @@ func TestPaneDragCenterMergesTabs(t *testing.T) {
 			t.Fatalf("target is missing merged file %q", p)
 		}
 	}
-	if m.panes.Focused() != dst {
-		t.Fatalf("focus should land on the merge target, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != dst {
+		t.Fatalf("focus should land on the merge target, got %q", m.activeWS().Panes.Focused())
 	}
 }
 
@@ -72,7 +72,7 @@ func TestPaneDragEdgeStillRelocates(t *testing.T) {
 	if _, ok := m.lay.Panes[src]; !ok {
 		t.Fatal("edge drop must relocate, not merge away, the source pane")
 	}
-	if got := m.panes.Get(dst).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(dst).TabCount(); got != 1 {
 		t.Fatalf("edge drop must not merge tabs into the target, got %d", got)
 	}
 }
@@ -93,13 +93,13 @@ func TestTabDragToEditorEdgeSplits(t *testing.T) {
 	if got := editorLeaves(m); got != before+1 {
 		t.Fatalf("edge drop should split a fresh pane: leaves %d want %d", got, before+1)
 	}
-	if got := m.panes.Get(dst).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(dst).TabCount(); got != 1 {
 		t.Fatalf("target's tab list must stay untouched on an edge drop, got %d", got)
 	}
-	if got := m.panes.Get(src).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(src).TabCount(); got != 1 {
 		t.Fatalf("source should be down to 1 tab, got %d", got)
 	}
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 	if ed == nil || ed.Path() != canonicalPath(paths[0]) {
 		t.Fatal("the fresh split should hold the dragged file and take focus")
 	}

@@ -25,8 +25,8 @@ func openTestTerminal(t *testing.T) (Model, string) {
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatalf("terminal.new should focus a terminal pane, got %q", key)
 	}
@@ -61,13 +61,13 @@ func TestTerminalKeysBypassGlobalHandling(t *testing.T) {
 			}
 		}
 	}
-	if !m.panes.Has(key) {
+	if !m.activeWS().Panes.Has(key) {
 		t.Fatal("terminal pane should survive q")
 	}
 	// ctrl+tab is the escape hatch: focus moves away.
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl})
 	m = out.(Model)
-	if m.panes.Focused() == key {
+	if m.activeWS().Panes.Focused() == key {
 		t.Fatal("ctrl+tab should move focus away from the terminal")
 	}
 }
@@ -79,7 +79,7 @@ func TestTerminalFocusKeysEscape(t *testing.T) {
 	// The terminal splits below the editor; ctrl+up must land elsewhere.
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
 	m = out.(Model)
-	if m.panes.Focused() == key {
+	if m.activeWS().Panes.Focused() == key {
 		t.Fatal("ctrl+up should move focus out of the terminal")
 	}
 }
@@ -93,7 +93,7 @@ func TestTerminalSelectionCopyKey(t *testing.T) {
 	t.Cleanup(func() { clipboardWrite = orig })
 
 	m, key := openTestTerminal(t)
-	term := m.panes.Get(key).Terminal()
+	term := m.activeWS().Panes.Get(key).Terminal()
 	time.Sleep(200 * time.Millisecond) // prompt on the grid
 
 	// Fake a drag over the prompt row.
@@ -111,7 +111,7 @@ func TestTerminalSelectionCopyKey(t *testing.T) {
 	if copied == "" {
 		t.Fatal("cmd+c should write the selection to the clipboard")
 	}
-	if m.panes.Focused() != key {
+	if m.activeWS().Panes.Focused() != key {
 		t.Fatal("cmd+c must not move focus")
 	}
 }
@@ -125,11 +125,11 @@ func TestTerminalPasteKey(t *testing.T) {
 	t.Cleanup(func() { clipboardRead = orig })
 
 	m, key := openTestTerminal(t)
-	term := m.panes.Get(key).Terminal()
+	term := m.activeWS().Panes.Get(key).Terminal()
 	time.Sleep(200 * time.Millisecond) // prompt on the grid
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModSuper})
 	m = out.(Model)
-	if m.panes.Focused() != key {
+	if m.activeWS().Panes.Focused() != key {
 		t.Fatal("cmd+v must not move focus")
 	}
 	deadline := time.Now().Add(3 * time.Second)
@@ -150,7 +150,7 @@ func TestDebugTerminalPasteKey(t *testing.T) {
 
 	m := sized(t, 100, 40)
 	m.openDebugPanel()
-	inst := m.panes.Get(pane.DebugKey)
+	inst := m.activeWS().Panes.Get(pane.DebugKey)
 	if inst == nil || inst.Kind() != pane.KindDebug {
 		t.Fatal("debug panel should open")
 	}
@@ -161,7 +161,7 @@ func TestDebugTerminalPasteKey(t *testing.T) {
 		t.Fatal("spawn failed for /bin/cat")
 	}
 	p.SetTerminal(&tm)
-	m.panes.SetFocused(pane.DebugKey)
+	m.activeWS().Panes.SetFocused(pane.DebugKey)
 	p.SetFocused(true)
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // frames -> vars
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // vars -> output
@@ -170,7 +170,7 @@ func TestDebugTerminalPasteKey(t *testing.T) {
 	}
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModSuper})
 	m = out.(Model)
-	if m.panes.Focused() != pane.DebugKey {
+	if m.activeWS().Panes.Focused() != pane.DebugKey {
 		t.Fatal("cmd+v must not move focus")
 	}
 	// cat echoes the pasted text back onto the grid.
@@ -187,10 +187,10 @@ func TestTerminalExitClosesPane(t *testing.T) {
 	m, key := openTestTerminal(t)
 	out, _ := m.Update(terminal.ExitedMsg{Key: key})
 	m = out.(Model)
-	if m.panes.Has(key) {
+	if m.activeWS().Panes.Has(key) {
 		t.Fatal("an exited terminal's pane should close")
 	}
-	if m.panes.Focused() == key {
+	if m.activeWS().Panes.Focused() == key {
 		t.Fatal("focus should land elsewhere")
 	}
 }
@@ -206,13 +206,13 @@ func TestTerminalLayoutRestoresFreshShell(t *testing.T) {
 
 	out, _ = m.Update(TerminalNewMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	dir := m.panes.Get(key).Terminal().Dir()
-	saveLayout(m.tree, m.panes)
-	m.panes.Get(key).Terminal().Close()
+	key := m.activeWS().Panes.Focused()
+	dir := m.activeWS().Panes.Get(key).Terminal().Dir()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	m.activeWS().Panes.Get(key).Terminal().Close()
 
 	m2 := NewWith(registry.New(), host.MapConfig{})
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatalf("terminal should restore under %q", key)
 	}
@@ -224,12 +224,12 @@ func TestTerminalLayoutRestoresFreshShell(t *testing.T) {
 		t.Fatalf("restored dir = %q, want %q", inst.Terminal().Dir(), dir)
 	}
 	found := false
-	for _, leaf := range layout.Leaves(m2.tree) {
+	for _, leaf := range layout.Leaves(m2.activeWS().Tree) {
 		if leaf == key {
 			found = true
 		}
 	}
-	if m2.tree != nil && !found {
+	if m2.activeWS().Tree != nil && !found {
 		t.Fatal("terminal leaf should stay in the restored tree")
 	}
 }
@@ -248,12 +248,12 @@ func TestTerminalSurvivesProjectSwitch(t *testing.T) {
 	m := switchModel(t)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	origin := m.panes.Get(key).Terminal().Dir()
+	key := m.activeWS().Panes.Focused()
+	origin := m.activeWS().Panes.Get(key).Terminal().Dir()
 
 	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatal("live terminal should be adopted across the switch")
 	}
@@ -286,8 +286,8 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 	m := switchModel(t)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	sess := m.panes.Get(key).Terminal()
+	key := m.activeWS().Panes.Focused()
+	sess := m.activeWS().Panes.Get(key).Terminal()
 	t.Cleanup(func() { sess.Close() })
 
 	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
@@ -296,8 +296,8 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 	m = out.(Model)
 
 	terms := 0
-	for _, k := range m.panes.Keys() {
-		if inst := m.panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal {
+	for _, k := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(k); inst != nil && inst.Kind() == pane.KindTerminal {
 			terms++
 			t.Cleanup(func() { inst.Terminal().Close() })
 		}
@@ -306,13 +306,13 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 		t.Fatalf("round trip must keep exactly one terminal pane, got %d", terms)
 	}
 	seen := map[string]int{}
-	for _, leaf := range layout.Leaves(m.tree) {
+	for _, leaf := range layout.Leaves(m.activeWS().Tree) {
 		seen[leaf]++
 		if seen[leaf] > 1 {
 			t.Fatalf("leaf %q appears twice in the tree — two panes would mirror one instance", leaf)
 		}
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatalf("terminal should live under its original key %q", key)
 	}
@@ -328,7 +328,7 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 // shell, ctrl+tab stays the only reserved escape.
 func TestTerminalScrollbackReservedKeys(t *testing.T) {
 	m, key := openTestTerminal(t)
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	inst.Terminal().ScrollBy(0) // touch: live view
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModShift})
 	m = out.(Model)
@@ -343,13 +343,13 @@ func TestTerminalScrollbackReservedKeys(t *testing.T) {
 // TestTerminalToggleStateMachine guards #97: create → return → refocus.
 func TestTerminalToggleStateMachine(t *testing.T) {
 	m := sized(t, 100, 40)
-	before := m.panes.Focused()
+	before := m.activeWS().Panes.Focused()
 
 	// No terminal: toggle creates and focuses one.
 	out, _ := m.Update(TerminalToggleMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatal("toggle should create a terminal")
 	}
@@ -358,19 +358,19 @@ func TestTerminalToggleStateMachine(t *testing.T) {
 	// Focused: toggle returns focus to the previous pane.
 	out, _ = m.Update(TerminalToggleMsg{})
 	m = out.(Model)
-	if m.panes.Focused() != before {
-		t.Fatalf("toggle should return focus to %q, got %q", before, m.panes.Focused())
+	if m.activeWS().Panes.Focused() != before {
+		t.Fatalf("toggle should return focus to %q, got %q", before, m.activeWS().Panes.Focused())
 	}
 
 	// Unfocused terminal exists: toggle focuses it again (no second spawn).
 	out, _ = m.Update(TerminalToggleMsg{})
 	m = out.(Model)
-	if m.panes.Focused() != key {
+	if m.activeWS().Panes.Focused() != key {
 		t.Fatal("toggle should refocus the existing terminal")
 	}
 	terms := 0
-	for _, k := range m.panes.Keys() {
-		if m.panes.Get(k).Kind() == pane.KindTerminal {
+	for _, k := range m.activeWS().Panes.Keys() {
+		if m.activeWS().Panes.Get(k).Kind() == pane.KindTerminal {
 			terms++
 		}
 	}
@@ -382,7 +382,7 @@ func TestTerminalToggleStateMachine(t *testing.T) {
 // TestTerminalClearEmptiesScrollback guards terminal.clear (#97).
 func TestTerminalClearEmptiesScrollback(t *testing.T) {
 	m, key := openTestTerminal(t)
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	term := inst.Terminal()
 	// Generate history.
 	for _, r := range "seq 1 200\r" {
@@ -503,7 +503,7 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
-	inst := m.panes.Get(m.panes.Focused())
+	inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
 	t.Cleanup(func() { inst.Terminal().Close() })
 	if title := m.terminalTitle(inst); !strings.Contains(title, "python→") {
 		t.Fatalf("title should indicate the mapping, got %q", title)
@@ -567,7 +567,7 @@ func TestStatusLineNamesFocusedTerminal(t *testing.T) {
 	if strings.Contains(line, "NORMAL") || strings.Contains(line, "Ln ") {
 		t.Fatalf("status line must not show editor mode/cursor while a terminal is focused: %q", line)
 	}
-	if sh := m.panes.Get(key).Terminal().ShellPath(); sh != "" &&
+	if sh := m.activeWS().Panes.Get(key).Terminal().ShellPath(); sh != "" &&
 		!strings.Contains(line, filepath.Base(sh)) {
 		t.Fatalf("status line should show the shell name %q, got %q", filepath.Base(sh), line)
 	}
@@ -602,13 +602,13 @@ func TestReservedCmdTSplitsSiblingTerminal(t *testing.T) {
 		t.Fatal("cmd+t must be reserved while a terminal is focused (#729)")
 	}
 	m = out.(Model)
-	nkey := m.panes.Focused()
-	inst := m.panes.Get(nkey)
+	nkey := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(nkey)
 	if nkey == key || inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatalf("cmd+t must focus a fresh terminal pane, got %q", nkey)
 	}
 	t.Cleanup(func() { inst.Terminal().Close() })
-	if old := m.panes.Get(key); old == nil || old.Kind() != pane.KindTerminal {
+	if old := m.activeWS().Panes.Get(key); old == nil || old.Kind() != pane.KindTerminal {
 		t.Fatal("the original terminal pane must survive")
 	}
 }
@@ -619,8 +619,8 @@ func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewTabMsg{})
 	m = out.(Model)
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor || inst.ActiveTerminal() == nil {
 		t.Fatalf("terminal.newTab should host a terminal tab in the editor pane, got %q", key)
 	}
@@ -632,8 +632,8 @@ func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
 		t.Fatal("cmd+t must be reserved while the terminal tab is focused")
 	}
 	m = out.(Model)
-	if m.panes.Focused() != key {
-		t.Fatalf("sibling tab must keep the pane focused, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != key {
+		t.Fatalf("sibling tab must keep the pane focused, got %q", m.activeWS().Panes.Focused())
 	}
 	nt := inst.ActiveTerminal()
 	if nt == nil {

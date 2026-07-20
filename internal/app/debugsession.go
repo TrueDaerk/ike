@@ -477,16 +477,16 @@ func (m *Model) debugStep(kind string) {
 
 // debugPanel returns the singleton panel model, nil while it is not open.
 func (m Model) debugPanel() *debugpanel.Model {
-	if !m.panes.Has(pane.DebugKey) {
+	if !m.activeWS().Panes.Has(pane.DebugKey) {
 		return nil
 	}
-	return m.panes.Get(pane.DebugKey).Debug()
+	return m.activeWS().Panes.Get(pane.DebugKey).Debug()
 }
 
 // debugPanelEditing reports whether the focused pane is the debug panel with an
 // open inline value editor, so the app routes every key straight to it (#627).
 func (m Model) debugPanelEditing() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().Editing()
 }
 
@@ -494,30 +494,30 @@ func (m Model) debugPanelEditing() bool {
 // bottom with the singleton panel — without stealing focus; the stop already
 // moved the caret to the paused line.
 func (m *Model) openDebugPanel() {
-	if m.panes.Has(pane.DebugKey) {
+	if m.activeWS().Panes.Has(pane.DebugKey) {
 		// The panel already exists — restored from a saved layout, or left
 		// open across stops. The session still attaches to it: the editable
 		// gate and any buffered output must reach the panel too (#640).
-		m.attachDebugPanel(m.panes.Get(pane.DebugKey).Debug())
+		m.attachDebugPanel(m.activeWS().Panes.Get(pane.DebugKey).Debug())
 		return
 	}
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	key := m.panes.AddDebug()
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	key := m.activeWS().Panes.AddDebug()
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
-	m.attachDebugPanel(m.panes.Get(key).Debug())
+	m.activeWS().Tree = tree
+	m.attachDebugPanel(m.activeWS().Panes.Get(key).Debug())
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // attachDebugPanel binds the live session to the panel: it gates the
@@ -619,7 +619,7 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	// The session key is minted from the terminal registry so output/exit
 	// messages route uniquely; an ExitedMsg for a non-pane key is a no-op, so
 	// the embedded session's exit never closes anything by accident.
-	key := m.panes.MintTerminalKey()
+	key := m.activeWS().Panes.MintTerminalKey()
 	t := terminal.NewCommand(key, msg.args.Args, dir, 80, 24, env, m.host.Send)
 	t.SetLabel("debug: " + dbg.cfgName)
 	pid := t.Pid()
@@ -643,7 +643,7 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 // column is focused and the process runs. The app then routes keys raw to the
 // panel, bypassing the keymap layer like it does for terminal panes.
 func (m Model) debugPanelTermCapturing() bool {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().OutputTermCapturing()
 }
 

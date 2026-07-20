@@ -31,7 +31,7 @@ func navProject(t *testing.T) (root string, files []string) {
 
 func (m Model) atPosition(t *testing.T, path string, line int) Model {
 	t.Helper()
-	ed := m.panes.Get(m.activeEditorKey()).Editor()
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
 	gotLine, _ := ed.Cursor()
 	if ed.Path() != path || gotLine-1 != line {
 		t.Fatalf("at %s:%d, want %s:%d", ed.Path(), gotLine-1, path, line)

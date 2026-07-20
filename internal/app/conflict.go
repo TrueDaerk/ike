@@ -22,7 +22,7 @@ func (m *Model) openConflictPrompt(path string) {
 	if key == "" {
 		return
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if idx := inst.TabForPath(path); idx >= 0 {
 		inst.ActivateTab(idx)
 	}
@@ -44,7 +44,7 @@ func (m *Model) openConflictPrompt(path string) {
 // other than the three answers are swallowed so nothing leaks past a modal
 // decision.
 func (m Model) updateConflict(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	inst := m.panes.Get(m.conflictKey)
+	inst := m.activeWS().Panes.Get(m.conflictKey)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		m.conflictKey = ""
 		m.shell.Close()

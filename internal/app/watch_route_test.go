@@ -53,7 +53,7 @@ func TestExternalDeleteKeepsDirtyEditorStale(t *testing.T) {
 	if key == "" {
 		t.Fatal("a dirty editor must survive an external delete — its buffer is the only copy")
 	}
-	if ed := m.panes.Get(key).Editor(); !ed.Stale() || !ed.Dirty() {
+	if ed := m.activeWS().Panes.Get(key).Editor(); !ed.Stale() || !ed.Dirty() {
 		t.Fatal("the surviving buffer must be dirty and stale")
 	}
 }
@@ -71,7 +71,7 @@ func TestRemoveWithFilePresentIsAContentChange(t *testing.T) {
 	if key == "" {
 		t.Fatal("the editor must stay open for a replaced file")
 	}
-	if got := m.panes.Get(key).Editor().Text(); !strings.Contains(got, "replaced") {
+	if got := m.activeWS().Panes.Get(key).Editor().Text(); !strings.Contains(got, "replaced") {
 		t.Fatalf("a replaced file must reload like a content change, got %q", got)
 	}
 }
