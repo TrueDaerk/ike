@@ -2,6 +2,11 @@
 
 ## 2026-07-19
 
+- cmd+v pastes the system clipboard into a focused terminal pane and the debug
+  panel's embedded debuggee terminal (#727): the key is caught before raw
+  forwarding and fed through the bracketed-paste path (`PasteText`), since a
+  Kitty-protocol host delivers cmd+v as a key event, not a paste.
+
 - Terminal capability check (#720): startup probe (Kitty keyboard protocol
   handshake with grace tick, tmux/screen env, color profile) opens a centered
   floating report — one headline + fix per deficiency, esc dismisses; the palette/cheatsheet "⚠

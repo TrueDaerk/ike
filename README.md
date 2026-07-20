@@ -20,8 +20,12 @@ Build from source (all platforms):
 ```sh
 git clone https://github.com/TrueDaerk/ike.git
 cd ike
-go build -o ike ./cmd/ike
+make install                        # installs to ~/.local/bin/ike
+make install BINDIR=/usr/local/bin  # or pick another directory
 ```
+
+(Or build without installing: `make` produces `./ike`; plain
+`go build -o ike ./cmd/ike` works too.)
 
 Then run `ike` from the directory you want to open as a project — the current
 working directory becomes the project root:
@@ -55,9 +59,18 @@ git log | ike -                   # pipe stdin into a scratch buffer
 > keybind = clear
 > keybind = super+,=open_config
 > keybind = super+shift+,=reload_config
+> # macOS only: Option is a composition key (needed for { [ @ ~ on
+> # international layouts), so option+backspace arrives without the alt
+> # modifier. This sends ESC DEL directly (backward-kill-word in IKE and
+> # in shells). Must come *after* `keybind = clear`.
+> keybind = alt+backspace=text:\x1b\x7f
 > ```
 >
-> (on Windows/Linux use `ctrl` instead of `super`.)
+> (on Windows/Linux use `ctrl` instead of `super`.) Ghostty merges every
+> config file it finds (e.g. `~/.config/ghostty/config` **and**
+> `~/Library/Application Support/com.mitchellh.ghostty/config.ghostty`);
+> a `keybind = clear` in a later file wipes keybinds from earlier ones —
+> check the effective result with `ghostty +show-config`.
 
 | Platform | Notes |
 |---|---|
