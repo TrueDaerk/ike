@@ -122,16 +122,18 @@ func (m Model) conflictCmd() tea.Cmd {
 // own file would clobber the external change, so it yields the prompt instead.
 // Saving to a different path (":w other") is not a conflict.
 // It reports ok=false when nothing was written — a pending conflict, a write
-// error, or a scratch buffer without a name — so ":wq" knows not to close.
-// The outcome lands on the ex line (#261): `"file" written` on success,
-// vim-style "E: …" on failure.
-func (m *Model) saveGuarded(target string) (tea.Cmd, bool) {
+// error, or an untitled buffer (whose save turns into the save-as prompt) —
+// so ":wq" knows not to close; closeAfter carries the ":wq" intent into that
+// prompt (#730). The outcome lands on the ex line (#261): `"file" written`
+// on success, vim-style "E: …" on failure.
+func (m *Model) saveGuarded(target string, closeAfter bool) (tea.Cmd, bool) {
 	if m.stale && samePath(target, m.path) {
 		return m.conflictCmd(), false
 	}
 	if target == "" && m.path == "" {
-		m.cmdMsg = "E: no file name"
-		return nil, false
+		// Untitled buffer (#730): ask the app to prompt for a path instead
+		// of failing with "no file name".
+		return func() tea.Msg { return SaveAsPromptMsg{CloseAfter: closeAfter} }, false
 	}
 	if err := m.saveAs(target); err != nil {
 		m.cmdMsg = "E: " + err.Error()
@@ -139,6 +141,19 @@ func (m *Model) saveGuarded(target string) (tea.Cmd, bool) {
 	}
 	m.cmdMsg = `"` + filepath.Base(m.path) + `" written`
 	return nil, true
+}
+
+// SaveTo writes the buffer to path and binds the editor to it — the accept
+// side of the untitled save-as prompt (#730). It goes through the normal
+// saveAs path (EventSave, undo checkpoint, editorconfig re-resolve) and
+// reports the outcome on the ex line like any save.
+func (m *Model) SaveTo(path string) error {
+	if err := m.saveAs(path); err != nil {
+		m.cmdMsg = "E: " + err.Error()
+		return err
+	}
+	m.cmdMsg = `"` + filepath.Base(m.path) + `" written`
+	return nil
 }
 
 // Autosave writes the buffer when focus leaves the pane or its document is

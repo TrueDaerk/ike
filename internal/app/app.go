@@ -212,6 +212,14 @@ type Model struct {
 	// its cursor. "" when no rename prompt is open.
 	renamePath  string
 	renameInput string
+
+	// saveAsKey is the pane whose untitled buffer the save-as prompt (#730)
+	// names while the shell shows it; saveAsClose carries the ":wq" intent.
+	saveAsKey   string
+	saveAsInput string
+	saveAsPos   int
+	saveAsClose bool
+	saveAsErr   string
 	renamePos   int
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
@@ -3162,6 +3170,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Info, msg.Text)
 		return m, nil
 
+	case editor.SaveAsPromptMsg:
+		// Saving an untitled buffer has no path (#730): prompt for one.
+		m.startSaveAsPrompt(msg.CloseAfter)
+		return m, nil
+
 	case editor.CloseMsg:
 		// :q / :wq closes the focused editor leaf, mirroring CloseFocused;
 		// :q! skips the unsaved-changes guard, vim-style (#259).
@@ -3338,6 +3351,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// characters build the new name, enter applies, esc cancels.
 		if m.renameOpen() {
 			return m.updateRenamePrompt(msg)
+		}
+		// The untitled save-as prompt (#730) mirrors it.
+		if m.saveAsOpen() {
+			return m.updateSaveAsPrompt(msg)
 		}
 		// The JetBrains keymap import prompt (#677) mirrors it, plus tab
 		// path completion.

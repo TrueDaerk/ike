@@ -573,6 +573,23 @@ the modified indicator clears. Untitled buffers are never idle-saved; crash
 recovery covers them. Config edits apply live: an interval change re-arms,
 leaving idle mode drops pending marks.
 
+## Untitled buffers & save-as (#730)
+
+An empty editor pane (fresh start, split leaf) is a typable **untitled
+buffer** — keys route to it like any editor, it dirties normally, and the
+dirty-close guard (#259) covers it. Saving it has no path: `saveGuarded`
+emits `SaveAsPromptMsg` instead of "no file name", and the app opens a shell
+prompt (`internal/app/saveas.go`, the rename-prompt pattern with the shared
+`ui.EditKey` line editing). The typed path resolves against the project root
+(absolute paths pass through), parent directories are created, and an
+existing file is refused — the prompt stays open. Accepting writes through
+`editor.SaveTo` and binds the tab: watcher tracking, MRU, explorer
+active-file, layout persistence, highlighting (`Reparse`), VCS gutter marks
+and the file-opened hooks all run, so the fresh file behaves exactly like
+one opened from disk. `:wq` carries its close intent through the prompt
+(`SaveAsPromptMsg.CloseAfter`); `:w other/path` on any buffer still saves
+directly without the prompt.
+
 ## Line endings & encodings (#66)
 
 The buffer is always **LF-joined UTF-8**; the on-disk flavor lives beside it as

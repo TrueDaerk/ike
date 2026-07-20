@@ -1367,14 +1367,29 @@ func TestWriteQuitStaysOpenOnSaveFailure(t *testing.T) {
 	}
 }
 
-func TestSaveScratchWithoutNameReportsError(t *testing.T) {
+// TestSaveScratchWithoutNamePrompts guards #730: ":w" on a pathless buffer
+// asks the app for the save-as prompt instead of failing with "no file name";
+// ":wq" carries the close intent along.
+func TestSaveScratchWithoutNamePrompts(t *testing.T) {
 	m := New()
 	m.SetSize(40, 5)
 	m.SetFocused(true)
 	m = typeKeys(m, ":w")
-	m = send(m, special(tea.KeyEnter))
-	if m.cmdMsg != "E: no file name" {
-		t.Fatalf("cmdMsg=%q want 'E: no file name' (#261)", m.cmdMsg)
+	tm, cmd := m.Update(special(tea.KeyEnter))
+	m = tm
+	if cmd == nil {
+		t.Fatal(":w without a name must emit a command (#730)")
+	}
+	if msg, ok := cmd().(SaveAsPromptMsg); !ok || msg.CloseAfter {
+		t.Fatalf(":w must emit SaveAsPromptMsg{CloseAfter: false}, got %#v", cmd())
+	}
+	m = typeKeys(m, ":wq")
+	_, cmd = m.Update(special(tea.KeyEnter))
+	if cmd == nil {
+		t.Fatal(":wq without a name must emit a command (#730)")
+	}
+	if msg, ok := cmd().(SaveAsPromptMsg); !ok || !msg.CloseAfter {
+		t.Fatalf(":wq must emit SaveAsPromptMsg{CloseAfter: true}, got %#v", cmd())
 	}
 }
 
