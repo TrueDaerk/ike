@@ -141,6 +141,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)
+	// editor.auto_save edits too: an idle-interval change re-arms, leaving
+	// idle mode drops pending marks (#731).
+	m.reconfigureAutosaveIdle(hcfg)
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)

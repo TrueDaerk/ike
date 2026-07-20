@@ -201,6 +201,12 @@ type Model struct {
 	backupDeb       *backup.Debouncer
 	backupTickArmed bool
 	backupIv        time.Duration
+
+	// Idle autosave (#731): same debouncer shape as backup, but the tick
+	// saves the quiet dirty buffers instead of snapshotting them.
+	autosaveIdleDeb       *backup.Debouncer
+	autosaveIdleTickArmed bool
+	autosaveIdleIv        time.Duration
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
@@ -471,6 +477,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
 	m.backupDeb = backup.NewDebouncer(m.backupIv)
+	m.autosaveIdleIv = autosaveIdleInterval(cfg)
+	m.autosaveIdleDeb = backup.NewDebouncer(m.autosaveIdleIv)
 	m.searcher = search.New(m.host.Send)
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
@@ -2628,6 +2636,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.backupOnSync(msg.FromKey, msg.Path); c != nil {
 			cmds = append(cmds, c)
 		}
+		// Idle autosave (#731) rides the same seam: dirty (re)arms the idle
+		// deadline, clean cancels it.
+		if c := m.autosaveIdleOnSync(msg.FromKey, msg.Path); c != nil {
+			cmds = append(cmds, c)
+		}
 		// Deliver to every other view of the document — other panes and this
 		// pane's background tabs alike; only the originating tab is skipped.
 		for _, key := range m.editorKeysForPath(msg.Path) {
@@ -3164,6 +3177,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// re-arm while marks remain (Roadmap 0210, #167).
 		m.backupTickArmed = false
 		return m, tea.Batch(m.snapshotDueBackups(time.Now()), m.armBackupTick())
+
+	case autosaveIdleTickMsg:
+		// An idle deadline elapsed: save the quiet dirty buffers and re-arm
+		// while marks remain (#731).
+		m.autosaveIdleTickArmed = false
+		m.saveDueIdleBuffers(time.Now())
+		return m, m.armAutosaveIdleTick()
 
 	case toastExpireMsg:
 		m.expireToast(msg.id)

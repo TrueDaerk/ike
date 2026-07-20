@@ -124,11 +124,12 @@ type Files struct {
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).
-// AutoSave ("off" or "focus") controls whether a dirty buffer saves itself when
-// focus leaves its pane or its document is replaced (#174); an "idle" mode is
-// reserved for later (#54).
+// AutoSave controls whether a dirty buffer saves itself: "off", "focus" (when
+// focus leaves its pane or its document is replaced, #174), or "idle" (focus
+// plus a debounced save after AutoSaveIdleMs of no edits, #731).
 type Editor struct {
 	AutoSave               string `toml:"auto_save"`
+	AutoSaveIdleMs         int    `toml:"auto_save_idle_ms"`
 	TabWidth               int    `toml:"tab_width"`
 	UseSpaces              bool   `toml:"use_spaces"`
 	LineNumbers            bool   `toml:"line_numbers"`
