@@ -382,6 +382,8 @@ func TestMotionKeyTranslation(t *testing.T) {
 		{"cmd+right (super)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
 		{"cmd+right (meta)", tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModMeta}, vt.KeyPressEvent{Code: 'e', Mod: vt.ModCtrl}},
 		{"option+backspace", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt}, vt.KeyPressEvent{Code: vt.KeyBackspace, Mod: vt.ModAlt}},
+		{"option+forward-delete", tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt}, vt.KeyPressEvent{Code: 'd', Mod: vt.ModAlt}},
+		{"shift+option+forward-delete", tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModShift | tea.ModAlt}, vt.KeyPressEvent{Code: 'd', Mod: vt.ModAlt}},
 		{"cmd+backspace (super)", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper}, vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}},
 		{"cmd+backspace (meta)", tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModMeta}, vt.KeyPressEvent{Code: 'u', Mod: vt.ModCtrl}},
 	}

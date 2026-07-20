@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -130,7 +130,8 @@ the full distance (cheap, clamped to history).
 translates the iTerm "natural text editing" motions to the readline/ZLE
 emacs-mode defaults — `option+left`/`right` → `ESC b`/`ESC f` (word jump),
 `cmd+left`/`right` → `ctrl+a`/`ctrl+e` (line start/end),
-`option+backspace` → `ESC DEL` (kill previous word), `cmd+backspace` →
+`option+backspace` → `ESC DEL` (kill previous word), `option+forward-delete`
+→ `ESC d` (kill next word, #733), `cmd+backspace` →
 `ctrl+u` (kill to line start). Shift-augmented variants behave the same (a
 PTY has no selection). Cmd delivery is terminal-dependent (the 0081
 reality-probe caveat).
