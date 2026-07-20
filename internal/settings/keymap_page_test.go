@@ -26,7 +26,7 @@ func selectChord(t *testing.T, k *KeymapPage, chord string) keymap.Binding {
 	for i, b := range k.rows() {
 		if b.Chord.String() == chord {
 			k.sel = i
-			return b
+			return b.Binding
 		}
 	}
 	t.Fatalf("no binding with chord %q", chord)
@@ -122,6 +122,76 @@ func TestUnbindAndResetRoundTrip(t *testing.T) {
 	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Editor)
 	if !ok || nb.Command != "editor.write" {
 		t.Fatal("reset must restore the preset default")
+	}
+}
+
+// selectUnbound moves the selection onto the unbound row for a command (#736).
+func selectUnbound(t *testing.T, k *KeymapPage, command string) keymapRow {
+	t.Helper()
+	for i, b := range k.rows() {
+		if b.unbound && b.Command == command {
+			k.sel = i
+			return b
+		}
+	}
+	t.Fatalf("no unbound row for command %q", command)
+	return keymapRow{}
+}
+
+func TestUnboundCommandStaysListedAndRebinds(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	// The command must remain reachable as an unbound row (#736).
+	row := selectUnbound(t, k, "editor.write")
+	if row.Chord.String() != "ctrl+s" {
+		t.Fatalf("unbound row should keep the default chord, got %q", row.Chord.String())
+	}
+	if !strings.Contains(k.View(120, 80), "(unbound)") {
+		t.Fatal("unbound row must render as (unbound)")
+	}
+	// enter starts a capture; a fresh chord binds the command again.
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !k.Capturing() {
+		t.Fatal("enter on an unbound row must start chord capture")
+	}
+	k.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+	apply(t, k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+o"), keymap.Editor)
+	if !ok || nb.Command != "editor.write" {
+		t.Fatalf("rebind from unbound must resolve, got %+v ok=%v", nb, ok)
+	}
+	// The default chord stays unbound — the user removed it deliberately.
+	if _, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Global); ok {
+		t.Fatal("default chord must stay unbound after rebinding elsewhere")
+	}
+}
+
+func TestUnboundCommandResetRestoresDefault(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	selectUnbound(t, k, "editor.write")
+	// "r" on the unbound row removes the ""-override; the default falls back.
+	apply(t, k.Update(tea.KeyPressMsg{Text: "r", Code: 'r'}))
+	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Editor)
+	if !ok || nb.Command != "editor.write" {
+		t.Fatalf("reset must restore the preset default, got %+v ok=%v", nb, ok)
+	}
+	for _, b := range k.rows() {
+		if b.unbound && b.Command == "editor.write" {
+			t.Fatal("unbound row must disappear after the reset")
+		}
+	}
+}
+
+func TestUnbindOnUnboundRowIsNoop(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	selectUnbound(t, k, "editor.write")
+	if cmd := k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}); cmd != nil {
+		t.Fatal("unbind on an already-unbound row must be a no-op")
 	}
 }
 
