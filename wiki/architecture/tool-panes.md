@@ -28,6 +28,13 @@ placement = "bottom"    # "bottom" (default) or "right" split
 Defined in `internal/config/schema.go` (`Tools`/`ToolEntry`). Entries missing
 `name` or `command` are skipped.
 
+Editable from the UI via **Settings → Tools** (#755,
+`internal/settings/tools_page.go`): `a` adds, enter edits, `d` deletes; the
+form validates name/command presence, duplicate names and the placement enum.
+Writes go through the write-back layer at user scope (the whole list, the
+`project.history` pattern) and reload through the normal pipeline, so the
+`tool.<name>` commands re-shape live.
+
 ## Commands & toggle semantics
 
 `toolCommands()` (`internal/app/tools.go`) builds one command per entry on
