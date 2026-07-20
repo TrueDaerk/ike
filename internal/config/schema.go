@@ -81,9 +81,12 @@ type Marketplace struct {
 	CatalogURL string `toml:"catalog_url"`
 }
 
-// Terminal holds integrated-terminal behaviour (Roadmap 0170).
+// Terminal holds integrated-terminal behaviour (Roadmap 0170). Autosuggest
+// is the completion popup's while-typing trigger (#740); ctrl+space stays
+// available when it is off.
 type Terminal struct {
-	Shell string `toml:"shell"`
+	Shell       string `toml:"shell"`
+	Autosuggest bool   `toml:"autosuggest"`
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.

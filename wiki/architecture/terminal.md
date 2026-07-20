@@ -113,6 +113,29 @@ grid per step, position marker on the bottom line, any typed key snaps back
 to live). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
 
+## Command completion popup (#740)
+
+JetBrains-style completion at the shell prompt (`complete.go`). The command
+line is read straight off the emulator — `LineText` of the cursor row, left
+of the cursor; the prompt is stripped heuristically (`$ `, `% `, `> `, `# `,
+`❯ `), command separators (`|`, `;`, `&&`, `||`) start a fresh command — so
+the shell keeps owning line editing and history. Sources per word: PATH
+executables while the first word is typed, make targets after `make`
+(Makefile/makefile/GNUmakefile in the session's start dir), files/dirs
+relative to the start dir otherwise (dir part in the word honoured, `~/` and
+absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).
+Every candidate strictly extends the typed word, so **accepting (enter/tab)
+pastes just the remainder** through the bracketed-paste path; a directory
+re-arms the popup to keep descending. `ctrl+space` opens the popup on demand
+(empty word shows everything); **auto-suggest** re-arms on every printable
+key and recomputes on the next `OutputMsg` — the shell must echo the
+keystroke before the cursor row reads current — and is togglable via
+`terminal.autosuggest` (default on, applies live). up/down move, esc
+dismisses, any other key invalidates and passes through raw. The popup is
+inactive on the alternate screen (vim/htop), in command sessions, and while
+paging scrollback; it renders as a bordered list composited over the grid at
+the word's start column, below the cursor row when it fits, above otherwise.
+
 **Mouse selection & copy** (#227, `MousePress`/`MouseDrag`/`MouseRelease` in
 `model.go`): a left drag over the grid selects text — highlighted in reverse
 video, anchored in virtual coordinates (indices into [scrollback ++ screen])

@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Terminal command completion popup (#740): auto-suggest while typing at
+  the shell prompt + ctrl+space on demand; PATH commands, paths and make
+  targets; accept pastes the remainder; inactive on the alt screen.
+  terminal.autosuggest toggles the auto trigger. terminal.md updated.
 - cmd+t in a focused terminal spawns a sibling terminal (#729): sibling tab
   in an editor-hosted terminal pane, split pane below a dedicated one;
   reserved-set entry, global cmd+t binding untouched. terminal.md updated.

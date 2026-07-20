@@ -359,6 +359,7 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 	}
 	term.SetPalette(i.pal)
 	term.SetSize(i.w, i.h)
+	term.SetAutoSuggest(autosuggestOn(i.cfg))
 	i.tabs = append(i.tabs, newTerminalTab(&term))
 	i.activate(len(i.tabs) - 1)
 	return i.tabs[i.active].Terminal()
@@ -744,5 +745,17 @@ func (i *Instance) configure(cfg host.Config) {
 		for _, t := range i.tabs {
 			t.configure(cfg)
 		}
+	case KindTerminal:
+		i.term.SetAutoSuggest(autosuggestOn(cfg))
 	}
+}
+
+// autosuggestOn reads terminal.autosuggest ("true" unless explicitly off);
+// the completion popup's while-typing trigger (#740).
+func autosuggestOn(cfg host.Config) bool {
+	if cfg == nil {
+		return true
+	}
+	v, ok := cfg.Get("terminal.autosuggest")
+	return !ok || v != "false"
 }

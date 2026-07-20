@@ -43,6 +43,13 @@ type Model struct {
 	// an existing selection, dragging a drag in progress.
 	selAnchor, selHead vpos
 	selOn, dragging    bool
+	// Command completion popup (#740): comp is the popup state, autoSuggest
+	// the while-typing trigger (terminal.autosuggest), pendingSuggest a
+	// recompute scheduled for the next screen update (the shell must echo
+	// the keystroke before the cursor row reads current).
+	comp           completion
+	autoSuggest    bool
+	pendingSuggest bool
 }
 
 // vpos is a cell position with a virtual line index (scrollback + screen).
@@ -58,7 +65,7 @@ func (p vpos) before(q vpos) bool {
 // rendering the error instead of a grid — the pane stays usable (closable)
 // rather than crashing the layout.
 func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
-	m := Model{w: w, h: h, send: send}
+	m := Model{w: w, h: h, send: send, autoSuggest: true}
 	sess, err := StartSession(key, shell, dir, w, h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
@@ -236,15 +243,22 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.scroll = 0
+	// The completion popup (#740) intercepts its own keys (navigation,
+	// accept, dismiss, ctrl+space) before the raw route.
+	if m.completionKey(msg.String()) {
+		return nil
+	}
 	m.ClearSelection()
 	m.occupied = true // input reached the session: never reuse it for a run (#574)
 	if ev, ok := motionKey(msg); ok {
+		m.completionTyped(msg.String(), "")
 		m.sess.SendKey(ev)
 		return nil
 	}
 	for _, ev := range toVTKeys(msg) {
 		m.sess.SendKey(ev)
 	}
+	m.completionTyped(msg.String(), msg.Text)
 	return nil
 }
 
@@ -529,7 +543,7 @@ func (m Model) View() string {
 		return view
 	}
 	cx, cy := m.sess.CursorPosition()
-	return overlayCursor(view, cx, cy)
+	return m.completionView(overlayCursor(view, cx, cy))
 }
 
 // exitLine renders the completion marker: command sessions (#574) report the
