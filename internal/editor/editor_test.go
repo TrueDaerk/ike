@@ -281,6 +281,39 @@ func TestBackspaceJoins(t *testing.T) {
 	}
 }
 
+func TestForwardDeleteInsert(t *testing.T) {
+	m, _ := loaded(t, "abcd\n")
+	m = typeKeys(m, "li") // cursor on 'b', insert before it
+	m = send(m, special(tea.KeyDelete))
+	m = send(m, special(tea.KeyEsc))
+	if line(m, 0) != "acd" {
+		t.Fatalf("del=%q", line(m, 0))
+	}
+}
+
+func TestForwardDeleteJoinsAtLineEnd(t *testing.T) {
+	m, _ := loaded(t, "ab\ncd\n")
+	m = typeKeys(m, "A") // insert at end of line 0 (col 2)
+	m = send(m, special(tea.KeyDelete))
+	m = send(m, special(tea.KeyEsc))
+	if m.buf.LineCount() != 1 || line(m, 0) != "abcd" {
+		t.Fatalf("del join=%q", m.buf.Lines())
+	}
+}
+
+func TestForwardDeleteAtBufferEndNoop(t *testing.T) {
+	m, _ := loaded(t, "ab\n")
+	m = typeKeys(m, "A")
+	m = send(m, special(tea.KeyDelete))
+	m = send(m, special(tea.KeyEsc))
+	if m.buf.LineCount() != 1 || line(m, 0) != "ab" {
+		t.Fatalf("del noop=%q", m.buf.Lines())
+	}
+	if m.dirty {
+		t.Fatalf("no-op forward delete marked the buffer dirty")
+	}
+}
+
 func TestInsertModeArrowKeys(t *testing.T) {
 	m, _ := loaded(t, "abc\ndef\n")
 	m = typeKeys(m, "i") // insert at col 0, line 0
