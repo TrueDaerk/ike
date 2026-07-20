@@ -8,7 +8,6 @@ package terminal
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -69,6 +68,15 @@ type Session struct {
 	// even while the emulator or render loop stalls (lock/sleep/resume);
 	// buffered bytes replay into the emulator in order, nothing drops.
 	out *spool
+
+	// Teardown sequencing (#748): upstream vt keeps Emulator.closed as a
+	// plain bool, so Emulator.Close is not safe concurrently with Read/Write.
+	// ioWG joins the loops feeding the emulator (read+feed), wlWG the write
+	// loop draining it; wlStop tells the write loop a delivered byte is the
+	// teardown sentinel, not child input.
+	ioWG   sync.WaitGroup
+	wlWG   sync.WaitGroup
+	wlStop atomic.Bool
 }
 
 // Shell resolves the shell to spawn: the config override first, $SHELL next,
@@ -146,6 +154,8 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
 	})
 	s.out = newSpool()
+	s.ioWG.Add(2)
+	s.wlWG.Add(1)
 	go s.readLoop()
 	go s.feedLoop()
 	go s.writeLoop()
@@ -158,6 +168,7 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 // or render loop must not backpressure into the kernel TTY queue, where
 // output around a suspend/resume window can be flushed and lost.
 func (s *Session) readLoop() {
+	defer s.ioWG.Done()
 	defer s.out.close()
 	buf := make([]byte, 32*1024)
 	for {
@@ -174,6 +185,7 @@ func (s *Session) readLoop() {
 // feedLoop replays spooled PTY output into the emulator in order and requests
 // repaints, coalesced so a burst of output paints once per quiet interval.
 func (s *Session) feedLoop() {
+	defer s.ioWG.Done()
 	for {
 		chunk, ok := s.out.take()
 		if !ok {
@@ -185,9 +197,23 @@ func (s *Session) feedLoop() {
 }
 
 // writeLoop pumps the emulator's host-bound bytes (key encodings from
-// SendKey, terminal query replies like DA1/DSR) into the PTY.
+// SendKey, terminal query replies like DA1/DSR) into the PTY. It keeps
+// draining after a PTY write error (teardown closed the PTY) so a query
+// reply from the emulator feed can never block on the host-bound pipe, and
+// exits on the teardown sentinel (#748) — only Emulator.Close would
+// otherwise unblock its Read, and that call races a concurrent reader.
 func (s *Session) writeLoop() {
-	_, _ = io.Copy(s.ptmx, s.em)
+	defer s.wlWG.Done()
+	buf := make([]byte, 4096)
+	for {
+		n, err := s.em.Read(buf)
+		if n > 0 && !s.wlStop.Load() {
+			_, _ = s.ptmx.Write(buf[:n])
+		}
+		if err != nil || s.wlStop.Load() {
+			return
+		}
+	}
 }
 
 // waitExit closes the session when the shell process ends and tells the app.
@@ -405,10 +431,17 @@ func (s *Session) Close() {
 	s.teardown()
 }
 
-// teardown releases the process and PTY.
+// teardown releases the process, PTY and emulator. The join order matters
+// (#748): the read loop ends when the closed PTY errors its Read, the feed
+// loop once the spool drains (exit output still reaches the emulator), and
+// only then is the write loop stopped — woken by a sentinel byte through the
+// host-bound pipe, since nothing else unblocks its Read. Emulator.Close runs
+// last, once no goroutine is inside the emulator: upstream vt keeps its
+// closed flag as a plain bool, so Close concurrent with Read/Write is a data
+// race. The mutex is released before the joins — the feed loop's title
+// callback takes it.
 func (s *Session) teardown() {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
 	}
@@ -416,5 +449,12 @@ func (s *Session) teardown() {
 	if s.out != nil {
 		s.out.close()
 	}
+	s.mu.Unlock()
+	s.ioWG.Wait()
+	s.wlStop.Store(true)
+	// The sentinel write blocks until the write loop reads it; if the loop
+	// already exited, Close's pipe error below releases the goroutine.
+	go func() { _, _ = s.em.InputPipe().Write([]byte{0}) }()
+	s.wlWG.Wait()
 	_ = s.em.Close()
 }
