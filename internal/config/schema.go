@@ -159,9 +159,12 @@ type Editor struct {
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
 // pane's tab bar even when it holds a single tab; by default the bar only
-// appears with two or more tabs.
+// appears with two or more tabs. Limit caps the open editor tabs per pane
+// (#742, the JetBrains tab limit): opening a file beyond it closes the least
+// recently used non-dirty file tab; 0 (or negative) disables the limit.
 type Tabs struct {
 	AlwaysShow bool `toml:"always_show"`
+	Limit      int  `toml:"limit"`
 }
 
 // Explorer holds file-tree behaviour. Colors is a per-filetype color-name slot

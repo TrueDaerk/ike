@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Editor Tabs
@@ -88,6 +88,18 @@ buffer and one undo history. `editorKeysForPath` matches any tab;
 `editorViewsForPath`/`editorForPath` resolve per-view editor models; sync
 broadcasts skip only the originating tab, reaching background tabs of the same
 pane.
+
+### Tab limit (#742)
+
+`editor.tabs.limit` (default 5, 0/negative disables) caps the document tabs
+per pane, JetBrains-style: when a file open appends a tab beyond the limit,
+`enforceTabLimit` closes the **least recently used** eligible tab — recency is
+a per-instance activation counter stamped in `activate` (`Tab.lastUsed`).
+Exempt are the active tab, dirty tabs, scratch tabs (no path to reopen from)
+and terminal tabs; when nothing is eligible the limit is exceeded rather than
+data risked. Evicted tabs land in the reopen ring (#158), so
+`editor.tab.reopenClosed` restores them. Layout restore is not limited — a
+saved layout reopens as saved.
 
 ## Closing peels tabs before the pane
 

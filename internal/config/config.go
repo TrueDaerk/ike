@@ -110,6 +110,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.sticky_scroll", c.Editor.StickyScroll)
 	put("editor.sticky_scroll_depth", c.Editor.StickyScrollDepth)
 	put("editor.tabs.always_show", c.Editor.Tabs.AlwaysShow)
+	put("editor.tabs.limit", c.Editor.Tabs.Limit)
 
 	put("explorer.show_hidden", c.Explorer.ShowHidden)
 	put("explorer.git_status", c.Explorer.GitStatus)

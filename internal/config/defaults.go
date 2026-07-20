@@ -29,7 +29,7 @@ func defaults() *Config {
 			Rulers:                 []int{},
 			StickyScroll:           true,
 			StickyScrollDepth:      4,
-			Tabs:                   Tabs{AlwaysShow: false},
+			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 		},
 		Explorer: Explorer{
 			ShowHidden: false,

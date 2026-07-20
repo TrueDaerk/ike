@@ -71,6 +71,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.show_whitespace", Type: Enum, Title: "Show whitespace", Description: "Render spaces and tabs visibly", Scope: config.UserScope, Options: []string{"none", "trailing", "all"}},
 			{Key: "editor.indent_guides", Type: Bool, Title: "Indent guides", Description: "Draw vertical lines at each indentation level", Scope: config.UserScope},
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
+			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
 		{Title: "Appearance", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},

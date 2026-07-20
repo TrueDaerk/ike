@@ -81,6 +81,7 @@ type Instance struct {
 	// are remembered so tabs created later match the live pane.
 	tabs    []*Tab
 	active  int
+	useSeq  int // monotonic activation counter stamping tab recency (#742)
 	cfg     host.Config
 	pal     *theme.Palette
 	w, h    int
@@ -395,12 +396,51 @@ func (i *Instance) ActivateTab(idx int) bool {
 	return true
 }
 
-// activate switches the active index and re-asserts per-tab focus flags.
+// activate switches the active index and re-asserts per-tab focus flags. The
+// activated tab gets the next use-sequence stamp — the recency the tab-limit
+// eviction orders by (#742).
 func (i *Instance) activate(idx int) {
 	i.active = idx
+	if idx >= 0 && idx < len(i.tabs) {
+		i.useSeq++
+		i.tabs[idx].lastUsed = i.useSeq
+	}
 	for n, t := range i.tabs {
 		t.setFocused(i.focused && n == i.active)
 	}
+}
+
+// FileTabCount counts the pane's document tabs — terminal tabs (#573) are
+// exempt from the tab limit (#742).
+func (i *Instance) FileTabCount() int {
+	n := 0
+	for _, t := range i.tabs {
+		if !t.IsTerminal() {
+			n++
+		}
+	}
+	return n
+}
+
+// EvictableLRUTab returns the least recently used tab the tab limit may close
+// (#742): a file-backed, non-dirty document tab that is not active — dirty
+// tabs, scratch tabs (nothing to reopen from) and terminals are exempt.
+// ok=false when no tab is eligible, in which case the limit may be exceeded.
+func (i *Instance) EvictableLRUTab() (idx int, ok bool) {
+	best := -1
+	for n, t := range i.tabs {
+		if n == i.active || t.IsTerminal() {
+			continue
+		}
+		ed := t.Editor()
+		if ed == nil || !ed.HasFile() || ed.Dirty() {
+			continue
+		}
+		if best < 0 || t.lastUsed < i.tabs[best].lastUsed {
+			best = n
+		}
+	}
+	return best, best >= 0
 }
 
 // MoveTab reorders the tab at from to position to, keeping the same tab active.
