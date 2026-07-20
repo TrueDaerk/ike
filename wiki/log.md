@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Terminal session teardown is race-free (#748): `go test -race` failed on
+  main because upstream vt's `Emulator.Close` races concurrent `Read`/`Write`
+  (plain-bool closed flag). Teardown now joins read/feed loops, stops the
+  write loop via a sentinel byte through the host-bound pipe, and closes the
+  emulator only once no goroutine is inside it.
+
 - Terminal output survives lock/sleep/resume (#734): the PTY read loop now
   drains into an in-process spool (16 MiB soft cap) and a separate feed loop
   replays chunks into the emulator — a stalled render loop can no longer

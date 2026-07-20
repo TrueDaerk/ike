@@ -57,6 +57,12 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   (app suspend/resume around a macOS lock/sleep window) therefore cannot
   backpressure into the kernel queue, where buffered output can be flushed
   and lost; everything buffers in-process and replays on resume.
+- **Teardown sequencing** (#748): upstream vt's `Emulator.Close` is not safe
+  concurrently with `Read`/`Write` (plain-bool closed flag), so `teardown`
+  joins the loops in order — read loop (closed PTY errors its read), feed
+  loop (spool drains, exit output kept), then the write loop, woken by a
+  sentinel byte through the host-bound pipe — and closes the emulator last.
+  `go test -race ./internal/terminal/` is clean.
 
 ## Pane citizenship (#96)
 
