@@ -302,3 +302,63 @@ func TestCtrlSpaceTriggersCompletion(t *testing.T) {
 		t.Fatalf("ctrl+space must not insert text, line=%q", line(m, 0))
 	}
 }
+
+// TestShowDiagnosticsPopup covers the diagnostic details popup (#739): every
+// diagnostic on the caret line shows with severity, source, code and message;
+// a clean line opens nothing.
+func TestShowDiagnosticsPopup(t *testing.T) {
+	m, _ := loaded(t, "package main\nbad line\n")
+	m, _ = m.Update(ilsp.DiagnosticsMsg{Path: m.path, Diagnostics: []ilsp.Diagnostic{
+		{Range: buffer.Range{Start: buffer.Position{Line: 1, Col: 0}, End: buffer.Position{Line: 1, Col: 3}},
+			Severity: 1, Message: "name is not defined", Source: "pyright", Code: "reportUndefinedVariable"},
+		{Range: buffer.Range{Start: buffer.Position{Line: 1, Col: 4}, End: buffer.Position{Line: 1, Col: 8}},
+			Severity: 2, Message: "unused variable"},
+	}})
+	m = typeKeys(m, "j") // caret onto line 1
+	if !m.ShowDiagnostics() {
+		t.Fatal("line 1 has diagnostics; the popup must open")
+	}
+	if !m.HoverOpen() {
+		t.Fatal("popup must reuse the hover surface")
+	}
+	v := m.HoverView()
+	for _, want := range []string{
+		"error", "pyright · reportUndefinedVariable", "name is not defined",
+		"warning", "unused variable",
+	} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("popup missing %q:\n%s", want, v)
+		}
+	}
+	// Any key dismisses, like hover (the dismissing key is consumed).
+	m = send(m, key('j'))
+	if m.HoverOpen() {
+		t.Fatal("popup must dismiss on the next key")
+	}
+	// A clean line opens nothing.
+	m = typeKeys(m, "gg") // caret onto line 0, which has no diagnostics
+	if m.ShowDiagnostics() {
+		t.Fatal("line 0 has no diagnostics")
+	}
+	if m.HoverOpen() {
+		t.Fatal("no popup on a clean line")
+	}
+}
+
+// TestShowDiagnosticsMultilineMessage: message newlines become popup rows.
+func TestShowDiagnosticsMultilineMessage(t *testing.T) {
+	m, _ := loaded(t, "x\n")
+	m, _ = m.Update(ilsp.DiagnosticsMsg{Path: m.path, Diagnostics: []ilsp.Diagnostic{
+		{Range: buffer.Range{Start: buffer.Position{Line: 0, Col: 0}, End: buffer.Position{Line: 0, Col: 1}},
+			Severity: 1, Message: "first line\nsecond line", Code: "E123"},
+	}})
+	if !m.ShowDiagnostics() {
+		t.Fatal("popup must open")
+	}
+	v := m.HoverView()
+	for _, want := range []string{"E123", "first line", "second line"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("popup missing %q:\n%s", want, v)
+		}
+	}
+}

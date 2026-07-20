@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -53,7 +53,7 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
+exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
 registry commands.
 
@@ -137,6 +137,17 @@ block is syntax-highlighted through the language registry (`HighlightFenced`,
 fence tag resolved as language id then extension; an unresolvable tag falls
 back to an accent tint so the signature still reads as code), and a thematic
 break (`---`) draws as a horizontal rule sized to the popup content.
+
+**Diagnostic details popup** (#739, `lsp.diagnosticInfo`, default `ctrl+f1` —
+the JetBrains error-description chord): shows every diagnostic covering the
+caret line on the hover popup surface — per entry a severity header colored
+like the gutter mark with the server attribution (`pyright ·
+reportUndefinedVariable`; `Diagnostic.Code` carries the protocol's
+string-or-number code as text), then the message; entries separate with a
+rule, any key dismisses. Pure client state (the cached publishDiagnostics
+answer, no server round trip); a clean caret line raises an info toast
+instead. With source and code visible a false positive can be attributed to
+its server and reported or configured away.
 
 **Diagnostic navigation (#369).** `lsp.nextDiagnostic` / `lsp.prevDiagnostic`
 (default `f2` / `shift+f2`, JetBrains' next/previous-highlighted-error keys)
