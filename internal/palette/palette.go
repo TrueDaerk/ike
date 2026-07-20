@@ -16,6 +16,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // Config tunes a Palette. Zero values select sensible defaults, so the empty
@@ -43,6 +44,7 @@ type Palette struct {
 
 	open     bool
 	query    string
+	cur      int // rune cursor within query, including the prefix rune (#763)
 	items    []Item
 	selected int
 	top      int // first visible row (scroll window into items)
@@ -162,6 +164,7 @@ func (p *Palette) OpenLocked(cx Context, prefix rune) {
 func (p *Palette) reset(cx Context) {
 	p.open = true
 	p.query = ""
+	p.cur = 0
 	p.selected = 0
 	p.top = 0
 	p.cx = cx
@@ -202,27 +205,26 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if c, ok := m.(Completer); ok {
 			if out := c.Complete(body); out != body {
 				p.query = p.query[:len(p.query)-len(body)] + out
+				p.cur = len([]rune(p.query))
 				p.recompute()
 				return p.liveKick()
 			}
 		}
 		return nil
-	case msg.Code == tea.KeyBackspace:
-		if r := []rune(p.query); len(r) > 0 {
-			p.query = string(r[:len(r)-1])
+	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
+		p.query = ""
+		p.cur = 0
+		p.recompute()
+		return p.liveKick()
+	}
+	// Everything else is single-line editing on the query (#763): cursor
+	// motions, word ops, backspace/delete, printable insertion.
+	if out, ncur, handled, changed := ui.EditKey(msg, p.query, p.cur); handled {
+		p.query, p.cur = out, ncur
+		if changed {
 			p.recompute()
 			return p.liveKick()
 		}
-		return nil
-	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
-		p.query = ""
-		p.recompute()
-		return p.liveKick()
-	case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		// Printable input, including a bare space (Text == " ").
-		p.query += msg.Text
-		p.recompute()
-		return p.liveKick()
 	}
 	return nil
 }
@@ -347,7 +349,8 @@ func (p *Palette) queryView(width int) string {
 		}
 		return lipgloss.NewStyle().Foreground(p.theme().Border).Render(ph)
 	}
-	return ansi.Truncate(body+"▏", width, "…")
+	pl := len([]rune(p.query)) - len([]rune(body))
+	return ansi.Truncate(ui.CursorView(body, p.cur-pl), width, "…")
 }
 
 // list renders the visible result rows with selection and match highlighting, or

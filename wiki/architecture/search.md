@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-11T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -62,7 +62,12 @@ table). It owns the keyboard while open (routed by the root model ahead of
 the palette):
 
 - **Inputs:** the query plus include/exclude glob fields (comma-separated);
-  `tab`/`shift+tab` cycle field focus. Every edit restarts the scan — the
+  `tab`/`shift+tab` cycle field focus. All fields are full single-line
+  editors (`internal/ui.EditKey`, #763): arrows/home/end move the cursor,
+  `alt+left`/`alt+right` jump words, `alt+backspace`/`alt+delete` delete
+  words, `delete` removes forward, typing (and pasted text) inserts at the
+  cursor; the same helper drives the command palette's query. Every edit
+  restarts the scan — the
   service's generation counter cancels the superseded one, and `Apply` drops
   stale-generation messages. Re-opening keeps the previous query
   **preselected** (rendered inverted, #277): the first typed character

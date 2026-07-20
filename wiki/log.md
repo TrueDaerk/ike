@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Palette and finder inputs are full single-line editors (#763): shared
+  `internal/ui.EditKey` helper gives them a movable cursor (arrows, home/end,
+  word jumps, word deletion, forward delete, insert-at-cursor);
+  `command-palette.md` and `search.md` updated.
 - Divider gutters removed (#761): panes tile the viewport exactly, their own
   rounded borders forming the seam; the resize handle is now a two-cell hit
   band over the borders meeting at a split boundary (divider precedence over

@@ -1,6 +1,7 @@
 package palette
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -336,5 +337,51 @@ func TestTabInertOnNonCompleterMode(t *testing.T) {
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if p.query != ":wri" {
 		t.Fatalf("tab on a non-completer mode must be inert, got %q", p.query)
+	}
+}
+
+// TestCursorEditing guards #763: arrows move the cursor, typing inserts at
+// it, alt+backspace deletes the word before it.
+func TestCursorEditing(t *testing.T) {
+	src := fakeSource{cmds: []registry.OwnedCommand{
+		owned("example.hello", "Say Hello", plugin.GlobalScope()),
+	}}
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(src, nil, false), fileMode())
+	p.SetSize(80, 24)
+	p.Open(Context{ContextID: "editor"})
+
+	p.Update(runes("helo"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	p.Update(runes("l"))
+	if p.query != "hello" {
+		t.Fatalf("insert at cursor: query = %q, want %q", p.query, "hello")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	p.Update(runes(" world"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
+	if p.query != "hello " {
+		t.Fatalf("word delete: query = %q, want %q", p.query, "hello ")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if p.query != "ello " {
+		t.Fatalf("forward delete at home: query = %q, want %q", p.query, "ello ")
+	}
+}
+
+// TestQueryViewCursorPosition: the cursor renders inside the body, offset by
+// the mode prefix.
+func TestQueryViewCursorPosition(t *testing.T) {
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fileMode())
+	p.SetSize(80, 24)
+	p.Open(Context{})
+	p.Update(runes("@abc"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyLeft}) // cursor between b and c
+	v := p.queryView(40)
+	if !strings.Contains(v, "abc") && !strings.Contains(v, "c") {
+		t.Fatalf("queryView lost text: %q", v)
+	}
+	if strings.Contains(v, "@") {
+		t.Fatalf("queryView must strip the prefix: %q", v)
 	}
 }
