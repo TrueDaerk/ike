@@ -40,7 +40,7 @@ func (m Model) updateDepEditPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Replays the blocked edit on the now-unlocked buffer.
-		return m, m.panes.Get(key).Update(editor.ConfirmDepEditMsg{})
+		return m, m.activeWS().Panes.Get(key).Update(editor.ConfirmDepEditMsg{})
 	case "esc":
 		m.depEditPending = ""
 		m.shell.Close()

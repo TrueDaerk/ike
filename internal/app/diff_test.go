@@ -25,8 +25,8 @@ func writeTempFile(t *testing.T, name, content string) string {
 
 // diffKeyOf returns the key of the first diff pane, or "".
 func diffKeyOf(m Model) string {
-	for _, key := range m.panes.Keys() {
-		if inst := m.panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindDiff {
 			return key
 		}
 	}
@@ -68,8 +68,8 @@ func TestDiffFilesPickFlow(t *testing.T) {
 	if key == "" {
 		t.Fatal("the second pick should open a diff pane")
 	}
-	if m.panes.Focused() != key {
-		t.Fatalf("the diff pane should take focus, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != key {
+		t.Fatalf("the diff pane should take focus, got %q", m.activeWS().Panes.Focused())
 	}
 	if v := m.render(); !strings.Contains(v, "DIFF") || !strings.Contains(v, "old") || !strings.Contains(v, "new") {
 		t.Fatal("the rendered workspace should show the titled diff with both versions")
@@ -99,7 +99,7 @@ func TestDiffJumpOpensEditorAtLine(t *testing.T) {
 	path := writeTempFile(t, "target.txt", "a\nb\nc\nd\n")
 	tm, _ := m.Update(diff.JumpMsg{Path: path, Line: 3})
 	m = tm.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		t.Fatal("the jump should focus an editor")
 	}

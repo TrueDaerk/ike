@@ -71,7 +71,7 @@ func (m *Model) toggleBreakpoint(path string, line int) {
 // toggleBreakpointAtCursor is the debug.toggleBreakpoint handler: the focused
 // editor's file at the cursor line.
 func (m *Model) toggleBreakpointAtCursor() {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		m.host.Notify(host.Info, "breakpoints need a focused editor")
 		return

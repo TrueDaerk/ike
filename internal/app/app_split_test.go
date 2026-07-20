@@ -18,7 +18,7 @@ import (
 // editorLeaves counts editor leaves in the current tree.
 func editorLeaves(m Model) int {
 	n := 0
-	for _, k := range layout.Leaves(m.tree) {
+	for _, k := range layout.Leaves(m.activeWS().Tree) {
 		if k != pane.ExplorerKey {
 			n++
 		}
@@ -35,11 +35,11 @@ func TestSplitFocusedAddsEditor(t *testing.T) {
 	if got := editorLeaves(m); got != before+1 {
 		t.Fatalf("editor leaves = %d, want %d", got, before+1)
 	}
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("split should focus the new editor")
 	}
 	// The new pane is a distinct instance from the original editor.
-	if m.panes.Focused() == "editor" {
+	if m.activeWS().Panes.Focused() == "editor" {
 		t.Fatal("focus should be the freshly split editor, not the original")
 	}
 }
@@ -49,9 +49,9 @@ func TestCloseFocusedCollapses(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
-	newKey := m.panes.Focused()
+	newKey := m.activeWS().Panes.Focused()
 	m.CloseFocused()
-	if m.panes.Has(newKey) {
+	if m.activeWS().Panes.Has(newKey) {
 		t.Fatal("closed editor instance should be gone")
 	}
 	if editorLeaves(m) != 1 {
@@ -65,17 +65,17 @@ func TestCtrlWClosesFocusedPane(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
-	newKey := m.panes.Focused()
+	newKey := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
 	m = tm.(Model)
-	if m.panes.Has(newKey) {
+	if m.activeWS().Panes.Has(newKey) {
 		t.Fatal("ctrl+w should close the focused editor pane")
 	}
 	// ctrl+w on the explorer is a no-op.
 	m.setFocus(pane.ExplorerKey)
 	tm, _ = m.Update(tea.KeyPressMsg{Code: 'w', Mod: tea.ModCtrl})
 	m = tm.(Model)
-	if !m.panes.Has(pane.ExplorerKey) {
+	if !m.activeWS().Panes.Has(pane.ExplorerKey) {
 		t.Fatal("ctrl+w must never close the explorer")
 	}
 }
@@ -85,7 +85,7 @@ func TestCloseFocusedRefusesExplorer(t *testing.T) {
 	m := sized(t, 100, 40)
 	// explorer is focused at start
 	m.CloseFocused()
-	if !m.panes.Has(pane.ExplorerKey) {
+	if !m.activeWS().Panes.Has(pane.ExplorerKey) {
 		t.Fatal("explorer must never be closed")
 	}
 }
@@ -96,11 +96,11 @@ func TestFocusDirMovesSpatially(t *testing.T) {
 	// Default layout: explorer left, editor right.
 	m.setFocus(pane.ExplorerKey)
 	m.FocusDir(DirRight)
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("focus-right from explorer should land on the editor")
 	}
 	m.FocusDir(DirLeft)
-	if m.panes.Focused() != pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("focus-left should return to the explorer")
 	}
 }
@@ -145,17 +145,17 @@ func TestFocusTargetPrefersAxisOverlap(t *testing.T) {
 // focus spatially through Update (not just the FocusDir method).
 func TestFocusKeysCtrlArrowDefault(t *testing.T) {
 	m := sized(t, 100, 40) // explorer left, editor right
-	if m.panes.Focused() != pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("setup: explorer should start focused")
 	}
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
 	m = tm.(Model)
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("ctrl+right should move focus to the editor")
 	}
 	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
 	m = tm.(Model)
-	if m.panes.Focused() != pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("ctrl+left should move focus back to the explorer")
 	}
 }
@@ -311,7 +311,7 @@ func TestOpenInNewPaneFromExplorerLandsInEditorArea(t *testing.T) {
 	m.setFocus(pane.ExplorerKey) // back to the explorer, then open-in-new-pane
 	out, _ = m.Update(explorer.OpenFileMsg{Path: b, NewPane: true})
 	m = out.(Model)
-	leaves := layout.Leaves(m.tree)
+	leaves := layout.Leaves(m.activeWS().Tree)
 	if leaves[0] != pane.ExplorerKey {
 		t.Fatalf("explorer should stay the leftmost leaf, leaves=%v", leaves)
 	}

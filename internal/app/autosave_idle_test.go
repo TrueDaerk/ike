@@ -67,7 +67,7 @@ func TestIdleAutosaveMarksAndSaves(t *testing.T) {
 	if !strings.HasPrefix(string(data), "Xone") {
 		t.Fatalf("expired idle deadline must write the buffer; file = %q", data)
 	}
-	if m.panes.Get(key).Editor().Dirty() {
+	if m.activeWS().Panes.Get(key).Editor().Dirty() {
 		t.Fatal("idle save must clear the modified indicator")
 	}
 }
@@ -76,7 +76,7 @@ func TestIdleAutosaveMarksAndSaves(t *testing.T) {
 // debounce — autosave has nowhere to write it.
 func TestIdleAutosaveSkipsUntitled(t *testing.T) {
 	m := newWithSettings(t, "[editor]\nauto_save = \"idle\"\n")
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(editor.SyncMsg{Path: "", FromKey: key})
 	m = tm.(Model)
 	if m.autosaveIdleDeb.Pending() != 0 {

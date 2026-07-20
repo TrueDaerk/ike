@@ -51,7 +51,7 @@ func TestRunFileInPane(t *testing.T) {
 	m := runModel(t, "in_pane")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		t.Fatal("focus must stay on the editor pane")
 	}
@@ -77,7 +77,7 @@ func TestRunFileNewTerminal(t *testing.T) {
 	m := runModel(t, "new_terminal")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatal("focus must land on the new terminal pane")
 	}
@@ -94,7 +94,7 @@ func TestRunReusesFinishedTerminal(t *testing.T) {
 	m = tm.(Model)
 	tm, _ = m.Update(RunFileMsg{})
 	m = tm.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 2 {
 		t.Fatalf("tabs = %d after rerun, want 2 (terminal reused)", inst.TabCount())
 	}
@@ -113,10 +113,10 @@ func TestRunUnknownFileType(t *testing.T) {
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	tm, _ = tm.(Model).Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	before := m.panes.Len()
+	before := m.activeWS().Panes.Len()
 	tm, _ = m.Update(RunFileMsg{})
 	m = tm.(Model)
-	if m.panes.Len() != before {
+	if m.activeWS().Panes.Len() != before {
 		t.Fatal("an unrunnable file must not open panes")
 	}
 }
@@ -129,9 +129,9 @@ func TestRerunWithoutHistory(t *testing.T) {
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
-	before := m.panes.Len()
+	before := m.activeWS().Panes.Len()
 	tm, _ = m.Update(RunRerunMsg{})
-	if tm.(Model).panes.Len() != before {
+	if tm.(Model).activeWS().Panes.Len() != before {
 		t.Fatal("rerun with no history must not open panes")
 	}
 }

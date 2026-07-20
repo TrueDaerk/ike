@@ -289,10 +289,10 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 	}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
 	m = tm.(Model)
-	if !m.panes.Has(pane.DebugKey) {
+	if !m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("a stop must open the debug panel")
 	}
-	if m.panes.Get(pane.DebugKey).Kind() != pane.KindDebug {
+	if m.activeWS().Panes.Get(pane.DebugKey).Kind() != pane.KindDebug {
 		t.Fatal("the panel leaf must be the debug kind")
 	}
 	waitForCommand(t, sa, "scopes") // top frame scopes fetched eagerly
@@ -313,7 +313,7 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 	// output stays reviewable.
 	tm, _ = m.Update(debugEndedMsg{})
 	m = tm.(Model)
-	if !m.panes.Has(pane.DebugKey) {
+	if !m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("session end must keep the debug panel open")
 	}
 	if p := m.debugPanel(); p == nil || !p.Finished() {
@@ -333,7 +333,7 @@ func TestRunInTerminalRefusedWithoutSession(t *testing.T) {
 	if resp.Success || resp.Command != "runInTerminal" || resp.Message == "" {
 		t.Fatalf("response = %+v, want a refusal with a reason", resp)
 	}
-	if m.panes.Has(pane.DebugKey) {
+	if m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("a refusal without a session must not open the debug panel")
 	}
 }
@@ -374,21 +374,21 @@ func TestRunInTerminalSpawnFailureLeavesNoTerminal(t *testing.T) {
 // closing the panel ends the embedded session.
 func TestRunInTerminalEmbedsInDebugPanel(t *testing.T) {
 	m, sa, _ := debugModel(t)
-	before := len(layout.Leaves(m.tree))
+	before := len(layout.Leaves(m.activeWS().Tree))
 	argv := []string{"/bin/sh", "-c", "exit 0"}
 	tm, _ := m.Update(debugRunInTerminalMsg{seq: 45, sess: m.dbg.sess, args: dap.RunInTerminalArgs{Args: argv}})
 	m = tm.(Model)
 	if resp := waitForReverseResp(t, sa, 45); !resp.Success {
 		t.Fatalf("first spawn refused: %+v", resp)
 	}
-	if !m.panes.Has(pane.DebugKey) {
+	if !m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("runInTerminal must open the debug panel")
 	}
 	p := m.debugPanel()
 	if p == nil || !p.HasTerminal() {
 		t.Fatal("the debuggee terminal must be embedded in the panel")
 	}
-	if got := len(layout.Leaves(m.tree)); got != before+1 {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
 		t.Fatalf("leaves = %d, want %d — only the panel splits, no terminal pane", got, before+1)
 	}
 	old := p.Terminal()
@@ -419,7 +419,7 @@ func TestRunInTerminalEmbedsInDebugPanel(t *testing.T) {
 	term := p.Terminal()
 	tm, _ = m.Update(debugEndedMsg{})
 	m = tm.(Model)
-	if !m.panes.Has(pane.DebugKey) {
+	if !m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("session end must keep the debug panel open")
 	}
 	p = m.debugPanel()
@@ -430,7 +430,7 @@ func TestRunInTerminalEmbedsInDebugPanel(t *testing.T) {
 		t.Fatal("the surviving panel must show the finished state")
 	}
 	m.closeKey(pane.DebugKey)
-	if m.panes.Has(pane.DebugKey) {
+	if m.activeWS().Panes.Has(pane.DebugKey) {
 		t.Fatal("closing the pane must remove the debug panel")
 	}
 	waitNotRunning(t, term)

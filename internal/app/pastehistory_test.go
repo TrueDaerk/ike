@@ -46,11 +46,11 @@ func TestPasteFromHistoryRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
 	// Copy line 1 ("one"), then line 2 ("two"): history holds two entries.
 	m = dispatch(t, m, editor.ActionMsg{Action: "copy"})
-	m.panes.FocusedInstance().Editor().SetCursor(1, 0)
+	m.activeWS().Panes.FocusedInstance().Editor().SetCursor(1, 0)
 	m = dispatch(t, m, editor.ActionMsg{Action: "copy"})
 	if h := ed.RegisterHistory(); len(h) != 2 || !strings.HasPrefix(h[0].Text, "two") {
 		t.Fatalf("history = %v", h)
@@ -65,7 +65,7 @@ func TestPasteFromHistoryRoundTrip(t *testing.T) {
 
 	// …and activating index 1 pastes the OLDER entry ("one") like Cmd+V.
 	m = dispatch(t, m, PasteHistoryEntryMsg{Index: 1})
-	if got := m.panes.FocusedInstance().Editor().Text(); strings.Count(got, "one") != 2 {
+	if got := m.activeWS().Panes.FocusedInstance().Editor().Text(); strings.Count(got, "one") != 2 {
 		t.Fatalf("older entry must be pasted, text = %q", got)
 	}
 }

@@ -26,29 +26,29 @@ func TestDiffReopenFocusesExisting(t *testing.T) {
 
 	m := newSized()
 	m.openDiffPane(left, right)
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	m.setFocus(pane.ExplorerKey)
-	count := len(m.panes.Keys())
+	count := len(m.activeWS().Panes.Keys())
 
 	m.openDiffPane(left, right)
-	if len(m.panes.Keys()) != count {
+	if len(m.activeWS().Panes.Keys()) != count {
 		t.Fatal("re-open must not create a second pane")
 	}
-	if m.panes.Focused() != key {
-		t.Fatalf("focus = %q, want the existing diff %q", m.panes.Focused(), key)
+	if m.activeWS().Panes.Focused() != key {
+		t.Fatalf("focus = %q, want the existing diff %q", m.activeWS().Panes.Focused(), key)
 	}
 
 	// A HEAD diff of the same file also dedupes.
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"r.txt": vcs.StatusModified})
 	out, _ := m.Update(vcs.HeadDiffMsg{Path: right, Head: "old\n"})
 	m2 := out.(Model)
-	headKey := m2.panes.Focused()
+	headKey := m2.activeWS().Panes.Focused()
 	m2.setFocus(pane.ExplorerKey)
-	count = len(m2.panes.Keys())
+	count = len(m2.activeWS().Panes.Keys())
 	out, _ = m2.Update(vcs.HeadDiffMsg{Path: right, Head: "old\n"})
 	m2 = out.(Model)
-	if len(m2.panes.Keys()) != count || m2.panes.Focused() != headKey {
-		t.Fatalf("head diff re-open: panes=%d focus=%q want %q", len(m2.panes.Keys()), m2.panes.Focused(), headKey)
+	if len(m2.activeWS().Panes.Keys()) != count || m2.activeWS().Panes.Focused() != headKey {
+		t.Fatalf("head diff re-open: panes=%d focus=%q want %q", len(m2.activeWS().Panes.Keys()), m2.activeWS().Panes.Focused(), headKey)
 	}
 }
 
@@ -66,25 +66,25 @@ func TestDiffSingleWindowRetargets(t *testing.T) {
 
 	m := newSized()
 	m.openDiffPane(a, b)
-	key := m.panes.Focused()
-	count := len(m.panes.Keys())
+	key := m.activeWS().Panes.Focused()
+	count := len(m.activeWS().Panes.Keys())
 
 	// A different pair retargets the same pane.
 	m.openDiffPane(a, c)
-	if len(m.panes.Keys()) != count || m.panes.Focused() != key {
-		t.Fatalf("second diff split a new pane (panes=%d focus=%q)", len(m.panes.Keys()), m.panes.Focused())
+	if len(m.activeWS().Panes.Keys()) != count || m.activeWS().Panes.Focused() != key {
+		t.Fatalf("second diff split a new pane (panes=%d focus=%q)", len(m.activeWS().Panes.Keys()), m.activeWS().Panes.Focused())
 	}
-	if got := m.panes.Get(key).Diff().RightPath(); got != c {
+	if got := m.activeWS().Panes.Get(key).Diff().RightPath(); got != c {
 		t.Fatalf("retarget right = %q, want %q", got, c)
 	}
 	// A HEAD diff also lands in the slot, flipping revs/titles.
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"b.txt": vcs.StatusModified})
 	out, _ := m.Update(vcs.HeadDiffMsg{Path: b, Head: "old\n"})
 	m = out.(Model)
-	if len(m.panes.Keys()) != count {
+	if len(m.activeWS().Panes.Keys()) != count {
 		t.Fatal("head diff split a new pane")
 	}
-	if lr, _ := m.panes.Get(key).Diff().Revs(); lr != "HEAD" {
+	if lr, _ := m.activeWS().Panes.Get(key).Diff().Revs(); lr != "HEAD" {
 		t.Fatalf("retarget revs = %q", lr)
 	}
 }
@@ -102,10 +102,10 @@ func TestDiffMultiWindowConfigSplits(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
 	m.openDiffPane(a, b)
-	count := len(m.panes.Keys())
+	count := len(m.activeWS().Panes.Keys())
 	m.openDiffPane(a, c)
-	if len(m.panes.Keys()) != count+1 {
-		t.Fatalf("multi mode must split (panes=%d)", len(m.panes.Keys()))
+	if len(m.activeWS().Panes.Keys()) != count+1 {
+		t.Fatalf("multi mode must split (panes=%d)", len(m.activeWS().Panes.Keys()))
 	}
 }
 
@@ -121,7 +121,7 @@ func TestDiffF7StepsHunks(t *testing.T) {
 
 	m := newSized()
 	m.openDiffPane(left, right)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindDiff || inst.Diff().HunkCount() != 2 {
 		t.Fatalf("setup: kind=%v hunks=%d", inst.Kind(), inst.Diff().HunkCount())
 	}
@@ -135,15 +135,15 @@ func TestDiffF7StepsHunks(t *testing.T) {
 	}
 
 	press(tea.KeyPressMsg{Code: tea.KeyF7})
-	if got := m.panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
+	if got := m.activeWS().Panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
 		t.Fatalf("after F7: hunk = %d, want 0", got)
 	}
 	press(tea.KeyPressMsg{Code: tea.KeyF7})
-	if got := m.panes.FocusedInstance().Diff().CurrentHunk(); got != 1 {
+	if got := m.activeWS().Panes.FocusedInstance().Diff().CurrentHunk(); got != 1 {
 		t.Fatalf("after F7 F7: hunk = %d, want 1", got)
 	}
 	press(tea.KeyPressMsg{Code: tea.KeyF7, Mod: tea.ModShift})
-	if got := m.panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
+	if got := m.activeWS().Panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
 		t.Fatalf("after shift+F7: hunk = %d, want 0", got)
 	}
 }
@@ -161,20 +161,20 @@ func TestDiffReusesEmptyEditor(t *testing.T) {
 
 	m := newSized() // default layout: explorer + one empty editor
 	editorKey := m.activeEditorKey()
-	if editorKey == "" || !m.panes.Get(editorKey).IsEmptyEditor() {
+	if editorKey == "" || !m.activeWS().Panes.Get(editorKey).IsEmptyEditor() {
 		t.Fatalf("expected an empty editor pane, got %q", editorKey)
 	}
-	before := len(layout.Leaves(m.tree))
+	before := len(layout.Leaves(m.activeWS().Tree))
 
 	m.openDiffPane(left, right)
 
-	if got := len(layout.Leaves(m.tree)); got != before {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before {
 		t.Fatalf("diff split a new pane: leaves %d -> %d", before, got)
 	}
-	if m.panes.Has(editorKey) {
+	if m.activeWS().Panes.Has(editorKey) {
 		t.Fatal("the empty editor pane should have been taken over, not kept")
 	}
-	if k := m.panes.Focused(); m.panes.Get(k) == nil || m.panes.Get(k).Kind() != pane.KindDiff {
+	if k := m.activeWS().Panes.Focused(); m.activeWS().Panes.Get(k) == nil || m.activeWS().Panes.Get(k).Kind() != pane.KindDiff {
 		t.Fatalf("focused pane is not the diff (key %q)", k)
 	}
 }
@@ -194,17 +194,17 @@ func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
 	m := newSized()
 	m.openPath(f, false) // active editor now holds a file
 	editorKey := m.activeEditorKey()
-	if m.panes.Get(editorKey).IsEmptyEditor() {
+	if m.activeWS().Panes.Get(editorKey).IsEmptyEditor() {
 		t.Fatal("editor should be file-backed now")
 	}
-	before := len(layout.Leaves(m.tree))
+	before := len(layout.Leaves(m.activeWS().Tree))
 
 	m.openDiffPane(left, right)
 
-	if got := len(layout.Leaves(m.tree)); got != before+1 {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != before+1 {
 		t.Fatalf("diff should split beside a file-backed editor: leaves %d -> %d", before, got)
 	}
-	if !m.panes.Has(editorKey) {
+	if !m.activeWS().Panes.Has(editorKey) {
 		t.Fatal("the file-backed editor pane must be preserved")
 	}
 }

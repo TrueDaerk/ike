@@ -31,14 +31,14 @@ func TestDiffLayoutRestores(t *testing.T) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
 	m.openDiffPane(left, right)
-	key := m.panes.Focused()
-	if inst := m.panes.Get(key); inst == nil || inst.Kind() != pane.KindDiff {
+	key := m.activeWS().Panes.Focused()
+	if inst := m.activeWS().Panes.Get(key); inst == nil || inst.Kind() != pane.KindDiff {
 		t.Fatalf("setup: focused = %q", key)
 	}
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 
 	m2 := NewWith(registry.New(), host.MapConfig{})
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindDiff {
 		t.Fatalf("diff pane did not restore under %q", key)
 	}
@@ -46,7 +46,7 @@ func TestDiffLayoutRestores(t *testing.T) {
 		t.Fatalf("restored diff hunks = %d, want 1 (contents re-read)", inst.Diff().HunkCount())
 	}
 	found := false
-	for _, leaf := range layout.Leaves(m2.tree) {
+	for _, leaf := range layout.Leaves(m2.activeWS().Tree) {
 		if leaf == key {
 			found = true
 		}
@@ -91,14 +91,14 @@ func TestHeadDiffRestoresBothSides(t *testing.T) {
 	m.vcs.snap = &vcs.Snapshot{Root: dir, Branch: "main"}
 	out, _ = m.Update(vcs.HeadDiffMsg{Path: path, Head: "v1\n"})
 	m = out.(Model)
-	key := m.panes.Focused()
-	if m.panes.Get(key).Diff().HunkCount() != 1 {
+	key := m.activeWS().Panes.Focused()
+	if m.activeWS().Panes.Get(key).Diff().HunkCount() != 1 {
 		t.Fatal("setup: head diff has no hunk")
 	}
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 
 	m2 := NewWith(registry.New(), host.MapConfig{})
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindDiff {
 		t.Fatal("head diff pane did not restore")
 	}

@@ -62,7 +62,7 @@ func TestTodoEnterOpensFileAtTag(t *testing.T) {
 	if key == "" {
 		t.Fatal("enter must open the tagged file")
 	}
-	ed := m.panes.Get(key).Editor()
+	ed := m.activeWS().Panes.Get(key).Editor()
 	if line, col := ed.Cursor(); line != 2 || col != 4 {
 		t.Fatalf("cursor at %d,%d, want 2,4 (1-based)", line, col)
 	}

@@ -77,28 +77,28 @@ func TestVCSPanelToggleLifecycle(t *testing.T) {
 	// Outside a repo: hint, no pane.
 	out, _ = m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	if m.panes.Has(pane.VCSKey) {
+	if m.activeWS().Panes.Has(pane.VCSKey) {
 		t.Fatal("panel must not open without a repo")
 	}
 
 	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
-	before := m.panes.Focused()
+	before := m.activeWS().Panes.Focused()
 	out, _ = m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	if !m.panes.Has(pane.VCSKey) || m.panes.Focused() != pane.VCSKey {
-		t.Fatalf("first toggle must open + focus the panel (focus=%q)", m.panes.Focused())
+	if !m.activeWS().Panes.Has(pane.VCSKey) || m.activeWS().Panes.Focused() != pane.VCSKey {
+		t.Fatalf("first toggle must open + focus the panel (focus=%q)", m.activeWS().Panes.Focused())
 	}
 
 	// Second toggle returns focus whence it came.
 	out, _ = m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	if m.panes.Focused() != before {
-		t.Fatalf("focus = %q, want %q", m.panes.Focused(), before)
+	if m.activeWS().Panes.Focused() != before {
+		t.Fatalf("focus = %q, want %q", m.activeWS().Panes.Focused(), before)
 	}
 	// Third re-focuses the existing pane without duplicating it.
 	out, _ = m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	if m.panes.Focused() != pane.VCSKey {
+	if m.activeWS().Panes.Focused() != pane.VCSKey {
 		t.Fatal("third toggle must re-focus the panel")
 	}
 
@@ -175,9 +175,9 @@ func TestVCSPanelLogRouting(t *testing.T) {
 	panelW := m.lay.Panes[pane.VCSKey].W
 	out, _ = m.Update(vcs.FileAtMsg{Hash: strings.Repeat("a", 40), Path: "f.txt", Parent: "v1\n", Content: "v2\n"})
 	m = out.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindDiff || inst.Diff().HunkCount() != 1 {
-		t.Fatalf("commit diff pane not opened (focus=%v)", m.panes.Focused())
+		t.Fatalf("commit diff pane not opened (focus=%v)", m.activeWS().Panes.Focused())
 	}
 	// The diff splits the editor area, never the bottom tool window (#489):
 	// the panel keeps its full width.
@@ -207,9 +207,9 @@ func TestDiffHeadOpensDiffPane(t *testing.T) {
 	}
 	out, _ = m.Update(vcs.HeadDiffMsg{Path: path, Head: "old\n"})
 	m = out.(Model)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindDiff {
-		t.Fatalf("focused pane = %v, want diff", m.panes.Focused())
+		t.Fatalf("focused pane = %v, want diff", m.activeWS().Panes.Focused())
 	}
 	if hc := inst.Diff().HunkCount(); hc != 1 {
 		t.Fatalf("hunks = %d, want 1 (old vs live)", hc)

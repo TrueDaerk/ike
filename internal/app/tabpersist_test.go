@@ -37,10 +37,10 @@ func TestTabListRoundTripsThroughLayout(t *testing.T) {
 		m = tm.(Model)
 	}
 	m = dispatch(t, m, TabSelectMsg{Index: 1}) // persist with b active
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 
 	m2 := fixedDirApp(t, conf)
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		t.Fatal("the editor pane must restore under its saved key")
 	}
@@ -76,7 +76,7 @@ func TestLegacyLayoutRestoresSingleTab(t *testing.T) {
 	}
 
 	m := fixedDirApp(t, conf)
-	inst := m.panes.Get("editor")
+	inst := m.activeWS().Panes.Get("editor")
 	if inst == nil || inst.TabCount() != 1 || inst.Editor().Path() != a {
 		t.Fatal("a legacy single-document identity must restore as one tab")
 	}
@@ -94,13 +94,13 @@ func TestMissingFilesSkippedOnRestore(t *testing.T) {
 		tm, _ := m.openPath(p, false)
 		m = tm.(Model)
 	}
-	key := m.panes.Focused() // c active, persisted by the open flow
+	key := m.activeWS().Panes.Focused() // c active, persisted by the open flow
 
 	if err := os.Remove(b); err != nil {
 		t.Fatal(err)
 	}
 	m2 := fixedDirApp(t, conf)
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst.TabCount() != 2 {
 		t.Fatalf("the vanished file must be skipped, got %d tabs", inst.TabCount())
 	}
@@ -123,12 +123,12 @@ func TestAllFilesMissingRestoresScratchPane(t *testing.T) {
 		tm, _ := m.openPath(p, false)
 		m = tm.(Model)
 	}
-	key := m.panes.Focused()
+	key := m.activeWS().Panes.Focused()
 	os.Remove(a)
 	os.Remove(b)
 
 	m2 := fixedDirApp(t, conf)
-	inst := m2.panes.Get(key)
+	inst := m2.activeWS().Panes.Get(key)
 	if inst.TabCount() != 1 || inst.Editor().HasFile() {
 		t.Fatal("a pane whose files all vanished must restore as one scratch tab")
 	}

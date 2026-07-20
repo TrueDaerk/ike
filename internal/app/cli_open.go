@@ -64,7 +64,7 @@ func (m Model) OpenStdinBuffer(text string) Model {
 	if key == "" {
 		key = m.spawnEditor()
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	// Only a truly empty tab (no file, no text — the shared predicate, #641)
 	// is filled in place; anything else gets a fresh tab appended.
 	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
@@ -86,7 +86,7 @@ func (m Model) openMissing(path string) Model {
 	if key == "" {
 		key = m.spawnEditor()
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	// Same reuse rule as openInTab: fill only a truly empty tab (#641).
 	if ed := inst.Editor(); ed == nil || !ed.IsEmpty() {
 		inst.AddTab()
@@ -97,6 +97,6 @@ func (m Model) openMissing(path string) Model {
 	m.syncExplorerOpen()
 	m.setFocus(key)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	return m
 }

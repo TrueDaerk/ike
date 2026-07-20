@@ -27,13 +27,13 @@ func TestVCSPanelTabRestores(t *testing.T) {
 	m = out.(Model)
 	out, _ = m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
 	m = out.(Model)
-	if m.panes.Get(pane.VCSKey).VCS().ActiveTab() != vcspanel.TabLog {
+	if m.activeWS().Panes.Get(pane.VCSKey).VCS().ActiveTab() != vcspanel.TabLog {
 		t.Fatal("setup: log tab not active")
 	}
-	saveLayout(m.tree, m.panes) // what quit() does
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes) // what quit() does
 
 	m2 := NewWith(registry.New(), host.MapConfig{})
-	inst := m2.panes.Get(pane.VCSKey)
+	inst := m2.activeWS().Panes.Get(pane.VCSKey)
 	if inst == nil || inst.Kind() != pane.KindVCS {
 		t.Fatal("panel did not restore")
 	}

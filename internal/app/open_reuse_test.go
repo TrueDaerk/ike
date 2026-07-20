@@ -23,18 +23,18 @@ func TestOpenReusesEmptyEditorTab(t *testing.T) {
 
 	m := newSized() // default layout: explorer + one empty editor
 	key := m.activeEditorKey()
-	if key == "" || !m.panes.Get(key).IsEmptyEditor() {
+	if key == "" || !m.activeWS().Panes.Get(key).IsEmptyEditor() {
 		t.Fatalf("expected an empty editor pane, got %q", key)
 	}
-	leaves := len(layout.Leaves(m.tree))
+	leaves := len(layout.Leaves(m.activeWS().Tree))
 
 	tm, _ := m.openPath(f, false)
 	m = tm.(Model)
 
-	if got := len(layout.Leaves(m.tree)); got != leaves {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != leaves {
 		t.Fatalf("open split a new pane: leaves %d -> %d", leaves, got)
 	}
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst.TabCount() != 1 {
 		t.Fatalf("open should fill the empty tab in place, got %d tabs", inst.TabCount())
 	}
@@ -53,7 +53,7 @@ func TestOpenPreservesScratchText(t *testing.T) {
 
 	m := newSized()
 	key := m.activeEditorKey()
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	inst.Editor().RestoreText("scratch notes") // pathless tab with content
 	if inst.IsEmptyEditor() {
 		t.Fatal("a scratch tab with text must not count as empty")
@@ -84,18 +84,18 @@ func TestOpenNewPaneReusesEmptyEditor(t *testing.T) {
 
 	m := newSized()
 	key := m.activeEditorKey()
-	if key == "" || !m.panes.Get(key).IsEmptyEditor() {
+	if key == "" || !m.activeWS().Panes.Get(key).IsEmptyEditor() {
 		t.Fatalf("expected an empty editor pane, got %q", key)
 	}
-	leaves := len(layout.Leaves(m.tree))
+	leaves := len(layout.Leaves(m.activeWS().Tree))
 
 	tm, _ := m.openPath(f, true)
 	m = tm.(Model)
 
-	if got := len(layout.Leaves(m.tree)); got != leaves {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != leaves {
 		t.Fatalf("NewPane split past the empty editor: leaves %d -> %d", leaves, got)
 	}
-	if ed := m.panes.Get(key).Editor(); ed == nil || ed.Path() != f {
+	if ed := m.activeWS().Panes.Get(key).Editor(); ed == nil || ed.Path() != f {
 		t.Fatal("the empty editor should have been reused for the file")
 	}
 }
@@ -113,12 +113,12 @@ func TestOpenNewPaneSplitsBesideFileBackedEditor(t *testing.T) {
 	m := newSized()
 	tm, _ := m.openPath(a, false)
 	m = tm.(Model)
-	leaves := len(layout.Leaves(m.tree))
+	leaves := len(layout.Leaves(m.activeWS().Tree))
 
 	tm, _ = m.openPath(b, true)
 	m = tm.(Model)
 
-	if got := len(layout.Leaves(m.tree)); got != leaves+1 {
+	if got := len(layout.Leaves(m.activeWS().Tree)); got != leaves+1 {
 		t.Fatalf("NewPane should split beside a file-backed editor: leaves %d -> %d", leaves, got)
 	}
 }

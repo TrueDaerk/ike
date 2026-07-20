@@ -74,7 +74,7 @@ func TestTabBarAlwaysShowConfig(t *testing.T) {
 	if !m.tabsAlwaysShow() {
 		t.Fatal("config editor.tabs.always_show must reach the app")
 	}
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if bar, ok := m.tabBar(inst, 60); !ok || !strings.Contains(ansi.Strip(bar), "solo.txt") {
 		t.Fatal("always_show must render the bar for a single tab")
 	}
@@ -92,7 +92,7 @@ func TestTabLabelsDirtyAndDisambiguation(t *testing.T) {
 	b := writeTemp(t, filepath.Join(dir, "two"), "x.txt", "bbb\n")
 	m := openApp(t, a, b)
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	inst.Editor().RestoreText("dirty now") // active tab (b) becomes dirty
 
 	labels := tabLabels(inst)
@@ -165,7 +165,7 @@ func TestStaleTabCarriesMarker(t *testing.T) {
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	b := writeTemp(t, dir, "bbb.txt", "bbb\n")
 	m := openApp(t, a, b)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	inst.Editor().RestoreText("dirty")
 	tm, _ := m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: b})
 	m = tm.(Model)

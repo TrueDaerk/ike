@@ -82,7 +82,7 @@ func strconvQuote(s string) string { return "\"" + s + "\"" }
 // live config reloads.
 func (m *Model) applyTheme(p *theme.Palette) {
 	m.themePal = p
-	m.panes.SetPalette(p)
+	m.activeWS().Panes.SetPalette(p)
 	m.palette.SetPalette(p)
 	m.finder.SetPalette(p)
 	m.shell.SetPalette(p)
@@ -134,7 +134,7 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// re-applied the stale value over the settings edit. Comparing before and
 	// after keeps unrelated reloads from touching session.json.
 	prevHidden := m.explorer().ShowingHidden()
-	m.panes.Reconfigure(hcfg)
+	m.activeWS().Panes.Reconfigure(hcfg)
 	if m.explorer().ShowingHidden() != prevHidden {
 		saveSession(m.snapshotSession())
 	}

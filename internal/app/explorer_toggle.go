@@ -18,7 +18,7 @@ func (m *Model) toggleExplorer() {
 		m.showExplorer()
 		return
 	}
-	if m.panes.Focused() == pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() == pane.ExplorerKey {
 		m.hideExplorer()
 		return
 	}
@@ -34,14 +34,14 @@ func (m *Model) focusExplorer() {
 		m.showExplorer()
 		return
 	}
-	if m.panes.Focused() != pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		m.setFocus(pane.ExplorerKey)
 	}
 }
 
 // explorerVisible reports whether the explorer leaf is in the layout tree.
 func (m Model) explorerVisible() bool {
-	for _, key := range layout.Leaves(m.tree) {
+	for _, key := range layout.Leaves(m.activeWS().Tree) {
 		if key == pane.ExplorerKey {
 			return true
 		}
@@ -53,15 +53,15 @@ func (m Model) explorerVisible() bool {
 // last remaining leaf can never be removed (layout.Close refuses), so a
 // workspace that is only the explorer stays as it is.
 func (m *Model) hideExplorer() {
-	if r, ok := explorerSplitRatio(m.tree); ok {
+	if r, ok := explorerSplitRatio(m.activeWS().Tree); ok {
 		m.explorerRatio = r
 	}
-	tree, ok := layout.Close(m.tree, pane.ExplorerKey)
+	tree, ok := layout.Close(m.activeWS().Tree, pane.ExplorerKey)
 	if !ok {
 		return
 	}
-	m.tree = tree
-	if m.panes.Focused() == pane.ExplorerKey {
+	m.activeWS().Tree = tree
+	if m.activeWS().Panes.Focused() == pane.ExplorerKey {
 		if key := m.activeEditorKey(); key != "" {
 			m.setFocus(key)
 		} else {
@@ -69,28 +69,28 @@ func (m *Model) hideExplorer() {
 		}
 	}
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // showExplorer re-inserts the explorer as the outer-left split at its
 // remembered ratio (the default width when none is remembered) and focuses it.
 func (m *Model) showExplorer() {
-	if !m.panes.Has(pane.ExplorerKey) || m.explorerVisible() {
+	if !m.activeWS().Panes.Has(pane.ExplorerKey) || m.explorerVisible() {
 		return
 	}
 	ratio := m.explorerRatio
 	if ratio <= 0 || ratio >= 1 {
 		ratio = defaultExplorerRatio(m.width)
 	}
-	m.tree = &layout.Split{
+	m.activeWS().Tree = &layout.Split{
 		Orient: layout.Horizontal,
 		Ratio:  ratio,
 		A:      &layout.Leaf{Pane: pane.ExplorerKey},
-		B:      m.tree,
+		B:      m.activeWS().Tree,
 	}
 	m.setFocus(pane.ExplorerKey)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // defaultExplorerRatio mirrors layout.Default's explorer sizing for width.

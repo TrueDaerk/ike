@@ -26,7 +26,7 @@ func openDirtyKey(t *testing.T, m Model, path string) (Model, string) {
 	if key == "" {
 		t.Fatal("open must focus an editor")
 	}
-	m.panes.Get(key).Editor().RestoreText("unsaved edits")
+	m.activeWS().Panes.Get(key).Editor().RestoreText("unsaved edits")
 	return m, key
 }
 
@@ -115,7 +115,7 @@ func TestBackupSaveRemovesSnapshot(t *testing.T) {
 	// snapshot.
 	tm, _ := m.Update(editor.ActionMsg{Action: "write"})
 	m = tm.(Model)
-	if m.panes.Get(key).Editor().Dirty() {
+	if m.activeWS().Panes.Get(key).Editor().Dirty() {
 		t.Fatal("write action must clean the buffer")
 	}
 	if cmd := m.backupOnSync(key, file); cmd != nil {
@@ -199,7 +199,7 @@ func TestBackupDisableViaReloadPurges(t *testing.T) {
 	if key == "" {
 		key = m.spawnEditor()
 	}
-	m.panes.Get(key).Editor().RestoreText("dirty again")
+	m.activeWS().Panes.Get(key).Editor().RestoreText("dirty again")
 	tm, _ = m.Update(editor.SyncMsg{Path: "", FromKey: key})
 	m = tm.(Model)
 	if m.backupDeb.Pending() != 0 {

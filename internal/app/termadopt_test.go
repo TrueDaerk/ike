@@ -18,8 +18,8 @@ func terminalDragApp(t *testing.T) (Model, string, string) {
 	t.Helper()
 	m, termKey := openTestTerminal(t)
 	edKey := ""
-	for _, k := range m.panes.Keys() {
-		if inst := m.panes.Get(k); inst != nil && inst.Kind() == pane.KindEditor {
+	for _, k := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(k); inst != nil && inst.Kind() == pane.KindEditor {
 			edKey = k
 			break
 		}
@@ -35,7 +35,7 @@ func terminalDragApp(t *testing.T) (Model, string, string) {
 // closes the vacated terminal pane.
 func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
 	m, edKey, termKey := terminalDragApp(t)
-	sess := m.panes.Get(termKey).Terminal().SessionKey()
+	sess := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
 	if sess == "" {
 		t.Fatal("setup: terminal has no session")
 	}
@@ -48,7 +48,7 @@ func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
 	if _, ok := m.lay.Panes[termKey]; ok {
 		t.Fatal("terminal pane should close after the center drop")
 	}
-	einst := m.panes.Get(edKey)
+	einst := m.activeWS().Panes.Get(edKey)
 	if einst == nil || einst.TabCount() != 2 {
 		t.Fatalf("editor should hold its file tab plus the terminal tab, got %d tabs", einst.TabCount())
 	}
@@ -59,8 +59,8 @@ func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
 	if got := term.SessionKey(); got != sess {
 		t.Fatalf("the shell session must move, not restart: key %q want %q", got, sess)
 	}
-	if m.panes.Focused() != edKey {
-		t.Fatalf("focus should land on the adopting pane, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != edKey {
+		t.Fatalf("focus should land on the adopting pane, got %q", m.activeWS().Panes.Focused())
 	}
 	t.Cleanup(einst.CloseTerminalTabs)
 }
@@ -77,10 +77,10 @@ func TestTerminalPaneEdgeDropStillRelocates(t *testing.T) {
 	if _, ok := m.lay.Panes[termKey]; !ok {
 		t.Fatal("edge drop must relocate, not dissolve, the terminal pane")
 	}
-	if got := m.panes.Get(edKey).TabCount(); got != 1 {
+	if got := m.activeWS().Panes.Get(edKey).TabCount(); got != 1 {
 		t.Fatalf("edge drop must not add tabs to the target, got %d", got)
 	}
-	if inst := m.panes.Get(termKey); inst == nil || inst.Kind() != pane.KindTerminal {
+	if inst := m.activeWS().Panes.Get(termKey); inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatal("relocated pane should still be the terminal")
 	}
 }

@@ -25,7 +25,7 @@ func TestFormatEditsMsgRoutesToEditor(t *testing.T) {
 		{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "\t"},
 	}})
 	m = out.(Model)
-	ed := m.panes.Get(m.activeEditorKey()).Editor()
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
 	if got := ed.Text(); got != "func main(){\n\tx:=1\n}" {
 		t.Fatalf("edits should apply to the buffer, got %q", got)
 	}
@@ -42,10 +42,10 @@ func TestFormatEditsMsgAppliesOncePerDocument(t *testing.T) {
 	dir := t.TempDir()
 	file := writeTemp(t, dir, "a.py", "print(z)\n")
 	m := openApp(t, file)
-	src := m.panes.Get(m.panes.Focused()).Editor()
+	src := m.activeWS().Panes.Get(m.activeWS().Panes.Focused()).Editor()
 
 	m = dispatch(t, m, SplitViewMsg{Zone: layout.ZoneRight})
-	other := m.panes.Get(m.panes.Focused()).Editor()
+	other := m.activeWS().Panes.Get(m.activeWS().Panes.Focused()).Editor()
 	if !other.SharesBufferWith(src) {
 		t.Fatal("precondition: views must alias one buffer")
 	}

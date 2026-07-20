@@ -70,14 +70,14 @@ func step(m Model, msg tea.Msg) Model {
 func TestMouseClickFocusesExplorer(t *testing.T) {
 	m := sized(t, 100, 40)
 	m.cycleFocus() // move focus to the editor
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("setup: focus should be editor")
 	}
 	r := m.lay.Panes[ctxExplorer]
 	// press the first content cell (inside border, padding, and title row).
 	m = step(m, press(r.X+paneContentX, r.Y+paneContentY))
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
-		t.Fatalf("click did not focus explorer: focus=%v", m.panes.Focused())
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
+		t.Fatalf("click did not focus explorer: focus=%v", m.activeWS().Panes.Focused())
 	}
 }
 
@@ -144,9 +144,9 @@ func TestDragMoveSwapsPanes(t *testing.T) {
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	edRect := m.lay.Panes[ctxEditor]
 	m = step(m, release(edRect.X+edRect.W-2, edRect.Y+edRect.H/2))
-	s, ok := m.tree.(*layout.Split)
+	s, ok := m.activeWS().Tree.(*layout.Split)
 	if !ok || s.Orient != layout.Horizontal {
-		t.Fatalf("expected horizontal split, got %#v", m.tree)
+		t.Fatalf("expected horizontal split, got %#v", m.activeWS().Tree)
 	}
 	if s.A.(*layout.Leaf).Pane != ctxEditor || s.B.(*layout.Leaf).Pane != ctxExplorer {
 		t.Fatalf("panes not swapped: A=%+v B=%+v", s.A, s.B)
@@ -234,7 +234,7 @@ func TestStaleLayoutFallsBackToDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := NewWith(registry.New(), host.MapConfig{})
-	if m.tree != nil {
+	if m.activeWS().Tree != nil {
 		t.Fatal("stale layout should not load; tree must stay nil until default")
 	}
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -254,13 +254,13 @@ func TestMouseIgnoredWhenShellOpen(t *testing.T) {
 	if !m.shell.IsOpen() {
 		t.Fatal("shell should be open")
 	}
-	before := m.tree
+	before := m.activeWS().Tree
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	m = step(m, release(50, 20))
 	if m.drag != nil {
 		t.Fatal("drag should not start while shell open")
 	}
-	if m.tree != before {
+	if m.activeWS().Tree != before {
 		t.Fatal("tree should be untouched while shell open")
 	}
 }
@@ -304,8 +304,8 @@ func TestTitleClickDoesNotSplit(t *testing.T) {
 	if got := len(m.lay.Panes); got != before {
 		t.Fatalf("title click must not split: %d panes, want %d", got, before)
 	}
-	if m.panes.Focused() != ctxEditor {
-		t.Fatalf("title click should focus the pane, focused=%q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != ctxEditor {
+		t.Fatalf("title click should focus the pane, focused=%q", m.activeWS().Panes.Focused())
 	}
 	// The second title row (tab bar) behaves the same.
 	m = step(m, press(edRect.X+2, edRect.Y+1))

@@ -16,7 +16,7 @@ import (
 // bar-local offset dx.
 func barCell(t *testing.T, m Model, dx int) (int, int) {
 	t.Helper()
-	r, ok := m.lay.Panes[m.panes.Focused()]
+	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
 	if !ok {
 		t.Fatal("focused pane has no rect")
 	}
@@ -47,7 +47,7 @@ func TestTabAtGeometry(t *testing.T) {
 
 func TestLeftClickFocusesTab(t *testing.T) {
 	m, paths := tabApp(t) // three tabs, third active
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	// " a.txt │ b.txt │ c.txt " — x=1 lands inside the first segment.
 	x, y := barCell(t, m, 1)
 	m = step(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
@@ -67,7 +67,7 @@ func TestLeftClickFocusesTab(t *testing.T) {
 
 func TestMiddleClickClosesTab(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	x, y := barCell(t, m, 1)
 	m = step(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseMiddle})
 	if inst.TabCount() != 2 {
@@ -78,14 +78,14 @@ func TestMiddleClickClosesTab(t *testing.T) {
 	}
 	// The closed tab fed the reopen ring (the dirty-guard path of a close).
 	m = dispatch(t, m, TabReopenMsg{})
-	if m.panes.FocusedInstance().EditorForPath(paths[0]) == nil {
+	if m.activeWS().Panes.FocusedInstance().EditorForPath(paths[0]) == nil {
 		t.Fatal("a middle-click close must be reopenable")
 	}
 }
 
 func TestWheelOverBarCycles(t *testing.T) {
 	m, paths := tabApp(t) // third tab active
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	x, y := barCell(t, m, 1)
 	m = step(m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
 	if inst.Editor().Path() != paths[0] {
@@ -104,10 +104,10 @@ func TestWheelOverBarCycles(t *testing.T) {
 
 func TestActiveTabClickStartsDrag(t *testing.T) {
 	m, _ := tabApp(t) // third tab active
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	// Find a cell inside the active (third) segment: walk the bar until
 	// tabAt reports the active index.
-	r := m.lay.Panes[m.panes.Focused()]
+	r := m.lay.Panes[m.activeWS().Panes.Focused()]
 	width := r.W - paneChromeW
 	labels := tabLabels(inst)
 	dx := -1
@@ -131,7 +131,7 @@ func TestActiveTabClickStartsDrag(t *testing.T) {
 		t.Fatal("pressing the active tab must not switch tabs")
 	}
 	m = step(m, release(x, y)) // click resolves as a no-op
-	rr := m.lay.Panes[m.panes.Focused()]
+	rr := m.lay.Panes[m.activeWS().Panes.Focused()]
 	m = step(m, press(rr.X+2, rr.Y)) // the top border row stays the pane handle
 	if m.drag == nil || m.drag.kind != dragMove {
 		t.Fatal("the title row must keep starting a whole-pane move")
@@ -145,8 +145,8 @@ func TestActiveTabClickStartsDrag(t *testing.T) {
 // remaining tabs stay put.
 func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
 	m, paths := tabApp(t)
-	src := m.panes.Focused()
-	inst := m.panes.FocusedInstance()
+	src := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.FocusedInstance()
 	r := m.lay.Panes[src]
 	x, y := barCell(t, m, 1) // grab the first tab (a.txt)
 	m = step(m, press(x, y))
@@ -155,11 +155,11 @@ func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
 	if inst.TabCount() != 2 {
 		t.Fatalf("source pane should keep 2 tabs, got %d", inst.TabCount())
 	}
-	newKey := m.panes.Focused()
+	newKey := m.activeWS().Panes.Focused()
 	if newKey == src {
 		t.Fatal("focus should land on the split pane")
 	}
-	if got := m.panes.Get(newKey).Editor().Path(); got != canonicalPath(paths[0]) {
+	if got := m.activeWS().Panes.Get(newKey).Editor().Path(); got != canonicalPath(paths[0]) {
 		t.Fatalf("split pane should hold the dragged file, got %q", got)
 	}
 }
@@ -169,10 +169,10 @@ func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
 func terminalTabApp(t *testing.T) (m Model, paths [3]string, src, term string) {
 	t.Helper()
 	m, paths = tabApp(t)
-	src = m.panes.Focused()
+	src = m.activeWS().Panes.Focused()
 	m = dispatch(t, m, TerminalNewMsg{})
-	term = m.panes.Focused()
-	inst := m.panes.Get(term)
+	term = m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(term)
 	if inst == nil || inst.Kind() != pane.KindTerminal {
 		t.Fatalf("setup: terminal.new should focus a terminal pane, got %q", term)
 	}
@@ -186,7 +186,7 @@ func terminalTabApp(t *testing.T) (m Model, paths [3]string, src, term string) {
 // the fresh editor leaf, like a self-edge drop.
 func TestTabDragToTerminalEdgeSplits(t *testing.T) {
 	m, paths, src, term := terminalTabApp(t)
-	inst := m.panes.Get(src)
+	inst := m.activeWS().Panes.Get(src)
 	x, y := barCell(t, m, 1) // grab a.txt
 	m = step(m, press(x, y))
 	tr := m.lay.Panes[term]
@@ -195,15 +195,15 @@ func TestTabDragToTerminalEdgeSplits(t *testing.T) {
 	if inst.TabCount() != 2 {
 		t.Fatalf("source pane should keep 2 tabs, got %d", inst.TabCount())
 	}
-	newKey := m.panes.Focused()
+	newKey := m.activeWS().Panes.Focused()
 	if newKey == src || newKey == term {
 		t.Fatalf("focus should land on the fresh split pane, got %q", newKey)
 	}
-	ninst := m.panes.Get(newKey)
+	ninst := m.activeWS().Panes.Get(newKey)
 	if ninst.Kind() != pane.KindEditor || ninst.Editor().Path() != canonicalPath(paths[0]) {
 		t.Fatalf("split pane should be an editor holding the dragged file, got %q", ninst.Editor().Path())
 	}
-	if m.panes.Get(term).Kind() != pane.KindTerminal {
+	if m.activeWS().Panes.Get(term).Kind() != pane.KindTerminal {
 		t.Fatal("the terminal pane must survive the split")
 	}
 }
@@ -212,7 +212,7 @@ func TestTabDragToTerminalEdgeSplits(t *testing.T) {
 // join, so a drop in its interior stays a no-op.
 func TestTabDragToTerminalInteriorNoop(t *testing.T) {
 	m, _, src, term := terminalTabApp(t)
-	inst := m.panes.Get(src)
+	inst := m.activeWS().Panes.Get(src)
 	panes := len(m.lay.Panes)
 	x, y := barCell(t, m, 1)
 	m = step(m, press(x, y))
@@ -247,15 +247,15 @@ func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
 // another editor pane relocates exactly that document.
 func TestTabDragToOtherPaneMovesOnlyThatFile(t *testing.T) {
 	m, paths := tabApp(t)
-	src := m.panes.Focused()
-	inst := m.panes.FocusedInstance()
+	src := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.FocusedInstance()
 	// First create a second editor pane by tab-dragging c.txt (active) off
 	// the bottom edge, then drag a.txt from the source onto it.
 	r := m.lay.Panes[src]
 	x, y := barCell(t, m, 17) // third segment (" a.txt │ b.txt │ c.txt ")
 	m = step(m, press(x, y))
 	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
-	dst := m.panes.Focused()
+	dst := m.activeWS().Panes.Focused()
 	if dst == src {
 		t.Fatal("setup: expected a split pane")
 	}
@@ -269,7 +269,7 @@ func TestTabDragToOtherPaneMovesOnlyThatFile(t *testing.T) {
 	if inst.TabCount() != 1 {
 		t.Fatalf("source should be down to 1 tab, got %d", inst.TabCount())
 	}
-	dinst := m.panes.Get(dst)
+	dinst := m.activeWS().Panes.Get(dst)
 	if dinst.TabCount() != 2 {
 		t.Fatalf("target should have 2 tabs, got %d", dinst.TabCount())
 	}

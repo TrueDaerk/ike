@@ -194,7 +194,7 @@ func (m *Model) openDiffHeadPane(path, head string) {
 		if ed := m.editorForPath(path); ed != nil {
 			right = ed.Text()
 		}
-		m.panes.Get(key).Diff().SetContents(head, right)
+		m.activeWS().Panes.Get(key).Diff().SetContents(head, right)
 		m.setFocus(key)
 		return
 	}
@@ -205,25 +205,25 @@ func (m *Model) openDiffHeadPane(path, head string) {
 			right = ed.Text()
 		}
 		name := filepath.Base(path)
-		inst := m.panes.Get(key)
+		inst := m.activeWS().Panes.Get(key)
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(name+" @ HEAD", name, "", path, "HEAD", "", true)
 		inst.Diff().SetContents(head, right)
 		m.setFocus(key)
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 		return
 	}
 	right := readFileOrEmpty(path)
 	if ed := m.editorForPath(path); ed != nil {
 		right = ed.Text()
 	}
-	key := m.panes.AddDiffHead(path)
+	key := m.activeWS().Panes.AddDiffHead(path)
 	if !m.placeDiffLeaf(key) {
 		return
 	}
-	m.panes.Get(key).Diff().SetContents(head, right)
+	m.activeWS().Panes.Get(key).Diff().SetContents(head, right)
 	m.setFocus(key)
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // placeDiffLeaf positions the freshly-created diff pane key beside the active
@@ -233,25 +233,25 @@ func (m *Model) openDiffHeadPane(path, head string) {
 func (m *Model) placeDiffLeaf(key string) bool {
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
-		m.panes.Close(key)
+	if target == "" || m.activeWS().Tree == nil {
+		m.activeWS().Panes.Close(key)
 		return false
 	}
-	if inst := m.panes.Get(target); inst != nil && inst.IsEmptyEditor() {
-		if _, ok := layout.Replace(m.tree, target, key); ok {
-			m.panes.Close(target)
+	if inst := m.activeWS().Panes.Get(target); inst != nil && inst.IsEmptyEditor() {
+		if _, ok := layout.Replace(m.activeWS().Tree, target, key); ok {
+			m.activeWS().Panes.Close(target)
 			m.layout()
 			return true
 		}
 	}
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneRight)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneRight)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return false
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.layout()
 	return true
 }

@@ -64,10 +64,10 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 
 	// A reusable terminal (never typed into, or its process ended) is taken
 	// over in place — pane or tab (#574).
-	if inst, tab, term := m.panes.ReusableRunTerminal(); term != nil {
+	if inst, tab, term := m.activeWS().Panes.ReusableRunTerminal(); term != nil {
 		key := term.SessionKey()
 		if key == "" {
-			key = m.panes.MintTerminalKey()
+			key = m.activeWS().Panes.MintTerminalKey()
 		}
 		term.StartCommand(key, argv, dir, env)
 		term.SetLabel(cfg.Name)
@@ -85,13 +85,13 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	}
 	if placement == "in_pane" {
 		if target := m.activeEditorKey(); target != "" {
-			inst := m.panes.Get(target)
-			key := m.panes.MintTerminalKey()
+			inst := m.activeWS().Panes.Get(target)
+			key := m.activeWS().Panes.MintTerminalKey()
 			term := terminal.NewCommand(key, argv, dir, 80, 24, env, m.host.Send)
 			term.SetLabel(cfg.Name)
 			inst.AddTerminalTab(term)
 			m.setFocus(target)
-			saveLayout(m.tree, m.panes)
+			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 			m.notifyRun(cfg, created, argv)
 			return
 		}
@@ -100,22 +100,22 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	// exists: a bottom-split terminal pane, like terminal.new.
 	target := m.activeEditorKey()
 	if target == "" {
-		target = m.panes.Focused()
+		target = m.activeWS().Panes.Focused()
 	}
-	if target == "" || m.tree == nil {
+	if target == "" || m.activeWS().Tree == nil {
 		m.host.Notify(host.Error, "run: no pane to place the terminal")
 		return
 	}
-	key := m.panes.AddCommandTerminal(argv, cfg.Name, dir, env, m.host.Send)
-	tree, ok := layout.SplitLeaf(m.tree, target, key, layout.ZoneBottom)
+	key := m.activeWS().Panes.AddCommandTerminal(argv, cfg.Name, dir, env, m.host.Send)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
 	if !ok {
-		m.panes.Close(key)
+		m.activeWS().Panes.Close(key)
 		return
 	}
-	m.tree = tree
+	m.activeWS().Tree = tree
 	m.setFocus(key)
 	m.layout()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	m.notifyRun(cfg, created, argv)
 }
 

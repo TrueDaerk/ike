@@ -114,7 +114,7 @@ func TestInitFiresFileOpenedForRestoredFiles(t *testing.T) {
 	m := NewWith(reg, host.MapConfig{})
 	// Simulate a startup restore: the same file loaded straight into two tabs of
 	// the active editor, exactly as restoreLayout does (never through openPath).
-	inst := m.panes.Get(m.activeEditorKey())
+	inst := m.activeWS().Panes.Get(m.activeEditorKey())
 	if err := inst.Editor().Load(path); err != nil {
 		t.Fatal(err)
 	}
@@ -209,15 +209,15 @@ func TestSplitFocusedCommands(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
 	m = tm.(Model)
-	before := m.panes.Focused()
-	editors := len(m.panes.Keys())
+	before := m.activeWS().Panes.Focused()
+	editors := len(m.activeWS().Panes.Keys())
 
 	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneBottom})
 	m = tm.(Model)
-	if len(m.panes.Keys()) != editors+1 {
-		t.Fatalf("split must add one editor pane, have %d", len(m.panes.Keys()))
+	if len(m.activeWS().Panes.Keys()) != editors+1 {
+		t.Fatalf("split must add one editor pane, have %d", len(m.activeWS().Panes.Keys()))
 	}
-	after := m.panes.Focused()
+	after := m.activeWS().Panes.Focused()
 	if after == before || after == "" {
 		t.Fatal("focus must move to the new editor")
 	}
@@ -232,7 +232,7 @@ func TestSplitFocusedCommands(t *testing.T) {
 
 	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneTop})
 	m = tm.(Model)
-	top := m.panes.Focused()
+	top := m.activeWS().Panes.Focused()
 	rt := m.lay.Panes[top]
 	if rt.Y >= m.lay.Panes[after].Y {
 		t.Fatalf("ZoneTop must place the new pane above (new y=%d, old y=%d)", rt.Y, m.lay.Panes[after].Y)
@@ -241,13 +241,13 @@ func TestSplitFocusedCommands(t *testing.T) {
 	// The horizontal pair (#121): right lands right of, left lands left of.
 	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneRight})
 	m = tm.(Model)
-	right := m.panes.Focused()
+	right := m.activeWS().Panes.Focused()
 	if m.lay.Panes[right].X <= rt.X {
 		t.Fatalf("ZoneRight must place the new pane to the right (new x=%d, old x=%d)", m.lay.Panes[right].X, rt.X)
 	}
 	tm, _ = m.Update(SplitFocusedMsg{Zone: layout.ZoneLeft})
 	m = tm.(Model)
-	left := m.panes.Focused()
+	left := m.activeWS().Panes.Focused()
 	if m.lay.Panes[left].X >= m.lay.Panes[right].X {
 		t.Fatalf("ZoneLeft must place the new pane to the left (new x=%d, old x=%d)", m.lay.Panes[left].X, m.lay.Panes[right].X)
 	}
@@ -433,7 +433,7 @@ func TestCmdWClosesTabThroughKeymap(t *testing.T) {
 	if m.activeEditor() != nil {
 		t.Fatal("cmd+w should close the focused editor pane")
 	}
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("focus should fall back to the explorer")
 	}
 }
@@ -461,11 +461,11 @@ func TestCtrlTabCyclesFocusThroughKeymap(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("precondition: editor focused after open")
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModCtrl})
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("ctrl+tab should cycle focus to the explorer")
 	}
 }
@@ -519,17 +519,17 @@ func TestSaveAllWritesDirtyEditors(t *testing.T) {
 // explorer to the active editor and back.
 func TestToggleExplorerFocus(t *testing.T) {
 	m := newSized()
-	if m.panes.Focused() != pane.ExplorerKey {
-		t.Fatalf("precondition: explorer focused, got %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
+		t.Fatalf("precondition: explorer focused, got %q", m.activeWS().Panes.Focused())
 	}
 	tm, _ := m.Update(ToggleExplorerFocusMsg{})
 	m = tm.(Model)
-	if got := m.panes.Focused(); got == pane.ExplorerKey {
+	if got := m.activeWS().Panes.Focused(); got == pane.ExplorerKey {
 		t.Fatal("toggle should move focus off the explorer")
 	}
 	tm, _ = m.Update(ToggleExplorerFocusMsg{})
 	m = tm.(Model)
-	if got := m.panes.Focused(); got != pane.ExplorerKey {
+	if got := m.activeWS().Panes.Focused(); got != pane.ExplorerKey {
 		t.Fatalf("second toggle should focus the explorer again, got %q", got)
 	}
 }
@@ -568,19 +568,19 @@ func TestDeletingFileClosesItsEditor(t *testing.T) {
 	if m.editorWithFile(path) != "" {
 		t.Fatal("editor should close when its file is deleted")
 	}
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("focus should fall back to the explorer after the editor closes")
 	}
 }
 
 func TestTabSwitchesFocus(t *testing.T) {
 	m := newSized()
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("should start focused on explorer")
 	}
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = tm.(Model)
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("tab should focus editor")
 	}
 }
@@ -597,7 +597,7 @@ func TestOpenFileRoutesToEditor(t *testing.T) {
 	if !m.activeEditor().HasFile() {
 		t.Fatal("editor should have loaded the file")
 	}
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("opening a file should focus the editor")
 	}
 }
@@ -618,7 +618,7 @@ func TestCloseMsgResetsToExplorer(t *testing.T) {
 	if m.activeEditor() != nil {
 		t.Fatal("close should remove the editor pane")
 	}
-	if m.panes.FocusedInstance().Kind() != pane.KindExplorer {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("close should focus explorer")
 	}
 }
@@ -673,7 +673,7 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 	if line, col := m2.activeEditor().CursorPos(); line != 2 || col != 3 {
 		t.Fatalf("restored cursor = (%d,%d), want (2,3)", line, col)
 	}
-	if m2.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m2.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("restoring an open file should focus the editor")
 	}
 	snap := m2.explorer().Snapshot()
@@ -737,7 +737,7 @@ func TestQuitFromEditorNormalMode(t *testing.T) {
 	m := newSized()
 	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
 	m = tm.(Model)
-	if m.panes.FocusedInstance().Kind() != pane.KindEditor {
+	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
 		t.Fatal("opening a file should focus the editor")
 	}
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
@@ -791,10 +791,10 @@ func TestHelpOverlayToggle(t *testing.T) {
 	}
 
 	// While open, tab is consumed by the overlay and must not switch focus.
-	before := m.panes.Focused()
+	before := m.activeWS().Panes.Focused()
 	tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = tm.(Model)
-	if m.panes.Focused() != before {
+	if m.activeWS().Panes.Focused() != before {
 		t.Fatal("overlay should swallow keys; focus changed")
 	}
 
@@ -934,10 +934,10 @@ var ansiStripRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 func TestExplorerToggleHidesAndRestores(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
-	if !m.explorerVisible() || m.panes.Focused() != pane.ExplorerKey {
+	if !m.explorerVisible() || m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("precondition: visible focused explorer")
 	}
-	wantRatio, ok := explorerSplitRatio(m.tree)
+	wantRatio, ok := explorerSplitRatio(m.activeWS().Tree)
 	if !ok {
 		t.Fatal("precondition: explorer split ratio resolvable")
 	}
@@ -947,19 +947,19 @@ func TestExplorerToggleHidesAndRestores(t *testing.T) {
 	if m.explorerVisible() {
 		t.Fatal("toggle on the focused explorer must hide it")
 	}
-	if m.panes.Focused() == pane.ExplorerKey {
+	if m.activeWS().Panes.Focused() == pane.ExplorerKey {
 		t.Fatal("hiding must move focus off the explorer")
 	}
-	if !m.panes.Has(pane.ExplorerKey) {
+	if !m.activeWS().Panes.Has(pane.ExplorerKey) {
 		t.Fatal("hiding must keep the pane instance registered")
 	}
 
 	tm, _ = m.Update(ToggleExplorerFocusMsg{}) // hidden → show + focus
 	m = tm.(Model)
-	if !m.explorerVisible() || m.panes.Focused() != pane.ExplorerKey {
+	if !m.explorerVisible() || m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("toggle on a hidden explorer must show and focus it")
 	}
-	if got, _ := explorerSplitRatio(m.tree); got != wantRatio {
+	if got, _ := explorerSplitRatio(m.activeWS().Tree); got != wantRatio {
 		t.Fatalf("restored ratio = %v, want remembered %v", got, wantRatio)
 	}
 
@@ -990,12 +990,12 @@ func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
 	if m2.explorerVisible() {
 		t.Fatal("restored session must keep the explorer hidden")
 	}
-	if !m2.panes.Has(pane.ExplorerKey) {
+	if !m2.activeWS().Panes.Has(pane.ExplorerKey) {
 		t.Fatal("restored session must still register the explorer instance")
 	}
 	tm, _ = m2.Update(ToggleExplorerFocusMsg{})
 	m2 = tm.(Model)
-	if !m2.explorerVisible() || m2.panes.Focused() != pane.ExplorerKey {
+	if !m2.explorerVisible() || m2.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("toggle must bring the restored hidden explorer back")
 	}
 }

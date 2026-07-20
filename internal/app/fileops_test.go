@@ -95,7 +95,7 @@ func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 	if _, err := os.Stat(renamed); err != nil {
 		t.Fatalf("rename did not happen on disk: %v", err)
 	}
-	ed := m.panes.Get(m.activeEditorKey()).Editor()
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
 	if ed.Path() != renamed {
 		t.Fatalf("editor must follow the rename, path = %q", ed.Path())
 	}
@@ -127,10 +127,10 @@ func TestMoveRepointsOpenEditor(t *testing.T) {
 	if _, err := os.Stat(moved); err != nil {
 		t.Fatalf("move did not happen on disk: %v", err)
 	}
-	if !m.panes.Has(key) {
+	if !m.activeWS().Panes.Has(key) {
 		t.Fatal("the editor pane must survive the move")
 	}
-	if got := m.panes.Get(key).Editor().Path(); got != moved {
+	if got := m.activeWS().Panes.Get(key).Editor().Path(); got != moved {
 		t.Fatalf("editor must follow the move, path = %q", got)
 	}
 }
@@ -151,7 +151,7 @@ func TestDirRenameRepointsNestedEditor(t *testing.T) {
 	m = drainCmd(tm.(Model), cmd)
 
 	want := filepath.Join(root, "pkg", "c.txt")
-	if got := m.panes.Get(m.activeEditorKey()).Editor().Path(); got != want {
+	if got := m.activeWS().Panes.Get(m.activeEditorKey()).Editor().Path(); got != want {
 		t.Fatalf("editor under a renamed folder must follow, path = %q want %q", got, want)
 	}
 }
@@ -180,13 +180,13 @@ func TestPaletteFileOpFocusesExplorer(t *testing.T) {
 			m := newSized()
 			tm, _ := m.openPath(file, false)
 			m = tm.(Model)
-			if m.panes.Focused() == pane.ExplorerKey {
+			if m.activeWS().Panes.Focused() == pane.ExplorerKey {
 				t.Fatal("setup: an editor must hold focus")
 			}
 
 			m = dispatch(t, m, tc.msg)
-			if m.panes.Focused() != pane.ExplorerKey {
-				t.Fatalf("focus = %q, want the explorer pane", m.panes.Focused())
+			if m.activeWS().Panes.Focused() != pane.ExplorerKey {
+				t.Fatalf("focus = %q, want the explorer pane", m.activeWS().Panes.Focused())
 			}
 			if tc.wantPrompt && !m.explorer().Prompting() {
 				t.Fatal("the file-op prompt must be open")
@@ -205,7 +205,7 @@ func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)
 	editorKey := m.activeEditorKey()
-	before := m.panes.Get(editorKey).Editor().Text()
+	before := m.activeWS().Panes.Get(editorKey).Editor().Text()
 
 	m = dispatch(t, m, explorer.NewFileMsg{})
 	for _, r := range "util.go" {
@@ -218,10 +218,10 @@ func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
 	if _, err := os.Stat(created); err != nil {
 		t.Fatalf("enter must create the file on disk: %v", err)
 	}
-	if got := m.panes.Get(editorKey).Editor().Text(); got != before {
+	if got := m.activeWS().Panes.Get(editorKey).Editor().Text(); got != before {
 		t.Fatalf("keystrokes leaked into the editor buffer: %q -> %q", before, got)
 	}
-	if m.panes.Get(editorKey).Editor().Dirty() {
+	if m.activeWS().Panes.Get(editorKey).Editor().Dirty() {
 		t.Fatal("the buffer must stay clean — no leaked vim commands")
 	}
 }
@@ -245,8 +245,8 @@ func TestPaletteFileOpShowsHiddenExplorer(t *testing.T) {
 	if !m.explorerVisible() {
 		t.Fatal("a palette file op must re-show the hidden explorer")
 	}
-	if m.panes.Focused() != pane.ExplorerKey {
-		t.Fatalf("focus = %q, want the explorer pane", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
+		t.Fatalf("focus = %q, want the explorer pane", m.activeWS().Panes.Focused())
 	}
 	if !m.explorer().Prompting() {
 		t.Fatal("the file-op prompt must be open")

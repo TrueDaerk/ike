@@ -21,7 +21,7 @@ func tabApp(t *testing.T) (Model, [3]string) {
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
 	c := writeTemp(t, dir, "c.txt", "ccc\n")
 	m := openApp(t, a, b, c)
-	if m.panes.FocusedInstance().TabCount() != 3 {
+	if m.activeWS().Panes.FocusedInstance().TabCount() != 3 {
 		t.Fatal("setup: want 3 tabs")
 	}
 	return m, [3]string{a, b, c}
@@ -50,7 +50,7 @@ func TestTabCommandsRegistered(t *testing.T) {
 
 func TestTabNextPrevWrap(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	m = dispatch(t, m, TabStepMsg{Delta: 1}) // active idx 2 → wraps to 0
 	if inst.Editor().Path() != paths[0] {
@@ -64,7 +64,7 @@ func TestTabNextPrevWrap(t *testing.T) {
 
 func TestTabSelect(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	m = dispatch(t, m, TabSelectMsg{Index: 1})
 	if inst.Editor().Path() != paths[1] || inst.ActiveTab() != 1 {
@@ -78,7 +78,7 @@ func TestTabSelect(t *testing.T) {
 
 func TestTabMoveReorders(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	m = dispatch(t, m, TabMoveMsg{Delta: -1}) // c moves from idx 2 to idx 1
 	if inst.Editor().Path() != paths[2] || inst.ActiveTab() != 1 {
@@ -96,7 +96,7 @@ func TestTabMoveReorders(t *testing.T) {
 
 func TestReopenClosedTabRestoresPathAndCursor(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	// Park the caret somewhere recognisable in c.txt, then close its tab.
 	inst.Editor().SetCursor(0, 2)
@@ -106,7 +106,7 @@ func TestReopenClosedTabRestoresPathAndCursor(t *testing.T) {
 	}
 
 	m = dispatch(t, m, TabReopenMsg{})
-	inst = m.panes.FocusedInstance()
+	inst = m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 3 || inst.Editor().Path() != paths[2] {
 		t.Fatalf("reopen must restore the closed file, got %q", inst.Editor().Path())
 	}
@@ -139,7 +139,7 @@ func TestPaneCloseFeedsReopenRing(t *testing.T) {
 	m.CloseFocused() // single-tab pane: closes the pane itself
 
 	m = dispatch(t, m, TabReopenMsg{})
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.EditorForPath(b) == nil {
 		t.Fatal("a tab lost with its pane must be reopenable")
 	}
@@ -147,7 +147,7 @@ func TestPaneCloseFeedsReopenRing(t *testing.T) {
 
 func TestTabKeymapChords(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModAlt})
 	if inst.Editor().Path() != paths[0] {
@@ -163,7 +163,7 @@ func TestTabKeymapChords(t *testing.T) {
 // the chord must fall through the keymap to the editor instead of cycling tabs.
 func TestAltArrowReachesEditorWordMotion(t *testing.T) {
 	m, paths := tabApp(t)
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
 	if inst.Editor().Path() != paths[2] {

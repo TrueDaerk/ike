@@ -27,11 +27,11 @@ func dirtyUntitled(t *testing.T, m Model) Model {
 	if key == "" {
 		t.Fatal("startup layout must focus an editor")
 	}
-	ed := m.panes.Get(key).Editor()
+	ed := m.activeWS().Panes.Get(key).Editor()
 	if ed == nil || ed.HasFile() {
 		t.Fatal("startup editor must be an untitled buffer")
 	}
-	m.panes.SetFocused(key)
+	m.activeWS().Panes.SetFocused(key)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
 	m = typeInto(m, "hello")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -69,7 +69,7 @@ func TestUntitledSavePromptsAndBinds(t *testing.T) {
 	if !strings.HasPrefix(string(data), "hello") {
 		t.Fatalf("file content = %q", data)
 	}
-	ed := m.panes.Get(key).Editor()
+	ed := m.activeWS().Panes.Get(key).Editor()
 	if !ed.HasFile() || ed.Path() != target {
 		t.Fatalf("tab must bind to the new file, path = %q", ed.Path())
 	}
@@ -122,7 +122,7 @@ func TestUntitledSaveRefusesExistingFile(t *testing.T) {
 	if m.saveAsOpen() {
 		t.Fatal("esc must close the prompt")
 	}
-	ed := m.panes.Get(m.activeEditorKey()).Editor()
+	ed := m.activeWS().Panes.Get(m.activeEditorKey()).Editor()
 	if ed.HasFile() || !ed.Dirty() {
 		t.Fatal("cancel must leave the buffer untitled and dirty")
 	}

@@ -26,8 +26,8 @@ import (
 // startSaveAsPrompt opens the path prompt for the focused pane's untitled
 // buffer. closeAfter carries the ":wq" intent through the prompt.
 func (m *Model) startSaveAsPrompt(closeAfter bool) {
-	key := m.panes.Focused()
-	inst := m.panes.Get(key)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return
 	}
@@ -119,7 +119,7 @@ func (m Model) updateSaveAsPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // explorer active-file, layout persistence, highlighting and the file-opened
 // hooks — so the fresh file behaves exactly like one opened from disk.
 func (m *Model) bindUntitled(key, path string) tea.Cmd {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return nil
 	}
@@ -140,7 +140,7 @@ func (m *Model) bindUntitled(key, path string) tea.Cmd {
 	m.watcher.Track(path)
 	m.explorer().SetActive(path)
 	m.syncExplorerOpen()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	cmds = append(cmds, ed.Reparse())
 	cmds = append(cmds, m.vcsMarksCmd(ed))
 	cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)

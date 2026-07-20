@@ -18,7 +18,7 @@ func wheelApp(t *testing.T) (Model, int, int) {
 	dir := t.TempDir()
 	p := writeTemp(t, dir, "long.txt", strings.Repeat("line\n", 200))
 	m := openApp(t, p)
-	r, ok := m.lay.Panes[m.panes.Focused()]
+	r, ok := m.lay.Panes[m.activeWS().Panes.Focused()]
 	if !ok {
 		t.Fatal("setup: focused pane has no rect")
 	}
@@ -35,7 +35,7 @@ func raw(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
 
 func TestWheelBurstCoalescesIntoOneFlush(t *testing.T) {
 	m, x, y := wheelApp(t)
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
 	var cmds [3]tea.Cmd
 	for i := range cmds {
@@ -65,7 +65,7 @@ func TestWheelBurstCoalescesIntoOneFlush(t *testing.T) {
 
 func TestWheelDirectionChangeKeepsOrder(t *testing.T) {
 	m, x, y := wheelApp(t)
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
 	for i := 0; i < 3; i++ {
 		m, _ = raw(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
@@ -82,7 +82,7 @@ func TestWheelDirectionChangeKeepsOrder(t *testing.T) {
 
 func TestNonWheelEventFlushesPendingWheel(t *testing.T) {
 	m, x, y := wheelApp(t)
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
 	m, _ = raw(t, m, tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
 	// A click arriving behind the wheel burst must see the scrolled viewport:

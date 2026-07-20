@@ -48,7 +48,7 @@ func TestTabLimitEvictsLeastRecentlyUsed(t *testing.T) {
 	withTabLimit(t, 3)
 	m = openApp2(t, m, a, b, c, d)
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.TabCount() != 3 {
 		t.Fatalf("tabs = %v, want 3 after eviction", tabPaths(inst))
 	}
@@ -76,7 +76,7 @@ func TestTabLimitEvictionIsLRUNotFIFO(t *testing.T) {
 	m = openApp2(t, m, a)
 	m = openApp2(t, m, d)
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	paths := tabPaths(inst)
 	for _, p := range paths {
 		if p == b {
@@ -119,11 +119,11 @@ func TestTabLimitNeverEvictsDirtyTabs(t *testing.T) {
 	}
 	m = openApp2(t, m, b)
 	m = openApp2(t, m, c)
-	if ed := m.panes.FocusedInstance().TabEditor(0); ed == nil || !ed.Dirty() {
+	if ed := m.activeWS().Panes.FocusedInstance().TabEditor(0); ed == nil || !ed.Dirty() {
 		t.Skip("autosave cleared the dirty flag despite the failed write; exemption untestable here")
 	}
 
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	paths := tabPaths(inst)
 	foundA := false
 	for _, p := range paths {
@@ -148,7 +148,7 @@ func TestTabLimitZeroDisables(t *testing.T) {
 	m := newSized()
 	withTabLimit(t, 0)
 	m = openApp2(t, m, paths...)
-	if got := m.panes.FocusedInstance().TabCount(); got != 7 {
+	if got := m.activeWS().Panes.FocusedInstance().TabCount(); got != 7 {
 		t.Fatalf("limit 0 must not evict, tabs = %d", got)
 	}
 }
@@ -171,7 +171,7 @@ func TestTabLimitExceededWhenAllDirty(t *testing.T) {
 	}
 	m = openApp2(t, m, b)
 	// a is dirty, b is active: nothing is eligible, the limit is exceeded.
-	if got := m.panes.FocusedInstance().TabCount(); got != 2 {
+	if got := m.activeWS().Panes.FocusedInstance().TabCount(); got != 2 {
 		t.Fatalf("all-exempt pane must exceed the limit, tabs = %d", got)
 	}
 }

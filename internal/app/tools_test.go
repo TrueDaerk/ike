@@ -67,7 +67,7 @@ func TestToolSlug(t *testing.T) {
 func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
-	editorKey := m.panes.Focused()
+	editorKey := m.activeWS().Panes.Focused()
 
 	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})
 	m = out.(Model)
@@ -76,8 +76,8 @@ func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
 		t.Fatal("tool.watcher must open a pane")
 	}
 	t.Cleanup(func() { inst.Terminal().Close() })
-	if m.panes.Focused() != inst.Key() {
-		t.Fatalf("tool pane must take focus, focused %q", m.panes.Focused())
+	if m.activeWS().Panes.Focused() != inst.Key() {
+		t.Fatalf("tool pane must take focus, focused %q", m.activeWS().Panes.Focused())
 	}
 	if inst.Terminal().Tool() != "watcher" {
 		t.Fatalf("tool marker = %q", inst.Terminal().Tool())
@@ -86,19 +86,19 @@ func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
 	// Re-invoking while focused returns focus to the remembered pane.
 	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
 	m = out.(Model)
-	if m.panes.Focused() != editorKey {
-		t.Fatalf("second invoke must return focus, got %q want %q", m.panes.Focused(), editorKey)
+	if m.activeWS().Panes.Focused() != editorKey {
+		t.Fatalf("second invoke must return focus, got %q want %q", m.activeWS().Panes.Focused(), editorKey)
 	}
 
 	// Re-invoking from elsewhere focuses the existing pane, no second spawn.
 	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
 	m = out.(Model)
-	if m.panes.Focused() != inst.Key() {
+	if m.activeWS().Panes.Focused() != inst.Key() {
 		t.Fatal("third invoke must focus the existing pane")
 	}
 	count := 0
-	for _, key := range m.panes.Keys() {
-		if p := m.panes.Get(key); p != nil && p.Kind() == pane.KindTerminal && p.Terminal().Tool() == "watcher" {
+	for _, key := range m.activeWS().Panes.Keys() {
+		if p := m.activeWS().Panes.Get(key); p != nil && p.Kind() == pane.KindTerminal && p.Terminal().Tool() == "watcher" {
 			count++
 		}
 	}
@@ -140,7 +140,7 @@ func TestToolExitClosesPane(t *testing.T) {
 	inst.Terminal().Close()
 	out, _ = m.Update(terminal.ExitedMsg{Key: sessKey})
 	m = out.(Model)
-	if m.panes.Has(key) {
+	if m.activeWS().Panes.Has(key) {
 		t.Fatal("tool pane must close when its program exits")
 	}
 }
@@ -148,10 +148,10 @@ func TestToolExitClosesPane(t *testing.T) {
 func TestToolUnknownNameIsNoop(t *testing.T) {
 	withTools(t)
 	m := sized(t, 100, 40)
-	before := m.panes.Len()
+	before := m.activeWS().Panes.Len()
 	out, _ := m.Update(ToolOpenMsg{Name: "ghost"})
 	m = out.(Model)
-	if m.panes.Len() != before {
+	if m.activeWS().Panes.Len() != before {
 		t.Fatal("unknown tool must not open a pane")
 	}
 }
@@ -230,9 +230,9 @@ func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
 
 	out, _ = m.Update(TerminalToggleMsg{})
 	m = out.(Model)
-	focused := m.panes.FocusedInstance()
+	focused := m.activeWS().Panes.FocusedInstance()
 	if focused == nil || focused.Kind() != pane.KindTerminal {
-		t.Fatalf("toggle must open and focus a terminal, focused %v", m.panes.Focused())
+		t.Fatalf("toggle must open and focus a terminal, focused %v", m.activeWS().Panes.Focused())
 	}
 	if focused.Terminal().Tool() != "" {
 		t.Fatal("toggle must not focus the tool pane; want a regular terminal")
@@ -242,7 +242,7 @@ func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
 	// A second toggle from the terminal returns focus (unchanged semantics).
 	out, _ = m.Update(TerminalToggleMsg{})
 	m = out.(Model)
-	if got := m.panes.FocusedInstance(); got != nil && got.Kind() == pane.KindTerminal && got.Terminal().Tool() == "" {
+	if got := m.activeWS().Panes.FocusedInstance(); got != nil && got.Kind() == pane.KindTerminal && got.Terminal().Tool() == "" {
 		t.Fatal("second toggle must leave the regular terminal")
 	}
 }

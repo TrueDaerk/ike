@@ -30,7 +30,7 @@ func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
 
 	m = dispatch(t, m, NewScratchMsg{Ext: "sct"})
 
-	ed := m.panes.FocusedInstance().Editor()
+	ed := m.activeWS().Panes.FocusedInstance().Editor()
 	if !ed.HasFile() {
 		t.Fatal("scratch must open as the focused buffer")
 	}
@@ -47,7 +47,7 @@ func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
 
 	// Plain scratch.new defaults to txt and allocates independently.
 	m = dispatch(t, m, NewScratchMsg{})
-	if got := filepath.Base(m.panes.FocusedInstance().Editor().Path()); got != "scratch-1.txt" {
+	if got := filepath.Base(m.activeWS().Panes.FocusedInstance().Editor().Path()); got != "scratch-1.txt" {
 		t.Fatalf("default scratch = %q, want scratch-1.txt", got)
 	}
 }

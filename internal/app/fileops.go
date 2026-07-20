@@ -24,7 +24,7 @@ import (
 // refactorTarget resolves the file a rename/move acts on: the explorer's
 // selection when the explorer holds focus, else the focused editor's file.
 func (m *Model) refactorTarget() (string, bool) {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
 		return "", false
 	}
@@ -43,7 +43,7 @@ func (m *Model) refactorTarget() (string, bool) {
 // startRenameFile handles RenameFileMsg (file.rename): the explorer keeps its
 // own inline prompt; for an editor the shell prompts for the new name.
 func (m *Model) startRenameFile() tea.Cmd {
-	inst := m.panes.FocusedInstance()
+	inst := m.activeWS().Panes.FocusedInstance()
 	if inst != nil && inst.Kind() == pane.KindExplorer {
 		exp := m.explorer()
 		var cmd tea.Cmd
@@ -183,8 +183,8 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 	m.watcher.MarkSaved(msg.New)
 	prefix := msg.Old + string(os.PathSeparator)
 	var cmds []tea.Cmd
-	for _, key := range m.panes.Keys() {
-		inst := m.panes.Get(key)
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
@@ -211,11 +211,11 @@ func (m *Model) followMovedFile(msg explorer.FileMovedMsg) tea.Cmd {
 		}
 	}
 	if key := m.activeEditorKey(); key != "" {
-		if ed := m.panes.Get(key).Editor(); ed != nil && ed.HasFile() {
+		if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			m.explorer().SetActive(ed.Path())
 		}
 	}
 	m.syncExplorerOpen()
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	return tea.Batch(cmds...)
 }

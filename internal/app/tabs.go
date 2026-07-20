@@ -28,7 +28,7 @@ const closedTabRing = 10
 // else the most recent one — or nil when no editor exists.
 func (m *Model) tabPane() *pane.Instance {
 	if key := m.activeEditorKey(); key != "" {
-		return m.panes.Get(key)
+		return m.activeWS().Panes.Get(key)
 	}
 	return nil
 }
@@ -55,7 +55,7 @@ func (m *Model) cycleTabs(inst *pane.Instance, delta int) {
 // snapshot survives only while the document is open elsewhere, and the pane
 // itself closes when its last tab goes.
 func (m *Model) closeBarTab(key string, idx int) {
-	inst := m.panes.Get(key)
+	inst := m.activeWS().Panes.Get(key)
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		return
 	}
@@ -87,7 +87,7 @@ func (m *Model) switchTab(inst *pane.Instance, idx int) {
 	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.explorer().SetActive(ed.Path())
 	}
-	saveLayout(m.tree, m.panes)
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // moveTab reorders the active tab by delta positions; moves past either end
@@ -99,7 +99,7 @@ func (m *Model) moveTab(delta int) {
 	}
 	from := inst.ActiveTab()
 	if inst.MoveTab(from, from+delta) {
-		saveLayout(m.tree, m.panes)
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
 }
 

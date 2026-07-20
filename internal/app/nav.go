@@ -30,7 +30,7 @@ func (m Model) currentNavPos() nav.Position {
 	if key == "" {
 		return nav.Position{}
 	}
-	ed := m.panes.Get(key).Editor()
+	ed := m.activeWS().Panes.Get(key).Editor()
 	if ed == nil || !ed.HasFile() {
 		return nav.Position{}
 	}

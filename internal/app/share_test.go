@@ -38,7 +38,7 @@ func sharedApp(t *testing.T) (*Model, string, [2]string) {
 	return &m, path, [2]string{keys[0], keys[1]}
 }
 
-func edOf(m *Model, key string) *editor.Model { return m.panes.Get(key).Editor() }
+func edOf(m *Model, key string) *editor.Model { return m.activeWS().Panes.Get(key).Editor() }
 
 func TestOpenSameFileTwiceSharesDocument(t *testing.T) {
 	m, _, keys := sharedApp(t)
@@ -79,7 +79,7 @@ func TestSaveInOnePaneCleansBoth(t *testing.T) {
 		tm, _ := m.Update(k)
 		*m = tm.(Model)
 	}
-	_ = m.panes.Get(m.activeEditorKey()).Update(editor.ActionMsg{Action: "write"})
+	_ = m.activeWS().Panes.Get(m.activeEditorKey()).Update(editor.ActionMsg{Action: "write"})
 	deliverSync(m, path, m.activeEditorKey())
 	for _, key := range keys {
 		if edOf(m, key).Dirty() {
@@ -125,7 +125,7 @@ func TestRestoreLayoutSharesDuplicatePaths(t *testing.T) {
 	if len(keys) != 2 {
 		t.Fatalf("restore must reopen the file in 2 panes, got %v", keys)
 	}
-	if !restored.panes.Get(keys[0]).Editor().SharesBufferWith(restored.panes.Get(keys[1]).Editor()) {
+	if !restored.activeWS().Panes.Get(keys[0]).Editor().SharesBufferWith(restored.activeWS().Panes.Get(keys[1]).Editor()) {
 		t.Fatal("restored duplicate paths must share one document")
 	}
 }
