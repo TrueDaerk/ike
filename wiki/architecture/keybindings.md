@@ -212,6 +212,12 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   to another command — stays listed as an `(unbound)` row (#736): enter
   captures a fresh chord for the command, `r` removes exactly that chord's
   override (per-binding reset to the shipped default), `u` is a no-op.
+- Every **registered command without any binding** — plugin/palette-only
+  commands and configured custom tools (`tool.<name>`, #741) — is listed too,
+  as a `(no binding)` row trailing the list (#771). The rows come from the
+  registry (`Registry.Commands()`), match the `/` filter (also via the
+  literal words "no binding"), and enter captures the command's first chord
+  through the normal capture/conflict flow; `u`/`r` are no-ops.
 
 ## JetBrains keymap XML import (#677)
 

@@ -16,7 +16,7 @@ func keymapPage(t *testing.T) (*KeymapPage, config.Options) {
 	t.Helper()
 	restoreConfig(t)
 	opts := testOpts(t)
-	k := NewKeymapPage(opts, func(string) bool { return true })
+	k := NewKeymapPage(opts, func(string) bool { return true }, nil)
 	return k, opts
 }
 
@@ -379,5 +379,95 @@ func TestKeymapPageImportEscCancels(t *testing.T) {
 	}
 	if _, err := os.Stat(opts.UserPath); !os.IsNotExist(err) {
 		t.Fatalf("no settings file expected, err=%v", err)
+	}
+}
+
+// keymapPageWithCommands builds the page with a registry-command lister
+// (#771): never-bound registered commands appear as "(no binding)" rows.
+func keymapPageWithCommands(t *testing.T, cmds []CommandEntry) (*KeymapPage, config.Options) {
+	t.Helper()
+	restoreConfig(t)
+	opts := testOpts(t)
+	k := NewKeymapPage(opts, func(string) bool { return true }, func() []CommandEntry { return cmds })
+	return k, opts
+}
+
+func TestNeverBoundCommandsListedAndFilterable(t *testing.T) {
+	k, _ := keymapPageWithCommands(t, []CommandEntry{
+		{ID: "tool.lazygit", Title: "Tool: lazygit"},
+		{ID: "editor.write", Title: "Save file"}, // already bound: no extra row
+	})
+	rows := k.rows()
+	var found int
+	for _, r := range rows {
+		if r.Command == "tool.lazygit" {
+			if !r.nobind {
+				t.Fatal("tool.lazygit must be a nobind row")
+			}
+			found++
+		}
+	}
+	if found != 1 {
+		t.Fatalf("tool.lazygit rows = %d, want 1", found)
+	}
+	// A bound command must not gain a duplicate nobind row.
+	for _, r := range rows {
+		if r.Command == "editor.write" && r.nobind {
+			t.Fatal("editor.write is bound; no nobind row expected")
+		}
+	}
+	// Nobind rows sort last.
+	if last := rows[len(rows)-1]; !last.nobind {
+		t.Fatalf("nobind rows must trail the list, last = %+v", last)
+	}
+	// The / filter matches them by id and by the "no binding" keyword.
+	for _, needle := range []string{"lazygit", "no binding"} {
+		k.filter = needle
+		ok := false
+		for _, r := range k.rows() {
+			if r.Command == "tool.lazygit" {
+				ok = true
+			}
+		}
+		if !ok {
+			t.Fatalf("filter %q must match the nobind row", needle)
+		}
+	}
+	k.filter = "lazygit"
+	if v := k.View(160, 100); !strings.Contains(v, "(no binding)") {
+		t.Fatalf("view must render the (no binding) chord cell:\n%s", v)
+	}
+}
+
+func TestNeverBoundCommandCapturesFirstChord(t *testing.T) {
+	k, _ := keymapPageWithCommands(t, []CommandEntry{{ID: "tool.lazygit", Title: "Tool: lazygit"}})
+	rows := k.rows()
+	for i, r := range rows {
+		if r.Command == "tool.lazygit" {
+			k.sel = i
+		}
+	}
+	// u and r are no-ops on a never-bound row.
+	if cmd := k.Update(tea.KeyPressMsg{Code: 'u'}); cmd != nil {
+		t.Fatal("u must be a no-op on a never-bound row")
+	}
+	if cmd := k.Update(tea.KeyPressMsg{Code: 'r'}); cmd != nil {
+		t.Fatal("r must be a no-op on a never-bound row")
+	}
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !k.Capturing() {
+		t.Fatal("enter must start chord capture on a never-bound row")
+	}
+	k.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModAlt})
+	apply(t, k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+alt+g"), keymap.Global)
+	if !ok || nb.Command != "tool.lazygit" {
+		t.Fatalf("ctrl+alt+g must resolve to tool.lazygit, got %+v ok=%v", nb, ok)
+	}
+	// Once bound, the command shows as a normal user-layer row, not nobind.
+	for _, r := range k.rows() {
+		if r.Command == "tool.lazygit" && r.nobind {
+			t.Fatal("bound command must lose its nobind row")
+		}
 	}
 }

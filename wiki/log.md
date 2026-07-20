@@ -2,6 +2,10 @@
 
 ## 2026-07-20
 
+- Keymap page lists never-bound registered commands (#771): every registry
+  command without a binding — including configured tool commands — appears
+  as a `(no binding)` row, filterable via `/`, enter captures its first
+  chord. keybindings.md updated.
 - Terminal command completion popup (#740): auto-suggest while typing at
   the shell prompt + ctrl+space on demand; PATH commands, paths and make
   targets; accept pastes the remainder; inactive on the alt screen.
