@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 ---
 
 # Command Palette
@@ -85,6 +85,13 @@ rune that names a registered mode selects that mode and strips it from the query
 body; otherwise the **default mode** (config `palette.default_mode`, default `:`)
 ranks the whole query. Each `Item` carries the `tea.Msg` it activates, so the
 palette dispatches without knowing what any mode does.
+
+The query is a full single-line editor (`internal/ui.EditKey`, #763): a rune
+cursor over the raw query (prefix included) — arrows/home/end move it,
+`alt+left`/`alt+right` jump words, `alt+backspace`/`alt+delete` delete words,
+`delete` removes forward, typed and pasted text insert at the cursor.
+`queryView` renders the cursor inside the prefix-stripped body; the finder's
+input fields share the same helper.
 
 ## Command mode (`:`)
 

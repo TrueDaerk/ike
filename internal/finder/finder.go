@@ -18,6 +18,7 @@ import (
 	"ike/internal/locations"
 	"ike/internal/search"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // OpenLocationMsg asks the root model to open Path at the (1-based) Line and
@@ -60,6 +61,9 @@ type Model struct {
 
 	open  bool
 	focus field
+	// cur is the rune cursor within the focused field (#763); focus changes
+	// and programmatic field replacement reset it to the end.
+	cur int
 
 	query   string
 	replace string // replacement template (replace mode only)
@@ -125,6 +129,7 @@ func (m *Model) Open(root string) {
 	m.replaceMode = false
 	m.root = root
 	m.focus = fieldQuery
+	m.cur = len([]rune(m.query))
 	m.histIdx = -1
 	m.errText = ""
 	m.preselect = m.query != ""
@@ -279,10 +284,10 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	case "tab":
-		m.focus = m.nextField(1)
+		m.setFocus(m.nextField(1))
 		return nil
 	case "shift+tab":
-		m.focus = m.nextField(-1)
+		m.setFocus(m.nextField(-1))
 		return nil
 	case "down":
 		if m.list.Total() > 0 {
@@ -322,23 +327,28 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case "alt+down", "ctrl+down":
 		m.history(-1)
 		return nil
-	case "backspace":
-		f := m.focused()
-		if r := []rune(*f); len(r) > 0 {
-			*f = string(r[:len(r)-1])
+	}
+	// Everything else is single-line editing on the focused field (#763):
+	// cursor motions, word ops, insertion. The chords above keep priority.
+	f := m.focused()
+	if out, ncur, handled, changed := ui.EditKey(msg, *f, m.cur); handled {
+		if pre && m.focus == fieldQuery && len(out) > len(*f) {
+			// The key inserted text: it replaces the selected prefill (#277),
+			// so re-apply it to an empty field.
+			out, ncur, _, _ = ui.EditKey(msg, "", 0)
+		}
+		*f, m.cur = out, ncur
+		if changed {
 			m.editedField()
 		}
-		return nil
-	}
-	if msg.Text != "" && !strings.ContainsAny(msg.Text, "\n\r") {
-		f := m.focused()
-		if pre && m.focus == fieldQuery {
-			*f = "" // typing replaces the selected prefill (#277)
-		}
-		*f = *f + msg.Text
-		m.editedField()
 	}
 	return nil
+}
+
+// setFocus moves the input focus and parks the cursor at the field's end.
+func (m *Model) setFocus(f field) {
+	m.focus = f
+	m.cur = len([]rune(*m.focused()))
 }
 
 // layoutInfo maps content rows (0 = first row inside the border) to click
@@ -377,13 +387,14 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	}
 	switch cy {
 	case m.lay.query:
-		m.focus, m.preselect = fieldQuery, false
+		m.setFocus(fieldQuery)
+		m.preselect = false
 	case m.lay.replace:
-		m.focus = fieldReplace
+		m.setFocus(fieldReplace)
 	case m.lay.include:
-		m.focus = fieldInclude
+		m.setFocus(fieldInclude)
 	case m.lay.exclude:
-		m.focus = fieldExclude
+		m.setFocus(fieldExclude)
 	case m.lay.toggles:
 		for i, sp := range toggleSpans() {
 			if cx < sp[0] || cx >= sp[1] {
@@ -493,6 +504,7 @@ func (m *Model) history(dir int) {
 	} else {
 		m.query = m.hist[next]
 	}
+	m.cur = len([]rune(m.query))
 	m.rescan()
 }
 
@@ -580,13 +592,16 @@ func (m *Model) inputRow(label, value string, f field, width int) string {
 	pal := m.theme()
 	lab := lipgloss.NewStyle().Faint(true).Render(label + " ")
 	text := value
-	if f == fieldQuery && m.preselect && value != "" {
+	switch {
+	case f == fieldQuery && m.preselect && value != "":
 		// The remembered query is "selected" (#277): render it inverted so
 		// it reads as replace-on-type.
 		text = lipgloss.NewStyle().Reverse(true).Render(value)
-	}
-	if m.focus == f {
-		text += lipgloss.NewStyle().Reverse(true).Render(" ")
+		if m.focus == f {
+			text += lipgloss.NewStyle().Reverse(true).Render(" ")
+		}
+	case m.focus == f:
+		text = ui.CursorView(value, m.cur)
 	}
 	row := lab + text
 	if m.focus == f {

@@ -491,3 +491,60 @@ func TestWheelScrollsResults(t *testing.T) {
 		t.Fatalf("wheel must clamp at the top, got %d", m.list.Cursor())
 	}
 }
+
+// TestCursorEditing guards #763: arrows move within the query, typing
+// inserts at the cursor, word ops edit whole words.
+func TestCursorEditing(t *testing.T) {
+	m := opened(t)
+	typeText(m, "nedle")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	typeText(m, "e")
+	if m.query != "needle" {
+		t.Fatalf("insert at cursor: query = %q, want %q", m.query, "needle")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
+	typeText(m, " haystack")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModAlt})
+	if m.query != "needle " {
+		t.Fatalf("word delete: query = %q, want %q", m.query, "needle ")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDelete})
+	if m.query != "eedle " {
+		t.Fatalf("forward delete at home: query = %q, want %q", m.query, "eedle ")
+	}
+}
+
+// TestCursorFollowsFocus: switching fields parks the cursor at the end of
+// the newly focused field.
+func TestCursorFollowsFocus(t *testing.T) {
+	m := opened(t)
+	typeText(m, "abc")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
+	m.Update(key("tab")) // include field
+	typeText(m, "*.go")
+	if m.include != "*.go" {
+		t.Fatalf("include = %q, want %q", m.include, "*.go")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	typeText(m, "x") // back on query, cursor must be at the end
+	if m.query != "abcx" {
+		t.Fatalf("query after refocus = %q, want %q", m.query, "abcx")
+	}
+}
+
+// TestSpaceAndPaste: a bare space inserts, multi-rune text (bracketed paste)
+// lands wholesale — the two #735-class failure modes.
+func TestSpaceAndPaste(t *testing.T) {
+	m := opened(t)
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
+	if m.query != " " {
+		t.Fatalf("space must insert, query = %q", m.query)
+	}
+	m.Update(tea.KeyPressMsg{Text: "pasted text"})
+	if m.query != " pasted text" {
+		t.Fatalf("paste must insert wholesale, query = %q", m.query)
+	}
+}
