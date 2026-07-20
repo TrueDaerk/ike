@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Tools settings page (#755): Settings → Tools edits the `[[tools.custom]]`
+  list from the UI — add/edit/delete with a five-field inline form (name,
+  command, args, cwd, placement), validation (required fields, duplicate
+  names, placement enum), write-back at user scope and live reload of the
+  `tool.<name>` commands.
+
 - Custom TUI tool panes landed (#741): `[[tools.custom]]` config entries
   (name, command, args, cwd, placement) become `tool.<name>` palette
   commands opening a pane that runs the program directly. Toggle-focus

@@ -492,6 +492,8 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		_, ok := reg.Command(id)
 		return ok
 	})})
+	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
+	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
 	pages = append(pages, settings.Page{Title: "Toolchain", Custom: settings.NewToolchainPage(m.cfgOpts, ".", func() tea.Cmd {
 		// An interpreter change respawns the servers against the new value.
 		if c, ok := reg.Command("lsp.restart"); ok {
