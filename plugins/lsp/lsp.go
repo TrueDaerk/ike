@@ -50,6 +50,15 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().parameterInfo(h) },
 			},
 			{
+				// The caret line's diagnostics in a popup (#739): message,
+				// severity, source, rule code. Pure client state — the cached
+				// publishDiagnostics answer, no server round trip.
+				ID:    "lsp.diagnosticInfo",
+				Title: "LSP: Diagnostic Under Caret",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return h.Dispatch(ilsp.DiagnosticInfoMsg{}) },
+			},
+			{
 				ID:    "lsp.definition",
 				Title: "LSP: Go to Definition",
 				Scope: plugin.PaneScope("editor"),

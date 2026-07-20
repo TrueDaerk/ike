@@ -103,6 +103,10 @@ var jetbrainsRows = []row{
 	// above). f1 — the macOS JetBrains quick-doc key — is taken by the
 	// cheatsheet.
 	{"ctrl+q", "lsp.hover", "Quick documentation", Editor, "LSP (0100)"},
+	// JetBrains error description (#739): ctrl+f1 shows the caret line's
+	// diagnostics — message, severity, source, rule code. Modified F-keys
+	// deliver under the Kitty keyboard protocol (the 0081 reality probe).
+	{"ctrl+f1", "lsp.diagnosticInfo", "Diagnostic under caret", Editor, "LSP (0100)"},
 	// JetBrains parameter info (#523). cmd+p matches JetBrains where the
 	// terminal can deliver Cmd; ctrl+p is the everywhere-deliverable fallback
 	// (the palette's former default toggle chord — palette.toggle_key now

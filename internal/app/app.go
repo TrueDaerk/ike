@@ -2634,6 +2634,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case ilsp.DiagnosticInfoMsg:
+		// lsp.diagnosticInfo (#739): show the caret line's diagnostics in the
+		// hover popup — message, severity, source and rule code, so a false
+		// positive can be judged and attributed to its server.
+		if ed := m.activeEditor(); ed != nil {
+			if !ed.ShowDiagnostics() {
+				m.host.Notify(host.Info, "no diagnostics on this line")
+			}
+		}
+		return m, nil
+
 	case ilsp.DiagnosticsMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 

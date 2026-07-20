@@ -753,6 +753,51 @@ func (m Model) HoverAnchor() (col, line int) { return m.cursor.Col, m.cursor.Lin
 // dismissHover clears any hover popup (called on the next key).
 func (m *Model) dismissHover() { m.hover = nil }
 
+// --- diagnostic details popup (#739) ---
+
+// ShowDiagnostics opens the hover popup with every diagnostic covering the
+// caret line (#739): per entry a severity header — colored like the gutter
+// mark — with the server source and rule code ("pyright · reportXyz"), then
+// the message. Multiple entries separate with a rule. It reports whether any
+// diagnostic exists on the line; without one no popup opens.
+func (m *Model) ShowDiagnostics() bool {
+	ds := m.diagByLine[m.cursor.Line]
+	if len(ds) == 0 {
+		return false
+	}
+	var out []hoverLine
+	for i, d := range ds {
+		if i > 0 {
+			out = append(out, hoverLine{rule: true})
+		}
+		head := "● " + severityLabel(d.Severity)
+		if attr := diagAttribution(d); attr != "" {
+			head += " — " + attr
+		}
+		style := lipgloss.NewStyle().Foreground(m.diagColor(d.Severity)).Bold(true)
+		out = append(out, hoverLine{text: style.Render(head)})
+		for _, line := range strings.Split(d.Message, "\n") {
+			out = append(out, hoverLine{text: line})
+		}
+	}
+	m.hover = &hoverState{lines: out}
+	return true
+}
+
+// diagAttribution renders "source · code" for the popup header, whichever
+// parts the server sent — the handle for judging (and reporting) a false
+// positive.
+func diagAttribution(d ilsp.Diagnostic) string {
+	switch {
+	case d.Source != "" && d.Code != "":
+		return d.Source + " · " + d.Code
+	case d.Source != "":
+		return d.Source
+	default:
+		return d.Code
+	}
+}
+
 // --- document highlight (#172) ---
 
 // applyDocumentHighlights installs the occurrence marks for the symbol under

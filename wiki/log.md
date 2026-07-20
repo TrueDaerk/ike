@@ -2,6 +2,12 @@
 
 ## 2026-07-20
 
+- Diagnostic details popup (#739): `lsp.diagnosticInfo` (default `ctrl+f1`)
+  shows the caret line's diagnostics on the hover popup surface — severity
+  header colored like the gutter, server attribution (`source · code`,
+  `Diagnostic.Code` newly threaded through from the protocol), full message;
+  multiple entries separate with a rule. Clean line → info toast.
+
 - Editor tab limit (#742): `editor.tabs.limit` (default 5, 0 disables, also
   in Settings → Editor) caps document tabs per pane. Opening beyond it closes
   the least recently used eligible tab into the reopen ring; the active tab,

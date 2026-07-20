@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -39,7 +40,15 @@ type Diagnostic struct {
 	Severity int // protocol.Severity* (1=error … 4=hint)
 	Message  string
 	Source   string
+	// Code is the server's diagnostic code rendered as text (#739) — e.g.
+	// pyright's "reportGeneralTypeIssues" — the handle for looking a rule up
+	// or configuring it away; "" when the server sent none.
+	Code string
 }
+
+// DiagnosticInfoMsg asks the focused editor to show the diagnostics under the
+// caret in a popup (#739). Dispatched by lsp.diagnosticInfo.
+type DiagnosticInfoMsg struct{}
 
 // CompletionMsg delivers completion items for an in-flight request, anchored at
 // the cursor position the request was issued from.
@@ -410,9 +419,24 @@ func ConvertDiagnostics(p protocol.PublishDiagnosticsParams, lines []string, enc
 			Severity: d.Severity,
 			Message:  d.Message,
 			Source:   d.Source,
+			Code:     diagnosticCode(d.Code),
 		})
 	}
 	return out
+}
+
+// diagnosticCode renders the protocol's string-or-number diagnostic code as
+// text (#739); any other shape (or nil) yields "".
+func diagnosticCode(code any) string {
+	switch v := code.(type) {
+	case string:
+		return v
+	case float64: // JSON numbers decode as float64
+		return strconv.FormatInt(int64(v), 10)
+	case int:
+		return strconv.Itoa(v)
+	}
+	return ""
 }
 
 // ConvertCompletion maps protocol items to editor items, falling back to the
