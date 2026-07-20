@@ -31,6 +31,9 @@ type Model struct {
 	// label is a caller-set display name (the run configuration's name,
 	// #576); it wins over the OSC title in tab labels.
 	label string
+	// tool is the configured tool name when the session is a custom TUI tool
+	// pane (#741); "" for plain terminals and runs.
+	tool string
 	// scroll is the scrollback offset in lines (0 = live view). Paging keys
 	// (shift+pgup/pgdn) and the mouse wheel move it; any other key snaps back
 	// to live and goes to the shell.
@@ -109,6 +112,14 @@ func (m *Model) SetLabel(l string) { m.label = l }
 
 // Label returns the caller-set display name, "" when none.
 func (m Model) Label() string { return m.label }
+
+// SetTool marks the session as a custom TUI tool pane (#741) carrying the
+// configured tool name; chrome and persistence treat it as a tool, not a
+// terminal, and its exit closes the pane.
+func (m *Model) SetTool(name string) { m.tool = name }
+
+// Tool returns the configured tool name, "" for plain terminals and runs.
+func (m Model) Tool() string { return m.tool }
 
 // Pid returns the running child's process id, or 0 when there is none (#625).
 func (m Model) Pid() int {

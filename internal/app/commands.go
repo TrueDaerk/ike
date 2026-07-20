@@ -291,7 +291,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
-		), scratchCommands()...),
+		), append(scratchCommands(), toolCommands()...)...),
 	}
 }
 

@@ -701,6 +701,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			explorers++
 		} else if ids[key].Kind == "terminal" {
 			continue // restored below as a fresh shell in the saved position (#96)
+		} else if ids[key].Kind == "tool" {
+			continue // restored below restarting the configured tool (#741)
 		} else if ids[key].Kind == "markdown" {
 			continue // restored below re-reading the source file (#62)
 		} else if ids[key].Kind == "diff" {
@@ -755,6 +757,26 @@ func (m *Model) restoreLayout(cfg host.Config) {
 				shell = v
 			}
 			panes.AddTerminalKey(key, terminal.Shell(shell), dir, terminalEnv(), m.host.Send)
+			continue
+		}
+		if id := ids[key]; id.Kind == "tool" {
+			// A tool pane restores by restarting its configured program
+			// (#741); a tool no longer configured degrades to a fresh shell
+			// in the saved position rather than breaking the layout.
+			if entry, ok := toolEntry(id.Tool); ok {
+				dir := entry.Cwd
+				if dir == "" {
+					dir = "."
+				}
+				argv := append([]string{entry.Command}, entry.Args...)
+				panes.AddToolKey(key, entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send)
+			} else {
+				shell := ""
+				if v, ok := cfg.Get("terminal.shell"); ok {
+					shell = v
+				}
+				panes.AddTerminalKey(key, terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+			}
 			continue
 		}
 		if id := ids[key]; id.Kind == "vcs" {
@@ -2337,6 +2359,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case ToolOpenMsg:
+		// tool.<name> (#741): open the configured TUI tool pane, focus it
+		// when it exists, return focus when it is already focused.
+		m.openTool(msg.Name)
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {
@@ -2354,7 +2382,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
 		key := m.terminalPaneForSession(msg.Key)
-		if key != "" && m.panes.Get(key).Terminal().IsCommand() {
+		// A tool pane (#741) closes with its program (quitting lazygit closes
+		// the pane); other command sessions (#576) stay open — their output
+		// is the point of the run.
+		if key != "" && m.panes.Get(key).Terminal().IsCommand() &&
+			m.panes.Get(key).Terminal().Tool() == "" {
 			return m, nil
 		}
 		if key != "" {
@@ -5670,7 +5702,13 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 				title = bar
 			}
 		case pane.KindTerminal:
-			title = m.terminalTitle(inst)
+			// A tool pane (#741) is chromed as the tool, not as a terminal:
+			// no shell, no directory, no OSC title, no interpreter mappings.
+			if tool := inst.Terminal().Tool(); tool != "" {
+				title = "⚙ " + strings.ToUpper(tool)
+			} else {
+				title = m.terminalTitle(inst)
+			}
 		case pane.KindMarkdown:
 			title = "PREVIEW " + baseName(inst.Preview().Path())
 		case pane.KindDiff:
