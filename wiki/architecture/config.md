@@ -68,9 +68,12 @@ Sections and their default-bearing slots (`schema.go`):
 - `[theme]` — `name`, `dark` (the selector; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries
   (`path` absolute, `name` display name, `last_opened` RFC3339), plus
-  `max_history`, `restore_last`. The entry semantics — validation, upsert,
-  dedupe, cap — live in `internal/project` (Roadmap 0090); config only fixes
-  the persisted shape.
+  `max_history`, `restore_last`, and `max_workspaces` (0370 M4, #780: how
+  many live background workspaces seamless switching keeps, default 3;
+  exceeding it evicts the least-recently-used one, confirming first when
+  unsaved buffers or running processes would die). The entry semantics —
+  validation, upsert, dedupe, cap — live in `internal/project` (Roadmap
+  0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
 

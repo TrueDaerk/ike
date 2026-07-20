@@ -57,6 +57,21 @@ layout as before. Consequences:
   parked workspace waits until re-attach (the pane then shows its final
   state); nothing is torn down.
 
+## Cap & eviction (#780)
+
+`project.max_workspaces` (default 3, floor 1) bounds the background set.
+After every switch `enforceWorkspaceCap` (`internal/app/workspace_evict.go`)
+drops least-recently-used parked workspaces past the cap: an **idle** one
+(no dirty buffers, no running terminal/tool/command sessions or tabs, no
+parked debug session — `workspaceBusy`) tears down silently
+(`teardownWorkspace` closes every terminal session and disconnects a parked
+debug session; buffers need no teardown), a **busy** one opens the eviction
+guard — `e` evicts, `esc` keeps it over the limit until the next switch
+re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
+plain switching never prompts. Per-project layout/session persistence needs
+no extra machinery: every workspace's layout is saved at park time, so an
+evicted project restores from disk on its next visit like any first visit.
+
 ## Working-directory invariant (#779)
 
 **The process cwd always equals the active workspace's root.** Everything

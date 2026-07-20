@@ -2,6 +2,9 @@
 
 ## 2026-07-20
 
+- Background workspace cap & eviction (#780, 0370 M4): project.max_workspaces
+  (default 3) bounds parked workspaces; idle LRU evicts silently, busy ones
+  behind an e/esc guard. config.md + workspace.md updated.
 - Recent Projects column in Recent Files (#778, 0370 M3): cmd+e grows a
   left column listing recent projects; tab/arrows switch columns, enter
   switches project seamlessly. Generic palette SideMode extension.
