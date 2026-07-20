@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-19T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -105,9 +105,21 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 ## Terminal limits & fallback
 
 Many modifier combos (`Cmd+T`, `Ctrl+Tab`, `Cmd+1`) are intercepted by the
-terminal/OS and never reach the program; such bindings carry a `Fragile` flag so
-the cheatsheet can show the palette fallback. Every bound action stays
-reachable from the command palette (07), the universal escape hatch.
+terminal/OS and never reach the program; such bindings carry a `Fragile` flag.
+Every bound action stays reachable from the command palette (07), the
+universal escape hatch.
+
+Since #720 the palette/cheatsheet no longer appends "⚠ terminal-dependent" to
+fragile-only bindings — post-#711 every default is a Cmd/Alt chord, so the
+suffix marked the whole table and carried no signal. Instead the app probes
+the environment at startup (`internal/app/termcheck.go`): it collects
+bubbletea's `KeyboardEnhancementsMsg` (Kitty keyboard protocol handshake —
+silence within a 3s grace tick means "unsupported") and `ColorProfileMsg`,
+and detects tmux/screen from `$TMUX`/`$TERM`. Detected deficiencies open one
+centered floating report at startup (headline + fix per issue — missing Kitty
+protocol, tmux without extended-keys, sub-true-color profile), dismissed with
+esc; it waits for the tour/recovery/onboarding modals to clear first. The per-chord `Fragile` classes stay
+visible in the settings keymap page (per-row ⚠) and the reachability matrix.
 
 ## Default set
 

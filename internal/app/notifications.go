@@ -188,7 +188,13 @@ func (m Model) compositeToasts(base string) string {
 	for _, t := range visible {
 		sc := m.toastColor(t.sev)
 		icon := lipgloss.NewStyle().Foreground(sc).Bold(true).Render(toastIcon(t.sev))
-		msg := lipgloss.NewStyle().Foreground(pal.Foreground).MaxWidth(maxW).Render(t.text)
+		// MaxWidth truncates; long texts (e.g. the capability warnings, #720)
+		// must wrap instead, so Width kicks in when the line would overflow.
+		msgStyle := lipgloss.NewStyle().Foreground(pal.Foreground)
+		if lipgloss.Width(t.text) > maxW {
+			msgStyle = msgStyle.Width(maxW)
+		}
+		msg := msgStyle.Render(t.text)
 		body := lipgloss.JoinHorizontal(lipgloss.Top, icon, " ", msg)
 		box := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
