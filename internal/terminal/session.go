@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -111,7 +112,15 @@ func StartCommandSession(key string, argv []string, dir string, w, h int, extraE
 }
 
 // startSession is the shared spawn path; isCommand marks a program session.
+// sessSeq makes every session routing key globally unique (#777): pane keys
+// restart per registry ("terminal", "terminal:2"), so two workspaces would
+// otherwise mint colliding keys and a background shell's ExitedMsg could
+// close the active workspace's same-key pane. The key is opaque to every
+// consumer — matching goes through SessionKey() string equality only.
+var sessSeq uint64
+
 func startSession(key string, argv []string, isCommand bool, dir string, w, h int, extraEnv []string, send func(tea.Msg)) (*Session, error) {
+	key = key + "#" + strconv.FormatUint(atomic.AddUint64(&sessSeq, 1), 10)
 	if w < 2 || h < 2 {
 		w, h = 80, 24
 	}

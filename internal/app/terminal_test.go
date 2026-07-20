@@ -234,41 +234,6 @@ func TestTerminalLayoutRestoresFreshShell(t *testing.T) {
 	}
 }
 
-// TestTerminalSurvivesProjectSwitch guards #96: live sessions carry across a
-// switch, titled with their origin root; the new workspace adopts them.
-func TestTerminalSurvivesProjectSwitch(t *testing.T) {
-	base := t.TempDir()
-	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
-	for _, d := range []string{src, dst} {
-		if err := os.Mkdir(d, 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	t.Chdir(src)
-	m := switchModel(t)
-	out, _ := m.Update(TerminalNewMsg{})
-	m = out.(Model)
-	key := m.activeWS().Panes.Focused()
-	origin := m.activeWS().Panes.Get(key).Terminal().Dir()
-
-	out, _ = m.Update(project.SwitchProjectMsg{Root: dst})
-	m = out.(Model)
-	inst := m.activeWS().Panes.Get(key)
-	if inst == nil || inst.Kind() != pane.KindTerminal {
-		t.Fatal("live terminal should be adopted across the switch")
-	}
-	t.Cleanup(func() { inst.Terminal().Close() })
-	if !inst.Terminal().Running() {
-		t.Fatal("adopted session should keep running")
-	}
-	if inst.Terminal().Dir() != origin {
-		t.Fatalf("origin dir should be preserved, got %q", inst.Terminal().Dir())
-	}
-	if !strings.Contains(m.terminalTitle(inst), "src") {
-		t.Fatalf("title should mark the origin root, got %q", m.terminalTitle(inst))
-	}
-}
-
 // TestTerminalSwitchRoundTripNoDuplicates guards #320: switching away and
 // back restores the terminal leaf from the saved layout AND carries the live
 // session over. The live session must take over the restored placeholder —

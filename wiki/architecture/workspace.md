@@ -17,10 +17,13 @@ state the root model owns into one swappable unit:
   backing every layout leaf), `Tree` (the pure split-tree layout), and
   `ReturnFocus` (the pane focused before `terminal.toggle` / a tool command
   moved focus).
-- **`Manager`** — holds the **active** workspace (`Active`/`SetActive`).
-  M1 is single-workspace by design; the type exists so every call site is
-  already manager-shaped when M2 (#777) adds the background workspace map,
-  the LRU cap and the seamless-switch orchestration.
+- **`Manager`** — holds the **active** workspace (`Active`/`SetActive`)
+  plus the **background set** (#777): `Park` moves the active workspace into
+  a root-keyed map, `Resume(root)` pops it back, `Peek`/`Background` inspect
+  it (LRU order, least-recently-used first) and `Drop` is the M4 eviction
+  seam. Parked workspaces stay fully alive — PTY readers, run processes and
+  debug bridges never depended on being rendered. `Workspace.Aux` carries
+  app-owned live extras across the park (the debug session state).
 
 ## Root-model integration
 
@@ -32,10 +35,27 @@ that keeps panes, tree and focus one shared unit across copies; a later
 project switch swaps the whole workspace atomically instead of rebuilding
 fields one by one.
 
-`performSwitch` (Roadmap 0090) still rebuilds the model through the
-fresh-start path — the fresh model gets a fresh manager. M2 replaces that
-teardown with parking the old workspace in the manager's background set so
-terminals, runs and debug sessions keep running.
+## Seamless switching (#777)
+
+`performSwitch` persists the old project's session/layout, chdirs, **parks**
+the live workspace (debug state stashed in `Aux`) and rebuilds the model
+through the fresh-start path with the manager carried over: a parked
+workspace for the target root resumes exactly as left (layout/session
+restore from disk is skipped), a first visit builds panes from the saved
+layout as before. Consequences:
+
+- **Dirty buffers no longer gate the switch** — they park with the
+  workspace and come back unsaved; the unsaved-changes prompt returns as
+  the M4 eviction guard (#780).
+- **The #96 terminal adoption is retired**: terminals stay with their
+  project and keep running in the background instead of following into the
+  new workspace. Session routing keys carry a global sequence suffix
+  (`internal/terminal`, `sessSeq`) so same-named pane keys in two
+  workspaces can never cross-route Output/Exited messages — a background
+  exit is simply ignored until the workspace resumes.
+- **Background events are not applied**: a debug stop or terminal exit in a
+  parked workspace waits until re-attach (the pane then shows its final
+  state); nothing is torn down.
 
 ## Boundaries
 

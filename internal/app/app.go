@@ -442,14 +442,41 @@ func NewWith(reg *registry.Registry, cfg host.Config) Model {
 // wired to its pointer — the program sender, the LSP bridge's editor emitter,
 // plugin captures — survive the re-root.
 func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
+	return buildModel(reg, cfg, h, nil)
+}
+
+// buildModel is the constructor body. When mgr is non-nil (a seamless project
+// switch, #777) and it holds a parked workspace for the current root, that
+// workspace — live panes, split tree, running terminals/runs and the debug
+// session stashed in Aux — resumes as-is and the layout/session restore from
+// disk is skipped; everything not part of the workspace unit (config layer,
+// theme, watcher, MRU, breakpoints) still re-resolves against the new cwd.
+func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *workspace.Manager) Model {
 	h.SetConfig(cfg)
 	applyPluginConfig(reg, cfg)
 	themePal, themeWarning := resolveTheme(reg, cfg)
-	panes := pane.NewRegistry(cfg)
-	panes.SetPalette(themePal)
-	panes.AddExplorer()
-	edKey := panes.AddEditor()
-	panes.SetFocused(pane.ExplorerKey)
+	root, _ := os.Getwd()
+	var resumed *workspace.Workspace
+	if mgr != nil {
+		resumed = mgr.Resume(root)
+	}
+	var panes *pane.Registry
+	edKey := ""
+	if resumed != nil {
+		panes = resumed.Panes
+		for _, key := range panes.Keys() {
+			if inst := panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+				edKey = key
+				break
+			}
+		}
+	} else {
+		panes = pane.NewRegistry(cfg)
+		panes.SetPalette(themePal)
+		panes.AddExplorer()
+		edKey = panes.AddEditor()
+		panes.SetFocused(pane.ExplorerKey)
+	}
 	refs := &refsMode{}
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
@@ -462,7 +489,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	m := Model{
 		cmdUsage:     cmdUsage,
 		winSizes:     winSizes,
-		ws:           workspace.NewManager(workspace.New("", panes)),
+		ws:           wsManager(mgr, resumed, root, panes),
 		recentEditor: edKey,
 		recent:       recent,
 		largeToasted: map[string]bool{},
@@ -578,9 +605,19 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 	// the default palette until the first theme switch (#384).
 	m.applyTheme(themePal)
 	// Restore a saved per-project layout if one is structurally sound; an unknown
-	// or stale layout is dropped and the default is built on first size.
-	m.restoreLayout(cfg)
-	m.restoreSession()
+	// or stale layout is dropped and the default is built on first size. A
+	// resumed workspace (#777) is already live — restoring from disk would
+	// replace its running panes with placeholders.
+	if resumed == nil {
+		m.restoreLayout(cfg)
+		m.restoreSession()
+	} else if extras, ok := resumed.Aux.(wsExtras); ok {
+		// The debug session parked with the workspace re-attaches (#777).
+		m.dbg = extras.dbg
+		m.dbgLaunching = extras.dbgLaunching
+		m.dbgLaunchGen = extras.dbgLaunchGen
+		resumed.Aux = nil
+	}
 	// restoreLayout replaces m.activeWS().Panes with a fresh registry that never saw the
 	// applyTheme above (#722): without re-threading, every restored pane
 	// (explorer file colors, editor highlight captures) renders the default
@@ -595,6 +632,28 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 		m.host.Notify(host.Warn, themeWarning)
 	}
 	return m
+}
+
+// wsManager resolves the model's workspace manager (#777): a resumed switch
+// keeps the carried-over manager (its active slot already holds the parked
+// workspace), a fresh-root switch registers a new workspace on the carried
+// manager, and a plain start builds a single-workspace manager.
+func wsManager(mgr *workspace.Manager, resumed *workspace.Workspace, root string, panes *pane.Registry) *workspace.Manager {
+	if mgr == nil {
+		return workspace.NewManager(workspace.New(root, panes))
+	}
+	if resumed == nil {
+		mgr.SetActive(workspace.New(root, panes))
+	}
+	return mgr
+}
+
+// wsExtras is the app-owned per-workspace state stashed in Workspace.Aux
+// while parked (#777): live state that cannot be reloaded from disk.
+type wsExtras struct {
+	dbg          *debugState
+	dbgLaunching bool
+	dbgLaunchGen int
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
