@@ -57,6 +57,7 @@ import (
 	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/todoindex"
+	"ike/internal/toolcatalog"
 	"ike/internal/tour"
 	"ike/internal/ui"
 	"ike/internal/undotree"
@@ -187,6 +188,7 @@ type Model struct {
 	setupQueue    []string
 	themePick     *themePickState
 	toolchainInfo *toolchainInfoState
+	toolSetup     *toolSetupState
 	// tour holds the welcome tour (#657) while the shell shows it; tourPending
 	// flags the first-run auto-open (#658) until the window is sized.
 	tour        *tour.Tour
@@ -2367,6 +2369,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openTool(msg.Name)
 		return m, nil
 
+	case ShowToolSetupMsg:
+		// tools.setup (#751–#753): reopen the tool-pane setup dialog any time.
+		if !m.openToolSetup() {
+			m.host.Notify(host.Info, "all recommended tools are already configured — manage them in Settings → Tools")
+		}
+		return m, nil
+
+	case toolcatalog.InstallResultMsg:
+		// A tool install from the setup dialog or the Tools settings page
+		// finished (#751–#753, #759).
+		if msg.Err != nil {
+			text := "installing " + msg.Name + " failed: " + msg.Err.Error()
+			if msg.Detail != "" {
+				text += " (" + msg.Detail + ")"
+			}
+			m.host.Notify(host.Error, text)
+		} else {
+			m.host.Notify(host.Info, msg.Name+" is ready — open it with the tool."+toolSlug(msg.Name)+" command")
+		}
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {
@@ -3218,6 +3241,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.toolchainInfoOpen() {
 			return m.updateToolchainInfo(msg)
+		}
+		if m.toolSetupOpen() {
+			return m.updateToolSetup(msg)
 		}
 		// A tour suspended behind a try-it overlay (#680) resumes as soon as
 		// the screen is free — this key then behaves as if the tour never

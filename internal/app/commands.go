@@ -253,6 +253,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
+			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
