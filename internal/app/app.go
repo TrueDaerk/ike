@@ -5796,10 +5796,21 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		}
-		// alt+click toggles a secondary caret (#145); a plain click moves the
-		// cursor and collapses the caret set.
+		// alt+click toggles a secondary caret (#145); cmd+click navigates to
+		// the clicked symbol's definition (#859) — cursor first (the click
+		// emits the cursor move the LSP bridge reads), then the same command
+		// F4 runs, which also records nav history via the DefinitionMsg
+		// funnel; a plain click moves the cursor and collapses the caret set.
 		if msg.Mod&tea.ModAlt != 0 {
 			inst.Editor().AltClick(localX, localY)
+		} else if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 && msg.Button == tea.MouseLeft {
+			ed := inst.Editor()
+			ed.MouseClick(localX, localY)
+			if ed.HasFile() {
+				if c, ok := m.reg.Command("lsp.definition"); ok {
+					return m, m.dispatchCommand("lsp.definition", c)
+				}
+			}
 		} else {
 			inst.Editor().MouseClick(localX, localY)
 		}
