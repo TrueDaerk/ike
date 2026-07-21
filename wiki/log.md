@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-21
+
+- External git changes refresh the VCS snapshot (#738): the watch service now
+  watches `.git` + `.git/logs` and emits a coalesced `GitChanged` event, so
+  commits/checkouts/staging done in a lazygit pane or terminal update gutter
+  marks, statusline branch and explorer coloring automatically
+  (`/architecture/vcs.md`).
+
 ## 2026-07-20
 
 - Background workspace cap & eviction (#780, 0370 M4): project.max_workspaces

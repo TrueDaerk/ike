@@ -318,6 +318,17 @@ func TestVCSWatcherEventArmsDebounce(t *testing.T) {
 	}
 }
 
+// TestVCSGitChangedArmsDebounce guards #738: repository metadata changes
+// reported by the watcher (external commit, branch switch, staging) arm the
+// snapshot refresh like any working-tree event.
+func TestVCSGitChangedArmsDebounce(t *testing.T) {
+	m := vcsApp(t)
+	_, cmd := m.Update(watch.EventMsg{Kind: watch.GitChanged, Path: "/r/.git"})
+	if cmd == nil || !m.vcs.tickArmed {
+		t.Fatalf("GitChanged must arm the vcs debounce tick (cmd=%v armed=%v)", cmd, m.vcs.tickArmed)
+	}
+}
+
 func TestVCSSaveInvalidateArmsDebounce(t *testing.T) {
 	m := vcsApp(t)
 	if _, cmd := m.Update(vcsInvalidateMsg{}); cmd == nil || !m.vcs.tickArmed {

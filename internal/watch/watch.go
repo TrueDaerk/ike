@@ -32,6 +32,10 @@ const (
 	// DirChanged is a directory whose entries changed (create/remove/rename
 	// below it); the explorer refreshes from it.
 	DirChanged
+	// GitChanged is a change to the repository metadata under .git (commit,
+	// branch switch, staging, pull — #738); the root model refreshes the VCS
+	// snapshot from it. Path carries the .git directory.
+	GitChanged
 )
 
 // EventMsg is one debounced, coalesced filesystem event. The root model routes
@@ -149,8 +153,32 @@ func (s *Service) Start(root string) error {
 		_ = w.Add(path)
 		return nil
 	})
+	s.watchGitDir(root)
 	go s.loop(w)
 	return nil
+}
+
+// watchGitDir adds the repository metadata watches (#738): the .git directory
+// and .git/logs. HEAD, index and packed-refs live at the .git top level, and
+// the reflog (logs/HEAD) is appended by every commit, checkout, reset, merge
+// and pull — so external git commands surface as GitChanged without watching
+// the noisy objects tree. A .git *file* (linked worktree, submodule) is left
+// unwatched. Not part of the recursive walk: skipWatchDir prunes dot dirs.
+func (s *Service) watchGitDir(root string) {
+	git := filepath.Join(root, ".git")
+	if st, err := os.Stat(git); err != nil || !st.IsDir() {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.w == nil {
+		return
+	}
+	_ = s.w.Add(git)
+	logs := filepath.Join(git, "logs")
+	if st, err := os.Stat(logs); err == nil && st.IsDir() {
+		_ = s.w.Add(logs)
+	}
 }
 
 // Stop ends the watcher goroutine. Safe on a stopped service.
@@ -207,7 +235,8 @@ func (s *Service) loop(w *fsnotify.Watcher) {
 // ingest maps one raw fsnotify event onto the debounce state.
 func (s *Service) ingest(ev fsnotify.Event) {
 	path := ev.Name
-	if strings.Contains(path, string(filepath.Separator)+".git"+string(filepath.Separator)) {
+	if gitDir, ok := underGitDir(path); ok {
+		s.ingestGit(ev, path, gitDir)
 		return
 	}
 	switch {
@@ -234,6 +263,40 @@ func (s *Service) ingest(ev fsnotify.Event) {
 	case ev.Has(fsnotify.Write):
 		s.note(path, FileChanged)
 	}
+}
+
+// ingestGit maps one raw event under .git onto a coalesced GitChanged for the
+// repo's .git directory (#738). Lock and temp files churn on every git command
+// without signaling a state change, so they are dropped; a directory created
+// directly under a watched git dir (a fresh repo growing .git/logs) is added
+// to the watch so the reflog is covered from the first commit on.
+func (s *Service) ingestGit(ev fsnotify.Event, path, gitDir string) {
+	base := filepath.Base(path)
+	if strings.HasSuffix(base, ".lock") || strings.HasPrefix(base, "tmp_") {
+		return
+	}
+	if ev.Has(fsnotify.Create) {
+		if st, err := os.Stat(path); err == nil && st.IsDir() {
+			s.mu.Lock()
+			if s.w != nil {
+				_ = s.w.Add(path)
+			}
+			s.mu.Unlock()
+			return
+		}
+	}
+	s.note(gitDir, GitChanged)
+}
+
+// underGitDir reports whether path lies inside a .git directory and returns
+// that directory.
+func underGitDir(path string) (string, bool) {
+	marker := string(filepath.Separator) + ".git" + string(filepath.Separator)
+	idx := strings.Index(path, marker)
+	if idx < 0 {
+		return "", false
+	}
+	return path[:idx+len(marker)-1], true
 }
 
 // note records one coalesced event and (re)arms the debounce flush. It is the
