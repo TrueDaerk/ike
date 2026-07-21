@@ -47,10 +47,14 @@ const (
 )
 
 // row is one visible form line: an entry plus the page it came from (the
-// filter flattens entries across pages).
+// filter flattens entries across pages). Filter results may also be page
+// jumps or custom-page items (#886).
 type row struct {
-	page  int
-	entry Entry
+	page     int
+	entry    Entry
+	kind     rowKind
+	label    string // display text for rowPage/rowItem
+	activate func() // rowItem positioning
 }
 
 // Model is the settings panel state. Values are never cached: every render
@@ -220,7 +224,21 @@ func (m *Model) rows() []row {
 	}
 	needle := strings.ToLower(m.filter)
 	for pi, p := range m.pages {
+		// Category titles match as jump rows (#886).
+		if strings.Contains(strings.ToLower(p.Title), needle) {
+			out = append(out, row{page: pi, kind: rowPage, label: p.Title})
+		}
 		if p.Custom != nil {
+			// Custom pages export their items through the Searchable seam
+			// (#886); enter navigates there.
+			if sp, ok := p.Custom.(Searchable); ok {
+				for _, it := range sp.SearchItems() {
+					hay := strings.ToLower(p.Title + " " + it.Label + " " + it.Keywords)
+					if strings.Contains(hay, needle) {
+						out = append(out, row{page: pi, kind: rowItem, label: p.Title + " › " + it.Label, activate: it.Activate})
+					}
+				}
+			}
 			continue
 		}
 		for _, e := range p.Entries {
@@ -276,9 +294,11 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if row < 0 || row >= m.height-4 {
 		return nil
 	}
-	// Category column.
-	if x >= 1 && x < 1+catWidth && m.filter == "" {
+	// Category column. A rail click while filtering clears the filter and
+	// jumps to the page (#886 — the rail is never dead).
+	if x >= 1 && x < 1+catWidth {
 		if idx := row + m.catOff; idx < len(m.pages) {
+			m.filter, m.filtering = "", false
 			m.cat, m.sel, m.focus = idx, 0, catColumn
 			m.followCat, m.followForm = true, true
 		}
@@ -534,7 +554,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.activate()
 	case "r":
-		if r, ok := m.current(); ok && m.focus == formColumn {
+		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry {
 			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
 		}
 	case "s":
@@ -567,6 +587,10 @@ func (m *Model) move(dir int) {
 func (m *Model) activate() tea.Cmd {
 	r, ok := m.current()
 	if !ok {
+		return nil
+	}
+	if r.kind != rowEntry {
+		m.activateResult(r)
 		return nil
 	}
 	e := r.entry
@@ -612,7 +636,7 @@ func optionIndex(e Entry, val string) int {
 // option; nil when the selection is not an enum.
 func (m *Model) cycleEnum(dir int) tea.Cmd {
 	r, ok := m.current()
-	if !ok || r.entry.Type != Enum || len(r.entry.Options) == 0 {
+	if !ok || r.kind != rowEntry || r.entry.Type != Enum || len(r.entry.Options) == 0 {
 		return nil
 	}
 	e := r.entry
