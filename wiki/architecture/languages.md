@@ -112,7 +112,11 @@ importable; matches `Dockerfile`/`Containerfile` by exact base name plus the
 `.dockerfile` extension), and `yaml` (#879, tree-sitter-grammars/tree-sitter-yaml;
 multi-line mapping pairs are sticky-scroll scopes, and `IndentAfter` is limited
 to `":"` + block-scalar introducers so sibling keys never get auto-indented
-wrongly — YAML is indentation-sensitive).
+wrongly — YAML is indentation-sensitive), and `shell` (#894, official
+tree-sitter-bash — covers sh/zsh for highlighting; matches `.sh`/`.bash`/`.zsh`,
+the rc-file base names `.bashrc` `.zshrc` `.bash_profile` `.profile`
+`.zprofile`, and extensionless scripts via interpreters `sh` `bash` `zsh`
+`dash`).
 The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
@@ -276,6 +280,7 @@ uv is present — it works even in envs without pip — else
 | TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics; also available via cargo/brew. IKE's own config is TOML. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
+| Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
