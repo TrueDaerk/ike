@@ -70,6 +70,10 @@ type Palette struct {
 	sideItems []Item
 	sideSel   int
 	sideFocus bool
+	// sideManual marks an explicit column switch (tab/arrows/click) for the
+	// current query (#819): while set, recompute keeps the user's column
+	// instead of auto-placing the focus; any query edit clears it.
+	sideManual bool
 	maxResults    int
 	accent        string         // config override; "" follows the theme
 	pal           *theme.Palette // active theme (Roadmap 0110); nil = default
@@ -178,6 +182,7 @@ func (p *Palette) reset(cx Context) {
 	p.sideFocus = false
 	p.sideSel = 0
 	p.sideItems = nil
+	p.sideManual = false
 }
 
 // side returns the locked mode's SideMode extension, nil when the current
@@ -234,12 +239,15 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		switch {
 		case msg.Code == tea.KeyTab && msg.Mod == 0:
 			p.sideFocus = !p.sideFocus
+			p.sideManual = true
 			return nil
 		case msg.Code == tea.KeyLeft && msg.Mod == 0 && p.query == "":
 			p.sideFocus = true
+			p.sideManual = true
 			return nil
 		case msg.Code == tea.KeyRight && msg.Mod == 0 && p.query == "":
 			p.sideFocus = false
+			p.sideManual = true
 			return nil
 		}
 		if p.sideFocus {
@@ -284,6 +292,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 			if out := c.Complete(body); out != body {
 				p.query = p.query[:len(p.query)-len(body)] + out
 				p.cur = len([]rune(p.query))
+				p.sideManual = false
 				p.recompute()
 				return p.liveKick()
 			}
@@ -292,6 +301,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 		p.query = ""
 		p.cur = 0
+		p.sideManual = false
 		p.recompute()
 		return p.liveKick()
 	}
@@ -300,6 +310,7 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if out, ncur, handled, changed := ui.EditKey(msg, p.query, p.cur); handled {
 		p.query, p.cur = out, ncur
 		if changed {
+			p.sideManual = false
 			p.recompute()
 			return p.liveKick()
 		}
@@ -399,7 +410,7 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 			if idx < 0 || idx >= len(p.sideItems) {
 				return nil
 			}
-			p.sideFocus, p.sideSel = true, idx
+			p.sideFocus, p.sideSel, p.sideManual = true, idx, true
 			it := p.sideItems[idx]
 			if it.Aux != nil && x >= sideW-auxGlyphW {
 				return p.auxCmd()
@@ -415,6 +426,7 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 		return nil
 	}
 	p.sideFocus = false
+	p.sideManual = true
 	p.selected = idx
 	it := p.items[idx]
 	if it.Aux != nil && x >= mainX+mainW-auxGlyphW {
@@ -467,12 +479,27 @@ func (p *Palette) recompute() {
 	} else {
 		p.sideItems = nil
 	}
-	if p.sideSel >= len(p.sideItems) {
-		p.sideSel = 0
-	}
+	p.sideSel = 0
 	if len(p.sideItems) == 0 {
 		p.sideFocus = false
+	} else if !p.sideManual {
+		p.sideFocus = p.autoSideFocus(body)
 	}
+}
+
+// autoSideFocus decides which column holds the focus after a recompute
+// (#819): the side (projects) column when the main list is empty, or when
+// its top result strictly outscores the main list's — a project matching the
+// query better than any file makes enter open the project. Files win ties,
+// and an empty query always starts on a non-empty files list.
+func (p *Palette) autoSideFocus(query string) bool {
+	if len(p.items) == 0 {
+		return true
+	}
+	if query == "" {
+		return false
+	}
+	return p.sideItems[0].Score > p.items[0].Score
 }
 
 // scrollToSelected keeps the selected row within the visible window.
