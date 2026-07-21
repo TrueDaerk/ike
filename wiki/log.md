@@ -2,6 +2,13 @@
 
 ## 2026-07-21
 
+- Project settings on switch + live reload (0380, #795): the switch's config
+  reload applies the incoming project's `.ike/settings.toml` and drops the
+  outgoing one's; the file watcher now watches `<root>/.ike` and an external
+  `settings.toml` edit reloads the config without restart
+  (`/architecture/project-switching.md`, `/architecture/config.md`). Epic
+  0380 complete.
+
 - Settings write-scope selector (0380, #794): `s` in the settings panel
   cycles auto/user/project as the write target for edits and resets, with a
   `[scope: …]` title chip; project writes create `.ike/settings.toml` on

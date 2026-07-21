@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -85,3 +85,14 @@ subsystem (it must not import editor/explorer), the root model routes:
 4. Afterwards `RecordOpenCmd` writes the history (success only) and
    `SwitchedMsg` toasts; the recorded write triggers a config reload so the
    picker's in-memory history is already current.
+
+**Settings scope (0380, #795).** The config reload inside `performSwitch`
+runs after the chdir, so the incoming project's `.ike/settings.toml` layer
+applies and the outgoing project's overrides drop in the same step — theme,
+keymap, editor behavior and the other consumers re-apply through the normal
+`reloadConfig` path, no restart. Load diagnostics of the incoming layer
+toast like any reload (#793). While a project is open, the file watcher
+holds a dedicated watch on `<root>/.ike` (created late or present from the
+start): an external edit of `settings.toml` surfaces as
+`watch.ConfigChanged` and re-runs the reload pipeline; the sibling state
+stores (layout/session/usage) stay silent.

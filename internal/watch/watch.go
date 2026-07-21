@@ -36,6 +36,10 @@ const (
 	// branch switch, staging, pull — #738); the root model refreshes the VCS
 	// snapshot from it. Path carries the .git directory.
 	GitChanged
+	// ConfigChanged is an external edit of the project settings file
+	// (<root>/.ike/settings.toml, 0380 #795); the root model re-runs the
+	// config reload pipeline from it. Path carries the settings file.
+	ConfigChanged
 )
 
 // EventMsg is one debounced, coalesced filesystem event. The root model routes
@@ -154,8 +158,25 @@ func (s *Service) Start(root string) error {
 		return nil
 	})
 	s.watchGitDir(root)
+	s.watchConfigDir(root)
 	go s.loop(w)
 	return nil
+}
+
+// watchConfigDir adds the project config-directory watch (0380, #795):
+// <root>/.ike holds settings.toml, whose external edits must reload the
+// config. Not part of the recursive walk — skipWatchDir prunes dot dirs.
+// A missing .ike is picked up by ingest when it is created later.
+func (s *Service) watchConfigDir(root string) {
+	dir := filepath.Join(root, ".ike")
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.w != nil {
+		_ = s.w.Add(dir)
+	}
 }
 
 // watchGitDir adds the repository metadata watches (#738): the .git directory
@@ -239,12 +260,31 @@ func (s *Service) ingest(ev fsnotify.Event) {
 		s.ingestGit(ev, path, gitDir)
 		return
 	}
+	if s.inConfigDir(path) {
+		// Only the settings file matters under .ike (0380, #795): the layout,
+		// session and usage stores churn on IKE's own writes and stay silent.
+		if filepath.Base(path) == fileNameSettings &&
+			(ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename)) {
+			s.note(path, ConfigChanged)
+		}
+		return
+	}
 	switch {
 	case ev.Has(fsnotify.Create):
 		if st, err := os.Stat(path); err == nil && st.IsDir() {
 			// A new directory: watch it (unless it is vendored noise — e.g. a
 			// mid-session `pip install` populating .venv, which would otherwise
 			// start thousands of new watches, #596) and refresh its parent.
+			// A freshly created <root>/.ike is the exception (#795): it is
+			// watched so a first project-scope settings write is seen.
+			if filepath.Base(path) == ".ike" && filepath.Dir(path) == s.rootDir() {
+				s.mu.Lock()
+				if s.w != nil {
+					_ = s.w.Add(path)
+				}
+				s.mu.Unlock()
+				return
+			}
 			if !skipWatchDir(filepath.Base(path)) {
 				s.mu.Lock()
 				if s.w != nil {
@@ -286,6 +326,23 @@ func (s *Service) ingestGit(ev fsnotify.Event, path, gitDir string) {
 		}
 	}
 	s.note(gitDir, GitChanged)
+}
+
+// fileNameSettings is the settings file name inside <root>/.ike (mirrors
+// internal/config; kept literal so watch stays dependency-free).
+const fileNameSettings = "settings.toml"
+
+// rootDir returns the current watch root.
+func (s *Service) rootDir() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.root
+}
+
+// inConfigDir reports whether path lies directly inside the watch root's
+// .ike directory (0380, #795).
+func (s *Service) inConfigDir(path string) bool {
+	return filepath.Dir(path) == filepath.Join(s.rootDir(), ".ike")
 }
 
 // underGitDir reports whether path lies inside a .git directory and returns
