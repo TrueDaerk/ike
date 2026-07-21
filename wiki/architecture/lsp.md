@@ -140,6 +140,14 @@ buffer-size delta since the last jump shifts later stops, the sequential
 fill-in shape — and esc (leaving insert mode) or jumping past the last stop
 ends the session, returning tab to normal indentation.
 
+**Auto-import (#848).** An accepted item's `additionalTextEdits` — the "type a
+name, the import appears" behavior — apply through the same insert recorder as
+the main insert (one undo step), bottom-up, before the identifier replacement;
+the manager converts them to editor coordinates against the synced document
+(`ConvertCompletionItems`), and the cursor/carets shift by the line delta of
+edits above them. Fragment-routed completions (0300) drop additional edits —
+they would target the virtual document.
+
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,

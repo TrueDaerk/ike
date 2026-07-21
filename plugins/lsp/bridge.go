@@ -1180,7 +1180,7 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 		if err != nil || len(items) == 0 {
 			return
 		}
-		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: ilsp.ConvertCompletion(items)})
+		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: mgr.ConvertCompletionItems(path, items)})
 	}()
 }
 

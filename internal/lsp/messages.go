@@ -73,6 +73,9 @@ type CompletionItem struct {
 	// IsSnippet marks InsertText as LSP snippet syntax (#846); the editor
 	// expands it (internal/lsp/snippet) and runs a tabstop session on accept.
 	IsSnippet bool
+	// AdditionalEdits are the item's additionalTextEdits (auto-import, #848)
+	// in editor coordinates, applied alongside the accept's main insert.
+	AdditionalEdits []FormatEdit
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.

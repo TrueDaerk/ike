@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Completion auto-import (0410, #848): `additionalTextEdits` on accepted
+  items apply in editor coordinates alongside the main insert, one undo step
+  (`/architecture/lsp.md`).
+
 - Snippet completions (0410, #846): the client declares `snippetSupport`;
   snippet insert texts expand via `internal/lsp/snippet` and accepted items
   with tabstops run a tab/shift+tab placeholder session in the editor

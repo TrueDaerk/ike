@@ -275,9 +275,10 @@ type CompletionItem struct {
 	Documentation    any       `json:"documentation,omitempty"`
 	InsertText       string    `json:"insertText,omitempty"`
 	TextEdit         *TextEdit `json:"textEdit,omitempty"`
-	SortText         string    `json:"sortText,omitempty"`
-	FilterText       string    `json:"filterText,omitempty"`
-	InsertTextFormat int       `json:"insertTextFormat,omitempty"`
+	SortText            string     `json:"sortText,omitempty"`
+	FilterText          string     `json:"filterText,omitempty"`
+	InsertTextFormat    int        `json:"insertTextFormat,omitempty"`
+	AdditionalTextEdits []TextEdit `json:"additionalTextEdits,omitempty"`
 }
 
 // InsertTextFormat values (LSP): 1 = plain text, 2 = snippet syntax.

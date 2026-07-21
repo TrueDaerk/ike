@@ -337,6 +337,12 @@ func (m *Model) completionAccept() {
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
+	// Auto-import first (#848): additionalTextEdits land away from the cursor
+	// (typically the import block), so applying them before the main insert
+	// keeps the item's coordinates valid; the cursor and carets shift by the
+	// line delta of edits above them. Same recorder, so esc undoes the accept
+	// and its import as one step.
+	m.applyCompletionExtraEdits(item.AdditionalEdits)
 	// Replace the partial identifier already typed before the cursor with the
 	// item's insert text — at every caret when carets are active (#145). The
 	// replacement starts at the identifier boundary (not the request anchor):
@@ -351,6 +357,46 @@ func (m *Model) completionAccept() {
 	m.dirtyFromInsert()
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
+	}
+}
+
+// applyCompletionExtraEdits applies an accepted item's additionalTextEdits
+// (auto-import, #848) through the open insert recorder, bottom-up so earlier
+// positions stay valid. The cursor and secondary carets shift by the line
+// delta of every edit that ends strictly above them (the import-block shape);
+// same-line edits before the cursor are left unadjusted.
+func (m *Model) applyCompletionExtraEdits(edits []ilsp.FormatEdit) {
+	if len(edits) == 0 {
+		return
+	}
+	sorted := make([]ilsp.FormatEdit, len(edits))
+	copy(sorted, edits)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].StartLine != sorted[j].StartLine {
+			return sorted[i].StartLine > sorted[j].StartLine
+		}
+		return sorted[i].StartCol > sorted[j].StartCol
+	})
+	for _, e := range sorted {
+		m.insert.rec.Apply(buffer.Edit{
+			Range: buffer.Range{
+				Start: buffer.Position{Line: e.StartLine, Col: e.StartCol},
+				End:   buffer.Position{Line: e.EndLine, Col: e.EndCol},
+			},
+			Text: e.Text,
+		})
+		delta := strings.Count(e.Text, "\n") - (e.EndLine - e.StartLine)
+		if delta == 0 {
+			continue
+		}
+		if e.EndLine < m.cursor.Line {
+			m.cursor.Line += delta
+		}
+		for i := range m.carets {
+			if e.EndLine < m.carets[i].pos.Line {
+				m.carets[i].pos.Line += delta
+			}
+		}
 	}
 }
 
