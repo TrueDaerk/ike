@@ -58,10 +58,13 @@ func (m *Model) View() string {
 	if r, ok := m.current(); ok && m.editing && r.entry.Type == Path {
 		hintText = " tab complete path · enter apply · esc cancel"
 	}
+	if m.SubOpen() {
+		hintText = " esc back · click a button"
+	}
 	hint := lipgloss.NewStyle().Foreground(pal.Secondary).Render(hintText)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
-	return lipgloss.NewStyle().
+	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(pal.BorderFocus).
 		Background(pal.Surface).
@@ -69,6 +72,11 @@ func (m *Model) View() string {
 		Width(m.width).
 		Height(m.height).
 		Render(content)
+	if m.SubOpen() {
+		// The open sub-panel (#883) composes centered over the panel.
+		return m.renderSub(box)
+	}
+	return box
 }
 
 // renderFilter shows the live filter input on the title row.

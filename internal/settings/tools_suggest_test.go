@@ -62,7 +62,7 @@ func suggestEntry(name string) toolcatalog.Entry {
 
 func TestToolsPageSuggestionsListAndAdd(t *testing.T) {
 	suggestStub(t, []string{"sugtool-bin"}, suggestEntry("sugtool"))
-	p := toolsPage(t)
+	p, _ := toolsPage(t)
 	p.Update(key("s"))
 	if !p.Capturing() {
 		t.Fatal("s must open the suggestion picker and capture keys")
@@ -83,8 +83,8 @@ func TestToolsPageSuggestionsListAndAdd(t *testing.T) {
 
 func TestToolsPageSuggestionsExcludeConfigured(t *testing.T) {
 	suggestStub(t, nil, suggestEntry("donetool"))
-	p := toolsPage(t)
-	addTool(t, p, "donetool", "donetool-bin")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "donetool", "donetool-bin")
 	p.Update(key("s"))
 	if p.Capturing() {
 		t.Fatal("picker must not open when everything is configured")
@@ -96,7 +96,7 @@ func TestToolsPageSuggestionsExcludeConfigured(t *testing.T) {
 
 func TestToolsPageSuggestionsEscBack(t *testing.T) {
 	suggestStub(t, nil, suggestEntry("backtool"))
-	p := toolsPage(t)
+	p, _ := toolsPage(t)
 	p.Update(key("s"))
 	p.Update(key("esc"))
 	if p.Capturing() {
@@ -119,7 +119,7 @@ func TestToolsPageSuggestionAddInstallsMissing(t *testing.T) {
 	}
 	t.Cleanup(func() { toolcatalog.RunInstall = origRun })
 
-	p := toolsPage(t)
+	p, _ := toolsPage(t)
 	p.Update(key("s"))
 	cmd := p.Update(key("enter"))
 	if cmd == nil {

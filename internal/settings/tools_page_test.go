@@ -9,57 +9,85 @@ import (
 	"ike/internal/config"
 )
 
-func toolsPage(t *testing.T) *ToolsPage {
-	t.Helper()
-	restoreConfig(t)
-	return NewToolsPage(testOpts(t))
+// stubHost collects pushed sub-panels for page-level tests (#883).
+type stubHost struct{ stack []SubPanel }
+
+func (s *stubHost) Push(sp SubPanel) { s.stack = append(s.stack, sp) }
+func (s *stubHost) Pop() {
+	if len(s.stack) > 0 {
+		s.stack = s.stack[:len(s.stack)-1]
+	}
+}
+func (s *stubHost) top() SubPanel {
+	if len(s.stack) == 0 {
+		return nil
+	}
+	return s.stack[len(s.stack)-1]
 }
 
-// typeText feeds a string into the page rune by rune.
-func typeText(p *ToolsPage, s string) {
+func toolsPage(t *testing.T) (*ToolsPage, *stubHost) {
+	t.Helper()
+	restoreConfig(t)
+	p := NewToolsPage(testOpts(t))
+	h := &stubHost{}
+	p.SetSubPanelHost(h)
+	return p, h
+}
+
+// form returns the open tool form, failing when none is pushed.
+func form(t *testing.T, h *stubHost) *toolForm {
+	t.Helper()
+	f, ok := h.top().(*toolForm)
+	if !ok {
+		t.Fatal("expected an open tool form sub-panel")
+	}
+	return f
+}
+
+// typeText feeds a string into the open form rune by rune.
+func typeText(f *toolForm, s string) {
 	for _, r := range s {
-		p.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		f.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
 }
 
 // addTool drives the full add flow: open form, fill name/command, save.
-func addTool(t *testing.T, p *ToolsPage, name, command string) {
+func addTool(t *testing.T, p *ToolsPage, h *stubHost, name, command string) {
 	t.Helper()
 	p.Update(key("a"))
-	if !p.Capturing() {
-		t.Fatal("a must open the form and capture keys")
+	f := form(t, h)
+	typeText(f, name)
+	f.Update(key("tab"))
+	typeText(f, command)
+	apply(t, f.Update(key("enter")))
+	if h.top() != nil {
+		t.Fatal("save must pop the form")
 	}
-	typeText(p, name)
-	p.Update(key("tab"))
-	typeText(p, command)
-	apply(t, p.Update(key("enter")))
 }
 
 func TestToolsPageAddWritesAndReloads(t *testing.T) {
-	p := toolsPage(t)
-	addTool(t, p, "lazygit", "lazygit")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "lazygit", "lazygit")
 	got := config.Get().Tools.Custom
 	if len(got) != 1 || got[0].Name != "lazygit" || got[0].Command != "lazygit" {
 		t.Fatalf("entries after add = %+v", got)
 	}
-	if p.Capturing() {
-		t.Fatal("save must close the form")
-	}
 }
 
 func TestToolsPageAddAllFields(t *testing.T) {
-	p := toolsPage(t)
+	p, h := toolsPage(t)
 	p.Update(key("a"))
-	typeText(p, "sq")
-	p.Update(key("tab"))
-	typeText(p, "sqlit")
-	p.Update(key("tab"))
-	typeText(p, "--db dev.sqlite")
-	p.Update(key("tab"))
-	typeText(p, "./data")
-	p.Update(key("tab"))
-	typeText(p, "right")
-	apply(t, p.Update(key("enter")))
+	f := form(t, h)
+	typeText(f, "sq")
+	f.Update(key("tab"))
+	typeText(f, "sqlit")
+	f.Update(key("tab"))
+	typeText(f, "--db dev.sqlite")
+	f.Update(key("tab"))
+	typeText(f, "./data")
+	f.Update(key("tab"))
+	typeText(f, "right")
+	apply(t, f.Update(key("enter")))
 	got := config.Get().Tools.Custom
 	if len(got) != 1 {
 		t.Fatalf("entries = %+v", got)
@@ -74,24 +102,25 @@ func TestToolsPageAddAllFields(t *testing.T) {
 // TestToolsPageMultipleField (#835): the sixth form field sets Multiple,
 // round-trips through edit, and rejects non-boolean input.
 func TestToolsPageMultipleField(t *testing.T) {
-	p := toolsPage(t)
+	p, h := toolsPage(t)
 	p.Update(key("a"))
-	typeText(p, "claude")
-	p.Update(key("tab"))
-	typeText(p, "claude")
+	f := form(t, h)
+	typeText(f, "claude")
+	f.Update(key("tab"))
+	typeText(f, "claude")
 	for i := 0; i < 4; i++ { // args, cwd, placement → multiple
-		p.Update(key("tab"))
+		f.Update(key("tab"))
 	}
-	typeText(p, "maybe")
-	p.Update(key("enter"))
-	if !p.Capturing() || !strings.Contains(p.note, "multiple must be true or false") {
-		t.Fatalf("invalid multiple must fail validation, note=%q", p.note)
+	typeText(f, "maybe")
+	f.Update(key("enter"))
+	if h.top() == nil || !strings.Contains(f.note, "multiple must be true or false") {
+		t.Fatalf("invalid multiple must fail validation, note=%q", f.note)
 	}
 	for range "maybe" {
-		p.Update(key("backspace"))
+		f.Update(key("backspace"))
 	}
-	typeText(p, "true")
-	apply(t, p.Update(key("enter")))
+	typeText(f, "true")
+	apply(t, f.Update(key("enter")))
 	got := config.Get().Tools.Custom
 	if len(got) != 1 || !got[0].Multiple {
 		t.Fatalf("entries = %+v, want Multiple=true", got)
@@ -99,26 +128,26 @@ func TestToolsPageMultipleField(t *testing.T) {
 	// Edit seeds "true" back into the form.
 	p.sel = 0
 	p.Update(key("enter"))
-	if p.form[5] != "true" {
-		t.Fatalf("edit must seed multiple, form=%v", p.form)
+	if f2 := form(t, h); f2.form[5] != "true" {
+		t.Fatalf("edit must seed multiple, form=%v", f2.form)
 	}
 }
 
 func TestToolsPageEditRoundTrip(t *testing.T) {
-	p := toolsPage(t)
-	addTool(t, p, "htop", "htop")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "htop", "htop")
 	p.sel = 0
 	p.Update(key("enter")) // edit
-	if !p.Capturing() || p.form[0] != "htop" {
-		t.Fatalf("edit must seed the form, form=%v", p.form)
+	f := form(t, h)
+	if f.form[0] != "htop" {
+		t.Fatalf("edit must seed the form, form=%v", f.form)
 	}
-	p.Update(key("tab")) // to command
-	p.Update(key("backspace"))
-	p.Update(key("backspace"))
-	p.Update(key("backspace"))
-	p.Update(key("backspace"))
-	typeText(p, "btop")
-	apply(t, p.Update(key("enter")))
+	f.Update(key("tab")) // to command
+	for i := 0; i < 4; i++ {
+		f.Update(key("backspace"))
+	}
+	typeText(f, "btop")
+	apply(t, f.Update(key("enter")))
 	got := config.Get().Tools.Custom
 	if len(got) != 1 || got[0].Command != "btop" {
 		t.Fatalf("entries after edit = %+v", got)
@@ -126,9 +155,9 @@ func TestToolsPageEditRoundTrip(t *testing.T) {
 }
 
 func TestToolsPageDelete(t *testing.T) {
-	p := toolsPage(t)
-	addTool(t, p, "one", "one")
-	addTool(t, p, "two", "two")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "one", "one")
+	addTool(t, p, h, "two", "two")
 	p.sel = 0
 	apply(t, p.Update(key("d")))
 	got := config.Get().Tools.Custom
@@ -138,89 +167,122 @@ func TestToolsPageDelete(t *testing.T) {
 }
 
 func TestToolsPageValidation(t *testing.T) {
-	p := toolsPage(t)
-	addTool(t, p, "taken", "cmd")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "taken", "cmd")
 
 	// Missing name.
 	p.Update(key("a"))
-	if cmd := p.Update(key("enter")); cmd != nil {
+	f := form(t, h)
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("empty name must not save")
 	}
-	if !strings.Contains(p.note, "name") {
-		t.Fatalf("note = %q", p.note)
+	if !strings.Contains(f.note, "name") {
+		t.Fatalf("note = %q", f.note)
 	}
 
 	// Missing command.
-	typeText(p, "fresh")
-	if cmd := p.Update(key("enter")); cmd != nil {
+	typeText(f, "fresh")
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("empty command must not save")
 	}
-	if !strings.Contains(p.note, "command") {
-		t.Fatalf("note = %q", p.note)
+	if !strings.Contains(f.note, "command") {
+		t.Fatalf("note = %q", f.note)
 	}
 
 	// Duplicate name.
-	p.Update(key("esc"))
+	f.Update(key("esc"))
 	p.Update(key("a"))
-	typeText(p, "taken")
-	p.Update(key("tab"))
-	typeText(p, "cmd")
-	if cmd := p.Update(key("enter")); cmd != nil {
+	f = form(t, h)
+	typeText(f, "taken")
+	f.Update(key("tab"))
+	typeText(f, "cmd")
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("duplicate name must not save")
 	}
-	if !strings.Contains(p.note, "exists") {
-		t.Fatalf("note = %q", p.note)
+	if !strings.Contains(f.note, "exists") {
+		t.Fatalf("note = %q", f.note)
 	}
 
 	// Bad placement.
-	p.Update(key("esc"))
+	f.Update(key("esc"))
 	p.Update(key("a"))
-	typeText(p, "fresh")
-	p.Update(key("tab"))
-	typeText(p, "cmd")
+	f = form(t, h)
+	typeText(f, "fresh")
+	f.Update(key("tab"))
+	typeText(f, "cmd")
 	for i := 0; i < 3; i++ {
-		p.Update(key("tab"))
+		f.Update(key("tab"))
 	}
-	typeText(p, "top")
-	if cmd := p.Update(key("enter")); cmd != nil {
+	typeText(f, "top")
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("bad placement must not save")
 	}
-	if !strings.Contains(p.note, "placement") {
-		t.Fatalf("note = %q", p.note)
+	if !strings.Contains(f.note, "placement") {
+		t.Fatalf("note = %q", f.note)
 	}
 }
 
 func TestToolsPageEditingOwnNameIsNotADuplicate(t *testing.T) {
-	p := toolsPage(t)
-	addTool(t, p, "solo", "cmd")
+	p, h := toolsPage(t)
+	addTool(t, p, h, "solo", "cmd")
 	p.sel = 0
 	p.Update(key("enter"))
-	apply(t, p.Update(key("enter"))) // save unchanged: own name must pass
+	apply(t, form(t, h).Update(key("enter"))) // save unchanged: own name must pass
 	if got := config.Get().Tools.Custom; len(got) != 1 || got[0].Name != "solo" {
 		t.Fatalf("entries = %+v", got)
 	}
 }
 
 func TestToolsPageEscCancelsWithoutWriting(t *testing.T) {
-	p := toolsPage(t)
+	p, h := toolsPage(t)
 	p.Update(key("a"))
-	typeText(p, "ghost")
-	p.Update(key("esc"))
-	if p.Capturing() {
-		t.Fatal("esc must close the form")
+	f := form(t, h)
+	typeText(f, "ghost")
+	f.Update(key("esc"))
+	if h.top() != nil {
+		t.Fatal("esc must pop the form")
 	}
 	if got := config.Get().Tools.Custom; len(got) != 0 {
 		t.Fatalf("cancel must not write, got %+v", got)
 	}
 }
 
+// TestToolFormUmlautBackspace guards the multi-byte fix: backspace removes a
+// whole rune, not one byte.
+func TestToolFormUmlautBackspace(t *testing.T) {
+	p, h := toolsPage(t)
+	p.Update(key("a"))
+	f := form(t, h)
+	typeText(f, "grün")
+	f.Update(key("backspace"))
+	if f.form[0] != "grü" {
+		t.Fatalf("after backspace = %q, want grü", f.form[0])
+	}
+}
+
+// TestToolFormClickFocusesField guards #883: a press on a field row focuses
+// it instead of destroying the form.
+func TestToolFormClickFocusesField(t *testing.T) {
+	p, h := toolsPage(t)
+	p.Update(key("a"))
+	f := form(t, h)
+	typeText(f, "keepme")
+	f.Click(0, 3) // the cwd row
+	if f.field != 3 {
+		t.Fatalf("field = %d, want 3", f.field)
+	}
+	if h.top() == nil || f.form[0] != "keepme" {
+		t.Fatal("a click must never discard the form")
+	}
+}
+
 func TestToolsPageViewListsEntriesAndHints(t *testing.T) {
-	p := toolsPage(t)
+	p, h := toolsPage(t)
 	v := p.View(100, 20)
 	if !strings.Contains(v, "no tools configured") {
 		t.Fatalf("empty view = %q", v)
 	}
-	addTool(t, p, "lazygit", "lazygit")
+	addTool(t, p, h, "lazygit", "lazygit")
 	v = p.View(100, 20)
 	if !strings.Contains(v, "lazygit") || !strings.Contains(v, "bottom") {
 		t.Fatalf("view must list the entry with its placement:\n%s", v)
