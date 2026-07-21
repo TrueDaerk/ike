@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- JSON / ndjson language support (#878): tree-sitter-json highlighting for
+  `.json`/`.jsonc` plus ndjson/jsonl streams, vscode-json-language-server
+  completion for json only (`/architecture/languages.md`).
+
 - Settings modal-flow migrations (0420, #892): keymap capture + import, LSP
   override editor, uv-install picker and PHP mapping form are sub-panels;
   every custom page is searchable (`/architecture/settings-ui.md`).

@@ -28,6 +28,7 @@ import (
 	// Language plugins register their grammar + LSP server + toolchain in the
 	// lang registry. Adding a language to IKE = adding a package here.
 	_ "ike/plugins/languages/go"
+	_ "ike/plugins/languages/json"
 	_ "ike/plugins/languages/php"
 	_ "ike/plugins/languages/python"
 	_ "ike/plugins/languages/sql"
