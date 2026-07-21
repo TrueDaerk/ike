@@ -87,7 +87,9 @@ DerekStride/tree-sitter-sql; also highlights SQL fragments injected into other
 languages, see [highlighting](./highlighting.md)), and `json`/`ndjson` (#878,
 official tree-sitter-json grammar — its document rule is `repeat(_value)`, so
 one grammar covers both a `.json` document and an ndjson/jsonl stream; ndjson
-has no server on purpose, the JSON server would flag every stream line).
+has no server on purpose, the JSON server would flag every stream line), and
+`toml` (#895, tree-sitter-grammars/tree-sitter-toml; `[table]` headers are
+sticky-scroll scopes).
 The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
@@ -248,6 +250,7 @@ uv is present — it works even in envs without pip — else
 | CSS/SCSS/LESS | vscode-css-language-server (`vscode-langservers-extracted`) | Same package, property/value data included. |
 | SQL | sql-language-server | Unchanged. |
 | JSON | vscode-json-language-server (`vscode-langservers-extracted`) | Same npm package as HTML/CSS — no new install step; JSON-Schema-store + `$schema` completion for free. ndjson/jsonl: no server (multi-document streams are an error to it). |
+| TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics; also available via cargo/brew. IKE's own config is TOML. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable

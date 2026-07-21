@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- TOML language support (#895): tree-sitter-toml highlighting with sticky
+  `[table]` scopes, taplo language server for schema-store completion
+  (`/architecture/languages.md`).
+
 - JSON / ndjson language support (#878): tree-sitter-json highlighting for
   `.json`/`.jsonc` plus ndjson/jsonl streams, vscode-json-language-server
   completion for json only (`/architecture/languages.md`).
