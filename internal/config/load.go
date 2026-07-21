@@ -33,14 +33,24 @@ func decodeFile(path string) (map[string]any, error) {
 // decodeOnto overlays the merged override map onto dst (which already holds the
 // defaults). BurntSushi decoding sets only the keys present in the document:
 // scalars replace, tables merge into the existing non-nil slot maps, lists
-// replace, and absent fields keep their default value.
-func decodeOnto(merged map[string]any, dst *Config) error {
+// replace, and absent fields keep their default value. Keys no schema field
+// (or slot map) absorbs are returned as unknown (0380, #793) so Load can warn
+// instead of silently ignoring a typo.
+func decodeOnto(merged map[string]any, dst *Config) ([]string, error) {
 	if len(merged) == 0 {
-		return nil
+		return nil, nil
 	}
 	data, err := toml.Marshal(merged)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return toml.Unmarshal(data, dst)
+	md, err := toml.Decode(string(data), dst)
+	if err != nil {
+		return nil, err
+	}
+	var unknown []string
+	for _, k := range md.Undecoded() {
+		unknown = append(unknown, k.String())
+	}
+	return unknown, nil
 }

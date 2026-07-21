@@ -37,12 +37,18 @@ func Load(opts Options) (*Config, []Diagnostic) {
 		}
 	}
 
-	if err := decodeOnto(merged, c); err != nil {
+	unknown, err := decodeOnto(merged, c)
+	if err != nil {
 		// A merge that decodes back into the struct should not fail; if it does,
 		// keep the defaults and report it rather than crashing.
 		diags = append(diags, Diagnostic{Field: "(merge)", Message: err.Error()})
 		c = defaults()
 		applyExtensionDefaults(c)
+	}
+	// Unknown keys are ignored with a warning (0380, #793): a typo in a
+	// settings file must be visible, not silently inert.
+	for _, k := range unknown {
+		diags = append(diags, Diagnostic{Field: k, Message: "unknown setting (ignored)"})
 	}
 
 	diags = append(diags, validate(c)...)

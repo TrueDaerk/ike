@@ -160,9 +160,12 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen}
 	m.ws.Park()
 
-	cfg, _ := config.Load(config.Discover("."))
+	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
 	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
+	// The incoming project's settings layer just applied (0380): surface its
+	// load diagnostics like any reload (#793).
+	fresh.notifyConfigDiags(diags)
 	fresh.StartWatcher(".")
 
 	// Size the fresh model like the first WindowSizeMsg would, then run its
