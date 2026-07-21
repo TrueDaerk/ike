@@ -128,8 +128,9 @@ func TestCenterZoneFeedback(t *testing.T) {
 		t.Fatalf("center ghost should carry the merge label:\n%s", box)
 	}
 
-	// An edge hover keeps the plain zone marker.
-	m = step(m, motion(dr.X+dr.W/2, dr.Y+dr.H-1))
+	// An edge hover keeps the plain zone marker (one cell inside the
+	// workspace border, whose outermost row now docks, #811).
+	m = step(m, motion(dr.X+dr.W/2, dr.Y+dr.H-2))
 	if view := m.render(); !strings.Contains(view, "⬓ bottom") {
 		t.Fatal("edge hover should show the edge-zone marker")
 	}

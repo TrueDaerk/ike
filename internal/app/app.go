@@ -5119,6 +5119,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 // source (0036 move/swap); onto the source pane's own edge it spawns a fresh
 // editor split there (0037); a drop in the source pane's interior is a no-op.
 func (m *Model) commitMove(x, y int) {
+	// The workspace's outermost strip docks the pane full-span against that
+	// edge (#811): top/bottom → full width, left/right → full height. Checked
+	// before the pane hit-test — the strip lies on the edge panes' borders.
+	if zone, ok := m.dockZoneAt(x, y); ok {
+		m.activeWS().Tree = layout.Dock(m.activeWS().Tree, m.drag.srcPane, zone, m.dockRatio(m.drag.srcPane, zone))
+		m.layout()
+		return
+	}
 	target, ok := m.lay.PaneAt(x, y)
 	if !ok {
 		return
@@ -5776,12 +5784,86 @@ func (m Model) compositeWhichKey(base string) string {
 	return overlay.Place(base, box, x, y, m.width, m.height)
 }
 
+// dockBand is the outer strip of the workspace body (in cells) that triggers
+// full-span edge docking during a whole-pane move (#811): exactly the
+// outermost row/column, so pane-relative drops just inside stay reachable.
+const dockBand = 1
+
+// dockZoneAt maps a whole-pane drag position onto an outer-edge dock zone
+// (#811). Only dragMove docks — tab drags carry a document, not a pane.
+// Corners prefer the horizontal edges (top/bottom).
+func (m Model) dockZoneAt(x, y int) (layout.Zone, bool) {
+	if m.drag == nil || m.drag.kind != dragMove || m.zoomActive() {
+		return 0, false
+	}
+	b := m.bodyRect()
+	inX := x >= b.X && x < b.X+b.W
+	inY := y >= b.Y && y < b.Y+b.H
+	switch {
+	case inX && y >= b.Y && y < b.Y+dockBand:
+		return layout.ZoneTop, true
+	case inX && y >= b.Y+b.H-dockBand && y < b.Y+b.H:
+		return layout.ZoneBottom, true
+	case inY && x >= b.X && x < b.X+dockBand:
+		return layout.ZoneLeft, true
+	case inY && x >= b.X+b.W-dockBand && x < b.X+b.W:
+		return layout.ZoneRight, true
+	}
+	return 0, false
+}
+
+// dockRatio derives the docked pane's share of the workspace along the dock
+// axis from its current size, so docking roughly preserves the pane's extent
+// (layout.Dock clamps it).
+func (m Model) dockRatio(key string, zone layout.Zone) float64 {
+	r, ok := m.lay.Panes[key]
+	b := m.bodyRect()
+	if !ok || b.W <= 0 || b.H <= 0 {
+		return 0.3
+	}
+	if zone == layout.ZoneTop || zone == layout.ZoneBottom {
+		return float64(r.H) / float64(b.H)
+	}
+	return float64(r.W) / float64(b.W)
+}
+
+// dockPreviewRect is the full-span rect a dock drop would occupy (#811).
+func (m Model) dockPreviewRect(zone layout.Zone, ratio float64) layout.Rect {
+	b := m.bodyRect()
+	if ratio < 0.1 {
+		ratio = 0.1
+	}
+	if ratio > 0.9 {
+		ratio = 0.9
+	}
+	switch zone {
+	case layout.ZoneTop:
+		return layout.Rect{X: b.X, Y: b.Y, W: b.W, H: int(float64(b.H) * ratio)}
+	case layout.ZoneBottom:
+		h := int(float64(b.H) * ratio)
+		return layout.Rect{X: b.X, Y: b.Y + b.H - h, W: b.W, H: h}
+	case layout.ZoneLeft:
+		return layout.Rect{X: b.X, Y: b.Y, W: int(float64(b.W) * ratio), H: b.H}
+	default: // ZoneRight
+		w := int(float64(b.W) * ratio)
+		return layout.Rect{X: b.X + b.W - w, Y: b.Y, W: w, H: b.H}
+	}
+}
+
 // moveGhost computes the preview box for an in-flight move. Onto another pane it
-// previews the relocation; onto the source pane's own edge it previews the spawn.
+// previews the relocation; onto the source pane's own edge it previews the spawn;
+// onto the workspace's outer strip it previews the full-span dock (#811).
 func (m Model) moveGhost() (box string, x, y int, ok bool) {
 	d := m.drag
 	if d == nil || (d.kind != dragMove && d.kind != dragTab) || !d.engaged() {
 		return "", 0, 0, false
+	}
+	if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
+		gr := m.dockPreviewRect(zone, m.dockRatio(d.srcPane, zone))
+		if gr.W < 3 || gr.H < 3 {
+			return "", 0, 0, false
+		}
+		return ghostBox(gr.W, gr.H, m.paneLabel(d.srcPane)+" — dock "+dockName(zone), m.pal().Ghost), gr.X, gr.Y, true
 	}
 	tgt, found := m.lay.PaneAt(d.curX, d.curY)
 	if !found {
@@ -6139,6 +6221,20 @@ func hashString(s string) uint64 {
 		h *= prime
 	}
 	return h
+}
+
+// dockName labels an outer-edge dock zone for the ghost and status hint (#811).
+func dockName(z layout.Zone) string {
+	switch z {
+	case layout.ZoneTop:
+		return "top (full width)"
+	case layout.ZoneBottom:
+		return "bottom (full width)"
+	case layout.ZoneLeft:
+		return "left (full height)"
+	default:
+		return "right (full height)"
+	}
 }
 
 // zoneArrow is the short drop-zone marker shown in a target pane's title.

@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Outer-edge pane docking (#811): dragging a pane onto the workspace's
+  outermost strip docks it full-width (top/bottom) or full-height
+  (left/right), with a full-span ghost preview
+  (`/architecture/pane-layout.md`).
+
 - Tool panes survive their program's exit (#810): footer offers restart in
   place (r / click) and close (ctrl+w / click); the layout slot is kept
   (`/architecture/tool-panes.md`).

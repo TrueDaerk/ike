@@ -63,6 +63,15 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   debounce the expensive PTY/emulator resize (leading + trailing, #804; see
   `/architecture/terminal.md`), so a divider drag over a terminal no longer
   triggers a SIGWINCH redraw storm in the child per step.
+- **Outer-edge docking (#811).** During a whole-pane move, the workspace
+  body's outermost row/column (`dockBand` = 1 cell) is a dock strip: releasing
+  there re-roots the tree via `layout.Dock` so the pane spans the **full
+  width** (outer top/bottom) or **full height** (outer left/right), its share
+  along the dock axis derived from its current size (clamped to [0.1, 0.9]).
+  Hovering the strip previews the full-span target as a ghost plus a
+  `dock <edge> (full …)` status hint. One cell inside the strip, the normal
+  pane-relative zones (including self-edge spawn) apply unchanged; corners
+  prefer top/bottom. Tab drags never dock — they carry a document, not a pane.
 - **Release** during a move resolves the drop target and `DropZone`
   (left/right/top/bottom of the target pane), then `layout.Move` re-parents the
   dragged leaf — swapping order or re-orienting the split. v1 only relocates the

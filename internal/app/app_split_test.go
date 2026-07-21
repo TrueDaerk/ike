@@ -352,9 +352,10 @@ func TestMouseSelfEdgeSpawnsSplit(t *testing.T) {
 	m := sized(t, 100, 40)
 	before := editorLeaves(m)
 	ed := m.lay.Panes[ctxEditor]
-	// Grab the editor's title bar, drop on its own right edge.
+	// Grab the editor's title bar, drop on its own right edge — one cell in
+	// from the workspace border, which now docks instead (#811).
 	m = step(m, press(ed.X+2, ed.Y))
-	m = step(m, release(ed.X+ed.W-1, ed.Y+ed.H/2))
+	m = step(m, release(ed.X+ed.W-2, ed.Y+ed.H/2))
 	if got := editorLeaves(m); got != before+1 {
 		t.Fatalf("self-edge drop should spawn a split, leaves=%d want %d", got, before+1)
 	}
