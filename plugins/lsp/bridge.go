@@ -348,6 +348,13 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		}
 		loc := locs[0]
 		target := protocol.URIToPath(loc.URI)
+		// Already standing on the definition (#860, JetBrains parity): the
+		// jump would go nowhere, so show where the symbol is used instead —
+		// declaration excluded, only the real usages.
+		if target == path && atDefinition(mgr, path, line, col, loc.Range) {
+			b.findReferences(h, path, line, col, false)
+			return
+		}
 		tline, tcol := loc.Range.Start.Line, 0
 		if data, rerr := os.ReadFile(target); rerr == nil {
 			p := protocol.FromLSPPosition(strings.Split(string(data), "\n"), loc.Range.Start, mgr.Encoding(path))
@@ -356,6 +363,28 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
 	}()
 	return nil
+}
+
+// atDefinition reports whether the editor position (line, col) sits inside
+// the definition range the server answered with (#860) — same file assumed
+// by the caller. The range covers the defined name; the end column is
+// inclusive here because a cursor on the name's last rune is still "on" it.
+func atDefinition(mgr *manager.Manager, path string, line, col int, r protocol.Range) bool {
+	lines, ok := mgr.DocLines(path)
+	if !ok {
+		return false
+	}
+	er := protocol.FromLSPRange(lines, r, mgr.Encoding(path))
+	if line < er.Start.Line || line > er.End.Line {
+		return false
+	}
+	if line == er.Start.Line && col < er.Start.Col {
+		return false
+	}
+	if line == er.End.Line && col > er.End.Col {
+		return false
+	}
+	return true
 }
 
 // definitionNotice is the toast for an empty definition answer (#858).
@@ -377,14 +406,24 @@ func (b *bridge) references(h host.API) tea.Cmd {
 	if path == "" || mgr == nil {
 		return nil
 	}
-	go func() {
-		locs, err := mgr.References(context.Background(), path, buffer.Position{Line: line, Col: col}, true)
-		if requestFailed(h, "find usages", err) {
-			return
-		}
-		h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
-	}()
+	go b.findReferences(h, path, line, col, true)
 	return nil
+}
+
+// findReferences is the shared find-usages core (#860): request, convert,
+// deliver. includeDecl mirrors the LSP flag — alt+f7 lists the declaration
+// among the usages, the at-definition flow does not. Runs off the UI
+// goroutine.
+func (b *bridge) findReferences(h host.API, path string, line, col int, includeDecl bool) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	locs, err := mgr.References(context.Background(), path, buffer.Position{Line: line, Col: col}, includeDecl)
+	if requestFailed(h, "find usages", err) {
+		return
+	}
+	h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
 }
 
 // callHierarchy prepares the call hierarchy for the symbol under the cursor

@@ -30,6 +30,7 @@ const previewMax = 32
 type refsMode struct {
 	items       []palette.Item
 	placeholder string // "" renders the default usages hint
+	count       int    // usages behind the default hint (#860)
 }
 
 // SetPlaceholder overrides the input hint for the next open ("Definitions —
@@ -41,6 +42,7 @@ func (r *refsMode) SetPlaceholder(s string) { r.placeholder = s }
 // It resets the placeholder to the usages default.
 func (r *refsMode) Set(refs []ilsp.Reference) {
 	r.placeholder = ""
+	r.count = len(refs)
 	r.items = make([]palette.Item, len(refs))
 	for i, ref := range refs {
 		preview := ref.Preview
@@ -63,7 +65,8 @@ func (r *refsMode) Placeholder() string {
 	if r.placeholder != "" {
 		return r.placeholder
 	}
-	return "Usages — filter by file or text…"
+	// The count answers "how often is this used" at a glance (#860).
+	return strconv.Itoa(r.count) + " usages — filter by file or text…"
 }
 
 // Results implements palette.Mode: the stored references fuzzy-matched on

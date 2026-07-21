@@ -158,3 +158,36 @@ func TestDefinitionNotice(t *testing.T) {
 		t.Fatalf("unsupported notice = %q", got)
 	}
 }
+
+// TestAtDefinition guards #860: the cursor counts as "on the definition" when
+// it sits inside (or on the inclusive end of) the answered range.
+func TestAtDefinition(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "a.go")
+	spec := ilsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	resolve := func(lang string) (ilsp.ServerSpec, bool) { return spec, lang == "go" }
+	m := manager.New(resolve, erroringConnector(), manager.Callbacks{})
+	defer m.Shutdown()
+	if err := m.Open(path, "go", "func target() {}\ncall()"); err != nil {
+		t.Fatal(err)
+	}
+	r := protocol.Range{Start: protocol.Position{Line: 0, Character: 5}, End: protocol.Position{Line: 0, Character: 11}}
+	for _, tc := range []struct {
+		line, col int
+		want      bool
+	}{
+		{0, 5, true},   // first rune of the name
+		{0, 8, true},   // middle
+		{0, 11, true},  // inclusive end
+		{0, 4, false},  // before
+		{0, 12, false}, // after
+		{1, 5, false},  // other line
+	} {
+		if got := atDefinition(m, path, tc.line, tc.col, r); got != tc.want {
+			t.Errorf("atDefinition(%d,%d) = %v, want %v", tc.line, tc.col, got, tc.want)
+		}
+	}
+}
