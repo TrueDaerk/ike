@@ -27,6 +27,7 @@ import (
 	"ike/internal/clipboard"
 	"ike/internal/commitui"
 	"ike/internal/complete"
+	"ike/internal/complete/emmet"
 	"ike/internal/complete/mru"
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
@@ -527,6 +528,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	engine := complete.NewEngine(h.Send)
 	engine.Register(words.New(root))
 	engine.Register(symbols.New(root))
+	engine.Register(emmet.New())
 	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {

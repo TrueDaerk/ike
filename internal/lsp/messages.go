@@ -76,6 +76,7 @@ const (
 
 	PriorityLSP     = 100
 	PrioritySymbols = 50
+	PriorityEmmet   = 30
 	PriorityWords   = 10
 )
 
