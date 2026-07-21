@@ -35,9 +35,11 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 - **PTY lifecycle** via `creack/pty`: the shell (`terminal.shell` config
   override → `$SHELL` → `/bin/sh`) spawns in the project root with
   `TERM=xterm-256color`; pane resizes propagate through `pty.Setsize`
-  (SIGWINCH for the child) and the emulator; `Close` kills the child and
-  releases the PTY, and a shell `exit` sends `ExitedMsg` so the root model
-  closes the pane.
+  (SIGWINCH for the child) and the emulator — **debounced** (#804): the first
+  resize applies immediately, a rapid burst (divider drag) folds into one
+  trailing apply of the final size, so the child redraws once instead of per
+  drag step; `Close` kills the child and releases the PTY, and a shell `exit`
+  sends `ExitedMsg` so the root model closes the pane.
 - **VT emulation** via `charmbracelet/x/vt` (`SafeEmulator` — the read loop
   writes while Update/View read): PTY output feeds `Write`, the screen
   renders with `Render()` (ANSI-styled, so 16/256/truecolor pass through),

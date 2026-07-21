@@ -527,3 +527,53 @@ func BenchmarkSessionView(b *testing.B) {
 		}
 	})
 }
+
+// TestSessionResizeDebounce guards #804: a rapid resize burst (divider drag)
+// applies the first size immediately and folds the rest into one trailing
+// apply of the final size — intermediate sizes never reach the PTY/emulator.
+func TestSessionResizeDebounce(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+
+	s.Resize(100, 30) // leading edge: immediate
+	if w := s.em.Width(); w != 100 {
+		t.Fatalf("leading resize must apply immediately, width = %d", w)
+	}
+	s.Resize(96, 30)
+	s.Resize(92, 30)
+	s.Resize(88, 30)
+	if w := s.em.Width(); w != 100 {
+		t.Fatalf("burst resizes must defer, width = %d, want still 100", w)
+	}
+	waitFor(t, "trailing resize", func() bool { return s.em.Width() == 88 })
+
+	// A lone resize after the quiet window is immediate again.
+	time.Sleep(resizeQuiet + 20*time.Millisecond)
+	s.Resize(80, 24)
+	if w := s.em.Width(); w != 80 {
+		t.Fatalf("post-quiet resize must apply immediately, width = %d", w)
+	}
+}
+
+// BenchmarkSessionResizeApply documents the #804 cost of one applied resize
+// (PTY SIGWINCH + emulator reflow) — what every divider-drag step paid before
+// the debounce.
+func BenchmarkSessionResizeApply(b *testing.B) {
+	c := &collector{}
+	s, err := StartSession("bench", "/bin/sh", b.TempDir(), 200, 60, nil, c.send)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(s.Close)
+	for _, r := range "seq 500\r" {
+		s.SendKey(keyFor(r))
+	}
+	time.Sleep(300 * time.Millisecond)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		w := 199 + i%2 // alternate so every call is a real change
+		s.mu.Lock()
+		s.applyResizeLocked(w, 60)
+		s.mu.Unlock()
+	}
+}
