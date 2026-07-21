@@ -126,7 +126,9 @@ func TestToolPaneChromeIsNotATerminal(t *testing.T) {
 	}
 }
 
-func TestToolExitClosesPane(t *testing.T) {
+// TestToolExitKeepsPaneOpen guards #810: a tool pane survives its program's
+// exit, keeping its layout slot, and shows the footer actions.
+func TestToolExitKeepsPaneOpen(t *testing.T) {
 	withTools(t, sleepTool("shortlived"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
@@ -140,8 +142,63 @@ func TestToolExitClosesPane(t *testing.T) {
 	inst.Terminal().Close()
 	out, _ = m.Update(terminal.ExitedMsg{Key: sessKey})
 	m = out.(Model)
+	if !m.activeWS().Panes.Has(key) {
+		t.Fatal("tool pane must stay open when its program exits (#810)")
+	}
+	view := inst.Terminal().View()
+	if !strings.Contains(view, "[restart (r)]") || !strings.Contains(view, "[close (ctrl+w)]") {
+		t.Fatalf("dead tool pane must offer footer actions, view tail: %q", view[max(0, len(view)-200):])
+	}
+}
+
+// TestToolExitRestartInPlace: r (and the footer click) rerun the command in
+// the same pane; the close click removes it.
+func TestToolExitRestartAndClose(t *testing.T) {
+	withTools(t, sleepTool("shortlived"))
+	m := sized(t, 100, 40)
+	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
+	m = out.(Model)
+	inst := m.toolPane("shortlived")
+	if inst == nil {
+		t.Fatal("tool pane must open")
+	}
+	key := inst.Key()
+	t.Cleanup(func() { inst.Terminal().Close() })
+	inst.Terminal().Close()
+	out, _ = m.Update(terminal.ExitedMsg{Key: inst.Terminal().SessionKey()})
+	m = out.(Model)
+
+	// r restarts in place: same pane key, session running again.
+	inst.Terminal().Update(tea.KeyPressMsg{Code: 'r', Text: "r"})
+	if !inst.Terminal().Running() {
+		t.Fatal("r must restart the tool in place")
+	}
+	if m.activeWS().Panes.Focused() != key && !m.activeWS().Panes.Has(key) {
+		t.Fatal("restart must keep the pane's layout slot")
+	}
+
+	// Exit again, then the footer close action removes the pane.
+	inst.Terminal().Close()
+	out, _ = m.Update(terminal.ExitedMsg{Key: inst.Terminal().SessionKey()})
+	m = out.(Model)
+	r := m.lay.Panes[key]
+	w, gh := inst.Terminal().Size()
+	cx, cy := -1, -1
+	for y := 0; y <= gh && cx < 0; y++ {
+		for x := 0; x < w; x++ {
+			if inst.Terminal().DeadActionHit(x, y) == "close" {
+				cx, cy = x, y
+				break
+			}
+		}
+	}
+	if cx < 0 {
+		t.Fatal("dead tool pane must expose a close hit zone")
+	}
+	out, _ = m.paneClick(key, mouseEvent{Mouse: tea.Mouse{X: r.X + paneContentX + cx, Y: r.Y + paneContentY + cy, Button: tea.MouseLeft}, action: mousePress})
+	m = out.(Model)
 	if m.activeWS().Panes.Has(key) {
-		t.Fatal("tool pane must close when its program exits")
+		t.Fatal("footer close click must remove the pane")
 	}
 }
 

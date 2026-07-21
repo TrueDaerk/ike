@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, tool chrome (not terminal chrome), exit-closes-pane, layout restore, and IKE_THEME_* env for theme following."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, and IKE_THEME_* env for theme following."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -83,8 +83,13 @@ session, `terminal.Model.SetTool` marks it) but is deliberately **not chromed
 as a terminal**: the title is `⚙ NAME` (no shell, directory, OSC title or
 interpreter mappings) and the statusline names the tool the same way.
 
-When the program exits the pane closes — quitting lazygit closes the pane
-(unlike run command sessions, which stay open to show their output).
+When the program exits the pane **stays open** (#810), keeping its layout
+slot: the last output remains visible and the footer row offers the two
+actions — `[<name> exited (code N)]  [restart (r)]  [close (ctrl+w)]`.
+`r` (or clicking `[restart (r)]`) reruns the configured command in place with
+the same directory and environment; `ctrl+w` (or clicking `[close (ctrl+w)]`)
+removes the pane. Run command sessions keep their existing stay-open
+behavior; plain shell terminals still close on exit.
 
 ## Layout persistence
 
