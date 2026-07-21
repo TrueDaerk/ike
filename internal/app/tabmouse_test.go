@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -208,25 +209,39 @@ func TestTabDragToTerminalEdgeSplits(t *testing.T) {
 	}
 }
 
-// TestTabDragToTerminalInteriorNoop guards #317: a terminal has no tab list to
-// join, so a drop in its interior stays a no-op.
-func TestTabDragToTerminalInteriorNoop(t *testing.T) {
-	m, _, src, term := terminalTabApp(t)
+// TestTabDragToTerminalCenterMerges (#836, formerly the #317 interior no-op):
+// a drop in a terminal's center converts it into a tab host — the shell
+// session becomes the first tab and the dragged file joins beside it.
+func TestTabDragToTerminalCenterMerges(t *testing.T) {
+	m, paths, src, term := terminalTabApp(t)
 	inst := m.activeWS().Panes.Get(src)
+	tinst := m.activeWS().Panes.Get(term)
 	panes := len(m.lay.Panes)
 	x, y := barCell(t, m, 1)
 	m = step(m, press(x, y))
 	tr := m.lay.Panes[term]
 	m = step(m, release(tr.X+tr.W/2, tr.Y+tr.H/2))
 
-	if len(m.lay.Panes) != panes || inst.TabCount() != 3 {
-		t.Fatalf("interior drop on a terminal must change nothing: panes=%d tabs=%d",
-			len(m.lay.Panes), inst.TabCount())
+	if len(m.lay.Panes) != panes {
+		t.Fatalf("center merge must not add panes, got %d want %d", len(m.lay.Panes), panes)
+	}
+	if inst.TabCount() != 2 {
+		t.Fatalf("source must lose the dragged tab, got %d tabs", inst.TabCount())
+	}
+	if tinst.Kind() != pane.KindEditor || tinst.TabCount() != 2 {
+		t.Fatalf("terminal must convert to a tab host with 2 tabs, kind=%v tabs=%d", tinst.Kind(), tinst.TabCount())
+	}
+	if tt := tinst.TabTerminal(0); tt == nil || !tt.Running() {
+		t.Fatal("the shell session must survive the conversion as the first tab")
+	}
+	if ed := tinst.TabEditor(tinst.ActiveTab()); ed == nil || ed.Path() != paths[0] {
+		t.Fatal("the dragged file must be the active tab of the converted pane")
 	}
 }
 
-// TestTabDragOverTerminalShowsFeedback guards #317: during a tab drag the
-// ghost/zone feedback renders over a terminal target's edge zone.
+// TestTabDragOverTerminalShowsFeedback guards #317/#836: during a tab drag
+// the ghost renders over a terminal target's edge zone and its interior now
+// shows the center merge ghost.
 func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
 	m, _, _, term := terminalTabApp(t)
 	x, y := barCell(t, m, 1)
@@ -237,8 +252,9 @@ func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
 		t.Fatal("a tab drag over a terminal edge must render the drop ghost")
 	}
 	m = step(m, motion(tr.X+tr.W/2, tr.Y+tr.H/2))
-	if _, _, _, ok := m.moveGhost(); ok {
-		t.Fatal("a terminal's interior is not a tab drop target, no ghost")
+	box, _, _, ok := m.moveGhost()
+	if !ok || !strings.Contains(box, "merge as tab") {
+		t.Fatal("a terminal's interior must render the center merge ghost (#836)")
 	}
 	m = step(m, release(x, y))
 }

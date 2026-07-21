@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Editor Tabs
@@ -55,11 +55,20 @@ shells can live next to the files they belong to.
   skip terminal tabs; `TabEditor(i)` returns nil for them, `TabTerminal(i)`
   the terminal.
 - The tab bar labels a terminal tab `⌨ ` + its OSC title (else the shell's base
-  name); no dirty/stale markers.
+  name); a tool session (#741) is labelled `⚙ ` + its tool name instead
+  (#836), and the pane title keeps the tool chrome while its tab is active.
+  No dirty/stale markers on either.
 - Closing a terminal tab (middle-click, `editor.closeTab`) **ends its shell
   session**; a pane close, `Registry.Close`, and a project switch end every
   hosted session the same way. Terminal tabs are session-local: like scratch
-  tabs they are not persisted, and layout restore drops them.
+  tabs they are not persisted, and layout restore drops them. **Tool tabs are
+  the exception** (#836): the pane identity records their tool names
+  (`tools` in the layout store) and restore restarts each configured program
+  as a fresh tab (`Registry.NewToolSession`), like dedicated tool panes.
+- A terminal/tool **pane** becomes such a tab host itself when a center drop
+  converts it (#836, `Instance.ConvertToTabHost`): its live session becomes
+  the first tab, the pane key stays terminal-shaped and restores as an
+  editor-identity slot (`AddEditorKey` advances the terminal mint counter).
 
 ## Opening routes into the tab list (`internal/app`)
 
