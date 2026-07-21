@@ -1430,6 +1430,18 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	return false, m, nil
 }
 
+// mouseChordKey maps the dedicated mouse navigation buttons (#816) onto the
+// synthetic keymap bases the default table binds to nav.back / nav.forward.
+func mouseChordKey(b tea.MouseButton) (keymap.Key, bool) {
+	switch b {
+	case tea.MouseBackward:
+		return keymap.Key{Base: "mouse-back"}, true
+	case tea.MouseForward:
+		return keymap.Key{Base: "mouse-forward"}, true
+	}
+	return keymap.Key{}, false
+}
+
 // terminalGlobalCommands are the commands whose chords a focused live
 // terminal does NOT forward to the shell (#805): the IDE's global entry
 // points — palette and project switching — must stay reachable without first
@@ -1956,8 +1968,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tourCmd
 
 	case tea.MouseClickMsg:
+		// The dedicated back/forward buttons (#816) resolve through the
+		// keymap as synthetic chords — rebindable like keys, default
+		// nav.back / nav.forward — regardless of the hovered pane. Unbound
+		// presses are swallowed: no pane expects button 4/5.
+		if k, isNav := mouseChordKey(msg.Button); isNav {
+			if cmd, handled := m.resolveKeymap(k); handled {
+				return m, cmd
+			}
+			return m, nil
+		}
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mousePress})
 	case tea.MouseReleaseMsg:
+		if _, isNav := mouseChordKey(msg.Button); isNav {
+			return m, nil // the press acted; the release must not leak into panes
+		}
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseRelease})
 	case tea.MouseMotionMsg:
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseMotion})

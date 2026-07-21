@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Mouse back/forward buttons drive the navigation history (#816): buttons 4/5
+  resolve through the keymap as `mouse-back`/`mouse-forward` (rebindable),
+  default nav.back / nav.forward (`/architecture/navigation-history.md`).
+
 - Outer-edge pane docking (#811): dragging a pane onto the workspace's
   outermost strip docks it full-width (top/bottom) or full-height
   (left/right), with a full-span ghost preview; the docked extent is capped

@@ -90,6 +90,11 @@ var jetbrainsRows = []row{
 	{"cmd+right", "editor.lineEnd", "Move to line end", Editor, "Editor (06)"},
 	{"cmd+left-bracket", "nav.back", "Navigate back", Global, "Editor (06)/app (01)"},
 	{"cmd+right-bracket", "nav.forward", "Navigate forward", Global, "Editor (06)/app (01)"},
+	// Mouse back/forward buttons (#816): synthetic single-step chords fed
+	// through the resolver by the root model, so they rebind like keys.
+	// Terminals without SGR extended buttons simply never deliver them.
+	{"mouse-back", "nav.back", "Navigate back (mouse button 4)", Global, "Editor (06)/app (01)"},
+	{"mouse-forward", "nav.forward", "Navigate forward (mouse button 5)", Global, "Editor (06)/app (01)"},
 	// Reconciled (0081/20): the LSP plugin registers goto-definition as
 	// lsp.definition; the table uses the registered id rather than forking an
 	// editor.gotoDeclaration alias. f4 — JetBrains' jump-to-source — is the
