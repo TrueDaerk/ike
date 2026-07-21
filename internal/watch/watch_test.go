@@ -349,3 +349,73 @@ func TestPollSmallFileStillHashedUnderLimit(t *testing.T) {
 		t.Fatalf("touch under the hash limit must not report, got %d events", n)
 	}
 }
+
+// TestConfigFileEvents (0380, #795): an external edit of
+// <root>/.ike/settings.toml surfaces as ConfigChanged; sibling state stores
+// (layout.json) stay silent, and a late-created .ike directory is picked up.
+func TestConfigFileEvents(t *testing.T) {
+	dir := t.TempDir()
+	ike := filepath.Join(dir, ".ike")
+	if err := os.Mkdir(ike, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	settings := filepath.Join(ike, "settings.toml")
+	if err := os.WriteFile(settings, []byte("[editor]\ntab_width = 2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	// State-store churn under .ike stays silent.
+	if err := os.WriteFile(filepath.Join(ike, "layout.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("layout.json churn must stay silent, got %d events", n)
+	}
+
+	if err := os.WriteFile(settings, []byte("[editor]\ntab_width = 4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	if got[0].Kind != ConfigChanged || got[0].Path != settings {
+		t.Fatalf("settings edit must surface as ConfigChanged, got %+v", got)
+	}
+}
+
+// TestConfigDirCreatedLate (#795): a project without .ike gains one (the
+// first project-scope write); the new directory is watched so the settings
+// file's first edit is seen.
+func TestConfigDirCreatedLate(t *testing.T) {
+	dir := t.TempDir()
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	ike := filepath.Join(dir, ".ike")
+	if err := os.Mkdir(ike, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Give fsnotify a beat to register the new watch before writing.
+	time.Sleep(50 * time.Millisecond)
+	settings := filepath.Join(ike, "settings.toml")
+	if err := os.WriteFile(settings, []byte("[editor]\ntab_width = 3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	found := false
+	for _, ev := range got {
+		if ev.Kind == ConfigChanged && ev.Path == settings {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("settings write in a late .ike must surface, got %+v", got)
+	}
+}

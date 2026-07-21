@@ -3208,6 +3208,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// event also invalidates the git status snapshot (Roadmap 0320); the
 		// debounce collapses bursts into one refresh.
 		vcsCmd := m.scheduleVCSRefresh()
+		if msg.Kind == watch.ConfigChanged {
+			// The project settings file changed externally (0380, #795):
+			// re-run the reload pipeline — theme, keymap, editor behavior
+			// re-apply live, diagnostics toast via the normal path. No VCS
+			// refresh: .ike is not part of the working tree view.
+			return m, config.Reload(m.cfgOpts)
+		}
 		if msg.Kind == watch.GitChanged {
 			// Repository metadata changed under .git (#738): an external commit,
 			// branch switch, staging or pull — e.g. inside a lazygit tool pane.
