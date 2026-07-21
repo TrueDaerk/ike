@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Terminal shrink no longer destroys content (#807): the session snapshots
+  the screen before every applied resize and restores the clipped cells on
+  grow (prefix-guarded, so rewritten rows win); scrollback already keeps its
+  full width (`/architecture/terminal.md`).
+
 - Divider-drag resize smoothed (#804): terminal PTY/emulator resizes are
   debounced (leading + trailing), so a drag no longer triggers a child
   SIGWINCH redraw storm per step; motion coalescing (#602) already bounds
