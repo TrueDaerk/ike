@@ -429,7 +429,7 @@ func TestManagerCompletion(t *testing.T) {
 	if err := m.Open(path, "go", "package main"); err != nil {
 		t.Fatal(err)
 	}
-	items, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	items, _, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0})
 	if err != nil {
 		t.Fatal(err)
 	}

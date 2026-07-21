@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Incomplete completion re-query (0410, #849): `isIncomplete` replies
+  re-request on further typing, debounced in the bridge
+  (`/architecture/lsp.md`).
+
 - Lazy completion resolve (0410, #847): selection-driven, debounced
   `completionItem/resolve` fills in documentation (rendered under the popup)
   and late auto-import edits (`/architecture/lsp.md`).

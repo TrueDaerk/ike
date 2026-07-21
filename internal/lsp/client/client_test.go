@@ -192,12 +192,31 @@ func TestCompletionNormalisesList(t *testing.T) {
 	})
 	ctx, cancel := ctx2s()
 	defer cancel()
-	items, err := c.Completion(ctx, protocol.CompletionParams{})
+	items, _, err := c.Completion(ctx, protocol.CompletionParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(items) != 1 || items[0].Label != "Println" {
 		t.Fatalf("items = %+v", items)
+	}
+}
+
+// TestCompletionCarriesIsIncomplete guards #849: the list's isIncomplete flag
+// survives normalisation; a bare item array reads as complete.
+func TestCompletionCarriesIsIncomplete(t *testing.T) {
+	c, _ := newClientWithFake(t, map[string]func(json.RawMessage) any{
+		"textDocument/completion": func(json.RawMessage) any {
+			return protocol.CompletionList{IsIncomplete: true, Items: []protocol.CompletionItem{{Label: "Pr"}}}
+		},
+	})
+	ctx, cancel := ctx2s()
+	defer cancel()
+	_, incomplete, err := c.Completion(ctx, protocol.CompletionParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !incomplete {
+		t.Fatal("isIncomplete must survive decoding")
 	}
 }
 

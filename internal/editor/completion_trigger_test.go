@@ -115,6 +115,29 @@ func TestCompletionAnchorAtIdentifierStart(t *testing.T) {
 	}
 }
 
+// TestIncompleteListRequeriesOnTyping guards #849: with an isIncomplete
+// reply, identifier runes typed while the popup shows re-emit the completion
+// trigger (the bridge re-queries); a complete reply keeps the old
+// filter-only behavior.
+func TestIncompleteListRequeriesOnTyping(t *testing.T) {
+	for _, tc := range []struct {
+		incomplete bool
+		want       int
+	}{{true, 2}, {false, 0}} {
+		m, _ := loaded(t, "\n")
+		m = insertModeAt(m, 0, 0)
+		m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, IsIncomplete: tc.incomplete, Items: []ilsp.CompletionItem{
+			{Label: "alpha", InsertText: "alpha"},
+			{Label: "aleph", InsertText: "aleph"},
+		}})
+		got := collectTriggers(&m)
+		m = send(m, key('a'), key('l'))
+		if len(*got) != tc.want {
+			t.Fatalf("incomplete=%v: triggers = %v, want %d re-queries", tc.incomplete, *got, tc.want)
+		}
+	}
+}
+
 // TestPasteDoesNotTrigger: multi-rune input (paste) never auto-triggers.
 func TestPasteDoesNotTrigger(t *testing.T) {
 	m, _ := loaded(t, "\n")

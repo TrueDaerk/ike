@@ -313,18 +313,18 @@ func (m *Manager) ResolveCompletion(ctx context.Context, path string, item proto
 // Completion requests completion at an editor position, gated on capability.
 // A position inside an embedded fragment routes to the fragment's server
 // (0300, #414) with results mapped back to host coordinates.
-func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position) ([]protocol.CompletionItem, error) {
-	if items, handled, err := m.fragmentCompletion(ctx, path, pos); handled {
+func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position) ([]protocol.CompletionItem, bool, error) {
+	if items, incomplete, handled, err := m.fragmentCompletion(ctx, path, pos); handled {
 		// Fragment edits target the virtual document; the host-coordinate
 		// conversion in ConvertCompletionItems would misplace them (#848).
 		for i := range items {
 			items[i].AdditionalTextEdits = nil
 		}
-		return items, err
+		return items, incomplete, err
 	}
 	srv, doc, ok := m.docServer(path)
 	if !ok || !srv.cl.Caps().Completion {
-		return nil, nil
+		return nil, false, nil
 	}
 	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
