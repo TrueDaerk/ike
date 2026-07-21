@@ -159,7 +159,8 @@ func TestToolsPageDelete(t *testing.T) {
 	addTool(t, p, h, "one", "one")
 	addTool(t, p, h, "two", "two")
 	p.sel = 0
-	apply(t, p.Update(key("d")))
+	p.Update(key("d"))
+	apply(t, confirmVia(t, h))
 	got := config.Get().Tools.Custom
 	if len(got) != 1 || got[0].Name != "two" {
 		t.Fatalf("entries after delete = %+v", got)

@@ -38,6 +38,7 @@ type KeymapPage struct {
 	pal        *theme.Palette
 
 	sel       int
+	host      SubPanelHost
 	off       int // list scroll offset (#537)
 	filter    string
 	filtering bool // "/" opened the filter input; every key is filter text
@@ -69,6 +70,9 @@ func NewKeymapPage(opts config.Options, registered func(commandID string) bool, 
 
 // SetPalette implements PageModel.
 func (k *KeymapPage) SetPalette(p *theme.Palette) { k.pal = p }
+
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (k *KeymapPage) SetSubPanelHost(h SubPanelHost) { k.host = h }
 
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
@@ -218,9 +222,13 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 	case "u":
 		// Unbind: an override chord→"" drops the binding on reload. An
-		// already-unbound row has nothing to drop.
-		if b, ok := k.current(); ok && !b.unbound && !b.nobind {
-			return config.WriteAndReload(k.opts, config.UserScope, "keymap.bindings."+b.Chord.String(), "")
+		// already-unbound row has nothing to drop. Confirmed (#891) — an
+		// unbind is easy to fat-finger and non-obvious to restore.
+		if b, ok := k.current(); ok && !b.unbound && !b.nobind && k.host != nil {
+			chord := b.Chord.String()
+			k.host.Push(newConfirm(k.host, "unbind "+chord, "Unbind", k.pal, func() tea.Cmd {
+				return config.WriteAndReload(k.opts, config.UserScope, "keymap.bindings."+chord, "")
+			}))
 		}
 	case "r":
 		// Reset to preset: remove the override; the default falls back. A

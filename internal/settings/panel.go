@@ -77,7 +77,8 @@ type Model struct {
 	editing bool
 	edit    textField   // shared cursor input (#888)
 	invalid string      // inline validation error for the current edit
-	notice  string      // transient info line (clamp feedback, #889)
+	notice  string      // transient info line (clamp feedback #889, saved flash #891)
+	writeErr string     // inline write/reload error (#891), cleared on the next action
 	suggest pathSuggest // live path completion while editing a Path entry (#541)
 
 	picking bool // enum picker open for the selected row
@@ -467,6 +468,18 @@ type CmdReceiver interface {
 	ReceiveCmd(msg tea.Msg) tea.Cmd
 }
 
+// NoteReloadDiags surfaces config write/reload diagnostics inline (#891):
+// the first one shows error-styled in the detail footer until the next
+// action, instead of only flashing as a toast.
+func (m *Model) NoteReloadDiags(diags []config.Diagnostic) {
+	if !m.open || len(diags) == 0 {
+		return
+	}
+	d := diags[0]
+	m.writeErr = d.Field + ": " + d.Message
+	m.notice = ""
+}
+
 // Deliver forwards a non-key message (async probe results) to every custom
 // page that consumes messages — and to open sub-panels (#883), so wizard
 // steps receive their async results too. Returned commands (CmdReceiver)
@@ -649,7 +662,7 @@ func (m *Model) moveNav(key string) {
 
 // move shifts the focused column's selection.
 func (m *Model) move(dir int) {
-	m.notice = ""
+	m.notice, m.writeErr = "", ""
 	if m.focus == catColumn && m.filter == "" {
 		m.cat = clamp(m.cat+dir, 0, len(m.pages)-1)
 		m.sel = 0
@@ -705,6 +718,19 @@ func (m *Model) activate() tea.Cmd {
 	}
 }
 
+// savedNotice flashes a write confirmation (#891) unless a more important
+// notice (the clamp feedback) is already showing.
+func (m *Model) savedNotice(scope config.Scope) {
+	if m.notice == "" {
+		label := "user"
+		if scope == config.ProjectScope {
+			label = "project"
+		}
+		m.notice = "✓ saved to " + label
+	}
+	m.writeErr = ""
+}
+
 // stepInt adjusts the selected Int row by delta (steppers, #889), clamped to
 // the entry's range with visible feedback; nil when the selection is not an
 // Int row.
@@ -729,6 +755,7 @@ func (m *Model) stepInt(delta int) tea.Cmd {
 	if next == n {
 		return nil
 	}
+	m.savedNotice(m.scopeFor(e))
 	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, next)
 }
 
@@ -752,6 +779,7 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 	e := r.entry
 	n := len(e.Options)
 	next := (optionIndex(e, value(e.Key)) + dir + n) % n
+	m.savedNotice(m.scopeFor(e))
 	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[next])
 }
 
@@ -824,6 +852,7 @@ func (m *Model) commit(e Entry) tea.Cmd {
 			n = clamped
 		}
 		m.editing = false
+		m.savedNotice(m.scopeFor(e))
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, n)
 	case Path:
 		p := strings.TrimSpace(m.edit.text)
@@ -835,9 +864,11 @@ func (m *Model) commit(e Entry) tea.Cmd {
 		}
 		m.editing = false
 		m.suggest.clear()
+		m.savedNotice(m.scopeFor(e))
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, p)
 	default: // String
 		m.editing = false
+		m.savedNotice(m.scopeFor(e))
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, m.edit.text)
 	}
 }

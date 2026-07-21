@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings feedback & safety (0420, #891): confirmation sub-panels for
+  destructive actions, ✓ saved-to-scope flash, inline write errors, pickers
+  follow the highlight (`/architecture/settings-ui.md`).
+
 - Settings rail & chrome (0420, #890): section headers, first-letter jump,
   remembered page (persisted per project), page name in the title, ▲/▼
   scroll indicators (`/architecture/settings-ui.md`).

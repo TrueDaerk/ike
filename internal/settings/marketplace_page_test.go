@@ -71,6 +71,7 @@ const marketEntry = `{
 func loadedPage(t *testing.T, eng *fakeMarketEngine) *MarketplacePage {
 	t.Helper()
 	p := NewMarketplacePage(eng, nil)
+	p.SetSubPanelHost(&stubHost{})
 	p.Receive(MarketCatalogMsg{Index: marketIndex(t, marketEntry)})
 	return p
 }
@@ -146,7 +147,8 @@ func TestMarketplaceRemove(t *testing.T) {
 		"example": {Name: "example", Version: market.Version{Major: 1, Minor: 2, Patch: 0}, VersionOK: true},
 	}}
 	p := loadedPage(t, eng)
-	runCmd(t, p, p.Update(mktKey("x")))
+	p.Update(mktKey("x"))
+	runCmd(t, p, confirmVia(t, p.host.(*stubHost)))
 	if len(eng.removes) != 1 {
 		t.Fatalf("removes = %v", eng.removes)
 	}
