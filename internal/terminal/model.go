@@ -25,6 +25,9 @@ type Model struct {
 	// send is remembered so StartCommand (0350, #574) can respawn a session
 	// in place with the same async injector.
 	send func(tea.Msg)
+	// env is the spawn environment overlay, remembered so Restart (#810) can
+	// rerun the command with the same injection.
+	env []string
 	// occupied marks that the user sent input (keys or a paste) to the
 	// session — an occupied terminal is never reused for a run (#574).
 	occupied bool
@@ -65,7 +68,7 @@ func (p vpos) before(q vpos) bool {
 // rendering the error instead of a grid — the pane stays usable (closable)
 // rather than crashing the layout.
 func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
-	m := Model{w: w, h: h, send: send, autoSuggest: true}
+	m := Model{w: w, h: h, send: send, env: extraEnv, autoSuggest: true}
 	sess, err := StartSession(key, shell, dir, w, h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
@@ -78,7 +81,7 @@ func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)
 // NewCommand starts a terminal model running argv instead of a shell (0350,
 // #574): the run-in-terminal seam. A failed spawn renders the error like New.
 func NewCommand(key string, argv []string, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
-	m := Model{w: w, h: h, send: send}
+	m := Model{w: w, h: h, send: send, env: extraEnv}
 	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
@@ -99,6 +102,7 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 	m.ClearSelection()
 	m.occupied = false
 	m.err = ""
+	m.env = extraEnv
 	w, h := m.w, m.h
 	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, m.send)
 	if err != nil {
@@ -107,6 +111,16 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 		return
 	}
 	m.sess = sess
+}
+
+// Restart reruns a finished command session in place (#810): same pane, same
+// layout slot, same command line, directory and environment. A no-op while
+// the session still runs or for plain shell sessions.
+func (m *Model) Restart() {
+	if m.sess == nil || m.sess.Running() || !m.sess.IsCommand() {
+		return
+	}
+	m.StartCommand(m.sess.key, m.sess.Argv(), m.sess.Dir(), m.env)
 }
 
 // Occupied reports whether the user has sent any input to the session; a run
@@ -240,6 +254,15 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "shift+pgdown":
 		m.ScrollBy(-m.pageSize())
+		return nil
+	}
+	// A finished tool pane (#810) stays open showing its last output; r
+	// reruns the configured command in place. Everything else is inert —
+	// there is no child to type into (ctrl+w closes the pane app-side).
+	if m.tool != "" && !m.sess.Running() {
+		if msg.String() == "r" {
+			m.Restart()
+		}
 		return nil
 	}
 	m.scroll = 0
@@ -536,23 +559,69 @@ func (m Model) View() string {
 		m.highlightSelection(lines, m.sess.ScrollbackLen())
 		view = strings.Join(lines, "\n")
 	}
-	if !m.focused || !m.sess.Running() {
-		if !m.sess.Running() {
-			view += "\n" + m.exitLine()
-		}
+	if !m.sess.Running() {
+		return m.deadView(view)
+	}
+	if !m.focused {
 		return view
 	}
 	cx, cy := m.sess.CursorPosition()
 	return m.completionView(overlayCursor(view, cx, cy))
 }
 
+// deadView renders a finished session: the grid with the exit footer as the
+// last row, truncating the grid by one row when it fills the pane so the
+// footer stays visible inside the fixed pane height (#810).
+func (m Model) deadView(view string) string {
+	lines := strings.Split(view, "\n")
+	if m.h > 0 && len(lines) >= m.h {
+		lines = lines[:m.h-1]
+	}
+	return strings.Join(append(lines, m.exitLine()), "\n")
+}
+
 // exitLine renders the completion marker: command sessions (#574) report the
-// exit code so a run's outcome is visible at a glance.
+// exit code so a run's outcome is visible at a glance; tool panes (#810)
+// additionally offer their footer actions. Kept ASCII — DeadActionHit maps
+// click columns onto byte offsets of this string.
 func (m Model) exitLine() string {
+	if m.tool != "" {
+		code := ""
+		if c, ok := m.sess.ExitCode(); ok {
+			code = " (code " + strconv.Itoa(c) + ")"
+		}
+		return "[" + m.tool + " exited" + code + "]  [restart (r)]  [close (ctrl+w)]"
+	}
 	if code, ok := m.sess.ExitCode(); ok && m.sess.IsCommand() {
 		return "[process exited with code " + strconv.Itoa(code) + "]"
 	}
 	return "[process exited]"
+}
+
+// DeadActionHit maps a click in a finished tool pane onto a footer action
+// (#810): "restart", "close", or "" for anywhere else. x/y are pane-local
+// content coordinates.
+func (m Model) DeadActionHit(x, y int) string {
+	if m.sess == nil || m.sess.Running() || m.tool == "" {
+		return ""
+	}
+	row := len(strings.Split(m.sess.View(), "\n"))
+	if m.h > 0 && row >= m.h {
+		row = m.h - 1
+	}
+	if y != row {
+		return ""
+	}
+	line := m.exitLine()
+	for _, a := range []struct{ span, action string }{
+		{"[restart (r)]", "restart"},
+		{"[close (ctrl+w)]", "close"},
+	} {
+		if i := strings.Index(line, a.span); i >= 0 && x >= i && x < i+len(a.span) {
+			return a.action
+		}
+	}
+	return ""
 }
 
 // scrolledView renders the paging window: scroll lines above the live screen,

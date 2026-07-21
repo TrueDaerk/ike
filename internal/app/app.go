@@ -2615,11 +2615,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
 		key := m.terminalPaneForSession(msg.Key)
-		// A tool pane (#741) closes with its program (quitting lazygit closes
-		// the pane); other command sessions (#576) stay open — their output
-		// is the point of the run.
-		if key != "" && m.activeWS().Panes.Get(key).Terminal().IsCommand() &&
-			m.activeWS().Panes.Get(key).Terminal().Tool() == "" {
+		// Command sessions (#576) stay open — their output is the point of
+		// the run. Tool panes (#741) stay open too (#810): the footer offers
+		// restart-in-place (r / click) and close (ctrl+w / click), so
+		// quitting the tool no longer destroys the pane's layout slot.
+		if key != "" && m.activeWS().Panes.Get(key).Terminal().IsCommand() {
 			return m, nil
 		}
 		if key != "" {
@@ -5488,8 +5488,22 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 	case pane.KindTerminal:
 		// Left press: forward to a mouse-reporting child, else anchor a text
-		// selection and track the drag (#227).
+		// selection and track the drag (#227). A finished tool pane's footer
+		// actions (#810) take the click first.
 		if msg.Button == tea.MouseLeft {
+			switch inst.Terminal().DeadActionHit(localX, localY) {
+			case "restart":
+				inst.Terminal().Restart()
+				return m, nil
+			case "close":
+				if m.closeKey(key) {
+					m.setFocus(m.focusAfterClose())
+					m.syncExplorerOpen()
+					m.layout()
+					saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+				}
+				return m, nil
+			}
 			inst.Terminal().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 		}

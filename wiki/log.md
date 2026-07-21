@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Tool panes survive their program's exit (#810): footer offers restart in
+  place (r / click) and close (ctrl+w / click); the layout slot is kept
+  (`/architecture/tool-panes.md`).
+
 - Terminal shrink no longer destroys content (#807): the session snapshots
   the screen before every applied resize and restores the clipped cells on
   grow (prefix-guarded, so rewritten rows win); scrollback already keeps its
