@@ -610,12 +610,13 @@ func TestSessionResizeWidthRoundTrip(t *testing.T) {
 	}
 }
 
-// TestSessionResizeHeightRoundTrip guards #807 vertically: rows dropped by a
-// height shrink come back on grow. A command session keeps the test
+// TestSessionResizeHeightRoundTrip guards #807/#826 vertically: a height
+// shrink scrolls the top rows into the scrollback and keeps the cursor line
+// (real-terminal semantics — before #826 the emulator hard-truncated the
+// BOTTOM rows, eating the newest output for good); the grow pulls the pushed
+// rows back so the round trip is identical. A command session keeps the test
 // deterministic — an interactive shell would react to the SIGWINCH with an
-// async prompt redraw that scrolls the screen mid-test (then the prefix
-// guard rightly refuses to restore, which is the stale-content behaviour
-// TestSessionResizeReserveNeverResurrectsStale covers).
+// async prompt redraw that scrolls the screen mid-test.
 func TestSessionResizeHeightRoundTrip(t *testing.T) {
 	c := &collector{}
 	s, err := StartCommandSession("terminal",
@@ -630,13 +631,95 @@ func TestSessionResizeHeightRoundTrip(t *testing.T) {
 		return strings.Contains(v, "line-8") && strings.Contains(v, "line-1")
 	})
 
-	resizeNow(s, 80, 4) // drop the bottom rows
-	if v := plainView(s); strings.Contains(v, "line-8") {
-		t.Fatalf("height shrink should clip bottom rows, view:\n%s", v)
+	resizeNow(s, 80, 4) // shrink: top rows scroll out, the newest output stays
+	if v := plainView(s); !strings.Contains(v, "line-8") {
+		t.Fatalf("height shrink must keep the cursor-side rows visible (#826), view:\n%s", v)
 	}
-	resizeNow(s, 80, 24) // grow back
-	if v := plainView(s); !strings.Contains(v, "line-8") || !strings.Contains(v, "line-1") {
-		t.Fatalf("height grow must restore the dropped rows, view:\n%s", v)
+	if v := plainView(s); strings.Contains(v, "line-1") {
+		t.Fatalf("height shrink should scroll the top rows out of the viewport, view:\n%s", v)
+	}
+	if s.em.ScrollbackLen() == 0 {
+		t.Fatal("the scrolled-out rows must land in the scrollback, not vanish")
+	}
+	if got := s.LineText(0); !strings.Contains(got, "line-1") {
+		t.Fatalf("scrollback line 0 = %q, want the first pushed row", got)
+	}
+
+	resizeNow(s, 80, 24) // grow back: the pushed rows return on top
+	v := plainView(s)
+	if !strings.Contains(v, "line-8") || !strings.Contains(v, "line-1") {
+		t.Fatalf("height grow must restore the full pre-shrink screen, view:\n%s", v)
+	}
+	if s.em.ScrollbackLen() != 0 {
+		t.Fatalf("scrollback after the round trip = %d lines, want 0 (all pulled back)", s.em.ScrollbackLen())
+	}
+	if strings.Count(v, "line-3") != 1 {
+		t.Fatalf("restored rows must not duplicate, view:\n%s", v)
+	}
+}
+
+// TestSessionResizeHeightShrinkTopAnchored: when the cursor already fits the
+// shrunk height (content anchored at the top), nothing scrolls — the classic
+// #807 truncate-and-reserve path still round-trips via the reserve.
+func TestSessionResizeHeightShrinkTopAnchored(t *testing.T) {
+	c := &collector{}
+	s, err := StartCommandSession("terminal",
+		[]string{"/bin/sh", "-c", "printf 'line-%s\\n' 1 2 3; sleep 30"},
+		t.TempDir(), 80, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	waitFor(t, "printf output", func() bool { return strings.Contains(plainView(s), "line-3") })
+
+	resizeNow(s, 80, 8) // cursor (row 3) fits: no scroll
+	if s.em.ScrollbackLen() != 0 {
+		t.Fatalf("a fitting shrink must not touch the scrollback, len = %d", s.em.ScrollbackLen())
+	}
+	if v := plainView(s); !strings.Contains(v, "line-1") || !strings.Contains(v, "line-3") {
+		t.Fatalf("a fitting shrink must keep the top-anchored content, view:\n%s", v)
+	}
+	resizeNow(s, 80, 24)
+	if v := plainView(s); !strings.Contains(v, "line-1") || !strings.Contains(v, "line-3") {
+		t.Fatalf("grow after a fitting shrink must keep the content, view:\n%s", v)
+	}
+}
+
+// TestSessionResizeHeightPullSkippedAfterScroll: child output that scrolls
+// the screen after the shrink buries the pushed rows in the scrollback — the
+// grow must not pull them back over the newer content (no duplication, no
+// resurrection; the rows stay retrievable in the scrollback).
+func TestSessionResizeHeightPullSkippedAfterScroll(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+
+	for _, r := range "printf 'line-%s\\n' 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "printf output", func() bool { return strings.Contains(plainView(s), "line-20") })
+
+	resizeNow(s, 80, 6) // pushes top rows; the shell's SIGWINCH redraw may add more
+	for _, r := range "printf 'late-%s\\n' 1 2 3 4 5 6 7 8\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "late output", func() bool { return strings.Contains(plainView(s), "late-8") })
+
+	resizeNow(s, 80, 24)
+	v := plainView(s)
+	if !strings.Contains(v, "late-8") {
+		t.Fatalf("grow must keep the newest content, view:\n%s", v)
+	}
+	// Nothing may appear twice across the whole history (scrollback+screen).
+	total := s.em.ScrollbackLen() + 24
+	var all strings.Builder
+	for i := 0; i < total; i++ {
+		all.WriteString(s.LineText(i))
+		all.WriteString("\n")
+	}
+	for _, probe := range []string{"line-5\n", "late-3\n"} {
+		if n := strings.Count(all.String(), probe); n > 1 {
+			t.Fatalf("%q appears %d times across history — duplicated by the pull", strings.TrimSpace(probe), n)
+		}
 	}
 }
 

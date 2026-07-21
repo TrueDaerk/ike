@@ -68,6 +68,14 @@ type Session struct {
 	// row the child rewrote meanwhile is never corrupted.
 	reserve  []uv.Line
 	reserveW int
+	// Height-shrink scroll state (#826): shrinkPushed counts the screen rows
+	// a height shrink scrolled into the scrollback (real-terminal semantics —
+	// the top scrolls out, the cursor line stays); a later grow pulls them
+	// back. shrinkMark remembers the scrollback length right after the push:
+	// child output pushing lines meanwhile buries ours, so the pull is
+	// abandoned instead of resurrecting the wrong rows.
+	shrinkPushed int
+	shrinkMark   int
 	// gridMu serializes the feed loop's emulator writes against the resize
 	// snapshot/restore (#807): SafeEmulator locks each call, but CellAt
 	// returns a pointer into the live buffer — copying the cell after the
@@ -331,12 +339,22 @@ func (s *Session) applyResizeLocked(w, h int) {
 	// restore sequence, so the copied cells cannot race a concurrent write
 	// and no child output lands between snapshot and restore.
 	s.gridMu.Lock()
+	// The height-restore guard compares BEFORE the snapshot folds the current
+	// screen into the reserve — afterwards the overlap matches trivially and
+	// stale reserve rows beyond oldH would resurrect over newer content.
+	heightMatch := s.reserveMatchesLocked(min(oldW, w), min(oldH, h))
 	s.snapshotReserveLocked(oldW, oldH)
+	if h < oldH {
+		s.scrollShrinkLocked(oldW, oldH, h)
+	}
 	s.w, s.h = w, h
 	s.lastResize = time.Now()
 	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	s.em.Resize(w, h)
-	s.restoreReserveLocked(oldW, oldH, w, h)
+	if h > oldH {
+		s.pullShrinkLocked(oldH, w, h)
+	}
+	s.restoreReserveLocked(oldW, oldH, w, h, heightMatch)
 	s.gridMu.Unlock()
 	s.version.Add(1)
 }
@@ -370,21 +388,36 @@ func (s *Session) snapshotReserveLocked(w, h int) {
 	}
 }
 
+// reserveMatchesLocked reports whether every screen row up to h still
+// prefix-matches its reserve row over the first w columns. Must run before
+// snapshotReserveLocked in the same apply — the snapshot syncs the overlap,
+// after which the comparison is vacuously true.
+func (s *Session) reserveMatchesLocked(w, h int) bool {
+	if len(s.reserve) == 0 {
+		return false
+	}
+	for y := 0; y < h && y < len(s.reserve); y++ {
+		if !rowPrefixEqual(s.reserve[y], s.screenRowLocked(w, y), w) {
+			return false
+		}
+	}
+	return true
+}
+
 // restoreReserveLocked writes reserved cells back after a grow. Width: each
 // row that still prefix-matches its reserve row gets the clipped columns
-// back. Height: the rows a shrink dropped come back only when every
-// overlapping row matched — content that scrolled meanwhile shifts row
-// indexes, and restoring then would resurrect stale lines.
-func (s *Session) restoreReserveLocked(oldW, oldH, w, h int) {
+// back. Height: the rows a shrink dropped come back only when the whole
+// pre-snapshot overlap matched (heightMatch) — content that scrolled or was
+// rewritten meanwhile shifts row indexes, and restoring then would resurrect
+// stale lines over newer content.
+func (s *Session) restoreReserveLocked(oldW, oldH, w, h int, heightMatch bool) {
 	if len(s.reserve) == 0 {
 		return
 	}
-	allMatch := true
 	overlap := min(min(oldH, h), len(s.reserve))
 	for y := 0; y < overlap; y++ {
 		cur := s.screenRowLocked(min(oldW, w), y)
 		if !rowPrefixEqual(s.reserve[y], cur, min(oldW, w)) {
-			allMatch = false
 			continue
 		}
 		if w > oldW { // width grow: fill the clipped columns
@@ -394,7 +427,7 @@ func (s *Session) restoreReserveLocked(oldW, oldH, w, h int) {
 			}
 		}
 	}
-	if h > oldH && allMatch { // height grow: bring the dropped rows back
+	if h > oldH && heightMatch { // height grow: bring the dropped rows back
 		for y := oldH; y < h && y < len(s.reserve); y++ {
 			for x := 0; x < w && x < len(s.reserve[y]); x++ {
 				c := s.reserve[y][x]
@@ -402,6 +435,111 @@ func (s *Session) restoreReserveLocked(oldW, oldH, w, h int) {
 			}
 		}
 	}
+}
+
+// scrollShrinkLocked applies real-terminal height-shrink semantics (#826)
+// before the emulator resize truncates: when the cursor would fall below the
+// new height, the top rows scroll into the scrollback and the screen slides
+// up so the cursor line (the prompt, the newest output) survives — upstream
+// alone hard-truncates the bottom rows, eating everything below the shrink
+// point. Runs before em.Resize, under gridMu; the subsequent Resize clamps
+// the emulator cursor to h-1, which is exactly where the slide put its line.
+// The alt screen has no scrollback and its apps redraw on SIGWINCH — skip.
+func (s *Session) scrollShrinkLocked(w, oldH, h int) {
+	if s.em.IsAltScreen() {
+		return
+	}
+	sb := s.em.Scrollback()
+	if sb == nil || sb.MaxLines() <= 0 {
+		return
+	}
+	cy := s.em.CursorPosition().Y
+	shift := cy - (h - 1)
+	if shift <= 0 {
+		return
+	}
+	if shift > oldH {
+		shift = oldH
+	}
+	for y := 0; y < shift; y++ {
+		sb.Push(s.screenRowLocked(w, y))
+	}
+	for y := 0; y < oldH; y++ {
+		src := y + shift
+		for x := 0; x < w; x++ {
+			c := uv.EmptyCell
+			if src < oldH {
+				if cell := s.em.CellAt(x, src); cell != nil {
+					c = *cell
+				}
+			}
+			s.em.SetCell(x, y, &c)
+		}
+	}
+	s.shrinkPushed += shift
+	s.shrinkMark = sb.Len()
+}
+
+// pullShrinkLocked reverses scrollShrinkLocked after a height grow: the rows
+// the shrink pushed come back out of the scrollback onto the top of the
+// screen (round-trip identical), the on-screen content slides down and the
+// cursor follows via an injected CUP. Only the session's own pushes are
+// pulled, and only while they are still the newest scrollback lines — child
+// output that scrolled meanwhile buried them, so the pull is abandoned (the
+// screen already reflects the newer content). Runs after em.Resize, under
+// gridMu.
+func (s *Session) pullShrinkLocked(oldH, w, h int) {
+	if s.shrinkPushed <= 0 || s.em.IsAltScreen() {
+		return
+	}
+	sb := s.em.Scrollback()
+	if sb == nil {
+		return
+	}
+	if sb.Len() != s.shrinkMark {
+		s.shrinkPushed = 0
+		return
+	}
+	pull := min(s.shrinkPushed, h-oldH, sb.Len())
+	if pull <= 0 {
+		return
+	}
+	// Pop the newest pull lines: the scrollback API only pushes, so the kept
+	// prefix is re-pushed after a clear. Line headers are copied first —
+	// Push clones into the same backing array Clear truncated.
+	all := sb.Lines()
+	popped := make([]uv.Line, pull)
+	copy(popped, all[len(all)-pull:])
+	keep := make([]uv.Line, len(all)-pull)
+	copy(keep, all[:len(all)-pull])
+	sb.Clear()
+	for _, l := range keep {
+		sb.Push(l)
+	}
+	// Slide the screen down (bottom-up: every write lands above-read rows),
+	// then lay the popped rows back on top, oldest first.
+	for y := oldH - 1; y >= 0; y-- {
+		row := s.screenRowLocked(w, y)
+		for x := 0; x < w; x++ {
+			c := row[x]
+			s.em.SetCell(x, y+pull, &c)
+		}
+	}
+	for y := 0; y < pull; y++ {
+		for x := 0; x < w; x++ {
+			c := uv.EmptyCell
+			if x < len(popped[y]) {
+				c = popped[y][x]
+			}
+			s.em.SetCell(x, y, &c)
+		}
+	}
+	// The cursor rides the slide. Injected as CUP through the emulator's
+	// input path — the only cursor mutator the safe wrapper exposes.
+	pos := s.em.CursorPosition()
+	_, _ = s.em.Write([]byte(fmt.Sprintf("\x1b[%d;%dH", pos.Y+pull+1, pos.X+1)))
+	s.shrinkPushed -= pull
+	s.shrinkMark = sb.Len()
 }
 
 // screenRowLocked reads the first n cells of screen row y.
