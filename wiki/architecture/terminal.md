@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -107,6 +107,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 | `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debug panel's embedded debuggee terminal (#676) gets the same treatment |
+| global navigation chords | the chords bound to `palette.searchEverywhere` (default `cmd+shift+a`), `palette.recentFiles` (`cmd+e`) and `project.switch` (`cmd+shift+p` / `ctrl+shift+p`), plus a configured `palette.toggle_key`, dispatch in the IDE instead of the shell (#805) — resolved via the live binding table, so rebinds move along. Single-step chords only; esc-esc stays with the shell (vim/lazygit would see side effects) |
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
