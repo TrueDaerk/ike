@@ -294,3 +294,17 @@ filtering — a click clears the filter and jumps to the page. The
 "not searched" note now lists only pages that don't export items yet.
 Implemented: Toolchain, Tools, Plugins; the remaining pages join with their
 sub-panel migrations (#892).
+
+## Unified keys (0420, #887)
+
+One table across the panel and every page: **enter** activates, **space**
+toggles booleans, **r** always means reset (LSP server overrides included —
+restart moved to **R** selected / **ctrl+r** all; the marketplace refresh
+moved to **g**), **s** is reserved for the write scope everywhere (the LSP
+options JSON edit moved to **o**; the Tools suggestions gained a visible
+`+ Suggestions…` action row next to the `s` shortcut). Every list understands
+**pgup/pgdn/home/end** through the shared `listNav` helper. Schema `Chord`
+entries capture through a shared sub-panel with keymap-page semantics —
+multi-step chords, enter confirms, backspace undoes a step — instead of
+grabbing the next keypress. **?** opens a key-help sub-panel listing the
+shared keys plus the active page's (`KeyHelper` seam).

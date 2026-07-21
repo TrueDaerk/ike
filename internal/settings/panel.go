@@ -508,6 +508,10 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			case "esc":
 				m.Close()
 				return nil
+			case "?":
+				// The key-help overlay (#887) is panel chrome on every page.
+				m.openKeyHelp()
+				return nil
 			}
 			return page.Update(key)
 		}
@@ -530,6 +534,15 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.move(-1)
 	case "down", "j":
 		m.move(1)
+	case "pgup", "pgdown", "home", "end":
+		m.moveNav(key.String())
+	case "space":
+		// Space toggles booleans (#887); other rows keep enter semantics.
+		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry && r.entry.Type == Bool {
+			return m.activate()
+		}
+	case "?":
+		m.openKeyHelp()
 	case "right", "l":
 		if m.focus == catColumn && m.filter == "" {
 			m.focus = formColumn
@@ -565,6 +578,20 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.focus = formColumn
 	}
 	return nil
+}
+
+// moveNav applies pgup/pgdn/home/end to the focused column (#887).
+func (m *Model) moveNav(key string) {
+	if m.focus == catColumn && m.filter == "" {
+		if listNav(key, &m.cat, len(m.pages), navPage) {
+			m.sel = 0
+			m.followCat, m.followForm = true, true
+		}
+		return
+	}
+	if listNav(key, &m.sel, len(m.rows()), navPage) {
+		m.followForm = true
+	}
 }
 
 // move shifts the focused column's selection.
@@ -608,13 +635,15 @@ func (m *Model) activate() tea.Cmd {
 		m.picking = true
 		m.pickIdx = optionIndex(e, value(e.Key))
 		return nil
+	case Chord:
+		// The shared capture sub-panel (#887): keymap-page semantics —
+		// multi-step, enter confirms — instead of grab-the-next-keypress.
+		m.Push(newChordCapture(m, m.opts, m.scopeFor(e), e.Key, e.Title, m.pal))
+		return nil
 	default:
 		m.editing = true
 		m.invalid = ""
 		m.input = value(e.Key)
-		if e.Type == Chord {
-			m.input = ""
-		}
 		if e.Type == Path {
 			m.suggest.refresh(m.input)
 		}
@@ -675,15 +704,6 @@ func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	e := r.entry
-	if e.Type == Chord {
-		// The next chord-shaped press is the value; esc cancels.
-		if key.Code == tea.KeyEscape {
-			m.editing = false
-			return nil
-		}
-		m.editing = false
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, key.String())
-	}
 	switch key.Code {
 	case tea.KeyEscape:
 		m.editing = false

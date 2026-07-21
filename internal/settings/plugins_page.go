@@ -88,6 +88,9 @@ func (p *PluginsPage) current() (PluginInfo, bool) {
 // Update implements PageModel.
 func (p *PluginsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	row, hasRow := p.current()
+	if listNav(key.String(), &p.sel, len(p.rows()), navPage) {
+		return nil
+	}
 	switch key.String() {
 	case "up", "k":
 		if p.sel > 0 {
@@ -302,4 +305,9 @@ func padCol(s string, width int) string {
 		return s + " "
 	}
 	return s + strings.Repeat(" ", width-len(s))
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (p *PluginsPage) KeyHelp() []string {
+	return []string{"e / space  toggle the plugin", "enter  inspect capabilities"}
 }

@@ -208,15 +208,10 @@ func (p *MarketplacePage) action(e market.Entry) string {
 // Update implements PageModel.
 func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 	row, hasRow := p.current()
+	if listNav(key.String(), &p.sel, len(p.rows()), navPage) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if p.sel > 0 {
-			p.sel--
-		}
-	case "down", "j":
-		if p.sel < len(p.rows())-1 {
-			p.sel++
-		}
 	case "enter":
 		if hasRow {
 			p.expanded[row.Name] = !p.expanded[row.Name]
@@ -237,7 +232,8 @@ func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 				return p.engine.Remove(row.Name)
 			})
 		}
-	case "r":
+	case "g":
+		// Refresh ("r" means reset everywhere, #887).
 		return p.refresh()
 	}
 	return nil
@@ -276,7 +272,7 @@ func (p *MarketplacePage) View(width, height int) string {
 	case catalogURL() == "":
 		head.WriteString(dim.Render(" no catalog configured — set marketplace.catalog_url"))
 	case p.catalog == nil:
-		head.WriteString(dim.Render(" catalog not loaded — press r"))
+		head.WriteString(dim.Render(" catalog not loaded — press g"))
 	default:
 		head.WriteString(dim.Render(" plugin · status · description"))
 	}
@@ -310,7 +306,7 @@ func (p *MarketplacePage) View(width, height int) string {
 		list = append(list, clip.Render(warn.Render(" "+d)))
 	}
 	footer := wrapFooter([]footerLine{{
-		text:  " enter details · i install/update (from details) · x remove · r refresh catalog",
+		text:  " enter details · i install/update (from details) · x remove · g refresh catalog · ? keys",
 		style: dim,
 	}}, width, 2)
 	hl := p.headLines()
@@ -392,4 +388,13 @@ func (p *MarketplacePage) inspectEntry(e market.Entry) []string {
 		out = append(out, "press i to "+act)
 	}
 	return out
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (p *MarketplacePage) KeyHelp() []string {
+	return []string{
+		"enter  details (capability review) · i  install/update",
+		"x  remove the installed plugin",
+		"g  refresh the catalog",
+	}
 }

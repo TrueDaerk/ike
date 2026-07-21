@@ -208,15 +208,10 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.pkgViewing {
 		return t.updatePkgView(key)
 	}
+	if listNav(key.String(), &t.sel, len(t.rows()), navPage) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if t.sel > 0 {
-			t.sel--
-		}
-	case "down", "j":
-		if t.sel < len(t.rows())-1 {
-			t.sel++
-		}
 	case "enter":
 		if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
 			t.pushWizard()
@@ -749,4 +744,13 @@ func (t *ToolchainPage) renderPicker() []string {
 func fileExists(p string) bool {
 	st, err := os.Stat(p)
 	return err == nil && !st.IsDir()
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (t *ToolchainPage) KeyHelp() []string {
+	return []string{
+		"enter  pick the interpreter (or run the selected action row)",
+		"p  probe the version · r  reset to detection",
+		"n  new Python environment · i  packages · u  uv-install a Python",
+	}
 }
