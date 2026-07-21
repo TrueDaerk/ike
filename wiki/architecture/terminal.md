@@ -55,16 +55,33 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   concurrent OutputMsgs **across sessions** into one batch per adaptive flush
   (#803) — so `yes`, a build log, or eight busy TUI panes at once cannot
   flood the render loop or starve input handling.
-- **Resize content preservation** (#807): the upstream emulator hard-truncates
-  the grid on shrink (clipped cells are destroyed). `Session` keeps a resize
-  reserve — the fullest known content per screen row, snapshotted before every
-  applied resize — and writes the clipped region back after a grow, guarded by
-  a per-row prefix match so content the child rewrote meanwhile is never
-  overwritten (a height restore additionally requires every overlapping row to
-  match, since scrolled content shifts row indexes). Scrollback lines keep
-  their full width upstream — only the render clips — so scrollback needs no
-  reserve. `gridMu` serializes the feed loop against the snapshot/restore
-  sequence (CellAt returns pointers into the live buffer).
+- **Resize content preservation** (#807, #826): the upstream emulator
+  hard-truncates the grid on shrink (clipped cells are destroyed — on a height
+  shrink the **bottom** rows, i.e. the newest output and the prompt).
+  `Session` layers two mechanisms on top:
+  - **Scroll-on-shrink** (#826, real-terminal semantics): when a height shrink
+    would clip the cursor line, the top rows scroll into the scrollback and
+    the screen slides up, so the cursor-side content survives no matter which
+    pane edge was dragged. A later height grow pulls exactly those rows back
+    out of the scrollback (round-trip identical) — but only while they are
+    still the newest scrollback lines; child output that scrolled meanwhile
+    buries them and the pull is abandoned (the rows stay retrievable in the
+    scrollback, never duplicated). Skipped on the alt screen (no scrollback;
+    TUIs redraw on SIGWINCH).
+  - **Resize reserve** (#807): the fullest known content per screen row,
+    snapshotted before every applied resize; a grow writes the clipped region
+    back, guarded by a per-row prefix match so content the child rewrote is
+    never overwritten. The height-restore guard compares **before** the
+    grow's own snapshot syncs the overlap (post-snapshot the comparison is
+    vacuously true — the #826 fix closed that stale-resurrection hole). This
+    path covers width clips and top-anchored height shrinks where nothing
+    scrolls.
+
+  Scrollback lines keep their full width upstream — only the render clips —
+  so scrollback needs no reserve. `gridMu` serializes the feed loop against
+  the whole snapshot/scroll/restore sequence (CellAt returns pointers into
+  the live buffer); the grow-side cursor follows the pulled rows via a CUP
+  injected through the emulator's input path.
 - **View render cache** (#803): `Session.View` caches the rendered grid keyed
   by a mutation version (bumped on feed writes, resize, clear); a frame
   re-renders only grids that actually changed (measured ~270µs per 200×60

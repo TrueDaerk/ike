@@ -2,6 +2,13 @@
 
 ## 2026-07-21
 
+- Terminal height shrink no longer eats the newest output (#826): the top
+  rows scroll into the scrollback and the cursor line stays (real-terminal
+  semantics, edge-independent); a grow pulls the pushed rows back for an
+  identical round trip. Also fixed the #807 reserve's stale-resurrection
+  hole (height-restore guard now compares before the grow's snapshot)
+  (`/architecture/terminal.md`).
+
 - Closing an editor tab now closes its LSP document (#827):
   `EventBufferClosed` gained a producer — the root model records every
   removed editor view and fires the hook once no view of the file remains
