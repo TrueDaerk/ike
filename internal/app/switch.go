@@ -172,10 +172,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	sized := sizedTM.(Model)
 	// Hold the background set to project.max_workspaces (#780): idle LRU
 	// workspaces drop silently, a busy one asks first.
-	sized.enforceWorkspaceCap()
+	capCmd := sized.enforceWorkspaceCap()
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,
+		capCmd,
 		project.RecordOpenCmd(config.Discover("."), root, time.Now()),
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)

@@ -128,6 +128,11 @@ const (
 	// payload is the command id (string). It fires at dispatch time; the
 	// command's own tea.Cmd may still be running.
 	EventCommandExecuted
+	// EventWorkspaceClosed fires when a background workspace is torn down —
+	// close-from-list (#820) or LRU eviction (#780). The payload is the
+	// workspace's absolute root (string); subscribers release every per-file
+	// resource they hold under that root (#825).
+	EventWorkspaceClosed
 )
 
 // Hook subscribes to a lifecycle Event.

@@ -121,13 +121,13 @@ func (m *Model) openWsClosePrompt(root string, act wsActivity) {
 }
 
 // finishWorkspaceClose drops and tears the background workspace down and
-// refreshes the palette (the ● badge disappears in place).
-func (m *Model) finishWorkspaceClose(root string) {
-	if w := m.ws.Drop(root); w != nil {
-		teardownWorkspace(w)
-	}
+// refreshes the palette (the ● badge disappears in place). The returned cmd
+// carries the workspace-closed hooks' async work (#825).
+func (m *Model) finishWorkspaceClose(root string) tea.Cmd {
+	cmd := m.closeWorkspace(m.ws.Drop(root))
 	m.palette.Refresh()
 	m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(root))
+	return cmd
 }
 
 // wsClosePromptOpen reports whether the guard currently owns the keyboard.
@@ -151,13 +151,12 @@ func (m Model) updateWsClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "not closed: save failed")
 			return m, tea.Batch(cmds...)
 		}
-		m.finishWorkspaceClose(pending.root)
+		cmds = append(cmds, m.finishWorkspaceClose(pending.root))
 		return m, tea.Batch(cmds...)
 	case "d":
 		m.wsClosePending = nil
 		m.shell.Close()
-		m.finishWorkspaceClose(pending.root)
-		return m, nil
+		return m, m.finishWorkspaceClose(pending.root)
 	case "esc":
 		m.wsClosePending = nil
 		m.shell.Close()

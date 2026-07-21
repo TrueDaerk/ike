@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -476,6 +476,12 @@ All of this is editable in-IDE on the **Language Servers** settings page
 layer, per-server enable and command/args/settings overrides via write-back,
 and per-server restart (`Manager.StopLang`: stops one language's servers, all
 roots; they respawn lazily) beside the global `lsp.restart`.
+
+Closing a background workspace (#825) releases its LSP footprint the same
+lazy-respawn way: the `EventWorkspaceClosed` hook (`lsp.wsclose`) has the
+bridge drop its per-path caches under the closed root and call
+`Manager.CloseRoot`, which didCloses every document inside the root and
+stops every server rooted there.
 
 ## Missing-server installation (#131)
 
