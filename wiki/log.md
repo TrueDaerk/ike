@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Busy workspaces confirm before teardown (#821): close-from-list prompts
+  with a running/unsaved summary (save / discard / cancel), and IDE quit
+  aggregates the checks across all in-memory workspaces
+  (`/architecture/workspace.md`).
+
 - Recent-projects lists mark in-memory background workspaces with ● and
   close them in place (#820): shift+delete or a click on the ✕ zone unloads
   the workspace without switching (`/architecture/workspace.md`).

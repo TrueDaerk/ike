@@ -256,6 +256,9 @@ type Model struct {
 	// evictPending is the busy LRU background workspace root awaiting the
 	// eviction-guard answer (0370 M4, #780).
 	evictPending string
+	// wsClosePending is the busy close-from-list guard state (#821): the
+	// background workspace whose teardown awaits the user's answer.
+	wsClosePending *pendingWsClose
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -2769,18 +2772,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case project.CloseWorkspaceMsg:
 		// Close-from-list (#820): unload the background workspace without
 		// switching — sessions terminated, memory freed; the history entry
-		// stays. The active workspace cannot be closed this way.
+		// stays. The active workspace cannot be closed this way, and a busy
+		// one goes through the #821 confirm guard.
 		if m.activeWS() != nil && m.activeWS().Root == msg.Path {
 			m.host.Notify(host.Info, "cannot close the active project from the list")
 			return m, nil
 		}
-		w := m.ws.Drop(msg.Path)
+		w := m.ws.Peek(msg.Path)
 		if w == nil {
 			return m, nil // already gone (evicted meanwhile)
 		}
-		teardownWorkspace(w)
-		m.palette.Refresh() // the "●" badge and aux action disappear in place
-		m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(msg.Path))
+		if act := collectActivity(w); act.busy() {
+			m.palette.Close() // the guard prompt owns the keyboard next
+			m.openWsClosePrompt(msg.Path, act)
+			return m, nil
+		}
+		m.finishWorkspaceClose(msg.Path) // idle: palette stays open, badge disappears
 		return m, nil
 
 	case project.SwitchProjectMsg:
@@ -3573,6 +3580,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The background-workspace eviction guard (0370 M4, #780): e / esc.
 		if m.evictPromptOpen() {
 			return m.updateEvictPrompt(msg)
+		}
+		// The busy close-from-list guard (#821): s / d / esc answer it.
+		if m.wsClosePromptOpen() {
+			return m.updateWsClosePrompt(msg)
 		}
 		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
 		if m.closePromptOpen() {

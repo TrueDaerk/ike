@@ -84,6 +84,25 @@ refreshes, the badge disappears, the history entry remains. The active
 project refuses the action with an info toast. Manual close is the explicit
 counterpart to LRU eviction.
 
+## Busy-close & quit guards (#821)
+
+Tearing down a workspace with live state asks first
+(`internal/app/workspace_guard.go`):
+
+- **Close-from-list** on a busy background workspace — running debug
+  session, runs/tools, running shells, or dirty buffers
+  (`collectActivity`, the detailed sibling of `workspaceBusy`) — opens a
+  prompt summarising what is running: `s` saves the workspace's dirty
+  buffers then closes (writes work without focus or rendering; a failed
+  write cancels), `d` closes discarding, `esc` cancels untouched.
+- **IDE quit** aggregates dirty buffers and running debug/run/tool activity
+  across **every** in-memory workspace (active + parked, entries labeled
+  with their project root). Idle interactive shells never gate the quit —
+  every session has one open. `s` saves everywhere then quits, `d` quits
+  discarding, `esc` cancels.
+- **LRU eviction** keeps its own #780 guard (busy workspaces prompt, never
+  evict silently).
+
 ## Working-directory invariant (#779)
 
 **The process cwd always equals the active workspace's root.** Everything
