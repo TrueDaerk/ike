@@ -71,6 +71,39 @@ func TestToolsPageAddAllFields(t *testing.T) {
 	}
 }
 
+// TestToolsPageMultipleField (#835): the sixth form field sets Multiple,
+// round-trips through edit, and rejects non-boolean input.
+func TestToolsPageMultipleField(t *testing.T) {
+	p := toolsPage(t)
+	p.Update(key("a"))
+	typeText(p, "claude")
+	p.Update(key("tab"))
+	typeText(p, "claude")
+	for i := 0; i < 4; i++ { // args, cwd, placement → multiple
+		p.Update(key("tab"))
+	}
+	typeText(p, "maybe")
+	p.Update(key("enter"))
+	if !p.Capturing() || !strings.Contains(p.note, "multiple must be true or false") {
+		t.Fatalf("invalid multiple must fail validation, note=%q", p.note)
+	}
+	for range "maybe" {
+		p.Update(key("backspace"))
+	}
+	typeText(p, "true")
+	apply(t, p.Update(key("enter")))
+	got := config.Get().Tools.Custom
+	if len(got) != 1 || !got[0].Multiple {
+		t.Fatalf("entries = %+v, want Multiple=true", got)
+	}
+	// Edit seeds "true" back into the form.
+	p.sel = 0
+	p.Update(key("enter"))
+	if p.form[5] != "true" {
+		t.Fatalf("edit must seed multiple, form=%v", p.form)
+	}
+}
+
 func TestToolsPageEditRoundTrip(t *testing.T) {
 	p := toolsPage(t)
 	addTool(t, p, "htop", "htop")

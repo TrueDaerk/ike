@@ -19,8 +19,13 @@ import (
 // semantics like the other tool windows).
 
 // ToolOpenMsg asks the root model to open (or focus) the tool pane for the
-// named [[tools.custom]] entry. Dispatched by the tool.<name> commands.
-type ToolOpenMsg struct{ Name string }
+// named [[tools.custom]] entry. Dispatched by the tool.<name> commands; New
+// (the tool.<name>.new command, #835) forces a fresh instance for tools
+// configured with multiple = true.
+type ToolOpenMsg struct {
+	Name string
+	New  bool
+}
 
 // toolCommands builds one palette command per configured tool. It runs on
 // every registry query (Capabilities is lazy), so a config reload adding or
@@ -40,6 +45,13 @@ func toolCommands() []plugin.Command {
 			"Tool: "+t.Name,
 			ToolOpenMsg{Name: t.Name},
 		))
+		if t.Multiple {
+			cmds = append(cmds, appCommand(
+				"tool."+toolSlug(t.Name)+".new",
+				"Tool: "+t.Name+" (New Instance)",
+				ToolOpenMsg{Name: t.Name, New: true},
+			))
+		}
 	}
 	return cmds
 }
@@ -78,41 +90,71 @@ func toolEntry(name string) (config.ToolEntry, bool) {
 	return config.ToolEntry{}, false
 }
 
-// toolPane returns the pane instance hosting the named tool, nil when none.
+// toolPane returns the dedicated pane instance hosting the named tool, nil
+// when none (tab-hosted instances are found via toolLocations).
 func (m Model) toolPane(name string) *pane.Instance {
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
-		if inst != nil && inst.Kind() == pane.KindTerminal && inst.Terminal().Tool() == name {
-			return inst
+	for _, loc := range m.toolLocations(name) {
+		if loc.tab < 0 {
+			return m.activeWS().Panes.Get(loc.key)
 		}
 	}
 	return nil
 }
 
-// openTool is the tool.<name> state machine (#741), mirroring
-// terminal.toggle: no pane → spawn one at the configured placement; pane
-// exists but is not focused → focus it; focused → return focus to the
-// remembered pane.
-func (m *Model) openTool(name string) {
-	if inst := m.toolPane(name); inst != nil {
-		if m.activeWS().Panes.Focused() != inst.Key() {
-			m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
-			m.setFocus(inst.Key())
-			return
+// toolLoc is one live instance of a tool: the pane hosting it and, for an
+// editor-hosted terminal tab, the tab index (-1 for a dedicated pane).
+type toolLoc struct {
+	key string
+	tab int
+}
+
+// toolLocations finds every live instance of the named tool in the active
+// workspace: dedicated tool panes and editor-hosted tool tabs alike (#835) —
+// a tool moved into a tab list (center drop, #708) must still be found by
+// the toggle, or the single-instance rule silently breaks into a second
+// spawn.
+func (m Model) toolLocations(name string) []toolLoc {
+	var out []toolLoc
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil {
+			continue
 		}
-		target := m.activeWS().ReturnFocus
-		if target == "" || !m.activeWS().Panes.Has(target) {
-			target = m.activeEditorKey()
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			if inst.Terminal().Tool() == name {
+				out = append(out, toolLoc{key: key, tab: -1})
+			}
+		case pane.KindEditor:
+			for i := 0; i < inst.TabCount(); i++ {
+				if t := inst.TabTerminal(i); t != nil && t.Tool() == name {
+					out = append(out, toolLoc{key: key, tab: i})
+				}
+			}
 		}
-		if target == "" || !m.activeWS().Panes.Has(target) {
-			target = pane.ExplorerKey
-		}
-		m.setFocus(target)
-		return
 	}
+	return out
+}
+
+// openTool is the tool.<name> state machine (#741), mirroring
+// terminal.toggle: no instance → spawn one at the configured placement;
+// instance exists but is not focused → focus it; focused → return focus to
+// the remembered pane. fresh (tool.<name>.new, #835) skips the toggle and
+// spawns another instance — only honored for entries with multiple = true,
+// so a stale binding cannot break a single-instance tool.
+func (m *Model) openTool(name string, fresh bool) {
 	entry, ok := toolEntry(name)
 	if !ok {
 		return
+	}
+	if fresh && !entry.Multiple {
+		fresh = false
+	}
+	if !fresh {
+		if locs := m.toolLocations(name); len(locs) > 0 {
+			m.toggleTool(name, locs)
+			return
+		}
 	}
 	target := m.activeEditorKey()
 	if target == "" {
@@ -139,8 +181,59 @@ func (m *Model) openTool(name string) {
 	}
 	m.activeWS().Tree = tree
 	m.setFocus(key)
+	m.rememberTool(name, key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// toggleTool applies the focus/return cycle on an existing instance,
+// preferring the most recently used one when several are open (#835): not
+// focused → focus it (activating its tab for a tab-hosted tool); focused →
+// return focus to the remembered pane.
+func (m *Model) toggleTool(name string, locs []toolLoc) {
+	loc := locs[0]
+	if recent := m.toolRecent[name]; recent != "" {
+		for _, l := range locs {
+			if l.key == recent {
+				loc = l
+				break
+			}
+		}
+	}
+	inst := m.activeWS().Panes.Get(loc.key)
+	if inst == nil {
+		return
+	}
+	focusedHere := m.activeWS().Panes.Focused() == loc.key &&
+		(loc.tab < 0 || inst.ActiveTab() == loc.tab)
+	if !focusedHere {
+		m.activeWS().ReturnFocus = m.activeWS().Panes.Focused()
+		m.setFocus(loc.key)
+		if loc.tab >= 0 {
+			inst.ActivateTab(loc.tab)
+		}
+		m.rememberTool(name, loc.key)
+		return
+	}
+	target := m.activeWS().ReturnFocus
+	if target == "" || !m.activeWS().Panes.Has(target) {
+		target = m.activeEditorKey()
+	}
+	if target == "" || !m.activeWS().Panes.Has(target) {
+		target = pane.ExplorerKey
+	}
+	m.setFocus(target)
+}
+
+// rememberTool records the pane the tool was last opened or focused in, so
+// the plain tool.<name> toggle targets the most recent instance (#835). The
+// map is shared across the value-model copies (lazy init hands every copy
+// the same map).
+func (m *Model) rememberTool(name, key string) {
+	if m.toolRecent == nil {
+		m.toolRecent = map[string]string{}
+	}
+	m.toolRecent[name] = key
 }
 
 // toolSpawnEnv is the environment overlay for tool processes: the toolchain

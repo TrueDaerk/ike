@@ -54,12 +54,16 @@ type Tools struct {
 // ("lazygit" → command id "tool.lazygit"); Command is the program to run with
 // Args; Cwd is the working directory (empty: the project root). Placement
 // decides where the pane splits open: "bottom" (default) or "right".
+// Multiple opts the tool into concurrent instances (#835): a "tool.<name>.new"
+// command spawns additional panes; false (default) keeps the strict
+// single-instance toggle.
 type ToolEntry struct {
 	Name      string   `toml:"name"`
 	Command   string   `toml:"command"`
 	Args      []string `toml:"args"`
 	Cwd       string   `toml:"cwd"`
 	Placement string   `toml:"placement"`
+	Multiple  bool     `toml:"multiple"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen
