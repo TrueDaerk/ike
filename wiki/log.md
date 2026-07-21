@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- F4 / go-to-definition never silent (#858): an empty answer toasts whether
+  nothing was found or no ready language server could be asked
+  (`/architecture/lsp.md`).
+
 - Floating-window resize chords delivered on macOS (#774): cmd+shift+arrows
   (and alt+shift) join ctrl+shift — Mission Control/Spaces own ctrl+arrows on
   macOS, so the original chord never reached the terminal.
