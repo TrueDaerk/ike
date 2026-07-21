@@ -51,8 +51,8 @@ type LSPPage struct {
 	sel     int
 	off     int // list scroll offset (#537)
 	status  map[string]lspStatus
-	editing lspEditField
 	field   textField // shared cursor input (#888)
+	host    SubPanelHost
 	invalid string
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
@@ -70,11 +70,15 @@ func NewLSPPage(opts config.Options, running func() []string, restartAll func() 
 	}
 }
 
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (p *LSPPage) SetSubPanelHost(h SubPanelHost) { p.host = h }
+
 // SetPalette implements PageModel.
 func (p *LSPPage) SetPalette(pal *theme.Palette) { p.pal = pal }
 
-// Capturing implements PageModel: the override input needs keys verbatim.
-func (p *LSPPage) Capturing() bool { return p.editing != lspEditNone }
+// Capturing implements PageModel: the override editors are sub-panels now
+// (#892), so the page itself never captures.
+func (p *LSPPage) Capturing() bool { return false }
 
 // Receive implements MsgReceiver: language-tagged server status updates land
 // in the per-language cache the status column reads.
@@ -198,9 +202,6 @@ func (p *LSPPage) rowStatus(id string) (label, detail string) {
 
 // Update implements PageModel.
 func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
-	if p.editing != lspEditNone {
-		return p.updateInput(key)
-	}
 	l, hasRow := p.current()
 	if listNav(key.String(), &p.sel, len(p.servers()), navPage) {
 		return nil
@@ -215,19 +216,19 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			return p.write(l.ID, "enabled", !serverOn(l.ID))
 		}
 	case "c":
-		if hasRow {
+		if hasRow && p.host != nil {
 			cmd, _ := effective(l)
-			p.startEdit(lspEditCommand, cmd)
+			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditCommand, cmd))
 		}
 	case "a":
-		if hasRow {
+		if hasRow && p.host != nil {
 			_, args := effective(l)
-			p.startEdit(lspEditArgs, strings.Join(args, " "))
+			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditArgs, strings.Join(args, " ")))
 		}
 	case "o":
 		// Server options JSON ("s" is reserved for the write scope, #887).
-		if hasRow {
-			p.startEdit(lspEditSettings, settingsJSON(l.ID))
+		if hasRow && p.host != nil {
+			p.host.Push(newLSPOverrideForm(p, p.host, l.ID, lspEditSettings, settingsJSON(l.ID)))
 		}
 	case "R":
 		// Restart the selected server ("r" means reset everywhere, #887).
@@ -291,10 +292,6 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// startEdit opens the inline input prefilled with the current value.
-func (p *LSPPage) startEdit(field lspEditField, prefill string) {
-	p.editing, p.field.text, p.invalid = field, prefill, ""
-}
 
 // settingsJSON renders the server's settings override as compact JSON for the
 // inline editor ("" when none is set).
@@ -310,29 +307,11 @@ func settingsJSON(id string) string {
 	return string(data)
 }
 
-// updateInput handles the inline override editor. Enter commits (an empty
-// input removes the override), esc cancels.
-func (p *LSPPage) updateInput(key tea.KeyPressMsg) tea.Cmd {
-	switch key.Code {
-	case tea.KeyEscape:
-		p.editing, p.invalid = lspEditNone, ""
-	case tea.KeyEnter:
-		return p.commitInput()
-	default:
-		// Shared cursor input (#888): rune-safe editing with word ops.
-		p.field.Handle(key)
-	}
-	return nil
-}
 
 // commitInput writes the edited override through write-back (project scope).
-func (p *LSPPage) commitInput() tea.Cmd {
-	l, ok := p.current()
-	if !ok {
-		p.editing = lspEditNone
-		return nil
-	}
-	field, raw := p.editing, strings.TrimSpace(p.field.text)
+// commitOverride writes one override for lang (#892); an empty raw resets it.
+func (p *LSPPage) commitOverride(lang string, field lspEditField, rawInput string) tea.Cmd {
+	raw := strings.TrimSpace(rawInput)
 	var key string
 	var value any
 	switch field {
@@ -354,11 +333,11 @@ func (p *LSPPage) commitInput() tea.Cmd {
 			value = m
 		}
 	}
-	p.editing, p.invalid = lspEditNone, ""
+	p.invalid = ""
 	if raw == "" {
-		return config.RemoveAndReload(p.opts, config.ProjectScope, "lsp.servers."+l.ID+"."+key)
+		return config.RemoveAndReload(p.opts, config.ProjectScope, "lsp.servers."+lang+"."+key)
 	}
-	return p.write(l.ID, key, value)
+	return p.write(lang, key, value)
 }
 
 // write persists one [lsp.servers.<id>] override to the project config.
@@ -413,27 +392,10 @@ func (p *LSPPage) View(w, h int) string {
 	var footer []string
 	if l, ok := p.current(); ok {
 		_, detail := p.rowStatus(l.ID)
-		switch {
-		case p.editing != lspEditNone:
-			prompt := map[lspEditField]string{
-				lspEditCommand:  "command",
-				lspEditArgs:     "args (space-separated)",
-				lspEditSettings: "settings (JSON object)",
-			}[p.editing]
-			line := " " + prompt + ": " + p.field.View() + "  (empty = reset)"
-			if p.invalid != "" {
-				line += "  ✗ " + p.invalid
-			}
-			footer = wrapFooter([]footerLine{
-				{text: line, style: sec},
-				{text: " enter apply · esc cancel", style: sec},
-			}, w, 3)
-		default:
-			footer = wrapFooter([]footerLine{
-				{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
-				{text: " e enable · c command · a args · o options JSON · i install · R restart · ctrl+r restart all · r reset · ? keys", style: sec},
-			}, w, 3)
-		}
+		footer = wrapFooter([]footerLine{
+			{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
+			{text: " e enable · c command · a args · o options JSON · i install · R restart · ctrl+r restart all · r reset · ? keys", style: sec},
+		}, w, 3)
 	}
 	p.listH = h - len(head) - len(footer)
 	return strings.Join(head, "\n") + "\n" + pinFooter(list, footer, p.sel, p.sel, h-len(head), &p.off)
@@ -447,10 +409,6 @@ const lspHeadLines = 3
 // page's primary action, `e`). A press while the inline override input is
 // open cancels it (esc semantics).
 func (p *LSPPage) Click(_, y int) tea.Cmd {
-	if p.editing != lspEditNone {
-		p.editing, p.invalid = lspEditNone, ""
-		return nil
-	}
 	row := y - lspHeadLines
 	if row < 0 || (p.listH > 0 && row >= p.listH) {
 		return nil
@@ -470,11 +428,8 @@ func (p *LSPPage) Click(_, y int) tea.Cmd {
 }
 
 // Wheel implements the optional PageWheeler seam (#674): the list moves its
-// selection (it follows, like j/k); inert while the override input is open.
+// selection (it follows, like j/k).
 func (p *LSPPage) Wheel(delta int) {
-	if p.editing != lspEditNone {
-		return
-	}
 	if n := len(p.servers()); n > 0 {
 		p.sel = clamp(p.sel+delta, 0, n-1)
 	}

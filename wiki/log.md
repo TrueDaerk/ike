@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings modal-flow migrations (0420, #892): keymap capture + import, LSP
+  override editor, uv-install picker and PHP mapping form are sub-panels;
+  every custom page is searchable (`/architecture/settings-ui.md`).
+
 - Settings feedback & safety (0420, #891): confirmation sub-panels for
   destructive actions, ✓ saved-to-scope flash, inline write errors, pickers
   follow the highlight (`/architecture/settings-ui.md`).

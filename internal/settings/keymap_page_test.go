@@ -13,6 +13,16 @@ import (
 )
 
 
+// capturePanel fetches the open chord-capture sub-panel (#892).
+func capturePanel(t *testing.T, k *KeymapPage) *keymapCapture {
+	t.Helper()
+	c, ok := k.host.(*stubHost).top().(*keymapCapture)
+	if !ok {
+		t.Fatal("expected an open capture sub-panel")
+	}
+	return c
+}
+
 // unbind drives "u" through the confirmation sub-panel (#891).
 func unbind(t *testing.T, k *KeymapPage) tea.Cmd {
 	t.Helper()
@@ -69,12 +79,10 @@ func TestCaptureRebindWritesOverrideAndReResolves(t *testing.T) {
 	if b.Command != "editor.write" {
 		t.Fatalf("precondition: ctrl+s is editor.write, got %s", b.Command)
 	}
-	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // start capture
-	if !k.Capturing() {
-		t.Fatal("enter must start chord capture")
-	}
-	k.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}) // ctrl+o
-	cmd := k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})   // confirm
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // push the capture
+	c := capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl}) // ctrl+o
+	cmd := c.Update(tea.KeyPressMsg{Code: tea.KeyEnter})   // confirm
 	apply(t, cmd)                                          // write + reload
 	table := k.table()
 	if _, ok := table.Lookup(keymap.MustParseChord("ctrl+s"), keymap.Global); ok {
@@ -96,24 +104,26 @@ func TestCaptureConflictNeedsConfirmation(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	c := capturePanel(t, k)
 	// Capture ctrl+z, which collides with editor.undo.
-	k.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
-	if cmd := k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
+	c.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	if cmd := c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd != nil {
 		t.Fatal("conflicting capture must wait for confirmation")
 	}
-	if k.conflict != "editor.undo" {
-		t.Fatalf("conflict should name editor.undo, got %q", k.conflict)
+	if c.conflict != "editor.undo" {
+		t.Fatalf("conflict should name editor.undo, got %q", c.conflict)
 	}
-	// Any non-enter key cancels.
-	k.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if k.Capturing() || k.conflict != "" {
-		t.Fatal("cancel must leave capture mode")
+	// Any non-enter key cancels (pops the capture).
+	c.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if k.host.(*stubHost).top() != nil {
+		t.Fatal("cancel must close the capture")
 	}
 	// Confirming (enter) writes the override.
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	k.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
-	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	apply(t, k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	c = capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Code: 'z', Mod: tea.ModCtrl})
+	c.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	apply(t, c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+z"), keymap.Editor)
 	if !ok || nb.Command != "editor.write" {
 		t.Fatalf("confirmed override must win, got %+v ok=%v", nb, ok)
@@ -161,13 +171,11 @@ func TestUnboundCommandStaysListedAndRebinds(t *testing.T) {
 	if !strings.Contains(k.View(120, 80), "(unbound)") {
 		t.Fatal("unbound row must render as (unbound)")
 	}
-	// enter starts a capture; a fresh chord binds the command again.
+	// enter pushes a capture; a fresh chord binds the command again.
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !k.Capturing() {
-		t.Fatal("enter on an unbound row must start chord capture")
-	}
-	k.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
-	apply(t, k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	c := capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
+	apply(t, c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+o"), keymap.Editor)
 	if !ok || nb.Command != "editor.write" {
 		t.Fatalf("rebind from unbound must resolve, got %+v ok=%v", nb, ok)
@@ -210,11 +218,15 @@ func TestFragileWarningOnCapture(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	k.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModSuper}) // cmd+s
-	if k.warn == "" {
+	c, ok := k.host.(*stubHost).top().(*keymapCapture)
+	if !ok {
+		t.Fatal("enter must push the capture sub-panel")
+	}
+	c.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModSuper}) // cmd+s
+	if c.warn == "" {
 		t.Fatal("capturing a cmd chord must raise the honesty warning")
 	}
-	if !strings.Contains(k.View(120, 60), "⚠") {
+	if !strings.Contains(c.View(120, 10), "⚠") {
 		t.Fatal("warning must render")
 	}
 }
@@ -339,17 +351,16 @@ func TestKeymapPageImportsJetBrainsXML(t *testing.T) {
 		t.Fatal(err)
 	}
 	k.Update(key("i"))
-	if !k.Capturing() {
-		t.Fatal("import input must capture keys")
+	imp, ok := k.host.(*stubHost).top().(*keymapImport)
+	if !ok {
+		t.Fatal("i must push the import sub-panel")
 	}
-	// Replace the seeded "~/" with the fixture's absolute path.
-	k.importField = textField{}
 	for _, r := range path {
-		k.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		imp.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
-	apply(t, k.Update(key("enter")))
-	if k.Capturing() {
-		t.Fatal("import input must close on enter")
+	apply(t, imp.Update(key("enter")))
+	if k.host.(*stubHost).top() != nil {
+		t.Fatal("import must close on enter")
 	}
 	if !strings.Contains(k.importNote, "imported 1 binding") || !strings.Contains(k.importNote, "1 action(s) unmapped") {
 		t.Fatalf("importNote = %q", k.importNote)
@@ -400,6 +411,7 @@ func keymapPageWithCommands(t *testing.T, cmds []CommandEntry) (*KeymapPage, con
 	restoreConfig(t)
 	opts := testOpts(t)
 	k := NewKeymapPage(opts, func(string) bool { return true }, func() []CommandEntry { return cmds })
+	k.SetSubPanelHost(&stubHost{})
 	return k, opts
 }
 
@@ -466,11 +478,9 @@ func TestNeverBoundCommandCapturesFirstChord(t *testing.T) {
 		t.Fatal("r must be a no-op on a never-bound row")
 	}
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !k.Capturing() {
-		t.Fatal("enter must start chord capture on a never-bound row")
-	}
-	k.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModAlt})
-	apply(t, k.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	c := capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModAlt})
+	apply(t, c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
 	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+alt+g"), keymap.Global)
 	if !ok || nb.Command != "tool.lazygit" {
 		t.Fatalf("ctrl+alt+g must resolve to tool.lazygit, got %+v ok=%v", nb, ok)

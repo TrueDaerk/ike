@@ -207,13 +207,14 @@ func TestToolchainPageEnvActions(t *testing.T) {
 		t.Fatalf("run step = %d running %v", w.step, w.running)
 	}
 
-	// u opens the uv picker; enter kicks the install.
+	// u pushes the uv picker sub-panel; install returns the async command.
 	p.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
-	if !p.uvPicking || len(p.uvVersions) != 1 {
-		t.Fatalf("picker state = %v %v", p.uvPicking, p.uvVersions)
+	up, ok := h.top().(*uvPickerPanel)
+	if !ok || len(up.versions) != 1 {
+		t.Fatalf("picker state = %T %v", h.top(), up)
 	}
-	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
-		t.Fatal("enter should return the install command")
+	if cmd := up.install(); cmd == nil {
+		t.Fatal("install should return the async command")
 	}
 
 	// A result lands in the state line via Receive.
@@ -224,9 +225,11 @@ func TestToolchainPageEnvActions(t *testing.T) {
 
 	// Without uv, u reports instead of opening a picker.
 	p2 := pythonPage(t, &fakeEnv{binaries: map[string]string{}})
+	h2 := &stubHost{}
+	p2.SetSubPanelHost(h2)
 	p2.Update(tea.KeyPressMsg{Code: 'u', Text: "u"})
-	if p2.uvPicking || !strings.Contains(p2.envState, "uv not found") {
-		t.Fatalf("state = %q picking=%v", p2.envState, p2.uvPicking)
+	if h2.top() != nil || !strings.Contains(p2.envState, "uv not found") {
+		t.Fatalf("state = %q top=%v", p2.envState, h2.top())
 	}
 }
 
