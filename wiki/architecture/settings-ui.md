@@ -280,3 +280,17 @@ auto/user/project on click, the **hint-row keys** execute their action
 instead of cancelling it. The Plugins and Marketplace lists scroll through
 `pinFooter` offsets — previously a `MaxHeight` clip made rows past the window
 unreachable.
+
+## Search over everything (0420, #886)
+
+The "/" filter reaches the whole product: schema entries (edit in place, as
+before), **category titles** (jump rows — enter lands on the page) and
+**custom-page items** through the `Searchable{SearchItems()}` seam — a
+`SearchItem` carries a label, extra keywords and an `Activate` callback that
+positions the page (select the row) after the panel navigates there.
+`/python` lists `Toolchain › python` and `Toolchain › New Python environment`;
+enter clears the filter and selects the row. The rail stays alive while
+filtering — a click clears the filter and jumps to the page. The
+"not searched" note now lists only pages that don't export items yet.
+Implemented: Toolchain, Tools, Plugins; the remaining pages join with their
+sub-panel migrations (#892).

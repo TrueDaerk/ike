@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Settings search over everything (0420, #886): the filter matches category
+  titles (jump rows) and custom-page items via the Searchable seam
+  (Toolchain/Tools/Plugins); enter navigates, the rail stays alive
+  (`/architecture/settings-ui.md`).
+
 - Settings mouse parity (0420, #885): hover highlighting, viewport wheel
   (1 category/notch on the rail), clickable scope chip / hint keys /
   completion suggestions, scrollable Plugins & Marketplace lists

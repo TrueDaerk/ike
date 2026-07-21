@@ -135,7 +135,6 @@ func (m *Model) renderCategories(h int) string {
 	base := lipgloss.NewStyle().Width(catWidth)
 	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
-	dim := base.Foreground(pal.Secondary).Faint(true)
 
 	if m.followCat {
 		m.catOff = follow(m.catOff, m.cat, m.cat, len(m.pages), h)
@@ -148,8 +147,6 @@ func (m *Model) renderCategories(h int) string {
 		p := m.pages[i]
 		label := " " + p.Title
 		switch {
-		case m.filter != "":
-			lines = append(lines, dim.Render(label))
 		case i == m.cat && m.focus == catColumn:
 			lines = append(lines, sel.Render(label))
 		case i == m.cat:
@@ -375,11 +372,15 @@ func (m *Model) renderPicker(e Entry, clip lipgloss.Style) []string {
 	return out
 }
 
-// customPagesNote names the custom pages the filter cannot search.
+// customPagesNote names the custom pages the filter cannot search (the ones
+// not yet exporting SearchItems, #886).
 func (m *Model) customPagesNote() string {
 	var names []string
 	for _, p := range m.pages {
-		if p.Custom != nil {
+		if p.Custom == nil {
+			continue
+		}
+		if _, ok := p.Custom.(Searchable); !ok {
 			names = append(names, p.Title)
 		}
 	}
@@ -392,6 +393,23 @@ func (m *Model) customPagesNote() string {
 // renderEntry renders one form row: "Title  [page]  value  @layer".
 func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	pal := m.theme()
+	if r.kind != rowEntry {
+		// A filter jump row (#886): a page or a custom-page item.
+		label := " → " + r.label
+		if r.kind == rowPage {
+			label = " → " + r.label + "  (page)"
+		}
+		style := lipgloss.NewStyle().Foreground(pal.Info)
+		switch {
+		case selected && m.focus == formColumn:
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+		case selected:
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+		case hovered:
+			style = style.Underline(true)
+		}
+		return style.Render(label)
+	}
 	e := r.entry
 
 	val := value(e.Key)
