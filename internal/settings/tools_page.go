@@ -26,21 +26,16 @@ const toolFieldCount = 6
 
 var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple"}
 
-// ToolsPage implements PageModel.
+// ToolsPage implements PageModel. The add/edit form runs as a SubPanel
+// (#883, tools_form.go) pushed through host.
 type ToolsPage struct {
 	opts config.Options
 	pal  *theme.Palette
+	host SubPanelHost
 
 	sel  int
 	off  int // list scroll offset
 	note string
-
-	// The add/edit form: editIdx is the entry being edited (-1 for a new
-	// one); field is the focused input, form the field values.
-	editing bool
-	editIdx int
-	field   int
-	form    [toolFieldCount]string
 
 	// The suggestion picker (#759): catalog entries not yet configured.
 	suggesting bool
@@ -48,6 +43,9 @@ type ToolsPage struct {
 
 	listH int // list-window height of the last render (mouse hit-testing)
 }
+
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (t *ToolsPage) SetSubPanelHost(h SubPanelHost) { t.host = h }
 
 // NewToolsPage builds the tools editor writing [[tools.custom]] through opts.
 func NewToolsPage(opts config.Options) *ToolsPage {
@@ -57,10 +55,9 @@ func NewToolsPage(opts config.Options) *ToolsPage {
 // SetPalette implements PageModel.
 func (t *ToolsPage) SetPalette(p *theme.Palette) { t.pal = p }
 
-// Capturing implements PageModel: while the form is open every key is field
-// text — names may contain the page's own action letters (a/d/j/k) — and the
-// suggestion picker owns esc/enter the same way.
-func (t *ToolsPage) Capturing() bool { return t.editing || t.suggesting }
+// Capturing implements PageModel: the suggestion picker owns esc/enter; the
+// add/edit form is a SubPanel now (#883) and captures at the panel level.
+func (t *ToolsPage) Capturing() bool { return t.suggesting }
 
 // entries returns the configured tools from the live config.
 func (t *ToolsPage) entries() []config.ToolEntry {
@@ -91,9 +88,6 @@ func (t *ToolsPage) suggestions() []toolcatalog.Entry {
 
 // Update implements PageModel.
 func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
-	if t.editing {
-		return t.updateForm(key)
-	}
 	if t.suggesting {
 		return t.updateSuggest(key)
 	}
@@ -172,98 +166,12 @@ func (t *ToolsPage) addSuggestion(e toolcatalog.Entry) tea.Cmd {
 	return tea.Batch(write, toolcatalog.Install(e))
 }
 
-// openForm opens the add (idx -1) or edit form, seeding the fields.
+// openForm pushes the add (idx -1) or edit form sub-panel (#883).
 func (t *ToolsPage) openForm(idx int) {
-	t.editing, t.editIdx, t.field, t.note = true, idx, 0, ""
-	t.form = [toolFieldCount]string{}
-	if idx >= 0 {
-		e := t.entries()[idx]
-		multiple := ""
-		if e.Multiple {
-			multiple = "true"
-		}
-		t.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple}
+	t.note = ""
+	if t.host != nil {
+		t.host.Push(newToolForm(t, t.host, idx))
 	}
-}
-
-// updateForm handles keys while the form is open: tab/down and shift+tab/up
-// cycle fields, printable text appends, backspace edits, enter validates and
-// saves, esc cancels.
-func (t *ToolsPage) updateForm(key tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Code == tea.KeyEscape:
-		t.editing, t.note = false, ""
-		return nil
-	case key.Code == tea.KeyEnter:
-		return t.commitForm()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		t.field = (t.field + toolFieldCount - 1) % toolFieldCount
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		t.field = (t.field + 1) % toolFieldCount
-	case key.Code == tea.KeyBackspace:
-		if f := t.form[t.field]; f != "" {
-			t.form[t.field] = f[:len(f)-1]
-		}
-	default:
-		if key.Text != "" {
-			t.form[t.field] += key.Text
-		}
-	}
-	return nil
-}
-
-// validate checks the form; "" means valid. self is the index being edited
-// (-1 for add) so its own name is not a duplicate of itself.
-func (t *ToolsPage) validate(self int) string {
-	name := strings.TrimSpace(t.form[0])
-	if name == "" {
-		return "name is required"
-	}
-	if strings.TrimSpace(t.form[1]) == "" {
-		return "command is required"
-	}
-	switch t.form[4] {
-	case "", "bottom", "right":
-	default:
-		return "placement must be bottom or right"
-	}
-	switch t.form[5] {
-	case "", "true", "false":
-	default:
-		return "multiple must be true or false"
-	}
-	for i, e := range t.entries() {
-		if i != self && e.Name == name {
-			return "a tool named " + name + " already exists"
-		}
-	}
-	return ""
-}
-
-// commitForm validates and writes the whole [[tools.custom]] list back at
-// user scope, reloading the config so the palette commands re-shape.
-func (t *ToolsPage) commitForm() tea.Cmd {
-	if msg := t.validate(t.editIdx); msg != "" {
-		t.note = msg
-		return nil
-	}
-	entry := config.ToolEntry{
-		Name:      strings.TrimSpace(t.form[0]),
-		Command:   strings.TrimSpace(t.form[1]),
-		Args:      strings.Fields(t.form[2]),
-		Cwd:       strings.TrimSpace(t.form[3]),
-		Placement: t.form[4],
-		Multiple:  t.form[5] == "true",
-	}
-	entries := append([]config.ToolEntry(nil), t.entries()...)
-	if t.editIdx >= 0 && t.editIdx < len(entries) {
-		entries[t.editIdx] = entry
-	} else {
-		entries = append(entries, entry)
-		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
-	}
-	t.editing, t.note = false, ""
-	return t.writeEntries(entries)
 }
 
 // deleteEntry removes the entry at idx and writes the list back.
@@ -330,7 +238,7 @@ func (t *ToolsPage) View(w, h int) string {
 			line += " · multi"
 		}
 		style := lipgloss.NewStyle()
-		if i == t.sel && !t.editing {
+		if i == t.sel {
 			style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 		}
 		list = append(list, style.Render(line))
@@ -338,17 +246,12 @@ func (t *ToolsPage) View(w, h int) string {
 	if len(entries) == 0 {
 		list = append(list, "no tools configured — press a to add one")
 	}
-	var footer []string
-	if t.editing {
-		footer = t.formFooter(w)
-	} else {
-		hint := "   a add · enter edit · d delete · s suggestions — each tool is a tool.<name> palette command"
-		lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
-		if t.note != "" {
-			lines = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines...)
-		}
-		footer = wrapFooter(lines, w, 3)
+	hint := "   a add · enter edit · d delete · s suggestions — each tool is a tool.<name> palette command"
+	lines2 := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
+	if t.note != "" {
+		lines2 = append([]footerLine{{text: "   " + t.note, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}, lines2...)
 	}
+	footer := wrapFooter(lines2, w, 3)
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
 	t.listH = h - 1 - len(footer)
 	return headLine + "\n" + pinFooter(list, footer, t.sel, t.sel, h-1, &t.off)
@@ -390,36 +293,6 @@ func (t *ToolsPage) viewSuggestions(w, h int) string {
 	return head + "\n" + pinFooter(list, footer, t.sugSel, t.sugSel, h-1, &off)
 }
 
-// formFooter renders the add/edit form pinned under the list: one line per
-// field, the focused one carrying the cursor, plus the hint/validation line.
-func (t *ToolsPage) formFooter(w int) []string {
-	pal := t.theme()
-	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	verb := "edit tool"
-	if t.editIdx < 0 {
-		verb = "new tool"
-	}
-	lines := []footerLine{{text: "   " + verb + ":", style: sec}}
-	for i, name := range toolFieldNames {
-		marker, cursor := "  ", ""
-		style := lipgloss.NewStyle()
-		if i == t.field {
-			marker, cursor = "> ", "▌"
-			style = style.Bold(true)
-		}
-		lines = append(lines, footerLine{
-			text:  "   " + marker + pad(name, 10) + t.form[i] + cursor,
-			style: style,
-		})
-	}
-	hint := "   tab next field · enter saves · esc cancels"
-	if t.note != "" {
-		lines = append(lines, footerLine{text: "   ✗ " + t.note, style: lipgloss.NewStyle().Foreground(pal.Error)})
-	}
-	lines = append(lines, footerLine{text: hint, style: sec})
-	return wrapFooter(lines, w, len(lines))
-}
-
 // argSuffix renders the args for the list line, "" when none.
 func argSuffix(args []string) string {
 	if len(args) == 0 {
@@ -437,11 +310,11 @@ func placementLabel(p string) string {
 }
 
 // Click implements the optional PageClicker seam: a press on a row selects
-// it, a press on the selected row opens the edit form (enter semantics); a
-// press while the form is open cancels it.
+// it, a press on the selected row opens the edit form sub-panel (enter
+// semantics); a press while the suggestion picker is open closes it.
 func (t *ToolsPage) Click(_, y int) tea.Cmd {
-	if t.editing || t.suggesting {
-		t.editing, t.suggesting, t.note = false, false, ""
+	if t.suggesting {
+		t.suggesting, t.note = false, ""
 		return nil
 	}
 	row := y - 1
@@ -461,9 +334,9 @@ func (t *ToolsPage) Click(_, y int) tea.Cmd {
 }
 
 // Wheel implements the optional PageWheeler seam: the list moves its
-// selection; inert while the form is open.
+// selection; inert while the suggestion picker is open.
 func (t *ToolsPage) Wheel(delta int) {
-	if t.editing || t.suggesting {
+	if t.suggesting {
 		return
 	}
 	if n := len(t.entries()); n > 0 {

@@ -85,6 +85,9 @@ type Model struct {
 	// follows each entry's conventional Scope, user/project force the layer
 	// for every write and reset. Cycled with "s", shown in the hint row.
 	writeScope scopeSel
+
+	// stack is the open sub-panel levels (#883), topmost last; see subpanel.go.
+	stack []SubPanel
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -119,9 +122,17 @@ func (m *Model) scopeLabel() string {
 	return "auto"
 }
 
-// New builds a closed panel over pages, writing through opts.
+// New builds a closed panel over pages, writing through opts. Custom pages
+// implementing the hostAware seam get the panel injected as their
+// SubPanelHost (#883), so they can push forms and wizards.
 func New(pages []Page, opts config.Options) *Model {
-	return &Model{pages: pages, opts: opts}
+	m := &Model{pages: pages, opts: opts}
+	for _, page := range pages {
+		if h, ok := page.Custom.(hostAware); ok {
+			h.SetSubPanelHost(m)
+		}
+	}
+	return m
 }
 
 // SetPalette threads the active theme palette (into custom pages too).
@@ -148,15 +159,22 @@ func (m *Model) Open() {
 	m.catOff, m.formOff = 0, 0
 	m.editing, m.filtering, m.picking = false, false, false
 	m.filter, m.input, m.invalid = "", "", ""
+	m.stack = nil
 }
 
-// Close hides the panel.
-func (m *Model) Close() { m.open = false }
+// Close hides the panel (and any open sub-panels).
+func (m *Model) Close() {
+	m.open = false
+	m.stack = nil
+}
 
 // Capturing reports whether the panel currently needs every key verbatim —
 // an edit/pick/filter input or a custom page's capture mode — so the host
 // must not intercept chrome chords like the resize keys (#774).
 func (m *Model) Capturing() bool {
+	if top := m.topSub(); top != nil {
+		return top.Capturing()
+	}
 	if m.editing || m.picking || m.filtering {
 		return true
 	}
@@ -223,6 +241,9 @@ func value(key string) string {
 func (m *Model) Click(x, y int) tea.Cmd {
 	if !m.open {
 		return nil
+	}
+	if m.SubOpen() {
+		return m.clickSub(x, y)
 	}
 	const bodyTop = 2 // border row + title row
 	if m.picking {
@@ -334,7 +355,14 @@ func (m *Model) clickEdit(x, row int) tea.Cmd {
 // lists follow their selection, like every other overlay panel): the category
 // column when hovered, the form column otherwise. x is panel-local.
 func (m *Model) Wheel(x, delta int) {
-	if !m.open || m.editing || m.picking || m.filtering {
+	if !m.open {
+		return
+	}
+	if m.SubOpen() {
+		m.wheelSub(delta)
+		return
+	}
+	if m.editing || m.picking || m.filtering {
 		return
 	}
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
@@ -359,10 +387,16 @@ func (m *Model) Wheel(x, delta int) {
 }
 
 // Deliver forwards a non-key message (async probe results) to every custom
-// page that consumes messages.
+// page that consumes messages — and to open sub-panels (#883), so wizard
+// steps receive their async results too.
 func (m *Model) Deliver(msg tea.Msg) {
 	for _, page := range m.pages {
 		if r, ok := page.Custom.(MsgReceiver); ok {
+			r.Receive(msg)
+		}
+	}
+	for _, sp := range m.stack {
+		if r, ok := sp.(MsgReceiver); ok {
 			r.Receive(msg)
 		}
 	}
@@ -373,6 +407,9 @@ func (m *Model) Deliver(msg tea.Msg) {
 func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	if !m.open {
 		return nil
+	}
+	if m.SubOpen() {
+		return m.updateSub(key)
 	}
 	if m.editing {
 		return m.updateEdit(key)

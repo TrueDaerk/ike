@@ -230,3 +230,20 @@ model's review step; `x` removes, `r` re-fetches. Async results arrive as
 `MarketCatalogMsg`/`MarketActionMsg` through `Model.Deliver`; opening the
 panel prefetches the catalog once. See
 [Plugin Marketplace](./marketplace.md).
+
+## Sub-panels (0420, #883)
+
+Multi-field and multi-step flows run in **pushed sub-panels** instead of
+pinned-footer state machines: `settings.SubPanel` (Title/Update/View/
+Capturing/Buttons) levels stack on the panel (`Push`/`Pop` via the
+`SubPanelHost` seam injected into `hostAware` custom pages), rendered as a
+bordered box centered over the panel with a breadcrumb header
+(`Settings › Tools › New Tool`), the content area, and a clickable button row.
+Esc pops exactly one level (capturing panels — text forms, chord capture —
+own every key and pop themselves); a button's optional `Key` triggers it from
+the keyboard on non-capturing panels; `SubPanelClicker`/`SubPanelWheeler`
+route content-local mouse events, and presses outside the box are swallowed,
+never a close. Async messages `Deliver`ed to the panel reach open sub-panels
+implementing `MsgReceiver`. First migration: the Tools add/edit form — fields
+are click-to-focus rows, Save/Cancel are buttons, a stray click no longer
+destroys typed input, and backspace is rune-safe.

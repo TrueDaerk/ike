@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings sub-panel primitive (0420, #883): pushed overlay levels with
+  breadcrumb, one-level esc, clickable button rows; Tools add/edit form
+  migrated as the first sub-panel (`/architecture/settings-ui.md`).
+
 - Usages when already at the definition (#860): F4/cmd+click on the
   definition itself list the symbol's usages (count in the hint, declaration
   excluded) instead of jumping in place (`/architecture/lsp.md`).
