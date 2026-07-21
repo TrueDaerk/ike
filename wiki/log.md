@@ -2,6 +2,9 @@
 
 ## 2026-07-21
 
+- Cmd+click go-to-definition (#859): cmd+left-click on a symbol places the
+  cursor and runs lsp.definition (F4 parity, nav history recorded).
+
 - F4 / go-to-definition never silent (#858): an empty answer toasts whether
   nothing was found or no ready language server could be asked
   (`/architecture/lsp.md`).
