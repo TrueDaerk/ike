@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -13,8 +13,12 @@ Roadmap 0220, promoted from idea #51. `nav.back` / `nav.forward` return the
 caret to where it was before a jump and re-traverse after going back —
 JetBrains Navigate Back/Forward semantics. The commands back the
 `cmd+left-bracket` / `cmd+right-bracket` defaults (fragile on many
-terminals and awkward on QWERTZ), the Navigate menu entries, and the
-palette.
+terminals and awkward on QWERTZ), the **mouse back/forward buttons** (#816:
+buttons 4/5 arrive as the synthetic single-step chords `mouse-back` /
+`mouse-forward` and resolve through the normal keymap, so they rebind like
+keys; terminals without SGR extended buttons simply never deliver them, and
+an unbound press is swallowed rather than leaked into a pane), the Navigate
+menu entries, and the palette.
 
 ## Semantics
 

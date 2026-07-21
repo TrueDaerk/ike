@@ -457,3 +457,41 @@ func TestDragDockShowsFullSpanPreview(t *testing.T) {
 		t.Fatalf("status hint missing the dock label:\n%s", view)
 	}
 }
+
+// TestMouseNavButtonsDispatchHistory guards #816: the dedicated mouse
+// back/forward buttons resolve through the keymap to nav.back/nav.forward,
+// regardless of the hovered pane; other buttons keep their pane routing.
+func TestMouseNavButtonsDispatchHistory(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, cmd := m.Update(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseBackward})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("back button must dispatch a command")
+	}
+	found := false
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(NavBackMsg); ok {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("back button must dispatch nav.back")
+	}
+
+	out, cmd = m.Update(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseForward})
+	m = out.(Model)
+	found = false
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(NavForwardMsg); ok {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("forward button must dispatch nav.forward")
+	}
+
+	// The release of a navigation button never leaks into panes.
+	if _, cmd = m.Update(tea.MouseReleaseMsg{X: 5, Y: 5, Button: tea.MouseForward}); cmd != nil {
+		t.Fatal("nav button release must be swallowed")
+	}
+}

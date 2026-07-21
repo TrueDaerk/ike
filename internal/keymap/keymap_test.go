@@ -380,3 +380,21 @@ func TestPageKeyAliases(t *testing.T) {
 		}
 	}
 }
+
+// TestMouseNavButtonsBindAndRebind guards #816: the synthetic mouse-back /
+// mouse-forward chords resolve to the navigation history by default and
+// rebind through the normal override mechanism like any key.
+func TestMouseNavButtonsBindAndRebind(t *testing.T) {
+	table := BuildTable(Defaults(PresetJetBrains), nil, "darwin")
+	if b, ok := table.Lookup(MustParseChord("mouse-back"), Editor); !ok || b.Command != "nav.back" {
+		t.Fatalf("mouse-back = %+v ok=%v, want nav.back", b, ok)
+	}
+	if b, ok := table.Lookup(MustParseChord("mouse-forward"), Explorer); !ok || b.Command != "nav.forward" {
+		t.Fatalf("mouse-forward = %+v ok=%v, want nav.forward (global)", b, ok)
+	}
+	// An override moves the button to another command.
+	table = BuildTable(Defaults(PresetJetBrains), map[string]string{"mouse-forward": "explorer.toggle"}, "darwin")
+	if b, ok := table.Lookup(MustParseChord("mouse-forward"), Editor); !ok || b.Command != "explorer.toggle" {
+		t.Fatalf("rebound mouse-forward = %+v ok=%v, want explorer.toggle", b, ok)
+	}
+}
