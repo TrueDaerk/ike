@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/terminal"
 )
 
 // collectSender returns a sender that records every re-injected message.
@@ -109,6 +111,34 @@ func TestFilterAbsorbsMouseAndFlushes(t *testing.T) {
 	}
 	if m := batch.motion.Mouse(); m.X != 9 || m.Y != 5 {
 		t.Fatalf("motion = (%d,%d), want the latest (9,5)", m.X, m.Y)
+	}
+}
+
+// TestFilterAbsorbsTerminalOutput guards #803: per-session OutputMsgs are
+// absorbed and folded into one batch carrying the deduplicated, sorted keys,
+// so N busy terminals cost one Update+render per flush instead of N per
+// quiet interval.
+func TestFilterAbsorbsTerminalOutput(t *testing.T) {
+	c := NewMouseCoalescer()
+	send, snapshot := collectSender()
+	c.SetSender(send)
+
+	for i := 0; i < 3; i++ { // repeated notifications of the same sessions
+		for _, key := range []string{"terminal:2", "terminal", "terminal:3"} {
+			if got := c.Filter(nil, terminal.OutputMsg{Key: key}); got != nil {
+				t.Fatalf("OutputMsg %q not absorbed (got %T)", key, got)
+			}
+		}
+	}
+	batch := waitForFlush(t, snapshot)
+	want := []string{"terminal", "terminal:2", "terminal:3"}
+	if len(batch.termKeys) != len(want) {
+		t.Fatalf("termKeys = %v, want %v", batch.termKeys, want)
+	}
+	for i, k := range want {
+		if batch.termKeys[i] != k {
+			t.Fatalf("termKeys = %v, want %v", batch.termKeys, want)
+		}
 	}
 }
 

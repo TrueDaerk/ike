@@ -1,12 +1,14 @@
 package app
 
 import (
+	"sort"
 	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/pane"
+	"ike/internal/terminal"
 )
 
 // inputcoalesce.go keeps a burst of mouse events from starving keystrokes (#602).
@@ -56,22 +58,31 @@ func nextInterval() time.Duration {
 	return d
 }
 
-// coalescedInputMsg carries mouse events folded from a burst. Update replays the
-// wheel notches in order and then the latest motion, so the whole burst costs one
-// render instead of one per event.
+// coalescedInputMsg carries mouse events folded from a burst, plus the keys of
+// terminal sessions whose screens changed meanwhile (#803). Update replays the
+// wheel notches in order, then the latest motion, then the terminal repaints,
+// so the whole burst costs one render instead of one per event.
 type coalescedInputMsg struct {
-	wheels []tea.MouseWheelMsg
-	motion *tea.MouseMotionMsg
+	wheels   []tea.MouseWheelMsg
+	motion   *tea.MouseMotionMsg
+	termKeys []string
 }
 
 // MouseCoalescer holds the accumulator shared between the filter (called on the
 // event-loop goroutine) and the flush timer. It is safe for concurrent use.
+// Despite the historical name it also folds terminal screen-change
+// notifications (#803): each busy session emits one OutputMsg per 8ms quiet
+// interval, so N busy TUI panes would otherwise trigger N×125 full Update +
+// render passes per second and starve input handling. Absorbing them here
+// bounds terminal-driven repaints to the same adaptive flush cadence as
+// mouse bursts (~60fps floor, backing off with render cost).
 type MouseCoalescer struct {
 	mu         sync.Mutex
 	send       func(tea.Msg)
 	wheels     []tea.MouseWheelMsg
 	motion     tea.MouseMotionMsg
 	haveMotion bool
+	termKeys   map[string]bool
 	armed      bool
 }
 
@@ -97,6 +108,14 @@ func (c *MouseCoalescer) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
 		return nil
 	case tea.MouseMotionMsg:
 		c.absorb(func() { c.motion, c.haveMotion = m, true })
+		return nil
+	case terminal.OutputMsg:
+		c.absorb(func() {
+			if c.termKeys == nil {
+				c.termKeys = map[string]bool{}
+			}
+			c.termKeys[m.Key] = true
+		})
 		return nil
 	default:
 		return msg
@@ -143,18 +162,27 @@ func (c *MouseCoalescer) flush() {
 		motion = &m
 		c.haveMotion = false
 	}
+	var termKeys []string
+	if len(c.termKeys) > 0 {
+		termKeys = make([]string, 0, len(c.termKeys))
+		for k := range c.termKeys {
+			termKeys = append(termKeys, k)
+		}
+		sort.Strings(termKeys)
+		c.termKeys = nil
+	}
 	send := c.send
 	c.mu.Unlock()
 
-	if send != nil && (len(wheels) > 0 || motion != nil) {
-		send(coalescedInputMsg{wheels: wheels, motion: motion}) // may block on the loop
+	if send != nil && (len(wheels) > 0 || motion != nil || len(termKeys) > 0) {
+		send(coalescedInputMsg{wheels: wheels, motion: motion, termKeys: termKeys}) // may block on the loop
 	}
 
 	// Re-arm only now (after delivery). If events piled up during the send,
 	// schedule the next flush; otherwise disarm so a later event re-arms. `armed`
 	// was never cleared, so no absorb could have spawned a second flush meanwhile.
 	c.mu.Lock()
-	if len(c.wheels) > 0 || c.haveMotion {
+	if len(c.wheels) > 0 || c.haveMotion || len(c.termKeys) > 0 {
 		time.AfterFunc(nextInterval(), c.flush)
 	} else {
 		c.armed = false
@@ -226,6 +254,16 @@ func (m Model) applyCoalescedInput(msg coalescedInputMsg) (tea.Model, tea.Cmd) {
 			tm, cmd = mm.handleMouse(mouseEvent{Mouse: msg.motion.Mouse(), action: mouseMotion})
 			if cmd != nil {
 				cmds = append(cmds, cmd)
+			}
+		}
+	}
+	// Terminal repaints (#803): the grids already hold the new content — only
+	// the per-session hooks (completion popup recompute) run here; returning
+	// repaints once for the whole batch.
+	if mm, ok := tm.(Model); ok {
+		for _, key := range msg.termKeys {
+			if t := mm.terminalModelForSession(key); t != nil {
+				t.OnOutput()
 			}
 		}
 	}

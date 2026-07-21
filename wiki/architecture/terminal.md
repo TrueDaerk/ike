@@ -48,8 +48,16 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   modifier, so the pane normalizes text-producing presses whose only
   modifiers are shift/caps-lock/num-lock (`toVTKeys` in `model.go`) —
   uppercase letters reach the shell as their produced text (#224).
-- **Batching**: output notifications are coalesced (`OutputMsg`, one per 8ms
-  quiet interval), so `yes` or a build log cannot flood the render loop.
+- **Batching**: output notifications are coalesced per session (`OutputMsg`,
+  one per 8ms quiet interval), and the app's input coalescer (#602) folds
+  concurrent OutputMsgs **across sessions** into one batch per adaptive flush
+  (#803) — so `yes`, a build log, or eight busy TUI panes at once cannot
+  flood the render loop or starve input handling.
+- **View render cache** (#803): `Session.View` caches the rendered grid keyed
+  by a mutation version (bumped on feed writes, resize, clear); a frame
+  re-renders only grids that actually changed (measured ~270µs per 200×60
+  grid render vs ~13ns cached), so N terminal panes no longer multiply the
+  per-frame render cost.
 - **Output spooling** (#734, `spool.go`): the PTY read loop no longer writes
   into the emulator directly — it drains the kernel TTY queue into an
   in-process FIFO (`spool`, 16 MiB soft cap) and a separate feed loop replays

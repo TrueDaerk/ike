@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Terminal output no longer starves the UI with many busy panes (#803):
+  Session.View caches the rendered grid per mutation version, and the input
+  coalescer folds cross-session OutputMsgs into one batch per adaptive flush
+  (`/architecture/terminal.md`).
+
 - Global navigation chords work from a focused terminal (#805): the chords
   bound to `palette.searchEverywhere`, `palette.recentFiles` and
   `project.switch` (plus a configured `palette.toggle_key`) dispatch in the
