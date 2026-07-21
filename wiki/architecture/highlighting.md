@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-12T21:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Syntax Highlighting
@@ -74,6 +74,16 @@ like top-level edits (the whole buffer reparses per change, off the event
 loop). One level deep: fragments inside fragments are not re-injected.
 Fragment languages without a registered grammar degrade to plain host
 highlighting.
+
+Since #880 the query can also name the language **dynamically**: a pattern
+capturing `@fragment.language` (a tag node, e.g. a markdown fence info string)
+together with `@fragment.content` injects the language the tag's *text* names —
+resolved as a language id first, then as a file extension (`\`\`\`go`,
+`\`\`\`py`). Detection iterates query *matches* (not lone captures) so the pair
+arrives together; unknown tags leave the host styling. Markdown is the first
+user: its block grammar injects the separate `markdown_inline` grammar into
+every `(inline)` node (headings, paragraphs), fenced code into the fence's
+language, and YAML/TOML front matter into those grammars.
 
 ## CGo isolation
 

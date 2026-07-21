@@ -74,6 +74,8 @@ github.com/stretchr/testify v1.10.0 h1:Xv5erBjTwe/5IxqUQTdXv5kgmIvbHo3QQyRwhJsOf
 github.com/stretchr/testify v1.10.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/tetratelabs/wazero v1.12.0 h1:DuWcpNu/FzgEXgGBDp8J1Spc+CWOvvtvVyjKlaZopYU=
 github.com/tetratelabs/wazero v1.12.0/go.mod h1:LvKtzl2RqO4gyF27BiXU+nKAjcV8f38U+kP/q2vgxh0=
+github.com/tree-sitter-grammars/tree-sitter-markdown v0.5.3 h1:uBqZgu4ZZRWn/VVdTuGEU6hb+/w8TwTkRrzrZtOzK5g=
+github.com/tree-sitter-grammars/tree-sitter-markdown v0.5.3/go.mod h1:Y5DZfku8K/JShvxAFQ86HIcJ7Ml/wVY7wrImXWb+NtE=
 github.com/tree-sitter-grammars/tree-sitter-toml v0.7.0 h1:VQOyz+wSHzNZJ7gUMHAWVEP4Xt/YBZkeL7iurBv/9xc=
 github.com/tree-sitter-grammars/tree-sitter-toml v0.7.0/go.mod h1:hagl3VSOuQdsaDpGY13oGMz2cLK2tUDAf4mNNW2pDBQ=
 github.com/tree-sitter-grammars/tree-sitter-yaml v0.7.2 h1:Mmr9LYGTdr+8iD3ZEK1+j2FKZtY1Jt3y5Wq9dedgwfs=
