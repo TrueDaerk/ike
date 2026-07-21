@@ -82,10 +82,13 @@ queries/<lang>.scm
 toolchain.go     optional Toolchain detector
 ```
 
-Ships with `go`, `python`, `php`, and `sql` (grammar from
+Ships with `go`, `python`, `php`, `sql` (grammar from
 DerekStride/tree-sitter-sql; also highlights SQL fragments injected into other
-languages, see [highlighting](./highlighting.md)). The grammar/query for the
-first three moved here out of the highlight engine.
+languages, see [highlighting](./highlighting.md)), and `json`/`ndjson` (#878,
+official tree-sitter-json grammar — its document rule is `repeat(_value)`, so
+one grammar covers both a `.json` document and an ndjson/jsonl stream; ndjson
+has no server on purpose, the JSON server would flag every stream line).
+The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
 
@@ -244,6 +247,7 @@ uv is present — it works even in envs without pip — else
 | HTML | vscode-html-language-server (`vscode-langservers-extracted`) | The extracted VS Code server; unmatched tag/attribute data. |
 | CSS/SCSS/LESS | vscode-css-language-server (`vscode-langservers-extracted`) | Same package, property/value data included. |
 | SQL | sql-language-server | Unchanged. |
+| JSON | vscode-json-language-server (`vscode-langservers-extracted`) | Same npm package as HTML/CSS — no new install step; JSON-Schema-store + `$schema` completion for free. ndjson/jsonl: no server (multi-document streams are an error to it). |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
