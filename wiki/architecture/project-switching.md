@@ -57,7 +57,15 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   `palette.Completer`. Entry details render through `compactPath`
   (home → `~`, middle-ellipsis) so long roots never crowd out the title.
   Activation emits `PickedMsg{Path}`, which the root model turns into the
-  switch transaction below. `cmd+shift+p` is also in the JetBrains chord table
+  switch transaction below. Every row carries a **relative last-opened
+  badge** (`RelTime`: "just now", "5m ago", … "3w ago"; empty for legacy
+  entries without a timestamp, #842). In-memory workspaces (#820) show
+  `● <time>` and their aux action (`shift+delete` / the `✕` zone) closes the
+  workspace; unloaded entries' aux action instead **removes the entry from
+  the history** (`RemoveFromHistoryMsg` → off-loop `RemoveFromHistory`
+  write-back at user scope → config reload → the still-open palette
+  re-lists). The Recent Projects column of the Recent Files dialog (#778)
+  carries the same badge and removal action. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
 

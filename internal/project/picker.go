@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ike/internal/config"
 	"ike/internal/fuzzy"
@@ -35,11 +36,29 @@ type PickerMode struct {
 	// in memory (#820); such entries carry the "●" badge and a close aux
 	// action. Nil marks nothing.
 	open func(path string) bool
+	// now overrides the clock for the last-opened badge (#842); tests only.
+	now func() time.Time
 }
 
 // SetOpen installs the in-memory check (#820); the app injects the workspace
 // manager's Peek so the picker package stays workspace-agnostic.
 func (m *PickerMode) SetOpen(open func(path string) bool) { m.open = open }
+
+// clock returns the injectable now source, defaulting to the wall clock.
+func (m *PickerMode) clock() time.Time {
+	if m.now != nil {
+		return m.now()
+	}
+	return time.Now()
+}
+
+// joinBadge joins non-empty badge fragments with a space.
+func joinBadge(a, b string) string {
+	if b == "" {
+		return a
+	}
+	return a + " " + b
+}
 
 // NewPickerMode builds the picker mode. A nil history reads the
 // recent-projects list from the live config on every open.
@@ -82,6 +101,7 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	sort.SliceStable(out, func(i, j int) bool { return out[i].score > out[j].score })
 
 	items := make([]palette.Item, 0, len(out)+1)
+	now := m.clock()
 	for _, s := range out {
 		it := palette.Item{
 			Title:  s.entry.Name,
@@ -89,11 +109,17 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			Spans:  s.spans,
 			Score:  s.score,
 			Msg:    PickedMsg{Path: s.entry.Path},
+			// The last-opened badge (#842); "" for legacy entries without
+			// a timestamp.
+			Badge: RelTime(s.entry.LastOpened, now),
 		}
 		if m.open != nil && m.open(s.entry.Path) {
-			// Loaded in memory (#820): badge + close-in-place aux action.
-			it.Badge = "●"
+			// Loaded in memory (#820): dot badge + close-in-place aux action.
+			it.Badge = joinBadge("●", it.Badge)
 			it.Aux = CloseWorkspaceMsg{Path: s.entry.Path}
+		} else {
+			// Unloaded entries prune from the history instead (#842).
+			it.Aux = RemoveFromHistoryMsg{Path: s.entry.Path}
 		}
 		items = append(items, it)
 	}

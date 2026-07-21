@@ -311,3 +311,52 @@ func TestHistoryDecodesTypedEntries(t *testing.T) {
 		t.Errorf("defaults wrong for sparse entry: %+v", h[1])
 	}
 }
+
+// TestRemoveFromHistory (#842): the entry vanishes from the persisted list;
+// other entries and their timestamps survive; a missing path is a no-op.
+func TestRemoveFromHistory(t *testing.T) {
+	opts := testOpts(t)
+	rootA, rootB := t.TempDir(), t.TempDir()
+	t0 := time.Date(2026, 6, 19, 10, 0, 0, 0, time.UTC)
+	if err := RecordOpen(opts, rootA, t0); err != nil {
+		t.Fatal(err)
+	}
+	if err := RecordOpen(opts, rootB, t0.Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RemoveFromHistory(opts, rootA); err != nil {
+		t.Fatal(err)
+	}
+	h := readHistory(t, opts)
+	if len(h) != 1 || h[0].Path != rootB {
+		t.Fatalf("history after remove = %+v, want only %s", h, rootB)
+	}
+	if h[0].LastOpened != "2026-06-19T11:00:00Z" {
+		t.Fatalf("surviving entry must keep its timestamp, got %q", h[0].LastOpened)
+	}
+
+	if err := RemoveFromHistory(opts, "/not/in/list"); err != nil {
+		t.Fatalf("removing a missing path must be a no-op, got %v", err)
+	}
+	if len(readHistory(t, opts)) != 1 {
+		t.Fatal("no-op removal must not change the list")
+	}
+}
+
+// TestRelTime (#842): compact relative rendering, "" for the zero time.
+func TestRelTime(t *testing.T) {
+	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
+	for want, at := range map[string]time.Time{
+		"":         {},
+		"just now": now.Add(-30 * time.Second),
+		"5m ago":   now.Add(-5 * time.Minute),
+		"3h ago":   now.Add(-3 * time.Hour),
+		"4d ago":   now.Add(-4 * 24 * time.Hour),
+		"3w ago":   now.Add(-21 * 24 * time.Hour),
+	} {
+		if got := RelTime(at, now); got != want {
+			t.Errorf("RelTime(%v) = %q, want %q", at, got, want)
+		}
+	}
+}

@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Project history pruning + last-opened badge (#842): picker rows (and the
+  Recent Projects column) show a relative last-opened time; shift+delete /
+  the ✕ zone on unloaded entries removes them from `project.history`
+  (user-scope write-back, live re-list)
+  (`/architecture/project-switching.md`).
+
 - Project settings on switch + live reload (0380, #795): the switch's config
   reload applies the incoming project's `.ike/settings.toml` and drops the
   outgoing one's; the file watcher now watches `<root>/.ike` and an external

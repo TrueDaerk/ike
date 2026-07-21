@@ -28,6 +28,18 @@ type SwitchFailedMsg struct {
 // recent-projects entries; the history entry itself stays.
 type CloseWorkspaceMsg struct{ Path string }
 
+// RemoveFromHistoryMsg asks the root model to delete the history entry at
+// Path (#842): the aux action of unloaded recent-projects entries. Only the
+// persisted list changes — nothing is closed or switched.
+type RemoveFromHistoryMsg struct{ Path string }
+
+// RemovedFromHistoryMsg reports a RemoveFromHistoryCmd outcome (#842); on
+// success the root model reloads the config so the open picker re-lists.
+type RemovedFromHistoryMsg struct {
+	Path string
+	Err  error
+}
+
 // UnsavedChangesMsg gates the switch on dirty editor buffers: the root model
 // answers it with a save-all / discard / cancel prompt and only a confirming
 // answer lets the switch to Root proceed.
