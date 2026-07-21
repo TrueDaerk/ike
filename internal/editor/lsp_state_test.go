@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/complete/mru"
 	"ike/internal/editor/buffer"
 	ilsp "ike/internal/lsp"
 )
@@ -430,6 +431,50 @@ func TestCompletionEmptyMergeBatch(t *testing.T) {
 	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: "words", SourcePriority: ilsp.PriorityWords})
 	if m.CompletionOpen() {
 		t.Fatal("popup must close once every batch is empty")
+	}
+}
+
+// TestCompletionMRUBoost guards #854: among equal fuzzy matches, a recently
+// accepted label ranks first, and accepting bumps the store.
+func TestCompletionMRUBoost(t *testing.T) {
+	store := mru.Load("")
+	open := func() Model {
+		m, _ := loaded(t, "\n")
+		m.SetCompletionMRU(store)
+		m = insertModeAt(m, 0, 0)
+		m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+			{Label: "aaa_first", InsertText: "aaa_first"},
+			{Label: "zzz_last", InsertText: "zzz_last"},
+		}})
+		return m
+	}
+	m := open()
+	if got := labels(m.filteredCompletion()); got[0] != "aaa_first" {
+		t.Fatalf("without MRU order = %v", got)
+	}
+	// Accept the second item; its label enters the MRU store.
+	m = send(m, special(tea.KeyDown), special(tea.KeyEnter))
+	if store.Rank("zzz_last") != 0 {
+		t.Fatalf("accept must bump the store, rank = %d", store.Rank("zzz_last"))
+	}
+	// A fresh popup now ranks the recently accepted item first.
+	m = open()
+	if got := labels(m.filteredCompletion()); got[0] != "zzz_last" {
+		t.Fatalf("with MRU order = %v, want zzz_last first", got)
+	}
+}
+
+// TestCompletionLocalityBoost guards #854: with equal fuzzy quality and
+// priority, the nearer LocalityTier ranks first regardless of base order.
+func TestCompletionLocalityBoost(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: "words", SourcePriority: ilsp.PriorityWords, Items: []ilsp.CompletionItem{
+		{Label: "aaa_project", InsertText: "aaa_project", SortText: "2aaa_project", LocalityTier: 2, Source: "words"},
+		{Label: "zzz_local", InsertText: "zzz_local", SortText: "0zzz_local", LocalityTier: 0, Source: "words"},
+	}})
+	if got := labels(m.filteredCompletion()); got[0] != "zzz_local" {
+		t.Fatalf("order = %v, want the tier-0 item first", got)
 	}
 }
 

@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Unified completion ranking (0410, #854): fuzzy-dominant score with source
+  priority, locality-tier and persisted per-project MRU boosts
+  (`/architecture/completion.md`).
+
 - Symbol-index completion source (0410, #853): grammar-capture symbols with
   kinds, CSS classes/IDs offered in HTML class=/id= attributes, watcher-driven
   invalidation (`/architecture/completion.md`).

@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -119,7 +120,7 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	defer s.mu.RUnlock()
 	seen := map[string]bool{}
 	var items []ilsp.CompletionItem
-	add := func(words map[string]struct{}, tier string) {
+	add := func(words map[string]struct{}, tier int) {
 		var ws []string
 		for w := range words {
 			if seen[w] || w == prefix || !matchesPrefix(w, prefix) {
@@ -134,23 +135,24 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 			}
 			seen[w] = true
 			items = append(items, ilsp.CompletionItem{
-				Label:      w,
-				InsertText: w,
-				Kind:       protocol.KindText,
-				SortText:   tier + strings.ToLower(w),
+				Label:        w,
+				InsertText:   w,
+				Kind:         protocol.KindText,
+				SortText:     strconv.Itoa(tier) + strings.ToLower(w),
+				LocalityTier: tier,
 			})
 		}
 	}
 	if cur != nil {
-		add(cur.words, "0")
+		add(cur.words, 0)
 	}
 	for path, b := range s.buffers {
 		if path == req.Path {
 			continue
 		}
-		add(b.words, "1")
+		add(b.words, 1)
 	}
-	add(s.project, "2")
+	add(s.project, 2)
 	return items, nil
 }
 

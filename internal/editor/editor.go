@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/complete/mru"
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/mode"
@@ -272,6 +273,7 @@ type Model struct {
 	blameOn   bool
 	blame     map[int]vcs.BlameLine
 	comp      *completionState
+	compMRU   *mru.Store // recently accepted completions (#854); nil-safe
 	snippet   *snippetSession
 	hover     *hoverState
 	signature *signatureState
