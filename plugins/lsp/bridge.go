@@ -331,7 +331,13 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 	}
 	go func() {
 		locs, err := mgr.Definition(context.Background(), path, buffer.Position{Line: line, Col: col})
-		if requestFailed(h, "go to definition", err) || len(locs) == 0 {
+		if requestFailed(h, "go to definition", err) {
+			return
+		}
+		if len(locs) == 0 {
+			// Never fail silently (#858): say whether nothing was found or
+			// nobody could be asked.
+			h.Send(ilsp.ServerStatusMsg{Text: definitionNotice(mgr.DefinitionSupported(path)), Kind: ilsp.ServerEventInfo})
 			return
 		}
 		if len(locs) > 1 {
@@ -350,6 +356,14 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
 	}()
 	return nil
+}
+
+// definitionNotice is the toast for an empty definition answer (#858).
+func definitionNotice(supported bool) string {
+	if !supported {
+		return "go to definition unavailable: no ready language server for this file"
+	}
+	return "no definition found under the cursor"
 }
 
 // references requests every usage of the symbol under the cursor, converts

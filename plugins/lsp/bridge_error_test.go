@@ -147,3 +147,14 @@ func TestRequestErrorsSurfaceToasts(t *testing.T) {
 		})
 	}
 }
+
+// TestDefinitionNotice guards #858: an empty definition answer names its
+// cause instead of failing silently.
+func TestDefinitionNotice(t *testing.T) {
+	if got := definitionNotice(true); got != "no definition found under the cursor" {
+		t.Fatalf("supported notice = %q", got)
+	}
+	if got := definitionNotice(false); got != "go to definition unavailable: no ready language server for this file" {
+		t.Fatalf("unsupported notice = %q", got)
+	}
+}

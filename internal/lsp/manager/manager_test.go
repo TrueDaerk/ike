@@ -786,3 +786,13 @@ func TestCompletionContext(t *testing.T) {
 		t.Fatalf("unknown-trigger context = %+v", c)
 	}
 }
+
+// TestDefinitionSupported guards #858: an unopened document (or one without a
+// server) reports unsupported, so the bridge can name why F4 stayed silent.
+func TestDefinitionSupported(t *testing.T) {
+	m := New(func(lang string) (lsp.ServerSpec, bool) { return lsp.ServerSpec{}, false }, fakeConnector(), Callbacks{})
+	defer m.Shutdown()
+	if m.DefinitionSupported("/nowhere.go") {
+		t.Fatal("no server must report unsupported")
+	}
+}

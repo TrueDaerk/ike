@@ -387,6 +387,14 @@ func (m *Manager) Definition(ctx context.Context, path string, pos buffer.Positi
 	})
 }
 
+// DefinitionSupported reports whether path currently has a ready server
+// advertising the definition capability (#858) — the difference between "the
+// server found nothing" and "nobody was asked", so a silent F4 can say which.
+func (m *Manager) DefinitionSupported(path string) bool {
+	srv, _, ok := m.docServer(path)
+	return ok && srv.cl.Caps().Definition
+}
+
 // maxWorkspaceSymbols caps the merged workspace/symbol result so one broad
 // query never floods the palette.
 const maxWorkspaceSymbols = 200

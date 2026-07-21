@@ -186,7 +186,9 @@ hundreds of library files, and one `tea.Msg` per file would mean one Update pass
 file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
-is handled by the app (navigate + place cursor); a jump that lands in a vendored
+is handled by the app (navigate + place cursor); an **empty answer is never
+silent** (#858) — a toast says whether the server found nothing under the
+cursor or no ready server could be asked at all; a jump that lands in a vendored
 dependency (`.venv`/`site-packages`/`node_modules`/…) opens the file read-only —
 the first edit prompts for confirmation before unlocking it (the editor's
 [dependency-file edit guard](./editor.md), #565). Hover markdown is rendered,
