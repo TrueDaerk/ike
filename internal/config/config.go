@@ -171,6 +171,9 @@ func (c *Config) Flat() map[string]string {
 
 	put("run.placement", c.Run.Placement)
 
+	put("debug.php.port", c.Debug.PHP.Port)
+	put("debug.php.hostname", c.Debug.PHP.Hostname)
+
 	put("marketplace.catalog_url", c.Marketplace.CatalogURL)
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))

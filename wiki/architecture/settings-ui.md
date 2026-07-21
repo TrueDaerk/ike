@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -75,7 +75,8 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   description, key and validation error render in a **footer pinned to the
   bottom of the form column** — not inline under the row — so ↑↓ never shifts
   the other rows (#535); only the enum picker expands inline. The custom pages
-  (Toolchain, Keymap, Language Servers) follow the same layout via a shared
+  (Toolchain, Keymap, Language Servers, Tools, PHP Debug Mappings #832)
+  follow the same layout via a shared
   `pinFooter` helper (#537): header line(s) pinned top, the list scrolls to
   follow the selection, and hints / failure details / env status / inline
   override inputs render in a constant-height footer pinned bottom. Custom-

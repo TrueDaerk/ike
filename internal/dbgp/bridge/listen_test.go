@@ -1,9 +1,13 @@
 package bridge
 
 import (
+	"bufio"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -185,6 +189,72 @@ func TestListenPathMappings(t *testing.T) {
 		t.Fatalf("frame path = %q, want the mapped local path", frames[0].Source.Path)
 	}
 	_ = s.Disconnect()
+}
+
+// dialFakeXdebugURI is dialFakeXdebug with a custom init fileuri.
+func dialFakeXdebugURI(t *testing.T, port int, fileuri string) *fakeXdebug {
+	t.Helper()
+	var conn net.Conn
+	var err error
+	for i := 0; i < 50; i++ {
+		conn, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+		if err == nil {
+			break
+		}
+	}
+	if err != nil {
+		t.Fatalf("dial bridge: %v", err)
+	}
+	e := &fakeXdebug{t: t, conn: conn, r: bufio.NewReader(conn)}
+	e.send(`<init xmlns="urn:debugger_protocol_v1" fileuri="` + fileuri + `" language="PHP" protocol_version="1.0" appid="1" idekey="ike"/>`)
+	return e
+}
+
+// TestListenPathMappingHint guards #832: an accepted request whose entry
+// file does not resolve locally raises the mapping hint; one that resolves
+// (through a mapping) stays silent.
+func TestListenPathMappingHint(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	port := freePort(t)
+	s, events := listenClient(t, map[string]any{
+		"request": "launch", "mode": "listen", "port": port,
+		"pathMappings": []map[string]string{{"server": "/srv/web", "local": dir}},
+	})
+	if err := s.ConfigurationDone(); err != nil {
+		t.Fatalf("configurationDone: %v", err)
+	}
+
+	// Unresolvable entry file: the hint fires with the server directory.
+	miss := dialFakeXdebugURI(t, port, "file:///var/www/html/index.php")
+	miss.serveFeatureSets()
+	go miss.serveRunEnd()
+	hint := waitEvent(t, events, "ike.pathMappingHint")
+	var body struct{ Server, File string }
+	if err := json.Unmarshal(hint.Body, &body); err != nil || body.Server != "/var/www/html" {
+		t.Fatalf("hint body = %s (%v)", hint.Body, err)
+	}
+	waitEvent(t, events, "continued")
+
+	// Mapped entry file exists locally: no hint for this request.
+	hit := dialFakeXdebugURI(t, port, "file:///srv/web/index.php")
+	hit.serveFeatureSets()
+	go hit.serveRunEnd()
+	waitEvent(t, events, "continued")
+	for {
+		select {
+		case ev := <-events:
+			if ev.Name == "ike.pathMappingHint" {
+				t.Fatal("a resolving entry file must not raise the hint")
+			}
+		default:
+			_ = s.Disconnect()
+			return
+		}
+	}
 }
 
 // TestListenBusyDetachesSecondConnection guards #823's sequential model: a

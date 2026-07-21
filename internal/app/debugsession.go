@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -10,6 +11,8 @@ import (
 	"strings"
 	"time"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/dap"
 	"ike/internal/debugpanel"
 	"ike/internal/host"
@@ -17,8 +20,11 @@ import (
 	"ike/internal/layout"
 	"ike/internal/lsp/transport"
 	"ike/internal/pane"
+	"ike/internal/project"
 	"ike/internal/run"
+	"ike/internal/settings"
 	"ike/internal/terminal"
+	"ike/internal/ui"
 )
 
 // debugsession.go orchestrates one live DAP session (0350, #579): debug.start
@@ -420,7 +426,60 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		go func() { send(debugEndedMsg{exitCode: x.ExitCode, hasCode: true}) }()
 	case "terminated":
 		go func() { send(debugEndedMsg{}) }()
+	case "ike.pathMappingHint":
+		// A listening session (#832) accepted a request whose entry file
+		// does not resolve locally: offer mapping the server directory to
+		// the project root. One prompt at a time; a hint while one is open
+		// (or another guard holds the shell) is dropped — the next request
+		// re-raises it.
+		var hint struct {
+			Server string `json:"server"`
+			File   string `json:"file"`
+		}
+		if json.Unmarshal(ev.Body, &hint) != nil || hint.Server == "" || m.shell.IsOpen() {
+			break
+		}
+		m.openDebugMapPrompt(hint.Server, hint.File)
 	}
+}
+
+// openDebugMapPrompt shows the #832 path-mapping suggestion for serverDir.
+func (m *Model) openDebugMapPrompt(serverDir, file string) {
+	m.debugMapPending = serverDir
+	root := projectRoot()
+	body := "the debugged request's file\n" + file + "\ndoes not exist in this project — the server's docroot\n" +
+		"probably differs from the project layout.\n\n" +
+		"  [m]   map " + serverDir + " → " + project.CompactPath(root) + "\n" +
+		"        (written to [[debug.php.path_mappings]], project scope)\n" +
+		"  [esc] ignore — breakpoints will not bind for these files"
+	m.shell.SetContent(ui.ModelContent{
+		Heading: "Add PHP path mapping?",
+		Body:    func() string { return body },
+	})
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
+}
+
+// debugMapPromptOpen reports whether the suggestion currently owns the keys.
+func (m Model) debugMapPromptOpen() bool { return m.debugMapPending != "" && m.shell.IsOpen() }
+
+// updateDebugMapPrompt consumes every key while the suggestion is open: m
+// writes the mapping at project scope (effective on the next debug.listen
+// start), esc dismisses it.
+func (m Model) updateDebugMapPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "m":
+		server := m.debugMapPending
+		m.debugMapPending = ""
+		m.shell.Close()
+		m.host.Notify(host.Info, "debug: mapping saved — restart listening to apply")
+		return m, settings.WriteDebugMapping(m.cfgOpts, server, projectRoot())
+	case "esc":
+		m.debugMapPending = ""
+		m.shell.Close()
+		return m, nil
+	}
+	return m, nil
 }
 
 // applyDebugStop records the stop context and returns the top frame to

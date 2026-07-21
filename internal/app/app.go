@@ -263,6 +263,11 @@ type Model struct {
 	// evictPending is the busy LRU background workspace root awaiting the
 	// eviction-guard answer (0370 M4, #780).
 	evictPending string
+	// debugMapPending is the server directory of a #832 path-mapping hint
+	// awaiting the user's answer ("" when no prompt is open): a listening
+	// debug session accepted a request whose entry file does not resolve
+	// locally, and mapping it to the project root was offered.
+	debugMapPending string
 	// wsClosePending is the busy close-from-list guard state (#821): the
 	// background workspace whose teardown awaits the user's answer.
 	wsClosePending *pendingWsClose
@@ -571,6 +576,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	})})
 	// The [[tools.custom]] list editor (#755): custom TUI tool panes (#741).
 	pages = append(pages, settings.Page{Title: "Tools", Custom: settings.NewToolsPage(m.cfgOpts)})
+	// The [[debug.php.path_mappings]] list editor (#832): the PHP listen
+	// mode's (#823) docroot↔project mappings.
+	pages = append(pages, settings.Page{Title: "PHP Debug Mappings", Custom: settings.NewDebugMapPage(m.cfgOpts)})
 	pages = append(pages, settings.Page{Title: "Toolchain", Custom: settings.NewToolchainPage(m.cfgOpts, ".", func() tea.Cmd {
 		// An interpreter change respawns the servers against the new value.
 		if c, ok := reg.Command("lsp.restart"); ok {
@@ -3603,6 +3611,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The busy close-from-list guard (#821): s / d / esc answer it.
 		if m.wsClosePromptOpen() {
 			return m.updateWsClosePrompt(msg)
+		}
+		// The PHP path-mapping suggestion (#832): m / esc answer it.
+		if m.debugMapPromptOpen() {
+			return m.updateDebugMapPrompt(msg)
 		}
 		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
 		if m.closePromptOpen() {
