@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings rail & chrome (0420, #890): section headers, first-letter jump,
+  remembered page (persisted per project), page name in the title, ▲/▼
+  scroll indicators (`/architecture/settings-ui.md`).
+
 - Settings widget affordances (0420, #889): [x] bools, ‹enum› with ←→
   cycling, ± int steppers with visible clamp feedback, ✎/⌨ edit markers
   (`/architecture/settings-ui.md`).

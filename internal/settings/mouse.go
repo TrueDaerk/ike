@@ -43,8 +43,9 @@ func (m *Model) Hover(x, y int) {
 		return
 	}
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
-		if idx := row + m.catOff; idx < len(m.pages) {
-			m.hoverCat = idx
+		rows := m.railRows()
+		if idx := row + m.catOff; idx >= 0 && idx < len(rows) && rows[idx].header == "" {
+			m.hoverCat = rows[idx].page
 		}
 		m.pageHover(-1, -1)
 		return

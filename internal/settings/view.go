@@ -43,7 +43,12 @@ func (m *Model) View() string {
 	right = lipgloss.NewStyle().MaxWidth(rightW).Render(right)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ")
+	titleText := " SETTINGS "
+	if m.cat >= 0 && m.cat < len(m.pages) {
+		// The current page lives in the header (#890): position at a glance.
+		titleText = " SETTINGS › " + m.pages[m.cat].Title + " "
+	}
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(titleText)
 	// The write scope (0380, #794) is always-visible, clickable chrome (#885):
 	// a press cycles auto → user → project like "s".
 	chipStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
@@ -51,7 +56,7 @@ func (m *Model) View() string {
 		chipStyle = lipgloss.NewStyle().Foreground(pal.Info).Bold(true)
 	}
 	chip := "[scope: " + m.scopeLabel() + "] "
-	m.chipSpan = span{start: 1 + lipgloss.Width(" SETTINGS "), end: 1 + lipgloss.Width(" SETTINGS ") + lipgloss.Width(chip)}
+	m.chipSpan = span{start: 1 + lipgloss.Width(titleText), end: 1 + lipgloss.Width(titleText) + lipgloss.Width(chip)}
 	title += chipStyle.Render(chip)
 	title += m.renderFilter()
 	hint := m.renderHint(pal)
@@ -135,23 +140,31 @@ func (m *Model) renderCategories(h int) string {
 	base := lipgloss.NewStyle().Width(catWidth)
 	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	header := base.Foreground(pal.Secondary).Faint(true).Bold(true)
+	hover := base.Underline(true)
 
+	rows := m.railRows()
+	selRow := m.railRowOf(m.cat)
 	if m.followCat {
-		m.catOff = follow(m.catOff, m.cat, m.cat, len(m.pages), h)
+		m.catOff = follow(m.catOff, selRow, selRow, len(rows), h)
 		m.followCat = false
 	}
-	m.catOff = clamp(m.catOff, 0, maxOff(len(m.pages), h))
-	hover := base.Underline(true)
+	m.catOff = clamp(m.catOff, 0, maxOff(len(rows), h))
 	lines := make([]string, 0, h)
-	for i := m.catOff; i < len(m.pages) && len(lines) < h; i++ {
-		p := m.pages[i]
+	for i := m.catOff; i < len(rows) && len(lines) < h; i++ {
+		r := rows[i]
+		if r.header != "" {
+			lines = append(lines, header.Render(" "+r.header))
+			continue
+		}
+		p := m.pages[r.page]
 		label := " " + p.Title
 		switch {
-		case i == m.cat && m.focus == catColumn:
+		case r.page == m.cat && m.focus == catColumn:
 			lines = append(lines, sel.Render(label))
-		case i == m.cat:
+		case r.page == m.cat:
 			lines = append(lines, inactiveSel.Render(label))
-		case i == m.hoverCat:
+		case r.page == m.hoverCat:
 			lines = append(lines, hover.Render(label))
 		default:
 			lines = append(lines, base.Render(label))
@@ -159,6 +172,15 @@ func (m *Model) renderCategories(h int) string {
 	}
 	for len(lines) < h {
 		lines = append(lines, base.Render(""))
+	}
+	// Scroll indicators (#890): the rail says when more categories exist
+	// above/below the window.
+	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
+	if m.catOff > 0 && len(lines) > 0 {
+		lines[0] = base.Render(dim.Render(" ▲ more"))
+	}
+	if m.catOff+h < len(rows) && len(lines) > 0 {
+		lines[h-1] = base.Render(dim.Render(" ▼ more"))
 	}
 	return strings.Join(lines[:h], "\n")
 }
@@ -304,7 +326,15 @@ func (m *Model) renderForm(w, h int) string {
 	if end > len(lines) {
 		end = len(lines)
 	}
-	out := lines[m.formOff:end]
+	out := append([]string{}, lines[m.formOff:end]...)
+	// Scroll indicators (#890).
+	ind := lipgloss.NewStyle().Foreground(pal.Secondary)
+	if m.formOff > 0 && len(out) > 0 {
+		out[0] = clip.Render(ind.Render(" ▲ more"))
+	}
+	if end < len(lines) && len(out) > 0 {
+		out[len(out)-1] = clip.Render(ind.Render(" ▼ more"))
+	}
 	if h > detailLines {
 		for len(out) < listH {
 			out = append(out, "")

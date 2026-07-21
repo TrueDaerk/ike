@@ -44,6 +44,9 @@ type Page struct {
 	Title   string
 	Entries []Entry
 	Custom  PageModel
+	// Section groups the category rail (#890): pages sharing a Section render
+	// under one header. Empty joins the previous section.
+	Section string
 }
 
 // BasePages returns the built-in core pages (#92). themes is the registry's
@@ -53,7 +56,7 @@ type Page struct {
 // exist in the typed schema (guarded by the no-dead-keys test).
 func BasePages(themes []string) []Page {
 	return []Page{
-		{Title: "Editor", Entries: []Entry{
+		{Section: "CORE", Title: "Editor", Entries: []Entry{
 			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
 			{Key: "editor.use_spaces", Type: Bool, Title: "Use spaces", Description: "Indent with spaces instead of tab characters", Scope: config.UserScope},
 			{Key: "editor.auto_indent", Type: Bool, Title: "Auto indent", Description: "Carry the current line's indentation into new lines", Scope: config.UserScope},
