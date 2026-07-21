@@ -212,10 +212,11 @@ func TestScopeSelectorWritesProjectLayer(t *testing.T) {
 		t.Fatalf("origin after project reset = %q, want default", got)
 	}
 
-	// One more "s" wraps back to auto.
+	// One more "s" wraps back to auto — the chip stays visible (clickable
+	// chrome, #885) and reads auto again.
 	m.Update(key("s"))
-	if strings.Contains(m.View(), "scope:") {
-		t.Fatal("selector must wrap back to auto (no title chip)")
+	if !strings.Contains(m.View(), "scope: auto") {
+		t.Fatal("selector must wrap back to auto")
 	}
 }
 
@@ -582,28 +583,21 @@ func TestWheelScrollsColumns(t *testing.T) {
 
 	formX := 1 + catWidth + 4
 
-	// Category column hovered: wheel switches pages.
+	// Wheel scrolls viewports now, never selections (#885). The test pages
+	// fit their windows, so the offsets stay clamped at 0 and nothing jumps.
 	m.Wheel(2, 1)
-	if m.cat != 1 {
-		t.Fatalf("wheel over categories must move the page, cat=%d", m.cat)
-	}
-	m.Wheel(2, 5) // clamped at the last page
-	if m.cat != 1 {
-		t.Fatalf("category wheel must clamp, cat=%d", m.cat)
-	}
-	m.Wheel(2, -3)
 	if m.cat != 0 {
-		t.Fatalf("wheel up must move back to the first page, cat=%d", m.cat)
+		t.Fatalf("category wheel must not move the selection, cat=%d", m.cat)
 	}
-
-	// Form column hovered: wheel moves the entry selection.
+	if m.catOff != 0 {
+		t.Fatalf("catOff must clamp with everything visible, off=%d", m.catOff)
+	}
 	m.Wheel(formX, 1)
-	if m.sel != 1 {
-		t.Fatalf("wheel over the form must move the selection, sel=%d", m.sel)
-	}
-	m.Wheel(formX, -9)
 	if m.sel != 0 {
-		t.Fatalf("form wheel must clamp at the top, sel=%d", m.sel)
+		t.Fatalf("form wheel must not move the selection, sel=%d", m.sel)
+	}
+	if m.formOff != 0 {
+		t.Fatalf("formOff must clamp with everything visible, off=%d", m.formOff)
 	}
 
 	// Wheel is inert while a picker or edit is open.

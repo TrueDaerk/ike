@@ -5113,6 +5113,11 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			v := m.settings.View()
 			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			return m, m.settings.Click(msg.X-bx, msg.Y-by)
+		case msg.action == mouseMotion:
+			// Hover affordance (#885), menu-bar parity.
+			v := m.settings.View()
+			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			m.settings.Hover(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
 			v := m.settings.View()
 			bx := (m.width - lipgloss.Width(v)) / 2

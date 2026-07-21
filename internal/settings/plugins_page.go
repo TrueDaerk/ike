@@ -48,12 +48,15 @@ type PluginsPage struct {
 	pal      *theme.Palette
 
 	sel      int
+	off      int // list scroll offset (#885)
+	listH    int // list-window height of the last render (mouse hit-testing)
+	hover    int // hovered row (-1 = none, #885)
 	expanded map[string]bool
 }
 
 // NewPluginsPage builds the page from its injected seams.
 func NewPluginsPage(opts config.Options, list func() []PluginInfo, onToggle func(id string, enable bool) tea.Cmd) *PluginsPage {
-	return &PluginsPage{opts: opts, list: list, onToggle: onToggle, expanded: map[string]bool{}}
+	return &PluginsPage{opts: opts, list: list, onToggle: onToggle, expanded: map[string]bool{}, hover: -1}
 }
 
 // SetPalette implements PageModel.
@@ -193,8 +196,9 @@ func (p *PluginsPage) View(width, height int) string {
 	selStyle := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	offStyle := lipgloss.NewStyle().Foreground(pal.Border).Faint(true)
 
-	var b strings.Builder
-	b.WriteString(dim.Render(" plugin · state · contributes") + "\n")
+	clip := lipgloss.NewStyle().MaxWidth(width)
+	var list []string
+	selStart, selEnd := 0, 0
 	for i, row := range p.rows() {
 		state := "enabled"
 		if !row.Enabled {
@@ -204,29 +208,48 @@ func (p *PluginsPage) View(width, height int) string {
 		if o := p.origin(row.ID); o != "default" {
 			line += dim.Render("  @" + o)
 		}
+		if i == p.sel {
+			selStart = len(list)
+		}
 		switch {
 		case i == p.sel:
-			b.WriteString(selStyle.Render(line) + "\n")
+			list = append(list, clip.Render(selStyle.Render(line)))
+		case i == p.hover:
+			list = append(list, clip.Render(lipgloss.NewStyle().Underline(true).Render(line)))
 		case !row.Enabled:
-			b.WriteString(offStyle.Render(line) + "\n")
+			list = append(list, clip.Render(offStyle.Render(line)))
 		default:
-			b.WriteString(line + "\n")
+			list = append(list, clip.Render(line))
 		}
 		if p.expanded[row.ID] {
 			for _, d := range inspect(row) {
-				b.WriteString(dim.Render("    "+d) + "\n")
+				list = append(list, clip.Render(dim.Render("    "+d)))
 			}
 		}
+		if i == p.sel {
+			selEnd = len(list) - 1
+		}
 	}
-	b.WriteString("\n" + dim.Render(" e toggle · enter inspect · a disabled language plugin takes its LSP server with it"))
-	return lipgloss.NewStyle().MaxHeight(height).MaxWidth(width).Render(b.String())
+	head := dim.Render(" plugin · state · contributes")
+	footer := wrapFooter([]footerLine{{
+		text:  " e toggle · enter inspect · a disabled language plugin takes its LSP server with it",
+		style: dim,
+	}}, width, 2)
+	p.listH = height - 1 - len(footer)
+	// The list scrolls (#885): before, a MaxHeight clip made rows past the
+	// window unreachable and let the selection walk off-screen.
+	return head + "\n" + pinFooter(list, footer, selStart, selEnd, height-1, &p.off)
 }
 
 // Click implements the optional PageClicker seam (#674): a press on a plugin
 // row (or its expanded detail) selects it, and a press on the selection
 // toggles the capability inspection (enter semantics).
 func (p *PluginsPage) Click(_, y int) tea.Cmd {
-	line := 1 // the header row is line 0
+	if y < 1 || (p.listH > 0 && y-1 >= p.listH) {
+		return nil
+	}
+	// The header row is line 0; list lines shift by the scroll offset (#885).
+	line := 1 - p.off
 	for i, row := range p.rows() {
 		span := 1
 		if p.expanded[row.ID] {
@@ -245,8 +268,28 @@ func (p *PluginsPage) Click(_, y int) tea.Cmd {
 	return nil
 }
 
-// Wheel implements the optional PageWheeler seam (#674): moves the selection
-// like j/k.
+// Hover implements the optional PageHoverer seam (#885).
+func (p *PluginsPage) Hover(_, y int) {
+	p.hover = -1
+	if y < 1 || (p.listH > 0 && y-1 >= p.listH) {
+		return
+	}
+	line := 1 - p.off
+	for i, row := range p.rows() {
+		span := 1
+		if p.expanded[row.ID] {
+			span += len(inspect(row))
+		}
+		if y >= line && y < line+span {
+			p.hover = i
+			return
+		}
+		line += span
+	}
+}
+
+// Wheel implements the optional PageWheeler seam: moves the selection like
+// j/k (the pinned-footer list follows it, so this also scrolls, #885).
 func (p *PluginsPage) Wheel(delta int) {
 	if n := len(p.rows()); n > 0 {
 		p.sel = clamp(p.sel+delta, 0, n-1)

@@ -265,3 +265,18 @@ project scope and offers the LSP restart, unchanged. Entry points: the
 visible `+ New environment…` action row in the Toolchain list (enter/click),
 the `n` shortcut, and the `python.newEnvironment` palette command
 (`Model.OpenPythonEnvWizard`).
+
+## Mouse parity (0420, #885)
+
+The panel is pointer-complete: **hover** (routed `MouseMotionMsg`) underlines
+the rail row, form row or plugin row under the cursor and moves an open enum
+picker's highlight (menu-bar parity; custom pages opt in via `PageHoverer`).
+The **wheel scrolls viewports, not selections** — one category per notch on
+the rail, list lines on the schema form; render only re-follows the selection
+after it actually moved, so wheel-browsing is never snapped back. Clickable
+chrome: the **scope chip** is always visible on the title row and cycles
+auto/user/project on click, the **hint-row keys** execute their action
+(enter/r/s///esc), and **path-completion suggestion rows** complete the edit
+instead of cancelling it. The Plugins and Marketplace lists scroll through
+`pinFooter` offsets — previously a `MaxHeight` clip made rows past the window
+unreachable.
