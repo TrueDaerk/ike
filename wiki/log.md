@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Dockerfile language support (#896): tree-sitter-dockerfile highlighting
+  (vendored C source — upstream Go binding unusable), docker-langserver
+  completion; first exact-base-name (`Filenames`) language besides templates
+  (`/architecture/languages.md`).
+
 - TOML language support (#895): tree-sitter-toml highlighting with sticky
   `[table]` scopes, taplo language server for schema-store completion
   (`/architecture/languages.md`).
