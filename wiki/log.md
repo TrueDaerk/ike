@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Completion engine fan-in (0410, #851): completion is multi-source — the
+  LSP bridge and the local engine (`internal/complete`) answer triggers as
+  tagged batches, merged in the editor with priority de-dup and stable
+  selection; host editor-event sinks are named and fan out
+  (`/architecture/completion.md`).
+
 - Completion trigger kinds (0410, #850): requests report
   TriggerCharacter/Invoked correctly, per-server trigger characters threaded
   through host and fragment paths (`/architecture/lsp.md`).

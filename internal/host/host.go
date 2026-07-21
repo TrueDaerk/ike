@@ -6,6 +6,7 @@
 package host
 
 import (
+	"sort"
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
@@ -60,10 +61,11 @@ type API interface {
 	// ("saved 3 files", "server crashed") and SetStatus only for persistent
 	// state segments.
 	Notify(sev Severity, text string)
-	// SetEditorEmitter registers the sink for editor lifecycle events (the LSP
-	// bridge, Roadmap 0100). The host forwards every editor change/cursor/
-	// completion signal to it; passing nil disables forwarding.
-	SetEditorEmitter(e EditorEmitter)
+	// SetEditorEmitter registers (or replaces) a named sink for editor
+	// lifecycle events (the LSP bridge "lsp", the completion engine
+	// "complete", #851). The host fans every editor change/cursor/completion
+	// signal out to all sinks; a nil emitter removes the name.
+	SetEditorEmitter(name string, e EditorEmitter)
 	// Config exposes read-only configuration access.
 	Config() Config
 }
@@ -183,7 +185,7 @@ type Host struct {
 	cfg       Config
 	status    string
 	send      func(tea.Msg)
-	edEmitter EditorEmitter
+	edEmitters map[string]EditorEmitter
 
 	// Queued notifications awaiting the root model's drain. Guarded by mu:
 	// background workers (LSP goroutines) may Notify while Update drains.
@@ -219,14 +221,30 @@ func (h *Host) Send(msg tea.Msg) {
 	}
 }
 
-// SetEditorEmitter implements API.
-func (h *Host) SetEditorEmitter(e EditorEmitter) { h.edEmitter = e }
+// SetEditorEmitter implements API: it registers (or replaces) the named sink.
+// Re-registering under the same name is idempotent, so a project switch that
+// re-wires seams never duplicates a sink.
+func (h *Host) SetEditorEmitter(name string, e EditorEmitter) {
+	if h.edEmitters == nil {
+		h.edEmitters = map[string]EditorEmitter{}
+	}
+	if e == nil {
+		delete(h.edEmitters, name)
+		return
+	}
+	h.edEmitters[name] = e
+}
 
-// EmitEditor forwards an editor event to the registered emitter (the app's
-// editor-emitter adapter calls this; the host fans it out to the LSP bridge).
+// EmitEditor fans an editor event out to every registered sink (the LSP
+// bridge, the local completion engine, …) in deterministic name order (#851).
 func (h *Host) EmitEditor(ev EditorEvent) {
-	if h.edEmitter != nil {
-		h.edEmitter.Emit(ev)
+	names := make([]string, 0, len(h.edEmitters))
+	for n := range h.edEmitters {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		h.edEmitters[n].Emit(ev)
 	}
 }
 

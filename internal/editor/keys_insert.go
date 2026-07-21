@@ -169,7 +169,7 @@ func (m *Model) maybeAutoComplete(text string) {
 		// An incomplete reply (#849) is a partial view: further typing must
 		// re-query the server, not narrow the stale list — the bridge
 		// debounces the burst.
-		if m.comp != nil && m.comp.incomplete {
+		if m.comp != nil && m.comp.anyIncomplete() {
 			m.emitChar(EventCompletionTrigger, text)
 		}
 		return

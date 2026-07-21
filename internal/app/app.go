@@ -26,6 +26,7 @@ import (
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
 	"ike/internal/commitui"
+	"ike/internal/complete"
 	"ike/internal/config"
 	"ike/internal/debug"
 	"ike/internal/debugpanel"
@@ -93,6 +94,10 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// completeEngine is the local completion engine (0410, #851): word/symbol
+	// sources register here; it fans out per completion trigger next to the
+	// LSP bridge and its batches merge into the editor popup.
+	completeEngine *complete.Engine
 	// cfgDiagSeen dedupes config-diagnostic notifications (#793): each
 	// distinct message toasts once per session, so a settings write that
 	// reloads an unchanged-but-warned config does not re-toast. Lazily
@@ -506,6 +511,10 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 // theme, watcher, MRU, breakpoints) still re-resolves against the new cwd.
 func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *workspace.Manager) Model {
 	h.SetConfig(cfg)
+	// The local completion engine (#851) listens to editor events next to the
+	// LSP bridge; registration by name keeps a project switch idempotent.
+	engine := complete.NewEngine(h.Send)
+	h.SetEditorEmitter("complete", engine)
 	applyPluginConfig(reg, cfg)
 	themePal, themeWarning := resolveTheme(reg, cfg)
 	root, _ := os.Getwd()
@@ -541,32 +550,33 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
 	wsMgr := wsManager(mgr, resumed, root, panes)  // hoisted: the palette's recent-projects sources read it (#820)
 	m := Model{
-		cmdUsage:     cmdUsage,
-		winSizes:     winSizes,
-		ws:           wsMgr,
-		recentEditor: edKey,
-		recent:       recent,
-		largeToasted: map[string]bool{},
-		toolchainSeg: map[string]string{},
-		navHist:      &nav.History{},
-		bpts:         debug.Load(),
-		host:         h,
-		reg:          reg,
-		themePal:     themePal,
-		bindings:     bindings,
-		help:         help.New(reg, bindings, helpMinCol(cfg)),
-		shell:        ui.New(shellConfig(cfg)),
-		vcs:          vcsSt,
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage, wsMgr),
-		refs:         refs,
-		lspStatus:    map[string]string{},
-		symbols:      symbols,
-		actions:      actions,
-		pasteHist:    pasteHist,
-		paletteKey:   paletteToggleKey(cfg),
-		splitZone:    splitZone(cfg),
-		focusKeys:    focusKeys(cfg),
-		keys:         buildKeymap(cfg, bindings),
+		cmdUsage:       cmdUsage,
+		winSizes:       winSizes,
+		completeEngine: engine,
+		ws:             wsMgr,
+		recentEditor:   edKey,
+		recent:         recent,
+		largeToasted:   map[string]bool{},
+		toolchainSeg:   map[string]string{},
+		navHist:        &nav.History{},
+		bpts:           debug.Load(),
+		host:           h,
+		reg:            reg,
+		themePal:       themePal,
+		bindings:       bindings,
+		help:           help.New(reg, bindings, helpMinCol(cfg)),
+		shell:          ui.New(shellConfig(cfg)),
+		vcs:            vcsSt,
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage, wsMgr),
+		refs:           refs,
+		lspStatus:      map[string]string{},
+		symbols:        symbols,
+		actions:        actions,
+		pasteHist:      pasteHist,
+		paletteKey:     paletteToggleKey(cfg),
+		splitZone:      splitZone(cfg),
+		focusKeys:      focusKeys(cfg),
+		keys:           buildKeymap(cfg, bindings),
 	}
 	m.shell.SetSizeStore(winSizes)   // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes) // resizable palette box (#774)
@@ -803,14 +813,14 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		go e.host.Send(msg)
 	}
 	e.host.EmitEditor(host.EditorEvent{
-		Kind:       int(ev.Kind),
-		Path:       ev.Path,
-		Line:       ev.Line,
-		Col:        ev.Col,
-		Text:       ev.Text,
-		Sel:        int(ev.Sel),
-		AnchorLine: ev.AnchorLine,
-		AnchorCol:  ev.AnchorCol,
+		Kind:         int(ev.Kind),
+		Path:         ev.Path,
+		Line:         ev.Line,
+		Col:          ev.Col,
+		Text:         ev.Text,
+		Sel:          int(ev.Sel),
+		AnchorLine:   ev.AnchorLine,
+		AnchorCol:    ev.AnchorCol,
 		Large:        ev.Large,
 		Char:         ev.Char,
 		CompletionID: ev.CompletionID,

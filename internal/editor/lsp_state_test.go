@@ -329,7 +329,7 @@ func TestCompletionResolveFlow(t *testing.T) {
 	}))
 	m = insertModeAt(m, 2, 2)
 	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 2, Col: 2, Items: []ilsp.CompletionItem{
-		{Label: "abc", InsertText: "abc", ID: 7},
+		{Label: "abc", InsertText: "abc", ID: 7, Source: ilsp.SourceLSP},
 	}})
 	if len(selects) != 1 || selects[0] != 7 {
 		t.Fatalf("selects = %v, want [7] (resolve requested on open)", selects)
@@ -361,13 +361,75 @@ func TestCompletionResolveNotRequestedWithInlineDoc(t *testing.T) {
 	}))
 	m = insertModeAt(m, 0, 2)
 	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
-		{Label: "abc", InsertText: "abc", ID: 1, Doc: "inline docs"},
+		{Label: "abc", InsertText: "abc", ID: 1, Doc: "inline docs", Source: ilsp.SourceLSP},
 	}})
 	if len(selects) != 0 {
 		t.Fatalf("selects = %v, want none (doc already present)", selects)
 	}
 	if v := m.CompletionView(); !strings.Contains(v, "inline docs") {
 		t.Fatalf("popup must render the inline doc, got:\n%s", v)
+	}
+}
+
+// TestCompletionMergesSourceBatches guards #851: a local batch opens the popup
+// instantly, the LSP batch merges in at the same request position without a
+// selection jump, duplicates by insert text keep the higher-priority item, and
+// higher-priority sources list first.
+func TestCompletionMergesSourceBatches(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: "words", SourcePriority: ilsp.PriorityWords, Items: []ilsp.CompletionItem{
+		{Label: "wordOnly", InsertText: "wordOnly", Source: "words"},
+		{Label: "shared", InsertText: "shared", Source: "words"},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("local batch must open the popup")
+	}
+	// Arrow onto "wordOnly" (base order: sortText/label — shared, wordOnly).
+	m = send(m, special(tea.KeyDown))
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: ilsp.SourceLSP, SourcePriority: ilsp.PriorityLSP, Items: []ilsp.CompletionItem{
+		{Label: "shared", InsertText: "shared", Detail: "func()", Source: ilsp.SourceLSP},
+		{Label: "serverOnly", InsertText: "serverOnly", Source: ilsp.SourceLSP},
+	}})
+	got := labels(m.filteredCompletion())
+	want := []string{"serverOnly", "shared", "wordOnly"}
+	if len(got) != 3 {
+		t.Fatalf("merged = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("merged order = %v, want %v", got, want)
+		}
+	}
+	// The de-duped "shared" is the LSP item (it carries the Detail).
+	if it := m.filteredCompletion()[1]; it.Source != ilsp.SourceLSP || it.Detail != "func()" {
+		t.Fatalf("shared item = %+v, want the LSP-source one", it)
+	}
+	// The selection stayed on wordOnly across the merge.
+	if sel := m.filteredCompletion()[m.comp.sel]; sel.Label != "wordOnly" {
+		t.Fatalf("selection jumped to %q, want wordOnly", sel.Label)
+	}
+}
+
+// TestCompletionEmptyMergeBatch guards #851: an empty batch clears only that
+// source's contribution; the popup survives on the other source's items, and
+// closes once every batch is empty.
+func TestCompletionEmptyMergeBatch(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: "words", SourcePriority: ilsp.PriorityWords, Items: []ilsp.CompletionItem{
+		{Label: "keep", InsertText: "keep", Source: "words"},
+	}})
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: ilsp.SourceLSP, SourcePriority: ilsp.PriorityLSP, Items: []ilsp.CompletionItem{
+		{Label: "gone", InsertText: "gone", Source: ilsp.SourceLSP},
+	}})
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: ilsp.SourceLSP, SourcePriority: ilsp.PriorityLSP})
+	if got := labels(m.filteredCompletion()); len(got) != 1 || got[0] != "keep" {
+		t.Fatalf("after empty LSP batch: %v, want [keep]", got)
+	}
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Source: "words", SourcePriority: ilsp.PriorityWords})
+	if m.CompletionOpen() {
+		t.Fatal("popup must close once every batch is empty")
 	}
 }
 
