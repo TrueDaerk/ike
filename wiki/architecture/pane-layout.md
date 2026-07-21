@@ -95,8 +95,9 @@ up" on stale scrolls. Any non-wheel message flushes the pending batch first,
 preserving ordering against clicks, keys and motion; a stale flush after an
 inline flush is a no-op.
 
-**Center merge zone (#318).** During a move or tab drag an **editor** target
-whose drag carries files shows five zones, resolved by
+**Center merge zone (#318).** During a move or tab drag a **tab-capable**
+target — an editor pane, or a **terminal/tool pane** (#836) — whose drag
+carries files or a live session shows five zones, resolved by
 `layout.DropZoneWithCenter`: the outer `CenterBand` (30%) of either axis is
 the four edge zones (split/relocate exactly as before), the interior is
 `ZoneCenter`, which **merges as tab** JetBrains-style. A whole-pane title
@@ -104,12 +105,20 @@ drag released there moves every file of the source editor into the target's
 tab list (`openInTab` dedupes onto existing tabs) and closes the emptied
 source pane (`mergePaneTabs`); a tab drag released there joins the target's
 tab list with just that file. A whole-pane drag of a **terminal pane** also
-shows the center zone on editor targets (#708): releasing there moves the
-live shell session into the target's tab list as a terminal tab — the model
-is detached via `Instance.DetachTerminal` so closing the vacated pane does
-not end the session (`adoptTerminalPane`); edge drops keep the plain
-relocate. Drags with nothing to merge — an explorer pane or an empty editor —
-keep the four-zone relocate behaviour everywhere.
+shows the center zone (#708): releasing there moves the live shell session
+into the target's tab list as a terminal tab — the model is detached via
+`Instance.DetachTerminal` so closing the vacated pane does not end the
+session (`adoptTerminalPane`); edge drops keep the plain relocate.
+
+A **terminal or tool target** converts on the first center drop (#836):
+`Instance.ConvertToTabHost` flips the pane to an editor-kind tab host with
+its running session as the first tab (no restart) — the pane kind describes
+the initial content, not the tab capability (`canHostTabs`/`ensureTabHost`
+in `internal/app`). Two terminals can stack as tabs in one panel this way,
+or a tool and a file. Drags with nothing to merge — an explorer pane or an
+empty editor — keep the four-zone relocate behaviour everywhere, and the
+explorer plus the viewer panes (preview, diff, vcs, debug) stay edge-only
+targets.
 
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an
@@ -124,12 +133,12 @@ segments keep starting a whole-pane move. On release (`commitTabMove`): a drop
 in **another editor's center zone** merges the document into that pane's tab
 list, while its **edge zones** split a fresh editor next to it holding just
 that file (#318); a drop on the **source pane's own edge** splits off a fresh
-editor holding just that file; a drop on a **non-editor pane's edge zone**
-(e.g. a terminal) likewise
-splits that pane and opens the file in the fresh editor leaf (#317). A drop in a
-non-editor pane's interior is a no-op — there is no tab list to join — and the
-drag feedback (zone arrow, ghost, status hint) only signals a target there when
-the cursor is in an edge zone. The ghost for a tab drag is labelled with the
+editor holding just that file; a drop on a **non-tab-capable pane's edge
+zone** (e.g. the explorer) likewise splits that pane and opens the file in
+the fresh editor leaf (#317). A terminal/tool pane's interior now merges via
+the conversion above (#836); only a non-tab-capable pane's interior stays a
+no-op, its drag feedback (zone arrow, ghost, status hint) signalling a
+target only in an edge zone. The ghost for a tab drag is labelled with the
 dragged file's basename (a terminal tab uses its tab title).
 
 **Terminal-tab drag (#707).** A grabbed **terminal tab** follows the same

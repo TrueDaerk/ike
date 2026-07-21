@@ -2,6 +2,13 @@
 
 ## 2026-07-21
 
+- Center merge on terminal/tool targets (#836): dropping tab-capable content
+  (file tabs, terminal panes/tabs, tool panes) into a terminal or tool
+  pane's interior converts it into a tab host — the running session becomes
+  the first tab; tool tabs get `⚙` labels and persist by restarting on
+  restore (`/architecture/pane-layout.md`, `/architecture/editor-tabs.md`,
+  `/architecture/tool-panes.md`).
+
 - Tool instances (#835): `multiple = true` on `[[tools.custom]]` allows
   concurrent instances via a `tool.<slug>.new` command (plain command toggles
   the most recent one); single-instance tools are now also found when hosted

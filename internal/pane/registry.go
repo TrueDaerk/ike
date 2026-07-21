@@ -109,10 +109,16 @@ func (r *Registry) AddEditor() string {
 // AddEditorKey recreates an editor instance under an exact key, used by restore
 // to rebuild the saved pane set. The minting counter is advanced past any
 // numeric suffix so future AddEditor calls never collide with a restored key.
+// A terminal-shaped key (a terminal/tool pane converted into a tab host,
+// #836) advances the terminal counter instead.
 func (r *Registry) AddEditorKey(key string) *Instance {
 	inst := newInstance(key, KindEditor, r.cfg, r.pal)
 	r.put(inst)
-	r.advancePast(key)
+	if len(key) >= len(terminalKeyBase) && key[:len(terminalKeyBase)] == terminalKeyBase {
+		r.advancePastTerminal(key)
+	} else {
+		r.advancePast(key)
+	}
 	return inst
 }
 
@@ -171,6 +177,18 @@ func (r *Registry) AddToolKey(key, name string, argv []string, dir string, env [
 	r.put(inst)
 	r.advancePastTerminal(key)
 	return inst
+}
+
+// NewToolSession builds a tool-marked command session without a pane (#836):
+// a freshly minted key running argv, ready to host as an editor tab — layout
+// restore restarts tab-hosted tools this way.
+func (r *Registry) NewToolSession(name string, argv []string, dir string, env []string, send func(tea.Msg)) terminal.Model {
+	key := r.MintTerminalKey()
+	t := terminal.NewCommand(key, argv, dir, 80, 24, env, send)
+	t.SetPalette(r.pal)
+	t.SetLabel(name)
+	t.SetTool(name)
+	return t
 }
 
 // newToolInstance builds the shared tool-pane instance (#741).

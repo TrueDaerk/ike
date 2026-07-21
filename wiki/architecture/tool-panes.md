@@ -117,6 +117,13 @@ restarts the configured program in the saved position (`AddToolKey`), like
 terminals respawn fresh shells. A tool no longer configured degrades to a
 fresh shell in that slot rather than breaking the layout.
 
+A tool hosted as an **editor tab** — after a center-drop move (#708/#836) —
+persists through the hosting pane's editor identity instead: its name lands
+in the identity's `tools` list and restore restarts it as a fresh tab
+(`Registry.NewToolSession`); an unconfigured name restores as nothing. A
+tool **pane** that became a tab host itself (#836,
+`Instance.ConvertToTabHost`) follows the same editor-identity path.
+
 ## Theme following
 
 The spawned process gets the toolchain env overlay every terminal gets, plus

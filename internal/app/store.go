@@ -38,6 +38,7 @@ type paneIdentity struct {
 	Rev2   string   `json:"rev2,omitempty"`  // diff panes: revision backing the right side
 	Tool   string   `json:"tool,omitempty"`  // tool panes: the configured tool name (#741)
 	Tabs   []string `json:"tabs,omitempty"`
+	Tools  []string `json:"tools,omitempty"` // editor panes: tool sessions hosted as tabs (#836), restarted on restore
 	Active int      `json:"active,omitempty"`
 }
 
@@ -132,6 +133,13 @@ func isEditorKey(key string) bool {
 	return key == "editor" || strings.HasPrefix(key, "editor:")
 }
 
+// isTerminalKey reports whether key is a well-formed terminal instance key
+// ("terminal" or "terminal:N") — an editor identity may live under one when
+// a terminal/tool pane was converted into a tab host (#836).
+func isTerminalKey(key string) bool {
+	return key == "terminal" || strings.HasPrefix(key, "terminal:")
+}
+
 // saveLayout persists the tree plus the identity table built from the registry.
 // Errors are swallowed: failing to persist layout must never disrupt the session.
 func saveLayout(root layout.Node, reg *pane.Registry) {
@@ -187,7 +195,16 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			}
 			// Terminal tabs (#573) are session-local like scratch tabs: their
 			// processes never resurrect, so only file-backed tabs persist.
+			// Tool sessions hosted as tabs (#836) are the exception — like
+			// dedicated tool panes they remember their name and restart the
+			// configured program on restore.
 			for i := 0; i < inst.TabCount(); i++ {
+				if tt := inst.TabTerminal(i); tt != nil {
+					if tool := tt.Tool(); tool != "" {
+						id.Tools = append(id.Tools, tool)
+					}
+					continue
+				}
 				ed := inst.TabEditor(i)
 				if ed == nil || !ed.HasFile() {
 					continue // scratch/terminal tabs restore as nothing

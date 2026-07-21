@@ -365,6 +365,25 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 	return i.tabs[i.active].Terminal()
 }
 
+// ConvertToTabHost turns a terminal (or tool, #741) pane into an editor-kind
+// instance hosting its live session as the only tab (#836), so a center drop
+// can merge more tabs into it — the pane kind describes the initial content,
+// not the tab capability. The session never restarts. Only valid on terminal
+// instances; reports success.
+func (i *Instance) ConvertToTabHost() bool {
+	if i.kind != KindTerminal {
+		return false
+	}
+	t := i.term
+	i.term = terminal.Model{}
+	if w, h := t.Size(); w > 0 && h > 0 {
+		i.w, i.h = w, h
+	}
+	i.kind = KindEditor
+	i.AddTerminalTab(t)
+	return true
+}
+
 // DetachTerminal hands the live terminal model to the caller and leaves the
 // instance with a session-less placeholder, so a following registry Close no
 // longer ends the moved shell (#708): a terminal pane dropped on an editor's

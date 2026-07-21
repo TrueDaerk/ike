@@ -835,7 +835,9 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as the empty singleton panel (0330)
 		} else if ids[key].Kind == "debug" {
 			continue // restored below as the empty singleton panel (#580)
-		} else if !isEditorKey(key) {
+		} else if !isEditorKey(key) && !isTerminalKey(key) {
+			// A terminal-shaped key may carry an editor identity: a
+			// converted tab host (#836) restores as an editor pane below.
 			return // unknown leaf kind / malformed key: fall back to default
 		}
 	}
@@ -974,6 +976,29 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			if i == id.Active {
 				active = inst.ActiveTab()
 			}
+		}
+		// Tool sessions hosted as tabs (#836) restart their configured
+		// program in place, like dedicated tool panes (#741); a tool no
+		// longer configured restores as nothing. A pane that held only
+		// tool tabs drops its placeholder empty editor tab again.
+		wasEmpty := inst.IsEmptyEditor()
+		toolTabs := 0
+		for _, tool := range id.Tools {
+			entry, ok := toolEntry(tool)
+			if !ok {
+				continue
+			}
+			dir := entry.Cwd
+			if dir == "" {
+				dir = "."
+			}
+			argv := append([]string{entry.Command}, entry.Args...)
+			inst.AddTerminalTab(panes.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send))
+			toolTabs++
+		}
+		if wasEmpty && toolTabs > 0 {
+			inst.CloseTab(0)
+			active = inst.ActiveTab()
 		}
 		inst.ActivateTab(active)
 	}
@@ -5322,14 +5347,18 @@ func (m *Model) commitMove(x, y int) {
 	if target != m.drag.srcPane {
 		r := m.lay.Panes[target]
 		zone := layout.DropZone(r, x, y)
-		if inst := m.activeWS().Panes.Get(target); inst != nil && inst.Kind() == pane.KindEditor && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
+		if inst := m.activeWS().Panes.Get(target); canHostTabs(inst) && (m.dragCarriesFiles(m.drag) || m.dragCarriesTerminal(m.drag)) {
 			zone = layout.DropZoneWithCenter(r, x, y)
 		}
 		if zone == layout.ZoneCenter {
-			// Center drop on an editor merges the source pane's files into
+			// Center drop on a tab host merges the source pane's files into
 			// the target's tab list instead of relocating the pane (#318); a
 			// terminal pane moves its live session there as a terminal tab
-			// (#708).
+			// (#708). A terminal/tool target converts into a tab host first
+			// (#836), its running session becoming the first tab.
+			if !m.ensureTabHost(target) {
+				return
+			}
 			if m.dragCarriesTerminal(m.drag) {
 				m.adoptTerminalPane(m.drag.srcPane, target)
 				return
@@ -5385,19 +5414,23 @@ func (m *Model) commitTabMove(x, y int) {
 		if tinst == nil {
 			return
 		}
-		if tinst.Kind() != pane.KindEditor {
-			// A non-editor pane has no tab list to join, but its edge
-			// zones still accept the file as a split next to it (#317),
-			// mirroring the self-edge drop below.
+		if !canHostTabs(tinst) {
+			// A pane that cannot host tabs still accepts the file as a
+			// split next to it in its edge zones (#317), mirroring the
+			// self-edge drop below.
 			if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
 				m.splitTabTo(target, zone, path, ed)
 			}
 			return
 		}
-		// An editor target shows five zones (#318): the center merges the
-		// file into its tab list, the edges split next to it like #317.
+		// A tab-hosting target shows five zones (#318): the center merges
+		// the file into its tab list (a terminal/tool target converts
+		// first, #836), the edges split next to it like #317.
 		if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
 			m.splitTabTo(target, zone, path, ed)
+			return
+		}
+		if !m.ensureTabHost(target) {
 			return
 		}
 		m.openInTab(target, path)
@@ -5436,7 +5469,7 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 	if tinst == nil {
 		return
 	}
-	if tinst.Kind() != pane.KindEditor {
+	if !canHostTabs(tinst) {
 		if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
 			m.splitTerminalTabTo(target, zone)
 		}
@@ -5444,6 +5477,9 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 	}
 	if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
 		m.splitTerminalTabTo(target, zone)
+		return
+	}
+	if !m.ensureTabHost(target) {
 		return
 	}
 	term, ok := inst.DetachTerminalTab(m.drag.srcTab)
@@ -6104,14 +6140,35 @@ func (m Model) moveGhost() (box string, x, y int, ok bool) {
 // center merge zone (#318).
 func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone, bool) {
 	inst := m.activeWS().Panes.Get(key)
-	isEditor := inst != nil && inst.Kind() == pane.KindEditor
-	if d.kind == dragTab && !isEditor {
+	isHost := canHostTabs(inst)
+	if d.kind == dragTab && !isHost {
 		return edgeZone(r, d.curX, d.curY)
 	}
-	if isEditor && (m.dragCarriesFiles(d) || m.dragCarriesTerminal(d)) {
+	if isHost && (m.dragCarriesFiles(d) || m.dragCarriesTerminal(d)) {
 		return layout.DropZoneWithCenter(r, d.curX, d.curY), true
 	}
 	return layout.DropZone(r, d.curX, d.curY), true
+}
+
+// canHostTabs reports whether the pane can take a merged tab (#836): an
+// editor pane natively, a terminal/tool pane after conversion. Explorer and
+// the viewer/tool-window kinds stay edge-only targets.
+func canHostTabs(inst *pane.Instance) bool {
+	return inst != nil && (inst.Kind() == pane.KindEditor || inst.Kind() == pane.KindTerminal)
+}
+
+// ensureTabHost makes the target pane tab-hosting in place (#836): editors
+// already are; a terminal/tool pane converts, its live session becoming the
+// first tab. Reports whether the pane can now take tabs.
+func (m *Model) ensureTabHost(key string) bool {
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil {
+		return false
+	}
+	if inst.Kind() == pane.KindEditor {
+		return true
+	}
+	return inst.ConvertToTabHost()
 }
 
 // dragCarriesTerminal reports whether the drag moves a whole terminal pane
@@ -6338,8 +6395,13 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = m.editorTitle(inst.Editor())
 			if term := inst.ActiveTerminal(); term != nil {
 				// The active tab hosts a terminal (#573): title it like a
-				// terminal pane, from the tab's own label.
-				title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
+				// terminal pane, from the tab's own label. A tool session
+				// (#741) keeps its tool chrome (#836).
+				if term.Tool() != "" {
+					title = "⚙ " + strings.ToUpper(term.Tool())
+				} else {
+					title = "TERMINAL — " + inst.Tab(inst.ActiveTab()).Title()
+				}
 			}
 			// The tab bar takes over the title row once the pane holds
 			// multiple tabs (#157); paneBox draws it like any title.

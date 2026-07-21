@@ -50,8 +50,13 @@ func tabLabels(inst *pane.Instance) []string {
 	for i := 0; i < n; i++ {
 		name := "untitled"
 		if t := inst.Tab(i); t != nil && t.IsTerminal() {
-			// Terminal tabs (#573) label themselves: OSC title or shell name.
-			name = "⌨ " + t.Title()
+			// Terminal tabs (#573) label themselves: OSC title or shell
+			// name; a tool session (#741) keeps its tool glyph (#836).
+			if tt := t.Terminal(); tt != nil && tt.Tool() != "" {
+				name = "⚙ " + t.Title()
+			} else {
+				name = "⌨ " + t.Title()
+			}
 		} else if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
 			name = baseName(ed.Path())
 		}
