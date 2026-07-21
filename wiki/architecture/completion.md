@@ -93,8 +93,26 @@ runes or starting with a digit are noise and never indexed. Edits to files not
 open in a buffer are not re-scanned — the buffer feed covers what the user
 actually types in.
 
+## Symbol index (#853)
+
+`internal/complete/symbols` (name `symbols`, priority `lsp.PrioritySymbols`)
+indexes project-wide identifiers through the **tree-sitter highlight layer**:
+the captures the language grammars already produce (`function`,
+`function.method`, `constructor`, `type`, `constant`) become completion items
+with proper kinds — no server round-trip, no per-language extraction code.
+Without cgo the grammar layer answers nothing and the source stays silent
+(the word index covers those builds). **CSS files** contribute selector class
+names and IDs (regex over `.css`/`.scss`/`.less`), offered inside HTML
+`class="…"`/`id="…"` attribute values — detected on the current line, with
+`data-class` & co. excluded — the cross-file case language servers are
+structurally weak at. Freshness mirrors the word index (observed buffers
+override the disk index; lazy re-extraction) plus **watcher invalidation**:
+the app forwards file-change events through `Engine.NotifyFileChanged` to
+sources implementing `FileObserver`, which re-extract off-goroutine. The
+one-shot background scan is capped tighter (2000 files, 128KB) since each
+file costs a parse.
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
-`internal/app`) at build time. Planned sources: the tree-sitter symbol index (#853, including CSS class
-names offered in HTML), Emmet (#856). Unified ranking across sources (locality, MRU) is #854.
+`internal/app`) at build time. Planned sources: Emmet (#856). Unified ranking across sources (locality, MRU) is #854.

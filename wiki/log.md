@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Symbol-index completion source (0410, #853): grammar-capture symbols with
+  kinds, CSS classes/IDs offered in HTML class=/id= attributes, watcher-driven
+  invalidation (`/architecture/completion.md`).
+
 - Word-index completion source (0410, #852): instant vim-keyword-level
   candidates from open buffers (event-fed, lazily extracted) + one-shot
   project scan, locality-tiered, prefix-prefiltered

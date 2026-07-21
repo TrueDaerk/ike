@@ -75,6 +75,27 @@ type EventObserver interface {
 	Observe(ev host.EditorEvent)
 }
 
+// FileObserver is an optional Source extension (#853): a source indexing
+// on-disk files implements it and the app forwards watcher file-change
+// events through NotifyFileChanged.
+type FileObserver interface {
+	InvalidateFile(path string)
+}
+
+// NotifyFileChanged tells file-observing sources that path changed on disk.
+// Must not block; observers do their re-extraction off this goroutine.
+func (e *Engine) NotifyFileChanged(path string) {
+	e.mu.Lock()
+	sources := make([]Source, len(e.sources))
+	copy(sources, e.sources)
+	e.mu.Unlock()
+	for _, s := range sources {
+		if o, ok := s.(FileObserver); ok {
+			o.InvalidateFile(path)
+		}
+	}
+}
+
 // Emit implements host.EditorEmitter: every event forwards to observing
 // sources, completion triggers additionally dispatch the sources. Only
 // identifier-ish characters and manual requests fire — server trigger
