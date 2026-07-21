@@ -162,6 +162,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 					return nil
 				},
 			},
+			{
+				ID:    "lsp.wsclose",
+				Event: plugin.EventWorkspaceClosed,
+				Notify: func(h host.API, payload any) tea.Cmd {
+					root, _ := payload.(string)
+					return shared().workspaceClosed(root)
+				},
+			},
 		},
 	}
 }

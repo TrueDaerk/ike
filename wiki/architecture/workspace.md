@@ -72,6 +72,25 @@ plain switching never prompts. Per-project layout/session persistence needs
 no extra machinery: every workspace's layout is saved at park time, so an
 evicted project restores from disk on its next visit like any first visit.
 
+## Teardown & memory release (#825)
+
+Every teardown path (close-from-list, busy-close guard, LRU eviction) runs
+`closeWorkspace` (`internal/app/workspace_evict.go`): `teardownWorkspace`
+closes every terminal session (PTY goroutines join synchronously in
+`Session.Close`), disconnects a parked debug session, and then cuts the
+workspace's references loose (`Panes`, `Tree`, `Aux` set to nil) so a
+lingering `Workspace` pointer can never pin the registry. It then fires the
+**`plugin.EventWorkspaceClosed`** hook (payload: the workspace's absolute
+root; WASM ABI name `workspace_closed`). The LSP plugin subscribes
+(`lsp.wsclose`): the bridge drops its per-path caches under that root and
+`manager.CloseRoot` closes every document whose path lies inside the root
+(didClose) and stops every server rooted there — the closed project's
+server processes, document texts and semantic-token arrays are released;
+the next visit respawns lazily. The recent-projects lists hold only entry
+metadata (path/name/timestamp), never live workspace pointers.
+Weak-pointer regression tests (`internal/app/workspace_release_test.go`)
+assert the dropped `Workspace` and its `pane.Registry` become garbage.
+
 ## Marker & close-from-list (#820)
 
 The recent-projects lists (the `project.switch` picker and the Recent Files

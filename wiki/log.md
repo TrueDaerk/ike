@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Closing a background workspace now releases its memory (#825): teardown
+  cuts the workspace's registry/tree references and fires the new
+  `EventWorkspaceClosed` hook; the LSP bridge closes the root's documents
+  and stops its servers (`manager.CloseRoot`). Weak-pointer regression
+  tests pin collectability (`/architecture/workspace.md`).
+
 - Busy workspaces confirm before teardown (#821): close-from-list prompts
   with a running/unsaved summary (save / discard / cancel), and IDE quit
   aggregates the checks across all in-memory workspaces

@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -867,6 +868,53 @@ func (m *Manager) StopLang(lang string) {
 	for host := range republish {
 		m.publishHostDiagnostics(host)
 	}
+}
+
+// CloseRoot releases everything the manager holds under one project root
+// (#825): every open document whose path lies inside root closes (didClose to
+// servers that keep running), and every server rooted inside root stops
+// outright. Called when a background workspace is torn down; the next
+// document event respawns lazily. Best-effort, like Shutdown.
+func (m *Manager) CloseRoot(root string) {
+	m.mu.Lock()
+	var paths []string
+	for path := range m.docs {
+		if underRoot(path, root) {
+			paths = append(paths, path)
+		}
+	}
+	m.mu.Unlock()
+	// Close releases the doc, its fragments and its diagnostics, and notifies
+	// the server — wasted on servers stopped below, but harmless.
+	for _, p := range paths {
+		_ = m.Close(p)
+	}
+	m.mu.Lock()
+	var stopped []*server
+	for k, srv := range m.servers {
+		if !underRoot(srv.root, root) {
+			continue
+		}
+		srv.closing = true // suppress restart on the resulting Done
+		stopped = append(stopped, srv)
+		delete(m.servers, k)
+		delete(m.restarts, k)
+	}
+	m.mu.Unlock()
+	for _, srv := range stopped {
+		if srv.stop != nil {
+			srv.stop()
+		}
+	}
+}
+
+// underRoot reports whether path lies inside (or equals) root.
+func underRoot(path, root string) bool {
+	if root == "" || path == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // RunningLangs returns the languages with at least one live server, sorted.

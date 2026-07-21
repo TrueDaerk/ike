@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -1259,6 +1260,55 @@ func (b *bridge) onStatus(lang, text string, kind ilsp.ServerStatusKind) {
 	if b.h != nil {
 		b.h.Send(ilsp.ServerStatusMsg{Lang: lang, Text: text, Kind: kind})
 	}
+}
+
+// workspaceClosed releases the LSP state of a torn-down workspace (#825): the
+// bridge's per-path caches under root drop on the spot, and the manager closes
+// its documents and stops its servers under root inside the returned cmd —
+// blocking server work stays off the Update goroutine (see restart).
+func (b *bridge) workspaceClosed(root string) tea.Cmd {
+	b.mu.Lock()
+	for path, t := range b.changeTimer {
+		if pathUnder(path, root) {
+			t.Stop()
+			delete(b.changeTimer, path)
+		}
+	}
+	prunePaths(b.pendingChange, root)
+	prunePaths(b.diags, root)
+	prunePaths(b.sigActive, root)
+	prunePaths(b.semInFlight, root)
+	prunePaths(b.semPending, root)
+	prunePaths(b.hintInFlight, root)
+	prunePaths(b.hintPending, root)
+	prunePaths(b.pendingDiags, root)
+	mgr := b.mgr
+	b.mu.Unlock()
+	if mgr == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		mgr.CloseRoot(root)
+		return nil
+	}
+}
+
+// prunePaths drops every entry whose path lies under root.
+func prunePaths[V any](m map[string]V, root string) {
+	for p := range m {
+		if pathUnder(p, root) {
+			delete(m, p)
+		}
+	}
+}
+
+// pathUnder reports whether path lies inside (or equals) root.
+func pathUnder(path, root string) bool {
+	if root == "" || path == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 // --- helpers ---

@@ -2787,8 +2787,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openWsClosePrompt(msg.Path, act)
 			return m, nil
 		}
-		m.finishWorkspaceClose(msg.Path) // idle: palette stays open, badge disappears
-		return m, nil
+		// Idle: palette stays open, badge disappears.
+		return m, m.finishWorkspaceClose(msg.Path)
 
 	case project.SwitchProjectMsg:
 		return m.handleSwitchProject(msg)

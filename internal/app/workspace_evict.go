@@ -3,6 +3,7 @@ package app
 import (
 	"ike/internal/config"
 	"ike/internal/pane"
+	"ike/internal/plugin"
 	"ike/internal/project"
 	"ike/internal/ui"
 	"ike/internal/workspace"
@@ -67,6 +68,8 @@ func workspaceBusy(w *workspace.Workspace) bool {
 // teardownWorkspace releases a dropped workspace's live resources: every
 // terminal session (panes and tabs) closes and a parked debug session
 // disconnects. Buffers need no teardown — dropping the registry is enough.
+// The pane registry and split tree are cut loose at the end so a Workspace
+// pointer lingering anywhere cannot pin them (#825).
 func teardownWorkspace(w *workspace.Workspace) {
 	if w == nil {
 		return
@@ -89,24 +92,43 @@ func teardownWorkspace(w *workspace.Workspace) {
 		go sess.Close()
 	}
 	w.Aux = nil
+	w.Panes = nil
+	w.Tree = nil
+	w.ReturnFocus = ""
+}
+
+// closeWorkspace tears w down and fires the workspace-closed hooks (#825), so
+// subscribers — the LSP bridge, notably — release everything they hold under
+// the workspace's root. The returned cmd carries the hooks' async work.
+func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
+	if w == nil {
+		return nil
+	}
+	root := w.Root
+	teardownWorkspace(w)
+	return tea.Batch(m.fireHooks(plugin.EventWorkspaceClosed, root)...)
 }
 
 // enforceWorkspaceCap evicts least-recently-used background workspaces past
 // the cap: idle ones silently, the first busy one behind the confirm prompt
-// (one decision at a time; the cap re-checks after the next switch).
-func (m *Model) enforceWorkspaceCap() {
+// (one decision at a time; the cap re-checks after the next switch). The
+// returned cmd carries the evicted workspaces' close hooks (#825).
+func (m *Model) enforceWorkspaceCap() tea.Cmd {
 	cap := maxWorkspaces()
+	var cmds []tea.Cmd
 	for {
 		bg := m.ws.Background()
 		if len(bg) <= cap {
-			return
+			return tea.Batch(cmds...)
 		}
 		lru := bg[0]
 		if workspaceBusy(m.ws.Peek(lru)) {
 			m.openEvictPrompt(lru)
-			return
+			return tea.Batch(cmds...)
 		}
-		teardownWorkspace(m.ws.Drop(lru))
+		if cmd := m.closeWorkspace(m.ws.Drop(lru)); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 }
 
@@ -139,9 +161,9 @@ func (m Model) updateEvictPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		root := m.evictPending
 		m.evictPending = ""
 		m.shell.Close()
-		teardownWorkspace(m.ws.Drop(root))
-		m.enforceWorkspaceCap() // more may be over the cap
-		return m, nil
+		closeCmd := m.closeWorkspace(m.ws.Drop(root))
+		capCmd := m.enforceWorkspaceCap() // more may be over the cap
+		return m, tea.Batch(closeCmd, capCmd)
 	case "esc":
 		m.evictPending = ""
 		m.shell.Close()
