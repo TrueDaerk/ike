@@ -85,7 +85,7 @@ Two optional Content extensions refine key routing while the shell is open
   `bubbles/viewport` (↑/↓, pgup/pgdn, ctrl+u/ctrl+d, plus g/G for top/bottom) and
   appends a position indicator (`▲ … ▼  NN%`) only when the content overflows.
   The pane therefore never grows past the terminal.
-- **User resize** (#774): `ctrl+shift+arrows` (CSI-parameter-encoded, so
+- **User resize** (#774): `cmd+shift+arrows (macOS; spelled shift+super) / ctrl+shift+arrows / alt+shift+arrows` (CSI-parameter-encoded, so
   delivered everywhere) adjust the open shell's content budget; the delta is
   persisted per content title in the per-project `winsize.json` store
   (`ui.WinSizes`, `IKE_CONFIG_DIR`-redirectable) and re-clamped against the

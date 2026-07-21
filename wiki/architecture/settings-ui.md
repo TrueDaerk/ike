@@ -135,7 +135,7 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 
 ## Resizing (#774)
 
-`ctrl+shift+arrows` resize the open panel (width ±4, height ±1) unless the
+`cmd+shift+arrows (macOS; spelled shift+super) / ctrl+shift+arrows / alt+shift+arrows` resize the open panel (width ±4, height ±1) unless the
 panel is capturing keys verbatim (`Model.Capturing()`: an edit/pick/filter
 input or a custom page's chord capture). The root model owns the chord: it
 adjusts the shared `ui.WinSizes` store (kind `"settings"`, persisted in the
