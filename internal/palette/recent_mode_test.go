@@ -155,6 +155,110 @@ func TestPaletteSideColumnFocusAndActivate(t *testing.T) {
 	}
 }
 
+// TestPaletteSideFocusStartsOnProjectsWhenNoFiles (#819): an empty recent-files
+// list opens the dialog with the projects column focused, so enter immediately
+// opens the previous project.
+func TestPaletteSideFocusStartsOnProjectsWhenNoFiles(t *testing.T) {
+	m := testRecentMode(nil)
+	m.SetProjects(func() []Item {
+		return []Item{{Title: "alpha", Msg: projectsMsg{Path: "/p/alpha"}}}
+	})
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	if !p.sideFocus {
+		t.Fatal("empty files list must start the focus on the projects column")
+	}
+	cmd := p.Update(enterKey())
+	if cmd == nil {
+		t.Fatal("enter must activate the focused project")
+	}
+	if got, ok := cmd().(projectsMsg); !ok || got.Path != "/p/alpha" {
+		t.Fatalf("activation msg = %#v, want the top project", cmd())
+	}
+}
+
+// TestPaletteSideFocusFollowsProjectOnlyMatch (#819): a query matching only
+// projects moves the focus (and enter target) to the projects column; deleting
+// back to a file-matching query returns it.
+func TestPaletteSideFocusFollowsProjectOnlyMatch(t *testing.T) {
+	m := sideRecentMode()
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	if p.sideFocus {
+		t.Fatal("non-empty files list must start on the files column")
+	}
+	for _, r := range "alph" { // matches only the project "alpha"
+		p.Update(runes(string(r)))
+	}
+	if len(p.items) != 0 {
+		t.Fatalf("query should match no files, got %+v", p.items)
+	}
+	if !p.sideFocus {
+		t.Fatal("project-only match must focus the projects column")
+	}
+	cmd := p.Update(enterKey())
+	if got, ok := cmd().(projectsMsg); !ok || got.Path != "/p/alpha" {
+		t.Fatalf("enter must open the matching project, got %#v", cmd())
+	}
+}
+
+// TestPaletteSideFocusShiftsOnBetterProjectMatch (#819): a project whose match
+// strictly outscores the best file hit pulls the focus to the projects column;
+// files keep it on ties.
+func TestPaletteSideFocusShiftsOnBetterProjectMatch(t *testing.T) {
+	m := testRecentMode([]string{"bexxtxa.go"}) // weak scattered match for "beta"
+	m.SetProjects(func() []Item {
+		return []Item{{Title: "beta", Msg: projectsMsg{Path: "/p/beta"}}}
+	})
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	for _, r := range "beta" {
+		p.Update(runes(string(r)))
+	}
+	if len(p.items) == 0 {
+		t.Fatal("the scattered file must still fuzzy-match")
+	}
+	if !p.sideFocus {
+		t.Fatal("a strictly better project match must shift the focus to projects")
+	}
+}
+
+// TestPaletteSideFocusManualOverride (#819): an explicit tab switch wins over
+// the automatic placement until the query changes again.
+func TestPaletteSideFocusManualOverride(t *testing.T) {
+	m := sideRecentMode()
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	for _, r := range "alph" {
+		p.Update(runes(string(r)))
+	}
+	if !p.sideFocus {
+		t.Fatal("precondition: project-only match focuses projects")
+	}
+	// Manual switch back to files sticks while the query is unchanged.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if p.sideFocus {
+		t.Fatal("tab must move the focus back to the files column")
+	}
+	p.Update(downKey())
+	if p.sideFocus {
+		t.Fatal("navigation must not re-trigger the automatic placement")
+	}
+	// The next query edit clears the override and auto-places again.
+	p.Update(runes("a"))
+	if !p.sideFocus {
+		t.Fatal("a query change must re-apply the automatic placement")
+	}
+}
+
 func TestPaletteSideColumnArrowsOnEmptyQuery(t *testing.T) {
 	m := sideRecentMode()
 	p := New(Config{}, m, fileMode())

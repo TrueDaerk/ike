@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Command Palette
@@ -158,6 +158,15 @@ and `enter` on a project emits `project.PickedMsg` — the normal validated
 path into the seamless workspace switch (#777), so terminals and runs keep
 running. The query fuzzy-filters both columns at once. Anchored palettes
 and search everywhere never show the column.
+
+**Automatic focus placement (#819).** On open and after every query edit the
+column focus follows the best match: an empty files list starts the focus on
+the projects column (fresh project, `enter` reopens the previous project),
+and a query whose top project strictly outscores the top file — or matches
+only projects — shifts the focus there, so `enter` opens the best hit. Files
+win ties, and an empty query with any recent files starts on the files
+column as before. An explicit column switch (`tab`, empty-query arrows, or a
+click) overrides the automatic placement until the query changes again.
 
 ## Search-everywhere mode (`cmd+shift+a` / double-shift, Roadmap 0230)
 

@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Recent Files focus placement (#819): the dialog's column focus now follows
+  the best match — empty files list or a better/only project match focuses
+  the Recent Projects column; files win ties; a manual `tab`/arrow/click
+  switch overrides until the query changes (`/architecture/command-palette.md`).
+
 - The `[debug.php]` listen settings are editable in-IDE (#832): a Debug
   schema section (port, hostname filter), a PHP Debug Mappings custom page
   for `[[debug.php.path_mappings]]`, and a mapping-suggestion prompt when
