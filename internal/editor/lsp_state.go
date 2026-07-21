@@ -15,6 +15,7 @@ import (
 	"ike/internal/highlight"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
+	"ike/internal/lsp/snippet"
 	"ike/internal/vcs"
 )
 
@@ -311,7 +312,9 @@ func (m *Model) completionMove(delta int) {
 }
 
 // completionAccept inserts the selected item, replacing the typed prefix, and
-// closes the popup.
+// closes the popup. A snippet item (#846) is expanded first and, with tabstops
+// present, starts the placeholder session (single caret only — multi-caret
+// inserts the expanded text plain).
 func (m *Model) completionAccept() {
 	items := m.filteredCompletion()
 	if len(items) == 0 {
@@ -323,6 +326,14 @@ func (m *Model) completionAccept() {
 	}
 	item := items[m.comp.sel]
 	m.comp = nil
+	insertText := item.InsertText
+	var stops []int
+	if item.IsSnippet {
+		if text, offs, err := snippet.Expand(insertText); err == nil {
+			insertText, stops = text, offs
+		}
+		// A malformed snippet falls back to the raw text.
+	}
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
@@ -334,10 +345,13 @@ func (m *Model) completionAccept() {
 	// prefix, duplicating it (e.g. "xyz.__" + "__dict__" → "xyz.____dict__", #330).
 	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
 		start := m.identifierStart(pos)
-		start = m.extendPrefixMatch(start, pos, item.InsertText)
-		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: item.InsertText})
+		start = m.extendPrefixMatch(start, pos, insertText)
+		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: insertText})
 	})
 	m.dirtyFromInsert()
+	if len(stops) > 0 && !m.hasCarets() {
+		m.startSnippetSession(insertText, stops)
+	}
 }
 
 // identifierStart returns the position of the start of the identifier run

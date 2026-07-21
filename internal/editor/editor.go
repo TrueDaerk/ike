@@ -272,6 +272,7 @@ type Model struct {
 	blameOn   bool
 	blame     map[int]vcs.BlameLine
 	comp      *completionState
+	snippet   *snippetSession
 	hover     *hoverState
 	signature *signatureState
 	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived

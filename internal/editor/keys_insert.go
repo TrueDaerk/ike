@@ -48,6 +48,12 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		m.insertBackspace()
 	case key.Code == tea.KeyDelete && key.Mod&^tea.ModShift == 0:
 		m.insertForwardDelete()
+	// An active snippet session (#846) owns tab/shift+tab: jump between the
+	// expansion's tabstops instead of indenting.
+	case key.Code == tea.KeyTab && m.snippet != nil && key.Mod&tea.ModShift != 0:
+		m.snippetMove(-1)
+	case key.Code == tea.KeyTab && m.snippet != nil:
+		m.snippetMove(1)
 	// Shift+Tab dedents the whole current line one unit (Roadmap 0260),
 	// regardless of the cursor column; plain Tab inserts one unit at the cursor.
 	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0:

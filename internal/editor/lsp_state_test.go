@@ -218,6 +218,80 @@ func labels(items []ilsp.CompletionItem) []string {
 	return out
 }
 
+// TestCompletionSnippetAcceptAndTabstops guards #846: accepting a snippet item
+// expands the placeholders, puts the cursor on the first tabstop, and
+// tab/shift+tab walk the stops with typed text shifting the later ones.
+func TestCompletionSnippetAcceptAndTabstops(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+		{Label: "f", InsertText: "f($1, $2)", IsSnippet: true},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "f(, )" {
+		t.Fatalf("expanded line = %q, want f(, )", got)
+	}
+	if m.cursor.Col != 2 {
+		t.Fatalf("cursor col = %d, want 2 (first tabstop)", m.cursor.Col)
+	}
+	m = send(m, key('x'), special(tea.KeyTab))
+	if m.cursor.Col != 5 {
+		t.Fatalf("after tab cursor col = %d, want 5 (second stop shifted by typed x)", m.cursor.Col)
+	}
+	m = send(m, key('y'))
+	if got := line(m, 0); got != "f(x, y)" {
+		t.Fatalf("line = %q, want f(x, y)", got)
+	}
+	// Shift+tab returns to the first stop's area (after its typed text).
+	m = send(m, tea.KeyPressMsg{Code: tea.KeyTab, Mod: tea.ModShift})
+	if m.cursor.Col != 2 {
+		t.Fatalf("after shift+tab cursor col = %d, want 2", m.cursor.Col)
+	}
+	// Esc ends the session; the next tab indents normally again.
+	m = send(m, special(tea.KeyEscape))
+	if m.snippet != nil {
+		t.Fatal("esc must end the snippet session")
+	}
+}
+
+// TestCompletionSnippetMalformedFallsBack guards #846: an unparsable snippet
+// inserts its raw text and starts no session.
+func TestCompletionSnippetMalformedFallsBack(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+		{Label: "bad", InsertText: "bad${1:unterminated", IsSnippet: true},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "bad${1:unterminated" {
+		t.Fatalf("line = %q, want the raw text", got)
+	}
+	if m.snippet != nil {
+		t.Fatal("malformed snippet must not start a session")
+	}
+}
+
+// TestCompletionSnippetTrailingStopOnly guards #846: a snippet whose only stop
+// is the end of the text ("foo()$0" shapes) needs no session — the cursor is
+// already there.
+func TestCompletionSnippetTrailingStopOnly(t *testing.T) {
+	m, _ := loaded(t, "\n")
+	m = insertModeAt(m, 0, 0)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 0, Items: []ilsp.CompletionItem{
+		{Label: "now", InsertText: "now()$0", IsSnippet: true},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "now()" {
+		t.Fatalf("line = %q, want now()", got)
+	}
+	if m.snippet != nil {
+		t.Fatal("trailing-only stop must not start a session")
+	}
+	if m.cursor.Col != 5 {
+		t.Fatalf("cursor col = %d, want 5 (end of insert)", m.cursor.Col)
+	}
+}
+
 func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
 	m, _ := loaded(t, "xyz.__\n")
 	m = insertModeAt(m, 0, 6) // after "xyz.__", as a manual trigger would anchor

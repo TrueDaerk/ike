@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Snippet completions (0410, #846): the client declares `snippetSupport`;
+  snippet insert texts expand via `internal/lsp/snippet` and accepted items
+  with tabstops run a tab/shift+tab placeholder session in the editor
+  (`/architecture/lsp.md`).
+
 - Fuzzy completion matching (0410, #845): the completion popup filters by
   fuzzy subsequence (`internal/fuzzy`) against `filterText`, ranks by match
   score with CamelCase/boundary bonuses, and ties/unfiltered lists follow the
