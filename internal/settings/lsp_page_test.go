@@ -118,7 +118,7 @@ func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 		t.Fatalf("args override must reach the effective command line:\n%s", v)
 	}
 
-	p.Update(key("s"))
+	p.Update(key("o"))
 	p.input = `{"telemetry":false}`
 	drainLSP(t, p, p.Update(key("enter")))
 	m, ok := config.Get().LSP.Servers["lsptest"]["settings"].(map[string]any)
@@ -127,7 +127,7 @@ func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 	}
 
 	// Invalid JSON is rejected without leaving the editor.
-	p.Update(key("s"))
+	p.Update(key("o"))
 	p.input = "not-json"
 	p.Update(key("enter"))
 	if !p.Capturing() || p.invalid == "" {
@@ -155,22 +155,22 @@ func TestLSPPageEnableTogglesAndReset(t *testing.T) {
 	}
 	drainLSP(t, p, p.Update(key("E"))) // back on
 
-	// x resets every override; the per-server disable goes with it.
-	drainLSP(t, p, p.Update(key("x")))
+	// r resets every override (#887); the per-server disable goes with it.
+	drainLSP(t, p, p.Update(key("r")))
 	if !serverOn("lsptest") {
-		t.Fatal("x must clear the per-server disable")
+		t.Fatal("r must clear the per-server disable")
 	}
 	if got := config.Get().LSP.Servers["lsptest"]["command"]; got != nil {
-		t.Fatalf("x must clear overrides, command = %v", got)
+		t.Fatalf("r must clear overrides, command = %v", got)
 	}
 }
 
 func TestLSPPageRestartDispatch(t *testing.T) {
 	p, _, restarts := lspPageFixture(t)
-	drainLSP(t, p, p.Update(key("r")))
 	drainLSP(t, p, p.Update(tea.KeyPressMsg{Text: "R", Code: 'R', Mod: tea.ModShift}))
+	drainLSP(t, p, p.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl}))
 	if len(*restarts) != 2 || (*restarts)[0] != "lsptest" || (*restarts)[1] != "*" {
-		t.Fatalf("restart dispatch = %v, want [lsptest *]", *restarts)
+		t.Fatalf("restart dispatch = %v, want [lsptest *] (R selected, ctrl+r all, #887)", *restarts)
 	}
 }
 

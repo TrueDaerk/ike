@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Settings key unification (0420, #887): r=reset / R=restart / g=refresh /
+  o=options-JSON / space toggles; pgup-pgdn-home-end everywhere; shared
+  chord-capture sub-panel; `?` key-help overlay
+  (`/architecture/settings-ui.md`).
+
 - Settings search over everything (0420, #886): the filter matches category
   titles (jump rows) and custom-page items via the Searchable seam
   (Toolchain/Tools/Plugins); enter navigates, the rail stays alive

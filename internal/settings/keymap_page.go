@@ -199,6 +199,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if k.importing {
 		return k.updateImport(key)
 	}
+	if listNav(key.String(), &k.sel, len(k.rows()), navPage) {
+		return nil
+	}
 	switch key.String() {
 	case "up", "k":
 		if k.sel > 0 {

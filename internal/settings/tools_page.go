@@ -91,18 +91,17 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.suggesting {
 		return t.updateSuggest(key)
 	}
+	if listNav(key.String(), &t.sel, len(t.entries())+1, navPage) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if t.sel > 0 {
-			t.sel--
-		}
-	case "down", "j":
-		if t.sel < len(t.entries())-1 {
-			t.sel++
-		}
 	case "a":
 		t.openForm(-1)
 	case "enter":
+		if t.sel == len(t.entries()) {
+			// The trailing "+ Suggestions…" action row (#887).
+			return t.openSuggestions()
+		}
 		if t.sel >= 0 && t.sel < len(t.entries()) {
 			t.openForm(t.sel)
 		}
@@ -111,13 +110,28 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			return t.deleteEntry(t.sel)
 		}
 	case "s":
-		if len(t.suggestions()) == 0 {
-			t.note = "no suggestions — every catalog tool is already configured"
-			return nil
-		}
-		t.suggesting, t.sugSel, t.note = true, 0, ""
+		return t.openSuggestions()
 	}
 	return nil
+}
+
+// openSuggestions opens the curated-suggestions picker (#759); reachable via
+// the visible action row and the "s" shortcut.
+func (t *ToolsPage) openSuggestions() tea.Cmd {
+	if len(t.suggestions()) == 0 {
+		t.note = "no suggestions — every catalog tool is already configured"
+		return nil
+	}
+	t.suggesting, t.sugSel, t.note = true, 0, ""
+	return nil
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (t *ToolsPage) KeyHelp() []string {
+	return []string{
+		"a  add a tool · enter  edit the selected tool (or open the action row)",
+		"d  delete · s  curated suggestions",
+	}
 }
 
 // updateSuggest handles keys while the suggestion picker is open: j/k move,
@@ -246,6 +260,16 @@ func (t *ToolsPage) View(w, h int) string {
 	if len(entries) == 0 {
 		list = append(list, "no tools configured — press a to add one")
 	}
+	// The trailing suggestions action row (#887): a visible entry point, not
+	// just the "s" letter.
+	{
+		label := " + Suggestions…"
+		style := lipgloss.NewStyle().Foreground(pal.Info)
+		if t.sel == len(entries) {
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+		}
+		list = append(list, style.Render(label))
+	}
 	hint := "   a add · enter edit · d delete · s suggestions — each tool is a tool.<name> palette command"
 	lines2 := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 	if t.note != "" {
@@ -322,10 +346,13 @@ func (t *ToolsPage) Click(_, y int) tea.Cmd {
 		return nil
 	}
 	idx := row + t.off
-	if idx >= len(t.entries()) {
+	if idx > len(t.entries()) {
 		return nil
 	}
 	if idx == t.sel {
+		if idx == len(t.entries()) {
+			return t.openSuggestions()
+		}
 		t.openForm(idx)
 		return nil
 	}
@@ -339,7 +366,7 @@ func (t *ToolsPage) Wheel(delta int) {
 	if t.suggesting {
 		return
 	}
-	if n := len(t.entries()); n > 0 {
+	if n := len(t.entries()) + 1; n > 0 { // + the suggestions action row
 		t.sel = clamp(t.sel+delta, 0, n-1)
 	}
 }

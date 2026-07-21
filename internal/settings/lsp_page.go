@@ -202,15 +202,10 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return p.updateInput(key)
 	}
 	l, hasRow := p.current()
+	if listNav(key.String(), &p.sel, len(p.servers()), navPage) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if p.sel > 0 {
-			p.sel--
-		}
-	case "down", "j":
-		if p.sel < len(p.servers())-1 {
-			p.sel++
-		}
 	case "E":
 		// Master switch: flips the whole subsystem, its conventional layer.
 		v := !masterEnabled()
@@ -229,11 +224,13 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			_, args := effective(l)
 			p.startEdit(lspEditArgs, strings.Join(args, " "))
 		}
-	case "s":
+	case "o":
+		// Server options JSON ("s" is reserved for the write scope, #887).
 		if hasRow {
 			p.startEdit(lspEditSettings, settingsJSON(l.ID))
 		}
-	case "r":
+	case "R":
+		// Restart the selected server ("r" means reset everywhere, #887).
 		if hasRow && p.restartLang != nil {
 			return p.restartLang(l.ID)
 		}
@@ -271,11 +268,12 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			v = true
 		}
 		return config.WriteAndReload(p.opts, config.DefaultScope("lsp.completion_auto"), "lsp.completion_auto", v)
-	case "R":
+	case "ctrl+r":
 		if p.restartAll != nil {
 			return p.restartAll()
 		}
-	case "x":
+	case "r":
+		// Reset the selected server's overrides (#887; was "x").
 		if hasRow {
 			// Reset every override of this server back to the baseline: all
 			// removals in one command with a single reload at the end, so
@@ -438,7 +436,7 @@ func (p *LSPPage) View(w, h int) string {
 		default:
 			footer = wrapFooter([]footerLine{
 				{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
-				{text: " e enable · c command · a args · s settings · i install · r restart · R restart all · x reset", style: sec},
+				{text: " e enable · c command · a args · o options JSON · i install · R restart · ctrl+r restart all · r reset · ? keys", style: sec},
 			}, w, 3)
 		}
 	}
@@ -505,4 +503,16 @@ func (p *LSPPage) renderRow(l lang.Language, selected bool) string {
 		style = style.Foreground(pal.Info)
 	}
 	return style.Render(label)
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (p *LSPPage) KeyHelp() []string {
+	return []string{
+		"e  toggle the selected server · E  master switch",
+		"c  edit command · a  edit args · o  edit options JSON",
+		"i  install the server binary",
+		"R  restart the selected server · ctrl+r  restart all",
+		"r  reset the selected server's overrides",
+		"A  auto-install · I  inlay hints · S  signature popup · C  completion popup",
+	}
 }
