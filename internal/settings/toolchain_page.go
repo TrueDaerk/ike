@@ -60,28 +60,14 @@ type ToolchainPage struct {
 	suggest    pathSuggest // live path completion for the custom input (#541)
 
 	// Python environment actions (#132): the uv-version picker and the
-	// in-flight/busy marker the view shows while an action runs.
+	// in-flight/busy marker the view shows while an action runs. The guided
+	// create wizard is a SubPanel now (#884, venv_wizard.go) pushed through
+	// host.
 	uvPicking  bool
 	uvVersions []string
 	uvPick     int
 	envState   string
-
-	// Create-environment target input (#547): pre-filled with ".venv",
-	// path-completed, resolved against the project root on enter. Since #569
-	// it is the last step of the guided create wizard.
-	envInput   bool
-	envPath    string
-	envSuggest pathSuggest
-
-	// Guided create wizard (#569): step 1 picks the tool (uv / venv), step 2
-	// the Python (uv: version, venv: base interpreter), step 3 is envInput.
-	wizStep   int // 0 = inactive
-	wizTools  []string
-	wizPick   int
-	wizTool   string
-	wizPys    []string
-	wizPyPick int
-	wizPython string
+	host       SubPanelHost
 
 	// Package listing (#569): `i` fetches the effective interpreter's
 	// installed packages asynchronously; j/k scroll the inline window.
@@ -112,10 +98,25 @@ func NewToolchainPage(opts config.Options, root string, restart func() tea.Cmd) 
 // SetPalette implements PageModel.
 func (t *ToolchainPage) SetPalette(p *theme.Palette) { t.pal = p }
 
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (t *ToolchainPage) SetSubPanelHost(h SubPanelHost) { t.host = h }
+
+// pushWizard opens the create-environment wizard (#884); without a host
+// (tests, degraded wiring) it reports instead of failing silently.
+func (t *ToolchainPage) pushWizard() {
+	if t.look("uv") == "" && t.look("python3") == "" && t.look("python") == "" {
+		t.envState = "✗ neither uv nor python found on PATH"
+		return
+	}
+	if t.host != nil {
+		t.host.Push(newVenvWizard(t, t.host))
+	}
+}
+
 // Capturing implements PageModel: the pickers and the custom-path input need
 // keys verbatim.
 func (t *ToolchainPage) Capturing() bool {
-	return t.picking || t.custom || t.uvPicking || t.envInput || t.wizStep > 0 || t.pkgViewing
+	return t.picking || t.custom || t.uvPicking || t.pkgViewing
 }
 
 // Receive implements MsgReceiver: async version probes land in the cache,
@@ -157,13 +158,33 @@ func (t *ToolchainPage) languages() []lang.Language {
 	return out
 }
 
-// current returns the selected language row.
+// tcRow is one visible list row: a language, or an action row (#884 — the
+// create-environment entry point lives in the list, not behind a letter).
+type tcRow struct {
+	lang   lang.Language
+	action string // "" = language row; "newenv" = create environment
+}
+
+// rows lists the visible rows: every language, plus the new-environment
+// action row right under python.
+func (t *ToolchainPage) rows() []tcRow {
+	var out []tcRow
+	for _, l := range t.languages() {
+		out = append(out, tcRow{lang: l})
+		if l.ID == "python" {
+			out = append(out, tcRow{action: "newenv"})
+		}
+	}
+	return out
+}
+
+// current returns the selected language row (ok=false on action rows).
 func (t *ToolchainPage) current() (lang.Language, bool) {
-	rows := t.languages()
-	if t.sel < 0 || t.sel >= len(rows) {
+	rows := t.rows()
+	if t.sel < 0 || t.sel >= len(rows) || rows[t.sel].action != "" {
 		return lang.Language{}, false
 	}
-	return rows[t.sel], true
+	return rows[t.sel].lang, true
 }
 
 // interpreter resolves the effective interpreter for a language, explicit
@@ -184,12 +205,6 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.uvPicking {
 		return t.updateUvPicker(key)
 	}
-	if t.wizStep == 1 || t.wizStep == 2 {
-		return t.updateWizard(key)
-	}
-	if t.envInput {
-		return t.updateEnvInput(key)
-	}
 	if t.pkgViewing {
 		return t.updatePkgView(key)
 	}
@@ -199,10 +214,14 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			t.sel--
 		}
 	case "down", "j":
-		if t.sel < len(t.languages())-1 {
+		if t.sel < len(t.rows())-1 {
 			t.sel++
 		}
 	case "enter":
+		if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
+			t.pushWizard()
+			return nil
+		}
 		if l, ok := t.current(); ok {
 			return t.openPicker(l)
 		}
@@ -218,10 +237,9 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	case "n":
-		// Create a project environment via the guided wizard (#569): tool,
-		// Python, then target directory.
+		// Create a project environment via the guided wizard (#884).
 		if l, ok := t.current(); ok && l.ID == "python" {
-			t.startWizard()
+			t.pushWizard()
 		}
 	case "i":
 		// List the effective interpreter's installed packages (#569).
@@ -249,87 +267,9 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// startWizard opens the guided create wizard (#569): the tool step is
-// skipped when only one tool is available.
-func (t *ToolchainPage) startWizard() {
-	t.wizTools = nil
-	if t.look("uv") != "" {
-		t.wizTools = append(t.wizTools, "uv")
-	}
-	if t.look("python3") != "" || t.look("python") != "" {
-		t.wizTools = append(t.wizTools, "venv")
-	}
-	if len(t.wizTools) == 0 {
-		t.envState = "✗ neither uv nor python found on PATH"
-		return
-	}
-	t.wizPick = 0
-	if len(t.wizTools) == 1 {
-		t.chooseTool(t.wizTools[0])
-		return
-	}
-	t.wizStep = 1
-}
 
-// chooseTool advances to the Python step: uv offers its versions (default
-// first), venv offers the discovered base interpreters. With nothing to
-// choose the step is skipped.
-func (t *ToolchainPage) chooseTool(tool string) {
-	t.wizTool, t.wizPyPick = tool, 0
-	if tool == "uv" {
-		t.wizPys = append([]string{"default"}, uvVersionsAll(t.run("uv", "python", "list"))...)
-	} else {
-		t.wizPys = pythonCandidates(t.root, t.run, t.look, t.resolve, t.glob)
-	}
-	if len(t.wizPys) <= 1 {
-		python := ""
-		if tool == "venv" && len(t.wizPys) == 1 {
-			python = t.wizPys[0]
-		}
-		t.choosePython(python)
-		return
-	}
-	t.wizStep = 2
-}
 
-// choosePython advances to the target-directory step (the pre-#569 input).
-func (t *ToolchainPage) choosePython(python string) {
-	t.wizPython = python
-	t.wizStep = 3
-	t.envInput, t.envPath = true, ".venv"
-	t.envSuggest.clear()
-}
 
-// updateWizard handles keys in the wizard's tool and Python steps.
-func (t *ToolchainPage) updateWizard(key tea.KeyPressMsg) tea.Cmd {
-	items, pick := t.wizTools, &t.wizPick
-	if t.wizStep == 2 {
-		items, pick = t.wizPys, &t.wizPyPick
-	}
-	switch key.String() {
-	case "esc":
-		t.wizStep = 0
-	case "up", "k":
-		if *pick > 0 {
-			*pick--
-		}
-	case "down", "j":
-		if *pick < len(items)-1 {
-			*pick++
-		}
-	case "enter":
-		if t.wizStep == 1 {
-			t.chooseTool(t.wizTools[t.wizPick])
-			return nil
-		}
-		python := t.wizPys[t.wizPyPick]
-		if t.wizTool == "uv" && python == "default" {
-			python = ""
-		}
-		t.choosePython(python)
-	}
-	return nil
-}
 
 // updatePkgView handles keys in the package listing: j/k scroll, esc closes.
 func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
@@ -348,37 +288,6 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// updateEnvInput handles the create-environment target input (#547), the
-// wizard's final step since #569.
-func (t *ToolchainPage) updateEnvInput(key tea.KeyPressMsg) tea.Cmd {
-	switch key.Code {
-	case tea.KeyEscape:
-		t.envInput, t.wizStep = false, 0
-		t.envSuggest.clear()
-	case tea.KeyEnter:
-		target := strings.TrimSpace(t.envPath)
-		if target == "" {
-			target = ".venv"
-		}
-		t.envInput, t.wizStep = false, 0
-		t.envSuggest.clear()
-		t.envState = envBusy
-		return createEnvWith(t.root, envSpec{Tool: t.wizTool, Python: t.wizPython, Target: target}, t.run, t.look)
-	case tea.KeyTab:
-		t.envPath = t.envSuggest.complete(t.envPath)
-	case tea.KeyBackspace:
-		if t.envPath != "" {
-			t.envPath = t.envPath[:len(t.envPath)-1]
-			t.envSuggest.refresh(t.envPath)
-		}
-	default:
-		if key.Text != "" {
-			t.envPath += key.Text
-			t.envSuggest.refresh(t.envPath)
-		}
-	}
-	return nil
-}
 
 // updateUvPicker handles keys inside the uv version picker.
 func (t *ToolchainPage) updateUvPicker(key tea.KeyPressMsg) tea.Cmd {
@@ -562,10 +471,18 @@ func (t *ToolchainPage) View(w, h int) string {
 	head := sec.Render(" language · interpreter · source · env · version")
 	var list []string
 	selStart, selEnd := 0, 0
-	for i, l := range t.languages() {
+	for i, r := range t.rows() {
 		if i == t.sel {
 			selStart = len(list)
 		}
+		if r.action != "" {
+			list = append(list, t.renderAction(i == t.sel))
+			if i == t.sel {
+				selEnd = len(list) - 1
+			}
+			continue
+		}
+		l := r.lang
 		list = append(list, t.renderLang(l, i == t.sel))
 		if i == t.sel {
 			switch {
@@ -578,13 +495,6 @@ func (t *ToolchainPage) View(w, h int) string {
 				for _, s := range t.suggest.lines() {
 					list = append(list, sec.Render(s))
 				}
-			case t.envInput:
-				list = append(list, sec.Render("   create "+t.wizardLabel()+" at: "+t.envPath+"▌"))
-				for _, s := range t.envSuggest.lines() {
-					list = append(list, sec.Render(s))
-				}
-			case t.wizStep == 1 || t.wizStep == 2:
-				list = append(list, t.renderWizard()...)
 			case t.pkgViewing:
 				list = append(list, t.renderPackages()...)
 			case t.picking:
@@ -649,10 +559,14 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 		return nil
 	}
 	idx, ok := t.listLine(y)
-	if !ok || idx >= len(t.languages()) {
+	if !ok || idx >= len(t.rows()) {
 		return nil
 	}
 	if idx == t.sel {
+		if rows := t.rows(); rows[idx].action == "newenv" {
+			t.pushWizard()
+			return nil
+		}
 		if l, hit := t.current(); hit {
 			return t.openPicker(l)
 		}
@@ -677,7 +591,7 @@ func (t *ToolchainPage) Wheel(delta int) {
 		t.pkgOff = clamp(t.pkgOff+delta, 0, max)
 	case t.Capturing(): // other modal flows: inert
 	default:
-		if n := len(t.languages()); n > 0 {
+		if n := len(t.rows()); n > 0 {
 			t.sel = clamp(t.sel+delta, 0, n-1)
 		}
 	}
@@ -687,6 +601,14 @@ func (t *ToolchainPage) Wheel(delta int) {
 // to the column width over up to two lines, #553) plus the python
 // environment status — a constant three lines so the list never shifts.
 func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
+	if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
+		out := wrapFooter([]footerLine{{text: " enter/click opens the guided create wizard", style: sec}}, w, 2)
+		status := ""
+		if t.envState != "" {
+			status = " " + t.envState
+		}
+		return append(out, sec.Render(status))
+	}
 	l, ok := t.current()
 	if !ok {
 		return nil
@@ -695,14 +617,6 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	switch {
 	case t.custom:
 		hint = " tab complete path · enter apply · esc cancel"
-	case t.wizStep == 1:
-		hint = " ↑↓ choose tool · enter next · esc cancel"
-	case t.wizStep == 2 && t.wizTool == "uv":
-		hint = " ↑↓ python version (uv downloads missing ones) · enter next · esc cancel"
-	case t.wizStep == 2:
-		hint = " ↑↓ base interpreter · enter next · esc cancel"
-	case t.envInput:
-		hint = " target directory (relative to project root) · tab complete · enter create · esc cancel"
 	case t.pkgViewing:
 		hint = " j/k scroll packages · esc close"
 	case t.picking, t.uvPicking:
@@ -735,50 +649,7 @@ func (t *ToolchainPage) provenance(path string) string {
 	return p
 }
 
-// wizardLabel phrases the wizard's tool + Python choice for the target step.
-func (t *ToolchainPage) wizardLabel() string {
-	label := t.wizTool
-	if label == "" {
-		label = "env"
-	}
-	if t.wizPython != "" {
-		if t.wizTool == "uv" {
-			label += " (python " + t.wizPython + ")"
-		} else {
-			label += " (" + t.wizPython + ")"
-		}
-	}
-	return label
-}
 
-// renderWizard renders the tool / Python pick steps.
-func (t *ToolchainPage) renderWizard() []string {
-	pal := t.theme()
-	items, pick := t.wizTools, t.wizPick
-	describe := func(s string) string {
-		if s == "uv" {
-			return "uv — fast, manages pyproject.toml + uv.lock"
-		}
-		return "venv — stdlib python -m venv"
-	}
-	if t.wizStep == 2 {
-		items, pick = t.wizPys, t.wizPyPick
-		if t.wizTool == "uv" {
-			describe = func(s string) string { return "python " + s }
-		} else {
-			describe = func(s string) string { return s + "  " + t.provenance(s) }
-		}
-	}
-	var out []string
-	for i, item := range items {
-		style := lipgloss.NewStyle().Foreground(pal.Secondary)
-		if i == pick {
-			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
-		}
-		out = append(out, style.Render("   "+describe(item)))
-	}
-	return out
-}
 
 // pkgWindow is how many package rows render inline at once.
 const pkgWindow = 12
@@ -805,6 +676,17 @@ func (t *ToolchainPage) renderPackages() []string {
 		out = append(out, sec.Render("   … "+strconv.Itoa(len(t.pkgs)-end)+" more (j to scroll)"))
 	}
 	return out
+}
+
+// renderAction renders the create-environment action row (#884).
+func (t *ToolchainPage) renderAction(selected bool) string {
+	pal := t.theme()
+	label := "   + New environment…"
+	style := lipgloss.NewStyle().Foreground(pal.Info)
+	if selected {
+		style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	}
+	return style.Render(label)
 }
 
 // renderLang renders one language row.

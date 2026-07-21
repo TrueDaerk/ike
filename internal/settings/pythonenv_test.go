@@ -151,8 +151,8 @@ func pythonPage(t *testing.T, f *fakeEnv) *ToolchainPage {
 	p.run, p.look = f.run, f.look
 	p.resolve = noResolve
 	p.glob = noGlob // keep the host's real versioned installs out of fixtures
-	for i, l := range p.languages() {
-		if l.ID == "python" {
+	for i, r := range p.rows() {
+		if r.lang.ID == "python" {
 			p.sel = i
 			return p
 		}
@@ -170,25 +170,41 @@ func TestToolchainPageEnvActions(t *testing.T) {
 		return ""
 	}
 	p := pythonPage(t, f)
+	h := &stubHost{}
+	p.SetSubPanelHost(h)
 
-	// n opens the guided wizard (#569). With only uv on PATH the tool step
-	// is skipped; the download-available 3.13.1 makes a version step.
+	// n pushes the guided wizard sub-panel (#884).
 	if cmd := p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"}); cmd != nil {
 		t.Fatal("n should open the wizard, not create yet")
 	}
-	if p.wizStep != 2 || p.wizTool != "uv" || len(p.wizPys) != 2 || p.wizPys[0] != "default" {
-		t.Fatalf("wizard state = step %d tool %q pys %v", p.wizStep, p.wizTool, p.wizPys)
+	w, ok := h.top().(*venvWizard)
+	if !ok {
+		t.Fatal("n must push the venv wizard")
 	}
-	// Accept "default", then the target input pre-filled with .venv (#547).
-	p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !p.envInput || p.envPath != ".venv" || p.wizPython != "" {
-		t.Fatalf("input state = %v %q python %q", p.envInput, p.envPath, p.wizPython)
+	// Only uv available: venv row is disabled with its reason; advance.
+	if !w.tools[0].available || w.tools[1].available {
+		t.Fatalf("tool availability = %+v", w.tools)
 	}
-	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
-		t.Fatal("enter should return the async create command")
+	cmd := w.next()
+	if cmd == nil {
+		t.Fatal("tool step must fetch the python list")
 	}
-	if p.envInput || p.wizStep != 0 || p.envState != envBusy {
-		t.Fatalf("state after enter = %v %d %q", p.envInput, p.wizStep, p.envState)
+	if c := w.ReceiveCmd(cmd()); c != nil {
+		t.Fatal("data delivery should not chain here")
+	}
+	if w.step != wStepPython || len(w.pys) != 2 || w.pys[0] != "default" {
+		t.Fatalf("python step = step %d pys %v", w.step, w.pys)
+	}
+	// Accept "default", then the path step pre-filled with .venv (#547).
+	w.next()
+	if w.step != wStepPath || w.path != ".venv" || w.python != "" {
+		t.Fatalf("path step = step %d path %q python %q", w.step, w.path, w.python)
+	}
+	if cmd := w.create(); cmd == nil {
+		t.Fatal("create should return the async command")
+	}
+	if w.step != wStepRun || !w.running {
+		t.Fatalf("run step = %d running %v", w.step, w.running)
 	}
 
 	// u opens the uv picker; enter kicks the install.
@@ -252,37 +268,52 @@ func TestCreateEnvCustomTargets(t *testing.T) {
 	}
 }
 
-// TestEnvInputPathCompletion guards the target input's completion and cancel.
+// TestEnvInputPathCompletion guards the target input's completion and cancel
+// (now the wizard's path step, #884).
 func TestEnvInputPathCompletion(t *testing.T) {
 	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv"}}
 	p := pythonPage(t, f)
+	h := &stubHost{}
+	p.SetSubPanelHost(h)
 	if err := os.Mkdir(filepath.Join(p.root, "environments"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
+	w := h.top().(*venvWizard)
+	w.ReceiveCmd(w.next()()) // tool → python list fetched
+	w.next()                 // default → path step
+	if w.step != wStepPath {
+		t.Fatalf("step = %d, want path", w.step)
+	}
 
 	// Replace the prefill with an absolute prefix and complete it.
-	for p.envPath != "" {
-		p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	for w.path != "" {
+		w.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	for _, r := range filepath.Join(p.root, "env") {
-		p.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		w.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
-	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(p.root, "environments") + string(filepath.Separator); p.envPath != want {
-		t.Fatalf("envPath after tab = %q, want %q", p.envPath, want)
+	w.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if want := filepath.Join(p.root, "environments") + string(filepath.Separator); w.path != want {
+		t.Fatalf("path after tab = %q, want %q", w.path, want)
 	}
 
-	// Esc cancels without creating (only the wizard's `uv python list`
-	// discovery ran).
-	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	// The existing directory is flagged, not blocking.
+	if !strings.Contains(w.pathNote, "already exists") {
+		t.Fatalf("pathNote = %q", w.pathNote)
+	}
+
+	// Backing all the way out cancels without creating (only the wizard's
+	// `uv python list` discovery ran).
+	w.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	w.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	for _, call := range f.calls {
 		if !strings.HasPrefix(call, "uv python list") {
 			t.Fatalf("esc must cancel: calls=%v", f.calls)
 		}
 	}
-	if p.envInput || p.wizStep != 0 || p.envState == envBusy {
-		t.Fatalf("esc must cancel: input=%v step=%d state=%q", p.envInput, p.wizStep, p.envState)
+	if h.top() != nil {
+		t.Fatal("backing out must close the wizard")
 	}
 }
 

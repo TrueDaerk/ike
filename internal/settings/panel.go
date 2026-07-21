@@ -386,20 +386,36 @@ func (m *Model) Wheel(x, delta int) {
 	}
 }
 
+// CmdReceiver is an optional receiver extension (#884): consumers that need
+// to answer a delivered message with a follow-up command (spinner ticks,
+// chained fetches) implement it instead of MsgReceiver.
+type CmdReceiver interface {
+	ReceiveCmd(msg tea.Msg) tea.Cmd
+}
+
 // Deliver forwards a non-key message (async probe results) to every custom
 // page that consumes messages — and to open sub-panels (#883), so wizard
-// steps receive their async results too.
-func (m *Model) Deliver(msg tea.Msg) {
-	for _, page := range m.pages {
-		if r, ok := page.Custom.(MsgReceiver); ok {
+// steps receive their async results too. Returned commands (CmdReceiver)
+// batch back into the app's update.
+func (m *Model) Deliver(msg tea.Msg) tea.Cmd {
+	var cmds []tea.Cmd
+	receive := func(v any) {
+		switch r := v.(type) {
+		case CmdReceiver:
+			if c := r.ReceiveCmd(msg); c != nil {
+				cmds = append(cmds, c)
+			}
+		case MsgReceiver:
 			r.Receive(msg)
 		}
+	}
+	for _, page := range m.pages {
+		receive(page.Custom)
 	}
 	for _, sp := range m.stack {
-		if r, ok := sp.(MsgReceiver); ok {
-			r.Receive(msg)
-		}
+		receive(sp)
 	}
+	return tea.Batch(cmds...)
 }
 
 // Update handles one key while the panel is open. Returned commands carry

@@ -78,6 +78,10 @@ type SplitFocusedMsg struct{ Zone layout.Zone }
 // 0160). Dispatched by settings.open (cmd+, / menu bar / palette).
 type OpenSettingsMsg struct{}
 
+// OpenPythonEnvWizardMsg opens the settings panel on the Toolchain page with
+// the venv creation wizard pushed (#884). Dispatched by python.newEnvironment.
+type OpenPythonEnvWizardMsg struct{}
+
 // ToggleMenuMsg asks the root model to open (or close) the menu bar's first
 // dropdown (Roadmap 0160). Dispatched by menu.open (f10).
 type ToggleMenuMsg struct{}
@@ -276,6 +280,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
+			appCommand("python.newEnvironment", "New Python Environment…", OpenPythonEnvWizardMsg{}),
 			appCommand("keymap.importJetBrains", "Import JetBrains Keymap XML…", ImportJetBrainsKeymapMsg{}),
 			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),

@@ -2377,12 +2377,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case settings.VersionMsg:
 		// Async interpreter version probes land in the toolchain page's cache.
-		m.settings.Deliver(msg)
-		return m, nil
+		return m, m.settings.Deliver(msg)
+
+	case settings.WizardTickMsg, settings.WizardDataMsg:
+		// Venv-wizard internals (#884): spinner ticks and async data fetches
+		// route back into the open sub-panel, which may chain follow-ups.
+		return m, m.settings.Deliver(msg)
 
 	case settings.MarketCatalogMsg:
 		// A finished marketplace catalog fetch (Roadmap 0310, #446).
-		m.settings.Deliver(msg)
+		_ = m.settings.Deliver(msg)
 		if msg.Err != nil {
 			m.host.Notify(host.Warn, "marketplace: "+msg.Err.Error())
 		}
@@ -2391,7 +2395,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case settings.MarketActionMsg:
 		// A finished marketplace install/update/remove; the page shows the
 		// detail, the toast carries the headline.
-		m.settings.Deliver(msg)
+		_ = m.settings.Deliver(msg)
 		if msg.Err != nil {
 			m.host.Notify(host.Warn, "marketplace: "+msg.Action+" "+msg.Name+": "+msg.Err.Error())
 		} else if msg.Action == "remove" {
@@ -2407,13 +2411,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// page, and on success register the interpreter through write-back
 		// (lang.Interpreter stays the single source of truth) and restart the
 		// language's server against it.
-		m.settings.Deliver(msg)
+		deliverCmd := m.settings.Deliver(msg)
 		if msg.Err != nil {
 			m.host.Notify(host.Warn, "python environment: "+msg.Err.Error())
-			return m, nil
+			return m, deliverCmd
 		}
 		m.host.Notify(host.Info, msg.Label+" — registered as project interpreter")
-		cmds := []tea.Cmd{config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
+		cmds := []tea.Cmd{deliverCmd, config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
 		if c, ok := m.reg.Command("lsp.restart"); ok {
 			cmds = append(cmds, m.dispatchCommand("lsp.restart", c))
 		}
@@ -2444,6 +2448,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// scratch.new[.<lang>] (#351): create under the scratch store, open
 		// through the standard funnel.
 		return m.newScratch(msg.Ext)
+
+	case OpenPythonEnvWizardMsg:
+		// python.newEnvironment (palette, #884): open settings on the
+		// Toolchain page with the venv wizard pushed.
+		w, h := m.settingsSize()
+		m.settings.SetSize(w, h)
+		m.settings.OpenPythonEnvWizard()
+		return m, nil
 
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the floating settings panel.
@@ -3222,7 +3234,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Persistent server state stays on the status line; transient events
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).
 		// The Language Servers settings page tracks per-language state (#130).
-		m.settings.Deliver(msg)
+		_ = m.settings.Deliver(msg)
 		if msg.Kind == ilsp.ServerEventError {
 			// Unrecoverable failures (launch errors, failed installs, #131)
 			// also leave a debug.log line for post-mortems (#125).

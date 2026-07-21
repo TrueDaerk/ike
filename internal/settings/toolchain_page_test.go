@@ -89,9 +89,9 @@ func TestToolchainChooseWritesProjectConfigAndRestarts(t *testing.T) {
 	p.run = func(name string, args ...string) string { return "X 1.2.3\nextra" }
 	p.look = func(string) string { return "" }
 
-	// Select the tcpage row.
-	for i, l := range p.languages() {
-		if l.ID == "tcpage" {
+	// Select the tcpage row (rows() may interleave action rows, #884).
+	for i, r := range p.rows() {
+		if r.lang.ID == "tcpage" {
 			p.sel = i
 		}
 	}
@@ -448,9 +448,9 @@ func TestOpenPickerPreselectsAndProbes(t *testing.T) {
 	p.look = func(string) string { return "" }
 	p.glob = noGlob
 	var l lang.Language
-	for i, ll := range p.languages() {
-		if ll.ID == "tcpre" {
-			p.sel, l = i, ll
+	for i, r := range p.rows() {
+		if r.lang.ID == "tcpre" {
+			p.sel, l = i, r.lang
 		}
 	}
 
