@@ -82,7 +82,15 @@ O(document) diff runs on the debounce goroutine, not the bubbletea Update loop.
 Any request (`cur()` is the choke point; completion, signature and save flush
 explicitly) drains the pending change first, so a completion or hover never acts
 on stale server text; a close cancels it so no sync lands after `didClose`. A
-file-open hook drives `didOpen`, save drives `didSave`, close drives `didClose`. The
+file-open hook drives `didOpen`, save drives `didSave`, close drives `didClose`.
+The close side (#827) is centralised in the root model: every path that removes
+an editor view (tab close, pane close, tab-limit eviction #742, tab drag)
+records the file via `noteClosedFileView`, and the `Update` wrapper's
+`drainClosedFileViews` fires `plugin.EventBufferClosed` only when **no** view of
+the path remains in **any** in-memory workspace (active or parked) — the
+close-side mirror of the `EventFileOpened` dedup over shared tabs/leaves
+(#142); a dragged tab's file, re-opened elsewhere in the same pass, never
+fires. The
 `didOpen` is gated by large-file mode (#149): a file over the
 `files.large_file_kb` / `files.large_file_lines` thresholds
 (`largeFileGated`, policy in `internal/largefile`) is never opened with the
