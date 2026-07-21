@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Language Registry
@@ -232,3 +232,20 @@ or `system` (path heuristics) — and `i` lists the effective interpreter's
 installed packages with versions (async; `uv pip list --python <interp>` when
 uv is present — it works even in envs without pip — else
 `<interp> -m pip list --format=freeze`), scrollable inline with `j`/`k`.
+
+## Default language servers & why (#855)
+
+| Language | Default server | Rationale / alternative |
+|---|---|---|
+| Go | gopls | Reference server, no contest. |
+| Python | pyright (via server spec in `plugins/languages/python`) | Fast, precise; venv-aware via `workspace/configuration`. |
+| PHP | Intelephense | Free tier beats phpactor on completion quality and speed; cross-file rename & advanced refactors are premium (paid). Prefer those? Override to phpactor via `[lsp.servers.php]`. |
+| TS/JS | vtsls | Wraps the same tsserver VS Code uses but speaks LSP far more faithfully than typescript-language-server (streaming/isIncomplete completions, lower memory churn). Override via `[lsp.servers.typescript]`. |
+| HTML | vscode-html-language-server (`vscode-langservers-extracted`) | The extracted VS Code server; unmatched tag/attribute data. |
+| CSS/SCSS/LESS | vscode-css-language-server (`vscode-langservers-extracted`) | Same package, property/value data included. |
+| SQL | sql-language-server | Unchanged. |
+
+Every default is a plain `ServerSpec` and can be replaced per project or user
+via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
+in the Settings → LSP page, which lists each registered language's effective
+command line, its config layer, and offers install/restart.
