@@ -96,6 +96,10 @@ func BasePages(themes []string) []Page {
 		{Title: "Run", Entries: []Entry{
 			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},
 		}},
+		{Title: "Debug", Entries: []Entry{
+			{Key: "debug.php.port", Type: Int, Title: "PHP listen port", Description: "DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)", Scope: config.UserScope, Min: 1, Max: 65535},
+			{Key: "debug.php.hostname", Type: String, Title: "PHP hostname filter", Description: "Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project", Scope: config.ProjectScope},
+		}},
 		{Title: "Notifications", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},

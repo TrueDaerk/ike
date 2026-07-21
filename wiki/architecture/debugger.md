@@ -86,6 +86,19 @@ verified optimistically; each accepted connection gets them replayed before
 the initial `run`. The Xdebug CLI preflight is skipped for listen — the
 engine lives in the server's PHP, not the CLI interpreter.
 
+The settings are editable in-IDE (#832): the settings panel's **Debug**
+section carries `debug.php.port` (user scope) and `debug.php.hostname`
+(project scope) as schema entries, and the **PHP Debug Mappings** custom
+page manages the `[[debug.php.path_mappings]]` list (a add · enter edit ·
+d delete, project scope — the `[[tools.custom]]` editor pattern). Mapping
+changes apply on the next `debug.listen` start. When a listening session
+accepts a request whose `init` fileuri does not resolve to an existing
+local file (after mappings), the bridge raises an `ike.pathMappingHint`
+event and the app offers a one-key prompt: `m` writes a mapping from the
+server file's directory to the project root (project scope), `esc`
+ignores; the request keeps running either way — breakpoints just cannot
+bind until a mapping exists.
+
 ## Adapter runtime auto-install (#589)
 
 `debug.start` preflights the adapter runtime before spawning anything

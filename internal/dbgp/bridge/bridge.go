@@ -15,6 +15,8 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -557,8 +559,22 @@ func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
 		b.bpIDs[path] = ids
 		b.mu.Unlock()
 	}
+	serverPath := dbgp.FromURI(init.FileURI)
+	local := b.toLocal(serverPath)
 	b.event("output", map[string]any{"category": "console",
-		"output": "Accepted debug connection (" + b.toLocal(dbgp.FromURI(init.FileURI)) + ")\n"})
+		"output": "Accepted debug connection (" + local + ")\n"})
+	// The request's entry file does not resolve locally (#832): the docroot
+	// likely differs from the project layout — hint the client so it can
+	// offer creating a path mapping. Purely informational; the session runs
+	// either way (breakpoints just won't bind until the mapping exists).
+	if !strings.Contains(local, "://") {
+		if _, err := os.Stat(local); err != nil {
+			b.event("ike.pathMappingHint", map[string]any{
+				"server": filepath.Dir(serverPath),
+				"file":   serverPath,
+			})
+		}
+	}
 	go b.resume(envelope{}, "breakpoint", (*dbgp.Conn).Run)
 }
 

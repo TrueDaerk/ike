@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- The `[debug.php]` listen settings are editable in-IDE (#832): a Debug
+  schema section (port, hostname filter), a PHP Debug Mappings custom page
+  for `[[debug.php.path_mappings]]`, and a mapping-suggestion prompt when
+  an accepted request's fileuri does not resolve locally
+  (`/architecture/debugger.md`).
+
 - PHP web/request debugging (#823): `debug.listen` toggles a persistent
   DBGp listener for php-fpm/Apache requests — sequential multi-accept,
   `[debug.php]` hostname filter (via `$_SERVER['HTTP_HOST']` probe, detach
