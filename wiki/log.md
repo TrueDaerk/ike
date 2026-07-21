@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Web languages + server choices (0410, #855): TypeScript/JavaScript (vtsls),
+  HTML and CSS (vscode-langservers-extracted) registered as language plugins;
+  per-language default-server rationale documented, overridable via
+  `[lsp.servers.<id>]` (`/architecture/languages.md`).
+
 - Unified completion ranking (0410, #854): fuzzy-dominant score with source
   priority, locality-tier and persisted per-project MRU boosts
   (`/architecture/completion.md`).

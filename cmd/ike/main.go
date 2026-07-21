@@ -31,6 +31,7 @@ import (
 	_ "ike/plugins/languages/php"
 	_ "ike/plugins/languages/python"
 	_ "ike/plugins/languages/sql"
+	_ "ike/plugins/languages/web"
 )
 
 // readStdin implements the "-" target (Roadmap 0270, #344): with wantStdin it
