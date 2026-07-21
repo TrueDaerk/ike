@@ -84,6 +84,46 @@ func TestTerminalFocusKeysEscape(t *testing.T) {
 	}
 }
 
+// TestTerminalGlobalChords guards #805: the global navigation chords stay
+// with the IDE while a live terminal is focused — cmd+shift+a opens the
+// palette, cmd+shift+p opens the project switcher — while unrelated chords
+// keep belonging to the shell.
+func TestTerminalGlobalChords(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("terminal.new should focus a terminal pane, got %q", key)
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	m = drainKey(m, tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper | tea.ModShift})
+	if !m.palette.IsOpen() {
+		t.Fatal("cmd+shift+a in a terminal must open the palette")
+	}
+	m.palette.Close()
+
+	m = drainKey(m, tea.KeyPressMsg{Code: 'p', Mod: tea.ModSuper | tea.ModShift})
+	if !m.palette.IsOpen() {
+		t.Fatal("cmd+shift+p in a terminal must open the project switcher")
+	}
+	m.palette.Close()
+
+	// An unrelated global chord stays with the shell: cmd+1 (explorer.toggle)
+	// is not allowlisted, so the pane set stays unchanged.
+	hadExplorer := m.activeWS().Panes.Has(pane.ExplorerKey)
+	out, _ = m.Update(tea.KeyPressMsg{Code: '1', Mod: tea.ModSuper})
+	m = out.(Model)
+	if m.activeWS().Panes.Has(pane.ExplorerKey) != hadExplorer {
+		t.Fatal("cmd+1 in a terminal must stay with the shell")
+	}
+	if m.activeWS().Panes.Focused() != key {
+		t.Fatal("shell-bound chord must not move focus")
+	}
+}
+
 // TestTerminalSelectionCopyKey: with a mouse selection, cmd+c is reserved and
 // clears the selection; without one it stays with the shell (#227).
 func TestTerminalSelectionCopyKey(t *testing.T) {

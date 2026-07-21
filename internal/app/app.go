@@ -1407,9 +1407,10 @@ func displayDir(dir string) string {
 //	cmd+t       new sibling terminal tab in the focused pane (#729)
 //
 // The spatial focus moves (default ctrl+arrows, keymap.bindings.focus_*),
-// cmd+c over an active mouse selection, and cmd+v (system-clipboard paste)
-// are reserved in the caller (#228, #227, #727). Everything else, including
-// tab, ctrl+c, esc and the F-keys, belongs
+// cmd+c over an active mouse selection, cmd+v (system-clipboard paste), and
+// the global navigation allowlist (terminalGlobalCommands + the configured
+// palette.toggle_key, #805) are reserved in the caller (#228, #227, #727).
+// Everything else, including tab, ctrl+c, esc and the F-keys, belongs
 // to the shell. shift+pgup/pgdn page the scrollback inside the pane itself.
 func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	switch keys {
@@ -1427,6 +1428,44 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		return true, m, nil
 	}
 	return false, m, nil
+}
+
+// terminalGlobalCommands are the commands whose chords a focused live
+// terminal does NOT forward to the shell (#805): the IDE's global entry
+// points — palette and project switching — must stay reachable without first
+// focusing an editor. Resolved through the live binding table, so rebinds
+// move the reserved chord along. esc-esc deliberately stays with the shell:
+// forwarding escapes to vim/lazygit while also opening the palette would
+// cause side effects there.
+var terminalGlobalCommands = map[string]bool{
+	"palette.searchEverywhere": true,
+	"palette.recentFiles":      true,
+	"project.switch":           true,
+}
+
+// terminalGlobalChord resolves a single-step chord against the live binding
+// table and dispatches it when it maps to an allowlisted global command
+// (#805). Multi-step chords (e.g. double-shift) cannot be intercepted without
+// buffering shell input and are left to the shell.
+func (m Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	if m.paletteKey != "" && msg.String() == m.paletteKey {
+		m.openPalette()
+		return true, nil
+	}
+	k, ok := keymap.FromKeyMsg(msg)
+	if ok {
+		table := m.bindings.Table()
+		if table == nil {
+			return false, nil
+		}
+		chord := keymap.Chord{Steps: []keymap.Key{k}}
+		if b, found := table.Lookup(chord, keymap.Context(m.focusContext())); found && terminalGlobalCommands[b.Command] {
+			if c, okc := m.reg.Command(b.Command); okc {
+				return true, m.dispatchCommand(b.Command, c)
+			}
+		}
+	}
+	return false, nil
 }
 
 // newTerminalSibling spawns a terminal next to the focused one (#729): a
@@ -3518,6 +3557,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 					return m, nil
 				}
+			}
+			// Global navigation chords (palette, project switch) stay with the
+			// IDE (#805); everything else belongs to the shell.
+			if handled, cmd := m.terminalGlobalChord(msg); handled {
+				return m, cmd
 			}
 			return m.routeKey(msg)
 		}

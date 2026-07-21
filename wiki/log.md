@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Global navigation chords work from a focused terminal (#805): the chords
+  bound to `palette.searchEverywhere`, `palette.recentFiles` and
+  `project.switch` (plus a configured `palette.toggle_key`) dispatch in the
+  IDE instead of being forwarded to the shell (`/architecture/terminal.md`).
+
 - External git changes refresh the VCS snapshot (#738): the watch service now
   watches `.git` + `.git/logs` and emits a coalesced `GitChanged` event, so
   commits/checkouts/staging done in a lazygit pane or terminal update gutter

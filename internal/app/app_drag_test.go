@@ -18,9 +18,15 @@ import (
 // sized returns a model after a window size so its layout tree and geometry are
 // computed, with layout persistence redirected to a temp dir.
 func sized(t *testing.T, w, h int) Model {
+	return sizedWith(t, registry.New(), w, h)
+}
+
+// sizedWith is sized with an explicit registry — pass registry.Global() when a
+// test needs the real registered commands (e.g. keymap dispatch, #805).
+func sizedWith(t *testing.T, reg *registry.Registry, w, h int) Model {
 	t.Helper()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	m := NewWith(registry.New(), host.MapConfig{})
+	m := NewWith(reg, host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	m = out.(Model)
 	// Drain the explorer's async root scan so the tree has visible rows. Init
