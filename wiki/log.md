@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Fuzzy completion matching (0410, #845): the completion popup filters by
+  fuzzy subsequence (`internal/fuzzy`) against `filterText`, ranks by match
+  score with CamelCase/boundary bonuses, and ties/unfiltered lists follow the
+  server's `sortText` (`/architecture/lsp.md`).
+
 - Project history pruning + last-opened badge (#842): picker rows (and the
   Recent Projects column) show a relative last-opened time; shift+delete /
   the ✕ zone on unloaded entries removes them from `project.history`
