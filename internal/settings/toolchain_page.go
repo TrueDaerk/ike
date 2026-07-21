@@ -55,7 +55,7 @@ type ToolchainPage struct {
 	candidates []string
 	pick       int
 	custom     bool
-	input      string
+	inputField textField // shared cursor input (#888)
 	invalid    string
 	suggest    pathSuggest // live path completion for the custom input (#541)
 
@@ -364,7 +364,7 @@ func (t *ToolchainPage) updatePicker(key tea.KeyPressMsg) tea.Cmd {
 		}
 	case "enter":
 		if t.pick >= len(t.candidates) {
-			t.picking, t.custom, t.input = false, true, ""
+			t.picking, t.custom, t.inputField.text = false, true, ""
 			return nil
 		}
 		if len(t.candidates) == 0 {
@@ -382,7 +382,7 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 		t.custom, t.invalid = false, ""
 		t.suggest.clear()
 	case tea.KeyEnter:
-		p := strings.TrimSpace(t.input)
+		p := strings.TrimSpace(t.inputField.text)
 		if p == "" {
 			t.custom = false
 			t.suggest.clear()
@@ -396,16 +396,11 @@ func (t *ToolchainPage) updateCustom(key tea.KeyPressMsg) tea.Cmd {
 		t.suggest.clear()
 		return t.choose(p)
 	case tea.KeyTab:
-		t.input = t.suggest.complete(t.input)
-	case tea.KeyBackspace:
-		if t.input != "" {
-			t.input = t.input[:len(t.input)-1]
-			t.suggest.refresh(t.input)
-		}
+		t.inputField.Set(t.suggest.complete(t.inputField.text))
 	default:
-		if key.Text != "" {
-			t.input += key.Text
-			t.suggest.refresh(t.input)
+		// Shared cursor input (#888).
+		if _, changed := t.inputField.Handle(key); changed {
+			t.suggest.refresh(t.inputField.text)
 		}
 	}
 	return nil
@@ -482,7 +477,7 @@ func (t *ToolchainPage) View(w, h int) string {
 		if i == t.sel {
 			switch {
 			case t.custom:
-				detail := "   custom path: " + t.input + "▌"
+				detail := "   custom path: " + t.inputField.View()
 				if t.invalid != "" {
 					detail += "  ✗ " + t.invalid
 				}
@@ -543,7 +538,7 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 		case opt < 0 || opt > len(t.candidates):
 			t.picking = false
 		case opt == len(t.candidates): // "custom path…"
-			t.picking, t.custom, t.input = false, true, ""
+			t.picking, t.custom, t.inputField.text = false, true, ""
 		default:
 			t.pick = opt
 			return t.choose(t.candidates[opt])

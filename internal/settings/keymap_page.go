@@ -51,7 +51,7 @@ type KeymapPage struct {
 	// JetBrains keymap import (#677): "i" opens an inline path input with
 	// filesystem completion; enter runs the import, importNote reports it.
 	importing   bool
-	importInput string
+	importField textField // shared cursor input (#888)
 	importSug   pathSuggest
 	importNote  string
 
@@ -241,9 +241,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "i":
 		// JetBrains keymap import (#677): inline path input with completion.
 		k.importing = true
-		k.importInput = "~" + string(filepath.Separator)
+		k.importField.text = "~" + string(filepath.Separator)
 		k.importNote = ""
-		k.importSug.refresh(k.importInput)
+		k.importSug.refresh(k.importField.text)
 	}
 	return nil
 }
@@ -280,23 +280,18 @@ func (k *KeymapPage) updateImport(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
 		k.importing = false
-		k.importInput = ""
+		k.importField = textField{}
 		k.importSug.clear()
 	case tea.KeyEnter:
 		k.importing = false
 		k.importSug.clear()
 		return k.commitImport()
 	case tea.KeyTab:
-		k.importInput = k.importSug.complete(k.importInput)
-	case tea.KeyBackspace:
-		if k.importInput != "" {
-			k.importInput = k.importInput[:len(k.importInput)-1]
-			k.importSug.refresh(k.importInput)
-		}
+		k.importField.Set(k.importSug.complete(k.importField.text))
 	default:
-		if key.Text != "" {
-			k.importInput += key.Text
-			k.importSug.refresh(k.importInput)
+		// Shared cursor input (#888): rune-safe editing with word ops.
+		if _, changed := k.importField.Handle(key); changed {
+			k.importSug.refresh(k.importField.text)
 		}
 	}
 	return nil
@@ -307,8 +302,8 @@ func (k *KeymapPage) updateImport(key tea.KeyPressMsg) tea.Cmd {
 // (replaced default chords are unbound), then the config reloads through the
 // normal pipeline. The outcome lands in importNote for the footer.
 func (k *KeymapPage) commitImport() tea.Cmd {
-	path := strings.TrimSpace(k.importInput)
-	k.importInput = ""
+	path := strings.TrimSpace(k.importField.text)
+	k.importField = textField{}
 	if path == "" {
 		return nil
 	}
@@ -629,7 +624,7 @@ func (k *KeymapPage) importFooter(w int) []string {
 	pal := k.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	lines := []footerLine{
-		{text: "   import JetBrains keymap XML: " + k.importInput + "▌", style: lipgloss.NewStyle()},
+		{text: "   import JetBrains keymap XML: " + k.importField.View(), style: lipgloss.NewStyle()},
 		{text: "   tab completes · enter imports · esc cancels", style: sec},
 	}
 	sug := k.importSug.lines()

@@ -263,12 +263,12 @@ func TestIntEditValidatesAndClamps(t *testing.T) {
 		t.Fatal("enter on an int entry must start an edit")
 	}
 	// Non-numeric input is rejected with an inline error, no write.
-	m.input = "abc"
+	m.edit = newTextField("abc")
 	if cmd := m.Update(key("enter")); cmd != nil || m.invalid == "" {
 		t.Fatalf("invalid int must not write (invalid=%q)", m.invalid)
 	}
 	// A too-large value clamps to Max.
-	m.input = "99"
+	m.edit.text = "99"
 	apply(t, m.Update(key("enter")))
 	if got := config.Get().Editor.TabWidth; got != 16 {
 		t.Fatalf("tab_width = %d, want clamped 16", got)
@@ -671,7 +671,7 @@ func TestEditClicks(t *testing.T) {
 	}
 
 	// Click elsewhere: the input commits like enter.
-	m.input = "8"
+	m.edit.text = "8"
 	cmd := m.Click(formX, 2+0)
 	if m.editing {
 		t.Fatal("outside click must end the edit")
@@ -684,7 +684,7 @@ func TestEditClicks(t *testing.T) {
 	// Invalid input: the outside click cancels instead of committing.
 	m.Open()
 	startEdit()
-	m.input = "not a number"
+	m.edit.text = "not a number"
 	if cmd := m.Click(2, 3); cmd != nil || m.editing || m.invalid != "" {
 		t.Fatalf("invalid input must cancel on outside click, editing=%v invalid=%q", m.editing, m.invalid)
 	}

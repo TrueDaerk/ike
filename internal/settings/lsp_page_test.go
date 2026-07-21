@@ -95,7 +95,7 @@ func TestLSPPageCommandOverrideWritesProjectConfig(t *testing.T) {
 		t.Fatal("the command editor must capture keys")
 	}
 	// Prefilled with the baseline; replace it wholesale.
-	p.input = "custom-ls"
+	p.field = newTextField("custom-ls")
 	drainLSP(t, p, p.Update(key("enter")))
 
 	if got := config.Get().LSP.Servers["lsptest"]["command"]; got != "custom-ls" {
@@ -112,14 +112,14 @@ func TestLSPPageCommandOverrideWritesProjectConfig(t *testing.T) {
 func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
 	p.Update(key("a"))
-	p.input = "--stdio --verbose"
+	p.field = newTextField("--stdio --verbose")
 	drainLSP(t, p, p.Update(key("enter")))
 	if v := p.View(120, 40); !strings.Contains(v, "--verbose") {
 		t.Fatalf("args override must reach the effective command line:\n%s", v)
 	}
 
 	p.Update(key("o"))
-	p.input = `{"telemetry":false}`
+	p.field = newTextField(`{"telemetry":false}`)
 	drainLSP(t, p, p.Update(key("enter")))
 	m, ok := config.Get().LSP.Servers["lsptest"]["settings"].(map[string]any)
 	if !ok || m["telemetry"] != false {
@@ -128,7 +128,7 @@ func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 
 	// Invalid JSON is rejected without leaving the editor.
 	p.Update(key("o"))
-	p.input = "not-json"
+	p.field = newTextField("not-json")
 	p.Update(key("enter"))
 	if !p.Capturing() || p.invalid == "" {
 		t.Fatal("invalid JSON must be rejected in place")

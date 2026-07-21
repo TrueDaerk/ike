@@ -414,11 +414,7 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 
 	val := value(e.Key)
 	if selected && m.editing {
-		if e.Type == Chord {
-			val = "press a key…"
-		} else {
-			val = m.input + "▌"
-		}
+		val = m.edit.View() // shared cursor input (#888)
 	}
 	origin := config.Origin(m.opts, e.Key)
 

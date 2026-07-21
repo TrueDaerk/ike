@@ -152,7 +152,7 @@ func TestPathSuggestionClickCompletes(t *testing.T) {
 	}
 	m.suggest.candidates = []string{"/tmp/sugg-a", "/tmp/sugg-b"}
 	m.Click(1+catWidth+4, 2+(m.sel-m.formOff)+2) // second suggestion line
-	if !m.editing || m.input != "/tmp/sugg-b" {
-		t.Fatalf("suggestion click: editing=%v input=%q", m.editing, m.input)
+	if !m.editing || m.edit.text != "/tmp/sugg-b" {
+		t.Fatalf("suggestion click: editing=%v input=%q", m.editing, m.edit.text)
 	}
 }

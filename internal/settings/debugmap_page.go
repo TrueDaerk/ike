@@ -34,6 +34,7 @@ type DebugMapPage struct {
 	editing bool
 	editIdx int
 	field   int
+	cur     int // cursor within the focused field (#888)
 	form    [mapFieldCount]string
 
 	listH int // list-window height of the last render (mouse hit-testing)
@@ -111,15 +112,15 @@ func (t *DebugMapPage) updateForm(key tea.KeyPressMsg) tea.Cmd {
 		return t.commitForm()
 	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
 		t.field = (t.field + mapFieldCount - 1) % mapFieldCount
+		t.cur = len([]rune(t.form[t.field]))
 	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
 		t.field = (t.field + 1) % mapFieldCount
-	case key.Code == tea.KeyBackspace:
-		if f := t.form[t.field]; f != "" {
-			t.form[t.field] = f[:len(f)-1]
-		}
+		t.cur = len([]rune(t.form[t.field]))
 	default:
-		if key.Text != "" {
-			t.form[t.field] += key.Text
+		// Shared cursor input (#888): rune-safe editing with word ops.
+		f := newTextFieldAt(t.form[t.field], t.cur)
+		if handled, _ := f.Handle(key); handled {
+			t.form[t.field], t.cur = f.text, f.cur
 		}
 	}
 	return nil
@@ -258,14 +259,16 @@ func (t *DebugMapPage) formFooter(w int) []string {
 	}
 	lines := []footerLine{{text: "   " + verb + ":", style: sec}}
 	for i, name := range mapFieldNames {
-		marker, cursor := "  ", ""
+		marker := "  "
 		style := lipgloss.NewStyle()
+		text := t.form[i]
 		if i == t.field {
-			marker, cursor = "> ", "▌"
+			marker = "> "
 			style = style.Bold(true)
+			text = newTextFieldAt(t.form[i], t.cur).View()
 		}
 		lines = append(lines, footerLine{
-			text:  "   " + marker + pad(name, 8) + t.form[i] + cursor,
+			text:  "   " + marker + pad(name, 8) + text,
 			style: style,
 		})
 	}

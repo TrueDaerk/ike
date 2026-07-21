@@ -197,8 +197,8 @@ func TestToolchainPageEnvActions(t *testing.T) {
 	}
 	// Accept "default", then the path step pre-filled with .venv (#547).
 	w.next()
-	if w.step != wStepPath || w.path != ".venv" || w.python != "" {
-		t.Fatalf("path step = step %d path %q python %q", w.step, w.path, w.python)
+	if w.step != wStepPath || w.path.text != ".venv" || w.python != "" {
+		t.Fatalf("path step = step %d path %q python %q", w.step, w.path.text, w.python)
 	}
 	if cmd := w.create(); cmd == nil {
 		t.Fatal("create should return the async command")
@@ -287,15 +287,15 @@ func TestEnvInputPathCompletion(t *testing.T) {
 	}
 
 	// Replace the prefill with an absolute prefix and complete it.
-	for w.path != "" {
+	for w.path.text != "" {
 		w.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	for _, r := range filepath.Join(p.root, "env") {
 		w.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
 	w.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(p.root, "environments") + string(filepath.Separator); w.path != want {
-		t.Fatalf("path after tab = %q, want %q", w.path, want)
+	if want := filepath.Join(p.root, "environments") + string(filepath.Separator); w.path.text != want {
+		t.Fatalf("path after tab = %q, want %q", w.path.text, want)
 	}
 
 	// The existing directory is flagged, not blocking.

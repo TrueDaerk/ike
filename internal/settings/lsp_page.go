@@ -52,7 +52,7 @@ type LSPPage struct {
 	off     int // list scroll offset (#537)
 	status  map[string]lspStatus
 	editing lspEditField
-	input   string
+	field   textField // shared cursor input (#888)
 	invalid string
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
@@ -293,7 +293,7 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 
 // startEdit opens the inline input prefilled with the current value.
 func (p *LSPPage) startEdit(field lspEditField, prefill string) {
-	p.editing, p.input, p.invalid = field, prefill, ""
+	p.editing, p.field.text, p.invalid = field, prefill, ""
 }
 
 // settingsJSON renders the server's settings override as compact JSON for the
@@ -318,14 +318,9 @@ func (p *LSPPage) updateInput(key tea.KeyPressMsg) tea.Cmd {
 		p.editing, p.invalid = lspEditNone, ""
 	case tea.KeyEnter:
 		return p.commitInput()
-	case tea.KeyBackspace:
-		if p.input != "" {
-			p.input = p.input[:len(p.input)-1]
-		}
 	default:
-		if key.Text != "" {
-			p.input += key.Text
-		}
+		// Shared cursor input (#888): rune-safe editing with word ops.
+		p.field.Handle(key)
 	}
 	return nil
 }
@@ -337,7 +332,7 @@ func (p *LSPPage) commitInput() tea.Cmd {
 		p.editing = lspEditNone
 		return nil
 	}
-	field, raw := p.editing, strings.TrimSpace(p.input)
+	field, raw := p.editing, strings.TrimSpace(p.field.text)
 	var key string
 	var value any
 	switch field {
@@ -425,7 +420,7 @@ func (p *LSPPage) View(w, h int) string {
 				lspEditArgs:     "args (space-separated)",
 				lspEditSettings: "settings (JSON object)",
 			}[p.editing]
-			line := " " + prompt + ": " + p.input + "▌  (empty = reset)"
+			line := " " + prompt + ": " + p.field.View() + "  (empty = reset)"
 			if p.invalid != "" {
 				line += "  ✗ " + p.invalid
 			}

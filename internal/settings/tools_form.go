@@ -23,6 +23,7 @@ type toolForm struct {
 	idx  int // entry being edited, -1 for a new one
 
 	field int
+	cur   int // cursor within the focused field (#888)
 	form  [toolFieldCount]string
 	note  string
 }
@@ -71,15 +72,15 @@ func (f *toolForm) Update(key tea.KeyPressMsg) tea.Cmd {
 		return f.save()
 	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
 		f.field = (f.field + toolFieldCount - 1) % toolFieldCount
+		f.cur = len([]rune(f.form[f.field]))
 	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
 		f.field = (f.field + 1) % toolFieldCount
-	case key.Code == tea.KeyBackspace:
-		if r := []rune(f.form[f.field]); len(r) > 0 {
-			f.form[f.field] = string(r[:len(r)-1])
-		}
+		f.cur = len([]rune(f.form[f.field]))
 	default:
-		if key.Text != "" {
-			f.form[f.field] += key.Text
+		// Shared cursor input (#888).
+		tf := newTextFieldAt(f.form[f.field], f.cur)
+		if handled, _ := tf.Handle(key); handled {
+			f.form[f.field], f.cur = tf.text, tf.cur
 		}
 	}
 	return nil
@@ -101,13 +102,15 @@ func (f *toolForm) View(w, h int) string {
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	lines := make([]string, 0, h)
 	for i, name := range toolFieldNames {
-		marker, cursor := "  ", ""
+		marker := "  "
 		style := lipgloss.NewStyle()
+		text := f.form[i]
 		if i == f.field {
-			marker, cursor = "▸ ", "▌"
+			marker = "▸ "
 			style = style.Bold(true)
+			text = newTextFieldAt(f.form[i], f.cur).View()
 		}
-		lines = append(lines, clip.Render(style.Render(" "+marker+pad(name, 10)+f.form[i]+cursor)))
+		lines = append(lines, clip.Render(style.Render(" "+marker+pad(name, 10)+text)))
 	}
 	lines = append(lines, "")
 	if f.note != "" {
