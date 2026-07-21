@@ -499,3 +499,31 @@ func TestSessionClear(t *testing.T) {
 		return !strings.Contains(plainView(s), "97") && !strings.Contains(plainView(s), "42")
 	})
 }
+
+// BenchmarkSessionView documents the #803 cost profile: an unchanged grid
+// serves the cached render; bumping the version forces the full emulator
+// render an OutputMsg-driven frame previously paid for every terminal pane.
+func BenchmarkSessionView(b *testing.B) {
+	c := &collector{}
+	s, err := StartSession("bench", "/bin/sh", b.TempDir(), 200, 60, nil, c.send)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(s.Close)
+	for _, r := range "seq 1000\r" {
+		s.SendKey(keyFor(r))
+	}
+	time.Sleep(500 * time.Millisecond) // let the grid fill
+
+	b.Run("cached", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			_ = s.View()
+		}
+	})
+	b.Run("uncached", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			s.version.Add(1)
+			_ = s.View()
+		}
+	})
+}

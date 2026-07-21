@@ -25,7 +25,9 @@ import (
 )
 
 // OutputMsg reports that the emulator's screen changed; the root model only
-// needs to repaint. Key identifies the owning pane.
+// needs to repaint. Key identifies the owning pane. The app's input coalescer
+// additionally folds concurrent OutputMsgs across sessions into one batch per
+// flush (#803), so N busy terminals cannot multiply the render rate.
 type OutputMsg struct{ Key string }
 
 // ExitedMsg reports that the shell process ended; the root model closes the
@@ -63,6 +65,16 @@ type Session struct {
 	mouseModes map[ansi.Mode]struct{}
 
 	notifyPending atomic.Bool
+
+	// version counts grid mutations (feed writes, resizes, clears); the View
+	// render cache is keyed by it (#803), so an unchanged grid never pays a
+	// second emulator render — with N terminal panes on screen, a frame
+	// re-renders only the grids that actually changed.
+	version   atomic.Uint64
+	viewMu    sync.Mutex
+	viewCache string
+	viewVer   uint64
+	viewValid bool
 
 	// out decouples the PTY read loop from the emulator feed (#734): PTY
 	// output is spooled immediately so the kernel TTY queue stays drained
@@ -201,6 +213,7 @@ func (s *Session) feedLoop() {
 			return
 		}
 		_, _ = s.em.Write(chunk)
+		s.version.Add(1)
 		s.notify()
 	}
 }
@@ -268,6 +281,7 @@ func (s *Session) Resize(w, h int) {
 	s.w, s.h = w, h
 	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	s.em.Resize(w, h)
+	s.version.Add(1)
 }
 
 // SendKey encodes one key press for the child, honouring the emulator's
@@ -321,9 +335,20 @@ func (s *Session) Paste(text string) {
 	}
 }
 
-// View renders the current screen as ANSI-styled lines.
+// View renders the current screen as ANSI-styled lines, cached per grid
+// version (#803): an unchanged grid returns the previous render without
+// touching the emulator. A version bump racing the render at worst stamps a
+// newer grid under an older version — the next call recomputes; a stale grid
+// can never be served for a newer version.
 func (s *Session) View() string {
-	return s.em.Render()
+	v := s.version.Load()
+	s.viewMu.Lock()
+	defer s.viewMu.Unlock()
+	if s.viewValid && s.viewVer == v {
+		return s.viewCache
+	}
+	s.viewCache, s.viewVer, s.viewValid = s.em.Render(), v, true
+	return s.viewCache
 }
 
 // CursorPosition returns the emulator's cursor cell (column, row).
@@ -383,8 +408,12 @@ func (s *Session) Clear() {
 	}
 	// 2J pushes the visible lines into the scrollback (the xterm behaviour),
 	// 3J then erases the scrollback — the canonical clear-everything pair.
-	_, _ = s.em.WriteString("\x1b[2J\x1b[3J\x1b[H")
+	// Via Write, not WriteString: SafeEmulator wraps only Write, and the
+	// promoted Emulator.WriteString would bypass the lock and race the feed
+	// loop (#803).
+	_, _ = s.em.Write([]byte("\x1b[2J\x1b[3J\x1b[H"))
 	s.em.SendKey(vt.KeyPressEvent{Code: 'l', Mod: vt.ModCtrl})
+	s.version.Add(1)
 	s.notify()
 }
 
