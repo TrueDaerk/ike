@@ -88,6 +88,17 @@ type Model struct {
 
 	// stack is the open sub-panel levels (#883), topmost last; see subpanel.go.
 	stack []SubPanel
+
+	// Pointer state (#885): the hovered category/form row (-1 = none), the
+	// scope chip's title-row span and the hint row's clickable segments (both
+	// recomputed at render), and the follow flags — the offsets track the
+	// selection only when it moved, so wheel scrolling the viewport away is
+	// not snapped back by the next render.
+	hoverCat, hoverRow int
+	chipSpan           span
+	hintHits           []hintAction
+	followCat          bool
+	followForm         bool
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -157,6 +168,8 @@ func (m *Model) Open() {
 	m.focus = catColumn
 	m.cat, m.sel = 0, 0
 	m.catOff, m.formOff = 0, 0
+	m.hoverCat, m.hoverRow = -1, -1
+	m.followCat, m.followForm = true, true
 	m.editing, m.filtering, m.picking = false, false, false
 	m.filter, m.input, m.invalid = "", "", ""
 	m.stack = nil
@@ -256,6 +269,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		// A click ends filter typing (like enter) and then hit-tests normally.
 		m.filtering = false
 	}
+	if cmd, handled := m.clickChrome(x, y); handled {
+		return cmd
+	}
 	row := y - bodyTop
 	if row < 0 || row >= m.height-4 {
 		return nil
@@ -264,6 +280,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
 		if idx := row + m.catOff; idx < len(m.pages) {
 			m.cat, m.sel, m.focus = idx, 0, catColumn
+			m.followCat, m.followForm = true, true
 		}
 		return nil
 	}
@@ -290,6 +307,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			return m.activate()
 		}
 		m.sel, m.focus = idx, formColumn
+		m.followForm = true
 	}
 	return nil
 }
@@ -326,8 +344,9 @@ func (m *Model) clickPick(x, row int) tea.Cmd {
 }
 
 // clickEdit handles a press while an inline edit is active: a click on the
-// row being edited keeps the edit, anything else commits the input (falling
-// back to cancel when the value does not validate — a click cannot fix it).
+// row being edited keeps the edit, a click on a completion suggestion takes
+// it (#885), anything else commits the input (falling back to cancel when
+// the value does not validate — a click cannot fix it).
 func (m *Model) clickEdit(x, row int) tea.Cmd {
 	r, ok := m.current()
 	if !ok {
@@ -336,6 +355,15 @@ func (m *Model) clickEdit(x, row int) tea.Cmd {
 	}
 	if idx, hit := m.formLine(x, row); hit && idx == m.sel {
 		return nil // stay in the edit
+	} else if hit && r.entry.Type == Path {
+		// Suggestion lines render directly under the edited row (#885): a
+		// press takes the candidate outright (the rendered line only shows
+		// the last path component, so index into the candidates).
+		if opt := idx - m.sel - 1; opt >= 0 && opt < len(m.suggest.candidates) && opt < maxSuggestLines {
+			m.input = m.suggest.candidates[opt]
+			m.suggest.refresh(m.input)
+			return nil
+		}
 	}
 	if r.entry.Type == Chord {
 		// There is nothing to commit mid-capture; the click cancels.
@@ -366,11 +394,13 @@ func (m *Model) Wheel(x, delta int) {
 		return
 	}
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
-		old := m.cat
-		m.cat = clamp(m.cat+delta, 0, len(m.pages)-1)
-		if m.cat != old {
-			m.sel = 0
+		// Viewport scroll, one category per notch (#885): the wheel browses,
+		// it does not yank the selection around.
+		step := 1
+		if delta < 0 {
+			step = -1
 		}
+		m.catOff = clamp(m.catOff+step, 0, maxOff(len(m.pages), m.height-4))
 		return
 	}
 	// Custom pages own their scrolling: forward through the optional
@@ -381,9 +411,16 @@ func (m *Model) Wheel(x, delta int) {
 		}
 		return
 	}
-	if n := len(m.rows()); n > 0 {
-		m.sel = clamp(m.sel+delta, 0, n-1)
+	// Schema form: viewport scroll, decoupled from the selection (#885).
+	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), m.height-4-detailLines))
+}
+
+// maxOff is the largest sensible scroll offset for n lines in an h window.
+func maxOff(n, h int) int {
+	if h <= 0 || n <= h {
+		return 0
 	}
+	return n - h
 }
 
 // CmdReceiver is an optional receiver extension (#884): consumers that need
@@ -515,10 +552,12 @@ func (m *Model) move(dir int) {
 	if m.focus == catColumn && m.filter == "" {
 		m.cat = clamp(m.cat+dir, 0, len(m.pages)-1)
 		m.sel = 0
+		m.followCat, m.followForm = true, true
 		return
 	}
 	if n := len(m.rows()); n > 0 {
 		m.sel = clamp(m.sel+dir, 0, n-1)
+		m.followForm = true
 	}
 }
 

@@ -57,10 +57,11 @@ func TestPanelForwardsMouseToCustomPage(t *testing.T) {
 	if len(stub.wheels) != 1 || stub.wheels[0] != 3 {
 		t.Fatalf("wheel must forward the delta, got %v", stub.wheels)
 	}
-	// Wheel over the category column: stays with the panel.
+	// Wheel over the category column: stays with the panel and scrolls the
+	// viewport, never the selection (#885).
 	m.Wheel(2, -1)
-	if len(stub.wheels) != 1 || m.cat != 1 {
-		t.Fatalf("category wheel must not forward, wheels=%v cat=%d", stub.wheels, m.cat)
+	if len(stub.wheels) != 1 || m.cat != 2 {
+		t.Fatalf("category wheel must not forward nor move the selection, wheels=%v cat=%d", stub.wheels, m.cat)
 	}
 
 	// A page without the seams is simply inert (no panic, no selection).

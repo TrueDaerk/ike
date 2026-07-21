@@ -44,24 +44,17 @@ func (m *Model) View() string {
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
 	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ")
+	// The write scope (0380, #794) is always-visible, clickable chrome (#885):
+	// a press cycles auto → user → project like "s".
+	chipStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
 	if m.writeScope != scopeAuto {
-		// The forced write scope (0380, #794) is prominent chrome: every
-		// edit/reset targets this layer until "s" cycles back to auto.
-		title += lipgloss.NewStyle().Foreground(pal.Info).Bold(true).
-			Render("[scope: " + m.scopeLabel() + "] ")
+		chipStyle = lipgloss.NewStyle().Foreground(pal.Info).Bold(true)
 	}
+	chip := "[scope: " + m.scopeLabel() + "] "
+	m.chipSpan = span{start: 1 + lipgloss.Width(" SETTINGS "), end: 1 + lipgloss.Width(" SETTINGS ") + lipgloss.Width(chip)}
+	title += chipStyle.Render(chip)
 	title += m.renderFilter()
-	hintText := " ↑↓/jk navigate · ←→ column · enter edit · r reset · s scope · / filter · esc"
-	if m.picking {
-		hintText = " ↑↓ choose · enter apply · esc cancel"
-	}
-	if r, ok := m.current(); ok && m.editing && r.entry.Type == Path {
-		hintText = " tab complete path · enter apply · esc cancel"
-	}
-	if m.SubOpen() {
-		hintText = " esc back · click a button"
-	}
-	hint := lipgloss.NewStyle().Foreground(pal.Secondary).Render(hintText)
+	hint := m.renderHint(pal)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
 	box := lipgloss.NewStyle().
@@ -77,6 +70,47 @@ func (m *Model) View() string {
 		return m.renderSub(box)
 	}
 	return box
+}
+
+// renderHint renders the bottom hint row and records its clickable key
+// segments (#885): a press on "r reset" resets, on "s scope" cycles, and so
+// on — the hints are buttons now, not just documentation.
+func (m *Model) renderHint(pal *theme.Palette) string {
+	m.hintHits = nil
+	style := lipgloss.NewStyle().Foreground(pal.Secondary)
+	switch {
+	case m.SubOpen():
+		return style.Render(" esc back · click a button")
+	case m.picking:
+		return style.Render(" ↑↓ choose · enter apply · esc cancel")
+	}
+	if r, ok := m.current(); ok && m.editing && r.entry.Type == Path {
+		return style.Render(" tab complete path · enter apply · esc cancel")
+	}
+	type seg struct{ text, action string }
+	segs := []seg{
+		{" ↑↓/jk navigate · ←→ column · ", ""},
+		{"enter edit", "edit"},
+		{" · ", ""},
+		{"r reset", "reset"},
+		{" · ", ""},
+		{"s scope", "scope"},
+		{" · ", ""},
+		{"/ filter", "filter"},
+		{" · ", ""},
+		{"esc", "close"},
+	}
+	x := 1 // border column 0
+	var out string
+	for _, sg := range segs {
+		w := lipgloss.Width(sg.text)
+		if sg.action != "" {
+			m.hintHits = append(m.hintHits, hintAction{start: x, end: x + w, action: sg.action})
+		}
+		out += sg.text
+		x += w
+	}
+	return style.Render(out)
 }
 
 // renderFilter shows the live filter input on the title row.
@@ -103,7 +137,12 @@ func (m *Model) renderCategories(h int) string {
 	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
 	dim := base.Foreground(pal.Secondary).Faint(true)
 
-	m.catOff = follow(m.catOff, m.cat, m.cat, len(m.pages), h)
+	if m.followCat {
+		m.catOff = follow(m.catOff, m.cat, m.cat, len(m.pages), h)
+		m.followCat = false
+	}
+	m.catOff = clamp(m.catOff, 0, maxOff(len(m.pages), h))
+	hover := base.Underline(true)
 	lines := make([]string, 0, h)
 	for i := m.catOff; i < len(m.pages) && len(lines) < h; i++ {
 		p := m.pages[i]
@@ -115,6 +154,8 @@ func (m *Model) renderCategories(h int) string {
 			lines = append(lines, sel.Render(label))
 		case i == m.cat:
 			lines = append(lines, inactiveSel.Render(label))
+		case i == m.hoverCat:
+			lines = append(lines, hover.Render(label))
 		default:
 			lines = append(lines, base.Render(label))
 		}
@@ -237,7 +278,7 @@ func (m *Model) renderForm(w, h int) string {
 		if i == m.sel {
 			selStart = len(lines)
 		}
-		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, w)))
+		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
 		if i == m.sel {
 			if m.picking {
 				lines = append(lines, m.renderPicker(r.entry, clip)...)
@@ -257,7 +298,11 @@ func (m *Model) renderForm(w, h int) string {
 				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
 		}
 	}
-	m.formOff = follow(m.formOff, selStart, selEnd, len(lines), listH)
+	if m.followForm {
+		m.formOff = follow(m.formOff, selStart, selEnd, len(lines), listH)
+		m.followForm = false
+	}
+	m.formOff = clamp(m.formOff, 0, maxOff(len(lines), listH))
 	end := m.formOff + listH
 	if end > len(lines) {
 		end = len(lines)
@@ -345,7 +390,7 @@ func (m *Model) customPagesNote() string {
 }
 
 // renderEntry renders one form row: "Title  [page]  value  @layer".
-func (m *Model) renderEntry(r row, selected bool, w int) string {
+func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	pal := m.theme()
 	e := r.entry
 
@@ -378,6 +423,8 @@ func (m *Model) renderEntry(r row, selected bool, w int) string {
 		// Unfocused column: keep the selection visible but dimmed, so the
 		// vivid selection always marks the focused column.
 		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	case hovered:
+		style = style.Underline(true) // pointer affordance (#885)
 	case origin == "default":
 		style = style.Foreground(pal.Foreground)
 	default:

@@ -60,6 +60,8 @@ type MarketplacePage struct {
 	installed map[string]market.Installed
 
 	sel      int
+	off      int // list scroll offset (#885)
+	listH    int // list-window height of the last render (mouse hit-testing)
 	expanded map[string]bool
 	busy     map[string]bool
 	rowNote  map[string]string
@@ -263,45 +265,59 @@ func (p *MarketplacePage) View(width, height int) string {
 	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	warn := lipgloss.NewStyle().Foreground(pal.Error)
 
-	var b strings.Builder
+	var head strings.Builder
 	switch {
 	// A fetch that ran (or is running) outranks the URL check: an error only
 	// exists because a catalog was configured at fetch time.
 	case p.fetching:
-		b.WriteString(dim.Render(" fetching catalog…") + "\n")
+		head.WriteString(dim.Render(" fetching catalog…"))
 	case p.fetchErr != "":
-		b.WriteString(warn.Render(" catalog: "+p.fetchErr) + "\n")
+		head.WriteString(warn.Render(" catalog: " + p.fetchErr))
 	case catalogURL() == "":
-		b.WriteString(dim.Render(" no catalog configured — set marketplace.catalog_url") + "\n")
+		head.WriteString(dim.Render(" no catalog configured — set marketplace.catalog_url"))
 	case p.catalog == nil:
-		b.WriteString(dim.Render(" catalog not loaded — press r") + "\n")
+		head.WriteString(dim.Render(" catalog not loaded — press r"))
 	default:
-		b.WriteString(dim.Render(" plugin · status · description") + "\n")
+		head.WriteString(dim.Render(" plugin · status · description"))
 	}
 	if p.restart {
-		b.WriteString(warn.Render(" restart IKE to load installed/updated plugins") + "\n")
+		head.WriteString("\n" + warn.Render(" restart IKE to load installed/updated plugins"))
 	}
+	clip := lipgloss.NewStyle().MaxWidth(width)
+	var list []string
+	selStart, selEnd := 0, 0
 	for i, e := range p.rows() {
 		line := " " + padCol(e.Name, 16) + padCol(p.status(e), 22) + e.Description
 		if i == p.sel {
-			b.WriteString(sel.Render(line) + "\n")
+			selStart = len(list)
+			list = append(list, clip.Render(sel.Render(line)))
 		} else {
-			b.WriteString(line + "\n")
+			list = append(list, clip.Render(line))
 		}
 		if note := p.rowNote[e.Name]; note != "" {
-			b.WriteString(warn.Render("    "+note) + "\n")
+			list = append(list, clip.Render(warn.Render("    "+note)))
 		}
 		if p.expanded[e.Name] {
 			for _, d := range p.inspectEntry(e) {
-				b.WriteString(dim.Render("    "+d) + "\n")
+				list = append(list, clip.Render(dim.Render("    "+d)))
 			}
+		}
+		if i == p.sel {
+			selEnd = len(list) - 1
 		}
 	}
 	for _, d := range p.diags {
-		b.WriteString(warn.Render(" "+d) + "\n")
+		list = append(list, clip.Render(warn.Render(" "+d)))
 	}
-	b.WriteString("\n" + dim.Render(" enter details · i install/update (from details) · x remove · r refresh catalog"))
-	return lipgloss.NewStyle().MaxHeight(height).MaxWidth(width).Render(b.String())
+	footer := wrapFooter([]footerLine{{
+		text:  " enter details · i install/update (from details) · x remove · r refresh catalog",
+		style: dim,
+	}}, width, 2)
+	hl := p.headLines()
+	p.listH = height - hl - len(footer)
+	// The list scrolls (#885): before, a MaxHeight clip made rows past the
+	// window unreachable and let the selection walk off-screen.
+	return head.String() + "\n" + pinFooter(list, footer, selStart, selEnd, height-hl, &p.off)
 }
 
 // headLines counts the view's lines above the first catalog row (the status
@@ -320,7 +336,12 @@ func (p *MarketplacePage) headLines() int {
 // selection toggles the detail expansion (enter semantics — install stays on
 // `i`, keeping the capability-review step).
 func (p *MarketplacePage) Click(_, y int) tea.Cmd {
-	line := p.headLines()
+	hl := p.headLines()
+	if y < hl || (p.listH > 0 && y-hl >= p.listH) {
+		return nil
+	}
+	// List lines shift by the scroll offset (#885).
+	line := hl - p.off
 	for i, e := range p.rows() {
 		span := 1
 		if p.rowNote[e.Name] != "" {

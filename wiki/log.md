@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Settings mouse parity (0420, #885): hover highlighting, viewport wheel
+  (1 category/notch on the rail), clickable scope chip / hint keys /
+  completion suggestions, scrollable Plugins & Marketplace lists
+  (`/architecture/settings-ui.md`).
+
 - Venv wizard sub-panel (0420, #884): visible four-step create flow —
   tool/python/location/run — with disclosure, clickable suggestions,
   spinner+cancel, real stderr on failure, and a `+ New environment…` action
