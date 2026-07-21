@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, commit dialog, update/revert, branch picker, file-vs-HEAD diff, inline blame, persistent tool window (changes + log); all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330)
@@ -28,8 +28,13 @@ repo-relative paths and survive macOS `/private` symlinked roots.
 `StartWatcher` (main.go-only, so tests stay free of the developer repo's
 state); watcher events (0140) and buffer saves arm a 250ms debounce tick;
 runs are serialized with at most one queued follow-up; every mutating VCS
-command answers with a refresh. Each new snapshot re-feeds the explorer, the
-commit dialog, gutter marks, and enabled blame maps.
+command answers with a refresh. External git changes are covered too (#738):
+the watch service additionally watches `.git` and `.git/logs` (index, HEAD,
+packed-refs, reflog — lock/temp churn filtered) and reports them as one
+coalesced `GitChanged` event, so commits, branch switches, staging or pulls
+made in a lazygit tool pane or a terminal refresh the snapshot automatically.
+Each new snapshot re-feeds the explorer, the commit dialog, gutter marks, and
+enabled blame maps.
 
 ## Surfaces
 

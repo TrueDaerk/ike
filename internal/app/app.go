@@ -3018,6 +3018,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// event also invalidates the git status snapshot (Roadmap 0320); the
 		// debounce collapses bursts into one refresh.
 		vcsCmd := m.scheduleVCSRefresh()
+		if msg.Kind == watch.GitChanged {
+			// Repository metadata changed under .git (#738): an external commit,
+			// branch switch, staging or pull — e.g. inside a lazygit tool pane.
+			// Only the snapshot refresh; there is no project file to route.
+			return m, vcsCmd
+		}
 		if msg.Kind == watch.DirChanged {
 			if m.activeWS().Panes.Has(pane.ExplorerKey) {
 				return m, tea.Batch(m.activeWS().Panes.Get(pane.ExplorerKey).Update(msg), vcsCmd)

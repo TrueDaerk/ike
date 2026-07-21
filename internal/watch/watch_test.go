@@ -8,6 +8,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/fsnotify/fsnotify"
 )
 
 // collector gathers sent messages behind a mutex (flush runs on a timer
@@ -125,6 +126,59 @@ func TestFsnotifyEndToEnd(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("expected a create/change for %s, got %v", path, got)
+	}
+}
+
+// TestGitMetadataEvents guards #738: changes under .git (index, HEAD, the
+// reflog) surface as one coalesced GitChanged so external git commands —
+// commits in a lazygit pane, a terminal checkout — refresh the VCS snapshot.
+// Lock-file churn stays silent.
+func TestGitMetadataEvents(t *testing.T) {
+	dir := t.TempDir()
+	git := filepath.Join(dir, ".git")
+	if err := os.MkdirAll(filepath.Join(git, "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	// index.lock churn must not surface.
+	if err := os.WriteFile(filepath.Join(git, "index.lock"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("lock file must stay silent, got %d events", n)
+	}
+
+	// A staged change (index) and a commit (reflog append) coalesce to one
+	// GitChanged for the .git dir.
+	if err := os.WriteFile(filepath.Join(git, "index"), []byte("idx"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(git, "logs", "HEAD"), []byte("reflog"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	if len(got) != 1 || got[0].Kind != GitChanged || got[0].Path != git {
+		t.Fatalf("want one GitChanged for %s, got %v", git, got)
+	}
+}
+
+// TestIngestGitMapsEvents covers the raw mapping without a live watcher.
+func TestIngestGitMapsEvents(t *testing.T) {
+	s, c := service()
+	git := filepath.Join(string(filepath.Separator)+"repo", ".git")
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "HEAD"), Op: fsnotify.Write})
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "refs", "heads", "main"), Op: fsnotify.Write})
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "index.lock"), Op: fsnotify.Create})
+	s.ingest(fsnotify.Event{Name: filepath.Join(git, "objects", "tmp_obj_x"), Op: fsnotify.Create})
+	got := c.wait(t, 1)
+	if len(got) != 1 || got[0].Kind != GitChanged || got[0].Path != git {
+		t.Fatalf("want one GitChanged for %s, got %v", git, got)
 	}
 }
 
