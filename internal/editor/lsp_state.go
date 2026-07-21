@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/fuzzy"
 	"ike/internal/highlight"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
@@ -215,7 +216,14 @@ func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 	// triggers nothing precedes the anchor, so this is the old behavior.
 	pos := buffer.Position{Line: msg.Line, Col: msg.Col}
 	anchor := m.extendAnchorMatch(m.identifierStart(pos), pos, msg.Items)
-	m.comp = &completionState{items: msg.Items, anchor: anchor}
+	// Base order is the server's ranking: sortText, label when absent (#845).
+	// The fuzzy filter sorts stably by match score, so this order breaks ties.
+	items := make([]ilsp.CompletionItem, len(msg.Items))
+	copy(items, msg.Items)
+	sort.SliceStable(items, func(i, j int) bool {
+		return completionSortKey(items[i]) < completionSortKey(items[j])
+	})
+	m.comp = &completionState{items: items, anchor: anchor}
 	if m.filteredCompletion() == nil {
 		m.comp = nil
 	}
@@ -238,7 +246,12 @@ func (m Model) completionPrefix() (string, bool) {
 	return string(runes[m.comp.anchor.Col:m.cursor.Col]), true
 }
 
-// filteredCompletion returns the items matching the current prefix.
+// filteredCompletion returns the items matching the current prefix, best match
+// first. Matching is fuzzy-subsequence with CamelCase/snake_case boundary
+// bonuses (internal/fuzzy, #845) against the server's filterText (label when
+// absent), so "gCN" finds "getClassName" and a scattered match still passes.
+// The sort is stable over the sortText base order, so equal scores keep the
+// server's ranking.
 func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if m.comp == nil {
 		return nil
@@ -250,14 +263,42 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if prefix == "" {
 		return m.comp.items
 	}
-	lower := strings.ToLower(prefix)
-	var out []ilsp.CompletionItem
+	type scored struct {
+		item  ilsp.CompletionItem
+		score int
+	}
+	var matched []scored
 	for _, it := range m.comp.items {
-		if strings.HasPrefix(strings.ToLower(it.Label), lower) {
-			out = append(out, it)
+		r, ok := fuzzy.Match(prefix, completionFilterText(it))
+		if !ok {
+			continue
 		}
+		matched = append(matched, scored{item: it, score: r.Score})
+	}
+	sort.SliceStable(matched, func(i, j int) bool { return matched[i].score > matched[j].score })
+	out := make([]ilsp.CompletionItem, len(matched))
+	for i, s := range matched {
+		out[i] = s.item
 	}
 	return out
+}
+
+// completionFilterText is the text an item is matched against: the server's
+// filterText when present, else the label (LSP spec default).
+func completionFilterText(it ilsp.CompletionItem) string {
+	if it.FilterText != "" {
+		return it.FilterText
+	}
+	return it.Label
+}
+
+// completionSortKey is the server-ranking key: sortText when present, else the
+// label (LSP spec default).
+func completionSortKey(it ilsp.CompletionItem) string {
+	if it.SortText != "" {
+		return it.SortText
+	}
+	return it.Label
 }
 
 // completionMove changes the selection by delta, wrapping around.

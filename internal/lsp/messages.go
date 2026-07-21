@@ -59,12 +59,17 @@ type CompletionMsg struct {
 	Items []CompletionItem
 }
 
-// CompletionItem is the editor-facing completion entry.
+// CompletionItem is the editor-facing completion entry. SortText and
+// FilterText carry the server's ranking and matching hints (#845): items sort
+// by SortText (label when absent) and filter against FilterText (label when
+// absent), per the LSP spec.
 type CompletionItem struct {
 	Label      string
 	Detail     string
 	InsertText string
 	Kind       int
+	SortText   string
+	FilterText string
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.
@@ -456,6 +461,8 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 			Detail:     it.Detail,
 			InsertText: insert,
 			Kind:       it.Kind,
+			SortText:   it.SortText,
+			FilterText: it.FilterText,
 		})
 	}
 	return out

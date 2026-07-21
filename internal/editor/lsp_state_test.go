@@ -126,15 +126,21 @@ func TestCompletionOpenFilterAccept(t *testing.T) {
 	if !m.CompletionOpen() {
 		t.Fatal("completion popup should be open")
 	}
-	// Type "Pr" to filter to Println/Printf.
+	// Type "Pr": fuzzy matching keeps all three ("Pr" is a subsequence of
+	// Sprintf too, #845), but the boundary-anchored Println/Printf rank first.
 	m = send(m, key('P'), key('r'))
-	if got := len(m.filteredCompletion()); got != 2 {
-		t.Fatalf("filtered = %d, want 2 (Println, Printf)", got)
+	if got := len(m.filteredCompletion()); got != 3 {
+		t.Fatalf("filtered = %d, want 3 (Println, Printf, Sprintf)", got)
 	}
-	// Accept the first (Println): the prefix "Pr" is replaced by the full insert.
+	// Equal fuzzy scores keep the sortText base order (label fallback), so
+	// "Printf" sorts before "Println"; the scattered Sprintf ranks last.
+	if got := m.filteredCompletion()[0].Label; got != "Printf" {
+		t.Fatalf("top item = %q, want Printf (start-anchored match outranks scattered)", got)
+	}
+	// Accept the first (Printf): the prefix "Pr" is replaced by the full insert.
 	m = send(m, special(tea.KeyEnter))
-	if got := line(m, 0); got != "fmt.Println" {
-		t.Fatalf("after accept line = %q, want fmt.Println", got)
+	if got := line(m, 0); got != "fmt.Printf" {
+		t.Fatalf("after accept line = %q, want fmt.Printf", got)
 	}
 	if m.CompletionOpen() {
 		t.Error("popup should close after accept")
@@ -145,6 +151,73 @@ func TestCompletionOpenFilterAccept(t *testing.T) {
 // text starts with the identifier already typed before the cursor must replace
 // that partial word rather than duplicate it. This is the manual (ctrl+space)
 // trigger shape, where the popup is anchored at the cursor.
+// TestCompletionFuzzyCamelCase guards #845: CamelCase initials fuzzy-match
+// ("gCN" → getClassName), snake_case initials too, and non-matches drop out.
+func TestCompletionFuzzyCamelCase(t *testing.T) {
+	m, _ := loaded(t, "x.\n")
+	m = insertModeAt(m, 0, 2)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "getClassName", InsertText: "getClassName"},
+		{Label: "getCount", InsertText: "getCount"},
+		{Label: "do_request", InsertText: "do_request"},
+	}})
+	// Case-insensitive fuzzy also lets "gCN" hit getCount's mid-word n, but
+	// the hump-anchored getClassName must rank first; do_request drops out.
+	m = send(m, key('g'), key('C'), key('N'))
+	got := labels(m.filteredCompletion())
+	if len(got) == 0 || got[0] != "getClassName" {
+		t.Fatalf("gCN filtered = %v, want getClassName ranked first", got)
+	}
+	for _, l := range got {
+		if l == "do_request" {
+			t.Fatalf("do_request must not match gCN, got %v", got)
+		}
+	}
+}
+
+// TestCompletionFilterTextWins guards #845: when a server sends filterText, the
+// match runs against it instead of the label.
+func TestCompletionFilterTextWins(t *testing.T) {
+	m, _ := loaded(t, "x.\n")
+	m = insertModeAt(m, 0, 2)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "•decorated", FilterText: "decorated", InsertText: "decorated"},
+		{Label: "plain", InsertText: "plain"},
+	}})
+	m = send(m, key('d'), key('e'), key('c'))
+	got := m.filteredCompletion()
+	if len(got) != 1 || got[0].Label != "•decorated" {
+		t.Fatalf("dec filtered = %v, want the filterText-carrying item", labels(got))
+	}
+}
+
+// TestCompletionSortTextOrder guards #845: with no prefix typed, items show in
+// server sortText order, not arrival order.
+func TestCompletionSortTextOrder(t *testing.T) {
+	m, _ := loaded(t, "x.\n")
+	m = insertModeAt(m, 0, 2)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "zeta", SortText: "0002", InsertText: "zeta"},
+		{Label: "alpha", SortText: "0003", InsertText: "alpha"},
+		{Label: "mid", SortText: "0001", InsertText: "mid"},
+	}})
+	got := labels(m.filteredCompletion())
+	want := []string{"mid", "zeta", "alpha"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order = %v, want %v", got, want)
+		}
+	}
+}
+
+func labels(items []ilsp.CompletionItem) []string {
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i] = it.Label
+	}
+	return out
+}
+
 func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
 	m, _ := loaded(t, "xyz.__\n")
 	m = insertModeAt(m, 0, 6) // after "xyz.__", as a manual trigger would anchor

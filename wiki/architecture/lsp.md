@@ -121,7 +121,12 @@ the popup open re-queries. The popup anchors at the start of the identifier
 under the request position (widened past sigils like PHP's `$` while the
 widened prefix still matches an item, mirroring the accept path's
 `extendPrefixMatch`), so the partial word typed before the request counts into
-the prefix filter. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
+the prefix filter. Filtering is **fuzzy** (#845): the typed prefix
+subsequence-matches each item's `filterText` (label when absent) via
+`internal/fuzzy`, so CamelCase/snake_case initials (`gCN` → `getClassName`)
+and scattered substrings match; results rank by match score (word-boundary and
+start-anchored matches win), with ties keeping the server's `sortText` order
+(label when absent), which also orders the unfiltered list. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
 
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)

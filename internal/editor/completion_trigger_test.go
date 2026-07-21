@@ -107,9 +107,11 @@ func TestCompletionAnchorAtIdentifierStart(t *testing.T) {
 	if col, _ := m.CompletionAnchor(); col != 0 {
 		t.Fatalf("anchor col = %d, want 0 (identifier start)", col)
 	}
+	// Fuzzy matching (#845) also keeps the scattered Sprintf, but the anchored
+	// prefix must count into the filter and rank Println first.
 	items := m.filteredCompletion()
-	if len(items) != 1 || items[0].Label != "Println" {
-		t.Fatalf("prefix 'Pr' should filter to Println, got %+v", items)
+	if len(items) == 0 || items[0].Label != "Println" {
+		t.Fatalf("prefix 'Pr' should rank Println first, got %+v", items)
 	}
 }
 
