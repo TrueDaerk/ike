@@ -66,8 +66,10 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
 - **Outer-edge docking (#811).** During a whole-pane move, the workspace
   body's outermost row/column (`dockBand` = 1 cell) is a dock strip: releasing
   there re-roots the tree via `layout.Dock` so the pane spans the **full
-  width** (outer top/bottom) or **full height** (outer left/right), its share
-  along the dock axis derived from its current size (clamped to [0.1, 0.9]).
+  width** (outer top/bottom) or **full height** (outer left/right). Its share
+  along the dock axis keeps the pane's current extent when that is already
+  modest, capped at `dockMaxShare` (⅓ of the workspace) — a full-height pane
+  docked to the bottom becomes a tool-window-sized strip, not a 90% slab.
   Hovering the strip previews the full-span target as a ghost plus a
   `dock <edge> (full …)` status hint. One cell inside the strip, the normal
   pane-relative zones (including self-edge spawn) apply unchanged; corners

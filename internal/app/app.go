@@ -5812,19 +5812,30 @@ func (m Model) dockZoneAt(x, y int) (layout.Zone, bool) {
 	return 0, false
 }
 
+// dockMaxShare caps the docked pane's share of the workspace along the dock
+// axis. A pane usually spans (nearly) the full workspace along the axis it
+// docks to — a full-height editor docked to the bottom would otherwise claim
+// ~90% of the height. Docking is a tool-window gesture; a third of the
+// workspace is the JetBrains-ish extent.
+const dockMaxShare = 1.0 / 3.0
+
 // dockRatio derives the docked pane's share of the workspace along the dock
-// axis from its current size, so docking roughly preserves the pane's extent
-// (layout.Dock clamps it).
+// axis: its current extent when that is already modest, capped at
+// dockMaxShare (layout.Dock enforces the lower bound).
 func (m Model) dockRatio(key string, zone layout.Zone) float64 {
 	r, ok := m.lay.Panes[key]
 	b := m.bodyRect()
 	if !ok || b.W <= 0 || b.H <= 0 {
 		return 0.3
 	}
+	share := float64(r.W) / float64(b.W)
 	if zone == layout.ZoneTop || zone == layout.ZoneBottom {
-		return float64(r.H) / float64(b.H)
+		share = float64(r.H) / float64(b.H)
 	}
-	return float64(r.W) / float64(b.W)
+	if share > dockMaxShare {
+		share = dockMaxShare
+	}
+	return share
 }
 
 // dockPreviewRect is the full-span rect a dock drop would occupy (#811).

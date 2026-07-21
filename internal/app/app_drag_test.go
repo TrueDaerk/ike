@@ -414,6 +414,11 @@ func TestDragDockToOuterEdge(t *testing.T) {
 	if r.Y+r.H != body.Y+body.H {
 		t.Fatalf("bottom dock: explorer not at the bottom (Y=%d H=%d)", r.Y, r.H)
 	}
+	// The explorer was full-height before the dock; the docked extent must be
+	// capped, not carried over (~90% of the workspace).
+	if max := int(float64(body.H)*dockMaxShare) + 1; r.H > max {
+		t.Fatalf("bottom dock: explorer height = %d, want <= %d (dockMaxShare)", r.H, max)
+	}
 
 	// Drag it to the outer right edge: full-height dock. The pane's top
 	// border now sits on a split boundary where the resize band wins (#761),
@@ -426,6 +431,9 @@ func TestDragDockToOuterEdge(t *testing.T) {
 	}
 	if r.X+r.W != body.X+body.W {
 		t.Fatalf("right dock: explorer not at the right edge (X=%d W=%d)", r.X, r.W)
+	}
+	if max := int(float64(body.W)*dockMaxShare) + 1; r.W > max {
+		t.Fatalf("right dock: explorer width = %d, want <= %d (dockMaxShare)", r.W, max)
 	}
 }
 
