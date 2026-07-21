@@ -47,12 +47,15 @@ func (m *Model) guardedCloseFocused() {
 	m.closeFocused()
 }
 
-// guardedQuit quits the app unless that would drop unsaved changes (#287):
-// with dirty buffers anywhere, the #259 guard prompt opens with quit
-// semantics — save everything and quit, discard and quit, or cancel.
+// guardedQuit quits the app unless that would drop live state (#287, #821):
+// dirty buffers or running debug/run/tool activity in ANY in-memory
+// workspace — the active one plus every parked background workspace — open
+// the guard prompt: save everything and quit, discard and quit, or cancel.
+// Idle shells never gate the quit (every session has one open).
 func (m Model) guardedQuit() (tea.Model, tea.Cmd) {
-	if dirty := m.dirtyEverywhere(); len(dirty) > 0 {
-		m.openQuitPrompt(dirty)
+	dirty, running := m.quitActivity()
+	if len(dirty) > 0 || len(running) > 0 {
+		m.openQuitPrompt(dirty, running)
 		return m, nil
 	}
 	return m.quit()
@@ -87,15 +90,29 @@ func (m *Model) dirtyEverywhere() []string {
 	return dirty
 }
 
-// openQuitPrompt shows the guard for a pending app quit.
-func (m *Model) openQuitPrompt(dirty []string) {
+// openQuitPrompt shows the guard for a pending app quit, aggregating dirty
+// buffers and running activity across every in-memory workspace (#821).
+func (m *Model) openQuitPrompt(dirty, running []string) {
 	m.closePending = &pendingClose{quit: true, dirty: dirty}
-	body := strings.Join(dirty, ", ") + " has unsaved changes.\n\n" +
-		"  [s]   save all, then quit\n" +
-		"  [d]   discard changes and quit\n" +
+	var parts []string
+	if len(running) > 0 {
+		parts = append(parts, "still running:\n  "+strings.Join(running, "\n  "))
+	}
+	if len(dirty) > 0 {
+		parts = append(parts, "unsaved changes: "+strings.Join(dirty, ", "))
+	}
+	body := strings.Join(parts, "\n") + "\n\n"
+	if len(dirty) > 0 {
+		body += "  [s]   save all, then quit\n"
+	}
+	body += "  [d]   quit — stop processes, discard unsaved changes\n" +
 		"  [esc] cancel — keep ike running"
+	heading := "Unsaved changes"
+	if len(running) > 0 {
+		heading = "Quit ike?"
+	}
 	m.shell.SetContent(ui.ModelContent{
-		Heading: "Unsaved changes",
+		Heading: heading,
 		Body:    func() string { return body },
 	})
 	m.shell.SetSize(m.width, m.height)
@@ -197,10 +214,18 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "s":
+		if len(m.closePending.dirty) == 0 {
+			return m, nil // running-only prompt: no save option offered
+		}
 		m.closePending = nil
 		m.shell.Close()
 		cmds := m.saveAllDirty()
-		if len(m.dirtyEverywhere()) > 0 {
+		// Background workspaces save too (#821): the write path does not
+		// depend on focus or rendering.
+		for _, root := range m.ws.Background() {
+			cmds = append(cmds, saveWorkspaceDirty(m.ws.Peek(root))...)
+		}
+		if dirty, _ := m.quitActivity(); len(dirty) > 0 {
 			// A write failed (read-only file, full disk): stay running; the
 			// batched editor cmds surface the write error.
 			m.host.Notify(host.Error, "not quit: save failed")

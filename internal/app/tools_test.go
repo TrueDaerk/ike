@@ -306,3 +306,40 @@ func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
 		t.Fatal("second toggle must leave the regular terminal")
 	}
 }
+
+// TestQuitPromptsForRunningTool (#821): a running tool pane gates the quit
+// (idle shells never do); d quits anyway, s is inert without dirty buffers.
+func TestQuitPromptsForRunningTool(t *testing.T) {
+	withTools(t, sleepTool("busy"))
+	m := sized(t, 100, 40)
+	out, _ := m.Update(ToolOpenMsg{Name: "busy"})
+	m = out.(Model)
+	inst := m.toolPane("busy")
+	if inst == nil {
+		t.Fatal("tool pane must open")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	out, _ = m.guardedQuit()
+	m = out.(Model)
+	if !m.closePromptOpen() {
+		t.Fatal("quit must prompt while a tool runs")
+	}
+	// s without dirty buffers is inert (no save option offered).
+	out, _ = m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = out.(Model)
+	if !m.closePromptOpen() {
+		t.Fatal("s must be inert on a running-only prompt")
+	}
+	out, cmd := m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	m = out.(Model)
+	quits := false
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(tea.QuitMsg); ok {
+			quits = true
+		}
+	}
+	if !quits {
+		t.Fatal("d must quit")
+	}
+}

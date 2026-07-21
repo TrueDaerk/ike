@@ -470,3 +470,104 @@ func TestPickerMarksOpenWorkspaces(t *testing.T) {
 		t.Fatal("historical-only entry must stay unmarked")
 	}
 }
+
+// busyCloseFixture: project a with a dirty buffer, parked behind a switch to
+// b — the #821 guard scenarios start here.
+func busyCloseFixture(t *testing.T) (m Model, aRoot, dirtyPath string) {
+	t.Helper()
+	base := t.TempDir()
+	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	dirtyPath = filepath.Join(a, "f.txt")
+	if err := os.WriteFile(dirtyPath, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(a)
+	m = switchModel(t)
+	tm, _ := m.openPath(dirtyPath, false)
+	m = tm.(Model)
+	for _, k := range []tea.KeyPressMsg{
+		{Code: 'i', Text: "i"}, {Code: 'X', Text: "X"}, {Code: tea.KeyEscape},
+	} {
+		m = drainKey(m, k)
+	}
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	bg := m.ws.Background()
+	if len(bg) != 1 {
+		t.Fatalf("background = %v, want the parked a", bg)
+	}
+	return m, bg[0], dirtyPath
+}
+
+// TestCloseFromListBusyPromptsAndCancel (#821): closing a background
+// workspace with unsaved changes prompts; esc keeps it untouched; d closes.
+func TestCloseFromListBusyPromptsAndCancel(t *testing.T) {
+	m, root, _ := busyCloseFixture(t)
+
+	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
+	m = out.(Model)
+	if !m.wsClosePromptOpen() {
+		t.Fatal("busy close-from-list must prompt")
+	}
+	if m.ws.Peek(root) == nil {
+		t.Fatal("prompting must not touch the workspace")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.wsClosePromptOpen() || m.ws.Peek(root) == nil {
+		t.Fatal("esc must cancel with the workspace untouched")
+	}
+
+	out, _ = m.Update(project.CloseWorkspaceMsg{Path: root})
+	m = out.(Model)
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	m = out.(Model)
+	if m.ws.Peek(root) != nil {
+		t.Fatal("d must close the busy workspace")
+	}
+}
+
+// TestCloseFromListSaveThenClose (#821): s writes the background workspace's
+// dirty buffers, then closes it.
+func TestCloseFromListSaveThenClose(t *testing.T) {
+	m, root, path := busyCloseFixture(t)
+	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
+	m = out.(Model)
+	if !m.wsClosePromptOpen() {
+		t.Fatal("busy close-from-list must prompt")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m = out.(Model)
+	if m.ws.Peek(root) != nil {
+		t.Fatal("s must close after saving")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "Xone") {
+		t.Fatalf("s must write the background buffer, got %q", data)
+	}
+}
+
+// TestQuitAggregatesBackgroundDirty (#821): quitting prompts for a parked
+// workspace's unsaved changes even when the active one is clean; esc keeps
+// ike running with the workspace untouched.
+func TestQuitAggregatesBackgroundDirty(t *testing.T) {
+	m, root, _ := busyCloseFixture(t)
+	out, _ := m.guardedQuit()
+	m = out.(Model)
+	if !m.closePromptOpen() {
+		t.Fatal("quit must prompt for background dirty buffers")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.closePromptOpen() || m.ws.Peek(root) == nil {
+		t.Fatal("esc must cancel the quit with everything untouched")
+	}
+}
