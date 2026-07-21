@@ -327,3 +327,13 @@ enter opens the picker — ← on other rows still returns to the rail, #533),
 ints as `value ±` (**+/−/←/→** step, range-clamped), text rows as `value ✎`
 and chords as `value ⌨`. Range clamps are never silent: stepping or typing
 past Min/Max shows an `ℹ clamped to N` notice in the detail footer.
+
+## Rail & chrome (0420, #890)
+
+The category rail groups into **sections** (`Page.Section` starts one: CORE /
+TOOLS / PLUGINS today), rendered as dim non-clickable headers. **First-letter
+jump** hops to the next page starting with the pressed letter (menu parity).
+The panel **remembers its page**: reopening lands where you left, and the
+choice persists per project in `.ike/settings-last.json`
+(IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>`, and
+overflowing rail/form windows show `▲ more` / `▼ more` scroll indicators.

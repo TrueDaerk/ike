@@ -21,6 +21,7 @@ func testOpts(t *testing.T) config.Options {
 // test, since edits go through config.Set.
 func restoreConfig(t *testing.T) {
 	t.Helper()
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir()) // isolates the per-project state files (#890)
 	prev := config.Get()
 	t.Cleanup(func() { config.Set(prev) })
 }

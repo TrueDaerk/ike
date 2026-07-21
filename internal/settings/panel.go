@@ -140,12 +140,20 @@ func (m *Model) scopeLabel() string {
 
 // New builds a closed panel over pages, writing through opts. Custom pages
 // implementing the hostAware seam get the panel injected as their
-// SubPanelHost (#883), so they can push forms and wizards.
+// SubPanelHost (#883), so they can push forms and wizards. The last-visited
+// page is restored from the per-project state file (#890).
 func New(pages []Page, opts config.Options) *Model {
-	m := &Model{pages: pages, opts: opts}
+	m := &Model{pages: pages, opts: opts, hoverCat: -1, hoverRow: -1}
 	for _, page := range pages {
 		if h, ok := page.Custom.(hostAware); ok {
 			h.SetSubPanelHost(m)
+		}
+	}
+	if title := loadLastPage(); title != "" {
+		for i, p := range pages {
+			if p.Title == title {
+				m.cat = i
+			}
 		}
 	}
 	return m
@@ -167,24 +175,29 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 // IsOpen reports whether the panel is visible (it owns the keyboard then).
 func (m *Model) IsOpen() bool { return m.open }
 
-// Open shows the panel on its first page.
+// Open shows the panel on the page it was last on (#890 — the panel
+// remembers across opens and, via the state file, across sessions).
 func (m *Model) Open() {
 	m.open = true
 	m.focus = catColumn
-	m.cat, m.sel = 0, 0
+	m.cat = clamp(m.cat, 0, len(m.pages)-1)
+	m.sel = 0
 	m.catOff, m.formOff = 0, 0
 	m.hoverCat, m.hoverRow = -1, -1
 	m.followCat, m.followForm = true, true
 	m.editing, m.filtering, m.picking = false, false, false
-	m.filter, m.invalid = "", ""
+	m.filter, m.invalid, m.notice = "", "", ""
 	m.edit = textField{}
 	m.stack = nil
 }
 
-// Close hides the panel (and any open sub-panels).
+// Close hides the panel (and any open sub-panels), remembering the page.
 func (m *Model) Close() {
 	m.open = false
 	m.stack = nil
+	if m.cat >= 0 && m.cat < len(m.pages) {
+		saveLastPage(m.pages[m.cat].Title)
+	}
 }
 
 // Capturing reports whether the panel currently needs every key verbatim —
@@ -297,11 +310,13 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		return nil
 	}
 	// Category column. A rail click while filtering clears the filter and
-	// jumps to the page (#886 — the rail is never dead).
+	// jumps to the page (#886 — the rail is never dead); section headers
+	// (#890) are not click targets.
 	if x >= 1 && x < 1+catWidth {
-		if idx := row + m.catOff; idx < len(m.pages) {
+		rows := m.railRows()
+		if idx := row + m.catOff; idx >= 0 && idx < len(rows) && rows[idx].header == "" {
 			m.filter, m.filtering = "", false
-			m.cat, m.sel, m.focus = idx, 0, catColumn
+			m.cat, m.sel, m.focus = rows[idx].page, 0, catColumn
 			m.followCat, m.followForm = true, true
 		}
 		return nil
@@ -422,7 +437,7 @@ func (m *Model) Wheel(x, delta int) {
 		if delta < 0 {
 			step = -1
 		}
-		m.catOff = clamp(m.catOff+step, 0, maxOff(len(m.pages), m.height-4))
+		m.catOff = clamp(m.catOff+step, 0, maxOff(len(m.railRows()), m.height-4))
 		return
 	}
 	// Custom pages own their scrolling: forward through the optional
@@ -545,6 +560,12 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 	case "?":
 		m.openKeyHelp()
+	default:
+		// First-letter jump on the rail (#890, menu parity): a letter hops to
+		// the next page starting with it, cycling.
+		if m.focus == catColumn && m.filter == "" && len(key.String()) == 1 {
+			m.jumpToLetter(key.String())
+		}
 	case "right", "l":
 		if m.focus == catColumn && m.filter == "" {
 			m.focus = formColumn
@@ -596,6 +617,20 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.focus = formColumn
 	}
 	return nil
+}
+
+// jumpToLetter selects the next page whose title starts with letter (#890).
+func (m *Model) jumpToLetter(letter string) {
+	letter = strings.ToLower(letter)
+	n := len(m.pages)
+	for i := 1; i <= n; i++ {
+		idx := (m.cat + i) % n
+		if strings.HasPrefix(strings.ToLower(m.pages[idx].Title), letter) {
+			m.cat, m.sel = idx, 0
+			m.followCat, m.followForm = true, true
+			return
+		}
+	}
 }
 
 // moveNav applies pgup/pgdn/home/end to the focused column (#887).

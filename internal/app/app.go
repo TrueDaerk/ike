@@ -618,7 +618,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.cfgOpts = config.Discover(".")
 	pages := settings.BasePages(themeNames(reg))
-	pages = append(pages, settings.Page{Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
+	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok
 	}, func() []settings.CommandEntry {
@@ -644,7 +644,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		}
 		return nil
 	})})
-	pages = append(pages, settings.Page{Title: "Plugins", Custom: settings.NewPluginsPage(m.cfgOpts,
+	pages = append(pages, settings.Page{Section: "PLUGINS", Title: "Plugins", Custom: settings.NewPluginsPage(m.cfgOpts,
 		func() []settings.PluginInfo {
 			descs := reg.Describe()
 			out := make([]settings.PluginInfo, len(descs))
