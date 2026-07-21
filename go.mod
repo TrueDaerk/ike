@@ -18,6 +18,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/tetratelabs/wazero v1.12.0
 	github.com/tree-sitter-grammars/tree-sitter-toml v0.7.0
+	github.com/tree-sitter-grammars/tree-sitter-yaml v0.7.2
 	github.com/tree-sitter/go-tree-sitter v0.25.0
 	github.com/tree-sitter/tree-sitter-go v0.25.0
 	github.com/tree-sitter/tree-sitter-json v0.24.8

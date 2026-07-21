@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- YAML language support (#879): tree-sitter-yaml highlighting with sticky
+  mapping-key scopes, yaml-language-server (schema-store) completion; indent
+  rules limited to `:` and block-scalar introducers
+  (`/architecture/languages.md`).
+
 - Dockerfile language support (#896): tree-sitter-dockerfile highlighting
   (vendored C source — upstream Go binding unusable), docker-langserver
   completion; first exact-base-name (`Filenames`) language besides templates
