@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Divider-drag resize smoothed (#804): terminal PTY/emulator resizes are
+  debounced (leading + trailing), so a drag no longer triggers a child
+  SIGWINCH redraw storm per step; motion coalescing (#602) already bounds
+  relayouts to one per rendered frame (`/architecture/pane-layout.md`).
+
 - Terminal output no longer starves the UI with many busy panes (#803):
   Session.View caches the rendered grid per mutation version, and the input
   coalescer folds cross-session OutputMsgs into one batch per adaptive flush

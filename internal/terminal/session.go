@@ -56,6 +56,11 @@ type Session struct {
 	ptmx     *os.File
 	cmd      *exec.Cmd
 	w, h     int
+	// Resize debounce (#804): lastResize stamps the leading apply; a burst
+	// inside resizeQuiet parks its latest size in pendW/H behind one timer.
+	lastResize    time.Time
+	pendW, pendH  int
+	resizePending bool
 	title    string // last OSC 0/2 title the application set ("" until then)
 	exitCode int
 	exited   bool
@@ -267,21 +272,65 @@ func (s *Session) notify() {
 	})
 }
 
+// resizeQuiet debounces rapid resize sequences (#804): a divider drag emits
+// one resize per motion flush, and every applied resize costs a PTY SIGWINCH
+// (the child — vim, htop — redraws) plus an emulator reflow. The first resize
+// applies immediately (leading edge, so a lone layout change is instant);
+// further ones inside the window fold into one trailing apply of the final
+// size. Meanwhile the pane clips/pads the stale-size grid.
+const resizeQuiet = 100 * time.Millisecond
+
 // Resize propagates a pane size change to the PTY (SIGWINCH for the child)
-// and the emulator. Same-size calls are no-ops.
+// and the emulator, debounced per resizeQuiet. Same-size calls are no-ops.
 func (s *Session) Resize(w, h int) {
 	if w < 2 || h < 2 || s.closed.Load() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if w == s.w && h == s.h {
+	if s.resizePending {
+		s.pendW, s.pendH = w, h // fold into the armed trailing apply
+		s.mu.Unlock()
 		return
 	}
+	if w == s.w && h == s.h {
+		s.mu.Unlock()
+		return
+	}
+	if time.Since(s.lastResize) >= resizeQuiet {
+		s.applyResizeLocked(w, h)
+		s.mu.Unlock()
+		return
+	}
+	s.pendW, s.pendH = w, h
+	s.resizePending = true
+	s.mu.Unlock()
+	time.AfterFunc(resizeQuiet, s.flushResize)
+}
+
+// applyResizeLocked performs the actual PTY + emulator resize; s.mu held.
+func (s *Session) applyResizeLocked(w, h int) {
 	s.w, s.h = w, h
+	s.lastResize = time.Now()
 	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	s.em.Resize(w, h)
 	s.version.Add(1)
+}
+
+// flushResize applies the last size a debounced burst settled on.
+func (s *Session) flushResize() {
+	if s.closed.Load() {
+		return
+	}
+	s.mu.Lock()
+	s.resizePending = false
+	changed := s.pendW != s.w || s.pendH != s.h
+	if changed {
+		s.applyResizeLocked(s.pendW, s.pendH)
+	}
+	s.mu.Unlock()
+	if changed {
+		s.notify() // repaint at the settled size
+	}
 }
 
 // SendKey encodes one key press for the child, honouring the emulator's

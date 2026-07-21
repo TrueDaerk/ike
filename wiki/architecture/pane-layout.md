@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -57,7 +57,12 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   renders and a release is a plain click that only focuses.
 - **Motion** during a resize calls `Divider.ResizeTo`, which updates the owning
   split's ratio, **clamped** so neither child drops below a minimum cell size — a
-  pane can never be dragged to zero.
+  pane can never be dragged to zero. Motion events are folded by the input
+  coalescer (#602) — only the latest position per adaptive flush applies, so a
+  drag costs at most one relayout per rendered frame — and terminal panes
+  debounce the expensive PTY/emulator resize (leading + trailing, #804; see
+  `/architecture/terminal.md`), so a divider drag over a terminal no longer
+  triggers a SIGWINCH redraw storm in the child per step.
 - **Release** during a move resolves the drop target and `DropZone`
   (left/right/top/bottom of the target pane), then `layout.Move` re-parents the
   dragged leaf — swapping order or re-orienting the split. v1 only relocates the
