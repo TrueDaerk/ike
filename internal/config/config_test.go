@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -108,6 +109,37 @@ func TestListReplaceNotAppend(t *testing.T) {
 	}
 	if e := c.Project.History[0]; e.Name != "c" || e.LastOpened != "2026-06-19T10:00:00Z" {
 		t.Errorf("entry fields should decode, got %+v", e)
+	}
+}
+
+// TestUnknownKeyProducesDiagnostic (0380, #793): a key no schema field
+// absorbs is ignored with a warning diagnostic, never silently inert.
+func TestUnknownKeyProducesDiagnostic(t *testing.T) {
+	proj := writeProject(t, "[editor]\ntab_wdth = 8\n[nosuchsection]\nfoo = 1\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+
+	if c.Editor.TabWidth == 8 {
+		t.Fatal("the typoed key must not land anywhere")
+	}
+	found := map[string]bool{}
+	for _, d := range diags {
+		found[d.Field] = strings.Contains(d.Message, "unknown setting")
+	}
+	if !found["editor.tab_wdth"] || !found["nosuchsection.foo"] {
+		t.Fatalf("unknown keys must warn, diags = %+v", diags)
+	}
+}
+
+// TestKnownSlotKeysProduceNoUnknownDiagnostic guards the Undecoded scan
+// against false positives on slot maps and list tables.
+func TestKnownSlotKeysProduceNoUnknownDiagnostic(t *testing.T) {
+	proj := writeProject(t,
+		"[explorer.colors]\ngo = \"cyan\"\n[keymap.bindings]\n\"ctrl+q\" = \"editor.save\"\n[[tools.custom]]\nname = \"htop\"\ncommand = \"htop\"\n")
+	_, diags := Load(Options{ProjectRoot: proj})
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unknown setting") {
+			t.Fatalf("slot keys must not warn as unknown: %+v", d)
+		}
 	}
 }
 

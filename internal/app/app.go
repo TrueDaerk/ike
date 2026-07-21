@@ -93,6 +93,11 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// cfgDiagSeen dedupes config-diagnostic notifications (#793): each
+	// distinct message toasts once per session, so a settings write that
+	// reloads an unchanged-but-warned config does not re-toast. Lazily
+	// initialized, shared by reference across value copies.
+	cfgDiagSeen map[string]bool
 	// toolRecent maps a tool name to the pane its instance was last opened
 	// or focused in (#835), so the plain tool.<name> toggle targets the most
 	// recent instance when multiple = true allows several. Session-local;
@@ -447,9 +452,34 @@ func (d *dragState) engaged() bool {
 // the global plugin registry. It loads the merged configuration (defaults < user
 // < project) from the working directory and backs the host with it.
 func New() Model {
-	cfg, _ := config.Load(config.Discover("."))
+	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
-	return NewWith(registry.Global(), host.FromConfig(cfg))
+	m := NewWith(registry.Global(), host.FromConfig(cfg))
+	m.notifyConfigDiags(diags)
+	return m
+}
+
+// notifyConfigDiags surfaces config-load diagnostics as warning notifications
+// (0380, #793): a broken settings file or an unknown key must be visible, not
+// silently skipped. Each distinct message toasts once per session.
+func (m *Model) notifyConfigDiags(diags []config.Diagnostic) {
+	if len(diags) == 0 {
+		return
+	}
+	if m.cfgDiagSeen == nil {
+		m.cfgDiagSeen = map[string]bool{}
+	}
+	for _, d := range diags {
+		text := "config: " + d.Field + ": " + d.Message
+		if d.Source != "" {
+			text = "config: " + d.Source + " " + d.Field + ": " + d.Message
+		}
+		if m.cfgDiagSeen[text] {
+			continue
+		}
+		m.cfgDiagSeen[text] = true
+		m.host.Notify(host.Warn, text)
+	}
 }
 
 // NewWith returns a root model backed by an explicit registry and config. It
@@ -2883,8 +2913,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case config.ConfigReloadedMsg:
 		// Live re-theme (Roadmap 0110): publish the fresh config and re-resolve
-		// the palette so a [theme].name change lands without a restart.
+		// the palette so a [theme].name change lands without a restart. Load
+		// diagnostics — parse errors, unknown keys, clamp warnings — surface
+		// as notifications, deduped per session (#793).
 		m.reloadConfig(msg.Config)
+		m.notifyConfigDiags(msg.Diags)
 		return m, nil
 
 	case palette.RunCommandMsg:

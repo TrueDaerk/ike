@@ -2,6 +2,13 @@
 
 ## 2026-07-21
 
+- Project settings loader hardening (0380, #793): unknown settings keys now
+  warn per key instead of being silently ignored, and config-load
+  diagnostics (parse errors, unknown keys, clamp warnings) surface as
+  session-deduped warning notifications at startup, on reload and on
+  project switch. The layered loader, Origin and project-scope write-back
+  already existed (`/architecture/config.md`).
+
 - Center merge on terminal/tool targets (#836): dropping tab-capable content
   (file tabs, terminal panes/tabs, tool panes) into a terminal or tool
   pane's interior converts it into a tab host — the running session becomes

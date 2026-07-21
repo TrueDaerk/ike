@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-12T23:45:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Configuration System
@@ -42,7 +42,17 @@ map is decoded onto the defaults-filled struct (`load.go`):
 `validate.go` enforces ranges and enums by **falling back to a default and
 emitting a non-fatal `Diagnostic`**. Bad config must never crash the IDE. Only a
 TOML *parse* error hard-fails a single file — its layer is dropped and the lower
-layers still apply, reported as a file-sourced diagnostic. Clamped today:
+layers still apply, reported as a file-sourced diagnostic. **Unknown keys**
+(no schema field or slot map absorbs them) are ignored with a per-key
+diagnostic (0380, #793), so a typo is visible instead of silently inert —
+`decodeOnto` reports the TOML metadata's undecoded keys.
+
+Diagnostics are **surfaced as warning notifications** by the root model
+(#793): at startup, on every `ConfigReloadedMsg` (settings-UI writes, manual
+reloads) and on a project switch applying the incoming project's layer — each
+distinct message toasts once per session (`notifyConfigDiags`).
+
+Clamped today:
 `editor.tab_width >= 1`, `editor.scroll_off >= 0`,
 `editor.sticky_scroll_depth >= 1`, `explorer.tree_indent >= 0`,
 `project.max_history >= 0`, `backup.debounce_ms >= 100`,
@@ -115,6 +125,11 @@ control writes through:
   explicit scope.
 - **Reset to default** = `RemoveKey`: the value falls back through
   defaults < user < project; emptied sections are pruned.
+- **Per-key origin:** `Origin(opts, key)` reports which layer supplies a
+  key's effective value (`project` / `user` / `default`), mirroring Load's
+  precedence — the settings UI renders it as the `@layer` suffix and colors
+  overridden values (0380, #793). `.ike/settings.toml` is committable, so a
+  team shares project conventions via the repo.
 - `WriteAndReload` / `RemoveAndReload` (watch.go) chain the write with the
   normal `Load` pipeline and deliver `ConfigReloadedMsg` — a UI change applies
   through exactly the flow a manual file edit takes; write failures surface as
