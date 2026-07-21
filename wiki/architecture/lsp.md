@@ -158,6 +158,14 @@ with a `CompletionResolveMsg`. The resolved documentation renders dimmed under
 the popup's hint row; resolve-delivered additional edits merge into the accept
 path like inline ones.
 
+**Incomplete lists (#849).** A reply flagged `isIncomplete` is a partial view:
+identifier runes typed while the popup shows re-emit the completion trigger
+instead of only narrowing the client-side filter, and the bridge **debounces
+identifier-rune requests** (80ms, re-armed per keystroke) so a typing burst
+reaches the server once, at the resting position. Complete replies keep the
+filter-only behavior; server trigger characters and manual ctrl+space stay
+immediate.
+
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,

@@ -36,6 +36,9 @@ type completionState struct {
 	// resolved caches completionItem/resolve results by item ID (#847): lazy
 	// documentation for the doc rows and late additionalTextEdits for accept.
 	resolved map[int]resolvedCompletion
+	// incomplete marks a partial server reply (#849): typing re-queries the
+	// server instead of only narrowing the client-side filter.
+	incomplete bool
 }
 
 // resolvedCompletion is one cached completionItem/resolve result (#847).
@@ -233,7 +236,7 @@ func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return completionSortKey(items[i]) < completionSortKey(items[j])
 	})
-	m.comp = &completionState{items: items, anchor: anchor, resolved: map[int]resolvedCompletion{}}
+	m.comp = &completionState{items: items, anchor: anchor, resolved: map[int]resolvedCompletion{}, incomplete: msg.IsIncomplete}
 	if m.filteredCompletion() == nil {
 		m.comp = nil
 		return

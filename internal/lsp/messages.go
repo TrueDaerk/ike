@@ -57,6 +57,9 @@ type CompletionMsg struct {
 	Line  int
 	Col   int
 	Items []CompletionItem
+	// IsIncomplete marks a partial reply (#849): the editor re-queries on
+	// further typing instead of narrowing the stale list client-side.
+	IsIncomplete bool
 }
 
 // CompletionItem is the editor-facing completion entry. SortText and

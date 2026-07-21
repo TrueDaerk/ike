@@ -74,13 +74,16 @@ func (c *Client) DidClose(p protocol.DidCloseTextDocumentParams) error {
 // --- requests (await a result) ---
 
 // Completion requests completion items; it normalises the `CompletionList | []`
-// result shape into a slice.
-func (c *Client) Completion(ctx context.Context, p protocol.CompletionParams) ([]protocol.CompletionItem, error) {
+// result shape into a slice. incomplete mirrors the list's isIncomplete flag
+// (#849): the reply is a partial view and further typing must re-query rather
+// than filter it client-side.
+func (c *Client) Completion(ctx context.Context, p protocol.CompletionParams) (items []protocol.CompletionItem, incomplete bool, err error) {
 	raw, err := c.conn.Call(ctx, "textDocument/completion", p)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return decodeCompletion(raw), nil
+	items, incomplete = decodeCompletion(raw)
+	return items, incomplete, nil
 }
 
 // Resolve requests completionItem/resolve for one item (#847): servers ship
@@ -419,20 +422,21 @@ func decodeTextEdits(raw json.RawMessage) []protocol.TextEdit {
 	return edits
 }
 
-// decodeCompletion accepts either a CompletionList or a bare item array.
-func decodeCompletion(raw json.RawMessage) []protocol.CompletionItem {
+// decodeCompletion accepts either a CompletionList (carrying isIncomplete,
+// #849) or a bare item array (always complete).
+func decodeCompletion(raw json.RawMessage) ([]protocol.CompletionItem, bool) {
 	if len(raw) == 0 || string(raw) == "null" {
-		return nil
+		return nil, false
 	}
 	var list protocol.CompletionList
 	if err := json.Unmarshal(raw, &list); err == nil && list.Items != nil {
-		return list.Items
+		return list.Items, list.IsIncomplete
 	}
 	var items []protocol.CompletionItem
 	if err := json.Unmarshal(raw, &items); err == nil {
-		return items
+		return items, false
 	}
-	return nil
+	return nil, false
 }
 
 // decodeLocations accepts a single Location, an array of Locations, or an array

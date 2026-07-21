@@ -70,6 +70,9 @@ type bridge struct {
 	compResolved map[int]bool
 	resolveID    int
 	resolveTimer *time.Timer
+	// compTimer debounces identifier-rune completion requests (#849) so a
+	// typing burst reaches the server once, at the resting position.
+	compTimer *time.Timer
 	// pendingChange/changeTimer coalesce didChange per path (#595): each edit
 	// stores its latest event and (re)arms a short debounce; the flush runs the
 	// O(document) diff + notification off the Update goroutine (on the timer
@@ -173,7 +176,21 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		if b.shouldComplete(ev) {
-			b.requestCompletion(ev.Path, ev.Line, ev.Col)
+			// Identifier-rune auto-triggers debounce (#849): a typing burst —
+			// notably the re-queries an isIncomplete reply forces — collapses
+			// to one request at the resting position. Server trigger
+			// characters and manual requests stay immediate.
+			if b.identAutoTrigger(ev) {
+				b.mu.Lock()
+				if b.compTimer != nil {
+					b.compTimer.Stop()
+				}
+				path, line, col := ev.Path, ev.Line, ev.Col
+				b.compTimer = time.AfterFunc(80*time.Millisecond, func() { b.requestCompletion(path, line, col) })
+				b.mu.Unlock()
+			} else {
+				b.requestCompletion(ev.Path, ev.Line, ev.Col)
+			}
 		}
 	case host.EditorCompletionSelect:
 		b.scheduleResolve(ev.Path, ev.CompletionID)
@@ -879,6 +896,24 @@ func (b *bridge) shouldComplete(ev host.EditorEvent) bool {
 	return completionWarranted(ev.Char, mgr.CompletionTriggers(ev.Path), b.completionAutoEnabled())
 }
 
+// identAutoTrigger reports whether ev is an identifier-rune auto-trigger —
+// the debounced kind (#849) — as opposed to a manual request (empty Char) or
+// a server trigger character, which fire immediately.
+func (b *bridge) identAutoTrigger(ev host.EditorEvent) bool {
+	if ev.Char == "" {
+		return false
+	}
+	mgr := b.manager()
+	if mgr == nil {
+		return false
+	}
+	triggers := mgr.CompletionTriggers(ev.Path)
+	if len(triggers) == 0 {
+		triggers = []string{"."}
+	}
+	return !isTriggerChar(ev.Char, triggers)
+}
+
 // completionWarranted is the trigger decision for a typed character: a server
 // trigger character (defaulting to "." while none are known) always fires; an
 // identifier-starting rune fires when the as-you-type popup is enabled.
@@ -1188,7 +1223,7 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 	}
 	h := b.h
 	go func() {
-		items, err := mgr.Completion(context.Background(), path, buffer.Position{Line: line, Col: col})
+		items, incomplete, err := mgr.Completion(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if err != nil || len(items) == 0 {
 			return
 		}
@@ -1198,7 +1233,7 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 		b.compItems, b.compPath = items, path
 		b.compResolved = map[int]bool{}
 		b.mu.Unlock()
-		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: mgr.ConvertCompletionItems(path, items)})
+		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: mgr.ConvertCompletionItems(path, items), IsIncomplete: incomplete})
 	}()
 }
 

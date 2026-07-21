@@ -166,6 +166,12 @@ func (m *Model) maybeAutoComplete(text string) {
 		return // paste or multi-rune input never auto-triggers
 	}
 	if m.CompletionOpen() && isIdentRune(r[0]) {
+		// An incomplete reply (#849) is a partial view: further typing must
+		// re-query the server, not narrow the stale list — the bridge
+		// debounces the burst.
+		if m.comp != nil && m.comp.incomplete {
+			m.emitChar(EventCompletionTrigger, text)
+		}
 		return
 	}
 	m.emitChar(EventCompletionTrigger, text)
