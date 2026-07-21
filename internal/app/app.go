@@ -27,6 +27,7 @@ import (
 	"ike/internal/clipboard"
 	"ike/internal/commitui"
 	"ike/internal/complete"
+	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
 	"ike/internal/debug"
@@ -517,9 +518,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	root, _ := os.Getwd()
 	// The local completion engine (#851) listens to editor events next to the
 	// LSP bridge; registration by name keeps a project switch idempotent. The
-	// word index (#852) starts its one-shot project scan in the background.
+	// word (#852) and symbol (#853) indexes start their one-shot project
+	// scans in the background.
 	engine := complete.NewEngine(h.Send)
 	engine.Register(words.New(root))
+	engine.Register(symbols.New(root))
 	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {
@@ -3243,6 +3246,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// event also invalidates the git status snapshot (Roadmap 0320); the
 		// debounce collapses bursts into one refresh.
 		vcsCmd := m.scheduleVCSRefresh()
+		// On-disk changes refresh the symbol completion index (#853); repo
+		// metadata and settings files are not index material.
+		if m.completeEngine != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged {
+			m.completeEngine.NotifyFileChanged(msg.Path)
+		}
 		if msg.Kind == watch.ConfigChanged {
 			// The project settings file changed externally (0380, #795):
 			// re-run the reload pipeline — theme, keymap, editor behavior
