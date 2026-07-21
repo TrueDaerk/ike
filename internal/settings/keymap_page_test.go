@@ -12,11 +12,22 @@ import (
 	"ike/internal/keymap"
 )
 
+
+// unbind drives "u" through the confirmation sub-panel (#891).
+func unbind(t *testing.T, k *KeymapPage) tea.Cmd {
+	t.Helper()
+	if cmd := k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}); cmd != nil {
+		return cmd
+	}
+	return confirmVia(t, k.host.(*stubHost))
+}
+
 func keymapPage(t *testing.T) (*KeymapPage, config.Options) {
 	t.Helper()
 	restoreConfig(t)
 	opts := testOpts(t)
 	k := NewKeymapPage(opts, func(string) bool { return true }, nil)
+	k.SetSubPanelHost(&stubHost{})
 	return k, opts
 }
 
@@ -112,7 +123,7 @@ func TestCaptureConflictNeedsConfirmation(t *testing.T) {
 func TestUnbindAndResetRoundTrip(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
-	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	apply(t, unbind(t, k))
 	if _, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Global); ok {
 		t.Fatal("unbind must drop the chord")
 	}
@@ -141,7 +152,7 @@ func selectUnbound(t *testing.T, k *KeymapPage, command string) keymapRow {
 func TestUnboundCommandStaysListedAndRebinds(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
-	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	apply(t, unbind(t, k))
 	// The command must remain reachable as an unbound row (#736).
 	row := selectUnbound(t, k, "editor.write")
 	if row.Chord.String() != "ctrl+s" {
@@ -170,7 +181,7 @@ func TestUnboundCommandStaysListedAndRebinds(t *testing.T) {
 func TestUnboundCommandResetRestoresDefault(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
-	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	apply(t, unbind(t, k))
 	selectUnbound(t, k, "editor.write")
 	// "r" on the unbound row removes the ""-override; the default falls back.
 	apply(t, k.Update(tea.KeyPressMsg{Text: "r", Code: 'r'}))
@@ -188,7 +199,7 @@ func TestUnboundCommandResetRestoresDefault(t *testing.T) {
 func TestUnbindOnUnboundRowIsNoop(t *testing.T) {
 	k, _ := keymapPage(t)
 	selectChord(t, k, "ctrl+s")
-	apply(t, k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}))
+	apply(t, unbind(t, k))
 	selectUnbound(t, k, "editor.write")
 	if cmd := k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}); cmd != nil {
 		t.Fatal("unbind on an already-unbound row must be a no-op")
@@ -266,7 +277,7 @@ func TestKeymapActionsAfterFilter(t *testing.T) {
 	}
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	selectChord(t, k, "ctrl+s")
-	if cmd := k.Update(tea.KeyPressMsg{Text: "u", Code: 'u'}); cmd == nil {
+	if cmd := unbind(t, k); cmd == nil {
 		t.Fatal("u after leaving the filter input must unbind")
 	}
 }

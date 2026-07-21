@@ -106,8 +106,11 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			t.openForm(t.sel)
 		}
 	case "d":
-		if t.sel >= 0 && t.sel < len(t.entries()) {
-			return t.deleteEntry(t.sel)
+		if t.sel >= 0 && t.sel < len(t.entries()) && t.host != nil {
+			idx, name := t.sel, t.entries()[t.sel].Name
+			t.host.Push(newConfirm(t.host, "delete the tool "+name, "Delete", t.pal, func() tea.Cmd {
+				return t.deleteEntry(idx)
+			}))
 		}
 	case "s":
 		return t.openSuggestions()

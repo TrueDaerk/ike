@@ -2975,6 +2975,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
 		m.notifyConfigDiags(msg.Diags)
+		m.settings.NoteReloadDiags(msg.Diags) // inline in the panel too (#891)
 		m.palette.Refresh()
 		return m, nil
 

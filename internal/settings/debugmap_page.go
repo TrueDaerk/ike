@@ -28,6 +28,7 @@ type DebugMapPage struct {
 	sel  int
 	off  int // list scroll offset
 	note string
+	host SubPanelHost
 
 	// The add/edit form: editIdx is the entry being edited (-1 for a new
 	// one); field is the focused input, form the field values.
@@ -39,6 +40,9 @@ type DebugMapPage struct {
 
 	listH int // list-window height of the last render (mouse hit-testing)
 }
+
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (t *DebugMapPage) SetSubPanelHost(h SubPanelHost) { t.host = h }
 
 // NewDebugMapPage builds the mappings editor writing
 // [[debug.php.path_mappings]] through opts.
@@ -83,8 +87,12 @@ func (t *DebugMapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			t.openForm(t.sel)
 		}
 	case "d":
-		if t.sel >= 0 && t.sel < len(t.entries()) {
-			return t.deleteEntry(t.sel)
+		if t.sel >= 0 && t.sel < len(t.entries()) && t.host != nil {
+			idx := t.sel
+			e := t.entries()[idx]
+			t.host.Push(newConfirm(t.host, "delete the mapping "+e.Server+" → "+e.Local, "Delete", t.pal, func() tea.Cmd {
+				return t.deleteEntry(idx)
+			}))
 		}
 	}
 	return nil

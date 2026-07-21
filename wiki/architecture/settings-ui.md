@@ -337,3 +337,13 @@ The panel **remembers its page**: reopening lands where you left, and the
 choice persists per project in `.ike/settings-last.json`
 (IKE_CONFIG_DIR-redirectable). The title row reads `SETTINGS › <Page>`, and
 overflowing rail/form windows show `▲ more` / `▼ more` scroll indicators.
+
+## Feedback & safety (0420, #891)
+
+Destructive actions confirm in a small sub-panel (`confirmPanel`: enter/y
+confirm, esc/n cancel) — Tools delete, PHP-mapping delete, Marketplace
+remove, Keymap unbind. Successful schema writes flash `✓ saved to
+user/project` in the detail footer; config write/reload diagnostics surface
+**inline** there too (error-styled, until the next action), not only as
+toasts. Open enum pickers **follow the highlighted option** — a long theme
+list can no longer move the highlight below the fold.

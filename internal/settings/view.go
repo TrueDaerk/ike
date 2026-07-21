@@ -299,8 +299,13 @@ func (m *Model) renderForm(w, h int) string {
 		}
 		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
 		if i == m.sel {
+			pickerStart := len(lines)
 			if m.picking {
 				lines = append(lines, m.renderPicker(r.entry, clip)...)
+				// The follow target is the highlighted option, not the whole
+				// expansion (#891) — a long theme list must never move the
+				// highlight below the fold.
+				selStart = pickerStart + m.pickIdx
 			}
 			if m.editing && r.entry.Type == Path {
 				sug := lipgloss.NewStyle().Foreground(pal.Secondary)
@@ -361,8 +366,11 @@ func (m *Model) renderDetail(w int) []string {
 		if m.invalid != "" {
 			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.invalid))
 		}
+		if m.writeErr != "" {
+			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.writeErr))
+		}
 		if m.notice != "" {
-			out = append(out, lipgloss.NewStyle().Foreground(pal.Info).Render(" ℹ "+m.notice))
+			out = append(out, lipgloss.NewStyle().Foreground(pal.Info).Render(" "+m.notice))
 		}
 		text := r.entry.Description + "  (" + r.entry.Key + ")"
 		for _, line := range strings.Split(ansi.Wordwrap(text, w-1, ""), "\n") {

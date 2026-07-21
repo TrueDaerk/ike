@@ -60,6 +60,7 @@ type MarketplacePage struct {
 	installed map[string]market.Installed
 
 	sel      int
+	host     SubPanelHost
 	off      int // list scroll offset (#885)
 	listH    int // list-window height of the last render (mouse hit-testing)
 	expanded map[string]bool
@@ -82,6 +83,9 @@ func NewMarketplacePage(engine MarketEngine, fetch MarketFetcher) *MarketplacePa
 
 // SetPalette implements PageModel.
 func (p *MarketplacePage) SetPalette(pal *theme.Palette) { p.pal = pal }
+
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (p *MarketplacePage) SetSubPanelHost(h SubPanelHost) { p.host = h }
 
 // Capturing implements PageModel: plain navigation only.
 func (p *MarketplacePage) Capturing() bool { return false }
@@ -227,10 +231,13 @@ func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	case "x":
-		if _, ok := p.installed[row.Name]; hasRow && ok && !p.busy[row.Name] {
-			return p.run(row.Name, "remove", func(context.Context) error {
-				return p.engine.Remove(row.Name)
-			})
+		if _, ok := p.installed[row.Name]; hasRow && ok && !p.busy[row.Name] && p.host != nil {
+			name := row.Name
+			p.host.Push(newConfirm(p.host, "remove the plugin "+name, "Remove", p.pal, func() tea.Cmd {
+				return p.run(name, "remove", func(context.Context) error {
+					return p.engine.Remove(name)
+				})
+			}))
 		}
 	case "g":
 		// Refresh ("r" means reset everywhere, #887).

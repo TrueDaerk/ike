@@ -18,7 +18,9 @@ func debugMapPage(t *testing.T) (*DebugMapPage, config.Options) {
 		UserPath:    filepath.Join(t.TempDir(), "settings.toml"),
 		ProjectRoot: t.TempDir(),
 	}
-	return NewDebugMapPage(opts), opts
+	p := NewDebugMapPage(opts)
+	p.SetSubPanelHost(&stubHost{})
+	return p, opts
 }
 
 func typeMap(p *DebugMapPage, s string) {
@@ -67,7 +69,8 @@ func TestDebugMapPageAddEditDelete(t *testing.T) {
 	}
 
 	// Delete empties the list.
-	apply(t, p.Update(key("d")))
+	p.Update(key("d"))
+	apply(t, confirmVia(t, p.host.(*stubHost)))
 	if got := config.Get().Debug.PHP.PathMappings; len(got) != 0 {
 		t.Fatalf("mappings after delete = %+v", got)
 	}
