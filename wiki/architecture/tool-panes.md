@@ -74,7 +74,24 @@ palette-reachable.
 
 Invoking mirrors `terminal.toggle`: no pane → spawn split below the active
 editor (or right, per `placement`); pane exists unfocused → focus it
-(remembering where focus was); focused → return focus. One instance per tool.
+(remembering where focus was); focused → return focus.
+
+### Instances (#835)
+
+One instance per tool by default — the toggle finds the tool wherever it
+lives, dedicated pane **or** editor-hosted terminal tab (a tool moved into a
+tab list via the #708 center drop; focusing a tab-hosted tool activates its
+tab), so `tool.<name>` never spawns a duplicate.
+
+`multiple = true` on the entry opts the tool into concurrent instances (e.g.
+several embedded `claude` sessions): a second command
+**`tool.<slug>.new`** ("Tool: NAME (New Instance)") spawns another pane,
+while the plain command keeps its toggle semantics targeting the **most
+recently opened/focused instance** (session-local recency). `New` on a
+single-instance tool degrades to the plain toggle. Layout persistence
+saves each instance as its own `{kind: "tool"}` slot; restore restarts one
+process per slot. The `multiple` field is editable in the Settings → Tools
+form (validated `true`/`false`, listed with a `· multi` marker).
 
 ## Pane behavior
 

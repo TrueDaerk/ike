@@ -93,6 +93,11 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// toolRecent maps a tool name to the pane its instance was last opened
+	// or focused in (#835), so the plain tool.<name> toggle targets the most
+	// recent instance when multiple = true allows several. Session-local;
+	// lazily initialized, shared by reference across value copies.
+	toolRecent map[string]string
 	// bpts is the per-project breakpoint store (0350, #577): loaded at start,
 	// rendered by editors through an injected source, persisted on toggle and
 	// on file save.
@@ -2633,8 +2638,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ToolOpenMsg:
 		// tool.<name> (#741): open the configured TUI tool pane, focus it
-		// when it exists, return focus when it is already focused.
-		m.openTool(msg.Name)
+		// when it exists, return focus when it is already focused. New
+		// (tool.<name>.new, #835) spawns another instance for multiple-
+		// enabled tools.
+		m.openTool(msg.Name, msg.New)
 		return m, nil
 
 	case ShowToolSetupMsg:

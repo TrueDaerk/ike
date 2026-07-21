@@ -21,10 +21,10 @@ import (
 // pipeline, so the tool.<name> palette commands re-shape live.
 
 // toolFieldCount is the number of form fields: name, command, args, cwd,
-// placement.
-const toolFieldCount = 5
+// placement, multiple (#835).
+const toolFieldCount = 6
 
-var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement"}
+var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple"}
 
 // ToolsPage implements PageModel.
 type ToolsPage struct {
@@ -178,7 +178,11 @@ func (t *ToolsPage) openForm(idx int) {
 	t.form = [toolFieldCount]string{}
 	if idx >= 0 {
 		e := t.entries()[idx]
-		t.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement}
+		multiple := ""
+		if e.Multiple {
+			multiple = "true"
+		}
+		t.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple}
 	}
 }
 
@@ -223,6 +227,11 @@ func (t *ToolsPage) validate(self int) string {
 	default:
 		return "placement must be bottom or right"
 	}
+	switch t.form[5] {
+	case "", "true", "false":
+	default:
+		return "multiple must be true or false"
+	}
 	for i, e := range t.entries() {
 		if i != self && e.Name == name {
 			return "a tool named " + name + " already exists"
@@ -244,6 +253,7 @@ func (t *ToolsPage) commitForm() tea.Cmd {
 		Args:      strings.Fields(t.form[2]),
 		Cwd:       strings.TrimSpace(t.form[3]),
 		Placement: t.form[4],
+		Multiple:  t.form[5] == "true",
 	}
 	entries := append([]config.ToolEntry(nil), t.entries()...)
 	if t.editIdx >= 0 && t.editIdx < len(entries) {
@@ -282,6 +292,9 @@ func (t *ToolsPage) writeEntries(entries []config.ToolEntry) tea.Cmd {
 		if e.Placement != "" {
 			m["placement"] = e.Placement
 		}
+		if e.Multiple {
+			m["multiple"] = true
+		}
 		raw[i] = m
 	}
 	return func() tea.Msg {
@@ -313,6 +326,9 @@ func (t *ToolsPage) View(w, h int) string {
 	var list []string
 	for i, e := range entries {
 		line := " " + pad(e.Name, 18) + pad(e.Command+argSuffix(e.Args), 34) + placementLabel(e.Placement)
+		if e.Multiple {
+			line += " · multi"
+		}
 		style := lipgloss.NewStyle()
 		if i == t.sel && !t.editing {
 			style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)

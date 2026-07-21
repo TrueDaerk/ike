@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Tool instances (#835): `multiple = true` on `[[tools.custom]]` allows
+  concurrent instances via a `tool.<slug>.new` command (plain command toggles
+  the most recent one); single-instance tools are now also found when hosted
+  as an editor tab, so the toggle never spawns a duplicate
+  (`/architecture/tool-panes.md`).
+
 - Recent Files focus placement (#819): the dialog's column focus now follows
   the best match — empty files list or a better/only project match focuses
   the Recent Projects column; files win ties; a manual `tab`/arrow/click

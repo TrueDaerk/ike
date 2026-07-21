@@ -107,6 +107,149 @@ func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
 	}
 }
 
+// TestToolCommandsMultipleAddsNewInstanceCommand (#835): a multiple = true
+// entry contributes a second tool.<slug>.new command.
+func TestToolCommandsMultipleAddsNewInstanceCommand(t *testing.T) {
+	withTools(t,
+		config.ToolEntry{Name: "claude", Command: "claude", Multiple: true},
+		config.ToolEntry{Name: "htop", Command: "htop"},
+	)
+	cmds := toolCommands()
+	if len(cmds) != 3 {
+		t.Fatalf("toolCommands = %d entries, want 3", len(cmds))
+	}
+	if cmds[1].ID != "tool.claude.new" || cmds[1].Title != "Tool: claude (New Instance)" {
+		t.Fatalf("new-instance command = %q / %q", cmds[1].ID, cmds[1].Title)
+	}
+	if cmds[2].ID != "tool.htop" {
+		t.Fatalf("single-instance tool must contribute only tool.htop, got %q", cmds[2].ID)
+	}
+}
+
+// countToolInstances counts live instances of a tool across dedicated panes
+// and editor-hosted tabs.
+func countToolInstances(m Model, name string) int {
+	return len(m.toolLocations(name))
+}
+
+// TestToolToggleFindsTabHostedTool (#835): a tool moved into an editor's tab
+// list (#708 center drop) is still found by the toggle — tool.<name> focuses
+// the hosting pane and activates the tab instead of spawning a second
+// instance.
+func TestToolToggleFindsTabHostedTool(t *testing.T) {
+	withTools(t, sleepTool("watcher"))
+	m := sized(t, 100, 40)
+	editorKey := m.activeEditorKey()
+
+	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	inst := m.toolPane("watcher")
+	if inst == nil {
+		t.Fatal("tool must open")
+	}
+	t.Cleanup(func() {
+		for _, loc := range m.toolLocations("watcher") {
+			p := m.activeWS().Panes.Get(loc.key)
+			if loc.tab < 0 {
+				p.Terminal().Close()
+			} else if tt := p.TabTerminal(loc.tab); tt != nil {
+				tt.Close()
+			}
+		}
+	})
+	// Move the tool pane into the editor's tab list (the #708 path).
+	m.adoptTerminalPane(inst.Key(), editorKey)
+	if m.toolPane("watcher") != nil {
+		t.Fatal("precondition: no dedicated tool pane left after the move")
+	}
+	ed := m.activeWS().Panes.Get(editorKey)
+	m.setFocus(pane.ExplorerKey)
+
+	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	if n := countToolInstances(m, "watcher"); n != 1 {
+		t.Fatalf("instances = %d, want 1 (toggle must find the tab-hosted tool)", n)
+	}
+	if m.activeWS().Panes.Focused() != editorKey {
+		t.Fatalf("toggle must focus the hosting editor pane, got %q", m.activeWS().Panes.Focused())
+	}
+	if tt := ed.TabTerminal(ed.ActiveTab()); tt == nil || tt.Tool() != "watcher" {
+		t.Fatal("toggle must activate the tool's tab")
+	}
+
+	// Focused on the tool tab: re-invoking returns focus.
+	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
+	m = out.(Model)
+	if m.activeWS().Panes.Focused() == editorKey {
+		t.Fatal("second invoke on the focused tool tab must return focus")
+	}
+}
+
+// TestToolMultipleInstances (#835): with multiple = true, ToolOpenMsg{New:
+// true} spawns additional instances; the plain command toggles the most
+// recent one. Without multiple, New is ignored.
+func TestToolMultipleInstances(t *testing.T) {
+	entry := sleepTool("claude")
+	entry.Multiple = true
+	withTools(t, entry)
+	m := sized(t, 100, 40)
+
+	out, _ := m.Update(ToolOpenMsg{Name: "claude"})
+	m = out.(Model)
+	out, _ = m.Update(ToolOpenMsg{Name: "claude", New: true})
+	m = out.(Model)
+	t.Cleanup(func() {
+		for _, loc := range m.toolLocations("claude") {
+			m.activeWS().Panes.Get(loc.key).Terminal().Close()
+		}
+	})
+	if n := countToolInstances(m, "claude"); n != 2 {
+		t.Fatalf("instances = %d, want 2 after tool.claude.new", n)
+	}
+	second := m.activeWS().Panes.Focused()
+
+	// Plain command while the newest instance is focused: return focus.
+	out, _ = m.Update(ToolOpenMsg{Name: "claude"})
+	m = out.(Model)
+	if m.activeWS().Panes.Focused() == second {
+		t.Fatal("plain command on the focused instance must return focus")
+	}
+	// Plain command from elsewhere: focus the most recent instance again —
+	// and never a third spawn.
+	out, _ = m.Update(ToolOpenMsg{Name: "claude"})
+	m = out.(Model)
+	if m.activeWS().Panes.Focused() != second {
+		t.Fatalf("plain command must focus the most recent instance %q, got %q", second, m.activeWS().Panes.Focused())
+	}
+	if n := countToolInstances(m, "claude"); n != 2 {
+		t.Fatalf("instances = %d, want 2 (toggle, not respawn)", n)
+	}
+}
+
+// TestToolNewIgnoredWithoutMultiple (#835): New on a single-instance tool
+// falls back to the toggle — no second spawn.
+func TestToolNewIgnoredWithoutMultiple(t *testing.T) {
+	withTools(t, sleepTool("htop"))
+	m := sized(t, 100, 40)
+	out, _ := m.Update(ToolOpenMsg{Name: "htop"})
+	m = out.(Model)
+	inst := m.toolPane("htop")
+	if inst == nil {
+		t.Fatal("tool must open")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	m.setFocus(pane.ExplorerKey)
+
+	out, _ = m.Update(ToolOpenMsg{Name: "htop", New: true})
+	m = out.(Model)
+	if n := countToolInstances(m, "htop"); n != 1 {
+		t.Fatalf("instances = %d, want 1 (New must be ignored without multiple)", n)
+	}
+	if m.activeWS().Panes.Focused() != inst.Key() {
+		t.Fatal("ignored New must still toggle-focus the existing instance")
+	}
+}
+
 func TestToolPaneChromeIsNotATerminal(t *testing.T) {
 	withTools(t, sleepTool("statuswatch"))
 	m := sized(t, 100, 40)
