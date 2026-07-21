@@ -60,6 +60,16 @@ type bridge struct {
 	// move re-arms it, so only the last position of a motion burst reaches
 	// the server.
 	hlTimer *time.Timer
+	// compItems caches the raw items of the latest completion reply for
+	// compPath, so a selection can completionItem/resolve its item (#847);
+	// compResolved marks IDs already resolved (or in flight), resolveID the
+	// latest selection, and resolveTimer debounces the request so arrowing
+	// through the list only resolves where the selection rests.
+	compItems    []protocol.CompletionItem
+	compPath     string
+	compResolved map[int]bool
+	resolveID    int
+	resolveTimer *time.Timer
 	// pendingChange/changeTimer coalesce didChange per path (#595): each edit
 	// stores its latest event and (re)arms a short debounce; the flush runs the
 	// O(document) diff + notification off the Update goroutine (on the timer
@@ -165,6 +175,8 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		if b.shouldComplete(ev) {
 			b.requestCompletion(ev.Path, ev.Line, ev.Col)
 		}
+	case host.EditorCompletionSelect:
+		b.scheduleResolve(ev.Path, ev.CompletionID)
 	}
 }
 
@@ -1180,8 +1192,58 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 		if err != nil || len(items) == 0 {
 			return
 		}
+		// Cache the raw reply for lazy completionItem/resolve (#847); the
+		// editor items' IDs index into it.
+		b.mu.Lock()
+		b.compItems, b.compPath = items, path
+		b.compResolved = map[int]bool{}
+		b.mu.Unlock()
 		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: mgr.ConvertCompletionItems(path, items)})
 	}()
+}
+
+// scheduleResolve debounces a completionItem/resolve for the selected item
+// (#847): arrowing through the popup re-arms the timer, so only the item the
+// selection rests on is resolved. Runs on the Update goroutine — must not block.
+func (b *bridge) scheduleResolve(path string, id int) {
+	if b.manager() == nil || b.h == nil {
+		return
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.compPath != path || id < 0 || id >= len(b.compItems) || b.compResolved[id] {
+		return
+	}
+	b.resolveID = id
+	if b.resolveTimer != nil {
+		b.resolveTimer.Stop()
+	}
+	b.resolveTimer = time.AfterFunc(120*time.Millisecond, func() { b.fireResolve(path) })
+}
+
+// fireResolve runs the debounced resolve on the timer goroutine and sends the
+// result as a CompletionResolveMsg. A reply for a superseded completion list
+// (path changed, new request cached) is dropped by the ID/path guard.
+func (b *bridge) fireResolve(path string) {
+	b.mu.Lock()
+	id := b.resolveID
+	mgr, h := b.mgr, b.h
+	if mgr == nil || h == nil || b.compPath != path || id < 0 || id >= len(b.compItems) || b.compResolved[id] {
+		b.mu.Unlock()
+		return
+	}
+	item := b.compItems[id]
+	b.compResolved[id] = true
+	b.mu.Unlock()
+	resolved, ok, err := mgr.ResolveCompletion(context.Background(), path, item)
+	if !ok || err != nil {
+		return
+	}
+	conv := mgr.ConvertCompletionItems(path, []protocol.CompletionItem{resolved})
+	if len(conv) == 0 {
+		return
+	}
+	h.Send(ilsp.CompletionResolveMsg{Path: path, ID: id, Doc: conv[0].Doc, AdditionalEdits: conv[0].AdditionalEdits})
 }
 
 // --- manager callbacks ---

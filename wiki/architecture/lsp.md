@@ -148,6 +148,16 @@ the manager converts them to editor coordinates against the synced document
 edits above them. Fragment-routed completions (0300) drop additional edits —
 they would target the virtual document.
 
+**Lazy resolve (#847).** Servers with `resolveProvider` ship lean completion
+lists; documentation and late `additionalTextEdits` arrive per item via
+`completionItem/resolve`. The editor emits a completion-select event whenever
+the popup's selection rests on a doc-less item (carrying the item's reply
+index, `CompletionID`); the bridge caches the raw reply, debounces 120ms so
+arrowing through the list resolves only where the selection rests, and answers
+with a `CompletionResolveMsg`. The resolved documentation renders dimmed under
+the popup's hint row; resolve-delivered additional edits merge into the accept
+path like inline ones.
+
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,

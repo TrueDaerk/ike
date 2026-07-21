@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Lazy completion resolve (0410, #847): selection-driven, debounced
+  `completionItem/resolve` fills in documentation (rendered under the popup)
+  and late auto-import edits (`/architecture/lsp.md`).
+
 - Completion auto-import (0410, #848): `additionalTextEdits` on accepted
   items apply in editor coordinates alongside the main insert, one undo step
   (`/architecture/lsp.md`).

@@ -33,6 +33,15 @@ type completionState struct {
 	items  []ilsp.CompletionItem
 	sel    int
 	anchor buffer.Position
+	// resolved caches completionItem/resolve results by item ID (#847): lazy
+	// documentation for the doc rows and late additionalTextEdits for accept.
+	resolved map[int]resolvedCompletion
+}
+
+// resolvedCompletion is one cached completionItem/resolve result (#847).
+type resolvedCompletion struct {
+	doc   string
+	edits []ilsp.FormatEdit
 }
 
 // hoverState is the live hover popup content (already parsed to display rows).
@@ -224,10 +233,43 @@ func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 	sort.SliceStable(items, func(i, j int) bool {
 		return completionSortKey(items[i]) < completionSortKey(items[j])
 	})
-	m.comp = &completionState{items: items, anchor: anchor}
+	m.comp = &completionState{items: items, anchor: anchor, resolved: map[int]resolvedCompletion{}}
 	if m.filteredCompletion() == nil {
 		m.comp = nil
+		return
 	}
+	m.requestCompletionResolve()
+}
+
+// requestCompletionResolve asks the bridge to resolve the selected item when
+// it still lacks documentation (#847).
+func (m *Model) requestCompletionResolve() {
+	items := m.filteredCompletion()
+	if m.comp == nil || len(items) == 0 {
+		return
+	}
+	sel := m.comp.sel
+	if sel >= len(items) {
+		sel = 0
+	}
+	it := items[sel]
+	if it.Doc != "" {
+		return
+	}
+	if _, ok := m.comp.resolved[it.ID]; ok {
+		return
+	}
+	m.emitCompletionSelect(it.ID)
+}
+
+// applyCompletionResolve caches a resolve reply for the open popup (#847); a
+// reply for a stale popup (different path handled by the caller, popup already
+// closed here) is dropped.
+func (m *Model) applyCompletionResolve(msg ilsp.CompletionResolveMsg) {
+	if m.comp == nil {
+		return
+	}
+	m.comp.resolved[msg.ID] = resolvedCompletion{doc: msg.Doc, edits: msg.AdditionalEdits}
 }
 
 // CompletionOpen reports whether the autocomplete popup is showing.
@@ -309,6 +351,7 @@ func (m *Model) completionMove(delta int) {
 		return
 	}
 	m.comp.sel = ((m.comp.sel+delta)%n + n) % n
+	m.requestCompletionResolve()
 }
 
 // completionAccept inserts the selected item, replacing the typed prefix, and
@@ -325,6 +368,11 @@ func (m *Model) completionAccept() {
 		m.comp.sel = 0
 	}
 	item := items[m.comp.sel]
+	// A resolve may have delivered late additionalTextEdits (#847) — merge
+	// them in unless the item already carried its own.
+	if r, ok := m.comp.resolved[item.ID]; ok && len(item.AdditionalEdits) == 0 {
+		item.AdditionalEdits = r.edits
+	}
 	m.comp = nil
 	insertText := item.InsertText
 	var stops []int
@@ -518,6 +566,15 @@ func (m Model) CompletionView() string {
 	// similar but is informational, so the actionable list says its keys.
 	hint := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Border)
 	rows = append(rows, hint.Width(width).Render(truncate(completionHint, width)))
+	// The selected item's documentation — inline or resolved (#847) — shows
+	// dimmed below the hint, capped at a few lines.
+	if doc := m.selectedCompletionDoc(items[sel]); doc != "" {
+		const maxDocRows = 4
+		docLines := completionDocLines(doc, maxDocRows)
+		for _, l := range docLines {
+			rows = append(rows, hint.Width(width).Render(truncate(l, width)))
+		}
+	}
 	// The same rounded frame as signature/hover (#316); the rows carry their
 	// own backgrounds, so the frame adds no padding.
 	return m.popupFrame().Render(lipgloss.JoinVertical(lipgloss.Left, rows...))
@@ -530,6 +587,44 @@ func (m Model) CompletionAnchor() (col, line int) {
 		return 0, 0
 	}
 	return m.comp.anchor.Col, m.comp.anchor.Line
+}
+
+// selectedCompletionDoc is the doc text for the selected item: its inline
+// documentation, else the cached resolve result (#847).
+func (m Model) selectedCompletionDoc(it ilsp.CompletionItem) string {
+	if it.Doc != "" {
+		return it.Doc
+	}
+	if r, ok := m.comp.resolved[it.ID]; ok {
+		return r.doc
+	}
+	return ""
+}
+
+// completionDocLines flattens doc markdown-ish text to at most max display
+// lines: fence markers drop, blank runs collapse, overflow gains an ellipsis.
+func completionDocLines(doc string, max int) []string {
+	var out []string
+	blank := true
+	for _, l := range strings.Split(doc, "\n") {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "```") {
+			continue
+		}
+		if t == "" {
+			if !blank {
+				blank = true
+			}
+			continue
+		}
+		blank = false
+		if len(out) == max {
+			out[max-1] = out[max-1] + " …"
+			return out
+		}
+		out = append(out, t)
+	}
+	return out
 }
 
 // completionLabel renders one item's display text (label + optional detail).

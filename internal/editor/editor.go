@@ -748,6 +748,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.openCompletion(msg)
 		}
 		return m, nil
+	case ilsp.CompletionResolveMsg:
+		if msg.Path == m.path {
+			m.applyCompletionResolve(msg)
+		}
+		return m, nil
 	case ilsp.HoverMsg:
 		if msg.Path == m.path && msg.Contents != "" {
 			m.hover = m.newHover(msg.Contents)

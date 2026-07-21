@@ -316,6 +316,61 @@ func TestCompletionAcceptAppliesAdditionalEdits(t *testing.T) {
 	}
 }
 
+// TestCompletionResolveFlow guards #847: opening the popup on a doc-less item
+// emits a completion-select event with the item's ID; the resolve reply's doc
+// renders under the popup and its late additionalTextEdits apply on accept.
+func TestCompletionResolveFlow(t *testing.T) {
+	m, _ := loaded(t, "package x\n\nab\n")
+	var selects []int
+	m.SetEmitter(EmitterFunc(func(e Event) {
+		if e.Kind == EventCompletionSelect {
+			selects = append(selects, e.CompletionID)
+		}
+	}))
+	m = insertModeAt(m, 2, 2)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 2, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "abc", InsertText: "abc", ID: 7},
+	}})
+	if len(selects) != 1 || selects[0] != 7 {
+		t.Fatalf("selects = %v, want [7] (resolve requested on open)", selects)
+	}
+	m, _ = m.Update(ilsp.CompletionResolveMsg{Path: m.path, ID: 7, Doc: "does the thing", AdditionalEdits: []ilsp.FormatEdit{
+		{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "import \"abc\"\n"},
+	}})
+	if v := m.CompletionView(); !strings.Contains(v, "does the thing") {
+		t.Fatalf("popup must render the resolved doc, got:\n%s", v)
+	}
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 1); got != "import \"abc\"" {
+		t.Fatalf("line 1 = %q, want the resolve-delivered import", got)
+	}
+	if got := line(m, 3); got != "abc" {
+		t.Fatalf("line 3 = %q, want abc (completed, shifted)", got)
+	}
+}
+
+// TestCompletionResolveNotRequestedWithInlineDoc guards #847: an item that
+// already ships documentation needs no resolve round-trip.
+func TestCompletionResolveNotRequestedWithInlineDoc(t *testing.T) {
+	m, _ := loaded(t, "ab\n")
+	var selects []int
+	m.SetEmitter(EmitterFunc(func(e Event) {
+		if e.Kind == EventCompletionSelect {
+			selects = append(selects, e.CompletionID)
+		}
+	}))
+	m = insertModeAt(m, 0, 2)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
+		{Label: "abc", InsertText: "abc", ID: 1, Doc: "inline docs"},
+	}})
+	if len(selects) != 0 {
+		t.Fatalf("selects = %v, want none (doc already present)", selects)
+	}
+	if v := m.CompletionView(); !strings.Contains(v, "inline docs") {
+		t.Fatalf("popup must render the inline doc, got:\n%s", v)
+	}
+}
+
 func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
 	m, _ := loaded(t, "xyz.__\n")
 	m = insertModeAt(m, 0, 6) // after "xyz.__", as a manual trigger would anchor
