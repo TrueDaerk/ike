@@ -93,6 +93,9 @@ type EditorEvent struct {
 	// Char carries the just-typed character on EditorCompletionTrigger
 	// (#527); empty means a manual request the bridge honours unconditionally.
 	Char string
+	// CompletionID carries the selected item's reply index on
+	// EditorCompletionSelect (#847), for completionItem/resolve.
+	CompletionID int
 }
 
 // EditorEvent selection kinds (mirrors editor.SelKind).
@@ -102,12 +105,15 @@ const (
 	SelLine
 )
 
-// EditorEvent kinds.
+// EditorEvent kinds. The order mirrors editor.EventKind — Kind is cast
+// straight across in the app's emitter adapter.
 const (
 	EditorChange = iota
 	EditorCursorMove
 	EditorCompletionTrigger
 	EditorSave
+	EditorJump
+	EditorCompletionSelect
 )
 
 // EditorEmitter receives editor lifecycle events. Implementations must not block.

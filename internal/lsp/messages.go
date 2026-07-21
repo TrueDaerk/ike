@@ -76,6 +76,22 @@ type CompletionItem struct {
 	// AdditionalEdits are the item's additionalTextEdits (auto-import, #848)
 	// in editor coordinates, applied alongside the accept's main insert.
 	AdditionalEdits []FormatEdit
+	// ID is the item's index in the completion reply (#847); the editor echoes
+	// it on selection so the bridge can completionItem/resolve the raw item.
+	ID int
+	// Doc is the item's inline documentation, flattened to plain text; empty
+	// until (and unless) a resolve fills it in.
+	Doc string
+}
+
+// CompletionResolveMsg delivers a completionItem/resolve result (#847) for the
+// item with ID in the popup's current reply: lazy documentation and any late
+// additionalTextEdits, already in editor coordinates.
+type CompletionResolveMsg struct {
+	Path            string
+	ID              int
+	Doc             string
+	AdditionalEdits []FormatEdit
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.
@@ -470,9 +486,25 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 			SortText:   it.SortText,
 			FilterText: it.FilterText,
 			IsSnippet:  it.InsertTextFormat == protocol.InsertSnippet,
+			ID:         len(out),
+			Doc:        DocText(it.Documentation),
 		})
 	}
 	return out
+}
+
+// DocText flattens a completion item's `string | MarkupContent`
+// documentation into plain text (#847).
+func DocText(d any) string {
+	switch v := d.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case map[string]any:
+		if s, ok := v["value"].(string); ok {
+			return strings.TrimSpace(s)
+		}
+	}
+	return ""
 }
 
 // HoverText flattens a protocol.Hover's contents (MarkupContent, a string, or an

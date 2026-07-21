@@ -30,6 +30,10 @@ const (
 	// landing follows as an ordinary EventCursorMove. Small motions (hjkl,
 	// w/b, paragraphs) never emit it.
 	EventJump
+	// EventCompletionSelect fires when the completion popup's selection lands
+	// on an item without documentation (#847). CompletionID carries the item's
+	// reply index; the LSP bridge answers with completionItem/resolve.
+	EventCompletionSelect
 )
 
 // SelKind classifies the visual selection carried on an event: none, a
@@ -69,6 +73,9 @@ type Event struct {
 	// flip an already-didOpened document into this state when it grows past
 	// the threshold on disk.
 	Large bool
+	// CompletionID carries the selected item's reply index on
+	// EventCompletionSelect (#847).
+	CompletionID int
 }
 
 // Emitter receives editor events. Implementations must not block.
@@ -89,6 +96,22 @@ func (m *Model) SetEmitter(e Emitter) { m.emitter = e }
 // the document version (independent of any emitter) so the syntax highlighter can
 // tag and order async parse results.
 func (m *Model) emit(kind EventKind) { m.emitChar(kind, "") }
+
+// emitCompletionSelect announces the selected completion item for lazy
+// resolve (#847); the bridge debounces and answers with CompletionResolveMsg.
+func (m *Model) emitCompletionSelect(id int) {
+	if m.emitter == nil {
+		return
+	}
+	m.emitter.Emit(Event{
+		Kind:         EventCompletionSelect,
+		Path:         m.path,
+		Line:         m.cursor.Line,
+		Col:          m.cursor.Col,
+		Mode:         m.mode,
+		CompletionID: id,
+	})
+}
 
 // emitChar is emit with the typed character attached (EventCompletionTrigger).
 func (m *Model) emitChar(kind EventKind, ch string) {

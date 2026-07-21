@@ -18,6 +18,7 @@ type Capabilities struct {
 	SyncKind           int
 	Completion         bool
 	CompletionTriggers []string
+	CompletionResolve  bool
 	Hover              bool
 	Definition         bool
 	References         bool
@@ -54,6 +55,7 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	if sc.CompletionProvider != nil {
 		caps.Completion = true
 		caps.CompletionTriggers = sc.CompletionProvider.TriggerCharacters
+		caps.CompletionResolve = sc.CompletionProvider.ResolveProvider
 	}
 	caps.Hover = truthyProvider(sc.HoverProvider)
 	caps.Definition = truthyProvider(sc.DefinitionProvider)

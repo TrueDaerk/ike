@@ -811,8 +811,9 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		Sel:        int(ev.Sel),
 		AnchorLine: ev.AnchorLine,
 		AnchorCol:  ev.AnchorCol,
-		Large:      ev.Large,
-		Char:       ev.Char,
+		Large:        ev.Large,
+		Char:         ev.Char,
+		CompletionID: ev.CompletionID,
 	})
 }
 

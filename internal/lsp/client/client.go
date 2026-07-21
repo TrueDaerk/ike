@@ -83,6 +83,20 @@ func (c *Client) Completion(ctx context.Context, p protocol.CompletionParams) ([
 	return decodeCompletion(raw), nil
 }
 
+// Resolve requests completionItem/resolve for one item (#847): servers ship
+// lean completion lists and attach documentation / additionalTextEdits lazily.
+func (c *Client) Resolve(ctx context.Context, item protocol.CompletionItem) (protocol.CompletionItem, error) {
+	raw, err := c.conn.Call(ctx, "completionItem/resolve", item)
+	if err != nil {
+		return item, err
+	}
+	var out protocol.CompletionItem
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return item, err
+	}
+	return out, nil
+}
+
 // Hover requests hover content.
 func (c *Client) Hover(ctx context.Context, p protocol.HoverParams) (*protocol.Hover, error) {
 	raw, err := c.conn.Call(ctx, "textDocument/hover", p)

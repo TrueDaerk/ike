@@ -296,6 +296,20 @@ func (m *Manager) ConvertCompletionItems(path string, items []protocol.Completio
 	return out
 }
 
+// ResolveCompletion runs completionItem/resolve for one raw item (#847),
+// gated on the server's resolveProvider; ok is false when the document has no
+// server or the server does not resolve.
+func (m *Manager) ResolveCompletion(ctx context.Context, path string, item protocol.CompletionItem) (protocol.CompletionItem, bool, error) {
+	srv, _, okDoc := m.docServer(path)
+	if !okDoc || !srv.cl.Caps().CompletionResolve {
+		return item, false, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	out, err := srv.cl.Resolve(cctx, item)
+	return out, err == nil, err
+}
+
 // Completion requests completion at an editor position, gated on capability.
 // A position inside an embedded fragment routes to the fragment's server
 // (0300, #414) with results mapped back to host coordinates.
