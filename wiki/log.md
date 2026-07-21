@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Floating-window resize chords delivered on macOS (#774): cmd+shift+arrows
+  (and alt+shift) join ctrl+shift — Mission Control/Spaces own ctrl+arrows on
+  macOS, so the original chord never reached the terminal.
+
 - Shared views keep highlighting (#857): ShareDocumentWith adopts the
   source's span index (document-derived, immutable) instead of clearing it —
   tab drag/drop and pane merges no longer produce unhighlighted views

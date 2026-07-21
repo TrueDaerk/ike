@@ -87,3 +87,21 @@ func TestFloatingResizeChordsShrinkAndPersist(t *testing.T) {
 		t.Fatalf("resized shell must re-clamp to the terminal budget: %d > %d", lipgloss.Width(v), base)
 	}
 }
+
+// TestResizeDeltaDeliveredChords guards #774: macOS terminals never see
+// ctrl+shift+arrows (Mission Control owns them), so the cmd (super/meta) and
+// alt spellings must resize too.
+func TestResizeDeltaDeliveredChords(t *testing.T) {
+	for _, key := range []string{"shift+super+left", "shift+meta+left", "alt+shift+left"} {
+		ddw, ddh, ok := ResizeDelta(key)
+		if !ok || ddw != -4 || ddh != 0 {
+			t.Errorf("%s = (%d,%d,%v), want (-4,0,true)", key, ddw, ddh, ok)
+		}
+	}
+	if ddw, ddh, ok := ResizeDelta("shift+super+down"); !ok || ddw != 0 || ddh != 1 {
+		t.Errorf("shift+super+down = (%d,%d,%v)", ddw, ddh, ok)
+	}
+	if _, _, ok := ResizeDelta("super+left"); ok {
+		t.Error("bare super+left must not resize (line-nav chords stay free)")
+	}
+}

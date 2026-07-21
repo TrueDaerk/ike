@@ -13,18 +13,21 @@ import (
 // the live terminal bounds when applied.
 
 // ResizeDelta maps a pressed key (tea key String form) to a window size
-// adjustment. The chords are ctrl+shift+arrows: CSI-parameter-encoded, so
-// they are delivered in every mainstream terminal (the ctrl+shift collapse
-// only affects character keys).
+// adjustment. Accepted chords, all modifier+shift+arrow:
+//   - cmd+shift (spelled shift+super / shift+meta) — the macOS primary:
+//     ctrl+arrows belong to Mission Control/Spaces there and never reach the
+//     terminal (#774), while terminals like Ghostty deliver cmd chords;
+//   - ctrl+shift — the primary everywhere else (CSI-parameter-encoded);
+//   - alt+shift — spare secondary where Option is not a composition key.
 func ResizeDelta(key string) (ddw, ddh int, ok bool) {
 	switch key {
-	case "ctrl+shift+left":
+	case "ctrl+shift+left", "shift+super+left", "shift+meta+left", "alt+shift+left":
 		return -4, 0, true
-	case "ctrl+shift+right":
+	case "ctrl+shift+right", "shift+super+right", "shift+meta+right", "alt+shift+right":
 		return 4, 0, true
-	case "ctrl+shift+up":
+	case "ctrl+shift+up", "shift+super+up", "shift+meta+up", "alt+shift+up":
 		return 0, -1, true
-	case "ctrl+shift+down":
+	case "ctrl+shift+down", "shift+super+down", "shift+meta+down", "alt+shift+down":
 		return 0, 1, true
 	}
 	return 0, 0, false
