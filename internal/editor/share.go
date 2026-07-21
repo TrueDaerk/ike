@@ -67,8 +67,14 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.wait = awaitNone
 	m.cmdline = ""
 	m.searching = false
-	m.hlIndex = highlight.Index{}
-	m.semIndex = highlight.Index{}
+	// Highlighting is document-derived like the fold ranges, and the index is
+	// immutable — the new view adopts the source's spans instead of starting
+	// blank (#857): clearing here left drag/drop-opened views unhighlighted
+	// until the next edit, because no share caller schedules a reparse and a
+	// finished parse has no SpansMsg in flight to route over.
+	m.hlIndex = src.hlIndex
+	m.semIndex = src.semIndex
+	m.hlVersion = src.hlVersion
 	// Fold ranges are document-derived and travel with the share; the
 	// collapsed set is per-view state (#144) and starts empty.
 	m.folds = src.folds

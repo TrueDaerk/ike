@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Shared views keep highlighting (#857): ShareDocumentWith adopts the
+  source's span index (document-derived, immutable) instead of clearing it —
+  tab drag/drop and pane merges no longer produce unhighlighted views
+  (`/architecture/editor.md`).
+
 - Emmet completion subset (0410, #856): CSS shorthands and HTML tag
   snippets as snippet completion items with expansion previews
   (`/architecture/completion.md`).
