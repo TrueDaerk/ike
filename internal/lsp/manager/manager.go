@@ -275,11 +275,37 @@ func (m *Manager) Close(path string) error {
 	})
 }
 
+// ConvertCompletionItems maps protocol completion items to editor items and
+// converts each item's additionalTextEdits (auto-import, #848) to editor
+// coordinates against the synced document. An unknown document (or a
+// fragment-routed result whose edits would target the virtual doc) keeps the
+// items but drops the additional edits.
+func (m *Manager) ConvertCompletionItems(path string, items []protocol.CompletionItem) []lsp.CompletionItem {
+	out := lsp.ConvertCompletion(items)
+	srv, doc, ok := m.docServer(path)
+	if !ok {
+		return out
+	}
+	enc := srv.cl.Encoding()
+	for i := range items {
+		if len(items[i].AdditionalTextEdits) == 0 {
+			continue
+		}
+		out[i].AdditionalEdits = convertEdits(doc.lines, items[i].AdditionalTextEdits, enc)
+	}
+	return out
+}
+
 // Completion requests completion at an editor position, gated on capability.
 // A position inside an embedded fragment routes to the fragment's server
 // (0300, #414) with results mapped back to host coordinates.
 func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position) ([]protocol.CompletionItem, error) {
 	if items, handled, err := m.fragmentCompletion(ctx, path, pos); handled {
+		// Fragment edits target the virtual document; the host-coordinate
+		// conversion in ConvertCompletionItems would misplace them (#848).
+		for i := range items {
+			items[i].AdditionalTextEdits = nil
+		}
 		return items, err
 	}
 	srv, doc, ok := m.docServer(path)

@@ -292,6 +292,30 @@ func TestCompletionSnippetTrailingStopOnly(t *testing.T) {
 	}
 }
 
+// TestCompletionAcceptAppliesAdditionalEdits guards #848: an accepted item's
+// additionalTextEdits (the auto-import shape) apply alongside the main insert,
+// with the cursor shifted past inserted lines so the completion still replaces
+// the typed prefix at the right spot.
+func TestCompletionAcceptAppliesAdditionalEdits(t *testing.T) {
+	m, _ := loaded(t, "package x\n\nfunc f() {\n\tfm\n}\n")
+	m = insertModeAt(m, 3, 3) // after "fm"
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 3, Col: 3, Items: []ilsp.CompletionItem{
+		{Label: "fmt.Println", InsertText: "fmt.Println", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "import \"fmt\"\n\n"},
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 1); got != "import \"fmt\"" {
+		t.Fatalf("line 1 = %q, want the inserted import", got)
+	}
+	if got := line(m, 5); got != "\tfmt.Println" {
+		t.Fatalf("line 5 = %q, want the completed call on the shifted line", got)
+	}
+	if m.cursor.Line != 5 {
+		t.Fatalf("cursor line = %d, want 5 (shifted by the two inserted lines)", m.cursor.Line)
+	}
+}
+
 func TestCompletionAcceptReplacesTypedPrefix(t *testing.T) {
 	m, _ := loaded(t, "xyz.__\n")
 	m = insertModeAt(m, 0, 6) // after "xyz.__", as a manual trigger would anchor
