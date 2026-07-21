@@ -98,5 +98,10 @@ func defaults() *Config {
 		Run: Run{
 			Placement: "in_pane",
 		},
+		Debug: Debug{
+			PHP: DebugPHP{
+				Port: 9003, // Xdebug's default DBGp port
+			},
+		},
 	}
 }

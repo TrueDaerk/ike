@@ -146,6 +146,34 @@ func (m *Model) startDebug() {
 	m.launchOrInstall(root, *cfg, false)
 }
 
+// listenCfgName names the synthetic listen configuration (#823); the toggle
+// recognizes its own session by it.
+const listenCfgName = "PHP: listen for Xdebug"
+
+// toggleDebugListen starts or stops the persistent PHP debug listener
+// (#823, debug.listen): web requests through php-fpm/Apache attach as debug
+// sessions while it runs. The Xdebug preflight is skipped on purpose — the
+// engine lives in the server's PHP, not in the CLI interpreter `php -m`
+// would probe.
+func (m *Model) toggleDebugListen() {
+	if m.dbg != nil && m.dbg.cfgName == listenCfgName {
+		m.stopDebugSession(false)
+		m.host.Notify(host.Info, "debug: stopped listening")
+		return
+	}
+	if m.dbg != nil || m.dbgLaunching {
+		m.host.Notify(host.Info, "debug: a session is already running")
+		return
+	}
+	if !lang.SupportsDebug("php") {
+		m.host.Notify(host.Info, "debug: the PHP language plugin is not available")
+		return
+	}
+	cfg := run.Config{Name: listenCfgName, Kind: run.KindDebug, Lang: "php", Listen: true}
+	m.dbgLaunching = true
+	m.launchDebug(projectRoot(), cfg)
+}
+
 // launchOrInstall preflights the adapter runtime (#589): a missing runtime
 // (debugpy) auto-installs asynchronously and the launch retries once after;
 // a runtime still missing then surfaces the manual command instead of
@@ -229,10 +257,10 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 
 	explicit := m.explicitInterpreter(cfg.Lang)
 	absFile := cfg.File
-	if !filepath.IsAbs(absFile) {
+	if absFile != "" && !filepath.IsAbs(absFile) {
 		absFile = filepath.Join(root, absFile)
 	}
-	spec := lang.RunSpec{File: absFile, Module: cfg.Module, Args: cfg.Args}
+	spec := lang.RunSpec{File: absFile, Module: cfg.Module, Args: cfg.Args, Listen: cfg.Listen}
 	launchArgs, ok := lang.DebugLaunchArgs(cfg.Lang, root, spec, cfg.Dir(root), cfg.Env)
 	if !ok {
 		m.host.Notify(host.Error, "debug: no launch template for "+cfg.Lang)

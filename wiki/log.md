@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- PHP web/request debugging (#823): `debug.listen` toggles a persistent
+  DBGp listener for php-fpm/Apache requests — sequential multi-accept,
+  `[debug.php]` hostname filter (via `$_SERVER['HTTP_HOST']` probe, detach
+  on mismatch) and docroot↔project path mappings
+  (`/architecture/debugger.md`).
+
 - Terminal height shrink no longer eats the newest output (#826): the top
   rows scroll into the scrollback and the cursor line stays (real-terminal
   semantics, edge-independent); a grow pulls the pushed rows back for an

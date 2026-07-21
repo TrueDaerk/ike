@@ -46,6 +46,14 @@ func (c *Conn) StepOut() (*Response, error) { return c.Call("step_out", nil, "")
 // Stop ends the debug session; the engine terminates the script.
 func (c *Conn) Stop() (*Response, error) { return c.Call("stop", nil, "") }
 
+// Detach ends the debug session but lets the script run to completion — the
+// listen mode's (#823) way to reject a filtered request or to stop listening
+// without killing an in-flight web request.
+func (c *Conn) Detach() error {
+	_, err := c.Call("detach", nil, "")
+	return err
+}
+
 // StackGet returns the current stack, innermost frame first (level 0).
 func (c *Conn) StackGet() ([]StackEntry, error) {
 	resp, err := c.Call("stack_get", nil, "")

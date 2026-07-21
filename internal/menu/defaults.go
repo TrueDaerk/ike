@@ -43,6 +43,7 @@ func Defaults() []Menu {
 			{Title: "Rerun Last", Command: "run.rerun"},
 			{Title: "Toggle Breakpoint", Command: "debug.toggleBreakpoint"},
 			{Title: "Debug File", Command: "debug.start"},
+			{Title: "Listen for PHP Debug Connections", Command: "debug.listen"},
 			{Title: "Step Over", Command: "debug.stepOver"},
 			{Title: "Step Into", Command: "debug.stepInto"},
 			{Title: "Step Out", Command: "debug.stepOut"},

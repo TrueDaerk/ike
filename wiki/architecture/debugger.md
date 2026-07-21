@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
-timestamp: 2026-07-18T12:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -52,6 +52,39 @@ then `brew install shivammathur/extensions/xdebug@<major.minor>` (version from
 `brew tap shivammathur/php && brew trust shivammathur/php` (and
 `…/extensions`) once — until then the auto-install surfaces the brew command as
 the manual instruction.
+
+### Web/request debugging — listen mode (#823)
+
+`debug.listen` (palette / Run menu) toggles JetBrains-style **"listen for
+PHP debug connections"**: instead of spawning a process, the bridge opens a
+persistent DBGp listener (launch args `mode: "listen"`) and every request
+served through php-fpm/Apache with Xdebug triggered attaches as a debug
+session — breakpoints, stepping, stack and variables through the same
+bridge. Sequential model: one session per accepted connection; a request
+arriving while another is being debugged is **detached** (runs through
+undisturbed), and when a request finishes the bridge emits `continued`,
+drops the connection and keeps listening. Stopping the listener detaches a
+live request instead of killing it mid-response.
+
+Settings live in `[debug.php]`:
+
+- `port` — DBGp listener port (default 9003, Xdebug's default).
+- `hostname` — only accept sessions whose request's `$_SERVER['HTTP_HOST']`
+  matches (case-insensitive, `:port` suffix ignored); everything else is
+  detached so another vhost on the same fpm pool cannot hijack the
+  debugger. The DBGp `init` packet carries no HTTP host, so the bridge
+  steps onto the first statement (`step_into`) and `property_get`s the
+  superglobal before deciding; a connection without `HTTP_HOST` (CLI) is
+  treated as non-matching while a filter is set.
+- `[[debug.php.path_mappings]]` — `server`/`local` prefix pairs for
+  docroot ≠ project layout; `local` may be project-relative. Breakpoints
+  translate local→server on replay, stack frames server→local, longest
+  prefix wins.
+
+Breakpoints set while no request is attached are cached (`bpLines`) and
+verified optimistically; each accepted connection gets them replayed before
+the initial `run`. The Xdebug CLI preflight is skipped for listen — the
+engine lives in the server's PHP, not the CLI interpreter.
 
 ## Adapter runtime auto-install (#589)
 

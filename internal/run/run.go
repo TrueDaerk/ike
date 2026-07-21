@@ -38,6 +38,10 @@ type Config struct {
 	Args   []string          `json:"args,omitempty"`
 	Env    map[string]string `json:"env,omitempty"`
 	Cwd    string            `json:"cwd,omitempty"`
+	// Listen marks a listen-style debug configuration (#823): no process is
+	// launched, the adapter waits for incoming connections (PHP/Xdebug web
+	// debugging). File is empty then.
+	Listen bool `json:"listen,omitempty"`
 }
 
 // Store is the persisted set of configurations plus the last-used name (the

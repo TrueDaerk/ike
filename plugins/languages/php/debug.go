@@ -3,8 +3,10 @@ package langphp
 import (
 	"io"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
+	"ike/internal/config"
 	"ike/internal/dbgp/bridge"
 	"ike/internal/lang"
 )
@@ -43,8 +45,41 @@ func (toolchain) DebugAdapterConnect(_ string, interpreter string) (io.ReadWrite
 func (toolchain) DebugAdapter(string, string) ([]string, bool) { return nil, false }
 
 // DebugLaunchArgs implements lang.DebugAdapterProvider: the bridge's launch
-// vocabulary is plain program/args/cwd/env (see bridge.launchArgs).
-func (toolchain) DebugLaunchArgs(_ string, spec lang.RunSpec, cwd string, env map[string]string) map[string]any {
+// vocabulary is plain program/args/cwd/env (see bridge.launchArgs). A listen
+// spec (#823) instead opens the bridge's persistent DBGp listener for
+// php-fpm/Apache requests, parameterized from [debug.php]: port, hostname
+// filter, and path mappings (Local resolved against the project root).
+func (toolchain) DebugLaunchArgs(root string, spec lang.RunSpec, cwd string, env map[string]string) map[string]any {
+	if spec.Listen {
+		args := map[string]any{"request": "launch", "mode": "listen"}
+		d := config.Get()
+		if d == nil {
+			return args
+		}
+		if d.Debug.PHP.Port > 0 {
+			args["port"] = d.Debug.PHP.Port
+		}
+		if h := strings.TrimSpace(d.Debug.PHP.Hostname); h != "" {
+			args["hostname"] = h
+		}
+		if len(d.Debug.PHP.PathMappings) > 0 {
+			maps := make([]map[string]string, 0, len(d.Debug.PHP.PathMappings))
+			for _, pm := range d.Debug.PHP.PathMappings {
+				if pm.Server == "" || pm.Local == "" {
+					continue
+				}
+				local := pm.Local
+				if !filepath.IsAbs(local) {
+					local = filepath.Join(root, local)
+				}
+				maps = append(maps, map[string]string{"server": pm.Server, "local": local})
+			}
+			if len(maps) > 0 {
+				args["pathMappings"] = maps
+			}
+		}
+		return args
+	}
 	args := map[string]any{
 		"request": "launch",
 		"program": spec.File,
