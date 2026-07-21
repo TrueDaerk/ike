@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/highlight"
 )
 
 func writeFile(path, content string) error {
@@ -87,5 +89,31 @@ func TestReloadKeepsSharingIntact(t *testing.T) {
 	b = send(b, key('u'))
 	if got := strings.TrimRight(b.Text(), "\n"); got != "fresh" {
 		t.Fatalf("the shared undo stack must be reset in place, got %q", got)
+	}
+}
+
+// TestShareAdoptsHighlighting guards #857: a view created from an
+// already-highlighted document adopts the source's span index instead of
+// starting blank — drag/drop-opened views schedule no reparse, and a finished
+// parse has no SpansMsg in flight to route over.
+func TestShareAdoptsHighlighting(t *testing.T) {
+	a, path := loaded(t, "package main\n")
+	a, _ = a.Update(highlight.SpansMsg{Path: path, Version: a.docVersion, Spans: []highlight.Span{
+		{Line: 0, StartCol: 0, EndCol: 7, Capture: "keyword"},
+	}})
+	if a.hlIndex.Empty() {
+		t.Fatal("setup: source view must hold spans")
+	}
+	b := New()
+	b.SetSize(80, 20)
+	b.ShareDocumentWith(&a)
+	if b.hlIndex.Empty() {
+		t.Fatal("shared view must adopt the source's highlight index")
+	}
+	if got := b.hlIndex.CaptureAt(0, 2); got != "keyword" {
+		t.Fatalf("CaptureAt = %q, want keyword", got)
+	}
+	if b.hlVersion != a.hlVersion {
+		t.Fatalf("hlVersion = %d, want %d", b.hlVersion, a.hlVersion)
 	}
 }
