@@ -429,7 +429,7 @@ func TestManagerCompletion(t *testing.T) {
 	if err := m.Open(path, "go", "package main"); err != nil {
 		t.Fatal(err)
 	}
-	items, _, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	items, _, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -762,5 +762,27 @@ func TestDetectRoot(t *testing.T) {
 	got := detectRoot(filepath.Join(sub, "main.go"), []string{"go.mod"})
 	if got != dir {
 		t.Fatalf("detectRoot = %q, want %q", got, dir)
+	}
+}
+
+// TestCompletionContext guards #850: a typed server trigger character reports
+// TriggerCharacter with the character; identifier runes and manual requests
+// report Invoked; a character outside the server's set is not a trigger.
+func TestCompletionContext(t *testing.T) {
+	triggers := []string{".", "->", "$"}
+	if c := completionContext(".", triggers); c.TriggerKind != protocol.CompletionTriggerCharacter || c.TriggerCharacter != "." {
+		t.Fatalf("dot context = %+v", c)
+	}
+	if c := completionContext("$", triggers); c.TriggerKind != protocol.CompletionTriggerCharacter || c.TriggerCharacter != "$" {
+		t.Fatalf("sigil context = %+v", c)
+	}
+	if c := completionContext("a", triggers); c.TriggerKind != protocol.CompletionTriggerInvoked || c.TriggerCharacter != "" {
+		t.Fatalf("identifier context = %+v", c)
+	}
+	if c := completionContext("", triggers); c.TriggerKind != protocol.CompletionTriggerInvoked {
+		t.Fatalf("manual context = %+v", c)
+	}
+	if c := completionContext(":", nil); c.TriggerKind != protocol.CompletionTriggerInvoked {
+		t.Fatalf("unknown-trigger context = %+v", c)
 	}
 }

@@ -164,7 +164,10 @@ instead of only narrowing the client-side filter, and the bridge **debounces
 identifier-rune requests** (80ms, re-armed per keystroke) so a typing burst
 reaches the server once, at the resting position. Complete replies keep the
 filter-only behavior; server trigger characters and manual ctrl+space stay
-immediate.
+immediate. Requests also report **why** they fired (#850): a typed character
+in the server's declared trigger set sends `TriggerCharacter` with the
+character; identifier runes and manual ctrl+space send `Invoked` — some
+servers (e.g. Intelephense on `$`) tailor their answers to it.
 
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)

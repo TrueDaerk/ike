@@ -260,7 +260,7 @@ func TestFragmentCompletionRoutesAndMapsRanges(t *testing.T) {
 		return isFragmentURI(p.TextDocument.URI)
 	})
 
-	items, _, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 10})
+	items, _, err := m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 10}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +274,7 @@ func TestFragmentCompletionRoutesAndMapsRanges(t *testing.T) {
 		t.Errorf("mapped edit range = %+v, want 0:4-0:7", r)
 	}
 	// Outside the fragment the host server answers; its range stays put.
-	items, _, err = m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0})
+	items, _, err = m.Completion(context.Background(), path, buffer.Position{Line: 0, Col: 0}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

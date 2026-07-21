@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Completion trigger kinds (0410, #850): requests report
+  TriggerCharacter/Invoked correctly, per-server trigger characters threaded
+  through host and fragment paths (`/architecture/lsp.md`).
+
 - Incomplete completion re-query (0410, #849): `isIncomplete` replies
   re-request on further typing, debounced in the bridge
   (`/architecture/lsp.md`).

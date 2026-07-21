@@ -313,8 +313,8 @@ func (m *Manager) ResolveCompletion(ctx context.Context, path string, item proto
 // Completion requests completion at an editor position, gated on capability.
 // A position inside an embedded fragment routes to the fragment's server
 // (0300, #414) with results mapped back to host coordinates.
-func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position) ([]protocol.CompletionItem, bool, error) {
-	if items, incomplete, handled, err := m.fragmentCompletion(ctx, path, pos); handled {
+func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Position, triggerChar string) ([]protocol.CompletionItem, bool, error) {
+	if items, incomplete, handled, err := m.fragmentCompletion(ctx, path, pos, triggerChar); handled {
 		// Fragment edits target the virtual document; the host-coordinate
 		// conversion in ConvertCompletionItems would misplace them (#848).
 		for i := range items {
@@ -331,8 +331,23 @@ func (m *Manager) Completion(ctx context.Context, path string, pos buffer.Positi
 	return srv.cl.Completion(cctx, protocol.CompletionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
 		Position:     protocol.ToLSPPosition(doc.lines, pos, srv.cl.Encoding()),
-		Context:      &protocol.CompletionContext{TriggerKind: protocol.CompletionTriggerInvoked},
+		Context:      completionContext(triggerChar, srv.cl.Caps().CompletionTriggers),
 	})
+}
+
+// completionContext builds the request context (#850): a typed character that
+// is one of the server's declared trigger characters reports TriggerCharacter
+// with the character; anything else (identifier runes, manual ctrl+space)
+// reports Invoked.
+func completionContext(ch string, triggers []string) *protocol.CompletionContext {
+	if ch != "" {
+		for _, t := range triggers {
+			if t == ch {
+				return &protocol.CompletionContext{TriggerKind: protocol.CompletionTriggerCharacter, TriggerCharacter: ch}
+			}
+		}
+	}
+	return &protocol.CompletionContext{TriggerKind: protocol.CompletionTriggerInvoked}
 }
 
 // Hover requests hover at an editor position, gated on capability. Fragment
