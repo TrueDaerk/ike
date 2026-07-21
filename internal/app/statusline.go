@@ -296,7 +296,9 @@ func (m Model) statusLine() string {
 				hint = "MOVE " + filepath.Base(ed.Path())
 			}
 		}
-		if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
+		if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
+			hint += " → dock " + dockName(zone)
+		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
 			if zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt]); can {
 				hint += " → " + zoneArrow(zone) + " of " + m.paneLabel(tgt)
 			} else {

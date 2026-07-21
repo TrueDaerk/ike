@@ -20,6 +20,43 @@ func Move(root Node, src, target string, zone Zone) Node {
 	return out
 }
 
+// Dock detaches the leaf src and re-attaches it against the tree's outer
+// edge (#811), splitting at the root: ZoneTop/ZoneBottom make it span the
+// full workspace width, ZoneLeft/ZoneRight the full height. ratio is the
+// docked pane's share of the workspace along the dock axis, clamped to
+// [0.1, 0.9]. Docking the only leaf or an unknown pane returns root
+// unchanged.
+func Dock(root Node, src string, zone Zone, ratio float64) Node {
+	if src == "" {
+		return root
+	}
+	switch zone {
+	case ZoneTop, ZoneBottom, ZoneLeft, ZoneRight:
+	default:
+		return root // remove() mutates in place — reject bad zones up front
+	}
+	pruned, leaf, ok := remove(root, src)
+	if !ok || leaf == nil || pruned == nil {
+		return root
+	}
+	if ratio < 0.1 {
+		ratio = 0.1
+	}
+	if ratio > 0.9 {
+		ratio = 0.9
+	}
+	switch zone {
+	case ZoneTop:
+		return &Split{Orient: Vertical, Ratio: ratio, A: leaf, B: pruned}
+	case ZoneBottom:
+		return &Split{Orient: Vertical, Ratio: 1 - ratio, A: pruned, B: leaf}
+	case ZoneLeft:
+		return &Split{Orient: Horizontal, Ratio: ratio, A: leaf, B: pruned}
+	default: // ZoneRight (validated above)
+		return &Split{Orient: Horizontal, Ratio: 1 - ratio, A: pruned, B: leaf}
+	}
+}
+
 // remove detaches the leaf with pane id src, returning the tree with src's
 // parent split replaced by src's sibling. Removing the only node (root is the
 // leaf) reports ok=false so callers keep the tree intact.

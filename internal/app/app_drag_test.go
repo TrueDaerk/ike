@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -328,7 +329,8 @@ func TestTitleDragOutOfBandStillSplits(t *testing.T) {
 	before := len(m.lay.Panes)
 	edRect := m.lay.Panes[ctxEditor]
 	m = step(m, press(edRect.X+edRect.W/2, edRect.Y))
-	m = step(m, release(edRect.X+edRect.W/2, edRect.Y+edRect.H-1))
+	// One cell above the workspace border — the outermost row docks (#811).
+	m = step(m, release(edRect.X+edRect.W/2, edRect.Y+edRect.H-2))
 	if got := len(m.lay.Panes); got != before+1 {
 		t.Fatalf("bottom-edge drop should split: %d panes, want %d", got, before+1)
 	}
@@ -393,5 +395,57 @@ func TestTitleDragPastThresholdEngages(t *testing.T) {
 	m = step(m, motion(x, y+1)) // one row down engages immediately
 	if !strings.Contains(m.render(), "MOVE EXPLORER") {
 		t.Fatal("move hint missing after one row of vertical travel")
+	}
+}
+
+// TestDragDockToOuterEdge guards #811: releasing a whole-pane drag on the
+// workspace's outermost strip docks the pane full-span against that edge.
+func TestDragDockToOuterEdge(t *testing.T) {
+	m := sized(t, 100, 40)
+	body := m.bodyRect()
+
+	// Drag the explorer to the outer bottom edge: full-width dock.
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
+	m = step(m, release(body.X+body.W/2, body.Y+body.H-1))
+	r := m.lay.Panes[ctxExplorer]
+	if r.W != body.W {
+		t.Fatalf("bottom dock: explorer width = %d, want full body width %d", r.W, body.W)
+	}
+	if r.Y+r.H != body.Y+body.H {
+		t.Fatalf("bottom dock: explorer not at the bottom (Y=%d H=%d)", r.Y, r.H)
+	}
+
+	// Drag it to the outer right edge: full-height dock. The pane's top
+	// border now sits on a split boundary where the resize band wins (#761),
+	// so grab the title text row just inside it.
+	m = step(m, press(r.X+2, r.Y+1))
+	m = step(m, release(body.X+body.W-1, body.Y+body.H/2))
+	r = m.lay.Panes[ctxExplorer]
+	if r.H != body.H {
+		t.Fatalf("right dock: explorer height = %d, want full body height %d", r.H, body.H)
+	}
+	if r.X+r.W != body.X+body.W {
+		t.Fatalf("right dock: explorer not at the right edge (X=%d W=%d)", r.X, r.W)
+	}
+}
+
+// TestDragDockShowsFullSpanPreview: hovering the outer strip previews the
+// full-span target (ghost + status hint) before release.
+func TestDragDockShowsFullSpanPreview(t *testing.T) {
+	m := sized(t, 100, 40)
+	body := m.bodyRect()
+	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
+	m = step(m, motion(body.X+body.W/2, body.Y+body.H-1))
+
+	box, gx, gy, ok := m.moveGhost()
+	if !ok {
+		t.Fatal("expected a dock ghost over the outer strip")
+	}
+	if gx != body.X || lipgloss.Width(box) != body.W {
+		t.Fatalf("dock ghost at x=%d w=%d, want full-width at %d w=%d", gx, lipgloss.Width(box), body.X, body.W)
+	}
+	_ = gy
+	if view := m.render(); !strings.Contains(view, "dock bottom (full width)") {
+		t.Fatalf("status hint missing the dock label:\n%s", view)
 	}
 }
