@@ -27,6 +27,7 @@ import (
 	"ike/internal/clipboard"
 	"ike/internal/commitui"
 	"ike/internal/complete"
+	"ike/internal/complete/words"
 	"ike/internal/config"
 	"ike/internal/debug"
 	"ike/internal/debugpanel"
@@ -511,13 +512,15 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 // theme, watcher, MRU, breakpoints) still re-resolves against the new cwd.
 func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *workspace.Manager) Model {
 	h.SetConfig(cfg)
-	// The local completion engine (#851) listens to editor events next to the
-	// LSP bridge; registration by name keeps a project switch idempotent.
-	engine := complete.NewEngine(h.Send)
-	h.SetEditorEmitter("complete", engine)
 	applyPluginConfig(reg, cfg)
 	themePal, themeWarning := resolveTheme(reg, cfg)
 	root, _ := os.Getwd()
+	// The local completion engine (#851) listens to editor events next to the
+	// LSP bridge; registration by name keeps a project switch idempotent. The
+	// word index (#852) starts its one-shot project scan in the background.
+	engine := complete.NewEngine(h.Send)
+	engine.Register(words.New(root))
+	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {
 		resumed = mgr.Resume(root)

@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Word-index completion source (0410, #852): instant vim-keyword-level
+  candidates from open buffers (event-fed, lazily extracted) + one-shot
+  project scan, locality-tiered, prefix-prefiltered
+  (`/architecture/completion.md`).
+
 - Completion engine fan-in (0410, #851): completion is multi-source — the
   LSP bridge and the local engine (`internal/complete`) answer triggers as
   tagged batches, merged in the editor with priority de-dup and stable

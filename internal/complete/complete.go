@@ -66,12 +66,31 @@ func (e *Engine) Register(s Source) {
 	e.sources = append(e.sources, s)
 }
 
-// Emit implements host.EditorEmitter: completion triggers dispatch the
-// sources. Only identifier-ish characters and manual requests fire — server
-// trigger characters ("." "->" "$") are the LSP bridge's business; a local
-// index has nothing position-specific to say after a "." — and it must not
-// block (dispatch spawns goroutines).
+// EventObserver is an optional Source extension (#852): a source that also
+// wants the editor lifecycle events (buffer changes for an index, saves, …)
+// implements it and the engine forwards every event. Observe runs on the UI
+// goroutine and must not block — stash and mark dirty, extract lazily in
+// Complete.
+type EventObserver interface {
+	Observe(ev host.EditorEvent)
+}
+
+// Emit implements host.EditorEmitter: every event forwards to observing
+// sources, completion triggers additionally dispatch the sources. Only
+// identifier-ish characters and manual requests fire — server trigger
+// characters ("." "->" "$") are the LSP bridge's business; a local index has
+// nothing position-specific to say after a "." — and it must not block
+// (dispatch spawns goroutines).
 func (e *Engine) Emit(ev host.EditorEvent) {
+	e.mu.Lock()
+	sources := make([]Source, len(e.sources))
+	copy(sources, e.sources)
+	e.mu.Unlock()
+	for _, s := range sources {
+		if o, ok := s.(EventObserver); ok {
+			o.Observe(ev)
+		}
+	}
 	if ev.Kind != host.EditorCompletionTrigger {
 		return
 	}

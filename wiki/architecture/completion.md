@@ -76,9 +76,25 @@ Fuzzy filtering (#845) runs on the merged list; `completionItem/resolve`
 only — local items never resolve, and resolve IDs cannot collide across
 sources.
 
+## Word index (#852)
+
+`internal/complete/words` is the first local source (name `words`, priority
+`lsp.PriorityWords`): vim-keyword-level completion from identifier words. Two
+feeds: **open buffers** — the engine forwards every `EditorChange` event (the
+optional `EventObserver` extension) and the buffer's word set re-extracts
+lazily on the next query (large-file buffers drop out) — and a **one-shot
+background project scan** at construction (skips dot-dirs, `node_modules`,
+`vendor` & co.; 256KB/file, 10k files, binaries by NUL sniff). A query
+computes the partial identifier at the cursor from the observed buffer text,
+pre-filters by case-insensitive prefix, excludes the word being typed, caps at
+200 items, and encodes the locality tier (current buffer < other buffers <
+project) into `SortText` so nearer words list first. Words shorter than 3
+runes or starting with a digit are noise and never indexed. Edits to files not
+open in a buffer are not re-scanned — the buffer feed covers what the user
+actually types in.
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
-`internal/app`) at build time. Planned sources: the word index (#852), the
-tree-sitter symbol index (#853, including CSS class names offered in HTML),
-Emmet (#856). Unified ranking across sources (locality, MRU) is #854.
+`internal/app`) at build time. Planned sources: the tree-sitter symbol index (#853, including CSS class
+names offered in HTML), Emmet (#856). Unified ranking across sources (locality, MRU) is #854.
