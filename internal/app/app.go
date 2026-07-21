@@ -27,6 +27,7 @@ import (
 	"ike/internal/clipboard"
 	"ike/internal/commitui"
 	"ike/internal/complete"
+	"ike/internal/complete/mru"
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
@@ -110,6 +111,9 @@ type Model struct {
 	// recent instance when multiple = true allows several. Session-local;
 	// lazily initialized, shared by reference across value copies.
 	toolRecent map[string]string
+	// compMRU is the per-project recently-accepted-completions store (0410,
+	// #854), injected into every editor for the popup's MRU ranking boost.
+	compMRU *mru.Store
 	// bpts is the per-project breakpoint store (0350, #577): loaded at start,
 	// rendered by editors through an injected source, persisted on toggle and
 	// on file save.
@@ -565,6 +569,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		largeToasted:   map[string]bool{},
 		toolchainSeg:   map[string]string{},
 		navHist:        &nav.History{},
+		compMRU:        mru.Load(mru.DefaultFile()),
 		bpts:           debug.Load(),
 		host:           h,
 		reg:            reg,
@@ -851,6 +856,7 @@ func (m *Model) installEmitter(key string) {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
 			ed.SetBreakpointSource(source)
 			ed.SetBreakpointAdjuster(adjust)
+			ed.SetCompletionMRU(m.compMRU)
 		}
 	}
 }

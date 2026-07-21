@@ -99,6 +99,10 @@ type CompletionItem struct {
 	// Source names the completion source that produced the item (#851);
 	// resolve requests only make sense for SourceLSP items.
 	Source string
+	// LocalityTier ranks how near the item's origin is (#854): 0 = current
+	// file (and everything a server answers), 1 = another open buffer,
+	// 2 = the project scan. Nearer boosts the popup ranking.
+	LocalityTier int
 	// ID is the item's index in the completion reply (#847); the editor echoes
 	// it on selection so the bridge can completionItem/resolve the raw item.
 	ID int

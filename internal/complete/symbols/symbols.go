@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode"
@@ -177,7 +178,7 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
 	seen := map[string]bool{}
 	var items []ilsp.CompletionItem
-	add := func(fi fileIndex, tier string) {
+	add := func(fi fileIndex, tier int) {
 		var ss []sym
 		for _, y := range fi.syms {
 			if seen[y.name] || y.name == prefix || !matchesPrefix(y.name, prefix) {
@@ -192,24 +193,25 @@ func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
 			}
 			seen[y.name] = true
 			items = append(items, ilsp.CompletionItem{
-				Label:      y.name,
-				InsertText: y.name,
-				Kind:       y.kind,
-				SortText:   tier + strings.ToLower(y.name),
+				Label:        y.name,
+				InsertText:   y.name,
+				Kind:         y.kind,
+				SortText:     strconv.Itoa(tier) + strings.ToLower(y.name),
+				LocalityTier: tier,
 			})
 		}
 	}
 	if d := s.buffers[curPath]; d != nil {
-		add(d.idx, "0")
+		add(d.idx, 0)
 	}
 	for path, d := range s.buffers {
 		if path != curPath {
-			add(d.idx, "1")
+			add(d.idx, 1)
 		}
 	}
 	for path, fi := range s.files {
 		if s.buffers[path] == nil {
-			add(fi, "1")
+			add(fi, 2)
 		}
 	}
 	return items

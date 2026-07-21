@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/complete/mru"
 	"ike/internal/editor/buffer"
 	"ike/internal/fuzzy"
 	"ike/internal/highlight"
@@ -410,12 +411,18 @@ func (m Model) completionPrefix() (string, bool) {
 	return string(runes[m.comp.anchor.Col:m.cursor.Col]), true
 }
 
-// filteredCompletion returns the items matching the current prefix, best match
-// first. Matching is fuzzy-subsequence with CamelCase/snake_case boundary
-// bonuses (internal/fuzzy, #845) against the server's filterText (label when
-// absent), so "gCN" finds "getClassName" and a scattered match still passes.
-// The sort is stable over the sortText base order, so equal scores keep the
-// server's ranking.
+// filteredCompletion returns the items matching the current prefix, best
+// first, under the unified ranking (#854):
+//
+//	score = fuzzy·4 + priority + locality + MRU
+//
+// Fuzzy quality (#845 — CamelCase/boundary bonuses against filterText)
+// dominates; the source priority (batch-level, scaled down), the locality
+// tier (nearer origin wins) and the recently-accepted boost (mru store)
+// break within-quality ties, and the stable sort over the merged base order
+// (#851) makes everything deterministic. An empty prefix ranks the whole
+// list the same way with fuzzy 0, so a fresh popup already prefers near and
+// recently used items.
 func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if m.comp == nil {
 		return nil
@@ -424,20 +431,21 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if !ok {
 		return nil
 	}
-	if prefix == "" {
-		return m.comp.items
-	}
 	type scored struct {
 		item  ilsp.CompletionItem
 		score int
 	}
 	var matched []scored
 	for _, it := range m.comp.items {
-		r, ok := fuzzy.Match(prefix, completionFilterText(it))
-		if !ok {
-			continue
+		score := 0
+		if prefix != "" {
+			r, ok := fuzzy.Match(prefix, completionFilterText(it))
+			if !ok {
+				continue
+			}
+			score = r.Score * fuzzyWeight
 		}
-		matched = append(matched, scored{item: it, score: r.Score})
+		matched = append(matched, scored{item: it, score: score + m.completionBoost(it)})
 	}
 	sort.SliceStable(matched, func(i, j int) bool { return matched[i].score > matched[j].score })
 	out := make([]ilsp.CompletionItem, len(matched))
@@ -445,6 +453,28 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 		out[i] = s.item
 	}
 	return out
+}
+
+// Ranking weights (#854): one fuzzy point is worth fuzzyWeight; the boosts
+// below top out well under a single boundary bonus, so match quality always
+// dominates and the boosts only settle comparable matches.
+const (
+	fuzzyWeight   = 4
+	localityStep  = 2  // per tier nearer than "project"
+	priorityScale = 25 // batch priority / priorityScale (lsp 100 → 4)
+	mruWindow     = 10 // accepts deeper in history carry no boost
+)
+
+// completionBoost is the fuzzy-independent part of an item's rank score.
+func (m Model) completionBoost(it ilsp.CompletionItem) int {
+	boost := m.comp.bySource[it.Source].prio / priorityScale
+	if tier := it.LocalityTier; tier < 2 {
+		boost += (2 - tier) * localityStep
+	}
+	if rank := m.compMRU.Rank(it.Label); rank >= 0 && rank < mruWindow {
+		boost += mruWindow - rank
+	}
+	return boost
 }
 
 // completionFilterText is the text an item is matched against: the server's
@@ -525,10 +555,15 @@ func (m *Model) completionAccept() {
 		return m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: pos}, Text: insertText})
 	})
 	m.dirtyFromInsert()
+	m.compMRU.Bump(item.Label) // recently-accepted ranking boost (#854)
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
 	}
 }
+
+// SetCompletionMRU injects the shared recently-accepted-completions store
+// (#854); nil keeps the ranking MRU-free.
+func (m *Model) SetCompletionMRU(s *mru.Store) { m.compMRU = s }
 
 // applyCompletionExtraEdits applies an accepted item's additionalTextEdits
 // (auto-import, #848) through the open insert recorder, bottom-up so earlier

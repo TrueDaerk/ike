@@ -112,7 +112,25 @@ sources implementing `FileObserver`, which re-extract off-goroutine. The
 one-shot background scan is capped tighter (2000 files, 128KB) since each
 file costs a parse.
 
+## Unified ranking (#854)
+
+The popup ranks the merged list with one score:
+
+    score = fuzzy·4 + priority + locality + MRU
+
+Fuzzy match quality (#845) dominates — the boosts top out well under a single
+word-boundary bonus, so they only settle comparable matches. Priority is the
+batch's source priority scaled down (LSP 100 → +4); locality reads the item's
+`LocalityTier` (0 current file — and everything a server answers — +4,
+1 other open buffers +2, 2 project scan +0), which the word/symbol sources
+stamp; MRU boosts the last-accepted labels (rank 0 → +10 fading to 0 past
+rank 10), fed by `internal/complete/mru` — a per-project, most-recent-first
+label store persisted atomically at `.ike/completion-mru.json` and bumped on
+every accept. An empty prefix ranks the same way with fuzzy 0, so a fresh
+popup already prefers near and recently used items. Ties stay deterministic:
+the sort is stable over the merged base order (#851).
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
-`internal/app`) at build time. Planned sources: Emmet (#856). Unified ranking across sources (locality, MRU) is #854.
+`internal/app`) at build time. Planned sources: Emmet (#856).
