@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Closing an editor tab now closes its LSP document (#827):
+  `EventBufferClosed` gained a producer — the root model records every
+  removed editor view and fires the hook once no view of the file remains
+  in any in-memory workspace, so the LSP manager drops the document
+  (didClose) instead of holding its text forever (`/architecture/lsp.md`).
+
 - Closing a background workspace now releases its memory (#825): teardown
   cuts the workspace's registry/tree references and fires the new
   `EventWorkspaceClosed` hook; the LSP bridge closes the root's documents

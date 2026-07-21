@@ -118,6 +118,13 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
+	// closedFileViews collects the file paths whose editor view disappeared
+	// during the current Update pass (tab close, pane close, tab-limit
+	// eviction, drag). The Update wrapper drains it once the whole operation
+	// settled and fires EventBufferClosed for paths with no view left in any
+	// in-memory workspace (#827) — a dragged tab's file, re-opened elsewhere
+	// in the same pass, never fires.
+	closedFileViews []string
 	// recent is the MRU file list behind the recent-files palette mode
 	// (Roadmap 0230). Held by pointer so value-receiver open paths mutate the
 	// one shared store; persisted with the session.
@@ -1906,6 +1913,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	if tick := mm.drainNotifications(); tick != nil {
 		cmd = tea.Batch(cmd, tick)
+	}
+	// EventBufferClosed fires here, once the whole pass settled (#827): a tab
+	// drag closes its source view and reopens the file elsewhere within one
+	// message, so only now is "no view left" decidable.
+	if closed := mm.drainClosedFileViews(); closed != nil {
+		cmd = tea.Batch(cmd, closed)
 	}
 	return mm, cmd
 }
@@ -3928,6 +3941,9 @@ func (m *Model) enforceTabLimit(inst *pane.Instance) {
 		}
 		if ed := inst.TabEditor(idx); ed != nil {
 			m.rememberClosedTab(ed)
+			if ed.HasFile() {
+				m.noteClosedFileView(ed.Path())
+			}
 		}
 		if !inst.CloseTab(idx) {
 			return
@@ -4005,6 +4021,69 @@ func (m Model) fireHooks(event plugin.Event, payload any) []tea.Cmd {
 		}
 	}
 	return cmds
+}
+
+// noteClosedFileView records that one editor view of path disappeared during
+// this Update pass (#827); pathless views (scratch tabs) are ignored. The
+// Update wrapper drains the collected paths via drainClosedFileViews.
+func (m *Model) noteClosedFileView(path string) {
+	if path != "" {
+		m.closedFileViews = append(m.closedFileViews, path)
+	}
+}
+
+// drainClosedFileViews fires EventBufferClosed for every recorded path whose
+// last editor view is gone — the close-side mirror of the EventFileOpened
+// dedup over shared tabs/leaves (#142). Parked workspaces count as open: the
+// LSP document belongs to the file, not to one workspace's view of it.
+func (m *Model) drainClosedFileViews() tea.Cmd {
+	if len(m.closedFileViews) == 0 {
+		return nil
+	}
+	paths := m.closedFileViews
+	m.closedFileViews = nil
+	var cmds []tea.Cmd
+	seen := map[string]bool{}
+	for _, path := range paths {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		if m.pathOpenAnywhere(path) {
+			continue
+		}
+		cmds = append(cmds, m.fireHooks(plugin.EventBufferClosed, path)...)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+// pathOpenAnywhere reports whether any editor tab in any in-memory workspace
+// (active or parked) still shows path.
+func (m Model) pathOpenAnywhere(path string) bool {
+	shows := func(w *workspace.Workspace) bool {
+		if w == nil || w.Panes == nil {
+			return false
+		}
+		for _, key := range w.Panes.Keys() {
+			inst := w.Panes.Get(key)
+			if inst != nil && inst.Kind() == pane.KindEditor && inst.TabForPath(path) >= 0 {
+				return true
+			}
+		}
+		return false
+	}
+	if shows(m.ws.Active()) {
+		return true
+	}
+	for _, root := range m.ws.Background() {
+		if shows(m.ws.Peek(root)) {
+			return true
+		}
+	}
+	return false
 }
 
 // CommandExecutedMsg is the in-app command-executed signal (#679): it is
@@ -4407,6 +4486,9 @@ func (m *Model) closeKey(key string) bool {
 	for _, ed := range inst.Editors() {
 		m.rememberClosedTab(ed)
 		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
+		if ed.HasFile() {
+			m.noteClosedFileView(ed.Path())
+		}
 	}
 	m.backupDropOnClose(inst, key)
 	m.activeWS().Tree = tree
@@ -4430,6 +4512,9 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 		m.rememberClosedTab(ed)
 		ed.PersistUndo() // undo survives the close (#148); no-op while dirty
 		m.backupDropOnCloseTab(ed, inst.Key())
+		if ed.HasFile() {
+			m.noteClosedFileView(ed.Path())
+		}
 	}
 	// A terminal tab (#573) has no document bookkeeping; CloseTab ends its
 	// session.
@@ -5292,6 +5377,7 @@ func (m *Model) commitTabMove(x, y int) {
 		}
 		m.openInTab(target, path)
 		m.backupDropOnCloseTab(ed, src)
+		m.noteClosedFileView(path) // no-op fire: the target tab still shows it
 		inst.CloseTab(m.drag.srcTab)
 		m.setFocus(target)
 		m.syncExplorerOpen()
@@ -5384,6 +5470,7 @@ func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *edi
 	m.layout()
 	m.openInTab(newKey, path)
 	m.backupDropOnCloseTab(ed, m.drag.srcPane)
+	m.noteClosedFileView(path) // no-op fire: the split-off leaf still shows it
 	m.activeWS().Panes.Get(m.drag.srcPane).CloseTab(m.drag.srcTab)
 	m.setFocus(newKey)
 	m.syncExplorerOpen()
