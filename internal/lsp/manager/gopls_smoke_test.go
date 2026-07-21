@@ -67,7 +67,7 @@ func TestSmokeGoplsDiagnosticsAndCompletion(t *testing.T) {
 	time.Sleep(500 * time.Millisecond) // let gopls index the change
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	items, _, err := m.Completion(ctx, path, buffer.Position{Line: 5, Col: 5}) // just after "fmt."
+	items, _, err := m.Completion(ctx, path, buffer.Position{Line: 5, Col: 5}, ".") // just after "fmt."
 	if err != nil {
 		t.Fatalf("completion: %v", err)
 	}

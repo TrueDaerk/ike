@@ -286,7 +286,7 @@ func (m *Manager) fragmentAt(hostPath string, pos buffer.Position) (*server, *fr
 // host server". A fragment whose server lacks the capability handles the
 // request with an empty result — the host server has nothing useful to say
 // about a position inside an embedded string either.
-func (m *Manager) fragmentCompletion(ctx context.Context, hostPath string, pos buffer.Position) (items []protocol.CompletionItem, incomplete bool, handled bool, err error) {
+func (m *Manager) fragmentCompletion(ctx context.Context, hostPath string, pos buffer.Position, triggerChar string) (items []protocol.CompletionItem, incomplete bool, handled bool, err error) {
 	srv, fd, ok := m.fragmentAt(hostPath, pos)
 	if !ok {
 		return nil, false, false, nil
@@ -303,7 +303,7 @@ func (m *Manager) fragmentCompletion(ctx context.Context, hostPath string, pos b
 	items, incomplete, err = srv.cl.Completion(cctx, protocol.CompletionParams{
 		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
 		Position:     protocol.ToLSPPosition(frag.Lines, hostToFrag(frag, pos), enc),
-		Context:      &protocol.CompletionContext{TriggerKind: protocol.CompletionTriggerInvoked},
+		Context:      completionContext(triggerChar, srv.cl.Caps().CompletionTriggers),
 	})
 	if err != nil {
 		return nil, false, true, err

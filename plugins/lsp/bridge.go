@@ -186,10 +186,10 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 					b.compTimer.Stop()
 				}
 				path, line, col := ev.Path, ev.Line, ev.Col
-				b.compTimer = time.AfterFunc(80*time.Millisecond, func() { b.requestCompletion(path, line, col) })
+				b.compTimer = time.AfterFunc(80*time.Millisecond, func() { b.requestCompletion(path, line, col, "") })
 				b.mu.Unlock()
 			} else {
-				b.requestCompletion(ev.Path, ev.Line, ev.Col)
+				b.requestCompletion(ev.Path, ev.Line, ev.Col, ev.Char)
 			}
 		}
 	case host.EditorCompletionSelect:
@@ -1212,7 +1212,7 @@ func (b *bridge) runningLangs() []string {
 
 // requestCompletion fires a completion request on a goroutine and sends the
 // result as a CompletionMsg anchored at the trigger position.
-func (b *bridge) requestCompletion(path string, line, col int) {
+func (b *bridge) requestCompletion(path string, line, col int, triggerChar string) {
 	// The server must hold the just-typed text before completing at this
 	// position (#595); the completion trigger arrives via ev.Path, bypassing
 	// cur(), so flush explicitly here.
@@ -1223,7 +1223,7 @@ func (b *bridge) requestCompletion(path string, line, col int) {
 	}
 	h := b.h
 	go func() {
-		items, incomplete, err := mgr.Completion(context.Background(), path, buffer.Position{Line: line, Col: col})
+		items, incomplete, err := mgr.Completion(context.Background(), path, buffer.Position{Line: line, Col: col}, triggerChar)
 		if err != nil || len(items) == 0 {
 			return
 		}
