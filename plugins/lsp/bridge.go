@@ -130,7 +130,7 @@ func (b *bridge) ensure(h host.API) {
 	// Embedded fragments (0300): tree-sitter injections feed the manager's
 	// virtual documents; a no-cgo build detects nothing and this stays inert.
 	b.mgr.SetFragmentDetector(highlight.Fragments)
-	h.SetEditorEmitter(b)
+	h.SetEditorEmitter("lsp", b)
 }
 
 // Emit implements host.EditorEmitter: it routes editor lifecycle events to the
@@ -1233,7 +1233,13 @@ func (b *bridge) requestCompletion(path string, line, col int, triggerChar strin
 		b.compItems, b.compPath = items, path
 		b.compResolved = map[int]bool{}
 		b.mu.Unlock()
-		h.Send(ilsp.CompletionMsg{Path: path, Line: line, Col: col, Items: mgr.ConvertCompletionItems(path, items), IsIncomplete: incomplete})
+		h.Send(ilsp.CompletionMsg{
+			Path: path, Line: line, Col: col,
+			Items:          mgr.ConvertCompletionItems(path, items),
+			IsIncomplete:   incomplete,
+			Source:         ilsp.SourceLSP,
+			SourcePriority: ilsp.PriorityLSP,
+		})
 	}()
 }
 

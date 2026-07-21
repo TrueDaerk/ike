@@ -106,6 +106,10 @@ open path), so the app also fires the file-open hook for each restored file from
 `Model.Init` — once per file even when it is shared across tabs — so a
 session-restored buffer gets its `didOpen` and diagnostics without a reopen (#332).
 
+Completion is one source of several since Roadmap 0410 (#851): the bridge's
+batches are tagged `Source: lsp` and merge with local index sources in the
+editor — see [/architecture/completion.md](/architecture/completion.md).
+
 **Completion triggering (#527).** Every typed character emits a completion
 trigger carrying the character (`Event.Char`); the *bridge* decides whether it
 warrants a `textDocument/completion` request: the server's advertised

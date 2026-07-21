@@ -60,7 +60,24 @@ type CompletionMsg struct {
 	// IsIncomplete marks a partial reply (#849): the editor re-queries on
 	// further typing instead of narrowing the stale list client-side.
 	IsIncomplete bool
+	// Source names the completion source this batch came from (#851); the
+	// editor merges batches for the same request position per source. The
+	// empty string is a plain single-source batch.
+	Source string
+	// SourcePriority orders sources in the merged popup and decides de-dup
+	// winners (#851): higher wins. See the Priority* constants.
+	SourcePriority int
 }
+
+// Completion source names and priorities (#851). The LSP server outranks the
+// local indexes; a duplicate insert text keeps the higher-priority item.
+const (
+	SourceLSP = "lsp"
+
+	PriorityLSP     = 100
+	PrioritySymbols = 50
+	PriorityWords   = 10
+)
 
 // CompletionItem is the editor-facing completion entry. SortText and
 // FilterText carry the server's ranking and matching hints (#845): items sort
@@ -79,6 +96,9 @@ type CompletionItem struct {
 	// AdditionalEdits are the item's additionalTextEdits (auto-import, #848)
 	// in editor coordinates, applied alongside the accept's main insert.
 	AdditionalEdits []FormatEdit
+	// Source names the completion source that produced the item (#851);
+	// resolve requests only make sense for SourceLSP items.
+	Source string
 	// ID is the item's index in the completion reply (#847); the editor echoes
 	// it on selection so the bridge can completionItem/resolve the raw item.
 	ID int
@@ -491,6 +511,7 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 			IsSnippet:  it.InsertTextFormat == protocol.InsertSnippet,
 			ID:         len(out),
 			Doc:        DocText(it.Documentation),
+			Source:     SourceLSP,
 		})
 	}
 	return out

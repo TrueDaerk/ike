@@ -48,7 +48,7 @@ func TestProgrammaticJumpEmitsCursorMove(t *testing.T) {
 	// Installed after the first open: the LSP bridge registers itself as the
 	// host emitter on file-open, and would otherwise displace the recorder.
 	rec := &recordingEmitter{}
-	m.host.SetEditorEmitter(rec)
+	m.host.SetEditorEmitter("test", rec)
 
 	// Go-to-definition into another file: the bridge must learn the landing.
 	tm, _ = m.Update(ilsp.DefinitionMsg{Path: files[1], Line: 5, Col: 1})

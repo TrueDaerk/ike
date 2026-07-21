@@ -30,15 +30,41 @@ import (
 // identifierStart) — not the anchor..cursor span, which is empty for a manual
 // trigger anchored at the cursor.
 type completionState struct {
-	items  []ilsp.CompletionItem
-	sel    int
-	anchor buffer.Position
+	// bySource holds one batch per completion source (#851): the LSP bridge
+	// and the local engine's sources each answer the same trigger with their
+	// own tagged CompletionMsg, merged here. items is the merged base order:
+	// sources by priority (descending), items by sortText within a source,
+	// duplicates by insert text dropped (first — highest-priority — wins).
+	bySource map[string]sourceBatch
+	items    []ilsp.CompletionItem
+	sel      int
+	anchor   buffer.Position
+	// reqLine/reqCol are the request position all batches of this popup share;
+	// a batch for a different position replaces the popup instead of merging.
+	reqLine, reqCol int
 	// resolved caches completionItem/resolve results by item ID (#847): lazy
 	// documentation for the doc rows and late additionalTextEdits for accept.
+	// Only SourceLSP items resolve, so IDs cannot collide across sources.
 	resolved map[int]resolvedCompletion
-	// incomplete marks a partial server reply (#849): typing re-queries the
-	// server instead of only narrowing the client-side filter.
+}
+
+// sourceBatch is one source's contribution to the popup (#851).
+type sourceBatch struct {
+	items []ilsp.CompletionItem // sorted by completionSortKey
+	prio  int
+	// incomplete marks a partial reply (#849): typing re-queries instead of
+	// only narrowing the client-side filter.
 	incomplete bool
+}
+
+// anyIncomplete reports whether any batch is a partial view (#849).
+func (c *completionState) anyIncomplete() bool {
+	for _, b := range c.bySource {
+		if b.incomplete {
+			return true
+		}
+	}
+	return false
 }
 
 // resolvedCompletion is one cached completionItem/resolve result (#847).
@@ -209,39 +235,131 @@ func (m Model) DiagnosticCounts() (errors, warnings int) {
 
 // --- completion popup ---
 
-// openCompletion shows the popup if the request still matches the cursor: the
-// trigger position must be the current line and at or before the cursor.
+// openCompletion shows the popup if the request still matches the cursor (the
+// trigger position must be the current line and at or before the cursor), or
+// merges the batch into an already-open popup for the same request position
+// (#851) — the LSP server and the local sources each answer with their own
+// tagged batch.
 func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 	if msg.Line != m.cursor.Line || msg.Col > m.cursor.Col {
 		return // the cursor moved away before the result arrived
 	}
-	if len(msg.Items) == 0 {
+	merging := m.comp != nil && m.comp.reqLine == msg.Line && m.comp.reqCol == msg.Col
+	if !merging {
+		if len(msg.Items) == 0 {
+			return // nothing to open; never clobber a popup at another position
+		}
+		// Anchor at the start of the identifier under the request position,
+		// not the position itself: an identifier-rune auto-trigger (#527)
+		// fires after the first typed letter, and the partial word before the
+		// cursor must count into the prefix filter or further typing filters
+		// against the wrong span. Sigil-carrying items ("$he" → "$hello",
+		// #427) widen the anchor past the sigil the same way the accept path
+		// does, so the sigil counts into the prefix instead of failing the
+		// filter. For "."-style triggers nothing precedes the anchor, so this
+		// is the old behavior. The anchor is set by the popup's first batch
+		// and later batches keep it, so merging never moves the popup.
+		pos := buffer.Position{Line: msg.Line, Col: msg.Col}
+		m.comp = &completionState{
+			bySource: map[string]sourceBatch{},
+			anchor:   m.extendAnchorMatch(m.identifierStart(pos), pos, msg.Items),
+			reqLine:  msg.Line,
+			reqCol:   msg.Col,
+			resolved: map[int]resolvedCompletion{},
+		}
+	}
+	// Remember the selected item across the merge so a batch arriving while
+	// the user is arrowing never jumps the selection.
+	prevKey, hadSel := "", false
+	if merging {
+		prevKey, hadSel = m.selectedCompletionKey()
+	}
+	m.comp.bySource[msg.Source] = sourceBatch{
+		items:      sortedBySortKey(msg.Items),
+		prio:       msg.SourcePriority,
+		incomplete: msg.IsIncomplete,
+	}
+	m.rebuildCompletion()
+	if len(m.comp.items) == 0 || m.filteredCompletion() == nil {
 		m.comp = nil
 		return
 	}
-	// Anchor at the start of the identifier under the request position, not
-	// the position itself: an identifier-rune auto-trigger (#527) fires after
-	// the first typed letter, and the partial word before the cursor must
-	// count into the prefix filter or further typing filters against the
-	// wrong span. Sigil-carrying items ("$he" → "$hello", #427) widen the
-	// anchor past the sigil the same way the accept path does, so the sigil
-	// counts into the prefix instead of failing the filter. For "."-style
-	// triggers nothing precedes the anchor, so this is the old behavior.
-	pos := buffer.Position{Line: msg.Line, Col: msg.Col}
-	anchor := m.extendAnchorMatch(m.identifierStart(pos), pos, msg.Items)
-	// Base order is the server's ranking: sortText, label when absent (#845).
-	// The fuzzy filter sorts stably by match score, so this order breaks ties.
-	items := make([]ilsp.CompletionItem, len(msg.Items))
-	copy(items, msg.Items)
-	sort.SliceStable(items, func(i, j int) bool {
-		return completionSortKey(items[i]) < completionSortKey(items[j])
-	})
-	m.comp = &completionState{items: items, anchor: anchor, resolved: map[int]resolvedCompletion{}, incomplete: msg.IsIncomplete}
-	if m.filteredCompletion() == nil {
-		m.comp = nil
-		return
+	if hadSel {
+		m.restoreCompletionSelection(prevKey)
 	}
 	m.requestCompletionResolve()
+}
+
+// sortedBySortKey copies items into the server ranking: sortText, label when
+// absent (#845). The fuzzy filter sorts stably by match score, so this order
+// breaks ties.
+func sortedBySortKey(items []ilsp.CompletionItem) []ilsp.CompletionItem {
+	out := make([]ilsp.CompletionItem, len(items))
+	copy(out, items)
+	sort.SliceStable(out, func(i, j int) bool {
+		return completionSortKey(out[i]) < completionSortKey(out[j])
+	})
+	return out
+}
+
+// rebuildCompletion recomputes the merged item list (#851): sources by
+// priority descending (name ascending on ties, so the order is deterministic),
+// then each batch in its own order, duplicates by insert text dropped — the
+// first occurrence, i.e. the highest-priority source's item, wins.
+func (m *Model) rebuildCompletion() {
+	names := make([]string, 0, len(m.comp.bySource))
+	for n := range m.comp.bySource {
+		names = append(names, n)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		pi, pj := m.comp.bySource[names[i]].prio, m.comp.bySource[names[j]].prio
+		if pi != pj {
+			return pi > pj
+		}
+		return names[i] < names[j]
+	})
+	seen := map[string]bool{}
+	var items []ilsp.CompletionItem
+	for _, n := range names {
+		for _, it := range m.comp.bySource[n].items {
+			if seen[it.InsertText] {
+				continue
+			}
+			seen[it.InsertText] = true
+			items = append(items, it)
+		}
+	}
+	m.comp.items = items
+}
+
+// completionItemKey identifies an item across merges for selection stability.
+func completionItemKey(it ilsp.CompletionItem) string {
+	return it.Source + "\x00" + it.Label + "\x00" + it.InsertText
+}
+
+// selectedCompletionKey returns the selected item's identity, if any.
+func (m Model) selectedCompletionKey() (string, bool) {
+	items := m.filteredCompletion()
+	if m.comp == nil || len(items) == 0 {
+		return "", false
+	}
+	sel := m.comp.sel
+	if sel >= len(items) {
+		sel = 0
+	}
+	return completionItemKey(items[sel]), true
+}
+
+// restoreCompletionSelection re-selects the item with key after a merge; a
+// vanished item falls back to the top.
+func (m *Model) restoreCompletionSelection(key string) {
+	m.comp.sel = 0
+	for i, it := range m.filteredCompletion() {
+		if completionItemKey(it) == key {
+			m.comp.sel = i
+			return
+		}
+	}
 }
 
 // requestCompletionResolve asks the bridge to resolve the selected item when
@@ -256,8 +374,8 @@ func (m *Model) requestCompletionResolve() {
 		sel = 0
 	}
 	it := items[sel]
-	if it.Doc != "" {
-		return
+	if it.Source != ilsp.SourceLSP || it.Doc != "" {
+		return // only server items resolve (#851)
 	}
 	if _, ok := m.comp.resolved[it.ID]; ok {
 		return
@@ -372,8 +490,9 @@ func (m *Model) completionAccept() {
 	}
 	item := items[m.comp.sel]
 	// A resolve may have delivered late additionalTextEdits (#847) — merge
-	// them in unless the item already carried its own.
-	if r, ok := m.comp.resolved[item.ID]; ok && len(item.AdditionalEdits) == 0 {
+	// them in unless the item already carried its own. Resolve results only
+	// exist for server items (#851).
+	if r, ok := m.comp.resolved[item.ID]; ok && item.Source == ilsp.SourceLSP && len(item.AdditionalEdits) == 0 {
 		item.AdditionalEdits = r.edits
 	}
 	m.comp = nil
@@ -597,6 +716,9 @@ func (m Model) CompletionAnchor() (col, line int) {
 func (m Model) selectedCompletionDoc(it ilsp.CompletionItem) string {
 	if it.Doc != "" {
 		return it.Doc
+	}
+	if it.Source != ilsp.SourceLSP {
+		return "" // resolve results only exist for server items (#851)
 	}
 	if r, ok := m.comp.resolved[it.ID]; ok {
 		return r.doc
