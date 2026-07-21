@@ -1022,8 +1022,8 @@ func TestDefinitionCandidatesOpenPicker(t *testing.T) {
 		{Path: "a.go", Line: 1}, {Path: "b.go", Line: 2},
 	}})
 	m = tm.(Model)
-	if got := m.refs.Placeholder(); got != "Usages — filter by file or text…" {
-		t.Fatalf("placeholder after references = %q, want the usages default", got)
+	if got := m.refs.Placeholder(); got != "2 usages — filter by file or text…" {
+		t.Fatalf("placeholder after references = %q, want the counted usages default (#860)", got)
 	}
 }
 

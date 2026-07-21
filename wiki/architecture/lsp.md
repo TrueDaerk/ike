@@ -188,7 +188,11 @@ the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
 is handled by the app (navigate + place cursor); an **empty answer is never
 silent** (#858) — a toast says whether the server found nothing under the
-cursor or no ready server could be asked at all; a jump that lands in a vendored
+cursor or no ready server could be asked at all; standing **on the definition
+itself** (the answered range contains the request position, same file) the
+jump would go nowhere, so F4/cmd+click show the symbol's usages instead
+(#860, JetBrains parity) — declaration excluded, the list's hint carrying the
+count; a jump that lands in a vendored
 dependency (`.venv`/`site-packages`/`node_modules`/…) opens the file read-only —
 the first edit prompts for confirmation before unlocking it (the editor's
 [dependency-file edit guard](./editor.md), #565). Hover markdown is rendered,

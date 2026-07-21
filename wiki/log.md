@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Usages when already at the definition (#860): F4/cmd+click on the
+  definition itself list the symbol's usages (count in the hint, declaration
+  excluded) instead of jumping in place (`/architecture/lsp.md`).
+
 - Cmd+click go-to-definition (#859): cmd+left-click on a symbol places the
   cursor and runs lsp.definition (F4 parity, nav history recorded).
 
