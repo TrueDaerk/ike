@@ -22,6 +22,12 @@ type SwitchFailedMsg struct {
 	Err  error
 }
 
+// CloseWorkspaceMsg asks the root model to unload the background workspace at
+// Path (#820): terminate its terminals/runs/debug sessions and free the
+// memory, without switching to it. Emitted as the aux action of marked
+// recent-projects entries; the history entry itself stays.
+type CloseWorkspaceMsg struct{ Path string }
+
 // UnsavedChangesMsg gates the switch on dirty editor buffers: the root model
 // answers it with a save-all / discard / cancel prompt and only a confirming
 // answer lets the switch to Root proceed.

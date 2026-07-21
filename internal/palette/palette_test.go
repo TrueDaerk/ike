@@ -427,3 +427,78 @@ func TestPaletteResizeChordsAdjustWidthAndRows(t *testing.T) {
 		t.Fatalf("persisted deltas = (%d,%d), want negative", dw, dh)
 	}
 }
+
+// auxMode serves rows for the #820 aux-action tests: one plain entry and one
+// marked "open in memory" with a close aux action.
+type auxMode struct{}
+
+func (auxMode) Prefix() rune        { return '&' }
+func (auxMode) Placeholder() string { return "aux" }
+func (auxMode) Results(string, Context) []Item {
+	return []Item{
+		{Title: "plain", Msg: OpenFileMsg{Path: "plain"}},
+		{Title: "open-proj", Badge: "●", Msg: OpenFileMsg{Path: "proj"}, Aux: RunCommandMsg{ID: "close-ws"}},
+	}
+}
+
+// TestAuxActionKeyAndBadge guards #820: shift+delete emits the selected
+// row's Aux msg keeping the palette open; rows render badge and ✕.
+func TestAuxActionKeyAndBadge(t *testing.T) {
+	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode(), auxMode{})
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{}, '&')
+
+	view := p.View()
+	if !strings.Contains(view, "●") || !strings.Contains(view, "✕") {
+		t.Fatalf("marked row must render badge and aux glyph:\n%s", view)
+	}
+
+	// shift+delete on the plain row: inert.
+	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModShift}); cmd != nil {
+		t.Fatal("aux on a plain row must be inert")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModShift})
+	if cmd == nil {
+		t.Fatal("aux key must emit the Aux msg")
+	}
+	if msg, ok := cmd().(RunCommandMsg); !ok || msg.ID != "close-ws" {
+		t.Fatalf("aux msg = %#v, want RunCommandMsg{close-ws}", cmd())
+	}
+	if !p.IsOpen() {
+		t.Fatal("aux action must keep the palette open")
+	}
+}
+
+// TestAuxActionClick guards #820's mouse path: a click on a row activates
+// it; a click on its ✕ zone runs the aux action and keeps the palette open.
+func TestAuxActionClick(t *testing.T) {
+	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode(), auxMode{})
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{}, '&')
+	inner := p.boxWidth() - 4
+
+	// Click the aux zone of row 1 (rows start at box-relative y=3).
+	cmd := p.Click(2+inner-1, 3+1)
+	if cmd == nil {
+		t.Fatal("aux-zone click must emit a command")
+	}
+	if msg, ok := cmd().(RunCommandMsg); !ok || msg.ID != "close-ws" {
+		t.Fatalf("aux click msg = %#v", cmd())
+	}
+	if !p.IsOpen() {
+		t.Fatal("aux click must keep the palette open")
+	}
+
+	// Click row 0 outside the aux zone: activates and closes.
+	cmd = p.Click(4, 3)
+	if cmd == nil {
+		t.Fatal("row click must activate")
+	}
+	if msg, ok := cmd().(OpenFileMsg); !ok || msg.Path != "plain" {
+		t.Fatalf("row click msg = %#v", cmd())
+	}
+	if p.IsOpen() {
+		t.Fatal("row activation must close the palette")
+	}
+}

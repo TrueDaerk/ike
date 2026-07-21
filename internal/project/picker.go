@@ -31,7 +31,15 @@ const PickerPrefix = '#'
 // injectable for tests; by default it reads the process-wide config.
 type PickerMode struct {
 	history func() []Entry
+	// open reports whether a history entry's workspace is currently loaded
+	// in memory (#820); such entries carry the "●" badge and a close aux
+	// action. Nil marks nothing.
+	open func(path string) bool
 }
+
+// SetOpen installs the in-memory check (#820); the app injects the workspace
+// manager's Peek so the picker package stays workspace-agnostic.
+func (m *PickerMode) SetOpen(open func(path string) bool) { m.open = open }
 
 // NewPickerMode builds the picker mode. A nil history reads the
 // recent-projects list from the live config on every open.
@@ -75,13 +83,19 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 
 	items := make([]palette.Item, 0, len(out)+1)
 	for _, s := range out {
-		items = append(items, palette.Item{
+		it := palette.Item{
 			Title:  s.entry.Name,
 			Detail: CompactPath(s.entry.Path),
 			Spans:  s.spans,
 			Score:  s.score,
 			Msg:    PickedMsg{Path: s.entry.Path},
-		})
+		}
+		if m.open != nil && m.open(s.entry.Path) {
+			// Loaded in memory (#820): badge + close-in-place aux action.
+			it.Badge = "●"
+			it.Aux = CloseWorkspaceMsg{Path: s.entry.Path}
+		}
+		items = append(items, it)
 	}
 	if q := strings.TrimSpace(query); q != "" {
 		// A path-shaped query browses the filesystem (#542): matching

@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/registry"
@@ -402,5 +403,70 @@ func TestWorkspaceCapGuardsBusyEviction(t *testing.T) {
 	}
 	if data, _ := os.ReadFile(file); string(data) != "one\n" {
 		t.Fatalf("eviction discards, never writes, file = %q", data)
+	}
+}
+
+// TestCloseWorkspaceFromList guards #820: a parked background workspace can
+// be unloaded from the recent-projects list without switching; the active
+// one cannot.
+func TestCloseWorkspaceFromList(t *testing.T) {
+	base := t.TempDir()
+	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(a)
+	m := switchModel(t)
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+
+	bg := m.ws.Background()
+	if len(bg) != 1 {
+		t.Fatalf("background = %v, want the parked a", bg)
+	}
+	root := bg[0]
+	if m.ws.Peek(root) == nil {
+		t.Fatal("parked workspace must be peekable (the list marker source)")
+	}
+
+	// Closing the active workspace from the list is refused.
+	out, _ = m.Update(project.CloseWorkspaceMsg{Path: m.activeWS().Root})
+	m = out.(Model)
+	if m.activeWS() == nil || len(m.ws.Background()) != 1 {
+		t.Fatal("closing the active project from the list must be a no-op")
+	}
+
+	// Closing the background workspace unloads it without switching.
+	active := m.activeWS().Root
+	out, _ = m.Update(project.CloseWorkspaceMsg{Path: root})
+	m = out.(Model)
+	if m.ws.Peek(root) != nil || len(m.ws.Background()) != 0 {
+		t.Fatal("close-from-list must drop the background workspace")
+	}
+	if m.activeWS().Root != active {
+		t.Fatal("close-from-list must not switch the active project")
+	}
+}
+
+// TestPickerMarksOpenWorkspaces (#820): picker items for in-memory roots
+// carry the badge and the close aux action.
+func TestPickerMarksOpenWorkspaces(t *testing.T) {
+	entries := []project.Entry{{Name: "alpha", Path: "/p/alpha"}, {Name: "beta", Path: "/p/beta"}}
+	pm := project.NewPickerMode(func() []project.Entry { return entries })
+	pm.SetOpen(func(path string) bool { return path == "/p/alpha" })
+	items := pm.Results("", palette.Context{})
+	if len(items) < 2 {
+		t.Fatalf("items = %d, want the two history entries", len(items))
+	}
+	if items[0].Badge != "●" {
+		t.Fatal("open workspace must carry the ● badge")
+	}
+	if aux, ok := items[0].Aux.(project.CloseWorkspaceMsg); !ok || aux.Path != "/p/alpha" {
+		t.Fatalf("open workspace aux = %#v, want CloseWorkspaceMsg", items[0].Aux)
+	}
+	if items[1].Badge != "" || items[1].Aux != nil {
+		t.Fatal("historical-only entry must stay unmarked")
 	}
 }

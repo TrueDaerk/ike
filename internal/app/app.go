@@ -489,10 +489,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	vcsSt := &vcsState{draft: &vcs.MessageDraft{}} // shared before the literal: the branch picker mode reads it
 	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
 	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
+	wsMgr := wsManager(mgr, resumed, root, panes)  // hoisted: the palette's recent-projects sources read it (#820)
 	m := Model{
 		cmdUsage:     cmdUsage,
 		winSizes:     winSizes,
-		ws:           wsManager(mgr, resumed, root, panes),
+		ws:           wsMgr,
 		recentEditor: edKey,
 		recent:       recent,
 		largeToasted: map[string]bool{},
@@ -506,7 +507,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:         help.New(reg, bindings, helpMinCol(cfg)),
 		shell:        ui.New(shellConfig(cfg)),
 		vcs:          vcsSt,
-		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage),
+		palette:      buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage, wsMgr),
 		refs:         refs,
 		lspStatus:    map[string]string{},
 		symbols:      symbols,
@@ -1231,7 +1232,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState, usage *palette.Usage) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1245,6 +1246,10 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	// The Recent Files dialog grows a Recent Projects column (#778): entries
 	// from project.history (current project excluded), whose activation goes
 	// through the normal validated seamless-switch path (project.PickedMsg).
+	// Background workspaces still open in memory (#777) are marked with "●"
+	// and closable in place via the aux action (#820).
+	openInMemory := func(path string) bool { return wsMgr != nil && wsMgr.Peek(path) != nil }
+	proj.SetOpen(openInMemory)
 	mru.SetProjects(func() []palette.Item {
 		cur, _ := os.Getwd()
 		var items []palette.Item
@@ -1252,10 +1257,15 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 			if e.Path == cur {
 				continue
 			}
-			items = append(items, palette.Item{
+			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
-			})
+			}
+			if openInMemory(e.Path) {
+				it.Badge = "●"
+				it.Aux = project.CloseWorkspaceMsg{Path: e.Path}
+			}
+			items = append(items, it)
 		}
 		return items
 	})
@@ -2755,6 +2765,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Picker selection: validate off the Update loop; the result comes
 		// back as SwitchProjectMsg or SwitchFailedMsg.
 		return m, project.SwitchTo(msg.Path)
+
+	case project.CloseWorkspaceMsg:
+		// Close-from-list (#820): unload the background workspace without
+		// switching — sessions terminated, memory freed; the history entry
+		// stays. The active workspace cannot be closed this way.
+		if m.activeWS() != nil && m.activeWS().Root == msg.Path {
+			m.host.Notify(host.Info, "cannot close the active project from the list")
+			return m, nil
+		}
+		w := m.ws.Drop(msg.Path)
+		if w == nil {
+			return m, nil // already gone (evicted meanwhile)
+		}
+		teardownWorkspace(w)
+		m.palette.Refresh() // the "●" badge and aux action disappear in place
+		m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(msg.Path))
+		return m, nil
 
 	case project.SwitchProjectMsg:
 		return m.handleSwitchProject(msg)
@@ -4855,14 +4882,21 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.palette.IsOpen() {
+		v := m.palette.View()
+		bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 		if m.palette.Anchored() {
-			ax, ay := m.palette.AnchorPos()
-			v := m.palette.View()
-			if msg.action == mousePress && !inRect(msg.X, msg.Y, ax, ay, lipgloss.Width(v), lipgloss.Height(v)) {
+			bx, by = m.palette.AnchorPos()
+		}
+		if msg.action == mousePress {
+			if !inRect(msg.X, msg.Y, bx, by, lipgloss.Width(v), lipgloss.Height(v)) {
 				m.palette.Close()
+				return m, nil
 			}
-		} else if clickOutside(msg, m.palette.View(), m.width, m.height) {
-			m.palette.Close()
+			// A left press inside the box hits the row layout (#820): rows
+			// activate, the "✕" zone runs the aux action (close workspace).
+			if msg.Button == tea.MouseLeft {
+				return m, m.palette.Click(msg.X-bx, msg.Y-by)
+			}
 		}
 		return m, nil
 	}

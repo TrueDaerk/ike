@@ -14,6 +14,14 @@ type Item struct {
 	Spans  []int
 	Score  int
 	Msg    tea.Msg
+	// Badge is an optional dim marker rendered after the title (#820): the
+	// recent-projects lists mark workspaces that are open in memory with "●".
+	Badge string
+	// Aux is an optional secondary action (#820): shift+delete on the
+	// selected row (or a click on the row's "✕" zone) emits it without
+	// closing the palette — e.g. closing a background workspace from the
+	// recent-projects list. Nil hides the affordance.
+	Aux tea.Msg
 }
 
 // Mode is a palette sub-mode selected by a single leading prefix rune. It turns
