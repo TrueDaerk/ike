@@ -332,7 +332,7 @@ func TestKeymapPageImportsJetBrainsXML(t *testing.T) {
 		t.Fatal("import input must capture keys")
 	}
 	// Replace the seeded "~/" with the fixture's absolute path.
-	k.importInput = ""
+	k.importField = textField{}
 	for _, r := range path {
 		k.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}

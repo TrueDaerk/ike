@@ -308,3 +308,13 @@ entries capture through a shared sub-panel with keymap-page semantics —
 multi-step chords, enter confirms, backspace undoes a step — instead of
 grabbing the next keypress. **?** opens a key-help sub-panel listing the
 shared keys plus the active page's (`KeyHelper` seam).
+
+## Shared text input (0420, #888)
+
+Every settings inline edit routes through one `textField` wrapping the
+shared `ui.EditKey`/`ui.CursorView` (#763): a movable cursor, home/end,
+word motions, word deletes — and **rune-safe backspace** (the nine
+hand-rolled append-only inputs byte-sliced backspace and corrupted umlauts).
+Ported: schema String/Int/Path edits, the keymap import path, the toolchain
+custom path, the venv wizard's location step, the Tools and PHP-debug-mapping
+forms, and the LSP override fields.

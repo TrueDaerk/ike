@@ -75,7 +75,7 @@ type Model struct {
 	formOff int // scroll offset (in rendered lines) of the form column
 
 	editing bool
-	input   string
+	edit    textField   // shared cursor input (#888)
 	invalid string      // inline validation error for the current edit
 	suggest pathSuggest // live path completion while editing a Path entry (#541)
 
@@ -175,7 +175,8 @@ func (m *Model) Open() {
 	m.hoverCat, m.hoverRow = -1, -1
 	m.followCat, m.followForm = true, true
 	m.editing, m.filtering, m.picking = false, false, false
-	m.filter, m.input, m.invalid = "", "", ""
+	m.filter, m.invalid = "", ""
+	m.edit = textField{}
 	m.stack = nil
 }
 
@@ -380,8 +381,8 @@ func (m *Model) clickEdit(x, row int) tea.Cmd {
 		// press takes the candidate outright (the rendered line only shows
 		// the last path component, so index into the candidates).
 		if opt := idx - m.sel - 1; opt >= 0 && opt < len(m.suggest.candidates) && opt < maxSuggestLines {
-			m.input = m.suggest.candidates[opt]
-			m.suggest.refresh(m.input)
+			m.edit.Set(m.suggest.candidates[opt])
+			m.suggest.refresh(m.edit.text)
 			return nil
 		}
 	}
@@ -643,9 +644,9 @@ func (m *Model) activate() tea.Cmd {
 	default:
 		m.editing = true
 		m.invalid = ""
-		m.input = value(e.Key)
+		m.edit = newTextField(value(e.Key))
 		if e.Type == Path {
-			m.suggest.refresh(m.input)
+			m.suggest.refresh(m.edit.text)
 		}
 		return nil
 	}
@@ -709,26 +710,17 @@ func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
 		m.editing = false
 		m.invalid = ""
 		m.suggest.clear()
+		return nil
 	case tea.KeyEnter:
 		return m.commit(e)
 	case tea.KeyTab:
 		if e.Type == Path {
-			m.input = m.suggest.complete(m.input)
+			m.edit.Set(m.suggest.complete(m.edit.text))
 		}
-	case tea.KeyBackspace:
-		if m.input != "" {
-			m.input = m.input[:len(m.input)-1]
-			if e.Type == Path {
-				m.suggest.refresh(m.input)
-			}
-		}
-	default:
-		if key.Text != "" {
-			m.input += key.Text
-			if e.Type == Path {
-				m.suggest.refresh(m.input)
-			}
-		}
+		return nil
+	}
+	if _, changed := m.edit.Handle(key); changed && e.Type == Path {
+		m.suggest.refresh(m.edit.text)
 	}
 	return nil
 }
@@ -737,7 +729,7 @@ func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
 func (m *Model) commit(e Entry) tea.Cmd {
 	switch e.Type {
 	case Int:
-		n, err := strconv.Atoi(strings.TrimSpace(m.input))
+		n, err := strconv.Atoi(strings.TrimSpace(m.edit.text))
 		if err != nil {
 			m.invalid = "not a number"
 			return nil
@@ -748,7 +740,7 @@ func (m *Model) commit(e Entry) tea.Cmd {
 		m.editing = false
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, n)
 	case Path:
-		p := strings.TrimSpace(m.input)
+		p := strings.TrimSpace(m.edit.text)
 		if p != "" {
 			if _, err := os.Stat(expandHome(p)); err != nil {
 				m.invalid = "path does not exist"
@@ -760,7 +752,7 @@ func (m *Model) commit(e Entry) tea.Cmd {
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, p)
 	default: // String
 		m.editing = false
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, m.input)
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, m.edit.text)
 	}
 }
 

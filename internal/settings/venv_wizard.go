@@ -68,7 +68,7 @@ type venvWizard struct {
 	tool       string
 	python     string // resolved choice ("" = default)
 
-	path     string
+	path     textField // shared cursor input (#888)
 	suggest  pathSuggest
 	pathNote string
 
@@ -84,7 +84,7 @@ type venvWizard struct {
 // tools always listed, unavailable ones disabled with the reason (never
 // hidden), the uv side effect disclosed up front.
 func newVenvWizard(page *ToolchainPage, host SubPanelHost) *venvWizard {
-	w := &venvWizard{page: page, host: host, path: ".venv"}
+	w := &venvWizard{page: page, host: host, path: newTextField(".venv")}
 	uvOK := page.look("uv") != ""
 	pyOK := page.look("python3") != "" || page.look("python") != ""
 	w.tools = []wizToolRow{
@@ -245,7 +245,7 @@ func (w *venvWizard) tick() tea.Cmd {
 
 // create starts the run step.
 func (w *venvWizard) create() tea.Cmd {
-	target := strings.TrimSpace(w.path)
+	target := strings.TrimSpace(w.path.text)
 	if target == "" {
 		target = ".venv"
 	}
@@ -319,18 +319,12 @@ func (w *venvWizard) updatePath(key tea.KeyPressMsg) tea.Cmd {
 	case tea.KeyEnter:
 		return w.create()
 	case tea.KeyTab:
-		w.path = w.suggest.complete(w.path)
+		w.path.Set(w.suggest.complete(w.path.text))
 		w.refreshPathNote()
-	case tea.KeyBackspace:
-		if r := []rune(w.path); len(r) > 0 {
-			w.path = string(r[:len(r)-1])
-			w.suggest.refresh(w.path)
-			w.refreshPathNote()
-		}
 	default:
-		if key.Text != "" {
-			w.path += key.Text
-			w.suggest.refresh(w.path)
+		// Shared cursor input (#888).
+		if _, changed := w.path.Handle(key); changed {
+			w.suggest.refresh(w.path.text)
 			w.refreshPathNote()
 		}
 	}
@@ -339,7 +333,7 @@ func (w *venvWizard) updatePath(key tea.KeyPressMsg) tea.Cmd {
 
 // refreshPathNote updates the live target validation line.
 func (w *venvWizard) refreshPathNote() {
-	target := strings.TrimSpace(w.path)
+	target := strings.TrimSpace(w.path.text)
 	if target == "" {
 		target = ".venv"
 	}
@@ -377,11 +371,12 @@ func (w *venvWizard) Click(_, y int) tea.Cmd {
 		// Line 0 prompt, line 1 input, line 2 note, suggestions from line 3.
 		if idx := y - 3; idx >= 0 {
 			lines := w.suggest.lines()
-			if idx < len(lines) {
-				w.path = strings.TrimSpace(lines[idx])
-				w.suggest.refresh(w.path)
+			if idx < len(w.suggest.candidates) {
+				w.path.Set(w.suggest.candidates[idx])
+				w.suggest.refresh(w.path.text)
 				w.refreshPathNote()
 			}
+			_ = lines
 		}
 	}
 	return nil
@@ -451,7 +446,7 @@ func (w *venvWizard) View(width, height int) string {
 		}
 	case wStepPath:
 		add(sec.Render(" Where should the environment live? (relative to the project root)"))
-		add(" " + w.path + "▌")
+		add(" " + w.path.View())
 		if w.pathNote != "" {
 			add(sec.Render(" ⚠ " + w.pathNote))
 		} else {

@@ -62,8 +62,8 @@ func TestToolchainCustomPathTabCompletes(t *testing.T) {
 	// Disambiguate and tab: the input extends to the full directory.
 	typeString(p, "ev")
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); p.input != want {
-		t.Fatalf("input after tab = %q, want %q", p.input, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); p.inputField.text != want {
+		t.Fatalf("input after tab = %q, want %q", p.inputField.text, want)
 	}
 
 	// esc clears the suggestions with the input.
@@ -88,8 +88,8 @@ func TestToolchainCustomPathTabCompletesFile(t *testing.T) {
 	p.custom = true
 	typeString(p, filepath.Join(root, "py"))
 	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
-	if want := filepath.Join(root, "python3"); p.input != want {
-		t.Fatalf("input after tab = %q, want %q", p.input, want)
+	if want := filepath.Join(root, "python3"); p.inputField.text != want {
+		t.Fatalf("input after tab = %q, want %q", p.inputField.text, want)
 	}
 }
 
@@ -117,8 +117,8 @@ func TestPanelPathEntryTabCompletes(t *testing.T) {
 		t.Fatalf("view must show the suggestion:\n%s", v)
 	}
 	m.Update(key("tab"))
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); m.input != want {
-		t.Fatalf("input after tab = %q, want %q", m.input, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); m.edit.text != want {
+		t.Fatalf("input after tab = %q, want %q", m.edit.text, want)
 	}
 	m.Update(key("esc"))
 	if m.suggest.candidates != nil {

@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings shared text input (0420, #888): all nine inline inputs use
+  ui.EditKey/CursorView — cursor, word ops, rune-safe backspace (umlaut
+  corruption fixed) (`/architecture/settings-ui.md`).
+
 - Settings key unification (0420, #887): r=reset / R=restart / g=refresh /
   o=options-JSON / space toggles; pgup-pgdn-home-end everywhere; shared
   chord-capture sub-panel; `?` key-help overlay
