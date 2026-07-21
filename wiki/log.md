@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Shell language support (#894): tree-sitter-bash highlighting, rc-file base
+  names + shebang interpreters, bash-language-server (with automatic
+  shellcheck diagnostics) (`/architecture/languages.md`).
+
 - Shebang language fallback (#893): extensionless files resolve their language
   from the `#!` line (env and env `-S` forms, version-suffix stripping);
   editor records a per-path association the whole path-keyed pipeline follows

@@ -32,6 +32,7 @@ import (
 	_ "ike/plugins/languages/json"
 	_ "ike/plugins/languages/php"
 	_ "ike/plugins/languages/python"
+	_ "ike/plugins/languages/shell"
 	_ "ike/plugins/languages/sql"
 	_ "ike/plugins/languages/toml"
 	_ "ike/plugins/languages/web"
