@@ -130,7 +130,19 @@ every accept. An empty prefix ranks the same way with fuzzy 0, so a fresh
 popup already prefers near and recently used items. Ties stay deterministic:
 the sort is stable over the merged base order (#851).
 
+## Emmet subset (#856)
+
+`internal/complete/emmet` (name `emmet`, priority `lsp.PriorityEmmet`) covers
+the high-frequency Emmet muscle memory as **snippet items** (#846) with an
+expansion preview in the item detail: CSS property shorthands (`m10` →
+`margin: 10px;`, `bg` → `background: $1;`, fixed forms like `df` →
+`display: flex;`) in CSS/SCSS/LESS buffers, and HTML tag snippets (`div` →
+`<div>$1</div>`, list/img/input/link special shapes) in HTML buffers, outside
+attribute values. Full Emmet abbreviations (`ul>li*3`) contain
+non-identifier characters the popup's identifier-replace accept path cannot
+span and are deliberately out of scope.
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
-`internal/app`) at build time. Planned sources: Emmet (#856).
+`internal/app`) at build time. All Phase-2 sources have landed.

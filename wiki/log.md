@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Emmet completion subset (0410, #856): CSS shorthands and HTML tag
+  snippets as snippet completion items with expansion previews
+  (`/architecture/completion.md`).
+
 - Web languages + server choices (0410, #855): TypeScript/JavaScript (vtsls),
   HTML and CSS (vscode-langservers-extracted) registered as language plugins;
   per-language default-server rationale documented, overridable via
