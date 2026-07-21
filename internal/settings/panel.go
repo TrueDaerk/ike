@@ -77,6 +77,7 @@ type Model struct {
 	editing bool
 	edit    textField   // shared cursor input (#888)
 	invalid string      // inline validation error for the current edit
+	notice  string      // transient info line (clamp feedback, #889)
 	suggest pathSuggest // live path completion while editing a Path entry (#541)
 
 	picking bool // enum picker open for the selected row
@@ -551,14 +552,30 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		if m.focus == formColumn {
+			if cmd := m.stepInt(1); cmd != nil {
+				return cmd
+			}
 			return m.cycleEnum(1) // quick next on an enum row; no-op otherwise
 		}
 	case "left", "h":
-		// Always the mirror of →: back to the category column, never a value
-		// change (#533). The enum quick-cycle lives on →/l alone (it wraps),
-		// enter opens the picker.
+		// On enum/int rows ← is →'s mirror as a value change (#889); on
+		// every other row it returns to the category column (#533).
 		if m.focus == formColumn && m.filter == "" {
+			if cmd := m.stepInt(-1); cmd != nil {
+				return cmd
+			}
+			if r, ok := m.current(); ok && r.kind == rowEntry && r.entry.Type == Enum {
+				return m.cycleEnum(-1)
+			}
 			m.focus = catColumn
+		}
+	case "+", "=":
+		if m.focus == formColumn {
+			return m.stepInt(1)
+		}
+	case "-":
+		if m.focus == formColumn {
+			return m.stepInt(-1)
 		}
 	case "enter":
 		if m.focus == catColumn && m.filter == "" {
@@ -597,6 +614,7 @@ func (m *Model) moveNav(key string) {
 
 // move shifts the focused column's selection.
 func (m *Model) move(dir int) {
+	m.notice = ""
 	if m.focus == catColumn && m.filter == "" {
 		m.cat = clamp(m.cat+dir, 0, len(m.pages)-1)
 		m.sel = 0
@@ -650,6 +668,33 @@ func (m *Model) activate() tea.Cmd {
 		}
 		return nil
 	}
+}
+
+// stepInt adjusts the selected Int row by delta (steppers, #889), clamped to
+// the entry's range with visible feedback; nil when the selection is not an
+// Int row.
+func (m *Model) stepInt(delta int) tea.Cmd {
+	r, ok := m.current()
+	if !ok || r.kind != rowEntry || r.entry.Type != Int {
+		return nil
+	}
+	e := r.entry
+	n, err := strconv.Atoi(strings.TrimSpace(value(e.Key)))
+	if err != nil {
+		n = 0
+	}
+	next := n + delta
+	if e.Min != 0 || e.Max != 0 {
+		clamped := clamp(next, e.Min, e.Max)
+		if clamped != next {
+			m.notice = "clamped to " + strconv.Itoa(clamped)
+		}
+		next = clamped
+	}
+	if next == n {
+		return nil
+	}
+	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, next)
 }
 
 // optionIndex returns the position of val in e.Options (0 when absent).
@@ -735,7 +780,13 @@ func (m *Model) commit(e Entry) tea.Cmd {
 			return nil
 		}
 		if e.Min != 0 || e.Max != 0 {
-			n = clamp(n, e.Min, e.Max)
+			clamped := clamp(n, e.Min, e.Max)
+			if clamped != n {
+				// The silent clamp committed a different number than typed
+				// (#889) — say so.
+				m.notice = "clamped to " + strconv.Itoa(clamped)
+			}
+			n = clamped
 		}
 		m.editing = false
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, n)

@@ -331,6 +331,9 @@ func (m *Model) renderDetail(w int) []string {
 		if m.invalid != "" {
 			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.invalid))
 		}
+		if m.notice != "" {
+			out = append(out, lipgloss.NewStyle().Foreground(pal.Info).Render(" ℹ "+m.notice))
+		}
 		text := r.entry.Description + "  (" + r.entry.Key + ")"
 		for _, line := range strings.Split(ansi.Wordwrap(text, w-1, ""), "\n") {
 			if len(out) == detailLines {
@@ -370,6 +373,28 @@ func (m *Model) renderPicker(e Entry, clip lipgloss.Style) []string {
 		out = append(out, clip.Render(style.Render(line)))
 	}
 	return out
+}
+
+// affordanceValue renders a value with its widget affordance (#889): a
+// checkbox for booleans, chevrons for enums (a picker opens / ←→ cycle),
+// steppers for ints, a pencil for text-shaped rows — so the row says how it
+// is edited before enter is pressed.
+func affordanceValue(e Entry, val string) string {
+	switch e.Type {
+	case Bool:
+		if val == "true" {
+			return "[x]"
+		}
+		return "[ ]"
+	case Enum:
+		return "‹ " + val + " ›"
+	case Int:
+		return val + " ±"
+	case Chord:
+		return val + " ⌨"
+	default: // String, Path
+		return val + " ✎"
+	}
 }
 
 // customPagesNote names the custom pages the filter cannot search (the ones
@@ -412,7 +437,7 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	}
 	e := r.entry
 
-	val := value(e.Key)
+	val := affordanceValue(e, value(e.Key))
 	if selected && m.editing {
 		val = m.edit.View() // shared cursor input (#888)
 	}

@@ -144,7 +144,7 @@ func TestSchemaRendersValuesAndLayer(t *testing.T) {
 	m.SetSize(90, 20)
 	m.Open()
 	v := m.View()
-	for _, want := range []string{"Interface", "Appearance", "Menu bar", "true", "@default", "SETTINGS"} {
+	for _, want := range []string{"Interface", "Appearance", "Menu bar", "[x]", "@default", "SETTINGS"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -330,12 +330,14 @@ func TestEnumQuickCycle(t *testing.T) {
 	if got := config.Get().Theme.Name; got != "default" {
 		t.Fatalf("l must wrap to the first option, got %q", got)
 	}
-	// ← is the mirror of →: back to the categories, no config write (#533).
-	if cmd := m.Update(key("left")); cmd != nil || m.focus != catColumn {
-		t.Fatal("left on an enum row must leave the column without cycling")
+	// ← mirrors → as a value change on enum rows (#889): it cycles back and
+	// keeps the focus in the form column.
+	apply(t, m.Update(key("left")))
+	if got := config.Get().Theme.Name; got != "tokyo-night" {
+		t.Fatalf("left must cycle to the previous option, got %q", got)
 	}
-	if got := config.Get().Theme.Name; got != "default" {
-		t.Fatalf("left must not change the value, got %q", got)
+	if m.focus != formColumn {
+		t.Fatal("left on an enum row must stay in the form column")
 	}
 }
 
