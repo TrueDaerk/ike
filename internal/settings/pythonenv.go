@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -24,12 +25,15 @@ import (
 
 // EnvMsg reports a finished environment action. Interpreter is the python
 // binary to register (empty when the action failed); Label phrases the
-// result for the toast.
+// result for the toast. Output carries the tail of the tools' combined
+// stdout/stderr (#884) so a failure shows the real reason, not a generic
+// line.
 type EnvMsg struct {
 	LangID      string
 	Interpreter string
 	Label       string
 	Err         error
+	Output      string
 }
 
 // envBusy is the in-flight marker the view shows while an action runs.
@@ -113,6 +117,92 @@ func createEnvWith(root string, spec envSpec, run runCommand, look lookPath) tea
 		return EnvMsg{LangID: "python", Interpreter: interp, Label: label}
 	}
 }
+
+// createEnvRun is createEnvWith for the wizard (#884): cancelable through
+// ctx, with the tools' combined stdout/stderr collected so failures carry
+// the real reason. runC must honor ctx (a cancelled context kills the child).
+func createEnvRun(ctx context.Context, root string, spec envSpec, runC runCtx, look lookPath) tea.Cmd {
+	venv := pathcomplete.Expand(spec.Target)
+	if !filepath.IsAbs(venv) {
+		venv = filepath.Join(root, venv)
+	}
+	if abs, err := filepath.Abs(venv); err == nil {
+		venv = abs
+	}
+	interp := filepath.Join(venv, "bin", "python")
+	return func() tea.Msg {
+		var tail outputTail
+		run := func(name string, args ...string) string {
+			out, _ := runC(ctx, name, args...)
+			tail.add(name, args, out)
+			return out
+		}
+		var scaffolded []string
+		detail := spec.Tool
+		switch spec.Tool {
+		case "uv":
+			if look("uv") == "" {
+				return EnvMsg{LangID: "python", Err: fmt.Errorf("uv not found on PATH")}
+			}
+			scaffolded = uvScaffold(root, run)
+			args := []string{"venv"}
+			if spec.Python != "" {
+				args = append(args, "--python", spec.Python)
+				detail += ", python " + spec.Python
+			}
+			run("uv", append(args, venv)...)
+		default:
+			base := spec.Python
+			if base == "" {
+				for _, name := range []string{"python3", "python"} {
+					if look(name) != "" {
+						base = name
+						break
+					}
+				}
+			}
+			if base == "" {
+				return EnvMsg{LangID: "python", Err: fmt.Errorf("neither uv nor python found on PATH")}
+			}
+			detail = base + " -m venv"
+			run(base, "-m", "venv", venv)
+		}
+		if ctx.Err() != nil {
+			return EnvMsg{LangID: "python", Err: fmt.Errorf("cancelled"), Output: tail.String()}
+		}
+		if !fileExists(interp) {
+			return EnvMsg{LangID: "python", Err: fmt.Errorf("environment creation left no interpreter at %s", interp), Output: tail.String()}
+		}
+		if spec.Tool == "uv" {
+			scaffolded = append(scaffolded, uvLock(root, run)...)
+		}
+		label := "created " + venv + " (" + detail + ")"
+		for _, s := range scaffolded {
+			label += " + " + s
+		}
+		return EnvMsg{LangID: "python", Interpreter: interp, Label: label, Output: tail.String()}
+	}
+}
+
+// outputTail collects the last lines of every command's combined output.
+type outputTail struct{ lines []string }
+
+// tailMax bounds the kept output; failures rarely need more.
+const tailMax = 12
+
+func (o *outputTail) add(name string, args []string, out string) {
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return
+	}
+	o.lines = append(o.lines, "$ "+name+" "+strings.Join(args, " "))
+	o.lines = append(o.lines, strings.Split(out, "\n")...)
+	if len(o.lines) > tailMax {
+		o.lines = o.lines[len(o.lines)-tailMax:]
+	}
+}
+
+func (o *outputTail) String() string { return strings.Join(o.lines, "\n") }
 
 // uvScaffold makes the project a uv project before the env is created
 // (#548): a missing pyproject.toml is generated with `uv init --bare` (the

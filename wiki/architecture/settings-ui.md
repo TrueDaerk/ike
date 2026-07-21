@@ -247,3 +247,21 @@ never a close. Async messages `Deliver`ed to the panel reach open sub-panels
 implementing `MsgReceiver`. First migration: the Tools add/edit form — fields
 are click-to-focus rows, Save/Cancel are buttons, a stray click no longer
 destroys typed input, and backspace is rune-safe.
+
+## Venv wizard (0420, #884)
+
+The Python environment creation is a four-step sub-panel (`venv_wizard.go`),
+replacing the hidden `n` state machine: **Tool** (uv recommended / stdlib
+venv — both always listed, unavailable ones disabled with the reason; the uv
+scaffold side effect `pyproject.toml + uv.lock` disclosed up front), **Python**
+(uv versions / discovered interpreters with provenance, fetched off the UI
+goroutine, highlight-followed windowing), **Location** (path input prefilled
+`.venv`, clickable completion suggestions, live already-exists note),
+**Run** (spinner + elapsed via `WizardTickMsg`, cancel kills the child through
+`context`, failures show the tools' combined output tail — `execRunCtx`
+captures stderr the old `execRun` swallowed). Esc means back one step. The
+result still lands as `EnvMsg`: the app writes `lang.python.interpreter` at
+project scope and offers the LSP restart, unchanged. Entry points: the
+visible `+ New environment…` action row in the Toolchain list (enter/click),
+the `n` shortcut, and the `python.newEnvironment` palette command
+(`Model.OpenPythonEnvWizard`).

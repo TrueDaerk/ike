@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Venv wizard sub-panel (0420, #884): visible four-step create flow —
+  tool/python/location/run — with disclosure, clickable suggestions,
+  spinner+cancel, real stderr on failure, and a `+ New environment…` action
+  row plus `python.newEnvironment` palette command
+  (`/architecture/settings-ui.md`).
+
 - Settings sub-panel primitive (0420, #883): pushed overlay levels with
   breadcrumb, one-level esc, clickable button rows; Tools add/edit form
   migrated as the first sub-panel (`/architecture/settings-ui.md`).

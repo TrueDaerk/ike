@@ -174,33 +174,50 @@ func TestWizardToolStep(t *testing.T) {
 	py := mkInterp(t, t.TempDir())
 	f := &fakeEnv{binaries: map[string]string{"uv": "/bin/uv", "python3": py3, "python": py}}
 	p := pythonPage(t, f)
+	h := &stubHost{}
+	p.SetSubPanelHost(h)
 	p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
-	if p.wizStep != 1 || len(p.wizTools) != 2 || p.wizTools[0] != "uv" || p.wizTools[1] != "venv" {
-		t.Fatalf("wizard = step %d tools %v", p.wizStep, p.wizTools)
+	w, ok := h.top().(*venvWizard)
+	if !ok {
+		t.Fatal("n must push the venv wizard")
+	}
+	if len(w.tools) != 2 || !w.tools[0].available || !w.tools[1].available {
+		t.Fatalf("tools = %+v", w.tools)
 	}
 	// Pick venv: candidates come from discovery (PATH python3 + python).
-	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if p.wizTool != "venv" || p.wizStep != 2 || len(p.wizPys) != 2 {
-		t.Fatalf("wizard = tool %q step %d pys %v", p.wizTool, p.wizStep, p.wizPys)
+	w.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	cmd := w.next()
+	if cmd == nil {
+		t.Fatal("tool step must fetch candidates")
 	}
-	p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if !p.envInput || p.wizPython != py3 {
-		t.Fatalf("input=%v python=%q", p.envInput, p.wizPython)
+	w.ReceiveCmd(cmd())
+	if w.tool != "venv" || w.step != wStepPython || len(w.pys) != 2 {
+		t.Fatalf("wizard = tool %q step %d pys %v", w.tool, w.step, w.pys)
 	}
-	// Esc from the wizard resets everything.
-	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if p.envInput || p.wizStep != 0 || p.Capturing() {
-		t.Fatalf("esc must reset: input=%v step=%d", p.envInput, p.wizStep)
+	w.next()
+	if w.step != wStepPath || w.python != py3 {
+		t.Fatalf("path step: step=%d python=%q", w.step, w.python)
+	}
+	// Esc steps BACK (not abort): path → python → tool → closed.
+	w.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if w.step != wStepPython {
+		t.Fatalf("esc from path must return to the python step, step=%d", w.step)
+	}
+	w.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	w.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if h.top() != nil {
+		t.Fatal("esc from the tool step must close the wizard")
 	}
 }
 
 // TestWizardNoToolchain: nothing on PATH — n reports instead of opening.
 func TestWizardNoToolchain(t *testing.T) {
 	p := pythonPage(t, &fakeEnv{binaries: map[string]string{}})
+	h := &stubHost{}
+	p.SetSubPanelHost(h)
 	p.Update(tea.KeyPressMsg{Code: 'n', Text: "n"})
-	if p.wizStep != 0 || p.envInput || !strings.Contains(p.envState, "neither uv nor python") {
-		t.Fatalf("state = step %d input %v %q", p.wizStep, p.envInput, p.envState)
+	if h.top() != nil || !strings.Contains(p.envState, "neither uv nor python") {
+		t.Fatalf("state = %q, stack=%v", p.envState, h.top())
 	}
 }
 

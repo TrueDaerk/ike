@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,6 +29,16 @@ type resolveShim func(root, path string) string
 // globList expands a glob pattern to matching paths (#675); production is
 // filepath.Glob. Injectable for tests.
 type globList func(pattern string) []string
+
+// runCtx is a context-aware command runner returning the combined
+// stdout/stderr (#884): the wizard's cancel kills the child through ctx.
+type runCtx func(ctx context.Context, name string, args ...string) (string, error)
+
+// execRunCtx is the production runCtx.
+func execRunCtx(ctx context.Context, name string, args ...string) (string, error) {
+	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	return string(out), err
+}
 
 // execRun is the production runCommand.
 func execRun(name string, args ...string) string {

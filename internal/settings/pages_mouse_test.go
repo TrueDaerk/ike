@@ -83,8 +83,8 @@ func TestToolchainPageMouse(t *testing.T) {
 	p.look = func(string) string { return "" }
 
 	idx := -1
-	for i, l := range p.languages() {
-		if l.ID == "tcmouse" {
+	for i, r := range p.rows() {
+		if r.lang.ID == "tcmouse" {
 			idx = i
 		}
 	}
