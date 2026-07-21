@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Recent-projects lists mark in-memory background workspaces with ● and
+  close them in place (#820): shift+delete or a click on the ✕ zone unloads
+  the workspace without switching (`/architecture/workspace.md`).
+
 - Mouse back/forward buttons drive the navigation history (#816): buttons 4/5
   resolve through the keymap as `mouse-back`/`mouse-forward` (rebindable),
   default nav.back / nav.forward (`/architecture/navigation-history.md`).

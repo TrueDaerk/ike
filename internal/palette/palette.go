@@ -259,6 +259,12 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	}
+	// The aux action (#820): shift+delete emits the focused row's Aux msg —
+	// e.g. close a background workspace — and keeps the palette open; the
+	// caller refreshes the lists via Refresh.
+	if msg.Code == tea.KeyDelete && msg.Mod == tea.ModShift {
+		return p.auxCmd()
+	}
 	switch {
 	case msg.Code == tea.KeyEscape:
 		p.Close()
@@ -299,6 +305,32 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// auxCmd emits the focused row's Aux msg (#820), keeping the palette open;
+// rows without an Aux action are inert.
+func (p *Palette) auxCmd() tea.Cmd {
+	it, ok := p.focusedItem()
+	if !ok || it.Aux == nil {
+		return nil
+	}
+	msg := it.Aux
+	return func() tea.Msg { return msg }
+}
+
+// focusedItem resolves the row the keyboard focus is on: the side column's
+// selection while it holds the focus, else the main list's.
+func (p *Palette) focusedItem() (Item, bool) {
+	if p.sideFocus {
+		if p.sideSel >= 0 && p.sideSel < len(p.sideItems) {
+			return p.sideItems[p.sideSel], true
+		}
+		return Item{}, false
+	}
+	if p.selected >= 0 && p.selected < len(p.items) {
+		return p.items[p.selected], true
+	}
+	return Item{}, false
 }
 
 // activate emits the selected item's message and closes the palette. With no
@@ -342,6 +374,66 @@ func (p *Palette) move(delta int) {
 		p.selected = len(p.items) - 1
 	}
 	p.scrollToSelected()
+}
+
+// Click maps a left press at box-relative (x, y) onto the row layout (#820):
+// a press on a result row activates it; a press on the row's right-pinned
+// "✕" zone emits its Aux action instead, keeping the palette open. Presses
+// on chrome (prompt, separator, heading, divider) are inert.
+func (p *Palette) Click(x, y int) tea.Cmd {
+	x -= 2 // border + horizontal padding
+	y -= 1 // top border
+	inner := p.boxWidth() - 4
+	if inner < 1 || y < 2 || x < 0 || x >= inner {
+		return nil // prompt row, separator, or outside the content
+	}
+	mainX, mainW := 0, inner
+	if len(p.sideItems) > 0 {
+		sideW := sideWidth(inner)
+		mainX, mainW = sideW+3, inner-sideW-3
+		if mainW < 10 {
+			mainW = 10
+		}
+		if x < sideW { // side column: heading at y==2, items below
+			idx := y - 3
+			if idx < 0 || idx >= len(p.sideItems) {
+				return nil
+			}
+			p.sideFocus, p.sideSel = true, idx
+			it := p.sideItems[idx]
+			if it.Aux != nil && x >= sideW-auxGlyphW {
+				return p.auxCmd()
+			}
+			return p.activateSide()
+		}
+		if x < mainX {
+			return nil // the divider strip
+		}
+	}
+	idx := p.top + (y - 2)
+	if idx < 0 || idx >= len(p.items) {
+		return nil
+	}
+	p.sideFocus = false
+	p.selected = idx
+	it := p.items[idx]
+	if it.Aux != nil && x >= mainX+mainW-auxGlyphW {
+		return p.auxCmd()
+	}
+	return p.activate()
+}
+
+// sideWidth is the left column's width for an inner content width (#778),
+// shared by the renderer and the click mapping.
+func sideWidth(inner int) int {
+	w := inner / 3
+	if w < 18 {
+		w = 18
+	}
+	if w > 34 {
+		w = 34
+	}
+	return w
 }
 
 // mode resolves the active mode and the query body (prefix stripped). A leading
@@ -414,13 +506,7 @@ func (p *Palette) View() string {
 	// A SideMode open (#778) renders the left column (e.g. Recent Projects)
 	// beside the main list, separated by a dim rule.
 	if len(p.sideItems) > 0 {
-		sideW := inner / 3
-		if sideW < 18 {
-			sideW = 18
-		}
-		if sideW > 34 {
-			sideW = 34
-		}
+		sideW := sideWidth(inner)
 		mainW := inner - sideW - 3
 		if mainW < 10 {
 			mainW = 10
@@ -515,21 +601,46 @@ func (p *Palette) sideView(width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
-// sideRow renders one left-column line: marker + highlighted title, truncated
-// to the column width.
+// auxGlyphW is the right-pinned "✕" affordance's width (glyph + one space).
+const auxGlyphW = 2
+
+// sideRow renders one left-column line: marker + highlighted title, an
+// optional Badge (#820, dim accent), and the right-pinned "✕" for rows with
+// an Aux action, truncated to the column width.
 func (p *Palette) sideRow(it Item, selected bool, width int) string {
 	const markerW = 2
 	marker := "  "
 	if selected {
 		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
 	}
-	title, _ := highlight(it.Title, it.Spans, p.accentColor(), width-markerW)
-	line := marker + title
+	badge, badgeW := p.badgeView(it)
+	auxW := 0
+	if it.Aux != nil {
+		auxW = auxGlyphW
+	}
+	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), width-markerW-badgeW-auxW)
+	line := marker + title + badge
+	if it.Aux != nil {
+		gap := width - markerW - titleW - badgeW - auxGlyphW
+		if gap < 1 {
+			gap = 1
+		}
+		line += strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(p.theme().Border).Render("✕ ")
+	}
 	style := lipgloss.NewStyle().MaxWidth(width)
 	if selected {
 		style = style.Background(p.theme().Panel).Width(width)
 	}
 	return style.Render(line)
+}
+
+// badgeView renders an item's Badge (#820) as a dim-accent suffix.
+func (p *Palette) badgeView(it Item) (string, int) {
+	if it.Badge == "" {
+		return "", 0
+	}
+	return " " + lipgloss.NewStyle().Foreground(p.accentColor()).Render(it.Badge),
+		1 + ansi.StringWidth(it.Badge)
 }
 
 // row renders a single result line: a selection marker, the highlighted title on
@@ -552,18 +663,25 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 		detailW = ansi.StringWidth(it.Detail) + 2
 	}
 
+	badge, badgeW := p.badgeView(it)
+	auxW := 0
+	aux := ""
+	if it.Aux != nil {
+		auxW = auxGlyphW
+		aux = lipgloss.NewStyle().Foreground(p.theme().Border).Render(" ✕")
+	}
 	avail := width - markerW
-	titleMax := avail - detailW - 1 // keep at least one space before the chip
+	titleMax := avail - detailW - badgeW - auxW - 1 // keep a space before the chip
 	if titleMax < 1 {
 		titleMax = 1
 	}
 	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
 
-	gap := avail - titleW - detailW
+	gap := avail - titleW - badgeW - detailW - auxW
 	if gap < 1 {
 		gap = 1
 	}
-	line := marker + title + strings.Repeat(" ", gap) + detail
+	line := marker + title + badge + strings.Repeat(" ", gap) + detail + aux
 
 	style := lipgloss.NewStyle().MaxWidth(width)
 	if selected {

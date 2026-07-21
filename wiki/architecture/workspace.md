@@ -4,7 +4,7 @@ title: Workspace
 description: Per-project UI state unit (pane registry, split tree, terminal return-focus) behind a Manager — the Roadmap 0370 seam for seamless project switching.
 resource: internal/workspace
 tags: [architecture, workspace, project-switching, panes, layout]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-21T00:00:00Z
 ---
 
 # Workspace
@@ -71,6 +71,18 @@ re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
 plain switching never prompts. Per-project layout/session persistence needs
 no extra machinery: every workspace's layout is saved at park time, so an
 evicted project restores from disk on its next visit like any first visit.
+
+## Marker & close-from-list (#820)
+
+The recent-projects lists (the `project.switch` picker and the Recent Files
+dialog's Recent Projects column) mark entries whose workspace is parked in
+memory with a **`●` badge** and offer a close-in-place aux action rendered as
+a right-pinned `✕`: `shift+delete` on the selected row or a click on the `✕`
+zone emits `project.CloseWorkspaceMsg`, which tears the background workspace
+down (`teardownWorkspace`) without switching — the palette stays open and
+refreshes, the badge disappears, the history entry remains. The active
+project refuses the action with an info toast. Manual close is the explicit
+counterpart to LRU eviction.
 
 ## Working-directory invariant (#779)
 
