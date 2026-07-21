@@ -16,6 +16,8 @@ func init() {
 	register.Language(lang.Language{
 		ID:         "php",
 		Extensions: []string{"php", "phtml"},
+		// Shebang fallback (#893): extensionless CLI scripts.
+		Interpreters: []string{"php"},
 		Grammar:    grammar(),
 		Server: &lang.ServerSpec{
 			Language:    "php",
