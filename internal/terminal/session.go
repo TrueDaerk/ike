@@ -61,6 +61,18 @@ type Session struct {
 	lastResize    time.Time
 	pendW, pendH  int
 	resizePending bool
+	// Resize reserve (#807): the fullest known content per screen row. The
+	// upstream emulator hard-truncates the grid on shrink, so before every
+	// applied resize the visible screen is snapshotted here, and after a grow
+	// the clipped cells are written back — guarded by a prefix match, so a
+	// row the child rewrote meanwhile is never corrupted.
+	reserve  []uv.Line
+	reserveW int
+	// gridMu serializes the feed loop's emulator writes against the resize
+	// snapshot/restore (#807): SafeEmulator locks each call, but CellAt
+	// returns a pointer into the live buffer — copying the cell after the
+	// call returns would race a concurrent feed write.
+	gridMu sync.Mutex
 	title    string // last OSC 0/2 title the application set ("" until then)
 	exitCode int
 	exited   bool
@@ -217,7 +229,9 @@ func (s *Session) feedLoop() {
 		if !ok {
 			return
 		}
+		s.gridMu.Lock()
 		_, _ = s.em.Write(chunk)
+		s.gridMu.Unlock()
 		s.version.Add(1)
 		s.notify()
 	}
@@ -308,12 +322,114 @@ func (s *Session) Resize(w, h int) {
 }
 
 // applyResizeLocked performs the actual PTY + emulator resize; s.mu held.
+// Around the emulator resize it maintains the content reserve (#807): the
+// upstream emulator destroys clipped cells on shrink, so the screen is
+// snapshotted before and the clipped region restored after a grow.
 func (s *Session) applyResizeLocked(w, h int) {
+	oldW, oldH := s.w, s.h
+	// gridMu keeps the feed loop out for the whole snapshot → resize →
+	// restore sequence, so the copied cells cannot race a concurrent write
+	// and no child output lands between snapshot and restore.
+	s.gridMu.Lock()
+	s.snapshotReserveLocked(oldW, oldH)
 	s.w, s.h = w, h
 	s.lastResize = time.Now()
 	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	s.em.Resize(w, h)
+	s.restoreReserveLocked(oldW, oldH, w, h)
+	s.gridMu.Unlock()
 	s.version.Add(1)
+}
+
+// snapshotReserveLocked folds the current screen into the reserve: a row
+// whose visible cells still prefix-match its reserve row keeps the longer
+// reserved content, anything else is replaced by what is on screen now.
+// Rows beyond the current height are kept for a later height grow.
+func (s *Session) snapshotReserveLocked(w, h int) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	if len(s.reserve) < h {
+		s.reserve = append(s.reserve, make([]uv.Line, h-len(s.reserve))...)
+	}
+	for y := 0; y < h; y++ {
+		row := make(uv.Line, w)
+		for x := 0; x < w; x++ {
+			if c := s.em.CellAt(x, y); c != nil {
+				row[x] = *c
+			} else {
+				row[x] = uv.EmptyCell
+			}
+		}
+		if !rowPrefixEqual(s.reserve[y], row, w) {
+			s.reserve[y] = row
+		}
+	}
+	if w > s.reserveW {
+		s.reserveW = w
+	}
+}
+
+// restoreReserveLocked writes reserved cells back after a grow. Width: each
+// row that still prefix-matches its reserve row gets the clipped columns
+// back. Height: the rows a shrink dropped come back only when every
+// overlapping row matched — content that scrolled meanwhile shifts row
+// indexes, and restoring then would resurrect stale lines.
+func (s *Session) restoreReserveLocked(oldW, oldH, w, h int) {
+	if len(s.reserve) == 0 {
+		return
+	}
+	allMatch := true
+	overlap := min(min(oldH, h), len(s.reserve))
+	for y := 0; y < overlap; y++ {
+		cur := s.screenRowLocked(min(oldW, w), y)
+		if !rowPrefixEqual(s.reserve[y], cur, min(oldW, w)) {
+			allMatch = false
+			continue
+		}
+		if w > oldW { // width grow: fill the clipped columns
+			for x := oldW; x < w && x < len(s.reserve[y]); x++ {
+				c := s.reserve[y][x]
+				s.em.SetCell(x, y, &c)
+			}
+		}
+	}
+	if h > oldH && allMatch { // height grow: bring the dropped rows back
+		for y := oldH; y < h && y < len(s.reserve); y++ {
+			for x := 0; x < w && x < len(s.reserve[y]); x++ {
+				c := s.reserve[y][x]
+				s.em.SetCell(x, y, &c)
+			}
+		}
+	}
+}
+
+// screenRowLocked reads the first n cells of screen row y.
+func (s *Session) screenRowLocked(n, y int) uv.Line {
+	row := make(uv.Line, n)
+	for x := 0; x < n; x++ {
+		if c := s.em.CellAt(x, y); c != nil {
+			row[x] = *c
+		} else {
+			row[x] = uv.EmptyCell
+		}
+	}
+	return row
+}
+
+// rowPrefixEqual reports whether the first n cells of a and b hold the same
+// content. Style differences are ignored — the guard only needs to know the
+// text is still the text the reserve captured.
+func rowPrefixEqual(a, b uv.Line, n int) bool {
+	if len(a) < n || len(b) < n {
+		return false
+	}
+	for i := 0; i < n; i++ {
+		if a[i].Content != b[i].Content {
+			return false
+		}
+	}
+	return true
 }
 
 // flushResize applies the last size a debounced burst settled on.

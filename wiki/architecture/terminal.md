@@ -55,6 +55,16 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   concurrent OutputMsgs **across sessions** into one batch per adaptive flush
   (#803) — so `yes`, a build log, or eight busy TUI panes at once cannot
   flood the render loop or starve input handling.
+- **Resize content preservation** (#807): the upstream emulator hard-truncates
+  the grid on shrink (clipped cells are destroyed). `Session` keeps a resize
+  reserve — the fullest known content per screen row, snapshotted before every
+  applied resize — and writes the clipped region back after a grow, guarded by
+  a per-row prefix match so content the child rewrote meanwhile is never
+  overwritten (a height restore additionally requires every overlapping row to
+  match, since scrolled content shifts row indexes). Scrollback lines keep
+  their full width upstream — only the render clips — so scrollback needs no
+  reserve. `gridMu` serializes the feed loop against the snapshot/restore
+  sequence (CellAt returns pointers into the live buffer).
 - **View render cache** (#803): `Session.View` caches the rendered grid keyed
   by a mutation version (bumped on feed writes, resize, clear); a frame
   re-renders only grids that actually changed (measured ~270µs per 200×60

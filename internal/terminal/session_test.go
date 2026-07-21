@@ -577,3 +577,93 @@ func BenchmarkSessionResizeApply(b *testing.B) {
 		s.mu.Unlock()
 	}
 }
+
+// resizeNow applies a resize synchronously, bypassing the #804 debounce.
+func resizeNow(s *Session, w, h int) {
+	s.mu.Lock()
+	s.applyResizeLocked(w, h)
+	s.mu.Unlock()
+}
+
+// TestSessionResizeWidthRoundTrip guards #807: shrinking the pane below the
+// content width and growing it back restores the clipped columns — the
+// upstream emulator alone would hard-truncate them for good.
+func TestSessionResizeWidthRoundTrip(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+
+	long := "0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmno" // 62 cols
+	for _, r := range "echo " + long + "\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "long echo output", func() bool {
+		return strings.Count(plainView(s), long) >= 2 // echoed input + output
+	})
+
+	resizeNow(s, 40, 24) // clip below the content width
+	if strings.Contains(plainView(s), long) {
+		t.Fatal("shrink should clip the visible line")
+	}
+	resizeNow(s, 80, 24) // grow back
+	if got := plainView(s); !strings.Contains(got, long) {
+		t.Fatalf("grow must restore the clipped columns, view:\n%s", got)
+	}
+}
+
+// TestSessionResizeHeightRoundTrip guards #807 vertically: rows dropped by a
+// height shrink come back on grow. A command session keeps the test
+// deterministic — an interactive shell would react to the SIGWINCH with an
+// async prompt redraw that scrolls the screen mid-test (then the prefix
+// guard rightly refuses to restore, which is the stale-content behaviour
+// TestSessionResizeReserveNeverResurrectsStale covers).
+func TestSessionResizeHeightRoundTrip(t *testing.T) {
+	c := &collector{}
+	s, err := StartCommandSession("terminal",
+		[]string{"/bin/sh", "-c", "printf 'line-%s\\n' 1 2 3 4 5 6 7 8; sleep 30"},
+		t.TempDir(), 80, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	waitFor(t, "printf output", func() bool {
+		v := plainView(s)
+		return strings.Contains(v, "line-8") && strings.Contains(v, "line-1")
+	})
+
+	resizeNow(s, 80, 4) // drop the bottom rows
+	if v := plainView(s); strings.Contains(v, "line-8") {
+		t.Fatalf("height shrink should clip bottom rows, view:\n%s", v)
+	}
+	resizeNow(s, 80, 24) // grow back
+	if v := plainView(s); !strings.Contains(v, "line-8") || !strings.Contains(v, "line-1") {
+		t.Fatalf("height grow must restore the dropped rows, view:\n%s", v)
+	}
+}
+
+// TestSessionResizeReserveNeverResurrectsStale: content the child rewrote
+// after the shrink must win over the reserve — the prefix guard.
+func TestSessionResizeReserveNeverResurrectsStale(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+
+	long := strings.Repeat("A", 60)
+	for _, r := range "echo " + long + "\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "first echo", func() bool { return strings.Contains(plainView(s), long) })
+
+	resizeNow(s, 40, 24)
+	// The child clears and rewrites the screen at the narrow size.
+	for _, r := range "clear; echo fresh-content\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "fresh content", func() bool {
+		v := plainView(s)
+		return strings.Contains(v, "fresh-content") && !strings.Contains(v, "AAAA")
+	})
+
+	resizeNow(s, 80, 24)
+	if v := plainView(s); strings.Contains(v, "AAAA") {
+		t.Fatalf("grow restored stale pre-shrink content over rewritten rows, view:\n%s", v)
+	}
+}
