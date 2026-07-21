@@ -463,6 +463,7 @@ func (m *Model) Load(path string) error {
 		return err
 	}
 	m.buf = buffer.FromString(text)
+	m.sniffLanguage()
 	m.seedBreakpointLines()
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
 	if eol, ok := m.editorconfigEOL(); ok {
@@ -578,6 +579,23 @@ func (m *Model) RestoreText(text string) {
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil
 	m.scroll()
+}
+
+// sniffLanguage wires the shebang fallback (#893): when neither base name nor
+// extension resolves a language for the open path, the first buffer line's
+// shebang picks one. A hit is recorded in the lang registry via AssociatePath,
+// so every path-keyed consumer — highlighting, LSP didOpen, the statusline —
+// resolves the file through the ordinary ByPath from here on.
+func (m *Model) sniffLanguage() {
+	if m.path == "" || m.buf.LineCount() == 0 {
+		return
+	}
+	if _, ok := lang.ByPath(m.path); ok {
+		return
+	}
+	if l, ok := lang.ForShebang(m.buf.Line(0)); ok {
+		lang.AssociatePath(m.path, l.ID)
+	}
 }
 
 // Path returns the loaded file path ("" when no file is open).

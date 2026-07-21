@@ -22,6 +22,9 @@ func init() {
 	register.Language(lang.Language{
 		ID:         "python",
 		Extensions: []string{"py", "pyi"},
+		// Shebang fallback (#893): extensionless scripts; python3.12-style
+		// version suffixes are stripped by the lookup.
+		Interpreters: []string{"python", "python3"},
 		Grammar:    grammar(),
 		Server: &lang.ServerSpec{
 			Language:    "python",

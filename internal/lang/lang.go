@@ -36,6 +36,12 @@ type Language struct {
 	Server     *ServerSpec
 	Toolchain  Toolchain
 
+	// Interpreters lists the interpreter base names that select this language
+	// via a shebang line (#893), e.g. []string{"python", "python3"} — the
+	// fallback when a file has no extension and no known base name. See
+	// ForShebang in shebang.go.
+	Interpreters []string
+
 	// Comment syntax for toggling (Roadmap 0120). LineComment is the marker
 	// placed before a line ("//", "#"); BlockComment is the open/close pair
 	// ("/*", "*/"). Empty strings mean the language has no such syntax.
@@ -70,10 +76,12 @@ type Language struct {
 }
 
 var (
-	mu     sync.RWMutex
-	byID   = map[string]Language{}
-	extIdx = map[string]string{} // extension (no dot, lower) -> language id
-	nameIx = map[string]string{} // exact base name -> language id
+	mu       sync.RWMutex
+	byID     = map[string]Language{}
+	extIdx   = map[string]string{} // extension (no dot, lower) -> language id
+	nameIx   = map[string]string{} // exact base name -> language id
+	interpIx = map[string]string{} // shebang interpreter base name -> language id (#893)
+	pathIx   = map[string]string{} // exact full path -> language id, from content sniffing (#893)
 )
 
 // Register records a language. Re-registering the same ID replaces the prior
@@ -89,6 +97,21 @@ func Register(l Language) {
 	for _, n := range l.Filenames {
 		nameIx[n] = l.ID
 	}
+	for _, i := range l.Interpreters {
+		interpIx[i] = l.ID
+	}
+}
+
+// AssociatePath records that path is language id, overriding what its
+// extension or base name would say. The editor calls it when content sniffing
+// — the shebang fallback (#893) — resolves a file the static indexes cannot;
+// every path-keyed consumer (highlighting, LSP didOpen, statusline) then
+// resolves the file through the ordinary ByPath. Re-sniffing on a later open
+// simply overwrites the entry.
+func AssociatePath(path, id string) {
+	mu.Lock()
+	defer mu.Unlock()
+	pathIx[path] = id
 }
 
 // ByID returns the language with the given id.
@@ -110,11 +133,17 @@ func ByExt(ext string) (Language, bool) {
 	return Language{}, false
 }
 
-// ByPath returns the language for a file path, matching an exact base name first
-// (e.g. "Dockerfile") then falling back to the extension.
+// ByPath returns the language for a file path: a sniffed per-path association
+// (#893) wins, then an exact base name match (e.g. "Dockerfile"), then the
+// extension.
 func ByPath(path string) (Language, bool) {
 	base := filepath.Base(path)
 	mu.RLock()
+	if id, ok := pathIx[path]; ok {
+		l := byID[id]
+		mu.RUnlock()
+		return l, true
+	}
 	if id, ok := nameIx[base]; ok {
 		l := byID[id]
 		mu.RUnlock()

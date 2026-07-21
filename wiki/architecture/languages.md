@@ -37,7 +37,9 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // exact base name, then extension
+func ByPath(path string) (Language, bool)   // sniffed path association, exact base name, then extension
+func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
+func AssociatePath(path, id string)         // record a content-sniffed language for one path
 func Comments(path string) (line string, block [2]string, ok bool)
 func IndentAfter(path string) ([]string, bool)
 func TemplateFor(path string) string        // rendered new-file content (#170)
@@ -62,6 +64,20 @@ functions, methods, func literals and type declarations; Python declares
 function and class definitions; PHP declares functions, methods, anonymous
 functions, class/interface/trait/enum declarations and namespaces. An empty
 list leaves sticky scroll inert for the language.
+
+### Shebang fallback (#893)
+
+Files with no extension and no known base name (`deploy`, `run-tests`) resolve
+via the `#!` line: a language declares `Interpreters` (base names, e.g. python
+→ `python`, `python3`), and the **editor** — only when the static lookups both
+miss — reads the first buffer line on open and calls `lang.ForShebang`. The
+parser handles the plain form (`#!/bin/bash`), the env form
+(`#!/usr/bin/env python3`) and env `-S` (`#!/usr/bin/env -S deno run`: first
+non-flag, non-assignment word after env); trailing version digits are stripped
+on a miss so `python3.12` matches `python`. A hit is recorded with
+`lang.AssociatePath(path, id)` — a per-path override consulted first by
+`ByPath` — so highlighting, the LSP bridge and the statusline (all path-keyed)
+follow without any extra plumbing.
 
 `Grammar` is `any`: the concrete compiled Tree-sitter grammar is built by
 `highlight.NewGrammar` (behind the cgo tag) and only stored/handed back here, so

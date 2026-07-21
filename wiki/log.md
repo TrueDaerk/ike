@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Shebang language fallback (#893): extensionless files resolve their language
+  from the `#!` line (env and env `-S` forms, version-suffix stripping);
+  editor records a per-path association the whole path-keyed pipeline follows
+  (`/architecture/languages.md`).
+
 - YAML language support (#879): tree-sitter-yaml highlighting with sticky
   mapping-key scopes, yaml-language-server (schema-store) completion; indent
   rules limited to `:` and block-scalar introducers
