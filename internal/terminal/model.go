@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -9,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/vt"
 
+	"ike/internal/overlay"
 	"ike/internal/theme"
 )
 
@@ -569,10 +571,15 @@ func (m Model) View() string {
 	return m.completionView(overlayCursor(view, cx, cy))
 }
 
-// deadView renders a finished session: the grid with the exit footer as the
-// last row, truncating the grid by one row when it fills the pane so the
-// footer stays visible inside the fixed pane height (#810).
+// deadView renders a finished session. A tool pane (#810) composites a
+// centered exit dialog over the last output — prominent even in fullscreen;
+// a pane too small for the dialog (and every non-tool command session) falls
+// back to the footer line, truncating the grid by one row when it fills the
+// pane so the footer stays visible inside the fixed pane height.
 func (m Model) deadView(view string) string {
+	if g, ok := m.deadDialogGeom(); ok {
+		return overlay.Place(view, m.renderDeadDialog(g), g.x, g.y, m.w, m.h)
+	}
 	lines := strings.Split(view, "\n")
 	if m.h > 0 && len(lines) >= m.h {
 		lines = lines[:m.h-1]
@@ -580,10 +587,84 @@ func (m Model) deadView(view string) string {
 	return strings.Join(append(lines, m.exitLine()), "\n")
 }
 
+// Dead-dialog button labels (#810). ASCII: the click mapping equates visual
+// columns with byte offsets.
+const (
+	deadRestartBtn = "[ Restart (r) ]"
+	deadCloseBtn   = "[ Close (ctrl+w) ]"
+	deadBtnGap     = "  "
+	deadDialogPad  = 2 // horizontal padding inside the border
+)
+
+// deadDialog is the exit dialog geometry, shared by the renderer and the
+// click mapping so both always agree.
+type deadDialog struct {
+	title, buttons         string
+	x, y, w, h             int // outer box rect, pane-local
+	btnRow                 int // absolute row of the buttons line
+	restartX, closeX       int // absolute start columns of the buttons
+}
+
+// deadDialogGeom computes the centered dialog geometry for a finished tool
+// session; ok=false when the session is alive, not a tool, or the pane is
+// too small for the box (the footer fallback then applies).
+func (m Model) deadDialogGeom() (deadDialog, bool) {
+	if m.sess == nil || m.sess.Running() || m.tool == "" {
+		return deadDialog{}, false
+	}
+	title := m.tool + " exited"
+	if c, ok := m.sess.ExitCode(); ok {
+		title += " (code " + strconv.Itoa(c) + ")"
+	}
+	buttons := deadRestartBtn + deadBtnGap + deadCloseBtn
+	inner := len(buttons)
+	if len(title) > inner {
+		inner = len(title)
+	}
+	g := deadDialog{
+		title:   title,
+		buttons: buttons,
+		w:       inner + 2*deadDialogPad + 2, // padding + border
+		h:       5,                           // border + title + blank + buttons + border
+	}
+	if g.w > m.w || g.h > m.h {
+		return deadDialog{}, false
+	}
+	g.x = (m.w - g.w) / 2
+	g.y = (m.h - g.h) / 2
+	g.btnRow = g.y + 3 // border + title + blank
+	g.restartX = g.x + 1 + deadDialogPad
+	g.closeX = g.restartX + len(deadRestartBtn) + len(deadBtnGap)
+	return g, true
+}
+
+// renderDeadDialog draws the dialog box for geometry g.
+func (m Model) renderDeadDialog(g deadDialog) string {
+	var accent, borderCol color.Color = lipgloss.White, lipgloss.White
+	if m.pal != nil {
+		accent, borderCol = m.pal.Accent, m.pal.Border
+	}
+	btnStyle := lipgloss.NewStyle().Bold(true).Reverse(true)
+	buttons := btnStyle.Foreground(accent).Render(deadRestartBtn) +
+		deadBtnGap + btnStyle.Render(deadCloseBtn)
+	title := lipgloss.NewStyle().Bold(true).Render(g.title)
+	inner := g.w - 2*deadDialogPad - 2
+	body := lipgloss.JoinVertical(lipgloss.Left,
+		lipgloss.NewStyle().Width(inner).Render(title),
+		"",
+		buttons,
+	)
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderCol).
+		Padding(0, deadDialogPad).
+		Render(body)
+}
+
 // exitLine renders the completion marker: command sessions (#574) report the
-// exit code so a run's outcome is visible at a glance; tool panes (#810)
-// additionally offer their footer actions. Kept ASCII — DeadActionHit maps
-// click columns onto byte offsets of this string.
+// exit code so a run's outcome is visible at a glance; a tool pane too small
+// for the dialog (#810) falls back to the footer actions here. Kept ASCII —
+// DeadActionHit maps click columns onto byte offsets of this string.
 func (m Model) exitLine() string {
 	if m.tool != "" {
 		code := ""
@@ -598,11 +679,24 @@ func (m Model) exitLine() string {
 	return "[process exited]"
 }
 
-// DeadActionHit maps a click in a finished tool pane onto a footer action
-// (#810): "restart", "close", or "" for anywhere else. x/y are pane-local
-// content coordinates.
+// DeadActionHit maps a click in a finished tool pane onto an exit-dialog
+// button (#810) — "restart", "close", or "" for anywhere else. x/y are
+// pane-local content coordinates. Falls back to the footer-line spans when
+// the pane is too small for the dialog.
 func (m Model) DeadActionHit(x, y int) string {
 	if m.sess == nil || m.sess.Running() || m.tool == "" {
+		return ""
+	}
+	if g, ok := m.deadDialogGeom(); ok {
+		if y != g.btnRow {
+			return ""
+		}
+		switch {
+		case x >= g.restartX && x < g.restartX+len(deadRestartBtn):
+			return "restart"
+		case x >= g.closeX && x < g.closeX+len(deadCloseBtn):
+			return "close"
+		}
 		return ""
 	}
 	row := len(strings.Split(m.sess.View(), "\n"))

@@ -7,9 +7,9 @@
   (left/right), with a full-span ghost preview
   (`/architecture/pane-layout.md`).
 
-- Tool panes survive their program's exit (#810): footer offers restart in
-  place (r / click) and close (ctrl+w / click); the layout slot is kept
-  (`/architecture/tool-panes.md`).
+- Tool panes survive their program's exit (#810): a centered exit dialog
+  offers restart in place (r / click) and close (ctrl+w / click); the layout
+  slot is kept (`/architecture/tool-panes.md`).
 
 - Terminal shrink no longer destroys content (#807): the session snapshots
   the screen before every applied resize and restores the clipped cells on

@@ -146,8 +146,11 @@ func TestToolExitKeepsPaneOpen(t *testing.T) {
 		t.Fatal("tool pane must stay open when its program exits (#810)")
 	}
 	view := inst.Terminal().View()
-	if !strings.Contains(view, "[restart (r)]") || !strings.Contains(view, "[close (ctrl+w)]") {
-		t.Fatalf("dead tool pane must offer footer actions, view tail: %q", view[max(0, len(view)-200):])
+	if !strings.Contains(view, "[ Restart (r) ]") || !strings.Contains(view, "[ Close (ctrl+w) ]") {
+		t.Fatalf("dead tool pane must show the exit dialog actions, view: %q", view)
+	}
+	if !strings.Contains(view, "shortlived exited") {
+		t.Fatal("exit dialog must name the tool and its exit")
 	}
 }
 

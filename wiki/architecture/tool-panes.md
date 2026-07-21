@@ -84,12 +84,14 @@ as a terminal**: the title is `⚙ NAME` (no shell, directory, OSC title or
 interpreter mappings) and the statusline names the tool the same way.
 
 When the program exits the pane **stays open** (#810), keeping its layout
-slot: the last output remains visible and the footer row offers the two
-actions — `[<name> exited (code N)]  [restart (r)]  [close (ctrl+w)]`.
-`r` (or clicking `[restart (r)]`) reruns the configured command in place with
-the same directory and environment; `ctrl+w` (or clicking `[close (ctrl+w)]`)
-removes the pane. Run command sessions keep their existing stay-open
-behavior; plain shell terminals still close on exit.
+slot: the last output remains visible with a **centered exit dialog**
+composited on top — `<name> exited (code N)` plus the `[ Restart (r) ]` and
+`[ Close (ctrl+w) ]` buttons (accent-styled, prominent even in fullscreen).
+`r` or clicking the restart button reruns the configured command in place
+with the same directory and environment; `ctrl+w` or the close button
+removes the pane. A pane too small for the dialog falls back to a one-line
+footer with the same actions. Run command sessions keep their existing
+stay-open behavior; plain shell terminals still close on exit.
 
 ## Layout persistence
 
