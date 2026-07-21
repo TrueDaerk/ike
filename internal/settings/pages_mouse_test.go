@@ -153,16 +153,12 @@ func TestKeymapPageMouse(t *testing.T) {
 	if k.sel != 2 {
 		t.Fatalf("click must select row 2, sel=%d", k.sel)
 	}
-	// Second click starts the chord capture (enter semantics).
+	// Second click pushes the chord-capture sub-panel (enter semantics, #892).
 	k.Click(3, 1+2)
-	if !k.capturing {
-		t.Fatal("click on the selection must start the capture")
+	if _, ok := k.host.(*stubHost).top().(*keymapCapture); !ok {
+		t.Fatal("click on the selection must push the capture sub-panel")
 	}
-	// A click during capture cancels it.
-	k.Click(3, 1+4)
-	if k.capturing || k.sel != 2 {
-		t.Fatalf("click during capture must cancel it, capturing=%v sel=%d", k.capturing, k.sel)
-	}
+	k.host.(*stubHost).Pop()
 
 	// The header row opens the filter input; a further click closes it.
 	k.Click(3, 0)
@@ -212,13 +208,6 @@ func TestLSPPageMouse(t *testing.T) {
 	drainLSP(t, p, cmd)
 	if serverOn(id) {
 		t.Fatal("second click must disable the server")
-	}
-
-	// A click while the override input is open cancels it.
-	p.startEdit(lspEditCommand, "x")
-	p.Click(3, lspHeadLines+idx)
-	if p.editing != lspEditNone {
-		t.Fatal("click must cancel the inline override input")
 	}
 
 	// Wheel moves the selection, clamped.

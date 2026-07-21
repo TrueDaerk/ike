@@ -347,3 +347,16 @@ user/project` in the detail footer; config write/reload diagnostics surface
 **inline** there too (error-styled, until the next action), not only as
 toasts. Open enum pickers **follow the highlighted option** — a long theme
 list can no longer move the highlight below the fold.
+
+## Modal-flow migrations complete (0420, #892)
+
+Every remaining inline modal state now runs as a sub-panel: the **keymap
+chord capture** (same semantics — multi-step chords, fragile warning,
+conflict confirm — in a dialog with Apply/Cancel), the **JetBrains import
+path** (cursor input, clickable completion suggestions), the **LSP override
+editor** (command / args / options JSON, validated in place), the **uv
+Python-install picker** (windowed list, wheel, click-to-install) and the
+**PHP path-mapping form** (click-to-focus fields, Save/Cancel). The pages
+themselves no longer capture keys; all seven custom pages export
+`SearchItems`, so the "not searched" note is gone. Toolchain package
+management (#571) should land as a sub-panel on this same pattern.

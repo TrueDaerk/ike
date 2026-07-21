@@ -49,6 +49,7 @@ func lspPageFixture(t *testing.T) (*LSPPage, config.Options, *[]string) {
 			p.sel = i
 		}
 	}
+	p.SetSubPanelHost(&stubHost{})
 	return p, opts, &restarts
 }
 
@@ -91,12 +92,13 @@ func TestLSPPageRendersRowFromConfig(t *testing.T) {
 func TestLSPPageCommandOverrideWritesProjectConfig(t *testing.T) {
 	p, opts, _ := lspPageFixture(t)
 	p.Update(key("c"))
-	if !p.Capturing() {
-		t.Fatal("the command editor must capture keys")
+	form, ok := p.host.(*stubHost).top().(*lspOverrideForm)
+	if !ok {
+		t.Fatal("c must push the override form")
 	}
 	// Prefilled with the baseline; replace it wholesale.
-	p.field = newTextField("custom-ls")
-	drainLSP(t, p, p.Update(key("enter")))
+	form.input = newTextField("custom-ls")
+	drainLSP(t, p, form.Update(key("enter")))
 
 	if got := config.Get().LSP.Servers["lsptest"]["command"]; got != "custom-ls" {
 		t.Fatalf("command override = %v, want custom-ls", got)
@@ -109,31 +111,43 @@ func TestLSPPageCommandOverrideWritesProjectConfig(t *testing.T) {
 	}
 }
 
+func lspForm(t *testing.T, p *LSPPage) *lspOverrideForm {
+	t.Helper()
+	f, ok := p.host.(*stubHost).top().(*lspOverrideForm)
+	if !ok {
+		t.Fatal("expected an open override form")
+	}
+	return f
+}
+
 func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
 	p.Update(key("a"))
-	p.field = newTextField("--stdio --verbose")
-	drainLSP(t, p, p.Update(key("enter")))
+	f := lspForm(t, p)
+	f.input = newTextField("--stdio --verbose")
+	drainLSP(t, p, f.Update(key("enter")))
 	if v := p.View(120, 40); !strings.Contains(v, "--verbose") {
 		t.Fatalf("args override must reach the effective command line:\n%s", v)
 	}
 
 	p.Update(key("o"))
-	p.field = newTextField(`{"telemetry":false}`)
-	drainLSP(t, p, p.Update(key("enter")))
+	f = lspForm(t, p)
+	f.input = newTextField(`{"telemetry":false}`)
+	drainLSP(t, p, f.Update(key("enter")))
 	m, ok := config.Get().LSP.Servers["lsptest"]["settings"].(map[string]any)
 	if !ok || m["telemetry"] != false {
 		t.Fatalf("settings override = %v, want map with telemetry=false", config.Get().LSP.Servers["lsptest"]["settings"])
 	}
 
-	// Invalid JSON is rejected without leaving the editor.
+	// Invalid JSON is rejected without leaving the form.
 	p.Update(key("o"))
-	p.field = newTextField("not-json")
-	p.Update(key("enter"))
-	if !p.Capturing() || p.invalid == "" {
+	f = lspForm(t, p)
+	f.input = newTextField("not-json")
+	f.Update(key("enter"))
+	if p.host.(*stubHost).top() == nil || f.note == "" {
 		t.Fatal("invalid JSON must be rejected in place")
 	}
-	p.Update(key("esc"))
+	f.Update(key("esc"))
 }
 
 func TestLSPPageEnableTogglesAndReset(t *testing.T) {
@@ -213,10 +227,9 @@ func TestLSPFooterPinned(t *testing.T) {
 	if !strings.Contains(lines[h-2], "e enable") { // 3-line wrapped footer (#553)
 		t.Fatalf("key hints must be pinned to the last line:\n%s", strings.Join(lines, "\n"))
 	}
-	// The override editor renders in the footer too.
+	// The override editor is a sub-panel now (#892).
 	p.Update(key("c"))
-	lines = strings.Split(p.View(120, h), "\n")
-	if !strings.Contains(lines[h-3], "command:") {
-		t.Fatalf("override input must render in the footer:\n%s", strings.Join(lines, "\n"))
+	if _, ok := p.host.(*stubHost).top().(*lspOverrideForm); !ok {
+		t.Fatal("c must push the override form")
 	}
 }

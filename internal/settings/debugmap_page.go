@@ -1,8 +1,6 @@
 package settings
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
@@ -30,14 +28,6 @@ type DebugMapPage struct {
 	note string
 	host SubPanelHost
 
-	// The add/edit form: editIdx is the entry being edited (-1 for a new
-	// one); field is the focused input, form the field values.
-	editing bool
-	editIdx int
-	field   int
-	cur     int // cursor within the focused field (#888)
-	form    [mapFieldCount]string
-
 	listH int // list-window height of the last render (mouse hit-testing)
 }
 
@@ -53,9 +43,9 @@ func NewDebugMapPage(opts config.Options) *DebugMapPage {
 // SetPalette implements PageModel.
 func (t *DebugMapPage) SetPalette(p *theme.Palette) { t.pal = p }
 
-// Capturing implements PageModel: while the form is open every key is field
-// text — paths may contain the page's own action letters (a/d/j/k).
-func (t *DebugMapPage) Capturing() bool { return t.editing }
+// Capturing implements PageModel: the add/edit form is a sub-panel now
+// (#892), so the page never captures.
+func (t *DebugMapPage) Capturing() bool { return false }
 
 // entries returns the configured mappings from the live config.
 func (t *DebugMapPage) entries() []config.DebugPathMap {
@@ -68,9 +58,6 @@ func (t *DebugMapPage) entries() []config.DebugPathMap {
 
 // Update implements PageModel.
 func (t *DebugMapPage) Update(key tea.KeyPressMsg) tea.Cmd {
-	if t.editing {
-		return t.updateForm(key)
-	}
 	switch key.String() {
 	case "up", "k":
 		if t.sel > 0 {
@@ -98,79 +85,16 @@ func (t *DebugMapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// openForm opens the add (idx -1) or edit form, seeding the fields.
+// openForm pushes the add (idx -1) or edit form sub-panel (#892).
 func (t *DebugMapPage) openForm(idx int) {
-	t.editing, t.editIdx, t.field, t.note = true, idx, 0, ""
-	t.form = [mapFieldCount]string{}
-	if idx >= 0 {
-		e := t.entries()[idx]
-		t.form = [mapFieldCount]string{e.Server, e.Local}
+	t.note = ""
+	if t.host != nil {
+		t.host.Push(newDebugMapForm(t, t.host, idx))
 	}
 }
 
-// updateForm handles keys while the form is open: tab/down and shift+tab/up
-// cycle fields, printable text appends, backspace edits, enter validates and
-// saves, esc cancels.
-func (t *DebugMapPage) updateForm(key tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Code == tea.KeyEscape:
-		t.editing, t.note = false, ""
-		return nil
-	case key.Code == tea.KeyEnter:
-		return t.commitForm()
-	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0, key.Code == tea.KeyUp:
-		t.field = (t.field + mapFieldCount - 1) % mapFieldCount
-		t.cur = len([]rune(t.form[t.field]))
-	case key.Code == tea.KeyTab, key.Code == tea.KeyDown:
-		t.field = (t.field + 1) % mapFieldCount
-		t.cur = len([]rune(t.form[t.field]))
-	default:
-		// Shared cursor input (#888): rune-safe editing with word ops.
-		f := newTextFieldAt(t.form[t.field], t.cur)
-		if handled, _ := f.Handle(key); handled {
-			t.form[t.field], t.cur = f.text, f.cur
-		}
-	}
-	return nil
-}
 
-// validate checks the form; "" means valid. self is the index being edited
-// (-1 for add) so its own server prefix is not a duplicate of itself.
-func (t *DebugMapPage) validate(self int) string {
-	server := strings.TrimSpace(t.form[0])
-	if server == "" {
-		return "server path is required"
-	}
-	if strings.TrimSpace(t.form[1]) == "" {
-		return "local path is required"
-	}
-	for i, e := range t.entries() {
-		if i != self && e.Server == server {
-			return "a mapping for " + server + " already exists"
-		}
-	}
-	return ""
-}
 
-// commitForm validates and writes the whole list back at project scope.
-func (t *DebugMapPage) commitForm() tea.Cmd {
-	if msg := t.validate(t.editIdx); msg != "" {
-		t.note = msg
-		return nil
-	}
-	entry := config.DebugPathMap{
-		Server: strings.TrimSpace(t.form[0]),
-		Local:  strings.TrimSpace(t.form[1]),
-	}
-	entries := append([]config.DebugPathMap(nil), t.entries()...)
-	if t.editIdx >= 0 && t.editIdx < len(entries) {
-		entries[t.editIdx] = entry
-	} else {
-		entries = append(entries, entry)
-	}
-	t.editing, t.note = false, ""
-	return writeDebugMappings(t.opts, entries)
-}
 
 // deleteEntry removes the entry at idx and writes the list back.
 func (t *DebugMapPage) deleteEntry(idx int) tea.Cmd {
@@ -233,7 +157,7 @@ func (t *DebugMapPage) View(w, h int) string {
 	for i, e := range entries {
 		line := " " + pad(e.Server, 34) + "→ " + e.Local
 		style := lipgloss.NewStyle()
-		if i == t.sel && !t.editing {
+		if i == t.sel {
 			style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 		}
 		list = append(list, style.Render(line))
@@ -242,9 +166,7 @@ func (t *DebugMapPage) View(w, h int) string {
 		list = append(list, "no mappings configured — press a to add one (only needed when the server's docroot differs from the project layout)")
 	}
 	var footer []string
-	if t.editing {
-		footer = t.formFooter(w)
-	} else {
+	{
 		hint := "   a add · enter edit · d delete — local may be project-relative; applies on the next debug.listen start"
 		lines := []footerLine{{text: hint, style: lipgloss.NewStyle().Foreground(pal.Secondary)}}
 		if t.note != "" {
@@ -257,43 +179,10 @@ func (t *DebugMapPage) View(w, h int) string {
 	return headLine + "\n" + pinFooter(list, footer, t.sel, t.sel, h-1, &t.off)
 }
 
-// formFooter renders the add/edit form pinned under the list.
-func (t *DebugMapPage) formFooter(w int) []string {
-	pal := t.theme()
-	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	verb := "edit mapping"
-	if t.editIdx < 0 {
-		verb = "new mapping"
-	}
-	lines := []footerLine{{text: "   " + verb + ":", style: sec}}
-	for i, name := range mapFieldNames {
-		marker := "  "
-		style := lipgloss.NewStyle()
-		text := t.form[i]
-		if i == t.field {
-			marker = "> "
-			style = style.Bold(true)
-			text = newTextFieldAt(t.form[i], t.cur).View()
-		}
-		lines = append(lines, footerLine{
-			text:  "   " + marker + pad(name, 8) + text,
-			style: style,
-		})
-	}
-	if t.note != "" {
-		lines = append(lines, footerLine{text: "   ✗ " + t.note, style: lipgloss.NewStyle().Foreground(pal.Error)})
-	}
-	lines = append(lines, footerLine{text: "   tab next field · enter saves · esc cancels", style: sec})
-	return wrapFooter(lines, w, len(lines))
-}
 
 // Click implements the optional PageClicker seam (enter semantics on the
-// selected row; a press while the form is open cancels it).
+// selected row).
 func (t *DebugMapPage) Click(_, y int) tea.Cmd {
-	if t.editing {
-		t.editing, t.note = false, ""
-		return nil
-	}
 	row := y - 1
 	if row < 0 || (t.listH > 0 && row >= t.listH) {
 		return nil
@@ -312,9 +201,6 @@ func (t *DebugMapPage) Click(_, y int) tea.Cmd {
 
 // Wheel implements the optional PageWheeler seam.
 func (t *DebugMapPage) Wheel(delta int) {
-	if t.editing {
-		return
-	}
 	if n := len(t.entries()); n > 0 {
 		t.sel = clamp(t.sel+delta, 0, n-1)
 	}

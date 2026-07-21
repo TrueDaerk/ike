@@ -23,9 +23,18 @@ func debugMapPage(t *testing.T) (*DebugMapPage, config.Options) {
 	return p, opts
 }
 
-func typeMap(p *DebugMapPage, s string) {
+func mapForm(t *testing.T, p *DebugMapPage) *debugMapForm {
+	t.Helper()
+	f, ok := p.host.(*stubHost).top().(*debugMapForm)
+	if !ok {
+		t.Fatal("expected an open mapping form sub-panel")
+	}
+	return f
+}
+
+func typeMap(f *debugMapForm, s string) {
 	for _, r := range s {
-		p.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+		f.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
 }
 
@@ -33,13 +42,14 @@ func typeMap(p *DebugMapPage, s string) {
 func addMapping(t *testing.T, p *DebugMapPage, server, local string) {
 	t.Helper()
 	p.Update(key("a"))
-	if !p.Capturing() {
-		t.Fatal("a must open the form and capture keys")
+	f := mapForm(t, p)
+	typeMap(f, server)
+	f.Update(key("tab"))
+	typeMap(f, local)
+	apply(t, f.Update(key("enter")))
+	if p.host.(*stubHost).top() != nil {
+		t.Fatal("save must pop the form")
 	}
-	typeMap(p, server)
-	p.Update(key("tab"))
-	typeMap(p, local)
-	apply(t, p.Update(key("enter")))
 }
 
 // TestDebugMapPageAddEditDelete guards #832: the page's CRUD persists
@@ -59,10 +69,11 @@ func TestDebugMapPageAddEditDelete(t *testing.T) {
 
 	// Edit the local side.
 	p.Update(key("enter"))
-	p.Update(key("tab")) // to local
-	p.Update(key("backspace"))
-	typeMap(p, "src")
-	apply(t, p.Update(key("enter")))
+	f := mapForm(t, p)
+	f.Update(key("tab")) // to local
+	f.Update(key("backspace"))
+	typeMap(f, "src")
+	apply(t, f.Update(key("enter")))
 	got = config.Get().Debug.PHP.PathMappings
 	if len(got) != 1 || got[0].Local != "src" {
 		t.Fatalf("mappings after edit = %+v", got)
@@ -81,24 +92,26 @@ func TestDebugMapPageAddEditDelete(t *testing.T) {
 func TestDebugMapPageValidation(t *testing.T) {
 	p, _ := debugMapPage(t)
 	p.Update(key("a"))
-	if cmd := p.Update(key("enter")); cmd != nil {
+	f := mapForm(t, p)
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("empty form must not write")
 	}
-	if !p.Capturing() || p.note == "" {
+	if p.host.(*stubHost).top() == nil || f.note == "" {
 		t.Fatal("invalid form must stay open with a note")
 	}
-	p.Update(key("esc"))
+	f.Update(key("esc"))
 
 	addMapping(t, p, "/srv/app", ".")
 	p.Update(key("a"))
-	typeMap(p, "/srv/app")
-	p.Update(key("tab"))
-	typeMap(p, "other")
-	if cmd := p.Update(key("enter")); cmd != nil {
+	f = mapForm(t, p)
+	typeMap(f, "/srv/app")
+	f.Update(key("tab"))
+	typeMap(f, "other")
+	if cmd := f.Update(key("enter")); cmd != nil {
 		t.Fatal("duplicate server prefix must not write")
 	}
-	if !strings.Contains(p.note, "already exists") {
-		t.Fatalf("note = %q", p.note)
+	if !strings.Contains(f.note, "already exists") {
+		t.Fatalf("note = %q", f.note)
 	}
 }
 

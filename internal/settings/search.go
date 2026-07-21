@@ -99,3 +99,62 @@ func (p *PluginsPage) SearchItems() []SearchItem {
 	}
 	return out
 }
+
+// SearchItems implements Searchable for the keymap page: every binding row by
+// command id and title.
+func (k *KeymapPage) SearchItems() []SearchItem {
+	var out []SearchItem
+	for i, b := range k.rows() {
+		i, b := i, b
+		out = append(out, SearchItem{
+			Label:    b.Command,
+			Keywords: "keybinding shortcut chord " + b.Title + " " + b.Chord.String(),
+			Activate: func() { k.sel = i },
+		})
+	}
+	return out
+}
+
+// SearchItems implements Searchable for the LSP page: one item per language
+// server row.
+func (p *LSPPage) SearchItems() []SearchItem {
+	var out []SearchItem
+	for i, l := range p.servers() {
+		i, l := i, l
+		out = append(out, SearchItem{
+			Label:    l.ID,
+			Keywords: "lsp language server " + l.ID,
+			Activate: func() { p.sel = i },
+		})
+	}
+	return out
+}
+
+// SearchItems implements Searchable for the marketplace page: the catalog
+// entries by name.
+func (p *MarketplacePage) SearchItems() []SearchItem {
+	var out []SearchItem
+	for i, e := range p.rows() {
+		i, e := i, e
+		out = append(out, SearchItem{
+			Label:    e.Name,
+			Keywords: "marketplace plugin " + e.Description,
+			Activate: func() { p.sel = i },
+		})
+	}
+	return out
+}
+
+// SearchItems implements Searchable for the PHP debug-mapping page.
+func (t *DebugMapPage) SearchItems() []SearchItem {
+	var out []SearchItem
+	for i, e := range t.entries() {
+		i, e := i, e
+		out = append(out, SearchItem{
+			Label:    e.Server + " → " + e.Local,
+			Keywords: "debug php path mapping xdebug",
+			Activate: func() { t.sel = i },
+		})
+	}
+	return out
+}

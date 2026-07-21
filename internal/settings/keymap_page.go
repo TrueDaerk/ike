@@ -43,15 +43,12 @@ type KeymapPage struct {
 	filter    string
 	filtering bool // "/" opened the filter input; every key is filter text
 
-	capturing bool
-	steps     []keymap.Key // chord steps captured so far
 	conflict  string       // colliding command id awaiting confirmation
 	warn      string       // fragile-chord honesty warning
 	invalid   string
 
 	// JetBrains keymap import (#677): "i" opens an inline path input with
 	// filesystem completion; enter runs the import, importNote reports it.
-	importing   bool
 	importField textField // shared cursor input (#888)
 	importSug   pathSuggest
 	importNote  string
@@ -77,7 +74,7 @@ func (k *KeymapPage) SetSubPanelHost(h SubPanelHost) { k.host = h }
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
 // verbatim — filter text may contain the page's own action letters (u/r/j/k).
-func (k *KeymapPage) Capturing() bool { return k.capturing || k.filtering || k.importing }
+func (k *KeymapPage) Capturing() bool { return k.filtering }
 
 // keymapRow is one list entry: an effective binding, or a preset default that
 // is no longer effective (#736). An unbound row keeps the default chord so "r"
@@ -194,14 +191,8 @@ func (k *KeymapPage) current() (keymapRow, bool) {
 
 // Update implements PageModel.
 func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
-	if k.capturing {
-		return k.updateCapture(key)
-	}
 	if k.filtering {
 		return k.updateFilter(key)
-	}
-	if k.importing {
-		return k.updateImport(key)
 	}
 	if listNav(key.String(), &k.sel, len(k.rows()), navPage) {
 		return nil
@@ -216,9 +207,8 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			k.sel++
 		}
 	case "enter":
-		if _, ok := k.current(); ok {
-			k.capturing = true
-			k.steps, k.conflict, k.warn, k.invalid = nil, "", "", ""
+		if b, ok := k.current(); ok && k.host != nil {
+			k.host.Push(newKeymapCapture(k, k.host, b))
 		}
 	case "u":
 		// Unbind: an override chord→"" drops the binding on reload. An
@@ -248,7 +238,9 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		k.filtering = true
 	case "i":
 		// JetBrains keymap import (#677): inline path input with completion.
-		k.importing = true
+		if k.host != nil {
+			k.host.Push(newKeymapImport(k, k.host))
+		}
 		k.importField.text = "~" + string(filepath.Separator)
 		k.importNote = ""
 		k.importSug.refresh(k.importField.text)
@@ -281,37 +273,13 @@ func (k *KeymapPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// updateImport handles keys while the JetBrains import path input is open
-// (#677): tab completes against the filesystem, enter runs the import, esc
-// cancels, backspace edits, printable text appends verbatim.
-func (k *KeymapPage) updateImport(key tea.KeyPressMsg) tea.Cmd {
-	switch key.Code {
-	case tea.KeyEscape:
-		k.importing = false
-		k.importField = textField{}
-		k.importSug.clear()
-	case tea.KeyEnter:
-		k.importing = false
-		k.importSug.clear()
-		return k.commitImport()
-	case tea.KeyTab:
-		k.importField.Set(k.importSug.complete(k.importField.text))
-	default:
-		// Shared cursor input (#888): rune-safe editing with word ops.
-		if _, changed := k.importField.Handle(key); changed {
-			k.importSug.refresh(k.importField.text)
-		}
-	}
-	return nil
-}
 
 // commitImport runs the JetBrains keymap import for the typed path: the
 // export's shortcuts become keymap.bindings.* overrides at user scope
 // (replaced default chords are unbound), then the config reloads through the
 // normal pipeline. The outcome lands in importNote for the footer.
-func (k *KeymapPage) commitImport() tea.Cmd {
-	path := strings.TrimSpace(k.importField.text)
-	k.importField = textField{}
+func (k *KeymapPage) commitImportPath(raw string) tea.Cmd {
+	path := strings.TrimSpace(raw)
 	if path == "" {
 		return nil
 	}
@@ -346,78 +314,14 @@ func (k *KeymapPage) commitImport() tea.Cmd {
 	}
 }
 
-// updateCapture accumulates chord steps; enter confirms (running conflict
-// detection first), esc cancels.
-func (k *KeymapPage) updateCapture(key tea.KeyPressMsg) tea.Cmd {
-	b, ok := k.current()
-	if !ok {
-		k.capturing = false
-		return nil
-	}
-	// A pending conflict waits for an explicit confirm/cancel.
-	if k.conflict != "" {
-		switch key.Code {
-		case tea.KeyEnter:
-			return k.commitRebind(b)
-		default:
-			k.capturing, k.conflict, k.steps = false, "", nil
-		}
-		return nil
-	}
-	switch key.Code {
-	case tea.KeyEscape:
-		k.capturing, k.steps, k.warn = false, nil, ""
-		return nil
-	case tea.KeyEnter:
-		if len(k.steps) == 0 {
-			k.capturing = false
-			return nil
-		}
-		chord := k.captured()
-		k.warn = fragileWarning(chord)
-		if other, found := k.conflictWith(chord, b); found {
-			k.conflict = other
-			return nil
-		}
-		return k.commitRebind(b)
-	}
-	if kk, ok := keymap.FromKeyMsg(key); ok {
-		k.steps = append(k.steps, keymap.NormalizeKey(kk, keymap.GOOS))
-		k.warn = fragileWarning(k.captured())
-	}
-	return nil
-}
 
-// captured is the chord built from the recorded steps.
-func (k *KeymapPage) captured() keymap.Chord { return keymap.Chord{Steps: k.steps} }
-
-// conflictWith reports the command a chord would collide with in the effective
-// table (same chord, overlapping context), ignoring the binding being rebound.
-func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (string, bool) {
-	cs := chord.String()
-	for _, b := range k.table().Bindings() {
-		if b.Chord.String() != cs {
-			continue
-		}
-		if b.Chord.Equal(self.Chord) && b.Command == self.Command {
-			continue
-		}
-		if b.Context.Matches(self.Context) || self.Context.Matches(b.Context) ||
-			b.Context == keymap.Global || self.Context == keymap.Global {
-			return b.Command, true
-		}
-	}
-	return "", false
-}
 
 // commitRebind writes the captured chord for the selected row's command
 // and unbinds the old chord when it changed. Both writes land before one
 // reload, so the table re-resolves atomically. An unbound row (#736) has no
 // live chord to drop — its default chord's ""-override stays as-is (it is what
 // keeps that chord unbound) and the new chord simply binds the command again.
-func (k *KeymapPage) commitRebind(b keymapRow) tea.Cmd {
-	chord := k.captured()
-	k.capturing, k.conflict, k.steps = false, "", nil
+func (k *KeymapPage) commitRebindChord(b keymapRow, chord keymap.Chord) tea.Cmd {
 	if chord.Len() == 0 {
 		return nil
 	}
@@ -490,9 +394,7 @@ func (k *KeymapPage) View(w, h int) string {
 	// selection never shifts the rows, and the list scrolls to follow it.
 	// It wraps to the column width over a constant two lines (#553).
 	var footer []string
-	if k.importing {
-		footer = k.importFooter(w)
-	} else if b, ok := k.current(); ok {
+	if b, ok := k.current(); ok {
 		footer = wrapFooter([]footerLine{k.detailLine(b)}, w, 2)
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
@@ -507,10 +409,6 @@ func (k *KeymapPage) View(w, h int) string {
 // of a chord); a press while the filter input is open keeps the filter and
 // returns to the list (enter semantics).
 func (k *KeymapPage) Click(_, y int) tea.Cmd {
-	if k.capturing {
-		k.capturing, k.conflict, k.steps, k.warn = false, "", nil, ""
-		return nil
-	}
 	if k.filtering {
 		k.filtering = false
 		return nil
@@ -528,8 +426,9 @@ func (k *KeymapPage) Click(_, y int) tea.Cmd {
 		return nil
 	}
 	if idx == k.sel {
-		k.capturing = true
-		k.steps, k.conflict, k.warn, k.invalid = nil, "", "", ""
+		if b, ok := k.current(); ok && k.host != nil {
+			k.host.Push(newKeymapCapture(k, k.host, b))
+		}
 		return nil
 	}
 	k.sel = idx
@@ -539,7 +438,7 @@ func (k *KeymapPage) Click(_, y int) tea.Cmd {
 // Wheel implements the optional PageWheeler seam (#674): the list moves its
 // selection (it follows, like j/k); inert during capture/filter input.
 func (k *KeymapPage) Wheel(delta int) {
-	if k.capturing || k.filtering {
+	if k.filtering {
 		return
 	}
 	if n := len(k.rows()); n > 0 {
@@ -556,13 +455,6 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	}
 	if b.nobind {
 		chord = "(no binding)"
-	}
-	if selected && k.capturing {
-		if len(k.steps) > 0 {
-			chord = k.captured().String() + "…"
-		} else {
-			chord = "press keys, enter to confirm…"
-		}
 	}
 	label := " " + pad(chord, 22) + pad(b.Title, 32) + pad(string(b.Context), 10) + "@" + b.Layer.String()
 	if reason, blocked := keymap.BlockedReason(b.Command); blocked || (k.registered != nil && !k.registered(b.Command)) {
@@ -594,15 +486,6 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 func (k *KeymapPage) detailLine(b keymapRow) footerLine {
 	pal := k.theme()
 	switch {
-	case k.conflict != "":
-		return footerLine{
-			text:  "   conflicts with " + k.conflict + " — enter overrides, any other key cancels",
-			style: lipgloss.NewStyle().Foreground(pal.Error),
-		}
-	case k.warn != "":
-		return footerLine{text: "   ⚠ " + k.warn, style: lipgloss.NewStyle().Foreground(pal.Warning)}
-	case k.capturing:
-		return footerLine{text: "   esc cancels the capture", style: lipgloss.NewStyle().Foreground(pal.Secondary)}
 	case k.importNote != "":
 		return footerLine{
 			text:  "   " + k.importNote + " — " + b.Command + " · enter rebind · u unbind · r reset · i import",
@@ -648,4 +531,23 @@ func pad(s string, n int) string {
 		return s[:n-1] + " "
 	}
 	return s + strings.Repeat(" ", n-lipgloss.Width(s))
+}
+
+// conflictWith reports the command a chord would collide with in the effective
+// table (same chord, overlapping context), ignoring the binding being rebound.
+func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (string, bool) {
+	cs := chord.String()
+	for _, b := range k.table().Bindings() {
+		if b.Chord.String() != cs {
+			continue
+		}
+		if b.Chord.Equal(self.Chord) && b.Command == self.Command {
+			continue
+		}
+		if b.Context.Matches(self.Context) || self.Context.Matches(b.Context) ||
+			b.Context == keymap.Global || self.Context == keymap.Global {
+			return b.Command, true
+		}
+	}
+	return "", false
 }

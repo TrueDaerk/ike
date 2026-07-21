@@ -63,10 +63,7 @@ type ToolchainPage struct {
 	// in-flight/busy marker the view shows while an action runs. The guided
 	// create wizard is a SubPanel now (#884, venv_wizard.go) pushed through
 	// host.
-	uvPicking  bool
-	uvVersions []string
-	uvPick     int
-	envState   string
+	envState string
 	host       SubPanelHost
 
 	// Package listing (#569): `i` fetches the effective interpreter's
@@ -116,7 +113,7 @@ func (t *ToolchainPage) pushWizard() {
 // Capturing implements PageModel: the pickers and the custom-path input need
 // keys verbatim.
 func (t *ToolchainPage) Capturing() bool {
-	return t.picking || t.custom || t.uvPicking || t.pkgViewing
+	return t.picking || t.custom || t.pkgViewing
 }
 
 // Receive implements MsgReceiver: async version probes land in the cache,
@@ -202,9 +199,6 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.picking {
 		return t.updatePicker(key)
 	}
-	if t.uvPicking {
-		return t.updateUvPicker(key)
-	}
 	if t.pkgViewing {
 		return t.updatePkgView(key)
 	}
@@ -245,18 +239,19 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			}
 		}
 	case "u":
-		// Install a managed Python via uv (#132): pick from `uv python list`.
-		if l, ok := t.current(); ok && l.ID == "python" {
+		// Install a managed Python via uv (#132) — the picker is a sub-panel
+		// now (#892).
+		if l, ok := t.current(); ok && l.ID == "python" && t.host != nil {
 			if t.look("uv") == "" {
 				t.envState = "✗ uv not found on PATH"
 				return nil
 			}
-			t.uvVersions = uvInstallable(t.run("uv", "python", "list"))
-			if len(t.uvVersions) == 0 {
+			versions := uvInstallable(t.run("uv", "python", "list"))
+			if len(versions) == 0 {
 				t.envState = "✗ uv offers no downloadable versions"
 				return nil
 			}
-			t.uvPicking, t.uvPick = true, 0
+			t.host.Push(newUvPicker(t, t.host, versions))
 		}
 	}
 	return nil
@@ -284,27 +279,6 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 }
 
 
-// updateUvPicker handles keys inside the uv version picker.
-func (t *ToolchainPage) updateUvPicker(key tea.KeyPressMsg) tea.Cmd {
-	switch key.String() {
-	case "esc":
-		t.uvPicking = false
-	case "up", "k":
-		if t.uvPick > 0 {
-			t.uvPick--
-		}
-	case "down", "j":
-		if t.uvPick < len(t.uvVersions)-1 {
-			t.uvPick++
-		}
-	case "enter":
-		t.uvPicking = false
-		version := t.uvVersions[t.uvPick]
-		t.envState = envBusy
-		return uvInstall(version, t.run)
-	}
-	return nil
-}
 
 // openPicker builds the language's candidate list, pre-selects the currently
 // effective interpreter (#675) and returns eager version probes for every
@@ -489,15 +463,6 @@ func (t *ToolchainPage) View(w, h int) string {
 				list = append(list, t.renderPackages()...)
 			case t.picking:
 				list = append(list, t.renderPicker()...)
-			case t.uvPicking:
-				for i, v := range t.uvVersions {
-					line := "   install python " + v
-					style := lipgloss.NewStyle().Foreground(pal.Secondary)
-					if i == t.uvPick {
-						style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
-					}
-					list = append(list, style.Render(line))
-				}
 			}
 			selEnd = len(list) - 1
 		}
@@ -609,7 +574,7 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 		hint = " tab complete path · enter apply · esc cancel"
 	case t.pkgViewing:
 		hint = " j/k scroll packages · esc close"
-	case t.picking, t.uvPicking:
+	case t.picking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
 	case l.ID == "python":
 		hint += " · n new env · i packages · u uv install"
