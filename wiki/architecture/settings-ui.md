@@ -318,3 +318,12 @@ hand-rolled append-only inputs byte-sliced backspace and corrupted umlauts).
 Ported: schema String/Int/Path edits, the keymap import path, the toolchain
 custom path, the venv wizard's location step, the Tools and PHP-debug-mapping
 forms, and the LSP override fields.
+
+## Widget affordances (0420, #889)
+
+Every schema row announces how it edits before enter is pressed: booleans as
+`[x]`/`[ ]` (space toggles), enums as `‹ value ›` (**←/→ cycle** on the row,
+enter opens the picker — ← on other rows still returns to the rail, #533),
+ints as `value ±` (**+/−/←/→** step, range-clamped), text rows as `value ✎`
+and chords as `value ⌨`. Range clamps are never silent: stepping or typing
+past Min/Max shows an `ℹ clamped to N` notice in the detail footer.

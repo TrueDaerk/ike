@@ -2,6 +2,10 @@
 
 ## 2026-07-21
 
+- Settings widget affordances (0420, #889): [x] bools, ‹enum› with ←→
+  cycling, ± int steppers with visible clamp feedback, ✎/⌨ edit markers
+  (`/architecture/settings-ui.md`).
+
 - Settings shared text input (0420, #888): all nine inline inputs use
   ui.EditKey/CursorView — cursor, word ops, rune-safe backspace (umlaut
   corruption fixed) (`/architecture/settings-ui.md`).
