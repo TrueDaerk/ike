@@ -35,6 +35,7 @@ import (
 	_ "ike/plugins/languages/sql"
 	_ "ike/plugins/languages/toml"
 	_ "ike/plugins/languages/web"
+	_ "ike/plugins/languages/yaml"
 )
 
 // readStdin implements the "-" target (Roadmap 0270, #344): with wantStdin it

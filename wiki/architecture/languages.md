@@ -93,7 +93,10 @@ sticky-scroll scopes), and `dockerfile` (#896, camdencheek/tree-sitter-dockerfil
 — **vendored C source** under the plugin's `grammar/`: upstream's Go binding
 carries a nested go.mod with the repo-root module path, so it is not
 importable; matches `Dockerfile`/`Containerfile` by exact base name plus the
-`.dockerfile` extension).
+`.dockerfile` extension), and `yaml` (#879, tree-sitter-grammars/tree-sitter-yaml;
+multi-line mapping pairs are sticky-scroll scopes, and `IndentAfter` is limited
+to `":"` + block-scalar introducers so sibling keys never get auto-indented
+wrongly — YAML is indentation-sensitive).
 The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
@@ -256,6 +259,7 @@ uv is present — it works even in envs without pip — else
 | JSON | vscode-json-language-server (`vscode-langservers-extracted`) | Same npm package as HTML/CSS — no new install step; JSON-Schema-store + `$schema` completion for free. ndjson/jsonl: no server (multi-document streams are an error to it). |
 | TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics; also available via cargo/brew. IKE's own config is TOML. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
+| YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
