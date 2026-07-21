@@ -2,6 +2,11 @@
 
 ## 2026-07-21
 
+- Ansible language support (#897): context-sniffer detection (role trees,
+  playbooks, project markers) resolves `.yml` to the ansible id sharing the
+  YAML grammar; @ansible/ansible-language-server for module completion; new
+  generic sniff layer in the lang registry (`/architecture/languages.md`).
+
 - Markdown language support (#880): block + inline grammar via injection,
   fenced code blocks highlighted in their fence language (new dynamic
   `@fragment.language`/`@fragment.content` seam), YAML/TOML front matter,

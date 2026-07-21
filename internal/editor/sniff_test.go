@@ -3,6 +3,7 @@ package editor
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ike/internal/lang"
@@ -42,6 +43,47 @@ func TestLoadSniffsShebang(t *testing.T) {
 	}
 	if _, ok := lang.ByPath(plain); ok {
 		t.Error("file without shebang must stay language-less")
+	}
+}
+
+// TestLoadContextSnifferOverridesExtension guards the editor side of #897: a
+// registered context sniffer wins over what the extension says (the Ansible
+// case — role-tree .yml is ansible, not yaml).
+func TestLoadContextSnifferOverridesExtension(t *testing.T) {
+	lang.Register(lang.Language{ID: "sniffbase", Extensions: []string{"sfy"}})
+	lang.Register(lang.Language{ID: "sniffspecial"})
+	lang.RegisterSniffer(func(path string) (string, bool) {
+		if strings.Contains(path, "sniffspecialdir") {
+			return "sniffspecial", true
+		}
+		return "", false
+	})
+	dir := filepath.Join(t.TempDir(), "sniffspecialdir")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "play.sfy")
+	if err := os.WriteFile(path, []byte("content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := New()
+	if err := m.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := lang.ByPath(path); l.ID != "sniffspecial" {
+		t.Errorf("context sniffer overridden: got %s, want sniffspecial", l.ID)
+	}
+	// The same extension outside the sniffed context keeps its language.
+	plain := filepath.Join(t.TempDir(), "plain.sfy")
+	if err := os.WriteFile(plain, []byte("content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m2 := New()
+	if err := m2.Load(plain); err != nil {
+		t.Fatal(err)
+	}
+	if l, _ := lang.ByPath(plain); l.ID != "sniffbase" {
+		t.Errorf("plain path: got %s, want sniffbase", l.ID)
 	}
 }
 

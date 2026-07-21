@@ -581,13 +581,19 @@ func (m *Model) RestoreText(text string) {
 	m.scroll()
 }
 
-// sniffLanguage wires the shebang fallback (#893): when neither base name nor
-// extension resolves a language for the open path, the first buffer line's
-// shebang picks one. A hit is recorded in the lang registry via AssociatePath,
-// so every path-keyed consumer — highlighting, LSP didOpen, the statusline —
-// resolves the file through the ordinary ByPath from here on.
+// sniffLanguage wires the content/context sniff layer on open. Context
+// sniffers (#897) run first and may override the extension's verdict (a
+// role-tree .yml is ansible, not yaml); the shebang fallback (#893) runs only
+// when neither the static lookups nor a sniffer resolve the path. A hit is
+// recorded in the lang registry via AssociatePath, so every path-keyed
+// consumer — highlighting, LSP didOpen, the statusline — resolves the file
+// through the ordinary ByPath from here on.
 func (m *Model) sniffLanguage() {
 	if m.path == "" || m.buf.LineCount() == 0 {
+		return
+	}
+	if l, ok := lang.Sniff(m.path); ok {
+		lang.AssociatePath(m.path, l.ID)
 		return
 	}
 	if _, ok := lang.ByPath(m.path); ok {

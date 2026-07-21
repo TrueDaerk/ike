@@ -65,6 +65,20 @@ function and class definitions; PHP declares functions, methods, anonymous
 functions, class/interface/trait/enum declarations and namespaces. An empty
 list leaves sticky scroll inert for the language.
 
+### Context sniffers (#897)
+
+The generalisation of the shebang seam: a language whose files the static
+indexes cannot identify registers a `Sniffer` (`lang.RegisterSniffer`) that
+inspects the path and project context on open. The editor runs `lang.Sniff`
+**before** the static verdict counts — a sniffer may override the extension —
+and records hits via `AssociatePath`. **Ansible** is the first user: `.yml`
+under `roles/<r>/(tasks|handlers|defaults|vars|meta)/`, `playbooks/`,
+`group_vars/`, `host_vars/` or `inventory/`, or inside a project with
+`ansible.cfg` / `galaxy.yml` / `requirements.yml`+`roles/` up the tree,
+resolves to the `ansible` id (sharing yaml's grammar) and gets
+`@ansible/ansible-language-server` instead of plain yaml-language-server;
+everything else stays `yaml`.
+
 ### Shebang fallback (#893)
 
 Files with no extension and no known base name (`deploy`, `run-tests`) resolve
@@ -284,6 +298,7 @@ uv is present — it works even in envs without pip — else
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 | Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH. |
 | Markdown | marksman (`marksman server`, `brew install marksman`) | Single static binary; completes link targets, heading anchors, wiki-links, reference labels. Prose keeps the word-index source. |
+| Ansible | ansible-language-server (`@ansible/ansible-language-server`) | Module FQCN/option/keyword completion, hover docs, ansible-lint diagnostics when installed. Needs `ansible` on PATH for full module data. Detected by context sniffer, not extension. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
