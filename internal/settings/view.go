@@ -43,8 +43,15 @@ func (m *Model) View() string {
 	right = lipgloss.NewStyle().MaxWidth(rightW).Render(right)
 	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
-	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ") + m.renderFilter()
-	hintText := " ↑↓/jk navigate · ←→/tab column · enter edit · r reset · / filter · esc close"
+	title := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus).Render(" SETTINGS ")
+	if m.writeScope != scopeAuto {
+		// The forced write scope (0380, #794) is prominent chrome: every
+		// edit/reset targets this layer until "s" cycles back to auto.
+		title += lipgloss.NewStyle().Foreground(pal.Info).Bold(true).
+			Render("[scope: " + m.scopeLabel() + "] ")
+	}
+	title += m.renderFilter()
+	hintText := " ↑↓/jk navigate · ←→ column · enter edit · r reset · s scope · / filter · esc"
 	if m.picking {
 		hintText = " ↑↓ choose · enter apply · esc cancel"
 	}

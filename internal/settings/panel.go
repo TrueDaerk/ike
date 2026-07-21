@@ -80,6 +80,43 @@ type Model struct {
 
 	filtering bool
 	filter    string
+
+	// writeScope is the explicit write-target selector (0380, #794): auto
+	// follows each entry's conventional Scope, user/project force the layer
+	// for every write and reset. Cycled with "s", shown in the hint row.
+	writeScope scopeSel
+}
+
+// scopeSel names the panel's write-scope selector states.
+type scopeSel int
+
+const (
+	scopeAuto scopeSel = iota
+	scopeUser
+	scopeProject
+)
+
+// scopeFor resolves the effective write scope for an entry: the selector's
+// forced layer, or the entry's conventional Scope on auto.
+func (m *Model) scopeFor(e Entry) config.Scope {
+	switch m.writeScope {
+	case scopeUser:
+		return config.UserScope
+	case scopeProject:
+		return config.ProjectScope
+	}
+	return e.Scope
+}
+
+// scopeLabel names the selector state for the hint row.
+func (m *Model) scopeLabel() string {
+	switch m.writeScope {
+	case scopeUser:
+		return "user"
+	case scopeProject:
+		return "project"
+	}
+	return "auto"
 }
 
 // New builds a closed panel over pages, writing through opts.
@@ -262,7 +299,7 @@ func (m *Model) clickPick(x, row int) tea.Cmd {
 	}
 	if opt := idx - m.sel - 1; opt >= 0 && opt < len(r.entry.Options) {
 		e := r.entry
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[opt])
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[opt])
 	}
 	return nil
 }
@@ -408,8 +445,11 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		return m.activate()
 	case "r":
 		if r, ok := m.current(); ok && m.focus == formColumn {
-			return config.RemoveAndReload(m.opts, r.entry.Scope, r.entry.Key)
+			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
 		}
+	case "s":
+		// Cycle the write-scope selector (0380, #794): auto → user → project.
+		m.writeScope = (m.writeScope + 1) % 3
 	case "/":
 		m.filtering = true
 		m.focus = formColumn
@@ -444,7 +484,7 @@ func (m *Model) activate() tea.Cmd {
 		if value(e.Key) == "true" {
 			next = "false"
 		}
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, next == "true")
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, next == "true")
 	case Enum:
 		if len(e.Options) == 0 {
 			return nil
@@ -486,7 +526,7 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 	e := r.entry
 	n := len(e.Options)
 	next := (optionIndex(e, value(e.Key)) + dir + n) % n
-	return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[next])
+	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[next])
 }
 
 // updatePick handles keys while the enum picker is open.
@@ -506,7 +546,7 @@ func (m *Model) updatePick(key tea.KeyPressMsg) tea.Cmd {
 		m.pickIdx = clamp(m.pickIdx+1, 0, len(e.Options)-1)
 	case "enter":
 		m.picking = false
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, e.Options[m.pickIdx])
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[m.pickIdx])
 	}
 	return nil
 }
@@ -526,7 +566,7 @@ func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		m.editing = false
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, key.String())
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, key.String())
 	}
 	switch key.Code {
 	case tea.KeyEscape:
@@ -570,7 +610,7 @@ func (m *Model) commit(e Entry) tea.Cmd {
 			n = clamp(n, e.Min, e.Max)
 		}
 		m.editing = false
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, n)
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, n)
 	case Path:
 		p := strings.TrimSpace(m.input)
 		if p != "" {
@@ -581,10 +621,10 @@ func (m *Model) commit(e Entry) tea.Cmd {
 		}
 		m.editing = false
 		m.suggest.clear()
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, p)
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, p)
 	default: // String
 		m.editing = false
-		return config.WriteAndReload(m.opts, e.Scope, e.Key, m.input)
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, m.input)
 	}
 }
 

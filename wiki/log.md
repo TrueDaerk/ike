@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Settings write-scope selector (0380, #794): `s` in the settings panel
+  cycles auto/user/project as the write target for edits and resets, with a
+  `[scope: …]` title chip; project writes create `.ike/settings.toml` on
+  demand and clearing a project key falls back immediately
+  (`/architecture/settings-ui.md`).
+
 - Project settings loader hardening (0380, #793): unknown settings keys now
   warn per key instead of being silently ignored, and config-load
   diagnostics (parse errors, unknown keys, clamp warnings) surface as
