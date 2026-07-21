@@ -1338,10 +1338,15 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
+				Badge: project.RelTime(e.LastOpened, time.Now()),
 			}
 			if openInMemory(e.Path) {
 				it.Badge = "●"
 				it.Aux = project.CloseWorkspaceMsg{Path: e.Path}
+			} else {
+				// Unloaded entries prune from the history (#842), like in
+				// the project picker.
+				it.Aux = project.RemoveFromHistoryMsg{Path: e.Path}
 			}
 			items = append(items, it)
 		}
@@ -2879,6 +2884,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Idle: palette stays open, badge disappears.
 		return m, m.finishWorkspaceClose(msg.Path)
 
+	case project.RemoveFromHistoryMsg:
+		// Prune-from-list (#842): the aux action of an unloaded recent
+		// project deletes its history entry; the write runs off-loop.
+		return m, project.RemoveFromHistoryCmd(config.Discover("."), msg.Path)
+
+	case project.RemovedFromHistoryMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Warn, "could not remove project from history: "+msg.Err.Error())
+			return m, nil
+		}
+		// Reload so the still-open picker re-lists without the entry.
+		return m, config.Reload(m.cfgOpts)
+
 	case project.SwitchProjectMsg:
 		return m.handleSwitchProject(msg)
 
@@ -2915,9 +2933,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Live re-theme (Roadmap 0110): publish the fresh config and re-resolve
 		// the palette so a [theme].name change lands without a restart. Load
 		// diagnostics — parse errors, unknown keys, clamp warnings — surface
-		// as notifications, deduped per session (#793).
+		// as notifications, deduped per session (#793). An open palette
+		// recomputes so config-backed lists (recent projects, #842) reflect
+		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
 		m.notifyConfigDiags(msg.Diags)
+		m.palette.Refresh()
 		return m, nil
 
 	case palette.RunCommandMsg:

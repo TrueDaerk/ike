@@ -1,6 +1,7 @@
 package project
 
 import (
+	"strconv"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -62,6 +63,53 @@ func RecordOpen(opts config.Options, root string, openedAt time.Time) error {
 		raw[i] = map[string]any{"path": c.Path, "name": c.Name, "last_opened": c.LastOpened}
 	}
 	return config.WriteKey(opts, config.UserScope, "project.history", raw)
+}
+
+// RemoveFromHistory deletes the entry at path from the persisted history
+// (#842) and writes the shortened list back through config's typed setter.
+// A path not in the list is a no-op. The comparison is by the stored
+// (absolute, cleaned) path, like the upsert dedupe.
+func RemoveFromHistory(opts config.Options, path string) error {
+	cfg, _ := config.Load(opts)
+	var out []map[string]any
+	for _, e := range History(cfg) {
+		if e.Path == path {
+			continue
+		}
+		c := e.toConfig()
+		out = append(out, map[string]any{"path": c.Path, "name": c.Name, "last_opened": c.LastOpened})
+	}
+	return config.WriteKey(opts, config.UserScope, "project.history", out)
+}
+
+// RemoveFromHistoryCmd wraps RemoveFromHistory as a tea.Cmd, mirroring
+// RecordOpenCmd: the write never blocks the Update loop.
+func RemoveFromHistoryCmd(opts config.Options, path string) tea.Cmd {
+	return func() tea.Msg {
+		return RemovedFromHistoryMsg{Path: path, Err: RemoveFromHistory(opts, path)}
+	}
+}
+
+// RelTime renders how long ago t was, compact ("just now", "5m ago",
+// "3h ago", "4d ago", "6w ago") for the picker's last-opened badge (#842).
+// The zero time (legacy entries without a timestamp) yields "".
+func RelTime(t, now time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := now.Sub(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return strconv.Itoa(int(d.Minutes())) + "m ago"
+	case d < 24*time.Hour:
+		return strconv.Itoa(int(d.Hours())) + "h ago"
+	case d < 14*24*time.Hour:
+		return strconv.Itoa(int(d.Hours()/24)) + "d ago"
+	default:
+		return strconv.Itoa(int(d.Hours()/(24*7))) + "w ago"
+	}
 }
 
 // RecordedMsg reports a RecordOpenCmd outcome. Err is nil on success.

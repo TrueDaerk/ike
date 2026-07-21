@@ -466,8 +466,13 @@ func TestPickerMarksOpenWorkspaces(t *testing.T) {
 	if aux, ok := items[0].Aux.(project.CloseWorkspaceMsg); !ok || aux.Path != "/p/alpha" {
 		t.Fatalf("open workspace aux = %#v, want CloseWorkspaceMsg", items[0].Aux)
 	}
-	if items[1].Badge != "" || items[1].Aux != nil {
-		t.Fatal("historical-only entry must stay unmarked")
+	// Zero-time entries carry no time badge; unloaded entries prune from
+	// the history instead of closing a workspace (#842).
+	if items[1].Badge != "" {
+		t.Fatal("historical-only entry without a timestamp must carry no badge")
+	}
+	if aux, ok := items[1].Aux.(project.RemoveFromHistoryMsg); !ok || aux.Path != "/p/beta" {
+		t.Fatalf("historical-only aux = %#v, want RemoveFromHistoryMsg", items[1].Aux)
 	}
 }
 
