@@ -208,6 +208,7 @@ func (m *Model) commitInsert() {
 	// cursor through normal-mode motions, which emit no change events for
 	// the server to dismiss it on.
 	m.dismissSignature()
+	m.snippetEnd() // leaving insert mode ends any snippet tabstop session (#846)
 	s := m.insert
 	text := s.typed
 	if s.rec != nil && !s.rec.Empty() {

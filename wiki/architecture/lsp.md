@@ -128,6 +128,18 @@ and scattered substrings match; results rank by match score (word-boundary and
 start-anchored matches win), with ties keeping the server's `sortText` order
 (label when absent), which also orders the unfiltered list. Accepting an item replaces the partial identifier before the cursor (the run of letters/digits/`_`, `identifierStart`), not the request anchor — a manual trigger anchors at the cursor, so an anchor-only replace would duplicate the already-typed prefix (#330).
 
+**Snippets (#846).** The client announces `snippetSupport`, so servers send
+items whose insert text is LSP snippet syntax (`insertTextFormat: 2`).
+`internal/lsp/snippet.Expand` parses tabstops (`$1`, `${2:default}`,
+`${3|choices|}`, `$0`), variables (default or empty) and escapes into plain
+text plus tabstop offsets; a malformed snippet falls back to inserting the raw
+text. With tabstops present (and a single caret) accepting starts a
+**tabstop session**: the cursor lands on the first stop (placeholder stops sit
+at the end of their default text), tab/shift+tab jump between stops — the
+buffer-size delta since the last jump shifts later stops, the sequential
+fill-in shape — and esc (leaving insert mode) or jumping past the last stop
+ends the session, returning tab to normal indentation.
+
 **Server → editor.** Server replies and notifications arrive on the jsonrpc read
 loop. The manager converts them to editor coordinates (via `protocol/convert.go`)
 and the bridge wraps them as `tea.Msg`s — `DiagnosticsMsg`, `CompletionMsg`,

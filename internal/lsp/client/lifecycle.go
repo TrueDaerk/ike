@@ -39,7 +39,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 			},
 			TextDocument: &protocol.TextDocumentClientCaps{
 				Synchronization: &protocol.SyncClientCaps{DidSave: true},
-				Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: false}},
+				Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: true}},
 				Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
 				Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
 				References:      &protocol.ReferencesClientCaps{},

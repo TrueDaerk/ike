@@ -70,6 +70,9 @@ type CompletionItem struct {
 	Kind       int
 	SortText   string
 	FilterText string
+	// IsSnippet marks InsertText as LSP snippet syntax (#846); the editor
+	// expands it (internal/lsp/snippet) and runs a tabstop session on accept.
+	IsSnippet bool
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.
@@ -463,6 +466,7 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 			Kind:       it.Kind,
 			SortText:   it.SortText,
 			FilterText: it.FilterText,
+			IsSnippet:  it.InsertTextFormat == protocol.InsertSnippet,
 		})
 	}
 	return out
