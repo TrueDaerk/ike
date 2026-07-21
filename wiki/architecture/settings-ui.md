@@ -87,6 +87,15 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 - **Layer indicator + reset.** Each row shows `@default` / `@user` /
   `@project` (`config.Origin`); overridden values are tinted; `r` resets
   (RemoveAndReload — fall back through the layers).
+- **Write-scope selector (0380, #794).** `s` cycles the write target:
+  `auto` (each entry's conventional `DefaultScope` layer) → `user` →
+  `project`. A forced scope renders as a `[scope: …]` chip on the title row
+  and routes **every** write and reset (`scopeFor`) — so any setting can be
+  overridden per project (`.ike/settings.toml` is created on the first
+  project write) and a project override removed with `r` falls straight
+  back to the user/global value on the reload. Custom pages keep their own
+  keys (`s` on the Tools page still opens suggestions — the panel's
+  selector only applies to schema rows).
 - **Filter.** `/` starts a type-to-filter across all schema pages (titles,
   keys, page names); matches render as `Page › Title`, and the result list
   names the custom pages the filter cannot search (`(not searched: Keymap,

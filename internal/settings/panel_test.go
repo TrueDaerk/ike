@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,6 +167,86 @@ func TestBoolToggleWritesAndReloads(t *testing.T) {
 	}
 	if !strings.Contains(m.View(), "@user") {
 		t.Fatal("layer badge must show the user override")
+	}
+}
+
+// TestScopeSelectorWritesProjectLayer (0380, #794): "s" cycles the write
+// scope; with "project" forced, a toggle writes .ike/settings.toml (created
+// on demand), the row shows @project, and reset removes the project key so
+// the value falls back immediately.
+func TestScopeSelectorWritesProjectLayer(t *testing.T) {
+	restoreConfig(t)
+	opts := testOpts(t)
+	opts.ProjectRoot = t.TempDir()
+	m := New(testPages(), opts)
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("tab"))
+
+	// auto → user → project.
+	m.Update(key("s"))
+	m.Update(key("s"))
+	if !strings.Contains(m.View(), "scope: project") {
+		t.Fatalf("title must show the forced scope:\n%s", m.View())
+	}
+	apply(t, m.Update(key("enter"))) // toggle ui.menu_bar in project scope
+	if config.Get().UI.MenuBar {
+		t.Fatal("toggle must flip ui.menu_bar to false")
+	}
+	if got := config.Origin(opts, "ui.menu_bar"); got != "project" {
+		t.Fatalf("origin after project write = %q, want project", got)
+	}
+	if _, err := os.Stat(filepath.Join(opts.ProjectRoot, ".ike", "settings.toml")); err != nil {
+		t.Fatal("the first project-scope write must create .ike/settings.toml")
+	}
+	if !strings.Contains(m.View(), "@project") {
+		t.Fatal("layer badge must show the project override")
+	}
+
+	// Reset in project scope removes the key; the value falls back.
+	apply(t, m.Update(key("r")))
+	if !config.Get().UI.MenuBar {
+		t.Fatal("reset must fall back (default true)")
+	}
+	if got := config.Origin(opts, "ui.menu_bar"); got != "default" {
+		t.Fatalf("origin after project reset = %q, want default", got)
+	}
+
+	// One more "s" wraps back to auto.
+	m.Update(key("s"))
+	if strings.Contains(m.View(), "scope:") {
+		t.Fatal("selector must wrap back to auto (no title chip)")
+	}
+}
+
+// TestScopeSelectorProjectOverridesUser (#794): a project-scope write shadows
+// an existing user value; removing the project key falls back to the user
+// value, not the default.
+func TestScopeSelectorProjectOverridesUser(t *testing.T) {
+	restoreConfig(t)
+	opts := testOpts(t)
+	opts.ProjectRoot = t.TempDir()
+	m := New(testPages(), opts)
+	m.SetSize(90, 20)
+	m.Open()
+	m.Update(key("tab"))
+
+	m.Update(key("s"))               // user
+	apply(t, m.Update(key("enter"))) // menu_bar -> false @user
+	m.Update(key("s"))               // project
+	apply(t, m.Update(key("enter"))) // menu_bar -> true @project
+	if !config.Get().UI.MenuBar {
+		t.Fatal("project layer must win")
+	}
+	if got := config.Origin(opts, "ui.menu_bar"); got != "project" {
+		t.Fatalf("origin = %q, want project", got)
+	}
+	apply(t, m.Update(key("r"))) // remove the project key
+	if config.Get().UI.MenuBar {
+		t.Fatal("removing the project key must fall back to the user value (false)")
+	}
+	if got := config.Origin(opts, "ui.menu_bar"); got != "user" {
+		t.Fatalf("origin after fallback = %q, want user", got)
 	}
 }
 
