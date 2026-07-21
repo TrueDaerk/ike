@@ -116,7 +116,9 @@ wrongly — YAML is indentation-sensitive), and `shell` (#894, official
 tree-sitter-bash — covers sh/zsh for highlighting; matches `.sh`/`.bash`/`.zsh`,
 the rc-file base names `.bashrc` `.zshrc` `.bash_profile` `.profile`
 `.zprofile`, and extensionless scripts via interpreters `sh` `bash` `zsh`
-`dash`).
+`dash`), and `markdown` (#880, two vendored grammars — block + inline — wired
+through the injection seam; fenced code blocks render in the fence's language,
+front matter as YAML/TOML; see [highlighting](./highlighting.md)).
 The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
@@ -281,6 +283,7 @@ uv is present — it works even in envs without pip — else
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 | Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH. |
+| Markdown | marksman (`marksman server`, `brew install marksman`) | Single static binary; completes link targets, heading anchors, wiki-links, reference labels. Prose keeps the word-index source. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable

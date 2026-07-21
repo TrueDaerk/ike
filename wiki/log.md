@@ -2,6 +2,12 @@
 
 ## 2026-07-21
 
+- Markdown language support (#880): block + inline grammar via injection,
+  fenced code blocks highlighted in their fence language (new dynamic
+  `@fragment.language`/`@fragment.content` seam), YAML/TOML front matter,
+  marksman completion (`/architecture/languages.md`,
+  `/architecture/highlighting.md`).
+
 - Shell language support (#894): tree-sitter-bash highlighting, rc-file base
   names + shebang interpreters, bash-language-server (with automatic
   shellcheck diagnostics) (`/architecture/languages.md`).
