@@ -37,6 +37,8 @@ type Config struct {
 	Todo Todo `toml:"todo"`
 	// Run holds run-configuration behaviour (0350, #576).
 	Run Run `toml:"run"`
+	// Debug holds debugger behaviour (0360, #823).
+	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
 }
@@ -58,6 +60,33 @@ type ToolEntry struct {
 	Args      []string `toml:"args"`
 	Cwd       string   `toml:"cwd"`
 	Placement string   `toml:"placement"`
+}
+
+// Debug holds debugger behaviour (0360). PHP carries the web/request listen
+// mode's settings (#823).
+type Debug struct {
+	PHP DebugPHP `toml:"php"`
+}
+
+// DebugPHP configures "listen for PHP debug connections" (#823). Port is the
+// DBGp listener port (Xdebug's default is 9003). Hostname, when set, only
+// accepts debug sessions whose request's $_SERVER['HTTP_HOST'] matches (port
+// suffix ignored, case-insensitive) — other requests are detached so an
+// unrelated vhost on the same php-fpm pool cannot hijack the debugger.
+// PathMappings translate between the server's docroot and the project layout
+// when they differ.
+type DebugPHP struct {
+	Port         int            `toml:"port"`
+	Hostname     string         `toml:"hostname"`
+	PathMappings []DebugPathMap `toml:"path_mappings"`
+}
+
+// DebugPathMap is one server→local path-prefix mapping ([[debug.php.path_mappings]]).
+// Server is the path prefix as the engine reports it (e.g. /var/www/html);
+// Local is the matching project path, absolute or project-relative.
+type DebugPathMap struct {
+	Server string `toml:"server"`
+	Local  string `toml:"local"`
 }
 
 // Run holds run-configuration behaviour (0350, #576). Placement decides where

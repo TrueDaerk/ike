@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"ike/internal/config"
 	"ike/internal/lang"
 )
 
@@ -81,6 +82,37 @@ func TestDebugLaunchArgs(t *testing.T) {
 	}
 	if _, ok := args["env"]; ok {
 		t.Error("empty env must be omitted")
+	}
+}
+
+// TestDebugLaunchArgsListen guards #823: a listen spec turns into the
+// bridge's listen vocabulary, parameterized from [debug.php] with relative
+// path mappings resolved against the project root.
+func TestDebugLaunchArgsListen(t *testing.T) {
+	old := config.Get()
+	t.Cleanup(func() { config.Set(old) })
+	c := &config.Config{}
+	c.Debug.PHP.Port = 9017
+	c.Debug.PHP.Hostname = "onpage.local"
+	c.Debug.PHP.PathMappings = []config.DebugPathMap{
+		{Server: "/var/www/html", Local: "src"},
+		{Server: "", Local: "ignored"}, // incomplete entries are dropped
+	}
+	config.Set(c)
+
+	args := toolchain{}.DebugLaunchArgs("/proj", lang.RunSpec{Listen: true}, "/proj", nil)
+	if args["mode"] != "listen" || args["port"] != 9017 || args["hostname"] != "onpage.local" {
+		t.Fatalf("unexpected listen args: %v", args)
+	}
+	if _, ok := args["program"]; ok {
+		t.Error("listen args must not carry a program")
+	}
+	maps, ok := args["pathMappings"].([]map[string]string)
+	if !ok || len(maps) != 1 {
+		t.Fatalf("pathMappings = %v", args["pathMappings"])
+	}
+	if maps[0]["server"] != "/var/www/html" || maps[0]["local"] != "/proj/src" {
+		t.Fatalf("mapping not resolved against root: %v", maps[0])
 	}
 }
 

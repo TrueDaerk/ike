@@ -15,6 +15,11 @@ type RunSpec struct {
 	Module string
 	// Args are the program's own arguments, appended after the target.
 	Args []string
+	// Listen marks a listen-style debug session (#823): no process is
+	// launched — the adapter waits for incoming connections instead (PHP's
+	// "listen for Xdebug connections from php-fpm"). File/Module/Args are
+	// empty then.
+	Listen bool
 }
 
 // RunCommandProvider is an optional Toolchain extension: it turns a RunSpec

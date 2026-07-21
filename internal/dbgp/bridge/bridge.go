@@ -72,6 +72,16 @@ type bridge struct {
 	vars       *varTable           // live variablesReferences; nil while running
 	ended      bool
 	revPending map[int]chan revReply
+
+	// Listen mode (#823): a persistent listener accepts one DBGp connection
+	// per request from php-fpm/Apache, sequentially. bpLines caches the DAP
+	// breakpoints per local path so each accepted connection gets them
+	// replayed; hostname filters requests by $_SERVER['HTTP_HOST']; maps
+	// translate server docroot paths to the project layout and back.
+	listenMode bool
+	hostname   string
+	maps       []pathMapping
+	bpLines    map[string][]int
 }
 
 // serve runs the DAP read loop until the pipe closes. A panic anywhere in
@@ -122,7 +132,7 @@ func (b *bridge) shutdown() {
 		return
 	}
 	b.ended = true
-	dc, l := b.dc, b.listener
+	dc, l, listen := b.dc, b.listener, b.listenMode
 	for seq, ch := range b.revPending {
 		close(ch)
 		delete(b.revPending, seq)
@@ -130,7 +140,13 @@ func (b *bridge) shutdown() {
 	b.mu.Unlock()
 	if dc != nil {
 		go func() {
-			_, _ = dc.Stop() // best effort: ends the script if still alive
+			if listen {
+				// A web request being debugged when the user stops listening
+				// (#823) runs to completion instead of dying mid-response.
+				_ = dc.Detach()
+			} else {
+				_, _ = dc.Stop() // best effort: ends the script if still alive
+			}
 			_ = dc.Close()
 		}()
 	}
@@ -260,11 +276,24 @@ func (b *bridge) handleRequest(req envelope) {
 }
 
 // launchArgs is the launch request vocabulary the PHP provider emits (#701).
+// Mode "listen" (#823) opens a persistent DBGp listener instead of spawning
+// a process; Port/Hostname/PathMappings only apply there.
 type launchArgs struct {
-	Program string            `json:"program"`
-	Args    []string          `json:"args"`
-	Cwd     string            `json:"cwd"`
-	Env     map[string]string `json:"env"`
+	Program      string            `json:"program"`
+	Args         []string          `json:"args"`
+	Cwd          string            `json:"cwd"`
+	Env          map[string]string `json:"env"`
+	Mode         string            `json:"mode,omitempty"`
+	Port         int               `json:"port,omitempty"`
+	Hostname     string            `json:"hostname,omitempty"`
+	PathMappings []pathMapping     `json:"pathMappings,omitempty"`
+}
+
+// pathMapping is one server→local path-prefix pair (#823). Local arrives
+// absolute (the provider resolves it against the project root).
+type pathMapping struct {
+	Server string `json:"server"`
+	Local  string `json:"local"`
 }
 
 // handleLaunch opens the DBGp listener, has the client spawn PHP in a
@@ -273,7 +302,15 @@ type launchArgs struct {
 // manager pushes breakpoints and finishes configuration.
 func (b *bridge) handleLaunch(req envelope) {
 	var args launchArgs
-	if err := json.Unmarshal(req.Arguments, &args); err != nil || args.Program == "" {
+	if err := json.Unmarshal(req.Arguments, &args); err != nil {
+		b.fail(req, "invalid launch arguments")
+		return
+	}
+	if args.Mode == "listen" {
+		b.handleListen(req, args)
+		return
+	}
+	if args.Program == "" {
 		b.fail(req, "invalid launch arguments")
 		return
 	}
@@ -367,6 +404,235 @@ func (b *bridge) handleLaunch(req envelope) {
 	b.event("initialized", nil)
 }
 
+// handleListen opens the persistent DBGp listener (#823): no process is
+// spawned — php-fpm/Apache dials in when a request runs with Xdebug
+// triggered. The listener accepts sequentially, one debug session per
+// connection; the DAP session stays alive across requests until disconnect.
+func (b *bridge) handleListen(req envelope, args launchArgs) {
+	port := args.Port
+	if port == 0 {
+		port = 9003 // Xdebug's default DBGp port
+	}
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		b.fail(req, "dbgp listen: "+err.Error())
+		b.shutdown()
+		return
+	}
+	b.mu.Lock()
+	if b.ended {
+		b.mu.Unlock()
+		_ = l.Close()
+		b.fail(req, "session ended")
+		return
+	}
+	b.listener = l
+	b.listenMode = true
+	b.hostname = args.Hostname
+	b.maps = args.PathMappings
+	b.bpLines = map[string][]int{}
+	b.mu.Unlock()
+
+	b.respond(req, map[string]any{})
+	b.event("initialized", nil)
+	note := fmt.Sprintf("Listening for Xdebug connections on port %d", l.Addr().(*net.TCPAddr).Port)
+	if args.Hostname != "" {
+		note += " (host filter: " + args.Hostname + ")"
+	}
+	b.event("output", map[string]any{"category": "console", "output": note + "…\n"})
+	go b.acceptLoop(l)
+}
+
+// acceptLoop accepts DBGp connections until the listener closes (disconnect
+// or shutdown). Each accepted connection is vetted and, when it passes,
+// becomes the live debug session; the loop then waits for the next request.
+func (b *bridge) acceptLoop(l net.Listener) {
+	defer b.recoverClose()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			return // listener closed: shutdown owns the teardown
+		}
+		b.handleIncoming(conn)
+	}
+}
+
+// handleIncoming vets one dialed-in engine connection: handshake, busy
+// check, hostname filter — then adopts it as the live session, replays the
+// cached breakpoints and resumes. Rejections detach politely so the request
+// completes undisturbed.
+func (b *bridge) handleIncoming(conn net.Conn) {
+	dc := dbgp.NewConn(conn, func(s dbgp.Stream) {
+		category := "stdout"
+		if s.Type == "stderr" {
+			category = "stderr"
+		}
+		b.event("output", map[string]any{"category": category, "output": s.Text()})
+	})
+	init, err := dc.WaitInit(acceptTimeout)
+	if err != nil {
+		_ = dc.Close()
+		return
+	}
+	b.mu.Lock()
+	busy, host := b.dc != nil || b.ended, b.hostname
+	b.mu.Unlock()
+	if busy {
+		// Sequential sessions only: a request arriving while another is
+		// being debugged runs through undisturbed.
+		_ = dc.Detach()
+		_ = dc.Close()
+		return
+	}
+	if host != "" {
+		reqHost, ok := b.requestHost(dc)
+		if !ok || !hostMatches(reqHost, host) {
+			b.event("output", map[string]any{"category": "console",
+				"output": fmt.Sprintf("Detached request from %q (host filter: %s)\n", reqHost, host)})
+			_ = dc.Detach()
+			_ = dc.Close()
+			return
+		}
+	}
+	b.adoptConn(dc, init)
+}
+
+// requestHost fetches the request's $_SERVER['HTTP_HOST']. property_get is
+// only valid in the break state, so the engine is stepped onto the first
+// statement first (cheap — nothing has run yet). ok=false means no host is
+// available (a CLI-triggered connection, or the engine refused).
+func (b *bridge) requestHost(dc *dbgp.Conn) (host string, ok bool) {
+	if resp, err := dc.StepInto(); err != nil || resp.Status != "break" {
+		return "", false
+	}
+	p, err := dc.PropertyGet(`$_SERVER['HTTP_HOST']`, 0, 0)
+	if err != nil || p.Type == "uninitialized" {
+		return "", false
+	}
+	return p.Value(), true
+}
+
+// hostMatches compares the request's HTTP_HOST against the configured
+// filter, case-insensitively and ignoring a :port suffix.
+func hostMatches(reqHost, filter string) bool {
+	h := strings.ToLower(strings.TrimSpace(reqHost))
+	if i := strings.LastIndex(h, ":"); i >= 0 && !strings.Contains(h[i:], "]") {
+		h = h[:i]
+	}
+	return h == strings.ToLower(strings.TrimSpace(filter))
+}
+
+// adoptConn makes an accepted connection the live session: feature limits,
+// breakpoint replay from the DAP-side cache, then run. Break/end reporting
+// goes through the same resume path as launch mode.
+func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
+	_ = dc.FeatureSet("max_depth", "1")
+	_ = dc.FeatureSet("max_children", "100")
+	_ = dc.FeatureSet("max_data", "4096")
+
+	b.mu.Lock()
+	if b.ended || b.dc != nil {
+		b.mu.Unlock()
+		_ = dc.Detach()
+		_ = dc.Close()
+		return
+	}
+	b.dc = dc
+	b.bpIDs = map[string][]string{}
+	lines := make(map[string][]int, len(b.bpLines))
+	for p, ls := range b.bpLines {
+		lines[p] = append([]int(nil), ls...)
+	}
+	b.mu.Unlock()
+
+	for path, ls := range lines {
+		uri := dbgp.ToURI(b.toServer(path))
+		ids := make([]string, 0, len(ls))
+		for _, line := range ls {
+			if id, err := dc.BreakpointSet(uri, line); err == nil {
+				ids = append(ids, id)
+			}
+		}
+		b.mu.Lock()
+		b.bpIDs[path] = ids
+		b.mu.Unlock()
+	}
+	b.event("output", map[string]any{"category": "console",
+		"output": "Accepted debug connection (" + b.toLocal(dbgp.FromURI(init.FileURI)) + ")\n"})
+	go b.resume(envelope{}, "breakpoint", (*dbgp.Conn).Run)
+}
+
+// endRun ends one request's debugging. Launch mode: the session is over.
+// Listen mode: drop the connection, report running, keep listening — the
+// next request starts the cycle again.
+func (b *bridge) endRun() {
+	b.mu.Lock()
+	listen, dc := b.listenMode, b.dc
+	b.dc = nil
+	b.mu.Unlock()
+	if !listen {
+		b.finish()
+		return
+	}
+	if dc != nil {
+		_ = dc.Close()
+	}
+	b.resetVars()
+	b.event("continued", map[string]any{"threadId": 1, "allThreadsContinued": true})
+	b.event("output", map[string]any{"category": "console", "output": "Request finished — listening…\n"})
+}
+
+// toServer maps a local project path to the server's path per the longest
+// matching mapping prefix; unmapped paths pass through.
+func (b *bridge) toServer(path string) string {
+	b.mu.Lock()
+	maps := b.maps
+	b.mu.Unlock()
+	best := -1
+	mapped := path
+	for _, m := range maps {
+		if m.Local == "" || m.Server == "" || len(m.Local) <= best {
+			continue
+		}
+		if rest, ok := prefixRest(path, m.Local); ok {
+			best, mapped = len(m.Local), m.Server+rest
+		}
+	}
+	return mapped
+}
+
+// toLocal maps a server path back into the project per the longest matching
+// mapping prefix; unmapped paths pass through.
+func (b *bridge) toLocal(path string) string {
+	b.mu.Lock()
+	maps := b.maps
+	b.mu.Unlock()
+	best := -1
+	mapped := path
+	for _, m := range maps {
+		if m.Local == "" || m.Server == "" || len(m.Server) <= best {
+			continue
+		}
+		if rest, ok := prefixRest(path, m.Server); ok {
+			best, mapped = len(m.Server), m.Local+rest
+		}
+	}
+	return mapped
+}
+
+// prefixRest reports whether path lies under prefix (or equals it) and
+// returns the remainder including its leading separator.
+func prefixRest(path, prefix string) (string, bool) {
+	prefix = strings.TrimRight(prefix, "/")
+	if path == prefix {
+		return "", true
+	}
+	if strings.HasPrefix(path, prefix+"/") {
+		return path[len(prefix):], true
+	}
+	return "", false
+}
+
 // conn returns the live DBGp connection, or nil after teardown/before launch.
 func (b *bridge) conn() *dbgp.Conn {
 	b.mu.Lock()
@@ -390,8 +656,30 @@ func (b *bridge) handleSetBreakpoints(req envelope) {
 		b.fail(req, "invalid setBreakpoints arguments")
 		return
 	}
+	// Listen mode (#823) caches the lines so every accepted connection gets
+	// them replayed — with or without a live engine right now.
+	b.mu.Lock()
+	if b.bpLines != nil {
+		lines := make([]int, 0, len(args.Breakpoints))
+		for _, bp := range args.Breakpoints {
+			lines = append(lines, bp.Line)
+		}
+		b.bpLines[args.Source.Path] = lines
+	}
+	listen := b.listenMode
+	b.mu.Unlock()
 	dc := b.conn()
 	if dc == nil {
+		if listen {
+			// No request being debugged: accept optimistically, the replay
+			// on the next accepted connection sets them for real.
+			verdicts := make([]map[string]any, 0, len(args.Breakpoints))
+			for _, bp := range args.Breakpoints {
+				verdicts = append(verdicts, map[string]any{"verified": true, "line": bp.Line})
+			}
+			b.respond(req, map[string]any{"breakpoints": verdicts})
+			return
+		}
 		b.fail(req, "no debug session")
 		return
 	}
@@ -402,7 +690,7 @@ func (b *bridge) handleSetBreakpoints(req envelope) {
 	for _, id := range old {
 		_ = dc.BreakpointRemove(id)
 	}
-	uri := dbgp.ToURI(args.Source.Path)
+	uri := dbgp.ToURI(b.toServer(args.Source.Path))
 	ids := make([]string, 0, len(args.Breakpoints))
 	verdicts := make([]map[string]any, 0, len(args.Breakpoints))
 	for _, bp := range args.Breakpoints {
@@ -436,8 +724,9 @@ func (b *bridge) resume(req envelope, stopReason string, cmd func(*dbgp.Conn) (*
 	resp, err := cmd(dc)
 	if err != nil {
 		// A dead connection mid-run means the script finished (Xdebug drops
-		// the link on exit); anything else ends the session the same way.
-		b.finish()
+		// the link on exit); listen mode (#823) goes back to waiting for the
+		// next request, launch mode ends the session.
+		b.endRun()
 		return
 	}
 	switch {
@@ -452,7 +741,7 @@ func (b *bridge) resume(req envelope, stopReason string, cmd func(*dbgp.Conn) (*
 			"allThreadsStopped": true,
 		})
 	case dbgp.StatusEnded(resp.Status):
-		b.finish()
+		b.endRun()
 	}
 }
 
@@ -493,7 +782,7 @@ func (b *bridge) handleStackTrace(req envelope) {
 			"line":   e.Lineno,
 			"column": 1,
 		}
-		if path := dbgp.FromURI(e.Filename); !strings.Contains(path, "://") {
+		if path := b.toLocal(dbgp.FromURI(e.Filename)); !strings.Contains(path, "://") {
 			fr["source"] = map[string]any{"path": path}
 		}
 		frames = append(frames, fr)

@@ -134,6 +134,11 @@ type DebugToggleBreakpointMsg struct{}
 // DebugStartMsg launches the active file's configuration under the debugger
 // (0350, #579); DebugStopMsg ends the session. The step messages drive a
 // paused session: over (F8), into (F7), out (shift+F8), continue (F9).
+// DebugListenMsg toggles listening for incoming PHP/Xdebug debug
+// connections from php-fpm/Apache (#823): on starts the persistent DBGp
+// listener session, off stops it.
+type DebugListenMsg struct{}
+
 type (
 	DebugStartMsg    struct{}
 	DebugStopMsg     struct{}
@@ -260,6 +265,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
+			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),
 			appCommand("debug.stop", "Stop Debug Session", DebugStopMsg{}),
 			appCommand("debug.stepOver", "Step Over", DebugStepOverMsg{}),
 			appCommand("debug.stepInto", "Step Into", DebugStepIntoMsg{}),

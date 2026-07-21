@@ -2420,6 +2420,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.stopDebugSession(true)
 		return m, nil
 
+	case DebugListenMsg:
+		// debug.listen (palette / Run menu, #823): toggle the persistent
+		// Xdebug listener for web/request debugging through php-fpm.
+		m.toggleDebugListen()
+		return m, nil
+
 	case DebugStepOverMsg:
 		m.debugStep("over")
 		return m, nil
