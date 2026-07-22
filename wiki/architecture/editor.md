@@ -218,8 +218,11 @@ Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
 `Home`/`End` and the word/page keys move the caret mid-insert. Backward kills
 work mid-insert too (#246), mirroring the terminal pane's macOS convention:
-`option+backspace` / `ctrl+w` delete the previous word, `cmd+backspace` /
-`ctrl+u` delete to the line start — all inside the open insert's undo unit. An `undo`/`redo`
+`option+backspace` / `ctrl+w` delete the previous word, `ctrl+u` deletes to
+the line start, and `cmd+backspace` is IntelliJ's Delete Line (#955): the
+whole current line goes, including the preceding line break (on line 0 the
+following break instead), landing the caret at the end of the previous line —
+all inside the open insert's undo unit. An `undo`/`redo`
 requested mid-insert (e.g. `Ctrl+Z` while typing) first **commits the open
 insert session**, so it reverts the whole typed run as one unit and behaves
 identically from insert and normal mode.

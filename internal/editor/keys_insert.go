@@ -32,15 +32,18 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		m.insertNewline()
 	// Word/line kills (#246) come before the plain-backspace case, which
 	// matches KeyBackspace regardless of modifiers. alt+backspace mirrors the
-	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin;
-	// cmd+backspace / ctrl+u kill to the line start the same way.
+	// terminal pane's macOS convention (#240), ctrl+w is the vim-native twin.
 	case key.Code == tea.KeyBackspace && key.Mod&^tea.ModShift == tea.ModAlt,
 		key.Code == 'w' && key.Mod == tea.ModCtrl:
 		m.insertKillBack(func(pos buffer.Position) buffer.Position {
 			return motion.WordBackward(m.buf, pos, 1).Pos
 		})
-	case key.Code == tea.KeyBackspace && (key.Mod&^tea.ModShift == tea.ModSuper || key.Mod&^tea.ModShift == tea.ModMeta),
-		key.Code == 'u' && key.Mod == tea.ModCtrl:
+	// cmd+backspace is IntelliJ's Delete Line (#955): the whole current line
+	// goes, including the preceding line break. ctrl+u keeps the vim/readline
+	// kill-to-line-start.
+	case key.Code == tea.KeyBackspace && (key.Mod&^tea.ModShift == tea.ModSuper || key.Mod&^tea.ModShift == tea.ModMeta):
+		m.insertKillLine()
+	case key.Code == 'u' && key.Mod == tea.ModCtrl:
 		m.insertKillBack(func(pos buffer.Position) buffer.Position {
 			return buffer.Position{Line: pos.Line, Col: 0}
 		})
@@ -339,6 +342,52 @@ func (m *Model) insertKillBack(startFor func(pos buffer.Position) buffer.Positio
 		return
 	}
 	m.insert.typed = "" // multi-caret kills clear the "." text, like a cross-line kill
+	m.dirtyFromInsert()
+}
+
+// insertKillLine deletes the whole current line at every caret, including the
+// preceding line break, so the line vanishes and the cursor lands at the end
+// of the previous line — IntelliJ's Delete Line on cmd+backspace (#955). On
+// line 0 the following break goes instead (the line still disappears); a
+// single-line buffer just clears its content. Carets sharing a line collapse
+// onto one deletion via the floor clamp.
+func (m *Model) insertKillLine() {
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	edited := false
+	m.fanApply(func(pos, floor buffer.Position) buffer.Position {
+		// A caret whose line an earlier caret already killed collapses onto
+		// that caret instead of eating the previous line too.
+		if floor.Line >= 0 && !floor.Before(pos) {
+			return floor
+		}
+		var start, end buffer.Position
+		switch {
+		case pos.Line > 0:
+			start = buffer.Position{Line: pos.Line - 1, Col: m.buf.RuneLen(pos.Line - 1)}
+			end = buffer.Position{Line: pos.Line, Col: m.buf.RuneLen(pos.Line)}
+		case m.buf.LineCount() > 1:
+			start = buffer.Position{Line: 0, Col: 0}
+			end = buffer.Position{Line: 1, Col: 0}
+		default:
+			start = buffer.Position{Line: 0, Col: 0}
+			end = buffer.Position{Line: 0, Col: m.buf.RuneLen(0)}
+		}
+		if floor.Line >= 0 && start.Before(floor) {
+			start = floor
+		}
+		if !start.Before(end) {
+			return pos
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: start, End: end}))
+		edited = true
+		return start
+	})
+	if !edited {
+		return
+	}
+	m.insert.typed = "" // a line kill crosses lines; clear the "." text
 	m.dirtyFromInsert()
 }
 
