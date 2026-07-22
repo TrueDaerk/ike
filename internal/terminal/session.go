@@ -773,23 +773,56 @@ func (s *Session) Width() int { return s.em.Width() }
 // terminal without shell integration uses: a row whose final column is
 // occupied wrapped into the next one. The one ambiguity — a hard-newline line
 // that exactly fills the width — reads as wrapped and joins on copy.
+//
+// A width shrink truncates rows instead of rewrapping them (reflow is #935),
+// which leaves clipped lines filling their last column too (#947). Those are
+// recognised — scrollback lines still store their full pre-shrink width, and
+// screen rows are checked against the resize reserve (#807) — and never read
+// as wrapped: better a missed join than chaining unrelated lines.
 func (s *Session) SoftWrapped(v int) bool {
 	sb := s.em.ScrollbackLen()
 	w := s.em.Width()
 	if w <= 0 || v < 0 || v >= sb+s.em.Height()-1 {
 		return false // the last virtual line has nothing to continue into
 	}
-	var c *uv.Cell
 	if v < sb {
-		c = s.em.ScrollbackCellAt(w-1, v)
-	} else {
-		c = s.em.CellAt(w-1, v-sb)
+		// Stored wider than the viewport: a clipped long line, not a wrap.
+		if s.em.ScrollbackCellAt(w, v) != nil {
+			return false
+		}
+		return cellOccupied(s.em.ScrollbackCellAt(w-1, v))
 	}
+	y := v - sb
+	if !cellOccupied(s.em.CellAt(w-1, y)) {
+		return false
+	}
+	// Full row: distinguish a wrap from a row a width shrink clipped. The
+	// reserve still holds the pre-shrink content; a prefix-matching reserve
+	// row wider than the viewport means the row was written on a wider grid
+	// and merely got cut (or ended exactly at w) — not a wrap. Rows rewritten
+	// since the shrink fail the prefix match and take the plain heuristic.
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.reserveW > w && y < len(s.reserve) && len(s.reserve[y]) > w {
+		s.gridMu.Lock()
+		match := rowPrefixEqual(s.reserve[y], s.screenRowLocked(w, y), w)
+		s.gridMu.Unlock()
+		if match {
+			return false
+		}
+	}
+	return true
+}
+
+// cellOccupied reports whether a cell holds visible content — the soft-wrap
+// heuristic's "did the line reach the final column" test. Width-0
+// continuation cells count: a wide rune reaches the edge.
+func cellOccupied(c *uv.Cell) bool {
 	if c == nil {
 		return false
 	}
 	if c.Width == 0 {
-		return true // continuation cell: a wide rune reaches the edge
+		return true
 	}
 	return c.Content != "" && c.Content != " "
 }

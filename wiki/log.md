@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Terminal soft-wrap heuristic after shrink (#947): width-truncated lines no
+  longer read as soft-wrapped (scrollback width / resize-reserve checks), so
+  triple-click and copy no longer chain unrelated clipped lines
+  (`/architecture/terminal.md`).
+
 - Markdown table cell inline rendering (#945): box-drawn table cells now
   render their inline markdown (`code`, emphasis, strike, links) styled and
   without marker chrome; column widths size by the concealed display width
