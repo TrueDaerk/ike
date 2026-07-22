@@ -672,11 +672,7 @@ func (p *Palette) sideRow(it Item, selected bool, width int) string {
 		}
 		line += strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(p.theme().Border).Render("✕ ")
 	}
-	style := lipgloss.NewStyle().MaxWidth(width)
-	if selected {
-		style = style.Background(p.theme().Panel).Width(width)
-	}
-	return style.Render(line)
+	return clipRow(line, width, selected, p.theme().Panel)
 }
 
 // badgeView renders an item's Badge (#820) as a dim-accent suffix.
@@ -728,11 +724,21 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 	}
 	line := marker + title + badge + strings.Repeat(" ", gap) + detail + aux
 
-	style := lipgloss.NewStyle().MaxWidth(width)
-	if selected {
-		style = style.Background(p.theme().Panel).Width(width)
+	return clipRow(line, width, selected, p.theme().Panel)
+}
+
+// clipRow bounds a result row to exactly one line: hard-truncate at width
+// (lipgloss MaxWidth would WRAP overlong content onto a second row, #971),
+// then pad selected rows to full width for the background band.
+func clipRow(line string, width int, selected bool, bg color.Color) string {
+	line = ansi.Truncate(line, width, "…")
+	if !selected {
+		return line
 	}
-	return style.Render(line)
+	if gap := width - ansi.StringWidth(line); gap > 0 {
+		line += strings.Repeat(" ", gap)
+	}
+	return lipgloss.NewStyle().Background(bg).Render(line)
 }
 
 // highlight renders title with the matched rune spans emphasised in the accent

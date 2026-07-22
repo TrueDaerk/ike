@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/locations"
 	"ike/internal/search"
@@ -539,7 +540,10 @@ func (m *Model) View() string {
 	if boxW < 40 {
 		boxW = min(40, m.width-2)
 	}
-	innerW := boxW - 4 // border + padding
+	// The box renders boxW-2 TOTAL cells including its border (lipgloss
+	// counts the border inside Width), minus 2 border and 2 padding cells:
+	// rows wider than boxW-6 soft-wrap onto a second line (#971).
+	innerW := boxW - 6 // border + padding
 
 	heading := "Find in Path"
 	if m.replaceMode {
@@ -607,7 +611,8 @@ func (m *Model) inputRow(label, value string, f field, width int) string {
 	if m.focus == f {
 		row = lipgloss.NewStyle().Foreground(pal.Foreground).Render(lab) + text
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(row)
+	// Hard truncate: lipgloss MaxWidth WRAPS overlong content (#971).
+	return ansi.Truncate(row, width, "…")
 }
 
 // The toggle row's fixed pieces; toggleSpans derives the click ranges from
@@ -634,7 +639,7 @@ func (m *Model) togglesRow(width int) string {
 	row := togglesIndent + part(caseLabel, m.caseSensitive) +
 		"  " + part(wordLabel, m.wholeWord) +
 		"  " + part(regexLabel, m.regex)
-	return lipgloss.NewStyle().MaxWidth(width).Render(row)
+	return ansi.Truncate(row, width, "…")
 }
 
 // previewRows renders the before/after preview for the selected match in
@@ -652,12 +657,12 @@ func (m *Model) previewRows(width int) []string {
 		return nil
 	}
 	pal := m.theme()
-	clip := lipgloss.NewStyle().MaxWidth(width)
 	del := lipgloss.NewStyle().Foreground(pal.Error)
 	add := lipgloss.NewStyle().Foreground(pal.Success)
+	// Hard truncate (#971): MaxWidth would wrap an overlong preview line.
 	return []string{
-		clip.Render(del.Render("- " + strings.TrimRight(it.Text, " \t"))),
-		clip.Render(add.Render("+ " + strings.TrimRight(after, " \t"))),
+		ansi.Truncate(del.Render("- "+strings.TrimRight(it.Text, " \t")), width, "…"),
+		ansi.Truncate(add.Render("+ "+strings.TrimRight(after, " \t")), width, "…"),
 	}
 }
 
@@ -668,7 +673,7 @@ func (m *Model) statusRow(width int) string {
 	switch {
 	case m.errText != "":
 		return lipgloss.NewStyle().Foreground(pal.Error).Render(
-			lipgloss.NewStyle().MaxWidth(width).Render("error: " + m.errText))
+			ansi.Truncate("error: "+m.errText, width, "…"))
 	case strings.TrimSpace(m.query) == "":
 		if m.replaceMode {
 			return dim.Render("type to search — enter replaces match, ctrl+f file, ctrl+a all, ctrl+enter opens")

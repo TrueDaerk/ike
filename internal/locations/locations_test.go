@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	"ike/internal/theme"
 )
 
@@ -147,5 +149,44 @@ func TestSetCursorClamps(t *testing.T) {
 	l.SetCursor(-5)
 	if l.Cursor() != 0 {
 		t.Fatalf("cursor must clamp low, got %d", l.Cursor())
+	}
+}
+
+// TestRenderRowsNeverWrap guards #971: overlong rows must occupy exactly one
+// line each — lipgloss MaxWidth WRAPS instead of clipping, so a width check
+// per line misses the bug; the row COUNT is the real assertion.
+func TestRenderRowsNeverWrap(t *testing.T) {
+	long := "* [Syntax Highlighting](/architecture/highlighting.md) - Tree-sitter lexical layer: per-language grammars parsed off-loop into theme-coloured spans, applied per cell (Roadmap 0100)"
+	idx := strings.Index(long, "architecture/high")
+	l := &List{}
+	l.Append([]Item{
+		{Path: "wiki/architecture/index.md", Line: 26, Text: long, StartCol: idx, EndCol: idx + 25},
+		{Path: "wiki/architecture/index.md", Line: 27, Text: "short", StartCol: 0, EndCol: 3},
+	})
+	for _, sel := range []int{0, 1} {
+		l.cursor = sel
+		out := l.Render(86, 10, theme.DefaultPalette(), nil)
+		rows := strings.Split(out, "\n")
+		if len(rows) != 3 { // header + two items
+			t.Fatalf("sel=%d: rows = %d, want 3 (a wrapped row splits):\n%s", sel, len(rows), out)
+		}
+		for i, r := range rows {
+			if w := lipgloss.Width(r); w > 86 {
+				t.Errorf("sel=%d row %d width %d > 86", sel, i, w)
+			}
+		}
+	}
+}
+
+// TestRenderFlattensEmbeddedNewlines guards #971: a match text carrying a
+// newline (multi-line context) must not render a literal second row.
+func TestRenderFlattensEmbeddedNewlines(t *testing.T) {
+	l := &List{}
+	l.Append([]Item{{Path: "wiki/log.md", Line: 2647,
+		Text: "[LSP](/architecture/lsp.md) and [Syntax\nHighlighting](/architecture/highlighting.md).",
+		StartCol: 5, EndCol: 25}})
+	out := l.Render(86, 10, theme.DefaultPalette(), nil)
+	if rows := strings.Split(out, "\n"); len(rows) != 2 { // header + one item
+		t.Fatalf("rows = %d, want 2:\n%s", len(rows), out)
 	}
 }

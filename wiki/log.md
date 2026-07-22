@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Fixed result rows wrapping onto a second line in Find in Path and the
+  palette (#971): the finder box's inner width was 2 cells too wide (the
+  border counts inside lipgloss Width), row "clipping" used MaxWidth (which
+  WRAPS, not truncates) in the finder, locations list and palette rows, and
+  multi-line match texts rendered a literal second row. All rows now hard-
+  truncate and flatten embedded newlines.
+
 - Status-line overflow shrinks priority-aware (#471): the file path gets a
   middle ellipsis first, then low-priority segments drop in a defined order;
   cursor/mode/diagnostics survive narrow widths

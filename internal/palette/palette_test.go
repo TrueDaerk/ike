@@ -1,6 +1,7 @@
 package palette
 
 import (
+	"charm.land/lipgloss/v2"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -500,5 +501,26 @@ func TestAuxActionClick(t *testing.T) {
 	}
 	if p.IsOpen() {
 		t.Fatal("row activation must close the palette")
+	}
+}
+
+// TestRowsNeverWrap guards #971: an overlong item title must render as
+// exactly one line, selected (background-padded) or not — the height, not
+// the per-line width, is the real assertion since MaxWidth used to wrap.
+func TestRowsNeverWrap(t *testing.T) {
+	p := New(Config{})
+	long := strings.Repeat("wiki/architecture/highlighting-", 8) + ".md"
+	for _, selected := range []bool{false, true} {
+		row := p.row(Item{Title: long, Detail: "cmd+shift+a"}, selected, 60)
+		if h := lipgloss.Height(row); h != 1 {
+			t.Fatalf("selected=%v: row height = %d, want 1:\n%s", selected, h, row)
+		}
+		if w := lipgloss.Width(row); w > 60 {
+			t.Fatalf("selected=%v: row width = %d, want <= 60", selected, w)
+		}
+		side := p.sideRow(Item{Title: long}, selected, 60)
+		if h := lipgloss.Height(side); h != 1 {
+			t.Fatalf("selected=%v: sideRow height = %d, want 1", selected, h)
+		}
 	}
 }
