@@ -85,6 +85,22 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 	if err := c.conn.Notify("initialized", struct{}{}); err != nil {
 		return res, err
 	}
+
+	// Open the handshake gate (#937): flush the traffic queued while the
+	// handshake was in flight — still under mu, so a concurrent notify cannot
+	// interleave ahead of the queue — then let requests through. Everything
+	// lands behind initialized in the conn's FIFO write queue.
+	c.initOnce.Do(func() {
+		c.mu.Lock()
+		queued := c.pending
+		c.pending = nil
+		for _, n := range queued {
+			_ = c.conn.Notify(n.method, n.params)
+		}
+		c.handshook = true
+		c.mu.Unlock()
+		close(c.initDone)
+	})
 	return res, nil
 }
 

@@ -20,11 +20,33 @@ type Client struct {
 	caps      Capabilities
 	ready     bool
 	serverNme string
+
+	// Handshake gate (#937): the LSP spec forbids any client traffic between
+	// the initialize request and the initialized notification, and servers die
+	// on violations (Intelephense crashes when didOpen races its async
+	// initialize handler). Notifications sent before the handshake completes
+	// are queued in pending and flushed — after initialized, in order — by
+	// Initialize; requests block on initDone. handshook mirrors the closed
+	// state of initDone so notify can test it under mu.
+	initOnce  sync.Once
+	initDone  chan struct{}
+	handshook bool
+	pending   []pendingNote
+}
+
+// pendingNote is a notification held back while the handshake is in flight.
+type pendingNote struct {
+	method string
+	params any
 }
 
 // New builds a client over conn. Call Initialize before using any feature.
 func New(conn *jsonrpc.Conn) *Client {
-	return &Client{conn: conn, caps: Capabilities{Encoding: protocol.EncodingUTF16, SyncKind: protocol.SyncFull}}
+	return &Client{
+		conn:     conn,
+		caps:     Capabilities{Encoding: protocol.EncodingUTF16, SyncKind: protocol.SyncFull},
+		initDone: make(chan struct{}),
+	}
 }
 
 // Caps returns the negotiated capabilities (valid after Initialize).
@@ -58,17 +80,47 @@ func (c *Client) Respond(id jsonrpc.ID, res any, errObj *jsonrpc.Error) error {
 
 // --- notifications (no reply) ---
 
+// notify sends a notification, or queues it while the initialize handshake is
+// still in flight (#937); Initialize flushes the queue in order right after
+// the initialized notification. A queued send reports success: if the
+// handshake fails the connection is torn down anyway and the manager re-opens
+// documents on the respawned server.
+func (c *Client) notify(method string, params any) error {
+	c.mu.Lock()
+	if !c.handshook {
+		c.pending = append(c.pending, pendingNote{method: method, params: params})
+		c.mu.Unlock()
+		return nil
+	}
+	c.mu.Unlock()
+	return c.conn.Notify(method, params)
+}
+
+// call issues a request once the handshake has completed (#937): no client
+// request may reach the server before the initialize response. ctx bounds the
+// wait exactly like the call itself.
+func (c *Client) call(ctx context.Context, method string, params any) (json.RawMessage, error) {
+	select {
+	case <-c.initDone:
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-c.conn.Done():
+		return nil, jsonrpc.ErrClosed
+	}
+	return c.conn.Call(ctx, method, params)
+}
+
 func (c *Client) DidOpen(p protocol.DidOpenTextDocumentParams) error {
-	return c.conn.Notify("textDocument/didOpen", p)
+	return c.notify("textDocument/didOpen", p)
 }
 func (c *Client) DidChange(p protocol.DidChangeTextDocumentParams) error {
-	return c.conn.Notify("textDocument/didChange", p)
+	return c.notify("textDocument/didChange", p)
 }
 func (c *Client) DidSave(p protocol.DidSaveTextDocumentParams) error {
-	return c.conn.Notify("textDocument/didSave", p)
+	return c.notify("textDocument/didSave", p)
 }
 func (c *Client) DidClose(p protocol.DidCloseTextDocumentParams) error {
-	return c.conn.Notify("textDocument/didClose", p)
+	return c.notify("textDocument/didClose", p)
 }
 
 // --- requests (await a result) ---
@@ -78,7 +130,7 @@ func (c *Client) DidClose(p protocol.DidCloseTextDocumentParams) error {
 // (#849): the reply is a partial view and further typing must re-query rather
 // than filter it client-side.
 func (c *Client) Completion(ctx context.Context, p protocol.CompletionParams) (items []protocol.CompletionItem, incomplete bool, err error) {
-	raw, err := c.conn.Call(ctx, "textDocument/completion", p)
+	raw, err := c.call(ctx, "textDocument/completion", p)
 	if err != nil {
 		return nil, false, err
 	}
@@ -89,7 +141,7 @@ func (c *Client) Completion(ctx context.Context, p protocol.CompletionParams) (i
 // Resolve requests completionItem/resolve for one item (#847): servers ship
 // lean completion lists and attach documentation / additionalTextEdits lazily.
 func (c *Client) Resolve(ctx context.Context, item protocol.CompletionItem) (protocol.CompletionItem, error) {
-	raw, err := c.conn.Call(ctx, "completionItem/resolve", item)
+	raw, err := c.call(ctx, "completionItem/resolve", item)
 	if err != nil {
 		return item, err
 	}
@@ -102,7 +154,7 @@ func (c *Client) Resolve(ctx context.Context, item protocol.CompletionItem) (pro
 
 // Hover requests hover content.
 func (c *Client) Hover(ctx context.Context, p protocol.HoverParams) (*protocol.Hover, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/hover", p)
+	raw, err := c.call(ctx, "textDocument/hover", p)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +171,7 @@ func (c *Client) Hover(ctx context.Context, p protocol.HoverParams) (*protocol.H
 // Definition requests definition locations; it normalises `Location | []Location
 // | LocationLink[]` into a slice of Locations.
 func (c *Client) Definition(ctx context.Context, p protocol.DefinitionParams) ([]protocol.Location, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/definition", p)
+	raw, err := c.call(ctx, "textDocument/definition", p)
 	if err != nil {
 		return nil, err
 	}
@@ -129,7 +181,7 @@ func (c *Client) Definition(ctx context.Context, p protocol.DefinitionParams) ([
 // References requests every reference to the symbol at a position; the result
 // is a plain Location array (normalised like Definition for safety).
 func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]protocol.Location, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/references", p)
+	raw, err := c.call(ctx, "textDocument/references", p)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +191,7 @@ func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]
 // DocumentHighlight requests the occurrences of the symbol at a position
 // (#172). A null result (position not on a symbol) is an empty slice.
 func (c *Client) DocumentHighlight(ctx context.Context, p protocol.DocumentHighlightParams) ([]protocol.DocumentHighlight, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/documentHighlight", p)
+	raw, err := c.call(ctx, "textDocument/documentHighlight", p)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +205,7 @@ func (c *Client) DocumentHighlight(ctx context.Context, p protocol.DocumentHighl
 // InlayHints requests the inline hints within a document range (#171). A null
 // result (nothing to hint) is an empty slice.
 func (c *Client) InlayHints(ctx context.Context, p protocol.InlayHintParams) ([]protocol.InlayHint, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/inlayHint", p)
+	raw, err := c.call(ctx, "textDocument/inlayHint", p)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +219,7 @@ func (c *Client) InlayHints(ctx context.Context, p protocol.InlayHintParams) ([]
 // PrepareCallHierarchy resolves the symbol at a position into call-hierarchy
 // items (#173). A null result (position not on a callable) is an empty slice.
 func (c *Client) PrepareCallHierarchy(ctx context.Context, p protocol.CallHierarchyPrepareParams) ([]protocol.CallHierarchyItem, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/prepareCallHierarchy", p)
+	raw, err := c.call(ctx, "textDocument/prepareCallHierarchy", p)
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +232,7 @@ func (c *Client) PrepareCallHierarchy(ctx context.Context, p protocol.CallHierar
 
 // IncomingCalls requests the callers of a prepared item (#173).
 func (c *Client) IncomingCalls(ctx context.Context, p protocol.CallHierarchyCallsParams) ([]protocol.CallHierarchyIncomingCall, error) {
-	raw, err := c.conn.Call(ctx, "callHierarchy/incomingCalls", p)
+	raw, err := c.call(ctx, "callHierarchy/incomingCalls", p)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +245,7 @@ func (c *Client) IncomingCalls(ctx context.Context, p protocol.CallHierarchyCall
 
 // OutgoingCalls requests the callees of a prepared item (#173).
 func (c *Client) OutgoingCalls(ctx context.Context, p protocol.CallHierarchyCallsParams) ([]protocol.CallHierarchyOutgoingCall, error) {
-	raw, err := c.conn.Call(ctx, "callHierarchy/outgoingCalls", p)
+	raw, err := c.call(ctx, "callHierarchy/outgoingCalls", p)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +261,7 @@ func (c *Client) OutgoingCalls(ctx context.Context, p protocol.CallHierarchyCall
 // (whose location may lack a range); both decode into the classic shape, and
 // entries without a usable URI are dropped.
 func (c *Client) WorkspaceSymbols(ctx context.Context, p protocol.WorkspaceSymbolParams) ([]protocol.SymbolInformation, error) {
-	raw, err := c.conn.Call(ctx, "workspace/symbol", p)
+	raw, err := c.call(ctx, "workspace/symbol", p)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +280,7 @@ func (c *Client) WorkspaceSymbols(ctx context.Context, p protocol.WorkspaceSymbo
 
 // Formatting requests whole-document formatting edits.
 func (c *Client) Formatting(ctx context.Context, p protocol.DocumentFormattingParams) ([]protocol.TextEdit, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/formatting", p)
+	raw, err := c.call(ctx, "textDocument/formatting", p)
 	if err != nil {
 		return nil, err
 	}
@@ -237,7 +289,7 @@ func (c *Client) Formatting(ctx context.Context, p protocol.DocumentFormattingPa
 
 // RangeFormatting requests formatting edits for one range.
 func (c *Client) RangeFormatting(ctx context.Context, p protocol.DocumentRangeFormattingParams) ([]protocol.TextEdit, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/rangeFormatting", p)
+	raw, err := c.call(ctx, "textDocument/rangeFormatting", p)
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +300,7 @@ func (c *Client) RangeFormatting(ctx context.Context, p protocol.DocumentRangeFo
 // rejects the position (null result); the returned range is zero when the
 // server answered with defaultBehavior only.
 func (c *Client) PrepareRename(ctx context.Context, p protocol.PrepareRenameParams) (protocol.Range, bool, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/prepareRename", p)
+	raw, err := c.call(ctx, "textDocument/prepareRename", p)
 	if err != nil {
 		return protocol.Range{}, false, err
 	}
@@ -285,7 +337,7 @@ func (c *Client) PrepareRename(ctx context.Context, p protocol.PrepareRenamePara
 // Rename requests the workspace-wide edit for renaming the symbol at a
 // position. A null result decodes to an empty edit.
 func (c *Client) Rename(ctx context.Context, p protocol.RenameParams) (protocol.WorkspaceEdit, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/rename", p)
+	raw, err := c.call(ctx, "textDocument/rename", p)
 	if err != nil {
 		return protocol.WorkspaceEdit{}, err
 	}
@@ -301,7 +353,7 @@ func (c *Client) Rename(ctx context.Context, p protocol.RenameParams) (protocol.
 // CodeAction and bare Command entries; both decode into CodeAction (a bare
 // command becomes a command-only action).
 func (c *Client) CodeActions(ctx context.Context, p protocol.CodeActionParams) ([]protocol.CodeAction, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/codeAction", p)
+	raw, err := c.call(ctx, "textDocument/codeAction", p)
 	if err != nil {
 		return nil, err
 	}
@@ -311,7 +363,7 @@ func (c *Client) CodeActions(ctx context.Context, p protocol.CodeActionParams) (
 // ExecuteCommand runs a server-defined command; effects come back as
 // workspace/applyEdit requests, so the result payload is ignored.
 func (c *Client) ExecuteCommand(ctx context.Context, p protocol.ExecuteCommandParams) error {
-	_, err := c.conn.Call(ctx, "workspace/executeCommand", p)
+	_, err := c.call(ctx, "workspace/executeCommand", p)
 	return err
 }
 
@@ -349,7 +401,7 @@ func decodeCodeActions(raw json.RawMessage) []protocol.CodeAction {
 
 // SignatureHelp requests call-signature info; null decodes to nil.
 func (c *Client) SignatureHelp(ctx context.Context, p protocol.SignatureHelpParams) (*protocol.SignatureHelp, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/signatureHelp", p)
+	raw, err := c.call(ctx, "textDocument/signatureHelp", p)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +417,7 @@ func (c *Client) SignatureHelp(ctx context.Context, p protocol.SignatureHelpPara
 
 // SemanticTokensFull requests the whole document's packed semantic tokens.
 func (c *Client) SemanticTokensFull(ctx context.Context, p protocol.SemanticTokensParams) (*protocol.SemanticTokens, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/semanticTokens/full", p)
+	raw, err := c.call(ctx, "textDocument/semanticTokens/full", p)
 	if err != nil {
 		return nil, err
 	}
@@ -383,7 +435,7 @@ func (c *Client) SemanticTokensFull(ctx context.Context, p protocol.SemanticToke
 // answer with either a delta (edits) or a fresh full result (data) — exactly
 // one of the returns is non-nil on success.
 func (c *Client) SemanticTokensDelta(ctx context.Context, p protocol.SemanticTokensDeltaParams) (*protocol.SemanticTokensDelta, *protocol.SemanticTokens, error) {
-	raw, err := c.conn.Call(ctx, "textDocument/semanticTokens/full/delta", p)
+	raw, err := c.call(ctx, "textDocument/semanticTokens/full/delta", p)
 	if err != nil {
 		return nil, nil, err
 	}
