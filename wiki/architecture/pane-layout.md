@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -211,13 +211,13 @@ matches or the pane vanished. Resizes keep the leaf set, so a zoom survives
 a terminal resize. Zoom is deliberately not persisted; a restart restores
 unzoomed.
 
-**Zen mode (#359).** `view.zenMode` (View menu, palette)
-layers chrome-hiding on the zoom: the **active editor** is maximized and the
-tab bar and status line disappear — the status row joins the body
-(`bodyRect`), the tab bar yields to the plain title (`tabBar`), and the ex
-command line is unaffected (it renders inside the editor pane). Leaving zen
-restores the chrome; the zoom survives only when that same editor was already
-manually zoomed before zen. Tree mutations drop zen exactly like they drop
+**Zen mode (#359, #934).** `view.zenMode` (View menu, palette)
+layers chrome-hiding on the zoom: the **focused pane** — editor, terminal,
+or tool pane alike — is maximized and the tab bar and status line disappear
+— the status row joins the body (`bodyRect`), the tab bar yields to the
+plain title (`tabBar`), and the ex command line is unaffected (it renders
+inside the editor pane). Leaving zen restores the chrome; the zoom survives
+only when that same pane was already manually zoomed before zen. Tree mutations drop zen exactly like they drop
 the zoom (one flag cleared in the same `layout()` check); zen is not
 persisted either.
 

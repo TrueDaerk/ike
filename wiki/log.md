@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Zen mode works for any focused pane kind (#934): terminal and tool panes
+  maximize chrome-free like editors; leaving zen restores the layout
+  (`/architecture/pane-layout.md`).
+
 - Insert-mode `cmd+backspace` is now IntelliJ's Delete Line (#955): the whole
   current line is removed including the preceding line break (line 0 takes the
   following break), caret lands at the end of the previous line. `ctrl+u`
