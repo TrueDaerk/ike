@@ -83,8 +83,11 @@ func TestSharedViewsFireBufferClosedOnce(t *testing.T) {
 	out, _ = m.Update(explorer.OpenFileMsg{Path: b, NewPane: true})
 	m = out.(Model)
 	// Open a as a second tab of the new pane: two views of a exist now.
-	out, _ = m.Update(explorer.OpenFileMsg{Path: a})
-	m = out.(Model)
+	// A plain open would focus a's existing pane since #930, so build the
+	// second view directly — the split/tab-drag flows that still create one.
+	if !m.openInTab(m.activeEditorKey(), a) {
+		t.Fatal("fixture: second view of a failed to open")
+	}
 	if len(m.editorKeysForPath(a)) != 2 {
 		t.Fatalf("fixture: a must be open in two panes, keys = %v", m.editorKeysForPath(a))
 	}

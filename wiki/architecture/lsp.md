@@ -62,6 +62,12 @@ exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definiti
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
 registry commands.
 
+Navigation jumps (`lsp.definition`, a references pick — both funnel through
+`DefinitionMsg` into `openPathAt`) focus the pane where the target file is
+already open instead of opening a duplicate tab in the current pane (#930,
+the cross-pane extension of the #272 same-pane dedupe; #509 precedent for
+diffs). Only an unopened target opens as a tab in the current pane.
+
 `lsp.definition` consults IKE-side **local definition providers** first
 (#922, `ilsp.RegisterLocalDefinition`): a plugin whose navigation target no
 server resolves (Ansible inventory hosts/groups) claims the jump and skips

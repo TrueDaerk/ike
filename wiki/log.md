@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- LSP jumps and nav-history traversal focus the pane where the target file
+  is already open (#930) instead of duplicating it as a tab in the current
+  pane; unopened targets open in the current pane as before
+  (`/architecture/navigation-history.md`, `/architecture/lsp.md`).
+
 - Centered popups cap their width on large terminals (#932):
   `ui.popup_max_width` (default 110 columns, 0 disables, Appearance page)
   bounds the palette box, the modal shell, and the settings panel; #774
