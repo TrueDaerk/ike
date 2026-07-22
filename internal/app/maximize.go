@@ -54,10 +54,11 @@ func (m *Model) zoomActive() bool {
 	return true
 }
 
-// toggleZen flips zen mode (#359): the active editor maximized plus the tab
-// bar and status line hidden — pure text, JetBrains distraction-free. Leaving
-// zen restores the chrome; the zoom stays only when that same editor was
-// already manually zoomed before zen (else the full layout returns).
+// toggleZen flips zen mode (#359): the focused pane maximized plus the tab
+// bar and status line hidden — pure text, JetBrains distraction-free. Any
+// pane kind qualifies (#934): editor, terminal, or tool pane. Leaving zen
+// restores the chrome; the zoom stays only when that same pane was already
+// manually zoomed before zen (else the full layout returns).
 func (m *Model) toggleZen() {
 	if m.zen {
 		m.zen = false
@@ -67,12 +68,14 @@ func (m *Model) toggleZen() {
 		m.layout()
 		return
 	}
-	key := m.activeEditorKey()
-	if key == "" {
-		m.host.Notify(host.Info, "zen mode needs an editor")
+	key := m.activeWS().Panes.Focused()
+	if key == "" || m.activeWS().Tree == nil {
+		m.host.Notify(host.Info, "zen mode needs a focused pane")
 		return
 	}
-	m.setFocus(key)
+	if _, ok := m.lay.Panes[key]; !ok {
+		return
+	}
 	m.zenKeepZoom = m.zoomed == key
 	m.zen = true
 	m.zoomed = key
