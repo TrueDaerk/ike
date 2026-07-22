@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Terminal width reflow (#935): resizing rewraps the whole history (screen +
+  scrollback) at the new width like iTerm2/kitty — shrink rewraps long lines,
+  grow unwraps them, hard newlines never merge, round-trips reproduce the
+  layout; replay-based, height-only resizes keep the #807/#826 machinery
+  (`/architecture/terminal.md`).
+
 - Terminal soft-wrap heuristic after shrink (#947): width-truncated lines no
   longer read as soft-wrapped (scrollback width / resize-reserve checks), so
   triple-click and copy no longer chain unrelated clipped lines
