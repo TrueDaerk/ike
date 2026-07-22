@@ -191,6 +191,11 @@ type Editor struct {
 	// (#168); StickyScrollDepth caps how many nested headers are pinned.
 	StickyScroll      bool `toml:"sticky_scroll"`
 	StickyScrollDepth int  `toml:"sticky_scroll_depth"`
+	// MarkdownRendering enables the in-editor Markdown semi-preview (#881):
+	// bold/italic/strikethrough text attributes, marker concealment on
+	// non-cursor lines, and box-drawing pipe tables while the cursor is
+	// outside the table.
+	MarkdownRendering bool `toml:"markdown_rendering"`
 	Tabs              Tabs `toml:"tabs"`
 }
 

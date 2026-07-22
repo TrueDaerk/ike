@@ -97,6 +97,7 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	m.dirty = false
 	m.stale = false
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil

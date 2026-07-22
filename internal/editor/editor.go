@@ -217,6 +217,14 @@ type Model struct {
 	docVersion int
 	hlVersion  int
 	hlIndex    highlight.Index
+	// Markdown rich rendering (#881). conceal holds the per-line marker-chrome
+	// column ranges split out of the same parse as hlIndex (@conceal captures);
+	// mdRender is the editor.markdown_rendering toggle; mdTables caches the
+	// detected pipe tables per document version (pointer, shared across the
+	// value copies like lineCache).
+	conceal  map[int][][2]int
+	mdRender bool
+	mdTables *mdTableState
 	// scopes are the sticky-scroll scopes (#168) delivered by the same parse
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
@@ -345,6 +353,8 @@ func New() Model {
 		eol:                textenc.LF,
 		enc:                textenc.UTF8,
 		lineCache:          newLineCache(),
+		mdRender:           true,
+		mdTables:           &mdTableState{},
 	}
 	m.view.LineNumbers = false
 	return m
@@ -434,6 +444,7 @@ func (m *Model) applyConfig() {
 		m.rulers = parseRulers(v)
 	}
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
+	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
 			m.stickyDepth = n
@@ -496,6 +507,7 @@ func (m *Model) Load(path string) error {
 	m.restoreUndo(data)
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -544,6 +556,7 @@ func (m *Model) NewFile(path string) {
 	m.diskHash = "" // nothing on disk yet; the first :w stamps it
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -573,6 +586,7 @@ func (m *Model) RestoreText(text string) {
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -620,6 +634,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.path = path
 	m.resolveEditorconfig()
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -757,7 +772,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// Accept a parse result only if it matches the current document and
 		// version; a newer edit since the parse was scheduled drops it.
 		if msg.Path == m.path && msg.Version == m.docVersion {
-			m.hlIndex = highlight.NewIndex(msg.Spans)
+			// Conceal spans (#881) feed the markdown rendering layer, not the
+			// style index — a marker cell styles raw on the cursor line but
+			// disappears elsewhere.
+			style, conceal := concealSplit(msg.Spans)
+			m.hlIndex = highlight.NewIndex(style)
+			m.conceal = conceal
 			m.scopes = msg.Scopes
 			m.folds = msg.Folds
 			m.reconcileFolds()

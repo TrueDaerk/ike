@@ -117,6 +117,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 		}
 	}
 	m.hlIndex = highlight.Index{}
+	m.conceal = nil
 	m.semIndex = highlight.Index{}
 	m.occurrences = nil
 	m.inlayHints, m.hintsByLine = nil, nil

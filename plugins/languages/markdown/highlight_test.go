@@ -64,6 +64,40 @@ func TestMarkdownInlineInjection(t *testing.T) {
 	}
 }
 
+// TestMarkdownConcealAndMarkupCaptures guards the #881 query side: the inline
+// grammar emits @conceal spans on the marker chrome and markup.* spans on the
+// emphasis nodes the editor turns into text attributes.
+func TestMarkdownConcealAndMarkupCaptures(t *testing.T) {
+	line := "**bold** and `code` and [docs](https://go.dev)"
+	spans := highlight.Highlight("README.md", []string{line})
+	has := func(capture string, col int) bool {
+		for _, s := range spans {
+			if s.Capture == capture && s.Line == 0 && col >= s.StartCol && col < s.EndCol {
+				return true
+			}
+		}
+		return false
+	}
+	if !has("conceal", 0) || !has("conceal", 6) { // the ** pairs
+		t.Error("emphasis delimiters not captured as conceal")
+	}
+	if !has("markup.bold", 2) { // bold
+		t.Error("strong emphasis not captured as markup.bold")
+	}
+	if !has("conceal", 13) { // opening backtick
+		t.Error("code span delimiter not captured as conceal")
+	}
+	if !has("conceal", 24) || !has("conceal", 30) { // [ and ] + ( of the link
+		t.Error("link brackets not captured as conceal")
+	}
+	if !has("conceal", 32) { // the URL
+		t.Error("link destination not captured as conceal")
+	}
+	if !has("label", 25) { // docs
+		t.Error("link text lost its label capture")
+	}
+}
+
 // TestMarkdownFencedCodeInjection is the dynamic fence injection (#880): a
 // ```go block is parsed with the registered Go grammar — the fence tag names
 // the language at query-match time, not in the capture name.

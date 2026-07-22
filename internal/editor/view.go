@@ -78,6 +78,12 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 	if col < 0 {
 		col = 0
 	}
+	if m.concealOn(line) {
+		// Concealed line (#881): the click landed on display cells that skip
+		// hidden marker columns — map back through the conceal ranges so the
+		// cursor lands on the character that was actually clicked.
+		col = m.concealClickCol(line, colBase, col-colBase)
+	}
 	p := buffer.Position{Line: line, Col: col}
 	if m.mode == Insert || m.mode == Replace {
 		return m.buf.Clamp(p)
@@ -387,8 +393,18 @@ func (m Model) renderSpan(line, from, to, width int, cursorStyle, selStyle lipgl
 // the horizontal scroll offset. Whitespace glyphs, indent guides, and ruler
 // tints (#64) overlay here so both paths share them.
 func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selStyle lipgloss.Style) string {
+	// Markdown pipe tables (#881): while the cursor is outside the block the
+	// whole row renders as its pre-built box-drawing form; the cell loop below
+	// never runs. Entering the block flips it back to raw pipe source.
+	if row, ok := m.mdTableRow(line); ok {
+		return m.renderTableRow(row, from, to, width)
+	}
 	runes := []rune(m.buf.Line(line))
 	left := from
+	// Marker concealment (#881): on lines the cursor is not on, cells inside
+	// a conceal range are skipped entirely so the line reads like rendered
+	// text. The cursor line always shows raw source.
+	concealing := m.concealOn(line)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Secondary carets (#145) render dimmer than the primary cell.
@@ -473,6 +489,17 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursorHere := isCursorLine && col == m.cursor.Col
 		caretHere := m.focused && m.caretOnLine(line, col)
 		selected := hasSel && col >= selStart && col <= selEnd
+		if concealing && col < len(runes) && m.concealedAt(line, col) {
+			// Concealed marker cell (#881): emit nothing, display columns
+			// close up; contentCells still advances so ruler/guide positions
+			// keep tracking buffer cells.
+			if runes[col] == '\t' {
+				contentCells += m.tabWidth
+			} else {
+				contentCells++
+			}
+			continue
+		}
 		if col >= len(runes) && !cursorHere && !caretHere && !selected {
 			// Nothing meaningful left on this line; flush hints anchored at or
 			// past the line end (a type hint after the last token) first.
