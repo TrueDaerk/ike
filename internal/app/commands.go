@@ -186,6 +186,10 @@ type ToggleExplorerFocusMsg struct{}
 // tab bar and status line hidden. Dispatched by view.zenMode.
 type ZenModeMsg struct{}
 
+// HideToolWindowsMsg toggles hide-all-tool-windows (#791): first press
+// snapshots and hides every visible tool pane, second press restores.
+type HideToolWindowsMsg struct{}
+
 // PinSlotMsg pins the active file to a numbered slot (#788, harpoon-style).
 type PinSlotMsg struct{ Slot int }
 
@@ -310,6 +314,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
+			appCommand("window.hideAllTools", "Hide All Tool Windows", HideToolWindowsMsg{}),
 			appCommand("vcs.commit", "Commit…", OpenCommitMsg{}),
 			appCommand("vcs.updateProject", "Update Project", UpdateProjectMsg{}),
 			appCommand("vcs.revertFile", "Revert File", RevertActiveFileMsg{}),

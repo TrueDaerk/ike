@@ -30,6 +30,7 @@ func Defaults() []Menu {
 			{Title: "Split View Down", Command: "editor.splitViewDown"},
 			{Title: "Maximize Pane", Command: "pane.maximize"},
 			{Title: "Zen Mode", Command: "view.zenMode"},
+			{Title: "Hide All Tool Windows", Command: "window.hideAllTools"},
 		}},
 		{Title: "Navigate", Items: []Item{
 			{Title: "Go to File", Command: "project.goToFile"},

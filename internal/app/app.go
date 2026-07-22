@@ -341,6 +341,7 @@ type Model struct {
 	winSizes   *ui.WinSizes     // persisted floating-window resize deltas (#774)
 	floatDrag  *floatResizeDrag // live mouse resize of a floating window (#933)
 	pins       *pinStore        // harpoon-style pinned file slots (#788)
+	toolHide   *toolHideSnapshot // hide-all-tool-windows snapshot (#791)
 	pinSel     int              // pin-picker selection
 	pinPicker  bool             // pin picker owns the modal shell
 	paletteKey string
@@ -2443,6 +2444,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case MaximizePaneMsg:
 		// pane.maximize (cmd+k z / View menu, #358): tmux-style zoom toggle.
 		m.toggleMaximize()
+		return m, nil
+
+	case HideToolWindowsMsg:
+		// window.hideAllTools (#791): hide every tool window / restore.
+		m.toggleToolWindows()
 		return m, nil
 
 	case ZenModeMsg:
