@@ -2392,6 +2392,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Async interpreter version probes land in the toolchain page's cache.
 		return m, m.settings.Deliver(msg)
 
+	case settings.PackagesMsg, settings.OutdatedMsg, settings.PkgActionMsg:
+		// Package listing (#569 — previously unrouted), available upgrades
+		// and finished package actions (#571) land in the toolchain page.
+		return m, m.settings.Deliver(msg)
+
 	case settings.WizardTickMsg, settings.WizardDataMsg:
 		// Venv-wizard internals (#884): spinner ticks and async data fetches
 		// route back into the open sub-panel, which may chain follow-ups.

@@ -66,12 +66,21 @@ type ToolchainPage struct {
 	envState string
 	host       SubPanelHost
 
-	// Package listing (#569): `i` fetches the effective interpreter's
-	// installed packages asynchronously; j/k scroll the inline window.
+	// Package listing (#569) and management (#571): `i` fetches the
+	// effective interpreter's installed packages plus available upgrades
+	// asynchronously; j/k move the selection, +/-/u install/uninstall/
+	// upgrade.
 	pkgViewing bool
 	pkgs       []pkgInfo
 	pkgErr     string
 	pkgOff     int
+	pkgSel     int
+	pkgLatest  map[string]string // normalized name -> latest version (#571)
+	pkgMode    string            // "" | "input" (install name) | "confirm" (uninstall)
+	pkgInput   textField
+	pkgBusy    string // in-flight action phrase ("" when idle)
+	pkgState   string // last action result for the status line
+	runErr     runCtx // error-aware runner for package actions (#571)
 
 	prov map[string]string // interpreter path -> provenance (cached stats)
 
@@ -85,6 +94,7 @@ func NewToolchainPage(opts config.Options, root string, restart func() tea.Cmd) 
 		root:     root,
 		restart:  restart,
 		run:      execRun,
+		runErr:   execRunCtx,
 		look:     execLook,
 		resolve:  lang.ResolveShim,
 		glob:     execGlob,
@@ -138,7 +148,27 @@ func (t *ToolchainPage) Receive(msg tea.Msg) {
 			t.pkgErr = v.Err.Error()
 		} else {
 			t.pkgs, t.pkgErr = v.Pkgs, ""
+			t.clampPkgSel()
 		}
+	case OutdatedMsg:
+		t.pkgLatest = v.Latest
+	case PkgActionMsg:
+		t.pkgBusy = ""
+		if v.Err != nil {
+			line := v.Output
+			if line == "" {
+				line = v.Err.Error()
+			}
+			t.pkgState = "✗ " + v.Action + ": " + line
+			return
+		}
+		t.pkgState = "✓ " + v.Action
+		if v.Pkgs != nil {
+			t.pkgs, t.pkgErr = v.Pkgs, ""
+			t.clampPkgSel()
+		}
+		// The acted-on package's cached latest marker is stale now.
+		delete(t.pkgLatest, normalizePkg(pkgBaseName(v.Name)))
 	}
 }
 
@@ -231,11 +261,16 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			t.pushWizard()
 		}
 	case "i":
-		// List the effective interpreter's installed packages (#569).
+		// List the effective interpreter's installed packages (#569) plus
+		// the available upgrades for the latest column (#571).
 		if l, ok := t.current(); ok && l.ID == "python" {
 			if path, _ := t.interpreter(l.ID); path != "" {
-				t.pkgViewing, t.pkgs, t.pkgErr, t.pkgOff = true, nil, "", 0
-				return listPackages(path, t.run, t.look)
+				t.pkgViewing, t.pkgs, t.pkgErr, t.pkgOff, t.pkgSel = true, nil, "", 0, 0
+				t.pkgMode, t.pkgState, t.pkgLatest = "", "", nil
+				return tea.Batch(
+					listPackages(path, t.run, t.look),
+					listOutdated(path, t.run, t.look),
+				)
 			}
 		}
 	case "u":
@@ -261,21 +296,126 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 
 
 
-// updatePkgView handles keys in the package listing: j/k scroll, esc closes.
+// updatePkgView handles keys in the package view: j/k move the selection,
+// `+` installs (name input), `-` uninstalls (confirm), `u` upgrades the
+// selection, esc closes (#571). While an action runs, only navigation and
+// closing work.
 func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
+	switch t.pkgMode {
+	case "input":
+		return t.updatePkgInput(key)
+	case "confirm":
+		return t.updatePkgConfirm(key)
+	}
 	switch key.String() {
 	case "esc", "i", "q":
 		t.pkgViewing = false
 	case "up", "k":
-		if t.pkgOff > 0 {
-			t.pkgOff--
+		if t.pkgSel > 0 {
+			t.pkgSel--
+			t.followPkgSel()
 		}
 	case "down", "j":
-		if t.pkgOff < len(t.pkgs)-pkgWindow {
-			t.pkgOff++
+		if t.pkgSel < len(t.pkgs)-1 {
+			t.pkgSel++
+			t.followPkgSel()
+		}
+	case "+":
+		if t.pkgBusy == "" {
+			t.pkgMode, t.pkgInput.text, t.pkgState = "input", "", ""
+			t.pkgInput.Set("")
+		}
+	case "-":
+		if t.pkgBusy == "" && t.selectedPkg() != "" {
+			t.pkgMode = "confirm"
+		}
+	case "u":
+		if t.pkgBusy == "" {
+			if name := t.selectedPkg(); name != "" {
+				return t.pkgAction(pkgUpgrade, name)
+			}
 		}
 	}
 	return nil
+}
+
+// selectedPkg returns the selected row's package name ("" on empty lists).
+func (t *ToolchainPage) selectedPkg() string {
+	if t.pkgSel < 0 || t.pkgSel >= len(t.pkgs) {
+		return ""
+	}
+	return t.pkgs[t.pkgSel].Name
+}
+
+// clampPkgSel re-bounds the selection after the listing changed.
+func (t *ToolchainPage) clampPkgSel() {
+	if t.pkgSel >= len(t.pkgs) {
+		t.pkgSel = len(t.pkgs) - 1
+	}
+	if t.pkgSel < 0 {
+		t.pkgSel = 0
+	}
+	t.followPkgSel()
+}
+
+// followPkgSel keeps the selected row inside the visible window.
+func (t *ToolchainPage) followPkgSel() {
+	if t.pkgSel < t.pkgOff {
+		t.pkgOff = t.pkgSel
+	}
+	if t.pkgSel >= t.pkgOff+pkgWindow {
+		t.pkgOff = t.pkgSel - pkgWindow + 1
+	}
+}
+
+// updatePkgInput handles the install-name input (`name` or `name==version`).
+func (t *ToolchainPage) updatePkgInput(key tea.KeyPressMsg) tea.Cmd {
+	switch key.Code {
+	case tea.KeyEscape:
+		t.pkgMode = ""
+	case tea.KeyEnter:
+		name := strings.TrimSpace(t.pkgInput.text)
+		t.pkgMode = ""
+		if name == "" {
+			return nil
+		}
+		return t.pkgAction(pkgInstall, name)
+	default:
+		t.pkgInput.Handle(key)
+	}
+	return nil
+}
+
+// updatePkgConfirm handles the uninstall confirmation.
+func (t *ToolchainPage) updatePkgConfirm(key tea.KeyPressMsg) tea.Cmd {
+	switch key.String() {
+	case "y", "enter":
+		t.pkgMode = ""
+		if name := t.selectedPkg(); name != "" {
+			return t.pkgAction(pkgUninstall, name)
+		}
+	case "n", "esc":
+		t.pkgMode = ""
+	}
+	return nil
+}
+
+// pkgAction builds and launches one asynchronous package action against the
+// effective interpreter, marking the view busy until its PkgActionMsg lands.
+func (t *ToolchainPage) pkgAction(action pkgAction, name string) tea.Cmd {
+	l, ok := t.current()
+	if !ok {
+		return nil
+	}
+	interp, _ := t.interpreter(l.ID)
+	if interp == "" {
+		return nil
+	}
+	backend := detectPkgBackend(t.root, interp, t.look)
+	cmds := pkgCommands(backend, action, name, t.root, interp)
+	t.pkgBusy = action.verb() + " " + name + "…"
+	t.pkgState = ""
+	return runPkgAction(interp, action, name, cmds, t.runErr, t.run, t.look)
 }
 
 
@@ -539,11 +679,10 @@ func (t *ToolchainPage) Wheel(delta int) {
 	case t.picking:
 		t.pick = clamp(t.pick+delta, 0, len(t.candidates)) // one past = custom
 	case t.pkgViewing:
-		max := len(t.pkgs) - pkgWindow
-		if max < 0 {
-			max = 0
+		if n := len(t.pkgs); n > 0 {
+			t.pkgSel = clamp(t.pkgSel+delta, 0, n-1)
+			t.followPkgSel()
 		}
-		t.pkgOff = clamp(t.pkgOff+delta, 0, max)
 	case t.Capturing(): // other modal flows: inert
 	default:
 		if n := len(t.rows()); n > 0 {
@@ -572,8 +711,12 @@ func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
 	switch {
 	case t.custom:
 		hint = " tab complete path · enter apply · esc cancel"
+	case t.pkgViewing && t.pkgMode == "input":
+		hint = " enter install · esc cancel"
+	case t.pkgViewing && t.pkgMode == "confirm":
+		hint = " y uninstall · n cancel"
 	case t.pkgViewing:
-		hint = " j/k scroll packages · esc close"
+		hint = " j/k select · + install · - uninstall · u upgrade · esc close"
 	case t.picking:
 		hint = " ↑↓ choose · enter apply · esc cancel"
 	case l.ID == "python":
@@ -609,7 +752,9 @@ func (t *ToolchainPage) provenance(path string) string {
 // pkgWindow is how many package rows render inline at once.
 const pkgWindow = 12
 
-// renderPackages renders the inline package listing window.
+// renderPackages renders the inline package window: selectable rows, the
+// latest-version marker for upgradable packages (#571), and the input /
+// confirm / busy lines of the management flows.
 func (t *ToolchainPage) renderPackages() []string {
 	pal := t.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
@@ -624,11 +769,30 @@ func (t *ToolchainPage) renderPackages() []string {
 	if end > len(t.pkgs) {
 		end = len(t.pkgs)
 	}
-	for _, p := range t.pkgs[t.pkgOff:end] {
-		out = append(out, sec.Render("   "+pad(p.Name, 32)+p.Version))
+	for i := t.pkgOff; i < end; i++ {
+		p := t.pkgs[i]
+		line := "   " + pad(p.Name, 32) + pad(p.Version, 14)
+		if latest, ok := t.pkgLatest[normalizePkg(p.Name)]; ok && latest != p.Version {
+			line += "↑ " + latest
+		}
+		style := sec
+		if i == t.pkgSel {
+			style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText)
+		}
+		out = append(out, style.Render(line))
 	}
 	if end < len(t.pkgs) {
 		out = append(out, sec.Render("   … "+strconv.Itoa(len(t.pkgs)-end)+" more (j to scroll)"))
+	}
+	switch {
+	case t.pkgMode == "input":
+		out = append(out, sec.Render("   install: "+t.pkgInput.View()+"  (name or name==version)"))
+	case t.pkgMode == "confirm":
+		out = append(out, sec.Render("   uninstall "+t.selectedPkg()+"? y/n"))
+	case t.pkgBusy != "":
+		out = append(out, sec.Render("   ⋯ "+t.pkgBusy))
+	case t.pkgState != "":
+		out = append(out, sec.Render("   "+t.pkgState))
 	}
 	return out
 }
@@ -712,5 +876,6 @@ func (t *ToolchainPage) KeyHelp() []string {
 		"enter  pick the interpreter (or run the selected action row)",
 		"p  probe the version · r  reset to detection",
 		"n  new Python environment · i  packages · u  uv-install a Python",
+		"packages view: +  install · -  uninstall · u  upgrade selection",
 	}
 }

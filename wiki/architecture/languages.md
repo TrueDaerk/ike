@@ -307,6 +307,10 @@ or `system` (path heuristics) — and `i` lists the effective interpreter's
 installed packages with versions (async; `uv pip list --python <interp>` when
 uv is present — it works even in envs without pip — else
 `<interp> -m pip list --format=freeze`), scrollable inline with `j`/`k`.
+Since #571 the view also installs/uninstalls/upgrades packages and marks
+available upgrades (`↑ <latest>`), preferring `uv add`/`uv remove` in uv
+projects so pyproject.toml and uv.lock stay in sync — see
+[Settings UI](./settings-ui.md) for the key flow.
 
 ## Default language servers & why (#855)
 

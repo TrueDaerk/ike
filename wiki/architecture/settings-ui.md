@@ -196,9 +196,23 @@ the **project** config and triggers `lsp.restart`
 so servers respawn against the new interpreter; `r` resets to detection.
 Python rows additionally show an environment **provenance** column
 (`uv venv`/`venv`/`uv managed`/`pyenv`/`system`), `i` opens an inline
-installed-packages listing (name + version, async, j/k scroll) and `n` runs
+installed-packages view (async) and `n` runs
 the guided environment-creation wizard (tool → Python → target directory) —
 see [Language Registry](./languages.md) (#569).
+
+The package view manages packages too (#571, PyCharm-style): `j`/`k` move a
+row selection, `+` opens an install input (`name` or `name==version`), `-`
+uninstalls the selection after a `y/n` confirm, `u` upgrades it, and rows
+with an available upgrade carry an `↑ <latest>` marker (fetched async via
+`pip list --outdated --format=json` / the uv equivalent when the view
+opens). All actions run in `tea.Cmd`s — the UI never blocks; the busy
+marker shows in-flight work, results (including the decisive stderr line on
+failure) land in the view's status row, and the listing refreshes in the
+same message. Backend selection per environment: a uv project
+(pyproject.toml + uv.lock, interpreter inside the project) goes through
+`uv add`/`uv remove`/`uv lock --upgrade-package` + `uv sync` so manifest
+and lockfile stay in sync; otherwise `uv pip … --python <interp>` when uv
+is on PATH, plain `<interp> -m pip …` else.
 
 ## Language Servers page (0180, #130)
 
