@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-22
+
+- Markdown rich rendering (#881): bold/italic/strikethrough text attributes,
+  marker concealment on non-cursor lines with exact click mapping, and
+  row-preserving box-drawing pipe tables; toggle
+  `editor.markdown_rendering` (`/architecture/editor.md`).
+
 ## 2026-07-21
 
 - Ansible language support (#897): context-sniffer detection (role trees,

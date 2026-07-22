@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Editor
@@ -676,6 +676,34 @@ policy (thresholds + override set) lives in `internal/largefile`, shared by
 editor, LSP bridge, and app. Replacing the line-slice store (piece table) is
 explicitly out of scope — this mode is the cheap 90%.
 
+## Markdown rich rendering (#881)
+
+Vim-conceal-style semi-preview for Markdown, display-only (`markdown.go`) and
+toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
+
+- **Inline attributes** (all lines): the inline grammar's `markup.*` captures
+  render as terminal text attributes — `**bold**` bold, `*italic*` italic,
+  `~~strike~~` struck through — composed in `styleAt` over whatever color the
+  theme resolves.
+- **Concealment** (lines the cursor/carets are *not* on): the query captures
+  the marker chrome (`**`, `*`, `` ` ``, link `[]()` + destination) as
+  `@conceal`; the `SpansMsg` handler splits those spans out of the style index
+  into per-line column ranges, and `renderSpan` skips those cells so the line
+  reads like rendered text. The cursor line always shows raw source. Mouse
+  clicks map back through the hidden ranges (`concealClickCol`), so the cursor
+  lands on the character that was clicked; buffer-column motions and
+  selections are untouched by design.
+- **Pipe tables** (cursor outside the block): detected from the buffer text (a
+  pipe row above a `|---|` delimiter row — equivalent to the grammar's
+  `pipe_table`, but it also works in `CGO_ENABLED=0` builds), re-rendered with
+  box-drawing characters, cells padded/aligned per the delimiter row's `:`
+  colons. **Row-preserving**: the delimiter row becomes the `├─┼─┤` separator
+  and no border rows are added, so line↔row mapping and the gutter stay 1:1.
+  The cursor entering the block flips it back to raw pipe source. Under soft
+  wrap tables stay raw (wrap segments slice raw buffer text; a sliced
+  box-drawing row would tear); with horizontal scroll the rendered row is
+  sliced by the same column window as any other line.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
@@ -683,7 +711,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `auto_close_pairs`, `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
-`indent_guides` and `rulers` take effect live. The view-option keys (#64) are
+`indent_guides`, `rulers` and `markdown_rendering` (#881) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,
 `view.toggleIndentGuides`) marks a per-view override that the per-event config
 refresh no longer clobbers. `files.encoding` names the fallback

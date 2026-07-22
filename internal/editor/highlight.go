@@ -57,5 +57,17 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	if capture == "" {
 		return lipgloss.Style{}, false
 	}
-	return m.hlTheme.Style(capture)
+	st, ok := m.hlTheme.Style(capture)
+	// markup.* captures (#881) carry terminal text attributes, not colors:
+	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —
+	// composed over whatever color the theme resolves (usually none).
+	switch capture {
+	case "markup.bold":
+		return st.Bold(true), true
+	case "markup.italic":
+		return st.Italic(true), true
+	case "markup.strikethrough":
+		return st.Strikethrough(true), true
+	}
+	return st, ok
 }

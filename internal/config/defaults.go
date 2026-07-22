@@ -30,6 +30,7 @@ func defaults() *Config {
 			Rulers:                 []int{},
 			StickyScroll:           true,
 			StickyScrollDepth:      4,
+			MarkdownRendering:      true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 		},
 		Explorer: Explorer{
