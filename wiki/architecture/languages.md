@@ -152,7 +152,14 @@ the rc-file base names `.bashrc` `.zshrc` `.bash_profile` `.profile`
 `.zprofile`, and extensionless scripts via interpreters `sh` `bash` `zsh`
 `dash`), and `markdown` (#880, two vendored grammars — block + inline — wired
 through the injection seam; fenced code blocks render in the fence's language,
-front matter as YAML/TOML; see [highlighting](./highlighting.md)).
+front matter as YAML/TOML; see [highlighting](./highlighting.md)), and the
+web languages (#925): `typescript` highlights via the **TSX grammar** — the
+permissive superset that parses plain JS, JSX and TS annotations alike, so
+the single language id (and with it the single vtsls instance per project)
+stays intact; the one casualty is legacy `<T>x` type assertions. `html` uses
+the official grammar with `<script>`/`<style>` injections into
+typescript/css; `css` uses the official grammar (scss/less parse best-effort
+— error-tolerant spans still color the shared subset).
 The grammar/query for the first three moved here out of the highlight engine.
 
 ## Server resolution (baseline < config)
