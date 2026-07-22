@@ -417,6 +417,14 @@ func (m *Model) current() *node {
 	if len(m.rows) == 0 {
 		return nil
 	}
+	// Heal a stale out-of-range cursor instead of panicking (#949): any path
+	// that shrank rows (or advanced the cursor past them) clamps here.
+	if m.cursor >= len(m.rows) {
+		m.cursor = len(m.rows) - 1
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+	}
 	return m.rows[m.cursor]
 }
 
@@ -468,8 +476,12 @@ func (m Model) expandOrOpen() (Model, tea.Cmd) {
 		m.rebuild()
 		return m, cmd
 	}
-	if len(n.children) > 0 {
-		m.cursor++ // first child is the next visible row
+	// Step onto the first child only when one is actually VISIBLE: a dir
+	// whose children are all hidden (dot-entries with show-hidden off, e.g.
+	// a project holding only .git) has children but no child row — stepping
+	// blindly ran the cursor off the rows slice (#949).
+	if m.cursor+1 < len(m.rows) && m.rows[m.cursor+1].depth > n.depth {
+		m.cursor++
 		m.clampScroll()
 	}
 	return m, nil

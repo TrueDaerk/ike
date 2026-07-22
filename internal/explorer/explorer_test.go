@@ -931,3 +931,41 @@ func TestPromptMouseClickWithWindowOffset(t *testing.T) {
 		t.Fatalf("pos after click = %d want %d", m.prompt.pos, want)
 	}
 }
+
+// TestHiddenOnlyDirNoPanic guards #949: a project whose root holds only
+// hidden entries (e.g. just .git) renders a single root row; stepping "into"
+// the root must not advance the cursor past the rows slice, and a refresh
+// afterwards must not panic in current().
+func TestHiddenOnlyDirNoPanic(t *testing.T) {
+	root := t.TempDir()
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := mounted(t, root, 40, 12)
+	if len(m.rows) != 1 {
+		t.Fatalf("fixture: rows = %d, want only the root", len(m.rows))
+	}
+	// Root is expanded with one (hidden) child: "l" used to run cursor to 1.
+	m, _ = send(m, key("l"))
+	if m.cursor != 0 {
+		t.Fatalf("cursor = %d, want 0 (no visible child)", m.cursor)
+	}
+	// The crash path (#949): refresh goes through current().
+	m, cmd := m.Update(RefreshMsg{})
+	_, _ = pumpScans(m, cmd)
+}
+
+// TestCurrentHealsStaleCursor covers the defensive clamp in current(): a
+// cursor beyond the rows slice (however it got there) clamps instead of
+// panicking.
+func TestCurrentHealsStaleCursor(t *testing.T) {
+	m := mounted(t, tree(t), 40, 12)
+	m.cursor = len(m.rows) + 5
+	n := m.current()
+	if n == nil {
+		t.Fatal("current must return the clamped row, not nil")
+	}
+	if m.cursor != len(m.rows)-1 {
+		t.Fatalf("cursor = %d, want %d", m.cursor, len(m.rows)-1)
+	}
+}
