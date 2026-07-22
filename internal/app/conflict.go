@@ -45,7 +45,9 @@ func (m *Model) openConflictPrompt(path string) {
 // decision.
 func (m Model) updateConflict(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	inst := m.activeWS().Panes.Get(m.conflictKey)
-	if inst == nil || inst.Kind() != pane.KindEditor {
+	// A stale key, a non-editor pane, or an editor pane whose active tab
+	// became a terminal (#573, Editor() nil, #931) all invalidate the prompt.
+	if inst == nil || inst.Kind() != pane.KindEditor || inst.Editor() == nil {
 		m.conflictKey = ""
 		m.shell.Close()
 		return m, nil

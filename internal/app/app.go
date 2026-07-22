@@ -1101,7 +1101,9 @@ func (m *Model) restoreSession() {
 			if key == "" {
 				key = m.spawnEditor()
 			}
-			if err := m.activeWS().Panes.Get(key).Editor().Load(s.Editor.Path); err != nil {
+			// The pane's active tab can be a terminal (#573), leaving
+			// Editor() nil (#931) — treat that like a failed load.
+			if ed := m.activeWS().Panes.Get(key).Editor(); ed == nil || ed.Load(s.Editor.Path) != nil {
 				key = ""
 			}
 		}
@@ -1146,8 +1148,10 @@ func (m Model) snapshotSession() sessionState {
 		},
 	}
 	if key := m.activeEditorKey(); key != "" {
-		ed := m.activeWS().Panes.Get(key).Editor()
-		if ed.HasFile() {
+		// activeEditorKey guarantees an editor-kind pane, not an editor model:
+		// the pane's active tab can be a terminal (#573, #836), in which case
+		// Editor() is nil (#931) — skip the editor part of the snapshot.
+		if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil && ed.HasFile() {
 			line, col := ed.CursorPos()
 			top, left := ed.ScrollOffset()
 			s.Editor = &editorSession{Path: ed.Path(), Line: line, Col: col, Top: top, Left: left}
@@ -4338,8 +4342,12 @@ func (m *Model) openFilePaletteAnchored() {
 // (not capturing text), the context in which "@" opens the file finder.
 func (m Model) editorNormalMode() bool {
 	inst := m.activeWS().Panes.FocusedInstance()
-	return inst != nil && inst.Kind() == pane.KindEditor &&
-		inst.Editor().ModeName() == editor.Normal
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return false
+	}
+	// The active tab can be a terminal (#573): no editor, no normal mode (#931).
+	ed := inst.Editor()
+	return ed != nil && ed.ModeName() == editor.Normal
 }
 
 // focusContext reports the context id advertised by the focused pane.
@@ -4433,7 +4441,10 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // activeEditorKey returns the editor that should receive a Replace open or an
 // editor action: the focused editor, else the most-recent editor, else the first
-// editor in tree order, else "".
+// editor in tree order, else "". The key names an editor-KIND pane, not an
+// editor model: the pane's active tab can be a terminal (#573, #836), in which
+// case Instance.Editor() is nil — callers needing the model must nil-check
+// (#931).
 func (m Model) activeEditorKey() string {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
 		return m.activeWS().Panes.Focused()
@@ -5027,7 +5038,9 @@ func (m *Model) layout() {
 		}
 		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH))
 		if inst.Kind() == pane.KindEditor && m.pendingScroll != nil && m.pendingScroll.key == key {
-			inst.Editor().SetScroll(m.pendingScroll.top, m.pendingScroll.left)
+			if ed := inst.Editor(); ed != nil {
+				ed.SetScroll(m.pendingScroll.top, m.pendingScroll.left)
+			}
 			m.pendingScroll = nil
 		}
 	}

@@ -182,15 +182,24 @@ func (m *Model) restoreSnapshot(snap backup.Snapshot) {
 			if key = m.activeEditorKey(); key == "" {
 				key = m.spawnEditor()
 			}
+			// The pane's active tab can be a terminal (#573), leaving
+			// Editor() nil (#931) — restore into a fresh tab instead.
+			inst := m.activeWS().Panes.Get(key)
+			if inst.Editor() == nil {
+				inst.AddTab()
+				m.installEmitter(key)
+			}
 			// Establish the path from the base file when it still exists; a deleted
 			// base just leaves the recovered text under no path.
-			_ = m.activeWS().Panes.Get(key).Editor().Load(snap.Path)
+			_ = inst.Editor().Load(snap.Path)
 		}
 	} else {
 		key = m.spawnEditor()
 	}
 	if inst := m.activeWS().Panes.Get(key); inst != nil {
-		inst.Editor().RestoreText(snap.Text)
+		if ed := inst.Editor(); ed != nil {
+			ed.RestoreText(snap.Text)
+		}
 	}
 	m.setFocus(key)
 }
