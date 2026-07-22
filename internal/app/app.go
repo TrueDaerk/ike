@@ -342,6 +342,7 @@ type Model struct {
 	floatDrag  *floatResizeDrag // live mouse resize of a floating window (#933)
 	pins       *pinStore        // harpoon-style pinned file slots (#788)
 	toolHide   *toolHideSnapshot // hide-all-tool-windows snapshot (#791)
+	termShiftAt time.Time        // last bare-shift tap in a terminal (#973)
 	pinSel     int              // pin-picker selection
 	pinPicker  bool             // pin picker owns the modal shell
 	paletteKey string
@@ -1584,17 +1585,62 @@ var terminalGlobalCommands = map[string]bool{
 	"palette.searchEverywhere": true,
 	"palette.recentFiles":      true,
 	"project.switch":           true,
+	// #973: IDE-level chords the shell can never meaningfully use.
+	"settings.open":         true,
+	"project.goToFile":      true,
+	"project.goToClass":     true,
+	"project.findInPath":    true,
+	"project.replaceInPath": true,
+	"explorer.toggle":       true,
+	"window.hideAllTools":   true,
+	"nav.pins":              true,
+	"nav.pinGoto1":          true,
+	"nav.pinGoto2":          true,
+	"nav.pinGoto3":          true,
+	"nav.pinGoto4":          true,
+	"todo.list":             true,
+	"vcs.panel":             true,
+	"notifications.history": true,
+}
+
+// doubleTapWindow is how close two bare shift taps must be to count as the
+// double-shift chord (#973), mirroring JetBrains' double-tap timing.
+const doubleTapWindow = 600 * time.Millisecond
+
+// isBareShift reports a bare shift modifier press (no base key).
+func isBareShift(msg tea.KeyPressMsg) bool {
+	switch msg.String() {
+	case "shift", "leftshift", "rightshift":
+		return true
+	}
+	return false
 }
 
 // terminalGlobalChord resolves a single-step chord against the live binding
 // table and dispatches it when it maps to an allowlisted global command
-// (#805). Multi-step chords (e.g. double-shift) cannot be intercepted without
+// (#805). The double-shift tap is detected explicitly (#973); other
+// multi-step chords (cmd+k sequences) cannot be intercepted without
 // buffering shell input and are left to the shell.
-func (m Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if m.paletteKey != "" && msg.String() == m.paletteKey {
 		m.openPalette()
 		return true, nil
 	}
+	// Double-shift (#973): two bare shift taps in quick succession open
+	// Search Everywhere. Unlike esc esc (which vim/lazygit need), a bare
+	// modifier press means nothing to the shell, so intercepting the second
+	// tap is side-effect-free; the taps themselves still forward.
+	if isBareShift(msg) {
+		if time.Since(m.termShiftAt) < doubleTapWindow {
+			m.termShiftAt = time.Time{}
+			if c, okc := m.reg.Command("palette.searchEverywhere"); okc {
+				return true, m.dispatchCommand("palette.searchEverywhere", c)
+			}
+		}
+		m.termShiftAt = time.Now()
+		return false, nil
+	}
+	m.termShiftAt = time.Time{}
 	k, ok := keymap.FromKeyMsg(msg)
 	if ok {
 		table := m.bindings.Table()
