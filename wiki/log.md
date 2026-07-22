@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Auto-import fix (#929): cursor/caret positions now adjust past
+  additionalTextEdits that end on the cursor's own line — accepting an
+  auto-import no longer mangles the inserted import line
+  (`/architecture/lsp.md`).
+
 - Python decorator highlighting fix (#928): only `@` + dotted name carry the
   decorator color, arguments render as normal call expressions; capture-order
   convention documented (`/architecture/highlighting.md`).

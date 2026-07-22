@@ -567,9 +567,11 @@ func (m *Model) SetCompletionMRU(s *mru.Store) { m.compMRU = s }
 
 // applyCompletionExtraEdits applies an accepted item's additionalTextEdits
 // (auto-import, #848) through the open insert recorder, bottom-up so earlier
-// positions stay valid. The cursor and secondary carets shift by the line
-// delta of every edit that ends strictly above them (the import-block shape);
-// same-line edits before the cursor are left unadjusted.
+// positions stay valid. The cursor and secondary carets are position-adjusted
+// past every edit that ends at or before them — including an edit ending on
+// the cursor's own line (#929): pyright inserts the import at (0,0) of a
+// short file, i.e. on the cursor line before the cursor, and without the
+// column shift the main insert would splice into the fresh import line.
 func (m *Model) applyCompletionExtraEdits(edits []ilsp.FormatEdit) {
 	if len(edits) == 0 {
 		return
@@ -590,19 +592,37 @@ func (m *Model) applyCompletionExtraEdits(edits []ilsp.FormatEdit) {
 			},
 			Text: e.Text,
 		})
-		delta := strings.Count(e.Text, "\n") - (e.EndLine - e.StartLine)
-		if delta == 0 {
-			continue
-		}
-		if e.EndLine < m.cursor.Line {
-			m.cursor.Line += delta
-		}
+		m.cursor = adjustPastEdit(m.cursor, e)
 		for i := range m.carets {
-			if e.EndLine < m.carets[i].pos.Line {
-				m.carets[i].pos.Line += delta
-			}
+			m.carets[i].pos = adjustPastEdit(m.carets[i].pos, e)
 		}
 	}
+}
+
+// adjustPastEdit maps a position in the pre-edit document to the same logical
+// spot after e was applied. Positions before the edit's end are unaffected —
+// except that a position *inside* the replaced range clamps to the edit's new
+// end. Positions after shift by the edit's line delta; a position on the
+// edit's own end line additionally shifts columns, because the text between
+// the edit and the position moved onto the edit's final line (#929).
+func adjustPastEdit(pos buffer.Position, e ilsp.FormatEdit) buffer.Position {
+	end := buffer.Position{Line: e.EndLine, Col: e.EndCol}
+	if pos.Line < end.Line || (pos.Line == end.Line && pos.Col < end.Col) {
+		return pos
+	}
+	lineDelta := strings.Count(e.Text, "\n") - (e.EndLine - e.StartLine)
+	if pos.Line != end.Line {
+		pos.Line += lineDelta
+		return pos
+	}
+	// Same line as the edit's end: compute where the end landed.
+	var newEnd buffer.Position
+	if i := strings.LastIndexByte(e.Text, '\n'); i >= 0 {
+		newEnd = buffer.Position{Line: e.StartLine + strings.Count(e.Text, "\n"), Col: len([]rune(e.Text[i+1:]))}
+	} else {
+		newEnd = buffer.Position{Line: e.StartLine, Col: e.StartCol + len([]rune(e.Text))}
+	}
+	return buffer.Position{Line: newEnd.Line, Col: newEnd.Col + (pos.Col - end.Col)}
 }
 
 // identifierStart returns the position of the start of the identifier run
