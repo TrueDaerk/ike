@@ -67,12 +67,13 @@ type Floating struct {
 	dismiss map[string]bool
 	pal     *theme.Palette // active theme (Roadmap 0110); nil = default
 
-	content Content
-	open    bool
-	width   int // terminal width
-	height  int // terminal height
-	scroll  scroller
-	sizes   *WinSizes // optional per-content resize persistence (#774)
+	content  Content
+	open     bool
+	width    int // terminal width
+	height   int // terminal height
+	scroll   scroller
+	sizes    *WinSizes // optional per-content resize persistence (#774)
+	maxWidth int       // outer width cap on large terminals (#932); 0 = uncapped
 }
 
 // New returns a closed Floating configured by cfg.
@@ -106,6 +107,15 @@ func (f *Floating) theme() *theme.Palette {
 // SetSizeStore installs the persisted per-window size deltas (#774):
 // ctrl+shift+arrows resize the open shell, keyed by the content's title.
 func (f *Floating) SetSizeStore(s *WinSizes) { f.sizes = s }
+
+// SetMaxWidth caps the shell's outer width (#932, ui.popup_max_width): on
+// large terminals the content budget stops growing at max−chrome columns and
+// extra terminal width just adds margin. 0 disables. The user's resize delta
+// (#774) applies on top of the capped base and still clamps to the terminal.
+func (f *Floating) SetMaxWidth(max int) {
+	f.maxWidth = max
+	f.relayout()
+}
 
 // AdjustSize applies one mouse-drag resize step (#933) without persisting;
 // the host flushes the store when the drag ends.
@@ -266,6 +276,13 @@ func (f *Floating) layout(preserveScroll bool) {
 		return
 	}
 	cw, ch := budget(f.width, f.height, f.margin(), f.cfg.MaxWidthFrac, f.cfg.MaxHeightFrac)
+	// Width cap (#932): the default content budget stops growing at the
+	// configured outer width on large terminals.
+	if f.maxWidth > 0 {
+		if c := f.maxWidth - frameH; c < cw {
+			cw = max(c, 1)
+		}
+	}
 	// User resize (#774): the stored delta adjusts the content budget, never
 	// past the terminal-bound budget (so a shrunken terminal re-clamps) and
 	// never below a readable floor.

@@ -162,3 +162,20 @@ func TestNudgeFlush(t *testing.T) {
 		t.Fatalf("reload after Flush = (%d,%d), want (5,1)", dw, dh)
 	}
 }
+
+// TestFloatingMaxWidthCap (#932): the shell's outer width stops growing at
+// the configured cap on a large terminal; 0 disables the cap.
+func TestFloatingMaxWidthCap(t *testing.T) {
+	f := New(Config{})
+	f.SetContent(wideContent{})
+	f.SetMaxWidth(60)
+	f.SetSize(200, 30)
+	f.Open()
+	if w := lipgloss.Width(f.View()); w > 60 {
+		t.Fatalf("capped shell width = %d, want <= 60", w)
+	}
+	f.SetMaxWidth(0)
+	if w := lipgloss.Width(f.View()); w <= 60 {
+		t.Fatalf("uncapped shell width = %d, want the terminal-bound width", w)
+	}
+}

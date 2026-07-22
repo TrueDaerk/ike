@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Centered popups cap their width on large terminals (#932):
+  `ui.popup_max_width` (default 110 columns, 0 disables, Appearance page)
+  bounds the palette box, the modal shell, and the settings panel; #774
+  resize deltas apply on top and still clamp to the terminal
+  (`/architecture/command-palette.md`).
+
 - Fixed a nil-pointer crash in session snapshotting (#931): with an editor
   pane whose active tab is a terminal (#573) focused, project switch and quit
   dereferenced `Instance.Editor()` unchecked. `activeEditorKey` documents the
