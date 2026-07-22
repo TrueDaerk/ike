@@ -154,9 +154,13 @@ ends the session, returning tab to normal indentation.
 name, the import appears" behavior — apply through the same insert recorder as
 the main insert (one undo step), bottom-up, before the identifier replacement;
 the manager converts them to editor coordinates against the synced document
-(`ConvertCompletionItems`), and the cursor/carets shift by the line delta of
-edits above them. Fragment-routed completions (0300) drop additional edits —
-they would target the virtual document.
+(`ConvertCompletionItems`), and the cursor/carets are **position-adjusted past
+every edit** (`adjustPastEdit`, #929) — line delta for edits above, plus a
+column shift when an edit ends on the cursor's own line before the cursor
+(pyright inserts the import at `(0,0)` of a short file; without the column
+shift the main insert spliced into the fresh import line). Fragment-routed
+completions (0300) drop additional edits — they would target the virtual
+document.
 
 **Lazy resolve (#847).** Servers with `resolveProvider` ship lean completion
 lists; documentation and late `additionalTextEdits` arrive per item via

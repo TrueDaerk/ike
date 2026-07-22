@@ -317,6 +317,97 @@ func TestCompletionAcceptAppliesAdditionalEdits(t *testing.T) {
 	}
 }
 
+// TestCompletionAdditionalEditOnCursorLine reproduces #929: pyright inserts
+// the auto-import at (0,0) of a short file — an edit ending on the cursor's
+// own line, before the cursor. The cursor must shift by lines AND columns;
+// without the column shift the main insert spliced into the fresh import
+// line ("from fastapi APIRouterrt …") and left the typed symbol untouched.
+func TestCompletionAdditionalEditOnCursorLine(t *testing.T) {
+	m, _ := loaded(t, "router = APIRoute\n")
+	m = insertModeAt(m, 0, 17) // after "APIRoute"
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 17, Items: []ilsp.CompletionItem{
+		{Label: "APIRouter", InsertText: "APIRouter", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 0, Text: "from fastapi import APIRouter\n\n"},
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "from fastapi import APIRouter" {
+		t.Fatalf("line 0 = %q, want the exact previewed import", got)
+	}
+	if got := line(m, 2); got != "router = APIRouter" {
+		t.Fatalf("line 2 = %q, want the completed symbol", got)
+	}
+	if m.cursor.Line != 2 || m.cursor.Col != 18 {
+		t.Fatalf("cursor = %v, want line 2 col 18", m.cursor)
+	}
+}
+
+// TestCompletionAdditionalEditSameLineNoNewline: a same-line edit without a
+// newline (extending an existing import list left of the cursor would be this
+// shape) shifts the cursor by the text's width delta.
+func TestCompletionAdditionalEditSameLineNoNewline(t *testing.T) {
+	m, _ := loaded(t, "import a; x = valu\n")
+	m = insertModeAt(m, 0, 18) // after "valu"
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 18, Items: []ilsp.CompletionItem{
+		{Label: "value", InsertText: "value", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 0, StartCol: 7, EndLine: 0, EndCol: 8, Text: "a, b"}, // "a" → "a, b"
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "import a, b; x = value" {
+		t.Fatalf("line 0 = %q, want extended import + completed symbol", got)
+	}
+}
+
+// TestCompletionAdditionalEditAfterCursor: an edit below the cursor leaves
+// the main insert untouched.
+func TestCompletionAdditionalEditAfterCursor(t *testing.T) {
+	m, _ := loaded(t, "x = valu\n\n")
+	m = insertModeAt(m, 0, 8)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 8, Items: []ilsp.CompletionItem{
+		{Label: "value", InsertText: "value", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "tail()\n"},
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "x = value" {
+		t.Fatalf("line 0 = %q, want completed symbol", got)
+	}
+	if got := line(m, 1); got != "tail()" {
+		t.Fatalf("line 1 = %q, want the below-cursor edit", got)
+	}
+}
+
+// TestCompletionSequentialAutoImports: two accepts in a row against the
+// changing document stay correct (#929 acceptance).
+func TestCompletionSequentialAutoImports(t *testing.T) {
+	m, _ := loaded(t, "a = Alph\n")
+	m = insertModeAt(m, 0, 8)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 8, Items: []ilsp.CompletionItem{
+		{Label: "Alpha", InsertText: "Alpha", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 0, Text: "import alpha\n"},
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+
+	// Continue typing on a new line and accept a second auto-import.
+	m = send(m, special(tea.KeyEnter))
+	m = typeKeys(m, "b = Bet")
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: m.cursor.Line, Col: m.cursor.Col, Items: []ilsp.CompletionItem{
+		{Label: "Beta", InsertText: "Beta", AdditionalEdits: []ilsp.FormatEdit{
+			{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "import beta\n"},
+		}},
+	}})
+	m = send(m, special(tea.KeyEnter))
+
+	want := []string{"import alpha", "import beta", "a = Alpha", "b = Beta"}
+	for i, w := range want {
+		if got := line(m, i); got != w {
+			t.Fatalf("line %d = %q, want %q (full doc: %q)", i, got, w, m.buf.Lines())
+		}
+	}
+}
+
 // TestCompletionResolveFlow guards #847: opening the popup on a doc-less item
 // emits a completion-select event with the item's ID; the resolve reply's doc
 // renders under the popup and its late additionalTextEdits apply on accept.
