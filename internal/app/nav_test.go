@@ -169,31 +169,36 @@ func TestNavBackSkipsDeletedFile(t *testing.T) {
 	tm.(Model).atPosition(t, files[2], 6)
 }
 
-func TestNavBackNavigatesInActivePane(t *testing.T) {
+func TestNavBackReturnsToOriginPane(t *testing.T) {
+	// #930: a nav-history jump into a file that is open in another pane
+	// focuses that pane instead of re-opening the file in the active one.
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
 	m = tm.(Model)
+	paneA := m.activeEditorKey()
 	// Split off a second editor pane holding files[1] (records a:0).
 	tm, _ = m.openPath(files[1], true)
 	m = tm.(Model)
 	paneB := m.activeEditorKey()
-	if len(m.editorKeysForPath(files[1])) == 0 {
-		t.Fatal("second pane must hold files[1]")
+	if paneB == paneA {
+		t.Fatal("fixture: second open must land in a new pane")
 	}
 
-	// Back acts in the active pane: paneB now shows files[0]; the original
-	// pane is untouched and still shows files[0] too (shared standard flow),
-	// but crucially focus and the target pane stay on paneB.
+	// Back returns to files[0] in its ORIGINATING pane (paneA); paneB keeps
+	// showing files[1] — no duplicate view of files[0] appears in paneB.
 	tm, _ = m.Update(NavBackMsg{})
 	m = tm.(Model).atPosition(t, files[0], 0)
-	if m.activeEditorKey() != paneB {
-		t.Fatalf("back must navigate in the active pane %s, got %s", paneB, m.activeEditorKey())
+	if m.activeEditorKey() != paneA {
+		t.Fatalf("back must focus the originating pane %s, got %s", paneA, m.activeEditorKey())
 	}
-	// Forward returns paneB to files[1].
+	if len(m.editorKeysForPath(files[0])) != 1 {
+		t.Fatalf("files[0] must stay single-view, panes = %v", m.editorKeysForPath(files[0]))
+	}
+	// Forward returns to files[1], focusing paneB again.
 	tm, _ = m.Update(NavForwardMsg{})
 	m = tm.(Model).atPosition(t, files[1], 0)
 	if m.activeEditorKey() != paneB {
-		t.Fatalf("forward must stay in pane %s, got %s", paneB, m.activeEditorKey())
+		t.Fatalf("forward must focus pane %s, got %s", paneB, m.activeEditorKey())
 	}
 }

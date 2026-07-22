@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -62,9 +62,11 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
   the opposite stack stays consistent; navigation itself goes through
   `openPathAt` with recording suppressed (`navSkip`), reusing the standard
   open flow (tab reuse, focus, hooks) — no remembered pane identities,
-  which keeps entries valid across layout changes. With split layouts,
-  back/forward acts in the *active* editor pane (focused, else most
-  recent); other panes are untouched (#220).
+  which keeps entries valid across layout changes. With split layouts, a
+  jump target already open in *any* editor pane focuses that pane's tab
+  (#930) — so back/forward returns to the pane a file lives in instead of
+  duplicating it into the active pane; a target open nowhere lands in the
+  active editor pane as before.
 - **Stale entries** (#220): traversal passes a validity filter
   (`BackWhere`/`ForwardWhere` with an `os.Stat` check) — an entry whose
   file was deleted or renamed is silently dropped and traversal continues

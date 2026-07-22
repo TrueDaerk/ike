@@ -3971,6 +3971,15 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
 		key := m.activeEditorKey()
+		// A file already open in ANY editor pane focuses that pane's tab
+		// instead of opening a duplicate in the current pane (#930) — the
+		// #272 same-pane dedupe extended across panes, like re-opened diffs
+		// (#509). An explicit new-pane open keeps its meaning.
+		if !newPane {
+			if k := m.editorWithFile(path); k != "" {
+				key = k
+			}
+		}
 		// NewPane with an empty active editor reuses it instead of splitting —
 		// otherwise the blank pane is stranded beside the new one, the exact
 		// scenario the diff path already guards against (#628, #641).
