@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Fixed a nil-pointer crash in session snapshotting (#931): with an editor
+  pane whose active tab is a terminal (#573) focused, project switch and quit
+  dereferenced `Instance.Editor()` unchecked. `activeEditorKey` documents the
+  editor-kind-not-editor-model invariant; all `.Editor()` call sites audited
+  and guarded.
+
 - Floating windows resize by mouse drag (#933): grab the border ring of the
   Settings panel, the centered palette (Search Everywhere / Run a Command /
   Recent Files), or the modal shell — edges resize one axis, corners both;
