@@ -55,7 +55,22 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   concurrent OutputMsgs **across sessions** into one batch per adaptive flush
   (#803) — so `yes`, a build log, or eight busy TUI panes at once cannot
   flood the render loop or starve input handling.
-- **Resize content preservation** (#807, #826): the upstream emulator
+- **Width reflow** (#935): any width change on the primary screen rewraps the
+  whole history — scrollback and screen — at the new width, as if the terminal
+  had always been that size (iTerm2/kitty behaviour): shrink rewraps overlong
+  logical lines onto continuation rows, grow merges soft-wrapped segments back
+  out to the new edge, hard newlines never merge, and wide→narrow→wide
+  round-trips reproduce the original layout. Implementation is a **replay**:
+  under `mu`+`gridMu` the logical lines are reconstructed (rows joined where
+  the soft-wrap heuristic says the renderer broke them, styles preserved via
+  `uv.Line.Render`), the emulator is resized, then `2J 3J H` plus the lines
+  (`\r\n`-separated, no trailing newline) are fed back through `em.Write` —
+  the emulator re-wraps natively, so wrap state, cursor and scrollback come
+  out consistent. Rows below the cursor and the last content row are dropped;
+  the reserve is cleared (everything was rewritten). The alt screen never
+  reflows — its apps repaint on SIGWINCH.
+- **Resize content preservation** (#807, #826): **height-only** changes keep
+  the reserve machinery — the upstream emulator
   hard-truncates the grid on shrink (clipped cells are destroyed — on a height
   shrink the **bottom** rows, i.e. the newest output and the prompt).
   `Session` layers two mechanisms on top:
@@ -186,12 +201,12 @@ clipboard, so a long command that merely wrapped pastes back as one line. The
 emulator keeps no per-row wrap metadata, so the copy path uses the classic
 heuristic (`Session.SoftWrapped`): a row whose final column is occupied
 continued into the next one — the sole ambiguity is a hard-newline line that
-exactly fills the width, which joins too. Width-shrunk content is exempt
-(#947): a shrink truncates rows instead of rewrapping (reflow is #935), so a
-clipped line also fills its last column — scrollback lines still store their
-full pre-shrink width and screen rows are checked against the resize reserve,
-and such lines never read as wrapped (better a missed join than chaining
-unrelated truncated lines; triple-click then selects single lines). Any key routed to the shell (and
+exactly fills the width, which joins too. Width changes reflow the whole
+history (#935), so resizes no longer clip lines; the #947 guards remain for
+content predating a reflow (an alt-screen phase, a legacy session) — lines
+stored wider than the viewport, or screen rows still prefix-matching a wider
+resize reserve, read as clips, never wraps (better a missed join than
+chaining unrelated lines). Any key routed to the shell (and
 `terminal.clear`) clears the selection. When the child enabled mouse
 reporting, press/drag/release forward to it instead — selection is
 unavailable then, like in xterm.

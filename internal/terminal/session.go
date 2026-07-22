@@ -330,15 +330,34 @@ func (s *Session) Resize(w, h int) {
 }
 
 // applyResizeLocked performs the actual PTY + emulator resize; s.mu held.
-// Around the emulator resize it maintains the content reserve (#807): the
-// upstream emulator destroys clipped cells on shrink, so the screen is
-// snapshotted before and the clipped region restored after a grow.
+//
+// A width change on the primary screen reflows (#935): the whole history is
+// rewrapped at the new width as if the terminal had always been that size.
+// Height-only changes keep the #807/#826 reserve machinery (scroll-push on
+// shrink, guarded pull/restore on grow) — its semantics are exactly right
+// vertically and battle-tested. The alt screen never reflows: its apps
+// repaint themselves on SIGWINCH.
 func (s *Session) applyResizeLocked(w, h int) {
 	oldW, oldH := s.w, s.h
 	// gridMu keeps the feed loop out for the whole snapshot → resize →
 	// restore sequence, so the copied cells cannot race a concurrent write
 	// and no child output lands between snapshot and restore.
 	s.gridMu.Lock()
+	if w != oldW && !s.em.IsAltScreen() {
+		lines := s.logicalLinesLocked(oldW, oldH)
+		s.w, s.h = w, h
+		s.lastResize = time.Now()
+		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+		s.em.Resize(w, h)
+		s.replayLocked(lines)
+		// The replay rewrote everything at the new width; stale reserve rows
+		// would only poison later prefix matches.
+		s.reserve, s.reserveW = nil, 0
+		s.shrinkPushed, s.shrinkMark = 0, 0
+		s.gridMu.Unlock()
+		s.version.Add(1)
+		return
+	}
 	// The height-restore guard compares BEFORE the snapshot folds the current
 	// screen into the reserve — afterwards the overlap matches trivially and
 	// stale reserve rows beyond oldH would resurrect over newer content.
@@ -774,12 +793,19 @@ func (s *Session) Width() int { return s.em.Width() }
 // occupied wrapped into the next one. The one ambiguity — a hard-newline line
 // that exactly fills the width — reads as wrapped and joins on copy.
 //
-// A width shrink truncates rows instead of rewrapping them (reflow is #935),
-// which leaves clipped lines filling their last column too (#947). Those are
-// recognised — scrollback lines still store their full pre-shrink width, and
-// screen rows are checked against the resize reserve (#807) — and never read
-// as wrapped: better a missed join than chaining unrelated lines.
+// Width changes reflow the whole history (#935), so clipped lines no longer
+// arise from resizes; the #947 guards below stay for content that predates a
+// reflow (an alt-screen phase, a legacy session): lines wider than the
+// viewport, or screen rows still prefix-matching a wider resize reserve, are
+// clips — never wraps. Better a missed join than chaining unrelated lines.
 func (s *Session) SoftWrapped(v int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.softWrappedLocked(v)
+}
+
+// softWrappedLocked is SoftWrapped's body; s.mu held.
+func (s *Session) softWrappedLocked(v int) bool {
 	sb := s.em.ScrollbackLen()
 	w := s.em.Width()
 	if w <= 0 || v < 0 || v >= sb+s.em.Height()-1 {
@@ -796,13 +822,10 @@ func (s *Session) SoftWrapped(v int) bool {
 	if !cellOccupied(s.em.CellAt(w-1, y)) {
 		return false
 	}
-	// Full row: distinguish a wrap from a row a width shrink clipped. The
-	// reserve still holds the pre-shrink content; a prefix-matching reserve
-	// row wider than the viewport means the row was written on a wider grid
-	// and merely got cut (or ended exactly at w) — not a wrap. Rows rewritten
-	// since the shrink fail the prefix match and take the plain heuristic.
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	// Full row: a prefix-matching reserve row wider than the viewport means
+	// the row was written on a wider grid and merely got cut (or ended
+	// exactly at w) — not a wrap. Rows rewritten since fail the prefix match
+	// and take the plain heuristic.
 	if s.reserveW > w && y < len(s.reserve) && len(s.reserve[y]) > w {
 		s.gridMu.Lock()
 		match := rowPrefixEqual(s.reserve[y], s.screenRowLocked(w, y), w)
@@ -812,6 +835,87 @@ func (s *Session) SoftWrapped(v int) bool {
 		}
 	}
 	return true
+}
+
+// --- width reflow (#935) ---------------------------------------------------
+
+// logicalLinesLocked reconstructs the logical lines of [scrollback ++ screen]
+// at the current (pre-resize) width: consecutive rows joined where
+// softWrappedLocked says the renderer wrapped them, each line rendered as a
+// styled string (SGR/links preserved via uv.Line.Render). Rows below both the
+// cursor and the last content row are dropped — the cursor's own (possibly
+// blank) row survives, so the replay puts the cursor back where the shell
+// left it. s.mu and s.gridMu held.
+func (s *Session) logicalLinesLocked(w, h int) []string {
+	sb := s.em.ScrollbackLen()
+	last := s.em.CursorPosition().Y
+	for y := h - 1; y > last; y-- {
+		if len(trimTrailingBlank(s.screenRowLocked(w, y))) > 0 {
+			last = y
+			break
+		}
+	}
+	total := sb + last + 1
+
+	var lines []string
+	var pending uv.Line
+	for v := 0; v < total; v++ {
+		var row uv.Line
+		if v < sb {
+			for x := 0; ; x++ {
+				c := s.em.ScrollbackCellAt(x, v)
+				if c == nil {
+					break
+				}
+				row = append(row, *c)
+			}
+		} else {
+			row = s.screenRowLocked(w, v-sb)
+		}
+		wrapped := v < total-1 && s.softWrappedLocked(v)
+		if wrapped {
+			// A wrapped row is full by definition; keep it verbatim so the
+			// continuation glues seamlessly.
+			pending = append(pending, row...)
+			continue
+		}
+		pending = append(pending, trimTrailingBlank(row)...)
+		lines = append(lines, uv.Line(trimTrailingBlank(pending)).Render())
+		pending = nil
+	}
+	return lines
+}
+
+// replayLocked rewrites the emulator's content from scratch: clear screen
+// (2J first — it pushes the stale rows into the scrollback — then 3J to wipe
+// that scrollback wholesale), home, then every logical line hard-newline
+// separated with no trailing newline. The emulator re-wraps each line at the
+// current width itself, so wrap state, cursor and scrollback come out exactly
+// as if the terminal had always been this size. s.mu and s.gridMu held.
+func (s *Session) replayLocked(lines []string) {
+	var b strings.Builder
+	b.WriteString("\x1b[0m\x1b[2J\x1b[3J\x1b[H")
+	for i, l := range lines {
+		if i > 0 {
+			b.WriteString("\r\n")
+		}
+		b.WriteString(l)
+	}
+	_, _ = s.em.Write([]byte(b.String()))
+}
+
+// trimTrailingBlank drops the trailing run of blank cells (the same
+// definition the scrollback push uses), keeping styled spaces.
+func trimTrailingBlank(l uv.Line) uv.Line {
+	end := len(l)
+	for end > 0 {
+		c := &l[end-1]
+		if !c.IsZero() && !c.Equal(&uv.EmptyCell) {
+			break
+		}
+		end--
+	}
+	return l[:end]
 }
 
 // cellOccupied reports whether a cell holds visible content — the soft-wrap
