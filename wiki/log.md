@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Fixed an explorer panic in projects whose root holds only hidden entries
+  (#949): stepping "into" the root advanced the cursor past the visible rows
+  (children existed but none rendered), and the next `current()` call — e.g.
+  via refresh — indexed out of range. `current()` now also heals any stale
+  out-of-range cursor.
+
 - LSP jumps and nav-history traversal focus the pane where the target file
   is already open (#930) instead of duplicating it as a tab in the current
   pane; unopened targets open in the current pane as before
