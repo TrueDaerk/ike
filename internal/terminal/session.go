@@ -76,6 +76,12 @@ type Session struct {
 	// abandoned instead of resurrecting the wrong rows.
 	shrinkPushed int
 	shrinkMark   int
+	// Reflow cache (#953): the logical lines the last width-reflow replay
+	// wrote. The next reflow consumes grid rows that still match these lines
+	// verbatim, so their hard breaks are known instead of guessed — the
+	// exact-width soft-wrap ambiguity cannot corrupt them across repeated
+	// resizes. Reset by Clear (the 3J wipes the content it describes).
+	reflowCache []uv.Line
 	// gridMu serializes the feed loop's emulator writes against the resize
 	// snapshot/restore (#807): SafeEmulator locks each call, but CellAt
 	// returns a pointer into the live buffer — copying the cell after the
@@ -344,12 +350,12 @@ func (s *Session) applyResizeLocked(w, h int) {
 	// and no child output lands between snapshot and restore.
 	s.gridMu.Lock()
 	if w != oldW && !s.em.IsAltScreen() {
-		lines := s.logicalLinesLocked(oldW, oldH)
+		lines, tail := s.logicalLinesLocked(oldW, oldH)
 		s.w, s.h = w, h
 		s.lastResize = time.Now()
 		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 		s.em.Resize(w, h)
-		s.replayLocked(lines)
+		s.replayLocked(lines, tail, w)
 		// The replay rewrote everything at the new width; stale reserve rows
 		// would only poison later prefix matches.
 		s.reserve, s.reserveW = nil, 0
@@ -735,6 +741,9 @@ func (s *Session) Clear() {
 	// loop (#803).
 	_, _ = s.em.Write([]byte("\x1b[2J\x1b[3J\x1b[H"))
 	s.em.SendKey(vt.KeyPressEvent{Code: 'l', Mod: vt.ModCtrl})
+	s.mu.Lock()
+	s.reflowCache = nil // the content it described is gone (#953)
+	s.mu.Unlock()
 	s.version.Add(1)
 	s.notify()
 }
@@ -840,13 +849,16 @@ func (s *Session) softWrappedLocked(v int) bool {
 // --- width reflow (#935) ---------------------------------------------------
 
 // logicalLinesLocked reconstructs the logical lines of [scrollback ++ screen]
-// at the current (pre-resize) width: consecutive rows joined where
-// softWrappedLocked says the renderer wrapped them, each line rendered as a
-// styled string (SGR/links preserved via uv.Line.Render). Rows below both the
-// cursor and the last content row are dropped — the cursor's own (possibly
-// blank) row survives, so the replay puts the cursor back where the shell
-// left it. s.mu and s.gridMu held.
-func (s *Session) logicalLinesLocked(w, h int) []string {
+// at the current (pre-resize) width. The reflow cache (#953) is consulted
+// first: it holds the logical lines the last replay wrote, so hard breaks in
+// the matched prefix are KNOWN — the exact-width heuristic ambiguity cannot
+// misjoin them, and repeated shrink/grow cycles stay lossless. Rows the cache
+// does not cover (output since the last replay: prompt redraws, new commands)
+// fall back to the softWrappedLocked heuristic. Rows below both the cursor
+// and the last content row are dropped — the cursor's own (possibly blank)
+// row survives, so the replay puts the cursor back where the shell left it.
+// s.mu and s.gridMu held.
+func (s *Session) logicalLinesLocked(w, h int) (lines, tail []uv.Line) {
 	sb := s.em.ScrollbackLen()
 	last := s.em.CursorPosition().Y
 	for y := h - 1; y > last; y-- {
@@ -857,8 +869,23 @@ func (s *Session) logicalLinesLocked(w, h int) []string {
 	}
 	total := sb + last + 1
 
-	var lines []string
-	var pending uv.Line
+	// The tail is the last logical content line (and anything below it): the
+	// shell's live edit line. It is NOT reflowed — its physical rows replay
+	// verbatim (clipped on shrink) so an interactive shell's own SIGWINCH
+	// redraw finds the row geometry it remembers and repaints cleanly,
+	// instead of walking up over relaid-out history rows (#953). It anchors
+	// on the last content row, NOT the cursor: a resize can catch the shell
+	// mid-redraw with the cursor parked high in the grid, and trusting it
+	// would clip whole history rows as "tail".
+	tailStart := total - 1
+	if tailStart < 0 {
+		tailStart = 0
+	}
+	for tailStart > 0 && s.softWrappedLocked(tailStart-1) {
+		tailStart--
+	}
+
+	rows := make([]uv.Line, 0, total)
 	for v := 0; v < total; v++ {
 		var row uv.Line
 		if v < sb {
@@ -872,36 +899,128 @@ func (s *Session) logicalLinesLocked(w, h int) []string {
 		} else {
 			row = s.screenRowLocked(w, v-sb)
 		}
-		wrapped := v < total-1 && s.softWrappedLocked(v)
+		rows = append(rows, row)
+	}
+
+	var consumed int
+	lines, consumed = reconcileCache(s.reflowCache, rows[:tailStart], w)
+
+	var pending uv.Line
+	for v := consumed; v < tailStart; v++ {
+		wrapped := v < tailStart-1 && s.softWrappedLocked(v)
 		if wrapped {
 			// A wrapped row is full by definition; keep it verbatim so the
 			// continuation glues seamlessly.
-			pending = append(pending, row...)
+			pending = append(pending, rows[v]...)
 			continue
 		}
-		pending = append(pending, trimTrailingBlank(row)...)
-		lines = append(lines, uv.Line(trimTrailingBlank(pending)).Render())
+		pending = append(pending, trimTrailingBlank(rows[v])...)
+		lines = append(lines, trimTrailingBlank(pending))
 		pending = nil
 	}
-	return lines
+	for v := tailStart; v < total; v++ {
+		tail = append(tail, trimTrailingBlank(rows[v]))
+	}
+	return lines, tail
+}
+
+// reconcileCache consumes grid rows from the top while they still are the
+// rewrap of the cached logical lines at width w (#953), returning those lines
+// verbatim — their hard breaks are authoritative. The first mismatching line
+// (rewritten or new content) stops the walk; when even the first cached line
+// no longer matches (e.g. the scrollback cap trimmed it), whole leading cache
+// lines are skipped until one aligns with row 0 again.
+func reconcileCache(cache []uv.Line, rows []uv.Line, w int) (lines []uv.Line, consumed int) {
+	for skip := 0; skip < len(cache); skip++ {
+		r := 0
+		for _, cl := range cache[skip:] {
+			seg := rewrapLine(cl, w)
+			if r+len(seg) > len(rows) || !segMatches(seg, rows[r:r+len(seg)]) {
+				break
+			}
+			lines = append(lines, cl)
+			r += len(seg)
+		}
+		if r > 0 {
+			return lines, r
+		}
+	}
+	return nil, 0
+}
+
+// rewrapLine chunks a logical line into the physical rows the emulator would
+// produce at width w: display cells accumulate up to w, zero-width
+// continuation cells stay with their head, and a wide cell that would
+// straddle the edge moves to the next row whole. An empty line is one empty
+// row.
+func rewrapLine(l uv.Line, w int) []uv.Line {
+	if w <= 0 || len(l) == 0 {
+		return []uv.Line{nil}
+	}
+	var segs []uv.Line
+	var cur uv.Line
+	used := 0
+	for i := 0; i < len(l); i++ {
+		cw := l[i].Width
+		if cw > 0 && used+cw > w {
+			segs = append(segs, cur)
+			cur, used = nil, 0
+		}
+		cur = append(cur, l[i])
+		used += cw
+	}
+	return append(segs, cur)
+}
+
+// segMatches reports whether the expected rewrap rows equal the actual grid
+// rows by trimmed cell content (styles may drift through render/re-parse and
+// do not affect wrap structure).
+func segMatches(expected, actual []uv.Line) bool {
+	for i := range expected {
+		e, a := trimTrailingBlank(expected[i]), trimTrailingBlank(actual[i])
+		if len(e) != len(a) {
+			return false
+		}
+		for x := range e {
+			if e[x].Content != a[x].Content {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // replayLocked rewrites the emulator's content from scratch: clear screen
 // (2J first — it pushes the stale rows into the scrollback — then 3J to wipe
 // that scrollback wholesale), home, then every logical line hard-newline
-// separated with no trailing newline. The emulator re-wraps each line at the
-// current width itself, so wrap state, cursor and scrollback come out exactly
-// as if the terminal had always been this size. s.mu and s.gridMu held.
-func (s *Session) replayLocked(lines []string) {
+// separated with no trailing newline (SGR/links preserved via
+// uv.Line.Render). The emulator re-wraps each line at the current width
+// itself, so wrap state, cursor and scrollback come out exactly as if the
+// terminal had always been this size. The written lines become the next
+// reflow cache (#953). s.mu and s.gridMu held.
+func (s *Session) replayLocked(lines, tail []uv.Line, w int) {
 	var b strings.Builder
 	b.WriteString("\x1b[0m\x1b[2J\x1b[3J\x1b[H")
 	for i, l := range lines {
 		if i > 0 {
 			b.WriteString("\r\n")
 		}
-		b.WriteString(l)
+		b.WriteString(l.Render())
+	}
+	// The tail (the shell's live edit line) keeps its physical rows verbatim,
+	// clipped to the new width: an interactive shell repaints it on SIGWINCH
+	// and must find the geometry it remembers (#953).
+	for i, row := range tail {
+		if i > 0 || len(lines) > 0 {
+			b.WriteString("\r\n")
+		}
+		if segs := rewrapLine(row, w); len(segs) > 0 {
+			b.WriteString(uv.Line(segs[0]).Render())
+		}
 	}
 	_, _ = s.em.Write([]byte(b.String()))
+	// Only the reflowed prefix is cacheable — the tail belongs to the shell.
+	s.reflowCache = lines
 }
 
 // trimTrailingBlank drops the trailing run of blank cells (the same

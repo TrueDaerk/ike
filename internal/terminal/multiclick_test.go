@@ -98,6 +98,49 @@ func TestTripleClickSelectsLogicalLine(t *testing.T) {
 	}
 }
 
+// TestReflowExactWidthLineSurvivesCycles guards #953: a hard line that
+// exactly fills an intermediate width looks soft-wrapped on the grid, but the
+// reflow cache knows its break is hard — shrink/grow cycles through the
+// ambiguous width must never merge it with the following line (the
+// brew-services corruption from the report).
+func TestReflowExactWidthLineSurvivesCycles(t *testing.T) {
+	exact40 := "0123456789012345678901234567890123456789" // exactly 40 cols
+	c := &collector{}
+	s, err := StartCommandSession("terminal",
+		[]string{"/bin/sh", "-c", "printf '%s\\nzzz-mark\\n' " + exact40 + "; sleep 30"},
+		t.TempDir(), 50, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	waitFor(t, "output", func() bool { return strings.Contains(plainView(s), "zzz-mark") })
+
+	// Cycle through the ambiguous width (40 = the line's exact length) twice.
+	for _, w := range []int{40, 60, 40, 55, 60} {
+		resizeNow(s, w, 24)
+	}
+
+	total := s.ScrollbackLen() + 24
+	var all []string
+	for i := 0; i < total; i++ {
+		all = append(all, s.LineText(i))
+	}
+	joined := strings.Join(all, "\n")
+	if strings.Contains(joined, "9zzz-mark") {
+		t.Fatalf("hard line merged with its successor across resizes:\n%s", joined)
+	}
+	found := false
+	for i, l := range all {
+		if l == exact40 && i+1 < len(all) && strings.HasPrefix(all[i+1], "zzz-mark") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected the exact-width line intact on its own row:\n%s", joined)
+	}
+}
+
 // TestDoubleClickSelectsWord guards #936: a double click selects the word
 // under the pointer with shell-friendly boundaries (path characters glue),
 // and a word spanning the soft-wrap break stays whole.

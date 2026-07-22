@@ -66,9 +66,21 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   `uv.Line.Render`), the emulator is resized, then `2J 3J H` plus the lines
   (`\r\n`-separated, no trailing newline) are fed back through `em.Write` —
   the emulator re-wraps natively, so wrap state, cursor and scrollback come
-  out consistent. Rows below the cursor and the last content row are dropped;
-  the reserve is cleared (everything was rewritten). The alt screen never
-  reflows — its apps repaint on SIGWINCH.
+  out consistent. Rows below the last content row are dropped; the reserve is
+  cleared (everything was rewritten). The alt screen never reflows — its apps
+  repaint on SIGWINCH. Two guards keep repeated resizes lossless (#953):
+  - **Reflow cache**: the logical lines the last replay wrote. The next
+    extraction consumes grid rows that still match these lines (rewrapped at
+    the current width), so their hard breaks are *known* — the exact-width
+    heuristic ambiguity (a hard line exactly filling some intermediate width
+    reads as wrapped) cannot merge them. Only content written since the last
+    replay takes the heuristic; the cache resets on clear.
+  - **Verbatim tail**: the last logical content line — the shell's live edit
+    line — is never reflowed; its physical rows replay unchanged (clipped on
+    shrink), anchored on the last content row rather than the cursor (a
+    resize can catch the shell mid-redraw with the cursor parked elsewhere).
+    The shell's own SIGWINCH repaint then finds the row geometry it
+    remembers instead of walking up over relaid-out history.
 - **Resize content preservation** (#807, #826): **height-only** changes keep
   the reserve machinery — the upstream emulator
   hard-truncates the grid on shrink (clipped cells are destroyed — on a height
