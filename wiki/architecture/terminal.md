@@ -189,9 +189,13 @@ executables while the first word is typed, make targets after `make`
 (Makefile/makefile/GNUmakefile in the live cwd), files/dirs
 relative to the live cwd otherwise (dir part in the word honoured, `~/` and
 absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).
-Every candidate strictly extends the typed word, so **accepting (enter/tab)
-pastes just the remainder** through the bracketed-paste path; a directory
-re-arms the popup to keep descending. `ctrl+space` opens the popup on demand
+Candidates match the typed
+word **case-insensitively** (#968, like every other typed search in the UI);
+an exact-prefix candidate strictly extends the typed word, so **accepting
+(enter/tab) pastes just the remainder** through the bracketed-paste path,
+while a candidate matching only case-insensitively erases the typed word
+with backspaces and pastes the canonical spelling (`mak` → `Makefile`). A
+directory re-arms the popup to keep descending. `ctrl+space` opens the popup on demand
 (empty word shows everything); **auto-suggest** re-arms on every printable
 key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via

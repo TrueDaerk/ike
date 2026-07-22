@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/vt"
 
 	"ike/internal/overlay"
 )
@@ -152,9 +153,12 @@ func sameItems(a, b []string) bool {
 	return true
 }
 
-// acceptCompletion pastes the selected candidate's remainder into the shell
-// (the word prefix is already typed) and closes the popup; a directory keeps
-// suggesting its children.
+// acceptCompletion applies the selected candidate and closes the popup: an
+// exact-prefix candidate pastes just the remainder (the word is already
+// typed); a candidate matching only case-insensitively (#968) erases the
+// typed word with backspaces first and pastes the candidate in its canonical
+// case, so `mak` accepting `Makefile` lands as Makefile, not makMakefile.
+// A directory keeps suggesting its children.
 func (m *Model) acceptCompletion() {
 	c := m.comp
 	m.comp = completion{}
@@ -162,11 +166,19 @@ func (m *Model) acceptCompletion() {
 		return
 	}
 	item := c.items[c.sel]
-	rest := strings.TrimPrefix(item, c.word)
-	if rest == "" {
-		return
+	switch {
+	case strings.HasPrefix(item, c.word):
+		rest := strings.TrimPrefix(item, c.word)
+		if rest == "" {
+			return
+		}
+		m.sess.Paste(rest)
+	default:
+		for range []rune(c.word) {
+			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
+		}
+		m.sess.Paste(item)
 	}
-	m.sess.Paste(rest)
 	if strings.HasSuffix(item, "/") {
 		m.pendingSuggest = true // keep completing into the directory
 	}
@@ -228,6 +240,16 @@ func candidates(cmd, word, dir, pathEnv string) []string {
 	}
 }
 
+// hasFoldPrefix reports whether s begins with prefix case-insensitively —
+// the popup matches like the rest of the UI's typed searches (#968); the
+// accept path case-corrects when the typed part differs.
+func hasFoldPrefix(s, prefix string) bool {
+	if len(s) < len(prefix) {
+		return false
+	}
+	return strings.EqualFold(s[:len(prefix)], prefix)
+}
+
 // commandCandidates lists executables on pathEnv matching the prefix.
 func commandCandidates(pathEnv, prefix string) []string {
 	seen := map[string]bool{}
@@ -238,7 +260,7 @@ func commandCandidates(pathEnv, prefix string) []string {
 		}
 		for _, e := range ents {
 			name := e.Name()
-			if !strings.HasPrefix(name, prefix) || seen[name] || e.IsDir() {
+			if !hasFoldPrefix(name, prefix) || seen[name] || e.IsDir() {
 				continue
 			}
 			if info, err := e.Info(); err != nil || info.Mode()&0o111 == 0 {
@@ -269,7 +291,7 @@ func makeCandidates(dir, prefix string) []string {
 			continue
 		}
 		for _, t := range strings.Fields(head) {
-			if strings.HasPrefix(t, prefix) && !strings.HasPrefix(t, ".") && !seen[t] {
+			if hasFoldPrefix(t, prefix) && !strings.HasPrefix(t, ".") && !seen[t] {
 				seen[t] = true
 			}
 		}
@@ -300,7 +322,7 @@ func pathCandidates(dir, word string) []string {
 	seen := map[string]bool{}
 	for _, e := range ents {
 		name := e.Name()
-		if !strings.HasPrefix(name, base) {
+		if !hasFoldPrefix(name, base) {
 			continue
 		}
 		if strings.HasPrefix(name, ".") && !strings.HasPrefix(base, ".") {
