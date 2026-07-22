@@ -115,20 +115,6 @@ func (m Model) branchSegment() string {
 	return s
 }
 
-// renderSegments joins the non-empty slots with the segment divider.
-func renderSegments(m Model, ed *editor.Model, segs []statusSegment) string {
-	var parts []string
-	for _, s := range segs {
-		if s.render == nil {
-			continue
-		}
-		if text := s.render(m, ed); text != "" {
-			parts = append(parts, text)
-		}
-	}
-	return strings.Join(parts, " │ ")
-}
-
 // modeSegment is the editor input mode; NORMAL when no editor exists.
 func modeSegment(_ Model, ed *editor.Model) string {
 	if ed == nil {
@@ -377,19 +363,120 @@ func (m Model) statusLine() string {
 	// The ":" / "/" command line renders inside the editor pane (vim-style),
 	// not here — the status line keeps its segments while typing a command.
 	ed := m.activeEditor()
-	left := " " + renderSegments(m, ed, statusLeft)
-	right := renderSegments(m, ed, statusRight) + " "
-	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
-	if gap < 1 {
-		gap = 1
-	}
-	line := left + strings.Repeat(" ", gap) + right
-	// Never wider than the terminal (#659): lipgloss pads but does not clip,
-	// and an over-wide bar wraps onto a second row, corrupting the layout.
-	if m.width > 0 && lipgloss.Width(line) > m.width {
-		line = ansi.Truncate(line, m.width, "…")
-	}
+	line := composeStatus(renderParts(m, ed, statusLeft), renderParts(m, ed, statusRight), m.width)
 	return style.Render(line)
+}
+
+// renderedSeg is one rendered, non-empty status segment with its slot id, so
+// the overflow shrinker (#471) can target segments by identity.
+type renderedSeg struct{ id, text string }
+
+// renderParts renders a slot list into its visible segments.
+func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg {
+	var parts []renderedSeg
+	for _, s := range segs {
+		if s.render == nil {
+			continue
+		}
+		if text := s.render(m, ed); text != "" {
+			parts = append(parts, renderedSeg{id: s.id, text: text})
+		}
+	}
+	return parts
+}
+
+// statusDropOrder is the order low-priority segments disappear when the bar
+// overflows (#471): cosmetic hints first, diagnostics/LSP last; mode, the
+// (already shrunken) file segment and the cursor never drop.
+var statusDropOrder = []string{
+	"hint", "eol", "encoding", "indent", "toolchain", "todo",
+	"host", "notifications", "macro", "branch", "diagnostics", "lsp",
+}
+
+// statusFileMin is the narrowest the file segment shrinks to before other
+// segments start dropping.
+const statusFileMin = 16
+
+// composeStatus joins the two segment groups into one bar of at most width
+// cells with priority-aware shrinking (#471): a bar that fits renders as-is;
+// an overflowing one first shortens the file path (JetBrains-style middle
+// ellipsis), then drops segments in statusDropOrder, and only as a last
+// resort hard-clips. width <= 0 skips all bounding (unsized startup frame).
+func composeStatus(left, right []renderedSeg, width int) string {
+	build := func() string {
+		var l, r []string
+		for _, s := range left {
+			l = append(l, s.text)
+		}
+		for _, s := range right {
+			r = append(r, s.text)
+		}
+		lt := " " + strings.Join(l, " │ ")
+		rt := strings.Join(r, " │ ") + " "
+		gap := width - lipgloss.Width(lt) - lipgloss.Width(rt)
+		if gap < 1 {
+			gap = 1
+		}
+		return lt + strings.Repeat(" ", gap) + rt
+	}
+	line := build()
+	if width <= 0 || lipgloss.Width(line) <= width {
+		return line
+	}
+	// 1. Shrink the file segment by exactly the overflow, flooring at a
+	// readable minimum.
+	overflow := lipgloss.Width(line) - width
+	for i := range left {
+		if left[i].id != "file" {
+			continue
+		}
+		fw := lipgloss.Width(left[i].text)
+		target := fw - overflow
+		if target < statusFileMin {
+			target = statusFileMin
+		}
+		if target < fw {
+			left[i].text = middleEllipsis(left[i].text, target)
+		}
+	}
+	if line = build(); lipgloss.Width(line) <= width {
+		return line
+	}
+	// 2. Drop low-priority segments in order until the bar fits.
+	drop := func(parts []renderedSeg, id string) []renderedSeg {
+		out := parts[:0]
+		for _, s := range parts {
+			if s.id != id {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	for _, id := range statusDropOrder {
+		left = drop(left, id)
+		right = drop(right, id)
+		if line = build(); lipgloss.Width(line) <= width {
+			return line
+		}
+	}
+	// 3. Hard clip — the terminal is narrower than mode+file+cursor.
+	return ansi.Truncate(line, width, "…")
+}
+
+// middleEllipsis shortens s to max runes with a middle "…", keeping head and
+// tail — the JetBrains path-shortening shape (#471).
+func middleEllipsis(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	if max <= 1 {
+		return "…"
+	}
+	keep := max - 1
+	head := (keep + 1) / 2
+	tail := keep / 2
+	return string(r[:head]) + "…" + string(r[len(r)-tail:])
 }
 
 // focusedLangStatus returns the tracked server state for the focused editor's
