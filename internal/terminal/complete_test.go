@@ -249,3 +249,67 @@ func TestCompletionFollowsCd(t *testing.T) {
 		t.Fatalf("candidates after cd = %v, want [./target-file.txt]", got)
 	}
 }
+
+// TestCandidatesFoldCase (#968): typed prefixes match case-insensitively for
+// paths, make targets, and commands.
+func TestCandidatesFoldCase(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"Makefile", "Documents"} {
+		if err := os.MkdirAll(filepath.Join(dir, f), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "readme.md"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := pathCandidates(dir, "./doc")
+	if len(got) != 1 || got[0] != "./Documents/" {
+		t.Fatalf("fold path candidates = %v, want [./Documents/]", got)
+	}
+	if got := pathCandidates(dir, "./READ"); len(got) != 1 || got[0] != "./readme.md" {
+		t.Fatalf("upper-typed fold = %v, want [./readme.md]", got)
+	}
+
+	if err := os.WriteFile(filepath.Join(dir, "Makefile", "..", "Makefile2"), []byte("Build-All:\n\techo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mdir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(mdir, "Makefile"), []byte("Build-All:\n\techo hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := makeCandidates(mdir, "build"); len(got) != 1 || got[0] != "Build-All" {
+		t.Fatalf("fold make candidates = %v, want [Build-All]", got)
+	}
+
+	bin := t.TempDir()
+	exe := filepath.Join(bin, "MyTool")
+	if err := os.WriteFile(exe, []byte("#!"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := commandCandidates(bin, "myt"); len(got) != 1 || got[0] != "MyTool" {
+		t.Fatalf("fold command candidates = %v, want [MyTool]", got)
+	}
+}
+
+// TestAcceptCaseCorrects (#968): accepting a candidate whose case differs
+// from the typed prefix erases the word and pastes the canonical case;
+// exact prefixes keep the remainder paste.
+func TestAcceptCaseCorrects(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	// Type "mak" at the prompt.
+	for _, r := range "mak" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of mak", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "mak"
+	})
+	// Fake an open popup offering the case-different candidate.
+	m.comp = completion{open: true, items: []string{"Makefile"}, sel: 0, word: "mak"}
+	m.acceptCompletion()
+	waitFor(t, "case-corrected line", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "Makefile"
+	})
+}

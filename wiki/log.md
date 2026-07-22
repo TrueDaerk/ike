@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Terminal completion matches case-insensitively (#968): commands, make
+  targets and paths complete regardless of typed case; accepting a
+  case-different candidate erases the word and pastes the canonical
+  spelling (`/architecture/terminal.md`).
+
 - Toolchain package management (#571): the python packages view installs,
   uninstalls and upgrades packages (`+`/`-`/`u`), marks available upgrades
   with `↑ <latest>`, prefers `uv add`/`uv remove` in uv projects, and keeps
