@@ -134,6 +134,118 @@ func TestDoubleClickSelectsWord(t *testing.T) {
 	}
 }
 
+// TestTruncatedLinesNotSoftWrapped guards #947: a width shrink truncates rows
+// instead of rewrapping (#935); the clipped lines fill their last column but
+// must not read as soft-wrapped — a triple-click selects only the one line,
+// while output written after the shrink still wraps and joins normally.
+func TestTruncatedLinesNotSoftWrapped(t *testing.T) {
+	c := &collector{}
+	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 40, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	m := Model{sess: s, h: 24, w: 40}
+
+	// Two independent lines at width 40 — neither wraps.
+	for _, r := range "printf '%s\\n%s\\n' " + wrapped30 + " zzz-end-marker\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "unwrapped output", func() bool {
+		return strings.Contains(plainView(s), "zzz-end-marker")
+	})
+
+	s.Resize(20, 24)
+	waitFor(t, "shrink applied", func() bool { return s.Width() == 20 })
+	m.w = 20
+
+	// The 30-char line is now clipped to a full 20-column row above the
+	// (still fitting) marker line.
+	sb := s.ScrollbackLen()
+	v := -1
+	for i := 0; i < sb+24; i++ {
+		if s.LineText(i) == wrapped30[:20] && strings.HasPrefix(s.LineText(i+1), "zzz-end-marker") {
+			v = i
+			break
+		}
+	}
+	if v < 0 {
+		t.Fatalf("clipped row not found; view:\n%s", plainView(s))
+	}
+	if s.SoftWrapped(v) {
+		t.Fatal("a width-truncated line must not read as soft-wrapped")
+	}
+
+	// Triple-click selects only that line — not the marker line below.
+	row := v - s.ScrollbackLen()
+	for i := 0; i < 3; i++ {
+		m.MousePress(3, row)
+		m.MouseRelease(3, row)
+	}
+	if got := m.SelectionText(); got != wrapped30[:20] {
+		t.Fatalf("triple-click on clipped line = %q, want %q", got, wrapped30[:20])
+	}
+
+	// Output printed at the shrunken width still soft-wraps: the stale
+	// reserve rows fail the prefix match and the plain heuristic applies.
+	for _, r := range "printf '%s\\n' " + wrapped30 + "\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "wrapped output after shrink", func() bool {
+		sb := s.ScrollbackLen()
+		for i := 0; i < sb+24; i++ {
+			if s.LineText(i) == wrapped30[:20] && strings.HasPrefix(s.LineText(i+1), wrapped30[20:]) {
+				return s.SoftWrapped(i)
+			}
+		}
+		return false
+	})
+}
+
+// TestScrollbackClippedLineNotSoftWrapped guards #947 for history rows: a
+// scrollback line stored wider than the shrunken viewport is a clipped long
+// line, not a wrap.
+func TestScrollbackClippedLineNotSoftWrapped(t *testing.T) {
+	c := &collector{}
+	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 40, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+
+	for _, r := range "printf '%s\\n' " + wrapped30 + " && seq 1 30\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "line scrolled into history", func() bool {
+		if s.ScrollbackLen() == 0 {
+			return false
+		}
+		for i := 0; i < s.ScrollbackLen(); i++ {
+			if strings.HasPrefix(s.LineText(i), wrapped30[:20]) {
+				return true
+			}
+		}
+		return false
+	})
+
+	s.Resize(20, 24)
+	waitFor(t, "shrink applied", func() bool { return s.Width() == 20 })
+
+	v := -1
+	for i := 0; i < s.ScrollbackLen(); i++ {
+		if s.LineText(i) == wrapped30[:20] {
+			v = i
+			break
+		}
+	}
+	if v < 0 {
+		t.Fatal("clipped line not found in scrollback")
+	}
+	if s.SoftWrapped(v) {
+		t.Fatal("a scrollback line wider than the viewport must not read as soft-wrapped")
+	}
+}
+
 // TestDoubleClickWordAcrossWrap guards #936: the word under the pointer
 // extends across the soft-wrap break in both directions.
 func TestDoubleClickWordAcrossWrap(t *testing.T) {

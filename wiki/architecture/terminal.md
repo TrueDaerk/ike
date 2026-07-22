@@ -186,7 +186,12 @@ clipboard, so a long command that merely wrapped pastes back as one line. The
 emulator keeps no per-row wrap metadata, so the copy path uses the classic
 heuristic (`Session.SoftWrapped`): a row whose final column is occupied
 continued into the next one — the sole ambiguity is a hard-newline line that
-exactly fills the width, which joins too. Any key routed to the shell (and
+exactly fills the width, which joins too. Width-shrunk content is exempt
+(#947): a shrink truncates rows instead of rewrapping (reflow is #935), so a
+clipped line also fills its last column — scrollback lines still store their
+full pre-shrink width and screen rows are checked against the resize reserve,
+and such lines never read as wrapped (better a missed join than chaining
+unrelated truncated lines; triple-click then selects single lines). Any key routed to the shell (and
 `terminal.clear`) clears the selection. When the child enabled mouse
 reporting, press/drag/release forward to it instead — selection is
 unavailable then, like in xterm.
