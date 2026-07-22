@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
 )
@@ -298,7 +299,10 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 		budget = 8
 	}
 
-	runes := []rune(strings.ReplaceAll(it.Text, "\t", " "))
+	// Tabs flatten to spaces; embedded newlines (a multi-line match text,
+	// #971) would render as a literal second row, so they flatten too.
+	flat := strings.NewReplacer("\t", " ", "\n", " ", "\r", "").Replace(it.Text)
+	runes := []rune(flat)
 	start, end := clampRange(it.StartCol, it.EndCol, len(runes))
 	// Slide the window so the match is visible; prepend an ellipsis when cut.
 	off := 0
@@ -351,7 +355,9 @@ func truncateRunes(s string, n int) string {
 	return "…" + string(r[len(r)-n+1:])
 }
 
-// ansiClip hard-caps a styled row to width cells.
+// ansiClip hard-caps a styled row to width cells. ansi.Truncate, not
+// lipgloss MaxWidth — MaxWidth WRAPS overlong content onto a second line
+// (#971), which corrupts single-row lists.
 func ansiClip(s string, width int) string {
-	return lipgloss.NewStyle().MaxWidth(width).Render(s)
+	return ansi.Truncate(s, width, "…")
 }
