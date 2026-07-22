@@ -225,6 +225,9 @@ type Model struct {
 	conceal  map[int][][2]int
 	mdRender bool
 	mdTables *mdTableState
+	// colorPreview is the inline color-swatch toggle (#790,
+	// editor.color_preview): color literals tint with their own color.
+	colorPreview bool
 	// scopes are the sticky-scroll scopes (#168) delivered by the same parse
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
@@ -355,6 +358,7 @@ func New() Model {
 		lineCache:          newLineCache(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
+		colorPreview:       true,
 	}
 	m.view.LineNumbers = false
 	return m
@@ -445,6 +449,7 @@ func (m *Model) applyConfig() {
 	}
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
 	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
+	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
 			m.stickyDepth = n

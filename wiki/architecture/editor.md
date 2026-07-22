@@ -704,6 +704,21 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   box-drawing row would tear); with horizontal scroll the rendered row is
   sliced by the same column window as any other line.
 
+## Inline color preview (#790)
+
+Recognized color literals — `#rrggbb`, `#rgb`, `rgb()/rgba()`, `hsl()/hsla()`
+— render with the literal's own color as the **cell background** and a
+black/white contrast foreground picked by luminance (`colorswatch.go`).
+The tint approach (instead of extra `██` swatch cells) is deliberate: it adds
+no display columns, so motions, mouse clicks, soft wrap and the #881 conceal
+mapping stay untouched. Detection is a per-line regex scan inside the
+line-cached render path — only visible lines are ever scanned, so large files
+cost nothing. Invalid values (out-of-range channels, wrong arity, 4/5/8-digit
+hex) yield no swatch. Alpha components parse but do not tint (no alpha
+channel in a terminal cell). Toggle: `editor.color_preview` (default on,
+Settings → Editor). Cursor/selection/search win the cell as usual; the
+diagnostic underline composes on top.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
@@ -711,7 +726,8 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `auto_close_pairs`, `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
-`indent_guides`, `rulers` and `markdown_rendering` (#881) take effect live. The view-option keys (#64) are
+`indent_guides`, `rulers`, `markdown_rendering` (#881) and `color_preview`
+(#790) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,
 `view.toggleIndentGuides`) marks a per-view override that the per-event config
 refresh no longer clobbers. `files.encoding` names the fallback

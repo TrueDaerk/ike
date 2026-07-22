@@ -196,6 +196,9 @@ type Editor struct {
 	// non-cursor lines, and box-drawing pipe tables while the cursor is
 	// outside the table.
 	MarkdownRendering bool `toml:"markdown_rendering"`
+	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
+	// with their own color (#790).
+	ColorPreview bool `toml:"color_preview"`
 	Tabs              Tabs `toml:"tabs"`
 }
 

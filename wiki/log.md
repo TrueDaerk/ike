@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Inline color preview (#790): `#rrggbb`/`#rgb`/`rgb()`/`hsl()` literals tint
+  with their own color (contrast foreground by luminance); toggle
+  `editor.color_preview` (`/architecture/editor.md`).
+
 - Auto-import fix (#929): cursor/caret positions now adjust past
   additionalTextEdits that end on the cursor's own line — accepting an
   auto-import no longer mangles the inserted import line
