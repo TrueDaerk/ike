@@ -2,6 +2,13 @@
 
 ## 2026-07-22
 
+- Toolchain package management (#571): the python packages view installs,
+  uninstalls and upgrades packages (`+`/`-`/`u`), marks available upgrades
+  with `↑ <latest>`, prefers `uv add`/`uv remove` in uv projects, and keeps
+  everything async with the decisive stderr line on failure
+  (`/architecture/settings-ui.md`). Also fixed: package-listing results were
+  never routed to the settings panel (#569 regression).
+
 - Terminal sessions track the shell's live cwd via OSC 7 (#770): completion
   candidates, pane title and status line follow `cd`; start directory stays
   the fallback without prompt integration (`/architecture/terminal.md`).
