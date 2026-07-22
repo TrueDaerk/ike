@@ -107,6 +107,16 @@ func (f *Floating) theme() *theme.Palette {
 // ctrl+shift+arrows resize the open shell, keyed by the content's title.
 func (f *Floating) SetSizeStore(s *WinSizes) { f.sizes = s }
 
+// AdjustSize applies one mouse-drag resize step (#933) without persisting;
+// the host flushes the store when the drag ends.
+func (f *Floating) AdjustSize(ddw, ddh int) {
+	if f.sizes == nil {
+		return
+	}
+	f.sizes.Nudge(f.sizeKind(), ddw, ddh)
+	f.layout(true)
+}
+
 // sizeKind is the persistence key for the current content: its title, so
 // each hosted window (help, settings dialogs, …) remembers its own size.
 func (f *Floating) sizeKind() string {

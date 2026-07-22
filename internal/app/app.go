@@ -338,7 +338,8 @@ type Model struct {
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette    *palette.Palette
 	cmdUsage   *palette.Usage // most-used command ranking (#773)
-	winSizes   *ui.WinSizes   // persisted floating-window resize deltas (#774)
+	winSizes   *ui.WinSizes     // persisted floating-window resize deltas (#774)
+	floatDrag  *floatResizeDrag // live mouse resize of a floating window (#933)
 	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -5046,7 +5047,55 @@ func paneInterior(outer, chrome int) int {
 // resize (divider) or move (title bar), motion updates the in-flight gesture, and
 // release commits and persists. A title drag onto another pane relocates it
 // (0036); a drag to the source pane's own edge spawns a fresh split there (0037).
+// floatResizeDrag tracks a live mouse resize of a floating window (#933):
+// press on the window's border ring grabs an edge (sx or sy set) or corner
+// (both), motion applies pointer deltas as size deltas, release persists.
+type floatResizeDrag struct {
+	kind         string // which float: "settings", "palette", "shell"
+	sx, sy       int    // grow direction of the grabbed edge/corner (−1/0/+1)
+	lastX, lastY int    // last applied pointer cell
+}
+
+// applyFloatResize applies one resize step to the dragged float. Deltas go
+// through the shared size store un-persisted (Nudge); each float re-clamps
+// live against the terminal bounds exactly as it does for the key resize
+// (#774), so a drag can never push a window off-screen.
+func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
+	switch kind {
+	case "settings":
+		m.winSizes.Nudge("settings", ddw, ddh)
+		w, h := m.settingsSize()
+		m.settings.SetSize(w, h)
+	case "palette":
+		m.palette.AdjustSize(ddw, ddh)
+	case "shell":
+		m.shell.AdjustSize(ddw, ddh)
+	}
+}
+
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
+	// An active float resize drag (#933) owns the mouse until release: each
+	// motion step applies the pointer delta along the grabbed edge/corner as a
+	// size delta (motion events are already folded by the input coalescer, so
+	// this runs at most once per rendered frame), release persists the store.
+	if m.floatDrag != nil {
+		switch msg.action {
+		case mouseMotion:
+			d := m.floatDrag
+			ddw, ddh := (msg.X-d.lastX)*d.sx, (msg.Y-d.lastY)*d.sy
+			if ddw != 0 || ddh != 0 {
+				d.lastX, d.lastY = msg.X, msg.Y
+				m.applyFloatResize(d.kind, ddw, ddh)
+			}
+			return m, nil
+		case mouseRelease:
+			m.floatDrag = nil
+			m.winSizes.Flush()
+			return m, nil
+		case mousePress:
+			m.floatDrag = nil // stray press: drop the drag, fall through
+		}
+	}
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
 	// a click inside stays with the overlay (never leaks to the panes below).
 	// The finder renders above every other overlay, so it hit-tests first (#424).
@@ -5112,7 +5161,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case msg.action == mousePress && msg.Button == tea.MouseLeft:
 			// Translate to panel-local coordinates (the box is centered).
 			v := m.settings.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
+			w, h := lipgloss.Width(v), lipgloss.Height(v)
+			bx, by := (m.width-w)/2, (m.height-h)/2
+			// The border ring starts a mouse resize (#933); anything inside
+			// is a content click.
+			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
+				m.floatDrag = &floatResizeDrag{kind: "settings", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+				return m, nil
+			}
 			return m, m.settings.Click(msg.X-bx, msg.Y-by)
 		case msg.action == mouseMotion:
 			// Hover affordance (#885), menu-bar parity.
@@ -5133,6 +5189,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	if m.shell.IsOpen() {
 		if clickOutside(msg, m.shell.View(), m.width, m.height) {
 			m.shell.Close()
+			return m, nil
+		}
+		if msg.action == mousePress && msg.Button == tea.MouseLeft {
+			v := m.shell.View()
+			w, h := lipgloss.Width(v), lipgloss.Height(v)
+			bx, by := (m.width-w)/2, (m.height-h)/2
+			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
+				m.floatDrag = &floatResizeDrag{kind: "shell", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+			}
 		}
 		return m, nil
 	}
@@ -5150,6 +5215,16 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// A left press inside the box hits the row layout (#820): rows
 			// activate, the "✕" zone runs the aux action (close workspace).
 			if msg.Button == tea.MouseLeft {
+				// The border ring starts a mouse resize (#933) — centered
+				// palettes only; an anchored box derives its geometry from
+				// its anchor and is not user-sizable.
+				if !m.palette.Anchored() {
+					w, h := lipgloss.Width(v), lipgloss.Height(v)
+					if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
+						m.floatDrag = &floatResizeDrag{kind: "palette", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+						return m, nil
+					}
+				}
 				return m, m.palette.Click(msg.X-bx, msg.Y-by)
 			}
 		}

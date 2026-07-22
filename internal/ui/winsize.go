@@ -73,6 +73,14 @@ func (s *WinSizes) Get(kind string) (dw, dh int) {
 // Adjust adds a delta for a window kind and persists the store. Errors are
 // swallowed: failing to persist must never disrupt the session.
 func (s *WinSizes) Adjust(kind string, ddw, ddh int) {
+	s.Nudge(kind, ddw, ddh)
+	s.Flush()
+}
+
+// Nudge adds a delta without persisting — the mid-drag step of a mouse resize
+// (#933), where writing the store once per motion event would be waste. The
+// drag's release calls Flush.
+func (s *WinSizes) Nudge(kind string, ddw, ddh int) {
 	if s == nil || kind == "" {
 		return
 	}
@@ -83,7 +91,12 @@ func (s *WinSizes) Adjust(kind string, ddw, ddh int) {
 	d.W += ddw
 	d.H += ddh
 	s.deltas[kind] = d
-	if s.path == "" {
+}
+
+// Flush persists the store. Errors are swallowed: failing to persist must
+// never disrupt the session.
+func (s *WinSizes) Flush() {
+	if s == nil || s.path == "" {
 		return
 	}
 	data, err := json.Marshal(s.deltas)
@@ -94,6 +107,30 @@ func (s *WinSizes) Adjust(kind string, ddw, ddh int) {
 		_ = os.MkdirAll(dir, 0o755)
 	}
 	_ = os.WriteFile(s.path, data, 0o644)
+}
+
+// ResizeZone hit-tests a point in box-local coordinates against the box's
+// border ring for a mouse resize (#933). It returns the horizontal/vertical
+// grow directions: an edge sets one axis (left/top −1, right/bottom +1), a
+// corner both. Only the outermost cell counts — one cell further in is
+// content, so border clicks never swallow content clicks (#761 precedent).
+func ResizeZone(x, y, w, h int) (sx, sy int, ok bool) {
+	if w < 3 || h < 3 || x < 0 || y < 0 || x >= w || y >= h {
+		return 0, 0, false
+	}
+	switch x {
+	case 0:
+		sx = -1
+	case w - 1:
+		sx = 1
+	}
+	switch y {
+	case 0:
+		sy = -1
+	case h - 1:
+		sy = 1
+	}
+	return sx, sy, sx != 0 || sy != 0
 }
 
 // ClampDelta bounds base+delta into [min, max] and returns the result.

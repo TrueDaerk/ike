@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -140,7 +140,10 @@ panel is capturing keys verbatim (`Model.Capturing()`: an edit/pick/filter
 input or a custom page's chord capture). The root model owns the chord: it
 adjusts the shared `ui.WinSizes` store (kind `"settings"`, persisted in the
 per-project `winsize.json`) and re-derives `settingsSize()`, which clamps
-base+delta into the live terminal bounds.
+base+delta into the live terminal bounds. **Mouse resize** (#933): pressing
+the panel's border ring starts a drag — edges resize one axis, corners both —
+applied through the same store (un-persisted per motion step, flushed on
+release), so key and mouse resizes share one remembered size.
 
 ## Page catalog (#92)
 

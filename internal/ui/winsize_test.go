@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -103,5 +104,61 @@ func TestResizeDeltaDeliveredChords(t *testing.T) {
 	}
 	if _, _, ok := ResizeDelta("super+left"); ok {
 		t.Error("bare super+left must not resize (line-nav chords stay free)")
+	}
+}
+
+// TestResizeZone covers the border-ring hit-test for mouse resizes (#933):
+// edges set one axis, corners both, anything one cell inside is content.
+func TestResizeZone(t *testing.T) {
+	const w, h = 20, 10
+	cases := []struct {
+		name   string
+		x, y   int
+		sx, sy int
+		ok     bool
+	}{
+		{"left edge", 0, 5, -1, 0, true},
+		{"right edge", w - 1, 5, 1, 0, true},
+		{"top edge", 10, 0, 0, -1, true},
+		{"bottom edge", 10, h - 1, 0, 1, true},
+		{"top-left corner", 0, 0, -1, -1, true},
+		{"top-right corner", w - 1, 0, 1, -1, true},
+		{"bottom-left corner", 0, h - 1, -1, 1, true},
+		{"bottom-right corner", w - 1, h - 1, 1, 1, true},
+		{"just inside left", 1, 5, 0, 0, false},
+		{"just inside bottom", 10, h - 2, 0, 0, false},
+		{"interior", 10, 5, 0, 0, false},
+		{"outside", w, 5, 0, 0, false},
+		{"negative", -1, 5, 0, 0, false},
+	}
+	for _, c := range cases {
+		sx, sy, ok := ResizeZone(c.x, c.y, w, h)
+		if sx != c.sx || sy != c.sy || ok != c.ok {
+			t.Errorf("%s: ResizeZone(%d,%d) = (%d,%d,%v), want (%d,%d,%v)",
+				c.name, c.x, c.y, sx, sy, ok, c.sx, c.sy, c.ok)
+		}
+	}
+	// Degenerate boxes have no resize ring.
+	if _, _, ok := ResizeZone(0, 0, 2, 2); ok {
+		t.Error("a 2x2 box must not offer a resize ring")
+	}
+}
+
+// TestNudgeFlush (#933): Nudge accumulates without touching disk; Flush
+// persists the accumulated deltas.
+func TestNudgeFlush(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "winsize.json")
+	s := LoadWinSizes(path)
+	s.Nudge("k", 3, 1)
+	s.Nudge("k", 2, 0)
+	if _, err := os.Stat(path); err == nil {
+		t.Fatal("Nudge must not persist")
+	}
+	if dw, dh := s.Get("k"); dw != 5 || dh != 1 {
+		t.Fatalf("Get = (%d,%d), want (5,1)", dw, dh)
+	}
+	s.Flush()
+	if dw, dh := LoadWinSizes(path).Get("k"); dw != 5 || dh != 1 {
+		t.Fatalf("reload after Flush = (%d,%d), want (5,1)", dw, dh)
 	}
 }

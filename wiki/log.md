@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Floating windows resize by mouse drag (#933): grab the border ring of the
+  Settings panel, the centered palette (Search Everywhere / Run a Command /
+  Recent Files), or the modal shell — edges resize one axis, corners both;
+  sizes persist via the #774 store and re-clamp to the terminal
+  (`/architecture/floating-shell.md`).
+
 - Zen mode works for any focused pane kind (#934): terminal and tool panes
   maximize chrome-free like editors; leaving zen restores the layout
   (`/architecture/pane-layout.md`).

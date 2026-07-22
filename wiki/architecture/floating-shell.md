@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Floating Shell
@@ -91,7 +91,11 @@ Two optional Content extensions refine key routing while the shell is open
   (`ui.WinSizes`, `IKE_CONFIG_DIR`-redirectable) and re-clamped against the
   live terminal budget on every layout, flooring at a readable minimum.
   Growth past the content's natural size is a no-op (the shell stays
-  content-sized); shrinking engages the scroller.
+  content-sized); shrinking engages the scroller. The same store also backs
+  **mouse resize** (#933): pressing the shell's border ring — the outermost
+  cell; edges resize one axis, corners both — starts a drag handled by the
+  root model (`floatResizeDrag`), which nudges the store un-persisted per
+  motion step and flushes it on release.
 - **The body re-renders on every `View()`** (#409), preserving the scroll
   offset. Content that mutates its state in place after opening — a modal
   moving its cursor or dropping list items — shows the change on the very next
