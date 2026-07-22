@@ -40,7 +40,18 @@ internal/highlight/
 
 A language's grammar is an opaque `lang.Grammar` built by `highlight.NewGrammar`
 in the language plugin's cgo file; the query (`highlights.scm`) is embedded there
-too. `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
+too.
+
+**Capture-order convention** (#724, #928): `Index.CaptureAt` is
+**first-span-wins**, and the query cursor yields captures in *node position
+order* — an enclosing node's span precedes its children's; only captures on
+the *same* node fall back to query-pattern order. Two rules follow for every
+`highlights.scm`: (1) specific patterns before broader ones on the same node
+(the identifier catch-all comes last), and (2) **never capture a container
+node whose children need their own colors** — capture the sigil/name parts
+instead (a whole-`(decorator)` capture painted the entire argument list
+monochrome, #928; same class of bug: markdown's `fenced_code_block`, CSS's
+`integer_value`+`unit`). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
 its grammar, and parses — the engine knows no specific language.
 
 `HighlightScoped(path, lines)` is the same single parse returning the spans
