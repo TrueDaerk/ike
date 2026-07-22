@@ -113,7 +113,7 @@ func TestExternalChangeIgnoresOtherPaths(t *testing.T) {
 
 func TestExternalChangeResetsUndoHistory(t *testing.T) {
 	m, path := loaded(t, "one\ntwo\n")
-	m = send(m, key('d'), key('d')) // an undoable edit...
+	m = send(m, key('d'), key('d'))  // an undoable edit...
 	if err := m.save(); err != nil { // ...saved, so the buffer is clean again
 		t.Fatal(err)
 	}

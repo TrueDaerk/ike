@@ -85,11 +85,11 @@ func TestRangeResolve(t *testing.T) {
 		},
 	}
 	cases := []struct {
-		name             string
-		in               string
-		wantS, wantE     int
-		wantErr          bool
-		def              int
+		name         string
+		in           string
+		wantS, wantE int
+		wantErr      bool
+		def          int
 	}{
 		{"empty falls back to def", "d", 4, 4, false, 4},
 		{"whole file", "%d", 0, 9, false, 4},

@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Markdown table cell inline rendering (#945): box-drawn table cells now
+  render their inline markdown (`code`, emphasis, strike, links) styled and
+  without marker chrome; column widths size by the concealed display width
+  (`/architecture/editor.md`).
+
 - Terminal selection (#936): copying joins soft-wrapped rows into one logical
   line (only hard newlines reach the clipboard); double-click selects the
   word under the pointer (shell-friendly charset, wrap-spanning),

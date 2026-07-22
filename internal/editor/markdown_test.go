@@ -30,7 +30,6 @@ func mdLoaded(t *testing.T, content string) (Model, string) {
 	return m, path
 }
 
-
 // ansiRE strips styling so assertions can match text across styled cells.
 var ansiRE = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
@@ -182,7 +181,7 @@ func TestDetectTables(t *testing.T) {
 		"| 1 | x\\|y |",
 		"done",
 		"| not | a table |", // no delimiter row below
-	})
+	}, mdCellStyles{})
 	if len(blocks) != 1 {
 		t.Fatalf("blocks = %d, want 1", len(blocks))
 	}
@@ -190,15 +189,71 @@ func TestDetectTables(t *testing.T) {
 	if b.start != 1 || b.end != 3 {
 		t.Errorf("block range %d-%d, want 1-3", b.start, b.end)
 	}
-	if !strings.Contains(b.rows[2], "x|y") {
-		t.Errorf("escaped pipe mangled: %q", b.rows[2])
+	// Rows carry their styling (faint borders) since #945: strip for text
+	// assertions.
+	if row := ansiRE.ReplaceAllString(b.rows[2], ""); !strings.Contains(row, "x|y") {
+		t.Errorf("escaped pipe mangled: %q", row)
 	}
-	if !strings.HasPrefix(b.rows[1], "├") || !strings.HasSuffix(b.rows[1], "┤") {
-		t.Errorf("delimiter row not a separator: %q", b.rows[1])
+	if row := ansiRE.ReplaceAllString(b.rows[1], ""); !strings.HasPrefix(row, "├") || !strings.HasSuffix(row, "┤") {
+		t.Errorf("delimiter row not a separator: %q", row)
 	}
 	// Row-preserving: one display row per source line.
 	if len(b.rows) != 3 {
 		t.Errorf("rows = %d, want 3 (line↔row mapping must stay 1:1)", len(b.rows))
+	}
+}
+
+// TestRenderCellInline covers the cell renderer (#945): marker chrome drops,
+// attributes apply, unmatched markers and escapes stay literal.
+func TestRenderCellInline(t *testing.T) {
+	st := mdCellStyles{}
+	for _, tc := range []struct {
+		in, plain, attr string
+	}{
+		{"`hello`", "hello", ""},
+		{"**bold**", "bold", "\x1b[1m"},
+		{"__bold__", "bold", "\x1b[1m"},
+		{"*Firm*", "Firm", "\x1b[3m"},
+		{"_ital_", "ital", "\x1b[3m"},
+		{"~~gone~~", "gone", "\x1b[9m"},
+		{"[site](https://x.y)", "site", ""},
+		{"![alt](img.png)", "alt", ""},
+		{"**bold *nested***", "bold nested", ";3m"}, // italic inside bold (combined SGR 1;3)
+		{"a * b", "a * b", ""},                          // unmatched marker literal
+		{"snake_case_name", "snake_case_name", ""},      // no intra-word underscore emphasis
+		{"\\*lit\\*", "*lit*", ""},                      // escapes
+		{"****", "****", ""},                            // empty emphasis stays literal
+	} {
+		got := renderCellInline(tc.in, st)
+		if plain := ansiRE.ReplaceAllString(got, ""); plain != tc.plain {
+			t.Errorf("%q → plain %q, want %q", tc.in, plain, tc.plain)
+		}
+		if tc.attr != "" && !strings.Contains(got, tc.attr) {
+			t.Errorf("%q → %q, missing attribute %q", tc.in, got, tc.attr)
+		}
+	}
+}
+
+// TestTableCellInlineStyling is the end-to-end #945 case: rendered cells show
+// content without marker chrome, styled, and columns size by display width.
+func TestTableCellInlineStyling(t *testing.T) {
+	m, _ := mdLoaded(t, "x\n| A | B |\n|---|---|\n| `hello` | True |\n| *Firm* | Abc |\n")
+	m.cursor = buffer.Position{Line: 0}
+	view := plainView(m)
+	if strings.Contains(view, "`") || strings.Contains(view, "*") {
+		t.Errorf("marker chrome visible in rendered cells:\n%s", view)
+	}
+	if !strings.Contains(view, "hello") || !strings.Contains(view, "Firm") {
+		t.Errorf("cell content missing:\n%s", view)
+	}
+	// Column A sizes by display width: "hello" (5) not "`hello`" (7) — the
+	// Firm row pads to 5, so its cell reads "│ Firm  │" once markers drop.
+	if !strings.Contains(view, "│ Firm  │") {
+		t.Errorf("column width not sized by concealed display width:\n%s", view)
+	}
+	// The italic attribute survives into the row render.
+	if !strings.Contains(m.View(), "\x1b[3m") {
+		t.Error("italic cell lost its text attribute")
 	}
 }
 

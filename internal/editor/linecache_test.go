@@ -66,8 +66,8 @@ func TestLineCacheNeverStale(t *testing.T) {
 
 			mut.do(&m)
 
-			got := m.View()          // may be served from cache
-			want := renderFresh(m)   // guaranteed cache-free
+			got := m.View()        // may be served from cache
+			want := renderFresh(m) // guaranteed cache-free
 			if got != want {
 				t.Fatalf("%s: cached render differs from fresh render (stale cache — missing epoch bump)\n--- cached ---\n%s\n--- fresh ---\n%s", mut.name, got, want)
 			}

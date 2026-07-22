@@ -403,6 +403,11 @@ func (m *Model) rebuildTheme() {
 		get = m.cfg.Get
 	}
 	m.hlTheme = highlight.NewTheme(captures, get)
+	// Pre-rendered markdown table rows bake in theme styles (#945): drop them
+	// so the next render re-resolves against the new theme.
+	if m.mdTables != nil {
+		m.mdTables.valid = false
+	}
 }
 
 // applyConfig refreshes settings from the retained config reference, then

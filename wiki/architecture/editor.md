@@ -702,7 +702,17 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   The cursor entering the block flips it back to raw pipe source. Under soft
   wrap tables stay raw (wrap segments slice raw buffer text; a sliced
   box-drawing row would tear); with horizontal scroll the rendered row is
-  sliced by the same column window as any other line.
+  sliced by the same column window as any other line (ANSI-aware, since the
+  rows carry styling).
+- **Cell inline rendering** (#945): cell content renders its inline markdown
+  inside the box-drawing rows — the per-line conceal/style pipeline cannot
+  follow text into the re-laid-out cells, so `renderCellInline` is a small
+  self-contained renderer (grammar-free, like table detection): `` `code` ``
+  and link text take their theme capture styles (@string / @label),
+  `**bold**`/`__bold__`, `*italic*`/`_italic_` (word-boundary underscores
+  only) and `~~strike~~` become text attributes with nesting, `[text](url)` /
+  `![alt](url)` show just the text, `\`-escapes and unmatched markers stay
+  literal. Column widths and alignment size by the concealed display width.
 
 ## Inline color preview (#790)
 
