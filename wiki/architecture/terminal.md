@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -180,10 +180,24 @@ video, anchored in virtual coordinates (indices into [scrollback ++ screen])
 so it survives scrollback paging and can span history and live rows. The
 selection is linear (stream-style): start line from the anchor column, full
 middle lines, end line up to the head column; `cmd+c` copies it right-trimmed
-and newline-joined to the system clipboard and drops the highlight. Any key
-routed to the shell (and `terminal.clear`) clears it. When the child enabled
-mouse reporting, press/drag/release forward to it instead — selection is
+to the system clipboard and drops the highlight. Soft-wrapped rows join
+without a newline on copy (#936): only hard newlines put `\n` in the
+clipboard, so a long command that merely wrapped pastes back as one line. The
+emulator keeps no per-row wrap metadata, so the copy path uses the classic
+heuristic (`Session.SoftWrapped`): a row whose final column is occupied
+continued into the next one — the sole ambiguity is a hard-newline line that
+exactly fills the width, which joins too. Any key routed to the shell (and
+`terminal.clear`) clears the selection. When the child enabled mouse
+reporting, press/drag/release forward to it instead — selection is
 unavailable then, like in xterm.
+
+**Multi-click selection** (#936): a second press on the same cell within
+500 ms selects the word under the pointer, a third the whole logical line
+(across its soft-wrapped rows), then the cycle restarts. Word boundaries are
+shell-friendly: alphanumerics plus `/.-_~+@$%=:`, so `/usr/local/bin`,
+`--flag=value` or `user@host:path` select whole, and a word spanning the wrap
+break stays one word. `cmd+c` copies multi-click selections through the same
+path as drags. Word-wise/line-wise drag extension stays with idea #30.
 
 **Mouse wheel** (#226, `MouseWheel` in `model.go`): the wheel goes to whoever
 asked for it — a child that enabled a DEC mouse-reporting mode

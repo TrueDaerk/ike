@@ -52,10 +52,10 @@ type Session struct {
 	em   *vt.SafeEmulator
 	send func(tea.Msg)
 
-	mu       sync.Mutex
-	ptmx     *os.File
-	cmd      *exec.Cmd
-	w, h     int
+	mu   sync.Mutex
+	ptmx *os.File
+	cmd  *exec.Cmd
+	w, h int
 	// Resize debounce (#804): lastResize stamps the leading apply; a burst
 	// inside resizeQuiet parks its latest size in pendW/H behind one timer.
 	lastResize    time.Time
@@ -80,7 +80,7 @@ type Session struct {
 	// snapshot/restore (#807): SafeEmulator locks each call, but CellAt
 	// returns a pointer into the live buffer — copying the cell after the
 	// call returns would race a concurrent feed write.
-	gridMu sync.Mutex
+	gridMu   sync.Mutex
 	title    string // last OSC 0/2 title the application set ("" until then)
 	exitCode int
 	exited   bool
@@ -761,6 +761,37 @@ func (s *Session) LineText(v int) string {
 		}
 	}
 	return strings.TrimRight(b.String(), " ")
+}
+
+// Width reports the terminal grid width in columns.
+func (s *Session) Width() int { return s.em.Width() }
+
+// SoftWrapped reports whether virtual line v — an index into
+// [scrollback ++ screen] — continues into v+1 because the renderer ran out of
+// columns, rather than because the program printed a newline (#936). The
+// emulator keeps no per-row wrap metadata, so this is the heuristic every
+// terminal without shell integration uses: a row whose final column is
+// occupied wrapped into the next one. The one ambiguity — a hard-newline line
+// that exactly fills the width — reads as wrapped and joins on copy.
+func (s *Session) SoftWrapped(v int) bool {
+	sb := s.em.ScrollbackLen()
+	w := s.em.Width()
+	if w <= 0 || v < 0 || v >= sb+s.em.Height()-1 {
+		return false // the last virtual line has nothing to continue into
+	}
+	var c *uv.Cell
+	if v < sb {
+		c = s.em.ScrollbackCellAt(w-1, v)
+	} else {
+		c = s.em.CellAt(w-1, v-sb)
+	}
+	if c == nil {
+		return false
+	}
+	if c.Width == 0 {
+		return true // continuation cell: a wide rune reaches the edge
+	}
+	return c.Content != "" && c.Content != " "
 }
 
 // Close ends the session: the child is terminated and the PTY closed. Safe to

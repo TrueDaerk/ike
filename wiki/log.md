@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Terminal selection (#936): copying joins soft-wrapped rows into one logical
+  line (only hard newlines reach the clipboard); double-click selects the
+  word under the pointer (shell-friendly charset, wrap-spanning),
+  triple-click the whole logical line (`/architecture/terminal.md`).
+
 - PHP web debugging host filter (#938): the HTTP_HOST probe now uses `eval`
   (property_get missed superglobals — context 0 vs 1 + `auto_globals_jit` —
   so the filter silently detached every request); filter/busy detaches are

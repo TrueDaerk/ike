@@ -4,6 +4,8 @@ import (
 	"image/color"
 	"strconv"
 	"strings"
+	"time"
+	"unicode"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -48,6 +50,11 @@ type Model struct {
 	// an existing selection, dragging a drag in progress.
 	selAnchor, selHead vpos
 	selOn, dragging    bool
+	// Multi-click selection (#936): consecutive presses on the same cell
+	// within multiClickWindow cycle click → word → line → click …
+	lastClickAt  time.Time
+	lastClickPos vpos
+	clickStreak  int
 	// Command completion popup (#740): comp is the popup state, autoSuggest
 	// the while-typing trigger (terminal.autosuggest), pendingSuggest a
 	// recompute scheduled for the next screen update (the shell must echo
@@ -342,9 +349,15 @@ func (m *Model) ScrollBy(delta int) {
 // Scroll reports the current scrollback offset (0 = live).
 func (m Model) Scroll() int { return m.scroll }
 
+// multiClickWindow is how quickly a follow-up press on the same cell must
+// land to count as a double/triple click (#936).
+const multiClickWindow = 500 * time.Millisecond
+
 // MousePress routes a left press at the pane-local cell (x, y): a child that
 // enabled mouse reporting gets the click (like the wheel, #226); otherwise it
-// anchors a text selection (#227).
+// anchors a text selection (#227). Repeated presses on the same cell within
+// multiClickWindow select the word (double) or the whole logical line across
+// its soft-wrapped rows (triple), then cycle (#936).
 func (m *Model) MousePress(x, y int) {
 	if m.sess == nil {
 		return
@@ -352,11 +365,102 @@ func (m *Model) MousePress(x, y int) {
 	m.ClearSelection()
 	if m.sess.WantsMouse() {
 		m.sess.SendMouse(vt.MouseClick{X: x, Y: y, Button: vt.MouseLeft})
+		m.clickStreak = 0
 		return
 	}
-	m.dragging = true
-	m.selAnchor = m.virtualAt(x, y)
-	m.selHead = m.selAnchor
+	v := m.virtualAt(x, y)
+	now := time.Now()
+	if v == m.lastClickPos && now.Sub(m.lastClickAt) <= multiClickWindow {
+		m.clickStreak++
+	} else {
+		m.clickStreak = 1
+	}
+	m.lastClickAt, m.lastClickPos = now, v
+
+	switch (m.clickStreak-1)%3 + 1 {
+	case 2:
+		m.selectWordAt(v)
+	case 3:
+		m.selectLineAt(v.line)
+	default:
+		m.dragging = true
+		m.selAnchor = v
+		m.selHead = m.selAnchor
+	}
+}
+
+// logicalLineSpan walks the soft-wrap chain around virtual line v and returns
+// the first and last row of the logical line it belongs to.
+func (m Model) logicalLineSpan(v int) (first, last int) {
+	first, last = v, v
+	for first > 0 && m.sess.SoftWrapped(first-1) {
+		first--
+	}
+	for m.sess.SoftWrapped(last) {
+		last++
+	}
+	return first, last
+}
+
+// selectWordAt selects the word under v, shell-friendly boundaries, across
+// the whole logical line — a word spanning a soft-wrap break stays one word
+// (#936). A press on a non-word cell selects just that cell.
+func (m *Model) selectWordAt(v vpos) {
+	w := m.sess.Width()
+	if w <= 0 {
+		return
+	}
+	first, last := m.logicalLineSpan(v.line)
+	// The logical line as one rune string: wrapped rows are full-width by
+	// definition of the heuristic, only the final row is right-trimmed, so
+	// index math is linear (padded defensively regardless).
+	var text []rune
+	for l := first; l <= last; l++ {
+		seg := []rune(m.sess.LineText(l))
+		if l < last {
+			for len(seg) < w {
+				seg = append(seg, ' ')
+			}
+		}
+		text = append(text, seg...)
+	}
+	idx := (v.line-first)*w + v.col
+	if idx >= len(text) || text[idx] == ' ' {
+		return // pressed blank space: nothing to select
+	}
+	a, b := idx, idx+1
+	if isWordRune(text[idx]) {
+		for a > 0 && isWordRune(text[a-1]) {
+			a--
+		}
+		for b < len(text) && isWordRune(text[b]) {
+			b++
+		}
+	}
+	m.selAnchor = vpos{line: first + a/w, col: a % w}
+	m.selHead = vpos{line: first + (b-1)/w, col: (b-1)%w + 1}
+	m.selOn, m.dragging = true, false
+}
+
+// selectLineAt selects the whole logical line through virtual line v: every
+// row of its soft-wrap chain, hard-newline bounded (#936).
+func (m *Model) selectLineAt(v int) {
+	first, last := m.logicalLineSpan(v)
+	end := len([]rune(m.sess.LineText(last)))
+	m.selAnchor = vpos{line: first, col: 0}
+	m.selHead = vpos{line: last, col: end}
+	m.selOn = m.selAnchor != m.selHead // an empty line has nothing to select
+	m.dragging = false
+}
+
+// isWordRune classifies shell-friendly word characters (#936): alphanumerics
+// plus the path/flag/URL punctuation smart selection needs, so a double-click
+// grabs /usr/local/bin, --flag=value or user@host:path whole.
+func isWordRune(r rune) bool {
+	if unicode.IsLetter(r) || unicode.IsDigit(r) {
+		return true
+	}
+	return strings.ContainsRune("/.-_~+@$%=:", r)
 }
 
 // MouseDrag extends the selection to (x, y) — or forwards the drag motion to
@@ -396,8 +500,11 @@ func (m Model) HasSelection() bool { return m.selOn }
 func (m *Model) ClearSelection() { m.selOn, m.dragging = false, false }
 
 // SelectionText extracts the selected text: the span runs from the earlier
-// endpoint (inclusive) to the later one (exclusive), lines right-trimmed and
-// newline-joined — the stream selection every terminal implements.
+// endpoint (inclusive) to the later one (exclusive), lines right-trimmed —
+// the stream selection every terminal implements. Rows joined by a soft wrap
+// concatenate without a newline (#936): only hard newlines put `\n` in the
+// clipboard, so a wrapped command pastes back as the one line the program
+// printed.
 func (m Model) SelectionText() string {
 	if !m.selOn || m.sess == nil {
 		return ""
@@ -406,7 +513,7 @@ func (m Model) SelectionText() string {
 	if end.before(start) {
 		start, end = end, start
 	}
-	var lines []string
+	var b strings.Builder
 	for v := start.line; v <= end.line; v++ {
 		text := []rune(m.sess.LineText(v))
 		from, to := 0, len(text)
@@ -421,9 +528,12 @@ func (m Model) SelectionText() string {
 		if from > to {
 			from = to
 		}
-		lines = append(lines, strings.TrimRight(string(text[from:to]), " "))
+		b.WriteString(strings.TrimRight(string(text[from:to]), " "))
+		if v < end.line && !m.sess.SoftWrapped(v) {
+			b.WriteByte('\n')
+		}
 	}
-	return strings.Join(lines, "\n")
+	return b.String()
 }
 
 // virtualAt maps a pane-local cell to virtual coordinates, honouring the
@@ -599,10 +709,10 @@ const (
 // deadDialog is the exit dialog geometry, shared by the renderer and the
 // click mapping so both always agree.
 type deadDialog struct {
-	title, buttons         string
-	x, y, w, h             int // outer box rect, pane-local
-	btnRow                 int // absolute row of the buttons line
-	restartX, closeX       int // absolute start columns of the buttons
+	title, buttons   string
+	x, y, w, h       int // outer box rect, pane-local
+	btnRow           int // absolute row of the buttons line
+	restartX, closeX int // absolute start columns of the buttons
 }
 
 // deadDialogGeom computes the centered dialog geometry for a finished tool
