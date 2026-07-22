@@ -117,6 +117,10 @@ func TestListenHostnameFilter(t *testing.T) {
 		t.Fatalf("configurationDone: %v", err)
 	}
 
+	// The host probe is an eval (#938): property_get searches context 0 while
+	// superglobals live in context 1, and auto_globals_jit leaves $_SERVER
+	// uninitialized until referenced — eval is the only probe that works on
+	// stock php-fpm setups. The expression travels base64-encoded after "--".
 	serveHostProbe := func(e *fakeXdebug, host string) {
 		name, tid, _ := e.next()
 		if name != "step_into" {
@@ -124,22 +128,47 @@ func TestListenHostnameFilter(t *testing.T) {
 		}
 		e.ack(name, tid, `status="break" reason="ok"`)
 		name, tid, line := e.next()
-		if name != "property_get" || !strings.Contains(line, "HTTP_HOST") {
-			e.t.Errorf("expected property_get HTTP_HOST, got %q", line)
+		expr := ""
+		if i := strings.Index(line, "-- "); i >= 0 {
+			if dec, err := base64.StdEncoding.DecodeString(strings.TrimSpace(line[i+3:])); err == nil {
+				expr = string(dec)
+			}
+		}
+		if name != "eval" || !strings.Contains(expr, "HTTP_HOST") {
+			e.t.Errorf("expected eval of HTTP_HOST, got %q (expr %q)", line, expr)
 		}
 		v := base64.StdEncoding.EncodeToString([]byte(host))
-		e.send(`<response xmlns="urn:debugger_protocol_v1" command="property_get" transaction_id="` + tid + `">` +
-			`<property name="HTTP_HOST" fullname="$_SERVER['HTTP_HOST']" type="string" encoding="base64">` + v + `</property></response>`)
+		e.send(`<response xmlns="urn:debugger_protocol_v1" command="eval" transaction_id="` + tid + `">` +
+			`<property type="string" encoding="base64">` + v + `</property></response>`)
+	}
+	expectDetach := func(e *fakeXdebug, why string) {
+		name, tid, _ := e.next()
+		if name != "detach" {
+			t.Fatalf("%s must be detached, got %q", why, name)
+		}
+		e.ack(name, tid, `status="stopping" reason="ok"`)
 	}
 
-	// Wrong vhost: detached, listener stays up.
+	// Wrong vhost: detached, listener stays up — and the drop is announced,
+	// never silent (#938).
 	wrong := dialFakeXdebug(t, port)
 	serveHostProbe(wrong, "other.local")
-	name, tid, _ := wrong.next()
-	if name != "detach" {
-		t.Fatalf("mismatching host must be detached, got %q", name)
+	expectDetach(wrong, "mismatching host")
+	fd := waitEvent(t, events, "ike.filterDetach")
+	var fdBody struct{ Host, Filter string }
+	if err := json.Unmarshal(fd.Body, &fdBody); err != nil ||
+		fdBody.Host != "other.local" || fdBody.Filter != "onpage.local" {
+		t.Fatalf("filterDetach body = %s (%v)", fd.Body, err)
 	}
-	wrong.ack(name, tid, `status="stopping" reason="ok"`)
+
+	// No HTTP_HOST (a CLI request): detached with notice too.
+	cli := dialFakeXdebug(t, port)
+	serveHostProbe(cli, "")
+	expectDetach(cli, "a hostless request")
+	fd = waitEvent(t, events, "ike.filterDetach")
+	if err := json.Unmarshal(fd.Body, &fdBody); err != nil || fdBody.Host != "" {
+		t.Fatalf("hostless filterDetach body = %s (%v)", fd.Body, err)
+	}
 
 	// Matching vhost (port suffix ignored): attaches and breaks.
 	right := dialFakeXdebug(t, port)

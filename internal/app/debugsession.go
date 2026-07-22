@@ -426,6 +426,22 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		go func() { send(debugEndedMsg{exitCode: x.ExitCode, hasCode: true}) }()
 	case "terminated":
 		go func() { send(debugEndedMsg{}) }()
+	case "ike.filterDetach":
+		// The listener rejected a request on the hostname filter (#938):
+		// surface it — a filter false-negative must be distinguishable from
+		// "breakpoints don't work".
+		var fd struct {
+			Host   string `json:"host"`
+			Filter string `json:"filter"`
+		}
+		if json.Unmarshal(ev.Body, &fd) != nil {
+			break
+		}
+		if fd.Host == "" {
+			m.host.Notify(host.Warn, "debug: detached a request without HTTP_HOST (host filter: "+fd.Filter+")")
+		} else {
+			m.host.Notify(host.Warn, "debug: detached request from "+fd.Host+" (host filter: "+fd.Filter+")")
+		}
 	case "ike.pathMappingHint":
 		// A listening session (#832) accepted a request whose entry file
 		// does not resolve locally: offer mapping the server directory to

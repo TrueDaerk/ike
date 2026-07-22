@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- PHP web debugging host filter (#938): the HTTP_HOST probe now uses `eval`
+  (property_get missed superglobals — context 0 vs 1 + `auto_globals_jit` —
+  so the filter silently detached every request); filter/busy detaches are
+  announced (warning notification + console line), troubleshooting section
+  added (`/architecture/debugger.md`).
+
 - LSP handshake sequencing (#937): the client now queues all notifications and
   blocks all requests until the initialize response has arrived and
   initialized is sent — early didOpen/initialized traffic crashed Intelephense

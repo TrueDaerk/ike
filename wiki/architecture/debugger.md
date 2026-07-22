@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Debugger (0350)
@@ -73,9 +73,15 @@ Settings live in `[debug.php]`:
   matches (case-insensitive, `:port` suffix ignored); everything else is
   detached so another vhost on the same fpm pool cannot hijack the
   debugger. The DBGp `init` packet carries no HTTP host, so the bridge
-  steps onto the first statement (`step_into`) and `property_get`s the
-  superglobal before deciding; a connection without `HTTP_HOST` (CLI) is
-  treated as non-matching while a filter is set.
+  steps onto the first statement (`step_into`) and `eval`s the superglobal
+  before deciding — `property_get` cannot see it (#938): without `-c` it
+  searches context 0 (Locals) while superglobals live in context 1, and
+  PHP's default `auto_globals_jit=On` leaves `$_SERVER` uninitialized until
+  user code references it, so the probe silently rejected every request. A
+  connection without `HTTP_HOST` (CLI) is treated as non-matching while a
+  filter is set. Every filter detach raises an `ike.filterDetach` event and
+  the app shows a warning notification naming the rejected host and the
+  filter — never a silent drop.
 - `[[debug.php.path_mappings]]` — `server`/`local` prefix pairs for
   docroot ≠ project layout; `local` may be project-relative. Breakpoints
   translate local→server on replay, stack frames server→local, longest
@@ -85,6 +91,31 @@ Breakpoints set while no request is attached are cached (`bpLines`) and
 verified optimistically; each accepted connection gets them replayed before
 the initial `run`. The Xdebug CLI preflight is skipped for listen — the
 engine lives in the server's PHP, not the CLI interpreter.
+
+Listener state is visible throughout: the debug console logs
+"Listening for Xdebug connections on port N (host filter: …)…",
+"Accepted debug connection (path)", "Detached request from …",
+"Detached a concurrent debug connection" and "Request finished —
+listening…" as they happen (the first output auto-opens the panel).
+
+Troubleshooting a request that never stops at breakpoints:
+
+1. Listener bound? `lsof -iTCP:9003 -sTCP:LISTEN` while listening — the
+   bind happens at `debug.listen` start and a failure fails the launch
+   loudly, so nothing listed means the listener was never started.
+2. Xdebug connecting? `xdebug.log` on the PHP side shows attempts and
+   refusals; php-fpm needs `xdebug.mode=debug` plus a start trigger
+   (`start_with_request` or the `XDEBUG_TRIGGER` cookie/param) to dial out
+   at all.
+3. Hostname filter rejecting? Watch for the warning notification / the
+   "Detached request from …" console line — it names the host the request
+   actually sent, so a filter typo or an unexpected `HTTP_HOST` is visible
+   immediately. An empty host means the request never sent one (CLI).
+4. Breakpoints in files the request never executes: check the path
+   mappings — breakpoint paths translate local→server on replay, and a
+   mapping miss binds them to files the server doesn't run. The
+   `ike.pathMappingHint` prompt fires when the entry file doesn't resolve
+   locally.
 
 The settings are editable in-IDE (#832): the settings panel's **Debug**
 section carries `debug.php.port` (user scope) and `debug.php.hostname`
