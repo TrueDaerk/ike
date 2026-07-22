@@ -34,6 +34,7 @@ func Defaults() []Menu {
 		{Title: "Navigate", Items: []Item{
 			{Title: "Go to File", Command: "project.goToFile"},
 			{Title: "Recent Files", Command: "palette.recentFiles"},
+			{Title: "Pinned Files", Command: "nav.pins"},
 			{Title: "Go to Declaration", Command: "lsp.definition"},
 			{Title: "Back", Command: "nav.back"},
 			{Title: "Forward", Command: "nav.forward"},

@@ -131,6 +131,18 @@ var jetbrainsRows = []row{
 	// reachability call.
 	{"alt+enter", "lsp.codeAction", "Show intention actions", Editor, "LSP (0100)"},
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)"},
+	// Pinned file slots (#788), the IntelliJ mnemonic-bookmark spirit.
+	// ctrl+digit is unavailable (cmd+digit tool-window chords fold onto it on
+	// Linux), so jumps sit on ctrl+shift+digit — digits are identical on
+	// QWERTZ; delivery needs the Kitty protocol like the other ctrl+shift
+	// chords, with the palette as the documented escape. cmd+2 mirrors
+	// JetBrains' Bookmarks tool window for the picker; pinning itself goes
+	// through the palette or the picker's `p` key.
+	{"ctrl+shift+1", "nav.pinGoto1", "Go to pinned file 1", Global, "Pinned files (#788)"},
+	{"ctrl+shift+2", "nav.pinGoto2", "Go to pinned file 2", Global, "Pinned files (#788)"},
+	{"ctrl+shift+3", "nav.pinGoto3", "Go to pinned file 3", Global, "Pinned files (#788)"},
+	{"ctrl+shift+4", "nav.pinGoto4", "Go to pinned file 4", Global, "Pinned files (#788)"},
+	{"cmd+2", "nav.pins", "Pinned files", Global, "Pinned files (#788)"},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)"},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)"},
 	// Editor tabs (0190, #158). Alt+digits jump straight to a tab (digits sit

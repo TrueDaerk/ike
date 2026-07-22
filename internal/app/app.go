@@ -340,6 +340,9 @@ type Model struct {
 	cmdUsage   *palette.Usage // most-used command ranking (#773)
 	winSizes   *ui.WinSizes     // persisted floating-window resize deltas (#774)
 	floatDrag  *floatResizeDrag // live mouse resize of a floating window (#933)
+	pins       *pinStore        // harpoon-style pinned file slots (#788)
+	pinSel     int              // pin-picker selection
+	pinPicker  bool             // pin picker owns the modal shell
 	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -565,6 +568,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:       cmdUsage,
 		winSizes:       winSizes,
+		pins:           loadPins(), // pinned file slots (#788)
 		completeEngine: engine,
 		ws:             wsMgr,
 		recentEditor:   edKey,
@@ -3132,6 +3136,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// activation msg of a references-list entry (references.go).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 
+	case PinSlotMsg:
+		// nav.pinSlotN (#788): pin the active file to a harpoon slot.
+		m.pinCurrent(msg.Slot)
+		return m, nil
+	case PinJumpMsg:
+		return m.pinJump(msg.Slot)
+	case PinPickerMsg:
+		m.openPinPicker(0)
+		return m, nil
+
 	case NavBackMsg:
 		// nav.back (Roadmap 0220): return to the previous recorded position.
 		return m.navigateHistory(m.navHist.BackWhere, "no earlier position in the navigation history")
@@ -3733,6 +3747,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// handling: k / r / esc answer it, everything else is swallowed.
 		if m.conflictOpen() {
 			return m.updateConflict(msg)
+		}
+		// The pinned-files picker (#788) owns the keyboard the same way.
+		if m.pinPickerOpen() {
+			return m.updatePinPicker(msg)
 		}
 		// The revert-file confirmation (0320, #466): enter / esc answer it.
 		if m.revertPromptOpen() {

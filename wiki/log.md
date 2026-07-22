@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Harpoon-style pinned file slots (#788): four per-project slots
+  (`.ike/pins.json`), `ctrl+shift+1..4` jumps, `cmd+2` opens the picker
+  (reorder / unpin / pin active file); a vanished pin raises the picker with
+  the slot selected (`/architecture/pinned-files.md`).
+
 - Fixed an explorer panic in projects whose root holds only hidden entries
   (#949): stepping "into" the root advanced the cursor past the visible rows
   (children existed but none rendered), and the next `current()` call — e.g.
