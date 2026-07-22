@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Rainbow brackets (#789): bracket pairs colored by Tree-sitter nesting
+  depth, cycling six theme-derived colors; `editor.rainbow_brackets`
+  (default on), overridable per slot via `theme.captures.rainbow.N`
+  (`/architecture/highlighting.md`).
+
 - Hide All Tool Windows (#791): cmd+shift+F12 hides every visible tool pane
   after snapshotting the layout tree; a second press restores it exactly
   (fallback re-attach when things diverged while hidden)

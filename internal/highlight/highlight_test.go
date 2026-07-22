@@ -82,3 +82,43 @@ func TestThemePaletteDefaults(t *testing.T) {
 		t.Error("config override should win over palette default")
 	}
 }
+
+// TestRainbowThemeDerivation (#789): rainbow.N slots derive from existing
+// palette captures and resolve for every cycle position.
+func TestRainbowThemeDerivation(t *testing.T) {
+	th := NewTheme(nil, nil)
+	for i := 0; i < RainbowColors; i++ {
+		if _, ok := th.Style(rainbowCapture(i)); !ok {
+			t.Errorf("rainbow slot %d must resolve from the default palette", i)
+		}
+	}
+	// Depth cycles: depth N and N+RainbowColors share a capture.
+	if rainbowCapture(1) != rainbowCapture(1+RainbowColors) {
+		t.Error("rainbow capture must cycle")
+	}
+	// A config override wins for its slot.
+	th2 := NewTheme(nil, func(key string) (string, bool) {
+		if key == "theme.captures.rainbow.0" {
+			return "#123456", true
+		}
+		return "", false
+	})
+	if _, ok := th2.Style("rainbow.0"); !ok {
+		t.Error("overridden rainbow slot must resolve")
+	}
+}
+
+// TestRainbowToggle (#789): SetRainbow flips RainbowEnabled; default is on.
+func TestRainbowToggle(t *testing.T) {
+	if !RainbowEnabled() {
+		t.Fatal("rainbow must default on")
+	}
+	SetRainbow(false)
+	if RainbowEnabled() {
+		t.Fatal("SetRainbow(false) must disable")
+	}
+	SetRainbow(true)
+	if !RainbowEnabled() {
+		t.Fatal("SetRainbow(true) must re-enable")
+	}
+}
