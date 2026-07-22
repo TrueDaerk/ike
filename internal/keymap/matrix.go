@@ -100,6 +100,7 @@ var reachableAlternatives = map[string]string{
 	"editor.tab.select9":       "palette",
 	"pane.maximize":            "palette",
 	"nav.pins":                 "palette",
+	"window.hideAllTools":      "palette",
 	"nav.pinGoto1":             "palette (or the cmd+2 picker)",
 	"nav.pinGoto2":             "palette (or the cmd+2 picker)",
 	"nav.pinGoto3":             "palette (or the cmd+2 picker)",

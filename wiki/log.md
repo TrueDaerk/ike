@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Hide All Tool Windows (#791): cmd+shift+F12 hides every visible tool pane
+  after snapshotting the layout tree; a second press restores it exactly
+  (fallback re-attach when things diverged while hidden)
+  (`/architecture/pane-layout.md`).
+
 - Harpoon-style pinned file slots (#788): four per-project slots
   (`.ike/pins.json`), `ctrl+shift+1..4` jumps, `cmd+2` opens the picker
   (reorder / unpin / pin active file); a vanished pin raises the picker with

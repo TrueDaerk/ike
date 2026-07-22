@@ -211,6 +211,16 @@ matches or the pane vanished. Resizes keep the leaf set, so a zoom survives
 a terminal resize. Zoom is deliberately not persisted; a restart restores
 unzoomed.
 
+**Hide All Tool Windows (#791).** `window.hideAllTools` (cmd+shift+F12,
+JetBrains verbatim) removes every visible tool leaf — explorer, terminals,
+VCS and debug panels — after deep-copying the tree (`layout.Clone`);
+instances stay registered, so terminal sessions keep running. The second
+press restores the saved tree verbatim when nothing diverged (same leaf
+signature, every hidden tool still registered and still hidden); otherwise
+each still-hidden tool re-attaches at its conventional side (explorer as
+the outer-left column, others as a bottom strip). Editor panes, splits and
+focus are untouched — the complement of zen mode below.
+
 **Zen mode (#359, #934).** `view.zenMode` (View menu, palette)
 layers chrome-hiding on the zoom: the **focused pane** — editor, terminal,
 or tool pane alike — is maximized and the tab bar and status line disappear

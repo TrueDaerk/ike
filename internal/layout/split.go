@@ -57,3 +57,20 @@ func Close(root Node, pane string) (Node, bool) {
 	}
 	return pruned, true
 }
+
+// Clone returns a deep copy of the tree. Mutating operations (remove, insert,
+// resize) edit splits in place, so callers snapshotting a tree for later
+// restore (#791) must copy it first.
+func Clone(n Node) Node {
+	switch t := n.(type) {
+	case *Leaf:
+		c := *t
+		return &c
+	case *Split:
+		c := *t
+		c.A = Clone(t.A)
+		c.B = Clone(t.B)
+		return &c
+	}
+	return nil
+}
