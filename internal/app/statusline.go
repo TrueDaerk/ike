@@ -331,7 +331,7 @@ func (m Model) statusLine() string {
 			if s := t.ShellPath(); s != "" {
 				seg = filepath.Base(s)
 			}
-			if d := t.Dir(); d != "" {
+			if d := t.Cwd(); d != "" { // live cwd (#770)
 				if seg != "" {
 					seg += " · "
 				}

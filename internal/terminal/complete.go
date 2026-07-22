@@ -126,7 +126,9 @@ func (m *Model) refreshCompletion(auto bool) {
 		m.comp = completion{}
 		return
 	}
-	items := candidates(cmd, word, m.sess.Dir(), os.Getenv("PATH"))
+	// Candidates resolve against the live cwd (#770), so file and make-target
+	// suggestions follow a `cd` instead of the session's start directory.
+	items := candidates(cmd, word, m.sess.Cwd(), os.Getenv("PATH"))
 	if len(items) == 0 || (len(items) == 1 && items[0] == word) {
 		m.comp = completion{}
 		return

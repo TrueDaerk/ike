@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Terminal sessions track the shell's live cwd via OSC 7 (#770): completion
+  candidates, pane title and status line follow `cd`; start directory stays
+  the fallback without prompt integration (`/architecture/terminal.md`).
+
 - Rainbow brackets (#789): bracket pairs colored by Tree-sitter nesting
   depth, cycling six theme-derived colors; `editor.rainbow_brackets`
   (default on), overridable per slot via `theme.captures.rainbow.N`
