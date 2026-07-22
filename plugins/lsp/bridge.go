@@ -322,11 +322,20 @@ func (b *bridge) parameterInfo(h host.API) tea.Cmd {
 
 // definition requests the definition target, converts it to editor coordinates
 // (reading the target file), and sends a DefinitionMsg for the app to navigate.
+// IKE-side local providers (#922, e.g. Ansible inventory hosts) are consulted
+// first — a claim skips the server round-trip and works with no server at all.
 func (b *bridge) definition(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
+	if path == "" {
+		return nil
+	}
+	if msg, ok := ilsp.LocalDefinitionAt(path, line, col, b.lineText(path, line)); ok {
+		h.Send(msg)
+		return nil
+	}
 	mgr := b.manager()
-	if path == "" || mgr == nil {
+	if mgr == nil {
 		return nil
 	}
 	go func() {
@@ -363,6 +372,25 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
 	}()
 	return nil
+}
+
+// lineText returns line's text for the local-definition providers (#922):
+// from the synced document when a manager tracks the file, else from disk.
+func (b *bridge) lineText(path string, line int) string {
+	if mgr := b.manager(); mgr != nil {
+		if lines, ok := mgr.DocLines(path); ok && line < len(lines) {
+			return lines[line]
+		}
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(string(data), "\n")
+	if line >= len(lines) {
+		return ""
+	}
+	return lines[line]
 }
 
 // atDefinition reports whether the editor position (line, col) sits inside

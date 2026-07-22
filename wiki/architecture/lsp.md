@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -56,6 +56,12 @@ compile-in plugin is the wiring layer: it enables the subsystem, owns the
 exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
 registry commands.
+
+`lsp.definition` consults IKE-side **local definition providers** first
+(#922, `ilsp.RegisterLocalDefinition`): a plugin whose navigation target no
+server resolves (Ansible inventory hosts/groups) claims the jump and skips
+the server round-trip — it works with no server installed. Providers claim
+narrowly; a pass falls through to the server exactly as before.
 
 ## Data flow
 

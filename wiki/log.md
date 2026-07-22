@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Ansible inventory navigation (#922): IKE-side host/group index (INI + YAML
+  inventories, group_vars/host_vars); goto-definition on `hosts:` /
+  `delegate_to:` / `groups[...]` via new local-definition seam in the LSP
+  bridge, completion source for hosts values
+  (`/architecture/languages.md`).
+
 - Markdown rich rendering (#881): bold/italic/strikethrough text attributes,
   marker concealment on non-cursor lines with exact click mapping, and
   row-preserving box-drawing pipe tables; toggle
