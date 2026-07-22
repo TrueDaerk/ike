@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Terminal multi-click drag (#951): holding the button after a double/triple
+  click extends the selection word-wise / logical-line-wise in both
+  directions, origin unit always covered (`/architecture/terminal.md`).
+
 - Terminal width reflow (#935): resizing rewraps the whole history (screen +
   scrollback) at the new width like iTerm2/kitty — shrink rewraps long lines,
   grow unwraps them, hard newlines never merge, round-trips reproduce the
