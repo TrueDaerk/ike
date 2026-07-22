@@ -2,6 +2,12 @@
 
 ## 2026-07-22
 
+- Reflow corruption over resize cycles (#953): a reflow cache pins the hard
+  breaks the last replay wrote (exact-width lines can no longer merge), and
+  the shell's live edit line replays verbatim anchored on the last content
+  row — zsh's SIGWINCH redraw no longer fights the relayout
+  (`/architecture/terminal.md`).
+
 - Terminal multi-click drag (#951): holding the button after a double/triple
   click extends the selection word-wise / logical-line-wise in both
   directions, origin unit always covered (`/architecture/terminal.md`).
