@@ -53,10 +53,30 @@ type Engine struct {
 	Timeout time.Duration
 }
 
+// pluginSources are sources registered from plugin init()s (#922) — before
+// any engine exists — picked up by every NewEngine.
+var (
+	pluginMu      sync.Mutex
+	pluginSources []Source
+)
+
+// RegisterSource adds a source to every engine created afterwards. The plugin
+// seam (#922): internal sources are registered on the engine instance by the
+// app; a plugin's init() has no engine yet, so it registers here.
+func RegisterSource(s Source) {
+	pluginMu.Lock()
+	defer pluginMu.Unlock()
+	pluginSources = append(pluginSources, s)
+}
+
 // NewEngine returns an engine sending result batches through send (host.Send —
-// safe to call from goroutines).
+// safe to call from goroutines). Plugin-registered sources are included.
 func NewEngine(send func(tea.Msg)) *Engine {
-	return &Engine{send: send, Timeout: 2 * time.Second}
+	e := &Engine{send: send, Timeout: 2 * time.Second}
+	pluginMu.Lock()
+	e.sources = append(e.sources, pluginSources...)
+	pluginMu.Unlock()
+	return e
 }
 
 // Register adds a source. Safe to call any time; the next dispatch sees it.

@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Language Registry
@@ -78,6 +78,26 @@ under `roles/<r>/(tasks|handlers|defaults|vars|meta)/`, `playbooks/`,
 resolves to the `ansible` id (sharing yaml's grammar) and gets
 `@ansible/ansible-language-server` instead of plain yaml-language-server;
 everything else stays `yaml`.
+
+**Inventory navigation & completion (#922).** The server resolves modules but
+not inventory hosts/groups, so IKE indexes them itself
+(`plugins/languages/ansible/inventory.go`): INI inventories (`inventory/`,
+root `hosts`/`inventory` — `[group]` headers, host lines, `:children`
+entries), YAML inventories (keys under `hosts:` / `children:`), and
+`group_vars/` / `host_vars/` base names. Two seams consume the index:
+
+- `lang`-side **local definition** (`ilsp.RegisterLocalDefinition`): the LSP
+  bridge consults registered providers before the server, so goto-definition
+  on a `hosts:` / `delegate_to:` value or a `groups['...']` reference jumps to
+  the defining inventory line — even with no server installed. Providers claim
+  only on a positive hit; everything else still reaches the server.
+- a **completion source** (`complete.RegisterSource`, the plugin seam): in a
+  `hosts:`/`delegate_to:` value position it offers the project's group/host
+  names (groups sorted first, prefix-filtered, priority between symbols and
+  the server).
+
+The index is best-effort text scanning with a 2s cache — no ansible
+invocation; dynamically computed names stay unknown.
 
 ### Shebang fallback (#893)
 
