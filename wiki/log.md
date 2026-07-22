@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Web language highlighting (#925): TSX grammar covers js/jsx/ts/tsx under
+  the single typescript id, HTML grammar with script/style injections, CSS
+  grammar; verified against real-world JS/CSS/Jinja-template files
+  (`/architecture/languages.md`).
+
 - Ansible inventory navigation (#922): IKE-side host/group index (INI + YAML
   inventories, group_vars/host_vars); goto-definition on `hosts:` /
   `delegate_to:` / `groups[...]` via new local-definition seam in the LSP
