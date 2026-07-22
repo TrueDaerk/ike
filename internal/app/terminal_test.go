@@ -111,16 +111,79 @@ func TestTerminalGlobalChords(t *testing.T) {
 	}
 	m.palette.Close()
 
-	// An unrelated global chord stays with the shell: cmd+1 (explorer.toggle)
-	// is not allowlisted, so the pane set stays unchanged.
-	hadExplorer := m.activeWS().Panes.Has(pane.ExplorerKey)
-	out, _ = m.Update(tea.KeyPressMsg{Code: '1', Mod: tea.ModSuper})
+	// An unrelated global chord stays with the shell: cmd+shift+t
+	// (editor.tab.reopenClosed) is not allowlisted, so focus stays put.
+	out, _ = m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper | tea.ModShift})
 	m = out.(Model)
-	if m.activeWS().Panes.Has(pane.ExplorerKey) != hadExplorer {
-		t.Fatal("cmd+1 in a terminal must stay with the shell")
-	}
 	if m.activeWS().Panes.Focused() != key {
 		t.Fatal("shell-bound chord must not move focus")
+	}
+}
+
+// TestTerminalGlobalChordsWidened guards #973: settings, explorer toggle and
+// the other IDE-level chords escape a focused terminal too.
+func TestTerminalGlobalChordsWidened(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	// cmd+, opens settings.
+	m = drainKey(m, tea.KeyPressMsg{Code: ',', Mod: tea.ModSuper})
+	if !m.settings.IsOpen() {
+		t.Fatal("cmd+, in a terminal must open settings")
+	}
+	m.settings.Close()
+	m.setFocus(key)
+
+	// cmd+1 focuses the explorer (allowlisted since #973).
+	m = drainKey(m, tea.KeyPressMsg{Code: '1', Mod: tea.ModSuper})
+	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
+		t.Fatal("cmd+1 in a terminal must focus the explorer")
+	}
+	m.setFocus(key)
+
+	// cmd+shift+f opens Find in Path.
+	m = drainKey(m, tea.KeyPressMsg{Code: 'f', Mod: tea.ModSuper | tea.ModShift})
+	if !m.finder.IsOpen() {
+		t.Fatal("cmd+shift+f in a terminal must open find in path")
+	}
+	m.finder.Close()
+}
+
+// TestTerminalDoubleShift guards #973: two bare shift taps open Search
+// Everywhere from a terminal; a single tap (or taps with other keys between)
+// stays with the shell.
+func TestTerminalDoubleShift(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+	t.Cleanup(func() { m.activeWS().Panes.Get(key).Terminal().Close() })
+
+	shift := tea.KeyPressMsg{Code: tea.KeyLeftShift}
+	out, _ = m.Update(shift)
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("a single shift tap must not open the palette")
+	}
+	m = drainKey(m, shift)
+	if !m.palette.IsOpen() {
+		t.Fatal("double-shift in a terminal must open search everywhere")
+	}
+	m.palette.Close()
+
+	// A key between the taps resets the detector.
+	out, _ = m.Update(shift)
+	m = out.(Model)
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	m = out.(Model)
+	out, _ = m.Update(shift)
+	m = out.(Model)
+	if m.palette.IsOpen() {
+		t.Fatal("an interrupted tap pair must stay with the shell")
 	}
 }
 

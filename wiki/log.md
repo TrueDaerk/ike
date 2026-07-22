@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Focused terminals let more IDE chords through (#973): settings, go-to
+  file/symbol, find/replace in path, explorer toggle, hide-all-tools, pinned
+  files, TODO index, VCS panel, notification history — and double-shift now
+  opens Search Everywhere from a terminal (`/architecture/terminal.md`).
+
 - Fixed result rows wrapping onto a second line in Find in Path and the
   palette (#971): the finder box's inner width was 2 cells too wide (the
   border counts inside lipgloss Width), row "clipping" used MaxWidth (which
