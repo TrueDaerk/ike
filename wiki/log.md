@@ -2,6 +2,10 @@
 
 ## 2026-07-22
 
+- Python decorator highlighting fix (#928): only `@` + dotted name carry the
+  decorator color, arguments render as normal call expressions; capture-order
+  convention documented (`/architecture/highlighting.md`).
+
 - Web language highlighting (#925): TSX grammar covers js/jsx/ts/tsx under
   the single typescript id, HTML grammar with script/style injections, CSS
   grammar; verified against real-world JS/CSS/Jinja-template files

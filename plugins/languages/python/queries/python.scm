@@ -2,11 +2,28 @@
 ; cursor yields same-node captures in pattern order — so specific patterns
 ; must precede broader ones, and the identifier catch-all comes last (#724).
 
-; Function calls
+; Decorators (#928): only the @ sigil and the (dotted) name get the decorator
+; color — never the whole (decorator) node, whose span would enclose the
+; argument list and win on position order, painting strings/kwargs/parens in
+; one monochrome block. Arguments highlight through the normal call rules.
 
-(decorator) @function
+(decorator "@" @function)
+
 (decorator
   (identifier) @function)
+
+(decorator
+  (attribute) @function)
+
+(decorator
+  (call
+    function: (identifier) @function))
+
+(decorator
+  (call
+    function: (attribute) @function))
+
+; Function calls
 
 ; Builtin functions (before the generic call pattern, which would shadow them)
 
