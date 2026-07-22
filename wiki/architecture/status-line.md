@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Status Line Segments
@@ -41,8 +41,13 @@ and the notification counter.
 
 The rendered bar is clamped to the terminal width (#659): lipgloss pads but
 does not clip, so without the guard an over-wide segment set would wrap the
-bar onto a second row and corrupt the layout. Overflow truncates on the right
-with an ellipsis.
+bar onto a second row and corrupt the layout. Overflow shrinks
+priority-aware (#471, `composeStatus`): first the file segment shortens by
+exactly the overflow with a JetBrains-style middle ellipsis (floor 16
+cells), then low-priority segments drop in a defined order (hint, eol,
+encoding, indent, toolchain, todo, host, notifications, macro, branch,
+diagnostics, lsp — mode, file and the cursor never drop), and only as a
+last resort the bar hard-clips on the right.
 
 ## Toolchain segment
 

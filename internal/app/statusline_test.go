@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
 	"ike/internal/editor"
@@ -101,5 +102,97 @@ func TestStatusLineSegmentsExtensible(t *testing.T) {
 	}
 	if strings.Contains(line, "CUSTOM-SEG │  ") || strings.Contains(line, "│ │") {
 		t.Fatalf("empty segment must not leave a dangling divider: %q", line)
+	}
+}
+
+// composeStatus (#471): priority-aware shrinking instead of blunt clipping.
+
+func segList(pairs ...string) []renderedSeg {
+	var out []renderedSeg
+	for i := 0; i+1 < len(pairs); i += 2 {
+		out = append(out, renderedSeg{id: pairs[i], text: pairs[i+1]})
+	}
+	return out
+}
+
+func TestComposeStatusFitsUntouched(t *testing.T) {
+	left := segList("mode", "NORMAL", "file", "main.go")
+	right := segList("cursor", "Ln 1, Col 1")
+	line := composeStatus(left, right, 80)
+	if lipgloss.Width(line) != 80 {
+		t.Fatalf("width = %d, want 80", lipgloss.Width(line))
+	}
+	for _, want := range []string{"NORMAL", "main.go", "Ln 1, Col 1"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("missing %q in %q", want, line)
+		}
+	}
+}
+
+func TestComposeStatusShrinksFileFirst(t *testing.T) {
+	longPath := "internal/some/deeply/nested/directory/with/a/really/long/file_name.go"
+	left := segList("mode", "NORMAL", "file", longPath, "eol", "LF")
+	right := segList("cursor", "Ln 120, Col 42")
+	line := composeStatus(left, right, 60)
+	if w := lipgloss.Width(line); w > 60 {
+		t.Fatalf("width = %d, want <= 60", w)
+	}
+	// The cursor — the high-value right segment — survives; the path gets a
+	// middle ellipsis instead.
+	if !strings.Contains(line, "Ln 120, Col 42") {
+		t.Fatalf("cursor segment must survive: %q", line)
+	}
+	if !strings.Contains(line, "…") || strings.Contains(line, longPath) {
+		t.Fatalf("file path must shrink with a middle ellipsis: %q", line)
+	}
+	if !strings.Contains(line, "LF") {
+		t.Fatalf("eol must survive while the path alone absorbs the overflow: %q", line)
+	}
+}
+
+func TestComposeStatusDropsLowPriorityInOrder(t *testing.T) {
+	left := segList(
+		"mode", "NORMAL",
+		"file", "a/deep/path/to/the/current/buffer/file_with_long_name.go",
+		"eol", "LF", "encoding", "UTF-8", "indent", "Spaces: 4",
+		"diagnostics", "3E 1W",
+	)
+	right := segList("branch", "⎇ feature/very-long-branch", "cursor", "Ln 9, Col 3")
+	line := composeStatus(left, right, 50)
+	if w := lipgloss.Width(line); w > 50 {
+		t.Fatalf("width = %d, want <= 50", w)
+	}
+	// eol/encoding/indent drop before diagnostics and the cursor.
+	for _, gone := range []string{"LF", "UTF-8", "Spaces"} {
+		if strings.Contains(line, gone) {
+			t.Fatalf("%q should have dropped: %q", gone, line)
+		}
+	}
+	if !strings.Contains(line, "Ln 9, Col 3") {
+		t.Fatalf("cursor must survive: %q", line)
+	}
+	if !strings.Contains(line, "3E 1W") {
+		t.Fatalf("diagnostics outrank eol/encoding/indent: %q", line)
+	}
+}
+
+func TestComposeStatusHardClipLastResort(t *testing.T) {
+	left := segList("mode", "NORMAL", "file", "somefile_with_a_name.go")
+	right := segList("cursor", "Ln 1, Col 1")
+	line := composeStatus(left, right, 20) // narrower than mode+min file+cursor
+	if w := lipgloss.Width(line); w > 20 {
+		t.Fatalf("width = %d, want <= 20", w)
+	}
+}
+
+func TestMiddleEllipsis(t *testing.T) {
+	if got := middleEllipsis("abcdefghij", 7); got != "abc…hij" || len([]rune(got)) != 7 {
+		t.Fatalf("middleEllipsis = %q", got)
+	}
+	if got := middleEllipsis("short", 10); got != "short" {
+		t.Fatalf("no-op expected, got %q", got)
+	}
+	if got := middleEllipsis("abcdef", 1); got != "…" {
+		t.Fatalf("max 1 = %q", got)
 	}
 }

@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Status-line overflow shrinks priority-aware (#471): the file path gets a
+  middle ellipsis first, then low-priority segments drop in a defined order;
+  cursor/mode/diagnostics survive narrow widths
+  (`/architecture/status-line.md`).
+
 - Terminal completion matches case-insensitively (#968): commands, make
   targets and paths complete regardless of typed case; accepting a
   case-different candidate erases the word and pastes the canonical
