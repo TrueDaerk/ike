@@ -64,6 +64,7 @@ type Palette struct {
 
 	width, height int
 	sizes         *ui.WinSizes // optional persisted resize deltas (#774)
+	maxWidth      int          // centered-box width cap (#932); 0 = uncapped
 
 	// The optional left column of a SideMode (#778): its items for the
 	// current query, its selection, and whether it holds the column focus.
@@ -211,6 +212,12 @@ func (p *Palette) SetSizeStore(s *ui.WinSizes) { p.sizes = s }
 
 // winKind is the persistence key for the palette window.
 const winKind = "palette"
+
+// SetMaxWidth caps the centered box's width (#932, ui.popup_max_width): on
+// large terminals the box stops growing at max columns and extra terminal
+// width just adds margin. 0 disables. The user's resize delta (#774) applies
+// on top of the capped base and still clamps to the terminal.
+func (p *Palette) SetMaxWidth(max int) { p.maxWidth = max }
 
 // AdjustSize applies one mouse-drag resize step (#933) without persisting;
 // the host flushes the store when the drag ends. Width in columns, height in
@@ -769,8 +776,14 @@ func (p *Palette) boxWidth() int {
 		w, floor, room = p.anchorW, minAnchorWidth, p.width-p.anchorX
 	} else {
 		w, floor, room = p.width/2, minBoxWidth, p.width-4
+		// Width cap (#932): the default width stops growing at maxWidth on
+		// large terminals; extra width just adds margin around the box.
+		if p.maxWidth > 0 && w > p.maxWidth {
+			w = p.maxWidth
+		}
 		// User resize (#774): the stored width delta widens/narrows the
-		// centered box; the floor/room clamps below re-bound it live.
+		// centered box on top of the capped base; the floor/room clamps
+		// below re-bound it live.
 		dw, _ := p.sizes.Get(winKind)
 		w += dw
 	}

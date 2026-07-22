@@ -129,6 +129,10 @@ type Terminal struct {
 type UI struct {
 	MenuBar   bool `toml:"menu_bar"`
 	Onboarded bool `toml:"onboarded"`
+	// PopupMaxWidth caps centered popup windows (palette modes, modal shell,
+	// settings) at this outer width in columns on large terminals (#932);
+	// extra terminal width just adds margin. 0 disables the cap.
+	PopupMaxWidth int `toml:"popup_max_width"`
 }
 
 // Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns

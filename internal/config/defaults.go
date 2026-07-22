@@ -83,7 +83,8 @@ func defaults() *Config {
 			PersistentUndo: true,
 		},
 		UI: UI{
-			MenuBar: true,
+			MenuBar:       true,
+			PopupMaxWidth: 110,
 		},
 		Backup: Backup{
 			Enable:     true,

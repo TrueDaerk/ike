@@ -594,6 +594,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	}
 	m.shell.SetSizeStore(winSizes)   // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes) // resizable palette box (#774)
+	m.shell.SetMaxWidth(popupMaxWidth())   // centered-popup width cap (#932)
+	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
 	m.backupIv = backupInterval(cfg)
@@ -4959,12 +4961,23 @@ func inRect(px, py, x, y, w, h int) bool {
 	return px >= x && px < x+w && py >= y && py < y+h
 }
 
+// popupMaxWidth reads ui.popup_max_width (#932): the outer width cap for
+// centered popups on large terminals; 0 disables. Falls back to the compiled
+// default when no config is loaded (tests, early startup).
+func popupMaxWidth() int {
+	if c := config.Get(); c != nil {
+		return c.UI.PopupMaxWidth
+	}
+	return 110
+}
+
 // settingsSize bounds the floating settings panel: most of the terminal, but
-// never full-screen (capped like a JetBrains dialog) and never overflowing.
+// never full-screen (capped like a JetBrains dialog, ui.popup_max_width #932)
+// and never overflowing.
 func (m Model) settingsSize() (w, h int) {
 	w = m.width - 6
-	if w > 110 {
-		w = 110
+	if cap := popupMaxWidth(); cap > 0 && w > cap {
+		w = cap
 	}
 	h = m.height - 4
 	if h > 32 {

@@ -173,6 +173,7 @@ func (c *Config) Flat() map[string]string {
 	put("backup.max_age_days", c.Backup.MaxAgeDays)
 
 	put("ui.menu_bar", c.UI.MenuBar)
+	put("ui.popup_max_width", c.UI.PopupMaxWidth)
 
 	put("terminal.shell", c.Terminal.Shell)
 	put("terminal.autosuggest", c.Terminal.Autosuggest)

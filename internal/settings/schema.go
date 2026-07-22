@@ -82,6 +82,7 @@ func BasePages(themes []string) []Page {
 		{Title: "Appearance", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
+			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
 		}},
 		{Title: "Files & Session", Entries: []Entry{

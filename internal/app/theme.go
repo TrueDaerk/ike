@@ -147,6 +147,14 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)
+	// ui.popup_max_width (#932) applies live to the capped popups — including
+	// the settings panel currently hosting the edit.
+	m.shell.SetMaxWidth(popupMaxWidth())
+	m.palette.SetMaxWidth(popupMaxWidth())
+	if m.settings.IsOpen() {
+		w, h := m.settingsSize()
+		m.settings.SetSize(w, h)
+	}
 	// Re-plan the terminal toolchain activation (#98, #652): shims regenerate
 	// or sweep and the overlay recomputes, so NEW terminals pick up an
 	// interpreter change. Running sessions keep their environment (a PATH

@@ -202,7 +202,11 @@ code alone. **Mouse resize** (#933): pressing the centered box's border ring
 starts a drag — edges resize one axis (left/right → width columns, top/bottom
 → result rows), corners both; deltas nudge the same store un-persisted per
 motion step and flush on release. Anchored palettes are not mouse-resizable
-(their geometry follows the anchor).
+(their geometry follows the anchor). **Width cap** (#932,
+`ui.popup_max_width`, default 110, 0 disables): on large terminals the
+centered box's default width stops at the cap and extra terminal width just
+adds margin; the user's #774 delta applies on top of the capped base and
+still clamps to the terminal.
 
 ## Fuzzy matching
 

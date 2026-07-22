@@ -143,7 +143,9 @@ per-project `winsize.json`) and re-derives `settingsSize()`, which clamps
 base+delta into the live terminal bounds. **Mouse resize** (#933): pressing
 the panel's border ring starts a drag — edges resize one axis, corners both —
 applied through the same store (un-persisted per motion step, flushed on
-release), so key and mouse resizes share one remembered size.
+release), so key and mouse resizes share one remembered size. The panel's
+default width honours `ui.popup_max_width` (#932, default 110) instead of a
+hardcoded cap; the Appearance page exposes the setting and edits apply live.
 
 ## Page catalog (#92)
 
