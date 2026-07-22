@@ -26,14 +26,14 @@ type subHit struct {
 // its original span to the current buffer; curLine/curStart/curEnd is the span
 // the view highlights.
 type subConfirmState struct {
-	repl                        string
-	hits                        []subHit
-	idx                         int
-	lineDelta                   map[int]int
-	rec                         *history.Recorder
-	replaced                    int
-	touched                     map[int]bool
-	curLine, curStart, curEnd   int
+	repl                      string
+	hits                      []subHit
+	idx                       int
+	lineDelta                 map[int]int
+	rec                       *history.Recorder
+	replaced                  int
+	touched                   map[int]bool
+	curLine, curStart, curEnd int
 }
 
 // beginSubstituteConfirm collects the matches over [start,end] and enters the

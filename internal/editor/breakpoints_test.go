@@ -38,7 +38,7 @@ func TestAdjusterFiresOnLineInsert(t *testing.T) {
 	lines := []int{}
 	var calls [][3]interface{}
 	m := bpEditor(t, &lines, &calls)
-	m, _ = m.Update(key('o'))                          // insert mode, new line 1
+	m, _ = m.Update(key('o'))                             // insert mode, new line 1
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape}) // end the insert session
 	total := 0
 	for _, c := range calls {
