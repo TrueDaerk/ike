@@ -600,6 +600,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.shell.SetSizeStore(winSizes)   // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes) // resizable palette box (#774)
 	m.shell.SetMaxWidth(popupMaxWidth())   // centered-popup width cap (#932)
+	highlight.SetRainbow(rainbowConfigured()) // rainbow brackets (#789)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -2994,6 +2995,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyConfigDiags(msg.Diags)
 		m.settings.NoteReloadDiags(msg.Diags) // inline in the panel too (#891)
 		m.palette.Refresh()
+		// Rainbow brackets (#789): a toggle flip re-parses every open editor
+		// so the change lands without waiting for the next edit.
+		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
+			highlight.SetRainbow(!before)
+			var cmds []tea.Cmd
+			for _, key := range m.activeWS().Panes.Keys() {
+				if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+					for _, ed := range inst.Editors() {
+						cmds = append(cmds, ed.Reparse())
+					}
+				}
+			}
+			return m, tea.Batch(cmds...)
+		}
 		return m, nil
 
 	case palette.RunCommandMsg:
@@ -5002,6 +5017,14 @@ func popupMaxWidth() int {
 		return c.UI.PopupMaxWidth
 	}
 	return 110
+}
+
+// rainbowConfigured reads editor.rainbow_brackets (#789, default on).
+func rainbowConfigured() bool {
+	if c := config.Get(); c != nil {
+		return c.Editor.RainbowBrackets
+	}
+	return true
 }
 
 // settingsSize bounds the floating settings panel: most of the terminal, but

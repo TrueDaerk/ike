@@ -32,6 +32,7 @@ func defaults() *Config {
 			StickyScrollDepth:      4,
 			MarkdownRendering:      true,
 			ColorPreview:           true,
+			RainbowBrackets:        true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 		},
 		Explorer: Explorer{

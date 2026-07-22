@@ -43,6 +43,24 @@ func NewTheme(defaults map[string]string, get func(key string) (string, bool)) T
 			}
 		}
 	}
+	// Rainbow brackets (#789): each cycle slot derives from an existing
+	// capture colour of the active palette unless the theme (or a
+	// theme.captures.rainbow.N config key) sets it explicitly.
+	for i, src := range rainbowSources {
+		key := rainbowCapture(i)
+		if get != nil {
+			if v, ok := get("theme.captures." + key); ok && v != "" {
+				colors[key] = v
+				continue
+			}
+		}
+		if _, exists := colors[key]; exists {
+			continue
+		}
+		if c, ok := colors[src]; ok {
+			colors[key] = c
+		}
+	}
 	return Theme{colors: colors, cache: make(map[string]styleHit)}
 }
 

@@ -200,6 +200,9 @@ type Editor struct {
 	// non-cursor lines, and box-drawing pipe tables while the cursor is
 	// outside the table.
 	MarkdownRendering bool `toml:"markdown_rendering"`
+	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
+	// cycling palette derived from the active theme.
+	RainbowBrackets bool `toml:"rainbow_brackets"`
 	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
 	// with their own color (#790).
 	ColorPreview bool `toml:"color_preview"`

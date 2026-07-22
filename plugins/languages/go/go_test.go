@@ -3,6 +3,7 @@
 package langgo
 
 import (
+	"strings"
 	"testing"
 
 	"ike/internal/highlight"
@@ -108,6 +109,39 @@ func TestGoFolds(t *testing.T) {
 	for i := range want {
 		if folds[i] != want[i] {
 			t.Errorf("fold[%d] = %v, want %v", i, folds[i], want[i])
+		}
+	}
+}
+
+// TestGoRainbowBrackets (#789): bracket tokens carry depth-cycled rainbow
+// captures from the real Go grammar, first-covering so they win over the
+// grammar's own punctuation captures; disabling the toggle removes them.
+func TestGoRainbowBrackets(t *testing.T) {
+	lines := []string{"func f() { g([]int{1}) }"}
+	spans := highlight.Highlight("main.go", lines)
+	depths := map[string]bool{}
+	for _, s := range spans {
+		if strings.HasPrefix(s.Capture, "rainbow.") {
+			depths[s.Capture] = true
+		}
+	}
+	// f() and {} at depth 0, ([...]) at 1, []int at 2... at least 3 depths.
+	for _, want := range []string{"rainbow.0", "rainbow.1", "rainbow.2"} {
+		if !depths[want] {
+			t.Errorf("missing %s in %v", want, depths)
+		}
+	}
+	// The index resolves a bracket cell to its rainbow capture (first wins).
+	ix := highlight.NewIndex(spans)
+	if got := ix.CaptureAt(0, 6); got != "rainbow.0" { // the "(" of f()
+		t.Errorf("CaptureAt bracket = %q, want rainbow.0", got)
+	}
+
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	for _, s := range highlight.Highlight("main.go", lines) {
+		if strings.HasPrefix(s.Capture, "rainbow.") {
+			t.Fatalf("rainbow span %q present while disabled", s.Capture)
 		}
 	}
 }

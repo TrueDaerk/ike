@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Syntax Highlighting
@@ -22,6 +22,7 @@ in `plugins/languages/*`. An optional LSP semantic-token overlay is deferred.
 `internal/highlight` parses a document into `Span{Line, StartCol, EndCol,
 Capture}` runs, where `Capture` is a Tree-sitter capture name (`keyword`,
 `string`, `function`, …). A `Theme` resolves capture names to lipgloss colours,
+including the **rainbow bracket** captures below,
 falling back from a dotted name (`function.builtin`) to its head (`function`), and
 layered over built-in defaults by the `[theme.captures.*]` config keys.
 
@@ -130,3 +131,22 @@ real Tree-sitter path (behind the `cgo` tag) is exercised by parsing Go/PHP/Pyth
 fixtures and asserting capture output, and the editor's render integration is
 tested by feeding `SpansMsg` into `editor.Model.Update` and checking the rendered
 ANSI.
+
+## Rainbow brackets (#789)
+
+Bracket tokens (`()[]{}`) are colored by nesting depth: the parse walk in
+`parse_cgo.go` (`collectBrackets`) visits **all** children (bracket tokens
+are anonymous nodes) tracking depth — an opener emits at the current depth
+and deepens until its closer; unbalanced mid-edit trees clamp instead of
+going negative. Depth `N` maps to capture `rainbow.<N mod 6>`
+(`RainbowColors`). The rainbow spans are prepended: `Index.CaptureAt` is
+first-covering-wins, so they beat the grammar's own punctuation captures.
+
+Colors derive from the active palette (`rainbowSources`: keyword, string,
+function, number, type, constant), so light and dark themes both stay
+legible; `theme.captures.rainbow.N` config keys override single slots.
+Toggle: `editor.rainbow_brackets` (settings Editor page, **default on**) —
+gated by an atomic read in the background parse, and a config-reload flip
+re-parses every open editor immediately. Cost is one extra walk over the
+already-parsed tree per async parse; the render path is untouched (spans
+flow through the existing per-version cache, 0400).
