@@ -239,6 +239,15 @@ func (m Model) Dir() string {
 	return m.sess.Dir()
 }
 
+// Cwd returns the shell's live working directory (OSC 7, #770), the origin
+// directory when the shell never reported one, "" for a failed spawn.
+func (m Model) Cwd() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.Cwd()
+}
+
 // ShellPath returns the spawned shell binary ("" for a failed spawn).
 func (m Model) ShellPath() string {
 	if m.sess == nil {

@@ -8,6 +8,7 @@ package terminal
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -88,6 +89,7 @@ type Session struct {
 	// call returns would race a concurrent feed write.
 	gridMu   sync.Mutex
 	title    string // last OSC 0/2 title the application set ("" until then)
+	cwd      string // live working directory from OSC 7 ("" until reported)
 	exitCode int
 	exited   bool
 	closed   atomic.Bool
@@ -204,6 +206,19 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		},
 		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
 		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+		// OSC 7 (#770): shells with prompt integration report their cwd on
+		// every prompt; completion and the pane chrome follow a `cd` through
+		// Cwd() instead of sticking to the start directory.
+		WorkingDirectory: func(raw string) {
+			p := parseOSC7Path(raw)
+			if p == "" {
+				return
+			}
+			s.mu.Lock()
+			s.cwd = p
+			s.mu.Unlock()
+			s.notify()
+		},
 	})
 	s.out = newSpool()
 	s.ioWG.Add(2)
@@ -714,9 +729,38 @@ func (s *Session) ExitCode() (code int, ok bool) {
 }
 
 // Shell returns the spawned shell binary; Dir the directory it started in
-// (the session's origin root — the live cwd is the shell's business).
+// (the session's origin root, used for respawn and persistence).
 func (s *Session) ShellPath() string { return s.shell }
 func (s *Session) Dir() string       { return s.dir }
+
+// Cwd returns the shell's live working directory, as last reported via
+// OSC 7 (#770). Shells without prompt integration never report one; then the
+// start directory stands in — the documented fallback.
+func (s *Session) Cwd() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.cwd != "" {
+		return s.cwd
+	}
+	return s.dir
+}
+
+// parseOSC7Path extracts the directory from an OSC 7 payload: a
+// `file://host/path` URL (percent-encoded, the common form emitted by shell
+// prompt integrations) or a bare absolute path. Anything else is ignored.
+func parseOSC7Path(raw string) string {
+	if strings.HasPrefix(raw, "file://") {
+		u, err := url.Parse(raw)
+		if err != nil || u.Path == "" {
+			return ""
+		}
+		return u.Path
+	}
+	if strings.HasPrefix(raw, "/") {
+		return raw
+	}
+	return ""
+}
 
 // Title returns the last OSC 0/2 title the running application set, "" when
 // none arrived yet.

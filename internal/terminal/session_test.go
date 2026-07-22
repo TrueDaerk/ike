@@ -750,3 +750,41 @@ func TestSessionResizeReserveNeverResurrectsStale(t *testing.T) {
 		t.Fatalf("grow restored stale pre-shrink content over rewritten rows, view:\n%s", v)
 	}
 }
+
+// TestParseOSC7Path (#770): file:// URLs (percent-encoded), bare absolute
+// paths, garbage.
+func TestParseOSC7Path(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"file://myhost/Users/g/dev", "/Users/g/dev"},
+		{"file:///tmp", "/tmp"},
+		{"file://h/with%20space", "/with space"},
+		{"/plain/path", "/plain/path"},
+		{"file://", ""},
+		{"not-a-path", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := parseOSC7Path(c.in); got != c.want {
+			t.Errorf("parseOSC7Path(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestSessionCwdFollowsOSC7 (#770): an OSC 7 report updates Cwd(); before any
+// report Cwd falls back to the start directory.
+func TestSessionCwdFollowsOSC7(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	if s.Cwd() != s.Dir() {
+		t.Fatalf("Cwd before any report = %q, want start dir %q", s.Cwd(), s.Dir())
+	}
+	cmd := `printf '\033]7;file://host/tmp\033\\'` + "\r"
+	for _, r := range cmd {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "OSC 7 cwd", func() bool { return s.Cwd() == "/tmp" })
+	if s.Dir() == "/tmp" {
+		t.Fatal("Dir (start dir) must not change")
+	}
+	s.Close()
+}

@@ -1503,7 +1503,7 @@ func (m Model) terminalTitle(inst *pane.Instance) string {
 	if s := t.ShellPath(); s != "" {
 		title += " — " + filepath.Base(s)
 	}
-	if d := t.Dir(); d != "" {
+	if d := t.Cwd(); d != "" { // live cwd via OSC 7 (#770), start dir until reported
 		title += " · " + displayDir(d)
 	}
 	// The application's OSC 0/2 title (shells report the running command

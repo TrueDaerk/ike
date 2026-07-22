@@ -186,8 +186,8 @@ of the cursor; the prompt is stripped heuristically (`$ `, `% `, `> `, `# `,
 `❯ `), command separators (`|`, `;`, `&&`, `||`) start a fresh command — so
 the shell keeps owning line editing and history. Sources per word: PATH
 executables while the first word is typed, make targets after `make`
-(Makefile/makefile/GNUmakefile in the session's start dir), files/dirs
-relative to the start dir otherwise (dir part in the word honoured, `~/` and
+(Makefile/makefile/GNUmakefile in the live cwd), files/dirs
+relative to the live cwd otherwise (dir part in the word honoured, `~/` and
 absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).
 Every candidate strictly extends the typed word, so **accepting (enter/tab)
 pastes just the remainder** through the bracketed-paste path; a directory
@@ -200,6 +200,16 @@ dismisses, any other key invalidates and passes through raw. The popup is
 inactive on the alternate screen (vim/htop), in command sessions, and while
 paging scrollback; it renders as a bordered list composited over the grid at
 the word's start column, below the cursor row when it fits, above otherwise.
+
+**Live cwd (OSC 7, #770).** Shells with prompt integration emit
+`OSC 7 ; file://host/path` on every prompt; the emulator's
+`WorkingDirectory` callback stores it on the session (`Session.Cwd()`,
+percent-decoded, bare absolute paths accepted too). Completion candidates,
+the pane title and the status-line segment all read `Cwd()`, so they follow
+a `cd`; without any OSC 7 report — a shell without prompt integration —
+`Cwd()` falls back to the start directory (`Dir()`), which is the documented
+fallback (no pid-based resolve). `Dir()` itself stays the origin root, used
+for respawn and layout persistence.
 
 **Mouse selection & copy** (#227, `MousePress`/`MouseDrag`/`MouseRelease` in
 `model.go`): a left drag over the grid selects text — highlighted in reverse

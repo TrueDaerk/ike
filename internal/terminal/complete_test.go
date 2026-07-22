@@ -227,3 +227,25 @@ func TestPopupInactiveOnAltScreen(t *testing.T) {
 		t.Fatal("auto-suggest must not arm on the alt screen")
 	}
 }
+
+// TestCompletionFollowsCd (#770): after the shell reports its cwd via OSC 7,
+// path candidates resolve against the live directory, not the start dir.
+func TestCompletionFollowsCd(t *testing.T) {
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(other, "target-file.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startShModel(t, c)
+	// The shell "cd"s: report the new cwd via OSC 7.
+	cmd := `printf '\033]7;file://host` + other + `\033\\'` + "\r"
+	for _, r := range cmd {
+		m.sess.SendKey(keyFor(r))
+	}
+	waitFor(t, "cwd update", func() bool { return m.sess.Cwd() == other })
+	// Path candidates for "./ta" resolve in the live cwd.
+	got := candidates("./ta", "./ta", m.sess.Cwd(), "")
+	if len(got) != 1 || got[0] != "./target-file.txt" {
+		t.Fatalf("candidates after cd = %v, want [./target-file.txt]", got)
+	}
+}
