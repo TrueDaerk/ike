@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 
 # Command Palette
@@ -198,7 +198,11 @@ rows composed and capped like any other source.
 shared per-project `winsize.json` store (kind `"palette"`), so Run a Command,
 Search Everywhere, Recent Files and the go-to modes share one remembered
 size. Handled before the plain-arrow selection keys, which match on the key
-code alone.
+code alone. **Mouse resize** (#933): pressing the centered box's border ring
+starts a drag — edges resize one axis (left/right → width columns, top/bottom
+→ result rows), corners both; deltas nudge the same store un-persisted per
+motion step and flush on release. Anchored palettes are not mouse-resizable
+(their geometry follows the anchor).
 
 ## Fuzzy matching
 

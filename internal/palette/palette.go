@@ -212,6 +212,17 @@ func (p *Palette) SetSizeStore(s *ui.WinSizes) { p.sizes = s }
 // winKind is the persistence key for the palette window.
 const winKind = "palette"
 
+// AdjustSize applies one mouse-drag resize step (#933) without persisting;
+// the host flushes the store when the drag ends. Width in columns, height in
+// result rows (one row per cell dragged).
+func (p *Palette) AdjustSize(ddw, ddh int) {
+	if p.sizes == nil {
+		return
+	}
+	p.sizes.Nudge(winKind, ddw, ddh)
+	p.scrollToSelected()
+}
+
 // visibleRows is the effective result-window height: the configured
 // maxResults plus the user's stored resize delta, floored at 3 (#774).
 func (p *Palette) visibleRows() int {
