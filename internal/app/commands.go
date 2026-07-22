@@ -186,6 +186,15 @@ type ToggleExplorerFocusMsg struct{}
 // tab bar and status line hidden. Dispatched by view.zenMode.
 type ZenModeMsg struct{}
 
+// PinSlotMsg pins the active file to a numbered slot (#788, harpoon-style).
+type PinSlotMsg struct{ Slot int }
+
+// PinJumpMsg opens the file pinned to a slot (#788).
+type PinJumpMsg struct{ Slot int }
+
+// PinPickerMsg opens the pinned-files picker (#788): view, reorder, unpin.
+type PinPickerMsg struct{}
+
 // MaximizePaneMsg toggles the focused pane's zoom (#358, tmux-style): render
 // it alone over the whole body, or restore the previous layout. Dispatched by
 // pane.maximize.
@@ -257,6 +266,15 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),
 			appCommand("nav.back", "Navigate Back", NavBackMsg{}),
 			appCommand("nav.forward", "Navigate Forward", NavForwardMsg{}),
+			appCommand("nav.pins", "Pinned Files", PinPickerMsg{}),
+			appCommand("nav.pinSlot1", "Pin File to Slot 1", PinSlotMsg{Slot: 1}),
+			appCommand("nav.pinSlot2", "Pin File to Slot 2", PinSlotMsg{Slot: 2}),
+			appCommand("nav.pinSlot3", "Pin File to Slot 3", PinSlotMsg{Slot: 3}),
+			appCommand("nav.pinSlot4", "Pin File to Slot 4", PinSlotMsg{Slot: 4}),
+			appCommand("nav.pinGoto1", "Go to Pinned File 1", PinJumpMsg{Slot: 1}),
+			appCommand("nav.pinGoto2", "Go to Pinned File 2", PinJumpMsg{Slot: 2}),
+			appCommand("nav.pinGoto3", "Go to Pinned File 3", PinJumpMsg{Slot: 3}),
+			appCommand("nav.pinGoto4", "Go to Pinned File 4", PinJumpMsg{Slot: 4}),
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
