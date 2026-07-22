@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- Insert-mode `cmd+backspace` is now IntelliJ's Delete Line (#955): the whole
+  current line is removed including the preceding line break (line 0 takes the
+  following break), caret lands at the end of the previous line. `ctrl+u`
+  keeps kill-to-line-start (`/architecture/editor.md`).
+
 - Reflow corruption over resize cycles (#953): a reflow cache pins the hard
   breaks the last replay wrote (exact-width lines can no longer merge), and
   the shell's live edit line replays verbatim anchored on the last content
