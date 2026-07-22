@@ -481,7 +481,10 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 	b.mu.Unlock()
 	if busy {
 		// Sequential sessions only: a request arriving while another is
-		// being debugged runs through undisturbed.
+		// being debugged runs through undisturbed. Say so (#938) — listener
+		// state must never change silently.
+		b.event("output", map[string]any{"category": "console",
+			"output": "Detached a concurrent debug connection — one session at a time\n"})
 		_ = dc.Detach()
 		_ = dc.Close()
 		return
@@ -491,6 +494,10 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 		if !ok || !hostMatches(reqHost, host) {
 			b.event("output", map[string]any{"category": "console",
 				"output": fmt.Sprintf("Detached request from %q (host filter: %s)\n", reqHost, host)})
+			// Never a silent drop (#938): the client raises a visible
+			// notification, otherwise a filter false-negative is
+			// indistinguishable from "debugging is broken".
+			b.event("ike.filterDetach", map[string]any{"host": reqHost, "filter": host})
 			_ = dc.Detach()
 			_ = dc.Close()
 			return
@@ -499,16 +506,22 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 	b.adoptConn(dc, init)
 }
 
-// requestHost fetches the request's $_SERVER['HTTP_HOST']. property_get is
-// only valid in the break state, so the engine is stepped onto the first
-// statement first (cheap — nothing has run yet). ok=false means no host is
-// available (a CLI-triggered connection, or the engine refused).
+// requestHost fetches the request's $_SERVER['HTTP_HOST']. Commands need the
+// break state, so the engine is stepped onto the first statement first (cheap
+// — nothing has run yet). property_get cannot be used here (#938): without a
+// -c flag it searches context 0 (Locals) while superglobals live in context 1,
+// and with PHP's default auto_globals_jit=On $_SERVER stays uninitialized
+// until user code references it — so the probe came back empty on stock
+// php-fpm setups and the filter silently detached every request. eval forces
+// the superglobal into existence and reads it regardless of context. ok=false
+// means no host is available (a CLI-triggered connection, or the engine
+// refused).
 func (b *bridge) requestHost(dc *dbgp.Conn) (host string, ok bool) {
 	if resp, err := dc.StepInto(); err != nil || resp.Status != "break" {
 		return "", false
 	}
-	p, err := dc.PropertyGet(`$_SERVER['HTTP_HOST']`, 0, 0)
-	if err != nil || p.Type == "uninitialized" {
+	p, err := dc.Eval(`(string)($_SERVER['HTTP_HOST'] ?? '')`)
+	if err != nil || p.Value() == "" {
 		return "", false
 	}
 	return p.Value(), true
