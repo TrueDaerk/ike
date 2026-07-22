@@ -405,6 +405,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// a conceal range are skipped entirely so the line reads like rendered
 	// text. The cursor line always shows raw source.
 	concealing := m.concealOn(line)
+	// Inline color preview (#790): literal cells tint with their own color.
+	swatches := m.lineColorSwatches(line)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Secondary carets (#145) render dimmer than the primary cell.
@@ -586,6 +588,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// colour; cursor/selection/search already won above.
 				st = st.Background(m.occurrenceColor(kind))
 				styled = true
+			}
+			for _, sw := range swatches {
+				// Color preview (#790): the literal's own color replaces the
+				// syntax/ruler/occurrence styling; the diagnostic underline
+				// still composes on top, cursor/selection/search already won.
+				if col >= sw.Start && col < sw.End {
+					st = swatchStyle(sw)
+					styled = true
+					break
+				}
 			}
 			if sev, ok := m.diagSeverityAt(line, col); ok {
 				// Diagnostic underline composes over the syntax colour (syntax base <
