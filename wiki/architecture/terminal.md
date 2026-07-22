@@ -217,7 +217,11 @@ unavailable then, like in xterm.
 shell-friendly: alphanumerics plus `/.-_~+@$%=:`, so `/usr/local/bin`,
 `--flag=value` or `user@host:path` select whole, and a word spanning the wrap
 break stays one word. `cmd+c` copies multi-click selections through the same
-path as drags. Word-wise/line-wise drag extension stays with idea #30.
+path as drags. Keeping the button down after the second/third click and
+dragging extends unit-wise (#951): word by word after a double click, whole
+logical lines after a triple click — in both directions, with the originally
+clicked word/line always fully selected; a plain click keeps character-wise
+dragging.
 
 **Mouse wheel** (#226, `MouseWheel` in `model.go`): the wheel goes to whoever
 asked for it — a child that enabled a DEC mouse-reporting mode

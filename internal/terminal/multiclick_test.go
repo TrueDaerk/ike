@@ -272,6 +272,110 @@ func TestReflowScrollbackRewraps(t *testing.T) {
 	}
 }
 
+// TestDoubleClickDragExtendsWordWise guards #951: after a double click,
+// dragging extends the selection word by word — forward and backward — with
+// the origin word always fully covered.
+func TestDoubleClickDragExtendsWordWise(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	m := Model{sess: s, h: 24, w: 80}
+
+	for _, r := range "echo run /usr/local/bin now\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "echo output", func() bool {
+		return strings.Count(plainView(s), "/usr/local/bin") >= 2
+	})
+	rows := strings.Split(plainView(s), "\n")
+	rowIdx, colIdx := -1, -1
+	for i, r := range rows {
+		if idx := strings.Index(r, "/usr/local/bin"); idx >= 0 && !strings.Contains(r, "echo ") {
+			rowIdx, colIdx = i, idx
+			break
+		}
+	}
+	if rowIdx < 0 {
+		t.Fatalf("output row not found in:\n%s", plainView(s))
+	}
+
+	// Double click on "run", then drag forward through the path and on to
+	// "now": each step grows the selection by whole words.
+	m.MousePress(colIdx-4, rowIdx)
+	m.MouseRelease(colIdx-4, rowIdx)
+	m.MousePress(colIdx-4, rowIdx)
+	if got := m.SelectionText(); got != "run" {
+		t.Fatalf("double-click selection = %q, want %q", got, "run")
+	}
+	m.MouseDrag(colIdx+6, rowIdx)
+	if got := m.SelectionText(); got != "run /usr/local/bin" {
+		t.Fatalf("forward word drag = %q, want %q", got, "run /usr/local/bin")
+	}
+	m.MouseDrag(colIdx+16, rowIdx)
+	if got := m.SelectionText(); got != "run /usr/local/bin now" {
+		t.Fatalf("forward word drag 2 = %q, want %q", got, "run /usr/local/bin now")
+	}
+	// Dragging back onto the origin shrinks to the origin word again.
+	m.MouseDrag(colIdx-4, rowIdx)
+	if got := m.SelectionText(); got != "run" {
+		t.Fatalf("drag back to origin = %q, want %q", got, "run")
+	}
+	m.MouseRelease(colIdx-4, rowIdx)
+
+	// Backward: double click "now", drag back to "run".
+	m.ClearSelection()
+	m.MousePress(colIdx+16, rowIdx)
+	m.MouseRelease(colIdx+16, rowIdx)
+	m.MousePress(colIdx+16, rowIdx)
+	m.MouseDrag(colIdx-3, rowIdx)
+	if got := m.SelectionText(); got != "run /usr/local/bin now" {
+		t.Fatalf("backward word drag = %q, want %q", got, "run /usr/local/bin now")
+	}
+	m.MouseRelease(colIdx-3, rowIdx)
+}
+
+// TestTripleClickDragExtendsLineWise guards #951: after a triple click,
+// dragging extends by whole logical lines — a soft-wrapped chain joins as
+// one line in the extended copy.
+func TestTripleClickDragExtendsLineWise(t *testing.T) {
+	c := &collector{}
+	s := startNarrowSh(t, c)
+	m := Model{sess: s, h: 24, w: 20}
+
+	for _, r := range "printf '%s\\nzzz-mark\\n' " + wrapped30 + "\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "output", func() bool { return strings.Contains(plainView(s), "zzz-mark") })
+	sb := s.ScrollbackLen()
+	v := -1
+	for i := 0; i < sb+24; i++ {
+		if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] &&
+			strings.HasPrefix(s.LineText(i+2), "zzz-mark") {
+			v = i
+			break
+		}
+	}
+	if v < 0 {
+		t.Fatalf("rows not found; view:\n%s", plainView(s))
+	}
+
+	// Triple click on the marker line (third press held), then drag up into
+	// the wrapped chain: the whole logical line above joins the selection.
+	row := v + 2 - s.ScrollbackLen()
+	m.MousePress(2, row)
+	m.MouseRelease(2, row)
+	m.MousePress(2, row)
+	m.MouseRelease(2, row)
+	m.MousePress(2, row)
+	if got := m.SelectionText(); got != "zzz-mark" {
+		t.Fatalf("triple-click selection = %q, want %q", got, "zzz-mark")
+	}
+	m.MouseDrag(3, row-1) // onto the wrapped continuation row above
+	if got := m.SelectionText(); got != wrapped30+"\nzzz-mark" {
+		t.Fatalf("line-wise drag up = %q, want %q", got, wrapped30+"\nzzz-mark")
+	}
+	m.MouseRelease(3, row-1)
+}
+
 // TestDoubleClickWordAcrossWrap guards #936: the word under the pointer
 // extends across the soft-wrap break in both directions.
 func TestDoubleClickWordAcrossWrap(t *testing.T) {

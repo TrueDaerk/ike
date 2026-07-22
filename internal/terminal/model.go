@@ -51,10 +51,15 @@ type Model struct {
 	selAnchor, selHead vpos
 	selOn, dragging    bool
 	// Multi-click selection (#936): consecutive presses on the same cell
-	// within multiClickWindow cycle click → word → line → click …
-	lastClickAt  time.Time
-	lastClickPos vpos
-	clickStreak  int
+	// within multiClickWindow cycle click → word → line → click … After a
+	// double/triple click the drag extends unit-wise (#951): selMode carries
+	// the granularity and selOriginA/B the clicked word/line, which always
+	// stays fully selected while the head grows in either direction.
+	lastClickAt            time.Time
+	lastClickPos           vpos
+	clickStreak            int
+	selMode                int
+	selOriginA, selOriginB vpos
 	// Command completion popup (#740): comp is the popup state, autoSuggest
 	// the while-typing trigger (terminal.autosuggest), pendingSuggest a
 	// recompute scheduled for the next screen update (the shell must echo
@@ -353,6 +358,13 @@ func (m Model) Scroll() int { return m.scroll }
 // land to count as a double/triple click (#936).
 const multiClickWindow = 500 * time.Millisecond
 
+// Selection granularities (#951): what one drag step extends by.
+const (
+	selChar = iota // plain drag: cell-wise
+	selWord        // after a double click: word-wise
+	selLine        // after a triple click: logical-line-wise
+)
+
 // MousePress routes a left press at the pane-local cell (x, y): a child that
 // enabled mouse reporting gets the click (like the wheel, #226); otherwise it
 // anchors a text selection (#227). Repeated presses on the same cell within
@@ -377,13 +389,16 @@ func (m *Model) MousePress(x, y int) {
 	}
 	m.lastClickAt, m.lastClickPos = now, v
 
+	m.dragging = true
 	switch (m.clickStreak-1)%3 + 1 {
 	case 2:
+		m.selMode = selWord
 		m.selectWordAt(v)
 	case 3:
+		m.selMode = selLine
 		m.selectLineAt(v.line)
 	default:
-		m.dragging = true
+		m.selMode = selChar
 		m.selAnchor = v
 		m.selHead = m.selAnchor
 	}
@@ -402,13 +417,29 @@ func (m Model) logicalLineSpan(v int) (first, last int) {
 	return first, last
 }
 
-// selectWordAt selects the word under v, shell-friendly boundaries, across
-// the whole logical line — a word spanning a soft-wrap break stays one word
-// (#936). A press on a non-word cell selects just that cell.
+// selectWordAt selects the word under v and remembers it as the drag-extend
+// origin (#936/#951). A press on a blank cell falls back to a plain
+// character selection anchored there.
 func (m *Model) selectWordAt(v vpos) {
+	a, b, ok := m.wordSpanAt(v)
+	if !ok {
+		m.selMode = selChar
+		m.selAnchor, m.selHead = v, v
+		return
+	}
+	m.selOriginA, m.selOriginB = a, b
+	m.selAnchor, m.selHead = a, b
+	m.selOn = true
+}
+
+// wordSpanAt returns the [a, b) span of the word under v, shell-friendly
+// boundaries, across the whole logical line — a word spanning a soft-wrap
+// break stays one word (#936). A non-word cell spans just itself; ok=false on
+// blank space.
+func (m Model) wordSpanAt(v vpos) (a, b vpos, ok bool) {
 	w := m.sess.Width()
 	if w <= 0 {
-		return
+		return a, b, false
 	}
 	first, last := m.logicalLineSpan(v.line)
 	// The logical line as one rune string: wrapped rows are full-width by
@@ -426,31 +457,38 @@ func (m *Model) selectWordAt(v vpos) {
 	}
 	idx := (v.line-first)*w + v.col
 	if idx >= len(text) || text[idx] == ' ' {
-		return // pressed blank space: nothing to select
+		return a, b, false // blank space: no word here
 	}
-	a, b := idx, idx+1
+	ia, ib := idx, idx+1
 	if isWordRune(text[idx]) {
-		for a > 0 && isWordRune(text[a-1]) {
-			a--
+		for ia > 0 && isWordRune(text[ia-1]) {
+			ia--
 		}
-		for b < len(text) && isWordRune(text[b]) {
-			b++
+		for ib < len(text) && isWordRune(text[ib]) {
+			ib++
 		}
 	}
-	m.selAnchor = vpos{line: first + a/w, col: a % w}
-	m.selHead = vpos{line: first + (b-1)/w, col: (b-1)%w + 1}
-	m.selOn, m.dragging = true, false
+	a = vpos{line: first + ia/w, col: ia % w}
+	b = vpos{line: first + (ib-1)/w, col: (ib-1)%w + 1}
+	return a, b, true
 }
 
-// selectLineAt selects the whole logical line through virtual line v: every
-// row of its soft-wrap chain, hard-newline bounded (#936).
+// selectLineAt selects the whole logical line through virtual line v — every
+// row of its soft-wrap chain, hard-newline bounded — and remembers it as the
+// drag-extend origin (#936/#951).
 func (m *Model) selectLineAt(v int) {
+	a, b := m.lineSpanAt(v)
+	m.selOriginA, m.selOriginB = a, b
+	m.selAnchor, m.selHead = a, b
+	m.selOn = a != b // an empty line has nothing to select yet
+}
+
+// lineSpanAt returns the [a, b) span of the logical line through virtual
+// line v.
+func (m Model) lineSpanAt(v int) (a, b vpos) {
 	first, last := m.logicalLineSpan(v)
 	end := len([]rune(m.sess.LineText(last)))
-	m.selAnchor = vpos{line: first, col: 0}
-	m.selHead = vpos{line: last, col: end}
-	m.selOn = m.selAnchor != m.selHead // an empty line has nothing to select
-	m.dragging = false
+	return vpos{line: first, col: 0}, vpos{line: last, col: end}
 }
 
 // isWordRune classifies shell-friendly word characters (#936): alphanumerics
@@ -476,8 +514,40 @@ func (m *Model) MouseDrag(x, y int) {
 	if !m.dragging {
 		return
 	}
-	m.selHead = m.virtualAt(x, y)
-	m.selOn = m.selHead != m.selAnchor
+	v := m.virtualAt(x, y)
+	switch m.selMode {
+	case selWord:
+		// Word-wise extension (#951): the selection is the union of the
+		// origin word and the word under the pointer; a blank cell extends
+		// cell-wise so the drag never feels stuck.
+		a, b, ok := m.wordSpanAt(v)
+		if !ok {
+			a, b = v, vpos{line: v.line, col: v.col + 1}
+		}
+		m.extendUnit(a, b)
+	case selLine:
+		a, b := m.lineSpanAt(v.line)
+		m.extendUnit(a, b)
+	default:
+		m.selHead = v
+		m.selOn = m.selHead != m.selAnchor
+	}
+}
+
+// extendUnit grows the selection from the multi-click origin unit to cover
+// the dragged unit [a, b): backwards drags anchor at the origin's end,
+// forward drags at its start — the originally clicked word/line always stays
+// fully selected (#951).
+func (m *Model) extendUnit(a, b vpos) {
+	switch {
+	case a.before(m.selOriginA):
+		m.selAnchor, m.selHead = m.selOriginB, a
+	case m.selOriginB.before(b):
+		m.selAnchor, m.selHead = m.selOriginA, b
+	default:
+		m.selAnchor, m.selHead = m.selOriginA, m.selOriginB
+	}
+	m.selOn = m.selAnchor != m.selHead
 }
 
 // MouseRelease ends a drag (or forwards the release); the selection, if any,
