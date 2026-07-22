@@ -42,6 +42,15 @@ func newClientWithFake(t *testing.T, responders map[string]func(params json.RawM
 	conn := jsonrpc.NewConn(cli, jsonrpc.Handler{})
 	c := New(conn)
 	t.Cleanup(func() { conn.Close() })
+
+	// Complete the handshake up front: requests gate on it (#937), so every
+	// feature test needs an initialized client. A scripted "initialize"
+	// responder is honoured; without one the null result works fine.
+	ctx, cancel := ctx2s()
+	defer cancel()
+	if _, err := c.Initialize(ctx, InitParams{}); err != nil {
+		t.Fatalf("handshake: %v", err)
+	}
 	return c, srv
 }
 

@@ -40,6 +40,11 @@ internal/lsp/
              editor rune columns <-> LSP UTF-16 (or negotiated UTF-8/UTF-32).
   client/    one Client per server: initialize/initialized/shutdown handshake,
              cached + feature-gated ServerCapabilities, typed request/notify calls.
+             The handshake is a hard gate (#937): notifications fired before the
+             initialize response arrives are queued and flushed right after
+             initialized (in order), requests wait for the gate — servers crash
+             on traffic that races the handshake (Intelephense dies on an early
+             didOpen/initialized).
   manager/   owns every server: maps (language, workspace root) -> Client, detects
              roots from root_markers, spawns lazily, routes ops, recovers from
              crashes (restart.go), and injects toolchain settings at spawn.

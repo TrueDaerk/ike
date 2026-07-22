@@ -2,6 +2,11 @@
 
 ## 2026-07-22
 
+- LSP handshake sequencing (#937): the client now queues all notifications and
+  blocks all requests until the initialize response has arrived and
+  initialized is sent — early didOpen/initialized traffic crashed Intelephense
+  on every start (`/architecture/lsp.md`).
+
 - Inline color preview (#790): `#rrggbb`/`#rgb`/`rgb()`/`hsl()` literals tint
   with their own color (contrast foreground by luminance); toggle
   `editor.color_preview` (`/architecture/editor.md`).
