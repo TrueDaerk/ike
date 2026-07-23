@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -832,5 +833,26 @@ func TestSendEOFExitsIdleShell(t *testing.T) {
 	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
 	waitFor(t, "shell exit", func() bool {
 		return c.has(func(m tea.Msg) bool { _, ok := m.(ExitedMsg); return ok })
+	})
+}
+
+// TestSessionCloseLeavesNoGoroutines guards #1001: repeated open/close
+// cycles must return the goroutine count to its baseline — the read/feed/
+// write loops and all timers end with the session.
+func TestSessionCloseLeavesNoGoroutines(t *testing.T) {
+	c := &collector{}
+	baseline := runtime.NumGoroutine()
+	for i := 0; i < 5; i++ {
+		s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s.Resize(90, 30)
+		s.Resize(100, 31) // arms the trailing resize timer
+		s.Close()
+	}
+	waitFor(t, "goroutines back to baseline", func() bool {
+		runtime.GC()
+		return runtime.NumGoroutine() <= baseline+2 // allow test-runner jitter
 	})
 }
