@@ -23,42 +23,9 @@ type InitParams struct {
 // surrogate-pair math) while still defaulting to UTF-16 when they decline.
 func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.InitializeResult, error) {
 	params := protocol.InitializeParams{
-		ProcessID: p.ProcessID,
-		RootURI:   p.RootURI,
-		Capabilities: protocol.ClientCapabilities{
-			General: &protocol.GeneralClientCapabilities{
-				PositionEncodings: []string{protocol.EncodingUTF8, protocol.EncodingUTF16},
-			},
-			// Without workspace.configuration a server never issues
-			// workspace/configuration, so pyright never pulls the detected
-			// Python interpreter (python.pythonPath) and falls back to the
-			// system interpreter — venv imports then resolve as errors (#563).
-			Workspace: &protocol.WorkspaceClientCaps{
-				Configuration:          true,
-				DidChangeConfiguration: &protocol.DidChangeConfigurationCaps{DynamicRegistration: true},
-			},
-			TextDocument: &protocol.TextDocumentClientCaps{
-				Synchronization: &protocol.SyncClientCaps{DidSave: true},
-				Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: true}},
-				Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
-				Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
-				References:      &protocol.ReferencesClientCaps{},
-				Formatting:      &protocol.ReferencesClientCaps{},
-				RangeFormatting: &protocol.ReferencesClientCaps{},
-				Rename:          &protocol.RenameClientCaps{PrepareSupport: true},
-				CodeAction:      &protocol.ReferencesClientCaps{},
-				SignatureHelp:   &protocol.ReferencesClientCaps{},
-				CallHierarchy:   &protocol.ReferencesClientCaps{},
-				InlayHint:       &protocol.ReferencesClientCaps{},
-				DocumentSymbol:  &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
-				SemanticTokens: &protocol.SemanticTokensClientCaps{
-					Requests:       protocol.SemanticTokensRequests{Full: &protocol.SemanticTokensFullRequest{Delta: true}},
-					TokenTypes:     protocol.StandardTokenTypes,
-					TokenModifiers: protocol.StandardTokenModifiers,
-					Formats:        []string{"relative"},
-				},
-			},
-		},
+		ProcessID:             p.ProcessID,
+		RootURI:               p.RootURI,
+		Capabilities:          clientCapabilities(),
 		InitializationOptions: p.InitializationOptions,
 	}
 	if p.RootURI != "" {
@@ -103,6 +70,48 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 		close(c.initDone)
 	})
 	return res, nil
+}
+
+// clientCapabilities is the full capability set IKE advertises in initialize.
+// Kept as its own function so tests can assert the wire payload (#1060).
+func clientCapabilities() protocol.ClientCapabilities {
+	return protocol.ClientCapabilities{
+		General: &protocol.GeneralClientCapabilities{
+			PositionEncodings: []string{protocol.EncodingUTF8, protocol.EncodingUTF16},
+		},
+		// Without workspace.configuration a server never issues
+		// workspace/configuration, so pyright never pulls the detected
+		// Python interpreter (python.pythonPath) and falls back to the
+		// system interpreter — venv imports then resolve as errors (#563).
+		Workspace: &protocol.WorkspaceClientCaps{
+			Configuration:          true,
+			DidChangeConfiguration: &protocol.DidChangeConfigurationCaps{DynamicRegistration: true},
+		},
+		TextDocument: &protocol.TextDocumentClientCaps{
+			Synchronization: &protocol.SyncClientCaps{DidSave: true},
+			Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: true}},
+			Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
+			Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
+			References:      &protocol.ReferencesClientCaps{},
+			Formatting:      &protocol.ReferencesClientCaps{},
+			RangeFormatting: &protocol.ReferencesClientCaps{},
+			Rename:          &protocol.RenameClientCaps{PrepareSupport: true},
+			CodeAction:      &protocol.ReferencesClientCaps{},
+			SignatureHelp:   &protocol.ReferencesClientCaps{},
+			CallHierarchy:   &protocol.ReferencesClientCaps{},
+			InlayHint:       &protocol.ReferencesClientCaps{},
+			DocumentSymbol:  &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
+			// #1060: vtsls gates push diagnostics on this capability — with
+			// it absent it never sends textDocument/publishDiagnostics.
+			PublishDiagnostics: &protocol.PublishDiagnosticsClientCaps{RelatedInformation: true},
+			SemanticTokens: &protocol.SemanticTokensClientCaps{
+				Requests:       protocol.SemanticTokensRequests{Full: &protocol.SemanticTokensFullRequest{Delta: true}},
+				TokenTypes:     protocol.StandardTokenTypes,
+				TokenModifiers: protocol.StandardTokenModifiers,
+				Formats:        []string{"relative"},
+			},
+		},
+	}
 }
 
 // Shutdown asks the server to shut down (request) then exit (notification). It

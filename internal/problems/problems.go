@@ -294,9 +294,18 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		scope = "current file"
 	}
 	errs, warns := m.visibleCounts()
-	counts := strconv.Itoa(errs) + " errors · " + strconv.Itoa(warns) + " warnings"
+	counts := plural(errs, "error") + " · " + plural(warns, "warning")
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" Problems — " + scope)
 	return title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
+}
+
+// plural renders "1 error" / "2 errors" (#1064).
+func plural(n int, unit string) string {
+	s := strconv.Itoa(n) + " " + unit
+	if n != 1 {
+		s += "s"
+	}
+	return s
 }
 
 // visibleCounts totals errors and warnings across the listed rows.

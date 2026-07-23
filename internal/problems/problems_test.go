@@ -183,7 +183,8 @@ func TestViewRendersRowsAndFooter(t *testing.T) {
 	if !strings.Contains(v, "(E42)") {
 		t.Fatalf("code missing:\n%s", v)
 	}
-	if !strings.Contains(v, "1 errors · 0 warnings") {
+	// #1064: singular for count 1.
+	if !strings.Contains(v, "1 error · 0 warnings") {
 		t.Fatalf("header counts missing:\n%s", v)
 	}
 	if !strings.Contains(v, "f current file") {
@@ -201,5 +202,15 @@ func TestViewEmptyStates(t *testing.T) {
 	m.Update(key("f"))
 	if v := m.View(); !strings.Contains(v, "no active file") {
 		t.Fatalf("file-scope empty view:\n%s", v)
+	}
+}
+
+// TestHeaderPluralization guards #1064.
+func TestHeaderPluralization(t *testing.T) {
+	cases := map[int]string{0: "0 errors", 1: "1 error", 2: "2 errors"}
+	for n, want := range cases {
+		if got := plural(n, "error"); got != want {
+			t.Errorf("plural(%d) = %q want %q", n, got, want)
+		}
 	}
 }

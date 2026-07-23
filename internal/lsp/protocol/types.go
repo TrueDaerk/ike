@@ -106,6 +106,16 @@ type TextDocumentClientCaps struct {
 	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
 	InlayHint       *ReferencesClientCaps     `json:"inlayHint,omitempty"`
 	DocumentSymbol  *DocumentSymbolClientCaps `json:"documentSymbol,omitempty"`
+	// PublishDiagnostics must be advertised for servers that gate their push
+	// diagnostics on it (#1060): vtsls sends none at all without the entry.
+	PublishDiagnostics *PublishDiagnosticsClientCaps `json:"publishDiagnostics,omitempty"`
+}
+
+// PublishDiagnosticsClientCaps announces textDocument/publishDiagnostics
+// support (#1060). relatedInformation asks servers to include linked
+// locations on diagnostics that carry them.
+type PublishDiagnosticsClientCaps struct {
+	RelatedInformation bool `json:"relatedInformation,omitempty"`
 }
 
 // DocumentSymbolClientCaps announces documentSymbol support (#1025);

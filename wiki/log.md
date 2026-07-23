@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- LSP quick fixes: initialize advertises `textDocument.publishDiagnostics`
+  (#1060 — vtsls gated all TypeScript push diagnostics on it), absent
+  `workspace/configuration` sections answer `{}` instead of null (#1061 —
+  css-language-server stopped validating on null), Problems header
+  pluralizes correctly (#1064) (`/architecture/lsp.md`).
+
 - Dirty directories take their subtree's dominant VCS status (#1053):
   `Snapshot.DirStatus` propagates the strongest child signal (conflicted >
   modified > added > untracked), so untracked-only folders stop reading as
