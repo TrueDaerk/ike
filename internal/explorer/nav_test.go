@@ -182,3 +182,49 @@ func TestNavCommandsDispatch(t *testing.T) {
 		t.Fatalf("collapseOrParent from a file must go to the parent, cursor = %d", m.cursor)
 	}
 }
+
+// TestEmptyDirHidesExpander guards #1039: a loaded empty directory shows no
+// caret; an unloaded one keeps it (contents unknown), hidden-only contents
+// count as empty until the toggle reveals them.
+func TestEmptyDirHidesExpander(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "emptydir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	hid := filepath.Join(root, "hiddenonly")
+	if err := os.MkdirAll(hid, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(hid, ".secret"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := New(root)
+	m.SetSize(30, 10)
+	m.applyScan(scanCmd(root)().(ScanDoneMsg))
+	find := func(name string) *node {
+		for _, n := range m.rows {
+			if n.name == name {
+				return n
+			}
+		}
+		t.Fatalf("row %q missing", name)
+		return nil
+	}
+	// Unloaded: caret shows.
+	if got := m.marker(find("emptydir")); got != "▸ " {
+		t.Fatalf("unloaded dir marker = %q", got)
+	}
+	// Load both: empty and hidden-only lose the caret.
+	m.applyScan(scanCmd(filepath.Join(root, "emptydir"))().(ScanDoneMsg))
+	m.applyScan(scanCmd(hid)().(ScanDoneMsg))
+	if got := m.marker(find("emptydir")); got != "  " {
+		t.Fatalf("loaded empty dir marker = %q want blank", got)
+	}
+	if got := m.marker(find("hiddenonly")); got != "  " {
+		t.Fatalf("hidden-only dir marker = %q want blank", got)
+	}
+	m, _ = m.Update(ToggleHiddenMsg{})
+	if got := m.marker(find("hiddenonly")); got != "▸ " {
+		t.Fatalf("with hidden shown the caret must return, got %q", got)
+	}
+}

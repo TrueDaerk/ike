@@ -1242,7 +1242,7 @@ func (m Model) rowParts(n *node) (guides, mark, name, ctx string) {
 	if n.isDir {
 		name += "/"
 	}
-	mark = marker(n)
+	mark = m.marker(n)
 	if m.icons {
 		mark += typeGlyph(n) + " "
 	}
@@ -1297,16 +1297,33 @@ func abbrevHome(p string) string {
 	return p
 }
 
-// marker is the two-cell expand glyph for a row: a caret for directories, blank
-// for files.
-func marker(n *node) string {
+// marker is the two-cell expand glyph for a row: a caret for directories,
+// blank for files — and for directories known to hold nothing visible
+// (#1039): a loaded dir with no (filter-surviving) children shows no
+// expander, JetBrains-style, instead of expanding to nothing. Unloaded dirs
+// keep the caret (contents unknown until the first scan).
+func (m Model) marker(n *node) string {
 	if !n.isDir {
+		return "  "
+	}
+	if n.loaded && !m.hasVisibleChildren(n) {
 		return "  "
 	}
 	if n.expanded {
 		return "▾ "
 	}
 	return "▸ "
+}
+
+// hasVisibleChildren reports whether n has at least one child surviving the
+// hidden-files filter.
+func (m Model) hasVisibleChildren(n *node) bool {
+	for _, c := range n.children {
+		if m.showHidden || !isHidden(c.name) {
+			return true
+		}
+	}
+	return false
 }
 
 // contentWidth is the display width of the widest visible row.

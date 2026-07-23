@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Empty directories drop their expander once loaded (#1039), hidden-only
+  contents included until the dot-toggle reveals them
+  (`/architecture/explorer.md`).
+
 - Explorer tree keys join the registry (#1041): navigation/open actions are
   rebindable commands with cheatsheet doc hints; the raw keys stay as the
   zero-config fallback (`/architecture/explorer.md`).
