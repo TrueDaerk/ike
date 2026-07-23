@@ -71,6 +71,10 @@ type Manager struct {
 	servers  map[string]*server // key: lang + "\x00" + root
 	docs     map[string]*document
 	restarts map[string]int // crash-restart attempts per server key
+	// companionsHinted marks languages whose optional companion tools were
+	// already probed (#1067) — the missing-tool hint fires once per language
+	// per manager lifetime, not per file or per root.
+	companionsHinted map[string]bool
 
 	// Embedded-fragment state (0300, #413): detector, fragment documents per
 	// host path (keyed by detector slot), and a per-host generation counter so
@@ -126,6 +130,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		servers:  make(map[string]*server),
 		docs:     make(map[string]*document),
 		restarts: make(map[string]int),
+
+		companionsHinted: make(map[string]bool),
 		frags:    make(map[string]map[int]*fragmentDoc),
 		fragGen:  make(map[string]int),
 
@@ -1123,6 +1129,9 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	}
 
 	m.status(lang, lang+" language server ready", lsp.ServerState)
+	// Ready is the moment a missing optional companion becomes relevant: the
+	// server works, but a delegated capability is silently off (#1067).
+	m.hintCompanions(lang, spec)
 	go m.watchExit(srv)
 	return srv, nil
 }

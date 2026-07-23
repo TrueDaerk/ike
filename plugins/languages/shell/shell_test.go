@@ -41,6 +41,19 @@ func TestShellRegistered(t *testing.T) {
 	if l.Server == nil || l.Server.Command != "bash-language-server" {
 		t.Errorf("server = %+v, want bash-language-server", l.Server)
 	}
+	// Companion tool (#1067): shellcheck powers the server's diagnostics —
+	// declared so the manager can hint when it is missing from PATH.
+	if l.Server != nil {
+		found := false
+		for _, c := range l.Server.Companions {
+			if c.Binary == "shellcheck" && c.Purpose != "" && c.Install != "" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("companions = %+v, want shellcheck with purpose and install hint", l.Server.Companions)
+		}
+	}
 	line, _, ok := lang.Comments("/p/build.sh")
 	if !ok || line != "#" {
 		t.Errorf("line comment = %q/%v, want #", line, ok)

@@ -32,6 +32,12 @@ func init() {
 			Args:        []string{"start"},
 			RootMarkers: []string{".git"},
 			Install:     []string{"npm", "install", "-g", "bash-language-server"},
+			// bash-language-server delegates linting to shellcheck; without
+			// it on PATH the server runs but never publishes a diagnostic
+			// (#1067) — the manager surfaces a one-time hint.
+			Companions: []lang.Companion{
+				{Binary: "shellcheck", Purpose: "shell diagnostics", Install: "brew install shellcheck"},
+			},
 		},
 		LineComment: "#",
 		IndentAfter: []string{"then", "do", "{"},

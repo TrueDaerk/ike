@@ -19,6 +19,22 @@ type ServerSpec struct {
 	// ["go", "install", "golang.org/x/tools/gopls@latest"]. Empty means the
 	// plugin ships no recipe and installation stays manual.
 	Install []string
+	// Companions are optional tools the server delegates work to (#1067):
+	// the server starts fine without them but silently loses a capability
+	// (bash-language-server → shellcheck diagnostics). The LSP manager probes
+	// PATH for each when the server first becomes ready and surfaces a
+	// one-time hint per language for every missing one.
+	Companions []Companion
+}
+
+// Companion is one optional tool a language server uses when present on PATH
+// (#1067). Binary is the executable to probe for, Purpose names what it
+// enables ("shell diagnostics"), and Install is a human-readable install hint
+// ("brew install shellcheck") folded into the missing-tool message.
+type Companion struct {
+	Binary  string
+	Purpose string
+	Install string
 }
 
 // SettingsJSON encodes Settings as initializationOptions, or nil when empty.

@@ -12,6 +12,10 @@ import "ike/internal/lang"
 // only parses the user's `[lsp.servers.<id>]` config *overlay* onto it.
 type ServerSpec = lang.ServerSpec
 
+// Companion is re-exported from internal/lang alongside ServerSpec: an optional
+// tool a server delegates work to, probed on PATH when the server starts (#1067).
+type Companion = lang.Companion
+
 // Overlay parses a `[lsp.servers.<id>]` config entry into a ServerSpec. Unlike a
 // full spec it does not require a command — config only overrides the fields the
 // user actually sets, on top of the language plugin's baseline. ok=false means the

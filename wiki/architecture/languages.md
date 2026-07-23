@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-23T22:00:00Z
+timestamp: 2026-07-23T22:30:00Z
 ---
 
 # Language Registry
@@ -170,6 +170,24 @@ args, root markers). The user's `[lsp.servers.<id>]` config is an **overlay**:
 overlay per field (config wins where set; baseline fills the rest). `applyDefaults`
 no longer hardcodes servers — it only enables the subsystem.
 
+### Companion tools (#1067)
+
+Some servers delegate a capability to another binary and stay silent when it is
+missing (bash-language-server runs fine without shellcheck, it just never
+publishes a diagnostic). A spec declares those as optional **companions**:
+
+```go
+Companions: []lang.Companion{
+    {Binary: "shellcheck", Purpose: "shell diagnostics", Install: "brew install shellcheck"},
+}
+```
+
+When a server first becomes ready, the LSP manager probes PATH for each declared
+companion and raises a one-time warn status per missing one — e.g. "shellcheck
+not found — shell diagnostics disabled (brew install shellcheck)" — deduplicated
+per language for the session, never per file. Declared today: shell → shellcheck;
+ansible → ansible (module data) and ansible-lint (lint diagnostics).
+
 ## Toolchain detection (version awareness)
 
 For version-gated intelligence (e.g. a Python 3.13 feature flagged under a 3.12
@@ -327,9 +345,9 @@ projects so pyproject.toml and uv.lock stay in sync — see
 | TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics. IKE's own config is TOML. **Caveat:** the Homebrew `taplo` formula is built *without* the LSP feature and dies at startup; IKE recognizes that failure and points at `npm install -g @taplo/cli` (or `cargo install taplo-cli --features lsp`), #1065. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
-| Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH. |
+| Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH (declared companion — a one-time hint fires when it is missing, #1067). |
 | Markdown | marksman (`marksman server`, `brew install marksman`) | Single static binary; completes link targets, heading anchors, wiki-links, reference labels. Prose keeps the word-index source. |
-| Ansible | ansible-language-server (`@ansible/ansible-language-server`) | Module FQCN/option/keyword completion, hover docs, ansible-lint diagnostics when installed. Needs `ansible` on PATH for full module data. Detected by context sniffer, not extension. |
+| Ansible | ansible-language-server (`@ansible/ansible-language-server`) | Module FQCN/option/keyword completion, hover docs, ansible-lint diagnostics when installed. Needs `ansible` on PATH for full module data (both declared companions with one-time missing hints, #1067). Detected by context sniffer, not extension. |
 
 Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
