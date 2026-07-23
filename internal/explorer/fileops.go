@@ -36,12 +36,20 @@ const (
 // (typically a re-scan of the affected directory). pos is the cursor's rune
 // index into input (promptInput only); it starts at the end of any prefilled
 // text and can be moved with the arrow keys or a click.
+//
+// selStart/selEnd mark a preselected rune range (selStart < selEnd), used by
+// rename to preselect the name stem JetBrains-style (#1047): the first
+// printable key replaces the whole range, Backspace/Delete remove it, and any
+// other key drops the selection and edits normally. Outside rename both stay
+// zero and the prompt behaves as a plain input line.
 type prompt struct {
-	kind   promptKind
-	title  string
-	input  string
-	pos    int
-	accept func(m *Model, input string) tea.Cmd
+	kind     promptKind
+	title    string
+	input    string
+	pos      int
+	selStart int
+	selEnd   int
+	accept   func(m *Model, input string) tea.Cmd
 }
 
 // fail records a failed user-initiated file operation and opens a dismissable
@@ -96,6 +104,30 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	// promptInput
+	if p.selStart < p.selEnd {
+		// A preselected range (rename's name stem, #1047): typing replaces it,
+		// Backspace/Delete remove it, any other key drops the selection and
+		// falls through to the normal cursor mechanics below.
+		switch {
+		case msg.Code == tea.KeyBackspace || msg.Code == tea.KeyDelete:
+			r := []rune(p.input)
+			p.input = string(append(r[:p.selStart:p.selStart], r[p.selEnd:]...))
+			p.pos = p.selStart
+			p.selStart, p.selEnd = 0, 0
+			return nil
+		case msg.Code == tea.KeyEnter || msg.Code == tea.KeyEscape:
+			p.selStart, p.selEnd = 0, 0 // accept/cancel act on the full text
+		case msg.Text != "" && msg.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
+			r := []rune(p.input)
+			ins := []rune(msg.Text)
+			p.input = string(append(append(append([]rune{}, r[:p.selStart]...), ins...), r[p.selEnd:]...))
+			p.pos = p.selStart + len(ins)
+			p.selStart, p.selEnd = 0, 0
+			return nil
+		default:
+			p.selStart, p.selEnd = 0, 0
+		}
+	}
 	switch {
 	case msg.Code == tea.KeyEnter:
 		name := trimSpace(p.input)
@@ -294,7 +326,10 @@ func (m *Model) toTrash(path string) (string, error) {
 }
 
 // promptRename opens the name prompt for renaming the selected entry, prefilled
-// with its current name. The root is never renameable.
+// with its current name and the name stem preselected (#1047, JetBrains-style):
+// typing immediately replaces the stem while the extension survives. Folders
+// (and extension-only names like ".gitignore") preselect the whole name. The
+// root is never renameable.
 func (m *Model) promptRename() {
 	n := m.current()
 	if n == nil || n == m.root {
@@ -305,11 +340,18 @@ func (m *Model) promptRename() {
 		what = "folder"
 	}
 	path, isDir := n.path, n.isDir
+	sel := len([]rune(n.name))
+	if !isDir {
+		if stem := strings.TrimSuffix(n.name, filepath.Ext(n.name)); stem != "" {
+			sel = len([]rune(stem))
+		}
+	}
 	m.prompt = &prompt{
-		kind:  promptInput,
-		title: fmt.Sprintf("Rename %s %q to:", what, n.name),
-		input: n.name,
-		pos:   len([]rune(n.name)),
+		kind:   promptInput,
+		title:  fmt.Sprintf("Rename %s %q to:", what, n.name),
+		input:  n.name,
+		pos:    sel,
+		selEnd: sel,
 		accept: func(mm *Model, name string) tea.Cmd {
 			return mm.renameEntry(path, name, isDir)
 		},
@@ -473,6 +515,10 @@ func (m *Model) refreshDir(dir string) tea.Cmd {
 // width locates the text column for both rendering and click hit-testing.
 const promptInputPrefix = "> "
 
+// promptInputHint is the affordance line under a promptInput's text (#1047),
+// mirroring the confirm prompt's "[y]es  [n]o" and the notice's dismiss hint.
+const promptInputHint = "enter accept · esc cancel"
+
 // promptCursorStyle highlights the rune the input cursor sits on (reverse
 // video) rather than inserting a separate caret glyph, so the cursor overlays
 // a cell instead of pushing the text sideways as it moves.
@@ -523,7 +569,18 @@ func (m Model) promptBox() string {
 	case promptInput:
 		r := []rune(p.input)
 		off, avail := m.promptInputWindow()
-		before, after := string(r[off:p.pos]), ""
+		before := string(r[off:p.pos])
+		if p.selStart < p.selEnd {
+			// Preselected stem (#1047): render the visible selected slice on
+			// the theme's selection colours so the replace-on-type affordance
+			// is visible. The selection always ends at the cursor, so only the
+			// "before" part needs splitting.
+			selStyle := lipgloss.NewStyle().
+				Background(m.theme().Selection).Foreground(m.theme().SelectionText)
+			s, e := clamp(p.selStart, off, p.pos), clamp(p.selEnd, off, p.pos)
+			before = string(r[off:s]) + selStyle.Render(string(r[s:e])) + string(r[e:p.pos])
+		}
+		after := ""
 		cur := " " // past the last rune: a blank cursor cell
 		if p.pos < len(r) {
 			cur = string(r[p.pos])
@@ -532,6 +589,7 @@ func (m Model) promptBox() string {
 			}
 		}
 		body += "\n" + promptInputPrefix + before + promptCursorStyle.Render(cur) + after
+		body += "\n" + ansi.Truncate(promptInputHint, inner, "…")
 	default:
 		body += "\n" + ansi.Truncate("[y]es  [n]o", inner, "…")
 	}
@@ -596,6 +654,7 @@ func (m *Model) PromptMouseClick(x, y int) {
 	off, _ := m.promptInputWindow()
 	r := []rune(p.input)
 	p.pos = clamp(x-textX+off, 0, len(r))
+	p.selStart, p.selEnd = 0, 0 // a click drops rename's preselection (#1047)
 }
 
 // trimSpace trims leading/trailing ASCII spaces and tabs from a filename without
