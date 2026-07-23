@@ -153,6 +153,44 @@ func TestTerminalGlobalChordsWidened(t *testing.T) {
 	m.finder.Close()
 }
 
+// TestTerminalTabSwitchChords guards #997: ctrl+cmd+left/right switch the
+// focused tab host's tabs from inside a terminal tab, while the ctrl+alt
+// secondaries stay with the shell.
+func TestTerminalTabSwitchChords(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+
+	// cmd+t converts the pane into a tab host with two terminal tabs (#983).
+	handled, out2, _ := m.terminalReservedKey("cmd+t")
+	if !handled {
+		t.Fatal("setup: cmd+t must convert the terminal pane")
+	}
+	m = out2.(Model)
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.TabCount() != 2 {
+		t.Fatalf("setup: want 2 terminal tabs, got %d", inst.TabCount())
+	}
+	t.Cleanup(inst.CloseTerminalTabs)
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModSuper})
+	if got := inst.ActiveTab(); got != 0 {
+		t.Fatalf("ctrl+cmd+right must cycle to tab 0, active=%d", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl | tea.ModSuper})
+	if got := inst.ActiveTab(); got != 1 {
+		t.Fatalf("ctrl+cmd+left must cycle back to tab 1, active=%d", got)
+	}
+
+	// The ctrl+alt secondaries stay with the shell (#997 decision).
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl | tea.ModAlt})
+	if got := inst.ActiveTab(); got != 1 {
+		t.Fatalf("ctrl+alt+right must stay with the shell, active=%d", got)
+	}
+	_ = m
+}
+
 // TestTerminalDoubleShift guards #973: two bare shift taps open Search
 // Everywhere from a terminal; a single tap (or taps with other keys between)
 // stays with the shell.

@@ -1650,6 +1650,20 @@ var terminalGlobalCommands = map[string]bool{
 	"todo.list":             true,
 	"vcs.panel":             true,
 	"notifications.history": true,
+	// #997: tab switching stays reachable from a focused terminal/tool pane
+	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
+	// ctrl+alt+arrow bindings stay with the shell — see terminalShellChords.
+	"editor.tab.next": true,
+	"editor.tab.prev": true,
+}
+
+// terminalShellChords are chords that stay with the shell even when they
+// resolve to an allowlisted command (#997): alt-modified arrows are common
+// readline word/line navigation, so only the ctrl+cmd tab chords are
+// reserved and the ctrl+alt secondaries keep reaching the shell.
+var terminalShellChords = map[string]bool{
+	"ctrl+alt+left":  true,
+	"ctrl+alt+right": true,
 }
 
 // doubleTapWindow is how close two bare shift taps must be to count as the
@@ -1697,6 +1711,9 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			return false, nil
 		}
 		chord := keymap.Chord{Steps: []keymap.Key{k}}
+		if terminalShellChords[chord.String()] {
+			return false, nil
+		}
 		if b, found := table.Lookup(chord, keymap.Context(m.focusContext())); found && terminalGlobalCommands[b.Command] {
 			if c, okc := m.reg.Command(b.Command); okc {
 				return true, m.dispatchCommand(b.Command, c)

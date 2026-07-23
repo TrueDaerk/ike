@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Terminal/tools: `ctrl+cmd+left/right` switch tabs while a terminal or tool
+  pane is focused (#997); the `ctrl+alt+arrow` secondaries stay with the
+  shell (`/architecture/terminal.md`).
+
 - LSP: replies to server→client requests always carry a `result` property —
   a nil payload now serializes as an explicit JSON null (#991); the omitted
   field crashed vscode-jsonrpc servers (Intelephense exited 1 right after
