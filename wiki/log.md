@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Explorer tree keys join the registry (#1041): navigation/open actions are
+  rebindable commands with cheatsheet doc hints; the raw keys stay as the
+  zero-config fallback (`/architecture/explorer.md`).
+
 - Explorer root-path context + optional file-type markers (#1046): the root
   row carries a dimmed, home-abbreviated ` — ~/path` suffix (InlayHint
   colour, pre-truncated to the pane, suppressed under 30 cols), and
