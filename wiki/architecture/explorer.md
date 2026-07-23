@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-23T19:00:00Z
 ---
 
 # File Explorer
@@ -126,18 +126,25 @@ the tree via `SetVCS`; outside a git repository nothing changes. See
 A row's **base** style is its per-filetype colour (`nodeStyle` → `colors.style`),
 plus italics for hidden (dot-prefixed) entries. `rowKind` then classifies how the
 row is highlighted, strongest first: the focused **cursor** (`selStyle`, blue
-background) → the mouse **hover** (base colour + grey background) → the **open
-file** (`activeStyle`, a muted warm accent, deliberately not bold — the
+background) → the mouse **hover** (adds the grey background only, preserving
+the row's semantic foreground — the active-file accent included, #1056) → the
+**open file** (`activeStyle`, a muted warm accent, deliberately not bold — the
 **focused editor's** file: `app.setFocus` calls `SetActive` whenever focus lands
 on an editor pane, so the accent follows pane clicks and focus cycling; it is
 cleared when the file closes) → otherwise the base style (directory or plain
 file colour). The classification lives in `rowKind` so it is testable independent
 of the terminal colour profile.
 
+Indent guides render in the semantic `IndentGuide` palette slot (#1050,
+mirroring the editor) over the row's background, and — with the expand
+marker — stay un-bold under the cursor so the caret column keeps its metrics
+(#1059). The `(empty)` placeholder uses the `InlayHint` slot instead of
+terminal Faint (#1058).
+
 Independently of `rowKind`, **every** file open in any editor pane renders its
-**name underlined + italic** (the row's indent guides and padding stay
-undecorated: `rowParts` splits prefix from name so `View` can style them
-separately) on top of whatever highlight the row carries. The app maintains
+**name underlined** (no italics — those stay reserved for hidden entries,
+#1055; `rowParts` splits guides/marker/name so `View` styles them separately)
+on top of whatever highlight the row carries. The app maintains
 that set via `SetOpen` (`syncExplorerOpen` in `internal/app` collects each
 editor pane's file after every open/close/restore); `SetOpen` also clears a
 stale `active` mark whose file is no longer open.

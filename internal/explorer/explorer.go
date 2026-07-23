@@ -778,29 +778,29 @@ func (m *Model) clampScroll() {
 }
 
 // rowParts is the plain (unstyled) content of a row, split where styling
-// differs: the prefix (indent guides for each ancestor level plus the expand
-// marker) and the name (directories gain a trailing slash). The split lets
-// View decorate just the name (the open-file underline) without underlining
-// guides or padding.
-func (m Model) rowParts(n *node) (prefix, name string) {
+// differs: the guides (one indent-guide segment per ancestor level), the
+// two-cell expand marker, and the name (directories gain a trailing slash).
+// The split lets View paint the guides in the semantic IndentGuide colour
+// (#1050, mirroring the editor) and decorate just the name (the open-file
+// underline) without touching guides or padding.
+func (m Model) rowParts(n *node) (guides, mark, name string) {
 	var b strings.Builder
 	for d := 0; d < n.depth; d++ {
 		b.WriteString("│")
 		b.WriteString(strings.Repeat(" ", maxz(m.indent-1)))
 	}
-	b.WriteString(marker(n))
 	name = n.name
 	if n.isDir {
 		name += "/"
 	}
-	return b.String(), name
+	return b.String(), marker(n), name
 }
 
 // rowText is the full plain content of a row. It is the single source of truth
 // for width measurement, so clipping and the scrollbars agree with rendering.
 func (m Model) rowText(n *node) string {
-	prefix, name := m.rowParts(n)
-	return prefix + name
+	guides, mark, name := m.rowParts(n)
+	return guides + mark + name
 }
 
 // marker is the two-cell expand glyph for a row: a caret for directories, blank
@@ -1111,7 +1111,9 @@ func (m Model) View() string {
 		return "error: " + m.err.Error()
 	}
 	if len(m.rows) == 0 {
-		return lipgloss.NewStyle().Faint(true).Render("(empty)")
+		// A palette slot, not terminal Faint, so light themes render the
+		// placeholder legibly (#1058).
+		return lipgloss.NewStyle().Foreground(m.theme().InlayHint).Render("(empty)")
 	}
 	textW, textH, needV, needH, contentW := m.viewport()
 	offY := clamp(m.offset, 0, maxz(len(m.rows)-textH))
@@ -1125,25 +1127,21 @@ func (m Model) View() string {
 		var line string
 		if i < len(m.rows) {
 			n := m.rows[i]
-			var style lipgloss.Style
-			switch m.rowKind(i) {
-			case rowSelected:
-				style = m.selStyle()
-			case rowActive:
-				style = m.activeStyle()
-			case rowHover:
-				style = m.nodeStyle(n).Background(m.theme().Panel)
-			default:
-				style = m.nodeStyle(n)
-			}
+			style := m.rowStyle(i, n)
 			nameStyle := style
 			if m.open[n.path] {
-				// Every file open in an editor reads underlined + italic — on the
-				// name only, so indent guides and padding stay clean.
-				nameStyle = nameStyle.Underline(true).Italic(true)
+				// Every file open in an editor reads underlined — on the name
+				// only, so indent guides and padding stay clean. No italic:
+				// italics already mean "hidden entry" (#1055).
+				nameStyle = nameStyle.Underline(true)
 			}
-			prefix, name := m.rowParts(n)
-			styled := style.Render(prefix) + nameStyle.Render(name)
+			guides, mark, name := m.rowParts(n)
+			// Guides take the semantic IndentGuide colour (#1050, editor
+			// parity) and, with the marker, stay un-bold so the caret column
+			// keeps its metrics while cursoring (#1059); both keep the row's
+			// background.
+			styled := m.guideStyle(style).Render(guides) +
+				style.Bold(false).Render(mark) + nameStyle.Render(name)
 			vis := ansi.Cut(styled, offX, offX+textW)
 			if pad := textW - ansi.StringWidth(vis); pad > 0 {
 				vis += style.Render(strings.Repeat(" ", pad))
@@ -1180,6 +1178,33 @@ func (m Model) View() string {
 		out = overlay.Place(out, m.promptBox(), bx, by, m.width, m.height)
 	}
 	return out
+}
+
+// rowStyle resolves the full row style for visible row i. The hover overlay
+// only adds a background (#1056): it preserves the row's semantic foreground —
+// the active-file accent included — instead of rebuilding from the filetype
+// colour.
+func (m Model) rowStyle(i int, n *node) lipgloss.Style {
+	switch m.rowKind(i) {
+	case rowSelected:
+		return m.selStyle()
+	case rowActive:
+		return m.activeStyle()
+	case rowHover:
+		base := m.nodeStyle(n)
+		if n.path == m.active && m.active != "" {
+			base = m.activeStyle()
+		}
+		return base.Background(m.theme().Panel)
+	default:
+		return m.nodeStyle(n)
+	}
+}
+
+// guideStyle strips a row style down for the indent-guide cells (#1050): the
+// semantic IndentGuide foreground over the row's background, never bold.
+func (m Model) guideStyle(row lipgloss.Style) lipgloss.Style {
+	return row.Foreground(m.theme().IndentGuide).Bold(false)
 }
 
 // rowKind classifies how visible row i is highlighted. Precedence, strongest
