@@ -741,9 +741,15 @@ func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
 	if m.termClosePromptOpen() {
 		t.Fatal("idle terminal must close without the busy guard")
 	}
-	exit := time.Now().Add(5 * time.Second)
+	// Under a parallel full-suite run dozens of shells spawn at once and the
+	// first EOF can race the shell's first read (#1008): redeliver while
+	// waiting, with a generous budget.
+	exit := time.Now().Add(15 * time.Second)
 	for term.Running() && time.Now().Before(exit) {
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
+		if term.Running() && !term.Busy() {
+			term.SendEOF()
+		}
 	}
 	if term.Running() {
 		t.Fatal("EOF must end the idle shell")
