@@ -156,6 +156,19 @@ func TestLoadRealRepo(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// An ignored file plus an ignored-only directory: Load's --ignored flag
+	// must surface both through Ignored (#1045).
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.log\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "logs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"debug.log", filepath.Join("logs", "a.log")} {
+		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	root, err := DetectRoot(dir)
 	if err != nil {
@@ -174,6 +187,14 @@ func TestLoadRealRepo(t *testing.T) {
 	if got := snap.Status("new.txt"); got != StatusUntracked {
 		t.Errorf("new.txt = %v", got)
 	}
+	for _, p := range []string{"debug.log", "logs", "logs/a.log", filepath.Join(dir, "debug.log")} {
+		if !snap.Ignored(p) {
+			t.Errorf("Ignored(%q) = false, want true", p)
+		}
+	}
+	if snap.Ignored("new.txt") || snap.Status("debug.log") != StatusNone {
+		t.Error("ignored/untracked classification crossed over")
+	}
 
 	// Not a repo: Load must fail, Refresh must resolve to a nil snapshot.
 	outside := t.TempDir()
@@ -182,6 +203,63 @@ func TestLoadRealRepo(t *testing.T) {
 	}
 	if msg, ok := Refresh(outside)().(SnapshotMsg); !ok || msg.Snap != nil {
 		t.Errorf("Refresh outside a repo = %#v", msg)
+	}
+}
+
+// TestParseStatusIgnored covers `--ignored` records (#1045): "! <path>" file
+// entries and collapsed "dir/" entries land in the ignored set — never in
+// Files/Entries — and Ignored answers exact matches, dir-prefix matches and
+// non-matches.
+func TestParseStatusIgnored(t *testing.T) {
+	out := z(
+		"# branch.head main",
+		"? keep.txt",
+		"! x.log",
+		"! build/",
+	)
+	s := parseStatus(out)
+	if len(s.Files) != 1 || s.Files["keep.txt"] != StatusUntracked {
+		t.Fatalf("Files = %v; ignored entries must not become changes", s.Files)
+	}
+	if len(s.Entries) != 1 {
+		t.Fatalf("Entries = %v; ignored entries must not reach the commit UI", s.Entries)
+	}
+	for _, p := range []string{"x.log", "build", "build/a.o", "build/deep/b.o"} {
+		if !s.Ignored(p) {
+			t.Errorf("Ignored(%q) = false, want true", p)
+		}
+	}
+	for _, p := range []string{"keep.txt", "buildx/a.o", "", "src/x.log"} {
+		if s.Ignored(p) {
+			t.Errorf("Ignored(%q) = true, want false", p)
+		}
+	}
+}
+
+// TestSnapshotIgnoredPathForms covers Ignored's relPath normalization
+// (#1045): absolute paths inside the repo resolve, paths outside report
+// false, and a nil snapshot is a clean no-op.
+func TestSnapshotIgnoredPathForms(t *testing.T) {
+	root := filepath.FromSlash("/work/repo")
+	s := NewSnapshot(root, nil)
+	s.AddIgnored("x.log", "build/")
+
+	if !s.Ignored(filepath.Join(root, "x.log")) {
+		t.Error("absolute ignored file not recognised")
+	}
+	if !s.Ignored(filepath.Join(root, "build", "obj", "a.o")) {
+		t.Error("absolute path under ignored dir not recognised")
+	}
+	if s.Ignored(filepath.Join(root, "keep.txt")) {
+		t.Error("clean absolute path reported ignored")
+	}
+	if s.Ignored(filepath.FromSlash("/somewhere/else/x.log")) {
+		t.Error("path outside the repo reported ignored")
+	}
+
+	var nilSnap *Snapshot
+	if nilSnap.Ignored("x.log") {
+		t.Error("nil snapshot reported ignored")
 	}
 }
 

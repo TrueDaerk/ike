@@ -72,6 +72,11 @@ func parseStatus(out []byte) *Snapshot {
 			}
 		case strings.HasPrefix(line, "? "):
 			snap.addEntry(strings.TrimPrefix(line, "? "), StatusUntracked, "??")
+		case strings.HasPrefix(line, "! "):
+			// Ignored entry (#1045, --ignored): a file path or a collapsed
+			// "dir/" for a fully-ignored subtree. Not a change — it feeds
+			// only Snapshot.Ignored for explorer dimming.
+			snap.AddIgnored(strings.TrimPrefix(line, "! "))
 		}
 	}
 	if snap.Branch == "(detached)" {

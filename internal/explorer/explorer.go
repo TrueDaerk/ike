@@ -1298,6 +1298,12 @@ func (m Model) nodeStyle(n *node) lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(m.theme().Foreground)
 	if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
 		s = s.Foreground(c)
+	} else if m.nodeIgnored(n) {
+		// Gitignored rows read uniformly dimmed, JetBrains-style (#1045):
+		// the foreground mixed toward the surface. Ranks below every real
+		// VCS status (an ignored path never carries one) and below the
+		// untracked hue.
+		s = s.Foreground(ignoredFg(m.theme()))
 	}
 	if isHidden(n.name) {
 		s = s.Italic(true)
@@ -1305,11 +1311,23 @@ func (m Model) nodeStyle(n *node) lipgloss.Style {
 	return s
 }
 
+// ignoredFg is the dimmed foreground for gitignored rows (#1045): the plain
+// foreground blended halfway toward the surface.
+func ignoredFg(p *theme.Palette) color.Color {
+	return theme.Mix(p.Foreground, p.Surface, 0.5)
+}
+
+// nodeIgnored reports whether a row's path is gitignored (#1045); a nil
+// snapshot (not a git repo) reports false.
+func (m Model) nodeIgnored(n *node) bool {
+	return m.vcsSnap.Ignored(n.path)
+}
+
 // suffixTint resolves the filetype colour for a clean file's extension
 // (#1051): nil for directories, VCS-statused rows (status owns the whole
-// row) and unmatched extensions.
+// row), gitignored rows (uniformly dim, #1045) and unmatched extensions.
 func (m Model) suffixTint(n *node) color.Color {
-	if n.isDir || m.nodeVCSStatus(n) != vcs.StatusNone {
+	if n.isDir || m.nodeVCSStatus(n) != vcs.StatusNone || m.nodeIgnored(n) {
 		return nil
 	}
 	return m.colors.suffixColor(n)

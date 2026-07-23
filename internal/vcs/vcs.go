@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -75,6 +76,11 @@ type Snapshot struct {
 	// root) containing at least one changed file to the dominant status of
 	// its subtree (#1053), for explorer tinting.
 	dirs map[string]FileStatus
+	// ignored is the set of repo-relative paths git ignores (#1045).
+	// Directory entries keep porcelain's trailing slash; git collapses a
+	// fully-ignored subtree to one such entry, so membership for deeper
+	// paths is a prefix check (see Ignored).
+	ignored map[string]bool
 }
 
 // FileEntry is one changed file with the porcelain XY detail the commit UI
@@ -99,6 +105,42 @@ func NewSnapshot(root string, files map[string]FileStatus) *Snapshot {
 		s.add(p, st)
 	}
 	return s
+}
+
+// AddIgnored records repo-relative slash-separated paths git ignores;
+// directory entries carry a trailing slash, matching porcelain output.
+// Exported for tests and synthetic states alongside NewSnapshot.
+func (s *Snapshot) AddIgnored(paths ...string) {
+	if s.ignored == nil {
+		s.ignored = map[string]bool{}
+	}
+	for _, p := range paths {
+		if p != "" {
+			s.ignored[p] = true
+		}
+	}
+}
+
+// Ignored reports whether path (absolute or repo-relative) is gitignored
+// (#1045): listed directly, or living under an ignored directory entry. A nil
+// snapshot or a path outside the repo reports false.
+func (s *Snapshot) Ignored(p string) bool {
+	if s == nil || len(s.ignored) == 0 {
+		return false
+	}
+	rel, ok := s.relPath(p)
+	if !ok || rel == "" {
+		return false
+	}
+	if s.ignored[rel] || s.ignored[rel+"/"] {
+		return true
+	}
+	for dir := path.Dir(rel); dir != "." && dir != "/"; dir = path.Dir(dir) {
+		if s.ignored[dir+"/"] {
+			return true
+		}
+	}
+	return false
 }
 
 // Status reports the status of path, which may be absolute or repo-relative.
@@ -199,7 +241,10 @@ func Load(dir string) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	out, err := runGit(root, "status", "--porcelain=v2", "--branch", "-z")
+	// --ignored rides the same invocation (#1045): git emits "! <path>"
+	// records, collapsing fully-ignored subtrees to one "dir/" entry, so the
+	// common path pays no extra subprocess.
+	out, err := runGit(root, "status", "--porcelain=v2", "--branch", "--ignored", "-z")
 	if err != nil {
 		return nil, err
 	}
