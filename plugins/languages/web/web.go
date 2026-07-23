@@ -53,6 +53,8 @@ func init() {
 			RootMarkers: []string{"tsconfig.json", "jsconfig.json", "package.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "@vtsls/language-server"},
 		},
+		// Workspace-TypeScript detection (#1079): vendored TS wins.
+		Toolchain:    tsToolchain{},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},

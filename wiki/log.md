@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Version-aware LSP settings (#1079): intelephense gets the project PHP
+  version (`composer.json` `require.php` minimum bound, `php -v` fallback)
+  as `intelephense.environment.phpVersion`; vtsls gets the vendored
+  workspace TypeScript via `typescript.tsdk`. Highlighting stays
+  version-agnostic by design (`/architecture/languages.md`).
+
 - Recognized launch failures carry install advice (#1065): the Homebrew
   taplo built without the LSP feature now yields "install an LSP-capable
   build: npm install -g @taplo/cli …" in the failure toast, via a

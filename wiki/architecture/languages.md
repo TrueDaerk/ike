@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-23T23:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Language Registry
@@ -224,9 +224,17 @@ e.g. the resolved `python.defaultInterpreterPath` reaches pyright.
 
 The **Python** detector (`plugins/languages/python/toolchain.go`) resolves the
 interpreter in priority order: active `$VIRTUAL_ENV` → project `.venv`/`venv` →
-`.python-version` (pyenv) → `python3` on `PATH`. **PHP** and **Go** ship
-PATH/install-location detectors (no server injection): PATH first, then the
-common install locations — for Go `/opt/homebrew/bin`, `/usr/local/bin`,
+`.python-version` (pyenv) → `python3` on `PATH`. The **PHP** detector (#1079)
+resolves the project's PHP *version* for intelephense
+(`intelephense.environment.phpVersion`): the `composer.json` `require.php`
+constraint's minimum bound wins (a PHP 7.3 project flags 8.x syntax as errors),
+the detected interpreter's `php -v` is the fallback; without either the server
+keeps its default. The **TypeScript** detector (#1079,
+`plugins/languages/web/toolchain.go`) points vtsls at a vendored workspace
+TypeScript via `typescript.tsdk` when `node_modules/typescript/lib` exists —
+VS Code's "use workspace version". **Go** (gopls reads the `go.mod` directive
+itself) ships a PATH/install-location detector only (no server injection):
+PATH first, then the common install locations — for Go `/opt/homebrew/bin`, `/usr/local/bin`,
 `/usr/local/go/bin`, `/usr/bin` (#538), since a GUI-launched process often
 misses homebrew's bin on PATH. The toolchain settings page's generic
 interpreter picker probes the same well-known directories after PATH
