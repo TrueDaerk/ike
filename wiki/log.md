@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-23
+
+- Editor multi-click selection (#975): double-click selects the word under the
+  pointer, triple-click the whole line — regular visual selections, so
+  `cmd+c`/`cmd+x` and visual operators consume them; a fourth or later plain
+  click collapses back to a bare cursor (`/architecture/editor.md`).
+
 ## 2026-07-22
 
 - Focused terminals let more IDE chords through (#973): settings, go-to

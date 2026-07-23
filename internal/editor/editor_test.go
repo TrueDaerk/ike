@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -341,6 +342,118 @@ func TestMouseClickPositionsCursor(t *testing.T) {
 	m.MouseClick(2, 1) // col 2, screen row 1 -> line 1
 	if m.cursor.Line != 1 || m.cursor.Col != 2 {
 		t.Fatalf("click=%v want {1 2}", m.cursor)
+	}
+}
+
+// clickClock installs a fake clock and returns an advance func for
+// multi-click tests (#975).
+func clickClock(m *Model) func(time.Duration) {
+	now := time.Unix(0, 0)
+	m.clickNow = func() time.Time { return now }
+	return func(d time.Duration) { now = now.Add(d) }
+}
+
+func TestDoubleClickSelectsWord(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	clickClock(&m)
+	m.MouseClick(7, 0)
+	m.MouseClick(7, 0)
+	if m.ModeName() != Visual {
+		t.Fatalf("mode=%v want Visual", m.ModeName())
+	}
+	if m.anchor != (buffer.Position{Line: 0, Col: 6}) || m.cursor != (buffer.Position{Line: 0, Col: 10}) {
+		t.Fatalf("selection %v..%v want {0 6}..{0 10}", m.anchor, m.cursor)
+	}
+}
+
+func TestTripleClickSelectsLine(t *testing.T) {
+	m, _ := loaded(t, "hello world\nsecond\n")
+	clickClock(&m)
+	for range 3 {
+		m.MouseClick(7, 0)
+	}
+	if m.ModeName() != VisualLine {
+		t.Fatalf("mode=%v want VisualLine", m.ModeName())
+	}
+	if m.anchor.Line != 0 || m.cursor != (buffer.Position{Line: 0, Col: 10}) {
+		t.Fatalf("selection %v..%v want line 0, cursor {0 10}", m.anchor, m.cursor)
+	}
+}
+
+func TestClickStreakResetsOnTimeoutAndCell(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	tick := clickClock(&m)
+	m.MouseClick(7, 0)
+	tick(500 * time.Millisecond) // beyond the window: no double-click
+	m.MouseClick(7, 0)
+	if m.ModeName() != Normal {
+		t.Fatalf("slow second click selected (mode=%v)", m.ModeName())
+	}
+	m.MouseClick(1, 0) // different cell: streak restarts
+	if m.ModeName() != Normal {
+		t.Fatalf("click on another cell selected (mode=%v)", m.ModeName())
+	}
+}
+
+func TestFourthClickCyclesToPlainClickAndCollapses(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	clickClock(&m)
+	for range 4 {
+		m.MouseClick(7, 0)
+	}
+	if m.ModeName() != Normal {
+		t.Fatalf("4th click: mode=%v want Normal (selection collapsed)", m.ModeName())
+	}
+	if m.cursor != (buffer.Position{Line: 0, Col: 7}) {
+		t.Fatalf("cursor=%v want {0 7}", m.cursor)
+	}
+}
+
+func TestPlainClickCollapsesMouseSelectionOnly(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	tick := clickClock(&m)
+	m.MouseClick(7, 0)
+	m.MouseClick(7, 0) // word selected
+	tick(time.Second)
+	m.MouseClick(1, 0)
+	if m.ModeName() != Normal || m.cursor.Col != 1 {
+		t.Fatalf("plain click must collapse mouse selection (mode=%v cursor=%v)", m.ModeName(), m.cursor)
+	}
+	// A v-entered selection keeps click-extends semantics.
+	m = typeKeys(m, "v")
+	tick(time.Second)
+	m.MouseClick(7, 0)
+	if m.ModeName() != Visual {
+		t.Fatalf("click during v-selection must extend, not collapse (mode=%v)", m.ModeName())
+	}
+}
+
+func TestDoubleClickCopyPutsWordInRegister(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	clickClock(&m)
+	m.MouseClick(2, 0)
+	m.MouseClick(2, 0)
+	m, _ = m.runAction("copy")
+	if got := m.regs.Get(0).Text; got != "hello" {
+		t.Fatalf("copied %q want %q", got, "hello")
+	}
+	if m.ModeName() != Normal {
+		t.Fatalf("copy must leave visual mode (mode=%v)", m.ModeName())
+	}
+}
+
+func TestTripleClickCutRemovesLine(t *testing.T) {
+	m, _ := loaded(t, "hello world\nsecond\n")
+	clickClock(&m)
+	for range 3 {
+		m.MouseClick(4, 0)
+	}
+	m, _ = m.runAction("cut")
+	if got := m.regs.Get(0).Text; got != "hello world\n" {
+		t.Fatalf("cut %q want %q", got, "hello world\n")
+	}
+	if line(m, 0) != "second" {
+		t.Fatalf("line 0 after cut=%q want %q", line(m, 0), "second")
 	}
 }
 
