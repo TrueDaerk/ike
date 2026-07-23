@@ -3,28 +3,112 @@ package editor
 import (
 	"strconv"
 	"strings"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
+	"ike/internal/editor/textobject"
 	"ike/internal/editor/viewport"
 	ilsp "ike/internal/lsp"
 )
+
+// doubleClickWindow is the maximum delay between two clicks on the same cell
+// for them to escalate the click streak (matching the explorer's window).
+const doubleClickWindow = 400 * time.Millisecond
 
 // MouseClick moves the cursor to the content-local cell (x, y) — coordinates
 // relative to the editor's content area (gutter included, title/border excluded).
 // It maps the click through the gutter width and the current scroll offsets. In
 // insert/replace mode the cursor may land one past the line end; otherwise it
 // snaps onto a character.
+//
+// Consecutive clicks on the same cell within doubleClickWindow escalate
+// click → word → line (#975): a double-click selects the word under the
+// pointer, a triple-click the whole line — both as regular visual selections,
+// so the usual operators and cmd+c/x apply. A later plain click collapses a
+// mouse-made selection back to a bare cursor.
 func (m *Model) MouseClick(x, y int) {
 	p := m.clickPosition(x, y)
 	// A plain click returns to single-caret editing (#145).
 	m.collapseCarets()
+	switch m.bumpClickStreak(p) {
+	case 2:
+		if m.selectWordAt(p) {
+			m.scroll()
+			m.emit(EventCursorMove)
+			return
+		}
+	case 3:
+		m.selectLineAt(p)
+		m.scroll()
+		m.emit(EventCursorMove)
+		return
+	}
+	if m.clickVisual {
+		// The previous selection came from a multi-click: a plain click
+		// collapses it (JetBrains behavior). v/V selections keep their
+		// click-extends semantics.
+		m.mode = Normal
+		m.clickVisual = false
+	}
 	m.cursor = p
 	m.desiredCol = m.cursor.Col
 	m.scroll()
 	m.emit(EventCursorMove)
+}
+
+// bumpClickStreak advances the multi-click counter for a click at p and
+// returns the streak (1 = single, 2 = double, 3 = triple). A different cell
+// or a pause beyond doubleClickWindow restarts at 1; a fourth click cycles
+// back to a plain click.
+func (m *Model) bumpClickStreak(p buffer.Position) int {
+	now := time.Now()
+	if m.clickNow != nil {
+		now = m.clickNow()
+	}
+	if p == m.lastClickPos && m.clickStreak > 0 && now.Sub(m.lastClickAt) <= doubleClickWindow {
+		m.clickStreak = m.clickStreak%3 + 1
+	} else {
+		m.clickStreak = 1
+	}
+	m.lastClickAt, m.lastClickPos = now, p
+	return m.clickStreak
+}
+
+// selectWordAt selects the word under p as a charwise visual selection
+// (double-click, #975), using the vim "iw" word classes. Reports false when
+// the line is empty, in which case the click falls back to a plain click.
+func (m *Model) selectWordAt(p buffer.Position) bool {
+	res := textobject.Word(m.buf, p, false, false)
+	if !res.OK {
+		return false
+	}
+	m.cursor = res.Range.Start
+	m.enterVisual(Visual)
+	end := res.Range.End
+	if end.Col > 0 {
+		end.Col-- // End is exclusive; put the cursor on the last selected rune
+	}
+	m.cursor = m.buf.ClampCursor(end)
+	m.desiredCol = m.cursor.Col
+	m.clickVisual = true
+	return true
+}
+
+// selectLineAt selects the whole clicked line as a linewise visual selection
+// (triple-click, #975), cursor on the line's last rune.
+func (m *Model) selectLineAt(p buffer.Position) {
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: p.Line})
+	m.enterVisual(VisualLine)
+	end := len([]rune(m.buf.Line(p.Line))) - 1
+	if end < 0 {
+		end = 0
+	}
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: p.Line, Col: end})
+	m.desiredCol = m.cursor.Col
+	m.clickVisual = true
 }
 
 // AltClick toggles a secondary caret at the clicked cell (#145): alt+click on

@@ -9,6 +9,7 @@ package editor
 import (
 	"os"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -127,6 +128,17 @@ type Model struct {
 
 	// Visual mode anchor (the fixed end of the selection).
 	anchor buffer.Position
+
+	// Multi-click state (#975): consecutive clicks on the same cell within
+	// doubleClickWindow escalate click → word → line selection. clickVisual
+	// marks a selection made by such a multi-click — a later plain click
+	// collapses it back to a bare cursor. clickNow is the clock, overridable
+	// in tests; nil means time.Now.
+	lastClickAt  time.Time
+	lastClickPos buffer.Position
+	clickStreak  int
+	clickVisual  bool
+	clickNow     func() time.Time
 
 	// True while the active selection was started with Shift+arrows (#326):
 	// such a selection is GUI-style — an unshifted navigation key drops it

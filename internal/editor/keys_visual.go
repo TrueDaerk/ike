@@ -17,6 +17,7 @@ func (m *Model) enterVisual(md mode.Mode) {
 	m.mode = md
 	m.anchor = m.cursor
 	m.shiftSelect = false
+	m.clickVisual = false // keyboard-entered selections keep click-extends semantics (#975)
 	m.emit(EventCursorMove)
 }
 
