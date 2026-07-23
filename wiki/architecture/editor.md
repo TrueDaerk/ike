@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-23T12:00:00Z
 ---
 
 # Editor
@@ -321,6 +321,22 @@ Insert, Visual, etc., unlike the vim-motion scroll commands. Horizontal wheel
 (or shift+wheel) scrolls sideways via `ScrollXBy(delta)`, moving `view.Left`
 clamped so the longest visible line keeps its last character on screen (#230);
 the next cursor motion re-derives the offset to follow the cursor again.
+A vertical scrollbar with a JetBrains-style diagnostics error stripe (#1022,
+`editor/scrollbar.go`) overlays the pane's rightmost content column whenever
+the buffer has more lines than the viewport: a dim track, a heavier thumb
+whose position/size mirror `view.Top` and the visible fraction (same
+`scrollThumb` math and glyphs as the explorer scrollbar), and a severity-
+colored `■` marker at each cached diagnostic line's proportional track row
+(worst severity wins a shared cell; markers draw over track and thumb). Mouse:
+`ScrollbarHit` claims the rightmost column before any content click, so the
+bar outranks text at that x. A left press on the thumb records the grab offset
+(`ScrollbarPress` → true) and the app tracks a `dragEditScroll` drag kind
+whose motion events call `ScrollbarDrag` — the viewport follows the pointer
+with the grab point kept under it, clamped at both ends. A press on the track
+above/below the thumb jumps the viewport to the proportional position.
+Right-click (context menu) and left drags on content (selection) are
+untouched; the bar renders only as an overlay, so text width, wrap, and click
+mapping never shift when it appears.
 
 ## Multi-caret editing (#145)
 

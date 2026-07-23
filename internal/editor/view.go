@@ -484,6 +484,9 @@ func (m Model) View() string {
 	if len(out) == 0 {
 		return ""
 	}
+	// Vertical scrollbar with diagnostics error stripe (#1022): overlays the
+	// rightmost column whenever the buffer overflows the viewport.
+	out = m.overlayScrollbar(out)
 	return lipgloss.JoinVertical(lipgloss.Left, out...)
 }
 

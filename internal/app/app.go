@@ -437,6 +437,7 @@ const (
 	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
 	dragEditSelect                 // dragging a text selection inside an editor pane (#977)
+	dragEditScroll                 // dragging the editor scrollbar thumb (#1022)
 	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 )
@@ -5736,6 +5737,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		case dragEditScroll:
+			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
+					if ed := inst.Editor(); ed != nil {
+						ed.ScrollbarDrag(ly)
+					}
+				}
+			}
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -5779,6 +5788,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragEditSelect:
 			m.drag = nil
 			return m, nil // the editor selection is already in place; nothing to commit
+		case dragEditScroll:
+			m.drag = nil
+			return m, nil // the viewport already followed the thumb; nothing to commit
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -6181,6 +6193,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			if ed := inst.Editor(); ed != nil && ed.HasFile() {
 				ed.ContextClick(localX, localY)
 				m.ctxMenu.Open(editorContextItems(), msg.X, msg.Y, m.width, m.height)
+			}
+			return m, nil
+		}
+		// A left press on the scrollbar column (#1022) outranks any content
+		// click at that x: on the thumb it starts a drag, on the track it
+		// jumps the viewport to the proportional position.
+		if ed := inst.Editor(); ed != nil && msg.Button == tea.MouseLeft && ed.ScrollbarHit(localX, localY) {
+			if ed.ScrollbarPress(localY) {
+				m.drag = &dragState{kind: dragEditScroll, srcPane: key, curX: msg.X, curY: msg.Y}
 			}
 			return m, nil
 		}
