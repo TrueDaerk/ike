@@ -8,6 +8,7 @@ func Defaults() []Menu {
 		{Title: "File", Items: []Item{
 			{Title: "New Scratch File", Command: "scratch.new"},
 			{Title: "Open Scratch File…", Command: "scratch.list"},
+			{Title: "Open File…", Command: "file.openPath"},
 			{Title: "Save", Command: "editor.write"},
 			{Title: "Save All", Command: "editor.saveAll"},
 			{Title: "Close Tab", Command: "editor.closeTab"},

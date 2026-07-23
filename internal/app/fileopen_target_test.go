@@ -49,6 +49,28 @@ func TestFileOpenSkipsTerminalTabHost(t *testing.T) {
 	}
 }
 
+// TestOpenPathOutsideWorkspace guards #999: an absolute path outside the
+// project root opens as a fully functional editor tab; a missing path fails
+// with an error toast instead of silently doing nothing.
+func TestOpenPathOutsideWorkspace(t *testing.T) {
+	m := sized(t, 100, 40)
+	outside := tmpFile(t, "outside.txt", "external\n")
+
+	out, _ := m.openPath(outside, false)
+	m = out.(Model)
+	inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
+	if inst == nil || inst.Editor() == nil || inst.Editor().Path() != outside {
+		t.Fatal("outside-root file must open as a regular editor tab")
+	}
+
+	missing := filepath.Join(t.TempDir(), "missing.txt")
+	out, _ = m.openPath(missing, false)
+	m = out.(Model)
+	if inst2 := m.activeWS().Panes.Get(m.activeWS().Panes.Focused()); inst2 != nil && inst2.Editor() != nil && inst2.Editor().Path() == missing {
+		t.Fatal("missing path must not produce a tab")
+	}
+}
+
 // TestFileOpenSkipsDedicatedTerminal: with a dedicated terminal pane focused,
 // a file open lands in an editor pane and the terminal pane survives as-is.
 func TestFileOpenSkipsDedicatedTerminal(t *testing.T) {
