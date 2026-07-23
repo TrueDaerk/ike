@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Clickable editor scrollbar with diagnostics error stripe (#1022): a
+  track/thumb overlay on the pane's rightmost column when the buffer
+  overflows, severity-colored markers at diagnostic lines' proportional
+  positions, thumb drag (`dragEditScroll`) and click-to-jump on the track
+  (`/architecture/editor.md`).
+
 - Editor right-click context menu (#1020): `menu.Context` floating dropdown
   anchored at the click cell, reusing the menu bar's item/InfoFunc rendering;
   caret repositions unless the click lands inside the selection

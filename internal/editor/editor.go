@@ -221,6 +221,10 @@ type Model struct {
 	width     int
 	height    int
 
+	// sbGrab is the pointer's offset within the scrollbar thumb at press time
+	// (#1022), so a thumb drag keeps the grab point under the pointer.
+	sbGrab int
+
 	cfg     host.Config
 	emitter Emitter
 
