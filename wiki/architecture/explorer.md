@@ -255,7 +255,7 @@ whenever `explorerCapturing()` is true (explorer focused with a prompt open).
 
 New entries are created next to the selection — inside the selected directory, or
 beside the selected file. Deletes do not `os.Remove`; they move the entry into a
-hidden, same-filesystem trash directory (`.ike-trash/` under the project root, so
+hidden, same-filesystem trash directory (`.ike/trash/` under the project root, so
 the rename never crosses devices), which is what makes an undo able to restore
 it. Completed operations are pushed onto a linear undo stack (`ops`) with a
 matching redo stack (`redoOps`; a fresh operation clears it, like a text

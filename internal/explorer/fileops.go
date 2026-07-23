@@ -238,12 +238,38 @@ func deletedCmd(path string, isDir bool) tea.Cmd {
 	return func() tea.Msg { return FileDeletedMsg{Path: path, IsDir: isDir} }
 }
 
-// toTrash moves path into a hidden, same-filesystem trash directory under the
-// project root (so the rename never crosses devices) and returns its new
-// location. A sequence number keeps entries with equal basenames distinct.
+// trashBase resolves the trash directory (#1038): inside the state store
+// (IKE_CONFIG_DIR when set, else the project's ".ike"), never a bare
+// ".ike-trash" polluting the project root and git status.
+func (m *Model) trashBase() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "trash")
+	}
+	return filepath.Join(m.root.path, ".ike", "trash")
+}
+
+// projectTrash is the same-filesystem fallback under the project's own state
+// dir, used when an IKE_CONFIG_DIR on another device makes the rename fail.
+func (m *Model) projectTrash() string {
+	return filepath.Join(m.root.path, ".ike", "trash")
+}
+
+// purgeStaleTrash removes leftover trash from previous sessions (#1038): the
+// undo/redo stacks live in memory only, so entries surviving a restart are
+// unreachable garbage. The legacy project-root ".ike-trash" is removed too.
+// Synchronous: a goroutine could race the first delete's MkdirAll.
+func (m *Model) purgeStaleTrash() {
+	_ = os.RemoveAll(m.trashBase())
+	_ = os.RemoveAll(filepath.Join(m.root.path, ".ike-trash"))
+}
+
+// toTrash moves path into the trash (#1038) and returns its new location; the
+// rename stays on the same filesystem in the common case, with a project-local
+// fallback when a cross-device IKE_CONFIG_DIR makes it fail. A sequence
+// number keeps entries with equal basenames distinct.
 func (m *Model) toTrash(path string) (string, error) {
 	if m.trashDir == "" {
-		d := filepath.Join(m.root.path, ".ike-trash")
+		d := m.trashBase()
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			return "", err
 		}
@@ -252,6 +278,16 @@ func (m *Model) toTrash(path string) (string, error) {
 	m.trashSeq++
 	tp := filepath.Join(m.trashDir, fmt.Sprintf("%d-%s", m.trashSeq, filepath.Base(path)))
 	if err := os.Rename(path, tp); err != nil {
+		if fb := m.projectTrash(); m.trashDir != fb {
+			// Cross-device state dir: fall back to the project-local trash.
+			if mkErr := os.MkdirAll(fb, 0o755); mkErr == nil {
+				m.trashDir = fb
+				tp = filepath.Join(fb, fmt.Sprintf("%d-%s", m.trashSeq, filepath.Base(path)))
+				if err2 := os.Rename(path, tp); err2 == nil {
+					return tp, nil
+				}
+			}
+		}
 		return "", err
 	}
 	return tp, nil
