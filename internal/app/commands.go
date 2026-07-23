@@ -46,6 +46,11 @@ type ShowKeymapHelpMsg struct{}
 // same behavior as the hardcoded tab. Dispatched by pane.switcher.
 type CyclePaneFocusMsg struct{}
 
+// OpenFilePathMsg asks the root model to open the palette locked to the
+// open-path picker (#999): a filesystem browser for absolute/~ paths, so
+// files outside the workspace open without switching projects.
+type OpenFilePathMsg struct{}
+
 // GoToFileMsg asks the root model to open the palette locked to the fuzzy file
 // mode ("@"), from any context. Dispatched by project.goToFile.
 type GoToFileMsg struct{}
@@ -279,6 +284,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("nav.pinGoto2", "Go to Pinned File 2", PinJumpMsg{Slot: 2}),
 			appCommand("nav.pinGoto3", "Go to Pinned File 3", PinJumpMsg{Slot: 3}),
 			appCommand("nav.pinGoto4", "Go to Pinned File 4", PinJumpMsg{Slot: 4}),
+			appCommand("file.openPath", "Open File…", OpenFilePathMsg{}),
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),

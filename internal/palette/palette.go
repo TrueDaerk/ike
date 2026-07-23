@@ -172,6 +172,18 @@ func (p *Palette) OpenLocked(cx Context, prefix rune) {
 	p.recompute()
 }
 
+// OpenLockedWith is OpenLocked with a pre-seeded query body (#999): the
+// open-file path picker re-opens itself this way to descend into an accepted
+// directory candidate.
+func (p *Palette) OpenLockedWith(cx Context, prefix rune, body string) {
+	p.OpenLocked(cx, prefix)
+	if p.locked == nil {
+		return
+	}
+	p.query = body
+	p.recompute()
+}
+
 // reset clears the per-open transient state.
 func (p *Palette) reset(cx Context) {
 	p.open = true

@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- New "Open File…" (#999, `file.openPath`): palette path picker over
+  absolute/`~` paths with tab completion — opens files outside the workspace
+  as regular editor tabs (`/architecture/command-palette.md`).
+
 - `project.restore_last` works now (#1000): startup re-anchors at the most
   recent project when enabled — CLI targets win, a vanished project falls
   back to cwd with a notice (`/architecture/project-switching.md`).

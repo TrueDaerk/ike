@@ -1400,7 +1400,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	branches := newBranchMode(func() []vcs.Branch { return vcsSt.branches })
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches, reverts)
+	openPath := palette.NewOpenPathMode()
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches, reverts, openPath)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2938,6 +2939,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
 		return m, nil
 
+	case OpenFilePathMsg:
+		// file.openPath (palette / File menu, #999): the filesystem path
+		// picker for files outside the workspace, locked to its mode.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.OpenPathPrefix)
+		return m, nil
+
+	case palette.OpenPathDescendMsg:
+		// Enter on a directory candidate (#999): re-open the picker with the
+		// accepted directory as the query, so enter descends like tab.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLockedWith(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.OpenPathPrefix, msg.Query)
+		return m, nil
+
 	case ShowRecentFilesMsg:
 		// palette.recentFiles (cmd+e / menu): the MRU file list,
 		// locked to its mode. The active file is excluded so opening the
@@ -4237,6 +4252,9 @@ func (m *Model) openInTab(key, path string) bool {
 			// The freshly appended tab never held the file: drop it again.
 			inst.CloseTab(inst.ActiveTab())
 		}
+		// Surface the failure (#999): a mistyped open-path pick or a
+		// vanished file otherwise fails silently.
+		m.host.Notify(host.Error, "cannot open "+displayPath(path)+": "+err.Error())
 		return false
 	}
 	if added {

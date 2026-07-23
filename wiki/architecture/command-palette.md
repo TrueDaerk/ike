@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Command Palette
@@ -127,6 +127,22 @@ disk walk is cached per-root (filtered on every keystroke, walked once), skips
 hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.
+
+## Open-path mode (`file.openPath`, #999)
+
+The "Open File…" picker (`openpath_mode.go`) opens files **outside the
+workspace** — configs in `~/`, logs under `/var` — without switching projects.
+Locked-only (prefix `;` is internal): the `file.openPath` command (palette /
+File menu) opens it centered. Candidates come from the shared
+`internal/pathcomplete` engine (`Complete`, files + dirs, `~` expanded): file
+rows activate the normal `OpenFileMsg` open path (out-of-root buffers behave
+like jumped-to dependency files, #565 — full editing/LSP, no explorer entry);
+directory rows emit `OpenPathDescendMsg`, which re-opens the picker with the
+accepted directory as the query (`OpenLockedWith`), so enter descends like
+tab. Tab completes via the `Completer` seam. With no matching candidate the
+raw query stays activatable — a missing file surfaces as an error toast
+(`openInTab` now reports load failures instead of failing silently). An empty
+query seeds `~/` and `/`.
 
 ## Recent-files mode (`cmd+e`, Roadmap 0230)
 
