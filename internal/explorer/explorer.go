@@ -5,6 +5,7 @@
 package explorer
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"sort"
@@ -1074,12 +1075,13 @@ func (m Model) activeStyle() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(m.theme().Accent)
 }
 
-// nodeStyle is a row's base style: its per-filetype colour, plus italics for
-// hidden (dot-prefixed) entries. A git status overrides the filetype colour
-// (Roadmap 0320): changed files read in their status hue, JetBrains-style,
-// and directories containing changes take the modified tint.
+// nodeStyle is a row's base style (#1051, suffix-tint model): the plain
+// foreground — the colour channel belongs to the VCS status, JetBrains-style,
+// so a changed file reads entirely in its status hue — plus italics for
+// hidden (dot-prefixed) entries. The filetype colour no longer paints rows;
+// it tints only the extension suffix of clean files (see View).
 func (m Model) nodeStyle(n *node) lipgloss.Style {
-	s := m.colors.style(n)
+	s := lipgloss.NewStyle().Foreground(m.theme().Foreground)
 	if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
 		s = s.Foreground(c)
 	}
@@ -1087,6 +1089,36 @@ func (m Model) nodeStyle(n *node) lipgloss.Style {
 		s = s.Italic(true)
 	}
 	return s
+}
+
+// suffixTint resolves the filetype colour for a clean file's extension
+// (#1051): nil for directories, VCS-statused rows (status owns the whole
+// row) and unmatched extensions.
+func (m Model) suffixTint(n *node) color.Color {
+	if n.isDir || m.nodeVCSStatus(n) != vcs.StatusNone {
+		return nil
+	}
+	return m.colors.suffixColor(n)
+}
+
+// statusLetter is the one-cell non-colour VCS cue rendered at the row's right
+// edge (#1051): redundancy for ANSI256 terminals and colour-blind users.
+func statusLetter(st vcs.FileStatus) string {
+	switch st {
+	case vcs.StatusModified:
+		return "M"
+	case vcs.StatusRenamed:
+		return "R"
+	case vcs.StatusAdded:
+		return "A"
+	case vcs.StatusUntracked:
+		return "U"
+	case vcs.StatusDeleted:
+		return "D"
+	case vcs.StatusConflicted:
+		return "C"
+	}
+	return ""
 }
 
 // nodeVCSStatus resolves the snapshot status backing a row's coloring; a
@@ -1136,14 +1168,41 @@ func (m Model) View() string {
 				nameStyle = nameStyle.Underline(true)
 			}
 			guides, mark, name := m.rowParts(n)
+			// The suffix-tint model (#1051): on clean files whose row renders
+			// the plain foreground, the extension alone takes the filetype
+			// colour. Cursor/active rows keep their own foreground whole.
+			nameRendered := nameStyle.Render(name)
+			if k := m.rowKind(i); k != rowSelected && k != rowActive {
+				if c := m.suffixTint(n); c != nil {
+					if dot := strings.LastIndex(name, "."); dot > 0 {
+						nameRendered = nameStyle.Render(name[:dot]) +
+							nameStyle.Foreground(c).Render(name[dot:])
+					}
+				}
+			}
 			// Guides take the semantic IndentGuide colour (#1050, editor
 			// parity) and, with the marker, stay un-bold so the caret column
 			// keeps its metrics while cursoring (#1059); both keep the row's
 			// background.
 			styled := m.guideStyle(style).Render(guides) +
-				style.Bold(false).Render(mark) + nameStyle.Render(name)
+				style.Bold(false).Render(mark) + nameRendered
 			vis := ansi.Cut(styled, offX, offX+textW)
-			if pad := textW - ansi.StringWidth(vis); pad > 0 {
+			// A VCS-statused row carries a one-cell status letter at the
+			// right edge (#1051): a non-colour cue that survives ANSI256
+			// quantisation and colour blindness.
+			if letter := statusLetter(m.nodeVCSStatus(n)); letter != "" && textW >= 2 {
+				if ansi.StringWidth(vis) >= textW {
+					vis = ansi.Cut(vis, 0, textW-1)
+				}
+				if pad := textW - 1 - ansi.StringWidth(vis); pad > 0 {
+					vis += style.Render(strings.Repeat(" ", pad))
+				}
+				ls := style.Bold(false)
+				if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
+					ls = ls.Foreground(c)
+				}
+				vis += ls.Render(letter)
+			} else if pad := textW - ansi.StringWidth(vis); pad > 0 {
 				vis += style.Render(strings.Repeat(" ", pad))
 			}
 			line = vis

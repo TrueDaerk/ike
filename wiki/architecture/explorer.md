@@ -123,8 +123,15 @@ the tree via `SetVCS`; outside a git repository nothing changes. See
 
 ## Row highlighting
 
-A row's **base** style is its per-filetype colour (`nodeStyle` → `colors.style`),
-plus italics for hidden (dot-prefixed) entries. `rowKind` then classifies how the
+A row's **base** style is the plain foreground (#1051, suffix-tint model): the
+colour channel belongs to the **VCS status** — a changed file reads entirely in
+its status hue, JetBrains-style, and carries a one-cell status letter
+(`M`/`R`/`A`/`U`/`D`/`C`) at the row's right edge as a non-colour cue for
+ANSI256 terminals and colour-blind users. On **clean files** only the extension
+suffix takes the filetype colour (`colors.suffixColor`, resolved from the
+`[explorer.colors]` ext/glob keys; the legacy `dir`/`default` keys are accepted
+but no longer paint rows — directories stay uncoloured, caret + `/` carry the
+distinction). Hidden (dot-prefixed) entries add italics. `rowKind` then classifies how the
 row is highlighted, strongest first: the focused **cursor** (`selStyle`, blue
 background) → the mouse **hover** (adds the grey background only, preserving
 the row's semantic foreground — the active-file accent included, #1056) → the
