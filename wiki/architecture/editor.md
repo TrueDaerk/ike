@@ -283,6 +283,10 @@ recording, the status line shows a `recording @x` segment
 Visual, V-Line and V-Block extend a selection that `View` highlights cell by
 cell (the cursor wins on overlap); motions and `i`/`a` text objects grow it, and
 `d c y` `>` `<` and `p` (replace selection from a register) consume it.
+Backspace/Delete also remove the selection outright (#979, GUI style — they are
+not the vim left-motion here); a selection entered from insert/replace mode
+(mouse selection while editing) then returns to insert mode at the deletion
+point so typing continues seamlessly.
 
 Mouse: clicking the editor focuses it and `MouseClick` maps the cell — through
 the gutter width and scroll offsets — to the cursor. Consecutive clicks on the

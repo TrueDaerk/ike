@@ -14,6 +14,9 @@ import (
 // The cursor-move event tells selection listeners (the LSP bridge) a selection
 // now exists, before any motion extends it.
 func (m *Model) enterVisual(md mode.Mode) {
+	// A selection made while editing remembers it (#979): deleting it with
+	// Backspace/Delete then returns to insert mode.
+	m.visualFromInsert = m.mode == Insert || m.mode == Replace
 	m.mode = md
 	m.anchor = m.cursor
 	m.shiftSelect = false
@@ -43,6 +46,30 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.wait = awaitNone
 		if hasRune {
 			m.visualTextObject(r)
+		}
+		return m, nil
+	}
+
+	// Backspace/Delete remove the selection outright (#979, GUI style —
+	// instead of vim's backspace-as-left motion); a selection made while
+	// editing returns to insert mode so typing continues seamlessly.
+	if key.Code == tea.KeyBackspace || key.Code == tea.KeyDelete {
+		fromInsert := m.visualFromInsert
+		start := m.anchor
+		if m.cursor.Before(start) {
+			start = m.cursor
+		}
+		linewise := m.mode == VisualLine
+		m.visualOperate('d')
+		if fromInsert {
+			if !linewise {
+				// The normal-mode clamp after the delete may have pulled the
+				// cursor off the deletion point (e.g. at line end); typing
+				// must continue exactly where the selection started.
+				m.cursor = m.buf.Clamp(start)
+				m.desiredCol = m.cursor.Col
+			}
+			m.startInsertWith(m.newRecorder(), nil)
 		}
 		return m, nil
 	}

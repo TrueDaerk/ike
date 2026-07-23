@@ -544,6 +544,52 @@ func TestDragExtendsKeyboardSelection(t *testing.T) {
 	}
 }
 
+func TestBackspaceDeletesVisualSelection(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	clickClock(&m)
+	m.MouseClick(2, 0)
+	m.MouseClick(2, 0) // word "hello" selected
+	m = send(m, special(tea.KeyBackspace))
+	if line(m, 0) != " world" {
+		t.Fatalf("line=%q want %q", line(m, 0), " world")
+	}
+	if m.ModeName() != Normal {
+		t.Fatalf("mode=%v want Normal (selection made from normal mode)", m.ModeName())
+	}
+}
+
+func TestDeleteKeyDeletesLinewiseSelection(t *testing.T) {
+	m, _ := loaded(t, "first\nsecond\n")
+	clickClock(&m)
+	for range 3 {
+		m.MouseClick(2, 0) // line "first" selected
+	}
+	m = send(m, special(tea.KeyDelete))
+	if line(m, 0) != "second" {
+		t.Fatalf("line 0=%q want %q", line(m, 0), "second")
+	}
+}
+
+func TestBackspaceOnInsertSelectionReturnsToInsert(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	tick := clickClock(&m)
+	m = typeKeys(m, "i") // editing
+	tick(time.Second)
+	m.MouseClick(7, 0)
+	m.MouseClick(7, 0) // word "world" selected mid-edit
+	m = send(m, special(tea.KeyBackspace))
+	if line(m, 0) != "hello " {
+		t.Fatalf("line=%q want %q", line(m, 0), "hello ")
+	}
+	if m.ModeName() != Insert {
+		t.Fatalf("mode=%v want Insert (selection was made while editing)", m.ModeName())
+	}
+	m = typeKeys(m, "x") // typing continues at the deletion point
+	if line(m, 0) != "hello x" {
+		t.Fatalf("after typing line=%q want %q", line(m, 0), "hello x")
+	}
+}
+
 func TestMouseClickClampsToLineInNormal(t *testing.T) {
 	m, _ := loaded(t, "ab\n")
 	m.MouseClick(50, 0)    // far past line end

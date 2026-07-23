@@ -143,6 +143,11 @@ type Model struct {
 	// selected while extending in either direction.
 	dragWord buffer.Range
 
+	// True when the current visual selection was entered from insert/replace
+	// mode (#979, mouse selection while editing): Backspace/Delete then
+	// returns to insert mode after removing the selection.
+	visualFromInsert bool
+
 	// True while the active selection was started with Shift+arrows (#326):
 	// such a selection is GUI-style — an unshifted navigation key drops it
 	// instead of extending it (vim's keymodel=stopsel). Selections entered
