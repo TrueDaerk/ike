@@ -70,7 +70,7 @@ cursor navigation; each node carries its `depth` for indentation.
 | --- | --- |
 | `explorer.show_hidden` | initial visibility of dot-entries (toggleable at runtime) |
 | `explorer.tree_indent` | spaces per depth level (indent-guide width) |
-| `explorer.sort` | within-level ordering (`name`); directories are always first |
+| `explorer.sort` | within-level ordering: `name` (default), `type` (extension, then name), `modified` (newest first) — directories always first; a live config change re-sorts the loaded tree (#1037) |
 | `explorer.colors.<ext\|glob>` | per-filetype colour; `dir` and `default` are required fallbacks |
 | `explorer.auto_refresh` | poll for external filesystem changes (default `true`; `"false"` disables) |
 

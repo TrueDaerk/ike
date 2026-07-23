@@ -168,7 +168,10 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 	if isDir {
 		err = os.MkdirAll(path, 0o755)
 	} else {
-		if err = os.MkdirAll(dir, 0o755); err == nil {
+		// A pathy name ("nested/newfile.txt", #1031) creates the intermediate
+		// directories, JetBrains-style — the parent of the file, not the
+		// prompt's anchor dir (which always exists).
+		if err = os.MkdirAll(filepath.Dir(path), 0o755); err == nil {
 			err = os.WriteFile(path, []byte(lang.TemplateFor(path)), 0o644)
 		}
 	}

@@ -44,6 +44,7 @@ type node struct {
 	loading  bool // a scan Cmd is in flight for this directory
 	children []*node
 	modTime  time.Time // directory mtime at last scan; drives auto-refresh polling
+	entMod   time.Time // this entry's own mtime, for the "modified" sort (#1037)
 }
 
 // Model is the file-explorer pane: an expandable tree rooted at a fixed base.
@@ -146,6 +147,7 @@ func (ScanDoneMsg) explorerMsg() {}
 type scanEntry struct {
 	name  string
 	isDir bool
+	mod   time.Time // entry mtime, for the "modified" sort (#1037)
 }
 
 // scanCmd reads path's entries off the update loop and returns them as a
@@ -159,6 +161,9 @@ func scanCmd(path string) tea.Cmd {
 		es := make([]scanEntry, len(des))
 		for i, de := range des {
 			es[i] = scanEntry{name: de.Name(), isDir: de.IsDir()}
+			if fi, err := de.Info(); err == nil {
+				es[i].mod = fi.ModTime()
+			}
 		}
 		var mod time.Time
 		if fi, err := os.Stat(path); err == nil {
@@ -202,23 +207,58 @@ func (m *Model) setChildren(n *node, entries []scanEntry) {
 	for _, e := range entries {
 		path := filepath.Join(n.path, e.name)
 		if old, ok := prev[path]; ok && old.isDir == e.isDir {
+			old.entMod = e.mod
 			children = append(children, old)
 			continue
 		}
 		children = append(children, &node{
-			name:  e.name,
-			path:  path,
-			isDir: e.isDir,
-			depth: n.depth + 1,
+			name:   e.name,
+			path:   path,
+			isDir:  e.isDir,
+			depth:  n.depth + 1,
+			entMod: e.mod,
 		})
+	}
+	m.sortChildren(children)
+	n.children = children
+}
+
+// sortChildren orders one level per explorer.sort (#1037) — "name" (default),
+// "type" (extension, then name) or "modified" (newest first, name tiebreak) —
+// directories always first.
+func (m *Model) sortChildren(children []*node) {
+	less := func(a, b *node) bool { return a.name < b.name }
+	switch m.sort {
+	case "type":
+		less = func(a, b *node) bool {
+			ea, eb := filepath.Ext(a.name), filepath.Ext(b.name)
+			if ea != eb {
+				return ea < eb
+			}
+			return a.name < b.name
+		}
+	case "modified":
+		less = func(a, b *node) bool {
+			if !a.entMod.Equal(b.entMod) {
+				return a.entMod.After(b.entMod)
+			}
+			return a.name < b.name
+		}
 	}
 	sort.SliceStable(children, func(i, j int) bool {
 		if children[i].isDir != children[j].isDir {
 			return children[i].isDir
 		}
-		return children[i].name < children[j].name
+		return less(children[i], children[j])
 	})
-	n.children = children
+}
+
+// resortAll re-sorts every loaded level, for a live explorer.sort change.
+func (m *Model) resortAll(n *node) {
+	m.sortChildren(n.children)
+	for _, c := range n.children {
+		m.resortAll(c)
+	}
 }
 
 // nodeByPath finds the node with the given path in the subtree rooted at n.
@@ -333,6 +373,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		return m, nil
 	case ToggleHiddenMsg:
+		// Keep the selection on the same entry across the toggle (#1033):
+		// the row set shifts when dot-entries appear/vanish, and a cursor
+		// that silently lands elsewhere makes the next d/R act on the wrong
+		// file. pendingSel reuses the file-op snap; a now-hidden selection
+		// falls back to the clamped cursor.
+		if m.cursor >= 0 && m.cursor < len(m.rows) {
+			m.pendingSel = m.rows[m.cursor].path
+		}
 		m.showHidden = !m.showHidden
 		m.rebuild()
 		show := m.showHidden

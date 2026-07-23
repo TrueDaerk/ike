@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Explorer small bug fixes: a pathy new-file name creates intermediate
+  directories (#1031), the hidden-files toggle keeps the selection on the
+  same entry (#1033), and `explorer.sort` actually works — `name`/`type`/
+  `modified`, live re-sort on config change (#1037)
+  (`/architecture/explorer.md`).
+
 - Version-aware LSP settings (#1079): intelephense gets the project PHP
   version (`composer.json` `require.php` minimum bound, `php -v` fallback)
   as `intelephense.environment.phpVersion`; vtsls gets the vendored
