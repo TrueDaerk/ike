@@ -273,6 +273,13 @@ stale `active` mark whose file is no longer open.
 
 ## Commands
 
+Tree navigation is registry-registered since #1041 (`explorer.cursorDown/Up`,
+`top`, `bottom`, `pageDown/Up`, `open`, `expandOrOpen`, `collapseOrParent`,
+`openInSplit`) with the raw keys documented as cheatsheet hints — rebindable
+through the keymap layer, while the raw switch in `Update` stays the
+zero-config fallback (a registered binding resolves first in the app's
+keymap layer). `o` (open in split) is thereby documented and rebindable.
+
 Every user action is a registry `Command` (scoped to the explorer context) with a
 default `Keymap`; each only dispatches an explorer `Msg` that the root model
 routes back into `Update`. The canonical binding set is owned by Roadmap 0080 —

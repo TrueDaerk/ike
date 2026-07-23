@@ -168,6 +168,42 @@ type ExpandAllMsg struct{}
 
 func (ExpandAllMsg) explorerMsg() {}
 
+// Navigation messages (#1041): the tree motions and open actions as
+// registry-dispatched messages, so the keybinding layer can rebind them and
+// the cheatsheet lists them. The raw key switch in Update stays as the
+// zero-config fallback; registered bindings resolve first in the app's
+// keymap layer.
+type (
+	// CursorMoveMsg moves the cursor by Delta rows (explorer.cursorDown/Up).
+	CursorMoveMsg struct{ Delta int }
+	// CursorPageMsg pages the cursor (explorer.pageDown/Up; Half = ctrl+d/u).
+	CursorPageMsg struct {
+		Dir  int
+		Half bool
+	}
+	// CursorBottomMsg jumps to the last row (explorer.bottom, vim G).
+	CursorBottomMsg struct{}
+	// CursorTopMsg jumps to the first row (explorer.top, vim gg).
+	CursorTopMsg struct{}
+	// ActivateMsg toggles the selected directory or opens the selected file.
+	ActivateMsg struct{}
+	// ExpandOrOpenMsg is the l/right semantic: expand a directory, open a file.
+	ExpandOrOpenMsg struct{}
+	// CollapseOrParentMsg is the h/left semantic.
+	CollapseOrParentMsg struct{}
+	// OpenInSplitMsg opens the selected file in a fresh split.
+	OpenInSplitMsg struct{}
+)
+
+func (CursorMoveMsg) explorerMsg()       {}
+func (CursorPageMsg) explorerMsg()       {}
+func (CursorBottomMsg) explorerMsg()     {}
+func (CursorTopMsg) explorerMsg()        {}
+func (ActivateMsg) explorerMsg()         {}
+func (ExpandOrOpenMsg) explorerMsg()     {}
+func (CollapseOrParentMsg) explorerMsg() {}
+func (OpenInSplitMsg) explorerMsg()      {}
+
 // ScanDoneMsg carries the result of a directory scan back into the model. It is
 // dispatched by the Cmd expand/refresh return; the root model routes it here.
 type ScanDoneMsg struct {
@@ -470,6 +506,31 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case ExpandAllMsg:
 		return m, m.expandAllUnderSelection()
+	case CursorMoveMsg:
+		m.clearSel()
+		m.moveCursor(msg.Delta)
+		return m, nil
+	case CursorPageMsg:
+		m.clearSel()
+		m.movePage(msg.Dir, msg.Half)
+		return m, nil
+	case CursorTopMsg:
+		m.clearSel()
+		m.moveCursor(-len(m.rows))
+		return m, nil
+	case CursorBottomMsg:
+		m.clearSel()
+		m.moveCursor(len(m.rows))
+		return m, nil
+	case ActivateMsg:
+		return m.activate()
+	case ExpandOrOpenMsg:
+		return m.expandOrOpen()
+	case CollapseOrParentMsg:
+		m.collapseOrParent()
+		return m, nil
+	case OpenInSplitMsg:
+		return m.openInSplit()
 	case RefreshMsg:
 		m.clearSel() // a manual refresh collapses the multi-select (#1044)
 		return m, m.refresh()

@@ -155,3 +155,30 @@ func TestClippedRowEndsInEllipsis(t *testing.T) {
 		t.Fatalf("clipped row must end in an ellipsis:\n%s", v)
 	}
 }
+
+// TestNavCommandsDispatch guards #1041: the registry-facing navigation
+// messages drive the same motions as the raw keys.
+func TestNavCommandsDispatch(t *testing.T) {
+	m := navModel(t, 30)
+	m, _ = m.Update(CursorBottomMsg{})
+	if m.cursor != len(m.rows)-1 {
+		t.Fatalf("bottom: cursor = %d", m.cursor)
+	}
+	m, _ = m.Update(CursorTopMsg{})
+	if m.cursor != 0 {
+		t.Fatalf("top: cursor = %d", m.cursor)
+	}
+	m, _ = m.Update(CursorMoveMsg{Delta: 3})
+	if m.cursor != 3 {
+		t.Fatalf("move: cursor = %d", m.cursor)
+	}
+	_, textH, _, _, _ := m.viewport()
+	m, _ = m.Update(CursorPageMsg{Dir: 1})
+	if m.cursor != 3+textH {
+		t.Fatalf("page: cursor = %d want %d", m.cursor, 3+textH)
+	}
+	m, _ = m.Update(CollapseOrParentMsg{})
+	if m.cursor != 0 {
+		t.Fatalf("collapseOrParent from a file must go to the parent, cursor = %d", m.cursor)
+	}
+}
