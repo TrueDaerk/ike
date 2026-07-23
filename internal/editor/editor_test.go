@@ -457,6 +457,93 @@ func TestTripleClickCutRemovesLine(t *testing.T) {
 	}
 }
 
+func TestDragSelectsCharwise(t *testing.T) {
+	m, _ := loaded(t, "hello world\nsecond line\n")
+	clickClock(&m)
+	m.MouseClick(2, 0)
+	m.MouseDrag(7, 1)
+	if m.ModeName() != Visual {
+		t.Fatalf("mode=%v want Visual", m.ModeName())
+	}
+	if m.anchor != (buffer.Position{Line: 0, Col: 2}) || m.cursor != (buffer.Position{Line: 1, Col: 7}) {
+		t.Fatalf("selection %v..%v want {0 2}..{1 7}", m.anchor, m.cursor)
+	}
+	m.MouseDrag(4, 0) // drag back above the anchor
+	if m.anchor != (buffer.Position{Line: 0, Col: 2}) || m.cursor != (buffer.Position{Line: 0, Col: 4}) {
+		t.Fatalf("backward drag %v..%v want {0 2}..{0 4}", m.anchor, m.cursor)
+	}
+}
+
+func TestDragWithoutTravelStaysPlainClick(t *testing.T) {
+	m, _ := loaded(t, "hello\n")
+	clickClock(&m)
+	m.MouseClick(2, 0)
+	m.MouseDrag(2, 0)
+	if m.ModeName() != Normal {
+		t.Fatalf("no-travel drag entered %v", m.ModeName())
+	}
+}
+
+func TestDoubleClickDragExtendsWordwise(t *testing.T) {
+	m, _ := loaded(t, "one two three\n")
+	clickClock(&m)
+	m.MouseClick(1, 0)
+	m.MouseClick(1, 0) // word "one" selected
+	m.MouseDrag(5, 0)  // into "two"
+	if m.anchor != (buffer.Position{Line: 0, Col: 0}) || m.cursor != (buffer.Position{Line: 0, Col: 6}) {
+		t.Fatalf("forward word drag %v..%v want {0 0}..{0 6}", m.anchor, m.cursor)
+	}
+	m.MouseDrag(1, 0) // back onto the origin word: just "one" again
+	if m.anchor != (buffer.Position{Line: 0, Col: 0}) || m.cursor != (buffer.Position{Line: 0, Col: 2}) {
+		t.Fatalf("origin word drag %v..%v want {0 0}..{0 2}", m.anchor, m.cursor)
+	}
+}
+
+func TestDoubleClickDragBackwardKeepsOriginWord(t *testing.T) {
+	m, _ := loaded(t, "one two three\n")
+	clickClock(&m)
+	m.MouseClick(9, 0)
+	m.MouseClick(9, 0) // word "three" selected (cols 8..12)
+	m.MouseDrag(5, 0)  // back into "two"
+	if m.anchor != (buffer.Position{Line: 0, Col: 12}) || m.cursor != (buffer.Position{Line: 0, Col: 4}) {
+		t.Fatalf("backward word drag %v..%v want {0 12}..{0 4}", m.anchor, m.cursor)
+	}
+}
+
+func TestTripleClickDragExtendsLinewise(t *testing.T) {
+	m, _ := loaded(t, "first\nsecond\nthird\n")
+	clickClock(&m)
+	for range 3 {
+		m.MouseClick(2, 1) // line "second" selected
+	}
+	m.MouseDrag(1, 2)
+	if m.ModeName() != VisualLine {
+		t.Fatalf("mode=%v want VisualLine", m.ModeName())
+	}
+	if m.anchor.Line != 1 || m.cursor.Line != 2 {
+		t.Fatalf("line drag %v..%v want lines 1..2", m.anchor, m.cursor)
+	}
+	m.MouseDrag(1, 0) // drag up past the origin line
+	if m.anchor.Line != 1 || m.cursor.Line != 0 {
+		t.Fatalf("upward line drag %v..%v want lines 1..0", m.anchor, m.cursor)
+	}
+}
+
+func TestDragExtendsKeyboardSelection(t *testing.T) {
+	m, _ := loaded(t, "hello world\n")
+	tick := clickClock(&m)
+	m = typeKeys(m, "v") // keyboard selection anchored at {0 0}
+	tick(time.Second)
+	m.MouseClick(4, 0)
+	m.MouseDrag(8, 0)
+	if m.ModeName() != Visual {
+		t.Fatalf("mode=%v want Visual", m.ModeName())
+	}
+	if m.anchor != (buffer.Position{Line: 0, Col: 0}) || m.cursor != (buffer.Position{Line: 0, Col: 8}) {
+		t.Fatalf("drag re-anchored keyboard selection: %v..%v want {0 0}..{0 8}", m.anchor, m.cursor)
+	}
+}
+
 func TestMouseClickClampsToLineInNormal(t *testing.T) {
 	m, _ := loaded(t, "ab\n")
 	m.MouseClick(50, 0)    // far past line end

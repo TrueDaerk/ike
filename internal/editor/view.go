@@ -94,7 +94,70 @@ func (m *Model) selectWordAt(p buffer.Position) bool {
 	m.cursor = m.buf.ClampCursor(end)
 	m.desiredCol = m.cursor.Col
 	m.clickVisual = true
+	m.dragWord = res.Range
 	return true
+}
+
+// MouseDrag extends a selection while the left button is held (#977): the
+// press cell anchors, and each motion event grows the selection to the cell
+// under the pointer — char-wise for a plain press, word-wise after a
+// double-click (the origin word stays fully selected), line-wise after a
+// triple-click. A drag while a keyboard-entered (v/V) selection is active
+// keeps extending that selection instead of re-anchoring.
+func (m *Model) MouseDrag(x, y int) {
+	p := m.clickPosition(x, y)
+	switch {
+	case m.clickStreak == 2 && m.mode.IsVisual():
+		m.dragWordTo(p)
+	case m.clickStreak == 3 && m.mode.IsVisual():
+		m.cursor = m.buf.ClampCursor(p)
+		m.desiredCol = m.cursor.Col
+	default:
+		m.dragCharTo(p)
+	}
+	m.scroll()
+	m.emit(EventCursorMove)
+}
+
+// dragCharTo extends a char-wise drag selection to p, entering visual mode on
+// the first cell of travel. Inside an existing selection it only moves the
+// cursor (the drag then extends it, keyboard- and mouse-made alike).
+func (m *Model) dragCharTo(p buffer.Position) {
+	if !m.mode.IsVisual() {
+		if p == m.lastClickPos {
+			return // no travel yet: still a plain click
+		}
+		m.cursor = m.lastClickPos
+		m.enterVisual(Visual)
+		m.clickVisual = true
+	}
+	m.cursor = m.buf.ClampCursor(p)
+	m.desiredCol = m.cursor.Col
+}
+
+// dragWordTo extends a word-wise drag (after a double-click) to the word
+// under p. The origin word stays fully selected: dragging forward anchors at
+// its first rune, dragging backward at its last.
+func (m *Model) dragWordTo(p buffer.Position) {
+	res := textobject.Word(m.buf, p, false, false)
+	if !res.OK {
+		return
+	}
+	last := func(r buffer.Range) buffer.Position {
+		e := r.End
+		if e.Col > 0 {
+			e.Col-- // End is exclusive; the last selected rune
+		}
+		return e
+	}
+	if res.Range.Start.Before(m.dragWord.Start) {
+		m.anchor = m.buf.ClampCursor(last(m.dragWord))
+		m.cursor = res.Range.Start
+	} else {
+		m.anchor = m.dragWord.Start
+		m.cursor = m.buf.ClampCursor(last(res.Range))
+	}
+	m.desiredCol = m.cursor.Col
 }
 
 // selectLineAt selects the whole clicked line as a linewise visual selection

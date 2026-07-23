@@ -430,6 +430,7 @@ const (
 	dragMove                       // dragging a pane title bar to relocate or spawn
 	dragTab                        // dragging one tab label to move just that file (#305)
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
+	dragEditSelect                 // dragging a text selection inside an editor pane (#977)
 	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 )
@@ -5579,6 +5580,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					term.MouseDrag(lx, ly)
 				}
 			}
+		case dragEditSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
+					if ed := inst.Editor(); ed != nil {
+						ed.MouseDrag(lx, ly)
+					}
+				}
+			}
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -5619,6 +5628,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
+		case dragEditSelect:
+			m.drag = nil
+			return m, nil // the editor selection is already in place; nothing to commit
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -6039,6 +6051,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		} else {
 			inst.Editor().MouseClick(localX, localY)
+			// Track the press so motion events extend a selection (#977):
+			// char-wise from a plain press, word-/line-wise after a
+			// double/triple click.
+			if msg.Button == tea.MouseLeft {
+				m.drag = &dragState{kind: dragEditSelect, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
 		}
 	case pane.KindTerminal:
 		// Left press: forward to a mouse-reporting child, else anchor a text
