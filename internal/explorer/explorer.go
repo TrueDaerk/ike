@@ -1193,6 +1193,25 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// ContextClick selects the row under the content-local cell for a
+// right-click (#1040) without activating it; the app then opens the context
+// menu at the pointer. Reports false when the press lands on chrome (the
+// scrollbar column or below the pane), where no menu applies. A press on
+// empty space below the rows keeps the current selection — the menu's
+// create actions then target the selected (or root) directory.
+func (m *Model) ContextClick(x, y int) bool {
+	textW, textH, needV, _, _ := m.viewport()
+	if x < 0 || y < 0 || y >= textH || x > textW || (needV && x == textW) {
+		return false
+	}
+	if i := m.offset + y; i < len(m.rows) {
+		m.cursor = i
+		m.clampScroll()
+	}
+	m.resetClick()
+	return true
+}
+
 // ScrollbarHit reports whether a content-local press lands on the vertical
 // scrollbar track (#1036) — the app checks it before the row click so a
 // thumb press can start a drag, mirroring the editor scrollbar (#1022).

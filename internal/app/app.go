@@ -6306,6 +6306,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindExplorer:
 		var cmd tea.Cmd
 		exp := inst.Explorer()
+		// A right click opens the node context menu (#1040): the row under
+		// the pointer is selected first, so the menu's actions target it.
+		if msg.Button == tea.MouseRight {
+			if exp.ContextClick(localX, localY) {
+				m.ctxMenu.Open(explorerContextItems(), msg.X, msg.Y, m.width, m.height)
+			}
+			return m, nil
+		}
 		// A left press on the scrollbar thumb starts a drag (#1036), like
 		// the editor scrollbar; track presses jump inside ScrollbarPress.
 		if msg.Button == tea.MouseLeft && exp.ScrollbarHit(localX, localY) {
@@ -6449,6 +6457,21 @@ func editorContextItems() []menu.Item {
 		{Title: "Go to Definition", Command: "lsp.definition"},
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Reformat File", Command: "lsp.format"},
+	}
+}
+
+// explorerContextItems is the explorer node's right-click menu (#1040): the
+// existing file-op commands, resolved through the same InfoFunc as the menu
+// bar so availability and shortcuts stay in sync.
+func explorerContextItems() []menu.Item {
+	return []menu.Item{
+		{Title: "New File", Command: "explorer.newFile"},
+		{Title: "New Directory", Command: "explorer.newFolder"},
+		{Title: "Rename", Command: "explorer.rename"},
+		{Title: "Delete", Command: "explorer.delete"},
+		{Title: "Refresh", Command: "explorer.refresh"},
+		{Title: "Expand All", Command: "explorer.expandAll"},
+		{Title: "Reveal Open File", Command: "explorer.reveal"},
 	}
 }
 
