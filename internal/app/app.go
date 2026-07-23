@@ -4999,7 +4999,10 @@ func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
 		return model, cmd
 	}
 	if ed := mm.editorForPath(path); ed != nil {
-		ed.SetCursor(line, col)
+		// Navigation landings frame the target near the top edge (#996);
+		// every jump surface (definition, usages, nav history, goto-line,
+		// CLI targets) funnels through here.
+		ed.JumpTo(line, col)
 	}
 	return mm, cmd
 }

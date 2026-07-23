@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Navigation jumps frame their target 3 rows below the top edge (#996,
+  `editor.JumpTo` behind `openPathAt`) — definition/usages/nav-history
+  landings stop hiding at arbitrary viewport positions
+  (`/architecture/navigation-history.md`).
+
 - Idle performance (#1001): explorer auto-refresh polls off-loop (one app
   wake per minute when quiet instead of one per 2s), single-shot debounce
   timers are cancelled with their owners (terminal resize, watch flush, LSP

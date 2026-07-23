@@ -751,6 +751,25 @@ func (m *Model) SetCursor(line, col int) {
 	m.emit(EventCursorMove)
 }
 
+// jumpTopMargin is how many context rows stay above a navigation landing
+// (#996): the jumped-to line sits this far below the pane's top edge.
+const jumpTopMargin = 3
+
+// JumpTo places the cursor like SetCursor and frames the landing for a
+// navigation jump (#996): the target line sits jumpTopMargin rows below the
+// viewport's top edge (small context margin, JetBrains-like) instead of being
+// scrolled minimally into view. Already-visible targets reframe too —
+// consistent landings beat the occasional saved scroll (documented decision).
+// SetScroll clamps, so a target near the end of the buffer never over-scrolls.
+func (m *Model) JumpTo(line, col int) {
+	m.SetCursor(line, col)
+	top := m.cursor.Line - jumpTopMargin
+	if top < 0 {
+		top = 0
+	}
+	m.SetScroll(top, m.view.Left)
+}
+
 // HasFile reports whether a file is currently open.
 func (m Model) HasFile() bool { return m.path != "" }
 

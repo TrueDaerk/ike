@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -52,6 +52,12 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
   jumps to another *line* — so every jump source (definition, references,
   search results, file switches) is covered at two choke points instead of
   per-feature hooks.
+- **Landing framing** (#996): `openPathAt` places the caret through
+  `editor.JumpTo`, which frames the target line `jumpTopMargin` (3) rows
+  below the viewport's top edge (JetBrains-like context margin) instead of
+  scrolling it minimally into view. Already-visible targets reframe too —
+  consistent landings are the documented choice; `SetScroll`'s clamp keeps
+  end-of-buffer jumps sane. Interactive cursor motion is untouched.
 - In-file jumps come through the editor's event seam (#219): the editor
   emits `EventJump` carrying the *departure* position immediately before a
   large motion or search landing moves the caret (`motion.Result.Jump` for

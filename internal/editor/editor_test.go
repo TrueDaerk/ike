@@ -1849,3 +1849,30 @@ func TestReplacePanelSlashesPickAnotherDelimiter(t *testing.T) {
 // searchCompileForTest builds a query via the search package (kept here so the
 // test reads at the editor level).
 func searchCompileForTest(pat string, regex bool) search.Query { return search.Compile(pat, regex) }
+
+func TestJumpToFramesTargetNearTop(t *testing.T) {
+	m, _ := loaded(t, strings.Repeat("line\n", 200))
+	m.SetSize(80, 20)
+	m.JumpTo(100, 0)
+	if m.cursor.Line != 100 {
+		t.Fatalf("cursor line=%d want 100", m.cursor.Line)
+	}
+	if m.view.Top != 97 {
+		t.Fatalf("Top=%d want 97 (target 3 rows below the top edge, #996)", m.view.Top)
+	}
+	// A target near the buffer start clamps at 0.
+	m.JumpTo(1, 0)
+	if m.view.Top != 0 {
+		t.Fatalf("Top=%d want 0 for a near-start jump", m.view.Top)
+	}
+	// A visible target reframes too (consistent landings).
+	m.JumpTo(5, 0)
+	if m.view.Top != 2 {
+		t.Fatalf("Top=%d want 2 for a visible-target jump", m.view.Top)
+	}
+	// End-of-buffer jump clamps sanely.
+	m.JumpTo(199, 0)
+	if m.view.Top != 196 || m.cursor.Line != 199 {
+		t.Fatalf("Top=%d cursor=%d want 196/199", m.view.Top, m.cursor.Line)
+	}
+}

@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ike/internal/pane"
@@ -86,5 +87,23 @@ func TestFileOpenSkipsDedicatedTerminal(t *testing.T) {
 	}
 	if tp := m.activeWS().Panes.Get(key); tp == nil || tp.Kind() != pane.KindTerminal {
 		t.Fatal("the terminal pane must survive unchanged")
+	}
+}
+
+// TestOpenPathAtFramesJumpNearTop guards #996: openPathAt — the funnel every
+// navigation jump uses — lands the target line 3 rows below the top edge.
+func TestOpenPathAtFramesJumpNearTop(t *testing.T) {
+	m := sized(t, 100, 40)
+	path := tmpFile(t, "big.txt", strings.Repeat("x\n", 300))
+	out, _ := m.openPathAt(path, 150, 0)
+	m = out.(Model)
+	ed := m.activeWS().Panes.Get(m.activeWS().Panes.Focused()).Editor()
+	if ed == nil || ed.Path() != path {
+		t.Fatal("setup: file must open")
+	}
+	line, _ := ed.CursorPos()
+	top, _ := ed.ScrollOffset()
+	if line != 150 || top != 147 {
+		t.Fatalf("line=%d top=%d want 150/147 (#996)", line, top)
 	}
 }
