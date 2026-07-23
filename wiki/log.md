@@ -2,6 +2,13 @@
 
 ## 2026-07-23
 
+- Explorer render polish (#1050/#1055/#1056/#1058/#1059): indent guides in
+  the semantic `IndentGuide` slot (editor parity) instead of each row's
+  filetype/VCS hue; hover only adds its background, preserving the
+  active-file accent; open-file marker is underline-only (italics stay
+  "hidden"); `(empty)` themed via `InlayHint`; guides/marker excluded from
+  the selection bold (`/architecture/explorer.md`).
+
 - Binding audit: default chords for the four unbound user-facing commands
   (#1048) — `cmd+8` problems.toggle, `cmd+3` structure.toggle (numeric
   tool-window family, palette fallback), `ctrl+f5` run.rerun and `ctrl+f2`
