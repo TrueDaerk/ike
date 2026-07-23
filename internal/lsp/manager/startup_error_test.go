@@ -40,3 +40,19 @@ func TestStatusForErrPointsAtLog(t *testing.T) {
 		t.Fatalf("kind = %v want ServerEventError", kind)
 	}
 }
+
+// TestLaunchAdviceForBrokenTaplo guards #1065: the Homebrew taplo without the
+// lsp feature gets concrete install advice, unknown failures do not.
+func TestLaunchAdviceForBrokenTaplo(t *testing.T) {
+	err := errors.New("ERROR operation failed error=the LSP is not part of this build, please consult the documentation about enabling the functionality")
+	text, _ := statusForErr("taplo", err)
+	if !strings.Contains(text, "npm install -g @taplo/cli") {
+		t.Fatalf("taplo advice missing: %q", text)
+	}
+	if a := launchAdvice("taplo", "some other failure"); a != "" {
+		t.Fatalf("unexpected advice %q", a)
+	}
+	if a := launchAdvice("gopls", "not part of this build"); a != "" {
+		t.Fatalf("advice must be command-gated, got %q", a)
+	}
+}

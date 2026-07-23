@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Recognized launch failures carry install advice (#1065): the Homebrew
+  taplo built without the LSP feature now yields "install an LSP-capable
+  build: npm install -g @taplo/cli …" in the failure toast, via a
+  `knownLaunchFailures` table on top of the #1062 stderr extraction
+  (`/architecture/lsp.md`, `/architecture/languages.md`).
+
 - Startup-crash notifications name the real error (#1062): a server dying
   before the handshake surfaces its decisive stderr line (taplo's "the LSP
   is not part of this build", sql-language-server's Node error) instead of

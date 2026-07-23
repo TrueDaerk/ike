@@ -1327,15 +1327,40 @@ func startupError(err error, stderr func() string) error {
 	return err
 }
 
+// knownLaunchFailures maps recognizable startup complaints to actionable
+// advice (#1065): when the extracted stderr line matches, the notification
+// tells the user how to get a working binary instead of only what broke.
+var knownLaunchFailures = []struct{ command, needle, advice string }{
+	// Homebrew builds taplo without the lsp feature; the npm/cargo builds
+	// carry it.
+	{"taplo", "not part of this build", "this taplo was built without the LSP — install an LSP-capable build: npm install -g @taplo/cli (or cargo install taplo-cli --features lsp)"},
+}
+
+// launchAdvice returns the actionable hint for a recognized launch failure,
+// or "" when none matches.
+func launchAdvice(command, errText string) string {
+	for _, k := range knownLaunchFailures {
+		if k.command == command && strings.Contains(errText, k.needle) {
+			return k.advice
+		}
+	}
+	return ""
+}
+
 // statusForErr renders a launch failure as a user-facing status string plus its
 // classification: a missing binary is persistent state (LSP stays off for the
 // language), any other launch failure is a transient error event pointing at
 // the server log (#1062, matching the repeated-crash disable message #715).
+// Recognized failures append concrete install advice (#1065).
 func statusForErr(command string, err error) (string, lsp.ServerStatusKind) {
 	if isNotFound(err) {
 		return command + " not found (LSP disabled for this language)", lsp.ServerState
 	}
-	return command + ": " + err.Error() + " — details: \"LSP: Show Server Log\"", lsp.ServerEventError
+	text := command + ": " + err.Error()
+	if advice := launchAdvice(command, err.Error()); advice != "" {
+		text += " — " + advice
+	}
+	return text + " — details: \"LSP: Show Server Log\"", lsp.ServerEventError
 }
 
 func splitLines(text string) []string { return strings.Split(text, "\n") }
