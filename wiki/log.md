@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Editor right-click context menu (#1020): `menu.Context` floating dropdown
+  anchored at the click cell, reusing the menu bar's item/InfoFunc rendering;
+  caret repositions unless the click lands inside the selection
+  (`/architecture/editor.md`).
+
 - LSP crash logs keep the actual error (#990): log markers always start on a
   fresh line, and the decisive stderr error line (`transport.ErrorLine`) is
   named in the crash/disable toasts and the crash log marker

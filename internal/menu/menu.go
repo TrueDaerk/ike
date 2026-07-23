@@ -304,17 +304,27 @@ func (m *Model) Dropdown() string {
 
 // dropdownLine renders one entry row at the dropdown's shared width.
 func (m *Model) dropdownLine(idx int) string {
-	pal := m.theme()
 	items := m.menus[m.active].Items
+	return listLine(items, m.info, m.theme(), m.sel, idx, m.dropdownWidth())
+}
+
+// dropdownWidth is the shared row width of the open dropdown.
+func (m *Model) dropdownWidth() int {
+	return listWidth(m.menus[m.active].Items, m.info)
+}
+
+// listLine renders one entry row of an item list at the shared width w:
+// shortcut right-aligned, disabled entries dimmed with their hint, the
+// selected entry highlighted. Shared by the bar dropdown and the context menu.
+func listLine(items []Item, info InfoFunc, pal *theme.Palette, sel, idx, w int) string {
 	it := items[idx]
-	info := m.info(it.Command)
+	in := info(it.Command)
 
 	label := it.Title
-	right := info.Shortcut
-	if !info.Runnable {
-		right = info.Hint
+	right := in.Shortcut
+	if !in.Runnable {
+		right = in.Hint
 	}
-	w := m.dropdownWidth()
 	gap := w - lipgloss.Width(label) - lipgloss.Width(right) - 2
 	if gap < 1 {
 		gap = 1
@@ -323,22 +333,22 @@ func (m *Model) dropdownLine(idx int) string {
 
 	style := lipgloss.NewStyle().Background(pal.Surface).Foreground(pal.Foreground)
 	switch {
-	case !info.Runnable:
+	case !in.Runnable:
 		style = style.Foreground(pal.Secondary).Faint(true)
-	case idx == m.sel:
+	case idx == sel:
 		style = style.Background(pal.Selection).Bold(true)
 	}
 	return style.Render(line)
 }
 
-// dropdownWidth is the shared row width of the open dropdown.
-func (m *Model) dropdownWidth() int {
+// listWidth is the shared row width of an item list.
+func listWidth(items []Item, info InfoFunc) int {
 	w := 0
-	for _, it := range m.menus[m.active].Items {
-		info := m.info(it.Command)
-		right := info.Shortcut
-		if !info.Runnable {
-			right = info.Hint
+	for _, it := range items {
+		in := info(it.Command)
+		right := in.Shortcut
+		if !in.Runnable {
+			right = in.Hint
 		}
 		if n := lipgloss.Width(it.Title) + lipgloss.Width(right) + 4; n > w {
 			w = n
