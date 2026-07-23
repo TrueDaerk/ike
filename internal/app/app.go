@@ -6329,6 +6329,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// shift+click extends the contiguous multi-select to the clicked
+		// row (#1044); a plain click below collapses it and selects.
+		if msg.Button == tea.MouseLeft && msg.Mod&tea.ModShift != 0 {
+			exp.ShiftClick(localX, localY)
+			return m, nil
+		}
 		*exp, cmd = exp.MouseClick(localX, localY)
 		return m, cmd
 	case pane.KindEditor:

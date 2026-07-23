@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-23T22:00:00Z
+timestamp: 2026-07-23T22:30:00Z
 ---
 
 # File Explorer
@@ -114,6 +114,39 @@ configured, a built-in default table is used so the tree is never monochrome.
   expanded one, or open a file.
 - `h` / `left` — collapse an expanded directory, otherwise jump to the parent
   node. Never moves above the root.
+- `shift+j` / `shift+k` (and `shift+down` / `shift+up`) — extend a contiguous
+  multi-select range from an anchor (#1044, see below).
+- `esc` — clear an active multi-select range.
+
+## Multi-select (#1044)
+
+The explorer supports a **contiguous range selection** for file operations,
+modeled as a single anchor row (`selAnchor`, `-1` = none): the selection is
+always the visible-row range between the anchor and the cursor, in either
+direction. `shift+j`/`shift+k` (and the shifted arrows) extend it — the first
+extension anchors at the current cursor row — and a **shift+click** extends it
+to the clicked row. Any plain motion or click collapses the range back to the
+bare cursor; `esc` clears it explicitly. A right-click **inside** the range
+keeps it untouched (cursor included), so the context menu's Delete acts on the
+whole selection; outside it the selection collapses like a plain click.
+
+Kept deliberately simple: row rebuilds only **clamp** the anchor to the row
+set, while toggling hidden files or a manual refresh **collapses** the
+selection outright (the row set shifts, so a stale range would cover the wrong
+entries).
+
+Visually, range members take the `rowRange` kind — the muted `SelectionMuted`
+background over the row's semantic foreground, the same recipe as the
+unfocused cursor — while the cursor row keeps the full Selection recipe, so it
+reads as the range's active end. Range members outrank hover.
+
+**Delete acts on the whole selection** with one confirm prompt ("Delete N
+entries?"): each entry is trashed individually, but the batch is recorded as
+ONE undo step (`fileOp.batch`), so a single undo restores the entire
+selection (and a single redo re-deletes it). Entries nested under another
+selected directory are filtered out (trashing the ancestor already moves
+them), and the root is never a target. Rename and move stay single-target —
+they ignore the selection beyond the cursor.
 
 Directories render with a `▾`/`▸` marker; a read error is retained and shown in
 place of the tree.
@@ -150,7 +183,9 @@ padding, and title row) before calling the explorer:
   **double-click** (two presses on the same row within `doubleClickWindow`,
   400ms; the clock is injectable via `Model.now` for tests). Exception: a
   single press on a directory's two-cell expand caret toggles it immediately,
-  like the IDE tree it mimics.
+  like the IDE tree it mimics. A **shift+click** instead extends the
+  contiguous multi-select to the clicked row (#1044, `ShiftClick`); a plain
+  click collapses any active range.
 - **Motion** over a row (`SetHoverAt` / `ClearHover`) sets a transient hover
   highlight; leaving the pane clears it.
 - **Wheel** over the pane scrolls without moving the cursor, like a real
@@ -251,7 +286,7 @@ these are defaults.
 | `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
 | `explorer.newFile` | `a` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
-| `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
+| `explorer.delete` | `d` | delete the selected entry — or the whole multi-select range (#1044) — after one confirmation (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
@@ -342,6 +377,9 @@ editor's history):
 
 - **Undo of a create** moves the entry to the trash (never `os.Remove`, so a
   redo — or a mistaken undo — loses nothing); redo moves it back.
+- **Undo of a batch delete** (#1044, a multi-select delete) restores every
+  entry of the batch in one step, last trashed first; redo re-trashes them
+  all. The batch lives in `fileOp.batch` as plain per-entry delete sub-ops.
 - **Undo of a delete** moves the trashed entry back to its original path; redo
   re-trashes it.
 - **Undo of a rename or move** relocates the entry back; redo re-applies it.
