@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Terminal: `cmd+d` splits the focused terminal's pane right with a fresh
+  terminal (#982, iTerm-style); reserved chords now canonicalize bubbletea's
+  super+/meta+ Cmd encodings (#981), and the pin-picker notice renders its
+  chord platform-normalized (`/architecture/terminal.md`).
+
 - Backspace/Delete remove a visual selection outright (#979); a selection
   made while editing returns to insert mode at the deletion point
   (`/architecture/editor.md`).

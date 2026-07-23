@@ -678,6 +678,57 @@ func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
 	}
 }
 
+// TestReservedCmdDSplitsTerminalRight guards #982: cmd+d inside a focused
+// terminal splits its pane to the right with a fresh, focused terminal.
+func TestReservedCmdDSplitsTerminalRight(t *testing.T) {
+	m, key := openTestTerminal(t)
+	handled, out, _ := m.terminalReservedKey("cmd+d")
+	if !handled {
+		t.Fatal("cmd+d must be reserved while a terminal is focused (#982)")
+	}
+	m = out.(Model)
+	nkey := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(nkey)
+	if nkey == key || inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("cmd+d must focus a fresh terminal pane, got %q", nkey)
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if m.lay.Panes[nkey].X <= m.lay.Panes[key].X {
+		t.Fatalf("new pane must sit to the right: old X=%d new X=%d",
+			m.lay.Panes[key].X, m.lay.Panes[nkey].X)
+	}
+}
+
+// TestReservedCmdDSplitsEditorHostedTerminalRight: cmd+d with a terminal tab
+// focused in an editor pane (#573) splits that pane right with a terminal pane.
+func TestReservedCmdDSplitsEditorHostedTerminalRight(t *testing.T) {
+	m := sized(t, 100, 40)
+	out, _ := m.Update(TerminalNewTabMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+	host := m.activeWS().Panes.Get(key)
+	if host == nil || host.ActiveTerminal() == nil {
+		t.Fatalf("setup: no editor-hosted terminal tab in %q", key)
+	}
+	t.Cleanup(func() { host.ActiveTerminal().Close() })
+
+	handled, out, _ := m.terminalReservedKey("cmd+d")
+	if !handled {
+		t.Fatal("cmd+d must be reserved while the terminal tab is focused")
+	}
+	m = out.(Model)
+	nkey := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(nkey)
+	if nkey == key || inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatalf("cmd+d must focus a fresh terminal pane, got %q", nkey)
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+	if m.lay.Panes[nkey].X <= m.lay.Panes[key].X {
+		t.Fatalf("new pane must sit to the right of the editor pane: old X=%d new X=%d",
+			m.lay.Panes[key].X, m.lay.Panes[nkey].X)
+	}
+}
+
 // TestReservedCmdTSplitsSiblingTerminal guards #729: cmd+t inside a focused
 // dedicated terminal pane spawns and focuses a second terminal pane.
 func TestReservedCmdTSplitsSiblingTerminal(t *testing.T) {
