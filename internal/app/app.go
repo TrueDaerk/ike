@@ -45,6 +45,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/largefile"
 	"ike/internal/layout"
+	"ike/internal/localhistory"
 	ilsp "ike/internal/lsp"
 	"ike/internal/market"
 	"ike/internal/menu"
@@ -351,6 +352,11 @@ type Model struct {
 	termShiftAt time.Time        // last bare-shift tap in a terminal (#973)
 	pinSel     int              // pin-picker selection
 	pinPicker  bool             // pin picker owns the modal shell
+	lhStore    *localhistory.Store  // local-history snapshot store (#1023)
+	lhSel      int                  // local-history picker selection
+	lhPicker   bool                 // local-history picker owns the modal shell
+	lhPath     string               // file the open picker lists
+	lhEntries  []localhistory.Entry // its snapshots, newest-first
 	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -578,7 +584,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:       cmdUsage,
 		winSizes:       winSizes,
-		pins:           loadPins(), // pinned file slots (#788)
+		pins:           loadPins(),                            // pinned file slots (#788)
+		lhStore:        localhistory.New(localHistoryDir()),   // local history (#1023)
 		completeEngine: engine,
 		ws:             wsMgr,
 		recentEditor:   edKey,
@@ -823,6 +830,10 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// indirection as the SyncMsg below: Emit runs inside Update, so a
 		// direct send into the program's own loop would deadlock.
 		go e.host.Send(todoSavedMsg{path: ev.Path})
+		// Local History (#1023): snapshot the just-written file. Every save
+		// flow (manual write, Save All, autosave) funnels through the editor
+		// save path, so this one hook captures them all.
+		go e.host.Send(localHistorySnapshotMsg{path: ev.Path})
 		// The save also invalidates the git status snapshot (Roadmap 0320);
 		// IKE's own writes are watcher-suppressed (MarkSaved above), so this
 		// is the only refresh trigger for in-IDE saves.
@@ -3303,6 +3314,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openPinPicker(0)
 		return m, nil
 
+	case LocalHistoryMsg:
+		// file.localHistory (#1023): list the focused file's snapshots.
+		m.openLocalHistoryPicker()
+		return m, nil
+	case localHistorySnapshotMsg:
+		// A buffer save: record the written bytes into the snapshot store.
+		m.recordLocalHistory(msg.path)
+		return m, nil
+
 	case NavBackMsg:
 		// nav.back (Roadmap 0220): return to the previous recorded position.
 		return m.navigateHistory(m.navHist.BackWhere, "no earlier position in the navigation history")
@@ -3920,6 +3940,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The pinned-files picker (#788) owns the keyboard the same way.
 		if m.pinPickerOpen() {
 			return m.updatePinPicker(msg)
+		}
+		// The local-history picker (#1023) owns the keyboard the same way.
+		if m.localHistoryOpen() {
+			return m.updateLocalHistoryPicker(msg)
 		}
 		// The revert-file confirmation (0320, #466): enter / esc answer it.
 		if m.revertPromptOpen() {
