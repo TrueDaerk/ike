@@ -8,6 +8,13 @@
   `explorer.icons = true` (default off) adds a one-cell plain-unicode class
   glyph — dir/code/doc/config/image/other — between the expand marker and
   the name (`/architecture/explorer.md`).
+- Explorer multi-select for file operations (#1044): `shift+j`/`shift+k`
+  (and shifted arrows / shift+click) extend a contiguous anchor..cursor
+  range — plain motions/clicks collapse it, `esc` clears it; range members
+  render on the muted-selection background while the cursor keeps the full
+  recipe; Delete acts on the whole selection with ONE confirm prompt and
+  records the batch as ONE undo step, so a single undo restores everything
+  (`/architecture/explorer.md`).
 
 - Explorer node context menu (#1040): right-click selects the row and opens
   the shared `menu.Context` shell with the file-op commands

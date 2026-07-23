@@ -77,6 +77,12 @@ type fileOp struct {
 	newPath   string // the entry's location after a rename (opRename only)
 	trashPath string // where a trashed entry lives (opDelete; opCreate after undo)
 	isDir     bool
+
+	// batch groups the per-entry sub-operations of one multi-select delete
+	// (#1044) into a single undo step: each sub-op is a plain opDelete, and
+	// undo/redo walk the batch as a unit so one undo restores the whole
+	// selection. Non-empty batch outranks kind in the undo/redo walk.
+	batch []fileOp
 }
 
 // Prompting reports whether a modal prompt is open, so the root model can route
@@ -232,9 +238,31 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 	return m.refreshDir(dir)
 }
 
-// promptDelete opens a confirmation for deleting the selected entry. The root is
-// never deletable.
+// promptDelete opens a confirmation for deleting the selected entry — or, with
+// a multi-select range active (#1044), for the whole selection at once: one
+// prompt, one batch, one undo step. The root is never deletable.
 func (m *Model) promptDelete() {
+	if lo, hi, ok := m.selRange(); ok && hi > lo {
+		// A nested child of a selected directory is filtered out, so the
+		// count can be smaller than the row span — it names what actually
+		// gets trashed.
+		targets := m.selTargets()
+		if len(targets) == 0 {
+			return // the range covers only the root
+		}
+		noun := "entries"
+		if len(targets) == 1 {
+			noun = "entry" // a dir plus its own children boils down to one
+		}
+		m.prompt = &prompt{
+			kind:  promptConfirm,
+			title: fmt.Sprintf("Delete %d %s?", len(targets), noun),
+			accept: func(mm *Model, _ string) tea.Cmd {
+				return mm.deleteEntries(targets)
+			},
+		}
+		return
+	}
 	n := m.current()
 	if n == nil || n == m.root {
 		return
@@ -263,6 +291,47 @@ func (m *Model) deleteEntry(path string, isDir bool) tea.Cmd {
 	}
 	m.pushOp(fileOp{kind: opDelete, path: path, trashPath: tp, isDir: isDir})
 	return tea.Batch(m.refreshDir(filepath.Dir(path)), deletedCmd(path, isDir))
+}
+
+// deleteEntries trashes every entry of a multi-select delete (#1044) and
+// records the whole batch as ONE undo step, so a single undo restores the
+// full selection. A mid-batch failure still records the already-trashed
+// entries (they stay undoable) before the error dialog opens; the untouched
+// remainder is simply left in place.
+func (m *Model) deleteEntries(targets []delTarget) tea.Cmd {
+	var subs []fileOp
+	var announce []tea.Cmd
+	dirs := map[string]bool{}
+	var failed error
+	for _, t := range targets {
+		tp, err := m.toTrash(t.path)
+		if err != nil {
+			failed = err
+			break
+		}
+		subs = append(subs, fileOp{kind: opDelete, path: t.path, trashPath: tp, isDir: t.isDir})
+		dirs[filepath.Dir(t.path)] = true
+		announce = append(announce, deletedCmd(t.path, t.isDir))
+	}
+	m.clearSel()
+	switch {
+	case len(subs) == 1:
+		m.pushOp(subs[0]) // a one-entry batch is just a plain delete
+	case len(subs) > 1:
+		m.pushOp(fileOp{kind: opDelete, batch: subs})
+	}
+	var cmds []tea.Cmd
+	for d := range dirs {
+		cmds = append(cmds, m.refreshDir(d))
+	}
+	cmds = append(cmds, announce...)
+	if failed != nil {
+		m.fail(failed)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // deletedCmd announces a removed path so the app can close editors on it.
@@ -427,6 +496,17 @@ func (m *Model) undo() tea.Cmd {
 	}
 	op := m.ops[len(m.ops)-1]
 	var cmd tea.Cmd
+	if len(op.batch) > 0 {
+		// A multi-select delete (#1044): restore the whole batch as one step.
+		c, ok := m.undoBatchDelete(op.batch)
+		if !ok {
+			return nil // the batch stays on the stack; the dialog shows why
+		}
+		m.ops = m.ops[:len(m.ops)-1]
+		m.redoOps = append(m.redoOps, op)
+		m.err = nil
+		return c
+	}
 	switch op.kind {
 	case opCreate:
 		tp, err := m.toTrash(op.path)
@@ -466,6 +546,17 @@ func (m *Model) redo() tea.Cmd {
 	}
 	op := m.redoOps[len(m.redoOps)-1]
 	var cmd tea.Cmd
+	if len(op.batch) > 0 {
+		// Re-apply a multi-select delete (#1044) as one step.
+		c, ok := m.redoBatchDelete(op.batch)
+		if !ok {
+			return nil
+		}
+		m.redoOps = m.redoOps[:len(m.redoOps)-1]
+		m.ops = append(m.ops, op)
+		m.err = nil
+		return c
+	}
 	switch op.kind {
 	case opCreate:
 		if err := os.Rename(op.trashPath, op.path); err != nil {
@@ -493,6 +584,48 @@ func (m *Model) redo() tea.Cmd {
 	m.ops = append(m.ops, op)
 	m.err = nil
 	return cmd
+}
+
+// undoBatchDelete restores every entry of a batch delete (#1044), last
+// trashed first. On a failing restore it opens the error dialog and reports
+// false so the batch stays on the undo stack — the already-restored entries
+// are back in place, and retrying simply fails fast on them without loss.
+func (m *Model) undoBatchDelete(subs []fileOp) (tea.Cmd, bool) {
+	dirs := map[string]bool{}
+	for i := len(subs) - 1; i >= 0; i-- {
+		s := subs[i]
+		if err := os.Rename(s.trashPath, s.path); err != nil {
+			m.fail(err)
+			return nil, false
+		}
+		dirs[filepath.Dir(s.path)] = true
+	}
+	m.pendingSel = subs[0].path
+	var cmds []tea.Cmd
+	for d := range dirs {
+		cmds = append(cmds, m.refreshDir(d))
+	}
+	return tea.Batch(cmds...), true
+}
+
+// redoBatchDelete re-trashes every entry of an undone batch delete (#1044),
+// in the original deletion order, announcing each removal so editors close.
+func (m *Model) redoBatchDelete(subs []fileOp) (tea.Cmd, bool) {
+	dirs := map[string]bool{}
+	var announce []tea.Cmd
+	for _, s := range subs {
+		if err := os.Rename(s.path, s.trashPath); err != nil {
+			m.fail(err)
+			return nil, false
+		}
+		dirs[filepath.Dir(s.path)] = true
+		announce = append(announce, deletedCmd(s.path, s.isDir))
+	}
+	var cmds []tea.Cmd
+	for d := range dirs {
+		cmds = append(cmds, m.refreshDir(d))
+	}
+	return tea.Batch(append(cmds, announce...)...), true
 }
 
 // refreshDir expands and re-scans dir so a just-changed directory reloads in

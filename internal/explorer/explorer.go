@@ -116,6 +116,14 @@ type Model struct {
 	pendingReveal string
 	autoReveal    bool
 	wantReveal    bool
+
+	// Contiguous multi-select (#1044): the selection is the visible-row range
+	// between selAnchor and the cursor, inclusive. -1 means no selection.
+	// shift+j/k (and shift+up/down, shift+click) extend it; any plain motion
+	// or click collapses it; esc clears it. Rebuilds clamp the anchor; a
+	// hidden-toggle or manual refresh collapses the selection (the row set
+	// shifts, so a stale range would cover the wrong entries — kept simple).
+	selAnchor int
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -142,6 +150,7 @@ func New(dir string) Model {
 		sort:         "name",
 		colors:       defaultColors(),
 		lastClickRow: -1,
+		selAnchor:    -1,
 		now:          time.Now,
 		autoRefresh:  true,
 		pollEvery:    2 * time.Second,
@@ -366,6 +375,11 @@ func (m *Model) rebuild() {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+	// A shrinking row set clamps the multi-select anchor (#1044); an empty
+	// tree drops the selection entirely.
+	if m.selAnchor >= len(m.rows) {
+		m.selAnchor = len(m.rows) - 1
+	}
 	m.clampScroll()
 }
 
@@ -443,6 +457,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.cursor >= 0 && m.cursor < len(m.rows) {
 			m.pendingSel = m.rows[m.cursor].path
 		}
+		// The row set shifts across the toggle, so the range would cover
+		// the wrong entries: the multi-select collapses (#1044).
+		m.clearSel()
 		m.showHidden = !m.showHidden
 		m.rebuild()
 		show := m.showHidden
@@ -454,6 +471,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ExpandAllMsg:
 		return m, m.expandAllUnderSelection()
 	case RefreshMsg:
+		m.clearSel() // a manual refresh collapses the multi-select (#1044)
 		return m, m.refresh()
 	case RevealMsg:
 		return m, m.reveal()
@@ -498,6 +516,18 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// switch below jumps to the top; any other key disarms.
 		armedG := m.pendingG
 		m.pendingG = false
+		// Contiguous multi-select (#1044): shifted vertical motions extend
+		// the range from an anchor; every other key — plain motions, esc —
+		// collapses it before the normal handling below.
+		switch key {
+		case "J", "shift+down":
+			m.extendSel(1)
+			return m, nil
+		case "K", "shift+up":
+			m.extendSel(-1)
+			return m, nil
+		}
+		m.clearSel()
 		switch key {
 		case "down", "j":
 			m.moveCursor(1)
@@ -555,6 +585,80 @@ func (m *Model) current() *node {
 		m.cursor = 0
 	}
 	return m.rows[m.cursor]
+}
+
+// extendSel grows the contiguous selection (#1044) by one shifted motion:
+// the first extension anchors at the current cursor row, then the cursor
+// moves, so the selection is always the anchor..cursor range.
+func (m *Model) extendSel(delta int) {
+	if len(m.rows) == 0 {
+		return
+	}
+	if m.selAnchor < 0 {
+		m.selAnchor = m.cursor
+	}
+	m.moveCursor(delta)
+}
+
+// clearSel collapses the multi-select range back to the bare cursor.
+func (m *Model) clearSel() { m.selAnchor = -1 }
+
+// selRange returns the inclusive visible-row bounds of the active contiguous
+// selection (anchor..cursor, either direction); ok is false when none is
+// active.
+func (m Model) selRange() (lo, hi int, ok bool) {
+	if m.selAnchor < 0 || len(m.rows) == 0 {
+		return 0, 0, false
+	}
+	lo, hi = m.selAnchor, m.cursor
+	if lo > hi {
+		lo, hi = hi, lo
+	}
+	return clamp(lo, 0, len(m.rows)-1), clamp(hi, 0, len(m.rows)-1), true
+}
+
+// inSelRange reports whether visible row i is part of the active selection.
+func (m Model) inSelRange(i int) bool {
+	lo, hi, ok := m.selRange()
+	return ok && i >= lo && i <= hi
+}
+
+// delTarget is one entry a multi-row file operation acts on, captured by path
+// so a rescan between prompt and accept cannot swap the node out from under
+// the closure.
+type delTarget struct {
+	path  string
+	isDir bool
+}
+
+// selTargets resolves the entries a selection-wide operation acts on: every
+// row of the active range, minus the root and minus entries nested under
+// another selected directory — trashing the ancestor already moves its
+// subtree, so a nested target's own rename would fail. Rows are in tree
+// order, so ancestors always precede their descendants.
+func (m *Model) selTargets() []delTarget {
+	lo, hi, ok := m.selRange()
+	if !ok {
+		return nil
+	}
+	var ts []delTarget
+	for i := lo; i <= hi; i++ {
+		n := m.rows[i]
+		if n == m.root {
+			continue
+		}
+		nested := false
+		for _, t := range ts {
+			if t.isDir && strings.HasPrefix(n.path, t.path+string(filepath.Separator)) {
+				nested = true
+				break
+			}
+		}
+		if !nested {
+			ts = append(ts, delTarget{path: n.path, isDir: n.isDir})
+		}
+	}
+	return ts
 }
 
 func (m *Model) moveCursor(delta int) {
@@ -1338,6 +1442,7 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	if i >= len(m.rows) {
 		return m, nil
 	}
+	m.clearSel() // a plain click collapses the multi-select (#1044)
 	m.cursor = i
 	m.clampScroll()
 
@@ -1356,6 +1461,27 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	return m, nil
 }
 
+// ShiftClick extends the contiguous multi-select to the clicked row (#1044):
+// with no active selection it anchors at the current cursor first, so a plain
+// click followed by a shift+click selects the range between them. Presses on
+// chrome or below the rows are ignored.
+func (m *Model) ShiftClick(x, y int) {
+	textW, textH, _, _, _ := m.viewport()
+	if x < 0 || y < 0 || x >= textW || y >= textH {
+		return
+	}
+	i := m.offset + y
+	if i >= len(m.rows) {
+		return
+	}
+	if m.selAnchor < 0 {
+		m.selAnchor = m.cursor
+	}
+	m.cursor = i
+	m.clampScroll()
+	m.resetClick() // a shift+click never chains into a double-click activation
+}
+
 // ContextClick selects the row under the content-local cell for a
 // right-click (#1040) without activating it; the app then opens the context
 // menu at the pointer. Reports false when the press lands on chrome (the
@@ -1368,6 +1494,15 @@ func (m *Model) ContextClick(x, y int) bool {
 		return false
 	}
 	if i := m.offset + y; i < len(m.rows) {
+		// A right-click inside the active multi-select keeps it untouched —
+		// cursor included, or moving it would shrink the anchor..cursor
+		// range — so the menu's Delete acts on the whole selection (#1044);
+		// outside it the selection collapses like any plain click.
+		if m.inSelRange(i) {
+			m.resetClick()
+			return true
+		}
+		m.clearSel()
 		m.cursor = i
 		m.clampScroll()
 	}
@@ -1689,7 +1824,11 @@ func (m Model) rowStyle(i int, n *node) lipgloss.Style {
 	switch m.rowKind(i) {
 	case rowSelected:
 		return base.Background(m.theme().Selection).Bold(true)
-	case rowCursorIdle:
+	case rowRange, rowCursorIdle:
+		// Multi-select members (#1044) share the muted-selection recipe with
+		// the unfocused cursor (#1034): a background overlay only, so the
+		// semantic foreground stays readable; the cursor row keeps the full
+		// Selection recipe above and reads as the range's active end.
 		return base.Background(m.theme().SelectionMuted)
 	case rowHover:
 		return base.Background(m.theme().Panel)
@@ -1705,8 +1844,9 @@ func (m Model) guideStyle(row lipgloss.Style) lipgloss.Style {
 }
 
 // rowKind classifies how visible row i is highlighted. Precedence, strongest
-// first: the focused cursor, the mouse hover, the unfocused cursor (#1034),
-// the open file, a directory, then a plain file. View maps each kind to a
+// first: the focused cursor, a multi-select range member (#1044), the mouse
+// hover, the unfocused cursor (#1034), the open file, a directory, then a
+// plain file. View maps each kind to a
 // style; tests exercise the logic here so they do not depend on the
 // terminal's colour profile.
 type rowKind int
@@ -1716,6 +1856,7 @@ const (
 	rowDir
 	rowActive
 	rowCursorIdle
+	rowRange
 	rowHover
 	rowSelected
 )
@@ -1725,6 +1866,11 @@ func (m Model) rowKind(i int) rowKind {
 	switch {
 	case i == m.cursor && m.focused:
 		return rowSelected
+	case m.inSelRange(i):
+		// A multi-select member (#1044) outranks hover: the range must stay
+		// visible while the mouse sweeps over it. The cursor row is caught
+		// above (focused) or by the muted-idle case below.
+		return rowRange
 	case i == m.hover:
 		return rowHover
 	case i == m.cursor:
