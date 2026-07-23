@@ -164,6 +164,18 @@ func (m Model) Pid() int {
 	return m.sess.Pid()
 }
 
+// Busy reports whether the session currently runs foreground work closing
+// would kill (#986); false for a failed or dead session.
+func (m Model) Busy() bool { return m.sess != nil && m.sess.Busy() }
+
+// SendEOF forwards a ctrl+d to the child (#986): on an idle shell prompt it
+// exits the shell, which closes the pane/tab through the regular exit path.
+func (m *Model) SendEOF() {
+	if m.sess != nil && m.sess.Running() {
+		m.sess.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
+	}
+}
+
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
 func (m Model) SessionKey() string {

@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
+	"golang.org/x/sys/unix"
 )
 
 // OutputMsg reports that the emulator's screen changed; the root model only
@@ -702,6 +703,25 @@ func (s *Session) CursorPosition() (x, y int) {
 
 // Running reports whether the shell is still alive.
 func (s *Session) Running() bool { return !s.closed.Load() }
+
+// Busy reports whether closing the session now would kill foreground work
+// (#986): a command session whose process still runs, or a shell whose
+// controlling terminal's foreground process group is not the shell itself —
+// a build, vim, … currently owns the terminal. A dead session is never busy.
+func (s *Session) Busy() bool {
+	if s.closed.Load() || s.cmd == nil || s.cmd.Process == nil || s.ptmx == nil {
+		return false
+	}
+	if s.IsCommand() {
+		_, exited := s.ExitCode()
+		return !exited
+	}
+	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	if err != nil {
+		return false
+	}
+	return pgrp != s.cmd.Process.Pid
+}
 
 // IsCommand reports whether the session runs a program (0350, #574) rather
 // than an interactive shell.

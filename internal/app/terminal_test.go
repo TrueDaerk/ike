@@ -678,6 +678,59 @@ func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
 	}
 }
 
+// TestReservedCmdWClosesIdleTerminal guards #986: cmd+w on an idle shell
+// sends an EOF — the shell exits and ExitedMsg closes the pane — without
+// raising the busy guard.
+func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
+	m, key := openTestTerminal(t)
+	term := m.activeWS().Panes.Get(key).Terminal()
+	deadline := time.Now().Add(3 * time.Second)
+	for term.Busy() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond) // shell still starting up
+	}
+	handled, out, _ := m.terminalReservedKey("cmd+w")
+	if !handled {
+		t.Fatal("cmd+w must be reserved while a terminal is focused (#986)")
+	}
+	m = out.(Model)
+	if m.termClosePromptOpen() {
+		t.Fatal("idle terminal must close without the busy guard")
+	}
+	for term.Running() && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if term.Running() {
+		t.Fatal("EOF must end the idle shell")
+	}
+}
+
+// TestTermCloseGuardEnterClosesEscKeeps: the busy-terminal guard (#986)
+// closes the pane on enter and keeps it on esc.
+func TestTermCloseGuardEnterClosesEscKeeps(t *testing.T) {
+	m, key := openTestTerminal(t)
+	m.openTermClosePrompt()
+	if !m.termClosePromptOpen() {
+		t.Fatal("guard must own the keyboard while open")
+	}
+	out, _ := m.updateTermClosePrompt(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	if m.termClosePromptOpen() {
+		t.Fatal("esc must dismiss the guard")
+	}
+	if m.activeWS().Panes.Get(key) == nil {
+		t.Fatal("esc must keep the terminal pane")
+	}
+	m.openTermClosePrompt()
+	out, _ = m.updateTermClosePrompt(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if m.termClosePromptOpen() {
+		t.Fatal("enter must dismiss the guard")
+	}
+	if m.activeWS().Panes.Get(key) != nil {
+		t.Fatal("enter must close the terminal pane")
+	}
+}
+
 // TestReservedCmdDSplitsTerminalRight guards #982: cmd+d inside a focused
 // terminal splits its pane to the right with a fresh, focused terminal.
 func TestReservedCmdDSplitsTerminalRight(t *testing.T) {

@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Terminal: `cmd+w` closes the focused terminal via an EOF to the shell; a
+  running foreground process raises a confirmation guard first (#986,
+  `Session.Busy` via TIOCGPGRP) (`/architecture/terminal.md`).
+
 - Terminal: `cmd+d` splits the focused terminal's pane right with a fresh
   terminal (#982, iTerm-style); reserved chords now canonicalize bubbletea's
   super+/meta+ Cmd encodings (#981), and the pin-picker notice renders its
