@@ -40,6 +40,13 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"ansible.cfg", "galaxy.yml", ".git"},
 			Install:     []string{"npm", "install", "-g", "@ansible/ansible-language-server"},
+			// ansible-language-server delegates module metadata to ansible
+			// and lint diagnostics to ansible-lint; without them on PATH the
+			// server runs but those capabilities stay silently off (#1067).
+			Companions: []lang.Companion{
+				{Binary: "ansible", Purpose: "ansible module docs and validation", Install: "pipx install ansible"},
+				{Binary: "ansible-lint", Purpose: "ansible lint diagnostics", Install: "pipx install ansible-lint"},
+			},
 		},
 		LineComment: "#",
 		IndentAfter: yaml.IndentAfter,

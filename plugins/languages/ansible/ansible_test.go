@@ -19,6 +19,21 @@ func TestAnsibleRegistered(t *testing.T) {
 	if l.Server == nil || l.Server.Command != "ansible-language-server" {
 		t.Errorf("server = %+v, want ansible-language-server", l.Server)
 	}
+	// Companion tools (#1067): the server delegates module data to ansible and
+	// lint diagnostics to ansible-lint — both declared so the manager can hint
+	// when they are missing from PATH.
+	if l.Server != nil {
+		got := map[string]bool{}
+		for _, c := range l.Server.Companions {
+			if c.Purpose == "" || c.Install == "" {
+				t.Errorf("companion %q lacks purpose/install: %+v", c.Binary, c)
+			}
+			got[c.Binary] = true
+		}
+		if !got["ansible"] || !got["ansible-lint"] {
+			t.Errorf("companions = %+v, want ansible and ansible-lint", l.Server.Companions)
+		}
+	}
 	if len(l.Extensions) != 0 || len(l.Filenames) != 0 {
 		t.Errorf("ansible must not claim extensions/filenames (would steal plain yaml), got %+v", l)
 	}

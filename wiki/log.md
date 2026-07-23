@@ -12,6 +12,12 @@
   unmaintained; sqls is a maintained Go binary speaking LSP over stdio with
   no args, installed via `go install github.com/sqls-server/sqls@latest`,
   root markers `.sqls`/`.git` (`/architecture/languages.md`).
+- Companion-tool hints (#1067): a `ServerSpec` can declare optional companion
+  binaries (`Companions`: shell → shellcheck, ansible → ansible/ansible-lint);
+  when the server first becomes ready the LSP manager probes PATH and raises a
+  one-time warn per missing tool ("shellcheck not found — shell diagnostics
+  disabled (brew install shellcheck)"), deduplicated per language per session
+  (`/architecture/languages.md`).
 
 - Startup-crash notifications name the real error (#1062): a server dying
   before the handshake surfaces its decisive stderr line (taplo's "the LSP
