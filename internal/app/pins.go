@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/ui"
 )
 
@@ -125,7 +126,9 @@ func (m *Model) pinCurrent(slot int) {
 func (m Model) pinJump(slot int) (tea.Model, tea.Cmd) {
 	path := m.pins.Get(slot - 1)
 	if path == "" {
-		m.host.Notify(host.Info, fmt.Sprintf("slot %d is empty — pin via the picker (cmd+2)", slot))
+		// Chord rendered platform-normalized (#981): ctrl+2 off macOS.
+		picker := keymap.NormalizeChord(keymap.MustParseChord("cmd+2"), keymap.GOOS).String()
+		m.host.Notify(host.Info, fmt.Sprintf("slot %d is empty — pin via the picker (%s)", slot, picker))
 		return m, nil
 	}
 	if _, err := os.Stat(path); err != nil {

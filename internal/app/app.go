@@ -1546,6 +1546,13 @@ func displayDir(dir string) string {
 // Everything else, including tab, ctrl+c, esc and the F-keys, belongs
 // to the shell. shift+pgup/pgdn page the scrollback inside the pane itself.
 func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
+	// Canonicalize the chord (#981): bubbletea encodes the Command key as
+	// super+/meta+ tokens, which ParseKey folds onto the logical cmd form the
+	// cases below use. Deliberately NOT platform-folded to ctrl — inside a
+	// terminal ctrl+t/ctrl+d belong to the shell on every platform.
+	if k, err := keymap.ParseKey(keys); err == nil {
+		keys = k.String()
+	}
 	switch keys {
 	case "ctrl+tab":
 		m.cycleFocus()
