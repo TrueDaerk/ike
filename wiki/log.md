@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Startup-crash notifications name the real error (#1062): a server dying
+  before the handshake surfaces its decisive stderr line (taplo's "the LSP
+  is not part of this build", sql-language-server's Node error) instead of
+  "jsonrpc: connection closed", and the launch-failure toast points at
+  "LSP: Show Server Log" like the disable path (`/architecture/lsp.md`).
+
 - LSP quick fixes: initialize advertises `textDocument.publishDiagnostics`
   (#1060 — vtsls gated all TypeScript push diagnostics on it), absent
   `workspace/configuration` sections answer `{}` instead of null (#1061 —
