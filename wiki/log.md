@@ -18,6 +18,14 @@
   one-time warn per missing tool ("shellcheck not found — shell diagnostics
   disabled (brew install shellcheck)"), deduplicated per language per session
   (`/architecture/languages.md`).
+- go.mod / go.work / go.sum get gopls (#1063): the language registry gains a
+  server-delegation seam (`Language.ServerLanguage` + `ServerLang()` /
+  `HasServer()`), the go plugin registers the three files as filename-matched
+  languages delegating to the "go" server, and the LSP manager attaches them
+  to the same gopls instance/root as `.go` files while sending gopls'
+  documented languageIds `go.mod`/`go.work`/`go.sum` in didOpen. No gomod
+  Tree-sitter grammar is vendored, so they highlight as plain text
+  (`/architecture/languages.md`).
 
 - Startup-crash notifications name the real error (#1062): a server dying
   before the handshake surfaces its decisive stderr line (taplo's "the LSP

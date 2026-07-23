@@ -36,6 +36,15 @@ type Language struct {
 	Server     *ServerSpec
 	Toolchain  Toolchain
 
+	// ServerLanguage names the language whose LSP server handles this
+	// language's documents (#1063): e.g. the "go.mod" language delegates to
+	// the "go" server, so go.mod files attach to the very gopls instance
+	// (same spec, same root, same process) that serves the module's .go
+	// files — while the wire languageId stays this language's own ID
+	// ("go.mod", gopls' documented id for the file). Empty means the
+	// language uses its own Server spec.
+	ServerLanguage string
+
 	// Interpreters lists the interpreter base names that select this language
 	// via a shebang line (#893), e.g. []string{"python", "python3"} — the
 	// fallback when a file has no extension and no known base name. See
@@ -112,6 +121,32 @@ func AssociatePath(path, id string) {
 	mu.Lock()
 	defer mu.Unlock()
 	pathIx[path] = id
+}
+
+// ServerLang returns the id of the language whose server spec handles this
+// language's documents: ServerLanguage when set, else the language's own ID.
+// The LSP subsystem resolves specs and keys server instances by this id, so a
+// delegating language shares its delegate's server process per root (#1063).
+func (l Language) ServerLang() string {
+	if l.ServerLanguage != "" {
+		return l.ServerLanguage
+	}
+	return l.ID
+}
+
+// HasServer reports whether documents of this language get a language server:
+// either the language carries its own Server spec, or it delegates via
+// ServerLanguage to a language that does.
+func (l Language) HasServer() bool {
+	if l.Server != nil {
+		return true
+	}
+	if l.ServerLanguage != "" {
+		if d, ok := ByID(l.ServerLanguage); ok {
+			return d.Server != nil
+		}
+	}
+	return false
 }
 
 // ByID returns the language with the given id.

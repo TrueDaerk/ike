@@ -152,7 +152,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			}
 			return
 		}
-		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil && b.manager() != nil {
+		if l, ok := lang.ByPath(ev.Path); ok && l.HasServer() && b.manager() != nil {
 			// Coalesce the sync off the Update goroutine (#595): the O(document)
 			// diff + notification and the follow-up requests run from the flush,
 			// not on every keystroke. A request flushes first, so nothing reads
@@ -162,7 +162,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 	case host.EditorCursorMove:
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.setSel(ev)
-		if l, ok := lang.ByPath(ev.Path); ok && l.Server != nil {
+		if l, ok := lang.ByPath(ev.Path); ok && l.HasServer() {
 			b.scheduleDocumentHighlight(ev.Path)
 			// A showing signature popup follows the cursor (#523): the server
 			// re-picks the active parameter, or answers null to dismiss.
@@ -208,7 +208,7 @@ func (b *bridge) fileOpened(h host.API, path string) {
 	// event, so position-less actions (lsp.format) work immediately.
 	b.setCur(path, 0, 0)
 	l, ok := lang.ByPath(path)
-	if !ok || l.Server == nil {
+	if !ok || !l.HasServer() {
 		return
 	}
 	data, err := os.ReadFile(path)
@@ -229,7 +229,9 @@ func (b *bridge) fileOpened(h host.API, path string) {
 		if err != nil && errors.Is(err, transport.ErrNotFound) {
 			// Missing binary on first use: activation implies installation
 			// (#131). We are already off the Update loop here.
-			b.autoInstall(l.ID, path)
+			// Install by the server language: a delegating language
+			// ("go.mod") carries no recipe of its own — its delegate does.
+			b.autoInstall(l.ServerLang(), path)
 			return
 		}
 		// Initial semantic overlay (#9) and inlay hints (#171) for the fresh

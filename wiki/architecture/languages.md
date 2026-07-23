@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-23T22:30:00Z
+timestamp: 2026-07-23T23:00:00Z
 ---
 
 # Language Registry
@@ -27,6 +27,7 @@ type Language struct {
     Filenames  []string     // optional exact base names ("Dockerfile")
     Grammar    Grammar      // opaque highlight token, or nil
     Server     *ServerSpec  // LSP launch config, or nil
+    ServerLanguage string   // delegate documents to this language's server (#1063); "" = own Server
     Toolchain  Toolchain    // project interpreter detector, or nil
 
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
@@ -161,6 +162,24 @@ the official grammar with `<script>`/`<style>` injections into
 typescript/css; `css` uses the official grammar (scss/less parse best-effort
 — error-tolerant spans still color the shared subset).
 The grammar/query for the first three moved here out of the highlight engine.
+
+### Server delegation (#1063)
+
+A language may set `ServerLanguage` to run its documents on **another
+language's server**: the LSP manager resolves the spec and keys the server
+instance by `Language.ServerLang()` (the delegate), while the `didOpen`
+languageId stays the delegating language's own ID. First user: the go plugin
+registers `go.mod`, `go.work` and `go.sum` as filename-matched languages
+delegating to `go` — a `go.mod` buffer attaches to the very gopls instance
+(same root, same process) that serves the module's `.go` files, with the wire
+languageIds `go.mod`/`go.work`/`go.sum` gopls documents, so hover on require
+lines and go.mod diagnostics work. They carry no grammar (no gomod
+Tree-sitter grammar is vendored — plain text), and they register with plain
+`lang.Register`, not `register.Language`: the `lang-go` plugin toggle governs
+the shared server, and a dotted plugin id would splinter the config key.
+Gating helpers: `Language.HasServer()` is true for a language with its own
+`Server` **or** a delegate that has one — the LSP bridge gates on it instead
+of `Server != nil`.
 
 ## Server resolution (baseline < config)
 
@@ -334,7 +353,7 @@ projects so pyproject.toml and uv.lock stay in sync — see
 
 | Language | Default server | Rationale / alternative |
 |---|---|---|
-| Go | gopls | Reference server, no contest. |
+| Go | gopls | Reference server, no contest. Also serves `go.mod`/`go.work`/`go.sum` (#1063): filename-matched languages delegating to the same instance, languageIds `go.mod`/`go.work`/`go.sum`. |
 | Python | pyright (via server spec in `plugins/languages/python`) | Fast, precise; venv-aware via `workspace/configuration`. |
 | PHP | Intelephense | Free tier beats phpactor on completion quality and speed; cross-file rename & advanced refactors are premium (paid). Prefer those? Override to phpactor via `[lsp.servers.php]`. |
 | TS/JS | vtsls | Wraps the same tsserver VS Code uses but speaks LSP far more faithfully than typescript-language-server (streaming/isIncomplete completions, lower memory churn). Override via `[lsp.servers.typescript]`. |

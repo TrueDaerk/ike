@@ -106,7 +106,8 @@ type server struct {
 // convert positions and resend full text on change (full-sync MVP).
 type document struct {
 	path    string
-	lang    string
+	lang    string // server language: keys the server instance and spec
+	langID  string // wire languageId sent in didOpen (differs for delegating languages, #1063)
 	root    string
 	version int
 	lines   []string
@@ -163,32 +164,48 @@ func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler)
 
 func key(lang, root string) string { return lang + "\x00" + root }
 
+// serverLangFor maps a document language to the language whose server handles
+// it (#1063): a registered language with ServerLanguage set delegates (e.g.
+// "go.mod" → "go"); everything else — including ids unknown to the registry —
+// maps to itself.
+func serverLangFor(langID string) string {
+	if l, ok := langreg.ByID(langID); ok {
+		return l.ServerLang()
+	}
+	return langID
+}
+
 // Open registers a document and ensures its server is running, sending didOpen.
 // It blocks on the initialize handshake the first time a (lang, root) server is
 // needed — safe because the bridge calls this from a tea.Cmd goroutine.
 func (m *Manager) Open(path, lang, text string) error {
-	spec, ok := m.resolve(lang)
+	// A delegating language (#1063, e.g. "go.mod") runs on its delegate's
+	// server: spec resolution, the server key and every status message use
+	// the server language, while the didOpen languageId keeps the document
+	// language's own id — exactly what gopls expects for go.mod/go.work.
+	srvLang := serverLangFor(lang)
+	spec, ok := m.resolve(srvLang)
 	if !ok {
 		return nil // no server configured for this language: silent no-op
 	}
 	root := detectRoot(path, spec.RootMarkers)
-	srv, err := m.ensureServer(lang, root, spec)
+	srv, err := m.ensureServer(srvLang, root, spec)
 	if err != nil {
 		text, kind := statusForErr(spec.Command, err)
-		m.status(lang, text, kind)
+		m.status(srvLang, text, kind)
 		return err
 	}
 
 	lines := splitLines(text)
 	m.mu.Lock()
-	doc := &document{path: path, lang: lang, root: root, version: 1, lines: lines, srvKey: srv.key()}
+	doc := &document{path: path, lang: srvLang, langID: lang, root: root, version: 1, lines: lines, srvKey: srv.key()}
 	m.docs[path] = doc
 	m.mu.Unlock()
 
 	err = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
 		TextDocument: protocol.TextDocumentItem{
 			URI:        protocol.PathToURI(path),
-			LanguageID: lang,
+			LanguageID: doc.langID,
 			Version:    doc.version,
 			Text:       text,
 		},
