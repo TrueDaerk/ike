@@ -1656,6 +1656,9 @@ var terminalGlobalCommands = map[string]bool{
 	// ctrl+alt+arrow bindings stay with the shell — see terminalShellChords.
 	"editor.tab.next": true,
 	"editor.tab.prev": true,
+	// #934: zen must toggle (and untoggle) with a terminal or tool pane
+	// focused; the shell never meaningfully sees the zen chord.
+	"view.zenMode": true,
 }
 
 // terminalShellChords are chords that stay with the shell even when they
@@ -2566,7 +2569,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ZenModeMsg:
-		// view.zenMode (cmd+k shift+z / View menu, #359): maximize + no chrome.
+		// view.zenMode (ctrl+alt+f / View menu, #359): maximize + no chrome.
 		m.toggleZen()
 		return m, nil
 

@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -437,3 +437,4 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
 | `vcs.updateProject` | `cmd+t` | fragile | `palette` | live via palette |
+| `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |

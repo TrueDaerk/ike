@@ -4,8 +4,11 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/registry"
 )
 
 // zen_test.go covers view.zenMode (#359): maximize + chrome-free rendering.
@@ -143,5 +146,46 @@ func TestZenOnTerminalDropsOnTreeMutation(t *testing.T) {
 	}
 	if !strings.Contains(m.render(), "NORMAL") {
 		t.Fatal("chrome must return when zen drops")
+	}
+}
+
+// The zen chord itself must escape a focused terminal (#934): view.zenMode
+// sits on the terminal global-command allowlist, so ctrl+alt+f toggles zen
+// on and — crucially — back off while the terminal keeps focus (no stuck
+// chrome-hidden state).
+func TestZenChordFromTerminal(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	zenChord := tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl | tea.ModAlt}
+	m = drainKey(m, zenChord)
+	if !m.zen || m.zoomed != key {
+		t.Fatalf("ctrl+alt+f in a terminal must enter zen, zen=%v zoomed=%q", m.zen, m.zoomed)
+	}
+	m = drainKey(m, zenChord)
+	if m.zen || m.zoomed != "" {
+		t.Fatal("ctrl+alt+f again must leave zen and restore the layout")
+	}
+}
+
+// Same chord with a tool pane focused (#934): routed through the regular
+// keymap path, not the terminal allowlist.
+func TestZenChordFromToolPane(t *testing.T) {
+	m := sizedWith(t, registry.Global(), 100, 40)
+	m.setFocus(pane.ExplorerKey)
+	m.layout()
+
+	zenChord := tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl | tea.ModAlt}
+	m = drainKey(m, zenChord)
+	if !m.zen || m.zoomed != pane.ExplorerKey {
+		t.Fatalf("ctrl+alt+f on a tool pane must enter zen, zen=%v zoomed=%q", m.zen, m.zoomed)
+	}
+	m = drainKey(m, zenChord)
+	if m.zen || m.zoomed != "" {
+		t.Fatal("ctrl+alt+f again must leave zen")
 	}
 }
