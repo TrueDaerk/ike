@@ -41,6 +41,7 @@ func defaults() *Config {
 			TreeIndent: 2,
 			Sort:       "name",
 			AutoReveal: false,
+			Icons:      false,
 			Colors:     map[string]string{},
 		},
 		Keymap: Keymap{
