@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Explorer scrollbar thumb is draggable (#1036): thumb press grabs and a
+  `dragExplScroll` gesture follows the pointer, mirroring the editor
+  scrollbar (#1022); track clicks keep the click-to-jump
+  (`/architecture/explorer.md`).
+
 - Explorer trash moved into the state store (#1038): `IKE_CONFIG_DIR/trash`
   (or the project's `.ike/trash`) instead of a root-polluting `.ike-trash`;
   cross-device state dirs fall back project-local, and stale trash — the

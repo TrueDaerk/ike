@@ -97,6 +97,7 @@ type Model struct {
 	trashDir   string
 	trashSeq   int
 	pendingSel string // path to put the cursor on once the next scan rebuilds rows
+	sbGrab     int    // thumb grab offset of an active scrollbar drag (#1036)
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -1036,9 +1037,9 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	textW, textH, needV, needH, contentW := m.viewport()
 
 	if needV && x == textW && y < textH { // vertical scrollbar track
-		if maxOff := len(m.rows) - textH; maxOff > 0 && textH > 1 {
-			m.offset = clamp(y*maxOff/(textH-1), 0, maxOff)
-		}
+		// Delegated to ScrollbarPress (#1036): thumb press starts a drag at
+		// the app layer, track press keeps the click-to-jump.
+		m.ScrollbarPress(y)
 		return m, nil
 	}
 	if needH && y == textH && x < textW { // horizontal scrollbar track
@@ -1070,6 +1071,51 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	}
 	m.lastClickRow, m.lastClickAt = i, clickAt
 	return m, nil
+}
+
+// ScrollbarHit reports whether a content-local press lands on the vertical
+// scrollbar track (#1036) — the app checks it before the row click so a
+// thumb press can start a drag, mirroring the editor scrollbar (#1022).
+func (m Model) ScrollbarHit(x, y int) bool {
+	textW, textH, needV, _, _ := m.viewport()
+	return needV && x == textW && y >= 0 && y < textH
+}
+
+// ScrollbarPress handles a left press on the track at row y: on the thumb it
+// records the grab offset and reports true (the app then tracks a drag
+// feeding ScrollbarDrag), on the track it jumps proportionally (#1036).
+func (m *Model) ScrollbarPress(y int) (drag bool) {
+	_, textH, needV, _, _ := m.viewport()
+	if !needV || textH <= 1 {
+		return false
+	}
+	start, length := scrollThumb(textH, len(m.rows), textH, m.offset)
+	if y >= start && y < start+length {
+		m.sbGrab = y - start
+		return true
+	}
+	if maxOff := len(m.rows) - textH; maxOff > 0 {
+		m.offset = clamp(y*maxOff/(textH-1), 0, maxOff)
+	}
+	return false
+}
+
+// ScrollbarDrag continues a thumb drag: the thumb's top follows the pointer
+// minus the recorded grab offset, mapped back to a scroll offset (#1036).
+func (m *Model) ScrollbarDrag(y int) {
+	_, textH, needV, _, _ := m.viewport()
+	if !needV {
+		return
+	}
+	_, length := scrollThumb(textH, len(m.rows), textH, m.offset)
+	if textH-length <= 0 {
+		return
+	}
+	maxOff := len(m.rows) - textH
+	if maxOff <= 0 {
+		return
+	}
+	m.offset = clamp((y-m.sbGrab)*maxOff/(textH-length), 0, maxOff)
 }
 
 // onMarker reports whether content-local column x (before horizontal scroll)

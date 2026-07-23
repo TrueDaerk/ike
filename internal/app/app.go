@@ -458,6 +458,7 @@ const (
 	dragTermSelect                 // dragging a text selection inside a terminal pane (#227)
 	dragEditSelect                 // dragging a text selection inside an editor pane (#977)
 	dragEditScroll                 // dragging the editor scrollbar thumb (#1022)
+	dragExplScroll                 // dragging the explorer scrollbar thumb (#1036)
 	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 )
@@ -5866,6 +5867,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
+		case dragExplScroll:
+			// The explorer thumb follows the pointer (#1036).
+			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindExplorer {
+					inst.Explorer().ScrollbarDrag(ly)
+				}
+			}
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -5912,6 +5920,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragEditScroll:
 			m.drag = nil
 			return m, nil // the viewport already followed the thumb; nothing to commit
+		case dragExplScroll:
+			m.drag = nil
+			return m, nil // the tree already followed the thumb; nothing to commit
 		case dragDebugTerm:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -6295,6 +6306,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindExplorer:
 		var cmd tea.Cmd
 		exp := inst.Explorer()
+		// A left press on the scrollbar thumb starts a drag (#1036), like
+		// the editor scrollbar; track presses jump inside ScrollbarPress.
+		if msg.Button == tea.MouseLeft && exp.ScrollbarHit(localX, localY) {
+			if exp.ScrollbarPress(localY) {
+				m.drag = &dragState{kind: dragExplScroll, srcPane: key, curX: msg.X, curY: msg.Y}
+			}
+			return m, nil
+		}
 		*exp, cmd = exp.MouseClick(localX, localY)
 		return m, cmd
 	case pane.KindEditor:
