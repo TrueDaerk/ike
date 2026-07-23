@@ -82,6 +82,7 @@ type Model struct {
 	hiddenCfg string
 	indent    int            // spaces per depth level (config explorer.tree_indent)
 	sort      string         // ordering within a level (config explorer.sort)
+	icons     bool           // file-type marker glyphs (config explorer.icons, #1046)
 	colors    colorTable     // per-filetype colour resolution
 	pal       *theme.Palette // active theme (Roadmap 0110); nil = default
 	cfgColors colorTable     // [explorer.colors] overrides retained for re-theming
@@ -1060,11 +1061,13 @@ func (m *Model) clampScroll() {
 
 // rowParts is the plain (unstyled) content of a row, split where styling
 // differs: the guides (one indent-guide segment per ancestor level), the
-// two-cell expand marker, and the name (directories gain a trailing slash).
-// The split lets View paint the guides in the semantic IndentGuide colour
-// (#1050, mirroring the editor) and decorate just the name (the open-file
-// underline) without touching guides or padding.
-func (m Model) rowParts(n *node) (guides, mark, name string) {
+// two-cell expand marker (plus, with explorer.icons on, a two-cell file-type
+// glyph, #1046), the name (directories gain a trailing slash), and — on the
+// root row only — the dimmed project-path context suffix (#1046). The split
+// lets View paint the guides in the semantic IndentGuide colour (#1050,
+// mirroring the editor), decorate just the name (the open-file underline)
+// and dim just the context, without touching guides or padding.
+func (m Model) rowParts(n *node) (guides, mark, name, ctx string) {
 	var b strings.Builder
 	for d := 0; d < n.depth; d++ {
 		b.WriteString("│")
@@ -1074,14 +1077,59 @@ func (m Model) rowParts(n *node) (guides, mark, name string) {
 	if n.isDir {
 		name += "/"
 	}
-	return b.String(), marker(n), name
+	mark = marker(n)
+	if m.icons {
+		mark += typeGlyph(n) + " "
+	}
+	if n == m.root {
+		ctx = m.rootContext(ansi.StringWidth(mark) + ansi.StringWidth(name))
+	}
+	return b.String(), mark, name, ctx
 }
 
 // rowText is the full plain content of a row. It is the single source of truth
 // for width measurement, so clipping and the scrollbars agree with rendering.
 func (m Model) rowText(n *node) string {
-	guides, mark, name := m.rowParts(n)
-	return guides + mark + name
+	guides, mark, name, ctx := m.rowParts(n)
+	return guides + mark + name + ctx
+}
+
+// minRootContextWidth is the narrowest pane that still shows the root row's
+// project-path context (#1046); anything narrower suppresses it entirely.
+const minRootContextWidth = 30
+
+// rootContext is the dimmed " — ~/path" suffix the root row carries (#1046):
+// the project root, home-abbreviated, JetBrains-style path context. used is
+// the display width the row already spends on marker + name. The suffix is
+// pre-truncated to the remaining pane width (one column reserved for a
+// possible scrollbar) so it never widens the content — the horizontal
+// scrollbar keeps tracking real tree overflow only — and it is suppressed
+// when the pane is too narrow to read it.
+func (m Model) rootContext(used int) string {
+	if m.width < minRootContextWidth {
+		return ""
+	}
+	avail := m.width - 1 - used
+	if avail < 4 {
+		return ""
+	}
+	return ansi.Truncate(" — "+abbrevHome(m.root.path), avail, "…")
+}
+
+// abbrevHome replaces a leading home directory with "~", the conventional
+// terminal abbreviation.
+func abbrevHome(p string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		return p
+	}
+	if p == home {
+		return "~"
+	}
+	if rest, ok := strings.CutPrefix(p, home+string(filepath.Separator)); ok {
+		return "~" + string(filepath.Separator) + rest
+	}
+	return p
 }
 
 // marker is the two-cell expand glyph for a row: a caret for directories, blank
@@ -1529,7 +1577,7 @@ func (m Model) View() string {
 				// italics already mean "hidden entry" (#1055).
 				nameStyle = nameStyle.Underline(true)
 			}
-			guides, mark, name := m.rowParts(n)
+			guides, mark, name, rctx := m.rowParts(n)
 			// The suffix-tint model (#1051): on clean files whose row renders
 			// the plain foreground, the extension alone takes the filetype
 			// colour. Cursor/active rows keep their own foreground whole.
@@ -1549,6 +1597,13 @@ func (m Model) View() string {
 			// background.
 			styled := m.guideStyle(style).Render(guides) +
 				style.Bold(false).Render(mark) + nameRendered
+			if rctx != "" {
+				// The root's path context dims to the InlayHint slot (#1046)
+				// over the row's own background, never bold — secondary
+				// information that must not compete with the name.
+				styled += style.Bold(false).
+					Foreground(m.theme().InlayHint).Render(rctx)
+			}
 			vis := ansi.Cut(styled, offX, offX+textW)
 			// Right-clipped rows end in an ellipsis (#1035) so truncation is
 			// visible; a VCS status letter below takes that cell instead.

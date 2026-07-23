@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-23T21:00:00Z
+timestamp: 2026-07-23T22:00:00Z
 ---
 
 # File Explorer
@@ -97,6 +97,7 @@ mirroring the structure-view sync.
 | `explorer.colors.<ext\|glob>` | per-filetype colour; `dir` and `default` are required fallbacks |
 | `explorer.auto_refresh` | poll for external filesystem changes (default `true`; `"false"` disables) |
 | `explorer.auto_reveal` | JetBrains "autoscroll from source" (#1042): reveal the focused editor's file (expand ancestors, select, scroll) on every focus/tab switch (default `false`) |
+| `explorer.icons` | file-type marker glyphs (#1046): a one-cell class glyph between the expand marker and the name (default `false`) |
 
 Colours (`colors.go`) resolve a node by checking, in order: an exact **glob**
 match (globs sorted for determinism), the `dir` fallback for directories, a bare
@@ -116,6 +117,27 @@ configured, a built-in default table is used so the tree is never monochrome.
 
 Directories render with a `▾`/`▸` marker; a read error is retained and shown in
 place of the tree.
+
+## Root path context & file-type markers (#1046)
+
+The **root row** shows more than the basename: a dimmed ` — ~/path` suffix
+(the project root, home-abbreviated) renders in the `InlayHint` colour after
+the name — JetBrains' project-path context, self-contained in the tree so no
+status-line plumbing is needed. The suffix is pre-truncated (ellipsis) to the
+pane width with one column reserved for a possible scrollbar, so it never
+widens the content or triggers the horizontal scrollbar, and it is suppressed
+entirely below 30 columns. It is part of `rowText` — the single source of
+truth for row width — so clipping and scrollbars stay consistent.
+
+With `explorer.icons = true` (default off) every row gains a **one-cell
+file-type glyph** (plus a separator cell) between the expand marker and the
+name (`icons.go`): directories `▪`, and files classified by extension into
+code `◆`, doc `¶`, config `§`, image `▣`, other `·`. Directories get a glyph
+too so names at one depth stay aligned. The glyphs are plain single-width
+unicode — **no nerd font required** — and an ASCII-safe fallback set (`#`,
+`*`, `"`, `=`, `%`, `-`) is kept alongside for a future capability probe or
+override. Classification (`glyphClassOf`) is a small built-in extension map,
+deliberately coarse — a handful of classes, not per-language icons.
 
 ## Mouse
 

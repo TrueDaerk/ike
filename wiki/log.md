@@ -2,6 +2,13 @@
 
 ## 2026-07-23
 
+- Explorer root-path context + optional file-type markers (#1046): the root
+  row carries a dimmed, home-abbreviated ` — ~/path` suffix (InlayHint
+  colour, pre-truncated to the pane, suppressed under 30 cols), and
+  `explorer.icons = true` (default off) adds a one-cell plain-unicode class
+  glyph — dir/code/doc/config/image/other — between the expand marker and
+  the name (`/architecture/explorer.md`).
+
 - Explorer node context menu (#1040): right-click selects the row and opens
   the shared `menu.Context` shell with the file-op commands
   (`/architecture/explorer.md`).

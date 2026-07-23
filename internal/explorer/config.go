@@ -17,6 +17,7 @@ const (
 	cfgColorsPfx   = "explorer.colors."
 	cfgAutoRefresh = "explorer.auto_refresh"
 	cfgAutoReveal  = "explorer.auto_reveal"
+	cfgIcons       = "explorer.icons"
 )
 
 // Configure applies the [explorer] configuration section to the model: initial
@@ -61,6 +62,11 @@ func (m *Model) Configure(cfg host.Config) {
 		// Auto-reveal-on-focus (#1042), the JetBrains "autoscroll from
 		// source". Off by default.
 		m.autoReveal = v == "true"
+	}
+	if v, ok := cfg.Get(cfgIcons); ok {
+		// One-cell file-type marker glyphs before each name (#1046). Off by
+		// default: plain trees stay compact.
+		m.icons = v == "true"
 	}
 	m.cfgColors = readColors(cfg)
 	m.mergeColors()
