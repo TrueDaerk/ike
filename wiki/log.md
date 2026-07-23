@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Explorer node context menu (#1040): right-click selects the row and opens
+  the shared `menu.Context` shell with the file-op commands
+  (`/architecture/explorer.md`).
+
 - Explorer tree navigation (#1032, #1043, #1035): gg/G/PageUp/PageDown/
   ctrl+u/ctrl+d motions, `C` recursive expand-all through lazy levels
   (scan-budget-bounded), ellipsis on right-clipped rows
