@@ -71,9 +71,10 @@ type Snapshot struct {
 	// Entries lists every changed file with its index/worktree detail for the
 	// commit UI, in parse order.
 	Entries []FileEntry
-	// dirs holds every repo-relative directory (slash-separated, "" for the
-	// root) that contains at least one changed file, for explorer tinting.
-	dirs map[string]bool
+	// dirs maps every repo-relative directory (slash-separated, "" for the
+	// root) containing at least one changed file to the dominant status of
+	// its subtree (#1053), for explorer tinting.
+	dirs map[string]FileStatus
 }
 
 // FileEntry is one changed file with the porcelain XY detail the commit UI
@@ -93,7 +94,7 @@ func (e FileEntry) PartiallyStaged() bool { return e.Staged() && e.Y != '.' }
 // NewSnapshot builds a snapshot from explicit per-file statuses (repo-relative
 // slash paths), propagating dirty directories — for tests and synthetic states.
 func NewSnapshot(root string, files map[string]FileStatus) *Snapshot {
-	s := &Snapshot{Root: root, Files: map[string]FileStatus{}, dirs: map[string]bool{}}
+	s := &Snapshot{Root: root, Files: map[string]FileStatus{}, dirs: map[string]FileStatus{}}
 	for p, st := range files {
 		s.add(p, st)
 	}
@@ -117,12 +118,19 @@ func (s *Snapshot) Status(path string) FileStatus {
 // DirDirty reports whether the directory at path (absolute or repo-relative)
 // contains at least one changed file, at any depth.
 func (s *Snapshot) DirDirty(path string) bool {
+	return s.DirStatus(path) != StatusNone
+}
+
+// DirStatus reports the dominant status of the subtree rooted at path
+// (#1053): the strongest child signal — conflicted over modified over added
+// over untracked — or StatusNone for a clean or unknown directory.
+func (s *Snapshot) DirStatus(path string) FileStatus {
 	if s == nil {
-		return false
+		return StatusNone
 	}
 	rel, ok := s.relPath(path)
 	if !ok {
-		return false
+		return StatusNone
 	}
 	return s.dirs[rel]
 }

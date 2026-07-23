@@ -1118,16 +1118,15 @@ func statusLetter(st vcs.FileStatus) string {
 }
 
 // nodeVCSStatus resolves the snapshot status backing a row's coloring; a
-// dirty directory reads as modified.
+// dirty directory reads as its subtree's dominant status (#1053).
 func (m Model) nodeVCSStatus(n *node) vcs.FileStatus {
 	if m.vcsSnap == nil {
 		return vcs.StatusNone
 	}
 	if n.isDir {
-		if m.vcsSnap.DirDirty(n.path) {
-			return vcs.StatusModified
-		}
-		return vcs.StatusNone
+		// The dominant subtree status (#1053): an untracked-only directory
+		// reads untracked like its children, not modified.
+		return m.vcsSnap.DirStatus(n.path)
 	}
 	return m.vcsSnap.Status(n.path)
 }
