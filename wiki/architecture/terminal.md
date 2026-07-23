@@ -121,6 +121,11 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   (app suspend/resume around a macOS lock/sleep window) therefore cannot
   backpressure into the kernel queue, where buffered output can be flushed
   and lost; everything buffers in-process and replays on resume.
+  Exception (#989): a `ctrl+c` key press discards the spooled backlog before
+  the interrupt is encoded — whatever is still queued is pre-abort output,
+  and replaying it makes the process look alive after SIGINT already landed.
+  At most the single chunk the feed loop already took still renders; bytes
+  arriving afterwards (the `^C` echo, the prompt) flow normally.
 - **Teardown sequencing** (#748): upstream vt's `Emulator.Close` is not safe
   concurrently with `Read`/`Write` (plain-bool closed flag), so `teardown`
   joins the loops in order — read loop (closed PTY errors its read), feed

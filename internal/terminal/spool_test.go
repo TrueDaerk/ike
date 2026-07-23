@@ -106,6 +106,50 @@ func TestSpoolCapBackpressure(t *testing.T) {
 	sp.close()
 }
 
+// TestSpoolDiscardDropsBacklog (#989): discard empties the buffered backlog
+// and reports the dropped byte count; the spool keeps working afterwards.
+func TestSpoolDiscardDropsBacklog(t *testing.T) {
+	sp := newSpool()
+	sp.put([]byte("stale-1"))
+	sp.put([]byte("stale-2"))
+	if got := sp.discard(); got != len("stale-1")+len("stale-2") {
+		t.Fatalf("discard dropped %d bytes, want %d", got, len("stale-1")+len("stale-2"))
+	}
+	sp.put([]byte("fresh"))
+	chunk, ok := sp.take()
+	if !ok || string(chunk) != "fresh" {
+		t.Fatalf("take after discard = %q ok=%v, want fresh", chunk, ok)
+	}
+	if got := sp.discard(); got != 0 {
+		t.Fatalf("discard on empty spool = %d, want 0", got)
+	}
+	sp.close()
+}
+
+// TestSpoolDiscardUnblocksBlockedPut (#989): dropping the backlog frees the
+// cap, so a producer blocked on a full spool resumes and its chunk lands.
+func TestSpoolDiscardUnblocksBlockedPut(t *testing.T) {
+	sp := newSpool()
+	sp.put(make([]byte, spoolMax))
+	released := make(chan struct{})
+	go func() {
+		sp.put([]byte("after"))
+		close(released)
+	}()
+	time.Sleep(10 * time.Millisecond)
+	sp.discard()
+	select {
+	case <-released:
+	case <-time.After(time.Second):
+		t.Fatal("discard must unblock a blocked put")
+	}
+	chunk, ok := sp.take()
+	if !ok || string(chunk) != "after" {
+		t.Fatalf("post-discard chunk = %q ok=%v, want after", chunk, ok)
+	}
+	sp.close()
+}
+
 // TestSpoolCloseUnblocksBlockedPut: teardown must release a reader stuck on a
 // full spool.
 func TestSpoolCloseUnblocksBlockedPut(t *testing.T) {
