@@ -1706,39 +1706,34 @@ func (m *Model) terminalGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	return false, nil
 }
 
-// newTerminalSibling spawns a terminal next to the focused one (#729): a
-// terminal tab hosted by an editor pane gets a sibling tab in the same pane
-// (#573); a dedicated single-session terminal pane gets a fresh terminal
-// pane split below it. The new session is focused either way.
+// newTerminalSibling opens a terminal tab next to the focused one (#729,
+// iTerm's cmd+t): a terminal tab hosted by an editor pane gets a sibling tab
+// in the same pane (#573); a dedicated single-session terminal pane converts
+// into a tab host first (#983, the same in-place conversion a tab drop does,
+// #836) so its live shell becomes the first tab and the new one the second.
+// The new session is focused either way.
 func (m *Model) newTerminalSibling() {
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return
 	}
+	if inst.Kind() == pane.KindTerminal && !inst.ConvertToTabHost() {
+		return
+	}
+	if inst.Kind() != pane.KindEditor {
+		return
+	}
 	shell := ""
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	switch inst.Kind() {
-	case pane.KindEditor:
-		tkey := m.activeWS().Panes.MintTerminalKey()
-		term := terminal.New(tkey, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
-		inst.AddTerminalTab(term)
-		m.setFocus(key)
-		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	case pane.KindTerminal:
-		nkey := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
-		tree, ok := layout.SplitLeaf(m.activeWS().Tree, key, nkey, layout.ZoneBottom)
-		if !ok {
-			m.activeWS().Panes.Close(nkey)
-			return
-		}
-		m.activeWS().Tree = tree
-		m.setFocus(nkey)
-		m.layout()
-		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-	}
+	tkey := m.activeWS().Panes.MintTerminalKey()
+	term := terminal.New(tkey, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
+	inst.AddTerminalTab(term)
+	m.setFocus(key)
+	m.layout()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // activeWS returns the active workspace (Roadmap 0370, #776): the single

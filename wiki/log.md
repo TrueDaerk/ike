@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Terminal: `cmd+t` in a dedicated terminal pane now opens a real terminal
+  tab — the pane converts into a tab host in place (#983, reusing the #836
+  conversion) instead of splitting a sibling pane below
+  (`/architecture/terminal.md`).
+
 - Terminal: `cmd+w` closes the focused terminal via an EOF to the shell; a
   running foreground process raises a confirmation guard first (#986,
   `Session.Busy` via TIOCGPGRP) (`/architecture/terminal.md`).
