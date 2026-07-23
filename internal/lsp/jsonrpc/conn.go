@@ -150,6 +150,13 @@ func (c *Conn) Respond(id ID, res any, errObj *Error) error {
 		if err != nil {
 			return err
 		}
+		if raw == nil {
+			// A response must carry a result or an error property; "result" has
+			// omitempty on the envelope, so a nil payload must serialize as an
+			// explicit JSON null — vscode-jsonrpc servers (e.g. Intelephense)
+			// die on a response with neither (#991).
+			raw = json.RawMessage("null")
+		}
 		msg.Result = raw
 	}
 	return c.write(msg)

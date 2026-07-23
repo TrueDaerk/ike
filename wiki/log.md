@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- LSP: replies to server→client requests always carry a `result` property —
+  a nil payload now serializes as an explicit JSON null (#991); the omitted
+  field crashed vscode-jsonrpc servers (Intelephense exited 1 right after
+  `client/registerCapability`) (`/architecture/lsp.md`).
+
 - Terminal: `cmd+t` in a dedicated terminal pane now opens a real terminal
   tab — the pane converts into a tab host in place (#983, reusing the #836
   conversion) instead of splitting a sibling pane below

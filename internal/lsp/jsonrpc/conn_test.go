@@ -142,6 +142,48 @@ func TestServerRequestDispatched(t *testing.T) {
 	}
 }
 
+func TestRespondNilResultSerializesNull(t *testing.T) {
+	cli, srv := newPipePair()
+	conn := NewConn(cli, Handler{})
+	defer conn.Close()
+
+	frames := make(chan []byte, 1)
+	go func() {
+		r := bufio.NewReader(srv)
+		payload, err := readFrame(r)
+		if err != nil {
+			return
+		}
+		frames <- payload
+	}()
+
+	if err := conn.Respond(ID{Num: 1}, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case payload := <-frames:
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(payload, &fields); err != nil {
+			t.Fatal(err)
+		}
+		// A response must carry "result" or "error"; a nil payload has to
+		// serialize as an explicit null (#991).
+		raw, ok := fields["result"]
+		if !ok {
+			t.Fatalf("response %s has no result property", payload)
+		}
+		if string(raw) != "null" {
+			t.Fatalf("result = %s, want null", raw)
+		}
+		if _, ok := fields["error"]; ok {
+			t.Fatalf("response %s unexpectedly has an error property", payload)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("response never written")
+	}
+}
+
 func TestCallFailsAfterClose(t *testing.T) {
 	cli, _ := newPipePair()
 	conn := NewConn(cli, Handler{})

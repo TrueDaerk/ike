@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -27,6 +27,9 @@ Highlighting](./highlighting.md).
 internal/lsp/
   jsonrpc/   JSON-RPC 2.0 over an io.ReadWriteCloser: Content-Length framing,
              request/response/notification, async read loop, id correlation.
+             Responses always carry a result or error property — a nil result
+             serializes as an explicit JSON null (#991): vscode-jsonrpc-based
+             servers (Intelephense) die on a response with neither.
              Outbound writes are async too (#594): callers marshal on their own
              goroutine and enqueue the framed payload onto an unbounded queue
              drained by a single dedicated writer goroutine. A caller therefore
