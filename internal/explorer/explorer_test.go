@@ -206,6 +206,8 @@ func TestUndoRedoRename(t *testing.T) {
 	m, _ = send(m, key("j"), key("j")) // a.txt
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
+	// End drops the stem preselection (#1047) so backspacing clears the name.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	for range len("a.txt") {
 		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
@@ -258,7 +260,9 @@ func TestRenamePrefillsAndRenames(t *testing.T) {
 	if m.prompt.input != "a.txt" {
 		t.Fatalf("prompt input = %q want prefilled %q", m.prompt.input, "a.txt")
 	}
-	// clear the prefilled name and type a new one.
+	// clear the prefilled name and type a new one (End first: it drops the
+	// stem preselection, #1047, so every backspace removes one rune).
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	for range "a.txt" {
 		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
@@ -284,13 +288,22 @@ func TestRenameArrowKeysMoveCursor(t *testing.T) {
 	m, _ = send(m, key("j"), key("j")) // a.txt
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
+	if m.prompt.pos != len("a") {
+		t.Fatalf("pos = %d want %d (end of the preselected stem)", m.prompt.pos, len("a"))
+	}
+	// the first arrow key drops the stem preselection (#1047) and then moves
+	// normally; the prefilled text stays intact.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	if m.prompt.pos != len("a.txt") {
-		t.Fatalf("pos = %d want %d (end)", m.prompt.pos, len("a.txt"))
+		t.Fatalf("pos after End = %d want %d (end)", m.prompt.pos, len("a.txt"))
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
 	if m.prompt.pos != len("a.txt")-2 {
 		t.Fatalf("pos after 2x left = %d want %d", m.prompt.pos, len("a.txt")-2)
+	}
+	if m.prompt.input != "a.txt" {
+		t.Fatalf("arrow keys must keep the text, input = %q", m.prompt.input)
 	}
 	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyHome})
 	if m.prompt.pos != 0 {
@@ -343,6 +356,125 @@ func TestPromptMouseClickMovesCursor(t *testing.T) {
 	}
 }
 
+// #1047: input prompts render an enter/esc affordance line, like the confirm
+// prompt's "[y]es  [n]o" and the notice's dismiss hint.
+func TestInputPromptRendersKeyHint(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(NewFileMsg{})
+	m, _ = pumpScans(m, cmd)
+	if !strings.Contains(m.View(), "enter accept · esc cancel") {
+		t.Fatalf("new-file prompt missing the key hint:\n%s", m.View())
+	}
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m, _ = send(m, key("j"), key("j")) // a.txt — the root is not renameable
+	m, cmd = m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if !strings.Contains(m.View(), "enter accept · esc cancel") {
+		t.Fatalf("rename prompt missing the key hint:\n%s", m.View())
+	}
+}
+
+// #1047: rename preselects the name stem — the first typed rune replaces the
+// whole stem and keeps the extension, JetBrains-style.
+func TestRenameTypingReplacesStemKeepsExtension(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if m.prompt.selStart != 0 || m.prompt.selEnd != len("a") {
+		t.Fatalf("selection = [%d,%d) want the stem [0,%d)",
+			m.prompt.selStart, m.prompt.selEnd, len("a"))
+	}
+	m, _ = send(m, key("new"), key("enter"))
+	if _, err := os.Stat(filepath.Join(root, "new.txt")); err != nil {
+		t.Fatalf("typing should have replaced the stem and kept .txt: %v", err)
+	}
+}
+
+// #1047: with the stem preselected, an arrow key keeps the text and drops the
+// selection; typing afterwards edits normally at the cursor.
+func TestRenameArrowKeyDropsPreselection(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
+	if m.prompt.input != "a.txt" {
+		t.Fatalf("arrow key must keep the text, input = %q", m.prompt.input)
+	}
+	if m.prompt.selStart != m.prompt.selEnd {
+		t.Fatalf("arrow key must drop the selection, got [%d,%d)",
+			m.prompt.selStart, m.prompt.selEnd)
+	}
+	m, _ = send(m, key("x"))
+	if m.prompt.input != "xa.txt" {
+		t.Fatalf("typing after dropping the selection must insert, input = %q", m.prompt.input)
+	}
+}
+
+// #1047: Backspace with the stem preselected deletes the stem (not just one
+// rune) and leaves the cursor at its start.
+func TestRenameBackspaceDeletesPreselectedStem(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j"), key("j")) // a.txt
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
+	if m.prompt.input != ".txt" || m.prompt.pos != 0 {
+		t.Fatalf("input = %q pos = %d, want %q pos 0", m.prompt.input, m.prompt.pos, ".txt")
+	}
+	if m.prompt.selStart != m.prompt.selEnd {
+		t.Fatal("backspace must consume the selection")
+	}
+}
+
+// #1047: renaming a folder preselects the whole name (no extension concept).
+func TestRenameDirPreselectsWholeName(t *testing.T) {
+	root := tree(t)
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, _ = send(m, key("j")) // sub/
+	m, cmd := m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if m.prompt.selStart != 0 || m.prompt.selEnd != len("sub") {
+		t.Fatalf("dir selection = [%d,%d) want [0,%d)",
+			m.prompt.selStart, m.prompt.selEnd, len("sub"))
+	}
+	m, _ = send(m, key("renamed"), key("enter"))
+	if _, err := os.Stat(filepath.Join(root, "renamed")); err != nil {
+		t.Fatalf("typing should have replaced the whole dir name: %v", err)
+	}
+}
+
+// #1047: a dotfile's name is all extension (empty stem), so the whole name is
+// preselected — matching JetBrains, where ".gitignore" selects fully.
+func TestRenameDotfilePreselectsWholeName(t *testing.T) {
+	root := tree(t)
+	mustWrite(t, filepath.Join(root, ".gitignore"), "")
+	m := mounted(t, root, 40, 20)
+	m.SetFocused(true)
+	m, cmd := m.Update(ToggleHiddenMsg{}) // dot-entries are skipped by default
+	m, _ = pumpScans(m, cmd)
+	m, _ = send(m, key("j"), key("j")) // .gitignore (sorted before a.txt)
+	m, cmd = m.Update(RenameMsg{})
+	m, _ = pumpScans(m, cmd)
+	if got := m.prompt.input; got != ".gitignore" {
+		t.Fatalf("test setup: rename prompt on %q, want .gitignore", got)
+	}
+	if m.prompt.selStart != 0 || m.prompt.selEnd != len(".gitignore") {
+		t.Fatalf("dotfile selection = [%d,%d) want [0,%d)",
+			m.prompt.selStart, m.prompt.selEnd, len(".gitignore"))
+	}
+}
+
 func TestRenameEscCancels(t *testing.T) {
 	root := tree(t)
 	m := mounted(t, root, 40, 20)
@@ -366,6 +498,7 @@ func TestRenameToExistingNameErrors(t *testing.T) {
 	m, _ = send(m, key("j"), key("j")) // a.txt
 	m, cmd := m.Update(RenameMsg{})
 	m, _ = pumpScans(m, cmd)
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd}) // drop the stem preselection
 	for range "a.txt" {
 		m, _ = send(m, tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
@@ -902,7 +1035,9 @@ func TestRenamePromptWindowsLongInput(t *testing.T) {
 	if !ok || w > 28 {
 		t.Fatalf("prompt box ok=%v width=%d, want rendered and <= pane width 28", ok, w)
 	}
-	// the window slides to the cursor at the end of the name: the tail is visible.
+	// End drops the stem preselection (#1047); the window slides to the cursor
+	// at the end of the name so the tail is visible.
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEnd})
 	if !strings.Contains(m.View(), "overflows.go") {
 		t.Fatalf("input window should show the text around the cursor:\n%s", m.View())
 	}

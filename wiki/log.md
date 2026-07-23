@@ -16,6 +16,12 @@
   the surface — below every real VCS status, no suffix tint, hidden-italic
   composes (`/architecture/explorer.md`).
 
+- Explorer input prompts polished (#1047): new-file/new-folder/rename boxes
+  render an `enter accept · esc cancel` hint line, and rename preselects the
+  name stem — typing replaces it and keeps the extension, arrows/click drop
+  the selection, folders and dotfiles preselect the whole name
+  (`/architecture/explorer.md`).
+
 - Explorer scrollbar thumb is draggable (#1036): thumb press grabs and a
   `dragExplScroll` gesture follows the pointer, mirroring the editor
   scrollbar (#1022); track clicks keep the click-to-jump

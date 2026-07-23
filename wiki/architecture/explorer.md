@@ -251,10 +251,23 @@ execute as vim commands against the buffer.
 A `promptInput`'s text carries a rune-index cursor (`prompt.pos`), not just
 append/backspace at the end: `Left`/`Right` step it, `Home`/`End` jump it,
 `Delete` removes forward, and typed text/`Backspace` act at `pos` rather than
-always at the string's end (rename starts with `pos` at the end of the
-prefilled name). The cursor cell itself is reverse-video (`promptCursorStyle`)
-over the rune already there (a blank cell past the last rune), not an inserted
-caret glyph — so it never shifts the surrounding text as it moves.
+always at the string's end. The cursor cell itself is reverse-video
+(`promptCursorStyle`) over the rune already there (a blank cell past the last
+rune), not an inserted caret glyph — so it never shifts the surrounding text as
+it moves. Every input prompt also renders an `enter accept · esc cancel` hint
+line under the text (#1047), mirroring the confirm prompt's `[y]es  [n]o` and
+the error notice's dismiss hint; like every prompt line it is truncated to the
+pane width.
+
+**Rename preselects the name stem** (#1047, JetBrains-style): the prompt opens
+with the basename-without-extension marked as a selection
+(`prompt.selStart`/`selEnd`, rendered on the theme's Selection/SelectionText
+colours) and the cursor at its end. The first printable key replaces the whole
+stem while the extension survives (`a.txt` + typing `new` → `new.txt`);
+`Backspace`/`Delete` remove the stem; any other key — arrows, `Home`/`End`, a
+mouse click — keeps the text, drops the selection, and edits normally from
+there. Folders and dotfiles (extension-only names like `.gitignore`) preselect
+the whole name.
 
 `View` overlays the box via `overlay.Place(out, m.promptBox(), bx, by,
 m.width, m.height)` — the explorer's **own** `m.width`/`m.height` (its pane
