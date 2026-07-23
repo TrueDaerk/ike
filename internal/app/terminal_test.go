@@ -724,9 +724,14 @@ func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
 func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
 	m, key := openTestTerminal(t)
 	term := m.activeWS().Panes.Get(key).Terminal()
-	deadline := time.Now().Add(3 * time.Second)
-	for term.Busy() && time.Now().Before(deadline) {
+	// Independent deadlines per wait (#1008): under full-suite load the
+	// shell's startup can eat a shared budget and starve the exit wait.
+	startup := time.Now().Add(5 * time.Second)
+	for term.Busy() && time.Now().Before(startup) {
 		time.Sleep(20 * time.Millisecond) // shell still starting up
+	}
+	if term.Busy() {
+		t.Fatal("setup: shell never reached an idle prompt")
 	}
 	handled, out, _ := m.terminalReservedKey("cmd+w")
 	if !handled {
@@ -736,7 +741,8 @@ func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
 	if m.termClosePromptOpen() {
 		t.Fatal("idle terminal must close without the busy guard")
 	}
-	for term.Running() && time.Now().Before(deadline) {
+	exit := time.Now().Add(5 * time.Second)
+	for term.Running() && time.Now().Before(exit) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	if term.Running() {
