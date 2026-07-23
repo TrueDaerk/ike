@@ -28,6 +28,7 @@ type promptKind int
 const (
 	promptInput   promptKind = iota // type a name, Enter accepts, Esc cancels
 	promptConfirm                   // y/Enter accepts, anything else cancels
+	promptNotice                    // dismissable error dialog (#1030); any key closes
 )
 
 // prompt is the explorer's modal overlay. accept runs on acceptance with the
@@ -41,6 +42,15 @@ type prompt struct {
 	input  string
 	pos    int
 	accept func(m *Model, input string) tea.Cmd
+}
+
+// fail records a failed user-initiated file operation and opens a dismissable
+// error dialog over the intact tree (#1030) — the project convention for
+// actionable pane states; the tree never gets replaced by raw error text.
+// Any key dismisses.
+func (m *Model) fail(err error) {
+	m.err = err
+	m.prompt = &prompt{kind: promptNotice, title: "error", input: err.Error()}
 }
 
 // opKind distinguishes the reversible file operations.
@@ -69,6 +79,12 @@ func (m Model) Prompting() bool { return m.prompt != nil }
 // by accepting it. It clears the prompt on accept or cancel.
 func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 	p := m.prompt
+	if p.kind == promptNotice {
+		// Any key dismisses the error dialog (#1030) and clears the error.
+		m.prompt = nil
+		m.err = nil
+		return nil
+	}
 	if p.kind == promptConfirm {
 		switch msg.String() {
 		case "y", "Y", "enter":
@@ -161,7 +177,7 @@ func (m *Model) promptNewEntry(isDir bool) {
 func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 	path := filepath.Join(dir, name)
 	if _, err := os.Lstat(path); err == nil {
-		m.err = fmt.Errorf("already exists: %s", name)
+		m.fail(fmt.Errorf("already exists: %s", name))
 		return nil
 	}
 	var err error
@@ -176,7 +192,7 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 		}
 	}
 	if err != nil {
-		m.err = err
+		m.fail(err)
 		return nil
 	}
 	m.pushOp(fileOp{kind: opCreate, path: path, isDir: isDir})
@@ -210,7 +226,7 @@ func (m *Model) promptDelete() {
 func (m *Model) deleteEntry(path string, isDir bool) tea.Cmd {
 	tp, err := m.toTrash(path)
 	if err != nil {
-		m.err = err
+		m.fail(err)
 		return nil
 	}
 	m.pushOp(fileOp{kind: opDelete, path: path, trashPath: tp, isDir: isDir})
@@ -283,15 +299,15 @@ func (m *Model) relocateEntry(path, newPath string, isDir bool) tea.Cmd {
 		return nil
 	}
 	if isDir && strings.HasPrefix(newPath, path+string(filepath.Separator)) {
-		m.err = fmt.Errorf("cannot move a folder into itself")
+		m.fail(fmt.Errorf("cannot move a folder into itself"))
 		return nil
 	}
 	if _, err := os.Lstat(newPath); err == nil {
-		m.err = fmt.Errorf("already exists: %s", filepath.Base(newPath))
+		m.fail(fmt.Errorf("already exists: %s", filepath.Base(newPath)))
 		return nil
 	}
 	if err := os.Rename(path, newPath); err != nil {
-		m.err = err
+		m.fail(err)
 		return nil
 	}
 	m.pushOp(fileOp{kind: opRename, path: path, newPath: newPath, isDir: isDir})
@@ -337,21 +353,21 @@ func (m *Model) undo() tea.Cmd {
 	case opCreate:
 		tp, err := m.toTrash(op.path)
 		if err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		op.trashPath = tp
 		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
 	case opDelete:
 		if err := os.Rename(op.trashPath, op.path); err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		m.pendingSel = op.path
 		cmd = m.refreshDir(filepath.Dir(op.path))
 	case opRename:
 		if err := os.Rename(op.newPath, op.path); err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		m.pendingSel = op.path
@@ -375,7 +391,7 @@ func (m *Model) redo() tea.Cmd {
 	switch op.kind {
 	case opCreate:
 		if err := os.Rename(op.trashPath, op.path); err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		op.trashPath = ""
@@ -383,13 +399,13 @@ func (m *Model) redo() tea.Cmd {
 		cmd = m.refreshDir(filepath.Dir(op.path))
 	case opDelete:
 		if err := os.Rename(op.path, op.trashPath); err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		cmd = tea.Batch(m.refreshDir(filepath.Dir(op.path)), deletedCmd(op.path, op.isDir))
 	case opRename:
 		if err := os.Rename(op.path, op.newPath); err != nil {
-			m.err = err
+			m.fail(err)
 			return nil
 		}
 		m.pendingSel = op.newPath
@@ -462,6 +478,12 @@ func (m Model) promptBox() string {
 	inner := m.promptInnerWidth()
 	body := ansi.Truncate(p.title, inner, "…")
 	switch p.kind {
+	case promptNotice:
+		// Dismissable error dialog (#1030): message in the Error colour,
+		// hint row mirrors the confirm prompt's affordance line.
+		msg := lipgloss.NewStyle().Foreground(m.theme().Error).
+			Render(ansi.Truncate(p.input, inner, "…"))
+		body += "\n" + msg + "\n" + ansi.Truncate("any key to dismiss", inner, "…")
 	case promptInput:
 		r := []rune(p.input)
 		off, avail := m.promptInputWindow()
@@ -512,7 +534,16 @@ func (m Model) promptBoxOrigin() (x, y, w, h int, ok bool) {
 // movable cursor), a click outside the input row, or when no prompt is open.
 func (m *Model) PromptMouseClick(x, y int) {
 	p := m.prompt
-	if p == nil || p.kind != promptInput {
+	if p == nil {
+		return
+	}
+	if p.kind == promptNotice {
+		// A click dismisses the error dialog like any key (#1030).
+		m.prompt = nil
+		m.err = nil
+		return
+	}
+	if p.kind != promptInput {
 		return
 	}
 	bx, by, _, _, ok := m.promptBoxOrigin()

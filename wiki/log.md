@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Explorer errors stop wiping the tree (#1030): failed file ops open a
+  dismissable dialog (any key/click), scan/poll errors render as a themed
+  bottom banner; both leave the tree rendered and navigable
+  (`/architecture/explorer.md`).
+
 - Explorer small bug fixes: a pathy new-file name creates intermediate
   directories (#1031), the hidden-files toggle keeps the selection on the
   same entry (#1033), and `explorer.sort` actually works — `name`/`type`/
