@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -33,6 +33,13 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   #3 lands, after a completed switch. A failed validation returns the error and
   leaves the stored history untouched. `RecordOpenCmd` wraps it as a `tea.Cmd`
   so the Update loop never blocks on the stat or the write.
+- **Restore last project** (#1000, `project.restore_last`, default off):
+  before `RecordOpen`, startup asks `RestoreLastRoot` whether to re-anchor —
+  with the setting on, no CLI target and no stdin buffer, the most recent
+  history entry wins over the current directory and main `chdir`s there
+  before anything loads (the whole IDE roots at "."). A history head equal to
+  cwd or an empty history is a no-op; a deleted/invalid stored root falls
+  back to cwd with an info toast. Explicit CLI targets always win.
 
 ## Command & picker (#12)
 

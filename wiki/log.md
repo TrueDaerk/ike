@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- `project.restore_last` works now (#1000): startup re-anchors at the most
+  recent project when enabled — CLI targets win, a vanished project falls
+  back to cwd with a notice (`/architecture/project-switching.md`).
+
 - File opens always land in a real editor pane (#998): terminal-only tab
   hosts and dedicated terminal/tool panes are skipped
   (`/architecture/editor-tabs.md`).

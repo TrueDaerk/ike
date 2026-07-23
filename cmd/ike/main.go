@@ -13,6 +13,7 @@ import (
 	"ike/internal/app"
 	"ike/internal/cli"
 	"ike/internal/config"
+	"ike/internal/host"
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/wasm"
@@ -72,6 +73,16 @@ func readStdin(wantStdin bool) (string, []tea.ProgramOption, error) {
 	return string(data), []tea.ProgramOption{tea.WithInput(tty)}, nil
 }
 
+// mustGetwd returns the current directory, "" when it is unknown (the
+// restore-last compare then simply never matches).
+func mustGetwd() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	return cwd
+}
+
 func main() {
 	// CLI open targets (Roadmap 0270): `ike file.go:42` opens the file at that
 	// line. Parse argv up front so a malformed invocation fails before any UI.
@@ -87,6 +98,22 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ike:", err)
 		os.Exit(2)
+	}
+	// Restore the last project (#1000): with project.restore_last enabled and
+	// no explicit open target (CLI paths or stdin count as explicit), the most
+	// recent history entry wins over the current directory — re-anchor before
+	// anything loads, since the whole IDE is rooted at ".". An unavailable
+	// stored project falls back to cwd with a notice raised after the model
+	// exists.
+	restoreNotice := ""
+	if len(inv.Targets) == 0 && !inv.Stdin {
+		if root, notice := project.RestoreLastRoot(config.Discover("."), mustGetwd()); root != "" {
+			if err := os.Chdir(root); err != nil {
+				restoreNotice = "last project unavailable: " + root + " — opening the current directory"
+			}
+		} else {
+			restoreNotice = notice
+		}
 	}
 	// Record the initial project open into the recent-projects history before
 	// the model loads config, so the fresh entry is already part of the merged
@@ -116,6 +143,9 @@ func main() {
 	}
 
 	m := app.New()
+	if restoreNotice != "" {
+		m.Host().Notify(host.Info, restoreNotice)
+	}
 	// Open the CLI targets after construction: session restore already ran, so
 	// the requested files win focus over the restored layout.
 	m = m.OpenCLITargets(inv.Targets)
