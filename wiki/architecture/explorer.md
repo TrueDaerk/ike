@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-23T19:00:00Z
+timestamp: 2026-07-23T21:00:00Z
 ---
 
 # File Explorer
@@ -127,6 +127,15 @@ directory containing changes tints with the modified colour so pending work is
 visible on collapsed subtrees. The app threads each vcs status snapshot into
 the tree via `SetVCS`; outside a git repository nothing changes. See
 [VCS / Git Integration](/architecture/vcs.md).
+
+**Gitignored entries** render dimmed (#1045, JetBrains-style): the snapshot's
+status command carries `--ignored`, so `! <path>` porcelain records (files, or
+collapsed `dir/` entries for fully-ignored subtrees) land in an ignored set
+queried via `Snapshot.Ignored` — a path under an ignored directory counts as
+ignored. Dimmed rows take the plain foreground mixed halfway toward the
+surface (`theme.Mix`); ignored ranks below every real VCS status and below the
+untracked hue, the suffix tint does not apply (the row is uniformly dim), and
+hidden-italic still composes.
 
 ## Errors (#1030)
 

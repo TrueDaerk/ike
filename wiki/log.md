@@ -6,6 +6,11 @@
   ctrl+u/ctrl+d motions, `C` recursive expand-all through lazy levels
   (scan-budget-bounded), ellipsis on right-clipped rows
   (`/architecture/explorer.md`).
+- Explorer dims gitignored entries (#1045): `git status` gains `--ignored`
+  on the same invocation, `! <path>` records feed `Snapshot.Ignored`
+  (dir-prefix aware), and ignored rows render the foreground mixed toward
+  the surface — below every real VCS status, no suffix tint, hidden-italic
+  composes (`/architecture/explorer.md`).
 
 - Explorer scrollbar thumb is draggable (#1036): thumb press grabs and a
   `dragExplScroll` gesture follows the pointer, mirroring the editor
