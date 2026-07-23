@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Binding audit: default chords for the four unbound user-facing commands
+  (#1048) — `cmd+8` problems.toggle, `cmd+3` structure.toggle (numeric
+  tool-window family, palette fallback), `ctrl+f5` run.rerun and `ctrl+f2`
+  debug.stop (JetBrains Windows scheme, delivered); everything else stays
+  palette/vim by design (`/architecture/keybindings.md`).
+
 - Clickable editor scrollbar with diagnostics error stripe (#1022): a
   track/thumb overlay on the pane's rightmost column when the buffer
   overflows, severity-colored markers at diagnostic lines' proportional

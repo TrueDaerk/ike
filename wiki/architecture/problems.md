@@ -67,7 +67,7 @@ The pane persists as identity kind `"problems"` and restores empty in its
 saved slot — diagnostics are session state; the live store re-feeds it as
 servers publish. It counts as a tool window for `window.hideAllTools` (#791).
 
-No default chord: JetBrains' cmd+6 is taken by the TODO index (#61), and the
-chord budget is full (#711); bind `problems.toggle` manually or use the
-palette. Next/previous-diagnostic navigation stays with the existing
+`cmd+8` toggles the pane (#1048; JetBrains' cmd+6 is taken by the TODO
+index #61, so the free numeric-family chord stands in — the palette is the
+delivered fallback). Next/previous-diagnostic navigation stays with the existing
 `lsp.nextDiagnostic` / `lsp.prevDiagnostic` commands.

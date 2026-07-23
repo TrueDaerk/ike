@@ -87,5 +87,6 @@ The pane persists in the layout like the VCS/debug tool windows
 (`paneIdentity{Kind: "structure"}`) and restores empty; the first settled pass
 refills it. It counts as a tool window for `window.hideAllTools`.
 
-No default chord is bound (JetBrains' Cmd+7 is taken by the comment toggle);
-the palette/menu run `structure.toggle` ("Structure").
+`cmd+3` toggles the pane (#1048; JetBrains' Cmd+7 is taken by the comment
+toggle, so the free numeric-family chord stands in — the palette is the
+delivered fallback); the palette/menu run `structure.toggle` ("Structure").
