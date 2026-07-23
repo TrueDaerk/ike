@@ -81,3 +81,32 @@ func TestRestoreLastRootMissingDirFallsBack(t *testing.T) {
 		t.Fatal("deleted project must raise a fallback notice")
 	}
 }
+
+func TestRestoreLastRootSkipsProjectCwd(t *testing.T) {
+	last := t.TempDir()
+	opts := seedRestore(t, last)
+	for _, marker := range []string{".git", ".ike"} {
+		cwd := t.TempDir()
+		if err := os.Mkdir(filepath.Join(cwd, marker), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if root, notice := RestoreLastRoot(opts, cwd); root != "" || notice != "" {
+			t.Fatalf("%s cwd must suppress the restore, got %q/%q", marker, root, notice)
+		}
+	}
+	// A plain directory still restores (#1000 behavior intact).
+	if root, _ := RestoreLastRoot(opts, t.TempDir()); root == "" {
+		t.Fatal("plain cwd must still restore the last project")
+	}
+}
+
+func TestRestoreLastRootNeverTargetsHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home dir")
+	}
+	opts := seedRestore(t, home)
+	if root, notice := RestoreLastRoot(opts, t.TempDir()); root != "" || notice != "" {
+		t.Fatalf("home at the history head must not restore, got %q/%q", root, notice)
+	}
+}

@@ -1,6 +1,11 @@
 package project
 
-import "ike/internal/config"
+import (
+	"os"
+	"path/filepath"
+
+	"ike/internal/config"
+)
 
 // RestoreLastRoot resolves the project root startup should anchor at (#1000):
 // with `project.restore_last` enabled and no explicit open target, the most
@@ -11,6 +16,13 @@ import "ike/internal/config"
 func RestoreLastRoot(opts config.Options, cwd string) (root, notice string) {
 	cfg, _ := config.Load(opts)
 	if cfg == nil || !cfg.Project.RestoreLast {
+		return "", ""
+	}
+	// Starting inside a project directory is an explicit target (#1010):
+	// `ike` run in a checkout must never be hijacked to the history head —
+	// combined with RecordOpen re-recording the restored root, one stray
+	// entry would otherwise make the redirect self-sustaining.
+	if isProjectDir(cwd) {
 		return "", ""
 	}
 	hist := History(cfg)
@@ -25,5 +37,25 @@ func RestoreLastRoot(opts config.Options, cwd string) (root, notice string) {
 	if err != nil {
 		return "", "last project unavailable: " + last + " — opening the current directory"
 	}
+	// The home directory is never a real project (#1010): an accidental
+	// `ike` in ~ records it, and restoring into it points the recursive
+	// watcher at the whole home tree.
+	if home, herr := os.UserHomeDir(); herr == nil && abs == home {
+		return "", ""
+	}
 	return abs, ""
+}
+
+// isProjectDir reports whether dir carries a project marker — a .git or .ike
+// entry — meaning a start there targets that project deliberately.
+func isProjectDir(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	for _, marker := range []string{".git", ".ike"} {
+		if _, err := os.Stat(filepath.Join(dir, marker)); err == nil {
+			return true
+		}
+	}
+	return false
 }

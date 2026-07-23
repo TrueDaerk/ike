@@ -39,7 +39,13 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   history entry wins over the current directory and main `chdir`s there
   before anything loads (the whole IDE roots at "."). A history head equal to
   cwd or an empty history is a no-op; a deleted/invalid stored root falls
-  back to cwd with an info toast. Explicit CLI targets always win.
+  back to cwd with an info toast. Explicit CLI targets always win, and two
+  guards (#1010) keep the redirect honest: a cwd that is itself a project
+  (`.git` or `.ike` marker) counts as an explicit target and never restores,
+  and the home directory is never a restore target — one accidental `ike`
+  in `~` would otherwise self-sustain at the history head (RecordOpen
+  re-records the restored root) and point the recursive watcher at the
+  whole home tree.
 
 ## Command & picker (#12)
 
