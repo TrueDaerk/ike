@@ -98,6 +98,12 @@ type Model struct {
 	trashSeq   int
 	pendingSel string // path to put the cursor on once the next scan rebuilds rows
 	sbGrab     int    // thumb grab offset of an active scrollbar drag (#1036)
+	pendingG   bool   // first g of the gg top-jump chord is armed (#1032)
+
+	// expand-all state (#1043): the subtree root being recursively expanded
+	// and the remaining scan budget bounding it.
+	expandAllRoot string
+	expandBudget  int
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -135,6 +141,11 @@ func New(dir string) Model {
 	m.purgeStaleTrash()
 	return m
 }
+
+// ExpandAllMsg recursively expands the selected directory's subtree (#1043).
+type ExpandAllMsg struct{}
+
+func (ExpandAllMsg) explorerMsg() {}
 
 // ScanDoneMsg carries the result of a directory scan back into the model. It is
 // dispatched by the Cmd expand/refresh return; the root model routes it here.
@@ -196,6 +207,30 @@ func (m *Model) applyScan(msg ScanDoneMsg) {
 	n.modTime = msg.ModTime
 	m.setChildren(n, msg.Entries)
 	m.rebuild()
+}
+
+// continueExpandAll resumes an in-flight expand-all (#1043) after a scan
+// landed: newly loaded directories under the expand root get expanded and
+// scanned in turn; the state clears when nothing is left (or the budget ran
+// out).
+func (m *Model) continueExpandAll(scanned string) tea.Cmd {
+	if m.expandAllRoot == "" {
+		return nil
+	}
+	if scanned != m.expandAllRoot && !strings.HasPrefix(scanned, m.expandAllRoot+string(filepath.Separator)) {
+		return nil
+	}
+	root := nodeByPath(m.root, m.expandAllRoot)
+	if root == nil {
+		m.expandAllRoot = ""
+		return nil
+	}
+	cmd := m.expandLoaded(root)
+	m.rebuild()
+	if cmd == nil {
+		m.expandAllRoot = ""
+	}
+	return cmd
 }
 
 // setChildren installs sorted child nodes on n from a scan's entries. It is
@@ -367,6 +402,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ScanDoneMsg:
 		m.applyScan(msg)
+		if cmd := m.continueExpandAll(msg.Path); cmd != nil {
+			return m, tea.Batch(cmd, m.startPoll())
+		}
 		return m, m.startPoll()
 	case pollMsg:
 		return m, m.applyPoll(msg)
@@ -394,6 +432,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CollapseAllMsg:
 		m.collapseAll()
 		return m, nil
+	case ExpandAllMsg:
+		return m, m.expandAllUnderSelection()
 	case RefreshMsg:
 		return m, m.refresh()
 	case RevealMsg:
@@ -435,11 +475,28 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		if m.prompt != nil {
 			return m, m.handlePromptKey(msg)
 		}
-		switch msg.String() {
+		key := msg.String()
+		// The vim gg chord (#1032): a first g arms, a second within the
+		// switch below jumps to the top; any other key disarms.
+		armedG := m.pendingG
+		m.pendingG = false
+		switch key {
 		case "down", "j":
 			m.moveCursor(1)
 		case "up", "k":
 			m.moveCursor(-1)
+		case "g":
+			if armedG {
+				m.moveCursor(-len(m.rows)) // gg: top
+			} else {
+				m.pendingG = true
+			}
+		case "G":
+			m.moveCursor(len(m.rows)) // bottom
+		case "pgdown", "ctrl+d":
+			m.movePage(1, key == "ctrl+d")
+		case "pgup", "ctrl+u":
+			m.movePage(-1, key == "ctrl+u")
 		case "enter":
 			return m.activate()
 		case "l", "right":
@@ -494,6 +551,20 @@ func (m *Model) moveCursor(delta int) {
 		m.cursor = len(m.rows) - 1
 	}
 	m.clampScroll()
+}
+
+// movePage moves the cursor by one page (PageUp/PageDown) or half a page
+// (ctrl+u/ctrl+d, vim-style), clamped like moveCursor (#1032).
+func (m *Model) movePage(dir int, half bool) {
+	_, textH, _, _, _ := m.viewport()
+	step := textH
+	if half {
+		step = maxz(textH / 2)
+	}
+	if step < 1 {
+		step = 1
+	}
+	m.moveCursor(dir * step)
 }
 
 // activate toggles a directory (expand/collapse) or opens a file (enter).
@@ -593,6 +664,55 @@ func (m *Model) collapseAll() {
 	m.cursor = 0
 	m.offset = 0
 	m.rebuild()
+}
+
+// expandAllUnderSelection recursively expands the selected directory's
+// subtree (#1043; the root when a file or the root row is selected). Lazy
+// loading makes it asynchronous: loaded levels expand immediately, unloaded
+// ones kick scans and applyScan continues the descent while expandAllRoot is
+// set. expandBudget bounds runaway trees.
+func (m *Model) expandAllUnderSelection() tea.Cmd {
+	n := m.current()
+	if n == nil || !n.isDir {
+		n = m.root
+	}
+	m.expandAllRoot = n.path
+	m.expandBudget = maxExpandAllScans
+	cmd := m.expandLoaded(n)
+	m.rebuild()
+	return cmd
+}
+
+// maxExpandAllScans bounds how many directory scans one expand-all may spawn.
+const maxExpandAllScans = 200
+
+// expandLoaded expands n's loaded subtree and returns scans for the unloaded
+// directories it uncovers, decrementing the expand budget per scan.
+func (m *Model) expandLoaded(n *node) tea.Cmd {
+	if !n.isDir {
+		return nil
+	}
+	n.expanded = true
+	if !n.loaded {
+		if m.expandBudget <= 0 {
+			return nil
+		}
+		m.expandBudget--
+		n.loading = true
+		return scanCmd(n.path)
+	}
+	var cmds []tea.Cmd
+	for _, c := range n.children {
+		if c.isDir {
+			if cmd := m.expandLoaded(c); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func collapse(n *node) {
@@ -1278,6 +1398,9 @@ func (m Model) View() string {
 			styled := m.guideStyle(style).Render(guides) +
 				style.Bold(false).Render(mark) + nameRendered
 			vis := ansi.Cut(styled, offX, offX+textW)
+			// Right-clipped rows end in an ellipsis (#1035) so truncation is
+			// visible; a VCS status letter below takes that cell instead.
+			clipped := ansi.StringWidth(styled) > offX+textW
 			// A VCS-statused row carries a one-cell status letter at the
 			// right edge (#1051): a non-colour cue that survives ANSI256
 			// quantisation and colour blindness.
@@ -1293,6 +1416,8 @@ func (m Model) View() string {
 					ls = ls.Foreground(c)
 				}
 				vis += ls.Render(letter)
+			} else if clipped && textW >= 2 {
+				vis = ansi.Cut(vis, 0, textW-1) + style.Bold(false).Render("…")
 			} else if pad := textW - ansi.StringWidth(vis); pad > 0 {
 				vis += style.Render(strings.Repeat(" ", pad))
 			}
