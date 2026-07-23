@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-23T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -354,6 +354,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.stepInto` | `f7` | delivered | `—` | live |
 | `debug.stepOut` | `shift+f8` | delivered | `—` | live |
 | `debug.stepOver` | `f8` | delivered | `—` | live |
+| `debug.stop` | `ctrl+f2` | delivered | `—` | live |
 | `debug.toggleBreakpoint` | `ctrl+f8` | delivered | `—` | live |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
@@ -400,6 +401,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
+| `lsp.diagnosticInfo` | `ctrl+f1` | delivered | `—` | live |
 | `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
@@ -409,8 +411,13 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `markdown.preview` | `cmd+alt+m` | fragile | `palette` | live via palette |
 | `menu.open` | `f10` | delivered | `—` | live |
-| `nav.back` | `cmd+left-bracket` | fragile | `palette` | live via palette |
-| `nav.forward` | `cmd+right-bracket` | fragile | `palette` | live via palette |
+| `nav.back` | `cmd+left-bracket` | fragile | `mouse-back` | live via mouse-back |
+| `nav.forward` | `cmd+right-bracket` | fragile | `mouse-forward` | live via mouse-forward |
+| `nav.pinGoto1` | `ctrl+shift+1` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
+| `nav.pinGoto2` | `ctrl+shift+2` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
+| `nav.pinGoto3` | `ctrl+shift+3` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
+| `nav.pinGoto4` | `ctrl+shift+4` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
+| `nav.pins` | `cmd+2` | fragile | `palette` | live via palette |
 | `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
@@ -421,15 +428,18 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `pane.splitRight` | `cmd+k right` | fragile | `palette` | live via palette |
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
+| `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
+| `run.rerun` | `ctrl+f5` | delivered | `—` | live |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
+| `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
 | `terminal.new` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
@@ -438,3 +448,4 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
 | `vcs.updateProject` | `cmd+t` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
+| `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |

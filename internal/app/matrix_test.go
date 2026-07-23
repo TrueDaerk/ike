@@ -50,6 +50,21 @@ func TestBindingMatrixShape(t *testing.T) {
 			t.Errorf("stubbed blocked row = %+v", r)
 		}
 	}
+	// #1048: the four bindings from the unbound-command audit. The tool-window
+	// toggles are Cmd-primary with the palette as the delivered fallback; the
+	// run/debug pair rides the delivered Windows-scheme F-key family.
+	if r := byCmd["problems.toggle"]; r.Primary != "cmd+8" || r.Fallback != "palette" || r.Status() != "live via palette" {
+		t.Errorf("problems.toggle = %+v", r)
+	}
+	if r := byCmd["structure.toggle"]; r.Primary != "cmd+3" || r.Fallback != "palette" || r.Status() != "live via palette" {
+		t.Errorf("structure.toggle = %+v", r)
+	}
+	if r := byCmd["run.rerun"]; r.Primary != "ctrl+f5" || r.Class != keymap.Delivered || r.Status() != "live" {
+		t.Errorf("run.rerun = %+v", r)
+	}
+	if r := byCmd["debug.stop"]; r.Primary != "ctrl+f2" || r.Class != keymap.Delivered || r.Status() != "live" {
+		t.Errorf("debug.stop = %+v", r)
+	}
 	if r := byCmd["editor.copy"]; r.Fallback != "vim y" {
 		t.Errorf("editor.copy = %+v", r)
 	}

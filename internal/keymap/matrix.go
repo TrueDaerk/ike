@@ -131,6 +131,8 @@ var reachableAlternatives = map[string]string{
 	"vcs.updateProject":        "palette",
 	"vcs.revertFile":           "palette",
 	"vcs.panel":                "palette",
+	"problems.toggle":          "palette",
+	"structure.toggle":         "palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

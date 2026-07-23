@@ -1700,6 +1700,7 @@ var terminalGlobalCommands = map[string]bool{
 	"todo.list":             true,
 	"vcs.panel":             true,
 	"problems.toggle":       true,
+	"structure.toggle":      true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary

@@ -223,6 +223,16 @@ var jetbrainsRows = []row{
 	{"f7", "debug.stepInto", "Step into", Global, "Run (0350)"},
 	{"shift+f8", "debug.stepOut", "Step out", Global, "Run (0350)"},
 	{"f9", "debug.continue", "Continue (debug)", Global, "Run (0350)"},
+	// JetBrains Windows-scheme Rerun and Stop (#1048), staying in the same
+	// scheme as the run/debug F-key family above; both deliver everywhere.
+	{"ctrl+f5", "run.rerun", "Rerun last", Global, "Run (0350)"},
+	{"ctrl+f2", "debug.stop", "Stop debug session", Global, "Run (0350)"},
+	// Problems and Structure tool windows (#1048): JetBrains' cmd+6/cmd+7 are
+	// taken (TODO index, comment toggle on the German layout), so the free
+	// neighbours keep the numeric tool-window family; the palette is the
+	// delivered fallback, like the other Cmd-primary tool windows.
+	{"cmd+8", "problems.toggle", "Problems tool window", Global, "Problems (#1024)"},
+	{"cmd+3", "structure.toggle", "Structure tool window", Global, "Structure (#1025)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 }
