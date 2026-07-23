@@ -1116,7 +1116,10 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 		if stop != nil {
 			stop()
 		}
-		return nil, err
+		// A broken binary dies before answering initialize; the transport
+		// error alone ("jsonrpc: connection closed") tells the user nothing.
+		// Fold the decisive stderr line in (#1062), like the crash path does.
+		return nil, startupError(err, srv.stderr)
 	}
 
 	m.status(lang, lang+" language server ready", lsp.ServerState)
@@ -1309,14 +1312,30 @@ func (m *Manager) docServer(path string) (*server, *document, bool) {
 	return srv, doc, true
 }
 
+// startupError folds the decisive stderr line into a bare transport error
+// (#1062): a server binary that dies during the handshake surfaces its actual
+// complaint (e.g. taplo's "the LSP is not part of this build") instead of
+// "jsonrpc: connection closed". Without a recognizable stderr line the
+// original error stands.
+func startupError(err error, stderr func() string) error {
+	if stderr == nil {
+		return err
+	}
+	if tail := transport.ErrorLine(stderr()); tail != "" {
+		return errors.New(tail)
+	}
+	return err
+}
+
 // statusForErr renders a launch failure as a user-facing status string plus its
 // classification: a missing binary is persistent state (LSP stays off for the
-// language), any other launch failure is a transient error event.
+// language), any other launch failure is a transient error event pointing at
+// the server log (#1062, matching the repeated-crash disable message #715).
 func statusForErr(command string, err error) (string, lsp.ServerStatusKind) {
 	if isNotFound(err) {
 		return command + " not found (LSP disabled for this language)", lsp.ServerState
 	}
-	return command + ": " + err.Error(), lsp.ServerEventError
+	return command + ": " + err.Error() + " — details: \"LSP: Show Server Log\"", lsp.ServerEventError
 }
 
 func splitLines(text string) []string { return strings.Split(text, "\n") }

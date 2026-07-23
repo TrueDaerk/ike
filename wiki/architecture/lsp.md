@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-23T21:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -643,6 +643,11 @@ stderr tail (`transport.ErrorLine`: scanning backwards for the last short
 non-stack-frame line naming an error — Node buries `SomeError: message`
 under a megabyte minified source line) and names it in the crash toast, the
 `server crashed:` log marker and the disabled-after-repeated-crashes toast.
+A server that dies **during the handshake** gets the same treatment (#1062):
+`startupError` folds the stderr line into the launch failure, so the toast
+reads e.g. `taplo: the LSP is not part of this build …` instead of
+`jsonrpc: connection closed`, and every launch-failure toast appends
+`— details: "LSP: Show Server Log"`.
 
 The palette command **`lsp.showLog`** ("LSP: Show Server Log",
 `plugins/lsp/showlog.go`) opens the most recently modified log — the crashed
