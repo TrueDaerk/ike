@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Backspace/Delete remove a visual selection outright (#979); a selection
+  made while editing returns to insert mode at the deletion point
+  (`/architecture/editor.md`).
+
 - Editor drag selection (#977): press-drag extends a charwise visual
   selection; double-click-drag word-wise (origin word always fully selected),
   triple-click-drag line-wise (`/architecture/editor.md`).
