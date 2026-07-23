@@ -293,6 +293,13 @@ line linewise, and a fourth click cycles back to a plain click. The selection
 is regular visual-mode state, so `cmd+c`/`cmd+x` and any visual operator
 consume it; a later plain click collapses a mouse-made selection back to a
 bare cursor (selections entered with `v`/`V` keep click-extends semantics).
+Holding the button and dragging extends a selection (#977): char-wise from a
+plain press (the press cell anchors on the first cell of travel), word-wise
+after a double-click (the origin word stays fully selected in both
+directions), line-wise after a triple-click; a drag during a `v`/`V`
+selection keeps extending it instead of re-anchoring. The app routes the
+gesture as a `dragEditSelect` drag kind — press starts it, motion events call
+`MouseDrag`, release just drops the drag state (nothing to commit).
 The wheel scrolls the
 viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
 buffer) without touching the cursor or mode — it works the same in Normal,

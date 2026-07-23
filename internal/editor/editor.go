@@ -139,6 +139,9 @@ type Model struct {
 	clickStreak  int
 	clickVisual  bool
 	clickNow     func() time.Time
+	// Origin word of a double-click (#977): a word-wise drag keeps it fully
+	// selected while extending in either direction.
+	dragWord buffer.Range
 
 	// True while the active selection was started with Shift+arrows (#326):
 	// such a selection is GUI-style — an unshifted navigation key drops it

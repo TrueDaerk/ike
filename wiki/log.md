@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Editor drag selection (#977): press-drag extends a charwise visual
+  selection; double-click-drag word-wise (origin word always fully selected),
+  triple-click-drag line-wise (`/architecture/editor.md`).
+
 - Editor multi-click selection (#975): double-click selects the word under the
   pointer, triple-click the whole line — regular visual selections, so
   `cmd+c`/`cmd+x` and visual operators consume them; a fourth or later plain
