@@ -1,6 +1,7 @@
 package explorer
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -189,5 +190,45 @@ func TestTrashLivesInStateDir(t *testing.T) {
 	// Round-trip: the trashed file moves back.
 	if err := os.Rename(tp, target); err != nil {
 		t.Fatalf("restore from trash: %v", err)
+	}
+}
+
+// TestScrollbarThumbDrag guards #1036: a thumb press grabs, drag motion maps
+// the pointer back to a proportional scroll offset; track press still jumps.
+func TestScrollbarThumbDrag(t *testing.T) {
+	root := t.TempDir()
+	for i := 0; i < 40; i++ {
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("f%02d.txt", i)), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := New(root)
+	m.SetSize(24, 10)
+	m.applyScan(scanCmd(root)().(ScanDoneMsg))
+	textW, textH, needV, _, _ := m.viewport()
+	if !needV {
+		t.Fatal("setup: expected vertical overflow")
+	}
+	if !m.ScrollbarHit(textW, 0) || m.ScrollbarHit(textW-1, 0) {
+		t.Fatal("ScrollbarHit must match exactly the bar column")
+	}
+	// Thumb sits at the top initially: pressing row 0 grabs it.
+	if !m.ScrollbarPress(0) {
+		t.Fatal("press on the thumb must start a drag")
+	}
+	m.ScrollbarDrag(textH - 1)
+	if m.offset == 0 {
+		t.Fatal("dragging to the bottom must scroll down")
+	}
+	maxOff := len(m.rows) - textH
+	if m.offset != maxOff {
+		t.Fatalf("offset = %d want max %d", m.offset, maxOff)
+	}
+	// Track press (top, thumb now at the bottom) jumps without dragging.
+	if m.ScrollbarPress(0) {
+		t.Fatal("press on the track must not start a drag")
+	}
+	if m.offset != 0 {
+		t.Fatalf("track press must jump, offset = %d", m.offset)
 	}
 }

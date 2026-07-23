@@ -110,7 +110,9 @@ padding, and title row) before calling the explorer:
 - **Wheel** over the pane scrolls without moving the cursor, like a real
   scrollbar: vertical by default (`ScrollBy`), horizontal with **shift** held or
   the wheel's own left/right buttons (`ScrollXBy`), `wheelLines` per notch.
-- **Left press** on a scrollbar track jumps that axis proportionally.
+- **Left press** on a scrollbar track jumps that axis proportionally; a press
+  on the **vertical thumb grabs it** and dragging follows the pointer
+  (#1036, `dragExplScroll`, mirroring the editor scrollbar #1022).
 
 ## Git status colouring
 
