@@ -202,11 +202,17 @@ func (s *Service) watchGitDir(root string) {
 	}
 }
 
-// Stop ends the watcher goroutine. Safe on a stopped service.
+// Stop ends the watcher goroutine and cancels a pending debounce flush
+// (#1001: an armed timer would otherwise fire once against the stopped
+// service). Safe on a stopped service.
 func (s *Service) Stop() {
 	s.mu.Lock()
 	w := s.w
 	s.w = nil
+	if s.timer != nil {
+		s.timer.Stop()
+		s.timer = nil
+	}
 	s.mu.Unlock()
 	if w != nil {
 		_ = w.Close()

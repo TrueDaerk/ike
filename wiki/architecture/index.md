@@ -18,6 +18,7 @@ Component-level concepts for the IKE codebase.
 * [Pane Registry & Multiple Editors](/architecture/pane-registry.md) - instance registry behind layout leaves, N editors, focused-leaf focus model, open-in-new-pane intent (Roadmap 0037)
 * [Editor Tabs](/architecture/editor-tabs.md) - per-pane ordered document list with one active tab: open appends/activates, close peels tabs before the pane, shared buffers across tabs (Roadmap 0190)
 * [Session Restore](/architecture/session-restore.md) - per-project workspace persistence: open file + cursor, explorer expansion/hidden/cursor, saved on quit
+* [Performance & Diagnostics](/architecture/performance.md) - idle wake rules (demand-armed ticks, off-loop explorer poll, timers die with owners) + opt-in pprof/SIGUSR1 hooks (#1001)
 * [Scratch Files](/architecture/scratch-files.md) - language-aware quick buffers under the user state dir, created from the palette, ordinary files that survive restarts (Roadmap 0280)
 * [Crash Recovery](/architecture/crash-recovery.md) - vim-swapfile-style safety net: debounced full-text snapshots of dirty buffers, atomic writes to the project state dir, restore on next launch (Roadmap 0210)
 * [Settings UI & Menu Bar](/architecture/settings-ui.md) - menu bar over the command registry; settings panel with schema-driven forms and config write-back (Roadmap 0160)

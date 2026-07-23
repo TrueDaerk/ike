@@ -1458,6 +1458,14 @@ func (b *bridge) workspaceClosed(root string) tea.Cmd {
 			delete(b.changeTimer, path)
 		}
 	}
+	// The single-shot debounce timers reference paths under the closed root
+	// (#1001): cancel them too, or they fire once against dead managers.
+	for _, t := range []*time.Timer{b.hlTimer, b.resolveTimer, b.compTimer, b.diagTimer} {
+		if t != nil {
+			t.Stop()
+		}
+	}
+	b.hlTimer, b.resolveTimer, b.compTimer, b.diagTimer = nil, nil, nil, nil
 	prunePaths(b.pendingChange, root)
 	prunePaths(b.diags, root)
 	prunePaths(b.sigActive, root)

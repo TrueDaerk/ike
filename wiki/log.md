@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Idle performance (#1001): explorer auto-refresh polls off-loop (one app
+  wake per minute when quiet instead of one per 2s), single-shot debounce
+  timers are cancelled with their owners (terminal resize, watch flush, LSP
+  bridge), and opt-in diagnostics land via IKE_PPROF / SIGUSR1
+  (`/architecture/performance.md`).
+
 - New "Open File…" (#999, `file.openPath`): palette path picker over
   absolute/`~` paths with tab completion — opens files outside the workspace
   as regular editor tabs (`/architecture/command-palette.md`).

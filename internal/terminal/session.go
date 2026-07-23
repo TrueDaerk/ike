@@ -63,6 +63,7 @@ type Session struct {
 	lastResize    time.Time
 	pendW, pendH  int
 	resizePending bool
+	resizeTimer   *time.Timer // armed trailing apply; cancelled on Close (#1001)
 	// Resize reserve (#807): the fullest known content per screen row. The
 	// upstream emulator hard-truncates the grid on shrink, so before every
 	// applied resize the visible screen is snapshotted here, and after a grow
@@ -347,8 +348,8 @@ func (s *Session) Resize(w, h int) {
 	}
 	s.pendW, s.pendH = w, h
 	s.resizePending = true
+	s.resizeTimer = time.AfterFunc(resizeQuiet, s.flushResize)
 	s.mu.Unlock()
-	time.AfterFunc(resizeQuiet, s.flushResize)
 }
 
 // applyResizeLocked performs the actual PTY + emulator resize; s.mu held.
@@ -1134,6 +1135,10 @@ func (s *Session) Close() {
 // callback takes it.
 func (s *Session) teardown() {
 	s.mu.Lock()
+	if s.resizeTimer != nil {
+		s.resizeTimer.Stop() // a pending trailing resize has nothing to apply (#1001)
+		s.resizeTimer = nil
+	}
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
 	}

@@ -13,6 +13,7 @@ import (
 	"ike/internal/app"
 	"ike/internal/cli"
 	"ike/internal/config"
+	"ike/internal/diag"
 	"ike/internal/host"
 	"ike/internal/project"
 	"ike/internal/registry"
@@ -99,6 +100,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "ike:", err)
 		os.Exit(2)
 	}
+	// Opt-in diagnostics (#1001): IKE_PPROF=<addr> serves net/http/pprof,
+	// SIGUSR1 dumps goroutines + heap to IKE_PPROF_DIR (default temp dir).
+	diag.Start(func(msg string) { fmt.Fprintln(os.Stderr, "ike:", msg) })
 	// Restore the last project (#1000): with project.restore_last enabled and
 	// no explicit open target (CLI paths or stdin count as explicit), the most
 	// recent history entry wins over the current directory — re-anchor before

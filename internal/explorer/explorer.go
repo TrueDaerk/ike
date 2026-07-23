@@ -661,22 +661,38 @@ func (m *Model) schedulePoll() tea.Cmd {
 	walk(m.root)
 	interval := m.pollEvery
 	return func() tea.Msg {
-		time.Sleep(interval)
-		var changed []string
-		for _, s := range stamps {
-			fi, err := os.Stat(s.path)
-			if err != nil {
-				// The directory vanished: its parent's listing changed.
-				changed = append(changed, filepath.Dir(s.path))
-				continue
+		// Idle-friendly loop (#1001): an unchanged tree re-checks in place
+		// instead of waking the program's whole Update/View cycle every
+		// interval — with many panes those idle repaints add up. At most one
+		// wake per pollIdleRounds intervals refreshes the stamp set, so
+		// newly expanded directories join monitoring on that wake.
+		for i := 0; i < pollIdleRounds; i++ {
+			time.Sleep(interval)
+			var changed []string
+			for _, s := range stamps {
+				fi, err := os.Stat(s.path)
+				if err != nil {
+					// The directory vanished: its parent's listing changed.
+					changed = append(changed, filepath.Dir(s.path))
+					continue
+				}
+				if !fi.ModTime().Equal(s.mod) {
+					changed = append(changed, s.path)
+				}
 			}
-			if !fi.ModTime().Equal(s.mod) {
-				changed = append(changed, s.path)
+			if len(changed) > 0 {
+				return pollMsg{changed: changed}
 			}
 		}
-		return pollMsg{changed: changed}
+		return pollMsg{}
 	}
 }
+
+// pollIdleRounds is how many quiet poll intervals run inside one Cmd before
+// the loop wakes the app anyway to refresh its directory-stamp snapshot
+// (#1001): 30 × the 2s default ≈ one idle wake per minute instead of one
+// per interval.
+const pollIdleRounds = 30
 
 // applyPoll re-scans every changed directory still present in the tree and
 // schedules the next poll tick.
