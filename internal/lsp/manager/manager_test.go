@@ -92,14 +92,14 @@ func renameCap(opts fakeOpts) json.RawMessage {
 
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
 func fakeConnectorOpts(opts fakeOpts) Connector {
-	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		cli := rwc{Reader: cr, Writer: cw}
 		go runFakeServer(bufio.NewReader(sr), sw, opts)
 		conn := jsonrpc.NewConn(cli, handler)
 		c := client.New(conn)
-		return c, func() { conn.Close() }, nil
+		return c, func() { conn.Close() }, nil, nil
 	}
 }
 

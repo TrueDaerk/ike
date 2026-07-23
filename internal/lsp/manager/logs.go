@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"ike/internal/lsp/transport"
 )
 
 // logs.go names the per-language server log files (#715): the transport tees
@@ -44,10 +46,14 @@ func appendLog(lang, line string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	// Read-capable so FreshLine can inspect the last byte: the transport tees
+	// stderr on a separate handle, and a crashing server's final write often
+	// has no trailing newline — the marker must not glue onto it (#990).
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
 	if err != nil {
 		return
 	}
 	defer f.Close()
+	transport.FreshLine(f)
 	_, _ = f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " --- " + line + "\n")
 }

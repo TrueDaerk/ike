@@ -58,7 +58,7 @@ func (pipeRWC) Close() error { return nil }
 // handshake with full request capabilities and then answers every request
 // with a JSON-RPC error — the shape of a server-side request failure.
 func erroringConnector() manager.Connector {
-	return func(spec ilsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+	return func(spec ilsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		connCh := make(chan *jsonrpc.Conn, 1)
@@ -83,7 +83,7 @@ func erroringConnector() manager.Connector {
 		})
 		connCh <- srvConn
 		conn := jsonrpc.NewConn(pipeRWC{Reader: cr, Writer: cw}, handler)
-		return client.New(conn), func() { conn.Close(); srvConn.Close() }, nil
+		return client.New(conn), func() { conn.Close(); srvConn.Close() }, nil, nil
 	}
 }
 

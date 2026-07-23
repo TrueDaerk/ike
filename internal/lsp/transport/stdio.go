@@ -144,15 +144,19 @@ func openLog(path string) *os.File {
 	if st, err := os.Stat(path); err == nil && st.Size() > logRotateBytes {
 		_ = os.Rename(path, path+".old")
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	// Read-capable so FreshLine can inspect the last byte before a marker.
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil
 	}
 	return f
 }
 
-// writeLogLine appends one timestamped marker line.
+// writeLogLine appends one timestamped marker line, always starting on a
+// fresh line even when the server's last stderr write had no trailing
+// newline (#990).
 func writeLogLine(f *os.File, line string) {
+	FreshLine(f)
 	_, _ = f.WriteString(time.Now().Format("2006-01-02 15:04:05") + " " + line + "\n")
 }
 

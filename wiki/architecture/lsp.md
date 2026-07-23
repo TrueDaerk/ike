@@ -633,6 +633,16 @@ above 1 MiB rotate to `<path>.old` on the next start; the in-memory ring
 buffer (`Process.Stderr`) is unchanged. Logging is best-effort: any file
 error silently degrades to today's behaviour.
 
+Markers always start on a fresh line (#990): both the transport's
+header/footer and the manager's `appendLog` pad a newline first when the
+server's last stderr write had none (`transport.FreshLine`), so a crash dump
+that ends mid-line cannot swallow the `--- exited` footer or the next start's
+header. On a crash the manager also extracts the decisive error from the
+stderr tail (`transport.ErrorLine`: scanning backwards for the last short
+non-stack-frame line naming an error — Node buries `SomeError: message`
+under a megabyte minified source line) and names it in the crash toast, the
+`server crashed:` log marker and the disabled-after-repeated-crashes toast.
+
 The palette command **`lsp.showLog`** ("LSP: Show Server Log",
 `plugins/lsp/showlog.go`) opens the most recently modified log — the crashed
 server's, in the common case — in a new editor pane, and points at the logs

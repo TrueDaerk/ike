@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- LSP crash logs keep the actual error (#990): log markers always start on a
+  fresh line, and the decisive stderr error line (`transport.ErrorLine`) is
+  named in the crash/disable toasts and the crash log marker
+  (`/architecture/lsp.md`).
+
 - Stale LSP diagnostics no longer outlive their server (#994): disabling
   after repeated crashes, `StopLang` and `Shutdown` clear the dead server's
   publishes from open editors; restart attempts keep them

@@ -18,8 +18,10 @@ import (
 const maxRestarts = 3
 
 // restart respawns a crashed server and re-opens its documents. It runs on its
-// own goroutine (off watchExit).
-func (m *Manager) restart(old *server, docs []*document) {
+// own goroutine (off watchExit). errLine is the decisive error extracted from
+// the crash's stderr tail ("" when none) — the terminal disable names it so
+// the user sees why, not just that, the server went away (#990).
+func (m *Manager) restart(old *server, docs []*document, errLine string) {
 	k := old.key()
 	m.mu.Lock()
 	m.restarts[k]++
@@ -30,7 +32,11 @@ func (m *Manager) restart(old *server, docs []*document) {
 		// Persistent state for the status line, plus an error toast so the user
 		// notices the subsystem went away — pointing at the log (#715).
 		m.status(old.lang, old.lang+" language server disabled", lsp.ServerState)
-		m.status(old.lang, old.lang+" language server disabled after repeated crashes — details: \"LSP: Show Server Log\"", lsp.ServerEventError)
+		reason := ""
+		if errLine != "" {
+			reason = " (" + errLine + ")"
+		}
+		m.status(old.lang, old.lang+" language server disabled after repeated crashes"+reason+" — details: \"LSP: Show Server Log\"", lsp.ServerEventError)
 		appendLog(old.lang, "disabled after repeated crashes")
 		// Nobody maintains the dead server's findings anymore — drop them
 		// from every affected editor (#994).
