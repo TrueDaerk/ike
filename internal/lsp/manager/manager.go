@@ -1262,9 +1262,16 @@ func settingsSection(s map[string]any, section string) any {
 	for _, part := range strings.Split(section, ".") {
 		mm, ok := cur.(map[string]any)
 		if !ok {
-			return nil
+			return map[string]any{}
 		}
 		cur = mm[part]
+	}
+	if cur == nil {
+		// An absent section answers an empty object, never null (#1061):
+		// vscode-css-language-server reads options off the answer and
+		// silently stops validating when it gets null — VS Code effectively
+		// provides a defaults object, so {} is what servers are built for.
+		return map[string]any{}
 	}
 	return cur
 }
