@@ -34,10 +34,12 @@ const requestTimeout = 5 * time.Second
 
 // Connector dials a server: it creates a connection (with the manager's handler
 // installed for notifications/requests) and returns the client plus a stop
-// function. The default production connector spawns a process; tests inject an
-// in-memory pipe. handler must be wired into the connection at creation so
-// notifications are not missed during initialize.
-type Connector func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (cl *client.Client, stop func(), err error)
+// function. stderr, when non-nil, returns the server's captured stderr tail —
+// the crash path extracts the decisive error line from it (#990). The default
+// production connector spawns a process; tests inject an in-memory pipe.
+// handler must be wired into the connection at creation so notifications are
+// not missed during initialize.
+type Connector func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (cl *client.Client, stop func(), stderr func() string, err error)
 
 // Callbacks deliver async server output and status to the host (the bridge wires
 // these to host.Send). All run on manager goroutines and must not block.
@@ -91,6 +93,7 @@ type server struct {
 	root    string
 	cl      *client.Client
 	stop    func()
+	stderr  func() string // captured stderr tail; nil for in-memory connectors
 	spec    lsp.ServerSpec
 	closing bool // set before a deliberate stop so watchExit does not restart
 }
@@ -132,7 +135,7 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 }
 
 // processConnector is the default connector: spawn the server binary over stdio.
-func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 	proc, err := transport.Start(transport.Spec{
 		Command: spec.Command,
 		Args:    spec.Args,
@@ -141,7 +144,7 @@ func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler)
 		LogPath: LogPath(spec.Language),
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	conn := jsonrpc.NewConn(proc.Conn(), handler)
 	cl := client.New(conn)
@@ -149,7 +152,7 @@ func processConnector(spec lsp.ServerSpec, root string, handler jsonrpc.Handler)
 		_ = conn.Close()
 		_ = proc.Stop()
 	}
-	return cl, stop, nil
+	return cl, stop, proc.Stderr, nil
 }
 
 func key(lang, root string) string { return lang + "\x00" + root }
@@ -1059,11 +1062,11 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 		Notify:  func(method string, params json.RawMessage) { m.onNotify(lang, method, params) },
 		Request: func(id jsonrpc.ID, method string, params json.RawMessage) { m.onRequest(k, id, method, params) },
 	}
-	cl, stop, err := m.connect(spec, root, handler)
+	cl, stop, stderr, err := m.connect(spec, root, handler)
 	if err != nil {
 		return nil, err
 	}
-	srv := &server{lang: lang, root: root, cl: cl, stop: stop, spec: spec}
+	srv := &server{lang: lang, root: root, cl: cl, stop: stop, stderr: stderr, spec: spec}
 	// Register before Initialize: a server may issue workspace/configuration as
 	// soon as it receives our "initialized" notification (sent inside
 	// Initialize), and onRequest must find the server to answer it with the
@@ -1114,9 +1117,21 @@ func (m *Manager) watchExit(srv *server) {
 	if deliberate {
 		return
 	}
-	m.status(srv.lang, srv.lang+" language server crashed", lsp.ServerEventWarn)
-	appendLog(srv.lang, "server crashed")
-	go m.restart(srv, docs)
+	// Name the concrete error when the stderr tail yields one (#990) — both
+	// in the toast and as a log marker, so neither reader has to fish the
+	// message out of a raw dump.
+	tail := ""
+	if srv.stderr != nil {
+		tail = transport.ErrorLine(srv.stderr())
+	}
+	text, marker := srv.lang+" language server crashed", "server crashed"
+	if tail != "" {
+		text += ": " + tail
+		marker += ": " + tail
+	}
+	m.status(srv.lang, text, lsp.ServerEventWarn)
+	appendLog(srv.lang, marker)
+	go m.restart(srv, docs, tail)
 }
 
 // onNotify routes a server notification. Only publishDiagnostics is consumed in

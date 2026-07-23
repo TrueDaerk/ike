@@ -54,7 +54,7 @@ func (r *diagRecorder) sawThenCleared(path string) bool {
 // diagnostic on didOpen and immediately drop the connection — every single
 // time, so the manager runs through all restart attempts into the disable.
 func crashingDiagConnector() Connector {
-	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		cli := rwc{Reader: cr, Writer: cw}
@@ -94,7 +94,7 @@ func crashingDiagConnector() Connector {
 			}
 		}()
 		conn := jsonrpc.NewConn(cli, handler)
-		return client.New(conn), func() { conn.Close() }, nil
+		return client.New(conn), func() { conn.Close() }, nil, nil
 	}
 }
 

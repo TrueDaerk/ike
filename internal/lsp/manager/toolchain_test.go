@@ -25,7 +25,7 @@ func (fakeToolchain) Detect(root string) (map[string]any, bool) {
 // capturingConnector runs a fake server that forwards each initialize's
 // initializationOptions to a channel, so a test can assert what reached the server.
 func capturingConnector(initOpts chan<- string) Connector {
-	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		cli := rwc{Reader: cr, Writer: cw}
@@ -55,7 +55,7 @@ func capturingConnector(initOpts chan<- string) Connector {
 			}
 		}()
 		conn := jsonrpc.NewConn(cli, handler)
-		return client.New(conn), func() { conn.Close() }, nil
+		return client.New(conn), func() { conn.Close() }, nil, nil
 	}
 }
 
@@ -64,7 +64,7 @@ func capturingConnector(initOpts chan<- string) Connector {
 // client's response payload to a channel. It proves the client both advertises
 // the capability and answers with the toolchain-detected settings (#563).
 func configConnector(section string, gotResult chan<- string) Connector {
-	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), error) {
+	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
 		cr, sw := io.Pipe()
 		sr, cw := io.Pipe()
 		cli := rwc{Reader: cr, Writer: cw}
@@ -96,7 +96,7 @@ func configConnector(section string, gotResult chan<- string) Connector {
 			}
 		}()
 		conn := jsonrpc.NewConn(cli, handler)
-		return client.New(conn), func() { conn.Close() }, nil
+		return client.New(conn), func() { conn.Close() }, nil, nil
 	}
 }
 
