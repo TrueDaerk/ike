@@ -788,3 +788,49 @@ func TestSessionCwdFollowsOSC7(t *testing.T) {
 	}
 	s.Close()
 }
+
+// TestBusyReflectsForegroundWork guards #986: an idle shell is not busy, a
+// foreground child (cat) makes it busy, ending the child clears it again.
+func TestBusyReflectsForegroundWork(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+
+	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	for _, r := range "cat\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "cat owns the foreground", func() bool { return s.Busy() })
+	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl}) // EOF ends cat
+	waitFor(t, "back at the prompt", func() bool { return !s.Busy() })
+}
+
+// TestBusyCommandSession: a command session is busy exactly while its process
+// runs; a dead session is never busy.
+func TestBusyCommandSession(t *testing.T) {
+	c := &collector{}
+	s, err := StartCommandSession("terminal",
+		[]string{"/bin/sh", "-c", "sleep 30"}, t.TempDir(), 80, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	if !s.Busy() {
+		t.Fatal("running command session must be busy")
+	}
+	s.Close()
+	if s.Busy() {
+		t.Fatal("closed session must not be busy")
+	}
+}
+
+// TestSendEOFExitsIdleShell: the model-level EOF (#986, reserved cmd+w) ends
+// an idle shell, raising ExitedMsg for the app's close path.
+func TestSendEOFExitsIdleShell(t *testing.T) {
+	c := &collector{}
+	s := startSh(t, c)
+	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
+	waitFor(t, "shell exit", func() bool {
+		return c.has(func(m tea.Msg) bool { _, ok := m.(ExitedMsg); return ok })
+	})
+}

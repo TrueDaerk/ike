@@ -297,6 +297,9 @@ type Model struct {
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
 	closePending *pendingClose
+	// termClosePending is true while the busy-terminal close guard (#986)
+	// owns the keyboard.
+	termClosePending bool
 
 	// explorerRatio remembers the hidden explorer's split ratio so
 	// explorer.toggle restores the tree at its prior width (#268); 0 means
@@ -1571,6 +1574,14 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// right with a fresh terminal (#982); outside terminals the chord
 		// keeps its global binding (editor.duplicateLine).
 		m.newTerminalSplitRight()
+		return true, m, nil
+	case "cmd+w":
+		// cmd+w closes the focused terminal (#986): an idle shell gets an
+		// EOF (it exits and the regular exit path closes the pane/tab); a
+		// busy one raises the confirmation guard first. ctrl+w stays with
+		// the shell (delete word); outside terminals cmd+w keeps its
+		// global binding (editor.closeTab).
+		m.requestTerminalClose()
 		return true, m, nil
 	}
 	return false, m, nil
@@ -3890,6 +3901,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
 		if m.closePromptOpen() {
 			return m.updateClosePrompt(msg)
+		}
+		// The busy-terminal close guard (#986): enter / esc answer it.
+		if m.termClosePromptOpen() {
+			return m.updateTermClosePrompt(msg)
 		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by
