@@ -3,8 +3,11 @@ package explorer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 )
@@ -99,5 +102,56 @@ func TestSortModes(t *testing.T) {
 	m.Configure(host.MapConfig{"explorer.sort": "bogus"})
 	if m.sort != "modified" {
 		t.Fatalf("sort = %q after bogus value", m.sort)
+	}
+}
+
+// TestFileOpErrorShowsDialogOverIntactTree guards #1030: a failed op opens a
+// dismissable dialog; the tree stays rendered and navigable after dismissal.
+func TestFileOpErrorShowsDialogOverIntactTree(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := New(root)
+	m.SetSize(40, 12)
+	m.applyScan(scanCmd(root)().(ScanDoneMsg))
+	m.createEntry(root, "a.txt", false) // already exists → error dialog
+	if !m.Prompting() {
+		t.Fatal("failed op must open the error dialog")
+	}
+	v := m.View()
+	if !strings.Contains(v, "a.txt") {
+		t.Fatalf("tree must stay rendered under the dialog:\n%s", v)
+	}
+	if !strings.Contains(v, "already exists") || !strings.Contains(v, "any key to dismiss") {
+		t.Fatalf("dialog content missing:\n%s", v)
+	}
+	// Any key dismisses and clears the error; the tree is plain again.
+	m.handlePromptKey(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if m.Prompting() || m.err != nil {
+		t.Fatal("dismiss must close the dialog and clear the error")
+	}
+	if v := m.View(); strings.Contains(v, "already exists") {
+		t.Fatalf("error must be gone after dismiss:\n%s", v)
+	}
+}
+
+// TestScanErrorBannerKeepsTree guards #1030: a scan error renders as a
+// bottom banner over the intact tree, not a full-view replacement.
+func TestScanErrorBannerKeepsTree(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "a.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := New(root)
+	m.SetSize(40, 8)
+	m.applyScan(scanCmd(root)().(ScanDoneMsg))
+	m.applyScan(ScanDoneMsg{Path: root, Err: os.ErrPermission})
+	v := m.View()
+	if !strings.Contains(v, "a.txt") || !strings.Contains(v, "error:") {
+		t.Fatalf("want tree + banner:\n%s", v)
+	}
+	if m.Prompting() {
+		t.Fatal("a scan error must not open a modal (poll spam)")
 	}
 }

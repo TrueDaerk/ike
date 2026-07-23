@@ -121,6 +121,16 @@ visible on collapsed subtrees. The app threads each vcs status snapshot into
 the tree via `SetVCS`; outside a git repository nothing changes. See
 [VCS / Git Integration](/architecture/vcs.md).
 
+## Errors (#1030)
+
+File-operation errors (create/rename/move/delete/undo) open a **dismissable
+dialog** over the intact tree — the project convention for actionable pane
+states — with the message in the theme's Error colour; any key or click
+dismisses and clears it. Scan/poll errors render as a themed one-line banner
+on the pane's last row instead (a modal would re-open on every auto-refresh
+poll); the next successful scan clears it. The tree is never replaced by raw
+error text.
+
 ## Row highlighting
 
 A row's **base** style is the plain foreground (#1051, suffix-tint model): the

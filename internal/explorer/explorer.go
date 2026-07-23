@@ -409,14 +409,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RenamePathMsg:
 		info, err := os.Lstat(msg.Path)
 		if err != nil {
-			m.err = err
+			m.fail(err)
 			return m, nil
 		}
 		return m, m.renameEntry(msg.Path, msg.Name, info.IsDir())
 	case MoveToMsg:
 		info, err := os.Lstat(msg.Path)
 		if err != nil {
-			m.err = err
+			m.fail(err)
 			return m, nil
 		}
 		return m, m.moveEntry(msg.Path, msg.TargetDir, info.IsDir())
@@ -1182,9 +1182,6 @@ func (m Model) nodeVCSStatus(n *node) vcs.FileStatus {
 // View renders the tree, clipping each row to the horizontal window and drawing
 // vertical/horizontal scrollbars whenever the content overflows the pane.
 func (m Model) View() string {
-	if m.err != nil {
-		return "error: " + m.err.Error()
-	}
 	if len(m.rows) == 0 {
 		// A palette slot, not terminal Faint, so light themes render the
 		// placeholder legibly (#1058).
@@ -1273,6 +1270,19 @@ func (m Model) View() string {
 	}
 
 	out := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	if m.err != nil && m.prompt == nil {
+		// A non-modal (scan/poll) error keeps the tree and takes the last
+		// row as a themed banner (#1030) — never a full-view replacement;
+		// the next successful scan clears it.
+		banner := lipgloss.NewStyle().Foreground(m.theme().Error).
+			Render(ansi.Truncate("error: "+m.err.Error(), maxz(m.width), "…"))
+		if n := len(lines); n > 0 {
+			lines[n-1] = banner
+			out = lipgloss.JoinVertical(lipgloss.Left, lines...)
+		} else {
+			out = banner
+		}
+	}
 	if m.prompt != nil {
 		// Place, not Center: Center drops a box that does not fit, which would
 		// leave an invisible prompt capturing keys (#373). promptBox fits the
