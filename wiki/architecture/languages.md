@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T21:30:00Z
 ---
 
 # Language Registry
@@ -324,7 +324,7 @@ projects so pyproject.toml and uv.lock stay in sync — see
 | CSS/SCSS/LESS | vscode-css-language-server (`vscode-langservers-extracted`) | Same package, property/value data included. |
 | SQL | sql-language-server | Unchanged. |
 | JSON | vscode-json-language-server (`vscode-langservers-extracted`) | Same npm package as HTML/CSS — no new install step; JSON-Schema-store + `$schema` completion for free. ndjson/jsonl: no server (multi-document streams are an error to it). |
-| TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics; also available via cargo/brew. IKE's own config is TOML. |
+| TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics. IKE's own config is TOML. **Caveat:** the Homebrew `taplo` formula is built *without* the LSP feature and dies at startup; IKE recognizes that failure and points at `npm install -g @taplo/cli` (or `cargo install taplo-cli --features lsp`), #1065. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 | Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH. |
