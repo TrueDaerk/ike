@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- ctrl+c discards the terminal's spooled output backlog (#989): aborted
+  commands stop rendering immediately instead of replaying up to 16 MiB of
+  pre-abort output (`/architecture/terminal.md`).
+
 - PHP and Go ship `injections.scm` (#995): guess-gated SQL fragments in PHP
   strings/heredoc/nowdoc and Go raw/interpreted string literals — highlighting
   and fragment LSP now cover both hosts (`/architecture/highlighting.md`).

@@ -66,6 +66,21 @@ func (sp *spool) take() (chunk []byte, ok bool) {
 	return chunk, true
 }
 
+// discard drops every buffered chunk and reports how many bytes were dropped
+// (#989): after an interrupt the backlog is stale output produced before the
+// abort — replaying it makes the process look alive after it is gone. Writers
+// blocked on the cap are released; a chunk already taken by the consumer is
+// out of reach and still lands.
+func (sp *spool) discard() (dropped int) {
+	sp.mu.Lock()
+	dropped = sp.size
+	sp.chunks = nil
+	sp.size = 0
+	sp.mu.Unlock()
+	sp.hasRoom.Broadcast()
+	return dropped
+}
+
 // close wakes both sides; pending chunks still drain through take.
 func (sp *spool) close() {
 	sp.mu.Lock()

@@ -632,9 +632,21 @@ func (s *Session) flushResize() {
 // SendKey encodes one key press for the child, honouring the emulator's
 // input modes (application cursor keys, etc.); the write loop delivers it.
 func (s *Session) SendKey(k vt.KeyPressEvent) {
-	if !s.closed.Load() {
-		s.em.SendKey(k)
+	if s.closed.Load() {
+		return
 	}
+	if k.Code == 'c' && k.Mod == vt.ModCtrl {
+		// ctrl+c interrupts the foreground process, so the spooled backlog is
+		// output from before the abort — drop it instead of replaying it, or
+		// a fast producer (yes, find /) keeps "running" on screen long after
+		// SIGINT landed (#989). Bytes still in the kernel TTY queue arrive
+		// after the discard and render normally (the ^C echo, the prompt).
+		if s.out.discard() > 0 {
+			s.version.Add(1)
+			s.notify()
+		}
+	}
+	s.em.SendKey(k)
 }
 
 // trackMouseMode records the child flipping a DEC mouse-reporting mode; other
