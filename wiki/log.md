@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Explorer suffix-tint colour model (#1051, closes #1054): the colour channel
+  belongs to the VCS status (whole row + right-edge `M`/`A`/`U`… letter as a
+  non-colour cue); filetype colours tint only the extension of clean files;
+  directories render uncoloured (`/architecture/explorer.md`).
+
 - Explorer render polish (#1050/#1055/#1056/#1058/#1059): indent guides in
   the semantic `IndentGuide` slot (editor parity) instead of each row's
   filetype/VCS hue; hover only adds its background, preserving the

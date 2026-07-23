@@ -1,11 +1,10 @@
 package explorer
 
 import (
+	"image/color"
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"charm.land/lipgloss/v2"
 
 	"ike/internal/theme"
 )
@@ -23,31 +22,28 @@ func defaultColors() colorTable {
 	return colorTable(theme.Default().Files)
 }
 
-// style resolves a node to its base lipgloss style. Resolution order matches the
-// roadmap: exact glob match (globs sorted for determinism), then the "dir"
-// fallback for directories, then a bare-extension match, then "default".
-func (t colorTable) style(n *node) lipgloss.Style {
-	base := lipgloss.NewStyle()
+// suffixColor resolves the filetype tint for a file's extension suffix
+// (#1051): exact glob match first (globs sorted for determinism), then a
+// bare-extension match. Directories and files without a match return nil —
+// the suffix-tint model colours only the extension of clean files; the "dir"
+// and "default" keys of older configs are accepted but no longer paint whole
+// rows (the row body renders in the plain foreground, the colour channel
+// belongs to the VCS status).
+func (t colorTable) suffixColor(n *node) color.Color {
+	if n.isDir {
+		return nil
+	}
 	for _, pat := range t.globs() {
 		if ok, _ := filepath.Match(pat, n.name); ok {
-			return base.Foreground(theme.Resolve(t[pat]))
+			return theme.Resolve(t[pat])
 		}
-	}
-	if n.isDir {
-		if c, ok := t["dir"]; ok {
-			return base.Foreground(theme.Resolve(c))
-		}
-		return base
 	}
 	if ext := strings.TrimPrefix(filepath.Ext(n.name), "."); ext != "" {
 		if c, ok := t[ext]; ok {
-			return base.Foreground(theme.Resolve(c))
+			return theme.Resolve(c)
 		}
 	}
-	if c, ok := t["default"]; ok {
-		return base.Foreground(theme.Resolve(c))
-	}
-	return base
+	return nil
 }
 
 // globs returns the glob keys (those containing a wildcard) sorted, so glob

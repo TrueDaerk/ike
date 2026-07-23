@@ -27,21 +27,29 @@ func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
 		"*.test.go": "magenta",
 		"Makefile":  "yellow", // a glob-free exact name only matches via the glob path if it has wildcards; here it does not, so it never matches a non-".ext" file
 	}
+	// #1051 suffix-tint model: only ext/glob keys resolve — dirs and files
+	// without a match return nil (rows render in the plain foreground; the
+	// legacy "dir"/"default" keys are accepted but no longer paint rows).
 	cases := []struct {
 		name  string
 		isDir bool
-		want  string // resolved foreground (lipgloss color value)
+		want  string // resolved suffix tint; "" = no tint
 	}{
 		{"main.go", false, "#5fd7d7"},      // ext "go" -> cyan
 		{"main.test.go", false, "#d787ff"}, // glob "*.test.go" wins over ext "go" -> magenta
-		{"sub", true, "#5fafff"},           // dir -> blue
-		{"README", false, "#e4e4e4"},       // no ext, no glob -> default white
-		{"notes.txt", false, "#e4e4e4"},    // unknown ext -> default white
+		{"sub", true, ""},                  // dir -> no tint (#1051/#1054)
+		{"README", false, ""},              // no ext, no glob -> no tint
+		{"notes.txt", false, ""},           // unknown ext -> no tint
 	}
 	for _, c := range cases {
 		n := &node{name: c.name, isDir: c.isDir}
-		if got := fg(ct.style(n)); got != c.want {
-			t.Errorf("%s: foreground = %q want %q", c.name, got, c.want)
+		got := ""
+		if col := ct.suffixColor(n); col != nil {
+			r, g, b, _ := col.RGBA()
+			got = fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+		}
+		if got != c.want {
+			t.Errorf("%s: suffix tint = %q want %q", c.name, got, c.want)
 		}
 	}
 }
@@ -165,8 +173,13 @@ func TestConfigureReadsExplorerSection(t *testing.T) {
 	if m.indent != 4 {
 		t.Errorf("indent = %d want 4", m.indent)
 	}
-	if got := fg(m.colors.style(&node{name: "x.go"})); got != "#ff5555" {
-		t.Errorf("go colour = %q want #ff5555 (red)", got)
+	if col := m.colors.suffixColor(&node{name: "x.go"}); col == nil {
+		t.Error("go suffix tint missing")
+	} else {
+		r, g, b, _ := col.RGBA()
+		if got := fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8); got != "#ff5555" {
+			t.Errorf("go colour = %q want #ff5555 (red)", got)
+		}
 	}
 }
 
