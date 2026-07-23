@@ -495,7 +495,7 @@ move it; a fragment that closes (or whose language is stopped) drops its
 diagnostics from the merged view immediately, without waiting for a server
 publish. A
 fragment language with no configured server degrades silently. The
-`sql` language plugin registers `sql-language-server` (also serving plain
+`sql` language plugin registers `sqls` (also serving plain
 `.sql` files) so the pipeline works out of the box.
 
 ## Design rules

@@ -7,6 +7,11 @@
   build: npm install -g @taplo/cli …" in the failure toast, via a
   `knownLaunchFailures` table on top of the #1062 stderr extraction
   (`/architecture/lsp.md`, `/architecture/languages.md`).
+- SQL default server is now sqls (#1066): sql-language-server crashes on
+  startup under Node ≥ 26 (`ERR_PACKAGE_PATH_NOT_EXPORTED`) and upstream is
+  unmaintained; sqls is a maintained Go binary speaking LSP over stdio with
+  no args, installed via `go install github.com/sqls-server/sqls@latest`,
+  root markers `.sqls`/`.git` (`/architecture/languages.md`).
 
 - Startup-crash notifications name the real error (#1062): a server dying
   before the handshake surfaces its decisive stderr line (taplo's "the LSP
