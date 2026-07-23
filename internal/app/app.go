@@ -4125,7 +4125,7 @@ func (m Model) openPath(path string, newPane bool) (tea.Model, tea.Cmd) {
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok {
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
-		key := m.activeEditorKey()
+		key := m.fileEditorKey()
 		// A file already open in ANY editor pane focuses that pane's tab
 		// instead of opening a duplicate in the current pane (#930) — the
 		// #272 same-pane dedupe extended across panes, like re-opened diffs
@@ -4611,6 +4611,30 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // editor model: the pane's active tab can be a terminal (#573, #836), in which
 // case Instance.Editor() is nil — callers needing the model must nil-check
 // (#931).
+// fileEditorKey returns the editor pane a *file* open lands in (#998): like
+// activeEditorKey, but a pane only qualifies when it actually edits files —
+// an empty editor or at least one editor tab. A terminal-only tab host
+// (a converted terminal pane, #983) or a dedicated terminal/tool pane never
+// takes a file tab; "" makes the caller spawn a fresh editor pane.
+func (m Model) fileEditorKey() string {
+	editsFiles := func(inst *pane.Instance) bool {
+		return inst != nil && inst.Kind() == pane.KindEditor &&
+			(inst.IsEmptyEditor() || len(inst.Editors()) > 0)
+	}
+	if inst := m.activeWS().Panes.FocusedInstance(); editsFiles(inst) {
+		return m.activeWS().Panes.Focused()
+	}
+	if m.recentEditor != "" && editsFiles(m.activeWS().Panes.Get(m.recentEditor)) {
+		return m.recentEditor
+	}
+	for _, key := range m.leafOrder() {
+		if editsFiles(m.activeWS().Panes.Get(key)) {
+			return key
+		}
+	}
+	return ""
+}
+
 func (m Model) activeEditorKey() string {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
 		return m.activeWS().Panes.Focused()
