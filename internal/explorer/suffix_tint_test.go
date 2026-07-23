@@ -100,3 +100,12 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// TestDirTakesDominantSubtreeStatus guards #1053 at the explorer level.
+func TestDirTakesDominantSubtreeStatus(t *testing.T) {
+	m := New(".")
+	m.SetVCS(vcs.NewSnapshot(".", map[string]vcs.FileStatus{"assets/logo.png": vcs.StatusUntracked}))
+	if got := m.nodeVCSStatus(&node{name: "assets", path: "assets", isDir: true}); got != vcs.StatusUntracked {
+		t.Fatalf("untracked-only dir status = %v want untracked", got)
+	}
+}

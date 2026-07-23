@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Dirty directories take their subtree's dominant VCS status (#1053):
+  `Snapshot.DirStatus` propagates the strongest child signal (conflicted >
+  modified > added > untracked), so untracked-only folders stop reading as
+  modified-blue and parent/child hues agree (`/architecture/explorer.md`).
+
 - One selection recipe across the list panes (#1052, #1034): the cursor adds
   Selection background + bold and keeps the semantic foreground (explorer
   aligned to structure/problems/VCS); unfocused panes keep a muted

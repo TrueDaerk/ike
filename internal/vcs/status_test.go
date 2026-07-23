@@ -184,3 +184,29 @@ func TestLoadRealRepo(t *testing.T) {
 		t.Errorf("Refresh outside a repo = %#v", msg)
 	}
 }
+
+// TestDirStatusDominance guards #1053: a directory reports the strongest
+// status in its subtree, so untracked-only dirs stop reading as modified.
+func TestDirStatusDominance(t *testing.T) {
+	s := NewSnapshot("/repo", map[string]FileStatus{
+		"only/new.txt":    StatusUntracked,
+		"mixed/new.txt":   StatusUntracked,
+		"mixed/edit.go":   StatusModified,
+		"staged/fresh.go": StatusAdded,
+	})
+	cases := map[string]FileStatus{
+		"only":   StatusUntracked,
+		"mixed":  StatusModified,
+		"staged": StatusAdded,
+		"":       StatusModified, // root: strongest across the tree
+		"clean":  StatusNone,
+	}
+	for dir, want := range cases {
+		if got := s.DirStatus(dir); got != want {
+			t.Errorf("DirStatus(%q) = %v want %v", dir, got, want)
+		}
+	}
+	if !s.DirDirty("only") || s.DirDirty("clean") {
+		t.Error("DirDirty must mirror DirStatus != none")
+	}
+}

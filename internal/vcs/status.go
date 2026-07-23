@@ -31,7 +31,7 @@ func gitError(err error, stderr string) error {
 func parseStatus(out []byte) *Snapshot {
 	snap := &Snapshot{
 		Files: map[string]FileStatus{},
-		dirs:  map[string]bool{},
+		dirs:  map[string]FileStatus{},
 	}
 	oid := ""
 	tokens := bytes.Split(out, []byte{0})
@@ -98,7 +98,9 @@ func (s *Snapshot) addEntry(p string, st FileStatus, xy string) {
 	s.add(p, st)
 }
 
-// add records one changed file and tints every ancestor directory.
+// add records one changed file and tints every ancestor directory with the
+// dominant status of its subtree (#1053): a directory holding only untracked
+// files reads untracked, not modified, so parent and child hues agree.
 func (s *Snapshot) add(p string, st FileStatus) {
 	if p == "" || st == StatusNone {
 		return
@@ -108,14 +110,31 @@ func (s *Snapshot) add(p string, st FileStatus) {
 		if dir == "." || dir == "/" {
 			dir = ""
 		}
-		if s.dirs[dir] {
-			return
+		if statusRank(st) > statusRank(s.dirs[dir]) {
+			s.dirs[dir] = st
 		}
-		s.dirs[dir] = true
 		if dir == "" {
 			return
 		}
 	}
+}
+
+// statusRank orders statuses for directory propagation: the strongest signal
+// wins — conflicts over content changes over additions over untracked.
+func statusRank(st FileStatus) int {
+	switch st {
+	case StatusConflicted:
+		return 5
+	case StatusModified, StatusRenamed, StatusDeleted:
+		return 4
+	case StatusAdded:
+		return 3
+	case StatusUntracked:
+		return 2
+	case StatusNone:
+		return 0
+	}
+	return 1
 }
 
 // statusFromXY folds the two-letter staged/unstaged pair into one badge.

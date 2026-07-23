@@ -125,7 +125,7 @@ the tree via `SetVCS`; outside a git repository nothing changes. See
 
 A row's **base** style is the plain foreground (#1051, suffix-tint model): the
 colour channel belongs to the **VCS status** — a changed file reads entirely in
-its status hue, JetBrains-style, and carries a one-cell status letter
+its status hue, JetBrains-style — directories take their subtree's dominant status (#1053), so an untracked-only folder reads untracked, not modified — and carries a one-cell status letter
 (`M`/`R`/`A`/`U`/`D`/`C`) at the row's right edge as a non-colour cue for
 ANSI256 terminals and colour-blind users. On **clean files** only the extension
 suffix takes the filetype colour (`colors.suffixColor`, resolved from the
