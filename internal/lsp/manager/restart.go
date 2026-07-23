@@ -58,12 +58,12 @@ func (m *Manager) restart(old *server, docs []*document, errLine string) {
 		m.mu.Lock()
 		text := strings.Join(d.lines, "\n")
 		version := d.version
-		path, lang := d.path, d.lang
+		path, langID := d.path, d.langID
 		m.mu.Unlock()
 		_ = srv.cl.DidOpen(protocol.DidOpenTextDocumentParams{
 			TextDocument: protocol.TextDocumentItem{
 				URI:        protocol.PathToURI(path),
-				LanguageID: lang,
+				LanguageID: langID,
 				Version:    version,
 				Text:       text,
 			},

@@ -27,6 +27,40 @@ func TestRegisterAndLookup(t *testing.T) {
 	}
 }
 
+// TestServerDelegation covers the ServerLanguage seam (#1063): a language may
+// delegate its documents to another language's server while keeping its own ID
+// as the wire languageId.
+func TestServerDelegation(t *testing.T) {
+	Register(Language{ID: "delehost", Server: &ServerSpec{Language: "delehost", Command: "fake"}})
+	Register(Language{ID: "deleaux", Filenames: []string{"Delefile"}, ServerLanguage: "delehost"})
+	Register(Language{ID: "deleorphan", ServerLanguage: "no-such-language"})
+	Register(Language{ID: "deleplain"})
+
+	host, _ := ByID("delehost")
+	aux, _ := ByID("deleaux")
+	orphan, _ := ByID("deleorphan")
+	plain, _ := ByID("deleplain")
+
+	if got := host.ServerLang(); got != "delehost" {
+		t.Errorf("host ServerLang = %q", got)
+	}
+	if got := aux.ServerLang(); got != "delehost" {
+		t.Errorf("aux ServerLang = %q, want delehost", got)
+	}
+	if !host.HasServer() {
+		t.Error("host HasServer = false")
+	}
+	if !aux.HasServer() {
+		t.Error("aux HasServer = false, want true via delegate")
+	}
+	if orphan.HasServer() {
+		t.Error("orphan HasServer = true, want false (delegate unknown)")
+	}
+	if plain.HasServer() {
+		t.Error("plain HasServer = true, want false")
+	}
+}
+
 func TestComments(t *testing.T) {
 	Register(Language{
 		ID:           "commented",

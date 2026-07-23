@@ -59,4 +59,32 @@ func init() {
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",
 	})
+
+	// Module metadata files (#1063): matched by exact base name, delegated to
+	// the "go" server — gopls fully supports them under the wire languageIds
+	// "go.mod" / "go.work" / "go.sum" (each language's own ID), attaching to
+	// the same instance/root as the module's .go files. Registered with plain
+	// lang.Register, not register.Language: they are part of the go plugin
+	// (its lang-go toggle governs the shared server), and a dotted plugin id
+	// would splinter the plugins.<id>.enabled config key. No Tree-sitter
+	// grammar — no gomod grammar is vendored — so they render as plain text.
+	lang.Register(lang.Language{
+		ID:             "go.mod",
+		Filenames:      []string{"go.mod"},
+		ServerLanguage: "go",
+		LineComment:    "//",
+		IndentAfter:    []string{"("},
+	})
+	lang.Register(lang.Language{
+		ID:             "go.work",
+		Filenames:      []string{"go.work"},
+		ServerLanguage: "go",
+		LineComment:    "//",
+		IndentAfter:    []string{"("},
+	})
+	lang.Register(lang.Language{
+		ID:             "go.sum",
+		Filenames:      []string{"go.sum"},
+		ServerLanguage: "go",
+	})
 }

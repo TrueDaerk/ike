@@ -493,5 +493,7 @@ func (m Model) focusedLangStatus(ed *editor.Model) string {
 	if !ok {
 		return ""
 	}
-	return m.lspStatus[l.ID]
+	// Server state is tracked under the server language: a delegating
+	// language (go.mod → go, #1063) shows its delegate's server state.
+	return m.lspStatus[l.ServerLang()]
 }
