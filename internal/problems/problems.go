@@ -363,8 +363,13 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		}
 		style = style.Foreground(sevColor(pal, r.d.Severity))
 	}
-	if i == m.cursor && m.focused {
-		style = style.Background(pal.Selection).Bold(true)
+	if i == m.cursor {
+		if m.focused {
+			style = style.Background(pal.Selection).Bold(true)
+		} else {
+			// Muted cursor row while unfocused (#1034), like the siblings.
+			style = style.Background(pal.SelectionMuted)
+		}
 	}
 	return style.Render(m.clip(line))
 }

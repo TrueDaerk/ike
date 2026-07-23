@@ -1055,18 +1055,14 @@ func (m Model) theme() *theme.Palette {
 
 // Scrollbar styling: a dim track with a brighter, heavier thumb, in the spirit
 // of table TUIs that surface overflow on the right and bottom edges. Highlight
-// styles overlay the per-filetype colour: the cursor and open-file rows replace
-// it, the hover keeps the foreground colour and adds a background.
+// styles overlay the semantic foreground (#1052): the cursor and hover only
+// add a background, so the VCS/accent hue stays readable while cursoring.
 func (m Model) barTrack() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack)
 }
 
 func (m Model) barThumb() lipgloss.Style {
 	return lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb)
-}
-
-func (m Model) selStyle() lipgloss.Style {
-	return lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText).Bold(true)
 }
 
 // activeStyle marks the focused editor's file with the theme accent — visible
@@ -1172,7 +1168,8 @@ func (m Model) View() string {
 			// the plain foreground, the extension alone takes the filetype
 			// colour. Cursor/active rows keep their own foreground whole.
 			nameRendered := nameStyle.Render(name)
-			if k := m.rowKind(i); k != rowSelected && k != rowActive {
+			if k := m.rowKind(i); k != rowSelected && k != rowActive &&
+				!(n.path == m.active && m.active != "") {
 				if c := m.suffixTint(n); c != nil {
 					if dot := strings.LastIndex(name, "."); dot > 0 {
 						nameRendered = nameStyle.Render(name[:dot]) +
@@ -1239,24 +1236,26 @@ func (m Model) View() string {
 	return out
 }
 
-// rowStyle resolves the full row style for visible row i. The hover overlay
-// only adds a background (#1056): it preserves the row's semantic foreground —
-// the active-file accent included — instead of rebuilding from the filetype
-// colour.
+// rowStyle resolves the full row style for visible row i: the semantic base
+// foreground (VCS/plain via nodeStyle, or the active-file accent), then the
+// highlight as a background overlay — the cursor and hover never replace the
+// foreground (#1052/#1056, matching the structure/problems/VCS lists), so git
+// status stays readable while cursoring. An unfocused explorer keeps a muted
+// cursor row (#1034, SelectionMuted) so refocusing lands visibly.
 func (m Model) rowStyle(i int, n *node) lipgloss.Style {
+	base := m.nodeStyle(n)
+	if n.path == m.active && m.active != "" {
+		base = m.activeStyle()
+	}
 	switch m.rowKind(i) {
 	case rowSelected:
-		return m.selStyle()
-	case rowActive:
-		return m.activeStyle()
+		return base.Background(m.theme().Selection).Bold(true)
+	case rowCursorIdle:
+		return base.Background(m.theme().SelectionMuted)
 	case rowHover:
-		base := m.nodeStyle(n)
-		if n.path == m.active && m.active != "" {
-			base = m.activeStyle()
-		}
 		return base.Background(m.theme().Panel)
 	default:
-		return m.nodeStyle(n)
+		return base
 	}
 }
 
@@ -1267,15 +1266,17 @@ func (m Model) guideStyle(row lipgloss.Style) lipgloss.Style {
 }
 
 // rowKind classifies how visible row i is highlighted. Precedence, strongest
-// first: the focused cursor, the mouse hover, the open file, a directory, then a
-// plain file. View maps each kind to a style; tests exercise the logic here so
-// they do not depend on the terminal's colour profile.
+// first: the focused cursor, the mouse hover, the unfocused cursor (#1034),
+// the open file, a directory, then a plain file. View maps each kind to a
+// style; tests exercise the logic here so they do not depend on the
+// terminal's colour profile.
 type rowKind int
 
 const (
 	rowPlain rowKind = iota
 	rowDir
 	rowActive
+	rowCursorIdle
 	rowHover
 	rowSelected
 )
@@ -1287,6 +1288,8 @@ func (m Model) rowKind(i int) rowKind {
 		return rowSelected
 	case i == m.hover:
 		return rowHover
+	case i == m.cursor:
+		return rowCursorIdle
 	case n.path == m.active && m.active != "":
 		return rowActive
 	case n.isDir:
