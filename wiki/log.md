@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- restore_last guards (#1010): starting inside a project (.git/.ike) never
+  redirects, and the home directory is never a restore target — fixes the
+  self-sustaining $HOME hijack that exhausted fds
+  (`/architecture/project-switching.md`).
+
 - Navigation jumps frame their target 3 rows below the top edge (#996,
   `editor.JumpTo` behind `openPathAt`) — definition/usages/nav-history
   landings stop hiding at arbitrary viewport positions
