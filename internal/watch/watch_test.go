@@ -1,6 +1,7 @@
 package watch
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,11 +17,13 @@ import (
 type collector struct {
 	mu   sync.Mutex
 	msgs []EventMsg
+	raw  []tea.Msg // every msg, for non-event types (TruncatedMsg, #1011)
 }
 
 func (c *collector) send(msg tea.Msg) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.raw = append(c.raw, msg)
 	if ev, ok := msg.(EventMsg); ok {
 		c.msgs = append(c.msgs, ev)
 	}
@@ -417,5 +420,66 @@ func TestConfigDirCreatedLate(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("settings write in a late .ike must surface, got %+v", got)
+	}
+}
+
+// TestStartCapsWatchCount guards #1011: the recursive walk stops at
+// maxWatchDirs and reports the truncation once; small roots stay silent.
+func TestStartCapsWatchCount(t *testing.T) {
+	old := maxWatchDirs
+	maxWatchDirs = 4
+	defer func() { maxWatchDirs = old }()
+
+	dir := t.TempDir()
+	for i := 0; i < 10; i++ {
+		if err := os.MkdirAll(filepath.Join(dir, fmt.Sprintf("d%02d", i)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		c.mu.Lock()
+		var hit *TruncatedMsg
+		for _, m := range c.raw {
+			if tm, ok := m.(TruncatedMsg); ok {
+				hit = &tm
+			}
+		}
+		c.mu.Unlock()
+		if hit != nil {
+			if hit.Watched != 4 {
+				t.Fatalf("Watched=%d want 4", hit.Watched)
+			}
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("cap hit must send a TruncatedMsg")
+}
+
+// TestStartSmallRootNoTruncation: below the cap no TruncatedMsg is sent.
+func TestStartSmallRootNoTruncation(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+	time.Sleep(50 * time.Millisecond)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, m := range c.raw {
+		if _, ok := m.(TruncatedMsg); ok {
+			t.Fatal("small root must not report truncation")
+		}
 	}
 }

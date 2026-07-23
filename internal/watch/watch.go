@@ -132,9 +132,24 @@ func skipWatchDir(name string) bool {
 	return vendorNoiseDirs[name]
 }
 
+// TruncatedMsg reports that the recursive watch hit maxWatchDirs (#1011) and
+// stopped adding directories: external changes below the unwatched remainder
+// go unseen (open buffers stay covered by the poll fallback). Sent once per
+// Start through the service's send seam so the app can toast it.
+type TruncatedMsg struct{ Watched int }
+
+// maxWatchDirs bounds the recursive watch (#1011): on macOS fsnotify's kqueue
+// backend holds an open file descriptor per watched object, so pointing IKE
+// at a huge root (a home directory via a stray restore, a monorepo) would
+// exhaust the process fd limit before bubbletea can even create its input
+// reader. Past the cap the walk stops; the root, .git and .ike watches are
+// added regardless. A variable (not const) so tests can lower it.
+var maxWatchDirs = 4096
+
 // Start begins watching root recursively, skipping dot-directories and vendored
-// noise (see skipWatchDir). Idempotent per service: a running watcher is stopped
-// first, which is also the project-switch (Roadmap 0090) restart path.
+// noise (see skipWatchDir) and capping the watch count at maxWatchDirs
+// (#1011). Idempotent per service: a running watcher is stopped first, which
+// is also the project-switch (Roadmap 0090) restart path.
 func (s *Service) Start(root string) error {
 	s.Stop()
 	w, err := fsnotify.NewWatcher()
@@ -145,6 +160,7 @@ func (s *Service) Start(root string) error {
 	s.w = w
 	s.root = root
 	s.mu.Unlock()
+	watched := 0
 	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || !d.IsDir() {
 			return nil
@@ -154,9 +170,16 @@ func (s *Service) Start(root string) error {
 		if path != root && skipWatchDir(d.Name()) {
 			return filepath.SkipDir
 		}
+		if watched >= maxWatchDirs {
+			return filepath.SkipAll
+		}
 		_ = w.Add(path)
+		watched++
 		return nil
 	})
+	if watched >= maxWatchDirs && s.send != nil {
+		go s.send(TruncatedMsg{Watched: watched})
+	}
 	s.watchGitDir(root)
 	s.watchConfigDir(root)
 	go s.loop(w)
