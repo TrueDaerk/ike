@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- Explorer trash moved into the state store (#1038): `IKE_CONFIG_DIR/trash`
+  (or the project's `.ike/trash`) instead of a root-polluting `.ike-trash`;
+  cross-device state dirs fall back project-local, and stale trash — the
+  legacy dir included — is purged on startup since undo stacks are
+  in-memory only (`/architecture/explorer.md`).
+
 - Explorer errors stop wiping the tree (#1030): failed file ops open a
   dismissable dialog (any key/click), scan/poll errors render as a themed
   bottom banner; both leave the tree rendered and navigable

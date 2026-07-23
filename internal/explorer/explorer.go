@@ -74,18 +74,18 @@ type Model struct {
 	pollEvery   time.Duration // interval between auto-refresh polls
 	polling     bool          // a poll loop is running (or armed by Restore)
 
-	showHidden bool           // render dot-entries; toggled by explorer.toggleHidden
+	showHidden bool // render dot-entries; toggled by explorer.toggleHidden
 	// hiddenCfg is the last explorer.show_hidden config string actually applied
 	// by Configure. A live reload only re-applies show_hidden when the config
 	// value genuinely changed, so an unrelated Reconfigure never clobbers the
 	// runtime `.` toggle (#629). "" means "not yet configured".
 	hiddenCfg string
-	indent     int            // spaces per depth level (config explorer.tree_indent)
-	sort       string         // ordering within a level (config explorer.sort)
-	colors     colorTable     // per-filetype colour resolution
-	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
-	cfgColors  colorTable     // [explorer.colors] overrides retained for re-theming
-	vcsSnap    *vcs.Snapshot  // git status snapshot (Roadmap 0320); nil = not a repo
+	indent    int            // spaces per depth level (config explorer.tree_indent)
+	sort      string         // ordering within a level (config explorer.sort)
+	colors    colorTable     // per-filetype colour resolution
+	pal       *theme.Palette // active theme (Roadmap 0110); nil = default
+	cfgColors colorTable     // [explorer.colors] overrides retained for re-theming
+	vcsSnap   *vcs.Snapshot  // git status snapshot (Roadmap 0320); nil = not a repo
 
 	// File-operation state (fileops.go). prompt is the active modal (new-file
 	// name entry, or a delete confirmation); ops/redoOps are the undo and redo
@@ -128,6 +128,10 @@ func New(dir string) Model {
 		pollEvery:    2 * time.Second,
 	}
 	m.rebuild()
+	// Leftover trash from previous sessions is unreachable (the undo stacks
+	// are in-memory) — clean it, including the legacy root ".ike-trash"
+	// (#1038).
+	m.purgeStaleTrash()
 	return m
 }
 

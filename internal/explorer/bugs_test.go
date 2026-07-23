@@ -155,3 +155,39 @@ func TestScanErrorBannerKeepsTree(t *testing.T) {
 		t.Fatal("a scan error must not open a modal (poll spam)")
 	}
 }
+
+// TestTrashLivesInStateDir guards #1038: trash goes under the state store
+// (IKE_CONFIG_DIR here), not a project-root .ike-trash; delete + undo still
+// round-trip, and stale trash (incl. the legacy dir) is purged on startup.
+func TestTrashLivesInStateDir(t *testing.T) {
+	root := t.TempDir()
+	cfg := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", cfg)
+	target := filepath.Join(root, "doomed.txt")
+	if err := os.WriteFile(target, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(root, ".ike-trash")
+	if err := os.MkdirAll(legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	m := New(root)
+	if _, err := os.Stat(legacy); !os.IsNotExist(err) {
+		t.Fatal("legacy .ike-trash must be purged on startup")
+	}
+
+	tp, err := m.toTrash(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rel, err := filepath.Rel(cfg, tp); err != nil || rel == "" || rel[0] == '.' {
+		t.Fatalf("trash path %q must live under IKE_CONFIG_DIR %q", tp, cfg)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".ike-trash")); !os.IsNotExist(err) {
+		t.Fatal("no .ike-trash may appear in the project root")
+	}
+	// Round-trip: the trashed file moves back.
+	if err := os.Rename(tp, target); err != nil {
+		t.Fatalf("restore from trash: %v", err)
+	}
+}
