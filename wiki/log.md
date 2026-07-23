@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- File opens always land in a real editor pane (#998): terminal-only tab
+  hosts and dedicated terminal/tool panes are skipped
+  (`/architecture/editor-tabs.md`).
+
 - Terminal/tools: `ctrl+cmd+left/right` switch tabs while a terminal or tool
   pane is focused (#997); the `ctrl+alt+arrow` secondaries stay with the
   shell (`/architecture/terminal.md`).

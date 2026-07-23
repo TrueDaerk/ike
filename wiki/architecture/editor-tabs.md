@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Editor Tabs
@@ -90,6 +90,12 @@ through `openPath`; it now lands the file in the focused pane's tab list via
 - **Open-in-new-pane splits** — unless the active editor is an empty scratch
   pane, which is reused in place instead of stranding a blank pane beside the
   new one (#641), mirroring the diff viewer's `placeDiffLeaf` behavior.
+- **File opens never land in terminal/tool panes** (#998): the target pane is
+  resolved by `fileEditorKey` — like `activeEditorKey`, but a pane only
+  qualifies while it actually edits files (an empty editor or ≥1 editor tab).
+  A terminal-only tab host (a `cmd+t`-converted terminal pane, #983) and
+  dedicated terminal/tool panes are skipped; with no qualifying pane a fresh
+  editor pane spawns.
 
 Shared documents (#142) are reused verbatim: `loadOrShare` scans all tabs of all
 panes, so one file open in two tabs — same pane or different panes — aliases one
