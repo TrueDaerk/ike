@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Explorer tree navigation (#1032, #1043, #1035): gg/G/PageUp/PageDown/
+  ctrl+u/ctrl+d motions, `C` recursive expand-all through lazy levels
+  (scan-budget-bounded), ellipsis on right-clipped rows
+  (`/architecture/explorer.md`).
+
 - Explorer scrollbar thumb is draggable (#1036): thumb press grabs and a
   `dragExplScroll` gesture follows the pointer, mirroring the editor
   scrollbar (#1022); track clicks keep the click-to-jump

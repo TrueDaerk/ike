@@ -110,6 +110,11 @@ padding, and title row) before calling the explorer:
 - **Wheel** over the pane scrolls without moving the cursor, like a real
   scrollbar: vertical by default (`ScrollBy`), horizontal with **shift** held or
   the wheel's own left/right buttons (`ScrollXBy`), `wheelLines` per notch.
+- **`gg`/`G`** jump to top/bottom, **PageUp/PageDown** page, **`ctrl+u`/`ctrl+d`**
+  half-page (#1032). **`C`** expands the selected subtree recursively
+  (lazy levels load via continued scans, bounded at 200 directory scans,
+  #1043); `c` stays collapse-all. Rows clipped at the right edge end in an
+  ellipsis (#1035; a VCS status letter takes that cell instead).
 - **Left press** on a scrollbar track jumps that axis proportionally; a press
   on the **vertical thumb grabs it** and dragging follows the pointer
   (#1036, `dragExplScroll`, mirroring the editor scrollbar #1022).
