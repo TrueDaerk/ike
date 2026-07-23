@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- PHP and Go ship `injections.scm` (#995): guess-gated SQL fragments in PHP
+  strings/heredoc/nowdoc and Go raw/interpreted string literals — highlighting
+  and fragment LSP now cover both hosts (`/architecture/highlighting.md`).
+
 - Recursive file watch capped at 4096 directories (#1011): huge roots no
   longer exhaust kqueue fds and kill startup; truncation toasts once
   (`/architecture/performance.md`).

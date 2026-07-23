@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Syntax Highlighting
@@ -81,7 +81,13 @@ parsed with its own language's registered grammar and the resulting spans are
 shifted into host coordinates (`injection.go`). Injected spans are prepended to
 the host span set, so inside a fragment they win over the host's enclosing
 `string` capture in `Index.CaptureAt`, while gaps between injected tokens fall
-back to the host colour. Fragments re-highlight with every reparse, exactly
+back to the host colour. Hosts shipping an `injections.scm` today: **Python**
+(SQL strings, guess-gated), **PHP** (#995: single/double-quoted strings,
+heredoc and nowdoc bodies, guess-gated), **Go** (#995: raw and interpreted
+string literals, guess-gated), **Markdown** (block injections, see below) and
+**HTML** (script/style). The `.guess` suffix defers to the Go-side content
+heuristic (SQL keyword leaders in `fragment.go`), so plain strings never
+become fragments. Fragments re-highlight with every reparse, exactly
 like top-level edits (the whole buffer reparses per change, off the event
 loop). One level deep: fragments inside fragments are not re-injected.
 Fragment languages without a registered grammar degrade to plain host

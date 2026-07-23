@@ -13,5 +13,5 @@ import (
 // grammar builds the Go highlighting grammar from the Tree-sitter Go binding and
 // the embedded highlights query. The !cgo stub returns nil.
 func grammar() lang.Grammar {
-	return highlight.NewGrammar(ts.NewLanguage(tsgo.Language()), query)
+	return highlight.NewGrammarInjections(ts.NewLanguage(tsgo.Language()), query, injections)
 }
