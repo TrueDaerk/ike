@@ -661,6 +661,23 @@ func TestStatusLineNamesFocusedExplorer(t *testing.T) {
 	}
 }
 
+// TestReservedKeyCanonicalizesSuperMeta guards #981: bubbletea delivers the
+// Command key as super+/meta+ tokens; both must match the reserved cmd chords.
+func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
+	for _, form := range []string{"super+t", "meta+t"} {
+		m, _ := openTestTerminal(t)
+		handled, out, _ := m.terminalReservedKey(form)
+		if !handled {
+			t.Fatalf("%s must canonicalize onto the reserved cmd+t", form)
+		}
+		m = out.(Model)
+		inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
+		if inst != nil && inst.Kind() == pane.KindTerminal {
+			t.Cleanup(func() { inst.Terminal().Close() })
+		}
+	}
+}
+
 // TestReservedCmdTSplitsSiblingTerminal guards #729: cmd+t inside a focused
 // dedicated terminal pane spawns and focuses a second terminal pane.
 func TestReservedCmdTSplitsSiblingTerminal(t *testing.T) {
