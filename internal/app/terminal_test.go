@@ -674,6 +674,8 @@ func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
 		inst := m.activeWS().Panes.Get(m.activeWS().Panes.Focused())
 		if inst != nil && inst.Kind() == pane.KindTerminal {
 			t.Cleanup(func() { inst.Terminal().Close() })
+		} else if inst != nil {
+			t.Cleanup(inst.CloseTerminalTabs) // cmd+t converted the pane (#983)
 		}
 	}
 }
@@ -782,23 +784,32 @@ func TestReservedCmdDSplitsEditorHostedTerminalRight(t *testing.T) {
 	}
 }
 
-// TestReservedCmdTSplitsSiblingTerminal guards #729: cmd+t inside a focused
-// dedicated terminal pane spawns and focuses a second terminal pane.
-func TestReservedCmdTSplitsSiblingTerminal(t *testing.T) {
+// TestReservedCmdTConvertsTerminalPaneToTabs guards #983: cmd+t inside a
+// dedicated terminal pane converts it into a tab host in place — the live
+// shell becomes the first tab and a fresh terminal tab opens focused.
+func TestReservedCmdTConvertsTerminalPaneToTabs(t *testing.T) {
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+t")
 	if !handled {
 		t.Fatal("cmd+t must be reserved while a terminal is focused (#729)")
 	}
 	m = out.(Model)
-	nkey := m.activeWS().Panes.Focused()
-	inst := m.activeWS().Panes.Get(nkey)
-	if nkey == key || inst == nil || inst.Kind() != pane.KindTerminal {
-		t.Fatalf("cmd+t must focus a fresh terminal pane, got %q", nkey)
+	if got := m.activeWS().Panes.Focused(); got != key {
+		t.Fatalf("cmd+t must keep the converted pane focused, got %q", got)
 	}
-	t.Cleanup(func() { inst.Terminal().Close() })
-	if old := m.activeWS().Panes.Get(key); old == nil || old.Kind() != pane.KindTerminal {
-		t.Fatal("the original terminal pane must survive")
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		t.Fatal("the terminal pane must convert into a tab host (#983)")
+	}
+	t.Cleanup(inst.CloseTerminalTabs)
+	if inst.TabCount() != 2 || inst.ActiveTab() != 1 {
+		t.Fatalf("tabs=%d active=%d, want 2 terminal tabs with the new one active",
+			inst.TabCount(), inst.ActiveTab())
+	}
+	for i := 0; i < inst.TabCount(); i++ {
+		if inst.TabTerminal(i) == nil {
+			t.Fatalf("tab %d must be a terminal tab", i)
+		}
 	}
 }
 
