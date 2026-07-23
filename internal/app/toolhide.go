@@ -18,7 +18,7 @@ import (
 // (editors, markdown preview, diff) are content, not tools.
 func isToolKind(k pane.Kind) bool {
 	switch k {
-	case pane.KindExplorer, pane.KindTerminal, pane.KindVCS, pane.KindDebug:
+	case pane.KindExplorer, pane.KindTerminal, pane.KindVCS, pane.KindDebug, pane.KindProblems:
 		return true
 	}
 	return false

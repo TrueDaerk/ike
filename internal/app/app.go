@@ -55,6 +55,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/preview"
+	"ike/internal/problems"
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/search"
@@ -282,6 +283,11 @@ type Model struct {
 	// m.activeWS().ReturnFocus.
 	// vcsReturnFocus is the same dance for the VCS tool window (0330, #482).
 	vcsReturnFocus string
+	// problemsReturnFocus is the same dance for the Problems tool window
+	// (#1024); probStore is its session-wide per-file diagnostics store, fed
+	// from every publish — files without an open editor included.
+	problemsReturnFocus string
+	probStore           *problems.Store
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -628,6 +634,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
 	m.finder.SetDisplayPath(displayPath)
+	m.probStore = problems.NewStore()
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
 	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
 	m.todo.SetPalette(themePal)
@@ -1007,6 +1014,15 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			// The debug panel restores empty (#580): sessions never
 			// resurrect, the next stop re-feeds it.
 			panes.AddDebug()
+			continue
+		}
+		if id := ids[key]; id.Kind == "problems" {
+			// The Problems panel restores empty in its saved slot (#1024):
+			// diagnostics are session state; the live store re-feeds it as
+			// the language servers publish.
+			p := panes.Get(panes.AddProblems()).Problems()
+			p.SetDisplayPath(displayPath)
+			p.SetStore(m.probStore)
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -1667,6 +1683,7 @@ var terminalGlobalCommands = map[string]bool{
 	"nav.pinGoto4":          true,
 	"todo.list":             true,
 	"vcs.panel":             true,
+	"problems.toggle":       true,
 	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
@@ -2318,6 +2335,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// openPathAt takes 0-based).
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 
+	case problems.OpenLocationMsg:
+		// A Problems row activation (#1024): open the file with the cursor on
+		// the diagnostic (already 0-based, like definition targets).
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
 	case editor.OpenUndoTreeMsg:
 		// editor.undoTree (palette): the undo-tree overlay (#59) over the
 		// focused editor's change tree.
@@ -2844,6 +2866,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleVCSPanel()
 		return m, nil
 
+	case ProblemsToggleMsg:
+		// problems.toggle (#1024): same state machine for the Problems pane.
+		m.toggleProblemsPanel()
+		return m, nil
+
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
 		// column. Revision-only diffs (the log's parent-vs-commit view) stay
@@ -3274,18 +3301,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case ilsp.DiagnosticsMsg:
+		// The Problems store (#1024) keeps every published set — opened in an
+		// editor or not — so the tool window aggregates project-wide.
+		m.probStore.Set(msg.Path, msg.Diagnostics)
+		m.refreshProblemsPanel()
 		return m, m.routeToEditor(msg.Path, msg)
 
 	case ilsp.DiagnosticsBatchMsg:
 		// Coalesced diagnostics (#597): route each document's set to its editor
 		// leaf in one Update pass, so a workspace publish storm re-renders once
-		// instead of once per file. Unopened paths route to nothing (cheap).
+		// instead of once per file. Unopened paths route to nothing (cheap) but
+		// still land in the Problems store (#1024).
 		var cmds []tea.Cmd
 		for _, d := range msg.Items {
+			m.probStore.Set(d.Path, d.Diagnostics)
 			if cmd := m.routeToEditor(d.Path, d); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
+		m.refreshProblemsPanel()
 		return m, tea.Batch(cmds...)
 	case ilsp.CompletionMsg:
 		return m, m.routeToEditor(msg.Path, msg)
@@ -4736,6 +4770,8 @@ func (m *Model) setFocus(key string) {
 			m.explorer().SetActive(ed.Path())
 		}
 	}
+	// The Problems pane's current-file scope tracks the same file (#1024).
+	m.syncProblemsActive()
 }
 
 // autosaveOnBlur saves the editor pane focus is leaving (#174): every focus
@@ -5630,6 +5666,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Debug().Wheel(lines)
 			}
+		case pane.KindProblems:
+			// The wheel scrolls the Problems list (#1024).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Problems().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Problems().Wheel(lines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -6287,6 +6331,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// checkboxes; emitted messages route like the key-driven ones.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.VCS().Click(localX, localY)
+		}
+	case pane.KindProblems:
+		// Problems-list clicks (#1024): a click selects, a double-click on
+		// the row opens the diagnostic's location, mirroring the VCS panel.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Problems().Click(localX, localY)
 		}
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
@@ -6994,6 +7044,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "VCS"
 		case pane.KindDebug:
 			title = "DEBUG"
+		case pane.KindProblems:
+			title = "PROBLEMS"
 		}
 	}
 

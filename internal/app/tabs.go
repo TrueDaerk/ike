@@ -87,6 +87,8 @@ func (m *Model) switchTab(inst *pane.Instance, idx int) {
 	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.explorer().SetActive(ed.Path())
 	}
+	// The Problems pane's current-file scope tracks the tab switch (#1024).
+	m.syncProblemsActive()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 

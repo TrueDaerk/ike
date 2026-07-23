@@ -11,6 +11,7 @@ import (
 	"ike/internal/diff"
 	"ike/internal/host"
 	"ike/internal/preview"
+	"ike/internal/problems"
 	"ike/internal/terminal"
 	"ike/internal/theme"
 	"ike/internal/vcspanel"
@@ -37,6 +38,9 @@ const VCSKey = "vcs"
 
 // DebugKey is the stable key of the singleton debug tool window (0350, #580).
 const DebugKey = "debug"
+
+// ProblemsKey is the stable key of the singleton Problems tool window (#1024).
+const ProblemsKey = "problems"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -360,6 +364,18 @@ func (r *Registry) AddDebug() string {
 	inst.dp = debugpanel.New(r.pal)
 	r.put(inst)
 	return DebugKey
+}
+
+// AddProblems creates the singleton Problems tool window under ProblemsKey
+// (#1024) and returns its key; a second call returns the existing key.
+func (r *Registry) AddProblems() string {
+	if _, ok := r.instances[ProblemsKey]; ok {
+		return ProblemsKey
+	}
+	inst := &Instance{key: ProblemsKey, kind: KindProblems, cfg: r.cfg, pal: r.pal}
+	inst.pp = problems.New(r.pal)
+	r.put(inst)
+	return ProblemsKey
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)

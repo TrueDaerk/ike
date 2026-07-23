@@ -14,6 +14,12 @@
   a floating picker — enter diffs against the current buffer in the reusable
   diff pane, `r` restores through the undoable edit path
   (`/architecture/local-history.md`).
+- Problems tool window (#1024, part of #33): singleton bottom-split pane
+  aggregating LSP diagnostics project-wide from a new app-level store fed by
+  every publish (unopened files included); grouped by file, errors first,
+  enter/double-click navigates, `f` toggles current-file vs project scope;
+  `problems.toggle` command, no default chord
+  (`/architecture/problems.md`, new).
 
 - Editor right-click context menu (#1020): `menu.Context` floating dropdown
   anchored at the click cell, reusing the menu bar's item/InfoFunc rendering;

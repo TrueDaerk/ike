@@ -343,6 +343,8 @@ func (m Model) statusLine() string {
 			}
 		case inst.Kind() == pane.KindDebug:
 			left += "DEBUG"
+		case inst.Kind() == pane.KindProblems:
+			left += "PROBLEMS"
 		case inst.Kind() == pane.KindVCS:
 			left += "VCS"
 			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
