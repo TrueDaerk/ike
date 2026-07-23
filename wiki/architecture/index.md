@@ -21,6 +21,7 @@ Component-level concepts for the IKE codebase.
 * [Performance & Diagnostics](/architecture/performance.md) - idle wake rules (demand-armed ticks, off-loop explorer poll, timers die with owners) + opt-in pprof/SIGUSR1 hooks (#1001)
 * [Scratch Files](/architecture/scratch-files.md) - language-aware quick buffers under the user state dir, created from the palette, ordinary files that survive restarts (Roadmap 0280)
 * [Crash Recovery](/architecture/crash-recovery.md) - vim-swapfile-style safety net: debounced full-text snapshots of dirty buffers, atomic writes to the project state dir, restore on next launch (Roadmap 0210)
+* [Local History](/architecture/local-history.md) - per-project content-addressed snapshots on every save; floating picker to diff a snapshot against the current buffer or restore it through the undoable edit path (#1023)
 * [Settings UI & Menu Bar](/architecture/settings-ui.md) - menu bar over the command registry; settings panel with schema-driven forms and config write-back (Roadmap 0160)
 * [Completion Engine](/architecture/completion.md) - multi-source autocomplete: LSP + local index sources as tagged batches, editor-side merge with priority de-dup and stable selection (Roadmap 0410)
 * [LSP & Language Intelligence](/architecture/lsp.md) - JSON-RPC client over a server's stdio, manager per (language, root), editor-driven sync, diagnostics/completion/hover/go-to-definition (Roadmap 0100)

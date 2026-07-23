@@ -8,6 +8,13 @@
   positions, thumb drag (`dragEditScroll`) and click-to-jump on the track
   (`/architecture/editor.md`).
 
+- Local history MVP (#1023, part of #35): every save records a
+  content-addressed snapshot under `.ike/history/` (dedupe, 50-per-file +
+  30-day pruning); `file.localHistory` lists the focused file's snapshots in
+  a floating picker — enter diffs against the current buffer in the reusable
+  diff pane, `r` restores through the undoable edit path
+  (`/architecture/local-history.md`).
+
 - Editor right-click context menu (#1020): `menu.Context` floating dropdown
   anchored at the click cell, reusing the menu bar's item/InfoFunc rendering;
   caret repositions unless the click lands inside the selection
