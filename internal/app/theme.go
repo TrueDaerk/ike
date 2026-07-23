@@ -88,6 +88,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.shell.SetPalette(p)
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)
+	m.ctxMenu.SetPalette(p)
 	m.settings.SetPalette(p)
 	m.commitUI.SetPalette(p)
 }

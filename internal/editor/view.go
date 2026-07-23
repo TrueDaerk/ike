@@ -59,6 +59,52 @@ func (m *Model) MouseClick(x, y int) {
 	m.emit(EventCursorMove)
 }
 
+// ContextClick positions the caret for a right-click (#1020), JetBrains-style:
+// a click inside the current selection keeps it (the context menu then acts on
+// the selection), anything else moves the caret to the clicked cell, collapsing
+// any selection and secondary carets. It never advances the multi-click streak.
+func (m *Model) ContextClick(x, y int) {
+	p := m.clickPosition(x, y)
+	if m.selectionContains(p) {
+		return
+	}
+	m.collapseCarets()
+	if m.mode.IsVisual() {
+		m.mode = Normal
+		m.clickVisual = false
+	}
+	m.cursor = m.buf.ClampCursor(p)
+	m.desiredCol = m.cursor.Col
+	m.scroll()
+	m.emit(EventCursorMove)
+}
+
+// selectionContains reports whether p lies inside the active visual selection
+// (line-wise for VisualLine, inclusive char-wise otherwise; block falls back
+// to charwise, matching visualSelection).
+func (m *Model) selectionContains(p buffer.Position) bool {
+	if !m.mode.IsVisual() {
+		return false
+	}
+	a, b := m.anchor, m.cursor
+	if a.Line > b.Line || (a.Line == b.Line && a.Col > b.Col) {
+		a, b = b, a
+	}
+	if p.Line < a.Line || p.Line > b.Line {
+		return false
+	}
+	if m.mode == VisualLine {
+		return true
+	}
+	if p.Line == a.Line && p.Col < a.Col {
+		return false
+	}
+	if p.Line == b.Line && p.Col > b.Col {
+		return false
+	}
+	return true
+}
+
 // bumpClickStreak advances the multi-click counter for a click at p and
 // returns the streak (1 = single, 2 = double, 3 = triple). A different cell
 // or a pause beyond doubleClickWindow restarts at 1; a fourth click cycles

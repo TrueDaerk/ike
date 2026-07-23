@@ -190,6 +190,9 @@ type Model struct {
 	// menu is the menu bar (Roadmap 0160, #90), rendered above the panes when
 	// ui.menu_bar is enabled.
 	menu *menu.Model
+	// ctxMenu is the right-click context menu (#1020): a floating dropdown
+	// anchored at the click cell, dispatching registry commands like the bar.
+	ctxMenu *menu.Context
 	// settings is the full-window settings panel (Roadmap 0160, #91); cfgOpts
 	// names the layer files its edits write back to.
 	settings *settings.Model
@@ -630,6 +633,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.commitUI.SetDraft(vcsSt.draft)
 	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
+	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
+	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
 	pages := settings.BasePages(themeNames(reg))
 	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
@@ -3835,6 +3840,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, m.settings.Update(msg)
 		}
+		// An open context menu owns the keyboard (arrows/enter/esc), #1020.
+		if m.ctxMenu.IsOpen() {
+			return m, m.ctxMenu.Update(msg)
+		}
 		// An open menu dropdown owns the keyboard (arrows/enter/esc).
 		if m.menu.IsOpen() {
 			return m, m.menu.Update(msg)
@@ -5350,6 +5359,25 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.floatDrag = nil // stray press: drop the drag, fall through
 		}
 	}
+	// The context menu (#1020) is the topmost transient popup: hover follows
+	// the pointer, a left press inside invokes the entry, any press outside
+	// dismisses — and never leaks to the panes below.
+	if m.ctxMenu.IsOpen() {
+		switch msg.action {
+		case mouseMotion:
+			if idx, ok := m.ctxMenu.ItemAt(msg.X, msg.Y); ok {
+				m.ctxMenu.Hover(idx)
+			}
+		case mousePress:
+			if msg.Button == tea.MouseLeft {
+				if idx, ok := m.ctxMenu.ItemAt(msg.X, msg.Y); ok {
+					return m, m.ctxMenu.Invoke(idx)
+				}
+			}
+			m.ctxMenu.Close()
+		}
+		return m, nil
+	}
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
 	// a click inside stays with the overlay (never leaks to the panes below).
 	// The finder renders above every other overlay, so it hit-tests first (#424).
@@ -6146,6 +6174,16 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// A right click opens the context menu at the pointer (#1020): the
+		// caret moves to the clicked cell first unless the click lands inside
+		// the current selection (the menu then acts on the selection).
+		if msg.Button == tea.MouseRight {
+			if ed := inst.Editor(); ed != nil && ed.HasFile() {
+				ed.ContextClick(localX, localY)
+				m.ctxMenu.Open(editorContextItems(), msg.X, msg.Y, m.width, m.height)
+			}
+			return m, nil
+		}
 		// A left click in the gutter toggles a breakpoint on that line
 		// (0350, #577), JetBrains-style.
 		if ed := inst.Editor(); ed != nil && ed.HasFile() && msg.Button == tea.MouseLeft && msg.Mod&tea.ModAlt == 0 {
@@ -6224,6 +6262,21 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+// editorContextItems is the editor pane's right-click menu (#1020): the
+// JetBrains staples, each referencing a registered command so availability
+// and shortcuts resolve through the same InfoFunc as the menu bar (LSP
+// entries render disabled while no server backs them).
+func editorContextItems() []menu.Item {
+	return []menu.Item{
+		{Title: "Cut", Command: "editor.cut"},
+		{Title: "Copy", Command: "editor.copy"},
+		{Title: "Paste", Command: "editor.paste"},
+		{Title: "Go to Definition", Command: "lsp.definition"},
+		{Title: "Find Usages", Command: "lsp.references"},
+		{Title: "Reformat File", Command: "lsp.format"},
+	}
 }
 
 // termLocal translates a screen-cell mouse event into pane-content-local
@@ -6415,6 +6468,11 @@ func (m Model) render() string {
 	}
 	base = m.compositeLSPPopups(base)
 	base = m.compositeWhichKey(base)
+	if m.ctxMenu.IsOpen() {
+		// The right-click context menu (#1020) floats at its clamped anchor.
+		x, y := m.ctxMenu.Pos()
+		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
+	}
 	result := base
 	switch {
 	case m.finder.IsOpen():

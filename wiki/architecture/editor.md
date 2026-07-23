@@ -304,6 +304,16 @@ directions), line-wise after a triple-click; a drag during a `v`/`V`
 selection keeps extending it instead of re-anchoring. The app routes the
 gesture as a `dragEditSelect` drag kind — press starts it, motion events call
 `MouseDrag`, release just drops the drag state (nothing to commit).
+A right-click opens a floating context menu at the pointer (#1020,
+`menu.Context` in `internal/menu/context.go`): the caret first moves to the
+clicked cell via `ContextClick` — unless the click lands inside the active
+selection (`selectionContains`), which stays put so Cut/Copy act on it. The
+menu's entries (Cut/Copy/Paste, Go to Definition, Find Usages, Reformat File)
+reference registered command ids resolved through the menu bar's `InfoFunc`,
+so availability and shortcuts stay in sync; invoking dispatches `menu.RunMsg`
+into the registry funnel. Hover highlights, left-click invokes, up/down/enter
+navigate, esc or an outside press dismisses (the press never leaks to the
+panes below); the box clamps to the terminal bounds at open time.
 The wheel scrolls the
 viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
 buffer) without touching the cursor or mode — it works the same in Normal,
