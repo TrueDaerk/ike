@@ -16,6 +16,7 @@ const (
 	cfgSort        = "explorer.sort"
 	cfgColorsPfx   = "explorer.colors."
 	cfgAutoRefresh = "explorer.auto_refresh"
+	cfgAutoReveal  = "explorer.auto_reveal"
 )
 
 // Configure applies the [explorer] configuration section to the model: initial
@@ -55,6 +56,11 @@ func (m *Model) Configure(cfg host.Config) {
 	}
 	if v, ok := cfg.Get(cfgAutoRefresh); ok {
 		m.autoRefresh = v != "false"
+	}
+	if v, ok := cfg.Get(cfgAutoReveal); ok {
+		// Auto-reveal-on-focus (#1042), the JetBrains "autoscroll from
+		// source". Off by default.
+		m.autoReveal = v == "true"
 	}
 	m.cfgColors = readColors(cfg)
 	m.mergeColors()

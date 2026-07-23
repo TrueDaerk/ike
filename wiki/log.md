@@ -21,6 +21,12 @@
   name stem — typing replaces it and keeps the extension, arrows/click drop
   the selection, folders and dotfiles preselect the whole name
   (`/architecture/explorer.md`).
+- Explorer reveal expands collapsed ancestors (#1042): `explorer.reveal`
+  (`alt+f1`) now descends to the open file through unloaded directories
+  (async `pendingReveal` walk resumed by each landing scan), selects and
+  scrolls to it; new `explorer.auto_reveal` config (default off) auto-reveals
+  the focused editor's file on tab/focus switches — JetBrains autoscroll
+  from source (`/architecture/explorer.md`).
 
 - Explorer scrollbar thumb is draggable (#1036): thumb press grabs and a
   `dragExplScroll` gesture follows the pointer, mirroring the editor

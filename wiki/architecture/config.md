@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-23T21:00:00Z
 ---
 
 # Configuration System
@@ -69,7 +69,8 @@ Sections and their default-bearing slots (`schema.go`):
 - `[editor]` — tab width, spaces, line numbers, wrap, scroll-off, auto-indent,
   trim/insert-newline, show-whitespace (`none|trailing|all`), indent-guides,
   rulers (display-column list, e.g. `[80, 120]`).
-- `[explorer]` — show-hidden, git-status, tree-indent, sort, plus an empty
+- `[explorer]` — show-hidden, git-status, tree-indent, sort, auto-reveal
+  (autoscroll from source, default `false`, #1042), plus an empty
   `[explorer.colors]` slot (Roadmap 0050 fills entries).
 - `[keymap]` — `preset` + an empty `[keymap.bindings]` slot (Roadmap 0080).
 - `[lsp]` — enabled, log-level, `inlay_hints` (default `false`, #523),

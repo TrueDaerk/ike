@@ -2200,6 +2200,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sync := mm.structureSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
+	// An armed explorer reveal (#1042) drains here once the pass settled:
+	// SetActive's call sites (focus changes, tab switches, the CLI open flow)
+	// cannot dispatch Cmds, so auto-reveal / Reveal() only mark the model and
+	// the expansion scans start now.
+	if reveal := mm.explorer().PendingRevealCmd(); reveal != nil {
+		cmd = tea.Batch(cmd, reveal)
+	}
 	return mm, cmd
 }
 

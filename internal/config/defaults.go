@@ -40,6 +40,7 @@ func defaults() *Config {
 			GitStatus:  true,
 			TreeIndent: 2,
 			Sort:       "name",
+			AutoReveal: false,
 			Colors:     map[string]string{},
 		},
 		Keymap: Keymap{
