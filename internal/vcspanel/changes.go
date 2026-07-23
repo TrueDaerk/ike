@@ -201,8 +201,13 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 			if c := vcs.StatusColor(pal, r.Status); c != nil {
 				style = style.Foreground(c)
 			}
-			if i == m.chCursor && m.focused && !m.msgFocus {
-				style = style.Background(pal.Selection).Bold(true)
+			if i == m.chCursor && !m.msgFocus {
+				if m.focused {
+					style = style.Background(pal.Selection).Bold(true)
+				} else {
+					// Muted cursor row while unfocused (#1034).
+					style = style.Background(pal.SelectionMuted)
+				}
 			}
 			b.WriteString(style.Render(m.clip(line)))
 		}

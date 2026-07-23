@@ -12,7 +12,10 @@ import (
 // filetype/VCS hue, and never bold (#1059).
 func TestGuideStyleUsesIndentGuideSlot(t *testing.T) {
 	m := New(".")
-	row := m.selStyle() // bold + SelectionText foreground
+	n := &node{name: "main.go", path: "main.go"}
+	m.rows = []*node{n}
+	m.focused = true
+	row := m.rowStyle(0, n) // focused cursor: Selection bg + bold (#1052)
 	g := m.guideStyle(row)
 	pr, pg, pb, _ := theme.DefaultPalette().IndentGuide.RGBA()
 	gr, gg, gb, _ := g.GetForeground().RGBA()

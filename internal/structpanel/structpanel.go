@@ -294,6 +294,10 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	switch {
 	case i == m.cursor && m.focused:
 		style = style.Background(pal.Selection).Bold(true)
+	case i == m.cursor:
+		// Unfocused panes keep a muted cursor row (#1034) so refocusing
+		// lands visibly, matching the explorer and the other list panes.
+		style = style.Background(pal.SelectionMuted)
 	case i == m.current:
 		// The enclosing symbol of the editor cursor (auto-follow).
 		style = style.Foreground(pal.Accent)

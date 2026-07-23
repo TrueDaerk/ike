@@ -2,6 +2,12 @@
 
 ## 2026-07-23
 
+- One selection recipe across the list panes (#1052, #1034): the cursor adds
+  Selection background + bold and keeps the semantic foreground (explorer
+  aligned to structure/problems/VCS); unfocused panes keep a muted
+  `SelectionMuted` cursor row in all four lists instead of hiding it
+  (`/architecture/explorer.md`).
+
 - Explorer suffix-tint colour model (#1051, closes #1054): the colour channel
   belongs to the VCS status (whole row + right-edge `M`/`A`/`U`… letter as a
   non-colour cue); filetype colours tint only the extension of clean files;

@@ -690,7 +690,11 @@ func TestHighlightPrecedence(t *testing.T) {
 	if k := m.rowKind(2); k != rowHover {
 		t.Fatalf("kind = %d want rowHover (hover beats active)", k)
 	}
-	m.hover = -1 // no hover → active shows
+	m.hover = -1 // no hover → the unfocused cursor stays visible (#1034)
+	if k := m.rowKind(2); k != rowCursorIdle {
+		t.Fatalf("kind = %d want rowCursorIdle", k)
+	}
+	m.cursor = 0 // cursor elsewhere → active shows
 	if k := m.rowKind(2); k != rowActive {
 		t.Fatalf("kind = %d want rowActive", k)
 	}
