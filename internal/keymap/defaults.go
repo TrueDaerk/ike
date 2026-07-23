@@ -186,6 +186,10 @@ var jetbrainsRows = []row{
 	{"cmd+k right", "pane.splitRight", "Split right", Global, "App (01)"},
 	{"cmd+k left", "pane.splitLeft", "Split left", Global, "App (01)"},
 	{"cmd+k z", "pane.maximize", "Maximize pane", Global, "Zen & maximize (#358)"},
+	// Distraction-free toggle (#934): a single delivered chord so zen also
+	// works from a focused terminal/tool pane (multi-step sequences cannot be
+	// intercepted there — see terminalGlobalChord).
+	{"ctrl+alt+f", "view.zenMode", "Zen mode", Global, "Zen & maximize (#358)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).

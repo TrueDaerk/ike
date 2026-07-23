@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Zen mode gets its chord (#934): `ctrl+alt+f` binds `view.zenMode` and sits
+  on the terminal global-command allowlist, so zen toggles from a focused
+  terminal/tool pane too — the pane-agnostic toggle from #957 was unreachable
+  by key there (`/architecture/pane-layout.md`, `/architecture/keybindings.md`).
+
 - ctrl+c discards the terminal's spooled output backlog (#989): aborted
   commands stop rendering immediately instead of replaying up to 16 MiB of
   pre-abort output (`/architecture/terminal.md`).

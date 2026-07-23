@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -221,7 +221,7 @@ each still-hidden tool re-attaches at its conventional side (explorer as
 the outer-left column, others as a bottom strip). Editor panes, splits and
 focus are untouched — the complement of zen mode below.
 
-**Zen mode (#359, #934).** `view.zenMode` (View menu, palette)
+**Zen mode (#359, #934).** `view.zenMode` (`ctrl+alt+f`, View menu, palette)
 layers chrome-hiding on the zoom: the **focused pane** — editor, terminal,
 or tool pane alike — is maximized and the tab bar and status line disappear
 — the status row joins the body (`bodyRect`), the tab bar yields to the
@@ -229,7 +229,10 @@ plain title (`tabBar`), and the ex command line is unaffected (it renders
 inside the editor pane). Leaving zen restores the chrome; the zoom survives
 only when that same pane was already manually zoomed before zen. Tree mutations drop zen exactly like they drop
 the zoom (one flag cleared in the same `layout()` check); zen is not
-persisted either.
+persisted either. The chord sits on the terminal global-command allowlist
+(`terminalGlobalCommands`, #934), so it toggles zen from a focused terminal
+or tool TUI pane instead of reaching the shell — and the same chord leaves
+zen again while that pane keeps focus.
 
 ## Persistence
 
