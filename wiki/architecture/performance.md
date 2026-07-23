@@ -36,6 +36,12 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   debounce flush on Stop, the LSP bridge its highlight/resolve/completion/
   diagnostics timers on workspaceClosed — an armed timer never fires against
   a torn-down owner.
+- **The recursive file watch is capped** (#1011, `maxWatchDirs` = 4096):
+  fsnotify's kqueue backend holds an fd per watched object, so an unbounded
+  walk over a huge root (a stray `$HOME` restore, a monorepo) exhausts the
+  process fd limit before bubbletea can create its input reader. Past the
+  cap the walk stops, a `watch.TruncatedMsg` toasts once, and open buffers
+  stay covered by the poll fallback; root/`.git`/`.ike` watches always land.
 - **Caches stay bounded**: the editor line cache clears past `lineCacheCap`
   (4096) and on every render-epoch bump; terminal render caches key by
   mutation version, not history.

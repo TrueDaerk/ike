@@ -3430,6 +3430,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case watch.TruncatedMsg:
+		// The recursive watch hit its cap (#1011): tell the user external
+		// changes below the unwatched remainder go unnoticed; open buffers
+		// stay covered by the poll fallback.
+		m.host.Notify(host.Info, fmt.Sprintf(
+			"large project: file watching capped at %d directories — external changes elsewhere may go unnoticed", msg.Watched))
+		return m, nil
+
 	case watch.EventMsg:
 		// External file changes (Roadmap 0140): directory events refresh the
 		// explorer, file events go to the editor leaf owning the path. Every

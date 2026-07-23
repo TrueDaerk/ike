@@ -2,6 +2,10 @@
 
 ## 2026-07-23
 
+- Recursive file watch capped at 4096 directories (#1011): huge roots no
+  longer exhaust kqueue fds and kill startup; truncation toasts once
+  (`/architecture/performance.md`).
+
 - restore_last guards (#1010): starting inside a project (.git/.ike) never
   redirects, and the home directory is never a restore target — fixes the
   self-sustaining $HOME hijack that exhausted fds
