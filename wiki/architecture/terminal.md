@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -168,6 +168,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `ctrl+tab` | move focus to the next pane (delivery is terminal-dependent — many terminals cannot send it; 0081's reality probe owns the call) |
 | `alt+f12` | `terminal.toggle` — return focus to the previous pane (the reliable hatch) |
 | `cmd+t` | new sibling terminal (#729, iTerm-style): a terminal tab hosted by an editor pane gets a sibling tab in the same pane (#573); a dedicated single-session terminal pane gets a fresh terminal pane split below it — focused either way. Outside terminals `cmd+t` keeps its global binding (`vcs.updateProject`) |
+| `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 | `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debug panel's embedded debuggee terminal (#676) gets the same treatment |

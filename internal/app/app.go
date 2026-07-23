@@ -1566,8 +1566,38 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// the reserved set only fires while a live terminal is focused.
 		m.newTerminalSibling()
 		return true, m, nil
+	case "cmd+d":
+		// iTerm-style: cmd+d splits the focused terminal's pane to the
+		// right with a fresh terminal (#982); outside terminals the chord
+		// keeps its global binding (editor.duplicateLine).
+		m.newTerminalSplitRight()
+		return true, m, nil
 	}
 	return false, m, nil
+}
+
+// newTerminalSplitRight splits the focused terminal's pane to the right with a
+// fresh terminal pane and focuses it (#982, iTerm's cmd+d) — the same for a
+// dedicated terminal pane and an editor pane hosting a terminal tab (#573).
+func (m *Model) newTerminalSplitRight() {
+	key := m.activeWS().Panes.Focused()
+	if m.activeWS().Panes.Get(key) == nil || m.activeWS().Tree == nil {
+		return
+	}
+	shell := ""
+	if v, ok := m.host.Config().Get("terminal.shell"); ok {
+		shell = v
+	}
+	nkey := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, key, nkey, layout.ZoneRight)
+	if !ok {
+		m.activeWS().Panes.Close(nkey)
+		return
+	}
+	m.activeWS().Tree = tree
+	m.setFocus(nkey)
+	m.layout()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // mouseChordKey maps the dedicated mouse navigation buttons (#816) onto the
