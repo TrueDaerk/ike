@@ -32,6 +32,9 @@ func (m *Manager) restart(old *server, docs []*document) {
 		m.status(old.lang, old.lang+" language server disabled", lsp.ServerState)
 		m.status(old.lang, old.lang+" language server disabled after repeated crashes — details: \"LSP: Show Server Log\"", lsp.ServerEventError)
 		appendLog(old.lang, "disabled after repeated crashes")
+		// Nobody maintains the dead server's findings anymore — drop them
+		// from every affected editor (#994).
+		m.clearServerDiagnostics(k, docs)
 		return
 	}
 

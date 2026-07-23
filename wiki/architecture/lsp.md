@@ -514,7 +514,13 @@ fragment language with no configured server degrades silently. The
   no-op with a status message, never an error popup.
 - **Crashes are recoverable.** `restart.go` detects an unexpected exit, respawns
   with linear backoff, re-initialises, and re-opens tracked documents; after
-  repeated crashes the server is disabled.
+  repeated crashes the server is disabled. Diagnostics survive the restart
+  attempts (a successful restart republishes), but a terminal disable — and a
+  deliberate `StopLang`/`Shutdown` — clears the dead server's publishes from
+  every affected editor (`cleardiags.go`, #994): host publishes are dropped
+  and the merged set re-emitted (fragment diagnostics from servers that still
+  run survive); documents that leave the manager get an explicit empty
+  publish.
 - **Status is classified (0130).** Every manager status carries a
   `lsp.ServerStatusKind`: persistent server state (ready, disabled, missing
   binary) renders as a status-line segment; transient events (crashed → warn,

@@ -893,8 +893,15 @@ func (m *Manager) StopLang(lang string) {
 		delete(m.servers, k)
 		delete(m.restarts, k)
 	}
+	type clearedDoc struct {
+		path    string
+		lines   []string
+		version int
+	}
+	var cleared []clearedDoc
 	for path, doc := range m.docs {
 		if doc.lang == lang {
+			cleared = append(cleared, clearedDoc{path, doc.lines, doc.version})
 			delete(m.docs, path)
 			delete(m.frags, path)
 			delete(m.fragGen, path)
@@ -927,6 +934,11 @@ func (m *Manager) StopLang(lang string) {
 		if srv.stop != nil {
 			srv.stop()
 		}
+	}
+	// The stopped language's documents left the manager, but their editors
+	// stay open — tell them explicitly that no diagnostics remain (#994).
+	for _, d := range cleared {
+		m.publishEmpty(d.path, d.lines, d.version)
 	}
 	for host := range republish {
 		m.publishHostDiagnostics(host)
@@ -996,10 +1008,21 @@ func (m *Manager) RunningLangs() []string {
 	return out
 }
 
-// Shutdown stops every server. Best-effort; used on app exit.
+// Shutdown stops every server. Best-effort; used on app exit and by the
+// restart commands, so open editors get an explicit empty publish for every
+// tracked document (#994) — a respawned server republishes on reopen.
 func (m *Manager) Shutdown() {
+	type clearedDoc struct {
+		path    string
+		lines   []string
+		version int
+	}
 	m.mu.Lock()
 	servers := m.servers
+	var cleared []clearedDoc
+	for path, doc := range m.docs {
+		cleared = append(cleared, clearedDoc{path, doc.lines, doc.version})
+	}
 	m.servers = make(map[string]*server)
 	m.docs = make(map[string]*document)
 	m.frags = make(map[string]map[int]*fragmentDoc)
@@ -1014,6 +1037,9 @@ func (m *Manager) Shutdown() {
 		if srv.stop != nil {
 			srv.stop()
 		}
+	}
+	for _, d := range cleared {
+		m.publishEmpty(d.path, d.lines, d.version)
 	}
 }
 

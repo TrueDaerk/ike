@@ -2,6 +2,11 @@
 
 ## 2026-07-23
 
+- Stale LSP diagnostics no longer outlive their server (#994): disabling
+  after repeated crashes, `StopLang` and `Shutdown` clear the dead server's
+  publishes from open editors; restart attempts keep them
+  (`/architecture/lsp.md`).
+
 - Zen mode gets its chord (#934): `ctrl+alt+f` binds `view.zenMode` and sits
   on the terminal global-command allowlist, so zen toggles from a focused
   terminal/tool pane too — the pane-agnostic toggle from #957 was unreachable
