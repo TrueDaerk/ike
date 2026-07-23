@@ -126,6 +126,7 @@ func (c *Config) Flat() map[string]string {
 	put("explorer.git_status", c.Explorer.GitStatus)
 	put("explorer.tree_indent", c.Explorer.TreeIndent)
 	put("explorer.sort", c.Explorer.Sort)
+	put("explorer.auto_reveal", c.Explorer.AutoReveal)
 	for k, v := range c.Explorer.Colors {
 		put("explorer.colors."+k, v)
 	}

@@ -104,6 +104,17 @@ type Model struct {
 	// and the remaining scan budget bounding it.
 	expandAllRoot string
 	expandBudget  int
+
+	// Reveal state (#1042). pendingReveal is the absolute path a reveal is
+	// descending toward: expanding an unloaded ancestor is async (scanCmd), so
+	// applyScan re-enters continueReveal after every scan until the target row
+	// exists or the path proves gone. autoReveal mirrors the
+	// explorer.auto_reveal config; wantReveal arms a reveal that a Cmd-less
+	// call site (SetActive on focus/tab switch, the CLI open flow) requested —
+	// the app's Update wrapper drains it via PendingRevealCmd.
+	pendingReveal string
+	autoReveal    bool
+	wantReveal    bool
 }
 
 // New creates an explorer rooted at dir. The root is marked expanded and a scan
@@ -191,22 +202,27 @@ func scanCmd(path string) tea.Cmd {
 
 // applyScan installs a completed scan's children onto the matching node and
 // rebuilds the visible rows. Unknown paths (a node collapsed/refreshed before
-// the scan returned) are ignored.
-func (m *Model) applyScan(msg ScanDoneMsg) {
+// the scan returned) are ignored. The returned Cmd, when non-nil, is the next
+// step of a pending reveal descent (#1042): each landing scan may unlock the
+// next unloaded ancestor on the way to the reveal target.
+func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
 	n := nodeByPath(m.root, msg.Path)
 	if n == nil {
-		return
+		return nil
 	}
 	n.loading = false
 	n.loaded = true
 	if msg.Err != nil {
 		m.err = msg.Err
-		return
+		// Continue anyway: the failed directory now reads loaded-and-empty,
+		// so a reveal descending through it abandons cleanly.
+		return m.continueReveal()
 	}
 	m.err = nil
 	n.modTime = msg.ModTime
 	m.setChildren(n, msg.Entries)
 	m.rebuild()
+	return m.continueReveal()
 }
 
 // continueExpandAll resumes an in-flight expand-all (#1043) after a scan
@@ -401,11 +417,13 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case ScanDoneMsg:
-		m.applyScan(msg)
+		// applyScan may hand back a reveal continuation (#1042); an in-flight
+		// expand-all (#1043) continues independently.
+		reveal := m.applyScan(msg)
 		if cmd := m.continueExpandAll(msg.Path); cmd != nil {
-			return m, tea.Batch(cmd, m.startPoll())
+			return m, tea.Batch(reveal, cmd, m.startPoll())
 		}
-		return m, m.startPoll()
+		return m, tea.Batch(reveal, m.startPoll())
 	case pollMsg:
 		return m, m.applyPoll(msg)
 	case watch.EventMsg:
@@ -437,8 +455,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RefreshMsg:
 		return m, m.refresh()
 	case RevealMsg:
-		m.reveal()
-		return m, nil
+		return m, m.reveal()
 	case NewFileMsg:
 		m.promptNewEntry(false)
 		return m, nil
@@ -890,24 +907,114 @@ func (m *Model) applyPoll(msg pollMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// Reveal moves the cursor onto the active file's row — the programmatic twin
-// of the explorer.reveal command, used by the CLI open flow (Roadmap 0270).
-func (m *Model) Reveal() { m.reveal() }
+// Reveal arms a reveal of the active file — the programmatic twin of the
+// explorer.reveal command, used by the CLI open flow (Roadmap 0270). The walk
+// itself starts when the app drains PendingRevealCmd on the next settled
+// update pass, because callers here cannot dispatch the expansion scans.
+func (m *Model) Reveal() { m.wantReveal = true }
 
-// reveal moves the cursor onto the row of the currently open file, if it is
-// visible in the tree. (Auto-expanding collapsed ancestors is left to a later
-// pass; today it locates an already-visible active row.)
-func (m *Model) reveal() {
-	if m.active == "" {
-		return
+// PendingRevealCmd returns the reveal walk armed by Reveal or by SetActive
+// under explorer.auto_reveal (#1042), or nil when none is armed. The app's
+// Update wrapper drains it once per settled pass — mirroring the structure
+// sync — since the arming call sites (focus changes, tab switches) cannot
+// return Cmds themselves.
+func (m *Model) PendingRevealCmd() tea.Cmd {
+	if !m.wantReveal {
+		return nil
 	}
-	for i, n := range m.rows {
-		if n.path == m.active {
+	m.wantReveal = false
+	return m.reveal()
+}
+
+// reveal puts the cursor on the row of the currently open file, expanding
+// every collapsed ancestor on the way (#1042). Lazy loading makes the descent
+// async: the returned Cmd scans the first unloaded ancestor, and applyScan
+// re-enters continueReveal after every scan until the target row exists.
+func (m *Model) reveal() tea.Cmd {
+	if m.active == "" {
+		return nil
+	}
+	m.pendingReveal = m.active
+	return m.continueReveal()
+}
+
+// continueReveal advances a pending reveal: it walks from the root toward the
+// target, expanding each ancestor. A loaded ancestor expands in place; the
+// first unloaded one dispatches its scan and pauses the walk (applyScan calls
+// back in when the result lands, so each scan resumes one level deeper). A
+// target that left the tree — deleted, renamed, or outside the root — abandons
+// the reveal, so the descent is bounded by the ancestor depth.
+func (m *Model) continueReveal() tea.Cmd {
+	path := m.pendingReveal
+	if path == "" {
+		return nil
+	}
+	rel, err := filepath.Rel(m.root.path, path)
+	if err != nil || rel == "." || rel == ".." ||
+		strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		m.abandonReveal()
+		return nil
+	}
+	n := m.root
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if !n.isDir {
+			// A file where a directory was expected: the path is stale.
+			m.abandonReveal()
+			return nil
+		}
+		if !n.loaded {
+			if n.loading {
+				return nil // a scan is in flight; applyScan resumes the walk
+			}
+			// pendingSel doubles as the cursor snap for the row rebuilds the
+			// landing scans trigger.
+			m.pendingSel = path
+			cmd := m.expand(n)
+			m.rebuild()
+			return cmd
+		}
+		n.expanded = true
+		next := childNamed(n, part)
+		if next == nil {
+			// The path vanished under us (or never existed): give up cleanly.
+			m.abandonReveal()
+			m.rebuild()
+			return nil
+		}
+		n = next
+	}
+	// Every ancestor is loaded and expanded: the target row exists (unless the
+	// hidden-files filter conceals it — then the cursor simply stays put).
+	m.pendingReveal = ""
+	m.pendingSel = ""
+	m.rebuild()
+	for i, r := range m.rows {
+		if r.path == path {
 			m.cursor = i
 			m.clampScroll()
-			return
+			break
 		}
 	}
+	return nil
+}
+
+// childNamed returns n's direct child with the given base name, or nil.
+func childNamed(n *node, name string) *node {
+	for _, c := range n.children {
+		if c.name == name {
+			return c
+		}
+	}
+	return nil
+}
+
+// abandonReveal drops a pending reveal whose target is unreachable, including
+// the cursor snap it armed.
+func (m *Model) abandonReveal() {
+	if m.pendingSel == m.pendingReveal {
+		m.pendingSel = ""
+	}
+	m.pendingReveal = ""
 }
 
 // parentOf returns the parent node of target, or nil for the root / not found.
@@ -1098,8 +1205,16 @@ func (m *Model) ScrollXBy(delta int) {
 }
 
 // SetActive marks path as the file currently open in the editor so its row is
-// highlighted distinctly from the cursor and hover. Pass "" to clear it.
-func (m *Model) SetActive(path string) { m.active = path }
+// highlighted distinctly from the cursor and hover. Pass "" to clear it. With
+// explorer.auto_reveal on, a genuinely new active file also arms a reveal
+// (#1042) — the JetBrains autoscroll-from-source — drained by
+// PendingRevealCmd, since SetActive's call sites cannot dispatch Cmds.
+func (m *Model) SetActive(path string) {
+	if m.autoReveal && path != "" && path != m.active {
+		m.wantReveal = true
+	}
+	m.active = path
+}
 
 // SetOpen replaces the set of files currently open in any editor pane. Open
 // rows render underlined and italic (in addition to any cursor/hover/active

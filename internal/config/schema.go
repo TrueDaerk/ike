@@ -220,12 +220,15 @@ type Tabs struct {
 }
 
 // Explorer holds file-tree behaviour. Colors is a per-filetype color-name slot
-// filled by Roadmap 0050.
+// filled by Roadmap 0050. AutoReveal (#1042) is the JetBrains "autoscroll from
+// source": when on, the tree reveals (expands ancestors, selects, scrolls to)
+// the focused editor's file on every focus/tab switch; off by default.
 type Explorer struct {
 	ShowHidden bool              `toml:"show_hidden"`
 	GitStatus  bool              `toml:"git_status"`
 	TreeIndent int               `toml:"tree_indent"`
 	Sort       string            `toml:"sort"`
+	AutoReveal bool              `toml:"auto_reveal"`
 	Colors     map[string]string `toml:"colors"`
 }
 

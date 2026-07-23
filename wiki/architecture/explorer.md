@@ -61,6 +61,29 @@ started by `Init`. `explorer.auto_refresh = "false"` disables it.
 The visible tree is flattened into `rows` (rebuilt on every expand/collapse) for
 cursor navigation; each node carries its `depth` for indentation.
 
+## Reveal (#1042)
+
+`explorer.reveal` (`alt+f1`, palette) puts the cursor on the focused editor's
+file, **expanding every collapsed ancestor** on the way and scrolling the row
+into view — JetBrains' Select Opened File. Lazy loading makes the descent
+async: `reveal` records the target in `pendingReveal` and `continueReveal`
+walks from the root toward it, expanding loaded ancestors in place; the first
+unloaded one dispatches its `scanCmd` and pauses the walk. Every landing scan
+(`applyScan`) re-enters `continueReveal`, so each result resumes one level
+deeper until the target row exists (select + scroll, state cleared). The loop
+is bounded: a target that left the tree — deleted, renamed, outside the root,
+or a scan error emptying an ancestor — abandons the reveal and clears the
+state (`abandonReveal`); a target concealed by the hidden-files filter leaves
+the cursor where it was.
+
+With `explorer.auto_reveal = true` (default off) the reveal also fires
+automatically whenever the focused editor's file changes — tab switches, pane
+focus, opens — the JetBrains **autoscroll from source**. `SetActive`'s call
+sites cannot dispatch Cmds, so a changed active path only *arms* the reveal
+(`wantReveal`; the CLI open flow's `Reveal()` arms the same flag) and the
+app's `Update` wrapper drains it once per settled pass via `PendingRevealCmd`,
+mirroring the structure-view sync.
+
 ## Configuration
 
 `Configure(host.Config)` applies the merged `[explorer]` section (owned by the
@@ -73,6 +96,7 @@ cursor navigation; each node carries its `depth` for indentation.
 | `explorer.sort` | within-level ordering: `name` (default), `type` (extension, then name), `modified` (newest first) — directories always first; a live config change re-sorts the loaded tree (#1037) |
 | `explorer.colors.<ext\|glob>` | per-filetype colour; `dir` and `default` are required fallbacks |
 | `explorer.auto_refresh` | poll for external filesystem changes (default `true`; `"false"` disables) |
+| `explorer.auto_reveal` | JetBrains "autoscroll from source" (#1042): reveal the focused editor's file (expand ancestors, select, scroll) on every focus/tab switch (default `false`) |
 
 Colours (`colors.go`) resolve a node by checking, in order: an exact **glob**
 match (globs sorted for determinism), the `dir` fallback for directories, a bare
@@ -202,7 +226,7 @@ these are defaults.
 | `explorer.toggleHidden` | `.` | show/hide dot-entries (`ToggleHiddenMsg`) |
 | `explorer.refresh` | `r` | invalidate + re-scan the selected subtree (`RefreshMsg`) |
 | `explorer.collapseAll` | `c` | fold the tree back to the root (`CollapseAllMsg`) |
-| `explorer.reveal` | — | move the cursor to the open file (`RevealMsg`) |
+| `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
 | `explorer.newFile` | `a` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry after confirmation (`DeleteMsg`) |
