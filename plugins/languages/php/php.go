@@ -12,6 +12,9 @@ import (
 //go:embed queries/php.scm
 var query string
 
+//go:embed queries/injections.scm
+var injections string
+
 func init() {
 	register.Language(lang.Language{
 		ID:         "php",

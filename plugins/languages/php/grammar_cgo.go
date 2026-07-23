@@ -11,5 +11,5 @@ import (
 )
 
 func grammar() lang.Grammar {
-	return highlight.NewGrammar(ts.NewLanguage(tsphp.LanguagePHP()), query)
+	return highlight.NewGrammarInjections(ts.NewLanguage(tsphp.LanguagePHP()), query, injections)
 }
