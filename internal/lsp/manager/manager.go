@@ -480,6 +480,27 @@ func (m *Manager) DocumentHighlight(ctx context.Context, path string, pos buffer
 	return convertHighlights(doc.lines, hs, srv.cl.Encoding()), nil
 }
 
+// DocumentSymbols requests the symbol tree of one document (#1025), converted
+// to editor coordinates — the Structure tool pane's data source. ok=false when
+// no ready server tracks the document or the server lacks the
+// documentSymbolProvider capability, so the caller can distinguish "no
+// provider" from "no symbols".
+func (m *Manager) DocumentSymbols(ctx context.Context, path string) ([]lsp.SymbolNode, bool, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().DocumentSymbol {
+		return nil, false, nil
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	syms, err := srv.cl.DocumentSymbols(cctx, protocol.DocumentSymbolParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+	})
+	if err != nil {
+		return nil, true, err
+	}
+	return lsp.ConvertDocumentSymbols(syms, doc.lines, srv.cl.Encoding()), true, nil
+}
+
 // convertHighlights maps protocol document highlights to editor coordinates.
 func convertHighlights(lines []string, hs []protocol.DocumentHighlight, enc string) []lsp.DocumentHighlight {
 	out := make([]lsp.DocumentHighlight, len(hs))

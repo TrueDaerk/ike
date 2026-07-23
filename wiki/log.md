@@ -20,6 +20,13 @@
   enter/double-click navigates, `f` toggles current-file vs project scope;
   `problems.toggle` command, no default chord
   (`/architecture/problems.md`, new).
+- Structure tool pane (#1025): singleton right-split pane with the focused
+  buffer's LSP `textDocument/documentSymbol` tree — capability-gated request
+  (both hierarchical and flat reply shapes), kind-glyph rows, cursor
+  auto-follow, enter/double-click navigates via the open funnel (nav history
+  records), refresh on open / buffer switch / save, layout persistence, new
+  `structure.toggle` command (`/architecture/structure-view.md`,
+  `/architecture/lsp.md`).
 
 - Editor right-click context menu (#1020): `menu.Context` floating dropdown
   anchored at the click cell, reusing the menu bar's item/InfoFunc rendering;

@@ -105,6 +105,14 @@ type TextDocumentClientCaps struct {
 	SemanticTokens  *SemanticTokensClientCaps `json:"semanticTokens,omitempty"`
 	CallHierarchy   *ReferencesClientCaps     `json:"callHierarchy,omitempty"`
 	InlayHint       *ReferencesClientCaps     `json:"inlayHint,omitempty"`
+	DocumentSymbol  *DocumentSymbolClientCaps `json:"documentSymbol,omitempty"`
+}
+
+// DocumentSymbolClientCaps announces documentSymbol support (#1025);
+// hierarchicalDocumentSymbolSupport asks for the DocumentSymbol[] tree shape
+// instead of the flat SymbolInformation[] fallback.
+type DocumentSymbolClientCaps struct {
+	HierarchicalDocumentSymbolSupport bool `json:"hierarchicalDocumentSymbolSupport,omitempty"`
 }
 
 // SemanticTokensClientCaps announces semantic-token support: which request
@@ -184,6 +192,26 @@ type ServerCapabilities struct {
 	ExecuteCommandProvider          json.RawMessage        `json:"executeCommandProvider,omitempty"`
 	WorkspaceSymbolProvider         json.RawMessage        `json:"workspaceSymbolProvider,omitempty"`
 	CallHierarchyProvider           json.RawMessage        `json:"callHierarchyProvider,omitempty"`
+	DocumentSymbolProvider          json.RawMessage        `json:"documentSymbolProvider,omitempty"`
+}
+
+// DocumentSymbolParams is the textDocument/documentSymbol request (#1025):
+// every symbol of one document, for the Structure tool pane.
+type DocumentSymbolParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// DocumentSymbol is one node of the hierarchical documentSymbol reply. Range
+// spans the whole construct, SelectionRange just the name — navigation targets
+// the latter. Servers may answer with flat SymbolInformation[] instead; the
+// client normalises that shape into this one (childless, both ranges equal).
+type DocumentSymbol struct {
+	Name           string           `json:"name"`
+	Detail         string           `json:"detail,omitempty"`
+	Kind           int              `json:"kind"`
+	Range          Range            `json:"range"`
+	SelectionRange Range            `json:"selectionRange"`
+	Children       []DocumentSymbol `json:"children,omitempty"`
 }
 
 // WorkspaceSymbolParams is the workspace/symbol request (0250, #294): a plain

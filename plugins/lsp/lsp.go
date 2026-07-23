@@ -107,6 +107,15 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().goToSymbol(h) },
 			},
 			{
+				// The Structure pane's data request (#1025): the app runs it
+				// on pane open / buffer switch / save; the reply routes into
+				// the pane as a DocumentSymbolsMsg.
+				ID:    "lsp.documentSymbols",
+				Title: "LSP: Document Symbols",
+				Scope: plugin.GlobalScope(),
+				Run:   func(h host.API) tea.Cmd { return shared().documentSymbols(h) },
+			},
+			{
 				ID:    "lsp.installMissing",
 				Title: "LSP: Install Missing Servers",
 				Scope: plugin.GlobalScope(),

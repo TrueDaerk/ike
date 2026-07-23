@@ -38,6 +38,7 @@ type Capabilities struct {
 	SemanticModifiers  []string
 	WorkspaceSymbol    bool
 	CallHierarchy      bool
+	DocumentSymbol     bool
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -64,6 +65,7 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.InlayHint = truthyProvider(sc.InlayHintProvider)
 	caps.WorkspaceSymbol = truthyProvider(sc.WorkspaceSymbolProvider)
 	caps.CallHierarchy = truthyProvider(sc.CallHierarchyProvider)
+	caps.DocumentSymbol = truthyProvider(sc.DocumentSymbolProvider)
 	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)
 	caps.RangeFormatting = truthyProvider(sc.DocumentRangeFormattingProvider)
 	caps.Rename = truthyProvider(sc.RenameProvider)

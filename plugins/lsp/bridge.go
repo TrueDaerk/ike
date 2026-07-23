@@ -587,6 +587,29 @@ func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
 	return nil
 }
 
+// documentSymbols requests the focused document's symbol tree (#1025) and
+// delivers it as a DocumentSymbolsMsg — the Structure pane's refresh. Errors
+// stay silent: the refresh is passive (pane open, buffer switch, save), so the
+// pane simply keeps its last tree.
+func (b *bridge) documentSymbols(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, _, _ := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	// Sync pending edits first so the answered positions match the buffer.
+	b.flushChange(path)
+	go func() {
+		syms, ok, err := mgr.DocumentSymbols(context.Background(), path)
+		if err != nil {
+			return
+		}
+		h.Send(ilsp.DocumentSymbolsMsg{Path: path, Symbols: syms, NoProvider: !ok})
+	}()
+	return nil
+}
+
 // locationsToRefs converts LSP locations to editor-coordinate references,
 // reading each distinct target file once — the read supplies both the
 // position conversion base and the preview line. Shared by find-references
