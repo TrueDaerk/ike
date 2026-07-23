@@ -188,6 +188,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindDebug:
 			// The panel restores empty (#580): its content is session state.
 			ids[key] = paneIdentity{Kind: "debug"}
+		case pane.KindProblems:
+			// The panel restores empty (#1024): diagnostics are session state.
+			ids[key] = paneIdentity{Kind: "problems"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
 			if ed := inst.Editor(); ed != nil {

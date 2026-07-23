@@ -54,6 +54,7 @@ func Defaults() []Menu {
 			{Title: "Stop Debug Session", Command: "debug.stop"},
 		}},
 		{Title: "Tools", Items: []Item{
+			{Title: "Problems", Command: "problems.toggle"},
 			{Title: "Terminal", Command: "terminal.toggle"},
 			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "New Terminal Tab", Command: "terminal.newTab"},
