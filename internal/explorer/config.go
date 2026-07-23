@@ -40,7 +40,18 @@ func (m *Model) Configure(cfg host.Config) {
 		}
 	}
 	if v, ok := cfg.Get(cfgSort); ok && v != "" {
-		m.sort = v
+		switch v {
+		case "name", "type", "modified":
+			if v != m.sort {
+				m.sort = v
+				// Re-sort the loaded tree live (#1037); new scans sort on
+				// arrival anyway.
+				m.resortAll(m.root)
+				m.rebuild()
+			}
+		default:
+			// Unknown value: keep the current (default "name") ordering.
+		}
 	}
 	if v, ok := cfg.Get(cfgAutoRefresh); ok {
 		m.autoRefresh = v != "false"
