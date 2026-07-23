@@ -60,6 +60,7 @@ import (
 	"ike/internal/registry"
 	"ike/internal/search"
 	"ike/internal/settings"
+	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/textenc"
 	"ike/internal/theme"
@@ -288,6 +289,13 @@ type Model struct {
 	// from every publish — files without an open editor included.
 	problemsReturnFocus string
 	probStore           *problems.Store
+	// structReturnFocus is the same dance for the Structure tool window
+	// (#1025); structReqPath is the last path a documentSymbol refresh was
+	// issued for (the request dedup), and structForce marks a save-triggered
+	// refresh that must re-request the unchanged path.
+	structReturnFocus string
+	structReqPath     string
+	structForce       bool
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -349,21 +357,21 @@ type Model struct {
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
-	palette    *palette.Palette
-	cmdUsage   *palette.Usage // most-used command ranking (#773)
-	winSizes   *ui.WinSizes     // persisted floating-window resize deltas (#774)
-	floatDrag  *floatResizeDrag // live mouse resize of a floating window (#933)
-	pins       *pinStore        // harpoon-style pinned file slots (#788)
-	toolHide   *toolHideSnapshot // hide-all-tool-windows snapshot (#791)
-	termShiftAt time.Time        // last bare-shift tap in a terminal (#973)
-	pinSel     int              // pin-picker selection
-	pinPicker  bool             // pin picker owns the modal shell
-	lhStore    *localhistory.Store  // local-history snapshot store (#1023)
-	lhSel      int                  // local-history picker selection
-	lhPicker   bool                 // local-history picker owns the modal shell
-	lhPath     string               // file the open picker lists
-	lhEntries  []localhistory.Entry // its snapshots, newest-first
-	paletteKey string
+	palette     *palette.Palette
+	cmdUsage    *palette.Usage       // most-used command ranking (#773)
+	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
+	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
+	pins        *pinStore            // harpoon-style pinned file slots (#788)
+	toolHide    *toolHideSnapshot    // hide-all-tool-windows snapshot (#791)
+	termShiftAt time.Time            // last bare-shift tap in a terminal (#973)
+	pinSel      int                  // pin-picker selection
+	pinPicker   bool                 // pin picker owns the modal shell
+	lhStore     *localhistory.Store  // local-history snapshot store (#1023)
+	lhSel       int                  // local-history picker selection
+	lhPicker    bool                 // local-history picker owns the modal shell
+	lhPath      string               // file the open picker lists
+	lhEntries   []localhistory.Entry // its snapshots, newest-first
+	paletteKey  string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
 	// at construction and on config reloads.
@@ -590,8 +598,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m := Model{
 		cmdUsage:       cmdUsage,
 		winSizes:       winSizes,
-		pins:           loadPins(),                            // pinned file slots (#788)
-		lhStore:        localhistory.New(localHistoryDir()),   // local history (#1023)
+		pins:           loadPins(),                          // pinned file slots (#788)
+		lhStore:        localhistory.New(localHistoryDir()), // local history (#1023)
 		completeEngine: engine,
 		ws:             wsMgr,
 		recentEditor:   edKey,
@@ -619,9 +627,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		focusKeys:      focusKeys(cfg),
 		keys:           buildKeymap(cfg, bindings),
 	}
-	m.shell.SetSizeStore(winSizes)   // resizable modal shell (#774)
-	m.palette.SetSizeStore(winSizes) // resizable palette box (#774)
-	m.shell.SetMaxWidth(popupMaxWidth())   // centered-popup width cap (#932)
+	m.shell.SetSizeStore(winSizes)            // resizable modal shell (#774)
+	m.palette.SetSizeStore(winSizes)          // resizable palette box (#774)
+	m.shell.SetMaxWidth(popupMaxWidth())      // centered-popup width cap (#932)
 	highlight.SetRainbow(rainbowConfigured()) // rainbow brackets (#789)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
@@ -928,6 +936,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as the empty singleton panel (0330)
 		} else if ids[key].Kind == "debug" {
 			continue // restored below as the empty singleton panel (#580)
+		} else if ids[key].Kind == "structure" {
+			continue // restored below as the empty singleton panel (#1025)
 		} else if !isEditorKey(key) && !isTerminalKey(key) {
 			// A terminal-shaped key may carry an editor identity: a
 			// converted tab host (#836) restores as an editor pane below.
@@ -1023,6 +1033,12 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			p := panes.Get(panes.AddProblems()).Problems()
 			p.SetDisplayPath(displayPath)
 			p.SetStore(m.probStore)
+			continue
+		}
+		if id := ids[key]; id.Kind == "structure" {
+			// The Structure panel restores empty (#1025); the first
+			// buffer-change sync re-requests the symbols.
+			panes.AddStructure()
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2176,6 +2192,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if closed := mm.drainClosedFileViews(); closed != nil {
 		cmd = tea.Batch(cmd, closed)
 	}
+	// The Structure pane follows the focused buffer here (#1025), once the
+	// pass settled: cursor follow is a cheap in-place highlight, a buffer
+	// switch issues the documentSymbol refresh (deduplicated per path).
+	if sync := mm.structureSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
 	return mm, cmd
 }
 
@@ -2324,6 +2346,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The save is also the persistence point for edit-shifted breakpoints
 		// (#577) — cheap, and the on-disk lines match the saved file.
 		_ = m.bpts.Save()
+		// The Structure pane re-requests the saved buffer's symbols (#1025);
+		// the Update wrapper's sync issues the actual request.
+		if sp := m.structPanel(); sp != nil && sp.Path() == msg.path {
+			m.structForce = true
+		}
 		return m, m.todo.RescanFile(msg.path)
 
 	case todoindex.FileScanMsg:
@@ -2870,6 +2897,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// problems.toggle (#1024): same state machine for the Problems pane.
 		m.toggleProblemsPanel()
 		return m, nil
+
+	case StructureToggleMsg:
+		// structure.toggle (#1025): same state machine for the Structure
+		// tool window; the Update wrapper's sync issues the first refresh.
+		m.toggleStructurePanel()
+		return m, nil
+
+	case ilsp.DocumentSymbolsMsg:
+		// A documentSymbol reply (#1025) fills the open Structure pane.
+		m.applyDocumentSymbols(msg)
+		return m, nil
+
+	case structpanel.NavigateMsg:
+		// Enter / double-click on a symbol row (#1025): jump the editor to
+		// the symbol through the standard open funnel, so nav history records
+		// it like a definition jump.
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
 
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
@@ -5674,6 +5718,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Problems().Wheel(lines)
 			}
+		case pane.KindStructure:
+			// The wheel scrolls the symbol list (#1025).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Structure().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Structure().Wheel(lines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -6337,6 +6389,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the row opens the diagnostic's location, mirroring the VCS panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Problems().Click(localX, localY)
+		}
+	case pane.KindStructure:
+		// Structure-pane clicks (#1025): a row click selects, a double-click
+		// navigates; the emitted message routes like the key-driven enter.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Structure().Click(localX, localY)
 		}
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
@@ -7046,6 +7104,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "DEBUG"
 		case pane.KindProblems:
 			title = "PROBLEMS"
+		case pane.KindStructure:
+			title = "STRUCTURE"
 		}
 	}
 

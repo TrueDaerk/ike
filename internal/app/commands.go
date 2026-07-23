@@ -332,6 +332,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
+			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 		), append(scratchCommands(), toolCommands()...)...),

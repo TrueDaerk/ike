@@ -50,6 +50,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 				SignatureHelp:   &protocol.ReferencesClientCaps{},
 				CallHierarchy:   &protocol.ReferencesClientCaps{},
 				InlayHint:       &protocol.ReferencesClientCaps{},
+				DocumentSymbol:  &protocol.DocumentSymbolClientCaps{HierarchicalDocumentSymbolSupport: true},
 				SemanticTokens: &protocol.SemanticTokensClientCaps{
 					Requests:       protocol.SemanticTokensRequests{Full: &protocol.SemanticTokensFullRequest{Delta: true}},
 					TokenTypes:     protocol.StandardTokenTypes,

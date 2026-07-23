@@ -62,8 +62,9 @@ from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
 exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
-`lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.restart` as
-registry commands.
+`lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.documentSymbols`
+(the [Structure pane](./structure-view.md)'s refresh, #1025) / `lsp.restart`
+as registry commands.
 
 Navigation jumps (`lsp.definition`, a references pick — both funnel through
 `DefinitionMsg` into `openPathAt`) focus the pane where the target file is

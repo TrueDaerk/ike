@@ -191,6 +191,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindProblems:
 			// The panel restores empty (#1024): diagnostics are session state.
 			ids[key] = paneIdentity{Kind: "problems"}
+		case pane.KindStructure:
+			// The panel restores empty (#1025): the first buffer-change sync
+			// re-requests the symbols.
+			ids[key] = paneIdentity{Kind: "structure"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
 			if ed := inst.Editor(); ed != nil {
