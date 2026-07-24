@@ -2531,6 +2531,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case TabReopenMsg:
 		// editor.tab.reopenClosed (alt+shift+t): pop the reopen ring.
 		return m.reopenClosedTab()
+	case TabCloseOthersMsg:
+		// editor.tab.closeOthers (tab context menu / palette, #1128): keep
+		// only the active tab; dirty tabs stay open.
+		m.closeOtherTabs()
+		return m, nil
+
+	case ClosePaneMsg:
+		// pane.close (pane-title context menu / palette, #1128): close the
+		// focused pane whole, behind the unsaved-changes guard.
+		m.guardedClosePane()
+		return m, nil
 
 	case ForceCodeInsightMsg:
 		// editor.forceCodeInsight (palette): override the large-file
@@ -4851,7 +4862,15 @@ func (m *Model) closeFocused() {
 		m.closeTab(inst, inst.ActiveTab())
 		return
 	}
-	if m.closeKey(m.activeWS().Panes.Focused()) {
+	m.closePane(m.activeWS().Panes.Focused())
+}
+
+// closePane closes the leaf named key outright — every tab at once — and
+// repairs focus, layout and persistence. Callers guard unsaved changes first
+// (guardedClosePane); shared by closeFocused, the pane.close command (#1128)
+// and the dead tool pane's ✕ action.
+func (m *Model) closePane(key string) {
+	if m.closeKey(key) {
 		// Focus the leaf that now occupies the closed pane's position: the first
 		// leaf in walk order is a safe, always-present choice (explorer at minimum).
 		m.setFocus(m.focusAfterClose())
@@ -4859,6 +4878,23 @@ func (m *Model) closeFocused() {
 		m.layout()
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
+}
+
+// guardedClosePane closes the focused pane whole — all its tabs — behind the
+// unsaved-changes guard (#1128, pane.close): dirty documents not visible in
+// another pane open the prompt with a whole-pane pending close first.
+func (m *Model) guardedClosePane() {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil {
+		return
+	}
+	if inst.Kind() == pane.KindEditor {
+		if dirty := m.dirtyOnClose(inst, -1); len(dirty) > 0 {
+			m.openClosePrompt(inst.Key(), -1, dirty)
+			return
+		}
+	}
+	m.closePane(inst.Key())
 }
 
 // closeKey removes the editor leaf named key from the layout and registry,
@@ -5707,22 +5743,64 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
+		// The status line (#1128) sits below the layout tree; a left press on
+		// one of its clickable segments — TODO count, notifications counter,
+		// LSP state — dispatches that segment's command, any other press on
+		// the row is swallowed.
+		if !m.zen && msg.Y == m.height-1 {
+			if msg.Button == tea.MouseLeft {
+				if id, ok := statusSegmentCommands[m.statusSegmentAt(msg.X)]; ok {
+					if c, found := m.reg.Command(id); found {
+						return m, m.dispatchCommand(id, c)
+					}
+				}
+			}
+			return m, nil
+		}
 		hit := m.lay.Hit(msg.X, msg.Y)
 		switch hit.Kind {
 		case layout.HitDivider:
 			m.drag = &dragState{kind: dragResize, divider: *hit.Divider, curX: msg.X, curY: msg.Y}
 		case layout.HitTitle:
+			// A right press on the title row opens a chrome context menu
+			// (#1128): on a tab segment the clicked tab is selected first —
+			// like the left-click focus path — so the menu's actions target
+			// it; elsewhere on the band the pane menu opens.
+			if msg.Button == tea.MouseRight {
+				if key, idx, _, ok := m.tabBarHit(msg.X, msg.Y); ok {
+					m.setFocus(key)
+					m.switchTab(m.activeWS().Panes.Get(key), idx)
+					m.ctxMenu.Open(tabContextItems(), msg.X, msg.Y, m.width, m.height)
+					return m, nil
+				}
+				m.setFocus(hit.Pane)
+				m.ctxMenu.Open(paneContextItems(), msg.X, msg.Y, m.width, m.height)
+				return m, nil
+			}
 			// Clicks on a tab-bar segment act on that tab (#159): left-click
 			// focuses it, middle-click closes it. The active tab's own
 			// segment — and the row outside the segments — still starts a
 			// pane move, keeping the title row as the drag handle.
-			if key, idx, ok := m.tabBarHit(msg.X, msg.Y); ok {
+			if key, idx, onClose, ok := m.tabBarHit(msg.X, msg.Y); ok {
 				inst := m.activeWS().Panes.Get(key)
 				if msg.Button == tea.MouseMiddle {
 					m.closeBarTab(key, idx)
 					return m, nil
 				}
 				if msg.Button == tea.MouseLeft {
+					if onClose {
+						// The segment's ✕ zone (#1128) closes the clicked
+						// tab; a dirty one is selected first so the
+						// unsaved-changes guard targets it.
+						if len(m.dirtyOnClose(inst, idx)) > 0 {
+							m.setFocus(key)
+							m.switchTab(inst, idx)
+							m.guardedCloseFocused()
+							return m, nil
+						}
+						m.closeBarTab(key, idx)
+						return m, nil
+					}
 					m.setFocus(key)
 					m.switchTab(inst, idx)
 					if inst.TabCount() > 1 {
@@ -6311,12 +6389,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.Terminal().Restart()
 				return m, nil
 			case "close":
-				if m.closeKey(key) {
-					m.setFocus(m.focusAfterClose())
-					m.syncExplorerOpen()
-					m.layout()
-					saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-				}
+				m.closePane(key)
 				return m, nil
 			}
 			inst.Terminal().MousePress(localX, localY)
@@ -6373,6 +6446,28 @@ func editorContextItems() []menu.Item {
 		{Title: "Go to Definition", Command: "lsp.definition"},
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Reformat File", Command: "lsp.format"},
+	}
+}
+
+// tabContextItems is the tab segment's right-click menu (#1128). The clicked
+// tab was selected on open, so Close and Close Others target it; entries
+// resolve through the same InfoFunc as the menu bar.
+func tabContextItems() []menu.Item {
+	return []menu.Item{
+		{Title: "Close", Command: "editor.closeTab"},
+		{Title: "Close Others", Command: "editor.tab.closeOthers"},
+		{Title: "Reopen Closed", Command: "editor.tab.reopenClosed"},
+	}
+}
+
+// paneContextItems is the pane title band's right-click menu (#1128): layout
+// operations on the pane whose band was clicked (it was focused on open).
+func paneContextItems() []menu.Item {
+	return []menu.Item{
+		{Title: "Split Right", Command: "pane.splitRight"},
+		{Title: "Split Down", Command: "pane.splitDown"},
+		{Title: "Maximize", Command: "pane.maximize"},
+		{Title: "Close Pane", Command: "pane.close"},
 	}
 }
 

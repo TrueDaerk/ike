@@ -51,7 +51,7 @@ func TestTerminalTabCenterDropMovesToOtherPane(t *testing.T) {
 	m, src, dst, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 
-	x, y := barCell(t, m, 17) // terminal segment of " a.txt │ b.txt │ <term> "
+	x, y := barCell(t, m, 21) // terminal segment of " a.txt ✕ │ b.txt ✕ │ <term> ✕ "
 	m = step(m, press(x, y))
 	dr := m.lay.Panes[dst]
 	m = step(m, release(dr.X+dr.W/2, dr.Y+dr.H/2))
@@ -82,7 +82,7 @@ func TestTerminalTabEdgeDropSplitsOwnPane(t *testing.T) {
 	defer func() { closeTerms(m) }()
 	leavesBefore := len(m.lay.Panes)
 
-	x, y := barCell(t, m, 17)
+	x, y := barCell(t, m, 21)
 	m = step(m, press(x, y))
 	dr := m.lay.Panes[dst]
 	m = step(m, release(dr.X+dr.W-1, dr.Y+dr.H/2)) // right edge of dst
@@ -111,7 +111,7 @@ func TestTerminalTabSelfEdgeSplit(t *testing.T) {
 	m, src, _, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 
-	x, y := barCell(t, m, 17)
+	x, y := barCell(t, m, 21)
 	m = step(m, press(x, y))
 	sr := m.lay.Panes[src]
 	m = step(m, release(sr.X+sr.W/2, sr.Y+sr.H-1)) // own bottom edge
@@ -135,7 +135,7 @@ func TestExitedSessionClosesSplitTerminalPane(t *testing.T) {
 	m, _, dst, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 
-	x, y := barCell(t, m, 17)
+	x, y := barCell(t, m, 21)
 	m = step(m, press(x, y))
 	dr := m.lay.Panes[dst]
 	m = step(m, release(dr.X+dr.W-1, dr.Y+dr.H/2))

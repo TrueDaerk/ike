@@ -17,7 +17,7 @@ func splitTabApp(t *testing.T) (Model, [3]string, string, string) {
 	m, paths := tabApp(t)
 	src := m.activeWS().Panes.Focused()
 	r := m.lay.Panes[src]
-	x, y := barCell(t, m, 17) // c.txt segment of " a.txt │ b.txt │ c.txt "
+	x, y := barCell(t, m, 21) // c.txt segment of " a.txt ✕ │ b.txt ✕ │ c.txt ✕ "
 	m = step(m, press(x, y))
 	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
 	dst := m.activeWS().Panes.Focused()
