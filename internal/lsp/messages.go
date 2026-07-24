@@ -159,6 +159,22 @@ type ReferencesMsg struct {
 	Refs []Reference
 }
 
+// UsagesMsg delivers panel-targeted find-references results
+// (lsp.referencesPanel, #1155): the app routes them into the persistent
+// Usages tool pane instead of the transient palette list. Symbol is the
+// identifier under the cursor at request time (the pane title); Path/Line/Col
+// are the request origin in editor coordinates. Refresh is the bridge-built
+// continuation that re-runs the request at the stored origin — best-effort
+// after edits, since the position may have drifted.
+type UsagesMsg struct {
+	Symbol  string
+	Path    string
+	Line    int
+	Col     int
+	Refs    []Reference
+	Refresh tea.Cmd
+}
+
 // DocumentHighlight is one occurrence of the symbol under the cursor in
 // editor coordinates (#172). Kind is protocol.Highlight* (text/read/write).
 type DocumentHighlight struct {

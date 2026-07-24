@@ -71,6 +71,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().references(h) },
 			},
 			{
+				// Same request as lsp.references, but the results fill the
+				// persistent Usages tool pane (#1155) instead of the palette.
+				ID:    "lsp.referencesPanel",
+				Title: "LSP: Find Usages (Panel)",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().referencesPanel(h) },
+			},
+			{
 				ID:    "lsp.callHierarchy",
 				Title: "LSP: Call Hierarchy",
 				Scope: plugin.PaneScope("editor"),
