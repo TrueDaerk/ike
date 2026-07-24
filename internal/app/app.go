@@ -3468,9 +3468,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openLocalHistoryPicker()
 		return m, nil
 	case localHistorySnapshotMsg:
-		// A buffer save: record the written bytes into the snapshot store.
+		// A buffer save: record the written bytes into the snapshot store —
+		// and fire the plugin hook (#1161): EventBufferSaved was never
+		// emitted, leaving the lsp plugin's didSave/file-event hook dead in
+		// native builds. This funnel sees every save flow (#1023).
 		m.recordLocalHistory(msg.path)
-		return m, nil
+		return m, tea.Batch(m.fireHooks(plugin.EventBufferSaved, msg.path)...)
 
 	case NavBackMsg:
 		// nav.back (Roadmap 0220): return to the previous recorded position.
