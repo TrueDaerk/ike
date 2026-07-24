@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Search Everywhere stops duplicating lines (#1121): workspace-symbol hits
+  dedupe on (name, path, line) in SetHits — first, best-ranked hit wins;
+  the shared cache also covers plain go-to-symbol
+  (`/architecture/command-palette.md`).
+
 - Undo gets the cmd+z default (#1117): dual-chord like save/redo — cmd+z
   where the terminal delivers Cmd, ctrl+z as the everywhere fallback; the
   stale "cmd is undeliverable" comment corrected

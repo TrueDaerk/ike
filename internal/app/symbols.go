@@ -66,8 +66,23 @@ func (s *symbolMode) SetHits(query string, hits []ilsp.SymbolHit) {
 	if query != s.lastSent {
 		return
 	}
-	s.items = make([]symbolItem, len(hits))
-	for i, h := range hits {
+	s.items = s.items[:0]
+	// Deduplicate rows that would render identically (#1121): a query
+	// matching one line several times yields several hits on the same
+	// (name, path, line) — one row is enough; the first (best-ranked) hit
+	// wins. Distinct symbols on different lines never collapse.
+	type rowKey struct {
+		name string
+		path string
+		line int
+	}
+	seen := make(map[rowKey]bool, len(hits))
+	for _, h := range hits {
+		k := rowKey{h.Name, h.Ref.Path, h.Ref.Line}
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
 		detail := displayPath(h.Ref.Path) + ":" + strconv.Itoa(h.Ref.Line+1)
 		if p := h.Ref.Preview; p != "" {
 			if runes := []rune(p); len(runes) > previewMax {
@@ -75,14 +90,14 @@ func (s *symbolMode) SetHits(query string, hits []ilsp.SymbolHit) {
 			}
 			detail += "  " + p
 		}
-		s.items[i] = symbolItem{
+		s.items = append(s.items, symbolItem{
 			item: palette.Item{
 				Title:  h.Name,
 				Detail: detail,
 				Msg:    ilsp.DefinitionMsg{Path: h.Ref.Path, Line: h.Ref.Line, Col: h.Ref.Col},
 			},
 			project: insideProject(h.Ref.Path),
-		}
+		})
 	}
 }
 
