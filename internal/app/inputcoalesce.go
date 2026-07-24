@@ -196,7 +196,7 @@ func (c *MouseCoalescer) flush() {
 func (m Model) overlayCapturesKeyboard() bool {
 	return m.settings.IsOpen() || (m.menuEnabled() && m.menu.IsOpen()) ||
 		m.finder.IsOpen() || m.todo.IsOpen() || m.undoTree.IsOpen() ||
-		m.commitUI.IsOpen() || m.callhier.IsOpen() || m.palette.IsOpen() ||
+		m.callhier.IsOpen() || m.palette.IsOpen() ||
 		m.shell.IsOpen() || m.recoveryOpen() || m.onboardingOpen() ||
 		m.conflictOpen() || m.revertPromptOpen() || m.depEditPromptOpen() ||
 		m.switchPromptOpen() || m.closePromptOpen() || m.renameOpen() ||

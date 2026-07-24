@@ -25,15 +25,13 @@ func changesPanel() Model {
 	return m
 }
 
-func ctrlS() tea.KeyPressMsg { return tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl} }
-
 func TestChangesRowsFromSnapshot(t *testing.T) {
 	m := changesPanel()
-	if len(m.chRows) != 2 || m.chRows[0].Path != "a.go" || m.chRows[0].Staged || !m.chRows[1].Staged {
+	if len(m.chRows) != 2 || m.chRows[0].Path != "a.go" || m.chRows[1].Path != "b.go" {
 		t.Fatalf("rows = %+v", m.chRows)
 	}
 	v := ansi.Strip(m.View())
-	for _, want := range []string{"[ ] M a.go", "[x] A b.go", "space stage"} {
+	for _, want := range []string{"M a.go", "A b.go", "enter diff"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -50,61 +48,16 @@ func TestChangesRowsFromSnapshot(t *testing.T) {
 	}
 }
 
-func TestChangesToggleAndDiff(t *testing.T) {
+func TestChangesNavigationAndDiff(t *testing.T) {
 	m := changesPanel()
-	cmd := m.Update(key(" "))
-	if cmd == nil {
-		t.Fatal("space emitted nothing")
+	if cmd := m.Update(key("j")); cmd != nil || m.chCursor != 1 {
+		t.Fatalf("j: cursor=%d cmd=%v", m.chCursor, cmd)
 	}
-	tgl, ok := cmd().(ToggleMsg)
-	if !ok || tgl.Path != "a.go" || !tgl.Stage || !m.chRows[0].Staged {
-		t.Fatalf("toggle = %#v staged=%v", tgl, m.chRows[0].Staged)
+	if cmd := m.Update(key("k")); cmd != nil || m.chCursor != 0 {
+		t.Fatalf("k: cursor=%d cmd=%v", m.chCursor, cmd)
 	}
-	cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if od, ok := cmd().(OpenDiffMsg); !ok || od.Path != "a.go" {
 		t.Fatalf("enter = %#v", cmd())
-	}
-}
-
-func TestChangesCommitFlow(t *testing.T) {
-	m := changesPanel()
-	// b.go staged, message empty: hint.
-	if h, ok := m.Update(ctrlS())().(HintMsg); !ok || !strings.Contains(h.Text, "message is empty") {
-		t.Fatalf("hint = %#v", h)
-	}
-	// c focuses the message; typed keys land in the shared draft, digits too.
-	m.Update(key("c"))
-	if !m.msgFocus {
-		t.Fatal("c must focus the message")
-	}
-	for _, r := range "fix 12" {
-		m.Update(key(string(r)))
-	}
-	if m.draft.Text != "fix 12" || m.ActiveTab() != TabChanges {
-		t.Fatalf("draft = %q tab = %v", m.draft.Text, m.ActiveTab())
-	}
-	sub, ok := m.Update(ctrlS())().(SubmitMsg)
-	if !ok || sub.Message != "fix 12" {
-		t.Fatalf("submit = %#v", sub)
-	}
-	// esc returns to the list.
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
-	if m.msgFocus {
-		t.Fatal("esc must leave the message field")
-	}
-}
-
-func TestChangesSharedDraft(t *testing.T) {
-	m := changesPanel()
-	shared := &vcs.MessageDraft{Text: "wip", Pos: 3}
-	m.SetDraft(shared)
-	m.Update(key("c"))
-	m.Update(key("!"))
-	if shared.Text != "wip!" {
-		t.Fatalf("shared draft = %q", shared.Text)
-	}
-	shared.Clear()
-	if m.draft.Text != "" {
-		t.Fatal("clear must reach the panel")
 	}
 }

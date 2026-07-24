@@ -164,11 +164,10 @@ var actionMap = map[string]string{
 	"NextDiff":     "diff.nextChange",
 	"PreviousDiff": "diff.prevChange",
 
-	// VCS.
-	"CheckinProject":      "vcs.commit",
-	"Vcs.UpdateProject":   "vcs.updateProject",
+	// VCS. Workflow actions (CheckinProject, Vcs.UpdateProject, Git.Branches)
+	// have no IKE command since #750 — git workflow is delegated to custom
+	// tool panes (lazygit) — so those rows import as unmapped.
 	"ChangesView.Revert":  "vcs.revertFile",
-	"Git.Branches":        "vcs.branches",
 	"Annotate":            "vcs.blameLine",
 	"Compare.SameVersion": "vcs.diff",
 

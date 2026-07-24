@@ -35,14 +35,14 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 	}
 	// Blocked commands are labelled, never hidden. The real ledger emptied
 	// with 0320 (#466), so the machinery is exercised through a stub entry.
-	remove := StubBlockedForTest("vcs.commit", "unit-test dependency")
-	if got, _ := l.Binding("vcs.commit"); !strings.HasPrefix(got, "✗ blocked:") {
+	remove := StubBlockedForTest("vcs.revertFile", "unit-test dependency")
+	if got, _ := l.Binding("vcs.revertFile"); !strings.HasPrefix(got, "✗ blocked:") {
 		t.Fatalf("stubbed blocked binding = %q", got)
 	}
 	remove()
-	// Without the stub the fragile cmd+k chord is shown plain.
-	if got, _ := l.Binding("vcs.commit"); got != "cmd+k" {
-		t.Fatalf("vcs.commit = %q", got)
+	// Without the stub the fragile cmd+alt+z chord is shown plain.
+	if got, _ := l.Binding("vcs.revertFile"); got != "cmd+alt+z" {
+		t.Fatalf("vcs.revertFile = %q", got)
 	}
 	// Unbound ids degrade gracefully.
 	if _, ok := l.Binding("no.such.command"); ok {

@@ -25,7 +25,6 @@ import (
 	"ike/internal/backup"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
-	"ike/internal/commitui"
 	"ike/internal/complete"
 	"ike/internal/complete/emmet"
 	"ike/internal/complete/mru"
@@ -338,10 +337,6 @@ type Model struct {
 	// undoTree is the undo-tree overlay (#59): the focused editor's change
 	// tree; jumps route back into that editor as HistoryJumpMsg.
 	undoTree *undotree.Model
-	// commitUI is the commit dialog (Roadmap 0320, #465): the changed-files
-	// list with stage toggles plus the commit message pane; the in-progress
-	// message survives close/reopen until a commit succeeds.
-	commitUI *commitui.Model
 	// revertPending is the file awaiting the vcs.revertFile confirmation
 	// (#466) while the shell shows the prompt; "" when none.
 	revertPending string
@@ -592,7 +587,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	pasteHist := &pasteHistMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{draft: &vcs.MessageDraft{}} // shared before the literal: the branch picker mode reads it
+	vcsSt := &vcsState{} // shared before the literal: the reverts picker mode reads it
 	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
 	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
 	wsMgr := wsManager(mgr, resumed, root, panes)  // hoisted: the palette's recent-projects sources read it (#820)
@@ -652,9 +647,6 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.callhier.SetPalette(themePal)
 	m.undoTree = undotree.New()
 	m.undoTree.SetPalette(themePal)
-	m.commitUI = commitui.New()
-	m.commitUI.SetPalette(themePal)
-	m.commitUI.SetDraft(vcsSt.draft)
 	m.callhier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
@@ -1019,14 +1011,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		}
 		if id := ids[key]; id.Kind == "vcs" {
 			// The VCS panel restores empty in its saved slot; the first
-			// status snapshot re-feeds it (0330, #482). Path carries the
-			// active tab (#504) — a restored Log view lazy-loads with the
-			// snapshot via EnsureLogLoaded.
-			p := panes.Get(panes.AddVCS()).VCS()
-			p.SetDraft(m.vcs.draft)
-			if id.Path == "log" {
-				p.SetTab(vcspanel.TabLog)
-			}
+			// status snapshot re-feeds it (0330, #482).
+			panes.AddVCS()
 			continue
 		}
 		if id := ids[key]; id.Kind == "debug" {
@@ -1465,10 +1451,9 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	scr := palette.NewScratchMode(scratchList)
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
-	branches := newBranchMode(func() []vcs.Branch { return vcsSt.branches })
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, branches, reverts, openPath)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, reverts, openPath)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2281,7 +2266,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
 		m.undoTree.SetSize(m.width, m.height)
-		m.commitUI.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
 			w, h := m.settingsSize()
@@ -3651,85 +3635,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Recomputed gutter diff markers (#464): to every view of the path.
 		return m, m.routeToEditor(msg.Path, msg)
 
-	case OpenCommitMsg:
-		// vcs.commit (#465): the commit dialog over the current snapshot,
-		// with a background refresh for fresh truth.
-		if m.vcs.snap == nil {
-			m.host.Notify(host.Info, "not a git repository")
-			return m, nil
-		}
-		m.commitUI.SetSize(m.width, m.height)
-		m.commitUI.Open(commitRows(m.vcs.snap))
-		return m, m.scheduleVCSRefresh()
-
-	case commitui.ToggleMsg:
-		if snap := m.vcs.snap; snap != nil {
-			if msg.Stage {
-				return m, vcs.StageCmd(snap.Root, msg.Path)
-			}
-			return m, vcs.UnstageCmd(snap.Root, msg.Path)
-		}
-		return m, nil
-
-	case vcspanel.ToggleMsg:
-		// The tool window's staging toggles reuse the 0320 ops (#483).
-		if snap := m.vcs.snap; snap != nil {
-			if msg.Stage {
-				return m, vcs.StageCmd(snap.Root, msg.Path)
-			}
-			return m, vcs.UnstageCmd(snap.Root, msg.Path)
-		}
-		return m, nil
-
-	case vcspanel.SubmitMsg:
-		if snap := m.vcs.snap; snap != nil {
-			return m, vcs.CommitCmd(snap.Root, msg.Message)
-		}
-		return m, nil
-
-	case vcspanel.HintMsg:
-		m.host.Notify(host.Info, msg.Text)
-		return m, nil
-
-	case vcspanel.LogRequestMsg:
-		// The panel's log window loads through the root model (#484).
-		if snap := m.vcs.snap; snap != nil {
-			return m, vcs.LogCmd(snap.Root, msg.Offset, msg.Limit)
-		}
-		return m, nil
-
-	case vcs.LogMsg:
-		if p := m.vcsPanel(); p != nil {
-			p.ApplyLog(msg)
-		}
-		return m, nil
-
-	case vcspanel.ShowRequestMsg:
-		if snap := m.vcs.snap; snap != nil {
-			return m, vcs.ShowCmd(snap.Root, msg.Hash)
-		}
-		return m, nil
-
-	case vcs.ShowMsg:
-		if p := m.vcsPanel(); p != nil {
-			p.ApplyShow(msg)
-		}
-		return m, nil
-
-	case vcspanel.OpenCommitDiffMsg:
-		if snap := m.vcs.snap; snap != nil {
-			return m, vcs.FileAtCmd(snap.Root, msg.Hash, msg.Path, msg.OldPath)
-		}
-		return m, nil
-
-	case vcs.FileAtMsg:
-		if msg.Err != nil {
-			m.host.Notify(host.Error, "diff: "+msg.Err.Error())
-			return m, nil
-		}
-		m.openCommitDiffPane(msg)
-		return m, nil
-
 	case vcspanel.OpenDiffMsg:
 		// enter on a changes row (#483): the file's diff against HEAD. Rows
 		// carry repo-relative paths; untracked files have no HEAD side.
@@ -3743,63 +3648,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, vcs.HeadDiffCmd(snap.Root, abs)
-
-	case commitui.SubmitMsg:
-		if snap := m.vcs.snap; snap != nil {
-			return m, vcs.CommitCmd(snap.Root, msg.Message)
-		}
-		return m, nil
-
-	case commitui.HintMsg:
-		m.host.Notify(host.Info, msg.Text)
-		return m, nil
-
-	case vcs.OpDoneMsg:
-		// A stage/unstage finished: surface failures, then let the refresh
-		// re-derive the dialog rows from git's actual state.
-		if msg.Err != nil {
-			m.host.Notify(host.Error, msg.Op+" failed: "+msg.Err.Error())
-		}
-		return m, m.scheduleVCSRefresh()
-
-	case OpenBranchPickerMsg:
-		// vcs.branches (#467): fetch a fresh list, then open the picker.
-		if m.vcs.snap == nil {
-			m.host.Notify(host.Info, "not a git repository")
-			return m, nil
-		}
-		return m, vcs.BranchesCmd(m.vcs.snap.Root)
-
-	case vcs.BranchesMsg:
-		if msg.Err != nil {
-			m.host.Notify(host.Error, "branches: "+msg.Err.Error())
-			return m, nil
-		}
-		m.vcs.branches = msg.Branches
-		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, branchesPrefix)
-		return m, nil
-
-	case CheckoutBranchMsg:
-		snap := m.vcs.snap
-		if snap == nil {
-			return m, nil
-		}
-		if msg.Name == snap.Branch {
-			m.host.Notify(host.Info, "already on "+msg.Name)
-			return m, nil
-		}
-		return m, vcs.CheckoutCmd(snap.Root, msg.Name)
-
-	case vcs.CheckoutDoneMsg:
-		if msg.Err != nil {
-			// Dirty-tree collisions surface as git's own "would be
-			// overwritten by checkout" line.
-			m.host.Notify(host.Error, "checkout failed: "+msg.Err.Error())
-			return m, m.scheduleVCSRefresh()
-		}
-		m.host.Notify(host.Info, "switched to "+msg.Branch)
-		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case DiffHeadMsg:
 		return m.diffAgainstHead()
@@ -3836,20 +3684,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "blame: "+msg.Err.Error())
 		}
 		return m, m.routeToEditor(msg.Path, msg)
-
-	case UpdateProjectMsg:
-		return m.updateProject()
-
-	case vcs.UpdateDoneMsg:
-		switch {
-		case msg.Err != nil:
-			m.host.Notify(host.Error, "update failed: "+msg.Err.Error())
-		case msg.UpToDate:
-			m.host.Notify(host.Info, "already up to date")
-		default:
-			m.host.Notify(host.Info, "updated: "+strconv.Itoa(msg.Commits)+" commits, "+strconv.Itoa(msg.Files)+" files")
-		}
-		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case RevertActiveFileMsg:
 		return m.revertActiveFile()
@@ -3891,17 +3725,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			reload = ed.ResolveConflictReload()
 		}
 		return m, tea.Batch(reload, m.scheduleVCSRefresh())
-
-	case vcs.CommitDoneMsg:
-		if msg.Err != nil {
-			// Hook failures etc. keep the dialog (and message) for a retry.
-			m.host.Notify(host.Error, "commit failed: "+msg.Err.Error())
-			return m, m.scheduleVCSRefresh()
-		}
-		m.commitUI.ClearMessage()
-		m.commitUI.Close()
-		m.host.Notify(host.Info, "committed "+msg.Hash+" — "+msg.Summary)
-		return m, tea.Batch(m.scheduleVCSRefresh(), m.vcsPanelLogReload())
 
 	case editor.ConflictMsg:
 		// Saving a stale buffer (Roadmap 0140, #82): prompt before overwriting
@@ -3953,7 +3776,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case keymapTimeoutMsg:
 		// A held partial chord timed out: resolve it as an exact binding if one
-		// exists (e.g. cmd+k alone → vcs.commit), else discard it. Either way
+		// exists, else discard it (cmd+k alone is a bare prefix of the
+		// pane-split sequence family and simply times out). Either way
 		// the which-key overlay goes.
 		m.whichKey = nil
 		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
@@ -4002,10 +3826,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.undoTree.IsOpen() {
 			// The undo-tree overlay owns the keyboard the same way (#59).
 			return m, m.undoTree.Update(msg)
-		}
-		if m.commitUI.IsOpen() {
-			// The commit dialog owns the keyboard the same way (0320, #465).
-			return m, m.commitUI.Update(msg)
 		}
 		if m.callhier.IsOpen() {
 			// The call-hierarchy overlay owns the keyboard the same way (#173).
@@ -6798,8 +6618,6 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.todo.View(), m.width, m.height)
 	case m.undoTree.IsOpen():
 		result = overlay.Center(base, m.undoTree.View(), m.width, m.height)
-	case m.commitUI.IsOpen():
-		result = overlay.Center(base, m.commitUI.View(), m.width, m.height)
 	case m.callhier.IsOpen():
 		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
 	case m.palette.IsOpen():

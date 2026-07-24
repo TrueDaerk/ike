@@ -251,8 +251,8 @@ func TestParameterInfoBindsToCtrlP(t *testing.T) {
 func TestMultiStepChordAndTimeout(t *testing.T) {
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
 	r := NewResolver(table)
-	// First step ctrl+k (cmd+k normalised) is both an exact binding (vcs.commit)
-	// and a prefix of the ctrl+k split/maximize sequences → must wait.
+	// First step ctrl+k (cmd+k normalised) is a prefix of the ctrl+k
+	// split/maximize sequences → must wait.
 	res := r.Feed(Key{Base: "k", Mods: ModCtrl}, Editor)
 	if res.Status != Pending {
 		t.Fatalf("after ctrl+k: status=%v, want Pending", res.Status)
@@ -262,14 +262,22 @@ func TestMultiStepChordAndTimeout(t *testing.T) {
 	if res.Status != Resolved || res.Command != "pane.splitDown" {
 		t.Fatalf("ctrl+k down = %+v, want pane.splitDown", res)
 	}
-	// Timeout path: ctrl+k then nothing → exact match vcs.commit resolves.
+	// Timeout path: ctrl+k then nothing → no exact binding since #750
+	// (vcs.commit removed), the held prefix is discarded.
 	res = r.Feed(Key{Base: "k", Mods: ModCtrl}, Global)
 	if res.Status != Pending {
 		t.Fatalf("ctrl+k pending expected, got %v", res.Status)
 	}
 	res = r.Timeout(Global)
-	if res.Status != Resolved || res.Command != "vcs.commit" {
-		t.Fatalf("timeout resolve = %+v, want vcs.commit", res)
+	if res.Status != NoMatch {
+		t.Fatalf("timeout resolve = %+v, want NoMatch (bare cmd+k prefix)", res)
+	}
+	// The sequence family stays intact after the discarded prefix.
+	if res := r.Feed(Key{Base: "k", Mods: ModCtrl}, Editor); res.Status != Pending {
+		t.Fatalf("ctrl+k after timeout: status=%v, want Pending", res.Status)
+	}
+	if res := r.Feed(Key{Base: "z"}, Editor); res.Status != Resolved || res.Command != "pane.maximize" {
+		t.Fatalf("ctrl+k z = %+v, want pane.maximize", res)
 	}
 }
 
@@ -328,13 +336,14 @@ func TestFromKeyMsg(t *testing.T) {
 }
 
 func TestInertBindingMetadataPreserved(t *testing.T) {
-	// vcs.* commands have no owner yet; the binding must still exist (inert) so
-	// the help sheet can show it. Resolution returns the id regardless of whether
-	// a command is registered — that check is the caller's.
+	// A default binding whose command may register later must still exist
+	// (inert) so the help sheet can show it. Resolution returns the id
+	// regardless of whether a command is registered — that check is the
+	// caller's. cmd+alt+z → vcs.revertFile is a stable such row.
 	table := BuildTable(Defaults(PresetJetBrains), nil, "linux")
-	commit := NormalizeChord(MustParseChord("cmd+k"), "linux")
-	if b, ok := table.Lookup(commit, Global); !ok || b.Command != "vcs.commit" {
-		t.Errorf("inert vcs.commit binding = %+v ok=%v", b, ok)
+	revert := NormalizeChord(MustParseChord("cmd+alt+z"), "linux")
+	if b, ok := table.Lookup(revert, Global); !ok || b.Command != "vcs.revertFile" {
+		t.Errorf("inert vcs.revertFile binding = %+v ok=%v", b, ok)
 	}
 }
 

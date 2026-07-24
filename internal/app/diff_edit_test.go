@@ -76,14 +76,19 @@ func TestDiffEditMode(t *testing.T) {
 	}
 }
 
-// TestDiffEditModeReadOnlyForRevisions guards the log diff: 'e' hints and
-// mounts nothing.
+// TestDiffEditModeReadOnlyForRevisions guards revision-backed diffs (e.g. a
+// restored revision pane, #508): 'e' hints and mounts nothing.
 func TestDiffEditModeReadOnlyForRevisions(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
-	out, _ := m.Update(vcs.FileAtMsg{Hash: "aaaaaaaa", Path: "f.txt", Parent: "v1\n", Content: "v2\n"})
-	m = out.(Model)
+	const key = "diff:1"
+	m.activeWS().Panes.AddDiffRevKey(key, "f.txt", "f.txt", "aaaaaaaa^", "aaaaaaaa")
+	if !m.placeDiffLeaf(key) {
+		t.Fatal("setup: diff pane not placed")
+	}
+	m.activeWS().Panes.Get(key).Diff().SetContents("v1\n", "v2\n")
+	m.setFocus(key)
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst.Kind() != pane.KindDiff || inst.Diff().Editable() {
 		t.Fatalf("setup: revision diff must not be editable")

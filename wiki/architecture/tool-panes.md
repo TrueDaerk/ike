@@ -28,6 +28,14 @@ placement = "bottom"    # "bottom" (default) or "right" split
 Defined in `internal/config/schema.go` (`Tools`/`ToolEntry`). Entries missing
 `name` or `command` are skipped.
 
+**Preconfigured default (#750):** when `lazygit` is on PATH the default layer
+(`internal/config/defaults.go`) ships exactly the entry above, so
+`tool.lazygit` works with zero configuration — the delegated home of the git
+workflow (staging, commits, branches, log) after the native VCS tool window
+slimmed to a read-only changes list. No hard dependency: without the binary
+the default is omitted and the setup dialog below offers the install. A
+user-defined `[[tools.custom]]` list overrides the default wholesale.
+
 Editable from the UI via **Settings → Tools** (#755,
 `internal/settings/tools_page.go`): `a` adds, enter edits, `d` deletes; the
 form validates name/command presence, duplicate names and the placement enum.

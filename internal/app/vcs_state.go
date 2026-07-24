@@ -1,12 +1,10 @@
 package app
 
 import (
-	"sort"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/commitui"
 	"ike/internal/editor"
 	"ike/internal/pane"
 	"ike/internal/vcs"
@@ -35,10 +33,6 @@ type vcsState struct {
 	tickArmed  bool          // a vcsTickMsg is pending
 	refreshing bool          // a git status run is in flight
 	dirty      bool          // triggers arrived mid-flight: run again after
-	branches   []vcs.Branch  // last fetched branch list, behind the picker (#467)
-	// draft is the shared in-progress commit message (0330, #483): the modal
-	// dialog and the tool window edit the same text.
-	draft *vcs.MessageDraft
 	// revertsPath/reverts back the vcs.undoRevert picker (#556): the focused
 	// file's pre-revert snapshots, loaded when the picker opens.
 	revertsPath string
@@ -76,33 +70,18 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	if m.activeWS().Panes.Has(pane.ExplorerKey) {
 		m.explorer().SetVCS(msg.Snap)
 	}
-	// The VCS tool window re-reads the snapshot (0330, #482); a restored
-	// Log view gets its first window now that a repo is known (#504).
-	var panelCmd tea.Cmd
+	// The VCS tool window re-reads the snapshot (0330, #482).
 	if m.activeWS().Panes.Has(pane.VCSKey) {
-		p := m.activeWS().Panes.Get(pane.VCSKey).VCS()
-		p.SetVCS(msg.Snap)
-		if msg.Snap != nil {
-			panelCmd = p.EnsureLogLoaded()
-		}
-	}
-	// The open commit dialog re-reads the changed files (#465); losing the
-	// repo underneath it closes it.
-	if m.commitUI.IsOpen() {
-		if msg.Snap == nil {
-			m.commitUI.Close()
-		} else {
-			m.commitUI.SetRows(commitRows(msg.Snap))
-		}
+		m.activeWS().Panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
 	}
 	if m.vcs.dirty {
 		m.vcs.dirty = false
 		m.vcs.refreshing = true
-		return tea.Batch(vcs.Refresh("."), panelCmd)
+		return vcs.Refresh(".")
 	}
 	// Recompute the gutter diff markers of every open buffer against the new
 	// snapshot (#464); clean/untracked buffers get their markers cleared.
-	return tea.Batch(append(m.vcsMarksCmds(), panelCmd)...)
+	return tea.Batch(m.vcsMarksCmds()...)
 }
 
 // ToggleBlameMsg runs vcs.blameLine (#468) on the focused document.
@@ -146,24 +125,6 @@ func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
 	default:
 		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
 	}
-}
-
-// OpenCommitMsg opens the commit dialog (vcs.commit, #465).
-type OpenCommitMsg struct{}
-
-// commitRows converts snapshot entries into the dialog's rows, sorted by path.
-func commitRows(snap *vcs.Snapshot) []commitui.Row {
-	rows := make([]commitui.Row, 0, len(snap.Entries))
-	for _, e := range snap.Entries {
-		rows = append(rows, commitui.Row{
-			Path:    e.Path,
-			Status:  e.Status,
-			Staged:  e.Staged(),
-			Partial: e.PartiallyStaged(),
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].Path < rows[j].Path })
-	return rows
 }
 
 // VCSSnapshot exposes the current snapshot to tests and consumers; nil means

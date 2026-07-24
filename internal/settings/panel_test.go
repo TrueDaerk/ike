@@ -23,6 +23,12 @@ func restoreConfig(t *testing.T) {
 	t.Helper()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir()) // isolates the per-project state files (#890)
 	prev := config.Get()
+	// Pin a clean baseline: the default layer is host-dependent (it
+	// preconfigures lazygit when the binary is on PATH, #750), and the tools
+	// page tests assert exact entry lists.
+	clean, _ := config.Load(config.Options{})
+	clean.Tools.Custom = nil
+	config.Set(clean)
 	t.Cleanup(func() { config.Set(prev) })
 }
 

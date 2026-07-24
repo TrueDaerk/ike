@@ -910,7 +910,7 @@ func (togglePlugin) Capabilities() plugin.Capabilities { return plugin.Capabilit
 func TestCheatsheetLiveAndBlocked(t *testing.T) {
 	// The real blocked ledger emptied with 0320 (#466): stub one entry so the
 	// sheet's blocked group stays covered.
-	defer keymap.StubBlockedForTest("vcs.updateProject", "unit-test dependency")()
+	defer keymap.StubBlockedForTest("vcs.revertFile", "unit-test dependency")()
 	m := sized(t, 120, 40)
 	m.openHelp()
 	m.help.Snapshot("")

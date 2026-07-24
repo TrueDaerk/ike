@@ -1,13 +1,12 @@
-// Package vcspanel is the persistent VCS tool window (Roadmap 0330, #480):
-// a bottom-split pane with two tabs — Changes (staging list + commit) and
-// Log (commit history) — JetBrains' Commit/Git tool windows scaled to the
-// terminal. The panel reads the shared vcs.Snapshot threaded in by the root
-// model and never runs git itself; every git interaction stays an async
-// command in internal/vcs.
+// Package vcspanel is the persistent VCS tool window (Roadmap 0330, #480;
+// slimmed in #750): a bottom-split pane with a read-only list of changed
+// files. Activating a row opens the file's diff against HEAD. The panel reads
+// the shared vcs.Snapshot threaded in by the root model and never runs git
+// itself. Git *workflow* (staging, commits, branches, log) is delegated to
+// custom TUI tool panes (#741) — lazygit ships as the preconfigured example.
 package vcspanel
 
 import (
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -17,14 +16,6 @@ import (
 	"ike/internal/vcs"
 )
 
-// Tab selects the visible view.
-type Tab int
-
-const (
-	TabChanges Tab = iota
-	TabLog
-)
-
 // Model is the tool window state. Value type with pointer-receiver mutators,
 // embedded in a pane.Instance like the diff viewer.
 type Model struct {
@@ -32,50 +23,25 @@ type Model struct {
 	height  int
 	focused bool
 	pal     *theme.Palette
-	tab     Tab
 
 	snap *vcs.Snapshot // shared status snapshot; nil = not a git repo
 
-	// Changes view (#483): the staging rows plus the message draft shared
-	// with the modal commit dialog.
+	// Changes list (#483, slimmed in #750): the changed files.
 	chRows   []Row
 	chCursor int
 	chTop    int
-	msgFocus bool
-	draft    *vcs.MessageDraft
 
-	// Double-click detection (#514): activating a row (diff / expand) needs
-	// a second click on the same row within doubleClickWindow; now is
-	// injectable so tests control the clock.
-	lastClickTab Tab
+	// Double-click detection (#514): activating a row (diff) needs a second
+	// click on the same row within doubleClickWindow; now is injectable so
+	// tests control the clock.
 	lastClickRow int
 	lastClickAt  time.Time
 	now          func() time.Time
-
-	// Log view (#484): windowed history, flattened with the expanded
-	// commit's files; loaded lazily through the root model.
-	logEntries   []vcs.LogEntry
-	logRows      []logRow
-	logCursor    int
-	logTop       int
-	logHasMore   bool
-	logLoading   bool
-	logErr       string
-	expandedHash string
-	details      *vcs.ShowMsg
 }
 
-// New returns a closed-over-nothing panel showing the Changes tab.
+// New returns a closed-over-nothing panel.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, draft: &vcs.MessageDraft{}, lastClickRow: -1, now: time.Now}
-}
-
-// SetDraft swaps in the shared commit message draft (#483) so the panel and
-// the modal dialog edit the same text.
-func (m *Model) SetDraft(d *vcs.MessageDraft) {
-	if d != nil {
-		m.draft = d
-	}
+	return Model{pal: pal, lastClickRow: -1, now: time.Now}
 }
 
 // SetSize records the interior content size.
@@ -88,32 +54,10 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
 // SetVCS threads the current status snapshot in; the root model calls it on
-// every refresh, mirroring the explorer. The Changes rows re-derive from it.
+// every refresh, mirroring the explorer. The rows re-derive from it.
 func (m *Model) SetVCS(snap *vcs.Snapshot) {
 	m.snap = snap
 	m.rebuildChanges()
-}
-
-// ActiveTab reports the visible view (tests, persistence).
-func (m *Model) ActiveTab() Tab { return m.tab }
-
-// SetTab selects the visible view without side effects — the layout restore
-// uses it (#504); the log's first load rides EnsureLogLoaded once the
-// snapshot exists.
-func (m *Model) SetTab(t Tab) {
-	if t == TabChanges || t == TabLog {
-		m.tab = t
-	}
-}
-
-// EnsureLogLoaded requests the log's first window when the Log tab is
-// visible and empty (#504): a restored Log view loads as soon as the initial
-// status snapshot arrives instead of waiting for a key-driven tab entry.
-func (m *Model) EnsureLogLoaded() tea.Cmd {
-	if m.tab != TabLog {
-		return nil
-	}
-	return m.ensureLogLoaded()
 }
 
 // theme resolves the palette with the shared default fallback.
@@ -129,73 +73,33 @@ func (m *Model) theme() *theme.Palette {
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
-		return m.handleKey(msg)
+		return m.updateChanges(msg)
 	}
 	return nil
 }
 
-// handleKey drives the tab header; view-specific keys land in the active
-// view's handler. While the message field holds focus every key belongs to
-// it — the tab-switch digits must stay typeable.
-func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.tab == TabChanges && m.msgFocus {
-		return m.updateChanges(msg)
-	}
-	switch msg.String() {
-	case "1":
-		m.tab = TabChanges
-		return nil
-	case "2":
-		m.tab = TabLog
-		return m.ensureLogLoaded()
-	case "tab":
-		m.tab = (m.tab + 1) % 2
-		if m.tab == TabLog {
-			return m.ensureLogLoaded()
-		}
-		return nil
-	}
-	switch m.tab {
-	case TabChanges:
-		return m.updateChanges(msg)
-	default:
-		return m.updateLog(msg)
-	}
-}
-
-// View renders the tab header plus the active view's body.
+// View renders the header plus the changes list.
 func (m *Model) View() string {
 	body := m.viewBody()
 	return m.header() + "\n" + body
 }
 
-// viewBody picks the active view, degrading to the non-repo placeholder.
+// viewBody renders the list, degrading to the non-repo placeholder.
 func (m *Model) viewBody() string {
 	if m.snap == nil {
 		return lipgloss.NewStyle().Faint(true).Render("not a git repository")
 	}
-	if m.tab == TabChanges {
-		return m.viewChanges()
-	}
-	return m.viewLog()
+	return m.viewChanges()
 }
 
-// header renders the two tab labels, the active one accented.
+// header renders the panel caption plus the branch.
 func (m *Model) header() string {
 	pal := m.theme()
-	labels := []string{"1 Changes", "2 Log"}
-	var parts []string
-	for i, l := range labels {
-		s := lipgloss.NewStyle().Foreground(pal.Secondary)
-		if Tab(i) == m.tab {
-			s = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
-			if m.focused {
-				s = s.Underline(true)
-			}
-		}
-		parts = append(parts, s.Render(l))
+	s := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	if m.focused {
+		s = s.Underline(true)
 	}
-	line := " " + strings.Join(parts, "  │  ")
+	line := " " + s.Render("Changes")
 	if m.snap != nil && m.snap.Branch != "" {
 		branch := lipgloss.NewStyle().Faint(true).Render("⎇ " + m.snap.Branch)
 		line += "   " + branch
@@ -210,4 +114,12 @@ func (m *Model) bodyHeight() int {
 		h = 1
 	}
 	return h
+}
+
+// clip bounds one rendered line to the panel width.
+func (m *Model) clip(s string) string {
+	if m.width > 0 && len([]rune(s)) > m.width {
+		return string([]rune(s)[:m.width-1]) + "…"
+	}
+	return s
 }

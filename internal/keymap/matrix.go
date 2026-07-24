@@ -127,8 +127,6 @@ var reachableAlternatives = map[string]string{
 	"notifications.history":    "palette",
 	"markdown.preview":         "palette",
 	"todo.list":                "palette",
-	"vcs.commit":               "palette",
-	"vcs.updateProject":        "palette",
 	"vcs.revertFile":           "palette",
 	"vcs.panel":                "palette",
 	"problems.toggle":          "palette",

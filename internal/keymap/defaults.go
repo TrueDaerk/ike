@@ -17,8 +17,9 @@ type row struct {
 // yet registered make the binding inert until their owner lands. Chords use
 // logical Cmd; platform.go maps Cmd→Ctrl off macOS at build time.
 var jetbrainsRows = []row{
-	{"cmd+k", "vcs.commit", "Commit", Global, "VCS (future)"},
-	{"cmd+t", "vcs.updateProject", "Update Project", Global, "VCS (future)"},
+	// vcs.commit (cmd+k) and vcs.updateProject (cmd+t) were removed in #750:
+	// git workflow is delegated to custom tool panes (lazygit). cmd+k lives
+	// on solely as the prefix of the pane-split sequence family below.
 	{"cmd+d", "editor.duplicateLine", "Duplicate line(s)", Editor, "Editor (06)"},
 	{"cmd+shift+a", "palette.searchEverywhere", "Search everywhere", Global, "Palette (07)"},
 	{"shift shift", "palette.searchEverywhere", "Search everywhere (double-shift)", Global, "Palette (07)"},

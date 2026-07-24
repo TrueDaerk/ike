@@ -12,40 +12,16 @@ import (
 	"ike/internal/vcs"
 )
 
-// vcs_actions.go drives vcs.updateProject and vcs.revertFile (Roadmap 0320,
-// #466): update pulls the upstream per the configured strategy with a summary
-// toast; revert restores the active file to HEAD behind a confirmation prompt
-// showing what would be lost. UX per the 0082 sheets on #22.
-
-// UpdateProjectMsg runs vcs.updateProject.
-type UpdateProjectMsg struct{}
+// vcs_actions.go drives vcs.revertFile (Roadmap 0320, #466): revert restores
+// the active file to HEAD behind a confirmation prompt showing what would be
+// lost. UX per the 0082 sheets on #22. Workflow commands (commit, update,
+// branches) are delegated to custom tool panes since #750.
 
 // RevertActiveFileMsg starts the vcs.revertFile flow for the focused editor.
 type RevertActiveFileMsg struct{}
 
 // RevertHunkMsg starts the vcs.revertHunk flow (#555) for the focused editor.
 type RevertHunkMsg struct{}
-
-// updateProject validates and launches the pull.
-func (m Model) updateProject() (tea.Model, tea.Cmd) {
-	snap := m.vcs.snap
-	if snap == nil {
-		m.host.Notify(host.Info, "not a git repository")
-		return m, nil
-	}
-	if len(snap.Entries) > 0 {
-		// No surprise loss (0082/29): a dirty tree blocks the update with a
-		// clear warning instead of half-applying a merge over local edits.
-		m.host.Notify(host.Warn, "working tree has uncommitted changes — commit or stash before updating")
-		return m, nil
-	}
-	strategy := "merge"
-	if v, ok := m.host.Config().Get("vcs.update"); ok && v == "rebase" {
-		strategy = "rebase"
-	}
-	m.host.Notify(host.Info, "updating project ("+strategy+")…")
-	return m, vcs.UpdateCmd(snap.Root, strategy)
-}
 
 // revertActiveFile validates the focused file and asks for the change count
 // backing the confirmation prompt.

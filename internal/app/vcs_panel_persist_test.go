@@ -9,13 +9,11 @@ import (
 	"ike/internal/pane"
 	"ike/internal/registry"
 	"ike/internal/vcs"
-	"ike/internal/vcspanel"
 )
 
-// TestVCSPanelTabRestores guards #504: quitting with the Log tab open
-// restores the Log tab, and the first status snapshot triggers the log's
-// initial window load.
-func TestVCSPanelTabRestores(t *testing.T) {
+// TestVCSPanelRestores guards the slimmed #750 panel: quitting with the panel
+// open restores it in its slot, and the first status snapshot re-feeds it.
+func TestVCSPanelRestores(t *testing.T) {
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 
@@ -25,10 +23,8 @@ func TestVCSPanelTabRestores(t *testing.T) {
 	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
 	out, _ = m.Update(VCSPanelToggleMsg{})
 	m = out.(Model)
-	out, _ = m.Update(tea.KeyPressMsg{Code: '2', Text: "2"})
-	m = out.(Model)
-	if m.activeWS().Panes.Get(pane.VCSKey).VCS().ActiveTab() != vcspanel.TabLog {
-		t.Fatal("setup: log tab not active")
+	if !m.activeWS().Panes.Has(pane.VCSKey) {
+		t.Fatal("setup: panel not open")
 	}
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes) // what quit() does
 
@@ -37,36 +33,12 @@ func TestVCSPanelTabRestores(t *testing.T) {
 	if inst == nil || inst.Kind() != pane.KindVCS {
 		t.Fatal("panel did not restore")
 	}
-	if inst.VCS().ActiveTab() != vcspanel.TabLog {
-		t.Fatal("restored panel must reopen the Log tab")
-	}
 
-	// The initial snapshot arrival kicks the log's first window load.
-	out, cmd := m2.Update(vcs.SnapshotMsg{Snap: &vcs.Snapshot{Root: "/r", Branch: "main"}})
+	// The initial snapshot arrival re-feeds the restored panel.
+	out, _ = m2.Update(vcs.SnapshotMsg{Snap: &vcs.Snapshot{Root: "/r", Branch: "main",
+		Entries: []vcs.FileEntry{{Path: "a.go", Status: vcs.StatusModified, X: '.', Y: 'M'}}}})
 	m2 = out.(Model)
-	if cmd == nil {
-		t.Fatal("snapshot must produce commands")
+	if v := m2.activeWS().Panes.Get(pane.VCSKey).VCS().View(); v == "" {
+		t.Fatal("restored panel renders empty")
 	}
-	if !producesLogRequest(cmd) {
-		t.Fatal("restored Log tab did not request its first window")
-	}
-}
-
-// producesLogRequest walks a (possibly batched) command tree for a
-// vcspanel.LogRequestMsg without running toast timers.
-func producesLogRequest(cmd tea.Cmd) bool {
-	if cmd == nil {
-		return false
-	}
-	switch msg := cmd().(type) {
-	case vcspanel.LogRequestMsg:
-		return true
-	case tea.BatchMsg:
-		for _, c := range msg {
-			if producesLogRequest(c) {
-				return true
-			}
-		}
-	}
-	return false
 }
