@@ -79,10 +79,12 @@ func (m *Model) openStructurePanel() {
 // symbol highlight) and issues a documentSymbol refresh when the shown tree
 // belongs to another file — or unconditionally after a save (structForce).
 // The request dedup (structReqPath) keeps a provider-less file from
-// re-requesting every pass.
+// re-requesting every pass. The breadcrumbs bar (#1153) shares the funnel:
+// with the panel closed it still issues the request when its per-path cache
+// (docSymbols) lacks the active buffer's tree.
 func (m *Model) structureSyncCmd() tea.Cmd {
 	sp := m.structPanel()
-	if sp == nil {
+	if sp == nil && !m.breadcrumbsOn() {
 		return nil
 	}
 	key := m.activeEditorKey()
@@ -94,11 +96,20 @@ func (m *Model) structureSyncCmd() tea.Cmd {
 		return nil
 	}
 	path := ed.Path()
-	if sp.Path() == path {
+	if sp != nil && sp.Path() == path {
 		line, _ := ed.Cursor() // 1-based
 		sp.Follow(line - 1)
 	}
-	if m.structureNeedsRequest(sp.Path(), path) {
+	// "Shown" data for the dedup: the open panel's tree, else the breadcrumb
+	// cache entry (present even for empty / provider-less replies, so those
+	// files don't re-request every pass).
+	shown := ""
+	if sp != nil {
+		shown = sp.Path()
+	} else if _, ok := m.docSymbols[path]; ok {
+		shown = path
+	}
+	if m.structureNeedsRequest(shown, path) {
 		m.structForce = false
 		m.structReqPath = path
 		return m.RunCommand("lsp.documentSymbols")
@@ -117,9 +128,15 @@ func (m *Model) structureNeedsRequest(shown, path string) bool {
 	return shown != path && m.structReqPath != path
 }
 
-// applyDocumentSymbols feeds a documentSymbol reply into the open panel; with
-// the panel closed the reply is dropped.
+// applyDocumentSymbols stores a documentSymbol reply in the breadcrumbs'
+// per-path cache (#1153) — empty and provider-less replies included, so the
+// sync's dedup sees the path as answered — and feeds the open Structure
+// panel.
 func (m *Model) applyDocumentSymbols(msg ilsp.DocumentSymbolsMsg) {
+	if m.docSymbols == nil {
+		m.docSymbols = map[string][]ilsp.SymbolNode{}
+	}
+	m.docSymbols[msg.Path] = msg.Symbols
 	if sp := m.structPanel(); sp != nil {
 		sp.SetSymbols(msg.Path, msg.Symbols, msg.NoProvider)
 	}

@@ -238,7 +238,13 @@ type Editor struct {
 	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
 	// with their own color (#790).
 	ColorPreview bool `toml:"color_preview"`
-	Tabs         Tabs `toml:"tabs"`
+	// Breadcrumbs renders a one-line symbol-path bar under an editor pane's
+	// tab/title row (#1153): the documentSymbol chain enclosing the cursor,
+	// clickable per segment. On by default (the JetBrains default); the row
+	// only appears while symbol data exists for the file, so files without a
+	// documentSymbol provider spend no editor row on it.
+	Breadcrumbs bool `toml:"breadcrumbs"`
+	Tabs        Tabs `toml:"tabs"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
