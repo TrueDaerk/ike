@@ -53,6 +53,15 @@ type Model struct {
 	open   bool
 	active int
 	sel    int
+
+	// Bar cache (#1101): the bar string only changes with width, open state,
+	// active menu or palette — not per frame.
+	barCache  string
+	barWidth  int
+	barOpen   bool
+	barActive int
+	barPal    *theme.Palette
+	barValid  bool
 }
 
 // New builds a closed menu bar over menus, resolving command ids through info.
@@ -260,6 +269,10 @@ func (m *Model) theme() *theme.Palette {
 // a hint that pressing it jumps to that menu.
 func (m *Model) Bar() string {
 	pal := m.theme()
+	if m.barValid && m.barWidth == m.width && m.barOpen == m.open &&
+		m.barActive == m.active && m.barPal == m.pal {
+		return m.barCache
+	}
 	bar := lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Foreground)
 	activeStyle := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.Foreground).Bold(true)
 	var b strings.Builder
@@ -270,7 +283,10 @@ func (m *Model) Bar() string {
 		}
 		b.WriteString(m.renderTitleCell(style, m.menus[i].Title))
 	}
-	return bar.Width(m.width).Render(b.String())
+	out := bar.Width(m.width).Render(b.String())
+	m.barCache, m.barWidth, m.barOpen, m.barActive, m.barPal, m.barValid =
+		out, m.width, m.open, m.active, m.pal, true
+	return out
 }
 
 // renderTitleCell renders one padded bar segment (" File "), underlining the
