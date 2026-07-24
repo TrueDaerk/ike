@@ -42,6 +42,14 @@ type Config struct {
 	// launched, the adapter waits for incoming connections (PHP/Xdebug web
 	// debugging). File is empty then.
 	Listen bool `json:"listen,omitempty"`
+	// Tests marks a test-scope configuration (#1150): the argv is synthesized
+	// through the language's TestSpec instead of its RunCommandProvider.
+	// TestName/TestKind select exactly one test function; an empty TestName
+	// runs the file's whole test scope (Go: its package). Cwd holds the test
+	// file's directory so `go test` targets the right package.
+	Tests    bool   `json:"tests,omitempty"`
+	TestName string `json:"test_name,omitempty"`
+	TestKind string `json:"test_kind,omitempty"`
 }
 
 // Store is the persisted set of configurations plus the last-used name (the
@@ -158,6 +166,40 @@ func Default(root, file string) (Config, bool) {
 	return cfg, true
 }
 
+// TestConfig synthesizes the test-scope configuration for the absolute file
+// at root (#1150): one test function when t is non-nil, the file's whole test
+// scope otherwise. Cwd is the file's directory (Go: `go test` targets the
+// package). The name is stable per target — "TestX (pkg/dir)" or
+// "tests: pkg/dir" — so Upsert folds repeated runs of the same test into one
+// configuration. ok=false when no registered language claims the file or its
+// language declares no test runner.
+func TestConfig(root, file string, t *lang.TestMatch) (Config, bool) {
+	l, found := lang.ByPath(file)
+	if !found || !lang.HasTests(file) {
+		return Config{}, false
+	}
+	rel := relTo(root, file)
+	scope := filepath.ToSlash(filepath.Dir(rel))
+	cwd := filepath.Dir(rel)
+	if cwd == "." {
+		cwd = ""
+	}
+	cfg := Config{
+		Kind:  KindRun,
+		Lang:  l.ID,
+		File:  rel,
+		Cwd:   cwd,
+		Tests: true,
+	}
+	if t != nil {
+		cfg.TestName, cfg.TestKind = t.Name, t.Kind
+		cfg.Name = t.Name + " (" + scope + ")"
+	} else {
+		cfg.Name = "tests: " + scope
+	}
+	return cfg, true
+}
+
 // EnsureFor returns the store's configuration for the absolute file,
 // creating and persisting the default one on first run (created=true then).
 // A failed persist still returns the in-memory configuration — the run must
@@ -180,10 +222,18 @@ func (s *Store) EnsureFor(root, file string) (cfg *Config, created bool, ok bool
 }
 
 // Argv synthesizes the command line for cfg at root through the language's
-// RunCommandProvider; explicit is the user's configured interpreter for the
-// language ("" when none). ok=false when the language contributes no run
+// RunCommandProvider — or, for a test-scope configuration (#1150), through
+// its TestSpec templates; explicit is the user's configured interpreter for
+// the language ("" when none). ok=false when the language contributes no run
 // command.
 func Argv(root string, cfg Config, explicit string) ([]string, bool) {
+	if cfg.Tests {
+		file := absTo(root, cfg.File)
+		if cfg.TestName == "" {
+			return lang.TestFileArgv(root, file, explicit)
+		}
+		return lang.TestArgv(root, file, lang.TestMatch{Name: cfg.TestName, Kind: cfg.TestKind}, explicit)
+	}
 	spec := lang.RunSpec{
 		File:   absTo(root, cfg.File),
 		Module: cfg.Module,

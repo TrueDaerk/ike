@@ -32,6 +32,15 @@ signs) renders fresh each frame, so those decorations can never go stale from th
 cache. The cache is per-view: `New` and `ShareDocumentWith` each install a fresh
 one so split views of a shared document (#142) never collide.
 
+The gutter's sign column also carries the **test run marker** (#1150): a `▶`
+in the success tone on every detected test declaration (`testmarks.go` —
+detection via the language registry's `lang.TestSpec` regex seam, cached per
+document version in a per-view pointer store like the line cache, so the scan
+runs at most once per edit, never per frame). Sign precedence: debugger paused
+`▶` > breakpoint `●` > test `▶` > diagnostic/git colouring. A plain gutter
+click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
+line runs that test (see /architecture/run-configurations.md).
+
 ## Sub-packages
 
 - **buffer** — the text store: a line slice (`[]string`, never empty) with

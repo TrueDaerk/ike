@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"ike/internal/host"
+	"ike/internal/lang"
 	"ike/internal/layout"
 	"ike/internal/run"
 	"ike/internal/terminal"
@@ -32,6 +33,61 @@ func (m *Model) runCurrentFile() {
 		return
 	}
 	m.launchRun(root, store, cfg, created)
+}
+
+// runTestAtCursor is the run.testAtCursor handler (#1150): it resolves the
+// test declared at or nearest above the focused editor's cursor and runs
+// exactly that test in the run-terminal placement, registering the synthesized
+// configuration with run.rerun's last-used memory.
+func (m *Model) runTestAtCursor() {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "run: focus a file tab first")
+		return
+	}
+	if !lang.HasTests(ed.Path()) {
+		m.host.Notify(host.Info, "run: no test runner for this file")
+		return
+	}
+	line, _ := ed.CursorPos()
+	t, ok := ed.NearestTestAt(line)
+	if !ok {
+		m.host.Notify(host.Info, "run: no test at or above the cursor")
+		return
+	}
+	m.runTest(ed.Path(), &t)
+}
+
+// runTestsInFile is the run.testsInFile handler (#1150): it runs every test
+// in the active test file's scope (Go: plain `go test` in the file's package
+// directory).
+func (m *Model) runTestsInFile() {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "run: focus a file tab first")
+		return
+	}
+	if !lang.HasTests(ed.Path()) {
+		m.host.Notify(host.Info, "run: no test runner for this file")
+		return
+	}
+	m.runTest(ed.Path(), nil)
+}
+
+// runTest synthesizes and launches the test-scope configuration for path —
+// one test when t is non-nil, the whole file scope otherwise. Upsert keeps
+// re-runs of the same test as one named configuration; launchRun touches the
+// store, so run.rerun repeats the test.
+func (m *Model) runTest(path string, t *lang.TestMatch) {
+	root := projectRoot()
+	cfg, ok := run.TestConfig(root, path, t)
+	if !ok {
+		m.host.Notify(host.Info, "run: no test runner for this file")
+		return
+	}
+	store := run.Load()
+	created := store.ByName(cfg.Name) == nil
+	m.launchRun(root, store, store.Upsert(cfg), created)
 }
 
 // rerunLast is the run.rerun handler: it launches the last-used configuration.

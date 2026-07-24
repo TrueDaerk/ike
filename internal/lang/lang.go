@@ -92,6 +92,11 @@ type Language struct {
 	// substituted — see TemplateFor. Empty means new files start empty. Users
 	// override it per language via `[lang.<id>] template` in the config.
 	Template string
+
+	// Test declares how the language's test functions are detected and run
+	// (#1150) — gutter run markers and run.testAtCursor. Nil means the
+	// language has no test runner. See test.go.
+	Test *TestSpec
 }
 
 var (

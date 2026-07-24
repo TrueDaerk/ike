@@ -387,6 +387,7 @@ func (m Model) View() string {
 		height = lineCount + len(sticky)
 	}
 	bps := m.breakpointSet()
+	tests := m.testMarks()
 	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
 		if m.lineHidden(i) {
 			continue
@@ -399,6 +400,11 @@ func (m Model) View() string {
 		// and the debugger's current line (#579) outrank both and, unlike the
 		// colour-only markers, draw a distinct glyph in the separator cell so
 		// they never read as a git highlight: ● breakpoint, ▶ paused line.
+		// A test run marker (#1150) — ▶ in the success tone on a test
+		// declaration line — slots between the breakpoint glyph and the
+		// colour-only markers: a breakpoint on a test line keeps its ●
+		// (breakpoints stay toggleable everywhere), while the run marker
+		// still outranks diagnostic/git colouring of the sign cell.
 		var sign string
 		var signStyle lipgloss.Style
 		if m.paused && i == m.pausedLine {
@@ -407,6 +413,9 @@ func (m Model) View() string {
 		} else if bps[i] {
 			sign = "●"
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+		} else if _, ok := tests[i]; ok {
+			sign = "▶"
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Success).Bold(true)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok {

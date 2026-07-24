@@ -170,6 +170,15 @@ type (
 // RunRerunMsg reruns the last-used run configuration (#576).
 type RunRerunMsg struct{}
 
+// RunTestAtCursorMsg runs the test function at or nearest above the focused
+// editor's cursor (#1150); RunTestsInFileMsg runs every test in the active
+// test file's scope (Go: its package). Both register with run.rerun's
+// last-used memory.
+type (
+	RunTestAtCursorMsg struct{}
+	RunTestsInFileMsg  struct{}
+)
+
 // TerminalToggleMsg drives the JetBrains alt+f12 state machine (#97): no
 // terminal → create one; unfocused → focus it; focused → return focus to the
 // previously focused pane. Dispatched by terminal.toggle.
@@ -307,6 +316,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
 			appCommand("run.file", "Run File", RunFileMsg{}),
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
+			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),
+			appCommand("run.testsInFile", "Run Tests in File", RunTestsInFileMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),

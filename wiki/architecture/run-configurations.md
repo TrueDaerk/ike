@@ -4,7 +4,7 @@ title: Run Configurations
 description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json.
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -27,6 +27,8 @@ type Config struct {
     Args   []string          // program arguments
     Env    map[string]string // extra environment
     Cwd    string            // project-relative working dir; "" = root
+    Tests  bool              // test-scope config (#1150): argv via the TestSpec seam
+    TestName, TestKind string // one test function; empty name = whole file scope
 }
 ```
 
@@ -80,6 +82,49 @@ Registered providers:
   `in_pane` opens a terminal tab in the focused editor pane (#573),
   `new_terminal` a bottom-split terminal pane. A command session's pane stays
   open on exit — the output is the point of the run.
+
+## Test runner (#1150)
+
+A language can declare **test detection + command templates** as data
+(`lang.TestSpec` in `internal/lang/test.go`): a line-anchored regexp with
+named groups `name` (the runnable test's full name) and optional `kind`, a
+`FilePattern` restricting detection to test files, per-kind argv templates
+with `{interpreter}`/`{name}` placeholders, a `FileArgv` template for the
+whole file scope, a `Tool` fallback binary and an `Exclude` name list.
+Detection is deliberately regex-based (not documentSymbol/Tree-sitter): it
+works without a language server and in CGo-free builds, and test declarations
+are strictly line-anchored in the supported languages. The synthesized argv is
+executed directly — no shell ever parses it, so quoting is shell-agnostic by
+construction.
+
+Registered specs:
+
+| Language | Detection | Commands |
+|---|---|---|
+| Go | `^func (Test\|Benchmark\|Fuzz)X(` in `_test.go` files (bare `Test` counts, `Testify` and `TestMain` do not) | `go test -run '^TestX$'`; benchmarks `go test -bench '^BenchmarkX$' -run '^$'`; file scope plain `go test` — all with cwd = the file's directory (its package) |
+
+Wiring:
+
+- The **editor** caches the detected declarations per document version
+  (`internal/editor/testmarks.go` — one `O(lines)` scan at most per edit,
+  never per frame; per-view pointer store like the line cache) and renders a
+  `▶` **gutter run marker** in the success tone on each test line. Sign
+  precedence: debugger paused line > breakpoint `●` > test `▶` >
+  diagnostic/git colouring.
+- **`run.testAtCursor`** (Run menu, palette, editor context menu) runs the
+  test at or nearest **above** the cursor; a notice appears when none is
+  there. **`run.testsInFile`** runs the file's whole scope. Neither has a
+  default chord (the budget is full, #711).
+- **Gutter clicks**: a plain left click keeps toggling the breakpoint on
+  *every* line — including test lines, so breakpoints on test functions stay
+  reachable. **ctrl+click or cmd+click on a marker line runs that test**; on
+  other gutter lines the modified click still toggles the breakpoint.
+- Both commands synthesize a **test-scope configuration**
+  (`run.TestConfig`: `Tests: true`, `TestName`/`TestKind`, cwd = the file's
+  dir, stable name `TestX (pkg/dir)` / `tests: pkg/dir` so repeats fold into
+  one config) and launch it through the ordinary placement rules above —
+  which also registers it with **run.rerun's last-used memory**, so rerun
+  repeats the exact test.
 
 ## Breakpoints (#577)
 
