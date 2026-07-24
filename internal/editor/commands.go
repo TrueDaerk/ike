@@ -94,6 +94,14 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// caches the set; no server round-trip is involved.
 			action("lsp.nextDiagnostic", "Next Diagnostic", "next_diagnostic", ""),
 			action("lsp.prevDiagnostic", "Previous Diagnostic", "prev_diagnostic", ""),
+			// Merge-conflict resolution (#1149): palette-only (the cmd-chord
+			// budget is full, #711); the accepts also surface contextually in
+			// the editor context menu when the cursor is inside a block.
+			action("merge.acceptOurs", "Merge: Accept Ours", "merge_accept_ours", ""),
+			action("merge.acceptTheirs", "Merge: Accept Theirs", "merge_accept_theirs", ""),
+			action("merge.acceptBoth", "Merge: Accept Both", "merge_accept_both", ""),
+			action("merge.nextConflict", "Merge: Next Conflict", "merge_next_conflict", ""),
+			action("merge.prevConflict", "Merge: Previous Conflict", "merge_prev_conflict", ""),
 		},
 	}
 }

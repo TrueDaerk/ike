@@ -613,6 +613,21 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		cmd := m.diagnosticJump(action == "next_diagnostic")
 		return m, cmd
+	// Merge-conflict resolution (#1149): per-block accepts (each one undo
+	// unit) and wrap-around navigation over the detected blocks.
+	case "merge_accept_ours", "merge_accept_theirs", "merge_accept_both":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		cmd := m.acceptConflict(action != "merge_accept_theirs", action != "merge_accept_ours")
+		m.scroll()
+		return m, cmd
+	case "merge_next_conflict", "merge_prev_conflict":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		cmd := m.conflictJump(action == "merge_next_conflict")
+		return m, cmd
 	case "caret_add_next":
 		if m.insert.active {
 			m.commitInsert()

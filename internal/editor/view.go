@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"image/color"
 	"strconv"
 	"strings"
 	"time"
@@ -12,8 +13,14 @@ import (
 	"ike/internal/editor/textobject"
 	"ike/internal/editor/viewport"
 	ilsp "ike/internal/lsp"
+	"ike/internal/theme"
 	"ike/internal/ui"
 )
+
+// conflictTintFrac is how much of the VCS status colour mixes into the surface
+// for the ours/theirs section backgrounds (#1149) — subtle, like the diff
+// pane's slotOrMix fractions.
+const conflictTintFrac = 0.22
 
 // doubleClickWindow is the maximum delay between two clicks on the same cell
 // for them to escalate the click streak (matching the explorer's window).
@@ -624,6 +631,18 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	swatches := m.lineColorSwatches(line)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
+	// Merge-conflict tint (#1149): the line's role in a conflict block, and
+	// the section background precomputed once per span. The role rides the
+	// line cache safely — blocks change only with the document version, whose
+	// every bump travels through Update and so through renderEpoch.
+	confRole := m.conflictRoleOf(line)
+	var confBG color.Color
+	switch confRole {
+	case conflictOurs:
+		confBG = theme.Mix(m.theme().VCSAdded, m.theme().Surface, conflictTintFrac)
+	case conflictTheirs:
+		confBG = theme.Mix(m.theme().VCSModified, m.theme().Surface, conflictTintFrac)
+	}
 	// Secondary carets (#145) render dimmer than the primary cell.
 	caretStyle := cursorStyle.Faint(true)
 
@@ -796,6 +815,21 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// Ruler tint (#64): a background stripe under everything the
 				// higher-priority overlays didn't claim.
 				st = st.Background(rulerBG)
+				styled = true
+			}
+			switch confRole {
+			// Conflict styling (#1149): section backgrounds slot under the
+			// syntax colour like occurrences; marker lines render dim and
+			// bold, the diff3 base section dim. Cursor/selection/search won
+			// above, diagnostics still compose on top.
+			case conflictOurs, conflictTheirs:
+				st = st.Background(confBG)
+				styled = true
+			case conflictBase:
+				st = st.Faint(true)
+				styled = true
+			case conflictMarker:
+				st = st.Faint(true).Bold(true)
 				styled = true
 			}
 			if kind, ok := m.occurrenceAt(line, col); ok {

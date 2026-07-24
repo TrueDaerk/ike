@@ -671,6 +671,36 @@ annotation at the end of the cursor line — "author, when · summary", or
 change, and vcs refresh, so marker positions may briefly lag unsaved edits.
 See [VCS / Git Integration](/architecture/vcs.md).
 
+## Merge-conflict resolution (#1149)
+
+`conflict.go` detects git conflict blocks in the buffer — `<<<<<<< label`,
+`=======`, `>>>>>>> label`, with an optional diff3 `||||||| base` section —
+and resolves them in place. Detection follows the testmarks (#1150) caching
+pattern: the scan runs at most once per document version (never per frame),
+held in a pointer store shared by the Model's value copies; each rescan bumps
+a conflicts epoch that keys the scrollbar stripe memo.
+
+- **Rendering** rides the line cache (#614): the ours section tints with a
+  `VCSAdded`-mixed background, theirs with `VCSModified`-mixed, the diff3
+  base section renders dim, marker lines dim bold. Roles change only with the
+  document version, whose bumps always travel through Update and hence
+  through the render epoch, so no extra invalidation is needed.
+- **Commands** (registry, palette-only — the chord budget is full, #711):
+  `merge.acceptOurs` / `merge.acceptTheirs` / `merge.acceptBoth` replace the
+  whole block containing the cursor with the kept side(s) — ours before
+  theirs for acceptBoth, base never kept — as ONE undo unit through the
+  standard mutate/Recorder path; the cursor lands on the block's start line.
+  Outside a block they answer with an ex-line notice. `merge.nextConflict` /
+  `merge.prevConflict` walk the block starts with wrap-around, the
+  diagnostic-jump pattern (#369).
+- **Context menu** (#1020): a right-click first moves the caret, then the app
+  asks the cheap `ConflictAtCursor()` query — inside a block the menu gains
+  the three accept entries; outside it keeps its static shape.
+- **Overview ruler** (#1131): conflict blocks mark their covered rows in the
+  `VCSConflicted` colour (`◆`) as a third stripe source with its own epoch;
+  cell precedence is diagnostics > conflicts > git, and a click on a marked
+  cell jumps to the block's start line.
+
 ## Auto-save (#174, #731)
 
 With `editor.auto_save = focus` (the default; `off` disables), a dirty

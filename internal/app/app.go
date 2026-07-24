@@ -6495,7 +6495,10 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseRight {
 			if ed := inst.Editor(); ed != nil && ed.HasFile() {
 				ed.ContextClick(localX, localY)
-				m.ctxMenu.Open(editorContextItems(), msg.X, msg.Y, m.width, m.height)
+				// The caret moved first, so the merge entries (#1149) reflect
+				// the clicked position: they appear only when it sits inside a
+				// conflict block.
+				m.ctxMenu.Open(editorContextItems(ed.ConflictAtCursor()), msg.X, msg.Y, m.width, m.height)
 			}
 			return m, nil
 		}
@@ -6614,9 +6617,11 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 // editorContextItems is the editor pane's right-click menu (#1020): the
 // JetBrains staples, each referencing a registered command so availability
 // and shortcuts resolve through the same InfoFunc as the menu bar (LSP
-// entries render disabled while no server backs them).
-func editorContextItems() []menu.Item {
-	return []menu.Item{
+// entries render disabled while no server backs them). When the caret sits
+// inside a merge-conflict block (#1149) the per-block accept entries are
+// appended contextually.
+func editorContextItems(conflict bool) []menu.Item {
+	items := []menu.Item{
 		{Title: "Cut", Command: "editor.cut"},
 		{Title: "Copy", Command: "editor.copy"},
 		{Title: "Paste", Command: "editor.paste"},
@@ -6626,6 +6631,14 @@ func editorContextItems() []menu.Item {
 		{Title: "Reformat File", Command: "lsp.format"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}
+	if conflict {
+		items = append(items,
+			menu.Item{Title: "Accept Ours", Command: "merge.acceptOurs"},
+			menu.Item{Title: "Accept Theirs", Command: "merge.acceptTheirs"},
+			menu.Item{Title: "Accept Both", Command: "merge.acceptBoth"},
+		)
+	}
+	return items
 }
 
 // tabContextItems is the tab segment's right-click menu (#1128). The clicked
