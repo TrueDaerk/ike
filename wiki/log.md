@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Row-style hoisting across the list panes (#1100): explorer builds a
+  per-frame `rowStyleSet` (Mix for ignored rows once per frame, not per
+  row); problems/structure/VCS row loops reuse loop-invariant base styles
+  (`/architecture/performance.md`).
+
 - Editor scrollbar stripe memoized + bar cells hoisted (#1097): warm View
   with an active error stripe drops from 329µs/606 allocs to 234µs/334
   (`/architecture/performance.md`).

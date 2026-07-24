@@ -181,6 +181,7 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 	if m.chCursor >= m.chTop+height {
 		m.chTop = m.chCursor - height + 1
 	}
+	base := lipgloss.NewStyle().Foreground(pal.Foreground) // built once (#1100)
 	var b strings.Builder
 	for k := 0; k < height; k++ {
 		i := m.chTop + k
@@ -197,7 +198,7 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 				badge = " "
 			}
 			line := " " + check + " " + badge + " " + r.Path
-			style := lipgloss.NewStyle().Foreground(pal.Foreground)
+			style := base
 			if c := vcs.StatusColor(pal, r.Status); c != nil {
 				style = style.Foreground(c)
 			}
