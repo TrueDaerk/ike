@@ -81,13 +81,20 @@ type Model struct {
 	// value genuinely changed, so an unrelated Reconfigure never clobbers the
 	// runtime `.` toggle (#629). "" means "not yet configured".
 	hiddenCfg string
-	indent    int            // spaces per depth level (config explorer.tree_indent)
-	sort      string         // ordering within a level (config explorer.sort)
-	icons     bool           // file-type marker glyphs (config explorer.icons, #1046)
-	colors    colorTable     // per-filetype colour resolution
-	pal       *theme.Palette // active theme (Roadmap 0110); nil = default
-	cfgColors colorTable     // [explorer.colors] overrides retained for re-theming
-	vcsSnap   *vcs.Snapshot  // git status snapshot (Roadmap 0320); nil = not a repo
+	// exclude holds the explorer.exclude base-name glob patterns (#1139):
+	// matching entries are hidden at every depth regardless of showHidden —
+	// JetBrains' "Excluded files". excludeCfg is the last applied config
+	// string, so unrelated live reloads skip the rebuild ("\x00" = not yet
+	// configured; "" is a valid empty list).
+	exclude    []string
+	excludeCfg string
+	indent     int            // spaces per depth level (config explorer.tree_indent)
+	sort       string         // ordering within a level (config explorer.sort)
+	icons      bool           // file-type marker glyphs (config explorer.icons, #1046)
+	colors     colorTable     // per-filetype colour resolution
+	pal        *theme.Palette // active theme (Roadmap 0110); nil = default
+	cfgColors  colorTable     // [explorer.colors] overrides retained for re-theming
+	vcsSnap    *vcs.Snapshot  // git status snapshot (Roadmap 0320); nil = not a repo
 
 	// File-operation state (fileops.go). prompt is the active modal (new-file
 	// name entry, or a delete confirmation); ops/redoOps are the undo and redo
@@ -99,8 +106,14 @@ type Model struct {
 	trashDir   string
 	trashSeq   int
 	pendingSel string // path to put the cursor on once the next scan rebuilds rows
-	sbGrab     int    // thumb grab offset of an active scrollbar drag (#1036)
-	pendingG   bool   // first g of the gg top-jump chord is armed (#1032)
+	// followSel arms cursor-following for the next pendingSel snap (#1140):
+	// user-initiated snaps (file ops, hidden toggle, reveal descent) scroll
+	// the landed cursor into view, while stability snaps (externalRefresh
+	// keeping the cursor on its entry across a watcher rebuild) leave the
+	// viewport where a wheel scroll put it.
+	followSel bool
+	sbGrab    int  // thumb grab offset of an active scrollbar drag (#1036)
+	pendingG  bool // first g of the gg top-jump chord is armed (#1032)
 
 	// expand-all state (#1043): the subtree root being recursively expanded
 	// and the remaining scan budget bounding it.
@@ -167,6 +180,8 @@ func New(dir string) Model {
 		hover:        -1,
 		indent:       2,
 		sort:         "name",
+		exclude:      defaultExclude(),
+		excludeCfg:   strings.Join(defaultExclude(), ","),
 		colors:       defaultColors(),
 		lastClickRow: -1,
 		selAnchor:    -1,
@@ -397,6 +412,16 @@ func nodeByPath(n *node, path string) *node {
 	return nil
 }
 
+// snapCursorTo arms a user-initiated cursor snap onto path for the next rows
+// rebuild (#1140): besides landing the cursor on the entry, the snap scrolls
+// it into view (followCursor), like any deliberate cursor motion. Stability
+// snaps that must NOT reframe the viewport (externalRefresh) set pendingSel
+// directly instead.
+func (m *Model) snapCursorTo(path string) {
+	m.pendingSel = path
+	m.followSel = true
+}
+
 // expand opens a directory node, dispatching a scan Cmd on first use. The
 // returned Cmd is nil when nothing needs scanning (leaf, or already loaded).
 func (m *Model) expand(n *node) tea.Cmd {
@@ -418,11 +443,13 @@ func (m *Model) rebuild() {
 	m.invalidateWidth() // any row-set change can change the content width (#1096)
 	m.rows = m.rows[:0]
 	m.appendVisible(m.root)
+	snapped := false
 	if m.pendingSel != "" {
 		for i, n := range m.rows {
 			if n.path == m.pendingSel {
 				m.cursor = i
 				m.pendingSel = ""
+				snapped = true
 				break
 			}
 		}
@@ -438,17 +465,30 @@ func (m *Model) rebuild() {
 	if m.selAnchor >= len(m.rows) {
 		m.selAnchor = len(m.rows) - 1
 	}
-	m.clampScroll()
+	// Content changed, the cursor did not (#1140): only bound the offset, so
+	// a wheel-scrolled viewport survives watcher/VCS/config rebuilds — except
+	// when a user-initiated pendingSel snap just moved the cursor (snapCursorTo),
+	// which follows it like any deliberate cursor motion.
+	if snapped && m.followSel {
+		m.followCursor()
+	} else {
+		m.clampOffset()
+	}
+	if snapped {
+		m.followSel = false
+	}
 }
 
 // appendVisible walks the tree depth-first, emitting each node and recursing into
 // expanded directories. Hidden (dot-prefixed) entries are skipped unless
-// showHidden is on; the root is always emitted.
+// showHidden is on, and excluded entries (#1139) always; the root is always
+// emitted. Filtering here is the single visibility gate: search, multi-select,
+// expand-all and the marker logic all operate on the filtered rows.
 func (m *Model) appendVisible(n *node) {
 	m.rows = append(m.rows, n)
 	if n.isDir && n.expanded {
 		for _, c := range n.children {
-			if !m.showHidden && isHidden(c.name) {
+			if !m.childVisible(c) {
 				continue
 			}
 			m.appendVisible(c)
@@ -456,8 +496,35 @@ func (m *Model) appendVisible(n *node) {
 	}
 }
 
+// childVisible reports whether a child entry survives the visibility filters:
+// the show-hidden toggle for dot-entries, and the explorer.exclude glob list
+// (#1139), which applies at every depth regardless of the toggle.
+func (m Model) childVisible(c *node) bool {
+	if m.isExcluded(c.name) {
+		return false
+	}
+	return m.showHidden || !isHidden(c.name)
+}
+
 // isHidden reports whether name is a hidden (dot-prefixed) entry.
 func isHidden(name string) bool { return strings.HasPrefix(name, ".") }
+
+// defaultExclude is the built-in explorer.exclude list (#1139), mirroring the
+// config default: the common noise entries hidden even with show-hidden on.
+func defaultExclude() []string { return []string{".git", ".idea", ".DS_Store"} }
+
+// isExcluded reports whether an entry base name matches any explorer.exclude
+// glob pattern (#1139; filepath.Match semantics, so a meta-free pattern is a
+// literal name match). Malformed patterns never match — config validation
+// already warns about and drops them.
+func (m Model) isExcluded(name string) bool {
+	for _, p := range m.exclude {
+		if ok, err := filepath.Match(p, name); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
 
 // Root returns the fixed project base directory.
 func (m Model) Root() string { return m.root.path }
@@ -471,7 +538,9 @@ func (m *Model) SetSize(width, height int) {
 	}
 	m.width = width
 	m.height = height
-	m.clampScroll()
+	// A resize is a geometry change, not a cursor move (#1140): only bound
+	// the offset so a wheel-scrolled viewport survives pane resizes.
+	m.clampOffset()
 }
 
 // SetFocused toggles whether this pane receives key input.
@@ -518,7 +587,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// file. pendingSel reuses the file-op snap; a now-hidden selection
 		// falls back to the clamped cursor.
 		if m.cursor >= 0 && m.cursor < len(m.rows) {
-			m.pendingSel = m.rows[m.cursor].path
+			m.snapCursorTo(m.rows[m.cursor].path)
 		}
 		// The row set shifts across the toggle, so the range would cover
 		// the wrong entries: the multi-select collapses (#1044).
@@ -775,7 +844,7 @@ func (m *Model) moveCursor(delta int) {
 	if m.cursor >= len(m.rows) {
 		m.cursor = len(m.rows) - 1
 	}
-	m.clampScroll()
+	m.followCursor()
 }
 
 // movePage moves the cursor by one page (PageUp/PageDown) or half a page
@@ -832,7 +901,7 @@ func (m Model) expandOrOpen() (Model, tea.Cmd) {
 	// blindly ran the cursor off the rows slice (#949).
 	if m.cursor+1 < len(m.rows) && m.rows[m.cursor+1].depth > n.depth {
 		m.cursor++
-		m.clampScroll()
+		m.followCursor()
 	}
 	return m, nil
 }
@@ -858,7 +927,7 @@ func (m *Model) jumpToParent() {
 	for i := m.cursor - 1; i >= 0; i-- {
 		if m.rows[i].depth < depth {
 			m.cursor = i
-			m.clampScroll()
+			m.followCursor()
 			return
 		}
 	}
@@ -928,7 +997,9 @@ func (m *Model) expandLoaded(n *node) tea.Cmd {
 	}
 	var cmds []tea.Cmd
 	for _, c := range n.children {
-		if c.isDir {
+		// Excluded subtrees (#1139) never render, so descending into them
+		// would only burn the scan budget on invisible directories.
+		if c.isDir && !m.isExcluded(c.name) {
 			if cmd := m.expandLoaded(c); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -1004,7 +1075,11 @@ func (m *Model) externalRefresh(path string) tea.Cmd {
 		return nil
 	}
 	if cur := m.current(); cur != nil {
+		// A stability snap (#1140): keep the cursor on its entry across the
+		// rebuild WITHOUT pulling the viewport to it — the refresh is not a
+		// user cursor move, and it must not undo a wheel scroll.
 		m.pendingSel = cur.path
+		m.followSel = false
 	}
 	n.loading = true
 	return scanCmd(n.path)
@@ -1175,8 +1250,9 @@ func (m *Model) continueReveal() tea.Cmd {
 				return nil // a scan is in flight; applyScan resumes the walk
 			}
 			// pendingSel doubles as the cursor snap for the row rebuilds the
-			// landing scans trigger.
-			m.pendingSel = path
+			// landing scans trigger; a reveal is a deliberate cursor move, so
+			// the snap follows (#1140).
+			m.snapCursorTo(path)
 			cmd := m.expand(n)
 			m.rebuild()
 			return cmd
@@ -1195,11 +1271,12 @@ func (m *Model) continueReveal() tea.Cmd {
 	// hidden-files filter conceals it — then the cursor simply stays put).
 	m.pendingReveal = ""
 	m.pendingSel = ""
+	m.followSel = false
 	m.rebuild()
 	for i, r := range m.rows {
 		if r.path == path {
 			m.cursor = i
-			m.clampScroll()
+			m.followCursor()
 			break
 		}
 	}
@@ -1221,6 +1298,7 @@ func childNamed(n *node, name string) *node {
 func (m *Model) abandonReveal() {
 	if m.pendingSel == m.pendingReveal {
 		m.pendingSel = ""
+		m.followSel = false
 	}
 	m.pendingReveal = ""
 }
@@ -1242,12 +1320,14 @@ func (m *Model) parentOf(target *node) *node {
 	return find(m.root)
 }
 
-// clampScroll keeps the cursor within the visible window and the scroll offset
-// within the renderable range. Clamping to maxOff is essential: View() clamps a
-// stale offset only for display, but MouseClick and hover hit-testing read the
-// raw offset, so an offset past the last page would make clicks land on rows far
-// below the ones actually shown.
-func (m *Model) clampScroll() {
+// followCursor pulls the viewport to the cursor and clamps the scroll offset
+// into the renderable range. It is the cursor-anchored clamp (#1140): call it
+// ONLY from code paths where the cursor genuinely moved (key navigation,
+// search jumps, reveal, user-initiated pendingSel snaps, mouse selection) —
+// generic content/geometry changes must use clampOffset instead, or any
+// watcher/VCS/config refresh after a wheel scroll would yank the viewport
+// back to the selection.
+func (m *Model) followCursor() {
 	_, textH, _, _, _ := m.viewport()
 	if textH <= 0 {
 		return
@@ -1257,6 +1337,21 @@ func (m *Model) clampScroll() {
 	}
 	if m.cursor >= m.offset+textH {
 		m.offset = m.cursor - textH + 1
+	}
+	m.clampOffset()
+}
+
+// clampOffset bounds the scroll offset to [0, rows-height] without touching
+// the cursor anchoring (#1140): the clamp for rebuilds, refreshes, resizes and
+// config applies, so a wheel-scrolled viewport survives them while an offset
+// past the last page still snaps back. Clamping to maxOff is essential: View()
+// clamps a stale offset only for display, but MouseClick and hover hit-testing
+// read the raw offset, so an offset past the last page would make clicks land
+// on rows far below the ones actually shown.
+func (m *Model) clampOffset() {
+	_, textH, _, _, _ := m.viewport()
+	if textH <= 0 {
+		return
 	}
 	if maxOff := len(m.rows) - textH; m.offset > maxOff {
 		m.offset = maxOff
@@ -1358,10 +1453,10 @@ func (m Model) marker(n *node) string {
 }
 
 // hasVisibleChildren reports whether n has at least one child surviving the
-// hidden-files filter.
+// hidden-files and exclude filters (#1039, #1139).
 func (m Model) hasVisibleChildren(n *node) bool {
 	for _, c := range n.children {
-		if m.showHidden || !isHidden(c.name) {
+		if m.childVisible(c) {
 			return true
 		}
 	}
@@ -1597,7 +1692,7 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 	}
 	m.clearSel() // a plain click collapses the multi-select (#1044)
 	m.cursor = i
-	m.clampScroll()
+	m.followCursor()
 
 	n := m.rows[i]
 	if n.isDir && m.onMarker(n, x) {
@@ -1631,7 +1726,7 @@ func (m *Model) ShiftClick(x, y int) {
 		m.selAnchor = m.cursor
 	}
 	m.cursor = i
-	m.clampScroll()
+	m.followCursor()
 	m.resetClick() // a shift+click never chains into a double-click activation
 }
 
@@ -1657,7 +1752,7 @@ func (m *Model) ContextClick(x, y int) bool {
 		}
 		m.clearSel()
 		m.cursor = i
-		m.clampScroll()
+		m.followCursor()
 	}
 	m.resetClick()
 	return true

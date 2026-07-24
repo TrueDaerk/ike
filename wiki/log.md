@@ -25,6 +25,20 @@
   `use` — single and block — now highlights; known trade-off: the grammar
   predates the Go 1.21 `toolchain` directive
   (`/architecture/languages.md`).
+- Explorer exclude list (#1139): `explorer.exclude` — a TOML array of
+  base-name glob patterns (default `.git`, `.idea`, `.DS_Store`) hidden from
+  the tree at every depth, even with hidden files shown. Filtered in the
+  single visibility gate (`childVisible`), editable live on the settings
+  panel's new Explorer page via the new `List` control (comma-separated text
+  persisted as a TOML array), explorer-only (go-to-file / find-in-path / LSP
+  untouched) (`/architecture/explorer.md`, `/architecture/settings-ui.md`).
+
+- Wheel scroll no longer snaps back to the selection (#1140): the
+  cursor-anchored `clampScroll` split into `clampOffset` (bounds only, used by
+  rebuilds, watcher/poll refreshes, config applies, resizes) and
+  `followCursor` (cursor-into-view, used only where the cursor genuinely
+  moved); `externalRefresh`'s cursor-stability snap explicitly does not follow
+  (`/architecture/explorer.md`).
 
 - Scrollbar thumb survives dense change marks and the viewport stops at the
   last line (#1134): thumb rows keep their glyph and only take the mark's

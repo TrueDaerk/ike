@@ -430,7 +430,7 @@ func affordanceValue(e Entry, val string) string {
 		return val + " ±"
 	case Chord:
 		return val + " ⌨"
-	default: // String, Path
+	default: // String, Path, List
 		return val + " ✎"
 	}
 }

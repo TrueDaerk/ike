@@ -86,7 +86,7 @@ func (m *Model) Restore(s State) {
 			}
 		}
 	}
-	m.clampScroll()
+	m.followCursor()
 }
 
 // loadSync reads a directory node's children on the update thread. Unlike the
