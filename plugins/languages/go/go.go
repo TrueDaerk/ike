@@ -17,6 +17,9 @@ var query string
 //go:embed queries/injections.scm
 var injections string
 
+//go:embed queries/gomod.scm
+var gomodQuery string
+
 func init() {
 	register.Language(lang.Language{
 		ID:         "go",
@@ -66,12 +69,16 @@ func init() {
 	// the same instance/root as the module's .go files. Registered with plain
 	// lang.Register, not register.Language: they are part of the go plugin
 	// (its lang-go toggle governs the shared server), and a dotted plugin id
-	// would splinter the plugins.<id>.enabled config key. No Tree-sitter
-	// grammar — no gomod grammar is vendored — so they render as plain text.
+	// would splinter the plugins.<id>.enabled config key. go.mod and go.work
+	// are highlighted by the vendored tree-sitter-go-mod grammar (#1078); the
+	// grammar has no `use` directive, so in go.work files `use` lines fall
+	// into error recovery while go/toolchain/replace and comments still
+	// highlight. go.sum stays plain — no grammar exists, content is hashes.
 	lang.Register(lang.Language{
 		ID:             "go.mod",
 		Filenames:      []string{"go.mod"},
 		ServerLanguage: "go",
+		Grammar:        gomodGrammar(),
 		LineComment:    "//",
 		IndentAfter:    []string{"("},
 	})
@@ -79,6 +86,7 @@ func init() {
 		ID:             "go.work",
 		Filenames:      []string{"go.work"},
 		ServerLanguage: "go",
+		Grammar:        gomodGrammar(),
 		LineComment:    "//",
 		IndentAfter:    []string{"("},
 	})

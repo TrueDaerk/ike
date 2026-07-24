@@ -2,6 +2,13 @@
 
 ## 2026-07-24
 
+- go.mod/go.work Tree-sitter highlighting (#1078): the
+  camdencheek/tree-sitter-go-mod grammar is vendored as C source under the go
+  plugin's `grammar/` (upstream's Go binding module path mismatches the repo,
+  same as the Dockerfile grammar) and wired into the `go.mod`/`go.work`
+  registrations with a `queries/gomod.scm` highlights query; `go.sum` stays
+  plain (`/architecture/languages.md`).
+
 - Search case control (#1111): new `editor.search_ignore_case` setting
   (default off) makes in-file `/` `?` search case-insensitive without a
   `\c`; `\C` forces exact matching, ctrl+c on the open search line toggles

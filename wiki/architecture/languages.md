@@ -173,8 +173,15 @@ registers `go.mod`, `go.work` and `go.sum` as filename-matched languages
 delegating to `go` — a `go.mod` buffer attaches to the very gopls instance
 (same root, same process) that serves the module's `.go` files, with the wire
 languageIds `go.mod`/`go.work`/`go.sum` gopls documents, so hover on require
-lines and go.mod diagnostics work. They carry no grammar (no gomod
-Tree-sitter grammar is vendored — plain text), and they register with plain
+lines and go.mod diagnostics work. `go.mod` and `go.work` highlight via the
+camdencheek/tree-sitter-go-mod grammar (#1078, **vendored C source** under the
+go plugin's `grammar/` like the Dockerfile grammar by the same author —
+upstream's go.mod declares a module path that does not match the repository,
+so it is not importable as a Go module; vendored from main so the Go 1.24/1.25
+`tool` and `ignore` directives parse). The grammar has no `use` directive, so
+`use` lines in go.work fall into error recovery while the other directives and
+comments still highlight. `go.sum` stays plain — no grammar exists, content is
+hashes. All three register with plain
 `lang.Register`, not `register.Language`: the `lang-go` plugin toggle governs
 the shared server, and a dotted plugin id would splinter the config key.
 Gating helpers: `Language.HasServer()` is true for a language with its own
