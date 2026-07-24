@@ -36,6 +36,7 @@ type Language struct {
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
     Template     string     // initial content for new files (#170); "" = start empty
+    Test         *TestSpec  // test detection + run templates (#1150); nil = no test runner
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)

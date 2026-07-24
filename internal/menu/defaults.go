@@ -44,6 +44,8 @@ func Defaults() []Menu {
 		{Title: "Run", Items: []Item{
 			{Title: "Run File", Command: "run.file"},
 			{Title: "Rerun Last", Command: "run.rerun"},
+			{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
+			{Title: "Run Tests in File", Command: "run.testsInFile"},
 			{Title: "Toggle Breakpoint", Command: "debug.toggleBreakpoint"},
 			{Title: "Debug File", Command: "debug.start"},
 			{Title: "Listen for PHP Debug Connections", Command: "debug.listen"},

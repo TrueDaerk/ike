@@ -72,6 +72,24 @@ func init() {
 		// New .go files start with their package clause, named after the
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",
+		// Test runner (#1150): gutter run markers on Test/Benchmark/Fuzz
+		// declarations in _test.go files; a single test runs with cwd = the
+		// file's directory, so plain `go test` targets its package.
+		// TestMain orchestrates, it is not runnable on its own.
+		Test: &lang.TestSpec{
+			FilePattern: `_test\.go$`,
+			// The character after the prefix must not be lowercase (go
+			// test's own rule: Testify is not a test, TestFoo/Test are).
+			Pattern: `^func (?P<name>(?P<kind>Test|Benchmark|Fuzz)(?:[^a-z\s(][0-9A-Za-z_]*)?)\s*\(`,
+			Kinds: map[string][]string{
+				"Test":      {"{interpreter}", "test", "-run", "^{name}$"},
+				"Benchmark": {"{interpreter}", "test", "-bench", "^{name}$", "-run", "^$"},
+				"Fuzz":      {"{interpreter}", "test", "-run", "^{name}$"},
+			},
+			FileArgv: []string{"{interpreter}", "test"},
+			Tool:     "go",
+			Exclude:  []string{"TestMain"},
+		},
 	})
 
 	// Module metadata files (#1063): matched by exact base name, delegated to

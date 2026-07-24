@@ -6,6 +6,16 @@
   restoreLayout pre-filter was missing the "problems" kind, silently
   falling back to the default layout (`/architecture/problems.md`).
 
+- Test runner (#1150): languages declare test detection + command templates
+  as data (`lang.TestSpec` — Go wired: `Test`/`Benchmark`/`Fuzz` in `_test.go`
+  files, `go test -run '^TestX$'` with cwd = the package dir). The editor
+  gutter marks test lines with a success-tone `▶` (cached per document
+  version, precedence below breakpoints); `run.testAtCursor` /
+  `run.testsInFile` (Run menu, palette, editor context menu) run the nearest
+  test above the cursor / the file's package tests in the run-terminal
+  placement, and register with `run.rerun`. Plain gutter clicks keep toggling
+  breakpoints everywhere; ctrl/cmd+click on a marker runs the test. See
+  /architecture/run-configurations.md.
 - Usages tool window (#1155): find-references gets a persistent worklist —
   `lsp.referencesPanel` ("Find Usages (Panel)", also in the editor context
   menu) runs the same request as `lsp.references` (whose quick palette stays)

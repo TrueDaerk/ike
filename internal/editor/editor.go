@@ -238,6 +238,11 @@ type Model struct {
 	renderEpoch uint64
 	lineCache   *lineCacheStore
 
+	// Test-run gutter markers (#1150): the detected test declarations, cached
+	// per document version (pointer, shared across value copies like
+	// lineCache). See testmarks.go.
+	testCache *testMarkStore
+
 	// Syntax highlighting (Roadmap 0100). docVersion is a monotonic document
 	// version bumped on every buffer change; it tags async parse results so stale
 	// spans (a newer edit already landed) are dropped. hlIndex caches the spans
@@ -395,6 +400,7 @@ func New() Model {
 		eol:                textenc.LF,
 		enc:                textenc.UTF8,
 		lineCache:          newLineCache(),
+		testCache:          newTestMarkStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
 		colorPreview:       true,

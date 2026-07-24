@@ -2762,6 +2762,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.rerunLast()
 		return m, nil
 
+	case RunTestAtCursorMsg:
+		// run.testAtCursor (Run menu / palette / editor context menu /
+		// ctrl-or-cmd+click on the gutter run marker, #1150).
+		m.runTestAtCursor()
+		return m, nil
+
+	case RunTestsInFileMsg:
+		// run.testsInFile (Run menu / palette, #1150): the file's package tests.
+		m.runTestsInFile()
+		return m, nil
+
 	case DebugToggleBreakpointMsg:
 		// debug.toggleBreakpoint (ctrl+f8 / Run menu / palette, #577).
 		m.toggleBreakpointAtCursor()
@@ -6401,9 +6412,19 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// A left click in the gutter toggles a breakpoint on that line
-		// (0350, #577), JetBrains-style.
+		// (0350, #577), JetBrains-style — everywhere, including test-marker
+		// lines, so breakpoints on test functions keep working. Running the
+		// test from its ▶ gutter marker (#1150) is the modified click:
+		// ctrl+click or cmd+click on the marker's line (on lines without a
+		// marker the modified click still toggles the breakpoint).
 		if ed := inst.Editor(); ed != nil && ed.HasFile() && msg.Button == tea.MouseLeft && msg.Mod&tea.ModAlt == 0 {
 			if line, ok := ed.GutterHit(localX, localY); ok {
+				if msg.Mod&(tea.ModCtrl|tea.ModSuper|tea.ModMeta) != 0 {
+					if t, isTest := ed.TestMarkAt(line); isTest {
+						m.runTest(ed.Path(), &t)
+						return m, nil
+					}
+				}
 				m.toggleBreakpoint(ed.Path(), line)
 				return m, nil
 			}
@@ -6506,6 +6527,7 @@ func editorContextItems() []menu.Item {
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
 		{Title: "Reformat File", Command: "lsp.format"},
+		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}
 }
 
