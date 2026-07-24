@@ -180,6 +180,14 @@ type Editor struct {
 	AutoClosePairs         bool   `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
 	InsertFinalNewline     bool   `toml:"insert_final_newline"`
+	// FormatOnSave runs LSP whole-document formatting before every manual
+	// write (#1148); OrganizeImportsOnSave applies the server's
+	// source.organizeImports code action first. Both are capability-gated
+	// silent no-ops without a ready server, and only user-initiated saves
+	// (:w, editor.write, Save All) run them — autosave and shutdown writes
+	// stay raw.
+	FormatOnSave          bool `toml:"format_on_save"`
+	OrganizeImportsOnSave bool `toml:"organize_imports_on_save"`
 	// Editorconfig honours .editorconfig files (#63): their matching sections
 	// override the [editor] indent/trim/final-newline/EOL/charset values per
 	// buffer. On by default; false ignores them entirely.

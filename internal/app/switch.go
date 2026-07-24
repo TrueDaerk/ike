@@ -115,6 +115,9 @@ func (m Model) updateSwitchPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // saveAllDirty writes every dirty editor buffer (background tabs included) and
 // returns the editors' follow-up cmds — the same walk editor.saveAll performs.
+// The writes are raw ("write_raw", #1148): the quit/switch/close-guard callers
+// proceed (or check Dirty()) synchronously right after, so the writes must not
+// defer behind the async format/organize-imports save chain.
 func (m *Model) saveAllDirty() []tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.activeWS().Panes.Keys() {
@@ -124,7 +127,7 @@ func (m *Model) saveAllDirty() []tea.Cmd {
 		}
 		for i := 0; i < inst.TabCount(); i++ {
 			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
-				cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
+				cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write_raw"}))
 			}
 		}
 	}

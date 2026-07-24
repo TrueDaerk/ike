@@ -478,10 +478,17 @@ type CodeActionParams struct {
 }
 
 // CodeActionContext carries the client-known diagnostics overlapping the
-// range, so servers offer the matching quick-fixes.
+// range, so servers offer the matching quick-fixes. Only, when set, asks the
+// server for actions of the listed kinds exclusively (#1148: the save chain
+// requests just source.organizeImports).
 type CodeActionContext struct {
 	Diagnostics []Diagnostic `json:"diagnostics"`
+	Only        []string     `json:"only,omitempty"`
 }
+
+// KindSourceOrganizeImports is the code-action kind the organize-imports save
+// step requests (#1148).
+const KindSourceOrganizeImports = "source.organizeImports"
 
 // CodeAction is one offered fix/refactor: Edit, Command, or both (Edit is
 // applied first per the spec).

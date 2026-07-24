@@ -3544,7 +3544,24 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			views[0].ApplyTextEdits(edits)
 		}
+		if msg.Applied != nil {
+			// The save chain's edit-applied signal (#1148): fires after the
+			// buffer holds the edits — or immediately when no view owns the
+			// path anymore, so a chain never stalls on a closed buffer.
+			msg.Applied()
+		}
 		return m, nil
+
+	case ilsp.SaveChainDoneMsg:
+		// Format/organize-imports on save finished (#1148): every view that
+		// parked a manual save behind the chain performs its write now.
+		var cmds []tea.Cmd
+		for _, ed := range m.editorViewsForPath(msg.Path) {
+			if c := ed.CompleteChainedSave(); c != nil {
+				cmds = append(cmds, c)
+			}
+		}
+		return m, tea.Batch(cmds...)
 
 	case ilsp.ReferencesMsg:
 		// lsp.references (alt+f7 / palette): nothing found is a toast, a single

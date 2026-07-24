@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-24T18:00:00Z
+timestamp: 2026-07-24T21:00:00Z
 ---
 
 # Editor
@@ -661,6 +661,42 @@ all the guarantees above (EventSave, untouched undo, stale-skip) hold and
 the modified indicator clears. Untitled buffers are never idle-saved; crash
 recovery covers them. Config edits apply live: an interval change re-arms,
 leaving idle mode drops pending marks.
+
+## Format & organize imports on save (#1148)
+
+`editor.format_on_save` and `editor.organize_imports_on_save` (both bool,
+default **off**; Settings → Editor) run LSP steps before a **manual** save:
+organize imports (the `source.organizeImports` code action, requested with
+`CodeActionContext.Only` and applied without the picker), then whole-document
+formatting, then the actual write. Because both steps are async server
+requests while the editor's write is synchronous, the save runs as an
+explicit **chain**: `saveGuarded` parks the write (`Model.pendingSave`,
+`editor/savechain.go`) and dispatches the bridge-registered provider
+(`ilsp.StartSaveChain` → `plugins/lsp/savechain.go`); the bridge goroutine
+runs each enabled, capability-gated step, delivers edits as a
+`FormatEditsMsg` whose `Applied` callback acks when the buffer holds them
+(so the next step's request reads the updated text), and always finishes
+with `ilsp.SaveChainDoneMsg` — the app routes it to the parked views, whose
+`CompleteChainedSave` performs the deferred write.
+
+Guarantees:
+
+- **Never blocks, never loses the save.** Every step — the server request
+  and the applied-ack wait — is time-boxed (`saveChainStepTimeout`, 2 s);
+  errors, empty answers and timeouts fall through to the next step, and the
+  done message always fires. No server / no capability (formatting, or the
+  organize-imports kind in `codeActionKinds`) means no chain at all: the
+  write happens immediately.
+- **Manual saves only.** `:w`, `:wq`, `editor.write`, `editor.write_quit`
+  and `editor.saveAll` chain (save-all per dirty buffer); autosave
+  (focus/idle), crash-backup snapshots and the shutdown/switch/close-guard
+  writes (the `write_raw` action) stay raw by design — they must land
+  synchronously and must never hinge on a language server. `:w other` is
+  raw too: the chain edits this buffer, not an arbitrary target.
+- **Re-entrancy coalesces.** A second save while a chain is pending joins it
+  (no stacked chains); a `:wq` issued meanwhile latches its close intent,
+  and the pane closes after the chained write. A conflict that appears
+  mid-chain (external change) still yields the save-conflict prompt.
 
 ## Untitled buffers & save-as (#730)
 

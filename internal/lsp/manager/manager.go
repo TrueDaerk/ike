@@ -808,6 +808,41 @@ func (m *Manager) CodeActions(ctx context.Context, path string, start, end buffe
 	})
 }
 
+// FormatSupported reports whether a ready server tracks path and offers
+// whole-document formatting — the save chain's capability gate (#1148).
+func (m *Manager) FormatSupported(path string) bool {
+	srv, _, ok := m.docServer(path)
+	return ok && srv.cl.Caps().Formatting
+}
+
+// OrganizeImportsSupported reports whether a ready server tracks path and
+// offers the source.organizeImports code-action kind (#1148).
+func (m *Manager) OrganizeImportsSupported(path string) bool {
+	srv, _, ok := m.docServer(path)
+	return ok && srv.cl.Caps().OffersCodeActionKind(protocol.KindSourceOrganizeImports)
+}
+
+// CodeActionsByKind requests the code actions of exactly one kind over the
+// whole document (#1148: the organize-imports save step). Context.Only asks
+// the server to filter server-side; no capability yields nil, nil.
+func (m *Manager) CodeActionsByKind(ctx context.Context, path, kind string) ([]protocol.CodeAction, error) {
+	srv, doc, ok := m.docServer(path)
+	if !ok || !srv.cl.Caps().CodeAction {
+		return nil, nil
+	}
+	end := buffer.Position{}
+	if n := len(doc.lines); n > 0 {
+		end = buffer.Position{Line: n - 1, Col: len([]rune(doc.lines[n-1]))}
+	}
+	cctx, cancel := context.WithTimeout(ctx, requestTimeout)
+	defer cancel()
+	return srv.cl.CodeActions(cctx, protocol.CodeActionParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: protocol.PathToURI(path)},
+		Range:        protocol.ToLSPRange(doc.lines, buffer.Range{Start: buffer.Position{}, End: end}, srv.cl.Encoding()),
+		Context:      protocol.CodeActionContext{Diagnostics: []protocol.Diagnostic{}, Only: []string{kind}},
+	})
+}
+
 // ExecuteCommand runs a server-defined command for the server handling path;
 // its effects arrive as workspace/applyEdit requests (Callbacks.ApplyEdit).
 func (m *Manager) ExecuteCommand(ctx context.Context, path string, cmd protocol.Command) error {
