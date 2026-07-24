@@ -240,6 +240,7 @@ func TestScrollbarGitMarks(t *testing.T) {
 		0:   vcs.LineAdded,
 		1:   vcs.LineDeleted, // same cell as line 0 at 20/200 → deleted wins
 		100: vcs.LineChanged,
+		150: vcs.LineChanged, // outside the thumb and diagnostic-free → ▎
 	}
 	m.marksEpoch++
 	git, lines := m.scrollbarGitMarks(track, total)
@@ -265,8 +266,15 @@ func TestScrollbarGitMarks(t *testing.T) {
 	if !strings.Contains(strings.Join(out, "\n"), "■") {
 		t.Fatal("diagnostic cell missing")
 	}
-	if !strings.Contains(strings.Join(out, "\n"), "▎") {
+	joined := strings.Join(out, "\n")
+	if !strings.Contains(joined, "▎") {
 		t.Fatal("git mark cell missing")
+	}
+	// The thumb keeps its glyph even where a mark lands on it (a file full
+	// of changes must not erase the thumb): row 0 sits inside the thumb and
+	// carries the deleted mark — rendered as a coloured ┃, never ▎.
+	if !strings.Contains(out[0], "┃") || strings.Contains(out[0], "▎") {
+		t.Fatalf("thumb row must keep the thumb glyph, got %q", out[0])
 	}
 }
 
