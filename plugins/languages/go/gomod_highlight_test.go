@@ -9,15 +9,14 @@ import (
 	"ike/internal/lang"
 )
 
-// TestGoModGrammar guards the vendored-source cgo wiring (#1078): go.mod and
-// go.work carry a non-nil grammar under cgo; go.sum stays plain (no grammar
+// TestGoModGrammar guards the vendored-source cgo wiring (#1078): go.mod
+// carries a non-nil grammar under cgo (go.work has its own grammar since
+// #1119, see gowork_highlight_test.go); go.sum stays plain (no grammar
 // exists, content is hashes).
 func TestGoModGrammar(t *testing.T) {
-	for _, id := range []string{"go.mod", "go.work"} {
-		l, ok := lang.ByID(id)
-		if !ok || l.Grammar == nil {
-			t.Errorf("%s grammar is nil under cgo", id)
-		}
+	l, ok := lang.ByID("go.mod")
+	if !ok || l.Grammar == nil {
+		t.Error("go.mod grammar is nil under cgo")
 	}
 	if l, ok := lang.ByID("go.sum"); !ok || l.Grammar != nil {
 		t.Error("go.sum should stay plain (nil grammar)")
@@ -63,28 +62,5 @@ func TestGoModHighlighting(t *testing.T) {
 	}
 }
 
-// TestGoWorkHighlighting: go.work shares the gomod grammar. The grammar has no
-// `use` directive (use lines fall into error recovery), but go/toolchain
-// directives and comments still highlight.
-func TestGoWorkHighlighting(t *testing.T) {
-	lines := []string{
-		`go 1.26`,
-		``,
-		`// local modules`,
-		`use ./demo`,
-	}
-	spans := highlight.Highlight("/p/go.work", lines)
-	if len(spans) == 0 {
-		t.Fatal("expected spans for go.work source, got none")
-	}
-	ix := highlight.NewIndex(spans)
-	if got := ix.CaptureAt(0, 0); got != "keyword" { // go
-		t.Errorf("go keyword: got capture %q, want keyword", got)
-	}
-	if got := ix.CaptureAt(0, 3); got != "string" { // 1.26
-		t.Errorf("go version: got capture %q, want string", got)
-	}
-	if got := ix.CaptureAt(2, 0); got != "comment" {
-		t.Errorf("comment: got capture %q", got)
-	}
-}
+// go.work highlighting moved to gowork_highlight_test.go: since #1119 it has
+// a dedicated grammar whose `use` directive the gomod grammar lacks.

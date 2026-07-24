@@ -450,10 +450,12 @@ func (m *Model) rebuildTheme() {
 }
 
 // applyConfig refreshes settings from the retained config reference, then
-// overlays the buffer's resolved EditorConfig settings (#63) — their
-// precedence is built-in defaults < IKE config < .editorconfig.
+// overlays the buffer language's indent-style default (#1137) and the
+// buffer's resolved EditorConfig settings (#63) — their precedence is
+// built-in defaults < IKE config < language default < .editorconfig.
 func (m *Model) applyConfig() {
 	if m.cfg == nil {
+		m.applyLangIndent()
 		m.applyEditorconfig()
 		return
 	}
@@ -500,7 +502,22 @@ func (m *Model) applyConfig() {
 			m.stickyDepth = n
 		}
 	}
+	m.applyLangIndent()
 	m.applyEditorconfig()
+}
+
+// applyLangIndent overlays the buffer language's indent-style default (#1137)
+// onto the global editor.use_spaces value: make recipes require a literal tab
+// and gofmt output is tab-indented, so those languages declare UseTabs and
+// win over the global preference. Runs before applyEditorconfig, so an
+// explicit .editorconfig indent_style keeps the last word.
+func (m *Model) applyLangIndent() {
+	if m.path == "" {
+		return
+	}
+	if l, ok := lang.ByPath(m.path); ok && l.UseTabs != nil {
+		m.useSpaces = !*l.UseTabs
+	}
 }
 
 // Load reads path into the buffer, resetting cursor, mode, and history. The

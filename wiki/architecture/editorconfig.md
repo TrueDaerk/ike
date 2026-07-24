@@ -4,7 +4,7 @@ title: EditorConfig Support
 description: Per-buffer .editorconfig resolution — spec-conformant glob matching, upward search with root=true, watcher-invalidated cache, override layer between IKE config and explicit user actions.
 resource: internal/editorconfig
 tags: [architecture, editor, config, editorconfig]
-timestamp: 2026-07-12T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # EditorConfig Support
@@ -19,11 +19,17 @@ value.
 ## Precedence
 
 ```
-built-in defaults < IKE config ([editor]) < .editorconfig < explicit user action
+built-in defaults < IKE config ([editor]) < language default < .editorconfig < explicit user action
 ```
 
 Resolved `.editorconfig` settings override the `[editor]` values for their
 buffer only; buffers no section matches keep following IKE's config live.
+The **language default** layer (#1137) covers indent style only: a language
+may declare `UseTabs` in the registry (make — recipes require a literal tab —
+and go/go.mod/go.work — gofmt output is tab-indented), which overrides the
+global `editor.use_spaces` for that language's buffers; an explicit
+`.editorconfig` `indent_style` still keeps the last word
+(`applyLangIndent` in `internal/editor/editor.go`).
 Explicit per-buffer actions still win — `file.setLineEndings` /
 `file.setEncoding` change the stored flavor directly and are not re-clobbered
 (resolution only touches EOL/charset at load time). `editor.editorconfig =

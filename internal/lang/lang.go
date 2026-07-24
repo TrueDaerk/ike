@@ -57,6 +57,16 @@ type Language struct {
 	LineComment  string
 	BlockComment [2]string
 
+	// UseTabs is the language's indent-style default (#1137): non-nil true
+	// means buffers of this language indent with tab characters, non-nil
+	// false with spaces; nil means the language has no opinion and the
+	// editor's global editor.use_spaces setting applies. Resolution order in
+	// the editor: built-in default < editor.use_spaces < UseTabs <
+	// .editorconfig — a project's explicit .editorconfig keeps the last word.
+	// Set by make (recipes require a literal tab) and go (gofmt output is
+	// tab-indented).
+	UseTabs *bool
+
 	// IndentAfter lists trimmed-line suffixes that open a block (Roadmap 0260):
 	// a line ending with one of them indents the next line one level deeper,
 	// e.g. ":" for Python or "{" for brace languages. Empty means the editor
