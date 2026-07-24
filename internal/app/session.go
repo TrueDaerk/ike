@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Session persistence saves the runtime workspace state — which file the editor
@@ -24,8 +25,58 @@ type sessionState struct {
 	// the config-derived theme. Empty means "no runtime override, follow config".
 	Theme string `json:"theme,omitempty"`
 	// RecentFiles is the MRU list behind the recent-files palette mode
-	// (Roadmap 0230), most recent first. Missing → empty list.
-	RecentFiles []string `json:"recent_files,omitempty"`
+	// (Roadmap 0230), most recent first. Missing → empty list. Since #1113
+	// entries carry a last-opened timestamp; the field still loads the
+	// pre-#1113 bare-path shape (see recentFileList.UnmarshalJSON).
+	RecentFiles recentFileList `json:"recent_files,omitempty"`
+}
+
+// recentFileEntry is the on-disk MRU record (#1113). TS is RFC3339; the zero
+// time (omitted) marks entries migrated from the bare-path shape.
+type recentFileEntry struct {
+	Path string    `json:"path"`
+	TS   time.Time `json:"ts,omitzero"`
+}
+
+// recentFileList marshals as a list of {path, ts} objects and tolerates the
+// legacy pre-#1113 shape — a bare string array — on load, so an existing
+// session.json keeps its history (timestamps start blank).
+type recentFileList []recentFileEntry
+
+func (l *recentFileList) UnmarshalJSON(data []byte) error {
+	var entries []recentFileEntry
+	if err := json.Unmarshal(data, &entries); err == nil {
+		*l = entries
+		return nil
+	}
+	var paths []string
+	if err := json.Unmarshal(data, &paths); err != nil {
+		return err
+	}
+	out := make(recentFileList, len(paths))
+	for i, p := range paths {
+		out[i] = recentFileEntry{Path: p}
+	}
+	*l = out
+	return nil
+}
+
+// toEntries converts the on-disk records to store entries.
+func (l recentFileList) toEntries() []RecentEntry {
+	out := make([]RecentEntry, len(l))
+	for i, e := range l {
+		out[i] = RecentEntry{Path: e.Path, LastOpened: e.TS}
+	}
+	return out
+}
+
+// recentListFromEntries converts store entries to the on-disk shape.
+func recentListFromEntries(entries []RecentEntry) recentFileList {
+	out := make(recentFileList, len(entries))
+	for i, e := range entries {
+		out[i] = recentFileEntry{Path: e.Path, TS: e.LastOpened}
+	}
+	return out
 }
 
 type editorSession struct {

@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Command Palette
@@ -151,16 +151,38 @@ locked-only (its prefix rune is internal, never typed): `palette.recentFiles`
 opens it centered via `OpenLocked`. The palette owns no MRU store — the list
 func is injected by the root model (`internal/app/recent.go`), which touches a
 path on every file open (`openPath`) and tab activation, deduplicates
-(touch moves to front) and caps at 50. The list persists as `recent_files` in
-`.ike/session.json` beside the rest of the session state, so history survives a
-restart; a missing section loads as empty (presence-versioned schema).
+(touch moves to front) and caps at 50. Every entry carries its **last-opened
+timestamp** (#1113), stamped on touch. The list persists as `recent_files` in
+`.ike/session.json` beside the rest of the session state — as `{path, ts}`
+objects since #1113; the pre-#1113 bare-string-array shape still loads
+(timestamps migrate as zero and render no time). The MRU reloads from the
+session file on **every** startup path (#1112), including the
+resumed-workspace path of a project switch, which skips the rest of
+`restoreSession` — before the fix that path started empty and the next
+session save wiped the persisted history.
 
 With an empty query the items keep MRU order — most recent first — with the
 **currently active file excluded**, so `cmd+e` + `enter` jumps to the previous
 file (the `Context.ActivePath` field carries the exclusion). A query
 fuzzy-matches the project-relative path; equal scores keep MRU order. Files
 that vanished from disk are dropped from the listing. Activation emits the same
-`OpenFileMsg` as the `@` mode.
+`OpenFileMsg` as the `@` mode. Each row shows its relative last-opened time
+(`ui.RelTime`: "just now", "5m ago", …) right-aligned in the `Item.Time`
+column (#1114 layout, see below), and carries an aux action mirroring the
+project picker's #842 prune: `shift+delete` on the selected row or a click on
+its right-pinned `✕` zone emits `RemoveRecentFileMsg{Path}` — the root model
+removes the entry from the MRU, persists the session immediately and
+refreshes the still-open palette.
+
+### Row layout: the right-aligned time column (#1114)
+
+`Item.Time` is a generic palette field: rows render `marker + title (+ badge)
+… detail chip + time + ✕`, with the time pinned to the right (two cells of
+separation from the title/detail, one before the `✕`). At narrow widths the
+**title truncates first** (ellipsis) so the time and the `✕` zone stay
+intact; when the title would fall below `minRowTitleW` (8 cells) the time
+column drops entirely so the name stays readable. `sideRow` (the Recent
+Projects column) applies the same rules, so both pickers match.
 
 ### Recent Projects column (#778)
 

@@ -5,8 +5,10 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"ike/internal/fuzzy"
+	"ike/internal/ui"
 )
 
 // RecentPrefix selects the recent-files mode inside the palette. The root
@@ -35,8 +37,8 @@ type SideMode interface {
 // excluded, so opening the mode and pressing enter jumps to the *previous*
 // file; a query fuzzy-matches the project-relative path, ties keep MRU order.
 type RecentMode struct {
-	// list returns the MRU paths, most recent first. Injected by the app.
-	list func() []string
+	// list returns the MRU entries, most recent first. Injected by the app.
+	list func() []RecentEntry
 	// exists filters vanished files out of the listing. Injectable for tests;
 	// defaults to an on-disk stat.
 	exists func(path string) bool
@@ -44,11 +46,33 @@ type RecentMode struct {
 	// carrying their activation Msg (the app injects project.PickedMsg
 	// values, so the palette stays project-agnostic). Nil hides the column.
 	projects func() []Item
+	// now overrides the clock for the last-opened column (#1113); tests only.
+	now func() time.Time
 }
 
+// RecentEntry is one injected MRU record (#1113): the file path and when it
+// was last opened. A zero LastOpened (legacy entry) renders no time.
+type RecentEntry struct {
+	Path       string
+	LastOpened time.Time
+}
+
+// RemoveRecentFileMsg is the aux action of a recent-files row (#1113,
+// mirroring the project picker's #842 prune): shift+delete or a click on the
+// "✕" zone asks the app to drop the entry from the MRU history.
+type RemoveRecentFileMsg struct{ Path string }
+
 // NewRecentMode builds the recent-files mode over the injected MRU source.
-func NewRecentMode(list func() []string) *RecentMode {
+func NewRecentMode(list func() []RecentEntry) *RecentMode {
 	return &RecentMode{list: list, exists: fileExists}
+}
+
+// clock returns the injectable now source, defaulting to the wall clock.
+func (r *RecentMode) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
 }
 
 // fileExists is the default existence filter: a stat-able non-directory.
@@ -110,20 +134,30 @@ func (r *RecentMode) Results(query string, cx Context) []Item {
 		score int
 	}
 	var out []scored
-	for _, p := range r.list() {
-		if cx.ActivePath != "" && filepath.Clean(p) == active {
+	now := r.clock()
+	for _, e := range r.list() {
+		if cx.ActivePath != "" && filepath.Clean(e.Path) == active {
 			continue
 		}
-		if r.exists != nil && !r.exists(p) {
+		if r.exists != nil && !r.exists(e.Path) {
 			continue
 		}
-		title := displayRel(p, cx.Root)
+		title := displayRel(e.Path, cx.Root)
 		m, ok := fuzzy.Match(query, title)
 		if !ok {
 			continue
 		}
 		out = append(out, scored{
-			item:  Item{Title: title, Spans: m.Positions, Score: m.Score, Msg: OpenFileMsg{Path: p}},
+			item: Item{
+				Title: title,
+				Spans: m.Positions,
+				Score: m.Score,
+				Msg:   OpenFileMsg{Path: e.Path},
+				// Last-opened column + prune action (#1113), like the
+				// project picker's rows after #842.
+				Time: ui.RelTime(e.LastOpened, now),
+				Aux:  RemoveRecentFileMsg{Path: e.Path},
+			},
 			score: m.Score,
 		})
 	}

@@ -17,6 +17,11 @@ type Item struct {
 	// Badge is an optional dim marker rendered after the title (#820): the
 	// recent-projects lists mark workspaces that are open in memory with "●".
 	Badge string
+	// Time is an optional right-aligned column (#1114) — the last-opened
+	// time of recent-projects (#842) and recent-files (#1113) rows. It is
+	// pinned to the right with clear separation from the title and the "✕"
+	// zone, and drops first when the row gets too narrow.
+	Time string
 	// Aux is an optional secondary action (#820): shift+delete on the
 	// selected row (or a click on the row's "✕" zone) emits it without
 	// closing the palette — e.g. closing a background workspace from the

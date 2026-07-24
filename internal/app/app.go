@@ -731,6 +731,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// or stale layout is dropped and the default is built on first size. A
 	// resumed workspace (#777) is already live — restoring from disk would
 	// replace its running panes with placeholders.
+	// The recent-files MRU always reloads from the session file, on the
+	// resumed path too (#1112): a resumed workspace skips restoreSession, and
+	// before this the model kept the empty constructor list — which the next
+	// saveSession (quit, hidden-toggle, switch-away) then persisted, wiping
+	// the project's MRU history for good.
+	if s, ok := loadSession(); ok {
+		m.recent.Set(s.RecentFiles.toEntries())
+	}
 	if resumed == nil {
 		m.restoreLayout(cfg)
 		m.restoreSession()
@@ -1149,7 +1157,8 @@ func (m *Model) restoreSession() {
 	}
 	// s.Theme (the pre-#667 per-project runtime override) is deliberately
 	// ignored: the theme is a user setting now, resolved from config alone.
-	m.recent.Set(s.RecentFiles)
+	// s.RecentFiles is loaded in buildModel (#1112): the MRU must survive the
+	// resumed-workspace path too, which never reaches this restore.
 	m.explorer().Restore(explorer.State{
 		Expanded:   s.Explorer.Expanded,
 		ShowHidden: s.Explorer.ShowHidden,
@@ -1203,7 +1212,7 @@ func (m Model) editorWithFile(path string) string {
 func (m Model) snapshotSession() sessionState {
 	st := m.explorer().Snapshot()
 	s := sessionState{
-		RecentFiles: m.recent.List(),
+		RecentFiles: recentListFromEntries(m.recent.Entries()),
 		Explorer: explorerSession{
 			Expanded:   st.Expanded,
 			ShowHidden: st.ShowHidden,
@@ -1413,7 +1422,14 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	file := palette.NewFileMode()
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
-	mru := palette.NewRecentMode(recent.List)
+	mru := palette.NewRecentMode(func() []palette.RecentEntry {
+		entries := recent.Entries()
+		out := make([]palette.RecentEntry, len(entries))
+		for i, e := range entries {
+			out[i] = palette.RecentEntry{Path: e.Path, LastOpened: e.LastOpened}
+		}
+		return out
+	})
 	// The Recent Files dialog grows a Recent Projects column (#778): entries
 	// from project.history (current project excluded), whose activation goes
 	// through the normal validated seamless-switch path (project.PickedMsg).
@@ -1431,7 +1447,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
-				Badge: project.RelTime(e.LastOpened, time.Now()),
+				// Right-aligned last-opened column (#842, #1114).
+				Time: project.RelTime(e.LastOpened, time.Now()),
 			}
 			if openInMemory(e.Path) {
 				it.Badge = "●"
@@ -3066,6 +3083,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			Root:       ".",
 			ActivePath: m.activeFilePath(),
 		}, palette.RecentPrefix)
+		return m, nil
+
+	case palette.RemoveRecentFileMsg:
+		// Prune-from-list (#1113, mirroring the project picker's #842): the
+		// aux action of a recent-files row drops the entry from the MRU. The
+		// session persists immediately so the removal survives a kill/crash,
+		// and the still-open palette re-lists without the entry.
+		m.recent.Remove(msg.Path)
+		saveSession(m.snapshotSession())
+		m.palette.Refresh()
 		return m, nil
 
 	case ShowPasteHistoryMsg:

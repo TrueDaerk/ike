@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -15,7 +16,13 @@ func testRecentMode(list []string, missing ...string) *RecentMode {
 	for _, p := range missing {
 		gone[p] = true
 	}
-	m := NewRecentMode(func() []string { return list })
+	m := NewRecentMode(func() []RecentEntry {
+		out := make([]RecentEntry, len(list))
+		for i, p := range list {
+			out[i] = RecentEntry{Path: p}
+		}
+		return out
+	})
 	m.exists = func(path string) bool { return !gone[path] }
 	return m
 }
@@ -87,6 +94,83 @@ func TestRecentModeEmitsOpenFileMsgWithOriginalPath(t *testing.T) {
 	msg, ok := items[0].Msg.(OpenFileMsg)
 	if !ok || msg.Path != "internal/app/app.go" {
 		t.Fatalf("Msg = %#v, want OpenFileMsg with original path", items[0].Msg)
+	}
+}
+
+// TestRecentModeRowsCarryTimeAndAux (#1113): every row shows the relative
+// last-opened time in the right-aligned Time column and carries the prune
+// aux action, mirroring the project picker after #842.
+func TestRecentModeRowsCarryTimeAndAux(t *testing.T) {
+	now := time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC)
+	m := NewRecentMode(func() []RecentEntry {
+		return []RecentEntry{
+			{Path: "a.go", LastOpened: now.Add(-5 * time.Minute)},
+			{Path: "b.go"}, // migrated legacy entry: no timestamp
+		}
+	})
+	m.exists = func(string) bool { return true }
+	m.now = func() time.Time { return now }
+
+	items := m.Results("", Context{Root: "."})
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want 2", len(items))
+	}
+	if items[0].Time != "5m ago" {
+		t.Fatalf("Time = %q, want \"5m ago\"", items[0].Time)
+	}
+	if items[1].Time != "" {
+		t.Fatalf("legacy entry must render no time, got %q", items[1].Time)
+	}
+	for i, want := range []string{"a.go", "b.go"} {
+		aux, ok := items[i].Aux.(RemoveRecentFileMsg)
+		if !ok || aux.Path != want {
+			t.Fatalf("items[%d].Aux = %#v, want RemoveRecentFileMsg{%s}", i, items[i].Aux, want)
+		}
+	}
+}
+
+// TestRecentModeAuxKeyEmitsRemove (#1113): shift+delete on a recent-files row
+// emits its RemoveRecentFileMsg and keeps the palette open.
+func TestRecentModeAuxKeyEmitsRemove(t *testing.T) {
+	m := testRecentMode([]string{"a.go", "b.go"})
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModShift})
+	if cmd == nil {
+		t.Fatal("shift+delete must emit the aux msg")
+	}
+	if msg, ok := cmd().(RemoveRecentFileMsg); !ok || msg.Path != "a.go" {
+		t.Fatalf("aux msg = %#v, want RemoveRecentFileMsg{a.go}", cmd())
+	}
+	if !p.IsOpen() {
+		t.Fatal("removal must keep the palette open")
+	}
+}
+
+// TestRecentModeClickAuxZoneEmitsRemove (#1113): a click on a row's "✕" zone
+// emits the remove msg instead of opening the file.
+func TestRecentModeClickAuxZoneEmitsRemove(t *testing.T) {
+	m := testRecentMode([]string{"a.go"})
+	m.SetProjects(func() []Item { return nil }) // single column: main list spans the box
+	p := New(Config{}, m, fileMode())
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+
+	inner := p.boxWidth() - 4
+	// The first result row is at box y=3 (border, prompt, separator); the ✕
+	// zone is the last auxGlyphW cells. Click x is box-relative and shifted
+	// by 2 (border + padding) inside Click.
+	cmd := p.Click(2+inner-1, 3)
+	if cmd == nil {
+		t.Fatal("click on the ✕ zone must emit the aux msg")
+	}
+	if msg, ok := cmd().(RemoveRecentFileMsg); !ok || msg.Path != "a.go" {
+		t.Fatalf("click aux msg = %#v, want RemoveRecentFileMsg{a.go}", cmd())
+	}
+	if !p.IsOpen() {
+		t.Fatal("the ✕ click must keep the palette open")
 	}
 }
 

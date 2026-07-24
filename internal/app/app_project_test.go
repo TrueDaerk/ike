@@ -234,6 +234,45 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 	}
 }
 
+// TestSwitchRoundTripKeepsRecentFiles (#1112): the resumed-workspace path
+// used to skip the MRU load — restoreSession only ran for resumed == nil —
+// so switching A→B→A came back with an empty list, and the next saveSession
+// (quit, hidden-toggle, switch-away) overwrote A's persisted recent_files
+// with it. The MRU must reload from the session file on every startup path.
+func TestSwitchRoundTripKeepsRecentFiles(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+	m.recent.Touch("a.go")
+	m.recent.Touch("b.go")
+
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src}) // resumes the parked workspace
+	m = out.(Model)
+
+	got := m.recent.List()
+	if len(got) != 2 || got[0] != "b.go" || got[1] != "a.go" {
+		t.Fatalf("resumed workspace MRU = %v, want [b.go a.go]", got)
+	}
+	if e := m.recent.Entries(); e[0].LastOpened.IsZero() {
+		t.Fatal("restored entries must keep their timestamps (#1113)")
+	}
+	// The destructive half of the bug: a save after the resume must not wipe
+	// the persisted history.
+	saveSession(m.snapshotSession())
+	s, ok := loadSession()
+	if !ok || len(s.RecentFiles) != 2 || s.RecentFiles[0].Path != "b.go" {
+		t.Fatalf("persisted recent_files after resume+save = %+v, want [b.go a.go]", s.RecentFiles)
+	}
+}
+
 // TestSwitchNewTerminalSpawnsInNewRoot (#779): everything root-derived spawns
 // against the active workspace's root after a switch — a fresh terminal lands
 // in the new project, not the old one.

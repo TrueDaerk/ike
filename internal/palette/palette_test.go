@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/plugin"
 	"ike/internal/registry"
@@ -522,5 +523,66 @@ func TestRowsNeverWrap(t *testing.T) {
 		if h := lipgloss.Height(side); h != 1 {
 			t.Fatalf("selected=%v: sideRow height = %d, want 1", selected, h)
 		}
+	}
+}
+
+// TestRowTimeColumnRightAligned (#1114): the Time column pins to the right
+// edge before the "✕" zone with clear separation from the title, and the
+// full row spans exactly the given width.
+func TestRowTimeColumnRightAligned(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "name", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
+	line := ansi.Strip(p.row(it, false, 40))
+	if !strings.HasSuffix(line, "5m ago ✕") {
+		t.Fatalf("time must sit right-aligned before the ✕, got %q", line)
+	}
+	if lipgloss.Width(line) != 40 {
+		t.Fatalf("row width = %d, want 40", lipgloss.Width(line))
+	}
+	if !strings.Contains(line, "name    ") {
+		t.Fatalf("title and time must be clearly separated, got %q", line)
+	}
+}
+
+// TestRowNarrowTruncatesTitleKeepsTime (#1114): at narrow widths the title
+// truncates with an ellipsis while the time and ✕ stay intact.
+func TestRowNarrowTruncatesTitleKeepsTime(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "averyverylongfilename.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
+	line := ansi.Strip(p.row(it, false, 24))
+	if !strings.HasSuffix(line, "5m ago ✕") {
+		t.Fatalf("time and ✕ must survive narrow widths, got %q", line)
+	}
+	if !strings.Contains(line, "…") {
+		t.Fatalf("the title must truncate with an ellipsis, got %q", line)
+	}
+}
+
+// TestRowVeryNarrowDropsTime (#1114): below the minimum the time drops so
+// the name keeps a readable width; the ✕ stays actionable.
+func TestRowVeryNarrowDropsTime(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "somefilename.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
+	line := ansi.Strip(p.row(it, false, 18))
+	if strings.Contains(line, "ago") {
+		t.Fatalf("the time must drop below the minimum width, got %q", line)
+	}
+	if !strings.Contains(line, "✕") {
+		t.Fatalf("the ✕ must stay, got %q", line)
+	}
+}
+
+// TestSideRowTimeColumn (#1114): the side column applies the same layout —
+// right-aligned time before the "✕", dropped when the column is too narrow.
+func TestSideRowTimeColumn(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "proj", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}
+	line := ansi.Strip(p.sideRow(it, false, 30))
+	if !strings.HasSuffix(line, "2h ago ✕ ") {
+		t.Fatalf("side time must sit right-aligned before the ✕, got %q", line)
+	}
+	narrow := ansi.Strip(p.sideRow(Item{Title: "longprojectname", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}, false, 16))
+	if strings.Contains(narrow, "ago") {
+		t.Fatalf("side time must drop in a too-narrow column, got %q", narrow)
 	}
 }
