@@ -6706,12 +6706,21 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.shell.View(), m.width, m.height)
 	}
 	result = m.compositeToasts(result)
-	return lipgloss.NewStyle().
+	// The palette wash paints the theme background/foreground under the whole
+	// frame. The frame is already composed at exactly width x height (#612),
+	// so the wash must not re-run lipgloss's Wrap/align/width-measurement over
+	// the entire screen — that alone was ~52% of every frame's CPU and ~68%
+	// of its allocations (#1095). Styling without Width/Height applies the
+	// colours per line and skips all of that; the padded variant stays as the
+	// defensive fallback for a frame that is not full-height (cheap check —
+	// counting newlines, no grapheme scanning).
+	wash := lipgloss.NewStyle().
 		Background(m.pal().Background).
-		Foreground(m.pal().Foreground).
-		Width(m.width).
-		Height(m.height).
-		Render(result)
+		Foreground(m.pal().Foreground)
+	if lipgloss.Height(result) == m.height {
+		return wash.Render(result)
+	}
+	return wash.Width(m.width).Height(m.height).Render(result)
 }
 
 // compositeWhichKey overlays the pending-chord hint rows (0081/40) as a

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-24
+
+- Frame wash stops re-wrapping the composed screen (#1095): the final
+  palette background/foreground pass styles per line instead of re-running
+  lipgloss Wrap/align over the exact-size frame — ~22% frame CPU and ~69%
+  of per-keystroke allocations gone (bench: 2.24ms/39.7k allocs →
+  1.75ms/12.4k); padded wash stays as the fallback for non-full-height
+  frames (`/architecture/performance.md`).
+
 ## 2026-07-23
 
 - Empty directories drop their expander once loaded (#1039), hidden-only
