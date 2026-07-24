@@ -163,6 +163,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.visualStart, m.visualEnd = lo, hi
 		m.mode = Command
 		m.cmdline = "'<,'>"
+		m.cmdCur = len([]rune(m.cmdline))
 	default:
 		_ = hasRune
 	}

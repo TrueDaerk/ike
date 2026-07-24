@@ -12,6 +12,7 @@ import (
 	"ike/internal/editor/textobject"
 	"ike/internal/editor/viewport"
 	ilsp "ike/internal/lsp"
+	"ike/internal/ui"
 )
 
 // doubleClickWindow is the maximum delay between two clicks on the same cell
@@ -504,7 +505,9 @@ func (m Model) commandLineRow() string {
 		}
 		return ""
 	}
-	return cl + lipgloss.NewStyle().Reverse(true).Render(" ") + m.searchCounter() + m.suggestRow()
+	// cl is the prefix rune (":", "/" or "?") plus the typed line; render the
+	// line through the shared cursor view so the movable cursor (#1110) shows.
+	return cl[:1] + ui.CursorView(m.cmdline, m.cmdCur) + m.searchCounter() + m.suggestRow()
 }
 
 // suggestRow renders the path-completion hint after the ":"-line cursor

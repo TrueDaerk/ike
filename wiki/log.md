@@ -2,6 +2,18 @@
 
 ## 2026-07-24
 
+- Search case control (#1111): new `editor.search_ignore_case` setting
+  (default off) makes in-file `/` `?` search case-insensitive without a
+  `\c`; `\C` forces exact matching, ctrl+c on the open search line toggles
+  the mode by rewriting the visible `\c`/`\C` marker. Precedence:
+  marker > setting > smartcase (`/architecture/editor.md`).
+
+- Search command line cursor editing (#1110): the `/` `?` (and `:`) input
+  reuses the shared single-line editing helper (#763) — left/right with
+  mid-query insertion, alt+backspace word delete, cmd+backspace clear —
+  and the incremental preview keeps tracking mid-query edits
+  (`/architecture/editor.md`).
+
 - Stale Problems entries pruned (#1102): the LSP manager flushes a stopped/
   disabled language's unopened publishes with empty diagnostics, and
   deleting a file/directory drops its findings from the store

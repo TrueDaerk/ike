@@ -74,6 +74,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.rainbow_brackets", Type: Bool, Title: "Rainbow brackets", Description: "Color bracket pairs by nesting depth (theme-derived cycle)", Scope: config.UserScope},
 			{Key: "editor.color_preview", Type: Bool, Title: "Color preview", Description: "Tint color literals (#rrggbb, rgb(), hsl()) with their own color", Scope: config.UserScope},
 			{Key: "editor.sticky_scroll_depth", Type: Int, Title: "Sticky scroll depth", Description: "Maximum number of nested header lines pinned at once", Scope: config.UserScope, Min: 1, Max: 10},
+			{Key: "editor.search_ignore_case", Type: Bool, Title: "Case-insensitive search", Description: "Match in-file / and ? searches ignoring case by default; a \\C query prefix forces exact case. Off = smartcase: all-lowercase folds, any uppercase matches exactly", Scope: config.UserScope},
 			{Key: "editor.wrap", Type: Bool, Title: "Soft wrap", Description: "Wrap long lines at the pane edge", Scope: config.UserScope},
 			{Key: "editor.show_whitespace", Type: Enum, Title: "Show whitespace", Description: "Render spaces and tabs visibly", Scope: config.UserScope, Options: []string{"none", "trailing", "all"}},
 			{Key: "editor.indent_guides", Type: Bool, Title: "Indent guides", Description: "Draw vertical lines at each indentation level", Scope: config.UserScope},

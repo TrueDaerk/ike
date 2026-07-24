@@ -9,6 +9,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/excmd"
 	"ike/internal/editor/search"
+	"ike/internal/ui"
 )
 
 // SearchCommittedMsg announces that an in-file search was committed with a
@@ -25,6 +26,7 @@ func (m *Model) beginSearch(dir search.Direction) {
 	m.searching = true
 	m.searchDir = dir
 	m.cmdline = ""
+	m.cmdCur = 0
 	m.preview = search.Query{}
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
@@ -77,7 +79,11 @@ func opposite(d search.Direction) search.Direction {
 	return search.Forward
 }
 
-// updateCommandLine handles typing on the ":" / "/" / "?" line.
+// updateCommandLine handles typing on the ":" / "/" / "?" line. Cursor
+// movement and word/whole deletion run through the shared single-line editing
+// helper (#763, #1110), so mid-line insertion works like the palette/finder
+// inputs; every text change reruns the incremental preview (search) or the
+// path-suggest refresh (ex line).
 func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	switch {
 	case key.Code == tea.KeyEscape:
@@ -86,58 +92,112 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.mode = Normal
 		m.cmdline = ""
+		m.cmdCur = 0
 		m.cmdSuggest = nil
 		m.searching = false
 	case key.Code == tea.KeyTab && !m.searching:
 		// Path completion for ":e <partial>" / ":w <partial>" (#543).
 		m.completeCmdlinePath()
+		m.cmdCur = len([]rune(m.cmdline))
 	case key.Code == tea.KeyEnter:
 		if m.searching {
 			m.commitSearch()
 			m.mode = Normal
 			m.searching = false
 			m.cmdline = ""
+			m.cmdCur = 0
 			if !m.query.Empty() {
 				return m, func() tea.Msg { return SearchCommittedMsg{} }
 			}
 			return m, nil
 		}
 		return m.runExLine()
-	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
-		if r := []rune(m.cmdline); len(r) > 0 {
-			m.cmdline = string(r[:len(r)-1])
+	case key.Code == 'c' && key.Mod == tea.ModCtrl && m.searching:
+		// ctrl+c toggles case sensitivity for the current query (#1111) by
+		// editing the visible \c / \C marker — the marker is the state.
+		m.toggleSearchCase()
+	case m.cmdline == "" && (key.Code == tea.KeyBackspace || key.Code == 'h' && key.Mod == tea.ModCtrl):
+		// Backspacing an empty line leaves the command line, vim-style.
+		if m.searching {
+			m.cancelSearch()
+		}
+		m.mode = Normal
+		m.searching = false
+		m.cmdSuggest = nil
+	default:
+		msg := key
+		if key.Code == 'h' && key.Mod == tea.ModCtrl {
+			msg = tea.KeyPressMsg{Code: tea.KeyBackspace} // ctrl+h is backspace
+		}
+		text, cur, handled, changed := ui.EditKey(msg, m.cmdline, m.cmdCur)
+		if !handled {
+			break
+		}
+		m.cmdline, m.cmdCur = text, cur
+		if changed {
 			if m.searching {
 				m.searchPreview()
 			} else {
 				m.refreshCmdlineSuggest()
 			}
-		} else {
-			if m.searching {
-				m.cancelSearch()
-			}
-			m.mode = Normal
-			m.searching = false
-			m.cmdSuggest = nil
-		}
-	case key.Text != "" && key.Mod&(tea.ModCtrl|tea.ModAlt) == 0:
-		// Printable input, including a bare space (Text == " ").
-		m.cmdline += key.Text
-		if m.searching {
-			m.searchPreview()
-		} else {
-			m.refreshCmdlineSuggest()
 		}
 	}
 	return m, nil
 }
 
-// parseSearchPattern splits the typed line into pattern and regex flag: a "\v"
-// prefix enables regex (very-magic toggle); otherwise the search is literal.
-func parseSearchPattern(line string) (string, bool) {
-	if strings.HasPrefix(line, `\v`) {
-		return line[2:], true
+// toggleSearchCase flips the effective case mode of the open search line
+// (#1111) by rewriting its leading marker, so the mode is always visible in
+// the query itself: forced-insensitive shows \c, forced-exact shows \C.
+// From the unmarked state the toggle forces the opposite of what the
+// editor.search_ignore_case setting yields — with the setting off that is
+// \c (smartcase → insensitive), with it on \C (insensitive → exact).
+func (m *Model) toggleSearchCase() {
+	switch {
+	case strings.HasPrefix(m.cmdline, `\c`):
+		m.cmdline = m.cmdline[2:]
+		m.cmdCur = max(0, m.cmdCur-2)
+		if m.searchIgnoreCase {
+			// Removing \c alone would fall back to the insensitive default;
+			// the toggle must land on the sensitive side.
+			m.cmdline = `\C` + m.cmdline
+			m.cmdCur += 2
+		}
+	case strings.HasPrefix(m.cmdline, `\C`):
+		m.cmdline = `\c` + m.cmdline[2:]
+	case m.searchIgnoreCase:
+		m.cmdline = `\C` + m.cmdline
+		m.cmdCur += 2
+	default:
+		m.cmdline = `\c` + m.cmdline
+		m.cmdCur += 2
 	}
-	return line, false
+	m.searchPreview()
+}
+
+// parseSearchPattern splits the typed line into pattern, regex flag and case
+// mode. Leading markers, in any order: "\v" enables regex (very-magic
+// toggle), "\c" forces case-insensitive matching, "\C" forces exact matching
+// (#1111). Without a case marker the editor.search_ignore_case setting picks
+// insensitive, else smartcase (#257) applies.
+func (m Model) parseSearchPattern(line string) (string, bool, search.Case) {
+	regex := false
+	cs := search.CaseSmart
+	if m.searchIgnoreCase {
+		cs = search.CaseFold
+	}
+	for {
+		switch {
+		case strings.HasPrefix(line, `\v`):
+			regex = true
+		case strings.HasPrefix(line, `\c`):
+			cs = search.CaseFold
+		case strings.HasPrefix(line, `\C`):
+			cs = search.CaseExact
+		default:
+			return line, regex, cs
+		}
+		line = line[2:]
+	}
 }
 
 // searchPreview recompiles the half-typed pattern and moves to the nearest
@@ -145,7 +205,7 @@ func parseSearchPattern(line string) (string, bool) {
 // pattern) parks the cursor back at the origin; nothing lands on the nav
 // stack — only the committed jump does.
 func (m *Model) searchPreview() {
-	m.preview = search.Compile(parseSearchPattern(m.cmdline))
+	m.preview = search.Compile(m.parseSearchPattern(m.cmdline))
 	if !m.preview.Empty() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
 			m.cursor = p
@@ -177,7 +237,7 @@ func (m *Model) restoreSearchOrigin() {
 // the first match from the origin. Zero matches leave a "no matches" report on
 // the ex line and restore the origin.
 func (m *Model) commitSearch() {
-	m.preview = search.Compile(parseSearchPattern(m.cmdline))
+	m.preview = search.Compile(m.parseSearchPattern(m.cmdline))
 	m.query = m.preview
 	m.preview = search.Query{}
 	if m.query.Empty() {
@@ -290,7 +350,7 @@ func (m Model) exResolver() excmd.Resolver {
 // from the line after/before `from` and wrapping around the buffer ends. It
 // backs the "/pat/" and "?pat?" ex addresses.
 func (m Model) exSearchLine(pat string, from int, forward bool) (int, bool) {
-	q := search.Compile(pat, true)
+	q := search.Compile(pat, true, search.CaseSmart)
 	if q.Empty() {
 		return 0, false
 	}

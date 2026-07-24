@@ -503,6 +503,7 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.collapseCarets()
 		m.mode = Command
 		m.cmdline = ""
+		m.cmdCur = 0
 	case "q":
 		// Macro recording (#58): q stops an active recording, otherwise the
 		// next key names the register to record into. Like vim, a q replayed

@@ -52,7 +52,7 @@ func (m *Model) beginReplacePanel() {
 // moves to the nearest match from the origin — the same incsearch behavior
 // the "/" line has (#255); no match parks back at the origin.
 func (m *Model) previewPanelFind() {
-	m.preview = search.Compile(parseSearchPattern(m.replPanel.find))
+	m.preview = search.Compile(m.parseSearchPattern(m.replPanel.find))
 	if !m.preview.Empty() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, search.Forward, 1); ok {
 			m.cursor = p
@@ -143,6 +143,7 @@ func (m Model) runPanelSubstitute(flags string) (Model, tea.Cmd) {
 	}
 	m.closeReplacePanel(false)
 	m.cmdline = line
+	m.cmdCur = len([]rune(line))
 	return m.runExLine()
 }
 

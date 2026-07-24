@@ -21,6 +21,19 @@ const (
 	Backward
 )
 
+// Case selects how a query treats letter case (#1111). CaseSmart is the
+// vim-style smartcase default (#257): an all-lowercase pattern folds case,
+// any uppercase rune makes it exact. CaseFold forces case-insensitive
+// matching (a "\c" marker or the editor.search_ignore_case setting);
+// CaseExact forces exact matching (a "\C" marker).
+type Case int
+
+const (
+	CaseSmart Case = iota
+	CaseFold
+	CaseExact
+)
+
 // Span is a match on a single line, as rune columns [Start, End).
 type Span struct {
 	Line       int
@@ -37,16 +50,19 @@ type Query struct {
 // Compile builds a Query. When regex is true and the pattern is invalid, it
 // falls back to a literal search so a half-typed regex never errors mid-keypress.
 //
-// Matching is smartcase (#257), vim-style: an all-lowercase pattern matches
-// case-insensitively, any uppercase rune makes it exact. A case-insensitive
-// literal runs through a quoted regex so multi-byte case pairs fold correctly;
-// the exact literal keeps the strings.Index fast path.
-func Compile(pattern string, regex bool) Query {
+// cs picks the case handling (#1111): CaseSmart is vim's smartcase (#257) —
+// an all-lowercase pattern matches case-insensitively, any uppercase rune
+// makes it exact — while CaseFold/CaseExact force one mode regardless of the
+// pattern's spelling. A case-insensitive literal runs through a quoted regex
+// so multi-byte case pairs fold correctly; the exact literal keeps the
+// strings.Index fast path.
+func Compile(pattern string, regex bool, cs Case) Query {
 	q := Query{Pattern: pattern, Regex: regex}
 	if pattern == "" {
 		return q
 	}
-	insensitive := strings.IndexFunc(pattern, unicode.IsUpper) < 0
+	insensitive := cs == CaseFold ||
+		(cs == CaseSmart && strings.IndexFunc(pattern, unicode.IsUpper) < 0)
 	if regex {
 		expr := pattern
 		if insensitive {

@@ -203,6 +203,11 @@ type Editor struct {
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme.
 	RainbowBrackets bool `toml:"rainbow_brackets"`
+	// SearchIgnoreCase makes the in-file "/" "?" search case-insensitive by
+	// default (#1111): queries fold case without an explicit \c marker, and a
+	// \C prefix forces exact matching. Off keeps smartcase (#257): an
+	// all-lowercase pattern folds case, any uppercase rune matches exactly.
+	SearchIgnoreCase bool `toml:"search_ignore_case"`
 	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
 	// with their own color (#790).
 	ColorPreview bool `toml:"color_preview"`
