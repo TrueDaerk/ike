@@ -98,6 +98,31 @@ func (m *Model) ScrollbarDrag(y int) {
 	m.SetScroll(top, m.view.Left)
 }
 
+// sbCache memoizes the scrollbar stripe across frames (#1097): the map was
+// rebuilt from every diagnostic on every frame. Pointer-held so the
+// value-receiver View can fill it; the single-threaded update loop is the
+// only writer, and the diagnostics epoch plus geometry key invalidation.
+type sbCache struct {
+	epoch        int
+	track, total int
+	stripe       map[int]int
+	valid        bool
+}
+
+// stripeFor returns the memoized stripe for the given geometry.
+func (m Model) stripeFor(track, total int) map[int]int {
+	if m.sbcache != nil && m.sbcache.valid &&
+		m.sbcache.epoch == m.diagsEpoch &&
+		m.sbcache.track == track && m.sbcache.total == total {
+		return m.sbcache.stripe
+	}
+	st := m.scrollbarStripe(track, total)
+	if m.sbcache != nil {
+		*m.sbcache = sbCache{epoch: m.diagsEpoch, track: track, total: total, stripe: st, valid: true}
+	}
+	return st
+}
+
 // scrollbarStripe maps track rows to the worst diagnostic severity whose line
 // lands there (error stripe): row -> severity (1=error … 4=hint), lower wins.
 func (m Model) scrollbarStripe(track, total int) map[int]int {
@@ -134,18 +159,24 @@ func (m Model) overlayScrollbar(rows []string) []string {
 	if !ok {
 		return rows
 	}
-	stripe := m.scrollbarStripe(track, total)
-	trackStyle := lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack)
-	thumbStyle := lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb)
+	stripe := m.stripeFor(track, total)
+	// Cells are identical across rows: render each variant once per call
+	// instead of a lipgloss style chain + Render per row (#1097).
+	trackCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack).Render("│")
+	thumbCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb).Render("┃")
+	var sevCells [5]string
 	w := m.width
 	for y := 0; y < len(rows) && y < track; y++ {
 		var cell string
 		if sev, hit := stripe[y]; hit {
-			cell = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
+			if sevCells[sev] == "" {
+				sevCells[sev] = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
+			}
+			cell = sevCells[sev]
 		} else if y >= start && y < start+length {
-			cell = thumbStyle.Render("┃")
+			cell = thumbCell
 		} else {
-			cell = trackStyle.Render("│")
+			cell = trackCell
 		}
 		row := ansi.Truncate(rows[y], w-1, "")
 		if pad := w - 1 - ansi.StringWidth(row); pad > 0 {

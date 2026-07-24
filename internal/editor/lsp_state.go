@@ -89,6 +89,7 @@ type hoverLine struct {
 // setDiagnostics replaces the diagnostic set and rebuilds the per-line index.
 func (m *Model) setDiagnostics(diags []ilsp.Diagnostic) {
 	m.diags = diags
+	m.diagsEpoch++ // invalidates the scrollbar stripe memo (#1097)
 	m.diagByLine = make(map[int][]ilsp.Diagnostic, len(diags))
 	for _, d := range diags {
 		for ln := d.Range.Start.Line; ln <= d.Range.End.Line; ln++ {

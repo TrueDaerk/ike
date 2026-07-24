@@ -286,6 +286,10 @@ type Model struct {
 	// popup, and the hover popup. See lsp_state.go.
 	diags      []ilsp.Diagnostic
 	diagByLine map[int][]ilsp.Diagnostic
+	// diagsEpoch bumps on every diagnostics replacement; sbcache memoizes the
+	// scrollbar error stripe against it (#1097).
+	diagsEpoch int
+	sbcache    *sbCache
 	// gitMarks are the gutter diff markers against HEAD (Roadmap 0320, #464),
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
 	// external change, and vcs refresh, so positions may briefly lag an edit.
@@ -366,6 +370,7 @@ func parseWhitespaceMode(v string) whitespaceMode {
 func New() Model {
 	m := Model{
 		buf:                buffer.New(nil),
+		sbcache:            &sbCache{},
 		mode:               Normal,
 		regs:               register.New(),
 		hist:               history.New(),
