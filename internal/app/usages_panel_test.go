@@ -146,7 +146,7 @@ func TestUsagesPanePersistsAndRestoresEmpty(t *testing.T) {
 // panel variant sits alongside the quick palette entry.
 func TestEditorContextMenuOffersUsagesPanel(t *testing.T) {
 	var palette, panel bool
-	for _, it := range editorContextItems() {
+	for _, it := range editorContextItems(false) {
 		switch it.Command {
 		case "lsp.references":
 			palette = true

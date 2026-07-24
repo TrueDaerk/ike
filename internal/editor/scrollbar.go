@@ -83,7 +83,7 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 	}
 	// A press on a marked cell jumps to that mark's line (#1131), centred;
 	// unmarked track cells keep the proportional jump (#1022).
-	if _, _, lines := m.stripesFor(track, total); lines != nil {
+	if _, _, _, lines := m.stripesFor(track, total); lines != nil {
 		if ln, ok := lines[y]; ok {
 			maxOff := total - track
 			m.SetScroll(clampInt(ln-track/2, 0, maxOff), m.view.Left)
@@ -116,27 +116,36 @@ func (m *Model) ScrollbarDrag(y int) {
 type sbCache struct {
 	epoch        int
 	marksEpoch   int
+	confEpoch    int
 	track, total int
 	stripe       map[int]int
 	git          map[int]vcs.LineMark
+	conf         map[int]bool
 	lines        map[int]int
 	valid        bool
 }
 
 // stripesFor returns the memoized mark maps for the given geometry: the
 // diagnostics stripe (#1022), the git change marks (#1131, overview-ruler
-// style) and, for click-to-jump, each marked row's representative buffer
-// line. Keyed on both the diagnostics and the git-marks epoch.
-func (m Model) stripesFor(track, total int) (stripe map[int]int, git map[int]vcs.LineMark, lines map[int]int) {
+// style), the merge-conflict blocks (#1149) and, for click-to-jump, each
+// marked row's representative buffer line. Keyed on the diagnostics, git-marks
+// and conflicts epochs. Cell precedence is diagnostics > conflicts > git,
+// applied by the overlay and mirrored in the click-to-jump lines.
+func (m Model) stripesFor(track, total int) (stripe map[int]int, git map[int]vcs.LineMark, conf map[int]bool, lines map[int]int) {
+	confEpoch := m.conflictsEpoch()
 	if m.sbcache != nil && m.sbcache.valid &&
 		m.sbcache.epoch == m.diagsEpoch && m.sbcache.marksEpoch == m.marksEpoch &&
+		m.sbcache.confEpoch == confEpoch &&
 		m.sbcache.track == track && m.sbcache.total == total {
-		return m.sbcache.stripe, m.sbcache.git, m.sbcache.lines
+		return m.sbcache.stripe, m.sbcache.git, m.sbcache.conf, m.sbcache.lines
 	}
 	stripe = m.scrollbarStripe(track, total)
 	git, lines = m.scrollbarGitMarks(track, total)
+	// Conflict blocks (#1149) mark every covered row; a marked row jumps to
+	// the block's start line, outranking any git line on the same row.
+	conf, lines = m.scrollbarConflictMarks(track, total, lines)
 	// Diagnostics own their cells for click-to-jump too (they win the cell
-	// visually); record their lines over any git line on the same row.
+	// visually); record their lines over any conflict/git line on the same row.
 	for _, d := range m.diags {
 		ln := d.Range.Start.Line
 		if ln < 0 || ln >= total {
@@ -154,10 +163,45 @@ func (m Model) stripesFor(track, total int) (stripe map[int]int, git map[int]vcs
 		}
 	}
 	if m.sbcache != nil {
-		*m.sbcache = sbCache{epoch: m.diagsEpoch, marksEpoch: m.marksEpoch,
-			track: track, total: total, stripe: stripe, git: git, lines: lines, valid: true}
+		*m.sbcache = sbCache{epoch: m.diagsEpoch, marksEpoch: m.marksEpoch, confEpoch: confEpoch,
+			track: track, total: total, stripe: stripe, git: git, conf: conf, lines: lines, valid: true}
 	}
-	return stripe, git, lines
+	return stripe, git, conf, lines
+}
+
+// scrollbarConflictMarks maps track rows covered by a merge-conflict block
+// (#1149) and records the block's start line for click-to-jump, overwriting
+// any git line already claiming the row (conflicts outrank git; diagnostics
+// are layered on top by the caller).
+func (m Model) scrollbarConflictMarks(track, total int, lines map[int]int) (map[int]bool, map[int]int) {
+	blocks := m.conflicts()
+	if len(blocks) == 0 {
+		return nil, lines
+	}
+	conf := make(map[int]bool)
+	starts := make(map[int]int) // row -> smallest conflict start claiming it
+	for _, c := range blocks {
+		for ln := c.start; ln <= c.end && ln < total; ln++ {
+			if ln < 0 {
+				continue
+			}
+			y := ln * track / total
+			if y > track-1 {
+				y = track - 1
+			}
+			conf[y] = true
+			if cur, ok := starts[y]; !ok || c.start < cur {
+				starts[y] = c.start
+			}
+		}
+	}
+	if lines == nil {
+		lines = make(map[int]int)
+	}
+	for y, s := range starts {
+		lines[y] = s // conflicts outrank git for click-to-jump
+	}
+	return conf, lines
 }
 
 // scrollbarGitMarks maps track rows to the strongest git change mark whose
@@ -232,13 +276,14 @@ func (m Model) overlayScrollbar(rows []string) []string {
 	if !ok {
 		return rows
 	}
-	stripe, git, _ := m.stripesFor(track, total)
+	stripe, git, conf, _ := m.stripesFor(track, total)
 	// Cells are identical across rows: render each variant once per call
 	// instead of a lipgloss style chain + Render per row (#1097).
 	trackCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack).Render("│")
 	plainThumb := lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).Render(" ")
 	var sevCells [5]string
 	gitCells := map[vcs.LineMark]string{}
+	confCell := ""
 	w := m.width
 	for y := 0; y < len(rows) && y < track; y++ {
 		onThumb := y >= start && y < start+length
@@ -250,10 +295,13 @@ func (m Model) overlayScrollbar(rows []string) []string {
 			// in the mark's colour ON that background — the thumb's extent
 			// stays identifiable even when the whole bar is covered in marks,
 			// and the marks inside it keep their colour. Diagnostics over
-			// git, as everywhere.
+			// conflicts over git, as everywhere.
 			if sev, hit := stripe[y]; hit {
 				cell = lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).
 					Foreground(m.diagColor(sev)).Bold(true).Render("■")
+			} else if conf[y] {
+				cell = lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).
+					Foreground(m.theme().VCSConflicted).Bold(true).Render("◆")
 			} else if mk, hit := git[y]; hit {
 				cell = lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).
 					Foreground(m.gitMarkColor(mk)).Bold(true).Render("▎")
@@ -266,6 +314,13 @@ func (m Model) overlayScrollbar(rows []string) []string {
 					sevCells[sev] = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
 				}
 				cell = sevCells[sev]
+			} else if conf[y] {
+				// Merge-conflict mark (#1149): the VCSConflicted colour on the
+				// ruler; diagnostics outrank it, it outranks git.
+				if confCell == "" {
+					confCell = lipgloss.NewStyle().Foreground(m.theme().VCSConflicted).Bold(true).Render("◆")
+				}
+				cell = confCell
 			} else if mk, hit := git[y]; hit {
 				// Git change mark (#1131): the gutter's colour convention on
 				// the ruler; diagnostics outrank it on a shared cell.

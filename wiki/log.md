@@ -2,6 +2,16 @@
 
 ## 2026-07-24
 
+- Merge-conflict resolution in the editor (#1149): conflict blocks
+  (`<<<<<<<` / `=======` / `>>>>>>>`, optional diff3 `|||||||` base) are
+  detected per document version, tinted in the buffer (ours VCSAdded-mixed,
+  theirs VCSModified-mixed, base dimmed, markers dim bold), resolvable via
+  `merge.acceptOurs/acceptTheirs/acceptBoth` (one undo unit each, cursor at
+  the block start) with `merge.nextConflict/prevConflict` wrap-around
+  navigation; the editor context menu gains the accept entries when the caret
+  sits inside a block, and blocks mark the overview ruler in VCSConflicted
+  (diagnostics > conflicts > git) with click-to-jump
+  (`/architecture/editor.md`, `/architecture/vcs.md`).
 - plugin.EventBufferSaved fires on every save (#1161): the lsp plugin's
   didSave hook (didChange flush + textDocument/didSave + the #1144 own-save
   file event) was dead in native builds; it now hangs off the same save

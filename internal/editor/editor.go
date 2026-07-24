@@ -251,6 +251,11 @@ type Model struct {
 	// lineCache). See testmarks.go.
 	testCache *testMarkStore
 
+	// Merge-conflict blocks (#1149): detected conflict markers, cached per
+	// document version like testCache; its epoch keys the scrollbar stripe
+	// memo. See conflict.go.
+	conflictCache *conflictStore
+
 	// Syntax highlighting (Roadmap 0100). docVersion is a monotonic document
 	// version bumped on every buffer change; it tags async parse results so stale
 	// spans (a newer edit already landed) are dropped. hlIndex caches the spans
@@ -419,6 +424,7 @@ func New() Model {
 		enc:                textenc.UTF8,
 		lineCache:          newLineCache(),
 		testCache:          newTestMarkStore(),
+		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
 		colorPreview:       true,

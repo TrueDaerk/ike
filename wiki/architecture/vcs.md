@@ -74,6 +74,13 @@ enabled blame maps.
   toggleable dimmed EOL annotation on the cursor line ("author, when ·
   summary", "not committed yet"); whole-file porcelain blame cached per
   document, refreshed with each snapshot.
+- **Merge-conflict resolution** (#1149, `internal/editor/conflict.go`) —
+  conflict blocks are detected, tinted and resolvable (accept ours / theirs /
+  both) directly in the editor, with wrap-around navigation and
+  `VCSConflicted` overview-ruler marks; see
+  [Editor § Merge-conflict resolution](/architecture/editor.md). Per #750
+  this stays file-context native; the surrounding merge *workflow* remains
+  lazygit's.
 
 ## Commands
 

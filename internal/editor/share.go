@@ -47,7 +47,8 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	// A separate view of the same document needs its own line cache — its cursor,
 	// scroll and size differ, so it must never share cached bodies (#614/#142).
 	m.lineCache = newLineCache()
-	m.testCache = newTestMarkStore() // per-view cache like lineCache (#1150)
+	m.testCache = newTestMarkStore()     // per-view cache like lineCache (#1150)
+	m.conflictCache = newConflictStore() // per-view cache like testCache (#1149)
 	m.renderEpoch++
 	m.path = src.path
 	m.buf = src.buf
