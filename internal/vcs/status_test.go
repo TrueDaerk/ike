@@ -288,3 +288,34 @@ func TestDirStatusDominance(t *testing.T) {
 		t.Error("DirDirty must mirror DirStatus != none")
 	}
 }
+
+// TestRelPathCachesResolvedRoot guards #1099: the symlinked-root fallback
+// resolves the root once and keeps answering correctly from the cache.
+func TestRelPathCachesResolvedRoot(t *testing.T) {
+	real := t.TempDir()
+	link := filepath.Join(t.TempDir(), "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	// Root recorded via the symlink; queries arrive resolved (the common
+	// macOS /tmp vs /private/tmp mismatch, inverted). The file must exist:
+	// the fallback EvalSymlinks the queried path too.
+	if err := os.WriteFile(filepath.Join(real, "a.go"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewSnapshot(link, map[string]FileStatus{"a.go": StatusModified})
+	resolved, err := filepath.EvalSymlinks(real)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := filepath.Join(resolved, "a.go")
+	if got := s.Status(q); got != StatusModified {
+		t.Fatalf("first resolved query = %v", got)
+	}
+	if !s.rootResolved || s.resolvedRoot == "" {
+		t.Fatal("first miss must cache the resolved root")
+	}
+	if got := s.Status(q); got != StatusModified {
+		t.Fatalf("cached query = %v", got)
+	}
+}

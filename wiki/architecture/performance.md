@@ -85,3 +85,12 @@ list is sorted once per table build and colour strings resolve once into
 `colorVals` (#1098) instead of per row per frame. Benchmarks
 `BenchmarkExplorerView` / `BenchmarkExplorerViewport` guard it: 2000-row View
 1.12ms/7.0k allocs → 0.72ms/2.9k; viewport 0.57ms → ~29ns steady-state.
+
+## Per-row VCS resolution (#1099)
+
+Explorer rows resolved their snapshot facts (status, ignored, tint, status
+letter) through up to five separate `Snapshot.relPath` calls per row per frame
+— each an allocating `filepath.Rel`, and on symlinked roots (macOS `/tmp`) a
+double `EvalSymlinks` syscall pair per call. `View` now resolves a `rowVCS`
+struct once per row and threads it through style/tint/letter; the Snapshot
+caches its `EvalSymlinks`-resolved root after the first fallback miss.

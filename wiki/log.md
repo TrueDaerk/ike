@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Explorer VCS facts resolve once per row (#1099): status/ignored/tint/letter
+  share one relPath resolution, and the snapshot caches its
+  EvalSymlinks-resolved root — no more per-row syscalls on symlinked roots
+  (`/architecture/performance.md`).
+
 - Explorer content width memoized + colour index precomputed (#1096, #1098):
   no more per-frame full-tree row rebuilding or per-row glob sorting; View
   reuses cached plain row widths for clipping
