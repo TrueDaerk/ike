@@ -92,6 +92,8 @@ func BasePages(themes []string) []Page {
 			{Key: "files.watch", Type: Bool, Title: "Watch files", Description: "Report external file changes (fsnotify on the project root)", Scope: config.UserScope},
 			{Key: "files.auto_reload", Type: Enum, Title: "Auto reload", Description: "Reload clean buffers when their file changes on disk", Scope: config.UserScope, Options: []string{"clean", "never"}},
 			{Key: "files.persistent_undo", Type: Bool, Title: "Persistent undo", Description: "Keep undo history across restarts while the file is unchanged", Scope: config.UserScope},
+			{Key: "files.large_file_kb", Type: Int, Title: "Large file threshold (KB)", Description: "Above this size, highlighting and language features are disabled for the file (#149); 0 disables the size guard. Applies to subsequently opened or reloaded files", Scope: config.UserScope, Min: 0},
+			{Key: "files.large_file_lines", Type: Int, Title: "Large file threshold (lines)", Description: "Above this line count, highlighting and language features are disabled for the file (#149); 0 disables the line guard. Applies to subsequently opened or reloaded files", Scope: config.UserScope, Min: 0},
 		}},
 		{Title: "Backup", Entries: []Entry{
 			{Key: "backup.enable", Type: Bool, Title: "Crash recovery", Description: "Snapshot dirty buffers for recovery; off also purges existing snapshots", Scope: config.UserScope},

@@ -3968,6 +3968,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
 			m.dismissErrorToasts()
+			// Also dismisses the large-file banner (#1124), equally additive.
+			m.dismissLargeBanner()
 		}
 		// The settings panel is a full-window modal: it owns the keyboard.
 		if m.settings.IsOpen() {
@@ -5539,6 +5541,16 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+	// The large-file banner (#1124) overlays the focused pane's first content
+	// row: ✕ dismisses, any other press on it runs Force Code Insight.
+	if text, bx, by, bw, ok := m.largeFileBanner(); ok && msg.action == mousePress && msg.Button == tea.MouseLeft &&
+		msg.Y == by && msg.X >= bx && msg.X < bx+lipgloss.Width(text) {
+		if msg.X >= bx+bw-2 {
+			m.dismissLargeBanner()
+			return m, nil
+		}
+		return m, func() tea.Msg { return ForceCodeInsightMsg{} }
+	}
 	// Floating overlays (#116): a click outside an open overlay dismisses it,
 	// a click inside stays with the overlay (never leaks to the panes below).
 	// The finder renders above every other overlay, so it hit-tests first (#424).
@@ -6602,6 +6614,50 @@ func (m Model) View() tea.View {
 // compositeLSPPopups overlays the focused editor's completion or hover popup at
 // the cursor cell. Only the editor knows the buffer-relative anchor; only the app
 // knows the absolute screen geometry, so the placement is computed here.
+// largeFileBanner resolves the persistent large-file notice (#1124) for the
+// focused editor: the banner text and its screen rect, ok=false when no
+// flagged, undismissed document is focused. It renders over the pane's first
+// content row (an overlay — pane geometry and mouse math stay untouched).
+func (m Model) largeFileBanner() (text string, x, y, w int, ok bool) {
+	key := m.activeWS().Panes.Focused()
+	inst := m.activeWS().Panes.Get(key)
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return "", 0, 0, 0, false
+	}
+	ed := inst.Editor()
+	if ed == nil || !ed.HasFile() || !ed.InsightOff() || largefile.NoticeDismissed(ed.Path()) {
+		return "", 0, 0, 0, false
+	}
+	r, rok := m.lay.Panes[key]
+	if !rok {
+		return "", 0, 0, 0, false
+	}
+	w = r.W - paneContentX - 2
+	if w < 10 {
+		return "", 0, 0, 0, false
+	}
+	pal := m.pal()
+	body := " Large file — highlighting and language features are disabled. Click to Force Code Insight, or raise files.large_file_kb. "
+	closeZone := "✕ "
+	avail := w - lipgloss.Width(closeZone)
+	body = ansi.Truncate(body, avail, "…")
+	if pad := avail - lipgloss.Width(body); pad > 0 {
+		body += strings.Repeat(" ", pad)
+	}
+	text = lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Warning).Render(body) +
+		lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Foreground).Bold(true).Render(closeZone)
+	return text, r.X + paneContentX, r.Y + paneContentY, w, true
+}
+
+// dismissLargeBanner marks the focused flagged document's banner dismissed.
+func (m Model) dismissLargeBanner() {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindEditor {
+		if ed := inst.Editor(); ed != nil && ed.HasFile() {
+			largefile.DismissNotice(ed.Path())
+		}
+	}
+}
+
 func (m Model) compositeLSPPopups(base string) string {
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.Get(key)
@@ -6724,6 +6780,11 @@ func (m Model) render() string {
 	}
 	base = m.compositeLSPPopups(base)
 	base = m.compositeWhichKey(base)
+	if text, bx, by, _, ok := m.largeFileBanner(); ok {
+		// Persistent large-file notice (#1124): an overlay over the focused
+		// pane's first content row — geometry stays untouched.
+		base = overlay.Place(base, text, bx, by, m.width, m.height)
+	}
 	if m.ctxMenu.IsOpen() {
 		// The right-click context menu (#1020) floats at its clamped anchor.
 		x, y := m.ctxMenu.Pos()
