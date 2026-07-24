@@ -140,8 +140,10 @@ func TestIconsWidthConsistency(t *testing.T) {
 	m.SetSize(10, 4) // narrow enough to suppress the root path context
 	f := &node{name: "main.go", depth: 1}
 	m.rows = []*node{m.root, f}
+	m.invalidateWidth() // rows were injected directly (#1096)
 	before := m.contentWidth()
 	m.icons = true
+	m.invalidateWidth() // production toggles go through Configure, which invalidates (#1096)
 	if got := m.contentWidth(); got != before+2 {
 		t.Fatalf("contentWidth with icons = %d want %d (+2 glyph column)", got, before+2)
 	}

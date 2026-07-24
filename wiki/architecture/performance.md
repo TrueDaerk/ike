@@ -72,3 +72,16 @@ re-aligning and grapheme-scanning ~12k cells per keystroke (52% of frame CPU,
 `width x height` (#612), the wash now styles per line without measurement; a
 non-full-height frame (defensive) falls back to the padded variant. Benchmark
 `BenchmarkAppRender` guards the cost.
+
+## Explorer width cache & colour index (#1096, #1098)
+
+`contentWidth` used to rebuild every flattened row's text (plus an
+`ansi.StringWidth` grapheme parse) on every frame — and on every Update-path
+`viewport()` call (mouse hit-tests included). It is now memoized in a
+pointer-held `widthCache`, invalidated in `rebuild`/`SetSize`/`Configure`; the
+pass also stores each node's plain row width (`node.rowW`), which `View` reuses
+instead of re-parsing styled strings for clipping. The colour table's glob
+list is sorted once per table build and colour strings resolve once into
+`colorVals` (#1098) instead of per row per frame. Benchmarks
+`BenchmarkExplorerView` / `BenchmarkExplorerViewport` guard it: 2000-row View
+1.12ms/7.0k allocs → 0.72ms/2.9k; viewport 0.57ms → ~29ns steady-state.

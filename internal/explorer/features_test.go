@@ -2,6 +2,7 @@ package explorer
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/registry"
+	"ike/internal/theme"
 )
 
 // fg returns a style's foreground colour as a "#rrggbb" hex string, regardless
@@ -17,6 +19,15 @@ import (
 func fg(s lipgloss.Style) string {
 	r, g, b, _ := s.GetForeground().RGBA()
 	return fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
+}
+
+// resolveAll builds the resolved-colour index a Model would hold (#1098).
+func resolveAll(t colorTable) map[string]color.Color {
+	out := make(map[string]color.Color, len(t))
+	for k, v := range t {
+		out[k] = theme.Resolve(v)
+	}
+	return out
 }
 
 func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
@@ -44,7 +55,7 @@ func TestColorResolutionGlobThenExtThenFallback(t *testing.T) {
 	for _, c := range cases {
 		n := &node{name: c.name, isDir: c.isDir}
 		got := ""
-		if col := ct.suffixColor(n); col != nil {
+		if col := ct.suffixColor(n, ct.globs(), resolveAll(ct)); col != nil {
 			r, g, b, _ := col.RGBA()
 			got = fmt.Sprintf("#%02x%02x%02x", r>>8, g>>8, b>>8)
 		}
@@ -173,7 +184,7 @@ func TestConfigureReadsExplorerSection(t *testing.T) {
 	if m.indent != 4 {
 		t.Errorf("indent = %d want 4", m.indent)
 	}
-	if col := m.colors.suffixColor(&node{name: "x.go"}); col == nil {
+	if col := m.colors.suffixColor(&node{name: "x.go"}, m.colorGlobs, m.colorVals); col == nil {
 		t.Error("go suffix tint missing")
 	} else {
 		r, g, b, _ := col.RGBA()
