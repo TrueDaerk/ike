@@ -242,6 +242,12 @@ type Model struct {
 	// saves the quiet dirty buffers instead of snapshotting them.
 	autosaveIdleDeb       *backup.Debouncer
 	autosaveIdleTickArmed bool
+
+	// hoverIdle tracks the pointer's resting cell for the mouse-idle hover
+	// (#1129); hoverIdleTickArmed keeps at most one demand-armed tick in
+	// flight (#1001). See hover_idle.go.
+	hoverIdle          mouseHoverState
+	hoverIdleTickArmed bool
 	autosaveIdleIv        time.Duration
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
@@ -3770,6 +3776,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.saveDueIdleBuffers(time.Now())
 		return m, m.armAutosaveIdleTick()
 
+	case mouseHoverTickMsg:
+		// The mouse-idle hover deadline elapsed (#1129): fire the hover when
+		// the pointer still rests on the tracked cell, else re-arm/no-op.
+		return m, m.mouseHoverTick(time.Now())
+
 	case toastExpireMsg:
 		m.expireToast(msg.id)
 		return m, nil
@@ -3788,6 +3799,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// Any key cancels a pending or open mouse-idle hover (#1129) — also
+		// for keys the app consumes before the editor's own dismissHover
+		// would see them.
+		m.cancelMouseHover()
 		// Esc dismisses persistent error toasts but keeps its normal meaning
 		// (pass-through) so it never costs an extra press elsewhere.
 		if msg.Code == tea.KeyEscape {
@@ -5320,6 +5335,11 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 }
 
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
+	// Any press, release, or wheel cancels a pending or open mouse-idle hover
+	// (#1129); motion is handled cell-wise by trackMouseHover below.
+	if msg.action != mouseMotion {
+		m.cancelMouseHover()
+	}
 	// An active float resize drag (#933) owns the mouse until release: each
 	// motion step applies the pointer delta along the grabbed edge/corner as a
 	// size delta (motion events are already folded by the input coalescer, so
@@ -5724,8 +5744,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	case mouseMotion:
 		if m.drag == nil {
 			m.updateHover(msg)
-			return m, nil
+			// Mouse-idle hover (#1129): overlay branches returned above, so
+			// this motion is over plain panes — track the resting cell.
+			return m, m.trackMouseHover(msg)
 		}
+		// A drag owns the mouse: no idle hover while it runs.
+		m.cancelMouseHover()
 		m.drag.curX, m.drag.curY = msg.X, msg.Y
 		switch m.drag.kind {
 		case dragResize:

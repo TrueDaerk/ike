@@ -194,6 +194,21 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		}
 	case host.EditorCompletionSelect:
 		b.scheduleResolve(ev.Path, ev.CompletionID)
+	case host.EditorHoverRequest:
+		// Mouse-idle hover (#1129): the app asks for hover at the hovered
+		// cell, not the cursor. Flush any pending didChange first so the
+		// server answers against the latest text (the cur() discipline), then
+		// fire the request; the goroutine inside requestHover keeps Emit
+		// non-blocking.
+		if l, ok := lang.ByPath(ev.Path); ok && l.HasServer() && b.manager() != nil {
+			b.flushChange(ev.Path)
+			b.mu.Lock()
+			h := b.h
+			b.mu.Unlock()
+			if h != nil {
+				b.requestHover(h, ev.Path, ev.Line, ev.Col, true)
+			}
+		}
 	}
 }
 
@@ -292,9 +307,18 @@ func requestFailed(h host.API, op string, err error) bool {
 func (b *bridge) hover(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
+	b.requestHover(h, path, line, col, false)
+	return nil
+}
+
+// requestHover asks the server for hover content at an arbitrary position and
+// sends the HoverMsg (#1129): the seam the key flow (cursor position, mouse
+// false) and the mouse-idle flow (hovered cell, mouse true) share. A mouse
+// reply carries its request position so the editor can drop it when stale.
+func (b *bridge) requestHover(h host.API, path string, line, col int, mouse bool) {
 	mgr := b.manager()
 	if path == "" || mgr == nil {
-		return nil
+		return
 	}
 	go func() {
 		hv, err := mgr.Hover(context.Background(), path, buffer.Position{Line: line, Col: col})
@@ -302,10 +326,9 @@ func (b *bridge) hover(h host.API) tea.Cmd {
 			return
 		}
 		if text := ilsp.HoverText(hv); text != "" {
-			h.Send(ilsp.HoverMsg{Path: path, Contents: text})
+			h.Send(ilsp.HoverMsg{Path: path, Contents: text, Mouse: mouse, Line: line, Col: col})
 		}
 	}()
-	return nil
 }
 
 // parameterInfo requests signature help at the current cursor on demand

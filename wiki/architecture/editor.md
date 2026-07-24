@@ -357,6 +357,13 @@ Right-click (context menu) and left drags on content (selection) are
 untouched; the bar renders only as an overlay, so text width, wrap, and click
 mapping never shift when it appears.
 
+Resting the pointer over content for ~600ms opens the hover popup at the
+hovered cell (#1129, mouse-idle hover): the diagnostic covering the cell
+shows immediately, LSP hover content follows when a server answers.
+`HoverTarget(x, y)` is the read-only hit-test (gutter, scrollbar, sticky
+headers, and cells past the line text are not targets); idle tracking and
+scope guards live at the app layer — see [LSP](./lsp.md) for the full flow.
+
 ## Multi-caret editing (#145)
 
 `multicaret.go` generalizes the single cursor to a primary caret plus an

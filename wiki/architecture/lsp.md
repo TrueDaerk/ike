@@ -238,6 +238,29 @@ answer, no server round trip); a clean caret line raises an info toast
 instead. With source and code visible a false positive can be attributed to
 its server and reported or configured away.
 
+**Mouse-idle hover** (#1129): resting the pointer over editor content for
+~600ms opens the hover popup **at the hovered cell**, not the caret. The app
+tracks the pointer's resting cell (`internal/app/hover_idle.go`) with a
+demand-armed `tea.Tick` (the [#1001 idle discipline](./performance.md): one
+tick in flight, re-armed only while a wait is pending — no free-running
+ticker). On fire, a diagnostic whose range covers the cell shows immediately
+(the #739 content shape, pure client state — this works with **no LSP hover
+support at all**), and a hover request goes to the bridge through a new
+app-originated editor event (`host.EditorHoverRequest`) carrying the hovered
+position; `bridge.requestHover` is the shared seam — the `ctrl+q` key flow
+feeds the cursor, the mouse flow the hovered cell. The reply
+(`HoverMsg{Mouse, Line, Col}`) is validated against the editor's pending
+mouse-hover position, so a stale answer never opens a popup at a cell the
+pointer has left; on a match the server content appends below the diagnostic
+rows (rule-separated) and the popup anchors at the pointer (`hoverState`
+carries an explicit anchor; `HoverAnchor` falls back to the cursor for the
+key flow). Scope guards: focused editor pane only (MVP — JetBrains also
+hovers unfocused panes, deferred), only over buffer text (`HoverTarget`
+rejects the gutter, scrollbar, sticky headers, and cells past the line), and
+never during a drag or while the context menu / any overlay is open. Motion
+off the cell, any click, wheel, or key dismisses the mouse-anchored popup;
+a key-triggered cursor-anchored popup is untouched by pointer motion.
+
 **Diagnostic navigation (#369).** `lsp.nextDiagnostic` / `lsp.prevDiagnostic`
 (default `f2` / `shift+f2`, JetBrains' next/previous-highlighted-error keys)
 step the cursor through the focused document's diagnostics. No server

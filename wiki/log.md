@@ -2,6 +2,15 @@
 
 ## 2026-07-24
 
+- Mouse-idle hover (#1129): resting the pointer over editor content for
+  ~600ms opens the hover popup at the hovered cell (not the caret) — the
+  diagnostic covering the cell immediately (works without any LSP hover
+  support), the LSP hover content when the server answers. Demand-armed
+  idle tick at the app layer (`internal/app/hover_idle.go`), a
+  position-carrying hover seam in the bridge (`host.EditorHoverRequest` →
+  `bridge.requestHover`), and an explicitly anchored hover popup; focused
+  pane only for now (`/architecture/editor.md`, `/architecture/lsp.md`).
+
 - The VCS tool window slims to file-context features (#750): the panel is
   now a read-only changes list (enter/double-click = diff-vs-HEAD; no
   staging, no commit message, no Log tab), the commit dialog
