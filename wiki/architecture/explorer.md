@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-07-23T22:30:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # File Explorer
@@ -117,6 +117,47 @@ configured, a built-in default table is used so the tree is never monochrome.
 - `shift+j` / `shift+k` (and `shift+down` / `shift+up`) — extend a contiguous
   multi-select range from an anchor (#1044, see below).
 - `esc` — clear an active multi-select range.
+- `/` — open the type-to-select **speed search** (#1087, see below).
+
+## Speed search (#1087)
+
+`/` with the tree focused opens a JetBrains-style type-to-select search. Bare
+typing cannot activate it — the tree already spends its single letters on
+file ops (`a`/`A`/`d`/`R`/`r`/`c`/`C`/`o`/`.`) — so `/` is the dedicated,
+vim-idiomatic activation key (registered as `explorer.search`, rebindable;
+the raw `/` in `Update` stays the zero-config fallback, and a palette
+invocation moves focus to the tree first like the file-op prompts).
+
+The search renders as a **one-line footer** on the pane's last row — the same
+region the scan-error banner uses (#1030), never a modal box — mirroring the
+editor's `/` command line: the slash prefix, the query with a block cursor
+(`ui.CursorView`), and a dim match counter (`3/17`, or `no matches` in the
+Error colour). It outranks the error banner while open.
+
+Typing filters incrementally over the **currently visible rows** (no
+auto-expansion): the cursor jumps to the row whose *name* contains the query,
+case-insensitively — scanning forward with wrap-around from the stable anchor
+(the row the search opened on), with **prefix matches ranked first** (a later
+prefix match beats an earlier contains match). A miss leaves the cursor put
+and flags `no matches`. Backspace edits and re-resolves from the anchor; an
+emptied query returns the cursor there.
+
+Keys while open (`searchState`, `handleSearchKey` in `search.go`): the search
+**owns the keyboard** — `Searching()` gives it the same raw-key capture the
+file-op prompt gets via `Prompting()` (`explorerCapturing` in the app routes
+keys ahead of the keymap layer), so the single-letter file-op bindings cannot
+fire mid-word. `enter` accepts (cursor stays, search closes); `esc` cancels
+(cursor returns to the anchor); `ctrl+n` / `down` step to the next match and
+`ctrl+p` / `up` to the previous, both wrapping; every other non-printable key
+is consumed without effect — no silent passthrough while the field is
+visible. Mouse clicks still select rows normally (the prompt's
+`PromptMouseClick` routing applies only to real prompts).
+
+Matched rows (other than the cursor row, which keeps its full Selection
+highlight) show the matching substring on the muted `SelectionMuted`
+background — the multi-select recipe — so every candidate stays visible while
+stepping. Non-ASCII names whose lowercase form changes byte length skip the
+substring styling (the jump still works).
 
 ## Multi-select (#1044)
 
@@ -295,6 +336,7 @@ these are defaults.
 | `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry — or the whole multi-select range (#1044) — after one confirmation (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
+| `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
 

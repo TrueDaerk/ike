@@ -36,6 +36,7 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.newFolder", "Explorer: New Folder", NewDirMsg{}),
 			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
 			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
+			cmd("explorer.search", "Explorer: Speed Search", SearchMsg{}),
 			cmd("explorer.undo", "Explorer: Undo File Operation", UndoMsg{}),
 			cmd("explorer.redo", "Explorer: Redo File Operation", RedoMsg{}),
 			// Tree navigation as rebindable commands (#1041); the raw keys in
@@ -60,6 +61,7 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("A", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
 			keymap("R", "explorer.rename", RenameMsg{}),
+			keymap("/", "explorer.search", SearchMsg{}),
 		},
 	}
 }

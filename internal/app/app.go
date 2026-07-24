@@ -2504,7 +2504,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// would execute as vim commands in the editor (#374) — so move focus
 		// to the explorer first, re-showing it when hidden.
 		switch msg.(type) {
-		case explorer.NewFileMsg, explorer.NewDirMsg, explorer.DeleteMsg, explorer.RenameMsg:
+		case explorer.NewFileMsg, explorer.NewDirMsg, explorer.DeleteMsg, explorer.RenameMsg,
+			explorer.SearchMsg:
+			// The speed search (#1087) equally captures keys only while the
+			// tree holds focus, so a palette invocation moves focus first.
 			m.focusExplorer()
 		}
 		exp := m.explorer()
@@ -4160,8 +4163,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// A focused explorer with an open prompt (new-file name entry, delete/undo
-		// confirmation) captures every key, ahead of the keymap and global layers,
-		// so typed names and y/n answers reach the prompt intact.
+		// confirmation) or speed search (#1087) captures every key, ahead of the
+		// keymap and global layers, so typed names, y/n answers and search
+		// queries reach it intact — the tree's single-letter file-op bindings
+		// must not fire mid-word.
 		if m.explorerCapturing() {
 			return m.routeKey(msg)
 		}
@@ -4766,8 +4771,20 @@ func (m Model) editorCapturing() bool {
 }
 
 // explorerCapturing reports whether the focused pane is the explorer with an
-// open modal prompt, in which case keys go straight to it (see Update).
+// open modal prompt or speed search (#1087), in which case keys go straight
+// to it (see Update).
 func (m Model) explorerCapturing() bool {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindExplorer {
+		return false
+	}
+	return inst.Explorer().Prompting() || inst.Explorer().Searching()
+}
+
+// explorerPromptOpen reports whether the focused explorer has a modal prompt
+// open — the mouse routing needs the narrower check: prompt clicks go to
+// PromptMouseClick, while an open speed search keeps normal row clicks.
+func (m Model) explorerPromptOpen() bool {
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil || inst.Kind() != pane.KindExplorer {
 		return false
@@ -5829,7 +5846,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	switch msg.action {
 	case mousePress:
-		if m.explorerCapturing() {
+		if m.explorerPromptOpen() {
 			// The prompt floats centered within the explorer pane's own
 			// content area, so it reads the same content-local coordinates
 			// as a normal row click.
