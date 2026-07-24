@@ -90,6 +90,7 @@ func defaults() *Config {
 			Sort:       "name",
 			AutoReveal: false,
 			Icons:      false,
+			Exclude:    []string{".git", ".idea", ".DS_Store"},
 			Colors:     map[string]string{},
 		},
 		Keymap: Keymap{

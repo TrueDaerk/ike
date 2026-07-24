@@ -74,12 +74,12 @@ type Model struct {
 	catOff  int // scroll offset of the category column
 	formOff int // scroll offset (in rendered lines) of the form column
 
-	editing bool
-	edit    textField   // shared cursor input (#888)
-	invalid string      // inline validation error for the current edit
-	notice  string      // transient info line (clamp feedback #889, saved flash #891)
-	writeErr string     // inline write/reload error (#891), cleared on the next action
-	suggest pathSuggest // live path completion while editing a Path entry (#541)
+	editing  bool
+	edit     textField   // shared cursor input (#888)
+	invalid  string      // inline validation error for the current edit
+	notice   string      // transient info line (clamp feedback #889, saved flash #891)
+	writeErr string      // inline write/reload error (#891), cleared on the next action
+	suggest  pathSuggest // live path completion while editing a Path entry (#541)
 
 	picking bool // enum picker open for the selected row
 	pickIdx int  // highlighted option inside the picker
@@ -866,6 +866,24 @@ func (m *Model) commit(e Entry) tea.Cmd {
 		m.suggest.clear()
 		m.savedNotice(m.scopeFor(e))
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, p)
+	case List:
+		// A comma-separated edit persists as a TOML string array (#1139):
+		// the schema field is a []string, so writing the raw comma string
+		// would fail the typed decode. Empty input writes an empty list
+		// (explicitly "no entries" — resetting to the default is the
+		// remove-key operation, like every other entry).
+		var items []string
+		for _, p := range strings.Split(m.edit.text, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				items = append(items, p)
+			}
+		}
+		if items == nil {
+			items = []string{}
+		}
+		m.editing = false
+		m.savedNotice(m.scopeFor(e))
+		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, items)
 	default: // String
 		m.editing = false
 		m.savedNotice(m.scopeFor(e))

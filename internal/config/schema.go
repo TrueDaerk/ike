@@ -211,7 +211,7 @@ type Editor struct {
 	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
 	// with their own color (#790).
 	ColorPreview bool `toml:"color_preview"`
-	Tabs              Tabs `toml:"tabs"`
+	Tabs         Tabs `toml:"tabs"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
@@ -230,6 +230,11 @@ type Tabs struct {
 // the focused editor's file on every focus/tab switch; off by default.
 // Icons (#1046) gates one-cell file-type marker glyphs before each name
 // (plain unicode, no nerd font); off by default.
+// Exclude (#1139) is a TOML array of base-name glob patterns
+// (filepath.Match semantics: ".git", "*.pyc", "node_modules") hidden from the
+// explorer tree at every depth, regardless of the show-hidden toggle —
+// JetBrains' "Excluded files". Explorer-only: go-to-file, find-in-path and
+// the LSP scan are unaffected. Default: .git, .idea, .DS_Store.
 type Explorer struct {
 	ShowHidden bool              `toml:"show_hidden"`
 	GitStatus  bool              `toml:"git_status"`
@@ -237,6 +242,7 @@ type Explorer struct {
 	Sort       string            `toml:"sort"`
 	AutoReveal bool              `toml:"auto_reveal"`
 	Icons      bool              `toml:"icons"`
+	Exclude    []string          `toml:"exclude"`
 	Colors     map[string]string `toml:"colors"`
 }
 

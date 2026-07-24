@@ -25,6 +25,11 @@ const (
 	Path
 	// Chord renders a key-capture control (the next key press is the value).
 	Chord
+	// List renders a free-text input edited as a comma-separated list but
+	// persisted as a TOML string array (#1139): the config schema field is a
+	// []string, so committing the raw comma string would fail the typed
+	// decode — commit splits it instead.
+	List
 )
 
 // Entry describes one setting.
@@ -80,6 +85,9 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.indent_guides", Type: Bool, Title: "Indent guides", Description: "Draw vertical lines at each indentation level", Scope: config.UserScope},
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
+		}},
+		{Title: "Explorer", Entries: []Entry{
+			{Key: "explorer.exclude", Type: List, Title: "Excluded entries", Description: "Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them", Scope: config.UserScope},
 		}},
 		{Title: "Appearance", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},

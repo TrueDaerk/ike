@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -49,7 +49,7 @@ box capped at ~110×32 cells above the workspace, category list left, form
 right, opened via `settings.open` (cmd+, / menu bar / palette).
 
 - **Schema-driven.** A `Page` is a titled list of `Entry` descriptors — config
-  key, control type (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`), write scope,
+  key, control type (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`), write scope,
   title, description, enum options, int bounds. The form renders from the
   descriptor; there are no hand-built page UIs.
 - **Apply-on-change, single source of truth.** The panel never caches values:
@@ -61,7 +61,11 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
   (#383); ← never cycles — it always returns to the category column, the
   mirror of → (#533); Int/String/Path
   open an inline input (int parses + clamps to bounds, path validates
-  existence); Chord captures the next key press. The pinned footer is **two lines** and
+  existence); Chord captures the next key press; List (#1139) edits like a
+  String — a comma-separated text field prefilled with the Flat comma-joined
+  value — but commits a **TOML string array** (`[]string`), because the typed
+  schema field is a string slice and a raw comma string would fail the decode.
+  The pinned footer is **two lines** and
   the description (plus its `(key)` suffix) **word-wraps** across them (#549)
   — long help stays readable instead of clipping; an overflow beyond two
   lines is marked with an ellipsis, a validation error takes the first line

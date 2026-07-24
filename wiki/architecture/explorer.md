@@ -98,6 +98,16 @@ mirroring the structure-view sync.
 | `explorer.auto_refresh` | poll for external filesystem changes (default `true`; `"false"` disables) |
 | `explorer.auto_reveal` | JetBrains "autoscroll from source" (#1042): reveal the focused editor's file (expand ancestors, select, scroll) on every focus/tab switch (default `false`) |
 | `explorer.icons` | file-type marker glyphs (#1046): a one-cell class glyph between the expand marker and the name (default `false`) |
+| `explorer.exclude` | exclude list (#1139): a TOML array of base-name glob patterns (`filepath.Match`: `.git`, `*.pyc`, `node_modules`) hidden at **every** depth, regardless of the show-hidden toggle — JetBrains' "Excluded files". Default: `[".git", ".idea", ".DS_Store"]`; an explicit empty list disables all exclusion. Editable on the settings panel's Explorer page (a `List` control: comma-separated text persisted as the TOML array); a live change re-filters without restart |
+
+The exclude filter lives in the single visibility gate (`childVisible`, used
+by `appendVisible` and `hasVisibleChildren`), so rows, expand markers (#1039),
+speed search, multi-select and expand-all (#1043, which also skips excluded
+subtrees rather than burn its scan budget invisibly) all see the same filtered
+tree. It is **explorer-only**: go-to-file, find-in-path and the LSP scan walk
+the filesystem themselves and never read explorer state. Malformed glob
+patterns are dropped with a config diagnostic (`validate`); at match time a
+pattern error simply never matches.
 
 Colours (`colors.go`) resolve a node by checking, in order: an exact **glob**
 match (globs sorted for determinism), the `dir` fallback for directories, a bare
@@ -477,3 +487,19 @@ sideways instead of wrapping.
 Each bar is a dim track (`│` / `─`) with a brighter, heavier thumb (`┃` / `━`)
 sized and positioned by `scrollThumb`, in the style of table TUIs. Bars are
 hidden when the content fits.
+
+**Cursor-anchored clamping is intentional (#1140).** A wheel scroll
+(`ScrollBy`) moves the viewport *without* the cursor, so the viewport clamp is
+split in two: `clampOffset` only bounds the offset into `[0, rows − height]`
+and runs from every content/geometry change — row rebuilds, watcher/poll
+re-scans, VCS re-renders, config applies, `SetSize` — so a wheel-scrolled
+viewport survives them while an offset past the last page still snaps back
+(essential: mouse hit-testing reads the raw offset). `followCursor`
+additionally pulls the window to the cursor and runs **only** where the cursor
+genuinely moved: key navigation, speed-search jumps, reveal, mouse selection
+(click / shift-click / context-click), `Restore`, and user-initiated
+`pendingSel` snaps (`snapCursorTo`: file ops, the hidden toggle, the reveal
+descent). `externalRefresh`'s stability snap — keeping the cursor on its entry
+across a watcher rebuild — deliberately sets `pendingSel` without the follow
+flag, so a background refresh never yanks the viewport back to an off-screen
+selection.

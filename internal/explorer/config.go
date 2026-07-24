@@ -18,6 +18,7 @@ const (
 	cfgAutoRefresh = "explorer.auto_refresh"
 	cfgAutoReveal  = "explorer.auto_reveal"
 	cfgIcons       = "explorer.icons"
+	cfgExclude     = "explorer.exclude"
 )
 
 // Configure applies the [explorer] configuration section to the model: initial
@@ -65,6 +66,17 @@ func (m *Model) Configure(cfg host.Config) {
 		// source". Off by default.
 		m.autoReveal = v == "true"
 	}
+	if v, ok := cfg.Get(cfgExclude); ok && v != m.excludeCfg {
+		// The exclude glob list (#1139), delivered as the Flat comma-joined
+		// form of the [explorer] exclude TOML array. Only a genuine change
+		// re-applies and rebuilds, so unrelated live reloads stay cheap; the
+		// rebuild makes an edit take effect without restart and re-clamps a
+		// now-out-of-range scroll offset (#1096 width invalidation happens in
+		// rebuild and the deferred invalidateWidth above).
+		m.exclude = parseExclude(v)
+		m.excludeCfg = v
+		m.rebuild()
+	}
 	if v, ok := cfg.Get(cfgIcons); ok {
 		// One-cell file-type marker glyphs before each name (#1046). Off by
 		// default: plain trees stay compact.
@@ -72,6 +84,20 @@ func (m *Model) Configure(cfg host.Config) {
 	}
 	m.cfgColors = readColors(cfg)
 	m.mergeColors()
+}
+
+// parseExclude splits the comma-joined explorer.exclude value into the glob
+// pattern list (#1139), trimming whitespace and dropping empties — so both
+// ".git,.idea" and ".git, .idea" (and an empty string: no exclusions) parse
+// as expected.
+func parseExclude(v string) []string {
+	var out []string
+	for _, p := range strings.Split(v, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // SetPalette threads the active theme palette in (Roadmap 0110): its file

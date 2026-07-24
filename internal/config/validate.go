@@ -1,6 +1,9 @@
 package config
 
-import "fmt"
+import (
+	"fmt"
+	"path/filepath"
+)
 
 // validate.go enforces "clamp, then warn": an out-of-range or unknown value
 // falls back to a sane default and produces a non-fatal diagnostic. Bad config
@@ -67,6 +70,21 @@ func validate(c *Config) []Diagnostic {
 	clampMin("editor.sticky_scroll_depth", &c.Editor.StickyScrollDepth, 1)
 	clampMin("explorer.tree_indent", &c.Explorer.TreeIndent, 0)
 	clampMin("project.max_history", &c.Project.MaxHistory, 0)
+
+	// explorer.exclude entries are filepath.Match glob patterns over entry
+	// base names (#1139): a malformed pattern (e.g. an unclosed "[") is
+	// dropped with a warning so it can never make Match error at render time.
+	if c.Explorer.Exclude != nil {
+		kept := c.Explorer.Exclude[:0]
+		for _, p := range c.Explorer.Exclude {
+			if _, err := filepath.Match(p, "x"); err != nil {
+				diags = append(diags, Diagnostic{Field: "explorer.exclude", Message: fmt.Sprintf("invalid glob pattern %q, ignoring it", p)})
+				continue
+			}
+			kept = append(kept, p)
+		}
+		c.Explorer.Exclude = kept
+	}
 
 	if !sortModes[c.Explorer.Sort] {
 		diags = append(diags, Diagnostic{Field: "explorer.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Explorer.Sort)})

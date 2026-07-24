@@ -129,6 +129,7 @@ func (c *Config) Flat() map[string]string {
 	put("explorer.sort", c.Explorer.Sort)
 	put("explorer.auto_reveal", c.Explorer.AutoReveal)
 	put("explorer.icons", c.Explorer.Icons)
+	put("explorer.exclude", strings.Join(c.Explorer.Exclude, ","))
 	for k, v := range c.Explorer.Colors {
 		put("explorer.colors."+k, v)
 	}

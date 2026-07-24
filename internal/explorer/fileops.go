@@ -234,7 +234,7 @@ func (m *Model) createEntry(dir, name string, isDir bool) tea.Cmd {
 		return nil
 	}
 	m.pushOp(fileOp{kind: opCreate, path: path, isDir: isDir})
-	m.pendingSel = path
+	m.snapCursorTo(path)
 	return m.refreshDir(dir)
 }
 
@@ -458,7 +458,7 @@ func (m *Model) relocateEntry(path, newPath string, isDir bool) tea.Cmd {
 		return nil
 	}
 	m.pushOp(fileOp{kind: opRename, path: path, newPath: newPath, isDir: isDir})
-	m.pendingSel = newPath
+	m.snapCursorTo(newPath)
 	return tea.Batch(m.refreshDirs(path, newPath), movedCmd(path, newPath, isDir))
 }
 
@@ -521,14 +521,14 @@ func (m *Model) undo() tea.Cmd {
 			m.fail(err)
 			return nil
 		}
-		m.pendingSel = op.path
+		m.snapCursorTo(op.path)
 		cmd = m.refreshDir(filepath.Dir(op.path))
 	case opRename:
 		if err := os.Rename(op.newPath, op.path); err != nil {
 			m.fail(err)
 			return nil
 		}
-		m.pendingSel = op.path
+		m.snapCursorTo(op.path)
 		cmd = tea.Batch(m.refreshDirs(op.path, op.newPath), movedCmd(op.newPath, op.path, op.isDir))
 	}
 	m.ops = m.ops[:len(m.ops)-1]
@@ -564,7 +564,7 @@ func (m *Model) redo() tea.Cmd {
 			return nil
 		}
 		op.trashPath = ""
-		m.pendingSel = op.path
+		m.snapCursorTo(op.path)
 		cmd = m.refreshDir(filepath.Dir(op.path))
 	case opDelete:
 		if err := os.Rename(op.path, op.trashPath); err != nil {
@@ -577,7 +577,7 @@ func (m *Model) redo() tea.Cmd {
 			m.fail(err)
 			return nil
 		}
-		m.pendingSel = op.newPath
+		m.snapCursorTo(op.newPath)
 		cmd = tea.Batch(m.refreshDirs(op.path, op.newPath), movedCmd(op.path, op.newPath, op.isDir))
 	}
 	m.redoOps = m.redoOps[:len(m.redoOps)-1]
@@ -600,7 +600,7 @@ func (m *Model) undoBatchDelete(subs []fileOp) (tea.Cmd, bool) {
 		}
 		dirs[filepath.Dir(s.path)] = true
 	}
-	m.pendingSel = subs[0].path
+	m.snapCursorTo(subs[0].path)
 	var cmds []tea.Cmd
 	for d := range dirs {
 		cmds = append(cmds, m.refreshDir(d))

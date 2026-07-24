@@ -66,7 +66,7 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 		m.search = nil
 		if len(m.rows) > 0 {
 			m.cursor = clamp(s.prev, 0, len(m.rows)-1)
-			m.clampScroll()
+			m.followCursor()
 		}
 	case msg.Code == tea.KeyEnter:
 		m.search = nil // accept: the cursor stays on the match
@@ -99,7 +99,7 @@ func (m *Model) searchJump() {
 	}
 	if s.query == "" {
 		m.cursor = clamp(s.prev, 0, len(m.rows)-1)
-		m.clampScroll()
+		m.followCursor()
 		return
 	}
 	q := strings.ToLower(s.query)
@@ -110,7 +110,7 @@ func (m *Model) searchJump() {
 		name := strings.ToLower(m.rows[idx].name)
 		if strings.HasPrefix(name, q) {
 			m.cursor = idx
-			m.clampScroll()
+			m.followCursor()
 			return
 		}
 		if contains < 0 && strings.Contains(name, q) {
@@ -119,7 +119,7 @@ func (m *Model) searchJump() {
 	}
 	if contains >= 0 {
 		m.cursor = contains
-		m.clampScroll()
+		m.followCursor()
 	}
 }
 
@@ -134,7 +134,7 @@ func (m *Model) searchStep(dir int) {
 		for _, idx := range matches {
 			if idx > m.cursor {
 				m.cursor = idx
-				m.clampScroll()
+				m.followCursor()
 				return
 			}
 		}
@@ -143,13 +143,13 @@ func (m *Model) searchStep(dir int) {
 		for i := len(matches) - 1; i >= 0; i-- {
 			if matches[i] < m.cursor {
 				m.cursor = matches[i]
-				m.clampScroll()
+				m.followCursor()
 				return
 			}
 		}
 		m.cursor = matches[len(matches)-1] // wrap to the last match
 	}
-	m.clampScroll()
+	m.followCursor()
 }
 
 // searchMatches returns the visible-row indices whose names contain the

@@ -79,10 +79,11 @@ func TestHiddenToggleAndItalic(t *testing.T) {
 		t.Fatalf("default rows = %v want [root visible.txt]", got)
 	}
 
-	// toggle hidden on: .git and .hidden appear (dirs first).
+	// toggle hidden on: .hidden appears — .git stays filtered by the default
+	// explorer.exclude list (#1139), which applies regardless of the toggle.
 	m, _ = m.Update(ToggleHiddenMsg{})
 	got := names(m)
-	want := []string{filepath.Base(root), ".git", ".hidden", "visible.txt"}
+	want := []string{filepath.Base(root), ".hidden", "visible.txt"}
 	if len(got) != len(want) {
 		t.Fatalf("after toggle rows = %v want %v", got, want)
 	}
