@@ -215,6 +215,11 @@ var jetbrainsRows = []row{
 	// leader layer retired (#711); JetBrains has no defaults for either.
 	{"cmd+alt+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
 	{"cmd+alt+n", "notifications.history", "Notification history", Global, "Notifications (#242)"},
+	// New file / scratch (#1145): cmd+n mirrors JetBrains' New-in-project-view
+	// — the prompt targets the explorer selection and works with an editor
+	// focused since #374; cmd+shift+n is JetBrains' New Scratch File verbatim.
+	{"cmd+n", "explorer.newFile", "New file", Global, "Explorer (05)"},
+	{"cmd+shift+n", "scratch.new", "New scratch file", Global, "Scratch files (#151)"},
 	// JetBrains Run (Windows keymap's shift+f10; macOS ctrl+r would shadow
 	// vim's redo in the editor, so the F-key is the delivered primary, 0350).
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},

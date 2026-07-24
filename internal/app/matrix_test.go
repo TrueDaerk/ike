@@ -78,6 +78,13 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["editor.undo"]; r.Primary != "cmd+z" || r.Fallback != "ctrl+z" || r.Status() != "live via ctrl+z" {
 		t.Errorf("editor.undo = %+v", r)
 	}
+	// #1145: new-file / scratch defaults, fragile Cmd primaries via palette.
+	if r := byCmd["explorer.newFile"]; r.Primary != "cmd+n" || !strings.Contains(r.Fallback, "palette") {
+		t.Errorf("explorer.newFile = %+v", r)
+	}
+	if r := byCmd["scratch.new"]; r.Primary != "cmd+shift+n" || r.Fallback != "palette" {
+		t.Errorf("scratch.new = %+v", r)
+	}
 	if r := byCmd["editor.copy"]; r.Fallback != "vim y" {
 		t.Errorf("editor.copy = %+v", r)
 	}

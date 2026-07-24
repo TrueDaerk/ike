@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-24T15:00:00Z
+timestamp: 2026-07-24T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -396,6 +396,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.tab.select9` | `alt+9` | fragile | `palette` | live via palette |
 | `editor.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
+| `explorer.newFile` | `cmd+n` | fragile | `palette (or a in the explorer)` | live via palette (or a in the explorer) |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
@@ -440,6 +441,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `ctrl+f5` | delivered | `—` | live |
+| `scratch.new` | `cmd+shift+n` | fragile | `palette` | live via palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
