@@ -12,6 +12,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
+	"ike/internal/vcs"
 )
 
 // sbEditor loads a real file with n numbered lines into a pane sized w×h.
@@ -211,5 +212,84 @@ func TestScrollbarRenders(t *testing.T) {
 		if strings.ContainsAny(ansi.Strip(row), "│┃■") {
 			t.Fatalf("bar glyph in a non-overflowing view: %q", row)
 		}
+	}
+}
+
+// gitRulerModel builds a 200-line file with git marks and a diagnostic.
+func gitRulerModel(t *testing.T) Model {
+	t.Helper()
+	lines := make([]string, 200)
+	for i := range lines {
+		lines[i] = "x"
+	}
+	m, _ := loaded(t, strings.Join(lines, "\n"))
+	m.SetSize(40, 20)
+	return m
+}
+
+// TestScrollbarGitMarks guards #1131: hunks appear at proportional rows in
+// the gutter colours; deleted outranks changed outranks added on a shared
+// cell; diagnostics win the cell over git marks.
+func TestScrollbarGitMarks(t *testing.T) {
+	m := gitRulerModel(t)
+	track, total, _, _, ok := m.scrollbarGeometry()
+	if !ok {
+		t.Fatal("setup: no scrollbar")
+	}
+	m.gitMarks = map[int]vcs.LineMark{
+		0:   vcs.LineAdded,
+		1:   vcs.LineDeleted, // same cell as line 0 at 20/200 → deleted wins
+		100: vcs.LineChanged,
+	}
+	m.marksEpoch++
+	git, lines := m.scrollbarGitMarks(track, total)
+	y0 := 0 * track / total
+	if git[y0] != vcs.LineDeleted {
+		t.Fatalf("shared cell = %v want deleted (strongest)", git[y0])
+	}
+	y100 := 100 * track / total
+	if git[y100] != vcs.LineChanged {
+		t.Fatalf("row for line 100 = %v want changed", git[y100])
+	}
+	if lines[y100] != 100 {
+		t.Fatalf("click line for row %d = %d want 100", y100, lines[y100])
+	}
+	// A diagnostic on line 100 wins the cell; the git mark still renders on
+	// its own free cells.
+	m.setDiagnostics([]ilsp.Diagnostic{{Range: buffer.Range{Start: buffer.Position{Line: 100}}, Severity: 1, Message: "boom"}})
+	rows := make([]string, track)
+	for i := range rows {
+		rows[i] = "line"
+	}
+	out := m.overlayScrollbar(rows)
+	if !strings.Contains(strings.Join(out, "\n"), "■") {
+		t.Fatal("diagnostic cell missing")
+	}
+	if !strings.Contains(strings.Join(out, "\n"), "▎") {
+		t.Fatal("git mark cell missing")
+	}
+}
+
+// TestScrollbarMarkClickJumps guards #1131: a track press on a marked cell
+// jumps to the mark's line (centred) instead of the proportional position.
+func TestScrollbarMarkClickJumps(t *testing.T) {
+	m := gitRulerModel(t)
+	track, total, _, _, _ := m.scrollbarGeometry()
+	m.gitMarks = map[int]vcs.LineMark{150: vcs.LineChanged}
+	m.marksEpoch++
+	y := 150 * track / total
+	if drag := m.ScrollbarPress(y); drag {
+		t.Fatal("mark press must not start a drag")
+	}
+	want := clampInt(150-track/2, 0, total-track)
+	if m.view.Top != want {
+		t.Fatalf("view.Top = %d want %d (centred on the hunk)", m.view.Top, want)
+	}
+	// Marks refresh with new git data: replacing the marks moves the stripe.
+	m.gitMarks = map[int]vcs.LineMark{10: vcs.LineAdded}
+	m.marksEpoch++
+	git, _ := m.scrollbarGitMarks(track, total)
+	if _, stale := git[y]; stale {
+		t.Fatal("old mark must vanish after refresh")
 	}
 }

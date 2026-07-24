@@ -6,6 +6,8 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/vcs"
 )
 
 // scrollbar.go — the editor pane's vertical scrollbar with a JetBrains-style
@@ -79,6 +81,15 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 		m.sbGrab = y - start
 		return true
 	}
+	// A press on a marked cell jumps to that mark's line (#1131), centred;
+	// unmarked track cells keep the proportional jump (#1022).
+	if _, _, lines := m.stripesFor(track, total); lines != nil {
+		if ln, ok := lines[y]; ok {
+			maxOff := total - track
+			m.SetScroll(clampInt(ln-track/2, 0, maxOff), m.view.Left)
+			return false
+		}
+	}
 	if track > 1 {
 		maxOff := total - track
 		m.SetScroll(clampInt(y*maxOff/(track-1), 0, maxOff), m.view.Left)
@@ -104,23 +115,85 @@ func (m *Model) ScrollbarDrag(y int) {
 // only writer, and the diagnostics epoch plus geometry key invalidation.
 type sbCache struct {
 	epoch        int
+	marksEpoch   int
 	track, total int
 	stripe       map[int]int
+	git          map[int]vcs.LineMark
+	lines        map[int]int
 	valid        bool
 }
 
-// stripeFor returns the memoized stripe for the given geometry.
-func (m Model) stripeFor(track, total int) map[int]int {
+// stripesFor returns the memoized mark maps for the given geometry: the
+// diagnostics stripe (#1022), the git change marks (#1131, overview-ruler
+// style) and, for click-to-jump, each marked row's representative buffer
+// line. Keyed on both the diagnostics and the git-marks epoch.
+func (m Model) stripesFor(track, total int) (stripe map[int]int, git map[int]vcs.LineMark, lines map[int]int) {
 	if m.sbcache != nil && m.sbcache.valid &&
-		m.sbcache.epoch == m.diagsEpoch &&
+		m.sbcache.epoch == m.diagsEpoch && m.sbcache.marksEpoch == m.marksEpoch &&
 		m.sbcache.track == track && m.sbcache.total == total {
-		return m.sbcache.stripe
+		return m.sbcache.stripe, m.sbcache.git, m.sbcache.lines
 	}
-	st := m.scrollbarStripe(track, total)
+	stripe = m.scrollbarStripe(track, total)
+	git, lines = m.scrollbarGitMarks(track, total)
+	// Diagnostics own their cells for click-to-jump too (they win the cell
+	// visually); record their lines over any git line on the same row.
+	for _, d := range m.diags {
+		ln := d.Range.Start.Line
+		if ln < 0 || ln >= total {
+			continue
+		}
+		y := ln * track / total
+		if y > track-1 {
+			y = track - 1
+		}
+		if lines == nil {
+			lines = make(map[int]int)
+		}
+		if cur, ok := lines[y]; !ok || ln < cur {
+			lines[y] = ln
+		}
+	}
 	if m.sbcache != nil {
-		*m.sbcache = sbCache{epoch: m.diagsEpoch, track: track, total: total, stripe: st, valid: true}
+		*m.sbcache = sbCache{epoch: m.diagsEpoch, marksEpoch: m.marksEpoch,
+			track: track, total: total, stripe: stripe, git: git, lines: lines, valid: true}
 	}
-	return st
+	return stripe, git, lines
+}
+
+// scrollbarGitMarks maps track rows to the strongest git change mark whose
+// line lands there (#1131) — deleted > changed > added when hunks share a
+// cell — plus each row's first marked line for click-to-jump.
+func (m Model) scrollbarGitMarks(track, total int) (map[int]vcs.LineMark, map[int]int) {
+	if len(m.gitMarks) == 0 {
+		return nil, nil
+	}
+	rank := func(mk vcs.LineMark) int {
+		switch mk {
+		case vcs.LineDeleted:
+			return 3
+		case vcs.LineChanged:
+			return 2
+		}
+		return 1
+	}
+	git := make(map[int]vcs.LineMark)
+	lines := make(map[int]int)
+	for ln, mk := range m.gitMarks {
+		if ln < 0 || ln >= total {
+			continue
+		}
+		y := ln * track / total
+		if y > track-1 {
+			y = track - 1
+		}
+		if cur, seen := git[y]; !seen || rank(mk) > rank(cur) {
+			git[y] = mk
+		}
+		if cur, seen := lines[y]; !seen || ln < cur {
+			lines[y] = ln
+		}
+	}
+	return git, lines
 }
 
 // scrollbarStripe maps track rows to the worst diagnostic severity whose line
@@ -159,12 +232,13 @@ func (m Model) overlayScrollbar(rows []string) []string {
 	if !ok {
 		return rows
 	}
-	stripe := m.stripeFor(track, total)
+	stripe, git, _ := m.stripesFor(track, total)
 	// Cells are identical across rows: render each variant once per call
 	// instead of a lipgloss style chain + Render per row (#1097).
 	trackCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack).Render("│")
 	thumbCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb).Render("┃")
 	var sevCells [5]string
+	gitCells := map[vcs.LineMark]string{}
 	w := m.width
 	for y := 0; y < len(rows) && y < track; y++ {
 		var cell string
@@ -173,6 +247,14 @@ func (m Model) overlayScrollbar(rows []string) []string {
 				sevCells[sev] = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
 			}
 			cell = sevCells[sev]
+		} else if mk, hit := git[y]; hit {
+			// Git change mark (#1131): the gutter's colour convention on the
+			// ruler; diagnostics outrank it on a shared cell, the thumb
+			// yields so marks stay visible inside the viewport range.
+			if gitCells[mk] == "" {
+				gitCells[mk] = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk)).Bold(true).Render("▎")
+			}
+			cell = gitCells[mk]
 		} else if y >= start && y < start+length {
 			cell = thumbCell
 		} else {

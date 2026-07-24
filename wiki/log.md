@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Git change marks in the editor scrollbar (#1131): hunks render as
+  gutter-coloured overview-ruler marks from the existing #464 diff data,
+  memoized beside the diagnostics stripe; clicking a marked track cell
+  jumps centred to the hunk (`/architecture/editor.md`).
+
 - Mouse-idle hover (#1129): resting the pointer over editor content for
   ~600ms opens the hover popup at the hovered cell (not the caret) — the
   diagnostic covering the cell immediately (works without any LSP hover
