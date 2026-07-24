@@ -18,6 +18,17 @@
   trigger+language and config reloads apply live. See
   /architecture/editor.md, /architecture/completion.md,
   /architecture/config.md.
+- Vim marks & bookmarks MVP (#1151, part of idea #55): `m{a-z}` sets a
+  per-view local mark, `'{x}` / `` `{x} `` jump to the line's first
+  non-blank / the exact position; `m{A-Z}` sets a global mark (path +
+  position) persisted in the state store (`internal/marks`, marks.json) and
+  jumped to through the open funnel, so cross-file jumps open the file and
+  record in the navigation history. Marked lines show an accent `⚑` in the
+  gutter (below breakpoint, above test marker); marks shift with edits via
+  the breakpoint delta scheme and clamp on jump. `nav.bookmarks`
+  (palette-only) lists all marks with path:line + preview — enter jumps,
+  shift+delete removes (`/architecture/editor.md`,
+  `/architecture/navigation-history.md`).
 
 - Saved layouts with the Problems pane restore again (#1157): the
   restoreLayout pre-filter was missing the "problems" kind, silently

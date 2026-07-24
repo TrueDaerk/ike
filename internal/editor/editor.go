@@ -74,6 +74,9 @@ const (
 	awaitObject    // after operator + i/a; awaiting the object char
 	awaitRecordReg // after a bare q; awaiting the macro register name (#58)
 	awaitPlayReg   // after @; awaiting the macro register name or a second @ (#58)
+	awaitMark      // after m; awaiting the mark name (#1151)
+	awaitMarkLine  // after '; awaiting the mark to jump to (line, first non-blank)
+	awaitMarkExact // after a backtick; awaiting the mark to jump to (exact position)
 )
 
 // Model is the editor pane.
@@ -310,6 +313,16 @@ type Model struct {
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
 	// external change, and vcs refresh, so positions may briefly lag an edit.
 	gitMarks map[int]vcs.LineMark
+	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
+	// per-session like the caret set; markLines is the last observed line
+	// count for the edit-shift delta (the bpLines pattern). The gm* hooks
+	// reach the app-owned persistent global-mark store (m{A-Z}), injected
+	// like bpSource/bpAdjust; see marks.go.
+	marks     map[rune]buffer.Position
+	markLines int
+	gmSet     func(r rune, path string, line, col int)
+	gmLines   func(path string) []int
+	gmAdjust  func(path string, cursorAfter, delta int)
 	// bpSource reports the current breakpoint lines for a file (0350, #577):
 	// injected by the app so the gutter always renders the live store without
 	// per-view push bookkeeping. Nil means no breakpoints feature. bpAdjust
@@ -554,6 +567,8 @@ func (m *Model) Load(path string) error {
 	m.buf = buffer.FromString(text)
 	m.sniffLanguage()
 	m.seedBreakpointLines()
+	m.seedMarkLines()
+	m.clearLocalMarks() // local marks belong to the previous content (#1151)
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
 	if eol, ok := m.editorconfigEOL(); ok {
 		// end_of_line applies on save, like every EditorConfig client: the
@@ -607,6 +622,8 @@ func (m *Model) NewFile(path string) {
 	m.resolveEditorconfig()
 	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.seedBreakpointLines()
+	m.seedMarkLines()
+	m.clearLocalMarks() // local marks belong to the previous content (#1151)
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
 	// A new file has no on-disk flavor to preserve, so .editorconfig picks
 	// the initial line endings and charset outright (#63).
@@ -652,6 +669,8 @@ func (m *Model) NewFile(path string) {
 func (m *Model) RestoreText(text string) {
 	m.buf = buffer.FromString(text)
 	m.seedBreakpointLines()
+	m.seedMarkLines()
+	m.clearLocalMarks() // recovered text is a fresh starting point (#1151)
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0

@@ -68,6 +68,26 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.pending.Reset()
 		return m, nil
+	case awaitMark:
+		// m's mark name (#1151): a-z is a local mark, A-Z a global one;
+		// anything else cancels.
+		m.wait = awaitNone
+		if hasRune {
+			m.setMark(r)
+		}
+		m.pending.Reset()
+		return m, nil
+	case awaitMarkLine, awaitMarkExact:
+		// ' / backtick jump target (#1151): ' lands on the line's first
+		// non-blank, backtick on the exact position. Global marks resolve
+		// app-side (cross-file), so the jump may return a command.
+		exact := m.wait == awaitMarkExact
+		m.wait = awaitNone
+		m.pending.Reset()
+		if hasRune {
+			return m, m.jumpMark(r, exact)
+		}
+		return m, nil
 	case awaitPlayReg:
 		// @'s register name (#58): @@ repeats the last replay; the count typed
 		// before @ (5@a) is still pending here.
@@ -516,6 +536,16 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 			break
 		}
 		m.wait = awaitRecordReg
+		return m, nil
+	case "m":
+		// Vim marks (#1151): the next key names the mark to set.
+		m.wait = awaitMark
+		return m, nil
+	case "'":
+		m.wait = awaitMarkLine
+		return m, nil
+	case "`":
+		m.wait = awaitMarkExact
 		return m, nil
 	case "@":
 		// Macro replay (#58): the next key names the register (or @ for the

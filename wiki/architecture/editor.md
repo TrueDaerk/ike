@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-24T21:00:00Z
+timestamp: 2026-07-24T22:00:00Z
 ---
 
 # Editor
@@ -37,7 +37,8 @@ in the success tone on every detected test declaration (`testmarks.go` —
 detection via the language registry's `lang.TestSpec` regex seam, cached per
 document version in a per-view pointer store like the line cache, so the scan
 runs at most once per edit, never per frame). Sign precedence: debugger paused
-`▶` > breakpoint `●` > test `▶` > diagnostic/git colouring. A plain gutter
+`▶` > breakpoint `●` > bookmark `⚑` (#1151, accent tone — vim marks, see
+"Vim marks & bookmarks") > test `▶` > diagnostic/git colouring. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
 line runs that test (see /architecture/run-configurations.md).
 
@@ -218,7 +219,8 @@ line runs that test (see /architecture/run-configurations.md).
 
 Normal mode resolves an optional `"reg`, an optional count, an operator, and a
 motion / text object before committing. Secondary-key states (`awaitG`,
-`awaitFind`, `awaitReplace`, `awaitObject`, `awaitRecordReg`, `awaitPlayReg`)
+`awaitFind`, `awaitReplace`, `awaitObject`, `awaitRecordReg`, `awaitPlayReg`,
+and the mark states `awaitMark` / `awaitMarkLine` / `awaitMarkExact`, #1151)
 park the handler between keys.
 Visual mode accumulates counts with the same 1–9/continuing-0 rule (#265), so
 `V3j` extends the selection three lines and `3G` jumps inside a selection;
@@ -373,6 +375,39 @@ shows immediately, LSP hover content follows when a server answers.
 `HoverTarget(x, y)` is the read-only hit-test (gutter, scrollbar, sticky
 headers, and cells past the line text are not targets); idle tracking and
 scope guards live at the app layer — see [LSP](./lsp.md) for the full flow.
+
+## Vim marks & bookmarks (#1151)
+
+`marks.go` implements the vim marks MVP. `m{a-z}` sets a **local mark** at the
+cursor; `'{a-z}` jumps to the marked line's first non-blank, `` `{a-z} `` to
+the exact position (both record the departure in the navigation history via
+`EventJump`). Local marks are per-view, per-session state like the caret set —
+cleared on `Load`/`NewFile`/`RestoreText`/share, deliberately not persisted.
+`m{A-Z}` sets a **global mark** (path + position, across files) in an
+app-owned persistent store (`internal/marks`, one `marks.json` under the state
+store — `IKE_CONFIG_DIR` or the project's `.ike` — loaded lazily, saved on
+every change, so globals survive restarts). The editor reaches the store
+through injected hooks (`SetMarkHooks`), the breakpoint-store pattern:
+setting/gutter-lines/edit-adjust are closures, and a `'{A-Z}` / `` `{A-Z} ``
+jump travels as `GlobalMarkJumpMsg` which the app resolves through the
+standard open funnel (`openPathAt`) — cross-file jumps open the file and the
+navigation history records.
+
+Marked lines carry a `⚑` in the gutter's sign column (accent tone; the letter
+shows in the picker, not the gutter), slotted below the breakpoint `●` and
+above the test `▶`. **Edit adjustment** uses the same cheap line-count-delta
+scheme as folds and breakpoints (`notifyMarkEdit`, beside
+`notifyBreakpointEdit`): whole-line insertions/deletions above a mark shift it
+exactly; multi-line replacements approximate (the mark clamps to the edit
+site), and every jump additionally clamps into the buffer, so residual drift
+never lands outside the text. External edits to a global mark's file are not
+tracked — the jump clamps.
+
+The **bookmarks picker** (`nav.bookmarks`, palette-only — vim keys are the
+interface, no default chord) lists the focused editor's local marks plus all
+globals as `'x  path:line  preview` rows; enter jumps (globals through the
+open funnel), shift+delete or the `✕` zone removes the mark (the #842/#1113
+prune pattern). See `internal/app/bookmarks.go`.
 
 ## Multi-caret editing (#145)
 

@@ -52,6 +52,8 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.path = src.path
 	m.buf = src.buf
 	m.seedBreakpointLines()
+	m.seedMarkLines()
+	m.clearLocalMarks() // local marks are per-view state, like carets (#1151)
 	m.hist = src.hist
 	m.dirty = src.dirty
 	m.stale = src.stale
@@ -101,6 +103,7 @@ func (m Model) applySync(msg SyncMsg) (Model, tea.Cmd) {
 	m.cursor = m.buf.ClampCursor(m.cursor)
 	m.desiredCol = m.cursor.Col
 	m.clampCarets()                      // this view's carets survive, snapped into the new text (#145)
+	m.seedMarkLines()                    // the remote edit already adjusted the marks store (#1151)
 	m.SetScroll(m.view.Top, m.view.Left) // re-clamp into the new line count
 	m.scroll()
 	m.dirty = msg.Dirty
