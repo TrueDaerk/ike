@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- plugin.EventBufferSaved fires on every save (#1161): the lsp plugin's
+  didSave hook (didChange flush + textDocument/didSave + the #1144 own-save
+  file event) was dead in native builds; it now hangs off the same save
+  funnel local history uses (`/architecture/lsp.md`).
+
 - Saved layouts with the Problems pane restore again (#1157): the
   restoreLayout pre-filter was missing the "problems" kind, silently
   falling back to the default layout (`/architecture/problems.md`).

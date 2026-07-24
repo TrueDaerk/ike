@@ -65,3 +65,33 @@ func TestWatchEventsFireExternalFileChangeHooks(t *testing.T) {
 		}
 	}
 }
+
+// TestBufferSavedHookFires guards #1161: a completed save reaches registered
+// EventBufferSaved hooks — the lsp plugin's didSave path hangs off this.
+func TestBufferSavedHookFires(t *testing.T) {
+	got := make(chan string, 1)
+	reg := registry.New()
+	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Hooks: []plugin.Hook{{
+		Event: plugin.EventBufferSaved,
+		Notify: func(h host.API, payload any) tea.Cmd {
+			if p, ok := payload.(string); ok {
+				select {
+				case got <- p:
+				default:
+				}
+			}
+			return nil
+		},
+	}}}})
+	m := sizedWith(t, reg, 100, 40)
+	out, _ := m.Update(localHistorySnapshotMsg{path: "/proj/a.go"})
+	_ = out
+	select {
+	case p := <-got:
+		if p != "/proj/a.go" {
+			t.Fatalf("hook payload = %q", p)
+		}
+	default:
+		t.Fatal("EventBufferSaved hook did not fire")
+	}
+}
