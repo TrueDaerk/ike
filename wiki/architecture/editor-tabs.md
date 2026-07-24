@@ -3,8 +3,8 @@ type: concept
 title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
-tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-24T00:00:00Z
+tags: [architecture, panes, tabs, editors, terminals, shared-documents, close, pins]
+timestamp: 2026-07-24T12:00:00Z
 ---
 
 # Editor Tabs
@@ -110,11 +110,27 @@ pane.
 per pane, JetBrains-style: when a file open appends a tab beyond the limit,
 `enforceTabLimit` closes the **least recently used** eligible tab — recency is
 a per-instance activation counter stamped in `activate` (`Tab.lastUsed`).
-Exempt are the active tab, dirty tabs, scratch tabs (no path to reopen from)
-and terminal tabs; when nothing is eligible the limit is exceeded rather than
-data risked. Evicted tabs land in the reopen ring (#158), so
+Exempt are the active tab, dirty tabs, scratch tabs (no path to reopen from),
+terminal tabs and **pinned tabs** (#1172); when nothing is eligible — e.g.
+every other tab is pinned — the limit is exceeded rather than data risked or a
+pin overridden. Evicted tabs land in the reopen ring (#158), so
 `editor.tab.reopenClosed` restores them. Layout restore is not limited — a
 saved layout reopens as saved.
+
+### Pinned tabs (#1172)
+
+`editor.tab.togglePin` ("Pin/Unpin Tab" in the palette; a state-aware
+"Pin Tab"/"Unpin Tab" entry in the tab context menu) flips a per-tab pin
+(`pane.Tab.pinned`, accessors `TabPinned`/`SetTabPinned`/`ToggleTabPin`).
+A pinned tab is exempt from the tab-limit LRU eviction and survives
+**Close Others** (alongside dirty tabs; the notification counts both reasons).
+Manual closes — `✕`, middle-click, `editor.closeTab` — stay allowed. The bar
+renders a pinned segment with a `• ` prefix (single-width, Accent); the prefix
+is part of the label string, so `tabWindow`/`tabHit` measure it for free and
+the mirrored geometry needs no special case. Pins persist with the layout
+identity (`pinned` — indexes into `tabs`, the `active` convention) and
+round-trip restarts; a dragged-out pinned tab keeps its pin in the destination
+pane (#305 center merge and edge splits alike).
 
 ## Closing peels tabs before the pane
 
@@ -204,8 +220,10 @@ actually showing a bar.
   focus path — and opens the shared floating context menu (`menu.Context`,
   #1020) with **Close** (`editor.closeTab`, targeting the now-active clicked
   tab), **Close Others** (`editor.tab.closeOthers` — closes every other tab;
-  dirty ones stay open with a notification) and **Reopen Closed**
-  (`editor.tab.reopenClosed`). The title band outside the segments opens the
+  dirty and pinned ones stay open with a notification), a state-aware
+  **Pin Tab / Unpin Tab** (`editor.tab.togglePin`, #1172 — the item list is
+  built at open time, so the label reflects the clicked tab) and **Reopen
+  Closed** (`editor.tab.reopenClosed`). The title band outside the segments opens the
   pane menu instead (see [Pane Layout & Drag](/architecture/pane-layout.md)).
 - **Wheel** over the bar row cycles tabs (up = previous, down = next) instead
   of scrolling the viewport; below the bar the wheel scrolls as before.
@@ -214,9 +232,10 @@ actually showing a bar.
 
 The layout store's per-leaf identity table (`internal/app/store.go`) grows the
 tab list: `tabs` holds every file-backed tab's path in order, `active` indexes
-the active one within that list; `path` stays the active tab's file so older
-builds keep working. Scratch tabs are not persisted — their unsaved text is
-the crash-recovery side's job (#165).
+the active one within that list, `pinned` lists the indexes of pinned tabs
+(#1172); `path` stays the active tab's file so older builds keep working.
+Scratch tabs are not persisted — their unsaved text is the crash-recovery
+side's job (#165).
 
 Restore (`restoreLayout`) rebuilds each pane's tab list tolerantly: identities
 without `tabs` (pre-#160 files) restore as single-tab panes; files missing on

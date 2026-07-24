@@ -20,6 +20,10 @@ type Tab struct {
 	// lastUsed is the instance's use-sequence stamp of the last activation,
 	// the recency the tab-limit eviction orders by (#742).
 	lastUsed int
+	// pinned protects the tab from the tab-limit LRU eviction and from
+	// "Close Others" (#1172); manual closes stay allowed. It persists with
+	// the layout identity.
+	pinned bool
 }
 
 // newEditorTab wraps an editor model as a tab slot.

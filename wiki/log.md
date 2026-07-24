@@ -14,6 +14,15 @@
 
 ## 2026-07-24
 
+- Pinned tabs (#1172): `editor.tab.togglePin` (palette "Pin/Unpin Tab" +
+  state-aware "Pin Tab"/"Unpin Tab" in the tab context menu) protects a tab
+  from the `editor.tabs.limit` LRU eviction and from Close Others (manual
+  closes stay allowed; an all-pinned pane exceeds the limit instead). Pinned
+  segments render a single-width `•` prefix in Accent — part of the label
+  string, so the bar's mirrored render/hit geometry is unchanged. Pins
+  persist with the layout identity (`pinned` indexes into `tabs`) and a
+  dragged-out pinned tab keeps its pin (`/architecture/editor-tabs.md`).
+
 - Merge-conflict resolution in the editor (#1149): conflict blocks
   (`<<<<<<<` / `=======` / `>>>>>>>`, optional diff3 `|||||||` base) are
   detected per document version, tinted in the buffer (ours VCSAdded-mixed,
