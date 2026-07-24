@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-24 (saved window layouts)
+
+- Saved window layouts (#1175): named, user-scoped, kind-only snapshots of
+  the split tree (`~/.ike/layouts.json`) with a default marker.
+  `window.saveLayout` / `window.layouts` picker / `window.setDefaultLayout` /
+  `window.restoreLayout` (shift+F12); the default layout shapes projects
+  without a persisted `layout.json` (`/architecture/pane-layout.md`).
+
 ## 2026-07-24 (copy path)
 
 - Copy Path / Copy Relative Path / Copy Reference (#1173): registry

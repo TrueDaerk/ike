@@ -266,6 +266,16 @@ type Model struct {
 	saveAsClose bool
 	saveAsErr   string
 	renamePos   int
+	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
+	// shell shows it; input/pos are the typed name and cursor, err the
+	// overwrite-confirmation hint. layoutsPicker is the palette mode listing
+	// saved layouts, kept on the model so the two entry commands can flip its
+	// apply/set-default action before opening it locked.
+	layoutSaveOpen  bool
+	layoutSaveInput string
+	layoutSavePos   int
+	layoutSaveErr   string
+	layoutsPicker   *layoutsMode
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
@@ -620,6 +630,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	vcsSt := &vcsState{} // shared before the literal: the reverts picker mode reads it
+	layoutsPicker := newLayoutsMode(layoutNames) // saved window layouts picker (#1175)
 	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
 	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
 	wsMgr := wsManager(mgr, resumed, root, panes)  // hoisted: the palette's recent-projects sources read it (#820)
@@ -644,7 +655,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, wsMgr),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, wsMgr, layoutsPicker),
+		layoutsPicker:  layoutsPicker,
 		refs:           refs,
 		lspStatus:      map[string]string{},
 		symbols:        symbols,
@@ -954,11 +966,24 @@ func (m *Model) installEmitter(key string) {
 // explorer+editor set: every non-explorer leaf becomes an editor whose file is
 // reloaded best-effort (a missing file restores as an empty editor). Any
 // structural breakage or a missing/duplicate explorer leaves the default intact.
+// A project WITHOUT a persisted layout materializes the user's designated
+// default layout instead (#1175), so a saved default shapes new projects; the
+// built-in explorer+editor pair stays the last resort.
 func (m *Model) restoreLayout(cfg host.Config) {
 	tree, ids, ok := loadLayout()
 	if !ok {
-		return
+		tree, ids, ok = defaultLayoutSnapshot()
+		if !ok {
+			return
+		}
 	}
+	m.restoreFromLayout(tree, ids, cfg)
+}
+
+// restoreFromLayout is restoreLayout's body over an already-decoded snapshot,
+// shared with the default-layout path (#1175): kind-only identities restore
+// as empty editors / fresh shells / restarted tools / empty panels.
+func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity, cfg host.Config) {
 	leaves := layout.Leaves(tree)
 	explorers := 0
 	for _, key := range leaves {
@@ -1457,7 +1482,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1512,7 +1537,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, bookmarks, reverts, openPath)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, bookmarks, reverts, openPath, layouts)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2736,6 +2761,36 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HideToolWindowsMsg:
 		// window.hideAllTools (#791): hide every tool window / restore.
 		m.toggleToolWindows()
+		return m, nil
+
+	case SaveLayoutPromptMsg:
+		// window.saveLayout (palette, #1175): name the current layout snapshot.
+		m.startLayoutSavePrompt()
+		return m, nil
+
+	case ShowLayoutsMsg:
+		// window.layouts / window.setDefaultLayout (palette, #1175).
+		m.openLayoutPicker(msg.SetDefault)
+		return m, nil
+
+	case ApplyLayoutMsg:
+		// A picker row activated (#1175): re-shape the active workspace.
+		m.applyLayoutByName(msg.Name)
+		return m, nil
+
+	case SetDefaultLayoutMsg:
+		m.setDefaultLayout(msg.Name)
+		return m, nil
+
+	case DeleteLayoutMsg:
+		// The picker's shift+delete aux action (#1175), in place like #1113.
+		m.deleteLayout(msg.Name)
+		return m, nil
+
+	case RestoreDefaultLayoutMsg:
+		// window.restoreLayout (shift+f12, #1175): JetBrains' Restore Default
+		// Layout — the designated default, or the built-in pair.
+		m.applyDefaultLayout()
 		return m, nil
 
 	case ZenModeMsg:
@@ -4188,6 +4243,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {
 			return m.updateSaveAsPrompt(msg)
+		}
+		// The save-layout name prompt (#1175) mirrors it.
+		if m.layoutSavePromptOpen() {
+			return m.updateLayoutSavePrompt(msg)
 		}
 		// The JetBrains keymap import prompt (#677) mirrors it, plus tab
 		// path completion.
