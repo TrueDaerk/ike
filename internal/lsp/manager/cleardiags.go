@@ -39,6 +39,32 @@ func (m *Manager) clearServerDiagnostics(srvKey string, docs []*document) {
 	}
 }
 
+// flushPublished emits an empty publish for every path lang's servers ever
+// published — unopened paths included — and forgets the set (#1102): the
+// Problems store aggregates project-wide, so entries from a stopped or
+// disabled language must not survive as stale findings. Open documents are
+// additionally covered by the callers' own #994 clears; the double empty
+// publish is harmless.
+func (m *Manager) flushPublished(lang string) {
+	m.mu.Lock()
+	paths := m.published[lang]
+	delete(m.published, lang)
+	// Open documents are cleared by the callers' own #994 paths — skip them
+	// here so nobody gets a duplicate empty publish.
+	skip := make(map[string]bool)
+	for p, d := range m.docs {
+		if d.lang == lang {
+			skip[p] = true
+		}
+	}
+	m.mu.Unlock()
+	for p := range paths {
+		if !skip[p] {
+			m.publishEmpty(p, nil, 0)
+		}
+	}
+}
+
 // publishEmpty tells the editor a document has no diagnostics anymore. Used
 // when the document itself leaves the manager (StopLang, Shutdown), where
 // publishHostDiagnostics would no-op on the missing document.

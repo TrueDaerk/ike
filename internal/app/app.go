@@ -2438,8 +2438,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case explorer.FileDeletedMsg:
 		// The explorer removed a path; close any editor still showing it so a
-		// deleted file does not linger in an open pane.
+		// deleted file does not linger in an open pane — and drop its stale
+		// findings from the Problems store (#1102).
 		m.closeEditorsForPath(msg.Path, msg.IsDir)
+		m.probStore.Drop(msg.Path, msg.IsDir)
+		m.refreshProblemsPanel()
 		return m, nil
 
 	case explorer.FileMovedMsg:

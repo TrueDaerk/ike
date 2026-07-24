@@ -192,3 +192,69 @@ func waitForPublish(t *testing.T, rec *diagRecorder, path string) {
 	}
 	t.Fatal("no diagnostics published before the stop")
 }
+
+// workspaceDiagConnector answers initialize and, on didOpen, publishes one
+// diagnostic for the opened file AND one for a project file nobody opened —
+// the workspace-diagnostic shape (#1102).
+func workspaceDiagConnector(extraURI string) Connector {
+	return func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
+		cr, sw := io.Pipe()
+		sr, cw := io.Pipe()
+		cli := rwc{Reader: cr, Writer: cw}
+		go func() {
+			in := bufio.NewReader(sr)
+			for {
+				payload, err := readFrame(in)
+				if err != nil {
+					return
+				}
+				var msg struct {
+					ID     *json.RawMessage `json:"id"`
+					Method string           `json:"method"`
+					Params json.RawMessage  `json:"params"`
+				}
+				_ = json.Unmarshal(payload, &msg)
+				switch msg.Method {
+				case "initialize":
+					respond(sw, msg.ID, protocol.InitializeResult{Capabilities: protocol.ServerCapabilities{TextDocumentSync: json.RawMessage(`1`)}})
+				case "textDocument/didOpen":
+					var p protocol.DidOpenTextDocumentParams
+					_ = json.Unmarshal(msg.Params, &p)
+					diag := []protocol.Diagnostic{{Message: "boom"}}
+					notify(sw, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{URI: p.TextDocument.URI, Diagnostics: diag})
+					notify(sw, "textDocument/publishDiagnostics", protocol.PublishDiagnosticsParams{URI: extraURI, Diagnostics: diag})
+				case "shutdown":
+					respond(sw, msg.ID, nil)
+				}
+			}
+		}()
+		conn := jsonrpc.NewConn(cli, handler)
+		return client.New(conn), func() { conn.Close() }, nil, nil
+	}
+}
+
+// TestStopLangFlushesUnopenedPublishes guards #1102: a path published without
+// an open document gets an empty publish on StopLang, so the Problems store
+// drops the stale findings.
+func TestStopLangFlushesUnopenedPublishes(t *testing.T) {
+	rec := newDiagRecorder()
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	dir := t.TempDir()
+	unopened := filepath.Join(dir, "unopened.go")
+	m := New(resolver(spec), workspaceDiagConnector(protocol.PathToURI(unopened)), Callbacks{
+		Diagnostics: rec.record,
+	})
+	defer m.Shutdown()
+
+	path := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(path, []byte("package main"), 0o644)
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPublish(t, rec, path)
+	waitForPublish(t, rec, unopened)
+
+	m.StopLang("go")
+	waitCleared(t, rec, path, "StopLang open doc")
+	waitCleared(t, rec, unopened, "StopLang unopened path")
+}

@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Stale Problems entries pruned (#1102): the LSP manager flushes a stopped/
+  disabled language's unopened publishes with empty diagnostics, and
+  deleting a file/directory drops its findings from the store
+  (`/architecture/lsp.md`, `/architecture/problems.md`).
+
 - Render micro-allocations trimmed (#1101): pane-box cache keyed on the
   border RGBA instead of a per-frame Sprintf, Problems header counts
   maintained on Refresh, menu bar string cached on
