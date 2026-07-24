@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Scrollbar thumb reads as a background block (#1138): marks on the thumb
+  keep their colour as foreground glyphs on the ScrollbarThumb background,
+  so the thumb extent stays identifiable under dense git/diagnostic marks
+  (`/architecture/editor.md`).
+
 - Scrollbar thumb survives dense change marks and the viewport stops at the
   last line (#1134): thumb rows keep their glyph and only take the mark's
   colour; `SetScroll` clamps to lineCount − viewHeight (wrap/folds keep the

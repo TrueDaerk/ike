@@ -236,7 +236,7 @@ func (m Model) overlayScrollbar(rows []string) []string {
 	// Cells are identical across rows: render each variant once per call
 	// instead of a lipgloss style chain + Render per row (#1097).
 	trackCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarTrack).Render("│")
-	thumbCell := lipgloss.NewStyle().Foreground(m.theme().ScrollbarThumb).Render("┃")
+	plainThumb := lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).Render(" ")
 	var sevCells [5]string
 	gitCells := map[vcs.LineMark]string{}
 	w := m.width
@@ -245,15 +245,20 @@ func (m Model) overlayScrollbar(rows []string) []string {
 		var cell string
 		switch {
 		case onThumb:
-			// The thumb must stay visible as a shape even in a file full of
-			// changes: thumb rows keep the thumb glyph and only take the
-			// mark's colour — diagnostics over git over the plain thumb.
+			// The thumb reads as a solid block (#1138): every thumb row gets
+			// the ScrollbarThumb background, and a mark on it draws its glyph
+			// in the mark's colour ON that background — the thumb's extent
+			// stays identifiable even when the whole bar is covered in marks,
+			// and the marks inside it keep their colour. Diagnostics over
+			// git, as everywhere.
 			if sev, hit := stripe[y]; hit {
-				cell = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("┃")
+				cell = lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).
+					Foreground(m.diagColor(sev)).Bold(true).Render("■")
 			} else if mk, hit := git[y]; hit {
-				cell = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk)).Bold(true).Render("┃")
+				cell = lipgloss.NewStyle().Background(m.theme().ScrollbarThumb).
+					Foreground(m.gitMarkColor(mk)).Bold(true).Render("▎")
 			} else {
-				cell = thumbCell
+				cell = plainThumb
 			}
 		default:
 			if sev, hit := stripe[y]; hit {
