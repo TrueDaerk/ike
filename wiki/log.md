@@ -6,6 +6,18 @@
   didSave hook (didChange flush + textDocument/didSave + the #1144 own-save
   file event) was dead in native builds; it now hangs off the same save
   funnel local history uses (`/architecture/lsp.md`).
+- Live templates / snippets (#1152): `[[snippets]]` config entries (`trigger`,
+  `body` in LSP snippet syntax, optional `language`) plus built-in examples
+  (`internal/snippets`) expand on Tab after the trigger word in insert mode
+  through the existing snippet placeholder engine — tab/shift+tab cycle
+  placeholders like accepted LSP snippet completions; no match keeps Tab's
+  indent behavior. Multi-line bodies re-indent to the current line, `\t`
+  honours the buffer's tab settings. The same templates show as `template`
+  snippet items in the completion popup via a new local completion source
+  (priority 40, works with no LSP server); user entries shadow built-ins per
+  trigger+language and config reloads apply live. See
+  /architecture/editor.md, /architecture/completion.md,
+  /architecture/config.md.
 
 - Saved layouts with the Problems pane restore again (#1157): the
   restoreLayout pre-filter was missing the "problems" kind, silently

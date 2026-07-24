@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Completion Engine
@@ -141,6 +141,22 @@ expansion preview in the item detail: CSS property shorthands (`m10` →
 attribute values. Full Emmet abbreviations (`ul>li*3`) contain
 non-identifier characters the popup's identifier-replace accept path cannot
 span and are deliberately out of scope.
+
+## Live templates (#1152)
+
+`internal/snippets` (name `snippets`, priority `lsp.PrioritySnippets` = 40 —
+below symbols, above Emmet) offers the user's `[[snippets]]` config templates
+plus the built-in examples as **snippet items** (kind snippet, detail
+`template <preview>`), scoped to the buffer's language via `lang.ByPath`
+(global entries everywhere). The source returns every matching template and
+lets the popup's fuzzy prefix filter narrow the list, so it needs no buffer
+text of its own; entries are read live from `config.Get()` per request, so a
+config reload needs no re-wiring. Because the local engine answers triggers
+independently of the LSP bridge, template items complete in plain buffers
+with no server. On accept the editor recognises the `snippets` source name
+and re-indents the body to the cursor's line before expansion — the same
+shape the insert-mode Tab trigger produces (see
+[editor](./editor.md)).
 
 ## Adding a source
 

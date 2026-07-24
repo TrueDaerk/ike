@@ -59,6 +59,7 @@ import (
 	"ike/internal/registry"
 	"ike/internal/search"
 	"ike/internal/settings"
+	"ike/internal/snippets"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/textenc"
@@ -567,6 +568,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	engine.Register(words.New(root))
 	engine.Register(symbols.New(root))
 	engine.Register(emmet.New())
+	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
+	// language-scoped per buffer. Reads config.Get() live, so reloads apply.
+	engine.Register(snippets.NewSource())
 	h.SetEditorEmitter("complete", engine)
 	var resumed *workspace.Workspace
 	if mgr != nil {

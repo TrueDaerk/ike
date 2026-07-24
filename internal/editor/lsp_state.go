@@ -17,6 +17,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/snippet"
+	"ike/internal/snippets"
 	"ike/internal/vcs"
 )
 
@@ -534,6 +535,13 @@ func (m *Model) completionAccept() {
 	insertText := item.InsertText
 	var stops []int
 	if item.IsSnippet {
+		// A live-template item (#1152) re-indents to the cursor's line before
+		// expansion, matching the Tab-trigger path; LSP snippet bodies are
+		// left exactly as the server sent them. Multi-caret accepts skip the
+		// re-indent — indentation would differ per caret.
+		if item.Source == snippets.SourceName && !m.hasCarets() {
+			insertText = m.reindentSnippetBody(insertText)
+		}
 		if text, offs, err := snippet.Expand(insertText); err == nil {
 			insertText, stops = text, offs
 		}

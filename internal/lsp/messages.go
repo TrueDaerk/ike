@@ -74,10 +74,11 @@ type CompletionMsg struct {
 const (
 	SourceLSP = "lsp"
 
-	PriorityLSP     = 100
-	PrioritySymbols = 50
-	PriorityEmmet   = 30
-	PriorityWords   = 10
+	PriorityLSP      = 100
+	PrioritySymbols  = 50
+	PrioritySnippets = 40
+	PriorityEmmet    = 30
+	PriorityWords    = 10
 )
 
 // CompletionItem is the editor-facing completion entry. SortText and

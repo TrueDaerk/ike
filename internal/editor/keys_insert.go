@@ -61,6 +61,9 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	// regardless of the cursor column; plain Tab inserts one unit at the cursor.
 	case key.Code == tea.KeyTab && key.Mod&tea.ModShift != 0:
 		m.insertDedentLine()
+	// Live templates (#1152): Tab right after a trigger word expands it before
+	// the indent insertion gets a say; no match falls through to tabText.
+	case key.Code == tea.KeyTab && m.expandSnippetTrigger():
 	case key.Code == tea.KeyTab:
 		m.insertText(m.tabText())
 	// Plain (or Shift-modified) arrows move the cursor; Alt/Ctrl chords fall

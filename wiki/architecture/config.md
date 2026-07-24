@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-23T21:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Configuration System
@@ -87,6 +87,16 @@ Sections and their default-bearing slots (`schema.go`):
   0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
+- `[[snippets]]` — user live templates (#1152): array-of-tables entries with
+  `trigger` (identifier word), `body` (LSP snippet syntax — `$1`,
+  `${2:default}`; TOML multiline strings work for multi-line bodies) and an
+  optional `language` (a language ID from `internal/lang`; absent = every
+  buffer). Validation drops entries whose trigger is not an identifier word
+  or whose body is empty, with a diagnostic. Being a list, a project-scope
+  `[[snippets]]` table replaces the user-scope one; the built-in examples
+  live in code (`internal/snippets`) and are shadowed per trigger+language,
+  never wiped. Consumed via the typed struct (like `tools.custom`, not
+  `Flat()`); see [editor](./editor.md) and [completion](./completion.md).
 
 ## Extension hook
 

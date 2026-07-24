@@ -41,6 +41,25 @@ type Config struct {
 	Debug Debug `toml:"debug"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
+	// Snippets holds user live templates (#1152): [[snippets]] entries the
+	// editor expands on Tab after the trigger word and offers in the
+	// completion popup. Like every TOML list it replaces across layers — a
+	// project [[snippets]] table hides the user-scope one — but the built-in
+	// examples live in code (internal/snippets) and are only shadowed per
+	// trigger+language, never wiped.
+	Snippets []SnippetEntry `toml:"snippets"`
+}
+
+// SnippetEntry is one user live template ([[snippets]], #1152). Trigger is the
+// word that expands (identifier runes only — Tab expansion matches the word
+// before the cursor); Body is the LSP-snippet-syntax text ($1, ${2:default};
+// literal "\t" runs re-indent to the buffer's tab settings and "\n" lines to
+// the current line's indent); Language scopes the entry to one language ID
+// (internal/lang), empty means every buffer.
+type SnippetEntry struct {
+	Trigger  string `toml:"trigger"`
+	Language string `toml:"language"`
+	Body     string `toml:"body"`
 }
 
 // Tools holds the custom TUI tool panes (#741): [[tools.custom]] entries, each
