@@ -290,9 +290,11 @@ type Model struct {
 	// popup, and the hover popup. See lsp_state.go.
 	diags      []ilsp.Diagnostic
 	diagByLine map[int][]ilsp.Diagnostic
-	// diagsEpoch bumps on every diagnostics replacement; sbcache memoizes the
-	// scrollbar error stripe against it (#1097).
+	// diagsEpoch bumps on every diagnostics replacement, marksEpoch on every
+	// git-marks replacement; sbcache memoizes the scrollbar stripes against
+	// both (#1097, #1131).
 	diagsEpoch int
+	marksEpoch int
 	sbcache    *sbCache
 	// gitMarks are the gutter diff markers against HEAD (Roadmap 0320, #464),
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
@@ -902,6 +904,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// nil clears them (clean file, untracked, not a repo).
 		if msg.Path == m.path {
 			m.gitMarks = msg.Marks
+			m.marksEpoch++ // invalidates the scrollbar git-mark memo (#1131)
 		}
 		return m, nil
 	case vcs.BlameMsg:
