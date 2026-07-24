@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often) and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/diag
 tags: [architecture, performance, pprof, idle, diagnostics]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T09:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -62,3 +62,13 @@ Long-session triage: dump goroutines at minute 1 and after an hour idle with
 rising CPU points at wakeups (profile 30s of "idle" CPU and look for View/
 render frames). `TestSessionCloseLeavesNoGoroutines` pins the terminal
 session lifecycle as a regression test.
+
+## Frame wash (#1095)
+
+The palette background/foreground wash at the end of `render()` used to run
+`lipgloss` with `Width`/`Height` over the fully composed screen — re-wrapping,
+re-aligning and grapheme-scanning ~12k cells per keystroke (52% of frame CPU,
+68% of allocations in the profile). Since the frame is composed at exactly
+`width x height` (#612), the wash now styles per line without measurement; a
+non-full-height frame (defensive) falls back to the padded variant. Benchmark
+`BenchmarkAppRender` guards the cost.
