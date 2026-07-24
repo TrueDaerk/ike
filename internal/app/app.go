@@ -945,6 +945,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as the empty singleton panel (0330)
 		} else if ids[key].Kind == "debug" {
 			continue // restored below as the empty singleton panel (#580)
+		} else if ids[key].Kind == "problems" {
+			continue // restored below as the empty singleton panel (#1024; fix #1157)
 		} else if ids[key].Kind == "structure" {
 			continue // restored below as the empty singleton panel (#1025)
 		} else if ids[key].Kind == "usages" {

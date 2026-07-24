@@ -2,6 +2,10 @@
 
 ## 2026-07-24
 
+- Saved layouts with the Problems pane restore again (#1157): the
+  restoreLayout pre-filter was missing the "problems" kind, silently
+  falling back to the default layout (`/architecture/problems.md`).
+
 - Usages tool window (#1155): find-references gets a persistent worklist —
   `lsp.referencesPanel` ("Find Usages (Panel)", also in the editor context
   menu) runs the same request as `lsp.references` (whose quick palette stays)
