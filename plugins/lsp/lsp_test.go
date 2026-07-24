@@ -12,6 +12,26 @@ import (
 	"ike/internal/plugin"
 )
 
+// TestPeekDefinitionCommandRegistered guards #1154: the peek variant of
+// go-to-definition is a first-class editor-scoped command.
+func TestPeekDefinitionCommandRegistered(t *testing.T) {
+	var peek plugin.Command
+	for _, c := range (Plugin{}).Capabilities().Commands {
+		if c.ID == "lsp.peekDefinition" {
+			peek = c
+		}
+	}
+	if peek.Run == nil {
+		t.Fatal("lsp.peekDefinition must be registered")
+	}
+	if peek.Title != "LSP: Peek Definition" {
+		t.Fatalf("title = %q", peek.Title)
+	}
+	if peek.Scope != plugin.PaneScope("editor") {
+		t.Fatalf("scope = %#v, want editor pane scope", peek.Scope)
+	}
+}
+
 // resolveSpec must merge the language plugin's baseline with the user's config
 // overlay: config wins per field it sets, the baseline fills the rest. This is the
 // "add a language = register it; config only overrides" contract.

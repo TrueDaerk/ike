@@ -144,6 +144,17 @@ type DefinitionMsg struct {
 	Col  int
 }
 
+// PeekDefinitionMsg asks the host to show a definition target inline (#1154):
+// instead of navigating, the app reads a bounded excerpt around Line and opens
+// the peek popup on the focused editor. Line/Col are editor coordinates in the
+// target file — the same jump target a DefinitionMsg would carry, so Enter
+// inside the peek can navigate through the shared funnel.
+type PeekDefinitionMsg struct {
+	Path string
+	Line int
+	Col  int
+}
+
 // Reference is one find-references result in editor coordinates, with the
 // target line's trimmed text as a preview for the results list.
 type Reference struct {
@@ -271,9 +282,12 @@ type SymbolResultsMsg struct {
 // DefinitionCandidatesMsg delivers a go-to-definition result with several
 // target locations (#279): instead of guessing the first, the app renders the
 // candidates as a palette list; picking one navigates through the same
-// DefinitionMsg path a single-target jump uses.
+// DefinitionMsg path a single-target jump uses. Peek marks a peek-definition
+// request (#1154): picking a candidate then peeks it (PeekDefinitionMsg)
+// instead of jumping.
 type DefinitionCandidatesMsg struct {
 	Refs []Reference
+	Peek bool
 }
 
 // FormatEdit is one formatting rewrite in 0-based editor rune coordinates:

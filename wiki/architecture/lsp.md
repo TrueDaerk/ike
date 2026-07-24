@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-24T21:00:00Z
+timestamp: 2026-07-24T22:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -61,7 +61,7 @@ registry](./languages.md) — each language plugin's `lang.Language.Server` — 
 from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/lsp`
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
-exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
+exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.peekDefinition` / `lsp.references` / `lsp.callHierarchy` / `lsp.format` /
 `lsp.formatRange` / `lsp.rename` / `lsp.codeAction` / `lsp.documentSymbols`
 (the [Structure pane](./structure-view.md)'s refresh, #1025) / `lsp.restart`
 as registry commands.
@@ -77,6 +77,28 @@ diffs). Only an unopened target opens as a tab in the current pane.
 server resolves (Ansible inventory hosts/groups) claims the jump and skips
 the server round-trip — it works with no server installed. Providers claim
 narrowly; a pass falls through to the server exactly as before.
+
+**Peek definition** (#1154, `lsp.peekDefinition` — palette + the editor
+context menu next to Go to Definition): the same resolution as
+`lsp.definition` (local providers, server request, the #279 multi-target
+picker — with peek intent preserved, so picking a candidate peeks it), but a
+single target delivers a `PeekDefinitionMsg` instead of navigating. The app
+(`internal/app/peek.go`) reads a **bounded excerpt** — up to 15 lines
+starting 3 above the definition line, from the **live buffer** when the
+target file is open in any tab (unsaved edits must show; disk would be
+stale), else from disk with a scan that stops after the excerpt; a failed
+read surfaces as a notice — and opens the popup on the focused editor
+(`internal/editor/peek.go`), a sibling of hover on the same popup surface
+(#316 frame, cursor-anchored, composited by `compositeLSPPopups`), titled
+`path:line` (over-long paths truncate from the left so the filename stays).
+The excerpt is syntax-highlighted with the target file's language via the
+standalone `highlight.Highlight` entry point, the way hover code fences are
+(#379); no grammar renders plain. While open the popup owns a few keys:
+**esc** closes, **enter jumps for real** through the same
+`DefinitionMsg`/`openPathAt` funnel (nav history records, pane dedupe #930
+applies), up/down scroll one row and ctrl+d/ctrl+u half a window through an
+excerpt longer than its 8-row window; **any other key closes the peek and is
+handled normally** (the hover-dismiss precedent), as does a mouse click.
 
 ## Data flow
 
