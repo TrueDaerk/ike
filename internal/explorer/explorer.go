@@ -1745,10 +1745,34 @@ func (m Model) activeStyle() lipgloss.Style {
 // hidden (dot-prefixed) entries. The filetype colour no longer paints rows;
 // it tints only the extension suffix of clean files (see View).
 func (m Model) nodeStyle(n *node) lipgloss.Style {
+	return m.nodeStyleVCS(n, m.resolveVCS(n))
+}
+
+// rowVCS bundles a row's snapshot-backed facts, resolved once per row per
+// frame (#1099): status/ignored/tint previously went through Snapshot.relPath
+// (an allocating filepath.Rel, and syscalls on symlinked roots) up to five
+// times per row.
+type rowVCS struct {
+	status  vcs.FileStatus
+	ignored bool
+}
+
+// resolveVCS resolves a row's VCS facts in one pass; ignored is only probed
+// when no real status owns the row (an ignored path never carries one).
+func (m Model) resolveVCS(n *node) rowVCS {
+	rv := rowVCS{status: m.nodeVCSStatus(n)}
+	if rv.status == vcs.StatusNone {
+		rv.ignored = m.nodeIgnored(n)
+	}
+	return rv
+}
+
+// nodeStyleVCS is nodeStyle over pre-resolved VCS facts (#1099).
+func (m Model) nodeStyleVCS(n *node, rv rowVCS) lipgloss.Style {
 	s := lipgloss.NewStyle().Foreground(m.theme().Foreground)
-	if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
+	if c := vcs.StatusColor(m.theme(), rv.status); c != nil {
 		s = s.Foreground(c)
-	} else if m.nodeIgnored(n) {
+	} else if rv.ignored {
 		// Gitignored rows read uniformly dimmed, JetBrains-style (#1045):
 		// the foreground mixed toward the surface. Ranks below every real
 		// VCS status (an ignored path never carries one) and below the
@@ -1777,7 +1801,12 @@ func (m Model) nodeIgnored(n *node) bool {
 // (#1051): nil for directories, VCS-statused rows (status owns the whole
 // row), gitignored rows (uniformly dim, #1045) and unmatched extensions.
 func (m Model) suffixTint(n *node) color.Color {
-	if n.isDir || m.nodeVCSStatus(n) != vcs.StatusNone || m.nodeIgnored(n) {
+	return m.suffixTintVCS(n, m.resolveVCS(n))
+}
+
+// suffixTintVCS is suffixTint over pre-resolved VCS facts (#1099).
+func (m Model) suffixTintVCS(n *node, rv rowVCS) color.Color {
+	if n.isDir || rv.status != vcs.StatusNone || rv.ignored {
 		return nil
 	}
 	return m.colors.suffixColor(n, m.colorGlobs, m.colorVals)
@@ -1837,7 +1866,8 @@ func (m Model) View() string {
 		var line string
 		if i < len(m.rows) {
 			n := m.rows[i]
-			style := m.rowStyle(i, n)
+			rv := m.resolveVCS(n) // one snapshot resolution per row (#1099)
+			style := m.rowStyleVCS(i, n, rv)
 			nameStyle := style
 			if m.open[n.path] {
 				// Every file open in an editor reads underlined — on the name
@@ -1852,7 +1882,7 @@ func (m Model) View() string {
 			nameRendered := nameStyle.Render(name)
 			if k := m.rowKind(i); k != rowSelected && k != rowActive &&
 				!(n.path == m.active && m.active != "") {
-				if c := m.suffixTint(n); c != nil {
+				if c := m.suffixTintVCS(n, rv); c != nil {
 					if dot := strings.LastIndex(name, "."); dot > 0 {
 						nameRendered = nameStyle.Render(name[:dot]) +
 							nameStyle.Foreground(c).Render(name[dot:])
@@ -1889,7 +1919,7 @@ func (m Model) View() string {
 			// A VCS-statused row carries a one-cell status letter at the
 			// right edge (#1051): a non-colour cue that survives ANSI256
 			// quantisation and colour blindness.
-			if letter := statusLetter(m.nodeVCSStatus(n)); letter != "" && textW >= 2 {
+			if letter := statusLetter(rv.status); letter != "" && textW >= 2 {
 				if visW >= textW {
 					vis = ansi.Cut(vis, 0, textW-1)
 					visW = textW - 1
@@ -1898,7 +1928,7 @@ func (m Model) View() string {
 					vis += style.Render(strings.Repeat(" ", pad))
 				}
 				ls := style.Bold(false)
-				if c := vcs.StatusColor(m.theme(), m.nodeVCSStatus(n)); c != nil {
+				if c := vcs.StatusColor(m.theme(), rv.status); c != nil {
 					ls = ls.Foreground(c)
 				}
 				vis += ls.Render(letter)
@@ -1961,7 +1991,12 @@ func (m Model) View() string {
 // status stays readable while cursoring. An unfocused explorer keeps a muted
 // cursor row (#1034, SelectionMuted) so refocusing lands visibly.
 func (m Model) rowStyle(i int, n *node) lipgloss.Style {
-	base := m.nodeStyle(n)
+	return m.rowStyleVCS(i, n, m.resolveVCS(n))
+}
+
+// rowStyleVCS is rowStyle over pre-resolved VCS facts (#1099).
+func (m Model) rowStyleVCS(i int, n *node, rv rowVCS) lipgloss.Style {
+	base := m.nodeStyleVCS(n, rv)
 	if n.path == m.active && m.active != "" {
 		base = m.activeStyle()
 	}

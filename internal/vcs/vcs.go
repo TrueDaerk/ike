@@ -76,6 +76,11 @@ type Snapshot struct {
 	// root) containing at least one changed file to the dominant status of
 	// its subtree (#1053), for explorer tinting.
 	dirs map[string]FileStatus
+	// resolvedRoot caches EvalSymlinks(Root) for the symlinked-root fallback
+	// in relPath (#1099); rootResolved marks the (single) attempt. Lazily
+	// filled from the single-threaded update/render loop.
+	resolvedRoot string
+	rootResolved bool
 	// ignored is the set of repo-relative paths git ignores (#1045).
 	// Directory entries keep porcelain's trailing slash; git collapses a
 	// fully-ignored subtree to one such entry, so membership for deeper
@@ -187,12 +192,23 @@ func (s *Snapshot) relPath(path string) (string, bool) {
 		if !ok {
 			// macOS tempdirs reach git through /private symlinks: retry with
 			// both sides resolved before declaring the path outside the repo.
-			root, err1 := filepath.EvalSymlinks(s.Root)
-			p, err2 := filepath.EvalSymlinks(path)
-			if err1 != nil || err2 != nil {
+			// The resolved root is cached after the first miss (#1099) —
+			// relPath runs per explorer row per frame, and EvalSymlinks on
+			// the root each time was a per-row syscall.
+			if !s.rootResolved {
+				if r, err := filepath.EvalSymlinks(s.Root); err == nil {
+					s.resolvedRoot = r
+				}
+				s.rootResolved = true
+			}
+			if s.resolvedRoot == "" {
 				return "", false
 			}
-			if rel, ok = relInside(root, p); !ok {
+			p, err := filepath.EvalSymlinks(path)
+			if err != nil {
+				return "", false
+			}
+			if rel, ok = relInside(s.resolvedRoot, p); !ok {
 				return "", false
 			}
 		}
