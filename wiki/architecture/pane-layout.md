@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Pane Layout & Drag
-description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
+description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
 timestamp: 2026-07-24T00:00:00Z
@@ -269,9 +269,48 @@ per-project state file rather than `settings.toml`:
 - Save is **debounced to op/drag commit** (split, close, move, resize,
   open-in-new-pane), never written per motion frame.
 
+## Saved window layouts (#1175)
+
+`internal/app/layouts.go` + `layouts_ui.go` add JetBrains' **Window Layouts**:
+named, user-scoped snapshots of the split tree.
+
+- A **snapshot** is the tree with canonically re-keyed leaves plus a
+  **kind-only** identity per leaf — no paths, tab lists or revisions. Content
+  panes (editors, markdown previews, diff viewers, tab hosts) all become
+  anonymous *editor slots*; a tool pane keeps only its tool name (#741) so
+  apply can restart the program; the singleton panels keep their fixed keys.
+- The store is `layouts.json` in the **user** layer (`~/.ike/`, or
+  `IKE_CONFIG_DIR` like every other state file) — layouts are cross-project
+  preference, unlike the per-project `layout.json`. Schema: named
+  `persistedLayout` snapshots plus a `default` marker.
+- **Commands:** `window.saveLayout` prompts for a name in the floating shell
+  (save-as pattern; an existing name asks for a confirming second enter).
+  `window.layouts` opens a locked palette picker — enter applies,
+  shift+delete deletes in place (#1113's aux convention), the default row
+  carries a `default` chip. `window.setDefaultLayout` opens the same picker
+  with enter marking the default instead. `window.restoreLayout`
+  (**shift+F12**, JetBrains' Restore Default Layout) re-applies the default —
+  the built-in explorer+editor pair when none is designated.
+- **Apply** re-shapes the **active workspace only** (parked workspaces, #777,
+  are untouched) and never closes files: live content panes re-slot into the
+  layout's editor slots in order; surplus editor panes merge their tabs into
+  the last slot (terminal tabs move live via detach/re-attach, editor tabs
+  re-share their document, #142, so dirtiness and undo survive); surplus
+  markdown/diff viewers close; extra slots become scratch editors. Tool panes
+  absent from the layout lose their leaf but **stay registered** (the
+  hide-all-tools precedent) — running terminals are never killed. Plain
+  terminal slots reuse live shells in order, then spawn fresh ones; per-project
+  panels (problems, usages, VCS, debug, structure) restore empty exactly as
+  they do on project restore.
+- **New projects:** `restoreLayout` falls back to materializing the designated
+  default layout when the project has no persisted `layout.json`; the built-in
+  `layout.Default` pair stays the last resort. A project that saves its own
+  layout owns it again from then on.
+
 ## Out of scope
 
 Detached/floating OS windows, tabbed pane groups within one leaf, cross-pane
-shared buffers, maximise/zoom, named layout presets, keyboard binding *choices*
-for split/close/focus-move (Roadmap 0080 owns the keymap; the ops here are
-binding-agnostic), and drag animations.
+shared buffers, per-project named layouts, auto-applying a named layout on
+project switch, keyboard binding *choices* for split/close/focus-move
+(Roadmap 0080 owns the keymap; the ops here are binding-agnostic), and drag
+animations.

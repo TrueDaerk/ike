@@ -150,6 +150,7 @@ var jetbrainsRows = []row{
 	{"cmd+2", "nav.pins", "Pinned files", Global, "Pinned files (#788)"},
 	// JetBrains Hide All Tool Windows (#791).
 	{"cmd+shift+f12", "window.hideAllTools", "Hide all tool windows", Global, "Windowing (#791)"},
+	{"shift+f12", "window.restoreLayout", "Restore default layout", Global, "Windowing (#1175)"},
 	{"ctrl+tab", "pane.switcher", "Switch pane focus", Global, "App (01)"},
 	{"cmd+w", "editor.closeTab", "Close active tab", Global, "Editor (06)"},
 	// Editor tabs (0190, #158). Alt+digits jump straight to a tab (digits sit
