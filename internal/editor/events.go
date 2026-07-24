@@ -122,6 +122,9 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		m.dissolveFoldsAtEdit()
 		// Breakpoints shift the same way (0350, #577), through the app's store.
 		m.notifyBreakpointEdit()
+		// Marks shift with the same delta (#1151): local ones in place,
+		// global ones through the injected store adjuster (marks.go).
+		m.notifyMarkEdit()
 	}
 	if m.emitter == nil {
 		return

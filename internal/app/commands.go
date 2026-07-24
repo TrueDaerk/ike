@@ -296,6 +296,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("nav.back", "Navigate Back", NavBackMsg{}),
 			appCommand("nav.forward", "Navigate Forward", NavForwardMsg{}),
 			appCommand("nav.pins", "Pinned Files", PinPickerMsg{}),
+			appCommand("nav.bookmarks", "Bookmarks", ShowBookmarksMsg{}),
 			appCommand("nav.pinSlot1", "Pin File to Slot 1", PinSlotMsg{Slot: 1}),
 			appCommand("nav.pinSlot2", "Pin File to Slot 2", PinSlotMsg{Slot: 2}),
 			appCommand("nav.pinSlot3", "Pin File to Slot 3", PinSlotMsg{Slot: 3}),

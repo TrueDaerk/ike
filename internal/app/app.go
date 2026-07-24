@@ -45,6 +45,7 @@ import (
 	"ike/internal/largefile"
 	"ike/internal/layout"
 	"ike/internal/localhistory"
+	"ike/internal/marks"
 	ilsp "ike/internal/lsp"
 	"ike/internal/market"
 	"ike/internal/menu"
@@ -424,6 +425,11 @@ type Model struct {
 	// pasteHist is the palette mode over the focused editor's yank/delete
 	// history (#57), same pattern as refs.
 	pasteHist *pasteHistMode
+	// bookmarks is the palette mode over the vim marks (#1151), same
+	// pattern as refs; gmarks is the persistent global-mark store behind
+	// the m{A-Z} marks, injected into every editor like bpts.
+	bookmarks *bookmarksMode
+	gmarks    *marks.Store
 	// diffPick tracks diff.files' two-step file picking (#60): 0 idle, 1
 	// picking the left (old) file, 2 the right (new). diffLeft holds the
 	// first pick while the second is chosen.
@@ -597,6 +603,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	actions := &actionsMode{}
 	symbols := &symbolMode{}
 	pasteHist := &pasteHistMode{}
+	bookmarks := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	vcsSt := &vcsState{} // shared before the literal: the reverts picker mode reads it
@@ -624,12 +631,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, vcsSt, cmdUsage, wsMgr),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, wsMgr),
 		refs:           refs,
 		lspStatus:      map[string]string{},
 		symbols:        symbols,
 		actions:        actions,
 		pasteHist:      pasteHist,
+		bookmarks:      bookmarks,
+		gmarks:         &marks.Store{},
 		paletteKey:     paletteToggleKey(cfg),
 		splitZone:      splitZone(cfg),
 		focusKeys:      focusKeys(cfg),
@@ -913,10 +922,12 @@ func (m *Model) wireEditorEmitters() {
 func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		source, adjust := breakpointHooks(m.bpts)
+		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
 			ed.SetBreakpointSource(source)
 			ed.SetBreakpointAdjuster(adjust)
+			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
 			ed.SetCompletionMRU(m.compMRU)
 		}
 	}
@@ -1421,7 +1432,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1476,7 +1487,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, reverts, openPath)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, bookmarks, reverts, openPath)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3163,6 +3174,68 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+
+	case ShowBookmarksMsg:
+		// nav.bookmarks (palette, #1151): the focused editor's local marks
+		// plus the persistent global marks, locked to the bookmarks mode.
+		m.bookmarks.Set(m.focusedEditor(), m.gmarks)
+		if len(m.bookmarks.items) == 0 {
+			m.host.Notify(host.Info, "no bookmarks yet — set one with m + a letter (A-Z survives restarts)")
+			return m, nil
+		}
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, bookmarksPrefix)
+		return m, nil
+
+	case BookmarkJumpMsg:
+		// A picker row was chosen: local marks jump within the focused
+		// editor, global marks route through the standard open funnel so
+		// the navigation history records the departure.
+		if msg.Local {
+			if ed := m.focusedEditor(); ed != nil {
+				ed.JumpToLocalMark(msg.Letter)
+			}
+			return m, nil
+		}
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case BookmarkRemoveMsg:
+		// The aux action (#1151, the #842/#1113 prune pattern): drop the
+		// mark, keep the palette open, re-list without the entry.
+		if msg.Local {
+			if ed := m.focusedEditor(); ed != nil {
+				ed.RemoveLocalMark(msg.Letter)
+			}
+		} else {
+			m.gmarks.Remove(msg.Letter)
+		}
+		m.bookmarks.Set(m.focusedEditor(), m.gmarks)
+		m.palette.Refresh()
+		return m, nil
+
+	case editor.GlobalMarkJumpMsg:
+		// '{A-Z} / `{A-Z} in an editor (#1151): resolve against the store
+		// and open through the standard funnel — cross-file jumps open the
+		// file, same-file jumps record in the nav history. The quote form
+		// then settles on the line's first non-blank.
+		mk, ok := m.gmarks.Get(msg.Letter)
+		if !ok {
+			m.host.Notify(host.Info, "mark "+string(msg.Letter)+" not set")
+			return m, nil
+		}
+		col := 0
+		if msg.Exact {
+			col = mk.Col
+		}
+		model, cmd := m.openPathAt(mk.Path, mk.Line, col)
+		if !msg.Exact {
+			if mm, ok := model.(Model); ok {
+				if ed := mm.editorForPath(canonicalPath(mk.Path)); ed != nil {
+					ed.MoveToFirstNonBlank()
+				}
+			}
+		}
+		return model, cmd
 
 	case ShowScratchFilesMsg:
 		// scratch.list (palette / File menu): the scratch store newest-first,

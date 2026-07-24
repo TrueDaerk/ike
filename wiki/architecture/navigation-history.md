@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -26,10 +26,12 @@ menu entries, and the palette.
   caret jumps through the open funnel — switching files (explorer, finder,
   palette, `host.OpenFileRequest`), go-to-definition, a references-list
   pick, a find-in-path result — and for in-file jumps (#219): large
-  motions (`gg`, `G`, `{count}G`) and search landings (the initial `/`/`?`
-  jump, `n`/`N`, `*`/`#`). Small motions (hjkl, w/b, paragraphs, page
-  scrolls) never record, and an operator composed over a large motion
-  (`dG`) is an edit, not a jump.
+  motions (`gg`, `G`, `{count}G`), search landings (the initial `/`/`?`
+  jump, `n`/`N`, `*`/`#`), and vim-mark jumps (#1151: `'{x}` / `` `{x} ``
+  and the `nav.bookmarks` picker — global marks route through the open
+  funnel, local ones emit the same jump event). Small motions (hjkl, w/b,
+  paragraphs, page scrolls) never record, and an operator composed over a
+  large motion (`dG`) is an edit, not a jump.
 - **Back** returns to the departure point; **forward** re-traverses after a
   back. A fresh jump while back in history truncates the forward tail.
 - **Dedup**: consecutive entries on the same file+line collapse (keeping
