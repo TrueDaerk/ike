@@ -76,7 +76,9 @@ multi-step state. Each `Feed(key, context)` returns:
 
 - **Pending** — the sequence is a prefix of a longer chord; the caller arms a
   `TimeoutDuration` (600ms) timer. A prefix wins over an equal-length exact match
-  (so `cmd+k down` stays reachable); the exact `cmd+k` is recovered on `Timeout`.
+  (so `cmd+k down` stays reachable); an exact binding on the bare prefix is
+  recovered on `Timeout` (none exists by default since #750 — `cmd+k` alone
+  simply times out and the sequence family is unaffected).
 - **Resolved** — a binding matched; `Command` carries the id.
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
@@ -257,9 +259,11 @@ first-keystroke="meta pressed S"/></action></keymap>`) into
 
 Vim-internal keymaps inside the editor (normal/insert/visual motions, operators,
 text objects) belong to Roadmap 0060 and are **not** in this table — this package
-owns only global / IDE-level shortcuts. The VCS ids (`vcs.commit`,
-`vcs.updateProject`, `vcs.revertFile`, …) went live with Epic 0320 — see
-[VCS / Git Integration](/architecture/vcs.md); their fragile Cmd primaries stay
+owns only global / IDE-level shortcuts. The file-context VCS ids
+(`vcs.revertFile`, `vcs.diff`, `vcs.panel`, …) went live with Epic 0320 — see
+[VCS / Git Integration](/architecture/vcs.md); the workflow ids (`vcs.commit`
+on `cmd+k`, `vcs.updateProject` on `cmd+t`, `vcs.branches`) were removed in
+#750 in favour of custom tool panes (lazygit). Fragile Cmd primaries stay
 reachable through the palette, and the
 blocked ledger is currently empty (its machinery stays test-covered through
 `keymap.StubBlockedForTest`).
@@ -443,9 +447,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `terminal.new` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
-| `vcs.commit` | `cmd+k` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
-| `vcs.updateProject` | `cmd+t` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |

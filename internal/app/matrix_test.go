@@ -32,13 +32,21 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["lsp.rename"]; r.Primary != "shift+f6" || r.Status() != "live" {
 		t.Errorf("lsp.rename = %+v", r)
 	}
-	// The VCS ids went live with 0320: fragile Cmd primaries, the palette as
-	// the delivered path since the leader layer retired (#711).
-	if r := byCmd["vcs.commit"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
-		t.Errorf("vcs.commit = %+v", r)
+	// The VCS workflow ids (vcs.commit, vcs.updateProject, vcs.branches) were
+	// removed in #750 — git workflow is delegated to custom tool panes — so
+	// the matrix must not list them anymore.
+	for _, gone := range []string{"vcs.commit", "vcs.updateProject", "vcs.branches"} {
+		if _, ok := byCmd[gone]; ok {
+			t.Errorf("%s must not appear in the matrix after #750", gone)
+		}
 	}
-	if r := byCmd["vcs.updateProject"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
-		t.Errorf("vcs.updateProject = %+v", r)
+	// The remaining VCS ids stay: fragile Cmd primaries, the palette as the
+	// delivered path since the leader layer retired (#711).
+	if r := byCmd["vcs.revertFile"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
+		t.Errorf("vcs.revertFile = %+v", r)
+	}
+	if r := byCmd["vcs.panel"]; r.Fallback != "palette" || !strings.Contains(r.Status(), "live") {
+		t.Errorf("vcs.panel = %+v", r)
 	}
 	// The blocked ledger emptied with 0320 (#466): the blocked-status label
 	// machinery is exercised through a stubbed entry.

@@ -90,7 +90,6 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.menu.SetPalette(p)
 	m.ctxMenu.SetPalette(p)
 	m.settings.SetPalette(p)
-	m.commitUI.SetPalette(p)
 }
 
 // selectTheme switches the active color scheme by name: resolve against

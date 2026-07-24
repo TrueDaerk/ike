@@ -51,7 +51,7 @@ var essentialGroups = []essentialGroup{
 		"run.file",
 		"debug.start",
 		"vcs.panel",
-		"vcs.commit",
+		"vcs.diff",
 	}},
 	{"Customize", []string{
 		"settings.open",

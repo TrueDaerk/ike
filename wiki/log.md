@@ -2,6 +2,16 @@
 
 ## 2026-07-24
 
+- The VCS tool window slims to file-context features (#750): the panel is
+  now a read-only changes list (enter/double-click = diff-vs-HEAD; no
+  staging, no commit message, no Log tab), the commit dialog
+  (`internal/commitui`) and the `vcs.commit` (cmd+k), `vcs.updateProject`
+  (cmd+t) and `vcs.branches` commands are removed — the `cmd+k` pane-split
+  sequences keep working, the bare prefix just times out. Git workflow is
+  delegated to custom tool panes: lazygit ships preconfigured in the default
+  config whenever it is on PATH (`/architecture/vcs.md`,
+  `/architecture/tool-panes.md`, `/architecture/keybindings.md`).
+
 - Large-file mode stops being silent (#1124, #1125): a persistent,
   dismissible banner over the focused flagged editor names the cause and
   both remedies (click = Force Code Insight, ✕/esc = dismiss per document),

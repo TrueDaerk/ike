@@ -1,11 +1,58 @@
 package config
 
-import "ike/internal/largefile"
+import (
+	"os/exec"
+	"sync"
+
+	"ike/internal/largefile"
+)
 
 // defaults.go constructs the lowest-precedence layer in code, so IKE works with
 // zero config files present. Slot maps are initialised non-nil and empty so
 // higher layers (and extensions) merge into them by key rather than replacing a
 // nil map wholesale.
+
+// lookPath resolves a binary on PATH; a seam for tests.
+var lookPath = exec.LookPath
+
+// lazygitProbe caches one PATH probe per process — defaults() runs on every
+// config Get before the first Set, and PATH does not change under IKE.
+var lazygitProbe struct {
+	once sync.Once
+	ok   bool
+}
+
+func lazygitOnPath() bool {
+	lazygitProbe.once.Do(func() {
+		_, err := lookPath("lazygit")
+		lazygitProbe.ok = err == nil
+	})
+	return lazygitProbe.ok
+}
+
+// resetLazygitProbe re-arms the cached PATH probe; intended for tests only.
+func resetLazygitProbe() {
+	lazygitProbe.once = sync.Once{}
+	lazygitProbe.ok = false
+}
+
+// defaultTools returns the default [[tools.custom]] entries (#750): lazygit
+// ships preconfigured as the example git-workflow tool pane whenever it is on
+// PATH — the native VCS tool window is file-context only, workflow is
+// delegated to tool panes (#741). When lazygit is missing there is no hard
+// dependency: the entry is omitted and the tools.setup onboarding offers it
+// as an install suggestion instead (internal/toolcatalog). A user-defined
+// tools.custom list overrides this default wholesale, like any other setting.
+func defaultTools() []ToolEntry {
+	if !lazygitOnPath() {
+		return nil
+	}
+	return []ToolEntry{{
+		Name:      "lazygit",
+		Command:   "lazygit",
+		Placement: "bottom",
+	}}
+}
 
 // defaults returns a freshly allocated default Config. It is a function, not a
 // package var, so callers can never mutate a shared baseline.
@@ -98,7 +145,8 @@ func defaults() *Config {
 		Terminal: Terminal{
 			Autosuggest: true,
 		},
-		Lang: map[string]map[string]string{},
+		Lang:  map[string]map[string]string{},
+		Tools: Tools{Custom: defaultTools()},
 		Todo: Todo{
 			Patterns: []string{"TODO", "FIXME", "HACK", "XXX"},
 		},

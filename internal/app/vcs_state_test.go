@@ -1,12 +1,10 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/commitui"
 	"ike/internal/host"
 	"ike/internal/registry"
 	"ike/internal/vcs"
@@ -76,98 +74,6 @@ func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusModified})
 	if msg := m.vcsMarksCmd(ed)().(vcs.MarksMsg); msg.Path != path {
 		t.Fatalf("modified marks path = %q", msg.Path)
-	}
-}
-
-func TestCommitDialogLifecycle(t *testing.T) {
-	m := vcsApp(t)
-	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m = out.(Model)
-
-	// Outside a repo the command degrades to a hint.
-	out, _ = m.Update(OpenCommitMsg{})
-	m = out.(Model)
-	if m.commitUI.IsOpen() {
-		t.Fatal("dialog must not open without a snapshot")
-	}
-
-	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main",
-		Entries: []vcs.FileEntry{{Path: "a.go", Status: vcs.StatusModified, X: '.', Y: 'M'}}}
-	out, _ = m.Update(OpenCommitMsg{})
-	m = out.(Model)
-	if !m.commitUI.IsOpen() {
-		t.Fatal("dialog should open on a repo")
-	}
-
-	// While open, keys go to the dialog: space on the first row emits the
-	// stage toggle, which the app answers with a git command.
-	out, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
-	m = out.(Model)
-	if cmd == nil {
-		t.Fatal("stage toggle produced no command")
-	}
-	tgl, ok := cmd().(commitui.ToggleMsg)
-	if !ok || tgl.Path != "a.go" || !tgl.Stage {
-		t.Fatalf("toggle = %#v", tgl)
-	}
-
-	// A successful commit closes the dialog, clears the message, toasts.
-	out, _ = m.Update(vcs.CommitDoneMsg{Hash: "abc1234", Summary: "feat: x"})
-	m = out.(Model)
-	if m.commitUI.IsOpen() || m.commitUI.Message() != "" {
-		t.Fatal("successful commit must close and clear")
-	}
-
-	// A refresh with a nil snapshot closes a reopened dialog.
-	out, _ = m.Update(OpenCommitMsg{})
-	m = out.(Model)
-	out, _ = m.Update(vcs.SnapshotMsg{Snap: nil})
-	m = out.(Model)
-	if m.commitUI.IsOpen() {
-		t.Fatal("losing the repo must close the dialog")
-	}
-}
-
-func TestUpdateProjectGuards(t *testing.T) {
-	m := vcsApp(t)
-	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	m = out.(Model)
-
-	// toastText drains the host queue and returns the newest toast.
-	toastText := func() string {
-		out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-		m = out.(Model)
-		if len(m.toasts) == 0 {
-			return ""
-		}
-		return m.toasts[0].text // newest first
-	}
-
-	// Outside a repo: hint instead of a git run.
-	out, _ = m.Update(UpdateProjectMsg{})
-	m = out.(Model)
-	if got := toastText(); got != "not a git repository" {
-		t.Fatalf("no-repo toast = %q", got)
-	}
-
-	// Dirty tree: blocked with a warning (0082/29 — no surprise loss).
-	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main",
-		Entries: []vcs.FileEntry{{Path: "a.go", Status: vcs.StatusModified}}}
-	out, _ = m.Update(UpdateProjectMsg{})
-	m = out.(Model)
-	if got := toastText(); !strings.Contains(got, "uncommitted changes") {
-		t.Fatalf("dirty-tree toast = %q", got)
-	}
-
-	// Clean tree launches the pull with a progress toast.
-	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}
-	out, cmd := m.Update(UpdateProjectMsg{})
-	m = out.(Model)
-	if cmd == nil {
-		t.Fatal("clean tree must launch the update")
-	}
-	if got := toastText(); !strings.Contains(got, "updating project") {
-		t.Fatalf("progress toast = %q", got)
 	}
 }
 
