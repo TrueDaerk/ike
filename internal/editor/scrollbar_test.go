@@ -198,7 +198,7 @@ func TestScrollbarRenders(t *testing.T) {
 		case y == 5:
 			want = '■'
 		case y >= start && y < start+length:
-			want = '┃'
+			want = ' ' // the thumb is a background block since #1138
 		default:
 			want = '│'
 		}
@@ -270,11 +270,12 @@ func TestScrollbarGitMarks(t *testing.T) {
 	if !strings.Contains(joined, "▎") {
 		t.Fatal("git mark cell missing")
 	}
-	// The thumb keeps its glyph even where a mark lands on it (a file full
-	// of changes must not erase the thumb): row 0 sits inside the thumb and
-	// carries the deleted mark — rendered as a coloured ┃, never ▎.
-	if !strings.Contains(out[0], "┃") || strings.Contains(out[0], "▎") {
-		t.Fatalf("thumb row must keep the thumb glyph, got %q", out[0])
+	// The thumb reads as a background block (#1138): a thumb row carrying a
+	// mark renders the mark glyph ON the ScrollbarThumb background, so the
+	// thumb extent stays identifiable in a fully-marked file while the mark
+	// keeps its colour.
+	if !strings.Contains(out[0], "48;2;") || !strings.Contains(out[0], "▎") {
+		t.Fatalf("thumb row must carry the thumb background under the mark, got %q", out[0])
 	}
 }
 
