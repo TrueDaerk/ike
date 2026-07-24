@@ -245,13 +245,14 @@ func (m *Model) View() string {
 		return b.String()
 	}
 	m.scrollToCursor()
+	base := lipgloss.NewStyle().Foreground(pal.Foreground) // built once (#1100)
 	for k := 0; k < height; k++ {
 		b.WriteString("\n")
 		i := m.top + k
 		if i >= len(m.rows) {
 			continue
 		}
-		b.WriteString(m.renderRow(pal, i))
+		b.WriteString(m.renderRow(pal, base, i))
 	}
 	return b.String()
 }
@@ -282,7 +283,7 @@ func (m *Model) emptyNotice() string {
 }
 
 // renderRow draws one symbol row: indent, kind glyph, name, faint detail.
-func (m *Model) renderRow(pal *theme.Palette, i int) string {
+func (m *Model) renderRow(pal *theme.Palette, base lipgloss.Style, i int) string {
 	r := m.rows[i]
 	glyph := KindGlyph(r.Kind)
 	line := " " + strings.Repeat("  ", r.Depth) + glyph + " " + r.Name
@@ -290,7 +291,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		line += " " + r.Detail
 	}
 	line = clip(line, m.width)
-	style := lipgloss.NewStyle().Foreground(pal.Foreground)
+	style := base
 	switch {
 	case i == m.cursor && m.focused:
 		style = style.Background(pal.Selection).Bold(true)

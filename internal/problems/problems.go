@@ -330,11 +330,12 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 		return lipgloss.NewStyle().Faint(true).Render(" "+m.emptyText()) + strings.Repeat("\n", height)
 	}
 	m.clampScroll()
+	rs := m.rowStyles(pal) // loop-invariant styles, built once (#1100)
 	var b strings.Builder
 	for k := 0; k < height; k++ {
 		i := m.top + k
 		if i < len(m.rows) {
-			b.WriteString(m.renderRow(pal, i))
+			b.WriteString(m.renderRow(pal, rs, i))
 		}
 		b.WriteString("\n")
 	}
@@ -353,13 +354,27 @@ func (m *Model) emptyText() string {
 }
 
 // renderRow draws one line: file headers accented, diagnostics glyph-tagged.
-func (m *Model) renderRow(pal *theme.Palette, i int) string {
+// rowBaseStyles holds the loop-invariant row styles, built once per View
+// call (#1100) instead of per row.
+type rowBaseStyles struct {
+	base   lipgloss.Style
+	header lipgloss.Style
+}
+
+func (m *Model) rowStyles(pal *theme.Palette) rowBaseStyles {
+	return rowBaseStyles{
+		base:   lipgloss.NewStyle().Foreground(pal.Foreground),
+		header: lipgloss.NewStyle().Foreground(pal.Accent).Bold(true),
+	}
+}
+
+func (m *Model) renderRow(pal *theme.Palette, rs rowBaseStyles, i int) string {
 	r := m.rows[i]
 	var line string
-	style := lipgloss.NewStyle().Foreground(pal.Foreground)
+	style := rs.base
 	if r.header {
 		line = " " + m.shorten(r.path)
-		style = lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+		style = rs.header
 	} else {
 		pos := strconv.Itoa(r.d.Range.Start.Line+1) + ":" + strconv.Itoa(r.d.Range.Start.Col+1)
 		msg := r.d.Message

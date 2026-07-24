@@ -1767,22 +1767,47 @@ func (m Model) resolveVCS(n *node) rowVCS {
 	return rv
 }
 
-// nodeStyleVCS is nodeStyle over pre-resolved VCS facts (#1099).
-func (m Model) nodeStyleVCS(n *node, rv rowVCS) lipgloss.Style {
-	s := lipgloss.NewStyle().Foreground(m.theme().Foreground)
-	if c := vcs.StatusColor(m.theme(), rv.status); c != nil {
+// rowStyleSet holds one frame's loop-invariant style building blocks
+// (#1100): base styles and colours are constructed once per View call
+// instead of chaining ~400-byte lipgloss setters per row.
+type rowStyleSet struct {
+	pal     *theme.Palette
+	plain   lipgloss.Style
+	accent  lipgloss.Style
+	ignored lipgloss.Style
+}
+
+// styleSet builds the frame's style building blocks.
+func (m Model) styleSet() rowStyleSet {
+	pal := m.theme()
+	return rowStyleSet{
+		pal:     pal,
+		plain:   lipgloss.NewStyle().Foreground(pal.Foreground),
+		accent:  lipgloss.NewStyle().Foreground(pal.Accent),
+		ignored: lipgloss.NewStyle().Foreground(ignoredFg(pal)),
+	}
+}
+
+// baseStyle picks a row's base foreground style from the frame set (#1100):
+// VCS hue, dimmed-ignored, or plain — plus italics for hidden entries.
+func (ss rowStyleSet) baseStyle(n *node, rv rowVCS) lipgloss.Style {
+	s := ss.plain
+	if c := vcs.StatusColor(ss.pal, rv.status); c != nil {
 		s = s.Foreground(c)
 	} else if rv.ignored {
-		// Gitignored rows read uniformly dimmed, JetBrains-style (#1045):
-		// the foreground mixed toward the surface. Ranks below every real
-		// VCS status (an ignored path never carries one) and below the
-		// untracked hue.
-		s = s.Foreground(ignoredFg(m.theme()))
+		// Gitignored rows read uniformly dimmed, JetBrains-style (#1045);
+		// the Mix now runs once per frame in styleSet, not per row.
+		s = ss.ignored
 	}
 	if isHidden(n.name) {
 		s = s.Italic(true)
 	}
 	return s
+}
+
+// nodeStyleVCS is nodeStyle over pre-resolved VCS facts (#1099).
+func (m Model) nodeStyleVCS(n *node, rv rowVCS) lipgloss.Style {
+	return m.styleSet().baseStyle(n, rv)
 }
 
 // ignoredFg is the dimmed foreground for gitignored rows (#1045): the plain
@@ -1857,6 +1882,7 @@ func (m Model) View() string {
 	textW, textH, needV, needH, contentW := m.viewport()
 	offY := clamp(m.offset, 0, maxz(len(m.rows)-textH))
 	offX := clamp(m.offsetX, 0, maxz(contentW-textW))
+	ss := m.styleSet() // frame-invariant style blocks, built once (#1100)
 
 	vStart, vLen := scrollThumb(textH, len(m.rows), textH, offY)
 
@@ -1867,7 +1893,7 @@ func (m Model) View() string {
 		if i < len(m.rows) {
 			n := m.rows[i]
 			rv := m.resolveVCS(n) // one snapshot resolution per row (#1099)
-			style := m.rowStyleVCS(i, n, rv)
+			style := m.rowStyleSetVCS(i, n, rv, ss)
 			nameStyle := style
 			if m.open[n.path] {
 				// Every file open in an editor reads underlined — on the name
@@ -1996,21 +2022,27 @@ func (m Model) rowStyle(i int, n *node) lipgloss.Style {
 
 // rowStyleVCS is rowStyle over pre-resolved VCS facts (#1099).
 func (m Model) rowStyleVCS(i int, n *node, rv rowVCS) lipgloss.Style {
-	base := m.nodeStyleVCS(n, rv)
+	ss := m.styleSet()
+	return m.rowStyleSetVCS(i, n, rv, ss)
+}
+
+// rowStyleSetVCS is rowStyleVCS over a per-frame style set (#1100).
+func (m Model) rowStyleSetVCS(i int, n *node, rv rowVCS, ss rowStyleSet) lipgloss.Style {
+	base := ss.baseStyle(n, rv)
 	if n.path == m.active && m.active != "" {
-		base = m.activeStyle()
+		base = ss.accent
 	}
 	switch m.rowKind(i) {
 	case rowSelected:
-		return base.Background(m.theme().Selection).Bold(true)
+		return base.Background(ss.pal.Selection).Bold(true)
 	case rowRange, rowCursorIdle:
 		// Multi-select members (#1044) share the muted-selection recipe with
 		// the unfocused cursor (#1034): a background overlay only, so the
 		// semantic foreground stays readable; the cursor row keeps the full
 		// Selection recipe above and reads as the range's active end.
-		return base.Background(m.theme().SelectionMuted)
+		return base.Background(ss.pal.SelectionMuted)
 	case rowHover:
-		return base.Background(m.theme().Panel)
+		return base.Background(ss.pal.Panel)
 	default:
 		return base
 	}
