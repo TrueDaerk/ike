@@ -32,6 +32,7 @@ type Language struct {
 
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
+    UseTabs      *bool      // indent-style default (#1137): tabs/spaces; nil = no opinion
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
     Template     string     // initial content for new files (#170); "" = start empty
@@ -162,6 +163,17 @@ the official grammar with `<script>`/`<style>` injections into
 typescript/css; `css` uses the official grammar (scss/less parse best-effort
 — error-tolerant spans still color the shared subset).
 The grammar/query for the first three moved here out of the highlight engine.
+And `make` (#1136, alemuller/tree-sitter-make — **vendored C source** under
+the plugin's `grammar/`, upstream ships no Go binding; matches
+`Makefile`/`makefile`/`GNUmakefile` by exact base name plus the `.mk`
+extension). Recipe bodies inject the shell grammar through the fragment seam
+(`queries/injections.scm`, the same mechanism HTML uses for
+`<script>`/`<style>`), so recipe lines highlight as shell while `$(VAR)`
+references keep their Makefile colouring; no LSP server exists for Makefiles,
+so it is highlighting-only. Make recipes require a literal tab, so the
+language declares the `UseTabs` indent default (#1137, see
+[EditorConfig](./editorconfig.md) for the resolution order); Go declares it
+too (gofmt output is tab-indented).
 
 ### Server delegation (#1063)
 
@@ -173,15 +185,21 @@ registers `go.mod`, `go.work` and `go.sum` as filename-matched languages
 delegating to `go` — a `go.mod` buffer attaches to the very gopls instance
 (same root, same process) that serves the module's `.go` files, with the wire
 languageIds `go.mod`/`go.work`/`go.sum` gopls documents, so hover on require
-lines and go.mod diagnostics work. `go.mod` and `go.work` highlight via the
+lines and go.mod diagnostics work. `go.mod` highlights via the
 camdencheek/tree-sitter-go-mod grammar (#1078, **vendored C source** under the
 go plugin's `grammar/` like the Dockerfile grammar by the same author —
 upstream's go.mod declares a module path that does not match the repository,
 so it is not importable as a Go module; vendored from main so the Go 1.24/1.25
-`tool` and `ignore` directives parse). The grammar has no `use` directive, so
-`use` lines in go.work fall into error recovery while the other directives and
-comments still highlight. `go.sum` stays plain — no grammar exists, content is
-hashes. All three register with plain
+`tool` and `ignore` directives parse). `go.work` highlights via the dedicated
+omertuc/tree-sitter-go-work grammar (#1119, vendored under `grammar_gowork/`
+with the same pinned-sha pattern; parser.c regenerated from the pinned
+grammar.json with tree-sitter-cli 0.25.10 so both grammars in the package
+share one `tree_sitter/parser.h` generation — cgo merges C definitions
+per package): the gomod grammar has no `use` directive, so `use` lines fell
+into error recovery; now single and block `use` highlight. Trade-off: the
+go-work grammar predates Go 1.21's `toolchain` directive, so a `toolchain`
+line in go.work error-recovers instead. `go.sum` stays plain — no grammar
+exists, content is hashes. All three register with plain
 `lang.Register`, not `register.Language`: the `lang-go` plugin toggle governs
 the shared server, and a dotted plugin id would splinter the config key.
 Gating helpers: `Language.HasServer()` is true for a language with its own
@@ -378,6 +396,7 @@ projects so pyproject.toml and uv.lock stay in sync — see
 | JSON | vscode-json-language-server (`vscode-langservers-extracted`) | Same npm package as HTML/CSS — no new install step; JSON-Schema-store + `$schema` completion for free. ndjson/jsonl: no server (multi-document streams are an error to it). |
 | TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics. IKE's own config is TOML. **Caveat:** the Homebrew `taplo` formula is built *without* the LSP feature and dies at startup; IKE recognizes that failure and points at `npm install -g @taplo/cli` (or `cargo install taplo-cli --features lsp`), #1065. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
+| Makefile | — (none) | No mainstream Makefile language server exists (#1136) — highlighting only, with recipe bodies injected as shell; tab indentation by default (#1137). |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 | Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH (declared companion — a one-time hint fires when it is missing, #1067). |
 | Markdown | marksman (`marksman server`, `brew install marksman`) | Single static binary; completes link targets, heading anchors, wiki-links, reference labels. Prose keeps the word-index source. |

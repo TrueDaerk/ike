@@ -6,6 +6,25 @@
   keep their colour as foreground glyphs on the ScrollbarThumb background,
   so the thumb extent stays identifiable under dense git/diagnostic marks
   (`/architecture/editor.md`).
+- Makefile language plugin (#1136): alemuller/tree-sitter-make vendored as C
+  source, matched by `Makefile`/`makefile`/`GNUmakefile` base names + `.mk`;
+  recipe bodies highlight as shell via the fragment injection seam; `#` line
+  comments, rule folding/sticky scopes, no LSP server
+  (`/architecture/languages.md`).
+
+- Per-language indent default (#1137): `lang.Language.UseTabs` layers between
+  `editor.use_spaces` and `.editorconfig` — make (recipes require a literal
+  tab) and go/go.mod/go.work (gofmt) default to tabs; Tab, Enter auto-indent
+  and `o` produce tabs in those buffers, an explicit `.editorconfig`
+  `indent_style` still wins (`/architecture/editorconfig.md`,
+  `/architecture/languages.md`).
+
+- Dedicated go.work grammar (#1119): omertuc/tree-sitter-go-work vendored
+  under the go plugin's `grammar_gowork/` (parser regenerated with
+  tree-sitter-cli 0.25.10 to share the package's parser.h generation);
+  `use` — single and block — now highlights; known trade-off: the grammar
+  predates the Go 1.21 `toolchain` directive
+  (`/architecture/languages.md`).
 
 - Scrollbar thumb survives dense change marks and the viewport stops at the
   last line (#1134): thumb rows keep their glyph and only take the mark's

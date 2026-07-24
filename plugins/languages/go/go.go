@@ -20,6 +20,16 @@ var injections string
 //go:embed queries/gomod.scm
 var gomodQuery string
 
+//go:embed queries/gowork.scm
+var goworkQuery string
+
+// tabs is the per-language indent default (#1137): gofmt output is
+// tab-indented, so Go buffers (and the gofmt-formatted module metadata files)
+// indent with tabs regardless of editor.use_spaces (.editorconfig still
+// overrides). Declared as a variable because Language.UseTabs is a *bool
+// (nil = no language opinion).
+var tabs = true
+
 func init() {
 	register.Language(lang.Language{
 		ID:         "go",
@@ -47,6 +57,7 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		UseTabs:      &tabs,
 		// Sticky-scroll scopes (#168): declarations whose header line stays
 		// pinned while scrolling through the body.
 		ScopeNodes: []string{"function_declaration", "method_declaration", "func_literal", "type_declaration"},
@@ -69,11 +80,12 @@ func init() {
 	// the same instance/root as the module's .go files. Registered with plain
 	// lang.Register, not register.Language: they are part of the go plugin
 	// (its lang-go toggle governs the shared server), and a dotted plugin id
-	// would splinter the plugins.<id>.enabled config key. go.mod and go.work
-	// are highlighted by the vendored tree-sitter-go-mod grammar (#1078); the
-	// grammar has no `use` directive, so in go.work files `use` lines fall
-	// into error recovery while go/toolchain/replace and comments still
-	// highlight. go.sum stays plain — no grammar exists, content is hashes.
+	// would splinter the plugins.<id>.enabled config key. go.mod is
+	// highlighted by the vendored tree-sitter-go-mod grammar (#1078); go.work
+	// by the dedicated vendored tree-sitter-go-work grammar (#1119), whose
+	// `use` directive the gomod grammar lacks — see grammar_gowork_cgo.go for
+	// the vendoring notes and the `toolchain` trade-off. go.sum stays plain —
+	// no grammar exists, content is hashes.
 	lang.Register(lang.Language{
 		ID:             "go.mod",
 		Filenames:      []string{"go.mod"},
@@ -81,14 +93,16 @@ func init() {
 		Grammar:        gomodGrammar(),
 		LineComment:    "//",
 		IndentAfter:    []string{"("},
+		UseTabs:        &tabs,
 	})
 	lang.Register(lang.Language{
 		ID:             "go.work",
 		Filenames:      []string{"go.work"},
 		ServerLanguage: "go",
-		Grammar:        gomodGrammar(),
+		Grammar:        goworkGrammar(),
 		LineComment:    "//",
 		IndentAfter:    []string{"("},
+		UseTabs:        &tabs,
 	})
 	lang.Register(lang.Language{
 		ID:             "go.sum",
