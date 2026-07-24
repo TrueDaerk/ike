@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-23T18:00:00Z
+timestamp: 2026-07-24T15:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -390,12 +390,12 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `editor.tab.select7` | `alt+7` | fragile | `palette` | live via palette |
 | `editor.tab.select8` | `alt+8` | fragile | `palette` | live via palette |
 | `editor.tab.select9` | `alt+9` | fragile | `palette` | live via palette |
-| `editor.undo` | `ctrl+z` | delivered | `—` | live |
+| `editor.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
-| `explorer.undo` | `ctrl+z` | delivered | `—` | live |
+| `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |

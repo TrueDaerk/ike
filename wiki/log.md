@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Undo gets the cmd+z default (#1117): dual-chord like save/redo — cmd+z
+  where the terminal delivers Cmd, ctrl+z as the everywhere fallback; the
+  stale "cmd is undeliverable" comment corrected
+  (`/architecture/keybindings.md`).
+
 - go.mod/go.work Tree-sitter highlighting (#1078): the
   camdencheek/tree-sitter-go-mod grammar is vendored as C source under the go
   plugin's `grammar/` (upstream's Go binding module path mismatches the repo,
