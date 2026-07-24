@@ -33,6 +33,16 @@ type TabMoveMsg struct{ Delta int }
 // cursor from the closed-tab ring. Dispatched by editor.tab.reopenClosed.
 type TabReopenMsg struct{}
 
+// TabCloseOthersMsg closes every tab of the active editor pane except the
+// active one (#1128); tabs with unsaved changes stay open. Dispatched by
+// editor.tab.closeOthers (tab context menu / palette).
+type TabCloseOthersMsg struct{}
+
+// ClosePaneMsg closes the focused pane whole — every tab at once — behind the
+// unsaved-changes guard (#1128). Dispatched by pane.close (pane-title context
+// menu / palette).
+type ClosePaneMsg struct{}
+
 // ForceCodeInsightMsg asks the root model to lift the large-file degradation
 // (#149) for the focused document: highlighting reparses and the LSP bridge
 // didOpens despite the size. Dispatched by editor.forceCodeInsight.
@@ -254,6 +264,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		appCommand("editor.tab.moveLeft", "Move Tab Left", TabMoveMsg{Delta: -1}),
 		appCommand("editor.tab.moveRight", "Move Tab Right", TabMoveMsg{Delta: 1}),
 		appCommand("editor.tab.reopenClosed", "Reopen Closed Tab", TabReopenMsg{}),
+		appCommand("editor.tab.closeOthers", "Close Other Tabs", TabCloseOthersMsg{}),
 	}
 	for i := 1; i <= 9; i++ {
 		n := strconv.Itoa(i)
@@ -320,6 +331,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("editor.pasteFromHistory", "Paste from History", ShowPasteHistoryMsg{}),
 			appCommand("editor.forceCodeInsight", "Force Code Insight (Large File)", ForceCodeInsightMsg{}),
 			appCommand("pane.maximize", "Maximize Pane", MaximizePaneMsg{}),
+			appCommand("pane.close", "Close Pane", ClosePaneMsg{}),
 			appCommand("view.zenMode", "Zen Mode", ZenModeMsg{}),
 			appCommand("window.hideAllTools", "Hide All Tool Windows", HideToolWindowsMsg{}),
 			appCommand("vcs.revertFile", "Revert File", RevertActiveFileMsg{}),

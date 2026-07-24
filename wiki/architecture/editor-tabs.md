@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — each editor pane hosts an ordered tab list (documents and embedded terminals) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, shared-documents, close]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Editor Tabs
@@ -182,18 +182,31 @@ tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping
 files deleted since, and restores the caret via the standard open flow. A
 "Reopen Closed Tab" item joins the File menu.
 
-## Mouse on the bar (#159)
+## Mouse on the bar (#159, #1128)
 
-`tabAt` mirrors the renderer's geometry exactly (window, padding, separators,
-ellipses), so clicks land on what is drawn; `tabBarHit` maps an absolute cell
-to (pane, tab) — only on the bar row of editor panes actually showing a bar.
+`tabHit` mirrors the renderer's geometry exactly (window, padding, separators,
+ellipses, close zones), so clicks land on what is drawn; `tabBarHit` maps an
+absolute cell to (pane, tab, on-close) — only on the bar row of editor panes
+actually showing a bar.
 
 - **Left-click** on an inactive segment focuses the pane and activates that
   tab. The active tab's own segment — and the row outside the segments —
   still starts a **pane move**, keeping the title row as the drag handle.
+- **Close button (#1128).** Every segment renders a trailing muted `✕`
+  (`" label ✕ "`); a left press on that cell closes the clicked tab like a
+  middle click. A dirty tab is selected first so the unsaved-changes guard
+  targets it. The lone truncated segment of a very narrow bar drops its `✕`
+  (no room), and its cells all hit-test as the plain tab.
 - **Middle-click** closes the clicked tab with the same guard as
   `editor.closeTab` (backup snapshot kept while the document is open
   elsewhere; the reopen ring is fed); a single-tab pane closes entirely.
+- **Right-click (#1128)** on a segment selects that tab — like the left-click
+  focus path — and opens the shared floating context menu (`menu.Context`,
+  #1020) with **Close** (`editor.closeTab`, targeting the now-active clicked
+  tab), **Close Others** (`editor.tab.closeOthers` — closes every other tab;
+  dirty ones stay open with a notification) and **Reopen Closed**
+  (`editor.tab.reopenClosed`). The title band outside the segments opens the
+  pane menu instead (see [Pane Layout & Drag](/architecture/pane-layout.md)).
 - **Wheel** over the bar row cycles tabs (up = previous, down = next) instead
   of scrolling the viewport; below the bar the wheel scrolls as before.
 

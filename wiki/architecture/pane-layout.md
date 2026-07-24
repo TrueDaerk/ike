@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -55,6 +55,15 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   the press cell — one row vertically or `moveEngageCols` columns sideways
   (#559): before that, no move feedback (status hint, source marker, ghost)
   renders and a release is a plain click that only focuses.
+- **Right press on the title band (#1128)** opens the pane context menu in the
+  shared floating shell (`menu.Context`, #1020) instead of starting a move:
+  the pane is focused first, then **Split Right** / **Split Down**
+  (`pane.splitRight` / `pane.splitDown`), **Maximize** (`pane.maximize`) and
+  **Close Pane** (`pane.close`, new — closes the leaf with *all* its tabs
+  behind the unsaved-changes guard; `closePane` is the shared unguarded close
+  the dead tool pane's ✕ uses too). A right press on a tab-bar *segment*
+  opens the tab menu instead (see
+  [Editor Tabs](/architecture/editor-tabs.md)).
 - **Motion** during a resize calls `Divider.ResizeTo`, which updates the owning
   split's ratio, **clamped** so neither child drops below a minimum cell size — a
   pane can never be dragged to zero. Motion events are folded by the input

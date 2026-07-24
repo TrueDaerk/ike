@@ -25,15 +25,16 @@ func barCell(t *testing.T, m Model, dx int) (int, int) {
 }
 
 func TestTabAtGeometry(t *testing.T) {
-	labels := []string{"aa", "bb", "cc"} // segments " aa │ bb │ cc " → widths 4|1|4|1|4
+	// Segments " aa ✕ │ bb ✕ │ cc ✕ " → widths 6|1|6|1|6 (#1128 close zones).
+	labels := []string{"aa", "bb", "cc"}
 	if got := tabAt(labels, 0, 40, 1); got != 0 {
 		t.Fatalf("x=1 must hit tab 0, got %d", got)
 	}
-	if got := tabAt(labels, 0, 40, 4); got != -1 {
-		t.Fatalf("x=4 is the separator, got %d", got)
+	if got := tabAt(labels, 0, 40, 6); got != -1 {
+		t.Fatalf("x=6 is the separator, got %d", got)
 	}
-	if got := tabAt(labels, 0, 40, 6); got != 1 {
-		t.Fatalf("x=6 must hit tab 1, got %d", got)
+	if got := tabAt(labels, 0, 40, 8); got != 1 {
+		t.Fatalf("x=8 must hit tab 1, got %d", got)
 	}
 	if got := tabAt(labels, 0, 40, 30); got != -1 {
 		t.Fatalf("trailing space must miss, got %d", got)
@@ -43,6 +44,28 @@ func TestTabAtGeometry(t *testing.T) {
 	long := []string{"first.go", "second.go", "third.go", "fourth.go", "fifth.go"}
 	if got := tabAt(long, 4, 24, 0); got != -1 {
 		t.Fatalf("the ellipsis cell must miss, got %d", got)
+	}
+}
+
+// TestTabHitCloseZone guards #1128: the ✕ cell after a label's right pad is
+// the segment's close zone, the label cells are not.
+func TestTabHitCloseZone(t *testing.T) {
+	labels := []string{"aa", "bb", "cc"} // " aa ✕ │ bb ✕ │ cc ✕ "
+	if idx, onClose := tabHit(labels, 0, 40, 4); idx != 0 || !onClose {
+		t.Fatalf("x=4 must be tab 0's ✕ zone, got idx=%d onClose=%v", idx, onClose)
+	}
+	if idx, onClose := tabHit(labels, 0, 40, 2); idx != 0 || onClose {
+		t.Fatalf("x=2 is tab 0's label, not its ✕, got idx=%d onClose=%v", idx, onClose)
+	}
+	if idx, onClose := tabHit(labels, 0, 40, 11); idx != 1 || !onClose {
+		t.Fatalf("x=11 must be tab 1's ✕ zone, got idx=%d onClose=%v", idx, onClose)
+	}
+	// A lone truncated segment renders no ✕: every cell is a plain tab hit.
+	long := []string{"short.go", "a-very-long-file-name-that-overflows.go"}
+	for x := 1; x < 16; x++ {
+		if _, onClose := tabHit(long, 1, 16, x); onClose {
+			t.Fatalf("a truncated lone segment has no ✕ zone, x=%d hit one", x)
+		}
 	}
 }
 
@@ -268,7 +291,7 @@ func TestTabDragToOtherPaneMovesOnlyThatFile(t *testing.T) {
 	// First create a second editor pane by tab-dragging c.txt (active) off
 	// the bottom edge, then drag a.txt from the source onto it.
 	r := m.lay.Panes[src]
-	x, y := barCell(t, m, 17) // third segment (" a.txt │ b.txt │ c.txt ")
+	x, y := barCell(t, m, 21) // third segment (" a.txt ✕ │ b.txt ✕ │ c.txt ✕ ")
 	m = step(m, press(x, y))
 	m = step(m, release(r.X+r.W/2, r.Y+r.H-1))
 	dst := m.activeWS().Panes.Focused()

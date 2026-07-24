@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Status Line Segments
@@ -74,5 +74,24 @@ per frame, and hides entirely outside a git repository. See
 `Model.notifUnseen` counts history-ring entries recorded since the
 notification history view (0130, #78) was last opened; the segment renders
 `● N` and disappears at zero. Opening the history — the `notifications.history`
-command — resets it. Opening on *click* is deferred until mouse support (#30)
-grows clickable status line zones.
+command — resets it, and since #1128 a left click on the segment opens the
+history directly (see "Clickable segments" below).
+
+## Clickable segments (#1128)
+
+`composeStatusSpans` is `composeStatus` plus the per-segment cell spans
+(`statusSpan{id, x0, x1}`) of the final line — shrunken segments narrower,
+dropped segments absent — so hit-testing always matches what is drawn.
+`Model.statusSegmentAt(x)` resolves a status-row cell to a segment id (empty
+while the row shows a drag hint or a non-editor focus summary), and the mouse
+router dispatches a left press through `statusSegmentCommands`:
+
+| segment | command |
+|---|---|
+| `todo` (TODO count) | `todo.list` |
+| `notifications` (`● N` counter) | `notifications.history` |
+| `lsp` (server state) | `lsp.showLog` |
+
+Only segments with one clear, obvious target are wired; every other press on
+the status row is swallowed (the row sits outside the layout tree, so nothing
+below can receive it anyway).

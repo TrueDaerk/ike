@@ -20,6 +20,14 @@ import (
 // tabEllipsis marks tabs hidden beyond either end of the bar window.
 const tabEllipsis = "…"
 
+// tabCloseGlyph is the per-segment close button (#1128); tabCloseW is the
+// extra cells a segment spends on it: the glyph plus its trailing pad,
+// rendered after the label's own right padding (" label ✕ ").
+const (
+	tabCloseGlyph = "✕"
+	tabCloseW     = 2
+)
+
 // tabBar returns the rendered tab bar for an editor pane fitting width cells,
 // and whether the bar (rather than the plain title) should be shown.
 func (m Model) tabBar(inst *pane.Instance, width int) (string, bool) {
@@ -117,19 +125,23 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 			style = activeStyle
 		}
 		label := labels[i]
+		withClose := true
 		if lo == hi {
 			// Even the active tab alone may overflow a narrow pane: the
-			// label must fit width minus its padding and any end ellipses.
-			room := width - 2
-			if lo > 0 {
-				room--
+			// label must fit width minus its padding and any end ellipses;
+			// the ✕ renders only when the segment still has room for it.
+			room := loneTabRoom(labels, lo, width)
+			if ansi.StringWidth(label)+tabCloseW > room {
+				withClose = false
+				label = ansi.Truncate(label, max(room, 1), tabEllipsis)
 			}
-			if hi < len(labels)-1 {
-				room--
-			}
-			label = ansi.Truncate(label, max(room, 1), tabEllipsis)
 		}
 		b.WriteString(style.Render(" " + label + " "))
+		if withClose {
+			// The close button (#1128) is muted like the frame so labels
+			// stay the visually dominant text.
+			b.WriteString(frameStyle.Render(tabCloseGlyph) + " ")
+		}
 	}
 	if hi < len(labels)-1 {
 		b.WriteString(frameStyle.Render(tabEllipsis))
@@ -137,12 +149,33 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 	return b.String()
 }
 
+// loneTabRoom is the label room of a bar showing a single (lo == hi) segment:
+// the width minus the segment's own padding and any end ellipsis cells.
+func loneTabRoom(labels []string, lo, width int) int {
+	room := width - 2
+	if lo > 0 {
+		room--
+	}
+	if lo < len(labels)-1 {
+		room--
+	}
+	return room
+}
+
 // tabAt resolves a bar-local x cell to the tab index rendered there, or -1 for
-// the cells between and beyond tabs (ellipses, separators, trailing space). It
-// mirrors renderTabBar's geometry exactly, so clicks land on what is drawn.
+// the cells between and beyond tabs (ellipses, separators, trailing space).
 func tabAt(labels []string, active, width, x int) int {
+	idx, _ := tabHit(labels, active, width, x)
+	return idx
+}
+
+// tabHit resolves a bar-local x cell to the tab index rendered there and
+// whether the cell is that segment's ✕ close zone (#1128); idx -1 for the
+// cells between and beyond tabs (ellipses, separators, trailing space). It
+// mirrors renderTabBar's geometry exactly, so clicks land on what is drawn.
+func tabHit(labels []string, active, width, x int) (int, bool) {
 	if len(labels) == 0 || x < 0 || x >= width {
-		return -1
+		return -1, false
 	}
 	if active < 0 || active >= len(labels) {
 		active = 0
@@ -153,31 +186,38 @@ func tabAt(labels []string, active, width, x int) int {
 		pos++ // left ellipsis cell
 	}
 	if x < pos {
-		return -1
+		return -1, false
 	}
 	if lo == hi {
-		// A lone (possibly truncated) segment owns the rest of the bar.
-		return lo
+		// A lone (possibly truncated) segment owns the rest of the bar; its
+		// ✕ exists only when the full label left room for it (renderTabBar).
+		lw := ansi.StringWidth(labels[lo])
+		if lw+tabCloseW <= loneTabRoom(labels, lo, width) {
+			return lo, x == pos+1+lw+1
+		}
+		return lo, false
 	}
 	for i := lo; i <= hi; i++ {
 		if i > lo {
 			if x == pos {
-				return -1 // separator cell
+				return -1, false // separator cell
 			}
 			pos++
 		}
-		w := ansi.StringWidth(labels[i]) + 2
+		lw := ansi.StringWidth(labels[i])
+		w := lw + 2 + tabCloseW
 		if x < pos+w {
-			return i
+			return i, x == pos+1+lw+1 // the ✕ cell after the label's pad
 		}
 		pos += w
 	}
-	return -1
+	return -1, false
 }
 
 // tabBarHit resolves an absolute mouse cell to the editor pane and tab index
-// whose visible tab-bar segment it lands on.
-func (m Model) tabBarHit(x, y int) (string, int, bool) {
+// whose visible tab-bar segment it lands on, plus whether the cell is that
+// segment's ✕ close zone (#1128).
+func (m Model) tabBarHit(x, y int) (string, int, bool, bool) {
 	for key, r := range m.lay.Panes {
 		if y != r.Y+1 || x < r.X+paneContentX || x >= r.X+r.W-paneContentX {
 			continue
@@ -189,13 +229,13 @@ func (m Model) tabBarHit(x, y int) (string, int, bool) {
 		if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
 			continue // the row shows the plain title, not a bar
 		}
-		idx := tabAt(tabLabels(inst), inst.ActiveTab(), r.W-paneChromeW, x-(r.X+paneContentX))
+		idx, onClose := tabHit(tabLabels(inst), inst.ActiveTab(), r.W-paneChromeW, x-(r.X+paneContentX))
 		if idx < 0 {
-			return "", 0, false
+			return "", 0, false, false
 		}
-		return key, idx, true
+		return key, idx, onClose, true
 	}
-	return "", 0, false
+	return "", 0, false, false
 }
 
 // tabWindow picks the run of tabs [lo, hi] to show: starting from the active
@@ -204,7 +244,8 @@ func (m Model) tabBarHit(x, y int) (string, int, bool) {
 func tabWindow(labels []string, active, width int) (int, int) {
 	ws := make([]int, len(labels))
 	for i, l := range labels {
-		ws[i] = ansi.StringWidth(l) + 2 // one padding space each side
+		// One padding space each side plus the ✕ close zone (#1128).
+		ws[i] = ansi.StringWidth(l) + 2 + tabCloseW
 	}
 	need := func(lo, hi int) int {
 		w := 0

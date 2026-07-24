@@ -399,31 +399,58 @@ var statusDropOrder = []string{
 // segments start dropping.
 const statusFileMin = 16
 
+// statusSpan is one rendered segment's cell range [x0, x1) on the status row,
+// exposed for mouse hit-testing (#1128).
+type statusSpan struct {
+	id     string
+	x0, x1 int
+}
+
 // composeStatus joins the two segment groups into one bar of at most width
 // cells with priority-aware shrinking (#471): a bar that fits renders as-is;
 // an overflowing one first shortens the file path (JetBrains-style middle
 // ellipsis), then drops segments in statusDropOrder, and only as a last
 // resort hard-clips. width <= 0 skips all bounding (unsized startup frame).
 func composeStatus(left, right []renderedSeg, width int) string {
-	build := func() string {
-		var l, r []string
-		for _, s := range left {
-			l = append(l, s.text)
+	line, _ := composeStatusSpans(left, right, width)
+	return line
+}
+
+// composeStatusSpans is composeStatus plus the per-segment cell spans of the
+// final line (#1128): spans mirror exactly what the renderer lays out —
+// shrunken segments narrower, dropped segments absent — and a hard clip cuts
+// them at width.
+func composeStatusSpans(left, right []renderedSeg, width int) (string, []statusSpan) {
+	build := func() (string, []statusSpan) {
+		var spans []statusSpan
+		lt := " "
+		for i, s := range left {
+			if i > 0 {
+				lt += " │ "
+			}
+			x := lipgloss.Width(lt)
+			spans = append(spans, statusSpan{id: s.id, x0: x, x1: x + lipgloss.Width(s.text)})
+			lt += s.text
 		}
+		var r []string
 		for _, s := range right {
 			r = append(r, s.text)
 		}
-		lt := " " + strings.Join(l, " │ ")
 		rt := strings.Join(r, " │ ") + " "
 		gap := width - lipgloss.Width(lt) - lipgloss.Width(rt)
 		if gap < 1 {
 			gap = 1
 		}
-		return lt + strings.Repeat(" ", gap) + rt
+		x := lipgloss.Width(lt) + gap
+		for _, s := range right {
+			spans = append(spans, statusSpan{id: s.id, x0: x, x1: x + lipgloss.Width(s.text)})
+			x += lipgloss.Width(s.text) + 3 // " │ " between neighbours
+		}
+		return lt + strings.Repeat(" ", gap) + rt, spans
 	}
-	line := build()
+	line, spans := build()
 	if width <= 0 || lipgloss.Width(line) <= width {
-		return line
+		return line, spans
 	}
 	// 1. Shrink the file segment by exactly the overflow, flooring at a
 	// readable minimum.
@@ -441,8 +468,8 @@ func composeStatus(left, right []renderedSeg, width int) string {
 			left[i].text = middleEllipsis(left[i].text, target)
 		}
 	}
-	if line = build(); lipgloss.Width(line) <= width {
-		return line
+	if line, spans = build(); lipgloss.Width(line) <= width {
+		return line, spans
 	}
 	// 2. Drop low-priority segments in order until the bar fits.
 	drop := func(parts []renderedSeg, id string) []renderedSeg {
@@ -457,12 +484,23 @@ func composeStatus(left, right []renderedSeg, width int) string {
 	for _, id := range statusDropOrder {
 		left = drop(left, id)
 		right = drop(right, id)
-		if line = build(); lipgloss.Width(line) <= width {
-			return line
+		if line, spans = build(); lipgloss.Width(line) <= width {
+			return line, spans
 		}
 	}
-	// 3. Hard clip — the terminal is narrower than mode+file+cursor.
-	return ansi.Truncate(line, width, "…")
+	// 3. Hard clip — the terminal is narrower than mode+file+cursor; spans
+	// past the clip are cut with it.
+	clipped := spans[:0]
+	for _, s := range spans {
+		if s.x0 >= width {
+			continue
+		}
+		if s.x1 > width {
+			s.x1 = width
+		}
+		clipped = append(clipped, s)
+	}
+	return ansi.Truncate(line, width, "…"), clipped
 }
 
 // middleEllipsis shortens s to max runes with a middle "…", keeping head and
@@ -479,6 +517,36 @@ func middleEllipsis(s string, max int) string {
 	head := (keep + 1) / 2
 	tail := keep / 2
 	return string(r[:head]) + "…" + string(r[len(r)-tail:])
+}
+
+// statusSegmentCommands maps clickable status segments to the command a left
+// click on them dispatches (#1128); unlisted segments ignore clicks — only
+// segments with one clear, obvious target are wired.
+var statusSegmentCommands = map[string]string{
+	"todo":          "todo.list",
+	"notifications": "notifications.history",
+	"lsp":           "lsp.showLog",
+}
+
+// statusSegmentAt returns the id of the segment rendered at cell x of the
+// status row (#1128), or "" between segments and while the row shows a drag
+// hint or a non-editor focus summary instead of the segment slots.
+func (m Model) statusSegmentAt(x int) string {
+	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
+		return ""
+	}
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil &&
+		(inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil) {
+		return ""
+	}
+	ed := m.activeEditor()
+	_, spans := composeStatusSpans(renderParts(m, ed, statusLeft), renderParts(m, ed, statusRight), m.width)
+	for _, s := range spans {
+		if x >= s.x0 && x < s.x1 {
+			return s.id
+		}
+	}
+	return ""
 }
 
 // focusedLangStatus returns the tracked server state for the focused editor's

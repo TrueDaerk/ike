@@ -193,12 +193,12 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "not closed: save failed")
 			return m, tea.Batch(cmds...)
 		}
-		m.closeFocused()
+		m.resumePendingClose(pending)
 		return m, tea.Batch(cmds...)
 	case "d":
 		m.closePending = nil
 		m.shell.Close()
-		m.closeFocused()
+		m.resumePendingClose(pending)
 		return m, nil
 	case "esc":
 		m.closePending = nil
@@ -206,6 +206,20 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+// resumePendingClose performs the close the guard was holding: a whole-pane
+// pending close (tab -1 while the pane still holds several tabs — the
+// pane.close path, #1128) closes the leaf outright; a tab pending closes the
+// focused pane's active tab, as guardedCloseFocused queued it.
+func (m *Model) resumePendingClose(p *pendingClose) {
+	if p.tab < 0 {
+		if inst := m.activeWS().Panes.Get(p.key); inst != nil && inst.TabCount() > 1 {
+			m.closePane(p.key)
+			return
+		}
+	}
+	m.closeFocused()
 }
 
 // updateQuitPrompt is the quit flavor of the guard (#287): s writes every

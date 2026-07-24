@@ -10,6 +10,15 @@
   position-carrying hover seam in the bridge (`host.EditorHoverRequest` →
   `bridge.requestHover`), and an explicitly anchored hover popup; focused
   pane only for now (`/architecture/editor.md`, `/architecture/lsp.md`).
+- Chrome mouse surfaces (#1128): right-clicking a tab-bar segment selects
+  that tab and opens a context menu (Close / Close Others — new
+  `editor.tab.closeOthers`, dirty tabs survive — / Reopen Closed); the title
+  band outside segments opens a pane menu (Split Right, Split Down, Maximize,
+  Close Pane — new `pane.close`, whole-pane guarded close). Every tab segment
+  gains a trailing ✕ close button (dropped when a lone truncated segment has
+  no room), and the status line's TODO, notifications and LSP segments become
+  clickable via exposed segment spans (`/architecture/editor-tabs.md`,
+  `/architecture/pane-layout.md`, `/architecture/status-line.md`).
 
 - The VCS tool window slims to file-context features (#750): the panel is
   now a read-only changes list (enter/double-click = diff-vs-HEAD; no

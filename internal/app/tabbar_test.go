@@ -53,7 +53,7 @@ func TestTwoTabsRenderTabBar(t *testing.T) {
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	b := writeTemp(t, dir, "bbb.txt", "bbb\n")
 	m := openApp(t, a, b)
-	if !strings.Contains(stripped(m), "aaa.txt │ bbb.txt") {
+	if !strings.Contains(stripped(m), "aaa.txt ✕ │ bbb.txt ✕") {
 		t.Fatalf("two tabs must render as a bar; frame:\n%s", stripped(m))
 	}
 }
@@ -120,7 +120,7 @@ func TestRenderTabBarFitsAndSeparates(t *testing.T) {
 	if got := ansi.StringWidth(plain); got > 60 {
 		t.Fatalf("bar exceeds width: %d > 60 (%q)", got, plain)
 	}
-	if !strings.Contains(plain, "a.go │ b.go │ c.go") {
+	if !strings.Contains(plain, "a.go ✕ │ b.go ✕ │ c.go ✕") {
 		t.Fatalf("all tabs must render when they fit, got %q", plain)
 	}
 	if strings.Contains(plain, tabEllipsis) {
