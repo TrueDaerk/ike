@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-24T23:30:00Z
 ---
 
 # Project Search (Find in Path)
@@ -80,7 +80,13 @@ the palette):
   these ctrl chords never reach the global quit/close-pane bindings.
 - **Query history:** committed on enter; recalled with `ctrl+up`/`ctrl+down`
   (`alt+up`/`alt+down` as secondary, and plain `up`/`down` while the result
-  list is empty — with results those keys move the selection).
+  list is empty — with results those keys move the selection). The list
+  **persists** (#1171): commits push into the `findInPath` bucket of the
+  app-owned query-history store (`internal/histories`, one `histories.json`
+  under the state store beside `marks.json`; deduped, capped at 50, malformed
+  file reads as empty), and the first `Open` of a session seeds the recall
+  list from it. The editor's `/` and `:` lines keep sibling buckets in the
+  same file (see [Editor § search](/architecture/editor.md)).
 - **Results:** the reusable `internal/locations` list — items grouped by
   file (headers show per-file counts), match ranges highlighted, cursor row
   selected, scrolled into view; the status row shows live counts, `…` while

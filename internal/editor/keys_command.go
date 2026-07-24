@@ -9,6 +9,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/excmd"
 	"ike/internal/editor/search"
+	"ike/internal/histories"
 	"ike/internal/ui"
 )
 
@@ -27,6 +28,7 @@ func (m *Model) beginSearch(dir search.Direction) {
 	m.searchDir = dir
 	m.cmdline = ""
 	m.cmdCur = 0
+	m.cmdHistIdx = -1 // a fresh line starts outside history recall (#1171)
 	m.preview = search.Query{}
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
@@ -99,8 +101,15 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		// Path completion for ":e <partial>" / ":w <partial>" (#543).
 		m.completeCmdlinePath()
 		m.cmdCur = len([]rune(m.cmdline))
+	case key.Code == tea.KeyUp:
+		// Recall an older query, vim-style (#1171); typing after a recall
+		// edits normally (the default branch drops back to the live line).
+		m.recallHistory(1)
+	case key.Code == tea.KeyDown:
+		m.recallHistory(-1)
 	case key.Code == tea.KeyEnter:
 		if m.searching {
+			m.pushCmdHistory()
 			m.commitSearch()
 			m.mode = Normal
 			m.searching = false
@@ -135,6 +144,9 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		m.cmdline, m.cmdCur = text, cur
 		if changed {
+			// Editing leaves history recall: the text is the live line now,
+			// and up restarts the walk from the newest entry (#1171).
+			m.cmdHistIdx = -1
 			if m.searching {
 				m.searchPreview()
 			} else {
@@ -259,8 +271,77 @@ func (m *Model) commitSearch() {
 	m.jumpTo(p)               // the initial /-search landing is a jump (Roadmap 0220)
 }
 
+// SetHistories injects the app-owned persistent query-history store (#1171):
+// the "/" "?" line and the ":" line each recall from (and push to) their own
+// named bucket. Nil (the default) disables recall, so the editor runs
+// standalone in tests without touching the state store.
+func (m *Model) SetHistories(h *histories.Store) { m.histStore = h }
+
+// cmdHistBucket names the open command line's history bucket: the search
+// line ("/" and "?") shares one bucket, the ex line has its own — separate
+// recall lists like vim's / and : histories.
+func (m Model) cmdHistBucket() string {
+	if m.searching {
+		return histories.Search
+	}
+	return histories.Ex
+}
+
+// recallHistory walks the command line through the bucket's entries (#1171):
+// dir>0 moves to older queries (up), dir<0 back toward the live line (down).
+// A recall replaces the input with the cursor at the end; the stashed live
+// line comes back when the walk returns past the newest entry. Recalled text
+// re-runs the incremental search preview / ex-line suggestions, so a recall
+// behaves exactly like having typed the query.
+func (m *Model) recallHistory(dir int) {
+	if m.histStore == nil {
+		return
+	}
+	entries := m.histStore.All(m.cmdHistBucket())
+	if len(entries) == 0 {
+		return
+	}
+	next := m.cmdHistIdx + dir
+	if next < -1 {
+		next = -1
+	}
+	if next >= len(entries) {
+		next = len(entries) - 1
+	}
+	if next == m.cmdHistIdx {
+		return
+	}
+	if m.cmdHistIdx == -1 {
+		m.cmdHistLive = m.cmdline
+	}
+	m.cmdHistIdx = next
+	if next == -1 {
+		m.cmdline = m.cmdHistLive
+	} else {
+		m.cmdline = entries[next]
+	}
+	m.cmdCur = len([]rune(m.cmdline))
+	if m.searching {
+		m.searchPreview()
+	} else {
+		m.refreshCmdlineSuggest()
+	}
+}
+
+// pushCmdHistory records the committed line in its bucket (#1171). Committing
+// always pushes — even a search without matches is worth recalling — and the
+// store dedupes and caps. The recall pointer resets so the next up starts at
+// this newest entry.
+func (m *Model) pushCmdHistory() {
+	m.cmdHistIdx = -1
+	if m.histStore != nil && m.cmdline != "" {
+		m.histStore.Push(m.cmdHistBucket(), m.cmdline)
+	}
+}
+
 // runExLine parses and executes a ":" command, returning any resulting tea.Cmd.
 func (m Model) runExLine() (Model, tea.Cmd) {
+	m.pushCmdHistory()
 	cmd := excmd.Parse(m.cmdline)
 	m.mode = Normal
 	m.cmdline = ""

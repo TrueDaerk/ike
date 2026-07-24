@@ -168,7 +168,7 @@ func (m Model) finishSubConfirm() Model {
 	}
 	cursorAfter := m.buf.ClampCursor(buffer.Position{Line: lastLine, Col: 0})
 	if !sc.rec.Empty() {
-		m.hist.Push(sc.rec.Commit(cursorAfter))
+		m.pushChange(sc.rec.Commit(cursorAfter))
 		m.dirty = true
 		m.emit(EventChange)
 		m.cursor = cursorAfter

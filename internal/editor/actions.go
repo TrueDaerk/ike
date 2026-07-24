@@ -63,7 +63,7 @@ func (m *Model) applyMutate(fn func(rec *history.Recorder) buffer.Position) {
 	rec := history.NewRecorder(m.buf, m.cursor)
 	newCur := fn(rec)
 	if !rec.Empty() {
-		m.hist.Push(rec.Commit(newCur))
+		m.pushChange(rec.Commit(newCur))
 		m.dirty = true
 		m.emit(EventChange)
 	}
@@ -212,7 +212,7 @@ func (m *Model) commitInsert() {
 	s := m.insert
 	text := s.typed
 	if s.rec != nil && !s.rec.Empty() {
-		m.hist.Push(s.rec.Commit(m.cursor))
+		m.pushChange(s.rec.Commit(m.cursor))
 		m.dirty = true
 		m.emit(EventChange)
 	}

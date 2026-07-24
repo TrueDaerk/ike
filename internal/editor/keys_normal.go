@@ -533,6 +533,7 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.mode = Command
 		m.cmdline = ""
 		m.cmdCur = 0
+		m.cmdHistIdx = -1 // a fresh line starts outside history recall (#1171)
 	case "q":
 		// Macro recording (#58): q stops an active recording, otherwise the
 		// next key names the register to record into. Like vim, a q replayed
@@ -587,6 +588,15 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 	case "+":
 		// g+: chronological redo across branches (#59).
 		m.redoChrono(m.pending.EffectiveCount())
+		m.pending.Reset()
+	case ";":
+		// g;: cursor to older edit positions on the change list (#1174) —
+		// unlike g-/g+ the buffer is untouched.
+		m.changeListJump(true, m.pending.EffectiveCount())
+		m.pending.Reset()
+	case ",":
+		// g,: back toward newer edit positions (#1174).
+		m.changeListJump(false, m.pending.EffectiveCount())
 		m.pending.Reset()
 	}
 	return m, nil

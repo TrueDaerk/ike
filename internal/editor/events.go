@@ -123,8 +123,12 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		// Breakpoints shift the same way (0350, #577), through the app's store.
 		m.notifyBreakpointEdit()
 		// Marks shift with the same delta (#1151): local ones in place,
-		// global ones through the injected store adjuster (marks.go).
+		// global ones through the injected store adjuster (marks.go). The
+		// change-list ring shifts inside the same call.
 		m.notifyMarkEdit()
+		// A freshly pushed change lands in the change list now (#1174),
+		// after the shift above — its own delta must not move it.
+		m.recordPendingChange()
 	}
 	if m.emitter == nil {
 		return

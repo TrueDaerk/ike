@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-24T22:00:00Z
+timestamp: 2026-07-24T23:30:00Z
 ---
 
 # Editor
@@ -106,6 +106,19 @@ line runs that test (see /architecture/run-configurations.md).
   they land exactly on it (vim-style), so `[+]` goes away when you undo back to
   the saved content. A crash-restored buffer marks the checkpoint unreachable —
   no undo depth makes it read as clean.
+  **Change list** (#1174, `changelist.go`): a per-document ring (cap 100) of
+  the `CursorAfter` of every committed `Change` — derived from the same
+  `pushChange` that makes an edit undoable, so undo/redo walks add no
+  entries. `g;` moves the cursor to older edit positions (the first `g;`
+  lands on the most recent edit), `g,` back toward newer — cursor motion
+  only, no undo (that is `g-`/`g+`) and no nav-history entry (the
+  diagnostics-motion precedent). Adjacent same-line entries collapse into
+  one stop keeping the newest position; a new edit resets the walk pointer.
+  Entries drift-correct with the local-mark delta scheme (`notifyMarkEdit`)
+  and every jump clamps into the buffer. Jumps notice `change list: n/m`,
+  the ends `no earlier/later edit position`. Session state like local marks:
+  it resets with the history and does not include changes restored from the
+  persistent undo store.
   **Persistent undo** (#148, vim's `undofile`): the tree survives a restart.
   `internal/undostore` keeps one JSON file per document under the state store
   (`.ike/undo/`, or `IKE_CONFIG_DIR/undo`), keyed by a hash of the absolute
@@ -204,6 +217,20 @@ line runs that test (see /architecture/run-configurations.md).
   inserts at it, alt+backspace deletes the previous word, cmd+backspace
   clears the line, and the incremental preview keeps tracking mid-query
   edits.
+  **Query history** (#1171): `up`/`down` on the open line cycle recent
+  committed queries, vim-style (up = older, most recent first; down past the
+  newest restores the half-typed live line). A recall replaces the input
+  with the cursor at the end and re-runs the incremental preview; typing or
+  editing after a recall works normally and leaves recall mode. Enter pushes
+  the typed line (markers like `\c` included, so a recall restores it
+  verbatim; even a no-match search is recallable). The `/` `?` line shares
+  one `search` bucket, the `:` line keeps its own `ex` bucket — separate
+  histories like vim's, even though the input code path is shared (#1110).
+  Buckets live in the app-owned `internal/histories` store (one
+  `histories.json` under the state store, `marks.json` pattern: lazy load,
+  save on push, dedupe + 50-entry cap, malformed reads as empty; the
+  find-in-path overlay keeps a third `findInPath` bucket there), injected
+  per editor via `SetHistories` — nil (tests) disables recall.
 - **excmd** — parses the `:` line into a typed `Command{Range, Name, Bang, Args}`
   AST and resolves its range. The grammar is `[range] name[!] [args]`: a range is
   one or two comma-separated *addresses* (or `%` = whole file), and an address is

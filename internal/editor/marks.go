@@ -183,6 +183,8 @@ func (m *Model) notifyMarkEdit() {
 		return
 	}
 	m.shiftLocalMarks(m.cursor.Line, delta)
+	// The change-list ring drifts with the same scheme (#1174).
+	m.changes.shift(m.cursor.Line, delta)
 	if m.gmAdjust != nil && m.HasFile() {
 		m.gmAdjust(m.path, m.cursor.Line, delta)
 	}
