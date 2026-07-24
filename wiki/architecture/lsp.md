@@ -296,6 +296,13 @@ site (interface implementations, build-tag variants) opens the same palette
 list — placeholder "Definitions — pick a target…" — instead of guessing the
 first location; a single site still jumps directly.
 
+**Find usages, persistently (#1155).** `lsp.referencesPanel` ("LSP: Find
+Usages (Panel)") runs the same references request but delivers an
+`ilsp.UsagesMsg` that fills the singleton [Usages tool window](./usages.md)
+instead of the palette: grouped by file, refreshable with `r`, title carrying
+the symbol captured under the cursor at request time. The palette stays the
+quick mode; the pane is the worklist.
+
 **Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, also
 `H` — lowercase `h` is the notification history) sends
 `textDocument/prepareCallHierarchy` from the cursor and opens the prepared

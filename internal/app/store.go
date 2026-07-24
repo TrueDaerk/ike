@@ -190,6 +190,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The panel restores empty (#1025): the first buffer-change sync
 			// re-requests the symbols.
 			ids[key] = paneIdentity{Kind: "structure"}
+		case pane.KindUsages:
+			// The panel restores empty (#1155): find-references results are
+			// session state; the next lsp.referencesPanel run re-fills it.
+			ids[key] = paneIdentity{Kind: "usages"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
 			if ed := inst.Editor(); ed != nil {

@@ -15,6 +15,7 @@ import (
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
 
@@ -45,6 +46,9 @@ const ProblemsKey = "problems"
 
 // StructureKey is the stable key of the singleton Structure tool window (#1025).
 const StructureKey = "structure"
+
+// UsagesKey is the stable key of the singleton Usages tool window (#1155).
+const UsagesKey = "usages"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -392,6 +396,18 @@ func (r *Registry) AddStructure() string {
 	inst.sp = structpanel.New(r.pal)
 	r.put(inst)
 	return StructureKey
+}
+
+// AddUsages creates the singleton Usages tool window under UsagesKey (#1155)
+// and returns its key; a second call returns the existing key.
+func (r *Registry) AddUsages() string {
+	if _, ok := r.instances[UsagesKey]; ok {
+		return UsagesKey
+	}
+	inst := &Instance{key: UsagesKey, kind: KindUsages, cfg: r.cfg, pal: r.pal}
+	inst.up = usages.New(r.pal)
+	r.put(inst)
+	return UsagesKey
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)

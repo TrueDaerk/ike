@@ -16,6 +16,7 @@ import (
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
 
@@ -51,6 +52,10 @@ const (
 	// KindStructure is the Structure tool window (#1025): a singleton side
 	// panel with the focused buffer's LSP symbol tree, under key "structure".
 	KindStructure
+	// KindUsages is the Usages tool window (#1155): a singleton bottom-split
+	// panel with the latest panel-targeted find-references results, under
+	// key "usages".
+	KindUsages
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -65,6 +70,7 @@ const (
 	ctxDebug    = "debug"
 	ctxProblems = "problems"
 	ctxStruct   = "structure"
+	ctxUsages   = "usages"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -85,6 +91,7 @@ type Instance struct {
 	dp   debugpanel.Model
 	pp   problems.Model
 	sp   structpanel.Model
+	up   usages.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -177,6 +184,8 @@ func (i *Instance) ContextID() string {
 		return ctxProblems
 	case KindStructure:
 		return ctxStruct
+	case KindUsages:
+		return ctxUsages
 	}
 	return ctxEditor
 }
@@ -212,6 +221,10 @@ func (i *Instance) Problems() *problems.Model { return &i.pp }
 // Structure returns the underlying Structure tool-window model (#1025). It is
 // only valid for a structure instance; callers gate on Kind first.
 func (i *Instance) Structure() *structpanel.Model { return &i.sp }
+
+// Usages returns the underlying Usages tool-window model (#1155). It is only
+// valid for a usages instance; callers gate on Kind first.
+func (i *Instance) Usages() *usages.Model { return &i.up }
 
 // DiffEditor returns the diff pane's edit-mode editor, nil while browsing.
 func (i *Instance) DiffEditor() *editor.Model { return i.dfEdit }
@@ -579,6 +592,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.pp.SetSize(w, h)
 	case KindStructure:
 		i.sp.SetSize(w, h)
+	case KindUsages:
+		i.up.SetSize(w, h)
 	}
 }
 
@@ -610,6 +625,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.pp.SetFocused(f)
 	case KindStructure:
 		i.sp.SetFocused(f)
+	case KindUsages:
+		i.up.SetFocused(f)
 	}
 }
 
@@ -655,6 +672,8 @@ func (i *Instance) View() string {
 		return i.pp.View()
 	case KindStructure:
 		return i.sp.View()
+	case KindUsages:
+		return i.up.View()
 	}
 	return ""
 }
@@ -697,6 +716,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.pp.Update(msg)
 	case KindStructure:
 		cmd = i.sp.Update(msg)
+	case KindUsages:
+		cmd = i.up.Update(msg)
 	}
 	return cmd
 }
@@ -796,6 +817,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.pp.SetPalette(p)
 	case KindStructure:
 		i.sp.SetPalette(p)
+	case KindUsages:
+		i.up.SetPalette(p)
 	}
 }
 

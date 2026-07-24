@@ -2,6 +2,17 @@
 
 ## 2026-07-24
 
+- Usages tool window (#1155): find-references gets a persistent worklist —
+  `lsp.referencesPanel` ("Find Usages (Panel)", also in the editor context
+  menu) runs the same request as `lsp.references` (whose quick palette stays)
+  but fills a singleton bottom-split pane (`internal/usages`,
+  `pane.KindUsages`): rows grouped by file with `line:col` + preview, title
+  "Usages: Foo — 12 in 4 files" from the symbol captured at request time,
+  enter/double-click jumps via `DefinitionMsg`, `r` re-runs at the stored
+  origin (best-effort after edits), `usages.toggle` palette command, layout
+  slot persists and restores empty (`/architecture/usages.md`,
+  `/architecture/lsp.md`).
+
 - New-file chords (#1145): cmd+n → explorer.newFile (prompt targets the
   explorer selection, works from a focused editor), cmd+shift+n →
   scratch.new (JetBrains verbatim); ledger regenerated

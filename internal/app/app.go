@@ -301,6 +301,8 @@ type Model struct {
 	structReturnFocus string
 	structReqPath     string
 	structForce       bool
+	// usagesReturnFocus is the same dance for the Usages tool window (#1155).
+	usagesReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
 	// answer (Roadmap 0090, #3) while the shell shows the save-all / discard /
 	// cancel prompt; "" when no switch is gated.
@@ -945,6 +947,8 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			continue // restored below as the empty singleton panel (#580)
 		} else if ids[key].Kind == "structure" {
 			continue // restored below as the empty singleton panel (#1025)
+		} else if ids[key].Kind == "usages" {
+			continue // restored below as the empty singleton panel (#1155)
 		} else if !isEditorKey(key) && !isTerminalKey(key) {
 			// A terminal-shaped key may carry an editor identity: a
 			// converted tab host (#836) restores as an editor pane below.
@@ -1034,6 +1038,13 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			p := panes.Get(panes.AddProblems()).Problems()
 			p.SetDisplayPath(displayPath)
 			p.SetStore(m.probStore)
+			continue
+		}
+		if id := ids[key]; id.Kind == "usages" {
+			// The Usages panel restores empty in its saved slot (#1155):
+			// find-references results are session state; the next
+			// lsp.referencesPanel run re-fills it.
+			panes.Get(panes.AddUsages()).Usages().SetDisplayPath(displayPath)
 			continue
 		}
 		if id := ids[key]; id.Kind == "structure" {
@@ -2931,6 +2942,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleProblemsPanel()
 		return m, nil
 
+	case UsagesToggleMsg:
+		// usages.toggle (#1155): same state machine for the Usages pane.
+		m.toggleUsagesPanel()
+		return m, nil
 	case StructureToggleMsg:
 		// structure.toggle (#1025): same state machine for the Structure
 		// tool window; the Update wrapper's sync issues the first refresh.
@@ -3532,6 +3547,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refs.Set(msg.Refs)
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		return m, nil
+	case ilsp.UsagesMsg:
+		// lsp.referencesPanel (#1155): the persistent counterpart to the
+		// palette list above — open the Usages pane and fill it, empty
+		// result included (the pane shows its found-nothing state).
+		m.fillUsagesPanel(msg)
 		return m, nil
 	case ilsp.CallHierarchyMsg:
 		// lsp.callHierarchy (#173): the prepared roots open the tree overlay;
@@ -5692,6 +5713,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Structure().Wheel(lines)
 			}
+		case pane.KindUsages:
+			// The wheel scrolls the usages list (#1155).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Usages().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Usages().Wheel(lines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -6435,6 +6464,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Structure().Click(localX, localY)
 		}
+	case pane.KindUsages:
+		// Usages-list clicks (#1155): a click selects, a double-click opens
+		// the reference's location, mirroring the Problems panel.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Usages().Click(localX, localY)
+		}
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
 		// activate (frame select / variable expand); messages route like keys.
@@ -6467,6 +6502,7 @@ func editorContextItems() []menu.Item {
 		{Title: "Paste", Command: "editor.paste"},
 		{Title: "Go to Definition", Command: "lsp.definition"},
 		{Title: "Find Usages", Command: "lsp.references"},
+		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
 		{Title: "Reformat File", Command: "lsp.format"},
 	}
 }
@@ -7238,6 +7274,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "PROBLEMS"
 		case pane.KindStructure:
 			title = "STRUCTURE"
+		case pane.KindUsages:
+			title = "USAGES"
 		}
 	}
 

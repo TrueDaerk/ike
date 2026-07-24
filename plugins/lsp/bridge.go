@@ -506,6 +506,75 @@ func (b *bridge) findReferences(h host.API, path string, line, col int, includeD
 	h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
 }
 
+// referencesPanel is lsp.referencesPanel (#1155): the same references request
+// as lsp.references, but the results route into the persistent Usages tool
+// pane instead of the transient palette list. The identifier under the cursor
+// is captured at request time so the pane title can name the symbol.
+func (b *bridge) referencesPanel(h host.API) tea.Cmd {
+	b.ensure(h)
+	path, line, col := b.cur()
+	mgr := b.manager()
+	if path == "" || mgr == nil {
+		return nil
+	}
+	symbol := identAt(b.lineText(path, line), col)
+	go b.findUsages(h, symbol, path, line, col)
+	return nil
+}
+
+// findUsages is the panel-target find-references core (#1155): request,
+// convert, deliver as a UsagesMsg carrying a Refresh continuation that
+// re-runs this very request at the stored origin position (best-effort — the
+// position re-resolves as-is after edits). Runs off the UI goroutine.
+func (b *bridge) findUsages(h host.API, symbol, path string, line, col int) {
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	locs, err := mgr.References(context.Background(), path, buffer.Position{Line: line, Col: col}, true)
+	if requestFailed(h, "find usages", err) {
+		return
+	}
+	h.Send(ilsp.UsagesMsg{
+		Symbol: symbol,
+		Path:   path,
+		Line:   line,
+		Col:    col,
+		Refs:   locationsToRefs(mgr, path, locs),
+		Refresh: func() tea.Msg {
+			go b.findUsages(h, symbol, path, line, col)
+			return nil
+		},
+	})
+}
+
+// identAt extracts the identifier covering col (0-based) in text, expanding
+// over letters, digits and underscores; a cursor sitting just past the word
+// counts as on it. Empty when the position touches no identifier — the pane
+// then titles itself without a symbol name.
+func identAt(text string, col int) string {
+	runes := []rune(text)
+	isWord := func(r rune) bool { return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) }
+	i := col
+	if i > len(runes) {
+		i = len(runes)
+	}
+	if i == len(runes) || (i > 0 && !isWord(runes[i])) {
+		i--
+	}
+	if i < 0 || i >= len(runes) || !isWord(runes[i]) {
+		return ""
+	}
+	start, end := i, i+1
+	for start > 0 && isWord(runes[start-1]) {
+		start--
+	}
+	for end < len(runes) && isWord(runes[end]) {
+		end++
+	}
+	return string(runes[start:end])
+}
+
 // callHierarchy prepares the call hierarchy for the symbol under the cursor
 // (#173) and sends a CallHierarchyMsg carrying the root items plus the Fetch
 // continuation the overlay expands nodes with. Nothing prepared (position not
