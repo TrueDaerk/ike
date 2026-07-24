@@ -2,6 +2,12 @@
 
 ## 2026-07-24
 
+- Large-file mode stops being silent (#1124, #1125): a persistent,
+  dismissible banner over the focused flagged editor names the cause and
+  both remedies (click = Force Code Insight, ✕/esc = dismiss per document),
+  and the thresholds are editable in Settings → Files
+  (`/architecture/editor.md`).
+
 - Search Everywhere stops duplicating lines (#1121): workspace-symbol hits
   dedupe on (name, path, line) in SetHits — first, best-ranked hit wins;
   the shared cache also covers plain go-to-symbol

@@ -112,6 +112,12 @@ one so split views of a shared document (#142) never collide.
   mode (#149) opts out — load stays flat, no content hashing.
   `files.persistent_undo` (default `true`) switches it off; a 1 MiB per-file
   cap and a 200-file LRU prune bound the store.
+  A flagged large file additionally shows a **persistent, dismissible banner**
+  over the pane's first content row while focused (#1124): it names the cause
+  and both remedies — a click runs `editor.forceCodeInsight`, the `✕` (or
+  esc) dismisses per document, and the thresholds are editable in Settings →
+  Files (`files.large_file_kb` / `files.large_file_lines`, 0 = guard off,
+  #1125).
 - **viewport** — vertical/horizontal scroll with `scroll_off`, plus the
   absolute/relative line-number gutter. The line renderer budgets by **display
   cells**, expanding each tab to `tab_width` spaces so a tabbed line's rendered

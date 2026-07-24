@@ -66,8 +66,9 @@ func (l Limits) Exceeded(bytes int64, lines int) bool {
 // the LSP bridge's didOpen gate must agree, and the bridge only ever sees a
 // path. Keyed by absolute path, mirroring the watcher's canonicalization.
 var (
-	mu     sync.Mutex
-	forced = map[string]bool{}
+	mu        sync.Mutex
+	forced    = map[string]bool{}
+	dismissed = map[string]bool{}
 )
 
 // Force marks path as insight-forced: Forced(path) reports true until Reset.
@@ -84,11 +85,28 @@ func Forced(path string) bool {
 	return forced[canon(path)]
 }
 
+// DismissNotice records that the user dismissed the large-file banner for
+// path (#1124); per document, so it survives tab switches and other flagged
+// files still show theirs.
+func DismissNotice(path string) {
+	mu.Lock()
+	dismissed[canon(path)] = true
+	mu.Unlock()
+}
+
+// NoticeDismissed reports whether the banner was dismissed for path.
+func NoticeDismissed(path string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	return dismissed[canon(path)]
+}
+
 // Reset clears every override (tests; project switch keeps them — the paths
 // are absolute, so stale entries are harmless).
 func Reset() {
 	mu.Lock()
 	forced = map[string]bool{}
+	dismissed = map[string]bool{}
 	mu.Unlock()
 }
 

@@ -75,3 +75,22 @@ func TestCorePagesPresent(t *testing.T) {
 		}
 	}
 }
+
+// TestLargeFileThresholdsExposed guards #1125: both large-file keys surface
+// in the Files category as positive-int entries (0 = guard disabled).
+func TestLargeFileThresholdsExposed(t *testing.T) {
+	found := map[string]bool{}
+	for _, p := range BasePages(nil) {
+		for _, e := range p.Entries {
+			if e.Key == "files.large_file_kb" || e.Key == "files.large_file_lines" {
+				if e.Type != Int || e.Min != 0 {
+					t.Fatalf("%s: want Int with Min 0, got %+v", e.Key, e)
+				}
+				found[e.Key] = true
+			}
+		}
+	}
+	if len(found) != 2 {
+		t.Fatalf("missing large-file entries: %v", found)
+	}
+}
