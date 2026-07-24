@@ -45,6 +45,7 @@ type node struct {
 	children []*node
 	modTime  time.Time // directory mtime at last scan; drives auto-refresh polling
 	entMod   time.Time // this entry's own mtime, for the "modified" sort (#1037)
+	rowW     int       // display width of this row's text, filled by contentWidth (#1096)
 }
 
 // Model is the file-explorer pane: an expandable tree rooted at a fixed base.
@@ -106,6 +107,19 @@ type Model struct {
 	expandAllRoot string
 	expandBudget  int
 
+	// wcache memoizes contentWidth (#1096): building every row's text plus a
+	// grapheme-width parse per frame dominated the View profile (41%) and ran
+	// again on every Update-path viewport() call. Held behind a pointer so
+	// the value-receiver View/viewport can fill it; invalidated wherever row
+	// text can change (rebuild, SetSize, Configure).
+	wcache *widthCache
+
+	// colorGlobs/colorVals index the colour table (#1098): the glob list is
+	// sorted once when the table is (re)built instead of per row per frame,
+	// and colour strings resolve once instead of per lookup.
+	colorGlobs []string
+	colorVals  map[string]color.Color
+
 	// Reveal state (#1042). pendingReveal is the absolute path a reveal is
 	// descending toward: expanding an unloaded ancestor is async (scanCmd), so
 	// applyScan re-enters continueReveal after every scan until the target row
@@ -154,7 +168,9 @@ func New(dir string) Model {
 		now:          time.Now,
 		autoRefresh:  true,
 		pollEvery:    2 * time.Second,
+		wcache:       &widthCache{},
 	}
+	m.rebuildColorIndex()
 	m.rebuild()
 	// Leftover trash from previous sessions is unreachable (the undo stacks
 	// are in-memory) — clean it, including the legacy root ".ike-trash"
@@ -394,6 +410,7 @@ func (m *Model) expand(n *node) tea.Cmd {
 // selection (set by a file op before its re-scan) snaps the cursor onto the new
 // or restored entry once it becomes visible.
 func (m *Model) rebuild() {
+	m.invalidateWidth() // any row-set change can change the content width (#1096)
 	m.rows = m.rows[:0]
 	m.appendVisible(m.root)
 	if m.pendingSel != "" {
@@ -442,6 +459,11 @@ func (m Model) Root() string { return m.root.path }
 
 // SetSize sets the available width and number of rows.
 func (m *Model) SetSize(width, height int) {
+	// The root row's home-abbreviated path suffix (#1046) depends on the pane
+	// width, so a resize can change row text (#1096).
+	if width != m.width {
+		m.invalidateWidth()
+	}
 	m.width = width
 	m.height = height
 	m.clampScroll()
@@ -1327,12 +1349,45 @@ func (m Model) hasVisibleChildren(n *node) bool {
 }
 
 // contentWidth is the display width of the widest visible row.
+// rebuildColorIndex precomputes the colour table's sorted glob list and
+// resolved colours (#1098), so suffixColor never sorts or re-parses per row.
+func (m *Model) rebuildColorIndex() {
+	m.colorGlobs = m.colors.globs()
+	m.colorVals = make(map[string]color.Color, len(m.colors))
+	for k, v := range m.colors {
+		m.colorVals[k] = theme.Resolve(v)
+	}
+}
+
+// widthCache memoizes the tree's content width across Model copies (#1096);
+// the single-threaded update loop is the only writer.
+type widthCache struct {
+	w     int
+	valid bool
+}
+
+// invalidateWidth drops the memoized content width; every row-text mutation
+// site funnels through rebuild/SetSize/Configure, which call this.
+func (m *Model) invalidateWidth() {
+	if m.wcache != nil {
+		m.wcache.valid = false
+	}
+}
+
 func (m Model) contentWidth() int {
+	if m.wcache != nil && m.wcache.valid {
+		return m.wcache.w
+	}
 	w := 0
 	for _, n := range m.rows {
-		if cw := ansi.StringWidth(m.rowText(n)); cw > w {
+		cw := ansi.StringWidth(m.rowText(n))
+		n.rowW = cw
+		if cw > w {
 			w = cw
 		}
+	}
+	if m.wcache != nil {
+		m.wcache.w, m.wcache.valid = w, true
 	}
 	return w
 }
@@ -1725,7 +1780,7 @@ func (m Model) suffixTint(n *node) color.Color {
 	if n.isDir || m.nodeVCSStatus(n) != vcs.StatusNone || m.nodeIgnored(n) {
 		return nil
 	}
-	return m.colors.suffixColor(n)
+	return m.colors.suffixColor(n, m.colorGlobs, m.colorVals)
 }
 
 // statusLetter is the one-cell non-colour VCS cue rendered at the row's right
@@ -1820,15 +1875,26 @@ func (m Model) View() string {
 			vis := ansi.Cut(styled, offX, offX+textW)
 			// Right-clipped rows end in an ellipsis (#1035) so truncation is
 			// visible; a VCS status letter below takes that cell instead.
-			clipped := ansi.StringWidth(styled) > offX+textW
+			// The plain row width was computed by contentWidth (#1096) —
+			// no ANSI re-parse of the styled string needed (#1096/#1098).
+			rowW := n.rowW
+			clipped := rowW > offX+textW
+			visW := rowW - offX
+			if visW > textW {
+				visW = textW
+			}
+			if visW < 0 {
+				visW = 0
+			}
 			// A VCS-statused row carries a one-cell status letter at the
 			// right edge (#1051): a non-colour cue that survives ANSI256
 			// quantisation and colour blindness.
 			if letter := statusLetter(m.nodeVCSStatus(n)); letter != "" && textW >= 2 {
-				if ansi.StringWidth(vis) >= textW {
+				if visW >= textW {
 					vis = ansi.Cut(vis, 0, textW-1)
+					visW = textW - 1
 				}
-				if pad := textW - 1 - ansi.StringWidth(vis); pad > 0 {
+				if pad := textW - 1 - visW; pad > 0 {
 					vis += style.Render(strings.Repeat(" ", pad))
 				}
 				ls := style.Bold(false)
@@ -1838,7 +1904,7 @@ func (m Model) View() string {
 				vis += ls.Render(letter)
 			} else if clipped && textW >= 2 {
 				vis = ansi.Cut(vis, 0, textW-1) + style.Bold(false).Render("…")
-			} else if pad := textW - ansi.StringWidth(vis); pad > 0 {
+			} else if pad := textW - visW; pad > 0 {
 				vis += style.Render(strings.Repeat(" ", pad))
 			}
 			line = vis

@@ -25,6 +25,8 @@ const (
 // table. Unset keys keep their built-in defaults. It triggers no scan; call it
 // before Init so the first render already reflects the config.
 func (m *Model) Configure(cfg host.Config) {
+	// Indent width, icons and the colour table all change row text (#1096).
+	defer m.invalidateWidth()
 	if cfg == nil {
 		return
 	}
@@ -103,6 +105,7 @@ func (m *Model) mergeColors() {
 		merged[k] = v
 	}
 	m.colors = merged
+	m.rebuildColorIndex() // keep the glob/colour index in step (#1098)
 }
 
 // readColors collects every "explorer.colors.<key>" entry into a colour table.

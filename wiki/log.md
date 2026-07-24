@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Explorer content width memoized + colour index precomputed (#1096, #1098):
+  no more per-frame full-tree row rebuilding or per-row glob sorting; View
+  reuses cached plain row widths for clipping
+  (`/architecture/performance.md`).
+
 - Frame wash stops re-wrapping the composed screen (#1095): the final
   palette background/foreground pass styles per line instead of re-running
   lipgloss Wrap/align over the exact-size frame — ~22% frame CPU and ~69%

@@ -29,18 +29,22 @@ func defaultColors() colorTable {
 // and "default" keys of older configs are accepted but no longer paint whole
 // rows (the row body renders in the plain foreground, the colour channel
 // belongs to the VCS status).
-func (t colorTable) suffixColor(n *node) color.Color {
+//
+// The sorted glob list and the resolved colours come precomputed from the
+// model's colour index (#1098): sorting the table and re-parsing colour
+// strings per row per frame showed up in the profile.
+func (t colorTable) suffixColor(n *node, globs []string, vals map[string]color.Color) color.Color {
 	if n.isDir {
 		return nil
 	}
-	for _, pat := range t.globs() {
+	for _, pat := range globs {
 		if ok, _ := filepath.Match(pat, n.name); ok {
-			return theme.Resolve(t[pat])
+			return vals[pat]
 		}
 	}
 	if ext := strings.TrimPrefix(filepath.Ext(n.name), "."); ext != "" {
-		if c, ok := t[ext]; ok {
-			return theme.Resolve(c)
+		if _, ok := t[ext]; ok {
+			return vals[ext]
 		}
 	}
 	return nil
