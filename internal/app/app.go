@@ -45,6 +45,7 @@ import (
 	"ike/internal/largefile"
 	"ike/internal/layout"
 	"ike/internal/localhistory"
+	"ike/internal/histories"
 	"ike/internal/marks"
 	ilsp "ike/internal/lsp"
 	"ike/internal/market"
@@ -438,6 +439,10 @@ type Model struct {
 	// the m{A-Z} marks, injected into every editor like bpts.
 	bookmarks *bookmarksMode
 	gmarks    *marks.Store
+	// qhist is the persistent query-history store (#1171): named recall
+	// buckets for the editor's search/ex lines and find-in-path, shared by
+	// every editor and the finder overlay.
+	qhist *histories.Store
 	// diffPick tracks diff.files' two-step file picking (#60): 0 idle, 1
 	// picking the left (old) file, 2 the right (new). diffLeft holds the
 	// first pick while the second is chosen.
@@ -647,6 +652,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		pasteHist:      pasteHist,
 		bookmarks:      bookmarks,
 		gmarks:         &marks.Store{},
+		qhist:          &histories.Store{},
 		paletteKey:     paletteToggleKey(cfg),
 		splitZone:      splitZone(cfg),
 		focusKeys:      focusKeys(cfg),
@@ -666,6 +672,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.searcher = search.New(m.host.Send)
 	m.finder = finder.New(m.searcher)
 	m.finder.SetPalette(themePal)
+	m.finder.SetHistories(m.qhist) // persistent query recall (#1171)
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
@@ -936,6 +943,7 @@ func (m *Model) installEmitter(key string) {
 			ed.SetBreakpointSource(source)
 			ed.SetBreakpointAdjuster(adjust)
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
+			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
 			ed.SetCompletionMRU(m.compMRU)
 		}
 	}

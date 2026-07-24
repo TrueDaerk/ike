@@ -23,6 +23,7 @@ import (
 	"ike/internal/editor/viewport"
 	"ike/internal/editorconfig"
 	"ike/internal/highlight"
+	"ike/internal/histories"
 	"ike/internal/host"
 	"ike/internal/lang"
 	"ike/internal/largefile"
@@ -100,7 +101,17 @@ type Model struct {
 
 	regs *register.Store
 	hist *history.History
-	view viewport.Viewport
+	// changes is the vim change list (#1174): the ring of recent edit
+	// positions g; / g, walk. Per-view session state like the local marks;
+	// reset wherever the undo history resets.
+	changes changeList
+	// changePending/changePos hand a freshly pushed change's CursorAfter to
+	// emitChar's EventChange branch, which records it into the ring after
+	// the same-event line-shift ran — recording at push time would let the
+	// edit's own delta shift the brand-new entry (changelist.go).
+	changePending bool
+	changePos     buffer.Position
+	view          viewport.Viewport
 
 	// Secondary-key state machine.
 	wait     awaiting
@@ -112,7 +123,15 @@ type Model struct {
 	cmdline    string
 	cmdCur     int      // rune cursor within cmdline (#1110)
 	cmdSuggest []string // path completion candidates on the ":" line (#543)
-	searching  bool
+	// Query-history recall (#1171): histStore is the app-owned persistent
+	// store (nil disables recall), cmdHistIdx the recall position on the
+	// open command line (-1 = editing live, otherwise an index into the
+	// bucket, newest first), cmdHistLive the stashed live line while
+	// walking so down past the newest entry restores it.
+	histStore   *histories.Store
+	cmdHistIdx  int
+	cmdHistLive string
+	searching   bool
 	searchDir  search.Direction
 	query      search.Query
 	// searchIgnoreCase mirrors editor.search_ignore_case (#1111): in-file
@@ -423,6 +442,7 @@ func New() Model {
 		stickyScroll:       true,
 		stickyDepth:        4,
 		hlTheme:            highlight.NewTheme(nil, nil),
+		cmdHistIdx:         -1,
 		visualStart:        -1,
 		visualEnd:          -1,
 		eol:                textenc.LF,
@@ -608,6 +628,7 @@ func (m *Model) Load(path string) error {
 		m.depOK = false
 	}
 	m.hist = history.New()
+	m.changes = changeList{} // the change list follows the history (#1174)
 	m.restoreUndo(data)
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
@@ -659,7 +680,8 @@ func (m *Model) NewFile(path string) {
 	m.depFile = false
 	m.depOK = false
 	m.hist = history.New()
-	m.diskHash = "" // nothing on disk yet; the first :w stamps it
+	m.changes = changeList{} // the change list follows the history (#1174)
+	m.diskHash = ""          // nothing on disk yet; the first :w stamps it
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
@@ -689,7 +711,8 @@ func (m *Model) RestoreText(text string) {
 	m.pending.Reset()
 	m.wait = awaitNone
 	m.hist = history.New()
-	m.hist.MarkNeverSaved() // recovered text is dirty even after undoing back to it
+	m.changes = changeList{} // the change list follows the history (#1174)
+	m.hist.MarkNeverSaved()  // recovered text is dirty even after undoing back to it
 	m.diskHash = ""         // recovered content matches no on-disk state
 	m.dirty = true
 	m.docVersion++

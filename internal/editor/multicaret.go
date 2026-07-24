@@ -220,7 +220,7 @@ func (m *Model) fanMutate(apply func(rec *history.Recorder, pos, floor buffer.Po
 		return apply(rec, pos, floor)
 	})
 	if !rec.Empty() {
-		m.hist.Push(rec.Commit(m.cursor))
+		m.pushChange(rec.Commit(m.cursor))
 		m.dirty = true
 		m.emit(EventChange)
 	}
@@ -385,7 +385,7 @@ func (m *Model) fanOperatorTargets(op, reg rune, resolve func(pos buffer.Positio
 		return
 	}
 	if !rec.Empty() {
-		m.hist.Push(rec.Commit(m.cursor))
+		m.pushChange(rec.Commit(m.cursor))
 		m.dirty = true
 		m.emit(EventChange)
 	}
@@ -433,7 +433,7 @@ func (m *Model) fanLinewiseOperator(op rune, count int) {
 			return
 		}
 		if !rec.Empty() {
-			m.hist.Push(rec.Commit(m.cursor))
+			m.pushChange(rec.Commit(m.cursor))
 			m.dirty = true
 			m.emit(EventChange)
 		}

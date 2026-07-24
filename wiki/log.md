@@ -22,6 +22,21 @@
   string, so the bar's mirrored render/hit geometry is unchanged. Pins
   persist with the layout identity (`pinned` indexes into `tabs`) and a
   dragged-out pinned tab keeps its pin (`/architecture/editor-tabs.md`).
+- Query history for search inputs (#1171): the editor's `/` `?` line and its
+  `:` line recall recent committed queries with `up`/`down` (vim order, live
+  line restored past the newest; typing after a recall edits normally), each
+  in its own bucket; find-in-path's existing recall now persists too. One new
+  `internal/histories` store (`histories.json` under the state store, named
+  buckets `search`/`ex`/`findInPath`, deduped, capped at 50, marks.json
+  degradation semantics), injected into editors and the finder by the app
+  (`/architecture/editor.md`, `/architecture/search.md`).
+- Change list (#1174): `g;` / `g,` walk a per-document ring (cap 100) of
+  recent edit positions — the `CursorAfter` of every committed undo `Change`
+  — with vim semantics (first `g;` = most recent edit, pointer resets on new
+  edits, adjacent same-line entries collapse). Cursor motion only: no undo,
+  no nav-history entry; entries shift with the local-mark delta scheme and
+  jumps clamp into the buffer; notices `change list: n/m` and
+  `no earlier/later edit position` (`/architecture/editor.md`).
 
 - Merge-conflict resolution in the editor (#1149): conflict blocks
   (`<<<<<<<` / `=======` / `>>>>>>>`, optional diff3 `|||||||` base) are

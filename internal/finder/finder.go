@@ -16,6 +16,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/histories"
 	"ike/internal/locations"
 	"ike/internal/search"
 	"ike/internal/theme"
@@ -89,6 +90,12 @@ type Model struct {
 
 	hist    []string
 	histIdx int // -1 = editing live, otherwise index into hist (newest first)
+	// histStore is the app-owned persistent query-history store (#1171):
+	// hist seeds from its findInPath bucket on the first Open and commits
+	// push back into it, so the recall list survives a restart. Nil (the
+	// default, tests) keeps the history session-local.
+	histStore  *histories.Store
+	histLoaded bool
 
 	gen       int // generation of the scan whose results we accept
 	scanning  bool
@@ -117,6 +124,9 @@ func New(svc *search.Service) *Model {
 // SetPalette threads the active theme in.
 func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
+// SetHistories injects the persistent query-history store (#1171).
+func (m *Model) SetHistories(h *histories.Store) { m.histStore = h }
+
 // SetDisplayPath injects the header path formatter.
 func (m *Model) SetDisplayPath(f func(string) string) { m.displayPath = f }
 
@@ -126,6 +136,12 @@ func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 // Open shows the finder rooted at root, keeping the previous query and
 // toggles (JetBrains re-opens with the last search) but clearing results.
 func (m *Model) Open(root string) {
+	if m.histStore != nil && !m.histLoaded {
+		// Seed the recall list from the persisted bucket once (#1171);
+		// afterwards the in-memory list is authoritative for this session.
+		m.hist = m.histStore.All(histories.FindInPath)
+		m.histLoaded = true
+	}
 	m.open = true
 	m.replaceMode = false
 	m.root = root
@@ -525,6 +541,11 @@ func (m *Model) commitHistory() {
 		out = out[:maxHistory]
 	}
 	m.hist = out
+	if m.histStore != nil {
+		// Persist on push (#1171): commits are rare, so no debounce. The
+		// store applies the same dedupe and cap.
+		m.histStore.Push(histories.FindInPath, q)
+	}
 }
 
 // View renders the centered overlay box.

@@ -53,7 +53,7 @@ func (m *Model) ApplyTextEdits(edits []TextEdit) int {
 		inv = append(inv, inverse)
 	}
 	m.cursor = m.buf.ClampCursor(m.cursor)
-	m.hist.Push(history.Change{
+	m.pushChange(history.Change{
 		Forwards:     fwd,
 		Inverses:     inv,
 		CursorBefore: cursorBefore,
