@@ -88,6 +88,10 @@ type Manager struct {
 	// and each fragment server's last publish per (host, slot), merged into
 	// one host-path publish whenever either side changes.
 	hostDiags map[string][]protocol.Diagnostic
+	// published tracks every path a language's servers have published
+	// non-empty diagnostics for — unopened paths included — so a stop or
+	// disable can flush them from the Problems store (#1102).
+	published map[string]map[string]bool
 	fragDiags map[string]map[int][]fragDiagnostic
 }
 
@@ -137,6 +141,7 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		fragGen:  make(map[string]int),
 
 		hostDiags: make(map[string][]protocol.Diagnostic),
+		published: make(map[string]map[string]bool),
 		fragDiags: make(map[string]map[int][]fragDiagnostic),
 	}
 }
@@ -954,6 +959,9 @@ func (m *Manager) StopLang(lang string) {
 			delete(m.fragGen, path)
 			delete(m.hostDiags, path)
 			delete(m.fragDiags, path)
+			if m.published[lang] != nil {
+				delete(m.published[lang], path) // its own publishEmpty follows (#1102)
+			}
 		}
 	}
 	// Fragment documents in the stopped language lose their server; drop them
@@ -987,6 +995,7 @@ func (m *Manager) StopLang(lang string) {
 	for _, d := range cleared {
 		m.publishEmpty(d.path, d.lines, d.version)
 	}
+	m.flushPublished(lang) // unopened paths leave the Problems store too (#1102)
 	for host := range republish {
 		m.publishHostDiagnostics(host)
 	}
@@ -1075,6 +1084,8 @@ func (m *Manager) Shutdown() {
 	m.frags = make(map[string]map[int]*fragmentDoc)
 	m.fragGen = make(map[string]int)
 	m.hostDiags = make(map[string][]protocol.Diagnostic)
+	published := m.published
+	m.published = make(map[string]map[string]bool)
 	m.fragDiags = make(map[string]map[int][]fragDiagnostic)
 	for _, srv := range servers {
 		srv.closing = true // suppress restart on the resulting Done
@@ -1087,6 +1098,19 @@ func (m *Manager) Shutdown() {
 	}
 	for _, d := range cleared {
 		m.publishEmpty(d.path, d.lines, d.version)
+	}
+	// Unopened published paths leave the Problems store too (#1102); cleared
+	// documents got their own empty publish above.
+	clearedSet := make(map[string]bool, len(cleared))
+	for _, d := range cleared {
+		clearedSet[d.path] = true
+	}
+	for _, paths := range published {
+		for p := range paths {
+			if !clearedSet[p] {
+				m.publishEmpty(p, nil, 0)
+			}
+		}
 	}
 }
 
@@ -1203,6 +1227,18 @@ func (m *Manager) onNotify(lang, method string, params json.RawMessage) {
 	doc := m.docs[path]
 	if doc != nil {
 		m.hostDiags[path] = p.Diagnostics
+	}
+	// Track every non-empty publish per language — unopened paths included
+	// (#1102): when the language's servers stop or get disabled, these are
+	// the entries the Problems store must drop; open documents already clear
+	// through the #994 paths.
+	if m.published[lang] == nil {
+		m.published[lang] = make(map[string]bool)
+	}
+	if len(p.Diagnostics) == 0 {
+		delete(m.published[lang], path)
+	} else {
+		m.published[lang][path] = true
 	}
 	m.mu.Unlock()
 	if doc == nil {

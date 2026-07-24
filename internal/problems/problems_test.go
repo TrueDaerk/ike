@@ -214,3 +214,23 @@ func TestHeaderPluralization(t *testing.T) {
 		}
 	}
 }
+
+// TestStoreDropRemovesSubtree guards #1102: deleting a file (or a directory
+// with findings beneath it) prunes the store.
+func TestStoreDropRemovesSubtree(t *testing.T) {
+	s := NewStore()
+	s.Set("/proj/a.go", []ilsp.Diagnostic{diag(0, 0, 1, "x", "")})
+	s.Set("/proj/sub/b.go", []ilsp.Diagnostic{diag(0, 0, 1, "y", "")})
+	s.Set("/proj/subx.go", []ilsp.Diagnostic{diag(0, 0, 1, "z", "")})
+	s.Drop("/proj/a.go", false)
+	if s.Get("/proj/a.go") != nil {
+		t.Fatal("file drop must remove the entry")
+	}
+	s.Drop("/proj/sub", true)
+	if s.Get("/proj/sub/b.go") != nil {
+		t.Fatal("dir drop must remove entries beneath it")
+	}
+	if s.Get("/proj/subx.go") == nil {
+		t.Fatal("sibling with the dir-name prefix must survive")
+	}
+}

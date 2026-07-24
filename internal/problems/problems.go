@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"sort"
 	"strconv"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -38,6 +39,21 @@ type Store struct {
 
 // NewStore returns an empty store.
 func NewStore() *Store { return &Store{byPath: map[string][]ilsp.Diagnostic{}} }
+
+// Drop removes path's entry — and, for a directory, every entry beneath it
+// (#1102): a deleted file's findings must not linger in the pane.
+func (s *Store) Drop(path string, isDir bool) {
+	delete(s.byPath, path)
+	if !isDir {
+		return
+	}
+	prefix := path + string(filepath.Separator)
+	for p := range s.byPath {
+		if strings.HasPrefix(p, prefix) {
+			delete(s.byPath, p)
+		}
+	}
+}
 
 // Set replaces path's diagnostic set; an empty set removes the path so a
 // fixed file drops out of the pane entirely.

@@ -41,6 +41,7 @@ func (m *Manager) restart(old *server, docs []*document, errLine string) {
 		// Nobody maintains the dead server's findings anymore — drop them
 		// from every affected editor (#994).
 		m.clearServerDiagnostics(k, docs)
+		m.flushPublished(old.lang) // stale project-wide findings go too (#1102)
 		return
 	}
 
