@@ -3623,17 +3623,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// The file is back: a replace-in-place (write temp + rename,
 				// git checkout) coalesced remove over create — a content change.
 				msg.Kind = watch.FileChanged
-			} else if ed := m.editorForPath(msg.Path); ed != nil {
-				if !ed.Dirty() {
-					// Externally deleted, nothing unsaved: same as the
-					// explorer's delete flow — close the pane (#83). A dirty
-					// buffer instead stays open, marked stale by the editor.
-					m.closeEditorsForPath(msg.Path, false)
-					return m, vcsCmd
-				}
 			}
 		}
-		return m, tea.Batch(m.routeToEditor(msg.Path, msg), vcsCmd)
+		// Announce the (kind-fixed) file event to hook subscribers (#1144):
+		// the LSP bridge forwards it to the servers as
+		// workspace/didChangeWatchedFiles, so Intelephense re-indexes
+		// externally created/changed/deleted files.
+		hookCmds := m.fireHooks(plugin.EventExternalFileChange, plugin.FileChange{
+			Path: msg.Path,
+			Kind: fileChangeKind(msg.Kind),
+		})
+		if msg.Kind == watch.FileRemoved {
+			if ed := m.editorForPath(msg.Path); ed != nil && !ed.Dirty() {
+				// Externally deleted, nothing unsaved: same as the
+				// explorer's delete flow — close the pane (#83). A dirty
+				// buffer instead stays open, marked stale by the editor.
+				m.closeEditorsForPath(msg.Path, false)
+				return m, tea.Batch(append(hookCmds, vcsCmd)...)
+			}
+		}
+		return m, tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
 
 	case vcsInvalidateMsg:
 		// Something changed the working tree (a buffer save, a mutating VCS
@@ -4368,6 +4377,19 @@ func (m *Model) syncExplorerOpen() {
 		}
 	}
 	m.explorer().SetOpen(open)
+}
+
+// fileChangeKind maps a watcher file-event kind onto the hook payload kind
+// (#1144). Only the three file kinds reach it — the dir/git/config kinds
+// return early in the watch.EventMsg case.
+func fileChangeKind(k watch.Kind) plugin.FileChangeKind {
+	switch k {
+	case watch.FileCreated:
+		return plugin.FileCreated
+	case watch.FileRemoved:
+		return plugin.FileDeleted
+	}
+	return plugin.FileModified
 }
 
 // fireHooks invokes every enabled hook subscribed to event.

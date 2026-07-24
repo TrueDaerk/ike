@@ -123,6 +123,13 @@ func (c *Client) DidClose(p protocol.DidCloseTextDocumentParams) error {
 	return c.notify("textDocument/didClose", p)
 }
 
+// DidChangeWatchedFiles announces external file creations/changes/deletions
+// (#1144) so workspace-indexing servers (Intelephense) refresh their view of
+// files IKE never opened.
+func (c *Client) DidChangeWatchedFiles(p protocol.DidChangeWatchedFilesParams) error {
+	return c.notify("workspace/didChangeWatchedFiles", p)
+}
+
 // --- requests (await a result) ---
 
 // Completion requests completion items; it normalises the `CompletionList | []`

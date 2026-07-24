@@ -93,6 +93,14 @@ type Manager struct {
 	// disable can flush them from the Problems store (#1102).
 	published map[string]map[string]bool
 	fragDiags map[string]map[int][]fragDiagnostic
+
+	// Watched-files state (#1144): externally created/changed/deleted paths
+	// accumulate here (latest merged change type per path) and flush after
+	// watchedDebounce as one workspace/didChangeWatchedFiles per interested
+	// server. See watchedfiles.go.
+	watchedPending map[string]int
+	watchedTimer   *time.Timer
+	watchedDelay   time.Duration
 }
 
 // server is one running language server instance.
@@ -104,6 +112,11 @@ type server struct {
 	stderr  func() string // captured stderr tail; nil for in-memory connectors
 	spec    lsp.ServerSpec
 	closing bool // set before a deliberate stop so watchExit does not restart
+	// watchers holds the server's dynamically registered file-watch globs
+	// (#1144), keyed by registration id so client/unregisterCapability can
+	// drop them. Guarded by the manager's mu. A server that never registers
+	// gets the language-match fallback (watchedfiles.go).
+	watchers map[string][]protocol.FileSystemWatcher
 }
 
 // document tracks an open buffer's identity and latest text, so the manager can
@@ -143,6 +156,9 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		hostDiags: make(map[string][]protocol.Diagnostic),
 		published: make(map[string]map[string]bool),
 		fragDiags: make(map[string]map[int][]fragDiagnostic),
+
+		watchedPending: make(map[string]int),
+		watchedDelay:   watchedDebounce,
 	}
 }
 
@@ -1277,6 +1293,19 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 			out[i] = settingsSection(srv.spec.Settings, it.Section)
 		}
 		_ = srv.cl.Respond(id, out, nil)
+	case "client/registerCapability":
+		// Dynamic registrations (#1144): store workspace/didChangeWatchedFiles
+		// globs on the server so external file events can be filtered; every
+		// other method is acknowledged and ignored.
+		var p protocol.RegistrationParams
+		_ = json.Unmarshal(params, &p)
+		m.registerWatchers(srv, p.Registrations)
+		_ = srv.cl.Respond(id, nil, nil)
+	case "client/unregisterCapability":
+		var p protocol.UnregistrationParams
+		_ = json.Unmarshal(params, &p)
+		m.unregisterWatchers(srv, p.Unregisterations)
+		_ = srv.cl.Respond(id, nil, nil)
 	case "workspace/applyEdit":
 		// The effect of an executed command (code actions, #8): convert and
 		// hand to the ApplyEdit callback. Off the read-loop goroutine — the

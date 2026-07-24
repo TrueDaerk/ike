@@ -79,6 +79,16 @@ type ClientCapabilities struct {
 type WorkspaceClientCaps struct {
 	Configuration          bool                        `json:"configuration,omitempty"`
 	DidChangeConfiguration *DidChangeConfigurationCaps `json:"didChangeConfiguration,omitempty"`
+	// DidChangeWatchedFiles with dynamicRegistration lets a server register
+	// the file globs it wants workspace/didChangeWatchedFiles for (#1144):
+	// without it Intelephense never re-indexes externally created files.
+	DidChangeWatchedFiles *DidChangeWatchedFilesCaps `json:"didChangeWatchedFiles,omitempty"`
+}
+
+// DidChangeWatchedFilesCaps announces workspace/didChangeWatchedFiles support
+// (#1144); DynamicRegistration invites client/registerCapability watch globs.
+type DidChangeWatchedFilesCaps struct {
+	DynamicRegistration bool `json:"dynamicRegistration,omitempty"`
 }
 
 type DidChangeConfigurationCaps struct {
@@ -684,4 +694,124 @@ type DocumentRangeFormattingParams struct {
 	TextDocument TextDocumentIdentifier `json:"textDocument"`
 	Range        Range                  `json:"range"`
 	Options      FormattingOptions      `json:"options"`
+}
+
+// --- watched files (#1144) ---
+
+// FileChangeType values classify one workspace/didChangeWatchedFiles event.
+const (
+	// FileChangeCreated announces a newly created file.
+	FileChangeCreated = 1
+	// FileChangeChanged announces a content change of an existing file.
+	FileChangeChanged = 2
+	// FileChangeDeleted announces a deleted file.
+	FileChangeDeleted = 3
+)
+
+// FileEvent is one file creation/change/deletion; Type is a FileChange* value.
+type FileEvent struct {
+	URI  string `json:"uri"`
+	Type int    `json:"type"`
+}
+
+// DidChangeWatchedFilesParams carries the batched file events of one
+// workspace/didChangeWatchedFiles notification.
+type DidChangeWatchedFilesParams struct {
+	Changes []FileEvent `json:"changes"`
+}
+
+// WatchKind bit flags of FileSystemWatcher.Kind: which event types a server
+// wants for a glob. An absent Kind means all three (7).
+const (
+	WatchCreate = 1
+	WatchChange = 2
+	WatchDelete = 4
+	// WatchAll is the spec default when a watcher carries no kind.
+	WatchAll = WatchCreate | WatchChange | WatchDelete
+)
+
+// GlobPattern is the `string | RelativePattern` union of a watcher's glob: a
+// bare pattern (relative to the workspace folder, or absolute), or a pattern
+// resolved against an explicit base URI/folder.
+type GlobPattern struct {
+	// Pattern is the glob itself.
+	Pattern string
+	// BaseURI is the resolved base of a RelativePattern ("" for bare strings);
+	// the wire shape allows a plain URI string or a WorkspaceFolder object.
+	BaseURI string
+}
+
+// UnmarshalJSON accepts `"glob"` or `{"baseUri": string | {"uri": ...}, "pattern": ...}`.
+func (g *GlobPattern) UnmarshalJSON(raw []byte) error {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		g.Pattern, g.BaseURI = s, ""
+		return nil
+	}
+	var rel struct {
+		BaseURI json.RawMessage `json:"baseUri"`
+		Pattern string          `json:"pattern"`
+	}
+	if err := json.Unmarshal(raw, &rel); err != nil {
+		return err
+	}
+	g.Pattern = rel.Pattern
+	var base string
+	if json.Unmarshal(rel.BaseURI, &base) != nil {
+		var folder WorkspaceFolder
+		if json.Unmarshal(rel.BaseURI, &folder) == nil {
+			base = folder.URI
+		}
+	}
+	g.BaseURI = base
+	return nil
+}
+
+// MarshalJSON writes the bare-string form when no base is set, the
+// RelativePattern object otherwise (round-trip support for tests).
+func (g GlobPattern) MarshalJSON() ([]byte, error) {
+	if g.BaseURI == "" {
+		return json.Marshal(g.Pattern)
+	}
+	return json.Marshal(struct {
+		BaseURI string `json:"baseUri"`
+		Pattern string `json:"pattern"`
+	}{g.BaseURI, g.Pattern})
+}
+
+// FileSystemWatcher is one glob a server registered interest in; Kind is a
+// Watch* bit set (nil means WatchAll).
+type FileSystemWatcher struct {
+	GlobPattern GlobPattern `json:"globPattern"`
+	Kind        *int        `json:"kind,omitempty"`
+}
+
+// DidChangeWatchedFilesRegistrationOptions is the registerOptions payload of a
+// workspace/didChangeWatchedFiles registration.
+type DidChangeWatchedFilesRegistrationOptions struct {
+	Watchers []FileSystemWatcher `json:"watchers"`
+}
+
+// Registration is one dynamic capability registration (client/registerCapability).
+type Registration struct {
+	ID              string          `json:"id"`
+	Method          string          `json:"method"`
+	RegisterOptions json.RawMessage `json:"registerOptions,omitempty"`
+}
+
+// RegistrationParams carries a client/registerCapability request's payload.
+type RegistrationParams struct {
+	Registrations []Registration `json:"registrations"`
+}
+
+// Unregistration is one dynamic capability withdrawal (client/unregisterCapability).
+type Unregistration struct {
+	ID     string `json:"id"`
+	Method string `json:"method"`
+}
+
+// UnregistrationParams carries a client/unregisterCapability request's payload.
+// The wire property is "unregisterations" — a spec typo kept for compatibility.
+type UnregistrationParams struct {
+	Unregisterations []Unregistration `json:"unregisterations"`
 }

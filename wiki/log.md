@@ -7,6 +7,15 @@
   scratch.new (JetBrains verbatim); ledger regenerated
   (`/architecture/keybindings.md`).
 
+- LSP watched files (#1144): external file creates/changes/deletes now reach
+  language servers as `workspace/didChangeWatchedFiles` — the client
+  advertises `didChangeWatchedFiles.dynamicRegistration`, stores each server's
+  `client/registerCapability` globs (pragmatic `**`/`{}`/`[]` matcher), falls
+  back to language matching for servers that never register, and batches the
+  0140 watcher's per-file events (200 ms, per-path merge). IKE's own saves
+  additionally emit a `Changed` event. Fixes Intelephense's stale
+  "Undefined type" for externally created classes
+  (`/architecture/lsp.md`, `/architecture/editor.md`).
 - Scrollbar thumb reads as a background block (#1138): marks on the thumb
   keep their colour as foreground glyphs on the ScrollbarThumb background,
   so the thumb extent stays identifiable under dense git/diagnostic marks

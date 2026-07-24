@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-24T12:00:00Z
+timestamp: 2026-07-24T18:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -520,6 +520,54 @@ publish. A
 fragment language with no configured server degrades silently. The
 `sql` language plugin registers `sqls` (also serving plain
 `.sql` files) so the pipeline works out of the box.
+
+## File watching (workspace/didChangeWatchedFiles, #1144)
+
+Workspace-indexing servers (Intelephense most visibly) resolve symbols against
+an index built at initialize time and only refresh entries they are told
+about. Open buffers sync via didOpen/didChange, but a file **created, changed
+or deleted outside IKE** — a generator, a `git checkout`, another editor —
+was previously never announced: a newly created PHP class kept reporting
+`Undefined type` in referencing files until a manual save happened to poke the
+server. The watched-files path closes that gap.
+
+- **Capability**: `clientCapabilities()` advertises
+  `workspace.didChangeWatchedFiles` with `dynamicRegistration: true`. Servers
+  answer with a `client/registerCapability` request for method
+  `workspace/didChangeWatchedFiles` carrying their glob watchers; the manager
+  stores them per server instance (`manager/watchedfiles.go`, keyed by
+  registration id) and `client/unregisterCapability` drops them. A crashed
+  server's replacement re-registers naturally — watchers live on the `server`
+  struct, not the manager.
+- **Event source**: the 0140 external-file watcher (`internal/watch`) already
+  emits debounced **per-file** `FileCreated`/`FileChanged`/`FileRemoved`
+  events. The app's `watch.EventMsg` handler forwards them (after its
+  remove-then-recreate fixup) as `plugin.EventExternalFileChange` hooks; the
+  LSP bridge feeds them into `Manager.FileEvent`. IKE's own saves are
+  watcher-suppressed (`MarkSaved`), so the bridge's `fileSaved` additionally
+  emits a `Changed` event — spec-conform, and it keeps servers watching
+  companion files (composer.json, go.mod) current.
+- **Batching**: events accumulate for 200 ms (on top of the watcher's own
+  100 ms debounce) with per-path merge (created+changed → created,
+  created+deleted cancels, deleted+created → changed), then flush as one
+  `workspace/didChangeWatchedFiles` per interested server.
+- **Filtering**: with registered watchers, the globs (and their `kind` bits)
+  decide. The matcher (`globMatch`) supports `**`, `*` (never crossing `/`),
+  `?`, `{a,b}` alternation and `[...]` classes — enough for what real servers
+  register (`**/*.php`, `**/*.{ts,tsx}`); limits: byte-wise matching, no
+  escape character. Relative patterns resolve against the RelativePattern
+  base or the server root; absolute patterns match the full path. A server
+  that never registers gets a **fallback**: events for files whose language
+  (via the `internal/lang` registry) maps to that server and that lie under
+  its root.
+- **Open buffers**: external edits to files open in IKE keep the 0140
+  reconciliation (auto-reload / stale flag, see
+  [Editor § External file changes](./editor.md#external-file-changes-roadmap-0140))
+  as the authority over buffer content; the server additionally receives the
+  watched-files event so its index and the buffer sync stay coherent.
+- **Coverage limits**: events originate from the recursive fsnotify watch, so
+  changes under pruned directories (dot dirs, `vendor/`, `node_modules/`, or
+  beyond the #1011 directory cap) are not announced.
 
 ## Design rules
 

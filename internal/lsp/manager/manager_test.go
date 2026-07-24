@@ -47,6 +47,12 @@ type fakeOpts struct {
 	// noInlayHint withholds the inlayHintProvider capability, so the
 	// manager's gate is observable (#171).
 	noInlayHint bool
+	// watched receives every workspace/didChangeWatchedFiles notification
+	// (#1144).
+	watched chan protocol.DidChangeWatchedFilesParams
+	// registerWatchers, when non-nil, is a registrations JSON array the fake
+	// sends as a client/registerCapability request upon "initialized" (#1144).
+	registerWatchers json.RawMessage
 }
 
 // fakeConnector returns a Connector backed by an in-memory scripted server. The
@@ -330,6 +336,16 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 					Message:  "boom",
 				}},
 			})
+		case msg.Method == "initialized":
+			if opts.registerWatchers != nil {
+				_ = writeFrame(out, []byte(`{"jsonrpc":"2.0","id":4242,"method":"client/registerCapability","params":{"registrations":`+string(opts.registerWatchers)+`}}`))
+			}
+		case msg.Method == "workspace/didChangeWatchedFiles":
+			if opts.watched != nil {
+				var p protocol.DidChangeWatchedFilesParams
+				_ = json.Unmarshal(msg.Params, &p)
+				opts.watched <- p
+			}
 		case msg.ID != nil:
 			respond(out, msg.ID, nil)
 		}
