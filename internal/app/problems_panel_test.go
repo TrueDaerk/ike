@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/host"
+	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 	"ike/internal/pane"
 	"ike/internal/problems"
@@ -132,3 +133,30 @@ func TestProblemsPanePersists(t *testing.T) {
 
 // Compile-time guard: the panel message the app routes stays in sync.
 var _ = problems.OpenLocationMsg{}
+
+// TestRestoreLayoutAcceptsProblemsLeaf guards #1157: a saved layout holding
+// the Problems pane restores it (empty) instead of silently falling back to
+// the default layout — the restoreLayout pre-filter was missing "problems".
+func TestRestoreLayoutAcceptsProblemsLeaf(t *testing.T) {
+	m := problemsApp(t)
+	out, _ := m.Update(ProblemsToggleMsg{})
+	m = out.(Model)
+	if _, _, ok := loadLayout(); !ok {
+		t.Fatal("layout must have been saved")
+	}
+	// A fresh model over the SAME config dir restores the saved tree — the
+	// problems leaf must survive the pre-filter (not fall back to default).
+	// Built like problemsApp but without re-pointing IKE_CONFIG_DIR.
+	m2 := NewWith(registry.New(), host.MapConfig{})
+	out2, _ := m2.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m2 = out2.(Model)
+	found := false
+	for _, key := range layout.Leaves(m2.activeWS().Tree) {
+		if key == pane.ProblemsKey {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("restored layout must keep the problems pane leaf (#1157)")
+	}
+}
