@@ -94,3 +94,16 @@ letter) through up to five separate `Snapshot.relPath` calls per row per frame
 double `EvalSymlinks` syscall pair per call. `View` now resolves a `rowVCS`
 struct once per row and threads it through style/tint/letter; the Snapshot
 caches its `EvalSymlinks`-resolved root after the first fallback miss.
+
+## Editor scrollbar overlay (#1097)
+
+The #1022 scrollbar overlay ran outside the #614 line cache: per frame it
+rebuilt the diagnostics stripe map from every diagnostic and allocated a
+lipgloss style chain + Render per bar cell. The stripe is now memoized in a
+pointer-held `sbCache` keyed on a diagnostics epoch (bumped in
+`setDiagnostics`) plus the track geometry, and the track/thumb/severity cells
+render once per overlay call instead of once per row. Warm 5k-line View with
+an active stripe: 329µs/606 allocs → 234µs/334 (BenchmarkEditorViewWarm).
+The remaining per-row `ansi.Truncate` pass is bounded by the pane width; the
+deeper option (carrying row widths in the line cache) stays open in the issue
+notes if it ever shows up again.

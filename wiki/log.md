@@ -2,6 +2,10 @@
 
 ## 2026-07-24
 
+- Editor scrollbar stripe memoized + bar cells hoisted (#1097): warm View
+  with an active error stripe drops from 329µs/606 allocs to 234µs/334
+  (`/architecture/performance.md`).
+
 - Explorer VCS facts resolve once per row (#1099): status/ignored/tint/letter
   share one relPath resolution, and the snapshot caches its
   EvalSymlinks-resolved root — no more per-row syscalls on symlinked roots
