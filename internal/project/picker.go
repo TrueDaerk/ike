@@ -52,14 +52,6 @@ func (m *PickerMode) clock() time.Time {
 	return time.Now()
 }
 
-// joinBadge joins non-empty badge fragments with a space.
-func joinBadge(a, b string) string {
-	if b == "" {
-		return a
-	}
-	return a + " " + b
-}
-
 // NewPickerMode builds the picker mode. A nil history reads the
 // recent-projects list from the live config on every open.
 func NewPickerMode(history func() []Entry) *PickerMode {
@@ -109,13 +101,13 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			Spans:  s.spans,
 			Score:  s.score,
 			Msg:    PickedMsg{Path: s.entry.Path},
-			// The last-opened badge (#842); "" for legacy entries without
-			// a timestamp.
-			Badge: RelTime(s.entry.LastOpened, now),
+			// The last-opened time (#842), right-aligned in its own column
+			// since #1114; "" for legacy entries without a timestamp.
+			Time: RelTime(s.entry.LastOpened, now),
 		}
 		if m.open != nil && m.open(s.entry.Path) {
 			// Loaded in memory (#820): dot badge + close-in-place aux action.
-			it.Badge = joinBadge("●", it.Badge)
+			it.Badge = "●"
 			it.Aux = CloseWorkspaceMsg{Path: s.entry.Path}
 		} else {
 			// Unloaded entries prune from the history instead (#842).

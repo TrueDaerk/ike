@@ -661,9 +661,18 @@ func (p *Palette) sideView(width int) string {
 // auxGlyphW is the right-pinned "✕" affordance's width (glyph + one space).
 const auxGlyphW = 2
 
+// timeSepW is the separation reserved on the left of the right-aligned Time
+// column (#1114), keeping it visually apart from the title / detail chip.
+const timeSepW = 2
+
+// minRowTitleW is the smallest title width worth keeping next to a Time
+// column (#1114): below it the time drops so the name stays readable.
+const minRowTitleW = 8
+
 // sideRow renders one left-column line: marker + highlighted title, an
-// optional Badge (#820, dim accent), and the right-pinned "✕" for rows with
-// an Aux action, truncated to the column width.
+// optional Badge (#820, dim accent), the right-aligned Time column (#1114)
+// and the right-pinned "✕" for rows with an Aux action, truncated to the
+// column width. The narrow side column drops the time before the name.
 func (p *Palette) sideRow(it Item, selected bool, width int) string {
 	const markerW = 2
 	marker := "  "
@@ -671,18 +680,36 @@ func (p *Palette) sideRow(it Item, selected bool, width int) string {
 		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
 	}
 	badge, badgeW := p.badgeView(it)
+	timeStr, timeW := p.timeView(it)
 	auxW := 0
 	if it.Aux != nil {
 		auxW = auxGlyphW
 	}
-	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), width-markerW-badgeW-auxW)
+	rightW := auxW
+	if timeW > 0 {
+		rightW += timeW + 1 // one space between the time and the "✕ "
+	}
+	titleMax := width - markerW - badgeW - rightW
+	if timeW > 0 && titleMax < minRowTitleW {
+		// Too narrow for both (#1114): the time drops, the name stays.
+		timeStr, timeW = "", 0
+		rightW = auxW
+		titleMax = width - markerW - badgeW - rightW
+	}
+	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
 	line := marker + title + badge
-	if it.Aux != nil {
-		gap := width - markerW - titleW - badgeW - auxGlyphW
+	if timeW > 0 || it.Aux != nil {
+		gap := width - markerW - titleW - badgeW - rightW
 		if gap < 1 {
 			gap = 1
 		}
-		line += strings.Repeat(" ", gap) + lipgloss.NewStyle().Foreground(p.theme().Border).Render("✕ ")
+		line += strings.Repeat(" ", gap)
+		if timeW > 0 {
+			line += timeStr + " "
+		}
+		if it.Aux != nil {
+			line += lipgloss.NewStyle().Foreground(p.theme().Border).Render("✕ ")
+		}
 	}
 	return clipRow(line, width, selected, p.theme().Panel)
 }
@@ -696,9 +723,22 @@ func (p *Palette) badgeView(it Item) (string, int) {
 		1 + ansi.StringWidth(it.Badge)
 }
 
-// row renders a single result line: a selection marker, the highlighted title on
-// the left, and the key binding (Detail) as a highlighted chip pinned to the
-// right. The title is truncated first so the binding chip is never dropped.
+// timeView renders an item's Time column (#1114) in the dim accent, unpadded
+// — the row layout owns the separation around it.
+func (p *Palette) timeView(it Item) (string, int) {
+	if it.Time == "" {
+		return "", 0
+	}
+	return lipgloss.NewStyle().Foreground(p.accentColor()).Render(it.Time),
+		ansi.StringWidth(it.Time)
+}
+
+// row renders a single result line: a selection marker, the highlighted title
+// (plus Badge) on the left, and the right column pinned to the right — the
+// Detail chip (key binding / path), the right-aligned Time (#1114) with
+// timeSepW of separation, and the "✕" aux zone. The title is truncated first
+// so the right column is never dropped; when even the title would fall below
+// minRowTitleW the Time column drops instead.
 func (p *Palette) row(it Item, selected bool, width int) string {
 	const markerW = 2
 	marker := "  "
@@ -717,6 +757,7 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 	}
 
 	badge, badgeW := p.badgeView(it)
+	timeStr, timeW := p.timeView(it)
 	auxW := 0
 	aux := ""
 	if it.Aux != nil {
@@ -724,17 +765,32 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 		aux = lipgloss.NewStyle().Foreground(p.theme().Border).Render(" ✕")
 	}
 	avail := width - markerW
-	titleMax := avail - detailW - badgeW - auxW - 1 // keep a space before the chip
+	rightW := detailW + auxW
+	if timeW > 0 {
+		rightW += timeW + timeSepW
+	}
+	titleMax := avail - badgeW - rightW - 1 // keep a space before the right column
+	if timeW > 0 && titleMax < minRowTitleW {
+		// Narrow rows drop the time first (#1114): the name keeps a readable
+		// minimum and the "✕" stays actionable.
+		timeStr, timeW = "", 0
+		rightW = detailW + auxW
+		titleMax = avail - badgeW - rightW - 1
+	}
 	if titleMax < 1 {
 		titleMax = 1
 	}
 	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
 
-	gap := avail - titleW - badgeW - detailW - auxW
+	gap := avail - titleW - badgeW - rightW
 	if gap < 1 {
 		gap = 1
 	}
-	line := marker + title + badge + strings.Repeat(" ", gap) + detail + aux
+	line := marker + title + badge + strings.Repeat(" ", gap) + detail
+	if timeW > 0 {
+		line += strings.Repeat(" ", timeSepW) + timeStr
+	}
+	line += aux
 
 	return clipRow(line, width, selected, p.theme().Panel)
 }

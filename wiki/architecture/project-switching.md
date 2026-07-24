@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -71,14 +71,20 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   (home → `~`, middle-ellipsis) so long roots never crowd out the title.
   Activation emits `PickedMsg{Path}`, which the root model turns into the
   switch transaction below. Every row carries a **relative last-opened
-  badge** (`RelTime`: "just now", "5m ago", … "3w ago"; empty for legacy
-  entries without a timestamp, #842). In-memory workspaces (#820) show
-  `● <time>` and their aux action (`shift+delete` / the `✕` zone) closes the
-  workspace; unloaded entries' aux action instead **removes the entry from
-  the history** (`RemoveFromHistoryMsg` → off-loop `RemoveFromHistory`
-  write-back at user scope → config reload → the still-open palette
-  re-lists). The Recent Projects column of the Recent Files dialog (#778)
-  carries the same badge and removal action. `cmd+shift+p` is also in the JetBrains chord table
+  time** (`RelTime`, now implemented in `ui.RelTime`: "just now", "5m ago",
+  … "3w ago"; empty for legacy entries without a timestamp, #842). Since
+  #1114 the time renders **right-aligned** in the palette's `Item.Time`
+  column — clearly separated from the name and from the `✕` control; narrow
+  rows truncate the name (ellipsis) while the time and `✕` stay intact, and
+  below a minimum name width the time drops. In-memory workspaces (#820)
+  keep the `●` badge next to the name and their aux action (`shift+delete` /
+  the `✕` zone) closes the workspace; unloaded entries' aux action instead
+  **removes the entry from the history** (`RemoveFromHistoryMsg` → off-loop
+  `RemoveFromHistory` write-back at user scope → config reload → the
+  still-open palette re-lists). The Recent Projects column of the Recent
+  Files dialog (#778) carries the same time column and removal action, and
+  the Recent Files rows themselves gained the matching layout and prune
+  action in #1113. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
 

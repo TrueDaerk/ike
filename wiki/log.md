@@ -13,6 +13,23 @@
   mid-query insertion, alt+backspace word delete, cmd+backspace clear —
   and the incremental preview keeps tracking mid-query edits
   (`/architecture/editor.md`).
+- Recent-files MRU survives every startup path (#1112): the resumed-workspace
+  path of a project switch skipped the session's `recent_files` load and the
+  next save wiped the history; the MRU now reloads from `session.json`
+  unconditionally in `buildModel` (`/architecture/command-palette.md`).
+
+- Recent Files rows gained per-entry removal and a last-opened time (#1113):
+  MRU entries carry timestamps (persisted as `{path, ts}`; the legacy bare
+  string array still loads), rows show `ui.RelTime` and prune via
+  `shift+delete` or the `✕` zone (`RemoveRecentFileMsg`), mirroring the
+  project picker's #842 (`/architecture/command-palette.md`).
+
+- Picker rows right-align the last-opened time (#1114): the new `Item.Time`
+  column pins the time before the `✕` with clear separation; narrow rows
+  truncate the name first and drop the time below a minimum width. Applies
+  to the project picker, the Recent Projects side column and the Recent
+  Files list (`/architecture/command-palette.md`,
+  `/architecture/project-switching.md`).
 
 - Stale Problems entries pruned (#1102): the LSP manager flushes a stopped/
   disabled language's unopened publishes with empty diagnostics, and

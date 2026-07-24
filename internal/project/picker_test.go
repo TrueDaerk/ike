@@ -199,9 +199,10 @@ func TestPickerComplete(t *testing.T) {
 	}
 }
 
-// TestPickerShowsLastOpenedBadge (#842): rows carry the relative
-// last-opened badge; open workspaces prepend their ● dot.
-func TestPickerShowsLastOpenedBadge(t *testing.T) {
+// TestPickerShowsLastOpenedTime (#842, #1114): rows carry the relative
+// last-opened time in the right-aligned Time column; open workspaces keep
+// their ● dot as the badge next to the name.
+func TestPickerShowsLastOpenedTime(t *testing.T) {
 	now := time.Date(2026, 7, 21, 12, 0, 0, 0, time.UTC)
 	entries := []Entry{
 		{Name: "alpha", Path: "/p/alpha", LastOpened: now.Add(-2 * time.Hour)},
@@ -212,11 +213,11 @@ func TestPickerShowsLastOpenedBadge(t *testing.T) {
 	pm.SetOpen(func(path string) bool { return path == "/p/alpha" })
 
 	items := pm.Results("", palette.Context{})
-	if items[0].Badge != "● 2h ago" {
-		t.Fatalf("open entry badge = %q, want \"● 2h ago\"", items[0].Badge)
+	if items[0].Badge != "●" || items[0].Time != "2h ago" {
+		t.Fatalf("open entry badge/time = %q/%q, want \"●\"/\"2h ago\"", items[0].Badge, items[0].Time)
 	}
-	if items[1].Badge != "3d ago" {
-		t.Fatalf("entry badge = %q, want \"3d ago\"", items[1].Badge)
+	if items[1].Badge != "" || items[1].Time != "3d ago" {
+		t.Fatalf("entry badge/time = %q/%q, want \"\"/\"3d ago\"", items[1].Badge, items[1].Time)
 	}
 	if aux, ok := items[1].Aux.(RemoveFromHistoryMsg); !ok || aux.Path != "/p/beta" {
 		t.Fatalf("unloaded entry aux = %#v, want RemoveFromHistoryMsg", items[1].Aux)

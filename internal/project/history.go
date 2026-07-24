@@ -1,12 +1,12 @@
 package project
 
 import (
-	"strconv"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/ui"
 )
 
 // history.go owns the recent-projects history content: loading it from the
@@ -92,25 +92,10 @@ func RemoveFromHistoryCmd(opts config.Options, path string) tea.Cmd {
 
 // RelTime renders how long ago t was, compact ("just now", "5m ago",
 // "3h ago", "4d ago", "6w ago") for the picker's last-opened badge (#842).
-// The zero time (legacy entries without a timestamp) yields "".
-func RelTime(t, now time.Time) string {
-	if t.IsZero() {
-		return ""
-	}
-	d := now.Sub(t)
-	switch {
-	case d < time.Minute:
-		return "just now"
-	case d < time.Hour:
-		return strconv.Itoa(int(d.Minutes())) + "m ago"
-	case d < 24*time.Hour:
-		return strconv.Itoa(int(d.Hours())) + "h ago"
-	case d < 14*24*time.Hour:
-		return strconv.Itoa(int(d.Hours()/24)) + "d ago"
-	default:
-		return strconv.Itoa(int(d.Hours()/(24*7))) + "w ago"
-	}
-}
+// The zero time (legacy entries without a timestamp) yields "". The
+// implementation moved to ui.RelTime (#1113) so the palette's recent-files
+// mode can share it; this wrapper keeps the established project API.
+func RelTime(t, now time.Time) string { return ui.RelTime(t, now) }
 
 // RecordedMsg reports a RecordOpenCmd outcome. Err is nil on success.
 type RecordedMsg struct {
