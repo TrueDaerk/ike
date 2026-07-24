@@ -172,6 +172,16 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				},
 			},
 			{
+				ID:    "lsp.watchedfiles",
+				Event: plugin.EventExternalFileChange,
+				Notify: func(h host.API, payload any) tea.Cmd {
+					if fc, ok := payload.(plugin.FileChange); ok {
+						shared().externalFileChange(h, fc)
+					}
+					return nil
+				},
+			},
+			{
 				ID:    "lsp.wsclose",
 				Event: plugin.EventWorkspaceClosed,
 				Notify: func(h host.API, payload any) tea.Cmd {

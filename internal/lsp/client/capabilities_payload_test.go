@@ -22,4 +22,10 @@ func TestClientCapabilitiesAdvertisePublishDiagnostics(t *testing.T) {
 	if !strings.Contains(s, `"configuration":true`) {
 		t.Fatalf("workspace.configuration gone missing:\n%s", s)
 	}
+	// Watched files (#1144): without the dynamicRegistration invitation
+	// Intelephense never registers its globs and externally created files
+	// stay out of its index.
+	if !strings.Contains(s, `"didChangeWatchedFiles":{"dynamicRegistration":true}`) {
+		t.Fatalf("workspace.didChangeWatchedFiles missing:\n%s", s)
+	}
 }

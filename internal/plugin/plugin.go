@@ -133,7 +133,31 @@ const (
 	// workspace's absolute root (string); subscribers release every per-file
 	// resource they hold under that root (#825).
 	EventWorkspaceClosed
+	// EventExternalFileChange fires when the 0140 file watcher reports an
+	// external create/change/delete of a regular file (#1144). The payload is
+	// a FileChange; the LSP bridge forwards it to the servers as
+	// workspace/didChangeWatchedFiles.
+	EventExternalFileChange
 )
+
+// FileChangeKind classifies an EventExternalFileChange payload.
+type FileChangeKind int
+
+const (
+	// FileCreated is a newly appeared file.
+	FileCreated FileChangeKind = iota
+	// FileModified is a content change of an existing file.
+	FileModified
+	// FileDeleted is a removed file.
+	FileDeleted
+)
+
+// FileChange is the EventExternalFileChange payload: one externally
+// created/changed/deleted file, already debounced by the watcher.
+type FileChange struct {
+	Path string
+	Kind FileChangeKind
+}
 
 // Hook subscribes to a lifecycle Event.
 type Hook struct {

@@ -22,6 +22,7 @@ import (
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/transport"
+	"ike/internal/plugin"
 )
 
 // bridge is the long-lived glue between the editor and the LSP manager. It is a
@@ -278,7 +279,33 @@ func (b *bridge) fileSaved(h host.API, path string) {
 	b.flushChange(path)
 	if mgr := b.manager(); mgr != nil {
 		go func() { _ = mgr.Save(path) }()
+		// Announce the on-disk change to watching servers too (#1144): the
+		// 0140 watcher suppresses IKE's own writes (MarkSaved), so without
+		// this a server watching the file — possibly another language's
+		// server, or the file's own server tracking companions like
+		// composer.json — never hears about the new bytes. The document's own
+		// server tolerates the duplicate alongside didSave (spec-conform).
+		mgr.FileEvent(path, protocol.FileChangeChanged)
 	}
+}
+
+// externalFileChange forwards one 0140 watcher event (#1144) into the
+// manager's watched-files batch: servers get workspace/didChangeWatchedFiles
+// so their workspace index follows external creates/changes/deletes.
+func (b *bridge) externalFileChange(h host.API, fc plugin.FileChange) {
+	b.ensure(h)
+	mgr := b.manager()
+	if mgr == nil {
+		return
+	}
+	typ := protocol.FileChangeChanged
+	switch fc.Kind {
+	case plugin.FileCreated:
+		typ = protocol.FileChangeCreated
+	case plugin.FileDeleted:
+		typ = protocol.FileChangeDeleted
+	}
+	mgr.FileEvent(fc.Path, typ)
 }
 
 func (b *bridge) fileClosed(path string) {

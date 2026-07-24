@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-24T12:00:00Z
+timestamp: 2026-07-24T18:00:00Z
 ---
 
 # Editor
@@ -587,6 +587,11 @@ git checkout) is downgraded to a content change and reloads normally.
 
 Config: `files.auto_reload = clean|never` (default `clean`; affects clean
 buffers only — stale marking is unconditional).
+
+Beyond the editor, the same per-file watcher events feed the LSP servers as
+`workspace/didChangeWatchedFiles` (#1144), so a workspace index (Intelephense)
+follows external creates/changes/deletes too — see
+[LSP § File watching](./lsp.md#file-watching-workspacedidchangewatchedfiles-1144).
 
 ## Dependency-file edit guard (#565)
 

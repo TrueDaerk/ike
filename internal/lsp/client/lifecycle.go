@@ -86,6 +86,11 @@ func clientCapabilities() protocol.ClientCapabilities {
 		Workspace: &protocol.WorkspaceClientCaps{
 			Configuration:          true,
 			DidChangeConfiguration: &protocol.DidChangeConfigurationCaps{DynamicRegistration: true},
+			// Watched files (#1144): servers that see this register their
+			// globs via client/registerCapability and expect
+			// workspace/didChangeWatchedFiles for external create/change/
+			// delete — Intelephense re-indexes new files only through it.
+			DidChangeWatchedFiles: &protocol.DidChangeWatchedFilesCaps{DynamicRegistration: true},
 		},
 		TextDocument: &protocol.TextDocumentClientCaps{
 			Synchronization: &protocol.SyncClientCaps{DidSave: true},
