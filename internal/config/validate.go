@@ -3,7 +3,19 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"unicode"
 )
+
+// identWord reports whether s consists only of identifier runes (letters,
+// digits, underscore) — the shape a snippet trigger must have (#1152).
+func identWord(s string) bool {
+	for _, r := range s {
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return s != ""
+}
 
 // validate.go enforces "clamp, then warn": an out-of-range or unknown value
 // falls back to a sane default and produces a non-fatal diagnostic. Bad config
@@ -113,6 +125,25 @@ func validate(c *Config) []Diagnostic {
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})
 		c.LSP.LogLevel = "warn"
+	}
+
+	// [[snippets]] entries (#1152) need a non-empty identifier-word trigger
+	// (Tab expansion matches the identifier before the cursor, so any other
+	// shape could never fire) and a non-empty body; offenders are dropped
+	// with a warning.
+	if c.Snippets != nil {
+		kept := c.Snippets[:0]
+		for _, s := range c.Snippets {
+			switch {
+			case s.Trigger == "" || !identWord(s.Trigger):
+				diags = append(diags, Diagnostic{Field: "snippets", Message: fmt.Sprintf("trigger %q is not an identifier word, dropping the entry", s.Trigger)})
+			case s.Body == "":
+				diags = append(diags, Diagnostic{Field: "snippets", Message: fmt.Sprintf("trigger %q has an empty body, dropping the entry", s.Trigger)})
+			default:
+				kept = append(kept, s)
+			}
+		}
+		c.Snippets = kept
 	}
 
 	// project.history is a bounded list: trim to max_history, newest kept.

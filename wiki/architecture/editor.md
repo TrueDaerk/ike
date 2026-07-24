@@ -854,6 +854,37 @@ channel in a terminal cell). Toggle: `editor.color_preview` (default on,
 Settings → Editor). Cursor/selection/search win the cell as usual; the
 diagnostic underline composes on top.
 
+## Live templates / snippets (#1152)
+
+`snippet_expand.go` + `internal/snippets`: user-defined **live templates**
+expand in insert mode. Pressing Tab with the cursor immediately after a
+trigger word replaces the word with the template body through the existing
+LSP snippet placeholder engine (`internal/lsp/snippet`), and the tabstop
+session (#846) takes over — the cursor lands on `$1`, Tab/Shift+Tab cycle
+placeholders exactly like an accepted LSP snippet completion, Esc ends the
+session. No trigger match leaves Tab to its normal indent insertion (#1137);
+with secondary carets active the expansion never fires (indentation and the
+trigger word would differ per caret).
+
+Templates come from `[[snippets]]` config entries (`trigger`, `body`,
+optional `language`; see [config](./config.md)) plus a small built-in table
+in `internal/snippets` (Go `iferr`/`main`/`forr`, Python `main`/`def`,
+TypeScript/JS `log`/`fn`). Resolution per buffer (via `lang.ByPath`):
+user language-scoped > built-in language-scoped > user global > built-in
+global — a user entry with the same trigger+language shadows the built-in.
+Lookups read `config.Get()` live, so a config reload applies immediately.
+
+Multi-line bodies re-indent on expansion: literal tabs become the buffer's
+indent unit (`tab_width`/`use_spaces`, editorconfig-aware) and every
+continuation line inherits the current line's leading whitespace.
+
+The same templates appear in the completion popup as snippet items (detail
+`template …`) through a local completion source (see
+[completion](./completion.md)) — this works with no LSP server at all, since
+the local engine answers triggers independently. Accepting a template item
+expands and re-indents identically to the Tab path; LSP-server snippet items
+are still inserted exactly as the server sent them.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
