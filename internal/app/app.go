@@ -2486,6 +2486,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case CopyPathMsg:
+		// #1173: resolve the subject — explorer selection when the explorer
+		// is focused, else the focused editor's file — and copy the wanted
+		// form with a toast (#252 pattern).
+		return m, m.copyPath(msg.Kind)
+
 	case explorer.FileDeletedMsg:
 		// The explorer removed a path; close any editor still showing it so a
 		// deleted file does not linger in an open pane — and drop its stale
@@ -6671,6 +6677,7 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Peek Definition", Command: "lsp.peekDefinition"},
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
+		{Title: "Copy Reference", Command: "file.copyReference"},
 		{Title: "Reformat File", Command: "lsp.format"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}
@@ -6715,6 +6722,8 @@ func explorerContextItems() []menu.Item {
 		{Title: "New Directory", Command: "explorer.newFolder"},
 		{Title: "Rename", Command: "explorer.rename"},
 		{Title: "Delete", Command: "explorer.delete"},
+		{Title: "Copy Path", Command: "file.copyPath"},
+		{Title: "Copy Relative Path", Command: "file.copyRelPath"},
 		{Title: "Refresh", Command: "explorer.refresh"},
 		{Title: "Expand All", Command: "explorer.expandAll"},
 		{Title: "Reveal Open File", Command: "explorer.reveal"},
@@ -6731,6 +6740,44 @@ func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 	// contentYOff (not paneContentY): an editor pane showing the breadcrumbs
 	// row (#1153) starts its content one row lower.
 	return msg.X - (r.X + paneContentX), msg.Y - (r.Y + m.contentYOff(key)), true
+}
+
+// copyPath copies the focused file's path (#1173): absolute, relative to the
+// project root, or relpath:line at the cursor. Explorer focus targets its
+// selection (line form falls back to the bare relpath there).
+func (m *Model) copyPath(kind int) tea.Cmd {
+	path, line := "", 0
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
+		switch inst.Kind() {
+		case pane.KindExplorer:
+			if p, _, ok := m.explorer().Selected(); ok {
+				path = p
+			}
+		case pane.KindEditor:
+			if ed := inst.Editor(); ed != nil && ed.HasFile() {
+				path = ed.Path()
+				line, _ = ed.Cursor() // 1-based
+			}
+		}
+	}
+	if path == "" {
+		m.host.Notify(host.Info, "nothing to copy a path from")
+		return nil
+	}
+	out := path
+	if kind != copyAbs {
+		if cwd, err := cachedGetwd(); err == nil {
+			if rel, rerr := filepath.Rel(cwd, path); rerr == nil && !strings.HasPrefix(rel, "..") {
+				out = rel
+			}
+		}
+		if kind == copyRef && line > 0 {
+			out += ":" + strconv.Itoa(line)
+		}
+	}
+	clipboardWrite(out)
+	m.host.Notify(host.Info, "copied "+out)
+	return nil
 }
 
 // clipboardWrite is a seam over the system clipboard so tests don't clobber
