@@ -303,6 +303,14 @@ type Model struct {
 	structReturnFocus string
 	structReqPath     string
 	structForce       bool
+	// docSymbols caches each file's hierarchical documentSymbol tree (#1153):
+	// the breadcrumbs bar derives the cursor's enclosing chain from it at
+	// render time (the Structure pane keeps its own flattened rows). Fed by
+	// applyDocumentSymbols, evicted when the file's last view closes.
+	// crumbSig is the last applied breadcrumb geometry signature; the settled
+	// pass (syncBreadcrumbLayout) re-runs layout() when it changes.
+	docSymbols map[string][]ilsp.SymbolNode
+	crumbSig   string
 	// usagesReturnFocus is the same dance for the Usages tool window (#1155).
 	usagesReturnFocus string
 	// switchPending is the validated project root awaiting the unsaved-changes
@@ -2236,6 +2244,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sync := mm.structureSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
+	// The breadcrumbs bar (#1153) claims or releases its editor row here,
+	// once the pass settled: symbol data arriving, tab/zen switches and the
+	// config toggle all change the row's visibility without a layout event.
+	mm.syncBreadcrumbLayout()
 	// An armed explorer reveal (#1042) drains here once the pass settled:
 	// SetActive's call sites (focus changes, tab switches, the CLI open flow)
 	// cannot dispatch Cmds, so auto-reveal / Reveal() only mark the model and
@@ -2391,8 +2403,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#577) — cheap, and the on-disk lines match the saved file.
 		_ = m.bpts.Save()
 		// The Structure pane re-requests the saved buffer's symbols (#1025);
-		// the Update wrapper's sync issues the actual request.
-		if sp := m.structPanel(); sp != nil && sp.Path() == msg.path {
+		// the Update wrapper's sync issues the actual request. A cached
+		// breadcrumbs tree (#1153) forces the refresh the same way, so the
+		// bar tracks the saved file's new symbol spans.
+		_, crumbs := m.docSymbols[msg.path]
+		if sp := m.structPanel(); (sp != nil && sp.Path() == msg.path) || crumbs {
 			m.structForce = true
 		}
 		return m, m.todo.RescanFile(msg.path)
@@ -4575,6 +4590,9 @@ func (m *Model) drainClosedFileViews() tea.Cmd {
 		if m.pathOpenAnywhere(path) {
 			continue
 		}
+		// The last view is gone: drop the breadcrumbs symbol cache (#1153)
+		// with it, so a re-open starts from a fresh documentSymbol request.
+		delete(m.docSymbols, path)
 		cmds = append(cmds, m.fireHooks(plugin.EventBufferClosed, path)...)
 	}
 	if len(cmds) == 0 {
@@ -5485,7 +5503,10 @@ func (m *Model) layout() {
 		if inst == nil {
 			continue
 		}
-		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH))
+		// The breadcrumbs bar (#1153) is one extra vertical chrome row for
+		// the editor panes showing it; breadcrumbRows is the shared predicate
+		// renderPane and the mouse translation (contentYOff) key off too.
+		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.breadcrumbRows(inst)))
 		if inst.Kind() == pane.KindEditor && m.pendingScroll != nil && m.pendingScroll.key == key {
 			if ed := inst.Editor(); ed != nil {
 				ed.SetScroll(m.pendingScroll.top, m.pendingScroll.left)
@@ -6462,7 +6483,16 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	m.setFocus(key)
 	localX := msg.X - (r.X + paneContentX)
-	localY := msg.Y - (r.Y + paneContentY)
+	localY := msg.Y - (r.Y + m.contentYOff(key))
+	// The breadcrumbs row (#1153) sits between the title row and the content
+	// (content-local y = -1): a left press on a symbol segment jumps there, any
+	// other press on the row is swallowed so it can't hit the content below.
+	if inst.Kind() == pane.KindEditor && localY == -1 && m.breadcrumbRows(inst) == 1 {
+		if msg.Button == tea.MouseLeft {
+			return m.breadcrumbClick(key, inst, localX)
+		}
+		return m, nil
+	}
 	switch inst.Kind() {
 	case pane.KindExplorer:
 		var cmd tea.Cmd
@@ -6698,7 +6728,9 @@ func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 	if !found || m.activeWS().Panes.Get(key) == nil {
 		return 0, 0, false
 	}
-	return msg.X - (r.X + paneContentX), msg.Y - (r.Y + paneContentY), true
+	// contentYOff (not paneContentY): an editor pane showing the breadcrumbs
+	// row (#1153) starts its content one row lower.
+	return msg.X - (r.X + paneContentX), msg.Y - (r.Y + m.contentYOff(key)), true
 }
 
 // clipboardWrite is a seam over the system clipboard so tests don't clobber
@@ -6790,7 +6822,7 @@ func (m Model) largeFileBanner() (text string, x, y, w int, ok bool) {
 	}
 	text = lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Warning).Render(body) +
 		lipgloss.NewStyle().Background(pal.Panel).Foreground(pal.Foreground).Bold(true).Render(closeZone)
-	return text, r.X + paneContentX, r.Y + paneContentY, w, true
+	return text, r.X + paneContentX, r.Y + m.contentYOff(key), w, true
 }
 
 // dismissLargeBanner marks the focused flagged document's banner dismissed.
@@ -6823,7 +6855,7 @@ func (m Model) compositeLSPPopups(base string) string {
 	top, _ := ed.ScrollOffset()
 	gw := ed.GutterWidth()
 	contentX := r.X + paneContentX
-	contentY := r.Y + paneContentY
+	contentY := r.Y + m.contentYOff(key)
 	place := func(view string, col, line int) string {
 		// DisplayOffset (not col-left): tabs expand and inlay hints (#171)
 		// inject virtual text, so the buffer column alone under-counts the
@@ -7457,6 +7489,12 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	// padding, per-line width measurement) when the pane's output is identical to
 	// the last frame — the common case for the panes the user is not touching.
 	content := inst.View()
+	// The breadcrumbs bar (#1153) is the first content row of an editor pane
+	// showing it; layout() shrank the instance's interior by the same row, so
+	// the composed box still fills the rect exactly.
+	if row, ok := m.breadcrumbRowFor(inst, r.W-paneChromeW); ok {
+		content = row + "\n" + content
+	}
 	br, bg, bb, ba := border.RGBA()
 	sig := pane.BoxSig{
 		ContentHash: hashString(content),

@@ -950,6 +950,41 @@ the local engine answers triggers independently. Accepting a template item
 expands and re-indents identically to the Tab path; LSP-server snippet items
 are still inserted exactly as the server sent them.
 
+## Breadcrumbs bar (#1153)
+
+App-level chrome, not editor state (`internal/app/breadcrumbs.go`): a one-line
+row under an editor pane's tab/title row showing `file ▸ symbol ▸ child` — the
+LSP `documentSymbol` chain enclosing the cursor, the same hierarchical tree
+the Structure pane (#1025, `/architecture/structure-view.md`) consumes, cached
+app-side per path (`Model.docSymbols`). The chain is derived at render time
+(`symbolChain`, mirroring the Structure pane's Follow semantics: the last
+containing node per level is the most specific), so cursor moves cost nothing;
+requests ride the existing settled-pass sync (`structureSyncCmd`), which now
+also fires with the Structure pane closed while breadcrumbs are on, with the
+same per-path dedup and save-triggered re-request.
+
+- **Config**: `editor.breadcrumbs` (bool, default on — the JetBrains default;
+  settings panel entry). Read live; the toggle applies on the next settled
+  pass.
+- **Visibility**: the row renders only while cached symbol data exists for the
+  pane's active file — no data, no provider, terminal tabs, zen: the row is
+  absent and the editor keeps the line. Outside any symbol the row shows just
+  the basename. Unfocused panes render it too whenever their file's data is
+  cached.
+- **Geometry**: the row is one extra *vertical chrome* line. `layout()` adds
+  `breadcrumbRows(inst)` to `paneChromeH` for the pane's `SetSize`, and every
+  editor-local mouse translation goes through `contentYOff(key)`
+  (= `paneContentY` + row) — clicks, drags, hover-idle, LSP popup anchors and
+  the large-file banner all shift together. `syncBreadcrumbLayout` in the
+  settled Update pass re-runs `layout()` when any pane's row appears or
+  disappears outside a layout event (data arrival, tab switch, config toggle).
+- **Interaction**: each segment is a click zone (`crumbHit` mirrors
+  `renderCrumbRow`'s geometry, like the tab bar's `tabHit`); a left press on a
+  symbol segment jumps there through `openPathAt`, so nav history records the
+  jump. The file segment is informational. At narrow widths the front segments
+  elide behind a leading `… ▸ ` — the deepest segments win; a lone overflowing
+  segment truncates with a trailing ellipsis.
+
 ## Config
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads

@@ -4,16 +4,19 @@ title: Structure View
 description: "Structure tool pane (#1025) — the focused buffer's symbol tree from LSP textDocument/documentSymbol: singleton right-split pane, capability-gated request through the manager, cursor auto-follow, enter/double-click navigates via the open funnel."
 resource: internal/structpanel
 tags: [architecture, lsp, structure, tool-window]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Structure View (#1025)
 
 JetBrains' Structure tool window scaled to the terminal: a singleton tool
 pane showing the focused buffer's symbol tree, backed by LSP
-`textDocument/documentSymbol`. This is the MVP slice of #31 — breadcrumbs and
-a Tree-sitter fallback for server-less languages remain follow-ups tracked
-there.
+`textDocument/documentSymbol`. This is the MVP slice of #31 — a Tree-sitter
+fallback for server-less languages remains a follow-up tracked there. The
+editor breadcrumbs bar (#1153, `/architecture/editor.md`) consumes the same
+data: `applyDocumentSymbols` caches the hierarchical tree app-side per path
+(`docSymbols`), and `structureSyncCmd` issues the request even with the pane
+closed while `editor.breadcrumbs` is enabled.
 
 ## Data path
 

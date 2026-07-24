@@ -22,6 +22,14 @@
   targets route through the #279 candidates picker, then peek the chosen one
   (`/architecture/lsp.md`).
 
+- Editor breadcrumbs bar (#1153, MVP of #31): a one-line `file ▸ symbol ▸
+  child` row under an editor pane's tab/title row showing the documentSymbol
+  chain enclosing the cursor, clickable per segment (jumps record nav
+  history), front-eliding at narrow widths. Config `editor.breadcrumbs`
+  (default on); data shared with the Structure pane via an app-side per-path
+  cache filled by the settled-pass sync; the row is one extra chrome line the
+  layout and all mouse translations account for
+  (`/architecture/editor.md`, `/architecture/structure-view.md`).
 - plugin.EventBufferSaved fires on every save (#1161): the lsp plugin's
   didSave hook (didChange flush + textDocument/didSave + the #1144 own-save
   file event) was dead in native builds; it now hangs off the same save

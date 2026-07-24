@@ -105,7 +105,10 @@ func (m *Model) mouseHoverTarget(x, y int) (mouseHoverState, bool) {
 	if !found {
 		return zero, false
 	}
-	lx, ly := x-(r.X+paneContentX), y-(r.Y+paneContentY)
+	// contentYOff (not paneContentY): the breadcrumbs row (#1153) shifts the
+	// editor content down one row; resting on the bar itself yields ly = -1,
+	// which HoverTarget rejects.
+	lx, ly := x-(r.X+paneContentX), y-(r.Y+m.contentYOff(key))
 	pos, hit := ed.HoverTarget(lx, ly)
 	if !hit {
 		return zero, false

@@ -83,6 +83,7 @@ func defaults() *Config {
 			ColorPreview:           true,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,
+			Breadcrumbs:            true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 		},
 		Explorer: Explorer{
