@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -182,8 +182,56 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 
 `shift+pgup` / `shift+pgdn` page the **scrollback** inside the pane (half a
 grid per step, position marker on the bottom line, any typed key snaps back
-to live). A dead session (shell exited) falls back to normal key handling so
+to live — except `/`, which opens the scrollback search, #1169 below). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
+
+## File:line links (#1168)
+
+Terminal output referencing `path/file.ext:12[:col]` — compiler errors, test
+failures, grep output — is clickable (`links.go`):
+
+- **Detection** is a pragmatic regex over the rendered plain text: relative
+  (`file.go:12`, `./pkg/x.go:3:14`) and absolute paths, line plus optional
+  column; the last path component must carry a letter-led extension, which
+  keeps clock times (`12:30`) and `host:port` pairs out (extensionless files
+  like `Makefile:3` are deliberately not detected).
+- **cmd+click** (`ModSuper`/`ModMeta`, mirroring the editor's cmd+click
+  go-to-definition) resolves the reference under the pointer: relative paths
+  against the session's live cwd (OSC 7, falling back to the spawn dir), then
+  a cheap `os.Stat` **at click time only** gates on an existing regular file
+  before `Model.LinkAt` hands the target to the app's `openPathAt` funnel
+  (nav history records). A plain click stays a selection press, untouched; a
+  cmd+click without a link under it is inert so it can never steal a
+  selection anchor. `LinkAt` scans the whole soft-wrap-joined logical line,
+  so wrapped references still resolve.
+- **Affordance**: an always-on subtle underline (SGR 4/24, no color reset) on
+  reference spans. The live screen decorates inside the version-keyed render
+  cache (#803) — one scan per grid change, the cached fast path returns the
+  already-decorated string; scrollback rows decorate as `scrolledView`
+  windows them in, so links work throughout the history.
+
+## Scrollback search (#1169)
+
+`/` while the pane is **scrolled into scrollback** opens a one-line search
+field on the pane's bottom row (`search.go`), the explorer speed-search
+pattern (#1087): case-insensitive contains over the plain line text, no
+regex. Typing jumps incrementally to the nearest match **at or above** the
+anchored view — history search goes backward — wrapping to the newest match
+when nothing older matches; `ctrl+p`/up step older, `ctrl+n`/down newer,
+both with wrap (plain `n`/`N` would collide with typing the query). Matches
+on the visible rows highlight reverse-video and the field carries a `3/17`
+counter (`no matches` in the Error colour on a miss). enter accepts and
+keeps the position, esc restores the offset the search opened on; every
+other key is consumed while the field is open — nothing leaks into the
+shell mid-query.
+
+Capture is deliberately narrow: at the **live view** `/` is everyday shell
+input (`ls /tmp`) and always passes through — enter scrollback first
+(`shift+pgup` or the wheel), then search. Alt-screen or mouse-reporting
+children (vim, lazygit) own their own `/` and are never captured
+(`searchCaptures` checks the same #96/#226 routing state the wheel uses).
+`terminal.clear` and a command-session restart drop an open search along
+with the history it indexed.
 
 ## Command completion popup (#740)
 

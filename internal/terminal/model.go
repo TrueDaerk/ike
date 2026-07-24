@@ -67,6 +67,9 @@ type Model struct {
 	comp           completion
 	autoSuggest    bool
 	pendingSuggest bool
+	// Scrollback search (#1169): open while non-nil; it owns the keyboard.
+	// Lives behind a pointer so value-receiver View copies share it.
+	search *termSearch
 }
 
 // vpos is a cell position with a virtual line index (scrollback + screen).
@@ -113,6 +116,7 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 		m.sess.Close()
 	}
 	m.scroll = 0
+	m.search = nil
 	m.ClearSelection()
 	m.occupied = false
 	m.err = ""
@@ -237,6 +241,7 @@ func (m Model) Title() string {
 // Clear empties the scrollback and repaints (terminal.clear).
 func (m *Model) Clear() {
 	m.scroll = 0
+	m.search = nil // the history it searched is gone (#1169)
 	m.ClearSelection()
 	if m.sess != nil {
 		m.sess.Clear()
@@ -281,6 +286,18 @@ func (m *Model) Close() {
 // (terminalReservedKeys in internal/app).
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if m.sess == nil {
+		return nil
+	}
+	// The scrollback search (#1169) owns the keyboard while open; `/` opens
+	// it only in the scrolled plain-shell state (searchCaptures) — at the live
+	// view or under an alt-screen/mouse-reporting child the key stays with
+	// the child.
+	if m.search != nil {
+		m.searchKey(msg)
+		return nil
+	}
+	if msg.String() == "/" && m.searchCaptures() {
+		m.startSearch()
 		return nil
 	}
 	switch msg.String() {
@@ -762,6 +779,18 @@ func (m Model) View() string {
 		m.highlightSelection(lines, m.sess.ScrollbackLen())
 		view = strings.Join(lines, "\n")
 	}
+	// An open scrollback search (#1169) can land on the live screen (scroll
+	// back at 0): matches highlight and the field replaces the bottom row,
+	// standing in for the cursor/completion chrome while it owns the keys.
+	if m.search != nil {
+		lines := strings.Split(view, "\n")
+		m.searchHighlight(lines, m.sess.ScrollbackLen())
+		for len(lines) < m.h {
+			lines = append(lines, "")
+		}
+		lines[len(lines)-1] = m.searchLine()
+		return strings.Join(lines, "\n")
+	}
 	if !m.sess.Running() {
 		return m.deadView(view)
 	}
@@ -934,13 +963,21 @@ func (m Model) scrolledView() string {
 		virtual := sbLen - off + i // index into [scrollback ++ screen]
 		switch {
 		case virtual < sbLen:
-			rows = append(rows, m.sess.HistoryLine(virtual))
+			// Scrollback rows decorate as they are windowed in (#1168) — the
+			// same underline affordance the cached live render carries.
+			rows = append(rows, decorateLinkLine(m.sess.HistoryLine(virtual)))
 		case virtual-sbLen < len(screen):
 			rows = append(rows, screen[virtual-sbLen])
 		}
 	}
 	m.highlightSelection(rows, sbLen-off)
 	marker := "[scrollback -" + strconv.Itoa(off) + "  shift+pgdn to return]"
+	// An open scrollback search (#1169) highlights its matches and takes the
+	// marker row for its input field.
+	if m.search != nil {
+		m.searchHighlight(rows, sbLen-off)
+		marker = m.searchLine()
+	}
 	if len(rows) > 0 {
 		rows[len(rows)-1] = marker
 	}

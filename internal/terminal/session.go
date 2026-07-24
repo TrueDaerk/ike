@@ -704,7 +704,10 @@ func (s *Session) View() string {
 	if s.viewValid && s.viewVer == v {
 		return s.viewCache
 	}
-	s.viewCache, s.viewVer, s.viewValid = s.em.Render(), v, true
+	// File references get their underline affordance here (#1168), inside the
+	// cache: the scan+decorate runs once per grid version, so the cached fast
+	// path stays a plain string return.
+	s.viewCache, s.viewVer, s.viewValid = decorateLinks(s.em.Render()), v, true
 	return s.viewCache
 }
 
