@@ -613,6 +613,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		cmd := m.diagnosticJump(action == "next_diagnostic")
 		return m, cmd
+	case "next_hunk", "prev_hunk":
+		// Git hunk navigation (#1170), the ]c/[c motion as a command.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		return m, m.hunkJump(action == "next_hunk")
 	// Merge-conflict resolution (#1149): per-block accepts (each one undo
 	// unit) and wrap-around navigation over the detected blocks.
 	case "merge_accept_ours", "merge_accept_theirs", "merge_accept_both":

@@ -92,6 +92,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Diagnostic navigation (#369) carries lsp.* ids — it steps through
 			// the LSP diagnostics — but lives here because the editor already
 			// caches the set; no server round-trip is involved.
+			// Git hunk navigation (#1170): the ]c/[c vim sequences, surfaced
+			// as doc hints like the fold z-commands.
+			action("vcs.nextChange", "Next Change (Editor)", "next_hunk", "]c"),
+			action("vcs.prevChange", "Previous Change (Editor)", "prev_hunk", "[c"),
 			action("lsp.nextDiagnostic", "Next Diagnostic", "next_diagnostic", ""),
 			action("lsp.prevDiagnostic", "Previous Diagnostic", "prev_diagnostic", ""),
 			// Merge-conflict resolution (#1149): palette-only (the cmd-chord

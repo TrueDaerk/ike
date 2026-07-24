@@ -1,5 +1,11 @@
 # Log
 
+## 2026-07-24 (hunk navigation)
+
+- Git hunk navigation (#1170): `]c`/`[c` walk the #464 gutter hunks with
+  wrap and n/m notices, registered as `vcs.nextChange`/`prevChange`
+  (`/architecture/editor.md`).
+
 ## 2026-07-24
 
 - Merge-conflict resolution in the editor (#1149): conflict blocks

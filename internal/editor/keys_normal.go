@@ -33,6 +33,15 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case awaitG:
 		m.wait = awaitNone
 		return m.resolveAfterG(s, r, hasRune)
+	case awaitBracketF, awaitBracketB:
+		// ]c / [c: git hunk navigation (#1170); any other continuation is
+		// dropped, like the other pending states.
+		forward := m.wait == awaitBracketF
+		m.wait = awaitNone
+		if s == "c" {
+			return m, m.hunkJump(forward)
+		}
+		return m, nil
 	case awaitZ:
 		m.wait = awaitNone
 		return m.resolveAfterZ(s)
@@ -541,6 +550,10 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		// Vim marks (#1151): the next key names the mark to set.
 		m.wait = awaitMark
 		return m, nil
+	case "]":
+		m.wait = awaitBracketF
+	case "[":
+		m.wait = awaitBracketB
 	case "'":
 		m.wait = awaitMarkLine
 		return m, nil

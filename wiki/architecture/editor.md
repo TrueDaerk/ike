@@ -409,6 +409,17 @@ globals as `'x  path:line  preview` rows; enter jumps (globals through the
 open funnel), shift+delete or the `✕` zone removes the mark (the #842/#1113
 prune pattern). See `internal/app/bookmarks.go`.
 
+## Git hunk navigation (#1170)
+
+`]c` / `[c` move between the change hunks the gutter marks (#464) describe —
+a hunk is a maximal run of consecutive marked lines (kind changes inside a
+run do not split it, matching `vcs.revertHunk`'s unit; a deleted-marker row
+with unmarked neighbours stands alone). Strictly-past semantics with wrap and
+a `change n/m (wrapped)` notice, the diagnostic/conflict jump family; lands
+on the first non-blank column. Registered as `vcs.nextChange`/`prevChange`
+with the vim sequences as cheatsheet doc hints; motion only — no undo, no
+nav-history entries.
+
 ## Multi-caret editing (#145)
 
 `multicaret.go` generalizes the single cursor to a primary caret plus an
