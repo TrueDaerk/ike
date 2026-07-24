@@ -77,6 +77,8 @@ const (
 	awaitMark      // after m; awaiting the mark name (#1151)
 	awaitMarkLine  // after '; awaiting the mark to jump to (line, first non-blank)
 	awaitMarkExact // after a backtick; awaiting the mark to jump to (exact position)
+	awaitBracketF  // after ]; awaiting c for next-change (#1170)
+	awaitBracketB  // after [; awaiting c for previous-change (#1170)
 )
 
 // Model is the editor pane.
