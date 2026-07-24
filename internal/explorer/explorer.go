@@ -131,6 +131,11 @@ type Model struct {
 	autoReveal    bool
 	wantReveal    bool
 
+	// Speed search (#1087, search.go): the open type-to-select state, nil
+	// when closed. While non-nil the search owns every key (Searching()
+	// gives it the same raw-key capture the file-op prompt gets).
+	search *searchState
+
 	// Contiguous multi-select (#1044): the selection is the visible-row range
 	// between selAnchor and the cursor, inclusive. -1 means no selection.
 	// shift+j/k (and shift+up/down, shift+click) extend it; any plain motion
@@ -570,6 +575,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RenameMsg:
 		m.promptRename()
 		return m, nil
+	case SearchMsg:
+		m.startSearch()
+		return m, nil
 	case RenamePathMsg:
 		info, err := os.Lstat(msg.Path)
 		if err != nil {
@@ -593,6 +601,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// is accepted or cancelled, ahead of any navigation binding.
 		if m.prompt != nil {
 			return m, m.handlePromptKey(msg)
+		}
+		// The open speed search (#1087) captures every key the same way:
+		// printable characters extend the query (the file-op keys must not
+		// fire mid-word), enter/esc close it, ctrl+n/p and the arrows step
+		// through the matches.
+		if m.search != nil {
+			m.handleSearchKey(msg)
+			return m, nil
 		}
 		key := msg.String()
 		// The vim gg chord (#1032): a first g arms, a second within the
@@ -639,6 +655,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// the active editor. A no-op on directories. The concrete binding is
 			// owned by Roadmap 0080; "o" is the placeholder.
 			return m.openInSplit()
+		case "/":
+			// Speed search (#1087): "/" is the dedicated activation key — the
+			// tree's single-letter file-op keys rule out bare typing.
+			m.startSearch()
 		}
 	}
 	return m, nil
@@ -1915,6 +1935,18 @@ func (m Model) View() string {
 					}
 				}
 			}
+			// Speed search (#1087): matched rows show the matching substring
+			// on the muted-selection background (the multi-select recipe) so
+			// every candidate is visible while stepping. The cursor row keeps
+			// its full Selection highlight — it already reads as the current
+			// match.
+			if m.search != nil && m.search.query != "" && i != m.cursor {
+				if s, e, ok := searchMatchRange(n.name, m.search.query); ok && e <= len(name) {
+					nameRendered = nameStyle.Render(name[:s]) +
+						nameStyle.Background(ss.pal.SelectionMuted).Render(name[s:e]) +
+						nameStyle.Render(name[e:])
+				}
+			}
 			// Guides take the semantic IndentGuide colour (#1050, editor
 			// parity) and, with the marker, stay un-bold so the caret column
 			// keeps its metrics while cursoring (#1059); both keep the row's
@@ -1998,6 +2030,19 @@ func (m Model) View() string {
 			out = lipgloss.JoinVertical(lipgloss.Left, lines...)
 		} else {
 			out = banner
+		}
+	}
+	if m.search != nil {
+		// The open speed search (#1087) takes the pane's last row — the same
+		// region the error banner uses (#1030), a one-line footer, never a
+		// modal box. It outranks the banner while open (a transient,
+		// user-invoked state; the banner returns when the search closes).
+		field := m.searchLine()
+		if n := len(lines); n > 0 {
+			lines[n-1] = field
+			out = lipgloss.JoinVertical(lipgloss.Left, lines...)
+		} else {
+			out = field
 		}
 	}
 	if m.prompt != nil {

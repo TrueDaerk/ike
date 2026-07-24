@@ -8,6 +8,14 @@
   same as the Dockerfile grammar) and wired into the `go.mod`/`go.work`
   registrations with a `queries/gomod.scm` highlights query; `go.sum` stays
   plain (`/architecture/languages.md`).
+- Explorer speed search (#1087): `/` with the tree focused opens a one-line
+  type-to-select field on the pane's footer row (the error-banner region,
+  mirroring the editor's `/` line); typing jumps the cursor to the visible
+  row whose name contains the query (case-insensitive, prefix matches rank
+  first, no auto-expansion), ctrl+n/p (down/up) step with wrap, enter keeps,
+  esc restores the cursor, and the search captures every key so the tree's
+  single-letter file-op bindings cannot fire mid-word
+  (`/architecture/explorer.md`).
 
 - Search case control (#1111): new `editor.search_ignore_case` setting
   (default off) makes in-file `/` `?` search case-insensitive without a
