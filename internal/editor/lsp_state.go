@@ -75,8 +75,12 @@ type resolvedCompletion struct {
 }
 
 // hoverState is the live hover popup content (already parsed to display rows).
+// anchored marks a mouse-idle popup (#1129): it anchors at the hovered cell
+// (anchor) instead of the cursor, and motion off that cell dismisses it.
 type hoverState struct {
-	lines []hoverLine
+	lines    []hoverLine
+	anchor   buffer.Position
+	anchored bool
 }
 
 // hoverLine is one display row of the hover popup: either pre-styled text or a
@@ -1124,11 +1128,118 @@ func (m Model) HoverView() string {
 	return m.clampPopup(box, strings.Join(rows, "\n"))
 }
 
-// HoverAnchor returns the buffer-relative cell the hover popup anchors to.
-func (m Model) HoverAnchor() (col, line int) { return m.cursor.Col, m.cursor.Line }
+// HoverAnchor returns the buffer-relative cell the hover popup anchors to:
+// the hovered cell for a mouse-idle popup (#1129), else the cursor.
+func (m Model) HoverAnchor() (col, line int) {
+	if m.hover != nil && m.hover.anchored {
+		return m.hover.anchor.Col, m.hover.anchor.Line
+	}
+	return m.cursor.Col, m.cursor.Line
+}
 
-// dismissHover clears any hover popup (called on the next key).
-func (m *Model) dismissHover() { m.hover = nil }
+// dismissHover clears any hover popup (called on the next key) and forgets a
+// pending mouse-idle request, so a late reply cannot re-open it.
+func (m *Model) dismissHover() {
+	m.hover = nil
+	m.mouseHover = nil
+}
+
+// --- mouse-idle hover (#1129) ---
+
+// HoverTarget maps a content-local cell to the buffer position a mouse-idle
+// hover would ask about. It reports false for anything that is not buffer
+// text: the gutter, the scrollbar column, pinned sticky-scroll headers, rows
+// past the last line, and cells past the end of the line — resting the
+// pointer there must not open a popup. Read-only: unlike clickPosition it
+// dismisses nothing and never moves the cursor.
+func (m Model) HoverTarget(x, y int) (buffer.Position, bool) {
+	var zero buffer.Position
+	gw := m.view.GutterWidth(m.buf.LineCount())
+	if y < 0 || x < gw || m.ScrollbarHit(x, y) {
+		return zero, false
+	}
+	if y < len(m.stickyLines()) {
+		return zero, false // pinned header rows are chrome, not hover targets
+	}
+	line := m.view.Top + y
+	colBase := m.view.Left
+	if m.softWrap {
+		line, colBase = m.wrapClickAt(y)
+	} else if m.hasFolds() {
+		line = m.displayLineAt(y)
+	}
+	if line < 0 || line >= m.buf.LineCount() {
+		return zero, false
+	}
+	col := x - gw + colBase
+	if m.concealOn(line) {
+		col = m.concealClickCol(line, colBase, col-colBase)
+	}
+	if col < 0 || col >= len([]rune(m.buf.Line(line))) {
+		return zero, false // past the end of the line (or an empty line)
+	}
+	return buffer.Position{Line: line, Col: col}, true
+}
+
+// ShowMouseHover opens the mouse-idle hover at pos (#1129): it registers pos
+// as the pending mouse-hover position — the validity token an LSP reply must
+// match — and, when a diagnostic's range covers the cell, immediately shows
+// its message (pure local data, so this works with no LSP hover support).
+// It reports whether a diagnostic-only popup opened; without one the popup
+// waits for the server reply.
+func (m *Model) ShowMouseHover(pos buffer.Position) bool {
+	m.mouseHover = &pos
+	lines := m.diagHoverLinesAt(pos)
+	if len(lines) == 0 {
+		return false
+	}
+	m.hover = &hoverState{lines: lines, anchor: pos, anchored: true}
+	return true
+}
+
+// applyMouseHover merges an LSP reply into the mouse-idle hover: diagnostics
+// covering the cell stay on top (separated by a rule), the server content
+// follows. A reply for a cell that is no longer the pending mouse-hover
+// position — the pointer moved on, a key dismissed it — is dropped.
+func (m *Model) applyMouseHover(msg ilsp.HoverMsg) {
+	pos := buffer.Position{Line: msg.Line, Col: msg.Col}
+	if m.mouseHover == nil || *m.mouseHover != pos {
+		return
+	}
+	hv := m.newHover(msg.Contents)
+	if hv == nil {
+		return
+	}
+	if diag := m.diagHoverLinesAt(pos); len(diag) > 0 {
+		hv.lines = append(append(diag, hoverLine{rule: true}), hv.lines...)
+	}
+	hv.anchor, hv.anchored = pos, true
+	m.hover = hv
+}
+
+// DismissMouseHover closes a mouse-anchored hover popup (pointer moved off
+// the cell) and cancels any pending mouse-hover reply. A key-triggered,
+// cursor-anchored popup is deliberately left alone — motion never dismissed
+// it before mouse hover existed.
+func (m *Model) DismissMouseHover() {
+	m.mouseHover = nil
+	if m.hover != nil && m.hover.anchored {
+		m.hover = nil
+	}
+}
+
+// diagHoverLinesAt builds the popup rows for every diagnostic whose range
+// covers pos — the #739 content shape (severity header with attribution, then
+// the message), filtered to the hovered cell instead of the whole caret line.
+func (m Model) diagHoverLinesAt(pos buffer.Position) []hoverLine {
+	var ds []ilsp.Diagnostic
+	for _, d := range m.diagByLine[pos.Line] {
+		if diagCovers(d, pos.Line, pos.Col) {
+			ds = append(ds, d)
+		}
+	}
+	return m.diagLines(ds)
+}
 
 // --- diagnostic details popup (#739) ---
 
@@ -1138,10 +1249,19 @@ func (m *Model) dismissHover() { m.hover = nil }
 // the message. Multiple entries separate with a rule. It reports whether any
 // diagnostic exists on the line; without one no popup opens.
 func (m *Model) ShowDiagnostics() bool {
-	ds := m.diagByLine[m.cursor.Line]
-	if len(ds) == 0 {
+	out := m.diagLines(m.diagByLine[m.cursor.Line])
+	if len(out) == 0 {
 		return false
 	}
+	m.hover = &hoverState{lines: out}
+	return true
+}
+
+// diagLines renders diagnostics as popup rows (#739): per entry a severity
+// header — colored like the gutter mark — with the server attribution, then
+// the message; multiple entries separate with a rule. Shared by the caret-line
+// popup (ShowDiagnostics) and the mouse-idle hover (#1129).
+func (m Model) diagLines(ds []ilsp.Diagnostic) []hoverLine {
 	var out []hoverLine
 	for i, d := range ds {
 		if i > 0 {
@@ -1157,8 +1277,7 @@ func (m *Model) ShowDiagnostics() bool {
 			out = append(out, hoverLine{text: line})
 		}
 	}
-	m.hover = &hoverState{lines: out}
-	return true
+	return out
 }
 
 // diagAttribution renders "source · code" for the popup header, whichever

@@ -116,6 +116,11 @@ const (
 	EditorSave
 	EditorJump
 	EditorCompletionSelect
+	// EditorHoverRequest is app-originated (mouse-idle hover, #1129), not a
+	// cast editor.EventKind: it asks the LSP bridge for hover content at the
+	// event's Line/Col (the hovered cell, not the cursor). Keep it after every
+	// mirrored kind so the straight cast in the emitter adapter stays valid.
+	EditorHoverRequest
 )
 
 // EditorEmitter receives editor lifecycle events. Implementations must not block.

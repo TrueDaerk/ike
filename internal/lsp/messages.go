@@ -123,9 +123,16 @@ type CompletionResolveMsg struct {
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.
+// Mouse marks a reply to a mouse-idle request (#1129): Line/Col then carry the
+// hovered buffer position the editor validates against its pending mouse
+// hover, so a stale reply never opens a popup at a cell the pointer has left.
+// The key-triggered flow leaves Mouse false and anchors at the cursor.
 type HoverMsg struct {
 	Path     string
 	Contents string
+	Mouse    bool
+	Line     int
+	Col      int
 }
 
 // DefinitionMsg asks the host to navigate to a definition target. Line/Col are

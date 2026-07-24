@@ -313,14 +313,18 @@ type Model struct {
 	// blameOn shows the inline blame annotation on the cursor line (#468);
 	// blame is the whole-file map behind it, refreshed by the app on save and
 	// vcs refresh, so positions may briefly lag an edit like gitMarks.
-	blameOn   bool
-	blame     map[int]vcs.BlameLine
-	comp      *completionState
-	compMRU   *mru.Store // recently accepted completions (#854); nil-safe
-	snippet   *snippetSession
-	hover     *hoverState
-	signature *signatureState
-	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived
+	blameOn bool
+	blame   map[int]vcs.BlameLine
+	comp    *completionState
+	compMRU *mru.Store // recently accepted completions (#854); nil-safe
+	snippet *snippetSession
+	hover   *hoverState
+	// mouseHover is the pending mouse-idle hover position (#1129): set when
+	// the app fires the idle hover, matched against the LSP reply's position
+	// so a stale answer never opens a popup at a cell the pointer has left.
+	mouseHover *buffer.Position
+	signature  *signatureState
+	popupMaxW  int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.
@@ -864,7 +868,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case ilsp.HoverMsg:
 		if msg.Path == m.path && msg.Contents != "" {
-			m.hover = m.newHover(msg.Contents)
+			if msg.Mouse {
+				// Mouse-idle hover (#1129): anchored at the hovered cell,
+				// validated against the pending request, diagnostics on top.
+				m.applyMouseHover(msg)
+			} else {
+				m.hover = m.newHover(msg.Contents)
+			}
 		}
 		return m, nil
 	case ilsp.SignatureHelpMsg:
