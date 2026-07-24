@@ -242,6 +242,17 @@ type ShowScratchFilesMsg struct{}
 // Dispatched by scratch.new and the per-language scratch.new.<id> commands.
 type NewScratchMsg struct{ Ext string }
 
+// CopyPathMsg copies the focused file's path to the clipboard (#1173):
+// absolute, project-relative, or relpath:line at the cursor. With the
+// explorer focused, its selection is the subject (no line form there).
+type CopyPathMsg struct{ Kind int }
+
+const (
+	copyAbs = iota
+	copyRel
+	copyRef
+)
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 

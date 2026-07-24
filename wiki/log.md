@@ -1,5 +1,11 @@
 # Log
 
+## 2026-07-24 (copy path)
+
+- Copy Path / Copy Relative Path / Copy Reference (#1173): registry
+  commands + context-menu entries (editor: reference, explorer: paths),
+  clipboard seam + toast (`/architecture/editor.md`).
+
 ## 2026-07-24 (hunk navigation)
 
 - Git hunk navigation (#1170): `]c`/`[c` walk the #464 gutter hunks with
