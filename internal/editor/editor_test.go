@@ -1848,7 +1848,7 @@ func TestReplacePanelSlashesPickAnotherDelimiter(t *testing.T) {
 
 // searchCompileForTest builds a query via the search package (kept here so the
 // test reads at the editor level).
-func searchCompileForTest(pat string, regex bool) search.Query { return search.Compile(pat, regex) }
+func searchCompileForTest(pat string, regex bool) search.Query { return search.Compile(pat, regex, search.CaseSmart) }
 
 func TestJumpToFramesTargetNearTop(t *testing.T) {
 	m, _ := loaded(t, strings.Repeat("line\n", 200))

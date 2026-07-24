@@ -66,6 +66,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.pending.Reset()
 	m.wait = awaitNone
 	m.cmdline = ""
+	m.cmdCur = 0
 	m.searching = false
 	// Highlighting is document-derived like the fold ranges, and the index is
 	// immutable — the new view adopts the source's spans instead of starting

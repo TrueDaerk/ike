@@ -105,10 +105,14 @@ type Model struct {
 
 	// Command line / search input.
 	cmdline    string
+	cmdCur     int      // rune cursor within cmdline (#1110)
 	cmdSuggest []string // path completion candidates on the ":" line (#543)
 	searching  bool
 	searchDir  search.Direction
 	query      search.Query
+	// searchIgnoreCase mirrors editor.search_ignore_case (#1111): in-file
+	// searches fold case by default; \C in the query forces exact matching.
+	searchIgnoreCase bool
 
 	// Incremental search (#255): the live-compiled preview query while the
 	// "/" line is open, the cursor/viewport captured at search start (Esc
@@ -482,6 +486,7 @@ func (m *Model) applyConfig() {
 		m.rulers = parseRulers(v)
 	}
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
+	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
 	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {

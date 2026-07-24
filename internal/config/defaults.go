@@ -33,6 +33,7 @@ func defaults() *Config {
 			MarkdownRendering:      true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,
+			SearchIgnoreCase:       false,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
 		},
 		Explorer: Explorer{

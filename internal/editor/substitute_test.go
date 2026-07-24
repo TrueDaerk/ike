@@ -80,7 +80,7 @@ func TestSubstituteCountOnly(t *testing.T) {
 
 func TestSubstituteEmptyPatternReusesSearch(t *testing.T) {
 	m, _ := loaded(t, "alpha beta alpha\n")
-	m.query = search.Compile("alpha", false)
+	m.query = search.Compile("alpha", false, search.CaseSmart)
 	m = runEx(m, "s//X/g")
 	if got := line(m, 0); got != "X beta X" {
 		t.Fatalf("empty pattern reuse: %q", got)

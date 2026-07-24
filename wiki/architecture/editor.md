@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-23T12:00:00Z
+timestamp: 2026-07-24T12:00:00Z
 ---
 
 # Editor
@@ -162,9 +162,18 @@ one so split views of a shared document (#142) never collide.
   (`editor.fold.*`).
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
-  Matching is **smartcase** (#257): an all-lowercase pattern is
-  case-insensitive, any uppercase rune makes it exact; `*`/`#` always match
-  the word exactly, and `:s` keeps its own explicit `i`/`I` flags.
+  Case handling (#257, #1111): a `\c` query prefix forces case-insensitive
+  matching, `\C` forces exact matching; without a marker the
+  `editor.search_ignore_case` setting (off by default, Settings → Editor)
+  makes every query case-insensitive, and with the setting off **smartcase**
+  applies — an all-lowercase pattern is case-insensitive, any uppercase rune
+  makes it exact. Precedence: marker > setting > smartcase. While the search
+  line is open, **ctrl+c toggles** the case mode for the current query by
+  rewriting the visible marker (the marker *is* the state display): unmarked →
+  `\c` (setting off) or `\C` (setting on), `\c` ↔ the sensitive side, `\C` →
+  `\c`. `*`/`#` always match the word exactly, and `:s` keeps its own
+  explicit `i`/`I` flags. The `\v`/`\c`/`\C` markers compose in any order at
+  the start of the query.
   The input line is **incremental** (#255): each keystroke recompiles the
   pattern, jumps to the nearest match from the search origin and shows a live
   counter ("3/17", "no matches") on the `/` line; Esc restores cursor and
@@ -174,7 +183,11 @@ one so split views of a shared document (#142) never collide.
   highlight, the current match additionally underlined; a normal-mode Esc
   clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm them.
   `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
-  find UI.
+  find UI. The `/` `?` and `:` lines share the single-line editing helper
+  (`internal/ui.EditKey`, #763, #1110): left/right move the cursor, typing
+  inserts at it, alt+backspace deletes the previous word, cmd+backspace
+  clears the line, and the incremental preview keeps tracking mid-query
+  edits.
 - **excmd** — parses the `:` line into a typed `Command{Range, Name, Bang, Args}`
   AST and resolves its range. The grammar is `[range] name[!] [args]`: a range is
   one or two comma-separated *addresses* (or `%` = whole file), and an address is
@@ -784,8 +797,9 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `auto_indent`, `auto_close_pairs`, `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
-`indent_guides`, `rulers`, `markdown_rendering` (#881) and `color_preview`
-(#790) take effect live. The view-option keys (#64) are
+`indent_guides`, `rulers`, `markdown_rendering` (#881), `color_preview`
+(#790) and `search_ignore_case` (#1111, default off — in-file search folds
+case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,
 `view.toggleIndentGuides`) marks a per-view override that the per-event config
 refresh no longer clobbers. `files.encoding` names the fallback
