@@ -1113,6 +1113,10 @@ func (m *Model) restoreLayout(cfg host.Config) {
 		if len(paths) == 0 && id.Path != "" {
 			paths = []string{id.Path} // pre-tabs file: one remembered document
 		}
+		pinned := make(map[int]bool, len(id.Pinned))
+		for _, n := range id.Pinned {
+			pinned[n] = true
+		}
 		active := 0
 		for i, p := range paths {
 			if p == "" {
@@ -1130,6 +1134,11 @@ func (m *Model) restoreLayout(cfg host.Config) {
 			}
 			if i == id.Active {
 				active = inst.ActiveTab()
+			}
+			if pinned[i] {
+				// Pins round-trip restarts (#1172): the index convention is
+				// the persisted Tabs list, same as Active.
+				inst.SetTabPinned(inst.ActiveTab(), true)
 			}
 		}
 		// Tool sessions hosted as tabs (#836) restart their configured
@@ -2584,6 +2593,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// editor.tab.closeOthers (tab context menu / palette, #1128): keep
 		// only the active tab; dirty tabs stay open.
 		m.closeOtherTabs()
+		return m, nil
+	case TabTogglePinMsg:
+		// editor.tab.togglePin (tab context menu / palette, #1172): flip the
+		// active tab's pin, exempting it from LRU eviction and Close Others.
+		m.togglePinTab()
 		return m, nil
 
 	case ClosePaneMsg:
@@ -4455,8 +4469,9 @@ func (m *Model) openInTab(key, path string) bool {
 // limit) to a pane after a file open appended a tab: while the pane holds
 // more document tabs than the limit, the least recently used non-dirty file
 // tab closes, landing in the reopen ring (#158) so it stays restorable.
-// Dirty, scratch and terminal tabs are exempt — when nothing is eligible the
-// limit is exceeded rather than data risked. 0 (or negative) disables.
+// Dirty, scratch, terminal and pinned (#1172) tabs are exempt — when nothing
+// is eligible (e.g. every other tab is pinned) the limit is exceeded rather
+// than data risked or a pin overridden. 0 (or negative) disables.
 func (m *Model) enforceTabLimit(inst *pane.Instance) {
 	limit := 0
 	if c := config.Get(); c != nil {
@@ -5968,9 +5983,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// it; elsewhere on the band the pane menu opens.
 			if msg.Button == tea.MouseRight {
 				if key, idx, _, ok := m.tabBarHit(msg.X, msg.Y); ok {
+					inst := m.activeWS().Panes.Get(key)
 					m.setFocus(key)
-					m.switchTab(m.activeWS().Panes.Get(key), idx)
-					m.ctxMenu.Open(tabContextItems(), msg.X, msg.Y, m.width, m.height)
+					m.switchTab(inst, idx)
+					m.ctxMenu.Open(tabContextItems(inst.TabPinned(idx)), msg.X, msg.Y, m.width, m.height)
 					return m, nil
 				}
 				m.setFocus(hit.Pane)
@@ -6214,6 +6230,8 @@ func (m *Model) commitTabMove(x, y int) {
 		return
 	}
 	path := ed.Path()
+	// A dragged-out pinned tab keeps its pin in the destination pane (#1172).
+	srcPinned := inst.TabPinned(m.drag.srcTab)
 	target, ok := m.lay.PaneAt(x, y)
 	if !ok || (target == src && y < r.Y+layout.TitleBarRows) {
 		return // dropped outside any pane, or a plain click (#304 semantics)
@@ -6228,7 +6246,7 @@ func (m *Model) commitTabMove(x, y int) {
 			// split next to it in its edge zones (#317), mirroring the
 			// self-edge drop below.
 			if zone, near := edgeZone(m.lay.Panes[target], x, y); near {
-				m.splitTabTo(target, zone, path, ed)
+				m.splitTabTo(target, zone, path, ed, srcPinned)
 			}
 			return
 		}
@@ -6236,13 +6254,15 @@ func (m *Model) commitTabMove(x, y int) {
 		// the file into its tab list (a terminal/tool target converts
 		// first, #836), the edges split next to it like #317.
 		if zone := layout.DropZoneWithCenter(m.lay.Panes[target], x, y); zone != layout.ZoneCenter {
-			m.splitTabTo(target, zone, path, ed)
+			m.splitTabTo(target, zone, path, ed, srcPinned)
 			return
 		}
 		if !m.ensureTabHost(target) {
 			return
 		}
-		m.openInTab(target, path)
+		if m.openInTab(target, path) && srcPinned {
+			tinst.SetTabPinned(tinst.ActiveTab(), true)
+		}
 		m.backupDropOnCloseTab(ed, src)
 		m.noteClosedFileView(path) // no-op fire: the target tab still shows it
 		inst.CloseTab(m.drag.srcTab)
@@ -6253,7 +6273,7 @@ func (m *Model) commitTabMove(x, y int) {
 	}
 	// Self-drop on an edge: split off a fresh pane holding just this file.
 	if zone, near := edgeZone(r, x, y); near {
-		m.splitTabTo(src, zone, path, ed)
+		m.splitTabTo(src, zone, path, ed, srcPinned)
 	}
 }
 
@@ -6328,7 +6348,8 @@ func (m *Model) splitTerminalTabTo(target string, zone layout.Zone) {
 
 // splitTabTo finishes a tab drag by splitting pane target at zone into a fresh
 // editor leaf holding path, then closing the dragged tab in the source pane.
-func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *editor.Model) {
+// A pinned source tab keeps its pin on the new pane (#1172).
+func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *editor.Model, pinned bool) {
 	newKey := m.activeWS().Panes.AddEditor()
 	m.installEmitter(newKey)
 	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
@@ -6338,7 +6359,9 @@ func (m *Model) splitTabTo(target string, zone layout.Zone, path string, ed *edi
 	}
 	m.activeWS().Tree = tree
 	m.layout()
-	m.openInTab(newKey, path)
+	if inst := m.activeWS().Panes.Get(newKey); m.openInTab(newKey, path) && pinned && inst != nil {
+		inst.SetTabPinned(inst.ActiveTab(), true)
+	}
 	m.backupDropOnCloseTab(ed, m.drag.srcPane)
 	m.noteClosedFileView(path) // no-op fire: the split-off leaf still shows it
 	m.activeWS().Panes.Get(m.drag.srcPane).CloseTab(m.drag.srcTab)
@@ -6692,12 +6715,18 @@ func editorContextItems(conflict bool) []menu.Item {
 }
 
 // tabContextItems is the tab segment's right-click menu (#1128). The clicked
-// tab was selected on open, so Close and Close Others target it; entries
-// resolve through the same InfoFunc as the menu bar.
-func tabContextItems() []menu.Item {
+// tab was selected on open, so Close, Close Others and Pin target it; entries
+// resolve through the same InfoFunc as the menu bar. The menu is built per
+// open, so the pin entry's label reflects the clicked tab's state (#1172).
+func tabContextItems(pinned bool) []menu.Item {
+	pinTitle := "Pin Tab"
+	if pinned {
+		pinTitle = "Unpin Tab"
+	}
 	return []menu.Item{
 		{Title: "Close", Command: "editor.closeTab"},
 		{Title: "Close Others", Command: "editor.tab.closeOthers"},
+		{Title: pinTitle, Command: "editor.tab.togglePin"},
 		{Title: "Reopen Closed", Command: "editor.tab.reopenClosed"},
 	}
 }

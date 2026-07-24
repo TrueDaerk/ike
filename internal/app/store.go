@@ -37,7 +37,8 @@ type paneIdentity struct {
 	Rev2   string   `json:"rev2,omitempty"`  // diff panes: revision backing the right side
 	Tool   string   `json:"tool,omitempty"`  // tool panes: the configured tool name (#741)
 	Tabs   []string `json:"tabs,omitempty"`
-	Tools  []string `json:"tools,omitempty"` // editor panes: tool sessions hosted as tabs (#836), restarted on restore
+	Tools  []string `json:"tools,omitempty"`  // editor panes: tool sessions hosted as tabs (#836), restarted on restore
+	Pinned []int    `json:"pinned,omitempty"` // editor panes: indexes into Tabs of pinned tabs (#1172)
 	Active int      `json:"active,omitempty"`
 }
 
@@ -217,6 +218,11 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 				}
 				if i == inst.ActiveTab() {
 					id.Active = len(id.Tabs)
+				}
+				if inst.TabPinned(i) {
+					// Pins (#1172) persist as indexes into the Tabs list, the
+					// same convention Active uses; older builds ignore the key.
+					id.Pinned = append(id.Pinned, len(id.Tabs))
 				}
 				id.Tabs = append(id.Tabs, ed.Path())
 			}

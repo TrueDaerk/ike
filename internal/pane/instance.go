@@ -468,6 +468,34 @@ func (i *Instance) activate(idx int) {
 	}
 }
 
+// TabPinned reports whether tab idx is pinned (#1172); false out of range.
+func (i *Instance) TabPinned(idx int) bool {
+	if idx < 0 || idx >= len(i.tabs) {
+		return false
+	}
+	return i.tabs[idx].pinned
+}
+
+// SetTabPinned marks tab idx pinned or unpinned (#1172): pinned tabs are
+// exempt from the tab-limit LRU eviction and from "Close Others"; manual
+// closes stay allowed. Out-of-range indexes are a no-op.
+func (i *Instance) SetTabPinned(idx int, on bool) {
+	if idx < 0 || idx >= len(i.tabs) {
+		return
+	}
+	i.tabs[idx].pinned = on
+}
+
+// ToggleTabPin flips tab idx's pin (#1172) and returns the new state; false
+// for an out-of-range index.
+func (i *Instance) ToggleTabPin(idx int) bool {
+	if idx < 0 || idx >= len(i.tabs) {
+		return false
+	}
+	i.tabs[idx].pinned = !i.tabs[idx].pinned
+	return i.tabs[idx].pinned
+}
+
 // FileTabCount counts the pane's document tabs — terminal tabs (#573) are
 // exempt from the tab limit (#742).
 func (i *Instance) FileTabCount() int {
@@ -482,12 +510,13 @@ func (i *Instance) FileTabCount() int {
 
 // EvictableLRUTab returns the least recently used tab the tab limit may close
 // (#742): a file-backed, non-dirty document tab that is not active — dirty
-// tabs, scratch tabs (nothing to reopen from) and terminals are exempt.
-// ok=false when no tab is eligible, in which case the limit may be exceeded.
+// tabs, scratch tabs (nothing to reopen from), terminals and pinned tabs
+// (#1172) are exempt. ok=false when no tab is eligible, in which case the
+// limit may be exceeded.
 func (i *Instance) EvictableLRUTab() (idx int, ok bool) {
 	best := -1
 	for n, t := range i.tabs {
-		if n == i.active || t.IsTerminal() {
+		if n == i.active || t.IsTerminal() || t.pinned {
 			continue
 		}
 		ed := t.Editor()

@@ -28,6 +28,12 @@ const (
 	tabCloseW     = 2
 )
 
+// tabPinPrefix marks a pinned tab's segment (#1172). It is part of the label
+// string itself — a single-width glyph plus a space — so tabWindow and tabHit
+// measure it for free and the mirrored geometry stays consistent; renderTabBar
+// merely re-colors the glyph in Accent.
+const tabPinPrefix = "• "
+
 // tabBar returns the rendered tab bar for an editor pane fitting width cells,
 // and whether the bar (rather than the plain title) should be shown.
 func (m Model) tabBar(inst *pane.Instance, width int) (string, bool) {
@@ -50,7 +56,8 @@ func (m Model) tabsAlwaysShow() bool {
 
 // tabLabels builds one display label per tab: the file basename, a directory
 // suffix when another tab shares that basename ("main.go — cmd/ike"), a dirty
-// marker (●) and a stale marker (!, file changed on disk while dirty, 0140).
+// marker (●), a stale marker (!, file changed on disk while dirty, 0140) and
+// a pin prefix (•, #1172) on pinned tabs.
 func tabLabels(inst *pane.Instance) []string {
 	n := inst.TabCount()
 	names := make([]string, n)
@@ -75,6 +82,9 @@ func tabLabels(inst *pane.Instance) []string {
 	for i := 0; i < n; i++ {
 		ed := inst.TabEditor(i)
 		label := names[i]
+		if inst.TabPinned(i) {
+			label = tabPinPrefix + label
+		}
 		if ed == nil {
 			labels[i] = label // terminal tab: no dirty/stale markers
 			continue
@@ -111,6 +121,7 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 	activeStyle := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
 	tabStyle := lipgloss.NewStyle().Foreground(pal.Foreground)
 	frameStyle := lipgloss.NewStyle().Foreground(pal.Border)
+	pinStyle := lipgloss.NewStyle().Foreground(pal.Accent)
 
 	var b strings.Builder
 	if lo > 0 {
@@ -136,7 +147,14 @@ func renderTabBar(labels []string, active, width int, pal *theme.Palette) string
 				label = ansi.Truncate(label, max(room, 1), tabEllipsis)
 			}
 		}
-		b.WriteString(style.Render(" " + label + " "))
+		if rest, isPinned := strings.CutPrefix(label, tabPinPrefix); isPinned {
+			// The pin glyph (#1172) renders in Accent; it occupies the same
+			// cells the plain-label rendering would, so hit-testing and the
+			// window math need no special case.
+			b.WriteString(style.Render(" ") + pinStyle.Render(strings.TrimSuffix(tabPinPrefix, " ")) + style.Render(" "+rest+" "))
+		} else {
+			b.WriteString(style.Render(" " + label + " "))
+		}
 		if withClose {
 			// The close button (#1128) is muted like the frame so labels
 			// stay the visually dominant text.

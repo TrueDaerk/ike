@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -71,29 +72,52 @@ func (m *Model) closeBarTab(key string, idx int) {
 // closeOtherTabs closes every tab of the active editor pane except the active
 // one (#1128, "Close Others"). Tabs whose close would drop unsaved changes
 // stay open — the close-guard prompt handles one pending close, not a batch —
-// and a notification counts the survivors.
+// pinned tabs stay open too (#1172), and a notification counts the survivors.
 func (m *Model) closeOtherTabs() {
 	inst := m.tabPane()
 	if inst == nil {
 		return
 	}
-	kept := 0
+	keptDirty, keptPinned := 0, 0
 	for i := inst.TabCount() - 1; i >= 0; i-- {
 		if i == inst.ActiveTab() {
 			continue
 		}
+		if inst.TabPinned(i) {
+			keptPinned++
+			continue
+		}
 		if len(m.dirtyOnClose(inst, i)) > 0 {
-			kept++
+			keptDirty++
 			continue
 		}
 		m.closeTab(inst, i)
 	}
-	switch {
-	case kept == 1:
-		m.host.Notify(host.Info, "1 tab kept: unsaved changes")
-	case kept > 1:
-		m.host.Notify(host.Info, strconv.Itoa(kept)+" tabs kept: unsaved changes")
+	var reasons []string
+	if keptPinned > 0 {
+		reasons = append(reasons, "pinned")
 	}
+	if keptDirty > 0 {
+		reasons = append(reasons, "unsaved changes")
+	}
+	if kept := keptDirty + keptPinned; kept > 0 {
+		noun := " tabs kept: "
+		if kept == 1 {
+			noun = " tab kept: "
+		}
+		m.host.Notify(host.Info, strconv.Itoa(kept)+noun+strings.Join(reasons, ", "))
+	}
+}
+
+// togglePinTab flips the active tab's pin (#1172) and persists it with the
+// layout, so pins survive restarts like the tab list itself.
+func (m *Model) togglePinTab() {
+	inst := m.tabPane()
+	if inst == nil {
+		return
+	}
+	inst.ToggleTabPin(inst.ActiveTab())
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // selectTab activates the tab at idx; out-of-range indexes are a no-op.
