@@ -614,9 +614,9 @@ func TestScrollByMovesViewportNotCursor(t *testing.T) {
 	if m.view.Top != 0 {
 		t.Fatalf("Top = %d want 0", m.view.Top)
 	}
-	m.ScrollBy(1000) // clamps to the last line
-	if m.view.Top != m.buf.LineCount()-1 {
-		t.Fatalf("Top = %d want %d (max)", m.view.Top, m.buf.LineCount()-1)
+	m.ScrollBy(1000) // clamps so the last line stays at the bottom — no overscroll
+	if want := m.buf.LineCount() - m.view.Height(); m.view.Top != want {
+		t.Fatalf("Top = %d want %d (max)", m.view.Top, want)
 	}
 }
 
@@ -1870,9 +1870,9 @@ func TestJumpToFramesTargetNearTop(t *testing.T) {
 	if m.view.Top != 2 {
 		t.Fatalf("Top=%d want 2 for a visible-target jump", m.view.Top)
 	}
-	// End-of-buffer jump clamps sanely.
+	// End-of-buffer jump clamps sanely — no overscroll past the last line.
 	m.JumpTo(199, 0)
-	if m.view.Top != 196 || m.cursor.Line != 199 {
-		t.Fatalf("Top=%d cursor=%d want 196/199", m.view.Top, m.cursor.Line)
+	if want := m.buf.LineCount() - m.view.Height(); m.view.Top != want || m.cursor.Line != 199 {
+		t.Fatalf("Top=%d cursor=%d want %d/199", m.view.Top, m.cursor.Line, want)
 	}
 }

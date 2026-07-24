@@ -334,8 +334,9 @@ into the registry funnel. Hover highlights, left-click invokes, up/down/enter
 navigate, esc or an outside press dismisses (the press never leaks to the
 panes below); the box clamps to the terminal bounds at open time.
 The wheel scrolls the
-viewport via `ScrollBy(delta)`, which moves `view.Top` directly (clamped to the
-buffer) without touching the cursor or mode — it works the same in Normal,
+viewport via `ScrollBy(delta)`, which moves `view.Top` directly — clamped so
+the last line stops at the bottom of the viewport (no overscroll, #1134;
+soft wrap and collapsed folds keep the looser last-line clamp) without touching the cursor or mode — it works the same in Normal,
 Insert, Visual, etc., unlike the vim-motion scroll commands. Horizontal wheel
 (or shift+wheel) scrolls sideways via `ScrollXBy(delta)`, moving `view.Left`
 clamped so the longest visible line keeps its last character on screen (#230);

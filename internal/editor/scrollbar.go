@@ -241,24 +241,36 @@ func (m Model) overlayScrollbar(rows []string) []string {
 	gitCells := map[vcs.LineMark]string{}
 	w := m.width
 	for y := 0; y < len(rows) && y < track; y++ {
+		onThumb := y >= start && y < start+length
 		var cell string
-		if sev, hit := stripe[y]; hit {
-			if sevCells[sev] == "" {
-				sevCells[sev] = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
+		switch {
+		case onThumb:
+			// The thumb must stay visible as a shape even in a file full of
+			// changes: thumb rows keep the thumb glyph and only take the
+			// mark's colour — diagnostics over git over the plain thumb.
+			if sev, hit := stripe[y]; hit {
+				cell = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("┃")
+			} else if mk, hit := git[y]; hit {
+				cell = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk)).Bold(true).Render("┃")
+			} else {
+				cell = thumbCell
 			}
-			cell = sevCells[sev]
-		} else if mk, hit := git[y]; hit {
-			// Git change mark (#1131): the gutter's colour convention on the
-			// ruler; diagnostics outrank it on a shared cell, the thumb
-			// yields so marks stay visible inside the viewport range.
-			if gitCells[mk] == "" {
-				gitCells[mk] = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk)).Bold(true).Render("▎")
+		default:
+			if sev, hit := stripe[y]; hit {
+				if sevCells[sev] == "" {
+					sevCells[sev] = lipgloss.NewStyle().Foreground(m.diagColor(sev)).Bold(true).Render("■")
+				}
+				cell = sevCells[sev]
+			} else if mk, hit := git[y]; hit {
+				// Git change mark (#1131): the gutter's colour convention on
+				// the ruler; diagnostics outrank it on a shared cell.
+				if gitCells[mk] == "" {
+					gitCells[mk] = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk)).Bold(true).Render("▎")
+				}
+				cell = gitCells[mk]
+			} else {
+				cell = trackCell
 			}
-			cell = gitCells[mk]
-		} else if y >= start && y < start+length {
-			cell = thumbCell
-		} else {
-			cell = trackCell
 		}
 		row := ansi.Truncate(rows[y], w-1, "")
 		if pad := w - 1 - ansi.StringWidth(row); pad > 0 {

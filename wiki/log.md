@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- Scrollbar thumb survives dense change marks and the viewport stops at the
+  last line (#1134): thumb rows keep their glyph and only take the mark's
+  colour; `SetScroll` clamps to lineCount − viewHeight (wrap/folds keep the
+  looser clamp) (`/architecture/editor.md`).
+
 - Git change marks in the editor scrollbar (#1131): hunks render as
   gutter-coloured overview-ruler marks from the existing #464 diff data,
   memoized beside the diagnostics stripe; clicking a marked track cell
