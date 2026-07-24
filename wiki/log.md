@@ -38,6 +38,21 @@
   jumps clamp into the buffer; notices `change list: n/m` and
   `no earlier/later edit position` (`/architecture/editor.md`).
 
+- Terminal file:line links (#1168): output referencing `path/file.ext:12[:col]`
+  (relative or absolute; Go compiler/test shapes) renders with a subtle
+  always-on underline — decorated inside the version-keyed render cache and on
+  scrollback rows as they window in — and cmd+click opens the file at that
+  position through the standard `openPathAt` funnel (nav history records).
+  Relative paths resolve against the session's live cwd; a cheap click-time
+  `os.Stat` gates on existing files, so false regex positives stay inert.
+  Plain-click selection is untouched (`/architecture/terminal.md`).
+- Terminal scrollback search (#1169): `/` while scrolled into scrollback opens
+  an inline search field on the pane's bottom row (explorer #1087 pattern) —
+  case-insensitive contains, incremental jump to the nearest match above the
+  anchored view, ctrl+p/up / ctrl+n/down stepping with wrap, reverse-video
+  match highlights and a `3/17` counter; enter keeps the position, esc
+  restores it. The live view and alt-screen/mouse-reporting children (vim,
+  lazygit) always keep their own `/` (`/architecture/terminal.md`).
 - Merge-conflict resolution in the editor (#1149): conflict blocks
   (`<<<<<<<` / `=======` / `>>>>>>>`, optional diff3 `|||||||` base) are
   detected per document version, tinted in the buffer (ours VCSAdded-mixed,

@@ -6563,6 +6563,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// forward to a mouse-reporting child, else anchor a text selection.
 		if term := inst.ActiveTerminal(); term != nil {
 			if msg.Button == tea.MouseLeft {
+				// cmd+click on a file:line reference opens it (#1168),
+				// mirroring the editor's cmd+click; it never anchors a
+				// selection, so plain-click selection stays untouched.
+				if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
+					if p, line, col, ok := term.LinkAt(localX, localY); ok {
+						return m.openPathAt(p, line, col)
+					}
+					return m, nil
+				}
 				term.MousePress(localX, localY)
 				m.drag = &dragState{kind: dragTermSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 			}
@@ -6643,6 +6652,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "close":
 				m.closePane(key)
+				return m, nil
+			}
+			// cmd+click on a file:line reference opens it (#1168); no link
+			// under the pointer keeps the press inert so it cannot steal a
+			// selection anchor.
+			if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
+				if p, line, col, ok := inst.Terminal().LinkAt(localX, localY); ok {
+					return m.openPathAt(p, line, col)
+				}
 				return m, nil
 			}
 			inst.Terminal().MousePress(localX, localY)
