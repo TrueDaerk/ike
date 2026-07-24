@@ -62,10 +62,14 @@ var jetbrainsRows = []row{
 	{"cmd+c", "editor.copy", "Copy", Editor, "Editor (06)"},
 	{"cmd+x", "editor.cut", "Cut", Editor, "Editor (06)"},
 	{"cmd+v", "editor.paste", "Paste", Editor, "Editor (06)"},
-	// Undo binds to ctrl+z, not cmd+z: macOS terminals never forward the Cmd
-	// modifier to a TUI, so a cmd+z chord is undeliverable there. ctrl+z arrives
-	// as a normal key (raw mode disables the suspend signal) on every platform.
+	// Undo gets both chords (#1117): cmd+z matches JetBrains/macOS muscle
+	// memory where the terminal delivers Cmd (Kitty keyboard protocol —
+	// Ghostty, kitty, WezTerm …), ctrl+z is the everywhere-deliverable
+	// fallback (raw mode disables the suspend signal on every platform) —
+	// the same dual-chord pattern save and redo already use.
+	{"cmd+z", "editor.undo", "Undo", Editor, "Editor (06)"},
 	{"ctrl+z", "editor.undo", "Undo", Editor, "Editor (06)"},
+	{"cmd+z", "explorer.undo", "Undo file operation", Explorer, "Explorer (05)"},
 	{"ctrl+z", "explorer.undo", "Undo file operation", Explorer, "Explorer (05)"},
 	// Redo gets both chords: cmd+shift+z matches JetBrains where the terminal
 	// can deliver it, ctrl+shift+z is the everywhere-deliverable fallback

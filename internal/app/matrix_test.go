@@ -65,6 +65,11 @@ func TestBindingMatrixShape(t *testing.T) {
 	if r := byCmd["debug.stop"]; r.Primary != "ctrl+f2" || r.Class != keymap.Delivered || r.Status() != "live" {
 		t.Errorf("debug.stop = %+v", r)
 	}
+	// #1117: undo mirrors the save/redo dual-chord pattern — the JetBrains
+	// cmd primary with the everywhere-deliverable ctrl twin as fallback.
+	if r := byCmd["editor.undo"]; r.Primary != "cmd+z" || r.Fallback != "ctrl+z" || r.Status() != "live via ctrl+z" {
+		t.Errorf("editor.undo = %+v", r)
+	}
 	if r := byCmd["editor.copy"]; r.Fallback != "vim y" {
 		t.Errorf("editor.copy = %+v", r)
 	}
