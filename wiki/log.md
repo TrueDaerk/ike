@@ -2,6 +2,11 @@
 
 ## 2026-07-24
 
+- New-file chords (#1145): cmd+n → explorer.newFile (prompt targets the
+  explorer selection, works from a focused editor), cmd+shift+n →
+  scratch.new (JetBrains verbatim); ledger regenerated
+  (`/architecture/keybindings.md`).
+
 - Scrollbar thumb reads as a background block (#1138): marks on the thumb
   keep their colour as foreground glyphs on the ScrollbarThumb background,
   so the thumb extent stays identifiable under dense git/diagnostic marks
