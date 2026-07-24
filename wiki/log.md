@@ -12,6 +12,16 @@
   sits inside a block, and blocks mark the overview ruler in VCSConflicted
   (diagnostics > conflicts > git) with click-to-jump
   (`/architecture/editor.md`, `/architecture/vcs.md`).
+- Peek definition (#1154): `lsp.peekDefinition` (palette + editor context
+  menu) shows the definition's surrounding lines in a cursor-anchored popup
+  instead of jumping — bounded 15-line excerpt (live buffer when the target
+  is open, bounded disk read otherwise), syntax-highlighted with the target's
+  language, titled `path:line`. Esc closes, Enter jumps for real through the
+  shared `DefinitionMsg` funnel (nav history records), up/down and
+  ctrl+d/ctrl+u scroll, any other key closes and passes through; multiple
+  targets route through the #279 candidates picker, then peek the chosen one
+  (`/architecture/lsp.md`).
+
 - plugin.EventBufferSaved fires on every save (#1161): the lsp plugin's
   didSave hook (didChange flush + textDocument/didSave + the #1144 own-save
   file event) was dead in native builds; it now hangs off the same save

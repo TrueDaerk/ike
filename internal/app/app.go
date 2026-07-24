@@ -3527,8 +3527,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.DefinitionMsg:
 		// Navigate to a definition target and place the cursor there. Also the
-		// activation msg of a references-list entry (references.go).
+		// activation msg of a references-list entry (references.go) and of
+		// Enter inside the peek popup (#1154).
 		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case ilsp.PeekDefinitionMsg:
+		// lsp.peekDefinition (#1154): show the target's surrounding lines in
+		// a popup on the focused editor instead of jumping.
+		m.openPeek(msg)
+		return m, nil
 
 	case PinSlotMsg:
 		// nav.pinSlotN (#788): pin the active file to a harpoon slot.
@@ -3675,8 +3682,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case ilsp.DefinitionCandidatesMsg:
 		// lsp.definition with several targets (#279): pick, don't guess. The
-		// list reuses the references rows; Enter navigates via DefinitionMsg.
-		m.refs.Set(msg.Refs)
+		// list reuses the references rows; Enter navigates via DefinitionMsg —
+		// or peeks the chosen target when the request was a peek (#1154).
+		if msg.Peek {
+			m.refs.SetPeek(msg.Refs)
+		} else {
+			m.refs.Set(msg.Refs)
+		}
 		m.refs.SetPlaceholder("Definitions — pick a target…")
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
@@ -6626,6 +6638,7 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Copy", Command: "editor.copy"},
 		{Title: "Paste", Command: "editor.paste"},
 		{Title: "Go to Definition", Command: "lsp.definition"},
+		{Title: "Peek Definition", Command: "lsp.peekDefinition"},
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
 		{Title: "Reformat File", Command: "lsp.format"},
@@ -6838,6 +6851,12 @@ func (m Model) compositeLSPPopups(base string) string {
 			y = 0
 		}
 		return overlay.Place(base, view, x, y, m.width, m.height)
+	}
+	if ed.PeekOpen() {
+		// The peek-definition popup (#1154): explicitly invoked, so it wins
+		// over the transient popups below.
+		col, line := ed.PeekAnchor()
+		return place(ed.PeekView(), col, line)
 	}
 	if ed.CompletionOpen() {
 		col, line := ed.CompletionAnchor()

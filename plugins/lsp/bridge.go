@@ -382,14 +382,28 @@ func (b *bridge) parameterInfo(h host.API) tea.Cmd {
 // (reading the target file), and sends a DefinitionMsg for the app to navigate.
 // IKE-side local providers (#922, e.g. Ansible inventory hosts) are consulted
 // first — a claim skips the server round-trip and works with no server at all.
-func (b *bridge) definition(h host.API) tea.Cmd {
+func (b *bridge) definition(h host.API) tea.Cmd { return b.definitionRequest(h, false) }
+
+// peekDefinition is lsp.peekDefinition (#1154): the same resolution as
+// lsp.definition, but a single target is delivered as a PeekDefinitionMsg —
+// the app shows the surrounding lines in a cursor-anchored popup instead of
+// jumping — and the multi-target picker peeks the chosen candidate.
+func (b *bridge) peekDefinition(h host.API) tea.Cmd { return b.definitionRequest(h, true) }
+
+// definitionRequest is the shared go-to/peek definition core: resolve the
+// target(s), then either navigate (DefinitionMsg) or peek (PeekDefinitionMsg).
+func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
 	if path == "" {
 		return nil
 	}
 	if msg, ok := ilsp.LocalDefinitionAt(path, line, col, b.lineText(path, line)); ok {
-		h.Send(msg)
+		if peek {
+			h.Send(ilsp.PeekDefinitionMsg{Path: msg.Path, Line: msg.Line, Col: msg.Col})
+		} else {
+			h.Send(msg)
+		}
 		return nil
 	}
 	mgr := b.manager()
@@ -409,16 +423,18 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 		}
 		if len(locs) > 1 {
 			// Several definition sites (interface implementations, build-tag
-			// variants): pick, don't guess (#279).
-			h.Send(ilsp.DefinitionCandidatesMsg{Refs: locationsToRefs(mgr, path, locs)})
+			// variants): pick, don't guess (#279). A peek request keeps its
+			// intent through the picker (#1154).
+			h.Send(ilsp.DefinitionCandidatesMsg{Refs: locationsToRefs(mgr, path, locs), Peek: peek})
 			return
 		}
 		loc := locs[0]
 		target := protocol.URIToPath(loc.URI)
 		// Already standing on the definition (#860, JetBrains parity): the
 		// jump would go nowhere, so show where the symbol is used instead —
-		// declaration excluded, only the real usages.
-		if target == path && atDefinition(mgr, path, line, col, loc.Range) {
+		// declaration excluded, only the real usages. A peek still shows the
+		// excerpt: its surrounding lines are useful even at the definition.
+		if !peek && target == path && atDefinition(mgr, path, line, col, loc.Range) {
 			b.findReferences(h, path, line, col, false)
 			return
 		}
@@ -427,7 +443,11 @@ func (b *bridge) definition(h host.API) tea.Cmd {
 			p := protocol.FromLSPPosition(strings.Split(string(data), "\n"), loc.Range.Start, mgr.Encoding(path))
 			tline, tcol = p.Line, p.Col
 		}
-		h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
+		if peek {
+			h.Send(ilsp.PeekDefinitionMsg{Path: target, Line: tline, Col: tcol})
+		} else {
+			h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
+		}
 	}()
 	return nil
 }

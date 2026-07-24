@@ -242,6 +242,7 @@ func (m *Model) AltClick(x, y int) {
 func (m *Model) clickPosition(x, y int) buffer.Position {
 	m.dismissHover()
 	m.dismissSignature()
+	m.dismissPeek()
 	if y < 0 {
 		y = 0
 	}

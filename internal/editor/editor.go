@@ -354,6 +354,9 @@ type Model struct {
 	// so a stale answer never opens a popup at a cell the pointer has left.
 	mouseHover *buffer.Position
 	signature  *signatureState
+	// peek is the peek-definition popup (#1154): a cursor-anchored excerpt of
+	// the definition target; owns esc/enter/scroll keys while open (peek.go).
+	peek *peekState
 	popupMaxW  int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
@@ -1001,6 +1004,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.scroll()
 		return m.maybeReparse(before, nil)
 	case tea.KeyPressMsg:
+		if m.peek != nil {
+			// The peek popup (#1154) owns esc/enter/up/down/ctrl+d/ctrl+u;
+			// any other key closes it and falls through to normal dispatch.
+			if handled, cmd := m.peekKey(msg); handled {
+				return m, cmd
+			}
+		}
 		m.dismissHover() // any key dismisses a hover popup
 		if msg.Code == tea.KeyEscape {
 			m.dismissSignature() // esc also drops the signature popup

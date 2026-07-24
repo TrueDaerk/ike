@@ -65,6 +65,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().definition(h) },
 			},
 			{
+				// The definition's surrounding lines in a cursor-anchored
+				// popup instead of a jump (#1154); Enter inside jumps.
+				ID:    "lsp.peekDefinition",
+				Title: "LSP: Peek Definition",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().peekDefinition(h) },
+			},
+			{
 				ID:    "lsp.references",
 				Title: "LSP: Find Usages",
 				Scope: plugin.PaneScope("editor"),

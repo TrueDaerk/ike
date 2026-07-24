@@ -4,6 +4,8 @@ import (
 	"sort"
 	"strconv"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/fuzzy"
 	ilsp "ike/internal/lsp"
 	"ike/internal/palette"
@@ -40,7 +42,14 @@ func (r *refsMode) SetPlaceholder(s string) { r.placeholder = s }
 // Set replaces the mode's items with the given references, kept in server
 // order (grouped by file, ascending positions for every mainstream server).
 // It resets the placeholder to the usages default.
-func (r *refsMode) Set(refs []ilsp.Reference) {
+func (r *refsMode) Set(refs []ilsp.Reference) { r.set(refs, false) }
+
+// SetPeek fills the mode as the peek-definition candidate picker (#1154):
+// same rows, but activating one peeks the target (PeekDefinitionMsg) instead
+// of jumping.
+func (r *refsMode) SetPeek(refs []ilsp.Reference) { r.set(refs, true) }
+
+func (r *refsMode) set(refs []ilsp.Reference, peek bool) {
 	r.placeholder = ""
 	r.count = len(refs)
 	r.items = make([]palette.Item, len(refs))
@@ -49,10 +58,14 @@ func (r *refsMode) Set(refs []ilsp.Reference) {
 		if runes := []rune(preview); len(runes) > previewMax {
 			preview = string(runes[:previewMax-1]) + "…"
 		}
+		var msg tea.Msg = ilsp.DefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col}
+		if peek {
+			msg = ilsp.PeekDefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col}
+		}
 		r.items[i] = palette.Item{
 			Title:  displayPath(ref.Path) + ":" + strconv.Itoa(ref.Line+1),
 			Detail: preview,
-			Msg:    ilsp.DefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col},
+			Msg:    msg,
 		}
 	}
 }
