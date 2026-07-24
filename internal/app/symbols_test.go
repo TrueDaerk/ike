@@ -84,3 +84,23 @@ func TestInsideProject(t *testing.T) {
 		t.Fatal("stdlib path must not count as project")
 	}
 }
+
+// TestSetHitsDeduplicatesIdenticalRows guards #1121: a query matching one
+// line several times yields several hits on the same (name, path, line) —
+// only one row survives; distinct lines and names never collapse.
+func TestSetHitsDeduplicatesIdenticalRows(t *testing.T) {
+	s := &symbolMode{}
+	q := "dup"
+	s.lastSent = q
+	same := symbolHit("dup", "/proj/a.go")
+	otherLine := symbolHit("dup", "/proj/a.go")
+	otherLine.Ref.Line = 7
+	otherName := symbolHit("dupOther", "/proj/a.go")
+	s.SetHits(q, []ilsp.SymbolHit{same, same, otherLine, same, otherName})
+	if len(s.items) != 3 {
+		t.Fatalf("items = %d, want 3 (dup@0, dup@7, dupOther@0)", len(s.items))
+	}
+	if s.items[0].item.Title != "dup" || s.items[1].item.Title != "dup" || s.items[2].item.Title != "dupOther" {
+		t.Fatalf("order/titles wrong: %q %q %q", s.items[0].item.Title, s.items[1].item.Title, s.items[2].item.Title)
+	}
+}
