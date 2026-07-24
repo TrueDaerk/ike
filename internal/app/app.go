@@ -7199,12 +7199,13 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	// padding, per-line width measurement) when the pane's output is identical to
 	// the last frame — the common case for the panes the user is not touching.
 	content := inst.View()
+	br, bg, bb, ba := border.RGBA()
 	sig := pane.BoxSig{
 		ContentHash: hashString(content),
 		Title:       title,
 		W:           r.W,
 		H:           r.H,
-		Border:      fmt.Sprintf("%v", border),
+		Border:      [4]uint32{br, bg, bb, ba},
 	}
 	return inst.CachedBox(sig, func() string { return paneBox(title, content, r.W, r.H, border) })
 }

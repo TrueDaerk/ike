@@ -2,6 +2,12 @@
 
 ## 2026-07-24
 
+- Render micro-allocations trimmed (#1101): pane-box cache keyed on the
+  border RGBA instead of a per-frame Sprintf, Problems header counts
+  maintained on Refresh, menu bar string cached on
+  (width/open/active/palette) — frame bench 1.53ms/12.2k allocs →
+  1.33ms/9.0k (`/architecture/performance.md`).
+
 - Row-style hoisting across the list panes (#1100): explorer builds a
   per-frame `rowStyleSet` (Mix for ignored rows once per frame, not per
   row); problems/structure/VCS row loops reuse loop-invariant base styles

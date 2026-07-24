@@ -126,7 +126,7 @@ type BoxSig struct {
 	ContentHash uint64
 	Title       string
 	W, H        int
-	Border      string // border color, hex
+	Border      [4]uint32 // border color RGBA — comparable without a per-frame Sprintf (#1101)
 }
 
 // CachedBox returns the pane's bordered box, running compute only when sig

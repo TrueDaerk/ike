@@ -13,7 +13,7 @@ func TestCachedBoxReusesUntilSigChanges(t *testing.T) {
 		return "box-v" + string(rune('0'+calls))
 	}
 
-	sig := BoxSig{ContentHash: 1, Title: "t", W: 10, H: 5, Border: "#fff"}
+	sig := BoxSig{ContentHash: 1, Title: "t", W: 10, H: 5, Border: [4]uint32{1, 2, 3, 4}}
 	a := inst.CachedBox(sig, compute)
 	b := inst.CachedBox(sig, compute) // same sig → cached, no recompute
 	if calls != 1 || a != b {
@@ -30,7 +30,7 @@ func TestCachedBoxReusesUntilSigChanges(t *testing.T) {
 
 	// A chrome change (focus border) also recomputes.
 	sig3 := sig2
-	sig3.Border = "#000"
+	sig3.Border = [4]uint32{9, 9, 9, 9}
 	_ = inst.CachedBox(sig3, compute)
 	if calls != 3 {
 		t.Fatalf("chrome change should recompute: calls=%d", calls)

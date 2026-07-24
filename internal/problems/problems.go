@@ -90,6 +90,10 @@ type Model struct {
 	rows   []row
 	cursor int
 	top    int
+	// errCount/warnCount memoize the header totals (#1101), maintained by
+	// Refresh so the header never iterates the whole diagnostic set per frame.
+	errCount  int
+	warnCount int
 
 	// Double-click detection mirrors the VCS panel (#514): activating a row
 	// needs a second click on the same row within doubleClickWindow; now is
@@ -182,6 +186,7 @@ func (m *Model) Refresh() {
 			break
 		}
 	}
+	m.errCount, m.warnCount = m.visibleCounts() // header reads the memo (#1101)
 	m.clampScroll()
 }
 
@@ -293,7 +298,7 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 	if m.fileOnly {
 		scope = "current file"
 	}
-	errs, warns := m.visibleCounts()
+	errs, warns := m.errCount, m.warnCount
 	counts := plural(errs, "error") + " · " + plural(warns, "warning")
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" Problems — " + scope)
 	return title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
@@ -309,6 +314,9 @@ func plural(n int, unit string) string {
 }
 
 // visibleCounts totals errors and warnings across the listed rows.
+// visibleCounts totals errors and warnings across the listed rows; the
+// result is maintained on Refresh (#1101) so the header never iterates the
+// full diagnostic set per frame.
 func (m *Model) visibleCounts() (errs, warns int) {
 	for _, r := range m.rows {
 		if r.header {
