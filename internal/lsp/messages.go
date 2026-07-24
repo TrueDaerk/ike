@@ -285,10 +285,14 @@ type FormatEdit struct {
 }
 
 // FormatEditsMsg delivers formatting edits for the app to route to the editor
-// owning Path, which applies them as one undo unit.
+// owning Path, which applies them as one undo unit. Applied, when set, is
+// invoked by the app right after the edits landed in the buffer (or were
+// dropped for lack of a view) — the save chain's edit-applied signal (#1148);
+// plain format/rename deliveries leave it nil.
 type FormatEditsMsg struct {
-	Path  string
-	Edits []FormatEdit
+	Path    string
+	Edits   []FormatEdit
+	Applied func()
 }
 
 // RenamePromptMsg asks the app to prompt for a symbol's new name

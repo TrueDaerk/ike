@@ -531,6 +531,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		if cmd, _ := m.saveGuarded(m.path, false); cmd != nil {
 			return m, cmd
 		}
+	case "write_raw":
+		// Shutdown/switch/close-guard flows (#1148): identical to "write" but
+		// never chained through format/organize-imports on save — the callers
+		// check Dirty() synchronously right after, so the write must land now.
+		if cmd, _ := m.saveGuardedRaw(m.path, false); cmd != nil {
+			return m, cmd
+		}
 	case "quit":
 		return m, func() tea.Msg { return CloseMsg{} }
 	case "write_quit":

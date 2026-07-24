@@ -181,6 +181,11 @@ type Model struct {
 
 	dirty bool
 	stale bool // file changed on disk while dirty (Roadmap 0140, #82)
+	// pendingSave defers a manual write behind the LSP save chain (#1148:
+	// organize imports, then format, then write); CompleteChainedSave performs
+	// the write when the chain's SaveChainDoneMsg arrives. Per view, like the
+	// save entry points themselves.
+	pendingSave *pendingSave
 	// Dependency-file edit guard (#565): depFile is set at Load when the path
 	// lives under a dependency directory (.venv, node_modules, …); such a buffer
 	// is read-only until the user confirms the first edit, which flips depOK for

@@ -71,6 +71,8 @@ func defaults() *Config {
 			AutoClosePairs:         true,
 			TrimTrailingWhitespace: true,
 			InsertFinalNewline:     true,
+			FormatOnSave:           false,
+			OrganizeImportsOnSave:  false,
 			Editorconfig:           true,
 			ShowWhitespace:         "none",
 			IndentGuides:           false,

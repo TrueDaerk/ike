@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-24T18:00:00Z
+timestamp: 2026-07-24T21:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -350,6 +350,20 @@ bottom-up as **one undo unit** (`editor/textedit.go`, mirroring replace.go).
 Both requests are capability-gated (`documentFormattingProvider` /
 `documentRangeFormattingProvider`) — gopls, for example, offers no range
 formatting, so the range command is a graceful no-op there.
+
+**Format / organize imports on save (#1148).** With
+`editor.format_on_save` / `editor.organize_imports_on_save` enabled (default
+off), a manual save defers its write behind a bridge-run chain
+(`plugins/lsp/savechain.go`): the `source.organizeImports` code action
+(requested with `CodeActionContext.Only`, first matching action applied
+without the picker), then `textDocument/formatting`, then the write. Each
+step is time-boxed (2 s) and falls through on error/timeout, edits ack back
+via `FormatEditsMsg.Applied`, and `SaveChainDoneMsg` releases the editor's
+parked write — see [Editor § Format & organize imports on
+save](./editor.md#format--organize-imports-on-save-1148). The capability
+gate parses `codeActionProvider.codeActionKinds`
+(`client.Capabilities.OffersCodeActionKind`; an undeclared list counts as
+offered).
 
 **Rename (#6).** `lsp.rename` runs `prepareRename` first (when the server
 offers it): a server without the rename capability at all toasts "language

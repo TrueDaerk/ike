@@ -179,7 +179,9 @@ func saveWorkspaceDirty(w *workspace.Workspace) []tea.Cmd {
 		}
 		for i := 0; i < inst.TabCount(); i++ {
 			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() && ed.HasFile() {
-				if cmd := inst.UpdateTab(i, editor.ActionMsg{Action: "write"}); cmd != nil {
+				// Raw write (#1148): the workspace teardown proceeds
+				// synchronously, so the save must not defer behind the chain.
+				if cmd := inst.UpdateTab(i, editor.ActionMsg{Action: "write_raw"}); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 			}

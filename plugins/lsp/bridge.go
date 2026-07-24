@@ -81,6 +81,9 @@ type bridge struct {
 	// to hold the latest text. Typing bursts collapse to far fewer syncs.
 	pendingChange map[string]host.EditorEvent
 	changeTimer   map[string]*time.Timer
+	// saveChains marks the paths with a pre-save chain in flight (#1148):
+	// a second save while one is pending coalesces into it (savechain.go).
+	saveChains map[string]bool
 	// pendingDiags/diagTimer coalesce diagnostics publishes (#597): a
 	// workspace-diagnostic server reporting hundreds of library files would
 	// otherwise push one tea.Msg — one Update pass + re-render — per file,
@@ -132,6 +135,9 @@ func (b *bridge) ensure(h host.API) {
 	// virtual documents; a no-cgo build detects nothing and this stays inert.
 	b.mgr.SetFragmentDetector(highlight.Fragments)
 	h.SetEditorEmitter("lsp", b)
+	// Format/organize-imports on save (#1148): manual editor saves consult
+	// this provider before writing (savechain.go).
+	ilsp.SetSaveChain(b.saveChainCmd)
 }
 
 // Emit implements host.EditorEmitter: it routes editor lifecycle events to the
@@ -1618,6 +1624,7 @@ func (b *bridge) workspaceClosed(root string) tea.Cmd {
 	prunePaths(b.hintInFlight, root)
 	prunePaths(b.hintPending, root)
 	prunePaths(b.pendingDiags, root)
+	prunePaths(b.saveChains, root)
 	mgr := b.mgr
 	b.mu.Unlock()
 	if mgr == nil {

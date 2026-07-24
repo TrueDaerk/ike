@@ -136,6 +136,35 @@ func (m *Model) saveGuarded(target string, closeAfter bool) (tea.Cmd, bool) {
 		// of failing with "no file name".
 		return func() tea.Msg { return SaveAsPromptMsg{CloseAfter: closeAfter} }, false
 	}
+	// Format/organize-imports on save (#1148): a manual save of the buffer's
+	// own file defers the write behind the LSP save chain when either toggle
+	// is on and a capable server tracks the file (savechain.go). ":w other"
+	// stays raw — the chain edits this buffer, not an arbitrary target.
+	if samePath(target, m.path) {
+		if cmd := m.beginSaveChain(closeAfter); cmd != nil {
+			return cmd, false
+		}
+	}
+	return m.writeGuarded(target)
+}
+
+// saveGuardedRaw is saveGuarded without the save-chain detour (#1148): the
+// shutdown/switch flows (quit prompt, project switch, close guard) need the
+// write to land synchronously because they check Dirty() right after, and the
+// chain's own deferred write completes through here too.
+func (m *Model) saveGuardedRaw(target string, closeAfter bool) (tea.Cmd, bool) {
+	if m.stale && samePath(target, m.path) {
+		return m.conflictCmd(), false
+	}
+	if target == "" && m.path == "" {
+		return func() tea.Msg { return SaveAsPromptMsg{CloseAfter: closeAfter} }, false
+	}
+	return m.writeGuarded(target)
+}
+
+// writeGuarded performs the actual write and reports the outcome on the ex
+// line — the shared tail of every guarded save.
+func (m *Model) writeGuarded(target string) (tea.Cmd, bool) {
 	if err := m.saveAs(target); err != nil {
 		m.cmdMsg = "E: " + err.Error()
 		return nil, false

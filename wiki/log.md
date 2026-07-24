@@ -26,6 +26,14 @@
   origin (best-effort after edits), `usages.toggle` palette command, layout
   slot persists and restores empty (`/architecture/usages.md`,
   `/architecture/lsp.md`).
+- Format & organize imports on save (#1148): `editor.format_on_save` and
+  `editor.organize_imports_on_save` (default off, Settings → Editor) chain a
+  manual save — organize imports (`source.organizeImports` via
+  `CodeActionContext.Only`, no picker), then LSP formatting, then the write —
+  with per-step 2 s timeouts that fall through so a dead server never blocks
+  or loses the save. Manual saves only; autosave and shutdown/switch writes
+  stay raw (`write_raw`). Re-entrant saves coalesce; `:wq` still closes after
+  the chained write (`/architecture/editor.md`, `/architecture/lsp.md`).
 
 - New-file chords (#1145): cmd+n → explorer.newFile (prompt targets the
   explorer selection, works from a focused editor), cmd+shift+n →

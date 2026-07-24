@@ -6,6 +6,7 @@ package client
 
 import (
 	"encoding/json"
+	"strings"
 
 	"ike/internal/lsp/protocol"
 )
@@ -29,6 +30,7 @@ type Capabilities struct {
 	Rename             bool
 	PrepareRename      bool
 	CodeAction         bool
+	CodeActionKinds    []string
 	ExecuteCommand     bool
 	SignatureHelp      bool
 	SignatureTriggers  []string
@@ -39,6 +41,26 @@ type Capabilities struct {
 	WorkspaceSymbol    bool
 	CallHierarchy      bool
 	DocumentSymbol     bool
+}
+
+// OffersCodeActionKind reports whether the server declared kind — or one of
+// its parent kinds, per the LSP's hierarchical kind scheme — in its
+// codeActionKinds (#1148). An empty list means the server did not say (bare
+// `true` provider) and counts as offered: the filtered request's empty answer
+// is the graceful no-op then.
+func (c Capabilities) OffersCodeActionKind(kind string) bool {
+	if !c.CodeAction {
+		return false
+	}
+	if len(c.CodeActionKinds) == 0 {
+		return true
+	}
+	for _, k := range c.CodeActionKinds {
+		if k == kind || (k != "" && strings.HasPrefix(kind, k+".")) {
+			return true
+		}
+	}
+	return false
 }
 
 // parseCapabilities decodes the raw ServerCapabilities into the gated view,
@@ -78,6 +100,16 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 		}
 	}
 	caps.CodeAction = truthyProvider(sc.CodeActionProvider)
+	if caps.CodeAction {
+		// A CodeActionOptions object may declare the offered kinds (#1148);
+		// a bare `true` provider leaves the list empty (= unknown).
+		var opts struct {
+			CodeActionKinds []string `json:"codeActionKinds"`
+		}
+		if json.Unmarshal(sc.CodeActionProvider, &opts) == nil {
+			caps.CodeActionKinds = opts.CodeActionKinds
+		}
+	}
 	caps.ExecuteCommand = truthyProvider(sc.ExecuteCommandProvider)
 	if sc.SignatureHelpProvider != nil {
 		caps.SignatureHelp = true
