@@ -14,8 +14,8 @@ That root is what the file tree shows, what project-wide search covers, and
 what per-project settings and session state attach to.
 
 !!! note "Running `ike` outside a project"
-    With `project.restore_last` enabled, running `ike` in a directory that is
-    *not* a project — no `.git`, no `.ike` — reopens your most recent project
+    With `project.restore_last` turned on — it is off by default — running
+    `ike` in a directory that is *not* a project — no `.git`, no `.ike` — reopens your most recent project
     instead of the current directory. Inside a project directory that never
     happens: an explicit checkout always wins over the history. Passing a file
     on the command line also counts as explicit.
@@ -81,7 +81,7 @@ vim key next to each command where one exists.
 
 ## Settings
 
-++cmd+,++ opens the settings panel — a searchable list of every option, with
+++cmd+comma++ opens the settings panel — a searchable list of every option, with
 its description, written back to `~/.ike/settings.toml` as you change it.
 Changes apply live; nothing needs a restart.
 
