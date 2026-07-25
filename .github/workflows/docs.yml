@@ -1,0 +1,64 @@
+# Builds the user documentation site (Epic #1182) and publishes it to GitHub
+# Pages. Pull requests build only; pushes to main deploy.
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "userdocs/**"
+      - "docs/screenshots/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "userdocs/**"
+      - "docs/screenshots/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Let a running deployment finish; queue at most one more.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: userdocs/requirements.txt
+
+      - name: Install MkDocs
+        run: pip install -r userdocs/requirements.txt
+
+      # --strict turns broken links and warnings into build failures.
+      - name: Build site
+        run: mkdocs build --strict
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
