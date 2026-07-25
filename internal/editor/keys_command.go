@@ -62,7 +62,16 @@ func (m Model) HasSearch() bool { return !m.query.Empty() }
 // RepeatSearch steps the committed in-file search once, like n (reverse=false)
 // or N (reverse=true). It backs search.nextMatch/prevMatch when the in-file
 // search is the most recent one (#376).
-func (m *Model) RepeatSearch(reverse bool) { m.searchNextRepeat(reverse, 1) }
+//
+// It follows the cursor itself (#1198): n/N reach searchNextRepeat through
+// Update, whose key branch ends in scroll(), but the root model calls this
+// entry point directly on the model, so nothing else would move the viewport.
+// scroll() is idempotent, so keeping it here rather than in searchNextRepeat
+// leaves the key path untouched.
+func (m *Model) RepeatSearch(reverse bool) {
+	m.searchNextRepeat(reverse, 1)
+	m.scroll()
+}
 
 // wrapped reports whether a search landing at p from `from` crossed a buffer
 // end: a forward match behind the cursor (or on it) wrapped to the top, a

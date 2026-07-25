@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-25 (f3 scrolls its match into view)
+
+- `search.nextMatch` / `search.prevMatch` (f3/shift+f3) moved the cursor to
+  the next in-file match without scrolling it into view (#1198). The root
+  model calls `editor.RepeatSearch` directly, bypassing `Update` — whose key
+  branch ends in `scroll()`, which is what makes `n`/`N` follow the cursor.
+  `RepeatSearch` now scrolls itself (`/architecture/search.md`).
+
 ## 2026-07-24 (saved window layouts)
 
 - Saved window layouts (#1175): named, user-scoped, kind-only snapshots of

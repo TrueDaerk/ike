@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results.
 resource: internal/search
 tags: [architecture, search, find-in-path]
-timestamp: 2026-07-24T23:30:00Z
+timestamp: 2026-07-25T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -101,6 +101,10 @@ the palette):
   committed in-file search (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like
   `n`/`N` on the active editor (the editor announces the commit with
   `editor.SearchCommittedMsg`); the next find-in-path scan reclaims them.
+  `editor.RepeatSearch` scrolls the landing into view itself (#1198): the
+  root model calls it directly on the model, so the trailing `scroll()` of
+  `Update`'s key branch — which is what makes `n`/`N` follow the cursor —
+  never runs on this path.
 - **Mouse (#424):** the overlay hit-tests first in the root mouse handler
   (it renders above every other overlay); a click outside dismisses it and
   clicks inside never leak to the panes below (#116). Inside: a click on an
