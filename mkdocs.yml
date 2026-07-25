@@ -76,7 +76,11 @@ nav:
       - Panes, tabs and layouts: concepts/panes-and-layout.md
       - The modal editor: concepts/modal-editor.md
       - Projects and sessions: concepts/projects-and-sessions.md
-  - Guides: guides/index.md
+  - Guides:
+      - Overview: guides/index.md
+      - Search and replace: guides/search.md
+      - Code intelligence: guides/code-intelligence.md
+      - The integrated terminal: guides/terminal.md
   - Reference:
       - Overview: reference/index.md
       - Keybindings: reference/keybindings.md
