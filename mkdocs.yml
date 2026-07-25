@@ -71,7 +71,11 @@ nav:
       - Terminal setup: getting-started/terminal-setup.md
       - Your first project: getting-started/first-project.md
       - Command line: getting-started/command-line.md
-  - Concepts: concepts/index.md
+  - Concepts:
+      - Overview: concepts/index.md
+      - Panes, tabs and layouts: concepts/panes-and-layout.md
+      - The modal editor: concepts/modal-editor.md
+      - Projects and sessions: concepts/projects-and-sessions.md
   - Guides: guides/index.md
   - Reference:
       - Overview: reference/index.md
