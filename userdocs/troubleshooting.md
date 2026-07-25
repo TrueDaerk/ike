@@ -1,8 +1,8 @@
 # Troubleshooting
 
-!!! info "This page is being written"
-    Progress is tracked in
-    [Epic 0440](https://github.com/TrueDaerk/ike/issues/1182).
+Failure modes worth knowing about. The full terminal walkthrough lives in
+[Terminal setup](getting-started/terminal-setup.md); this page is the short
+diagnostic path.
 
 ## A keyboard shortcut does nothing
 
