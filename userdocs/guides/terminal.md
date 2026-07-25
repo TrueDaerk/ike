@@ -54,7 +54,7 @@ anyway, ++esc++ cancels.
 
 ## Scrollback
 
-++shift+pgup++ and ++shift+pgdown++ page through the scrollback, half a screen
+++shift+page-up++ and ++shift+page-down++ page through the scrollback, half a screen
 at a time, with a position marker on the bottom line. Any key you type snaps
 back to the live view.
 
