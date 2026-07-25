@@ -7,3 +7,7 @@
 # Editor / IDE metadata
 .idea/
 *.iml
+
+# Built binaries (make / go build)
+/ike
+/docgen

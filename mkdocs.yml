@@ -68,7 +68,11 @@ nav:
   - Getting started: getting-started/index.md
   - Concepts: concepts/index.md
   - Guides: guides/index.md
-  - Reference: reference/index.md
+  - Reference:
+      - Overview: reference/index.md
+      - Keybindings: reference/keybindings.md
+      - Settings: reference/settings.md
+      - Commands: reference/commands.md
   - Troubleshooting: troubleshooting.md
   - About & contributing: contributing.md
 

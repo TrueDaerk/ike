@@ -102,6 +102,17 @@ see the [documentation](https://truedaerk.github.io/ike/) for terminal setup.
 `go run ./cmd/keyprobe` tells you what your terminal actually delivers, which
 is the first thing to check when a keybinding "does nothing".
 
+The reference pages under `userdocs/reference/` are generated from the source
+by `cmd/docgen` — the default keymap, the settings schema and the command
+registry. Never edit them by hand; if your change touches a binding, a setting
+or a command, regenerate and commit the result:
+
+```sh
+make docs            # go run ./cmd/docgen
+```
+
+CI re-runs the generator and fails when the checked-in output differs.
+
 The documentation site builds with:
 
 ```sh
