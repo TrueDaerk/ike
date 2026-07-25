@@ -2,27 +2,25 @@
 
 ## Why this exists
 
-I worked in JetBrains IDEs for years, and over time the performance stopped
-being acceptable: memory use kept climbing, and crashes and freezes got more
-frequent. Worst of all with eight or more IDE windows open at once — which for
-me is the normal case, not an edge case.
+I work across a lot of microservice repositories and move between them
+constantly — whichever one has the priority that hour. In practice that meant
+eight or more JetBrains IDEs open at the same time, plus a fair amount of the
+day spent finding the right window among them.
 
-That last part is the real reason IKE exists. I work across a lot of
-microservice repositories and switch between them constantly, depending on
-where the priority is that hour. With one IDE window per project, a large part
-of the day goes into hunting for the right window. IKE replaces that with
-**project switching**: one keystroke, a list of recent projects, and the
-workspace re-roots — same window, same session, no window management at all.
+Running that many full IDEs at once asks a lot of a machine, and that is where
+I kept hitting the ceiling. I wanted something light enough that keeping every
+project open is not a decision you have to make.
 
-Neovim was the obvious alternative. But assembling a full IDE out of plugins
-and Lua config was a bigger project than the one I actually wanted to solve. I
-did not want to build an editor; I wanted the JetBrains muscle memory back, in
-a terminal, without the assembly.
+Neovim was the obvious lighter alternative. But assembling a full IDE out of
+plugins and Lua config was a bigger project than the one I actually wanted to
+solve — I did not want to build an editor, I wanted my JetBrains muscle memory
+back, in a terminal, without the assembly.
 
 So IKE is a terminal IDE shaped like a JetBrains one: the same chords, the
 same panes and tool windows, the same everything-is-one-keystroke-away feel —
 with a vim-style editor in the middle, because that part vim genuinely got
-right.
+right. And **project switching** in place of window hunting: one keystroke, a
+list of recent projects, and the workspace re-roots where it stands.
 
 ## What IKE is
 
