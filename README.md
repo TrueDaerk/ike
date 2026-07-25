@@ -27,8 +27,7 @@ terminal with truecolor, mouse, and Kitty keyboard protocol support
 
 Build from source (all platforms):
 
-```sh
-git clone https://github.com/TrueDaerk/ike.git
+
 cd ike
 make install                        # installs to ~/.local/bin/ike
 make install BINDIR=/usr/local/bin  # or pick another directory
@@ -139,8 +138,8 @@ Most settings can also be edited interactively in the settings panel
 - **Integrated terminal** — a real PTY-spawned shell in a pane, with raw key
   routing (`ctrl+arrows` escape back to the IDE), mouse passthrough, and text
   selection.
-- **Themes** — one `[theme].name` recolors the whole IDE; nine built-ins plus
-  plugin-registered themes, switchable live from the palette
+- **Themes** — one `[theme].name` recolors the whole IDE; fourteen built-ins
+  plus plugin-registered themes, switchable live from the palette
   (see [screenshots](#themes) below).
 - **Session restore & crash recovery** — open files, cursors, and explorer
   state are restored per project; dirty buffers are snapshotted vim-swapfile
@@ -163,7 +162,9 @@ concept document per subsystem.
 ## Themes
 
 Select a theme in `settings.toml` (`[theme] name = "..."`) or at runtime via
-the command palette (`:` → "Theme: …"). Built-ins:
+the command palette (`:` → "Theme: …"). Nine of the fourteen built-ins are
+shown below; `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light` and
+`dracula` ship too.
 
 | | |
 |---|---|

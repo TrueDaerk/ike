@@ -9,8 +9,13 @@ Task-oriented pages, one per feature area.
   when a feature is silent.
 - **[The integrated terminal](terminal.md)** — shells in panes, which keys IKE
   keeps, scrollback, clickable file references, and tool panes.
+- **[Git](git.md)** — status colours, gutter markers, diffs, reverting a hunk,
+  inline blame — and why the Git *workflow* is delegated to a tool pane.
+- **[Running and debugging](run-and-debug.md)** — run configurations, tests,
+  where output goes, breakpoints, stepping, and PHP/Xdebug.
+- **[Customising IKE](customising.md)** — settings, rebinding keys, importing
+  a JetBrains keymap, themes, and plugins.
 
 !!! info "Still to come"
-    Git, running and debugging, themes, settings, customising keybindings,
-    plugins, and scratch files and snippets. Tracked in
+    Scratch files and snippets. Tracked in
     [Epic 0440](https://github.com/TrueDaerk/ike/issues/1182).
