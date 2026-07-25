@@ -13,12 +13,13 @@ integrated terminal, themes, and a WASM plugin system.
 terminal setup, feature guides, and the keybinding/settings reference.
 
 **Why it exists:** built for working across a lot of microservice repositories
-at once — often eight or more projects open at a time. Running that many full
-IDEs side by side asks a lot of a machine, and a surprising share of the day
-goes into finding the right window. Neovim was the obvious lighter
-alternative, but assembling an IDE out of plugins was a bigger project than
-the one worth solving. So: a JetBrains-shaped IDE in a terminal, with
-**project switching** in place of window hunting.
+at once. A full IDE has indexing to do before a project is usable, so closing
+one you will need again shortly is a bad trade — you keep them all open, they
+all stay resident, and a surprising share of the day goes into finding the
+right window. Neovim was the obvious lighter alternative, but assembling an
+IDE out of plugins was a bigger project than the one worth solving. So: a
+JetBrains-shaped IDE in a terminal, with **project switching** in place of
+window hunting.
 
 > [!NOTE]
 > IKE is a personal project: built by one person, to that person's taste, with
