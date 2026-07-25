@@ -82,6 +82,23 @@ install for you.
 ## Verifying
 
 ```sh
+ike --version
+```
+
+```
+ike 0.1.0 (a1b2c3d) go1.26.5 darwin/arm64
+```
+
+The number is the release; the part in parentheses is the commit a Makefile
+build was made from, with `, dirty` added when the working tree had
+uncommitted changes. A plain `go build` omits the parentheses entirely. Quote
+this line in bug reports — it says exactly what you are running.
+
+The same version is shown in the title of the help overlay (++f1++).
+
+Then open something:
+
+```sh
 cd ~/src/my-project
 ike
 ```

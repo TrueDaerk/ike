@@ -45,6 +45,13 @@ make install BINDIR=/usr/local/bin  # or pick another directory
 (Or build without installing: `make` produces `./ike`; plain
 `go build -o ike ./cmd/ike` works too.)
 
+Check what you built with `ike --version` — a Makefile build stamps the commit
+and whether the tree was clean:
+
+```
+ike 0.1.0 (a1b2c3d, dirty) go1.26.5 darwin/arm64
+```
+
 Then run `ike` from the directory you want to open as a project — the current
 working directory becomes the project root:
 

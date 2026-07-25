@@ -45,8 +45,8 @@ body:
     id: version
     attributes:
       label: IKE version
-      description: The commit you built from — `git rev-parse --short HEAD`.
-      placeholder: 1b22fb9
+      description: The output of `ike --version`.
+      placeholder: ike 0.1.0 (1b22fb9) go1.26.5 darwin/arm64
     validations:
       required: true
 

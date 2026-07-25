@@ -19,10 +19,14 @@ type Target struct {
 }
 
 // Invocation is the parsed command line: the files to open in argument order,
-// and whether stdin should be read into a scratch buffer ("-").
+// whether stdin should be read into a scratch buffer ("-"), and whether the
+// invocation is a request for the version banner rather than for the IDE.
 type Invocation struct {
 	Targets []Target
 	Stdin   bool
+	// Version reports that "--version" / "-v" was given. cmd/ike prints the
+	// banner and exits; every other field is then meaningless.
+	Version bool
 }
 
 // Parse parses the arguments after the program name. Supported forms:
@@ -32,6 +36,7 @@ type Invocation struct {
 //	file.go:42:7       path + line + column
 //	+42 file.go        vim-style line for the following path
 //	-                  read stdin into a scratch buffer (at most once)
+//	--version, -v      print the version banner instead of starting
 //
 // A suffix that is not a positive number stays part of the path ("weird:name"
 // is a plain path, as is a trailing colon), since file names may contain ":".
@@ -42,6 +47,11 @@ func Parse(args []string) (Invocation, error) {
 	pending := 0 // "+N" line waiting for its path; 0 = none
 	for _, a := range args {
 		switch {
+		case a == "--version" || a == "-v":
+			// A version request short-circuits: nothing else on the line can
+			// change what it does, so stop parsing rather than validating
+			// arguments that will never be used.
+			return Invocation{Version: true}, nil
 		case a == "-":
 			if inv.Stdin {
 				return Invocation{}, fmt.Errorf("duplicate stdin argument %q", a)

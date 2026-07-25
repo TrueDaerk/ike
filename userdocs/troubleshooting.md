@@ -159,6 +159,10 @@ serves `net/http/pprof`, and `SIGUSR1` writes goroutine and heap dumps to
 ## Reporting it
 
 If it really is a bug,
-[open an issue](https://github.com/TrueDaerk/ike/issues/new/choose). Include
-your **terminal emulator and version** — a large share of reports turn out to
-be the terminal, and that one line saves a round trip.
+[open an issue](https://github.com/TrueDaerk/ike/issues/new/choose). Two lines
+save a round trip:
+
+- **Your terminal emulator and version** — a large share of reports turn out
+  to be the terminal.
+- **The output of `ike --version`** — it names the exact commit, and whether
+  the build came from a modified tree.

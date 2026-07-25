@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-25 (versioning)
+
+- IKE carries a version (#1214), starting at **0.1.0**: `internal/version`
+  holds the number, the Makefile stamps commit + dirty through `-ldflags`,
+  `ike --version` prints the banner and short-circuits `cli.Parse`, and the
+  help overlay title shows the number
+  (`/architecture/versioning.md`).
+
 ## 2026-07-25 (f3 scrolls its match into view)
 
 - `search.nextMatch` / `search.prevMatch` (f3/shift+f3) moved the cursor to

@@ -63,3 +63,45 @@ func TestParseErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestParseVersionFlag covers `ike --version` / `ike -v` (#1214): the flag
+// short-circuits, so it wins over anything else on the line — including an
+// otherwise-invalid invocation, since the version banner never needs the rest
+// of the arguments to be sound.
+func TestParseVersionFlag(t *testing.T) {
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"long", []string{"--version"}},
+		{"short", []string{"-v"}},
+		{"before a path", []string{"-v", "file.go"}},
+		{"after a path", []string{"file.go", "--version"}},
+		{"wins over a malformed line", []string{"--version", "+abc"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			inv, err := Parse(c.args)
+			if err != nil {
+				t.Fatalf("Parse(%v) errored: %v", c.args, err)
+			}
+			if !inv.Version {
+				t.Fatalf("Parse(%v).Version = false, want true", c.args)
+			}
+		})
+	}
+}
+
+// TestParseVersionFlagIsExact guards the neighbours: a lone "-" is stdin, and
+// "-v" only counts as the flag when it is the whole argument.
+func TestParseVersionFlagIsExact(t *testing.T) {
+	for _, arg := range []string{"-", "-vv", "--versions", "v"} {
+		inv, err := Parse([]string{arg})
+		if err != nil {
+			t.Fatalf("Parse([%q]) errored: %v", arg, err)
+		}
+		if inv.Version {
+			t.Fatalf("Parse([%q]).Version = true, want false", arg)
+		}
+	}
+}
