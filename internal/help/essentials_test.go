@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/version"
 )
 
 // essentialsRegistry registers a few commands that appear in the curated
@@ -52,8 +53,10 @@ func TestHelpOpensOnEssentialsAndTabToggles(t *testing.T) {
 	h := New(essentialsRegistry(), nil, 0)
 	h.Snapshot("")
 
-	if title := h.Title(); title != "HELP — essentials" {
-		t.Fatalf("default view title = %q, want essentials", title)
+	// The title carries the version (#1214), so assert on the parts that
+	// identify the view rather than on the whole string.
+	if title := h.Title(); !strings.HasPrefix(title, "HELP "+version.Short()) || !strings.HasSuffix(title, "— essentials") {
+		t.Fatalf("default view title = %q, want the essentials title with the version", title)
 	}
 	v := ansi.Strip(h.Render(80))
 	if strings.Contains(v, "Obscure Command") {
@@ -67,7 +70,7 @@ func TestHelpOpensOnEssentialsAndTabToggles(t *testing.T) {
 	if !h.HandleKey("tab") {
 		t.Fatal("tab must be consumed")
 	}
-	if title := h.Title(); title != "HELP — commands & shortcuts" {
+	if title := h.Title(); !strings.HasSuffix(title, "— commands & shortcuts") {
 		t.Fatalf("full view title = %q", title)
 	}
 	v = ansi.Strip(h.Render(80))

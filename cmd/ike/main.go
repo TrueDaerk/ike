@@ -17,6 +17,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/project"
 	"ike/internal/registry"
+	"ike/internal/version"
 	"ike/internal/wasm"
 	"ike/internal/wasm/abi"
 	"ike/internal/wasm/bridge"
@@ -92,7 +93,15 @@ func main() {
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "ike:", err)
 		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
+		fmt.Fprintln(os.Stderr, "       ike --version")
 		os.Exit(2)
+	}
+	// `ike --version` prints the banner and exits before any terminal setup —
+	// it has to work in a pipe, in CI, and in a terminal IKE itself could not
+	// run in.
+	if inv.Version {
+		fmt.Println(version.Full())
+		return
 	}
 	// `ike -` (#344): consume piped stdin up front; the UI reads its keyboard
 	// from /dev/tty instead, vim-style. Both failure modes abort before any UI.

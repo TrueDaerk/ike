@@ -95,7 +95,12 @@ it is not obvious.
 make                 # build ./ike
 make install         # install to ~/.local/bin/ike
 go test ./...        # the full test suite
+make version         # build, then print what `ike --version` reports
 ```
+
+The version number lives in `internal/version` and is bumped there. Builds
+through the Makefile stamp the commit and a dirty marker into the binary via
+`-ldflags`; a plain `go build` leaves them empty, which is fine.
 
 IKE needs a terminal with Kitty keyboard protocol support to run properly —
 see the [documentation](https://truedaerk.github.io/ike/) for terminal setup.

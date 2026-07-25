@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/theme"
+	"ike/internal/version"
 )
 
 // maxColumns caps the cheat sheet at two columns wide regardless of how much
@@ -95,15 +96,17 @@ func (h *Help) HandleKey(key string) bool {
 func (h *Help) SetExtra(g Group) { h.extra = g }
 
 // Title implements ui.Content; an active filter is echoed so the user sees
-// what they typed.
+// what they typed. The unfiltered titles carry the version (#1214) — the help
+// overlay is the one screen a user is already looking at when they need to
+// quote which build they are on.
 func (h *Help) Title() string {
 	if h.filter != "" {
 		return "HELP — filter: " + h.filter
 	}
 	if !h.showAll {
-		return "HELP — essentials"
+		return "HELP " + version.Short() + " — essentials"
 	}
-	return "HELP — commands & shortcuts"
+	return "HELP " + version.Short() + " — commands & shortcuts"
 }
 
 // Render implements ui.Content: it lays the snapshotted groups out into at most
@@ -156,7 +159,6 @@ func countEntries(groups []Group) int {
 	}
 	return n
 }
-
 
 // visibleGroups picks the current view: the curated Essentials groups by
 // default, the full snapshot after a tab toggle. A live filter always searches
