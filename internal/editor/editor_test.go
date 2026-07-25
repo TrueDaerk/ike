@@ -822,6 +822,52 @@ func TestSearchForwardAndNext(t *testing.T) {
 	}
 }
 
+// TestRepeatSearchScrollsMatchIntoView guards #1198: f3/shift+f3 reach the
+// search through RepeatSearch, called directly on the model by the root
+// model — bypassing Update, whose key branch is what normally ends in
+// scroll(). Without RepeatSearch following the cursor itself, the match was
+// selected but left off screen, while n/N (which do go through Update)
+// scrolled correctly.
+func TestRepeatSearchScrollsMatchIntoView(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		if i == 150 {
+			b.WriteString("needle\n")
+			continue
+		}
+		b.WriteString("filler\n")
+	}
+	m, _ := loaded(t, b.String())
+	m.SetSize(80, 10)
+
+	m = send(m, key('/'))
+	m = typeKeys(m, "needle")
+	m, _ = m.Update(special(tea.KeyEnter))
+	if m.cursor.Line != 150 {
+		t.Fatalf("committed search landed on line %d, want 150", m.cursor.Line)
+	}
+
+	// Back to the top with the viewport following, so the match is off screen
+	// again and a repeat has something to scroll to.
+	m.SetCursor(0, 0)
+	if m.ScrollTop() != 0 {
+		t.Fatalf("setup: ScrollTop=%d want 0", m.ScrollTop())
+	}
+
+	m.RepeatSearch(false)
+
+	if m.cursor.Line != 150 {
+		t.Fatalf("RepeatSearch landed on line %d, want 150", m.cursor.Line)
+	}
+	top := m.ScrollTop()
+	if top == 0 {
+		t.Fatal("RepeatSearch left the viewport at the top: the match is off screen")
+	}
+	if 150 < top || 150 >= top+10 {
+		t.Fatalf("match line 150 outside the visible window [%d,%d)", top, top+10)
+	}
+}
+
 // TestCommitSearchEmitsSearchCommittedMsg guards the app-level f3/shift+f3
 // hookup (#376): committing a non-empty in-file search must announce itself so
 // f3 can repeat it; an empty commit stays silent.
