@@ -1,0 +1,47 @@
+name: Feature request
+description: Suggest something IKE should be able to do.
+labels: ["enhancement", "idea"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        IKE is a personal project built to one person's taste — see
+        [CONTRIBUTING.md](https://github.com/TrueDaerk/ike/blob/main/CONTRIBUTING.md).
+        Suggestions are welcome; a proposal that *adds* something (ideally
+        behind a setting) has an easier time than one that reshapes an
+        existing default.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to do that IKE makes hard or impossible? Describe
+        the situation, not the solution — it often has a shorter answer than
+        expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like it to do
+      description: The behaviour you have in mind, including how you would reach it (a command, a chord, a setting).
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and prior art
+      description: >
+        How do other editors solve this? If JetBrains, Vim or VS Code has an
+        equivalent, naming it is the fastest way to convey the idea.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for an existing request.
+          required: true

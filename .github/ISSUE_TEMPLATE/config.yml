@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://truedaerk.github.io/ike/
+    about: Installation, terminal setup, feature guides and troubleshooting.
+  - name: Security vulnerability
+    url: https://github.com/TrueDaerk/ike/security/advisories/new
+    about: Report privately instead of opening a public issue.
+  - name: How to contribute
+    url: https://github.com/TrueDaerk/ike/blob/main/CONTRIBUTING.md
+    about: What this project is, the issue-first workflow, and how PRs are handled.

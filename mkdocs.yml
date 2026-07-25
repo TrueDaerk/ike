@@ -70,6 +70,7 @@ nav:
   - Guides: guides/index.md
   - Reference: reference/index.md
   - Troubleshooting: troubleshooting.md
+  - About & contributing: contributing.md
 
 extra:
   social:

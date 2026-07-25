@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in IKE behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. One thing worth checking first: if a
+        **keyboard shortcut does nothing**, the terminal is usually claiming
+        the chord before IKE sees it. Run `go run ./cmd/keyprobe`, press the
+        chord, quit with ctrl+d — if the probe reports it missing, the fix
+        belongs in your terminal configuration. See
+        [Troubleshooting](https://truedaerk.github.io/ike/troubleshooting/).
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you do, and what did IKE do instead of what you expected?
+      placeholder: |
+        1. Opened a Go file
+        2. Pressed …
+        3. Expected …, got …
+    validations:
+      required: true
+
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal emulator and version
+      description: e.g. "Ghostty 1.2.0", "WezTerm 20240203", "iTerm2 3.5.11"
+      placeholder: Ghostty 1.2.0
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.3 / Ubuntu 24.04 / Windows 11 + WSL2
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: IKE version
+      description: The commit you built from — `git rev-parse --short HEAD`.
+      placeholder: 1b22fb9
+    validations:
+      required: true
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant configuration
+      description: >
+        Anything from `~/.ike/settings.toml` or `<project>/.ike/settings.toml`
+        that might matter. Leave empty if you are on the defaults.
+      render: toml
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: Screenshots, logs, a minimal file that triggers it.

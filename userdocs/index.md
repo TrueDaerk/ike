@@ -114,6 +114,20 @@ most keys can be edited in the settings panel instead of by hand.
 name = "tokyo-night"
 ```
 
+## A note on what this is
+
+IKE is a personal project — built by one person, to that person's taste, with
+heavy AI assistance. The defaults follow a specific JetBrains muscle memory,
+on a German keyboard, in a specific terminal, because that is the setup it was
+built for. There is no support promise and no roadmap commitment.
+
+That said: it is public on purpose. Use it if it suits you, and pull requests
+that improve it are genuinely welcome — see
+[About & contributing](contributing.md). The
+[licence](https://github.com/TrueDaerk/ike/blob/main/LICENSE) is MIT with the
+Commons Clause: do what you like with IKE, including building commercial
+software with it — just do not sell IKE itself.
+
 ## Looking for the internals?
 
 This site documents *using* IKE. The architecture documentation — one concept

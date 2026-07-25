@@ -12,6 +12,13 @@ integrated terminal, themes, and a WASM plugin system.
 📖 **[Documentation](https://truedaerk.github.io/ike/)** — installation,
 terminal setup, feature guides, and the keybinding/settings reference.
 
+> [!NOTE]
+> IKE is a personal project: built by one person, to that person's taste, with
+> heavy AI assistance. The defaults follow a specific JetBrains muscle memory,
+> on a German keyboard, in a specific terminal, and there is no support
+> promise. It is public on purpose, though — use it if it suits you, and
+> [pull requests](CONTRIBUTING.md) that improve it are genuinely welcome.
+
 ## Installation & usage
 
 IKE is a single Go binary. You need [Go 1.26+](https://go.dev/dl/) and a
@@ -173,7 +180,15 @@ the command palette (`:` → "Theme: …"). Built-ins:
   workflow.
 - Run the tests with `go test ./...`.
 - Architecture docs live in [`wiki/`](wiki/index.md).
+- Contributor guide: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports:
+  [`SECURITY.md`](SECURITY.md).
 - The user documentation site is built from [`userdocs/`](userdocs/index.md)
   with MkDocs Material and deployed to GitHub Pages on every push to `main`.
   Preview it locally with
   `pip install -r userdocs/requirements.txt && mkdocs serve`.
+
+## License
+
+[MIT with the Commons Clause](LICENSE). Use, modify and redistribute IKE
+freely — including building commercial software with it. The one restriction
+is selling IKE itself, modified or not.
