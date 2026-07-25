@@ -12,6 +12,14 @@ integrated terminal, themes, and a WASM plugin system.
 📖 **[Documentation](https://truedaerk.github.io/ike/)** — installation,
 terminal setup, feature guides, and the keybinding/settings reference.
 
+**Why it exists:** years of JetBrains IDEs, and a losing fight with their
+performance — memory climbing, freezes and crashes, worst with eight or more
+IDE windows open at once. That window count is what working across many
+microservice repositories looks like. Neovim was the obvious alternative, but
+assembling an IDE out of plugins was a bigger project than the one worth
+solving. So: a JetBrains-shaped IDE in a terminal, with **project switching**
+replacing the window-hunting.
+
 > [!NOTE]
 > IKE is a personal project: built by one person, to that person's taste, with
 > heavy AI assistance. The defaults follow a specific JetBrains muscle memory,
