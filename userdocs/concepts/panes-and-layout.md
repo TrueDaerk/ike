@@ -50,7 +50,7 @@ lands.
 |---|---|
 | ++cmd+ctrl+right++ / ++cmd+ctrl+left++ | Next / previous tab |
 | ++alt+1++ … ++alt+9++ | Jump to tab *n* |
-| ++ctrl+shift+pgup++ / ++ctrl+shift+pgdown++ | Move the current tab left / right |
+| ++ctrl+shift+page-up++ / ++ctrl+shift+page-down++ | Move the current tab left / right |
 | ++cmd+w++ | Close the active tab |
 | ++cmd+shift+t++ | Reopen the last closed tab |
 
