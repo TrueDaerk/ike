@@ -2,19 +2,22 @@
 
 Complete, exhaustive tables — the pages you search rather than read.
 
-!!! info "This section is being written"
-    Progress is tracked in
-    [Epic 0440](https://github.com/TrueDaerk/ike/issues/1182).
+These are **generated from the source** by `cmd/docgen` and re-generated in CI,
+so they describe the current code rather than what the documentation happened
+to say when it was written.
 
-The reference pages are **generated from the source**, not written by hand, so
-they cannot drift out of date:
+- **[Keybindings](keybindings.md)** — every default binding, grouped by
+  context, with the chord on macOS and on Linux/Windows.
+- **[Settings](settings.md)** — every configuration key, its type, default,
+  allowed values, and which file a change is written to.
+- **[Commands](commands.md)** — everything the command palette can run,
+  including the vim keys and ex-commands that do the same job in the editor.
 
-- **Keybindings** — every default binding, with its command, context and the
-  chord on each platform.
-- **Settings** — every configuration key, its type, default, allowed values,
-  and which file it is written to.
-- **Commands** — every command the palette can run.
+In the running IDE the same information is a keypress away: ++f1++ opens the
+help overlay with the live bindings for your build, and the palette lists every
+registered command.
 
-Until they land, the in-app help overlay (++f1++) lists the live bindings for
-your build, and the palette (++cmd+shift+a++, then `:`) lists every registered
-command.
+!!! tip "Found a mistake?"
+    A wrong entry here means the code and the generator disagree — worth
+    [an issue](https://github.com/TrueDaerk/ike/issues/new/choose). Do not edit
+    the generated pages directly; the next CI run overwrites them.

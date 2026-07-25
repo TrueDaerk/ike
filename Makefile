@@ -6,13 +6,14 @@
 #   make install BINDIR=/usr/local/bin
 #   make uninstall
 #   make clean
+#   make docs      # regenerate userdocs/reference from the source
 
 BINARY  := ike
 PACKAGE := ./cmd/ike
 BINDIR  ?= $(HOME)/.local/bin
 GO      ?= go
 
-.PHONY: all build install uninstall clean test
+.PHONY: all build install uninstall clean test docs
 
 all: build
 
@@ -31,3 +32,8 @@ clean:
 
 test:
 	$(GO) test ./...
+
+# Regenerate the documentation reference pages. CI fails when the checked-in
+# output differs from a fresh run, so commit the result.
+docs:
+	$(GO) run ./cmd/docgen

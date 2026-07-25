@@ -1,0 +1,47 @@
+# The reference pages under userdocs/reference are generated from the source by
+# cmd/docgen. This job re-runs the generator and fails when the checked-in
+# output differs, so a renamed command, a new setting or a changed default
+# cannot silently leave the documentation stale.
+name: Docs reference
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "userdocs/reference/**"
+      - ".github/workflows/reference.yml"
+  pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - "userdocs/reference/**"
+      - ".github/workflows/reference.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Regenerate the reference
+        run: go run ./cmd/docgen
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --quiet -- userdocs/reference; then
+            echo "::error::userdocs/reference is out of date. Run 'go run ./cmd/docgen' and commit the result."
+            git diff -- userdocs/reference
+            exit 1
+          fi
