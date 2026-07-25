@@ -11,16 +11,15 @@ terminal, themes, and a plugin system.
 
 ## Why it exists
 
-It was built by someone who had spent years in JetBrains IDEs and was losing
-the fight with their performance — memory climbing, freezes and crashes, worst
-with eight or more IDE windows open at once. That window count is what
-happens when you work across a lot of microservice repositories and switch
-between them all day.
+It was built for working across a lot of microservice repositories at once —
+often eight or more projects open at the same time, switching between them all
+day. Running that many full IDEs side by side asks a lot of a machine, and a
+surprising share of the day goes into finding the right window.
 
-Neovim was the obvious alternative, but assembling a full IDE out of plugins
-was a bigger project than the one worth solving. So: a terminal IDE shaped
-like a JetBrains one — same chords, same panes and tool windows — with a
-vim-style editor in the middle.
+Neovim was the obvious lighter alternative, but assembling a full IDE out of
+plugins was a bigger project than the one worth solving. So: a terminal IDE
+shaped like a JetBrains one — the same chords, the same panes and tool
+windows — with a vim-style editor in the middle.
 
 If you also live in many repositories at once, the part to look at first is
 **project switching**: one keystroke, pick from your recent projects, and the
