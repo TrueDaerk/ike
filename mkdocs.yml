@@ -65,7 +65,12 @@ markdown_extensions:
 
 nav:
   - Home: index.md
-  - Getting started: getting-started/index.md
+  - Getting started:
+      - Overview: getting-started/index.md
+      - Installation: getting-started/installation.md
+      - Terminal setup: getting-started/terminal-setup.md
+      - Your first project: getting-started/first-project.md
+      - Command line: getting-started/command-line.md
   - Concepts: concepts/index.md
   - Guides: guides/index.md
   - Reference:
