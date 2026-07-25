@@ -45,8 +45,8 @@ the tree without hiding it from search.
 
 | Keys | What it does |
 |---|---|
-| ++cmd+left-bracket++ | Back |
-| ++cmd+right-bracket++ | Forward |
+| `cmd+[` | Back |
+| `cmd+]` | Forward |
 | Mouse buttons 4 / 5 | The same, if your mouse has them |
 
 The history records *jumps*, not every cursor move — going to a definition,
