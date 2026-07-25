@@ -1,0 +1,4 @@
+# Build dependencies for the documentation site (mkdocs build --strict).
+# Material 9.5 is the floor: the site uses grid cards, the palette toggle and
+# the content.action.edit feature.
+mkdocs-material>=9.5,<10

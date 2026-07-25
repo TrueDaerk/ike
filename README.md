@@ -9,6 +9,9 @@ integrated terminal, themes, and a WASM plugin system.
 
 ![IKE with the tokyo-night theme](docs/screenshots/tokyo-night.png)
 
+📖 **[Documentation](https://truedaerk.github.io/ike/)** — installation,
+terminal setup, feature guides, and the keybinding/settings reference.
+
 ## Installation & usage
 
 IKE is a single Go binary. You need [Go 1.26+](https://go.dev/dl/) and a
@@ -112,8 +115,10 @@ Most settings can also be edited interactively in the settings panel
   shared across panes.
 - **Vim-like modal editor** — normal/insert/visual modes, motions, operators,
   text objects, registers, undo/redo, and in-buffer search.
-- **Command palette** — `ctrl+p` opens a centered overlay: type `:` to run any
-  registered command (context-ranked), or `@` to fuzzy-find files.
+- **Command palette** — `cmd+shift+a` (or double-shift) opens a centered
+  overlay: type `:` to run any registered command (context-ranked), or `@` to
+  fuzzy-find files. A dedicated toggle chord can be set via
+  `palette.toggle_key`.
 - **JetBrains-like keybindings** — context-scoped shortcuts with multi-step
   chords, conflict detection, platform normalisation, and a built-in
   cheatsheet (help overlay).
@@ -168,3 +173,7 @@ the command palette (`:` → "Theme: …"). Built-ins:
   workflow.
 - Run the tests with `go test ./...`.
 - Architecture docs live in [`wiki/`](wiki/index.md).
+- The user documentation site is built from [`userdocs/`](userdocs/index.md)
+  with MkDocs Material and deployed to GitHub Pages on every push to `main`.
+  Preview it locally with
+  `pip install -r userdocs/requirements.txt && mkdocs serve`.

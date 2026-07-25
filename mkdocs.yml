@@ -1,0 +1,78 @@
+# MkDocs configuration for the IKE user documentation site (Epic #1182).
+#
+# The site documents *using* the IDE. The architecture knowledge base in
+# `wiki/` is a separate, contributor-facing bundle and is deliberately not
+# built into this site.
+site_name: IKE
+site_description: A JetBrains-inspired terminal IDE with vim-like editing.
+site_url: https://truedaerk.github.io/ike/
+repo_url: https://github.com/TrueDaerk/ike
+repo_name: TrueDaerk/ike
+edit_uri: edit/main/userdocs/
+copyright: Documentation for IKE — a terminal IDE.
+
+docs_dir: userdocs
+
+# Fail the build on broken links and other warnings; CI relies on it.
+strict: true
+
+theme:
+  name: material
+  icon:
+    logo: material/console
+    repo: fontawesome/brands/github
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.superfences
+  - pymdownx.keys
+  - pymdownx.tabbed:
+      alternate_style: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started/index.md
+  - Concepts: concepts/index.md
+  - Guides: guides/index.md
+  - Reference: reference/index.md
+  - Troubleshooting: troubleshooting.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/TrueDaerk/ike
+      name: IKE on GitHub
