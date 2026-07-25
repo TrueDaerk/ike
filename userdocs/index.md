@@ -9,6 +9,26 @@ terminal, themes, and a plugin system.
 
 ![IKE with the tokyo-night theme](screenshots/tokyo-night.png)
 
+## Why it exists
+
+It was built by someone who had spent years in JetBrains IDEs and was losing
+the fight with their performance — memory climbing, freezes and crashes, worst
+with eight or more IDE windows open at once. That window count is what
+happens when you work across a lot of microservice repositories and switch
+between them all day.
+
+Neovim was the obvious alternative, but assembling a full IDE out of plugins
+was a bigger project than the one worth solving. So: a terminal IDE shaped
+like a JetBrains one — same chords, same panes and tool windows — with a
+vim-style editor in the middle.
+
+If you also live in many repositories at once, the part to look at first is
+**project switching**: one keystroke, pick from your recent projects, and the
+whole workspace re-roots in place. No second window, nothing to hunt for.
+
+More on the reasoning, and on what this project is, in
+[About & contributing](contributing.md).
+
 ## Before you install
 
 !!! important "Your terminal has to cooperate"
