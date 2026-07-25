@@ -2,6 +2,8 @@
 
 Task-oriented pages, one per feature area.
 
+- **[Getting around](navigation.md)** — the file tree, go-to-file and symbol,
+  back/forward, marks, pinned files, structure, Problems and the TODO index.
 - **[Search and replace](search.md)** — in-file search, find and replace in
   path, the ripgrep backend, and how it differs from finding files by name.
 - **[Code intelligence](code-intelligence.md)** — language servers: which one
@@ -13,9 +15,7 @@ Task-oriented pages, one per feature area.
   inline blame — and why the Git *workflow* is delegated to a tool pane.
 - **[Running and debugging](run-and-debug.md)** — run configurations, tests,
   where output goes, breakpoints, stepping, and PHP/Xdebug.
+- **[Scratch files and snippets](scratch-and-snippets.md)** — throwaway
+  buffers that outlive the session, and live templates.
 - **[Customising IKE](customising.md)** — settings, rebinding keys, importing
   a JetBrains keymap, themes, and plugins.
-
-!!! info "Still to come"
-    Scratch files and snippets. Tracked in
-    [Epic 0440](https://github.com/TrueDaerk/ike/issues/1182).

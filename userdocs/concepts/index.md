@@ -11,8 +11,6 @@ the documentation — and the IDE — easier to predict.
 - **[Projects and sessions](projects-and-sessions.md)** — what a project is,
   the three settings layers, what is restored when you reopen, and crash
   recovery.
-
-!!! info "Still to come"
-    **Commands and the palette** — why almost everything is a command, and how
-    the palette, the menu bar and the keymap are three views of one registry.
-    Tracked in [Epic 0440](https://github.com/TrueDaerk/ike/issues/1182).
+- **[Commands and the palette](commands-and-palette.md)** — why almost
+  everything is a command, and how the palette, the menu bar and the keymap
+  are three views of one registry.

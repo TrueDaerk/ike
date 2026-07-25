@@ -76,13 +76,16 @@ nav:
       - Panes, tabs and layouts: concepts/panes-and-layout.md
       - The modal editor: concepts/modal-editor.md
       - Projects and sessions: concepts/projects-and-sessions.md
+      - Commands and the palette: concepts/commands-and-palette.md
   - Guides:
       - Overview: guides/index.md
+      - Getting around: guides/navigation.md
       - Search and replace: guides/search.md
       - Code intelligence: guides/code-intelligence.md
       - The integrated terminal: guides/terminal.md
       - Git: guides/git.md
       - Running and debugging: guides/run-and-debug.md
+      - Scratch files and snippets: guides/scratch-and-snippets.md
       - Customising IKE: guides/customising.md
   - Reference:
       - Overview: reference/index.md
