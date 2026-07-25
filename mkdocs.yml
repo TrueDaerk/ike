@@ -81,6 +81,9 @@ nav:
       - Search and replace: guides/search.md
       - Code intelligence: guides/code-intelligence.md
       - The integrated terminal: guides/terminal.md
+      - Git: guides/git.md
+      - Running and debugging: guides/run-and-debug.md
+      - Customising IKE: guides/customising.md
   - Reference:
       - Overview: reference/index.md
       - Keybindings: reference/keybindings.md
