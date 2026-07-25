@@ -11,10 +11,11 @@ terminal, themes, and a plugin system.
 
 ## Why it exists
 
-It was built for working across a lot of microservice repositories at once —
-often eight or more projects open at the same time, switching between them all
-day. Running that many full IDEs side by side asks a lot of a machine, and a
-surprising share of the day goes into finding the right window.
+It was built for working across a lot of microservice repositories at once.
+A full IDE has indexing to do before a project is usable, so closing one you
+will need again shortly is a bad trade — you keep them all open instead, and
+they all stay resident. Then a surprising share of the day goes into finding
+the right window among them.
 
 Neovim was the obvious lighter alternative, but assembling a full IDE out of
 plugins was a bigger project than the one worth solving. So: a terminal IDE

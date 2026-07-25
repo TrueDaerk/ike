@@ -3,13 +3,18 @@
 ## Why this exists
 
 I work across a lot of microservice repositories and move between them
-constantly — whichever one has the priority that hour. In practice that meant
-eight or more JetBrains IDEs open at the same time, plus a fair amount of the
-day spent finding the right window among them.
+constantly — whichever one has the priority that hour.
 
-Running that many full IDEs at once asks a lot of a machine, and that is where
-I kept hitting the ceiling. I wanted something light enough that keeping every
-project open is not a decision you have to make.
+A full IDE has indexing to do before a project is usable, so closing one I
+would need again an hour later was never a good trade. The habit that follows
+is the obvious one: never close anything. Which means every project I touched
+that week stayed open, and stayed resident — plus a fair amount of the day
+spent finding the right window among them.
+
+That is a lot to ask of a machine, and it is where I kept hitting the ceiling.
+I wanted something light enough that keeping every project open is not a
+decision, and quick enough to open one that hoarding them stops being
+necessary.
 
 Neovim was the obvious lighter alternative. But assembling a full IDE out of
 plugins and Lua config was a bigger project than the one I actually wanted to
