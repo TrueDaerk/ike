@@ -31,21 +31,29 @@ so `d2w` deletes two words, `"ayy` yanks a line into register `a`, and `c3j`
 changes three lines down. Learning the operators and the motions separately
 gets you every combination of them.
 
-**Operators:** `d` delete, `c` change, `y` yank, `>` / `<` indent. That is the
-complete set — commenting is a command (++cmd+7++) rather than an operator,
-and `~` toggles the case of the character under the cursor.
+**Operators:** `d` delete, `c` change, `y` yank, `>` / `<` indent, `gu` / `gU`
+/ `g~` lowercase / uppercase / toggle case, `=` reindent, `gq` reflow (hard-wrap
+at `editor.text_width`). Doubling an operator makes it linewise (`dd`, `guu`,
+`gqq`, `==`). Commenting is a command (++cmd+7++) rather than an operator, and
+`~` on its own toggles the case of the character under the cursor.
 
-**Motions:** `h j k l`, `w b e` by word, `0 ^ $` within the line, `gg G` for
-the file, `{ }` by paragraph, `f t F T` to a character, `%` to the matching
-bracket, `H M L` to the top/middle/bottom of the screen.
+**Motions:** `h j k l`, `w b e` by word (`ge` back to the previous word's end),
+`0 ^ $` within the line, `gg G` for the file, `{ }` by paragraph, `f t F T` to
+a character, `%` to the matching bracket, `H M L` to the top/middle/bottom of
+the screen. With soft wrap on, `g0 g$ gj gk` move by display line instead of
+buffer line.
 
-**Text objects:** `iw` / `aw` a word, `i(` / `a(` inside/around brackets (also
-`[`, `{`, `<`), and `i"` / `a"` a quoted string.
+**Text objects:** `iw` / `aw` a word, `ip` / `ap` a paragraph, `is` / `as` a
+sentence, `i(` / `a(` inside/around brackets (also `[`, `{`, `<`, and the
+aliases `b` for `(` and `B` for `{`), `i"` / `a"` a quoted string, and `it` /
+`at` an XML/HTML tag.
 
 **Scrolling:** ++ctrl+f++ / ++ctrl+b++ by page, ++ctrl+d++ / ++ctrl+u++ by half
-a page.
+a page; `zz` / `zt` / `zb` put the cursor line at the centre / top / bottom.
 
-Counts work in visual mode too: `V3j` extends the selection three lines.
+Counts work in visual mode too: `V3j` extends the selection three lines. A
+selection also takes `u` / `U` / `~` (case), `J` (join the lines), `r` (replace
+every character), `=`, and `x` / `s` as aliases of `d` / `c`.
 
 ## Registers, marks and repeat
 
@@ -60,8 +68,13 @@ to its line. Bookmarks are the same idea with a UI in front of them.
 the reason the grammar is worth learning: make an edit once, move, press `.`.
 
 `g` also prefixes a few navigation commands: `gg` to the top, `gp` paste, `g-`
-/ `g+` for chronological undo and redo, and `g;` / `g,` to walk your recent
-edit positions.
+/ `g+` for chronological undo and redo, `g;` / `g,` to walk your recent edit
+positions, `gv` to reselect the last visual selection, `gi` to resume inserting
+where you last left insert mode, `gJ` to join lines without a space, and `gf`
+to open the file whose name is under the cursor.
+
+`ZZ` saves and closes the pane (like `:x`), `ZQ` closes it discarding changes
+(like `:q!`).
 
 ## Ex commands
 
@@ -131,5 +144,6 @@ a modern GUI where vim has no opinion:
 | `editor.auto_save` | `focus` | Saves when focus leaves a pane; `idle` adds a timer, `off` disables |
 | `editor.tab_width` / `editor.use_spaces` | `4` / `true` | Indentation, unless `.editorconfig` overrides it |
 | `editor.format_on_save` | `false` | Runs the language server's formatter on manual saves |
+| `editor.text_width` | `80` | The column `gq` reflows text to (0 falls back to 79) |
 
 The [settings reference](../reference/settings.md) has the full list.

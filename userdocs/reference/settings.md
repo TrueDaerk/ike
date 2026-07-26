@@ -37,6 +37,7 @@ Settings, or run `settings.open` from the palette.
 | Line numbers | `editor.line_numbers` | boolean | `true` | user | Show the line-number gutter |
 | Relative line numbers | `editor.relative_line_numbers` | boolean | `false` | user | Count gutter lines away from the cursor (vim-style) |
 | Scroll offset | `editor.scroll_off` | integer (0–50) | `3` | user | Minimum lines kept visible above and below the cursor |
+| Text width | `editor.text_width` | integer (0–500) | `80` | user | Hard-wrap column the gq reflow operator targets (0 = vim's default 79) |
 | Sticky scroll | `editor.sticky_scroll` | boolean | `true` | user | Pin enclosing function/class header lines at the top while scrolling |
 | Markdown rendering | `editor.markdown_rendering` | boolean | `true` | user | Render Markdown inline styles, conceal markers and draw pipe tables with box characters on lines the cursor is not on |
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |

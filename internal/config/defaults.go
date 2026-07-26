@@ -67,6 +67,7 @@ func defaults() *Config {
 			RelativeLineNumbers:    false,
 			Wrap:                   false,
 			ScrollOff:              3,
+			TextWidth:              80,
 			AutoIndent:             true,
 			AutoClosePairs:         true,
 			TrimTrailingWhitespace: true,

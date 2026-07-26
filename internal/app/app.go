@@ -3311,6 +3311,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.Refresh()
 		return m, nil
 
+	case editor.OpenPathMsg:
+		// "gf" (#1193): resolve the name under the cursor against the
+		// requesting file's directory, then the working root, and open the
+		// first existing file through the standard funnel.
+		var candidates []string
+		if filepath.IsAbs(msg.Path) {
+			candidates = []string{msg.Path}
+		} else {
+			if msg.From != "" {
+				candidates = append(candidates, filepath.Join(filepath.Dir(msg.From), msg.Path))
+			}
+			if cwd, err := cachedGetwd(); err == nil {
+				candidates = append(candidates, filepath.Join(cwd, msg.Path))
+			}
+		}
+		for _, p := range candidates {
+			if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+				return m.openPathAt(p, 0, 0)
+			}
+		}
+		m.host.Notify(host.Info, "gf: no file "+msg.Path)
+		return m, nil
+
 	case editor.GlobalMarkJumpMsg:
 		// '{A-Z} / `{A-Z} in an editor (#1151): resolve against the store
 		// and open through the standard funnel — cross-file jumps open the

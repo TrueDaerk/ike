@@ -30,6 +30,10 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	s := key.String()
 	r, hasRune := firstRune(key)
 
+	// Refresh the "gv" snapshot on every visual-mode key, so whatever ends the
+	// selection leaves its final extent reselectable (#1193).
+	m.lastVis = visualSnapshot{anchor: m.anchor, cursor: m.cursor, mode: m.mode, ok: true}
+
 	if key.Code == tea.KeyEscape {
 		m.mode = Normal
 		m.wait = awaitNone
@@ -38,6 +42,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		// Tell listeners the selection is gone (the LSP bridge tracks it for
 		// range-scoped requests).
 		m.emit(EventCursorMove)
+		return m, nil
+	}
+
+	// A pending "r" replaces every selected character with the next key (#1193).
+	if m.wait == awaitReplace {
+		m.wait = awaitNone
+		if hasRune {
+			m.replaceSelection(r)
+		}
 		return m, nil
 	}
 
@@ -136,6 +149,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.visualIndent(1)
 	case "<":
 		m.visualIndent(-1)
+	case "u", "U", "~":
+		// Case operations on the selection (#1193).
+		m.visualOperate(rune(s[0]))
+	case "=":
+		m.visualOperate('=')
+	case "J":
+		m.joinVisual(true)
+	case "r":
+		m.wait = awaitReplace
 	case "p", "P":
 		m.visualPaste(0)
 	case "i":
@@ -175,6 +197,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 func (m *Model) visualTextObject(r rune) {
 	res := m.resolveTextObject(r)
 	if !res.OK {
+		return
+	}
+	if res.Linewise {
+		// A linewise object (paragraph, #1193) selects whole lines.
+		m.mode = mode.VisualLine
+		m.anchor = buffer.Position{Line: res.Range.Start.Line}
+		m.cursor = m.buf.ClampCursor(buffer.Position{Line: res.Range.End.Line})
+		m.desiredCol = m.cursor.Col
+		m.emit(EventCursorMove)
 		return
 	}
 	m.anchor = res.Range.Start

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-26 (vim parity: operators, g-sequences, text objects)
+
+- The everyday vim keys missing from the modal editor landed (#1193): case
+  operators `gu gU g~` (+ visual `u U ~`), `=` reindent and `gq` reflow (new
+  `editor.text_width` setting), text objects `ip ap is as it at ib iB`,
+  `gv gi gJ ge gE gf`, visual `J r x s =`, `zz zt zb`, `ZZ ZQ`, and the
+  display-line motions `g0 g$ gj gk`
+  (`/architecture/editor.md`).
+
 ## 2026-07-25 (versioning)
 
 - IKE carries a version (#1214), starting at **0.1.0**: `internal/version`

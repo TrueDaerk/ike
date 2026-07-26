@@ -69,7 +69,8 @@ type awaiting int
 const (
 	awaitNone awaiting = iota
 	awaitG
-	awaitZ // fold commands: za zc zo zM zR (#144)
+	awaitZ    // fold commands za zc zo zM zR (#144) and scrolling zz zt zb (#1193)
+	awaitZBig // after Z; awaiting ZZ (save and close) or ZQ (close without saving, #1193)
 	awaitFind
 	awaitReplace
 	awaitObject    // after operator + i/a; awaiting the object char
@@ -186,6 +187,19 @@ type Model struct {
 	// -1 when no selection has been made this session.
 	visualStart int
 	visualEnd   int
+
+	// Last visual selection (anchor, cursor, variant) for "gv" (#1193);
+	// refreshed on every visual-mode key so the state at exit survives.
+	lastVis visualSnapshot
+
+	// Position of the last insert-mode exit for "gi" (#1193).
+	lastInsert struct {
+		pos buffer.Position
+		ok  bool
+	}
+
+	// Hard-wrap column for "gq" (editor.text_width, #1193).
+	textWidth int
 
 	// Insert-session recording for "." repeat.
 	insert insertSession
@@ -437,6 +451,7 @@ func New() Model {
 		regs:               register.New(),
 		hist:               history.New(),
 		tabWidth:           4,
+		textWidth:          80,
 		insertFinalNewline: true,
 		showInlayHints:     false,
 		stickyScroll:       true,
@@ -529,6 +544,11 @@ func (m *Model) applyConfig() {
 	m.view.RelativeNumbers = boolOr(m.cfg, "editor.relative_line_numbers", m.view.RelativeNumbers)
 	if v, ok := m.cfg.Get("editor.scroll_off"); ok {
 		m.view.ScrollOff = atoi(v, m.view.ScrollOff)
+	}
+	if v, ok := m.cfg.Get("editor.text_width"); ok {
+		if n := atoi(v, m.textWidth); n >= 0 {
+			m.textWidth = n
+		}
 	}
 	// View options (#64): a palette toggle overrides the config value for
 	// this view until the next toggle; rulers have no toggle and always track
