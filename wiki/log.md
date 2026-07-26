@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-26 (themes: broadened palette set — 10 new built-ins)
+
+- Added the #1230 batch: `everforest-dark`/`everforest-light` (the missing
+  green family), `ayu-dark`/`ayu-mirage`/`ayu-light` (the warm/orange
+  family), `github-dark`/`github-light` (Primer; the light variant passed
+  the full contrast matrix with zero corrections), `oxocarbon`,
+  `monokai-pro`, and `zenburn` (needed the largest lightness lifts of the
+  batch, as predicted). All corrections are lightness-only with per-slot
+  comments (`/architecture/themes.md`).
+
 ## 2026-07-26 (themes: JetBrains pair — darcula, intellij-light)
 
 - Added the JetBrains theme pair (#1228): `darcula` (Surface `#2b2b2b`, the
