@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/palette"
 )
 
 func init() {
@@ -17,7 +18,7 @@ func init() {
 
 func TestScratchCommandsRegistered(t *testing.T) {
 	m := newSized()
-	for _, id := range []string{"scratch.new", "scratch.new.sctest"} {
+	for _, id := range []string{"scratch.new", "scratch.new.text", "scratch.new.sctest"} {
 		if _, ok := m.reg.Command(id); !ok {
 			t.Fatalf("command %s must be registered", id)
 		}
@@ -61,6 +62,44 @@ func TestScratchListOpensLockedPalette(t *testing.T) {
 	m = dispatch(t, m, ShowScratchFilesMsg{})
 	if !m.palette.IsOpen() {
 		t.Fatal("scratch.list must open the palette")
+	}
+}
+
+// TestNewScratchOpensLanguagePicker covers #1223: scratch.new — the command
+// behind cmd+shift+n and the File menu — asks for the language instead of
+// silently creating a .txt file.
+func TestNewScratchOpensLanguagePicker(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	m := newSized()
+	m = dispatch(t, m, ShowNewScratchMsg{})
+	if !m.palette.IsOpen() {
+		t.Fatal("scratch.new must open the language picker")
+	}
+
+	items := scratchNewMode{}.Results("", palette.Context{})
+	if len(items) == 0 || items[0].Title != "Plain Text" {
+		t.Fatalf("plain text must head the unfiltered list, got %+v", items)
+	}
+	if items[0].Msg != (palette.RunCommandMsg{ID: "scratch.new.text"}) {
+		t.Fatalf("plain-text row msg = %+v, want the scratch.new.text command", items[0].Msg)
+	}
+	var found bool
+	for _, it := range items {
+		if it.Msg == (palette.RunCommandMsg{ID: "scratch.new.sctest"}) {
+			found = true
+			if it.Detail != ".sct" {
+				t.Errorf("detail = %q, want the language extension", it.Detail)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("every registered language must be offered, got %+v", items)
+	}
+
+	// Filtering matches the language title.
+	got := scratchNewMode{}.Results("sctest", palette.Context{})
+	if len(got) != 1 || got[0].Title != "Sctest" {
+		t.Fatalf("query must filter to the language, got %+v", got)
 	}
 }
 

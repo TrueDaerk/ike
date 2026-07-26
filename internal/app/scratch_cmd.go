@@ -12,16 +12,23 @@ import (
 )
 
 // scratch_cmd.go surfaces the scratch store (Roadmap 0280, #351) as palette
-// commands: "New Scratch File" plus one language-flavored variant per
-// registered language — picking the command IS the language picker, so
-// scratch creation needs no extra overlay UI.
+// commands: "New Scratch File" — which asks for the language through the
+// picker in scratch_new_mode.go (#1223) — plus one no-prompt variant per
+// registered language, so a bound chord or a script can create a Python or
+// PHP scratch without going through the overlay.
+
+// scratchTextCommandID is the no-prompt plain-text creator. scratch.new used
+// to be that command; it now opens the language picker, so the direct .txt
+// path needs an id of its own (the picker's "Plain Text" row runs it).
+const scratchTextCommandID = "scratch.new.text"
 
 // scratchCommands builds the scratch.new command family. It runs on every
 // registry query (Capabilities is lazy), so languages registered later —
 // plugins, tests — appear without ordering constraints.
 func scratchCommands() []plugin.Command {
 	cmds := []plugin.Command{
-		appCommand("scratch.new", "New Scratch File", NewScratchMsg{}),
+		appCommand("scratch.new", "New Scratch File…", ShowNewScratchMsg{}),
+		appCommand(scratchTextCommandID, "New Scratch File: Plain Text", NewScratchMsg{Ext: "txt"}),
 		appCommand("scratch.list", "Open Scratch File…", ShowScratchFilesMsg{}),
 	}
 	for _, l := range lang.All() {

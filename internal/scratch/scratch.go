@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"ike/internal/lang"
 )
 
 // configDirEnv mirrors config.Discover's user-layer override, so a sandboxed
@@ -34,8 +36,10 @@ func Dir() (string, error) {
 }
 
 // Create allocates the next free scratch-N.<ext> (N counting up from 1),
-// creates it empty — and the directory when missing — and returns the
-// absolute path. The extension is dot-optional; empty means "txt".
+// creates it — and the directory when missing — seeded with the language's
+// file template (#1223: a PHP scratch opens with "<?php", so it is runnable
+// as created), and returns the absolute path. Languages without a template
+// yield an empty file. The extension is dot-optional; empty means "txt".
 func Create(ext string) (string, error) {
 	dir, err := Dir()
 	if err != nil {
@@ -53,6 +57,14 @@ func Create(ext string) (string, error) {
 		// O_EXCL makes allocation race-free: the first creator wins.
 		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
+			// The template is written through the winning handle, so the
+			// content belongs to the allocation that won the O_EXCL race.
+			if tpl := lang.TemplateFor(path); tpl != "" {
+				if _, err := f.WriteString(tpl); err != nil {
+					f.Close()
+					return "", fmt.Errorf("seeding scratch template: %w", err)
+				}
+			}
 			f.Close()
 			return path, nil
 		}

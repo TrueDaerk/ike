@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"ike/internal/lang"
 )
 
 // sandbox points the store at a fresh IKE_CONFIG_DIR and returns the expected
@@ -52,6 +54,35 @@ func TestCreateAllocatesSequentially(t *testing.T) {
 	}
 	if want := filepath.Join(dir, "scratch-1.txt"); other != want {
 		t.Fatalf("empty ext must mean txt: %q, want %q", other, want)
+	}
+}
+
+// TestCreateSeedsLanguageTemplate covers #1223: a scratch of a language that
+// registers a file template opens with that template rendered, so e.g. a PHP
+// scratch is runnable as created; languages without one stay empty.
+func TestCreateSeedsLanguageTemplate(t *testing.T) {
+	sandbox(t)
+	lang.Register(lang.Language{ID: "scrtpl", Extensions: []string{"scrtpl"}, Template: "<?tpl ${NAME}\n"})
+	lang.Register(lang.Language{ID: "scrbare", Extensions: []string{"scrbare"}})
+
+	path, err := Create("scrtpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "<?tpl scratch-1\n"; string(data) != want {
+		t.Fatalf("seeded content = %q, want %q", data, want)
+	}
+
+	bare, err := Create("scrbare")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(bare); err != nil || len(data) != 0 {
+		t.Fatalf("template-less language must create an empty scratch: %q, %v", data, err)
 	}
 }
 

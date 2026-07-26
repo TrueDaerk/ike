@@ -1533,11 +1533,12 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 		return items
 	})
 	scr := palette.NewScratchMode(scratchList)
+	scrNew := scratchNewMode{}
 	all := palette.NewSearchAllMode(cmd, file, symbols)
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, pasteHist, bookmarks, reverts, openPath, layouts)
+	return palette.New(pcfg, cmd, file, dir, proj, refs, actions, mru, all, symbols, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -2804,9 +2805,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.splitView(msg.Zone)
 
 	case NewScratchMsg:
-		// scratch.new[.<lang>] (#351): create under the scratch store, open
+		// scratch.new.<lang> (#351): create under the scratch store, open
 		// through the standard funnel.
 		return m.newScratch(msg.Ext)
+
+	case ShowNewScratchMsg:
+		// scratch.new (cmd+shift+n / File menu, #1223): pick the language
+		// first, locked to the picker mode; the chosen row runs the matching
+		// scratch.new.<id> command.
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{
+			ContextID: m.focusContext(),
+			Root:      ".",
+		}, scratchNewPrefix)
+		return m, nil
 
 	case OpenPythonEnvWizardMsg:
 		// python.newEnvironment (palette, #884): open settings on the
