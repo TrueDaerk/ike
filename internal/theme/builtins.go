@@ -19,6 +19,8 @@ func Builtins() []Theme {
 		solarizedDark(),
 		solarizedLight(),
 		dracula(),
+		darcula(),
+		intellijLight(),
 	}
 }
 
@@ -1138,6 +1140,166 @@ func catppuccinLatte() Theme {
 			"json":    "#7c4f10",
 			"yaml":    "#7c4f10",
 			"lock":    "#64697d",
+		},
+	}
+}
+
+// darcula ports JetBrains' IntelliJ Darcula scheme. Anchors are the canonical
+// editor values (Surface #2b2b2b, Panel #3c3f41, Foreground #a9b7c6, keyword
+// #cc7832, string #6a8759, number #6897bb, comment #808080). Slots that
+// deviate from a canonical value carry a comment saying why.
+func darcula() Theme {
+	return Theme{
+		Name: "darcula",
+		Dark: true,
+		UI: UI{
+			Background:      "#2b2b2b", // editor background
+			Foreground:      "#a9b7c6", // default text
+			Surface:         "#2b2b2b",
+			Panel:           "#3c3f41", // tool window / status bar background
+			Border:          "#555555", // panel separator
+			BorderFocus:     "#4a88c7", // focus ring blue
+			Selection:       "#214283", // editor selection
+			SelectionText:   "#a9b7c6",
+			SelectionMuted:  "#323232", // caret row
+			OccurrenceRead:  "#344134", // identifier under caret
+			OccurrenceWrite: "#40332b", // identifier under caret (write)
+			InlayHint:       "#959595", // comment gray #808080 lightened for 3.5:1 over overlays
+			Whitespace:      "#505050",
+			IndentGuide:     "#505050",
+			Ruler:           "#323232",
+			Accent:          "#ffc66d", // function yellow
+			Primary:         "#2e446c", // list selection #4b6eaf pulled toward Surface (selection cap)
+			Secondary:       "#da9d69", // keyword orange #cc7832 lightened for AA on Panel
+			Success:         "#6cba76", // IDE green #499c54 lightened for AA on Panel
+			Warning:         "#bbb529", // annotation yellow
+			Error:           "#dd9795", // error red #bc3f3c lightened for AA on Panel
+			Info:            "#8aaeca", // number blue #6897bb lightened for AA on Panel
+			Hint:            "#86b57b", // doc-comment green #629755 lightened for AA on Panel
+			MoveSource:      "#cf5b56",
+			DropTarget:      "#bbb529",
+			Ghost:           "#cc7832",
+			ScrollbarTrack:  "#3c3f41",
+			ScrollbarThumb:  "#595b5d",
+			DiffAdded:       "#294436", // diff added line
+			DiffRemoved:     "#3d3f3f", // diff deleted #484a4a pulled toward Surface (overlay cap)
+			DiffChanged:     "#2b4155", // diff changed #385570 pulled toward Surface (overlay cap)
+			VCSModified:     "#8aaeca", // VCS modified blue #6897bb lightened for AA on Panel
+			VCSAdded:        "#86b57b", // VCS added green #629755 lightened for AA on Panel
+			VCSUntracked:    "#bbb529",
+			VCSDeleted:      "#959595", // comment gray #808080 lightened for 3.5:1 over overlays
+			VCSConflicted:   "#dd9795", // error red #bc3f3c lightened for AA on Panel
+		},
+		Captures: map[string]string{
+			"keyword":          "#cf7e3b", // #cc7832 lightened for AA on Surface
+			"operator":         "#a9b7c6",
+			"string":           "#7b9b68", // #6a8759 lightened for AA on Surface
+			"number":           "#6897bb",
+			"comment":          "#808080",
+			"function":         "#ffc66d",
+			"type":             "#a9b7c6", // Darcula leaves class names default
+			"constant":         "#a588b5", // static field purple #9876aa lightened for AA
+			"constant.builtin": "#a588b5",
+			"variable":         "#a9b7c6",
+			"variable.builtin": "#cf7e3b", // this/self keyword orange, lightened for AA
+			"property":         "#a588b5", // instance field purple #9876aa lightened for AA
+			"label":            "#cf7e3b",
+			"attribute":        "#bbb529", // annotation yellow
+			"punctuation":      "#a9b7c6",
+			"escape":           "#cf7e3b", // valid escape orange, lightened for AA
+			"boolean":          "#cf7e3b",
+			"tag":              "#e8bf6a", // HTML tag yellow
+			"embedded":         "#a9b7c6",
+		},
+		Files: map[string]string{
+			"dir":     "#8aaeca", // number blue lightened for AA on Panel
+			"default": "#a9b7c6",
+			"go":      "#86b57b", // doc green lightened for AA on Panel
+			"md":      "#98b189", // string green lightened for AA on Panel
+			"toml":    "#bbb529",
+			"json":    "#bbb529",
+			"yaml":    "#bbb529",
+			"lock":    "#959595", // lightened for 3.5:1 over overlays
+		},
+	}
+}
+
+// intellijLight ports JetBrains' IntelliJ Light scheme. Anchors are the
+// canonical editor values (Surface #ffffff, Foreground #000000, keyword
+// #0033b3, string #067d17, number #1750eb, comment #8c8c8c). Slots that
+// deviate from a canonical value carry a comment saying why.
+func intellijLight() Theme {
+	return Theme{
+		Name: "intellij-light",
+		Dark: false,
+		UI: UI{
+			Background:      "#f2f2f2", // tool window background
+			Foreground:      "#000000",
+			Surface:         "#ffffff", // editor background
+			Panel:           "#f2f2f2",
+			Border:          "#d1d1d1", // panel separator
+			BorderFocus:     "#3574f0", // focus ring blue
+			Selection:       "#b3d8ff", // editor selection #a6d2ff lightened toward Surface (selection cap)
+			SelectionText:   "#000000",
+			SelectionMuted:  "#fcfaed", // caret row
+			OccurrenceRead:  "#edebfc", // identifier under caret
+			OccurrenceWrite: "#fce8f4", // identifier under caret (write)
+			InlayHint:       "#808080", // comment gray #8c8c8c darkened for 3.5:1 on Panel
+			Whitespace:      "#adadad",
+			IndentGuide:     "#d3d3d3",
+			Ruler:           "#f5f5f5",
+			Accent:          "#0033b3", // keyword blue
+			Primary:         "#d4e2ff", // completion selected row
+			Secondary:       "#871094", // field purple
+			Success:         "#067d17", // string green
+			Warning:         "#806e0b", // metadata gold #9e880d darkened for AA on Panel
+			Error:           "#df0000", // error red #f50000 darkened for AA on Panel
+			Info:            "#1750eb", // number blue
+			Hint:            "#00627a", // function teal
+			MoveSource:      "#db3b4b",
+			DropTarget:      "#9e880d",
+			Ghost:           "#c77800",
+			ScrollbarTrack:  "#f2f2f2",
+			ScrollbarThumb:  "#a6a6a6",
+			DiffAdded:       "#d4f0d4",
+			DiffRemoved:     "#f5d8d8",
+			DiffChanged:     "#f0ecd7",
+			VCSModified:     "#0032a0", // VCS modified blue
+			VCSAdded:        "#067d17",
+			VCSUntracked:    "#806e0b", // metadata gold darkened for AA on Panel
+			VCSDeleted:      "#616161",
+			VCSConflicted:   "#a90f21",
+		},
+		Captures: map[string]string{
+			"keyword":          "#0033b3",
+			"operator":         "#000000",
+			"string":           "#067d17",
+			"number":           "#1750eb",
+			"comment":          "#888888", // #8c8c8c darkened for 3.5:1 on Surface
+			"function":         "#00627a",
+			"type":             "#000000", // IntelliJ Light leaves class names default
+			"constant":         "#871094", // static field purple
+			"constant.builtin": "#871094",
+			"variable":         "#000000",
+			"variable.builtin": "#0033b3", // this/self keyword blue
+			"property":         "#871094", // instance field purple
+			"label":            "#0033b3",
+			"attribute":        "#174ad4", // HTML attribute blue
+			"punctuation":      "#000000",
+			"escape":           "#0037a6", // valid escape blue
+			"boolean":          "#0033b3",
+			"tag":              "#0033b3",
+			"embedded":         "#000000",
+		},
+		Files: map[string]string{
+			"dir":     "#1750eb",
+			"default": "#000000",
+			"go":      "#00627a",
+			"md":      "#067d17",
+			"toml":    "#806e0b", // metadata gold darkened for AA on Panel
+			"json":    "#806e0b",
+			"yaml":    "#806e0b",
+			"lock":    "#808080", // darkened for 3.5:1 on Panel
 		},
 	}
 }
