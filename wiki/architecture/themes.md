@@ -78,7 +78,7 @@ internal/theme/
                 replaced the duplicated copies in highlight and explorer
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
                 catppuccin-mocha(+latte), kanagawa, one-dark,
-                solarized-dark(+light), dracula
+                solarized-dark(+light), dracula, darcula, intellij-light
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -181,7 +181,13 @@ Error slot lightens the scheme's red to clear the contrast rule),
 `solarized-dark` / `solarized-light` (Ethan Schoonover's Solarized; the
 scheme's low-contrast accents are lightened/darkened on the diagnostic,
 secondary, and syntax slots to clear the contrast rule), `dracula` (the
-official Dracula spec, with the same lift applied where needed).
+official Dracula spec, with the same lift applied where needed),
+`darcula` / `intellij-light` (the JetBrains IntelliJ pair, #1228; Darcula's
+mid-luminance accents are lightened on the chrome slots, IntelliJ Light's
+gold/red darkened, and the strong JetBrains list/selection backgrounds
+(`#4b6eaf`, `#a6d2ff`) are pulled toward `Surface` per rule 3 — the canonical
+syntax anchors `#cc7832`/`#6a8759`/`#6897bb` and `#0033b3`/`#067d17`/
+`#1750eb` are kept or nudged in lightness only).
 
 Across all built-ins the full-matrix audit lifted the low-emphasis
 foregrounds (`InlayHint`, `VCSDeleted`, `file:lock`, comments), darkened the

@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-26 (themes: JetBrains pair — darcula, intellij-light)
+
+- Added the JetBrains theme pair (#1228): `darcula` (Surface `#2b2b2b`, the
+  canonical keyword/string/number anchors) and `intellij-light` (white-first,
+  `#0033b3`/`#067d17`/`#1750eb` anchors). Slots that missed the #1226 contrast
+  rules moved in lightness only, each with a comment; the strong JetBrains
+  list/selection backgrounds (`#4b6eaf`/`#a6d2ff`) were pulled toward
+  `Surface` per rule 3, while `darcula`'s editor selection `#214283` passed
+  as-is (`/architecture/themes.md`).
+
 ## 2026-07-26 (theme contrast: full-matrix audit)
 
 - Every built-in theme was audited across the whole text/background matrix,
