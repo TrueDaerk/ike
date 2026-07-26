@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-26 (theme contrast: full-matrix audit)
+
+- Every built-in theme was audited across the whole text/background matrix,
+  not just the chrome spot-check: low-emphasis foregrounds (`InlayHint`,
+  `VCSDeleted`, `file:lock`, comments) were lifted, the light variants' syntax
+  accents darkened, and every overlay background (`Selection`, `Primary`,
+  `SelectionMuted`, `Ruler`, the occurrence marks, the three diff tints)
+  pulled back toward `Surface` so the semantic row colors panels keep under a
+  selection stay readable. `TestBuiltinThemeFullContrast` now enforces the
+  three rules (AA text, 3.5:1 dim text, overlay within 1.35/1.5 of `Surface`)
+  (`/architecture/themes.md`).
+
 ## 2026-07-26 (scratch files: language picker, templates, running)
 
 - `scratch.new` (`cmd+shift+n`, File menu) asks for the language instead of
