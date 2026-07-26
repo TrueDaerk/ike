@@ -41,19 +41,19 @@ func defaultTheme() Theme {
 			Panel:          "#303030", // status bar / popups / hover rows
 			Border:         "#585858", // blurred borders, dividers
 			BorderFocus:    "#5f87ff", // former colorPaneFocus
-			Selection:      "#3668ff",
-			SelectionText:  "#ffffff",
-			SelectionMuted: "#444444", // editor visual selection
+			Selection:      "#1f3065",
+			SelectionText:  "#d0d0d0",
+			SelectionMuted: "#2c2c2c", // editor visual selection
 			// Occurrence marks (#172) sit below the visual selection in
 			// emphasis: read cool, write warm.
-			OccurrenceRead:  "#31404f",
-			OccurrenceWrite: "#4f4031",
+			OccurrenceRead:  "#242d36",
+			OccurrenceWrite: "#332b23",
 			InlayHint:       "gray",
 			Whitespace:      "#585858",
 			IndentGuide:     "#585858",
-			Ruler:           "#303030",
+			Ruler:           "#2c2c2c",
 			Accent:          "#d7af87", // explorer active entry
-			Primary:         "#005f87", // completion selected row
+			Primary:         "#09384b", // completion selected row
 			Secondary:       "#ffaf5f",
 			Success:         "#5fd75f",
 			Warning:         "#9f9f00",
@@ -65,13 +65,13 @@ func defaultTheme() Theme {
 			Ghost:           "#af8700",
 			ScrollbarTrack:  "#585858",
 			ScrollbarThumb:  "#8a8a8a",
-			DiffAdded:       "#223d22",
-			DiffRemoved:     "#462424",
-			DiffChanged:     "#4d4d0a",
+			DiffAdded:       "#1e311e",
+			DiffRemoved:     "#432323",
+			DiffChanged:     "#2e2e0e",
 			VCSModified:     "#8d8dff", // vcs status foregrounds (Roadmap 0320)
 			VCSAdded:        "#5fd75f",
 			VCSUntracked:    "#9f9f00",
-			VCSDeleted:      "#585858",
+			VCSDeleted:      "#868686",
 			VCSConflicted:   "#ff6464",
 		},
 		Captures: map[string]string{
@@ -119,17 +119,17 @@ func tokyoNight() Theme {
 			Panel:           "#24283b",
 			Border:          "#414868",
 			BorderFocus:     "#7aa2f7",
-			Selection:       "#7aa2f7",
-			SelectionText:   "#1a1b26",
-			SelectionMuted:  "#283457",
-			OccurrenceRead:  "#233450",
-			OccurrenceWrite: "#413630",
-			InlayHint:       "#565f89",
+			Selection:       "#2f3954",
+			SelectionText:   "#a9b1d6",
+			SelectionMuted:  "#273252",
+			OccurrenceRead:  "#23334e",
+			OccurrenceWrite: "#3a312e",
+			InlayHint:       "#717aa6",
 			Whitespace:      "#414868",
 			IndentGuide:     "#414868",
 			Ruler:           "#24283b",
 			Accent:          "#7fa1de",
-			Primary:         "#7aa2f7",
+			Primary:         "#2f3954",
 			Secondary:       "#ff9e64",
 			Success:         "#9ece6a",
 			Warning:         "#e0af68",
@@ -141,13 +141,13 @@ func tokyoNight() Theme {
 			Ghost:           "#ff9e64",
 			ScrollbarTrack:  "#24283b",
 			ScrollbarThumb:  "#414868",
-			DiffAdded:       "#374234",
-			DiffRemoved:     "#4a2f3c",
-			DiffChanged:     "#6d5941",
+			DiffAdded:       "#2d352f",
+			DiffRemoved:     "#432c39",
+			DiffChanged:     "#383130",
 			VCSModified:     "#7aa2f7",
 			VCSAdded:        "#9ece6a",
 			VCSUntracked:    "#e0af68",
-			VCSDeleted:      "#414868",
+			VCSDeleted:      "#727ca7",
 			VCSConflicted:   "#f7768e",
 		},
 		Captures: map[string]string{
@@ -155,7 +155,7 @@ func tokyoNight() Theme {
 			"operator":         "#89ddff",
 			"string":           "#9ece6a",
 			"number":           "#ff9e64",
-			"comment":          "#565f89",
+			"comment":          "#656f9e",
 			"function":         "#7aa2f7",
 			"type":             "#2ac3de",
 			"constant":         "#ff9e64",
@@ -179,7 +179,7 @@ func tokyoNight() Theme {
 			"toml":    "#e0af68",
 			"json":    "#e0af68",
 			"yaml":    "#e0af68",
-			"lock":    "#565f89",
+			"lock":    "#717aa6",
 		},
 	}
 }
@@ -195,17 +195,17 @@ func nord() Theme {
 			Panel:           "#3b4252",
 			Border:          "#4c566a",
 			BorderFocus:     "#88c0d0",
-			Selection:       "#88c0d0",
-			SelectionText:   "#2e3440",
-			SelectionMuted:  "#434c5e",
+			Selection:       "#3f4f5b",
+			SelectionText:   "#d8dee9",
+			SelectionMuted:  "#3f4758",
 			OccurrenceRead:  "#3b4657",
-			OccurrenceWrite: "#524a43",
-			InlayHint:       "#616e88",
+			OccurrenceWrite: "#4c4642",
+			InlayHint:       "#909bb0",
 			Whitespace:      "#4c566a",
 			IndentGuide:     "#4c566a",
 			Ruler:           "#3b4252",
 			Accent:          "#8fbcbb",
-			Primary:         "#88c0d0",
+			Primary:         "#3f4f5b",
 			Secondary:       "#dba291",
 			Success:         "#a3be8c",
 			Warning:         "#ebcb8b",
@@ -217,45 +217,45 @@ func nord() Theme {
 			Ghost:           "#d08770",
 			ScrollbarTrack:  "#3b4252",
 			ScrollbarThumb:  "#4c566a",
-			DiffAdded:       "#475250",
-			DiffRemoved:     "#534b56",
-			DiffChanged:     "#7d735f",
+			DiffAdded:       "#40494b",
+			DiffRemoved:     "#4a4551",
+			DiffChanged:     "#464749",
 			VCSModified:     "#97b2cc",
 			VCSAdded:        "#a3be8c",
 			VCSUntracked:    "#ebcb8b",
-			VCSDeleted:      "#4c566a",
+			VCSDeleted:      "#909bb0",
 			VCSConflicted:   "#d9a1a6",
 		},
 		Captures: map[string]string{
 			"keyword":          "#81a1c1",
 			"operator":         "#81a1c1",
 			"string":           "#a3be8c",
-			"number":           "#b48ead",
-			"comment":          "#616e88",
+			"number":           "#b691af",
+			"comment":          "#7e8aa3",
 			"function":         "#88c0d0",
 			"type":             "#8fbcbb",
-			"constant":         "#d08770",
-			"constant.builtin": "#d08770",
+			"constant":         "#d18a74",
+			"constant.builtin": "#d18a74",
 			"variable":         "#d8dee9",
-			"variable.builtin": "#bf616a",
+			"variable.builtin": "#cf8990",
 			"property":         "#d8dee9",
 			"label":            "#81a1c1",
 			"attribute":        "#ebcb8b",
 			"punctuation":      "#eceff4",
 			"escape":           "#ebcb8b",
 			"boolean":          "#81a1c1",
-			"tag":              "#bf616a",
+			"tag":              "#cf8990",
 			"embedded":         "#d8dee9",
 		},
 		Files: map[string]string{
-			"dir":     "#81a1c1",
+			"dir":     "#99b3cd",
 			"default": "#d8dee9",
 			"go":      "#88c0d0",
 			"md":      "#a3be8c",
 			"toml":    "#ebcb8b",
 			"json":    "#ebcb8b",
 			"yaml":    "#ebcb8b",
-			"lock":    "#616e88",
+			"lock":    "#909bb0",
 		},
 	}
 }
@@ -271,17 +271,17 @@ func gruvbox() Theme {
 			Panel:           "#3c3836",
 			Border:          "#504945",
 			BorderFocus:     "#fabd2f",
-			Selection:       "#076678",
+			Selection:       "#164953",
 			SelectionText:   "#ebdbb2",
-			SelectionMuted:  "#504945",
-			OccurrenceRead:  "#324547",
-			OccurrenceWrite: "#503b2c",
-			InlayHint:       "#928374",
+			SelectionMuted:  "#403c39",
+			OccurrenceRead:  "#303f41",
+			OccurrenceWrite: "#4b392c",
+			InlayHint:       "#9b8d7f",
 			Whitespace:      "#504945",
 			IndentGuide:     "#504945",
 			Ruler:           "#3c3836",
 			Accent:          "#fe8019",
-			Primary:         "#076678",
+			Primary:         "#164953",
 			Secondary:       "#fe8019",
 			Success:         "#b8bb26",
 			Warning:         "#fabd2f",
@@ -293,25 +293,25 @@ func gruvbox() Theme {
 			Ghost:           "#fe8019",
 			ScrollbarTrack:  "#3c3836",
 			ScrollbarThumb:  "#665c54",
-			DiffAdded:       "#474827",
-			DiffRemoved:     "#563a37",
-			DiffChanged:     "#80662a",
+			DiffAdded:       "#3d3e27",
+			DiffRemoved:     "#4e3734",
+			DiffChanged:     "#443c29",
 			VCSModified:     "#8aaa9e",
 			VCSAdded:        "#b8bb26",
 			VCSUntracked:    "#fabd2f",
-			VCSDeleted:      "#504945",
+			VCSDeleted:      "#988d87",
 			VCSConflicted:   "#fc7d6e",
 		},
 		Captures: gruvboxCaptures(false),
 		Files: map[string]string{
-			"dir":     "#83a598",
+			"dir":     "#89a99d",
 			"default": "#ebdbb2",
 			"go":      "#8ec07c",
 			"md":      "#b8bb26",
 			"toml":    "#fabd2f",
 			"json":    "#fabd2f",
 			"yaml":    "#fabd2f",
-			"lock":    "#928374",
+			"lock":    "#9b8d7f",
 		},
 	}
 }
@@ -327,9 +327,9 @@ func gruvboxLight() Theme {
 			Panel:           "#ebdbb2",
 			Border:          "#d5c4a1",
 			BorderFocus:     "#d79921",
-			Selection:       "#3d7679",
-			SelectionText:   "#fbf1c7",
-			SelectionMuted:  "#d5c4a1",
+			Selection:       "#c0cbaf",
+			SelectionText:   "#3c3836",
+			SelectionMuted:  "#dfd0ab",
 			OccurrenceRead:  "#d0dce2",
 			OccurrenceWrite: "#ecd9b5",
 			InlayHint:       "#7c6f64",
@@ -337,9 +337,9 @@ func gruvboxLight() Theme {
 			IndentGuide:     "#d5c4a1",
 			Ruler:           "#ebdbb2",
 			Accent:          "#9f450a",
-			Primary:         "#3d7679",
+			Primary:         "#c0cbaf",
 			Secondary:       "#9f450a",
-			Success:         "#717013",
+			Success:         "#646311",
 			Warning:         "#7c5813",
 			Error:           "#ba211a",
 			Info:            "#36676a",
@@ -350,23 +350,23 @@ func gruvboxLight() Theme {
 			ScrollbarTrack:  "#ebdbb2",
 			ScrollbarThumb:  "#bdae93",
 			DiffAdded:       "#dcd49f",
-			DiffRemoved:     "#ecc3a0",
-			DiffChanged:     "#c5b07b",
+			DiffRemoved:     "#efcba7",
+			DiffChanged:     "#e0d1a1",
 			VCSModified:     "#36676a",
-			VCSAdded:        "#717013",
+			VCSAdded:        "#646311",
 			VCSUntracked:    "#7c5813",
-			VCSDeleted:      "#d5c4a1",
+			VCSDeleted:      "#876f3c",
 			VCSConflicted:   "#ba211a",
 		},
 		Captures: gruvboxCaptures(true),
 		Files: map[string]string{
-			"dir":     "#458588",
+			"dir":     "#36676a",
 			"default": "#3c3836",
-			"go":      "#689d6a",
-			"md":      "#98971a",
-			"toml":    "#d79921",
-			"json":    "#d79921",
-			"yaml":    "#d79921",
+			"go":      "#456a46",
+			"md":      "#646311",
+			"toml":    "#7f5a13",
+			"json":    "#7f5a13",
+			"yaml":    "#7f5a13",
 			"lock":    "#7c6f64",
 		},
 	}
@@ -374,9 +374,34 @@ func gruvboxLight() Theme {
 
 // gruvboxCaptures builds the capture table for gruvbox; the light variant
 // swaps in the darker accent shades so contrast holds on the light background.
+// Both sets are tuned so every capture clears WCAG AA against its variant's
+// Surface (see TestBuiltinThemeFullContrast).
 func gruvboxCaptures(light bool) map[string]string {
-	c := map[string]string{
-		"keyword":          "#fb4934",
+	if light {
+		return map[string]string{
+			"keyword":          "#cc241d",
+			"operator":         "#3c3836",
+			"string":           "#717013",
+			"number":           "#a35177",
+			"comment":          "#7c6f64",
+			"function":         "#717013",
+			"type":             "#8c6415",
+			"constant":         "#a35177",
+			"constant.builtin": "#a35177",
+			"variable":         "#3c3836",
+			"variable.builtin": "#b44e0c",
+			"property":         "#3c7477",
+			"label":            "#cc241d",
+			"attribute":        "#8c6415",
+			"punctuation":      "#665c54",
+			"escape":           "#b44e0c",
+			"boolean":          "#a35177",
+			"tag":              "#cc241d",
+			"embedded":         "#3c3836",
+		}
+	}
+	return map[string]string{
+		"keyword":          "#fb5643",
 		"operator":         "#ebdbb2",
 		"string":           "#b8bb26",
 		"number":           "#d3869b",
@@ -388,28 +413,14 @@ func gruvboxCaptures(light bool) map[string]string {
 		"variable":         "#ebdbb2",
 		"variable.builtin": "#fe8019",
 		"property":         "#83a598",
-		"label":            "#fb4934",
+		"label":            "#fb5643",
 		"attribute":        "#fabd2f",
 		"punctuation":      "#a89984",
 		"escape":           "#fe8019",
 		"boolean":          "#d3869b",
-		"tag":              "#fb4934",
+		"tag":              "#fb5643",
 		"embedded":         "#ebdbb2",
 	}
-	if light {
-		for k, v := range map[string]string{
-			"keyword": "#cc241d", "operator": "#3c3836", "string": "#98971a",
-			"number": "#b16286", "comment": "#7c6f64", "function": "#98971a",
-			"type": "#d79921", "constant": "#b16286", "constant.builtin": "#b16286",
-			"variable": "#3c3836", "variable.builtin": "#d65d0e", "property": "#458588",
-			"label": "#cc241d", "attribute": "#d79921", "punctuation": "#665c54",
-			"escape": "#d65d0e", "boolean": "#b16286", "tag": "#cc241d",
-			"embedded": "#3c3836",
-		} {
-			c[k] = v
-		}
-	}
-	return c
 }
 
 func rosePine() Theme {
@@ -423,17 +434,17 @@ func rosePine() Theme {
 			Panel:           "#26233a",
 			Border:          "#403d52",
 			BorderFocus:     "#c4a7e7",
-			Selection:       "#c4a7e7",
-			SelectionText:   "#191724",
-			SelectionMuted:  "#403d52",
-			OccurrenceRead:  "#2a3549",
-			OccurrenceWrite: "#4a3844",
-			InlayHint:       "#6e6a86",
+			Selection:       "#3b344b",
+			SelectionText:   "#e0def4",
+			SelectionMuted:  "#312e40",
+			OccurrenceRead:  "#273143",
+			OccurrenceWrite: "#392c39",
+			InlayHint:       "#7b7693",
 			Whitespace:      "#403d52",
 			IndentGuide:     "#403d52",
 			Ruler:           "#26233a",
 			Accent:          "#ebbcba",
-			Primary:         "#9ccfd8",
+			Primary:         "#313844",
 			Secondary:       "#f6c177",
 			Success:         "#9ccfd8",
 			Warning:         "#f6c177",
@@ -445,21 +456,21 @@ func rosePine() Theme {
 			Ghost:           "#ebbcba",
 			ScrollbarTrack:  "#26233a",
 			ScrollbarThumb:  "#524f67",
-			DiffAdded:       "#353f4b",
-			DiffRemoved:     "#472a3c",
-			DiffChanged:     "#755e46",
+			DiffAdded:       "#2b313d",
+			DiffRemoved:     "#42283a",
+			DiffChanged:     "#372e2f",
 			VCSModified:     "#4097bb",
 			VCSAdded:        "#9ccfd8",
 			VCSUntracked:    "#f6c177",
-			VCSDeleted:      "#403d52",
+			VCSDeleted:      "#7b7699",
 			VCSConflicted:   "#eb6f92",
 		},
 		Captures: map[string]string{
-			"keyword":          "#31748f",
+			"keyword":          "#3a8aaa",
 			"operator":         "#908caa",
 			"string":           "#f6c177",
 			"number":           "#ebbcba",
-			"comment":          "#6e6a86",
+			"comment":          "#706c89",
 			"function":         "#ebbcba",
 			"type":             "#9ccfd8",
 			"constant":         "#ebbcba",
@@ -467,7 +478,7 @@ func rosePine() Theme {
 			"variable":         "#e0def4",
 			"variable.builtin": "#eb6f92",
 			"property":         "#c4a7e7",
-			"label":            "#31748f",
+			"label":            "#3a8aaa",
 			"attribute":        "#c4a7e7",
 			"punctuation":      "#908caa",
 			"escape":           "#eb6f92",
@@ -476,14 +487,14 @@ func rosePine() Theme {
 			"embedded":         "#e0def4",
 		},
 		Files: map[string]string{
-			"dir":     "#31748f",
+			"dir":     "#3f96b9",
 			"default": "#e0def4",
 			"go":      "#9ccfd8",
 			"md":      "#f6c177",
 			"toml":    "#c4a7e7",
 			"json":    "#c4a7e7",
 			"yaml":    "#c4a7e7",
-			"lock":    "#6e6a86",
+			"lock":    "#7b7693",
 		},
 	}
 }
@@ -499,17 +510,17 @@ func rosePineDawn() Theme {
 			Panel:           "#f2e9e1",
 			Border:          "#dfdad9",
 			BorderFocus:     "#907aa9",
-			Selection:       "#7e649b",
-			SelectionText:   "#faf4ed",
+			Selection:       "#d4c7d4",
+			SelectionText:   "#555076",
 			SelectionMuted:  "#dfdad9",
 			OccurrenceRead:  "#dee7ea",
 			OccurrenceWrite: "#f3ddd0",
-			InlayHint:       "#9893a5",
+			InlayHint:       "#7d778e",
 			Whitespace:      "#dfdad9",
 			IndentGuide:     "#dfdad9",
 			Ruler:           "#f2e9e1",
 			Accent:          "#b83f39",
-			Primary:         "#286983",
+			Primary:         "#bfcdcf",
 			Secondary:       "#945c0f",
 			Success:         "#416f77",
 			Warning:         "#945c0f",
@@ -522,44 +533,44 @@ func rosePineDawn() Theme {
 			ScrollbarTrack:  "#f2e9e1",
 			ScrollbarThumb:  "#9893a5",
 			DiffAdded:       "#d1d6d3",
-			DiffRemoved:     "#e6cfcf",
-			DiffChanged:     "#cfb48f",
+			DiffRemoved:     "#e6d0d0",
+			DiffChanged:     "#e4d3bc",
 			VCSModified:     "#286983",
 			VCSAdded:        "#416f77",
 			VCSUntracked:    "#945c0f",
-			VCSDeleted:      "#dfdad9",
+			VCSDeleted:      "#887673",
 			VCSConflicted:   "#a34e66",
 		},
 		Captures: map[string]string{
 			"keyword":          "#286983",
-			"operator":         "#797593",
-			"string":           "#ea9d34",
-			"number":           "#d7827e",
-			"comment":          "#9893a5",
-			"function":         "#d7827e",
-			"type":             "#56949f",
-			"constant":         "#d7827e",
-			"constant.builtin": "#d7827e",
+			"operator":         "#6f6b89",
+			"string":           "#9e6210",
+			"number":           "#c2423c",
+			"comment":          "#837d92",
+			"function":         "#c2423c",
+			"type":             "#44757e",
+			"constant":         "#c2423c",
+			"constant.builtin": "#c2423c",
 			"variable":         "#575279",
-			"variable.builtin": "#b4637a",
-			"property":         "#907aa9",
+			"variable.builtin": "#ab526c",
+			"property":         "#7e649b",
 			"label":            "#286983",
-			"attribute":        "#907aa9",
+			"attribute":        "#7e649b",
 			"punctuation":      "#797593",
-			"escape":           "#b4637a",
-			"boolean":          "#d7827e",
-			"tag":              "#b4637a",
+			"escape":           "#ab526c",
+			"boolean":          "#c2423c",
+			"tag":              "#ab526c",
 			"embedded":         "#575279",
 		},
 		Files: map[string]string{
 			"dir":     "#286983",
 			"default": "#575279",
-			"go":      "#56949f",
-			"md":      "#ea9d34",
-			"toml":    "#907aa9",
-			"json":    "#907aa9",
-			"yaml":    "#907aa9",
-			"lock":    "#9893a5",
+			"go":      "#416f77",
+			"md":      "#945c0f",
+			"toml":    "#765e92",
+			"json":    "#765e92",
+			"yaml":    "#765e92",
+			"lock":    "#7d778e",
 		},
 	}
 }
@@ -575,17 +586,17 @@ func catppuccinMocha() Theme {
 			Panel:           "#313244",
 			Border:          "#45475a",
 			BorderFocus:     "#b4befe",
-			Selection:       "#b4befe",
-			SelectionText:   "#1e1e2e",
-			SelectionMuted:  "#45475a",
+			Selection:       "#383951",
+			SelectionText:   "#cdd6f4",
+			SelectionMuted:  "#333446",
 			OccurrenceRead:  "#2a3045",
-			OccurrenceWrite: "#463830",
-			InlayHint:       "#6c7086",
+			OccurrenceWrite: "#3e3330",
+			InlayHint:       "#84889c",
 			Whitespace:      "#45475a",
 			IndentGuide:     "#45475a",
 			Ruler:           "#313244",
 			Accent:          "#f5c2e7",
-			Primary:         "#89b4fa",
+			Primary:         "#323b55",
 			Secondary:       "#fab387",
 			Success:         "#a6e3a1",
 			Warning:         "#f9e2af",
@@ -597,13 +608,13 @@ func catppuccinMocha() Theme {
 			Ghost:           "#fab387",
 			ScrollbarTrack:  "#313244",
 			ScrollbarThumb:  "#585b70",
-			DiffAdded:       "#3b4947",
-			DiffRemoved:     "#4c3548",
-			DiffChanged:     "#797064",
+			DiffAdded:       "#2f373c",
+			DiffRemoved:     "#413042",
+			DiffChanged:     "#37343d",
 			VCSModified:     "#89dceb",
 			VCSAdded:        "#a6e3a1",
 			VCSUntracked:    "#f9e2af",
-			VCSDeleted:      "#45475a",
+			VCSDeleted:      "#8386a0",
 			VCSConflicted:   "#f38ba8",
 		},
 		Captures: map[string]string{
@@ -611,7 +622,7 @@ func catppuccinMocha() Theme {
 			"operator":         "#89dceb",
 			"string":           "#a6e3a1",
 			"number":           "#fab387",
-			"comment":          "#6c7086",
+			"comment":          "#71758c",
 			"function":         "#89b4fa",
 			"type":             "#f9e2af",
 			"constant":         "#fab387",
@@ -635,7 +646,7 @@ func catppuccinMocha() Theme {
 			"toml":    "#f9e2af",
 			"json":    "#f9e2af",
 			"yaml":    "#f9e2af",
-			"lock":    "#6c7086",
+			"lock":    "#84889c",
 		},
 	}
 }
@@ -655,17 +666,17 @@ func kanagawa() Theme {
 			Panel:           "#2a2a37", // sumiInk4
 			Border:          "#54546d", // sumiInk6
 			BorderFocus:     "#7e9cd8", // crystalBlue
-			Selection:       "#2d4f67", // waveBlue2
+			Selection:       "#283f52", // waveBlue2
 			SelectionText:   "#dcd7ba",
 			SelectionMuted:  "#223249", // waveBlue1
 			OccurrenceRead:  "#25354d",
-			OccurrenceWrite: "#49443c",
-			InlayHint:       "#727169",
+			OccurrenceWrite: "#383534",
+			InlayHint:       "#828178",
 			Whitespace:      "#54546d",
 			IndentGuide:     "#54546d",
 			Ruler:           "#2a2a37",
 			Accent:          "#e6c384", // carpYellow
-			Primary:         "#2d4f67", // waveBlue2 (pmenu selection)
+			Primary:         "#283f52", // waveBlue2 (pmenu selection)
 			Secondary:       "#ffa066", // surimiOrange
 			Success:         "#98bb6c", // springGreen
 			Warning:         "#ff9e3b", // roninYellow
@@ -677,13 +688,13 @@ func kanagawa() Theme {
 			Ghost:           "#ffa066",
 			ScrollbarTrack:  "#2a2a37",
 			ScrollbarThumb:  "#54546d",
-			DiffAdded:       "#394136",
-			DiffRemoved:     "#502c34",
-			DiffChanged:     "#7d542f",
+			DiffAdded:       "#313732",
+			DiffRemoved:     "#4f2c34",
+			DiffChanged:     "#42332b",
 			VCSModified:     "#7fb4ca",
 			VCSAdded:        "#98bb6c",
 			VCSUntracked:    "#ff9e3b",
-			VCSDeleted:      "#54546d",
+			VCSDeleted:      "#7d7d9b",
 			VCSConflicted:   "#ff5d62",
 		},
 		Captures: map[string]string{
@@ -691,7 +702,7 @@ func kanagawa() Theme {
 			"operator":         "#c0a36e", // boatYellow2
 			"string":           "#98bb6c", // springGreen
 			"number":           "#d27e99", // sakuraPink
-			"comment":          "#727169", // fujiGray
+			"comment":          "#77766e", // fujiGray
 			"function":         "#7e9cd8", // crystalBlue
 			"type":             "#7aa89f", // waveAqua2
 			"constant":         "#ffa066", // surimiOrange
@@ -715,7 +726,7 @@ func kanagawa() Theme {
 			"toml":    "#e6c384",
 			"json":    "#e6c384",
 			"yaml":    "#e6c384",
-			"lock":    "#727169",
+			"lock":    "#828178",
 		},
 	}
 }
@@ -738,8 +749,8 @@ func oneDark() Theme {
 			SelectionText:   "#abb2bf",
 			SelectionMuted:  "#2c313c", // cursor line
 			OccurrenceRead:  "#323b4d",
-			OccurrenceWrite: "#4a3f33",
-			InlayHint:       "#5c6370",
+			OccurrenceWrite: "#493e33",
+			InlayHint:       "#798191",
 			Whitespace:      "#3e4451",
 			IndentGuide:     "#3e4451",
 			Ruler:           "#21252b",
@@ -756,13 +767,13 @@ func oneDark() Theme {
 			Ghost:           "#5c6370", // mono3 / comment gray
 			ScrollbarTrack:  "#21252b",
 			ScrollbarThumb:  "#4b5263", // gutter gray
-			DiffAdded:       "#404d43",
-			DiffRemoved:     "#523f46",
-			DiffChanged:     "#776a51",
+			DiffAdded:       "#38423e",
+			DiffRemoved:     "#4b3c43",
+			DiffChanged:     "#41403d",
 			VCSModified:     "#61afef",
 			VCSAdded:        "#98c379",
 			VCSUntracked:    "#e5c07b",
-			VCSDeleted:      "#3e4451",
+			VCSDeleted:      "#778197",
 			VCSConflicted:   "#e88388",
 		},
 		Captures: map[string]string{
@@ -770,20 +781,20 @@ func oneDark() Theme {
 			"operator":         "#abb2bf", // mono1
 			"string":           "#98c379", // green
 			"number":           "#d19a66", // orange 1
-			"comment":          "#5c6370", // mono3
+			"comment":          "#798191", // mono3
 			"function":         "#61afef", // blue
 			"type":             "#e5c07b", // orange 2 (classes/types)
 			"constant":         "#d19a66",
 			"constant.builtin": "#d19a66",
 			"variable":         "#abb2bf",
-			"variable.builtin": "#e06c75", // red 1
-			"property":         "#e06c75",
+			"variable.builtin": "#e17079", // red 1
+			"property":         "#e17079",
 			"label":            "#c678dd",
 			"attribute":        "#d19a66",
 			"punctuation":      "#abb2bf",
 			"escape":           "#56b6c2", // cyan
 			"boolean":          "#d19a66",
-			"tag":              "#e06c75",
+			"tag":              "#e17079",
 			"embedded":         "#abb2bf",
 		},
 		Files: map[string]string{
@@ -794,7 +805,7 @@ func oneDark() Theme {
 			"toml":    "#e5c07b",
 			"json":    "#e5c07b",
 			"yaml":    "#e5c07b",
-			"lock":    "#5c6370",
+			"lock":    "#798191",
 		},
 	}
 }
@@ -803,7 +814,7 @@ func oneDark() Theme {
 // low-contrast accents sit below AA on the base03/base02 backgrounds, so the
 // slots the contrast test checks against Panel (Secondary, Warning, Error,
 // Info, Hint) carry lightened accent shades; Accent and Success only render
-// on Surface and keep (or barely nudge) the canonical values.
+// on Surface and are nudged just far enough to clear it.
 func solarizedDark() Theme {
 	return Theme{
 		Name: "solarized-dark",
@@ -815,19 +826,19 @@ func solarizedDark() Theme {
 			Panel:           "#073642", // base02
 			Border:          "#586e75", // base01
 			BorderFocus:     "#268bd2", // blue
-			Selection:       "#586e75", // base01
-			SelectionText:   "#fdf6e3", // base3
+			Selection:       "#244650", // base01
+			SelectionText:   "#a3afaf", // base3
 			SelectionMuted:  "#073642", // base02 (editor visual selection)
 			OccurrenceRead:  "#0a4152",
 			OccurrenceWrite: "#3d3a28",
-			InlayHint:       "#586e75",
+			InlayHint:       "#6e8992",
 			Whitespace:      "#586e75",
 			IndentGuide:     "#586e75",
 			Ruler:           "#073642",
-			Accent:          "#b58900", // yellow
-			Primary:         "#586e75", // base01 (pmenu selection)
+			Accent:          "#c49500", // yellow
+			Primary:         "#244650", // base01 (pmenu selection)
 			Secondary:       "#db815c", // orange lightened for AA on Panel
-			Success:         "#859900", // green
+			Success:         "#8ea300", // green
 			Warning:         "#bb9316", // yellow lightened for AA on Panel
 			Error:           "#e87674", // red lightened for AA on Panel
 			Info:            "#4b9fda", // blue lightened for AA on Panel
@@ -839,23 +850,23 @@ func solarizedDark() Theme {
 			ScrollbarThumb:  "#586e75",
 			DiffAdded:       "#1d432a",
 			DiffRemoved:     "#333b43",
-			DiffChanged:     "#4e5628",
+			DiffChanged:     "#28412f",
 			VCSModified:     "#4b9fda",
-			VCSAdded:        "#859900",
+			VCSAdded:        "#8ea300",
 			VCSUntracked:    "#bb9316",
-			VCSDeleted:      "#586e75",
+			VCSDeleted:      "#6e8992",
 			VCSConflicted:   "#e87674",
 		},
 		Captures: solarizedCaptures(false),
 		Files: map[string]string{
-			"dir":     "#268bd2",
+			"dir":     "#48a0de",
 			"default": "#93a1a1",
-			"go":      "#2aa198",
-			"md":      "#859900",
-			"toml":    "#b58900",
-			"json":    "#b58900",
-			"yaml":    "#b58900",
-			"lock":    "#586e75",
+			"go":      "#2ca9a0",
+			"md":      "#8ea300",
+			"toml":    "#c49500",
+			"json":    "#c49500",
+			"yaml":    "#c49500",
+			"lock":    "#6e8992",
 		},
 	}
 }
@@ -874,19 +885,19 @@ func solarizedLight() Theme {
 			Panel:           "#eee8d5", // base2
 			Border:          "#93a1a1", // base1
 			BorderFocus:     "#268bd2", // blue
-			Selection:       "#586e75", // base01
-			SelectionText:   "#fdf6e3", // base3
+			Selection:       "#cccdc2", // base01
+			SelectionText:   "#49595f", // base3
 			SelectionMuted:  "#eee8d5", // base2 (editor visual selection)
 			OccurrenceRead:  "#e0ecec",
 			OccurrenceWrite: "#f2e4c4",
-			InlayHint:       "#93a1a1",
+			InlayHint:       "#6c7c7c",
 			Whitespace:      "#93a1a1",
 			IndentGuide:     "#93a1a1",
 			Ruler:           "#eee8d5",
-			Accent:          "#c44815", // orange darkened for AA on Surface
-			Primary:         "#586e75", // base01 (pmenu selection)
+			Accent:          "#b64314", // orange darkened for AA on Surface
+			Primary:         "#cccdc2", // base01 (pmenu selection)
 			Secondary:       "#b64314", // orange darkened for AA on Panel
-			Success:         "#687800", // green darkened for AA on Surface
+			Success:         "#5f6e00", // green darkened for AA on Surface
 			Warning:         "#846400", // yellow darkened for AA on Panel
 			Error:           "#c52d2a", // red darkened for AA on Panel
 			Info:            "#1e6da5", // blue darkened for AA on Panel
@@ -897,24 +908,24 @@ func solarizedLight() Theme {
 			ScrollbarTrack:  "#eee8d5",
 			ScrollbarThumb:  "#93a1a1",
 			DiffAdded:       "#dcdab1",
-			DiffRemoved:     "#f0c9ba",
-			DiffChanged:     "#cab883",
+			DiffRemoved:     "#f2cfbf",
+			DiffChanged:     "#e2d6b1",
 			VCSModified:     "#1e6da5",
-			VCSAdded:        "#687800",
+			VCSAdded:        "#5f6e00",
 			VCSUntracked:    "#846400",
-			VCSDeleted:      "#93a1a1",
+			VCSDeleted:      "#6c7c7c",
 			VCSConflicted:   "#c52d2a",
 		},
 		Captures: solarizedCaptures(true),
 		Files: map[string]string{
-			"dir":     "#268bd2",
-			"default": "#657b83",
-			"go":      "#2aa198",
-			"md":      "#859900",
-			"toml":    "#b58900",
-			"json":    "#b58900",
-			"yaml":    "#b58900",
-			"lock":    "#93a1a1",
+			"dir":     "#1d6ca2",
+			"default": "#586b72",
+			"go":      "#1e756e",
+			"md":      "#5d6b00",
+			"toml":    "#826200",
+			"json":    "#826200",
+			"yaml":    "#826200",
+			"lock":    "#6c7c7c",
 		},
 	}
 }
@@ -924,38 +935,54 @@ func solarizedLight() Theme {
 // Constant=cyan/magenta, Special=red, Comment=base01). Accents are shared
 // between variants by design; only the monotone slots (operator, variable,
 // comment, punctuation, embedded) flip between the base0x and base0x-inverse
-// halves of the palette.
+// halves of the palette. Stock solarized accents sit below WCAG AA on both
+// backgrounds, so each hue is lightened (dark) or darkened (light) until it
+// clears 4.5:1 against its variant's Surface.
 func solarizedCaptures(light bool) map[string]string {
-	c := map[string]string{
-		"keyword":          "#859900", // green
-		"operator":         "#839496", // base0
-		"string":           "#2aa198", // cyan
-		"number":           "#d33682", // magenta
-		"comment":          "#586e75", // base01
-		"function":         "#268bd2", // blue
-		"type":             "#b58900", // yellow
-		"constant":         "#d33682",
-		"constant.builtin": "#d33682",
-		"variable":         "#839496", // base0
-		"variable.builtin": "#cb4b16", // orange
-		"property":         "#268bd2",
-		"label":            "#859900",
-		"attribute":        "#6c71c4", // violet
-		"punctuation":      "#657b83", // base00
-		"escape":           "#dc322f", // red
-		"boolean":          "#d33682",
-		"tag":              "#dc322f",
-		"embedded":         "#839496",
-	}
 	if light {
-		for k, v := range map[string]string{
-			"operator": "#657b83", "comment": "#93a1a1", "variable": "#657b83",
-			"punctuation": "#839496", "embedded": "#657b83",
-		} {
-			c[k] = v
+		return map[string]string{
+			"keyword":          "#667500",
+			"operator":         "#5e737a",
+			"string":           "#217d76",
+			"number":           "#cd2d7a",
+			"comment":          "#758787",
+			"function":         "#2074af",
+			"type":             "#8c6a00",
+			"constant":         "#cd2d7a",
+			"constant.builtin": "#cd2d7a",
+			"variable":         "#5e737a",
+			"variable.builtin": "#c24815",
+			"property":         "#2074af",
+			"label":            "#667500",
+			"attribute":        "#6166c0",
+			"punctuation":      "#738588",
+			"escape":           "#d72724",
+			"boolean":          "#cd2d7a",
+			"tag":              "#d72724",
+			"embedded":         "#5e737a",
 		}
 	}
-	return c
+	return map[string]string{
+		"keyword":          "#859900",
+		"operator":         "#839496",
+		"string":           "#2aa198",
+		"number":           "#dd649f",
+		"comment":          "#657e86",
+		"function":         "#3295da",
+		"type":             "#b58900",
+		"constant":         "#dd649f",
+		"constant.builtin": "#dd649f",
+		"variable":         "#839496",
+		"variable.builtin": "#e96630",
+		"property":         "#3295da",
+		"label":            "#859900",
+		"attribute":        "#858ace",
+		"punctuation":      "#698089",
+		"escape":           "#e56663",
+		"boolean":          "#dd649f",
+		"tag":              "#e56663",
+		"embedded":         "#839496",
+	}
 }
 
 // dracula ports the official Dracula spec (draculatheme.com/contribute).
@@ -974,17 +1001,17 @@ func dracula() Theme {
 			Panel:           "#21222c", // sidebar/panel (VSCode port)
 			Border:          "#44475a", // current line / selection
 			BorderFocus:     "#bd93f9", // purple
-			Selection:       "#44475a", // selection
+			Selection:       "#424557", // selection
 			SelectionText:   "#f8f8f2",
-			SelectionMuted:  "#44475a", // editor visual selection
-			OccurrenceRead:  "#34405c",
-			OccurrenceWrite: "#514440",
-			InlayHint:       "#6272a4",
+			SelectionMuted:  "#3b3e4f", // editor visual selection
+			OccurrenceRead:  "#333e59",
+			OccurrenceWrite: "#463d3d",
+			InlayHint:       "#6f7eab",
 			Whitespace:      "#44475a",
 			IndentGuide:     "#44475a",
 			Ruler:           "#21222c",
 			Accent:          "#ff79c6", // pink
-			Primary:         "#44475a", // pmenu selection
+			Primary:         "#424557", // pmenu selection
 			Secondary:       "#ffb86c", // orange
 			Success:         "#50fa7b", // green
 			Warning:         "#f1fa8c", // yellow
@@ -996,13 +1023,13 @@ func dracula() Theme {
 			Ghost:           "#6272a4", // comment
 			ScrollbarTrack:  "#21222c",
 			ScrollbarThumb:  "#44475a",
-			DiffAdded:       "#305745",
+			DiffAdded:       "#2c433e",
 			DiffRemoved:     "#57333c",
-			DiffChanged:     "#7c815a",
+			DiffChanged:     "#3c3f3f",
 			VCSModified:     "#bd93f9",
 			VCSAdded:        "#50fa7b",
 			VCSUntracked:    "#f1fa8c",
-			VCSDeleted:      "#44475a",
+			VCSDeleted:      "#797e9a",
 			VCSConflicted:   "#ff5555",
 		},
 		Captures: map[string]string{
@@ -1010,7 +1037,7 @@ func dracula() Theme {
 			"operator":         "#ff79c6",
 			"string":           "#f1fa8c", // yellow
 			"number":           "#bd93f9", // purple
-			"comment":          "#6272a4", // comment
+			"comment":          "#6f7eab", // comment
 			"function":         "#50fa7b", // green
 			"type":             "#8be9fd", // cyan
 			"constant":         "#bd93f9",
@@ -1034,7 +1061,7 @@ func dracula() Theme {
 			"toml":    "#f1fa8c",
 			"json":    "#f1fa8c",
 			"yaml":    "#f1fa8c",
-			"lock":    "#6272a4",
+			"lock":    "#6f7eab",
 		},
 	}
 }
@@ -1050,19 +1077,19 @@ func catppuccinLatte() Theme {
 			Panel:           "#ccd0da",
 			Border:          "#bcc0cc",
 			BorderFocus:     "#7287fd",
-			Selection:       "#3d5afc",
-			SelectionText:   "#eff1f5",
-			SelectionMuted:  "#bcc0cc",
+			Selection:       "#bbc5f7",
+			SelectionText:   "#4c4f69",
+			SelectionMuted:  "#ced1da",
 			OccurrenceRead:  "#ccd8e8",
 			OccurrenceWrite: "#e8d8c4",
-			InlayHint:       "#9ca0b0",
+			InlayHint:       "#64697d",
 			Whitespace:      "#bcc0cc",
 			IndentGuide:     "#bcc0cc",
-			Ruler:           "#ccd0da",
+			Ruler:           "#cdd1db",
 			Accent:          "#a1197d",
-			Primary:         "#1761f5",
+			Primary:         "#b3c9f5",
 			Secondary:       "#9b3901",
-			Success:         "#327c21",
+			Success:         "#28641b",
 			Warning:         "#7c4f10",
 			Error:           "#b10d30",
 			Info:            "#025f83",
@@ -1073,44 +1100,44 @@ func catppuccinLatte() Theme {
 			ScrollbarTrack:  "#ccd0da",
 			ScrollbarThumb:  "#9ca0b0",
 			DiffAdded:       "#c5d7c6",
-			DiffRemoved:     "#e1bec9",
-			DiffChanged:     "#beac94",
+			DiffRemoved:     "#e4cbd4",
+			DiffChanged:     "#d8d1c7",
 			VCSModified:     "#025f83",
-			VCSAdded:        "#327c21",
+			VCSAdded:        "#28641b",
 			VCSUntracked:    "#7c4f10",
-			VCSDeleted:      "#bcc0cc",
+			VCSDeleted:      "#61687f",
 			VCSConflicted:   "#b10d30",
 		},
 		Captures: map[string]string{
 			"keyword":          "#8839ef",
-			"operator":         "#04a5e5",
-			"string":           "#40a02b",
-			"number":           "#fe640b",
-			"comment":          "#9ca0b0",
-			"function":         "#1e66f5",
-			"type":             "#df8e1d",
-			"constant":         "#fe640b",
-			"constant.builtin": "#fe640b",
+			"operator":         "#03729f",
+			"string":           "#327c21",
+			"number":           "#bc4501",
+			"comment":          "#777d93",
+			"function":         "#145ff5",
+			"type":             "#976014",
+			"constant":         "#bc4501",
+			"constant.builtin": "#bc4501",
 			"variable":         "#4c4f69",
 			"variable.builtin": "#d20f39",
-			"property":         "#7287fd",
+			"property":         "#3b58fc",
 			"label":            "#8839ef",
-			"attribute":        "#df8e1d",
-			"punctuation":      "#7c7f93",
-			"escape":           "#ea76cb",
-			"boolean":          "#fe640b",
+			"attribute":        "#976014",
+			"punctuation":      "#797c91",
+			"escape":           "#c71f9a",
+			"boolean":          "#bc4501",
 			"tag":              "#d20f39",
 			"embedded":         "#4c4f69",
 		},
 		Files: map[string]string{
-			"dir":     "#1e66f5",
+			"dir":     "#094cd2",
 			"default": "#4c4f69",
-			"go":      "#179299",
-			"md":      "#40a02b",
-			"toml":    "#df8e1d",
-			"json":    "#df8e1d",
-			"yaml":    "#df8e1d",
-			"lock":    "#9ca0b0",
+			"go":      "#0f5f64",
+			"md":      "#28641b",
+			"toml":    "#7c4f10",
+			"json":    "#7c4f10",
+			"yaml":    "#7c4f10",
+			"lock":    "#64697d",
 		},
 	}
 }

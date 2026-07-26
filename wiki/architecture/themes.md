@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-17T00:00:00Z
+timestamp: 2026-07-26T00:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -128,24 +128,46 @@ additionally paint their own `Panel`/`Selection` backgrounds.
 
 ## Contrast rule (adding a theme)
 
-Every built-in theme must pass **WCAG AA text contrast (≥ 4.5:1)** on the
-fg/bg slot pairs the chrome actually renders; `TestBuiltinThemeContrast`
-(`internal/theme/contrast_test.go`) enforces this table-driven over all
-builtins, so a new theme with unreadable pairs fails CI. The checked pairs:
-`Foreground` on `Background`/`Surface`/`Panel`; `SelectionText` on
-`Selection` and on `Primary` (the completion selected row paints
-`SelectionText` on `Primary`); `Accent` and `Secondary` on `Surface`
-(`Secondary` also on `Panel`); `Success` on `Surface`; and each diagnostic
-color (`Warning`/`Error`/`Info`/`Hint`) on both `Surface` and `Panel`.
-Border/indicator slots (`BorderFocus`, `MoveSource`, `DropTarget`, `Ghost`,
-scrollbars) are exempt — they never carry text. When designing a theme, pick
-the darkest/lightest canonical shade of each accent that clears the bar
-rather than inventing new hues.
+Two tests in `internal/theme/contrast_test.go` enforce readability over all
+built-ins, so a theme that ships a dark-on-dark or light-on-light pair fails
+CI. `TestBuiltinThemeContrast` is the original chrome spot-check (#384);
+`TestBuiltinThemeFullContrast` walks the **whole matrix** — every text color a
+theme can paint against every background it can land on.
+
+**Three rules, in the order they matter:**
+
+1. **Text clears WCAG AA (≥ 4.5:1)** on the base surfaces it renders over.
+   Chrome text (`Foreground`, `Accent`, `Secondary`, `Success`, `Warning`,
+   `Error`, `Info`, `Hint`, and the five `VCS*` status colors) is checked
+   against `Background`, `Surface`, **and** `Panel`. Syntax `Captures` are
+   checked against `Surface` (the editor body is the only place they paint);
+   explorer `Files` colors against `Surface` and `Panel` (the hover row).
+   `SelectionText` is checked against `Selection` and `Primary`.
+2. **Deliberately dim text clears 3.5:1** — `InlayHint`, `VCSDeleted`,
+   `capture:comment`, `capture:punctuation`, and `file:lock` are low-emphasis
+   by design, but still have to be legible.
+3. **Overlay backgrounds stay near `Surface`.** `SelectionMuted`, `Ruler`,
+   `OccurrenceRead`/`OccurrenceWrite`, and `DiffAdded`/`DiffRemoved`/
+   `DiffChanged` must be within **1.35:1** of `Surface`; the two "strong"
+   backgrounds, `Selection` and `Primary`, within **1.5:1**. This is what
+   makes rules 1–2 compose: panels that paint an overlay *keep the row's
+   semantic foreground* (explorer file/VCS colors, problems severity colors,
+   the editor's syntax colors under a visual selection), so an overlay that
+   drifted far from `Surface` would swallow every color tuned against it.
+   Holding the cap leaves any AA-clear text at ≥ 4.5/1.5 = **3.0:1** on an
+   overlay, and dim text at ≥ 2.3:1 — the floor the test asserts.
+
+Border/indicator slots (`Border`, `BorderFocus`, `Whitespace`, `IndentGuide`,
+`MoveSource`, `DropTarget`, `Ghost`, scrollbars) are exempt — they never carry
+text. When designing a theme, pick the darkest/lightest canonical shade of
+each accent that clears the bar rather than inventing new hues, and pick a
+*hued but luminance-close* `Selection` rather than a bright one: hue alone
+reads as "selected" in a terminal.
 
 Renderers must never pair a hardcoded color with a theme color: a
-`Selection`/`Primary` background always sets `Foreground(SelectionText)`
-explicitly (terminal-default text on a theme background was the source of
-issue #384).
+`Selection`/`Primary` background either sets `Foreground(SelectionText)`
+explicitly or keeps a semantic palette foreground (terminal-default text on a
+theme background was the source of issue #384).
 
 ## Built-in palettes
 
@@ -157,10 +179,16 @@ rebelot/kanagawa.nvim; the darkest diagnostic shades are swapped for their
 lighter siblings per the contrast rule), `one-dark` (Atom's One Dark; the
 Error slot lightens the scheme's red to clear the contrast rule),
 `solarized-dark` / `solarized-light` (Ethan Schoonover's Solarized; the
-scheme's low-contrast accents are lightened/darkened on the diagnostic and
-secondary slots to clear the contrast rule), `dracula` (the official Dracula
-spec; every slot is a canonical palette value — all accents clear the
-contrast rule as-is). Select via:
+scheme's low-contrast accents are lightened/darkened on the diagnostic,
+secondary, and syntax slots to clear the contrast rule), `dracula` (the
+official Dracula spec, with the same lift applied where needed).
+
+Across all built-ins the full-matrix audit lifted the low-emphasis
+foregrounds (`InlayHint`, `VCSDeleted`, `file:lock`, comments), darkened the
+light variants' syntax accents, and pulled every overlay background —
+`Selection`, `Primary`, `SelectionMuted`, `Ruler`, the occurrence marks, and
+the three diff tints — back toward `Surface` so semantic row colors survive
+underneath them. Select via:
 
 ```toml
 [theme]
