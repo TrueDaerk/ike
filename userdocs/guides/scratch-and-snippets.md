@@ -10,15 +10,25 @@ for a quick query, a chunk of JSON you want highlighted, a snippet of code you
 are reasoning about — anything you would otherwise paste into an untitled tab
 and lose.
 
-++cmd+shift+n++ creates one. Or pick a language directly: the palette has a
-**New Scratch File: Python**, **New Scratch File: SQL** and so on for every
-registered language.
+++cmd+shift+n++ creates one and asks for the language first: **Plain Text**,
+**Python**, **PHP**, **SQL** — one row per registered language, filtered as you
+type. Or skip the prompt and run the language's own command from the palette:
+**New Scratch File: Python**, **New Scratch File: SQL**, **New Scratch File:
+Plain Text**.
 
-**Picking the command is how you choose the language.** There is no separate
-prompt: the command uses the language's own file extension, and everything
-language-aware follows from that — syntax highlighting, the language server,
-comment toggling, smart indentation. A scratch file is not a special buffer
-type; it is a normal file that happens to live somewhere else.
+The language decides the file extension, and everything language-aware follows
+from that — syntax highlighting, the language server, comment toggling, smart
+indentation, and the language's file template (a PHP scratch opens with
+`<?php`). A scratch file is not a special buffer type; it is a normal file that
+happens to live somewhere else.
+
+### Running one
+
+++shift+f10++ (**Run File**) runs a scratch like any other file: from your
+**project root**, with the interpreter that project resolves — its virtualenv,
+its `[lang.<id>] interpreter` setting, its detected toolchain version. So a
+Python or PHP scratch can exercise the project it sits next to without being
+part of it. Languages that contribute no run command say so instead.
 
 ### Where they live
 

@@ -135,3 +135,39 @@ func TestRerunWithoutHistory(t *testing.T) {
 		t.Fatal("rerun with no history must not open panes")
 	}
 }
+
+// TestRunScratchFromProjectRoot covers #1223: a scratch file lives outside the
+// project tree, yet run.file executes it from the project root, so the
+// project's toolchain (venv, [lang.<id>] interpreter) and its relative paths
+// apply exactly like for a file inside the repository.
+func TestRunScratchFromProjectRoot(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	m := newSized()
+	m = dispatch(t, m, NewScratchMsg{Ext: "rfake"})
+
+	scratchPath := m.activeWS().Panes.FocusedInstance().Editor().Path()
+	tm, _ := m.Update(RunFileMsg{})
+	m = tm.(Model)
+
+	store := run.Load()
+	cfg := store.ByName("scratch-1.rfake")
+	if cfg == nil {
+		t.Fatalf("the scratch run must persist a configuration: %+v", store)
+	}
+	// Outside the project tree, so the file is stored absolute — and the
+	// working directory stays the project root.
+	if cfg.File != scratchPath {
+		t.Fatalf("cfg.File = %q, want the absolute scratch path %q", cfg.File, scratchPath)
+	}
+	root := projectRoot()
+	if cfg.Cwd != "" || cfg.Dir(root) != root {
+		t.Fatalf("scratch run must use the project root as cwd (cwd %q, dir %q)", cfg.Cwd, cfg.Dir(root))
+	}
+	argv, ok := run.Argv(root, *cfg, "")
+	if !ok || argv[len(argv)-1] != scratchPath {
+		t.Fatalf("argv = %v, %v; want the scratch as the target", argv, ok)
+	}
+	if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term == nil || !term.IsCommand() {
+		t.Fatal("the scratch run must open a command terminal")
+	}
+}

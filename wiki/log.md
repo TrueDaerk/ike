@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-26 (scratch files: language picker, templates, running)
+
+- `scratch.new` (`cmd+shift+n`, File menu) asks for the language instead of
+  always creating `.txt` (#1223): new locked palette mode `scratchNewMode`
+  (prefix `+`) listing "Plain Text" plus every registered language, `.txt`
+  keeps a no-prompt command of its own (`scratch.new.text`), new scratches are
+  seeded with the language's file template, and running a scratch from the
+  project root with the project's interpreter is now covered by tests
+  (`/architecture/scratch-files.md`).
+
 ## 2026-07-26 (vim parity: operators, g-sequences, text objects)
 
 - The everyday vim keys missing from the modal editor landed (#1193): case

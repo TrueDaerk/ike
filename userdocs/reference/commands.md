@@ -103,7 +103,7 @@ bring their own.
 | Run Test at Cursor | `run.testAtCursor` | — | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
-| New Scratch File | `scratch.new` | `cmd+shift+n` | — | everywhere |
+| New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
 | New Scratch File: CSS | `scratch.new.css` | — | — | everywhere |
 | New Scratch File: Dockerfile | `scratch.new.dockerfile` | — | — | everywhere |
 | New Scratch File: GO | `scratch.new.go` | — | — | everywhere |
@@ -116,6 +116,7 @@ bring their own.
 | New Scratch File: Python | `scratch.new.python` | — | — | everywhere |
 | New Scratch File: Shell | `scratch.new.shell` | — | — | everywhere |
 | New Scratch File: SQL | `scratch.new.sql` | — | — | everywhere |
+| New Scratch File: Plain Text | `scratch.new.text` | — | — | everywhere |
 | New Scratch File: Toml | `scratch.new.toml` | — | — | everywhere |
 | New Scratch File: Typescript | `scratch.new.typescript` | — | — | everywhere |
 | New Scratch File: Yaml | `scratch.new.yaml` | — | — | everywhere |
