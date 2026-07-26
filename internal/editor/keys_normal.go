@@ -45,6 +45,24 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	case awaitZ:
 		m.wait = awaitNone
 		return m.resolveAfterZ(s)
+	case awaitZBig:
+		// ZZ / ZQ (#1193): save-and-close / close-without-saving, mirroring
+		// ":x" and ":q!"; any other continuation cancels.
+		m.wait = awaitNone
+		switch s {
+		case "Z":
+			c, ok := m.saveGuarded(m.path, true)
+			if c != nil {
+				return m, c // conflict: prompt first, keep the pane open
+			}
+			if !ok {
+				return m, nil // write failed: stay open
+			}
+			return m, func() tea.Msg { return CloseMsg{} }
+		case "Q":
+			return m, func() tea.Msg { return CloseMsg{Force: true} }
+		}
+		return m, nil
 	case awaitFind:
 		m.wait = awaitNone
 		if hasRune {
@@ -198,6 +216,21 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	if s == "," && m.lastFind.Valid() {
 		m.applyFind(m.lastFind.Reverse())
 		m.pending.Reset()
+		return m, nil
+	}
+
+	// The case/reflow operators double with their own bare key (guu, gUU,
+	// g~~, gqq) — the second key is not an operator key itself (#1193).
+	if m.pending.HasOperator() && caseOperator(m.pending.Operator) && len(s) == 1 && rune(s[0]) == m.pending.Operator {
+		m.applyLinewiseOperator(m.pending.Operator, count)
+		m.pending.Reset()
+		return m, nil
+	}
+
+	// "g" opens the g-sequence layer — also while an operator is pending, so
+	// gu/gU/g~/gq compose and d ge / c gg reach their motions (#1193).
+	if s == "g" {
+		m.wait = awaitG
 		return m, nil
 	}
 
@@ -487,7 +520,7 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case "P":
 		m.paste(m.pending.Register, false, count, false)
 	case "J":
-		m.joinLines(count)
+		m.joinLines(count, true)
 	case "~":
 		m.toggleCase(count)
 	case "*":
@@ -501,11 +534,11 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 	case ".":
 		m.collapseCarets() // "." repeats the recorded change at the primary caret
 		m.repeatDot(count)
-	case "g":
-		m.wait = awaitG
-		return m, nil
 	case "z":
 		m.wait = awaitZ
+		return m, nil
+	case "Z":
+		m.wait = awaitZBig
 		return m, nil
 	case "v":
 		m.collapseCarets() // visual selections are single-caret (#145)
@@ -598,6 +631,50 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 		// g,: back toward newer edit positions (#1174).
 		m.changeListJump(false, m.pending.EffectiveCount())
 		m.pending.Reset()
+	case "u", "U", "~", "q":
+		// Case operators gu/gU/g~ and the reflow operator gq (#1193). A
+		// repeated sequence (gugu) is the linewise form, like guu.
+		op := rune(s[0])
+		if m.pending.Operator == op {
+			m.applyLinewiseOperator(op, m.pending.EffectiveCount())
+			m.pending.Reset()
+		} else if !m.pending.HasOperator() {
+			m.pending.SetOperator(op)
+		} else {
+			m.pending.Reset()
+		}
+	case "e":
+		// ge: end of the previous word (#1193).
+		m.applyMotionOrOperator(motion.WordEndBackward(m.buf, m.cursor, m.pending.EffectiveCount()), m.pending.EffectiveCount())
+	case "E":
+		m.applyMotionOrOperator(motion.WordEndBackwardBig(m.buf, m.cursor, m.pending.EffectiveCount()), m.pending.EffectiveCount())
+	case "J":
+		// gJ: join without inserting a space (#1193).
+		m.joinLines(m.pending.EffectiveCount(), false)
+		m.pending.Reset()
+	case "v":
+		// gv: reselect the last visual selection (#1193).
+		m.reselectVisual()
+		m.pending.Reset()
+	case "i":
+		// gi: insert at the position of the last insert (#1193).
+		m.gotoLastInsert()
+		m.pending.Reset()
+	case "f":
+		// gf: open the file named under the cursor (#1193).
+		cmd := m.openFileUnderCursor()
+		m.pending.Reset()
+		return m, cmd
+	case "0", "$", "j", "k":
+		// Display-line motions (#1193): visual rows under soft wrap, their
+		// buffer-line counterparts otherwise.
+		if res, ok := m.displayMotion(s, m.pending.EffectiveCount()); ok {
+			m.applyMotionOrOperator(res, m.pending.EffectiveCount())
+		}
+	default:
+		// An unrecognised g-sequence cancels whatever was pending — without
+		// this a "g"-entered operator would stay armed for the next motion.
+		m.pending.Reset()
 	}
 	return m, nil
 }
@@ -617,6 +694,12 @@ func (m Model) resolveAfterZ(s string) (Model, tea.Cmd) {
 		m.foldCloseAll()
 	case "R":
 		m.foldOpenAll()
+	case "z":
+		m.scrollCursorLine(0)
+	case "t":
+		m.scrollCursorLine(-1)
+	case "b":
+		m.scrollCursorLine(1)
 	}
 	m.pending.Reset()
 	return m, nil
@@ -635,8 +718,20 @@ func operatorKey(s string) (rune, bool) {
 		return '>', true
 	case "<":
 		return '<', true
+	case "=":
+		return '=', true
 	}
 	return 0, false
+}
+
+// caseOperator reports whether op doubles with its own bare key rather than an
+// operator key: the g-prefixed case/reflow operators (#1193).
+func caseOperator(op rune) bool {
+	switch op {
+	case 'u', 'U', '~', 'q':
+		return true
+	}
+	return false
 }
 
 // findKey maps f/t/F/T to a FindKind.

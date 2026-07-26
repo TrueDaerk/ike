@@ -76,6 +76,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.line_numbers", Type: Bool, Title: "Line numbers", Description: "Show the line-number gutter", Scope: config.UserScope},
 			{Key: "editor.relative_line_numbers", Type: Bool, Title: "Relative line numbers", Description: "Count gutter lines away from the cursor (vim-style)", Scope: config.UserScope},
 			{Key: "editor.scroll_off", Type: Int, Title: "Scroll offset", Description: "Minimum lines kept visible above and below the cursor", Scope: config.UserScope, Min: 0, Max: 50},
+			{Key: "editor.text_width", Type: Int, Title: "Text width", Description: "Hard-wrap column the gq reflow operator targets (0 = vim's default 79)", Scope: config.UserScope, Min: 0, Max: 500},
 			{Key: "editor.sticky_scroll", Type: Bool, Title: "Sticky scroll", Description: "Pin enclosing function/class header lines at the top while scrolling", Scope: config.UserScope},
 			{Key: "editor.markdown_rendering", Type: Bool, Title: "Markdown rendering", Description: "Render Markdown inline styles, conceal markers and draw pipe tables with box characters on lines the cursor is not on", Scope: config.UserScope},
 			{Key: "editor.rainbow_brackets", Type: Bool, Title: "Rainbow brackets", Description: "Color bracket pairs by nesting depth (theme-derived cycle)", Scope: config.UserScope},

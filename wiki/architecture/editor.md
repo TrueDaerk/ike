@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-24T23:30:00Z
+timestamp: 2026-07-26T12:00:00Z
 ---
 
 # Editor
@@ -51,13 +51,19 @@ line runs that test (see /architecture/run-configurations.md).
 - **mode** — the `Mode` enum (Normal, Insert, Visual, V-Line, V-Block,
   CommandLine, Replace) and the `Pending` operator/count/register sub-state.
 - **motion** — motions return a target `Position` + a `Kind`
-  (exclusive/inclusive/linewise): `h j k l`, `w b e` (+ `W B E`), `0 ^ $`,
-  `gg G`, `{ }`, `f t F T` with `;`/`,`, and `%` bracket match.
+  (exclusive/inclusive/linewise): `h j k l`, `w b e` (+ `W B E`), `ge`/`gE`
+  (backward word end, #1193), `0 ^ $`, `gg G`, `{ }`, `f t F T` with `;`/`,`,
+  and `%` bracket match.
 - **textobject** — `iw aw` (and WORD), bracket pairs (`i( a( i{ …`, nesting and
-  multi-line aware) and quotes (`i" a"`), resolved to a `Range`.
+  multi-line aware, plus the `ib`/`iB` aliases), quotes (`i" a"`), paragraphs
+  (`ip ap`, linewise), sentences (`is as`) and XML/HTML tags (`it at`, text
+  scan, #1193), resolved to a `Range` (+ a `Linewise` flag).
 - **operator** — `d c y p` (+ `gp`), doubled `dd cc yy`, char/line-wise, with
   `Compose` turning a motion result into the operated `Target`. Writes the
-  register store and records edits through a `history.Recorder`.
+  register store and records edits through a `history.Recorder`. The case
+  operators `gu gU g~` (#1193) run through the same target plumbing
+  (`operator.Transform`), as do `=` (heuristic reindent) and `gq` (reflow at
+  `editor.text_width`) on the editor side.
 - **register** — unnamed `"`, named `"a`-`"z` (uppercase appends), yank `"0`,
   small-delete `"-`, the numbered ring `"1`-`"9`, and a system-clipboard seam
   (`"+`/`"*`, injected via `SetClipboard`). `internal/clipboard` provides the
@@ -255,7 +261,18 @@ the count is consumed by its motion and Esc clears the pending state.
 Beyond the core motions it also binds `~` (toggle case), `*`/`#` (search the
 word under the cursor), indent operators `>`/`<` (and `>>`/`<<`), `H M L`
 (screen top/middle/bottom), and screen scrolling via `Ctrl-f/b` (page),
-`Ctrl-d/u` (half page) and `PgUp`/`PgDn`. `Alt/Option+←/→` (and `Ctrl+←/→`) are
+`Ctrl-d/u` (half page) and `PgUp`/`PgDn`. The vim-parity pass (#1193) added
+the `g`-prefixed layer — case/reflow operators `gu gU g~ gq` (double or repeat
+for linewise, e.g. `guu`/`gugu`), `gv` (reselect the last visual selection),
+`gi` (insert at the last insert position), `gJ` (join without a space),
+`ge`/`gE`, `gf` (open the file under the cursor via `OpenPathMsg`, resolved
+app-side), and the display-line motions `g0 g$ gj gk` (visual rows under soft
+wrap, plain line motions otherwise) — plus `zz zt zb` (scroll the cursor line
+to centre/top/bottom next to the `z` fold keys) and `ZZ`/`ZQ` (save-and-close /
+force-close, mirroring `:x` / `:q!`). Visual mode gained `u U ~` (case), `J`
+(join), `r` (replace every selected character), `=`, and the `x`/`s` aliases
+for `d`/`c`. The `g` prefix stays available while an operator is pending, so
+`d ge` and `gu iw` compose. `Alt/Option+←/→` (and `Ctrl+←/→`) are
 word motions clamped to the current line (#303) — `.` inside identifiers counts
 as a stop point (`config.editor.tabWidth` yields sub-word stops), and past the
 first/last word the caret lands on the line start/end instead of crossing

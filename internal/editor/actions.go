@@ -92,6 +92,14 @@ func (m *Model) runOperator(op rune, target operator.Target, reg rune) {
 		m.indentTarget(target, 1)
 	case '<':
 		m.indentTarget(target, -1)
+	case 'u', 'U', '~':
+		// Case operators gu/gU/g~ and visual u/U/~ (#1193).
+		m.caseTarget(target, op)
+	case '=':
+		m.reindentTarget(target)
+	case 'q':
+		// gq reflows whole lines whatever the motion covered, like vim.
+		m.reflowTarget(target)
 	}
 }
 
@@ -229,6 +237,9 @@ func (m *Model) commitInsert() {
 			return mm.cursor
 		})
 	}}
+	// "gi" returns here: the position where typing would have continued (#1193).
+	m.lastInsert.pos = m.cursor
+	m.lastInsert.ok = true
 	m.insert = insertSession{}
 	m.mode = Normal
 	if m.cursor.Col > 0 {
@@ -339,9 +350,9 @@ func (m *Model) replaceChar(ch rune, count int) {
 	m.dot = &dotCommand{run: func(mm *Model) { mm.replaceChar(ch, count) }}
 }
 
-// joinLines implements J: join count following lines onto the current one with a
-// single separating space.
-func (m *Model) joinLines(count int) {
+// joinLines implements J (space true) and gJ (space false, #1193): join count
+// following lines onto the current one, with or without a separating space.
+func (m *Model) joinLines(count int, space bool) {
 	if count < 2 {
 		count = 2
 	}
@@ -353,17 +364,21 @@ func (m *Model) joinLines(count int) {
 				break
 			}
 			joinAt := buffer.Position{Line: line, Col: m.buf.RuneLen(line)}
-			// Drop leading blanks of the next line, replace the break with a space.
-			trimmed := strings.TrimLeft(m.buf.Line(line+1), " \t")
+			next := m.buf.Line(line + 1)
+			text := next
+			if space {
+				// Drop leading blanks of the next line, replace the break with a space.
+				text = " " + strings.TrimLeft(next, " \t")
+			}
 			landCol = m.buf.RuneLen(line)
 			rec.Apply(buffer.Edit{
 				Range: buffer.Range{Start: joinAt, End: buffer.Position{Line: line + 1, Col: m.buf.RuneLen(line + 1)}},
-				Text:  " " + trimmed,
+				Text:  text,
 			})
 		}
 		return buffer.Position{Line: m.cursor.Line, Col: landCol}
 	})
-	m.dot = &dotCommand{run: func(mm *Model) { mm.joinLines(count) }}
+	m.dot = &dotCommand{run: func(mm *Model) { mm.joinLines(count, space) }}
 }
 
 // undo reverts the last count changes and moves the cursor to the last recorded

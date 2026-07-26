@@ -7,10 +7,13 @@ package textobject
 
 import "ike/internal/editor/buffer"
 
-// Result is a resolved text object.
+// Result is a resolved text object. Linewise marks an object that operates on
+// whole lines (paragraphs): Range.Start.Line through Range.End.Line inclusive,
+// with the columns meaningless.
 type Result struct {
-	Range buffer.Range
-	OK    bool
+	Range    buffer.Range
+	OK       bool
+	Linewise bool
 }
 
 // runeAt returns the rune at p, '\n' at a newline slot, or 0 at end-of-buffer.

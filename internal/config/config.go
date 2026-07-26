@@ -102,6 +102,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.relative_line_numbers", c.Editor.RelativeLineNumbers)
 	put("editor.wrap", c.Editor.Wrap)
 	put("editor.scroll_off", c.Editor.ScrollOff)
+	put("editor.text_width", c.Editor.TextWidth)
 	put("editor.auto_indent", c.Editor.AutoIndent)
 	put("editor.auto_close_pairs", c.Editor.AutoClosePairs)
 	put("editor.trim_trailing_whitespace", c.Editor.TrimTrailingWhitespace)

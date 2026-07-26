@@ -187,18 +187,21 @@ type Files struct {
 // focus leaves its pane or its document is replaced, #174), or "idle" (focus
 // plus a debounced save after AutoSaveIdleMs of no edits, #731).
 type Editor struct {
-	AutoSave               string `toml:"auto_save"`
-	AutoSaveIdleMs         int    `toml:"auto_save_idle_ms"`
-	TabWidth               int    `toml:"tab_width"`
-	UseSpaces              bool   `toml:"use_spaces"`
-	LineNumbers            bool   `toml:"line_numbers"`
-	RelativeLineNumbers    bool   `toml:"relative_line_numbers"`
-	Wrap                   bool   `toml:"wrap"`
-	ScrollOff              int    `toml:"scroll_off"`
-	AutoIndent             bool   `toml:"auto_indent"`
-	AutoClosePairs         bool   `toml:"auto_close_pairs"`
-	TrimTrailingWhitespace bool   `toml:"trim_trailing_whitespace"`
-	InsertFinalNewline     bool   `toml:"insert_final_newline"`
+	AutoSave            string `toml:"auto_save"`
+	AutoSaveIdleMs      int    `toml:"auto_save_idle_ms"`
+	TabWidth            int    `toml:"tab_width"`
+	UseSpaces           bool   `toml:"use_spaces"`
+	LineNumbers         bool   `toml:"line_numbers"`
+	RelativeLineNumbers bool   `toml:"relative_line_numbers"`
+	Wrap                bool   `toml:"wrap"`
+	ScrollOff           int    `toml:"scroll_off"`
+	// TextWidth is the hard-wrap column the gq reflow operator targets
+	// (#1193); 0 falls back to vim's 79.
+	TextWidth              int  `toml:"text_width"`
+	AutoIndent             bool `toml:"auto_indent"`
+	AutoClosePairs         bool `toml:"auto_close_pairs"`
+	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`
+	InsertFinalNewline     bool `toml:"insert_final_newline"`
 	// FormatOnSave runs LSP whole-document formatting before every manual
 	// write (#1148); OrganizeImportsOnSave applies the server's
 	// source.organizeImports code action first. Both are capability-gated

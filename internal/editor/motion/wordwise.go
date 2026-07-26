@@ -108,6 +108,46 @@ func wordEnd(b *buffer.Buffer, from buffer.Position, count int, big bool) Result
 	return Result{Pos: p, Kind: Inclusive}
 }
 
+// WordEndBackward moves to the end of the previous word ("ge"); inclusive.
+func WordEndBackward(b *buffer.Buffer, from buffer.Position, count int) Result {
+	return wordEndBackward(b, from, count, false)
+}
+
+// WordEndBackwardBig is the WORD variant of WordEndBackward ("gE").
+func WordEndBackwardBig(b *buffer.Buffer, from buffer.Position, count int) Result {
+	return wordEndBackward(b, from, count, true)
+}
+
+func wordEndBackward(b *buffer.Buffer, from buffer.Position, count int, big bool) Result {
+	p := from
+	for i := 0; i < max1(count); i++ {
+		for {
+			q, ok := prev(b, p)
+			if !ok {
+				break
+			}
+			p = q
+			if atWordEnd(b, p, big) {
+				break
+			}
+		}
+	}
+	// Exclusive so an operator spans [word end, cursor) — vim's dge deletes
+	// through the character before the cursor, not the cursor's own rune.
+	return Result{Pos: p, Kind: Exclusive}
+}
+
+// atWordEnd reports whether p sits on the last rune of a word run: a non-blank
+// rune whose successor is blank or of a different class.
+func atWordEnd(b *buffer.Buffer, p buffer.Position, big bool) bool {
+	c := classAt(b, p, big)
+	if c == clsBlank {
+		return false
+	}
+	q, ok := next(b, p)
+	return !ok || classAt(b, q, big) != c
+}
+
 // WordBackward moves to the start of the previous word ("b"); exclusive.
 func WordBackward(b *buffer.Buffer, from buffer.Position, count int) Result {
 	return wordBackward(b, from, count, false)

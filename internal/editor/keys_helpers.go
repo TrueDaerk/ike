@@ -155,6 +155,17 @@ func (m *Model) resolveTextObject(r rune) textobject.Result {
 		return textobject.Word(m.buf, m.cursor, m.around, true)
 	case '"', '\'', '`':
 		return textobject.Quote(m.buf, m.cursor, r, m.around)
+	case 'p':
+		return textobject.Paragraph(m.buf, m.cursor, m.around)
+	case 's':
+		return textobject.Sentence(m.buf, m.cursor, m.around)
+	case 't':
+		return textobject.Tag(m.buf, m.cursor, m.around)
+	case 'b':
+		// Vim's bracket aliases (#1193): ib/ab = i(/a(, iB/aB = i{/a{.
+		return textobject.Pair(m.buf, m.cursor, '(', ')', m.around)
+	case 'B':
+		return textobject.Pair(m.buf, m.cursor, '{', '}', m.around)
 	default:
 		if o, c, ok := textobject.CloseFor(r); ok {
 			return textobject.Pair(m.buf, m.cursor, o, c, m.around)
@@ -177,7 +188,7 @@ func (m *Model) applyTextObject(r rune) {
 			if !res.OK {
 				return operator.Target{}, false
 			}
-			return operator.CharTarget(res.Range), true
+			return objectTarget(res), true
 		})
 		return
 	}
@@ -185,5 +196,14 @@ func (m *Model) applyTextObject(r rune) {
 	if !res.OK || !m.pending.HasOperator() {
 		return
 	}
-	m.runOperator(op, operator.CharTarget(res.Range), m.pending.Register)
+	m.runOperator(op, objectTarget(res), m.pending.Register)
+}
+
+// objectTarget converts a resolved text object into an operator target,
+// honouring linewise objects (paragraphs, #1193).
+func objectTarget(res textobject.Result) operator.Target {
+	if res.Linewise {
+		return operator.LineTarget(res.Range.Start.Line, res.Range.End.Line)
+	}
+	return operator.CharTarget(res.Range)
 }
