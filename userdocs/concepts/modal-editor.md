@@ -19,6 +19,11 @@ on every line it spans and let you type into all of them at once; the
 operators (`d`, `y`, `c`) currently treat it as a plain character range from
 where you started to where the cursor is, not column by column.
 
+**Replace** overwrites. `R` enters it and everything you type replaces the
+character it lands on instead of pushing it right; ++esc++ leaves. For a single
+character you do not need the mode at all — `r` in normal mode replaces the one
+under the cursor and stays put (`3rx` overwrites three).
+
 The active mode is always shown at the left of the status bar. When in doubt,
 press ++esc++ — from anywhere it lands you in normal mode.
 
@@ -40,32 +45,59 @@ at `editor.text_width`). Doubling an operator makes it linewise (`dd`, `guu`,
 `gqq`, `==`). Commenting is a command (++cmd+7++) rather than an operator, and
 `~` on its own toggles the case of the character under the cursor.
 
-**Motions:** `h j k l`, `w b e` by word (`ge` back to the previous word's end),
+**Motions:** `h j k l`, `w b e` by word and `W B E` by WORD (whitespace-
+delimited, so `foo.bar()` is one), `ge` / `gE` back to the previous word's end,
 `0 ^ $` within the line, `gg G` for the file, `{ }` by paragraph, `f t F T` to
-a character, `%` to the matching bracket, `H M L` to the top/middle/bottom of
-the screen. With soft wrap on, `g0 g$ gj gk` move by display line instead of
-buffer line.
+a character with `;` / `,` to repeat that jump forwards / backwards, `%` to the
+matching bracket, `H M L` to the top/middle/bottom of the screen. `g0 g$ gj gk`
+are the same as `0 $ j k` until soft wrap is on, where they move by display
+line instead of buffer line.
 
-**Text objects:** `iw` / `aw` a word, `ip` / `ap` a paragraph, `is` / `as` a
-sentence, `i(` / `a(` inside/around brackets (also `[`, `{`, `<`, and the
-aliases `b` for `(` and `B` for `{`), `i"` / `a"` a quoted string, and `it` /
-`at` an XML/HTML tag.
+**Text objects:** `iw` / `aw` a word and `iW` / `aW` a WORD, `ip` / `ap` a
+paragraph, `is` / `as` a sentence, `i(` / `a(` inside/around brackets (also
+`[`, `{`, `<`, either bracket of the pair, and the aliases `b` for `(` and `B`
+for `{`), `i"` / `a"` a quoted string (also `'` and `` ` ``), and `it` / `at`
+an XML/HTML tag.
+
+**Single-key edits** skip the grammar for the things you do constantly: `x`
+deletes the character under the cursor, `D` / `C` / `Y` act on the rest of the
+line, `s` substitutes a character, `J` joins the next line onto this one, `p` /
+`P` paste after / before, `u` undoes and ++ctrl+r++ redoes.
 
 **Scrolling:** ++ctrl+f++ / ++ctrl+b++ by page, ++ctrl+d++ / ++ctrl+u++ by half
 a page; `zz` / `zt` / `zb` put the cursor line at the centre / top / bottom.
 
 Counts work in visual mode too: `V3j` extends the selection three lines. A
 selection also takes `u` / `U` / `~` (case), `J` (join the lines), `r` (replace
-every character), `=`, and `x` / `s` as aliases of `d` / `c`.
+every character), `=`, and `x` / `s` as aliases of `d` / `c`. `i` and `a` grow
+it to a text object (`vi(` selects inside the brackets), `p` replaces it with
+what you last yanked, and `o` jumps to the selection's other end so you can
+extend the side you started from.
+
+## Searching
+
+`/` searches forwards and `?` backwards; `n` and `N` walk the matches, and
+++esc++ clears the highlighting. `*` / `#` search for the word under the cursor
+without typing it. ++cmd+f++ opens the same search line for non-vim fingers.
+The [search guide](../guides/search.md) covers case handling, regex, replacing
+and project-wide search.
 
 ## Registers, marks and repeat
 
 Yanks and deletes land in registers — `"a` through `"z`, plus the unnamed one.
-`"ayy` yanks into `a`, `"ap` pastes it back. Macros use the same letters: `q`
-records, `@` replays.
+`"ayy` yanks into `a`, `"ap` pastes it back; an uppercase name (`"Ayy`) appends
+instead of overwriting. Vim's automatic registers are there too: `"0` holds the
+last yank (so a delete in between cannot clobber it), `"-` the last small
+delete, `"1` through `"9` a ring of the recent line-wise deletes, and `"+` /
+`"*` the system clipboard — `"+p` pastes what another application copied.
+
+Macros use the same letters: `q` records, `@` replays, `@@` repeats the last
+replay, and counts work (`5@a`).
 
 Marks remember positions: `ma` sets mark `a`, `` `a `` jumps back to it, `'a`
-to its line. Bookmarks are the same idea with a UI in front of them.
+to its line. Uppercase marks (`mA`) are global — jumping to one opens its file
+if you are somewhere else. Bookmarks are the same idea with a UI in front of
+them.
 
 `.` repeats the last change. It is the highest-leverage key in the editor and
 the reason the grammar is worth learning: make an edit once, move, press `.`.
@@ -89,14 +121,26 @@ to open the file whose name is under the cursor.
 | `:q` `:q!` | Close (with `!`, discarding changes) |
 | `:wq` `:x` | Save and close |
 | `:e path` | Reload a file, or open a new unsaved buffer if it does not exist |
-| `:s/pat/repl/g` | Substitute — add `c` to confirm each match interactively |
+| `:s/pat/repl/g` | Substitute over a range |
+| `:d` `:y` | Delete / yank the range's lines, optionally into a register (`:d a`) |
+| `:>` `:<` | Indent / dedent the range — repeat the character for more levels (`:>>`) |
 | `:42` `:$` | Jump to a line |
 
-Ranges work as in vim: `%` is the whole file, `1,5` a span, `.` the current
-line, `'<,'>` the last visual selection (pre-filled automatically when you
-press `:` from visual mode), and addresses take offsets like `.+2` or `$-1`.
+Every command also takes its long form (`:write`, `:quit`, `:edit`,
+`:substitute`, `:delete`, `:yank`), and `:xit` is another spelling of `:x`.
+`:g` and `:v` are recognised but report that they are not implemented yet.
 
-++tab++ completes paths on `:e` and `:w` lines.
+Ranges work as in vim: `%` is the whole file, `1,5` a span, `.` the current
+line, `$` the last, `'<,'>` the last visual selection (pre-filled automatically
+when you press `:` from visual mode), and `/pat/` or `?pat?` the next or
+previous line matching a pattern. Addresses take offsets like `.+2` or `$-1`.
+
+`:s` takes the usual flags: `g` for every match on a line, `i` / `I` to force
+case-insensitive or exact matching, `n` to only count matches, and `c` to
+confirm each one interactively. A bare `:s` repeats the last substitution.
+
+++tab++ completes paths on any command that takes one — `:e`, `:w`, `:wq`,
+`:x` and their long forms.
 
 ## Where IKE is not vim
 
@@ -131,6 +175,8 @@ a modern GUI where vim has no opinion:
   for a column.
 - **Folding** — `za` toggles a fold, `zc` / `zo` close and open one, `zM` /
   `zR` do the whole file.
+- **Changed hunks** — `]c` / `[c` jump to the next / previous block of
+  uncommitted changes in the file, the same ones the gutter marks.
 - **Undo tree** — undo is a tree, not a line. **Undo Tree** from the palette
   shows the branches; `g-` and `g+` walk the history chronologically instead
   of by branch.

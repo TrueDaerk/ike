@@ -7,8 +7,12 @@ overwritten and CI will fail on the drift. Change the source instead and run:
 
 # Keybindings
 
-Every binding IKE ships with. These are defaults — rebind anything in the
-settings panel (**Settings → Keymap**) or in `settings.toml`.
+Every modifier chord IKE ships with. These are defaults — rebind anything
+in the settings panel (**Settings → Keymap**) or in `settings.toml`.
+
+The editor's vim keys are a separate layer and are not listed here: they are
+not rebindable chords but the modal grammar itself. See
+[The modal editor](../concepts/modal-editor.md) for those.
 
 The same logical chord is written with **Cmd** on macOS and **Ctrl** on Linux
 and Windows; both columns are listed.
