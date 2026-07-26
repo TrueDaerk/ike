@@ -78,7 +78,9 @@ internal/theme/
                 replaced the duplicated copies in highlight and explorer
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
                 catppuccin-mocha(+latte), kanagawa, one-dark,
-                solarized-dark(+light), dracula, darcula, intellij-light
+                solarized-dark(+light), dracula, darcula, intellij-light,
+                everforest-dark(+light), ayu-dark(+mirage, +light),
+                github-dark(+light), oxocarbon, monokai-pro, zenburn
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -188,6 +190,21 @@ gold/red darkened, and the strong JetBrains list/selection backgrounds
 (`#4b6eaf`, `#a6d2ff`) are pulled toward `Surface` per rule 3 — the canonical
 syntax anchors `#cc7832`/`#6a8759`/`#6897bb` and `#0033b3`/`#067d17`/
 `#1750eb` are kept or nudged in lightness only).
+
+The #1230 batch broadened the color space beyond the blue/violet cluster:
+`everforest-dark` / `everforest-light` (sainnhe/everforest medium — the
+green-dominant family; the light variant's accents darken heavily for AA),
+`ayu-dark` / `ayu-mirage` / `ayu-light` (ayu-theme/ayu-colors — the
+warm/orange family, with mirage as the mid-dark ground between the tiers;
+alpha-composited selection/comment values are carried as their solid
+equivalents), `github-dark` / `github-light` (GitHub Primer; the upstream
+values are themselves contrast-audited — `github-light` passed the full
+matrix with **zero** corrections), `oxocarbon` (IBM Carbon on true black,
+base16 slot conventions; the Carbon palette has no yellow, so warm slots
+reuse its pinks, noted per slot), `monokai-pro` (the default filter), and
+`zenburn` (deliberately low-contrast by design and therefore the sharpest
+test of the rules — its greens/reds needed the largest lightness lifts of
+the batch while keeping the muted zenburn hues).
 
 Across all built-ins the full-matrix audit lifted the low-emphasis
 foregrounds (`InlayHint`, `VCSDeleted`, `file:lock`, comments), darkened the

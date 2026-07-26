@@ -21,6 +21,16 @@ func Builtins() []Theme {
 		dracula(),
 		darcula(),
 		intellijLight(),
+		everforestDark(),
+		everforestLight(),
+		ayuDark(),
+		ayuMirage(),
+		ayuLight(),
+		githubDark(),
+		githubLight(),
+		oxocarbon(),
+		monokaiPro(),
+		zenburn(),
 	}
 }
 
@@ -1300,6 +1310,809 @@ func intellijLight() Theme {
 			"json":    "#806e0b",
 			"yaml":    "#806e0b",
 			"lock":    "#808080", // darkened for 3.5:1 on Panel
+		},
+	}
+}
+
+// everforestDark ports sainnhe/everforest (dark, medium). Anchors are the
+// canonical palette (bg0 #2d353b, fg #d3c6aa, red #e67e80, orange #e69875,
+// yellow #dbbc7f, green #a7c080, aqua #83c092, blue #7fbbb3, purple #d699b6).
+// Slots deviating from a canonical value carry a comment saying why.
+func everforestDark() Theme {
+	return Theme{
+		Name: "everforest-dark",
+		Dark: true,
+		UI: UI{
+			Background:      "#232a2e", // bg_dim
+			Foreground:      "#d3c6aa", // fg
+			Surface:         "#2d353b", // bg0
+			Panel:           "#343f44", // bg1
+			Border:          "#475258", // bg3
+			BorderFocus:     "#a7c080", // green
+			Selection:       "#543a48", // bg_visual
+			SelectionText:   "#d3c6aa",
+			SelectionMuted:  "#3d484d", // bg2
+			OccurrenceRead:  "#354a55", // bg_blue, pulled toward Surface from #3a515d (overlay cap)
+			OccurrenceWrite: "#48473f", // bg_yellow, pulled toward Surface from #4d4c43 (overlay cap)
+			InlayHint:       "#89968d", // grey1, lightened for contrast from #859289
+			Whitespace:      "#475258",
+			IndentGuide:     "#475258",
+			Ruler:           "#343f44",
+			Accent:          "#dbbc7f", // yellow
+			Primary:         "#425047", // bg_green
+			Secondary:       "#e69875", // orange
+			Success:         "#a7c080", // green
+			Warning:         "#dbbc7f", // yellow
+			Error:           "#e98f91", // red, lightened for contrast from #e67e80
+			Info:            "#7fbbb3", // blue
+			Hint:            "#83c092", // aqua
+			MoveSource:      "#e67e80",
+			DropTarget:      "#dbbc7f",
+			Ghost:           "#e69875",
+			ScrollbarTrack:  "#343f44",
+			ScrollbarThumb:  "#4f585e", // bg4
+			DiffAdded:       "#3d4a42", // bg_green, pulled toward Surface from #425047 (overlay cap)
+			DiffRemoved:     "#514045", // bg_red
+			DiffChanged:     "#354a55", // bg_blue, pulled toward Surface from #3a515d (overlay cap)
+			VCSModified:     "#7fbbb3",
+			VCSAdded:        "#a7c080",
+			VCSUntracked:    "#dbbc7f",
+			VCSDeleted:      "#89968d", // grey1, lightened for contrast from #859289
+			VCSConflicted:   "#e98f91", // lightened for contrast from #e67e80
+		},
+		Captures: map[string]string{
+			"keyword":          "#e67e80", // red
+			"operator":         "#e69875", // orange
+			"string":           "#a7c080", // green
+			"number":           "#d699b6", // purple
+			"comment":          "#859289", // grey1
+			"function":         "#83c092", // aqua
+			"type":             "#dbbc7f", // yellow
+			"constant":         "#83c092", // aqua
+			"constant.builtin": "#83c092",
+			"variable":         "#d3c6aa",
+			"variable.builtin": "#d699b6", // purple
+			"property":         "#7fbbb3", // blue
+			"label":            "#e69875",
+			"attribute":        "#dbbc7f",
+			"punctuation":      "#9da9a0", // grey2
+			"escape":           "#e69875",
+			"boolean":          "#d699b6",
+			"tag":              "#e67e80",
+			"embedded":         "#d3c6aa",
+		},
+		Files: map[string]string{
+			"dir":     "#7fbbb3",
+			"default": "#d3c6aa",
+			"go":      "#83c092",
+			"md":      "#a7c080",
+			"toml":    "#dbbc7f",
+			"json":    "#dbbc7f",
+			"yaml":    "#dbbc7f",
+			"lock":    "#89968d", // lightened for contrast from #859289
+		},
+	}
+}
+
+// everforestLight ports sainnhe/everforest (light, medium). Anchors are the
+// canonical palette (bg0 #fdf6e3, fg #5c6a72, red #f85552, orange #f57d26,
+// yellow #dfa000, green #8da101, aqua #35a77c, blue #3a94c5, purple #df69ba).
+// Slots deviating from a canonical value carry a comment saying why.
+func everforestLight() Theme {
+	return Theme{
+		Name: "everforest-light",
+		Dark: false,
+		UI: UI{
+			Background:      "#f2efdf", // bg_dim
+			Foreground:      "#5c6a72", // fg
+			Surface:         "#fdf6e3", // bg0
+			Panel:           "#efebd4", // bg2
+			Border:          "#e0dcc7", // bg4
+			BorderFocus:     "#8da101", // green
+			Selection:       "#eaedc8", // bg_visual
+			SelectionText:   "#5a6870", // darkened for contrast from #5c6a72
+			SelectionMuted:  "#f4f0d9", // bg1
+			OccurrenceRead:  "#ecf5ed", // bg_blue
+			OccurrenceWrite: "#faedcd", // bg_yellow
+			InlayHint:       "#727f6f", // grey1, darkened for contrast from #939f91
+			Whitespace:      "#e0dcc7",
+			IndentGuide:     "#e0dcc7",
+			Ruler:           "#efebd4",
+			Accent:          "#896300", // yellow, darkened for contrast from #dfa000
+			Primary:         "#dde8cb", // deepened bg_green so the row reads selected
+			Secondary:       "#ad4d08", // orange, darkened for contrast from #f57d26
+			Success:         "#627001", // green, darkened for contrast from #8da101
+			Warning:         "#896300", // yellow, darkened for contrast from #dfa000
+			Error:           "#d50c09", // red, darkened for contrast from #f85552
+			Info:            "#2c7096", // blue, darkened for contrast from #3a94c5
+			Hint:            "#267758", // aqua, darkened for contrast from #35a77c
+			MoveSource:      "#f85552",
+			DropTarget:      "#dfa000",
+			Ghost:           "#f57d26",
+			ScrollbarTrack:  "#efebd4",
+			ScrollbarThumb:  "#a6b0a0", // grey0
+			DiffAdded:       "#e5efda", // bg_green tint
+			DiffRemoved:     "#fbe3da", // bg_red
+			DiffChanged:     "#faedcd", // bg_yellow
+			VCSModified:     "#2c7096", // darkened for contrast from #3a94c5
+			VCSAdded:        "#627001", // darkened for contrast from #8da101
+			VCSUntracked:    "#896300", // darkened for contrast from #dfa000
+			VCSDeleted:      "#727f6f", // grey1, darkened for contrast from #939f91
+			VCSConflicted:   "#d50c09", // darkened for contrast from #f85552
+		},
+		Captures: map[string]string{
+			"keyword":          "#e10d09", // red, darkened for contrast from #f85552
+			"operator":         "#b95309", // orange, darkened for contrast from #f57d26
+			"string":           "#697801", // green, darkened for contrast from #8da101
+			"number":           "#c92b98", // purple, darkened for contrast from #df69ba
+			"comment":          "#788776", // grey1, darkened for contrast from #939f91
+			"function":         "#287f5e", // aqua, darkened for contrast from #35a77c
+			"type":             "#946a00", // yellow, darkened for contrast from #dfa000
+			"constant":         "#287f5e", // aqua, darkened for contrast from #35a77c
+			"constant.builtin": "#287f5e", // darkened for contrast from #35a77c
+			"variable":         "#5c6a72",
+			"variable.builtin": "#c92b98", // purple, darkened for contrast from #df69ba
+			"property":         "#2f789f", // blue, darkened for contrast from #3a94c5
+			"label":            "#b95309", // darkened for contrast from #f57d26
+			"attribute":        "#946a00", // darkened for contrast from #dfa000
+			"punctuation":      "#778776", // grey2, darkened for contrast from #829181
+			"escape":           "#b95309", // darkened for contrast from #f57d26
+			"boolean":          "#c92b98", // darkened for contrast from #df69ba
+			"tag":              "#e10d09", // darkened for contrast from #f85552
+			"embedded":         "#5c6a72",
+		},
+		Files: map[string]string{
+			"dir":     "#2c7096", // darkened for contrast from #3a94c5
+			"default": "#5c6a72",
+			"go":      "#267758", // darkened for contrast from #35a77c
+			"md":      "#627001", // darkened for contrast from #8da101
+			"toml":    "#896300", // darkened for contrast from #dfa000
+			"json":    "#896300", // darkened for contrast from #dfa000
+			"yaml":    "#896300", // darkened for contrast from #dfa000
+			"lock":    "#727f6f", // darkened for contrast from #939f91
+		},
+	}
+}
+
+// ayuDark ports ayu-theme/ayu-colors (dark). Anchors are the canonical
+// editor values (bg #0b0e14, fg #bfbdb6, accent #e6b450, keyword #ff8f40,
+// string #aad94c, function #ffb454, entity #59c2ff, constant #d2a6ff).
+// Slots deviating from a canonical value carry a comment saying why.
+func ayuDark() Theme {
+	return Theme{
+		Name: "ayu-dark",
+		Dark: true,
+		UI: UI{
+			Background:      "#0b0e14",
+			Foreground:      "#bfbdb6",
+			Surface:         "#0b0e14",
+			Panel:           "#0f131a", // panel background
+			Border:          "#2d3440", // guide/line
+			BorderFocus:     "#e6b450", // accent
+			Selection:       "#1f3244", // selection (solid form of #409fff alpha), pulled toward Surface from #253c52 (overlay cap)
+			SelectionText:   "#bfbdb6",
+			SelectionMuted:  "#131721", // line highlight
+			OccurrenceRead:  "#132639",
+			OccurrenceWrite: "#2b2620",
+			InlayHint:       "#7a828e",
+			Whitespace:      "#2d3440",
+			IndentGuide:     "#2d3440",
+			Ruler:           "#0f131a",
+			Accent:          "#e6b450", // accent
+			Primary:         "#1f3244", // pulled toward Surface (overlay cap) from #253c52
+			Secondary:       "#ff8f40", // keyword orange
+			Success:         "#7fd962", // vcs added
+			Warning:         "#e6b450",
+			Error:           "#d95757", // error
+			Info:            "#73b8ff", // vcs modified
+			Hint:            "#95e6cb", // regexp teal
+			MoveSource:      "#f26d78", // vcs removed
+			DropTarget:      "#e6b450",
+			Ghost:           "#ff8f40",
+			ScrollbarTrack:  "#0f131a",
+			ScrollbarThumb:  "#2d3440",
+			DiffAdded:       "#142117",
+			DiffRemoved:     "#241317",
+			DiffChanged:     "#1f1c10",
+			VCSModified:     "#73b8ff",
+			VCSAdded:        "#7fd962",
+			VCSUntracked:    "#e6b450",
+			VCSDeleted:      "#646c77", // lightened for contrast from #636b76
+			VCSConflicted:   "#f26d78",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ff8f40",
+			"operator":         "#f29668",
+			"string":           "#aad94c",
+			"number":           "#d2a6ff",
+			"comment":          "#636b76", // solid form of the alpha comment gray
+			"function":         "#ffb454",
+			"type":             "#59c2ff", // entity blue
+			"constant":         "#d2a6ff",
+			"constant.builtin": "#d2a6ff",
+			"variable":         "#bfbdb6",
+			"variable.builtin": "#f07178", // markup red
+			"property":         "#39bae6", // tag blue
+			"label":            "#ff8f40",
+			"attribute":        "#ffb454",
+			"punctuation":      "#8a9199", // ui fg
+			"escape":           "#95e6cb",
+			"boolean":          "#d2a6ff",
+			"tag":              "#39bae6",
+			"embedded":         "#bfbdb6",
+		},
+		Files: map[string]string{
+			"dir":     "#59c2ff",
+			"default": "#bfbdb6",
+			"go":      "#95e6cb",
+			"md":      "#aad94c",
+			"toml":    "#e6b450",
+			"json":    "#e6b450",
+			"yaml":    "#e6b450",
+			"lock":    "#8a9199",
+		},
+	}
+}
+
+// ayuMirage ports ayu-theme/ayu-colors (mirage) — the mid-dark ground that
+// sits between the dark and light tiers. Anchors: bg #1f2430, fg #cccac2,
+// accent #ffcc66, keyword #ffad66, string #d5ff80, entity #73d0ff.
+// Slots deviating from a canonical value carry a comment saying why.
+func ayuMirage() Theme {
+	return Theme{
+		Name: "ayu-mirage",
+		Dark: true,
+		UI: UI{
+			Background:      "#171b24", // panel background
+			Foreground:      "#cccac2",
+			Surface:         "#1f2430",
+			Panel:           "#171b24",
+			Border:          "#3a4151",
+			BorderFocus:     "#ffcc66", // accent
+			Selection:       "#32405c", // selection, pulled toward Surface from #33415e (overlay cap)
+			SelectionText:   "#cccac2",
+			SelectionMuted:  "#242936", // line highlight
+			OccurrenceRead:  "#223142",
+			OccurrenceWrite: "#35302a",
+			InlayHint:       "#707a8c", // ui fg
+			Whitespace:      "#3a4151",
+			IndentGuide:     "#3a4151",
+			Ruler:           "#242936",
+			Accent:          "#ffcc66", // accent
+			Primary:         "#32405c", // pulled toward Surface (overlay cap) from #33415e
+			Secondary:       "#ffad66", // keyword orange
+			Success:         "#87d96c", // vcs added
+			Warning:         "#ffcc66",
+			Error:           "#ff6666", // error
+			Info:            "#80bfff", // vcs modified
+			Hint:            "#95e6cb", // regexp teal
+			MoveSource:      "#f27983", // vcs removed
+			DropTarget:      "#ffcc66",
+			Ghost:           "#ffad66",
+			ScrollbarTrack:  "#171b24",
+			ScrollbarThumb:  "#3a4151",
+			DiffAdded:       "#26362a",
+			DiffRemoved:     "#3b2a30",
+			DiffChanged:     "#35322a",
+			VCSModified:     "#80bfff",
+			VCSAdded:        "#87d96c",
+			VCSUntracked:    "#ffcc66",
+			VCSDeleted:      "#707a8c",
+			VCSConflicted:   "#f27983",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ffad66",
+			"operator":         "#f29e74",
+			"string":           "#d5ff80",
+			"number":           "#dfbfff",
+			"comment":          "#6d7a89", // solid form of the alpha comment gray, lightened for contrast from #5c6773
+			"function":         "#ffd173",
+			"type":             "#73d0ff", // entity blue
+			"constant":         "#dfbfff",
+			"constant.builtin": "#dfbfff",
+			"variable":         "#cccac2",
+			"variable.builtin": "#f28779", // markup red
+			"property":         "#5ccfe6", // tag blue
+			"label":            "#ffad66",
+			"attribute":        "#ffd173",
+			"punctuation":      "#8a919e",
+			"escape":           "#95e6cb",
+			"boolean":          "#dfbfff",
+			"tag":              "#5ccfe6",
+			"embedded":         "#cccac2",
+		},
+		Files: map[string]string{
+			"dir":     "#73d0ff",
+			"default": "#cccac2",
+			"go":      "#5ccfe6",
+			"md":      "#d5ff80",
+			"toml":    "#ffcc66",
+			"json":    "#ffcc66",
+			"yaml":    "#ffcc66",
+			"lock":    "#707a8c",
+		},
+	}
+}
+
+// ayuLight ports ayu-theme/ayu-colors (light). Anchors: bg #fcfcfc,
+// fg #5c6166, accent #ffaa33, keyword #fa8d3e, string #86b300,
+// entity #399ee6, constant #a37acc.
+// Slots deviating from a canonical value carry a comment saying why.
+func ayuLight() Theme {
+	return Theme{
+		Name: "ayu-light",
+		Dark: false,
+		UI: UI{
+			Background:      "#f8f9fa", // panel background
+			Foreground:      "#5c6166",
+			Surface:         "#fcfcfc",
+			Panel:           "#eceef0",
+			Border:          "#d0d3d6",
+			BorderFocus:     "#ffaa33", // accent
+			Selection:       "#d9e9fb", // selection (solid form of #035bd6 alpha)
+			SelectionText:   "#5c6166",
+			SelectionMuted:  "#f3f4f5", // line highlight
+			OccurrenceRead:  "#e6f2fb",
+			OccurrenceWrite: "#fdf2e2",
+			InlayHint:       "#757e87", // ui fg, darkened for contrast from #8a9199
+			Whitespace:      "#d0d3d6",
+			IndentGuide:     "#d0d3d6",
+			Ruler:           "#f3f4f5",
+			Accent:          "#9d5c00", // accent, darkened for contrast from #ffaa33
+			Primary:         "#cfe3fa",
+			Secondary:       "#b34e05", // keyword orange, darkened for contrast from #fa8d3e
+			Success:         "#437729", // vcs added, darkened for contrast from #6cbf43
+			Warning:         "#975f0b", // function gold, darkened for contrast from #f2ae49
+			Error:           "#d41e1e", // error, darkened for contrast from #e65050
+			Info:            "#306fae", // vcs modified, darkened for contrast from #478acc
+			Hint:            "#2b785f", // regexp teal, darkened for contrast from #4cbf99
+			MoveSource:      "#ff7383", // vcs removed
+			DropTarget:      "#ffaa33",
+			Ghost:           "#fa8d3e",
+			ScrollbarTrack:  "#f3f4f5",
+			ScrollbarThumb:  "#aab0b6",
+			DiffAdded:       "#e0f0d4",
+			DiffRemoved:     "#fbe0e0",
+			DiffChanged:     "#faeed6",
+			VCSModified:     "#306fae", // darkened for contrast from #478acc
+			VCSAdded:        "#437729", // darkened for contrast from #6cbf43
+			VCSUntracked:    "#975f0b", // darkened for contrast from #f2ae49
+			VCSDeleted:      "#757e87", // darkened for contrast from #8a9199
+			VCSConflicted:   "#d90019", // darkened for contrast from #ff7383
+		},
+		Captures: map[string]string{
+			"keyword":          "#c15405", // darkened for contrast from #fa8d3e
+			"operator":         "#c45117", // darkened for contrast from #ed9366
+			"string":           "#5e7e00", // darkened for contrast from #86b300
+			"number":           "#8f5dc1", // darkened for contrast from #a37acc
+			"comment":          "#787b80",
+			"function":         "#a5670c", // darkened for contrast from #f2ae49
+			"type":             "#1879be", // entity blue, darkened for contrast from #399ee6
+			"constant":         "#8f5dc1", // darkened for contrast from #a37acc
+			"constant.builtin": "#8f5dc1", // darkened for contrast from #a37acc
+			"variable":         "#5c6166",
+			"variable.builtin": "#e71818", // markup red, darkened for contrast from #f07171
+			"property":         "#277d9a", // tag blue, darkened for contrast from #55b4d4
+			"label":            "#c15405", // darkened for contrast from #fa8d3e
+			"attribute":        "#a5670c", // darkened for contrast from #f2ae49
+			"punctuation":      "#808890", // darkened for contrast from #8a9199
+			"escape":           "#2e8166", // darkened for contrast from #4cbf99
+			"boolean":          "#8f5dc1", // darkened for contrast from #a37acc
+			"tag":              "#277d9a", // darkened for contrast from #55b4d4
+			"embedded":         "#5c6166",
+		},
+		Files: map[string]string{
+			"dir":     "#166faf", // darkened for contrast from #399ee6
+			"default": "#5c6166",
+			"go":      "#2b785f", // darkened for contrast from #4cbf99
+			"md":      "#587600", // darkened for contrast from #86b300
+			"toml":    "#975f0b", // darkened for contrast from #f2ae49
+			"json":    "#975f0b", // darkened for contrast from #f2ae49
+			"yaml":    "#975f0b", // darkened for contrast from #f2ae49
+			"lock":    "#757e87", // darkened for contrast from #8a9199
+		},
+	}
+}
+
+// githubDark ports GitHub's Primer dark scheme, whose upstream values are
+// themselves contrast-audited. Anchors: canvas #0d1117, fg #e6edf3,
+// keyword #ff7b72, string #a5d6ff, constant #79c0ff, function #d2a8ff.
+// Slots deviating from a canonical value carry a comment saying why.
+func githubDark() Theme {
+	return Theme{
+		Name: "github-dark",
+		Dark: true,
+		UI: UI{
+			Background:      "#010409", // canvas inset
+			Foreground:      "#e6edf3",
+			Surface:         "#0d1117", // canvas default
+			Panel:           "#161b22", // canvas subtle
+			Border:          "#30363d",
+			BorderFocus:     "#58a6ff", // accent
+			Selection:       "#1b3252", // solid form of the #388bfd alpha selection, pulled toward Surface from #1f3a5f (overlay cap)
+			SelectionText:   "#e6edf3",
+			SelectionMuted:  "#161b22",
+			OccurrenceRead:  "#142a45",
+			OccurrenceWrite: "#342a18",
+			InlayHint:       "#8b949e", // fg muted
+			Whitespace:      "#30363d",
+			IndentGuide:     "#30363d",
+			Ruler:           "#161b22",
+			Accent:          "#58a6ff", // accent
+			Primary:         "#1b3252", // pulled toward Surface (overlay cap) from #1f3a5f
+			Secondary:       "#ffa657", // variable orange
+			Success:         "#3fb950",
+			Warning:         "#d29922", // attention
+			Error:           "#f85149", // danger
+			Info:            "#58a6ff",
+			Hint:            "#39c5cf", // scale cyan
+			MoveSource:      "#f85149",
+			DropTarget:      "#d29922",
+			Ghost:           "#ffa657",
+			ScrollbarTrack:  "#161b22",
+			ScrollbarThumb:  "#30363d",
+			DiffAdded:       "#122117", // solid form of the diff green alpha
+			DiffRemoved:     "#25171c",
+			DiffChanged:     "#221d10",
+			VCSModified:     "#58a6ff",
+			VCSAdded:        "#3fb950",
+			VCSUntracked:    "#d29922",
+			VCSDeleted:      "#8b949e",
+			VCSConflicted:   "#f85149",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ff7b72",
+			"operator":         "#e6edf3",
+			"string":           "#a5d6ff",
+			"number":           "#79c0ff",
+			"comment":          "#8b949e",
+			"function":         "#d2a8ff",
+			"type":             "#7ee787", // entity green
+			"constant":         "#79c0ff",
+			"constant.builtin": "#79c0ff",
+			"variable":         "#ffa657",
+			"variable.builtin": "#ff7b72",
+			"property":         "#79c0ff",
+			"label":            "#ff7b72",
+			"attribute":        "#79c0ff",
+			"punctuation":      "#8b949e",
+			"escape":           "#79c0ff",
+			"boolean":          "#79c0ff",
+			"tag":              "#7ee787",
+			"embedded":         "#e6edf3",
+		},
+		Files: map[string]string{
+			"dir":     "#58a6ff",
+			"default": "#e6edf3",
+			"go":      "#39c5cf",
+			"md":      "#7ee787",
+			"toml":    "#d29922",
+			"json":    "#d29922",
+			"yaml":    "#d29922",
+			"lock":    "#8b949e",
+		},
+	}
+}
+
+// githubLight ports GitHub's Primer light scheme. Anchors: canvas #ffffff,
+// fg #1f2328, keyword #cf222e, string #0a3069, constant #0550ae,
+// function #8250df, tag #116329.
+// Slots deviating from a canonical value carry a comment saying why.
+func githubLight() Theme {
+	return Theme{
+		Name: "github-light",
+		Dark: false,
+		UI: UI{
+			Background:      "#f6f8fa", // canvas subtle
+			Foreground:      "#1f2328",
+			Surface:         "#ffffff", // canvas default
+			Panel:           "#f6f8fa",
+			Border:          "#d0d7de",
+			BorderFocus:     "#0969da", // accent
+			Selection:       "#b6e3ff", // scale blue 1
+			SelectionText:   "#1f2328",
+			SelectionMuted:  "#f6f8fa",
+			OccurrenceRead:  "#ddf4ff", // scale blue 0
+			OccurrenceWrite: "#fff8c5", // scale yellow 0
+			InlayHint:       "#6e7781", // fg muted
+			Whitespace:      "#afb8c1",
+			IndentGuide:     "#d8dee4",
+			Ruler:           "#f6f8fa",
+			Accent:          "#0969da", // accent
+			Primary:         "#b6e3ff",
+			Secondary:       "#953800", // variable rust
+			Success:         "#1a7f37",
+			Warning:         "#9a6700", // attention
+			Error:           "#cf222e", // danger
+			Info:            "#0969da",
+			Hint:            "#1b7c83", // scale cyan
+			MoveSource:      "#cf222e",
+			DropTarget:      "#9a6700",
+			Ghost:           "#bc4c00", // severe
+			ScrollbarTrack:  "#f6f8fa",
+			ScrollbarThumb:  "#afb8c1",
+			DiffAdded:       "#d8f3dc",
+			DiffRemoved:     "#ffd7d5",
+			DiffChanged:     "#fff3c2",
+			VCSModified:     "#0969da",
+			VCSAdded:        "#1a7f37",
+			VCSUntracked:    "#9a6700",
+			VCSDeleted:      "#6e7781",
+			VCSConflicted:   "#cf222e",
+		},
+		Captures: map[string]string{
+			"keyword":          "#cf222e",
+			"operator":         "#1f2328",
+			"string":           "#0a3069",
+			"number":           "#0550ae",
+			"comment":          "#6e7781",
+			"function":         "#8250df",
+			"type":             "#6639ba", // entity purple
+			"constant":         "#0550ae",
+			"constant.builtin": "#0550ae",
+			"variable":         "#953800",
+			"variable.builtin": "#cf222e",
+			"property":         "#0550ae",
+			"label":            "#cf222e",
+			"attribute":        "#0550ae",
+			"punctuation":      "#6e7781",
+			"escape":           "#0550ae",
+			"boolean":          "#0550ae",
+			"tag":              "#116329",
+			"embedded":         "#1f2328",
+		},
+		Files: map[string]string{
+			"dir":     "#0969da",
+			"default": "#1f2328",
+			"go":      "#1b7c83",
+			"md":      "#1a7f37",
+			"toml":    "#9a6700",
+			"json":    "#9a6700",
+			"yaml":    "#9a6700",
+			"lock":    "#6e7781",
+		},
+	}
+}
+
+// oxocarbon ports nyoom-engineering/oxocarbon.nvim (IBM Carbon): cold
+// violet-cyan on true black, following the base16 slot conventions
+// (base00 #161616 ground, base05 #f2f4f8 text, base0E #be95ff keywords,
+// base0B #33b1ff strings, base0D #42be65 functions, base0A #ee5396 types).
+// The Carbon palette has no yellow, so the warm slots reuse its pinks —
+// noted per slot. Slots deviating from a canonical value carry a comment.
+func oxocarbon() Theme {
+	return Theme{
+		Name: "oxocarbon",
+		Dark: true,
+		UI: UI{
+			Background:      "#161616", // base00
+			Foreground:      "#f2f4f8", // base05
+			Surface:         "#161616",
+			Panel:           "#262626", // base01
+			Border:          "#393939", // base02
+			BorderFocus:     "#33b1ff", // base0B
+			Selection:       "#363636", // base02, pulled toward Surface from #393939 (overlay cap)
+			SelectionText:   "#f2f4f8",
+			SelectionMuted:  "#262626", // base01
+			OccurrenceRead:  "#1c2733",
+			OccurrenceWrite: "#33212b",
+			InlayHint:       "#7a7a7a", // lightened for contrast from #6f6f6f
+			Whitespace:      "#393939",
+			IndentGuide:     "#393939",
+			Ruler:           "#262626",
+			Accent:          "#3ddbd9", // base08
+			Primary:         "#363636", // pulled toward Surface (overlay cap) from #393939
+			Secondary:       "#ff7eb6", // base0C
+			Success:         "#42be65", // base0D
+			Warning:         "#ff7eb6", // base0C — Carbon has no yellow
+			Error:           "#ee5396", // base0A
+			Info:            "#78a9ff", // base09
+			Hint:            "#08bdba", // base07
+			MoveSource:      "#ee5396",
+			DropTarget:      "#82cfff", // base0F — no yellow in the palette
+			Ghost:           "#be95ff", // base0E
+			ScrollbarTrack:  "#262626",
+			ScrollbarThumb:  "#525252", // base03
+			DiffAdded:       "#16281c",
+			DiffRemoved:     "#2d1a24",
+			DiffChanged:     "#252031",
+			VCSModified:     "#78a9ff",
+			VCSAdded:        "#42be65",
+			VCSUntracked:    "#ff7eb6", // no yellow in the palette
+			VCSDeleted:      "#8d8d8d",
+			VCSConflicted:   "#ee5396",
+		},
+		Captures: map[string]string{
+			"keyword":          "#be95ff", // base0E
+			"operator":         "#dde1e6", // base04
+			"string":           "#33b1ff", // base0B
+			"number":           "#78a9ff", // base09
+			"comment":          "#6e6e6e", // base03, lightened for contrast from #525252
+			"function":         "#42be65", // base0D
+			"type":             "#ee5396", // base0A
+			"constant":         "#ff7eb6", // base0C
+			"constant.builtin": "#ff7eb6",
+			"variable":         "#3ddbd9", // base08
+			"variable.builtin": "#ee5396",
+			"property":         "#08bdba", // base07
+			"label":            "#be95ff",
+			"attribute":        "#78a9ff",
+			"punctuation":      "#dde1e6",
+			"escape":           "#ff7eb6",
+			"boolean":          "#78a9ff",
+			"tag":              "#ee5396",
+			"embedded":         "#f2f4f8",
+		},
+		Files: map[string]string{
+			"dir":     "#78a9ff",
+			"default": "#f2f4f8",
+			"go":      "#3ddbd9",
+			"md":      "#42be65",
+			"toml":    "#82cfff",
+			"json":    "#82cfff",
+			"yaml":    "#82cfff",
+			"lock":    "#7a7a7a", // lightened for contrast from #6f6f6f
+		},
+	}
+}
+
+// monokaiPro ports the Monokai Pro default filter. Anchors: bg #2d2a2e,
+// fg #fcfcfa, red #ff6188, orange #fc9867, yellow #ffd866, green #a9dc76,
+// cyan #78dce8, purple #ab9df2, dim #727072.
+// Slots deviating from a canonical value carry a comment saying why.
+func monokaiPro() Theme {
+	return Theme{
+		Name: "monokai-pro",
+		Dark: true,
+		UI: UI{
+			Background:      "#221f22", // darker chrome shade
+			Foreground:      "#fcfcfa",
+			Surface:         "#2d2a2e",
+			Panel:           "#221f22",
+			Border:          "#5b595c",
+			BorderFocus:     "#ffd866", // yellow
+			Selection:       "#403e41", // selection
+			SelectionText:   "#fcfcfa",
+			SelectionMuted:  "#363337",
+			OccurrenceRead:  "#2c363b",
+			OccurrenceWrite: "#3d332c",
+			InlayHint:       "#939293",
+			Whitespace:      "#5b595c",
+			IndentGuide:     "#5b595c",
+			Ruler:           "#221f22",
+			Accent:          "#ffd866", // yellow
+			Primary:         "#403e41",
+			Secondary:       "#fc9867", // orange
+			Success:         "#a9dc76", // green
+			Warning:         "#ffd866", // yellow
+			Error:           "#ff6188", // red
+			Info:            "#78dce8", // cyan
+			Hint:            "#ab9df2", // purple
+			MoveSource:      "#ff6188",
+			DropTarget:      "#ffd866",
+			Ghost:           "#fc9867",
+			ScrollbarTrack:  "#221f22",
+			ScrollbarThumb:  "#5b595c",
+			DiffAdded:       "#37402f",
+			DiffRemoved:     "#452d36",
+			DiffChanged:     "#403a2b",
+			VCSModified:     "#78dce8",
+			VCSAdded:        "#a9dc76",
+			VCSUntracked:    "#ffd866",
+			VCSDeleted:      "#939293",
+			VCSConflicted:   "#ff6188",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ff6188",
+			"operator":         "#ff6188",
+			"string":           "#ffd866",
+			"number":           "#ab9df2",
+			"comment":          "#807e80", // lightened for contrast from #727072
+			"function":         "#a9dc76",
+			"type":             "#78dce8",
+			"constant":         "#ab9df2",
+			"constant.builtin": "#ab9df2",
+			"variable":         "#fcfcfa",
+			"variable.builtin": "#fc9867", // self/this orange
+			"property":         "#fcfcfa",
+			"label":            "#ff6188",
+			"attribute":        "#78dce8",
+			"punctuation":      "#939293",
+			"escape":           "#ab9df2",
+			"boolean":          "#ab9df2",
+			"tag":              "#ff6188",
+			"embedded":         "#fcfcfa",
+		},
+		Files: map[string]string{
+			"dir":     "#78dce8",
+			"default": "#fcfcfa",
+			"go":      "#ab9df2",
+			"md":      "#a9dc76",
+			"toml":    "#ffd866",
+			"json":    "#ffd866",
+			"yaml":    "#ffd866",
+			"lock":    "#939293",
+		},
+	}
+}
+
+// zenburn ports the classic zenburn.el palette — deliberately low-contrast
+// by design, so it is the sharpest test of the #1226 rules. Anchors:
+// bg #3f3f3f, fg #dcdccc, keyword #f0dfaf, string #cc9393, comment #7f9f7f,
+// function #93e0e3, orange #dfaf8f, magenta #dc8cc3.
+// Slots deviating from a canonical value carry a comment saying why.
+func zenburn() Theme {
+	return Theme{
+		Name: "zenburn",
+		Dark: true,
+		UI: UI{
+			Background:      "#2b2b2b", // bg-1 (modeline)
+			Foreground:      "#dcdccc",
+			Surface:         "#3f3f3f", // bg
+			Panel:           "#4f4f4f", // bg+1
+			Border:          "#5f5f5f", // bg+2
+			BorderFocus:     "#f0dfaf", // yellow
+			Selection:       "#2f2f2f", // region
+			SelectionText:   "#dcdccc",
+			SelectionMuted:  "#383838", // hl-line
+			OccurrenceRead:  "#3a4442",
+			OccurrenceWrite: "#4a4038",
+			InlayHint:       "#abab9e", // lightened for contrast from #989888
+			Whitespace:      "#5f5f5f",
+			IndentGuide:     "#5f5f5f",
+			Ruler:           "#464646",
+			Accent:          "#e3b89c", // orange, lightened for contrast from #dfaf8f
+			Primary:         "#3e5e5e", // dim teal selection, pulled toward Surface from #3f5f5f (overlay cap)
+			Secondary:       "#f0dfaf", // yellow
+			Success:         "#b3c6b3", // green, lightened for contrast from #7f9f7f
+			Warning:         "#f0dfaf", // yellow
+			Error:           "#deb8b8", // red, lightened for contrast from #cc9393
+			Info:            "#9dc4f4", // blue+1, lightened for contrast from #94bff3
+			Hint:            "#93e0e3", // cyan
+			MoveSource:      "#cc9393",
+			DropTarget:      "#f0dfaf",
+			Ghost:           "#dfaf8f",
+			ScrollbarTrack:  "#4f4f4f",
+			ScrollbarThumb:  "#6f6f6f",
+			DiffAdded:       "#3f4f3f",
+			DiffRemoved:     "#4f3f3f",
+			DiffChanged:     "#4f4f3f",
+			VCSModified:     "#9dc4f4", // lightened for contrast from #94bff3
+			VCSAdded:        "#a7caa7", // green+2, lightened for contrast from #9fc59f
+			VCSUntracked:    "#f0dfaf",
+			VCSDeleted:      "#abab9e", // lightened for contrast from #989888
+			VCSConflicted:   "#deb8b8", // lightened for contrast from #cc9393
+		},
+		Captures: map[string]string{
+			"keyword":          "#f0dfaf",
+			"operator":         "#dcdccc",
+			"string":           "#d19d9d", // lightened for contrast from #cc9393
+			"number":           "#8cd0d3", // blue
+			"comment":          "#7f9f7f", // zenburn's famous green comments
+			"function":         "#93e0e3",
+			"type":             "#dfdfbf",
+			"constant":         "#dca3a3",
+			"constant.builtin": "#dca3a3",
+			"variable":         "#dfaf8f",
+			"variable.builtin": "#de92c6", // lightened for contrast from #dc8cc3
+			"property":         "#dcdccc",
+			"label":            "#f0dfaf",
+			"attribute":        "#94bff3",
+			"punctuation":      "#9f9f8f",
+			"escape":           "#dfaf8f",
+			"boolean":          "#dca3a3",
+			"tag":              "#de92c6", // lightened for contrast from #dc8cc3
+			"embedded":         "#dcdccc",
+		},
+		Files: map[string]string{
+			"dir":     "#9dc4f4", // lightened for contrast from #94bff3
+			"default": "#dcdccc",
+			"go":      "#93e0e3",
+			"md":      "#a7caa7", // lightened for contrast from #9fc59f
+			"toml":    "#f0dfaf",
+			"json":    "#f0dfaf",
+			"yaml":    "#f0dfaf",
+			"lock":    "#abab9e", // lightened for contrast from #989888
 		},
 	}
 }
