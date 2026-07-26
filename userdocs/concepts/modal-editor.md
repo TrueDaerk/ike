@@ -14,7 +14,10 @@ trigger a dozen unrelated things.
 each at a different position), ++esc++ leaves it.
 
 **Visual** selects. `v` for characters, `V` for whole lines, ++ctrl+v++ for a
-block.
+column block. The block is a real rectangle for `I` and `A`, which put a caret
+on every line it spans and let you type into all of them at once; the
+operators (`d`, `y`, `c`) currently treat it as a plain character range from
+where you started to where the cursor is, not column by column.
 
 The active mode is always shown at the left of the status bar. When in doubt,
 press ++esc++ — from anywhere it lands you in normal mode.
@@ -121,9 +124,11 @@ a modern GUI where vim has no opinion:
 
 ## Beyond the basics
 
-- **Multi-caret** — ++ctrl+g++ adds a caret at the next occurrence of the
-  selection, ++ctrl+shift+g++ at all of them; then type once and edit
-  everywhere.
+- **Multi-caret** — the first ++ctrl+g++ locks onto the word under the cursor;
+  each press after that leaves a caret behind and jumps to the next
+  occurrence. ++ctrl+shift+g++ puts a caret on every occurrence at once. Then
+  type once and edit everywhere. `I` / `A` on a ++ctrl+v++ block do the same
+  for a column.
 - **Folding** — `za` toggles a fold, `zc` / `zo` close and open one, `zM` /
   `zR` do the whole file.
 - **Undo tree** — undo is a tree, not a line. **Undo Tree** from the palette

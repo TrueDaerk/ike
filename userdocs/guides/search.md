@@ -20,11 +20,13 @@ your fingers already know vim.
 
 Matching is **smartcase** by default: an all-lowercase query ignores case,
 while any uppercase character makes the whole query case-sensitive. Prefix a
-query with `\C` to force exact case regardless. If you would rather always
-ignore case, set `editor.search_ignore_case = true`.
+query with `\C` to force exact case regardless, or with `\c` to force the
+opposite. ++ctrl+c++ toggles between them while the search line is open — it
+writes the marker into the query, so the current mode is always visible. If
+you would rather always ignore case, set `editor.search_ignore_case = true`.
 
-++ctrl+up++ and ++ctrl+down++ recall previous queries, and the history
-survives restarts.
+++up++ and ++down++ recall previous queries, and the history survives
+restarts.
 
 ### Replacing in the file
 
