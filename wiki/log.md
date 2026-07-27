@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http: pan the response viewer sideways)
+
+- Wide response lines were unreachable (#1290): the viewer clipped every row
+  at the pane width with no way to see the rest. It now keeps a horizontal
+  offset — `←`/`→` pan by 8 columns, `0`/`^` and `$` jump to the edges, `g`
+  resets both axes, and the horizontal wheel / shift+wheel pan like the editor
+  (#230). Columns stay absolute, so highlight, search matches and mouse
+  selection line up at any offset; history browsing keeps `h`/`l`. Updated
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (tests: isolate $HOME, not just $IKE_CONFIG_DIR)
 
 - Six `internal/app` tests failed on any machine with a saved **default

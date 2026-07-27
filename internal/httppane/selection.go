@@ -197,7 +197,7 @@ func (m *Model) posAt(x, y int) pos {
 	if row > len(m.rows) {
 		row = len(m.rows)
 	}
-	col := x - 1 // the leading space of every rendered row
+	col := x - 1 + m.left // the leading space, plus the horizontal pan (#1290)
 	if col < 0 {
 		col = 0
 	}
