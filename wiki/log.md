@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (float resize drag: edge tracks the pointer)
+
+- Mouse resize of centered floats (#933) doubled its pointer-to-size mapping
+  (#1243): a size delta grows both sides of a centered box, so 1:1 mapping
+  made the grabbed edge lag the pointer by half. One pointer cell now maps to
+  two size cells — the grabbed edge lands exactly under the mouse
+  (`/architecture/floating-shell.md`).
+
 ## 2026-07-27 (floating shell: z-ordered stack infrastructure)
 
 - Added `ui.Stack` (#1237, `internal/ui/stack.go`): floating shells layered in

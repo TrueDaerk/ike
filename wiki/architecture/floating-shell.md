@@ -96,7 +96,9 @@ Two optional Content extensions refine key routing while the shell is open
   **mouse resize** (#933): pressing the shell's border ring — the outermost
   cell; edges resize one axis, corners both — starts a drag handled by the
   root model (`floatResizeDrag`), which nudges the store un-persisted per
-  motion step and flushes it on release. `ui.popup_max_width` (#932, default
+  motion step and flushes it on release. Floats are centered, so one pointer
+  cell maps to **two** size cells (#1243): the grabbed edge tracks the
+  pointer exactly, the opposite edge mirrors outward. `ui.popup_max_width` (#932, default
   110, 0 disables) additionally caps the shell's outer width on large
   terminals; the resize delta applies on top of the capped base.
 - **The body re-renders on every `View()`** (#409), preserving the scroll

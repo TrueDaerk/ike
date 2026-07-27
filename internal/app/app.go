@@ -5699,11 +5699,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	// motion step applies the pointer delta along the grabbed edge/corner as a
 	// size delta (motion events are already folded by the input coalescer, so
 	// this runs at most once per rendered frame), release persists the store.
+	// Floats are centered, so a size delta grows both sides — one pointer cell
+	// maps to two size cells so the grabbed edge tracks the pointer exactly
+	// (#1243).
 	if m.floatDrag != nil {
 		switch msg.action {
 		case mouseMotion:
 			d := m.floatDrag
-			ddw, ddh := (msg.X-d.lastX)*d.sx, (msg.Y-d.lastY)*d.sy
+			ddw, ddh := (msg.X-d.lastX)*d.sx*2, (msg.Y-d.lastY)*d.sy*2
 			if ddw != 0 || ddh != 0 {
 				d.lastX, d.lastY = msg.X, msg.Y
 				m.applyFloatResize(d.kind, ddw, ddh)
