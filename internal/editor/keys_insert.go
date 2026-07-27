@@ -208,7 +208,7 @@ func (m *Model) insertNewline() {
 		}
 		left := []rune(m.buf.Line(pos.Line))
 		col := min(pos.Col, len(left))
-		return m.smartIndent(string(left[:col]))
+		return m.smartIndent(pos.Line, string(left[:col]))
 	}
 	// "." replays the primary caret's indent, like the single-cursor insert
 	// did; a block split (#518) replays only its pre-cursor half.

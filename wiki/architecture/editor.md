@@ -332,7 +332,12 @@ Go/PHP) — the reference text's leading whitespace, plus one `tabText()` unit
 indents by what stays behind); `o` uses the whole current line; `O` and
 languages without rules keep plain copy-indent. Pure text heuristic — no
 Tree-sitter — so an opener ending a trailing string literal false-positives;
-accepted for v1. Mid-insert, plain `Tab` inserts one indent unit at the cursor
+accepted for v1. Inside an **embedded region** the rules come from the region's
+language, not the host's (#1304): a JSON body in a `.http` file indents after
+`{`/`[` and an XML body after `>`, while the host's own openers still govern
+everything outside the region — see `indentOpeners`, backed by `lang.RegionAt`.
+A region whose language has no rules falls back to copy-indent rather than
+borrowing the host's. Mid-insert, plain `Tab` inserts one indent unit at the cursor
 and `Shift+Tab` dedents the **whole current line** by one unit (the same
 `dedentCols` unit as `<<` — one leading tab or up to `tab_width` spaces),
 wherever the cursor sits; the cursor follows the removed columns, and the edit

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-27 (editor: indent by the embedded region's language)
+
+- Pressing enter after `{` in a `.http` JSON body gave plain copy-indent
+  (#1304): `smartIndent` resolved block openers from the *buffer's* language.
+  It now asks `indentOpeners` for the line, which consults `lang.RegionAt`
+  first — so an embedded region indents by its own language (JSON after
+  `{`/`[`, XML after `>`) while the host still governs everything outside it.
+  A region language without indent rules falls back to copy-indent instead of
+  borrowing the host's. Updated [Editor](/architecture/editor.md) and
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: bodies highlighted by Content-Type)
 
 - A JSON or XML request body rendered as flat text (#1303). The body's language

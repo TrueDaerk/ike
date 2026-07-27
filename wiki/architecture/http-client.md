@@ -229,6 +229,17 @@ leave the body with the host's own styling rather than guessing.
 and `lang.RegionAt` answers "which language is this line" for consumers that
 need it outside highlighting.
 
+The editor uses that same answer for **smart indent** (#1304): pressing enter
+after `{` in a JSON body opens an indented line, `{`+enter between the pair
+opens the three-line block, and an XML body indents after `>` — all by the
+body's rules, while request and header lines keep the host's. A body whose
+media type maps to no language, or to one without indent rules, keeps plain
+copy-indent.
+
+Completion inside a body stays deliberately off: the source claims the buffer
+exclusively (#1302), so a JSON body offers nothing rather than every identifier
+in the file.
+
 ## Completion is exclusive (#1302)
 
 The `.http` source claims its buffers through `complete.ExclusiveSource`, so the

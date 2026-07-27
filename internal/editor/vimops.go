@@ -73,7 +73,7 @@ func (m *Model) reindentTarget(target operator.Target) {
 			}
 			indent := ""
 			if ref := m.prevNonBlank(l); ref >= 0 {
-				indent = m.smartIndent(m.buf.Line(ref))
+				indent = m.smartIndent(ref, m.buf.Line(ref))
 			}
 			if r := []rune(body)[0]; r == '}' || r == ')' || r == ']' {
 				indent = strings.TrimSuffix(strings.TrimSuffix(indent, m.tabText()), "\t")
