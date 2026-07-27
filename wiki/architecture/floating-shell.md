@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Floating Shell
@@ -25,10 +25,11 @@ internal/ui/
   sizing.go     content budget: terminal-minus-margin, box chrome, title row, optional max width/height fraction
   scroll.go     vertical scroll wrapping bubbles/viewport + position indicator; adds g/G to the built-in keys
   floating.go   Floating shell: hosts a Content child, chrome + open/close + IsOpen + key-swallow + dismiss
+  stack.go      Stack: z-ordered floating layers (#1237) — topmost owns input, composite bottom-to-top
 internal/help/
   help.go       refactored: Help is now a ui.Content provider (snapshot + column layout), no chrome of its own
 internal/app/
-  app.go        root hosts one Floating, forwards size + keys, composites via overlay.Center
+  app.go        root hosts the Floating stack, forwards size + keys to the topmost layer, composites bottom-to-top
 ```
 
 The split is deliberate:
@@ -104,12 +105,37 @@ Two optional Content extensions refine key routing while the shell is open
   frame; hosts never need to force a relayout (`SetSize`/`SetContent`) after
   handling a key. `SetContent`/`Open` still reset scroll to the top.
 
+## The floating stack (#1237)
+
+`ui.Stack` (`internal/ui/stack.go`) layers multiple shells in z-order while the
+shell itself stays single-level and layering-unaware:
+
+- **Base vs transient layers.** Layers passed to `NewStack` are persistent —
+  they survive `Close` and their owner reopens them (the root's `shell` is the
+  bottom layer). Layers added via `Push` are transient: `Push` threads the
+  stack's shared state (terminal size, palette, `WinSizes` store, width cap)
+  into the shell, opens it topmost, and the layer leaves the stack when it
+  closes.
+- **Input.** `Update` routes every message to the **topmost open layer only**
+  (key-swallow as before); a dismiss key closes just that layer — one layer
+  per keypress. `tea.WindowSizeMsg` resizes every layer.
+- **Compositing.** `Composite(base, w, h)` draws every open layer
+  bottom-to-top via `overlay.Center`, so the topmost is drawn last and fully
+  readable over the lower ones.
+- **Mouse.** The root routes mouse to `Top()`: a press outside the topmost
+  layer `Pop`s only that layer (outside-click, #116); a border press starts
+  the resize drag (#933) on the topmost layer.
+- A stack of one behaves exactly like a bare `Floating`, so all existing
+  single-shell consumers are unchanged.
+
 ## Root integration
 
-`internal/app` holds a single active `*ui.Floating` (v1 is **single-level** — one
-shell at a time). On `tea.WindowSizeMsg` it forwards the size; while open the
-shell **swallows every key** and shadows all other routing; `View` composites it
-centered via `overlay.Center` so the base layout stays visible around it.
+`internal/app` holds one persistent `*ui.Floating` (`shell`) as the base layer
+of a `*ui.Stack` (`floats`, #1237); extra dialogs stack on top via `Push`. On
+`tea.WindowSizeMsg` the root forwards the size to the stack; while any layer is
+open the topmost **swallows every key** and shadows all other routing; `View`
+composites the open layers bottom-to-top so the base layout stays visible
+around them.
 
 - **Help:** `?` snapshots the registry into the `*help.Help` content, sets it on
   the shell, and opens. Dismiss set is `esc/?/q`.
@@ -134,12 +160,14 @@ host per shell.
 - **Composite, don't replace.** The base layout stays visible around the pane.
 - **Swallow + dismiss.** While open the shell consumes all keys; a dismiss key
   closes it.
-- **One stacking owner.** The root decides what is open; v1 is single-level.
+- **One stacking owner.** The root decides what is open; z-order lives in
+  `ui.Stack`, never in the shells themselves.
 
 ## Boundaries
 
-- Stacked/nested modals, animations, and drag/move of the pane are out of
-  scope (windowing belongs to the broader pane manager).
+- Animations and drag/move of the pane are out of scope (windowing belongs to
+  the broader pane manager). Stacked modals are in scope since #1237 via
+  `ui.Stack`.
 - Specific modal content (confirm dialogs, pickers) are separate features that
   *consume* this shell.
 - The plugin "open as modal" contract beyond the minimal additive
