@@ -68,6 +68,10 @@ type Model struct {
 	// bodyIx indexes the highlight spans of the body lines only.
 	bodyIx highlight.Index
 	top    int
+	// left is the horizontal viewport offset in runes (#1290): minified JSON
+	// and long header values are wider than the pane, so the view pans
+	// sideways instead of clipping the rest away for good.
+	left int
 
 	// In-pane search (#1265) over the whole composed view — status line,
 	// headers and formatted body alike. searching marks the open "/" prompt,
@@ -193,6 +197,7 @@ func (m *Model) HistoryIndex() (int, int) { return m.histIdx, len(m.hist) }
 func (m *Model) compose(resp *httpclient.Response) {
 	m.loaded = true
 	m.top = 0
+	m.left = 0
 	m.rows = nil
 	m.bodyIx = highlight.Index{}
 	if resp == nil {
@@ -349,14 +354,25 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.Scroll(-m.bodyHeight())
 	case "g", "home":
 		m.top = 0
+		m.left = 0
 	case "G", "end":
 		m.top = m.maxTop()
-	case "h", "left":
+	case "h":
 		// Older stored response of the same request (#1251).
 		m.showHistory(m.histIdx + 1)
-	case "l", "right":
+	case "l":
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
+	case "left":
+		// The arrows pan sideways (#1290); history stays on h/l so wide
+		// bodies are reachable with the keys a user reaches for first.
+		m.ScrollX(-hScrollStep)
+	case "right":
+		m.ScrollX(hScrollStep)
+	case "0", "^":
+		m.left = 0
+	case "$":
+		m.left = m.maxLeft()
 	}
 	return nil
 }
@@ -443,14 +459,23 @@ func (m *Model) scrollToMatch() {
 	if len(m.matches) == 0 {
 		return
 	}
-	line := m.matches[m.cur].Line
+	sp := m.matches[m.cur]
 	switch h := m.bodyHeight(); {
-	case line < m.top:
-		m.top = line
-	case line >= m.top+h:
-		m.top = line - h + 1
+	case sp.Line < m.top:
+		m.top = sp.Line
+	case sp.Line >= m.top+h:
+		m.top = sp.Line - h + 1
 	}
-	m.Scroll(0) // clamp
+	// A match past the right edge is as invisible as one below the fold
+	// (#1290): pan sideways until it reads.
+	switch w := m.rowWidth(); {
+	case sp.Start < m.left:
+		m.left = sp.Start
+	case sp.End > m.left+w:
+		m.left = sp.End - w
+	}
+	m.Scroll(0)  // clamp
+	m.ScrollX(0) // clamp
 }
 
 // matchState reports whether column col of row i is inside a match (1) or
@@ -487,8 +512,43 @@ func (m *Model) Scroll(delta int) {
 	}
 }
 
+// hScrollStep is how far one sideways key press pans. A single column would
+// take forever across a minified JSON line; a screenful loses the eye's place.
+const hScrollStep = 8
+
+// ScrollX pans the viewport sideways by delta runes (keys + horizontal
+// wheel), clamped to the longest composed row (#1290).
+func (m *Model) ScrollX(delta int) {
+	m.left += delta
+	if m.left > m.maxLeft() {
+		m.left = m.maxLeft()
+	}
+	if m.left < 0 {
+		m.left = 0
+	}
+}
+
+// Left reports the horizontal offset (tests).
+func (m *Model) Left() int { return m.left }
+
 func (m *Model) maxTop() int {
 	return max(0, len(m.rows)-m.bodyHeight())
+}
+
+// maxLeft is the offset at which the longest row's last rune is still shown.
+func (m *Model) maxLeft() int {
+	longest := 0
+	for _, r := range m.rows {
+		if n := len([]rune(r.text)); n > longest {
+			longest = n
+		}
+	}
+	return max(0, longest-m.rowWidth())
+}
+
+// rowWidth is the room one composed row has after the leading gutter space.
+func (m *Model) rowWidth() int {
+	return max(1, m.width-1)
 }
 
 // bodyHeight is the room between the header and footer lines.
@@ -560,7 +620,7 @@ func (m *Model) footerText() string {
 	if m.query != "" {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
-	s := " j/k scroll · g/G top/bottom · / search · y copy body (Y headers)"
+	s := " j/k ←/→ scroll · g/G top/bottom · / search · y copy (Y headers)"
 	// The history hint is permanent while a response is shown (#1267): it
 	// used to appear only once a second response existed, which is exactly
 	// when nobody was looking for it.
@@ -609,8 +669,16 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	if r.kind == kindBlank {
 		return ""
 	}
-	text := m.clipRaw(r.text)
-	return " " + m.paintRow(i, text, m.baseStyle(pal, r))
+	// Only the window [left, left+width) of the row is on screen (#1290); the
+	// columns keep their absolute index so highlight, matches and selection
+	// stay aligned with the text they belong to.
+	runes := []rune(r.text)
+	from := min(m.left, len(runes))
+	to, tail := len(runes), ""
+	if w := m.rowWidth(); to-from > w {
+		to, tail = from+w-1, "…"
+	}
+	return " " + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, r)) + tail
 }
 
 // styleFn resolves the non-match styling of one column: the style plus a key
@@ -657,15 +725,17 @@ func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
 // paintRow renders text with base styling per column and the search-match
 // overlay: every match gets a muted background, the current one the
 // selection background plus an underline — the editor's convention (#255).
-func (m *Model) paintRow(rowIx int, text string, base styleFn) string {
-	runes := []rune(text)
+// The columns are absolute row columns: runes holds the visible window and
+// offset is the column its first rune sits at.
+func (m *Model) paintRow(rowIx int, runes []rune, offset int, base styleFn) string {
 	var b strings.Builder
-	for col := 0; col < len(runes); {
+	last := offset + len(runes)
+	for col := offset; col < last; {
 		st, key := base(col)
 		state := m.matchState(rowIx, col)
 		end := col + 1
 		selected := m.selState(rowIx, col)
-		for end < len(runes) {
+		for end < last {
 			if _, k := base(end); k != key || m.matchState(rowIx, end) != state || m.selState(rowIx, end) != selected {
 				break
 			}
@@ -681,7 +751,7 @@ func (m *Model) paintRow(rowIx int, text string, base styleFn) string {
 		case state == 1:
 			st = st.Background(m.theme().SelectionMuted)
 		}
-		b.WriteString(st.Render(string(runes[col:end])))
+		b.WriteString(st.Render(string(runes[col-offset : end-offset])))
 		col = end
 	}
 	return b.String()
@@ -691,14 +761,6 @@ func (m *Model) paintRow(rowIx int, text string, base styleFn) string {
 func (m *Model) clip(s string) string {
 	if m.width > 0 && len([]rune(s)) > m.width {
 		return string([]rune(s)[:m.width-1]) + "…"
-	}
-	return s
-}
-
-// clipRaw bounds a body line, leaving one column for the leading space.
-func (m *Model) clipRaw(s string) string {
-	if m.width > 1 && len([]rune(s)) > m.width-1 {
-		return string([]rune(s)[:m.width-2]) + "…"
 	}
 	return s
 }

@@ -6104,11 +6104,21 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.Usages().Wheel(lines)
 			}
 		case pane.KindHTTP:
-			// The wheel scrolls the response viewer (#1250).
-			switch msg.Button {
-			case tea.MouseWheelUp:
+			// The wheel scrolls the response viewer (#1250); horizontal wheel
+			// and shift+wheel pan wide bodies sideways (#1290), like the
+			// editor (#230).
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				inst.HTTP().ScrollX(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				inst.HTTP().ScrollX(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				inst.HTTP().ScrollX(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				inst.HTTP().ScrollX(lines)
+			case msg.Button == tea.MouseWheelUp:
 				inst.HTTP().Scroll(-lines)
-			case tea.MouseWheelDown:
+			case msg.Button == tea.MouseWheelDown:
 				inst.HTTP().Scroll(lines)
 			}
 		case pane.KindTerminal:

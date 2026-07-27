@@ -232,6 +232,8 @@ func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
 var httpPaneKeys = []struct{ Key, Title string }{
 	{"h / l", "Browse older / newer stored response"},
 	{"j / k", "Scroll"},
+	{"← / →", "Pan sideways in wide lines"},
+	{"0 / $", "Left edge / right edge"},
 	{"g / G", "Top / bottom"},
 	{"/", "Search in the response"},
 	{"n / N", "Next / previous match"},

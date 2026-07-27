@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T18:00:00Z
+timestamp: 2026-07-27T20:30:00Z
 ---
 
 # HTTP Client (.http files)
@@ -150,6 +150,14 @@ config file paths, or disable detection entirely.
   collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
+- **Horizontal panning** (#1290): lines wider than the pane (minified JSON,
+  long header values) are not lost — `←`/`→` pan the view sideways by 8
+  columns, `0`/`^` return to column 0, `$` jumps to the right edge, and `g`
+  resets both axes. The horizontal wheel and shift+wheel pan too, matching the
+  editor (#230). The offset applies to every composed row, and columns stay
+  absolute so syntax highlight, search matches and mouse selection remain
+  aligned with the text; a clipped row ends in `…`. History browsing keeps
+  `h`/`l` only — the arrows now scroll.
 - **In-pane search** (#1265): `/` opens a search prompt in the pane footer,
   matching incrementally over the **whole composed view** — status line,
   headers and formatted body alike — with the editor's smartcase rule (an
@@ -233,7 +241,7 @@ response on (`h/l history 1/1`), not only once a second one exists; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l`, `j/k`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+(`h/l`, `j/k`, `←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
