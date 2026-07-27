@@ -483,7 +483,10 @@ func padTo(lines []string, h int) []string {
 // selection move can never shift what is under the pointer.
 func (m *Model) renderForm(w, h int) string {
 	pal := m.theme()
-	clip := lipgloss.NewStyle().MaxWidth(w)
+	// The column has a fixed edge: lines are clipped *and* padded to w, so a
+	// short list (a filter result) cannot shrink the column and shift the
+	// detail column sideways.
+	clip := lipgloss.NewStyle().MaxWidth(w).Width(w)
 	rows := m.rows()
 	if len(rows) == 0 {
 		empty := clip.Render(lipgloss.NewStyle().Foreground(pal.Secondary).Render(" no matching settings"))
@@ -542,6 +545,17 @@ func (m *Model) renderDetailColumn(w, h int) string {
 	}
 
 	r, ok := m.current()
+	if ok && r.kind != rowEntry && m.focus != catColumn {
+		// A filter jump row (#886): say where enter goes rather than
+		// describing the page the cursor happens to sit on.
+		lines := []string{clip.Render(title.Render(" " + r.label))}
+		if r.kind == rowPage {
+			lines = append(lines, wrap("A settings page. Enter opens it.", dim)...)
+		} else {
+			lines = append(lines, wrap("Enter opens the page positioned on this item.", dim)...)
+		}
+		return strings.Join(padTo(lines, h), "\n")
+	}
 	if !ok || r.kind != rowEntry || m.focus == catColumn {
 		return strings.Join(padTo(m.renderPageDetail(w, h, wrap, title, dim), h), "\n")
 	}

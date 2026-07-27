@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-28 (settings: grid rendering polish)
+
+- Three things found by driving the finished panel (#1316): the settings column
+  collapsed to its content width on a short filter result and dragged the
+  detail column with it (lines are padded to the column width now, not only
+  clipped); a filter jump row left the detail column describing whatever page
+  the cursor sat on (it now says what enter does with the result); and
+  detail-column prose clipped mid-sentence instead of wrapping.
+
 ## 2026-07-28 (settings: fold the numbered binding runs)
 
 - Nine lines saying "alt+N goes to tab N" became one (#1300): the keymap page
