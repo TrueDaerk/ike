@@ -188,6 +188,8 @@ func (m *Model) openKeyHelp() {
 		"        ‹ › stepper (numbers) · cycle (enums)",
 		"        space toggle a boolean · d remove a list value",
 		"        r reset to default",
+		"apply:  ctrl+s review and write the staged changes",
+		"        esc with changes pending opens the same review",
 		"global: / search all settings",
 		"        s write-scope: auto → user → project",
 		"        ? this overlay · esc back / close",

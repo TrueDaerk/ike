@@ -30,9 +30,9 @@ func TestSpaceTogglesBool(t *testing.T) {
 	m := mouseModel(t)
 	m.focus = formColumn
 	m.sel = 0 // ui.menu_bar (Bool)
-	before := value("ui.menu_bar")
-	apply(t, m.Update(key("space")))
-	if value("ui.menu_bar") == before {
+	before := m.value("ui.menu_bar")
+	m.Update(key("space"))
+	if m.value("ui.menu_bar") == before {
 		t.Fatal("space must toggle the boolean")
 	}
 }
@@ -58,14 +58,14 @@ func TestChordCaptureSubPanel(t *testing.T) {
 	if m.SubOpen() {
 		t.Fatal("apply must close the capture")
 	}
-	if got := value("palette.toggle_key"); got != "g p" {
+	if got := liveValue("palette.toggle_key"); got != "g p" {
 		t.Fatalf("captured chord = %q, want \"g p\"", got)
 	}
 	// Esc cancels without writing.
 	m.Update(key("enter"))
 	m.Update(keyRune('z'))
 	m.Update(key("esc"))
-	if m.SubOpen() || value("palette.toggle_key") != "g p" {
+	if m.SubOpen() || liveValue("palette.toggle_key") != "g p" {
 		t.Fatal("esc must cancel the capture without writing")
 	}
 }

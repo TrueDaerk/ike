@@ -43,9 +43,9 @@ type KeymapPage struct {
 	filter    string
 	filtering bool // "/" opened the filter input; every key is filter text
 
-	conflict  string       // colliding command id awaiting confirmation
-	warn      string       // fragile-chord honesty warning
-	invalid   string
+	conflict string // colliding command id awaiting confirmation
+	warn     string // fragile-chord honesty warning
+	invalid  string
 
 	// JetBrains keymap import (#677): "i" opens an inline path input with
 	// filesystem completion; enter runs the import, importNote reports it.
@@ -273,7 +273,6 @@ func (k *KeymapPage) updateFilter(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-
 // commitImport runs the JetBrains keymap import for the typed path: the
 // export's shortcuts become keymap.bindings.* overrides at user scope
 // (replaced default chords are unbound), then the config reloads through the
@@ -313,8 +312,6 @@ func (k *KeymapPage) commitImportPath(raw string) tea.Cmd {
 		return config.ConfigReloadedMsg{Config: cfg, Diags: diags}
 	}
 }
-
-
 
 // commitRebind writes the captured chord for the selected row's command
 // and unbinds the old chord when it changed. Both writes land before one

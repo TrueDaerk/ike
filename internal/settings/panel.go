@@ -81,6 +81,10 @@ type Model struct {
 	editor    Editor
 	editorKey string
 
+	// changes is the staged-apply buffer (0460, #1296), in edit order: schema
+	// edits collect here and reach disk only when the batch is applied.
+	changes []change
+
 	notice   string // transient info line (clamp feedback #889, saved flash #891)
 	writeErr string // inline write/reload error (#891), cleared on the next action
 
@@ -102,6 +106,7 @@ type Model struct {
 	// not snapped back by the next render.
 	hoverCat, hoverRow int
 	chipSpan           span
+	countSpan          span
 	hintHits           []hintAction
 	followCat          bool
 	followForm         bool
@@ -277,11 +282,6 @@ func (m *Model) current() (row, bool) {
 		return row{}, false
 	}
 	return rows[m.sel], true
-}
-
-// value reads an entry's effective value from the live config.
-func value(key string) string {
-	return config.Get().Flat()[key]
 }
 
 // syncEditor keeps the detail column's editor in step with the selection
@@ -508,8 +508,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 				m.focus = catColumn
 				return nil
 			case "esc":
-				m.Close()
-				return nil
+				return m.closeOrApply()
 			case "?":
 				// The key-help overlay (#887) is panel chrome on every page.
 				m.openKeyHelp()
@@ -525,7 +524,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			m.sel = 0
 			return nil
 		}
-		m.Close()
+		return m.closeOrApply()
 	case "tab":
 		// The grid cycles nav → settings → detail → nav (#1295).
 		switch {
@@ -546,7 +545,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		// Space toggles booleans (#887); other rows keep enter semantics.
 		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry && r.entry.Type == Bool {
 			e := r.entry
-			return m.writeValue(e, value(e.Key) != "true")
+			return m.writeValue(e, m.value(e.Key) != "true")
 		}
 	case "?":
 		m.openKeyHelp()
@@ -599,9 +598,14 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		return m.activate()
 	case "r":
 		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry {
-			m.editor, m.editorKey = nil, "" // rebuild against the restored value
-			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
+			m.rebuildEditor() // rebuild against the restored value
+			return m.stageReset(r.entry)
 		}
+	case "ctrl+s", "cmd+s":
+		// Apply the staged batch (#1296). Enter cannot do it — it is the
+		// editor key on every row — so the panel borrows the universal save
+		// chord, and the header's change counter is clickable for the mouse.
+		return m.openApply()
 	case "s":
 		// Cycle the write-scope selector (0380, #794): auto → user → project.
 		m.writeScope = (m.writeScope + 1) % 3
@@ -609,6 +613,18 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		m.filtering = true
 		m.focus = formColumn
 	}
+	return nil
+}
+
+// closeOrApply handles esc on the panel: with staged edits it opens the diff
+// instead of throwing them away, so a batch is never lost to a stray key
+// (#1296). The diff's own buttons then close the panel.
+func (m *Model) closeOrApply() tea.Cmd {
+	if m.Dirty() {
+		m.Push(&applyPanel{m: m, pal: m.pal, closeAfter: true})
+		return nil
+	}
+	m.Close()
 	return nil
 }
 
@@ -681,23 +697,10 @@ func (m *Model) activate() tea.Cmd {
 		if b, ok := m.editor.(*boolEditor); ok {
 			b.idx = 1 - b.idx
 		}
-		return m.writeValue(e, value(e.Key) != "true")
+		return m.writeValue(e, m.value(e.Key) != "true")
 	}
 	m.focus = detailColumn
 	return nil
-}
-
-// savedNotice flashes a write confirmation (#891) unless a more important
-// notice (the clamp feedback) is already showing.
-func (m *Model) savedNotice(scope config.Scope) {
-	if m.notice == "" {
-		label := "user"
-		if scope == config.ProjectScope {
-			label = "project"
-		}
-		m.notice = "✓ saved to " + label
-	}
-	m.writeErr = ""
 }
 
 // stepInt adjusts the selected Int row by delta (steppers, #889), clamped to
@@ -709,7 +712,7 @@ func (m *Model) stepInt(delta int) tea.Cmd {
 		return nil
 	}
 	e := r.entry
-	n, err := strconv.Atoi(strings.TrimSpace(value(e.Key)))
+	n, err := strconv.Atoi(strings.TrimSpace(m.value(e.Key)))
 	if err != nil {
 		n = 0
 	}
@@ -724,8 +727,8 @@ func (m *Model) stepInt(delta int) tea.Cmd {
 	if next == n {
 		return nil
 	}
-	m.savedNotice(m.scopeFor(e))
-	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, next)
+	m.rebuildEditor()
+	return m.writeValue(e, next)
 }
 
 // optionIndex returns the position of val in e.Options (0 when absent).
@@ -747,9 +750,9 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 	}
 	e := r.entry
 	n := len(e.Options)
-	next := (optionIndex(e, value(e.Key)) + dir + n) % n
-	m.savedNotice(m.scopeFor(e))
-	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[next])
+	next := (optionIndex(e, m.value(e.Key)) + dir + n) % n
+	m.rebuildEditor()
+	return m.writeValue(e, e.Options[next])
 }
 
 // Paste inserts a pasted block into whichever of the panel's own text inputs

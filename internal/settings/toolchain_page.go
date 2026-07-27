@@ -64,7 +64,7 @@ type ToolchainPage struct {
 	// create wizard is a SubPanel now (#884, venv_wizard.go) pushed through
 	// host.
 	envState string
-	host       SubPanelHost
+	host     SubPanelHost
 
 	// Package listing (#569) and management (#571): `i` fetches the
 	// effective interpreter's installed packages plus available upgrades
@@ -292,10 +292,6 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-
-
-
-
 // updatePkgView handles keys in the package view: j/k move the selection,
 // `+` installs (name input), `-` uninstalls (confirm), `u` upgrades the
 // selection, esc closes (#571). While an action runs, only navigation and
@@ -417,8 +413,6 @@ func (t *ToolchainPage) pkgAction(action pkgAction, name string) tea.Cmd {
 	t.pkgState = ""
 	return runPkgAction(interp, action, name, cmds, t.runErr, t.run, t.look)
 }
-
-
 
 // openPicker builds the language's candidate list, pre-selects the currently
 // effective interpreter (#675) and returns eager version probes for every
@@ -746,8 +740,6 @@ func (t *ToolchainPage) provenance(path string) string {
 	t.prov[path] = p
 	return p
 }
-
-
 
 // pkgWindow is how many package rows render inline at once.
 const pkgWindow = 12

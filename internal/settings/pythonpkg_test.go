@@ -95,10 +95,10 @@ func TestNormalizeAndBaseName(t *testing.T) {
 		t.Fatalf("normalizePkg = %q", normalizePkg("Typing._Extensions"))
 	}
 	for spec, want := range map[string]string{
-		"requests==2.0":  "requests",
-		"requests>=1":    "requests",
-		"plain":          "plain",
-		"pkg~=1.0":       "pkg",
+		"requests==2.0": "requests",
+		"requests>=1":   "requests",
+		"plain":         "plain",
+		"pkg~=1.0":      "pkg",
 	} {
 		if got := pkgBaseName(spec); got != want {
 			t.Errorf("pkgBaseName(%q) = %q, want %q", spec, got, want)

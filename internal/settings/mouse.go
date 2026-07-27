@@ -82,6 +82,10 @@ func (m *Model) clickChrome(x, y int) (tea.Cmd, bool) {
 		m.writeScope = (m.writeScope + 1) % 3
 		return nil, true
 	}
+	if y == 1 && m.countSpan.end > m.countSpan.start && x >= m.countSpan.start && x < m.countSpan.end {
+		// The change counter is the mouse's apply button (#1296).
+		return m.openApply(), true
+	}
 	if y == m.hintRowY() {
 		for _, h := range m.hintHits {
 			if x >= h.start && x < h.end {
@@ -115,6 +119,8 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 		m.focus = formColumn
 	case "help":
 		m.openKeyHelp()
+	case "apply":
+		return m.openApply()
 	case "close":
 		m.Close()
 	}

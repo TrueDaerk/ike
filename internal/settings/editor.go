@@ -7,8 +7,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-
-	"ike/internal/config"
 )
 
 // editor.go is the typed-editor layer (0460, #1295). The wireframes' rule is
@@ -48,28 +46,24 @@ func newEditor(m *Model, e Entry) Editor {
 	case Enum:
 		return newEnumEditor(m, e)
 	case Int:
-		return &intEditor{m: m, e: e, tf: newTextField(value(e.Key))}
+		return &intEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 	case Chord:
 		return &chordEditor{m: m, e: e}
 	case List:
 		return newListEditor(m, e)
 	case Path:
-		ed := &pathEditor{m: m, e: e, tf: newTextField(value(e.Key))}
+		ed := &pathEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 		ed.suggest.refresh(ed.tf.text)
 		return ed
 	default:
-		return &textEditor{m: m, e: e, tf: newTextField(value(e.Key))}
+		return &textEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 	}
 }
 
-// writeValue writes v for e through the write-back layer and flashes the saved
-// notice. Every editor commits through here, so scope resolution and feedback
-// live in one place.
-func (m *Model) writeValue(e Entry, v any) tea.Cmd {
-	scope := m.scopeFor(e)
-	m.savedNotice(scope)
-	return config.WriteAndReload(m.opts, scope, e.Key, v)
-}
+// writeValue stages an edit for e (#1296): nothing reaches disk until the
+// batch is applied. Every editor commits through here, so scope resolution,
+// the change counter and the live preview live in one place.
+func (m *Model) writeValue(e Entry, v any) tea.Cmd { return m.stage(e, v) }
 
 // leaveEditor returns the focus to the settings column (esc from an editor).
 func (m *Model) leaveEditor() { m.focus = formColumn }
@@ -104,7 +98,7 @@ type boolEditor struct {
 
 func newBoolEditor(m *Model, e Entry) *boolEditor {
 	b := &boolEditor{m: m, e: e}
-	if value(e.Key) != "true" {
+	if m.value(e.Key) != "true" {
 		b.idx = 1
 	}
 	return b
@@ -112,7 +106,7 @@ func newBoolEditor(m *Model, e Entry) *boolEditor {
 
 func (b *boolEditor) Value() any      { return b.idx == 0 }
 func (b *boolEditor) Capturing() bool { return false }
-func (b *boolEditor) Dirty() bool     { return (value(b.e.Key) == "true") != (b.idx == 0) }
+func (b *boolEditor) Dirty() bool     { return (b.m.value(b.e.Key) == "true") != (b.idx == 0) }
 
 func (b *boolEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
@@ -128,7 +122,7 @@ func (b *boolEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 }
 
 func (b *boolEditor) View(w, h int) []string {
-	on := value(b.e.Key) == "true"
+	on := b.m.value(b.e.Key) == "true"
 	rows := []struct {
 		label string
 		set   bool
@@ -157,7 +151,7 @@ type enumEditor struct {
 }
 
 func newEnumEditor(m *Model, e Entry) *enumEditor {
-	return &enumEditor{m: m, e: e, idx: optionIndex(e, value(e.Key))}
+	return &enumEditor{m: m, e: e, idx: optionIndex(e, m.value(e.Key))}
 }
 
 // matches returns the options passing the filter, in schema order.
@@ -178,7 +172,7 @@ func (n *enumEditor) matches() []string {
 func (n *enumEditor) Value() any {
 	opts := n.matches()
 	if n.idx < 0 || n.idx >= len(opts) {
-		return value(n.e.Key)
+		return n.m.value(n.e.Key)
 	}
 	return opts[n.idx]
 }
@@ -186,14 +180,14 @@ func (n *enumEditor) Value() any {
 // Capturing is true only while a filter is being typed: with an empty filter
 // esc must fall through to the panel and return to the settings column.
 func (n *enumEditor) Capturing() bool { return n.filter != "" }
-func (n *enumEditor) Dirty() bool     { return n.Value() != value(n.e.Key) }
+func (n *enumEditor) Dirty() bool     { return n.Value() != n.m.value(n.e.Key) }
 
 func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	opts := n.matches()
 	switch key.String() {
 	case "esc":
 		if n.filter != "" {
-			n.filter, n.idx = "", optionIndex(n.e, value(n.e.Key))
+			n.filter, n.idx = "", optionIndex(n.e, n.m.value(n.e.Key))
 			return nil
 		}
 		n.m.leaveEditor()
@@ -232,7 +226,7 @@ func (n *enumEditor) View(w, h int) []string {
 	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	opts := n.matches()
-	cur := value(n.e.Key)
+	cur := n.m.value(n.e.Key)
 
 	head := strconv.Itoa(len(n.e.Options)) + " options · type to filter"
 	if n.filter != "" {
@@ -270,12 +264,12 @@ type intEditor struct {
 func (n *intEditor) Value() any {
 	v, err := strconv.Atoi(strings.TrimSpace(n.tf.text))
 	if err != nil {
-		return value(n.e.Key)
+		return n.m.value(n.e.Key)
 	}
 	return v
 }
 func (n *intEditor) Capturing() bool        { return true }
-func (n *intEditor) Dirty() bool            { return strings.TrimSpace(n.tf.text) != value(n.e.Key) }
+func (n *intEditor) Dirty() bool            { return strings.TrimSpace(n.tf.text) != n.m.value(n.e.Key) }
 func (n *intEditor) Paste(text string) bool { return n.tf.Paste(text) }
 
 // clampToBounds applies the entry's inclusive range, noting a silent clamp.
@@ -294,7 +288,7 @@ func (n *intEditor) clampToBounds(v int) int {
 func (n *intEditor) step(delta int) tea.Cmd {
 	cur, err := strconv.Atoi(strings.TrimSpace(n.tf.text))
 	if err != nil {
-		cur, _ = strconv.Atoi(strings.TrimSpace(value(n.e.Key)))
+		cur, _ = strconv.Atoi(strings.TrimSpace(n.m.value(n.e.Key)))
 	}
 	next := n.clampToBounds(cur + delta)
 	n.err = ""
@@ -355,13 +349,13 @@ type textEditor struct {
 
 func (t *textEditor) Value() any             { return t.tf.text }
 func (t *textEditor) Capturing() bool        { return true }
-func (t *textEditor) Dirty() bool            { return t.tf.text != value(t.e.Key) }
+func (t *textEditor) Dirty() bool            { return t.tf.text != t.m.value(t.e.Key) }
 func (t *textEditor) Paste(text string) bool { return t.tf.Paste(text) }
 
 func (t *textEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
-		t.tf = newTextField(value(t.e.Key))
+		t.tf = newTextField(t.m.value(t.e.Key))
 		t.m.leaveEditor()
 		return nil
 	case tea.KeyEnter:
@@ -394,7 +388,7 @@ type pathEditor struct {
 
 func (p *pathEditor) Value() any      { return strings.TrimSpace(p.tf.text) }
 func (p *pathEditor) Capturing() bool { return true }
-func (p *pathEditor) Dirty() bool     { return p.tf.text != value(p.e.Key) }
+func (p *pathEditor) Dirty() bool     { return p.tf.text != p.m.value(p.e.Key) }
 
 func (p *pathEditor) Paste(text string) bool {
 	if !p.tf.Paste(text) {
@@ -407,7 +401,7 @@ func (p *pathEditor) Paste(text string) bool {
 func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	switch key.Code {
 	case tea.KeyEscape:
-		p.tf = newTextField(value(p.e.Key))
+		p.tf = newTextField(p.m.value(p.e.Key))
 		p.suggest.clear()
 		p.m.leaveEditor()
 		return nil
@@ -462,7 +456,7 @@ type chordEditor struct {
 	e Entry
 }
 
-func (c *chordEditor) Value() any      { return value(c.e.Key) }
+func (c *chordEditor) Value() any      { return c.m.value(c.e.Key) }
 func (c *chordEditor) Capturing() bool { return false }
 func (c *chordEditor) Dirty() bool     { return false }
 
@@ -479,7 +473,7 @@ func (c *chordEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 func (c *chordEditor) View(w, h int) []string {
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	dim := lipgloss.NewStyle().Foreground(c.m.theme().Secondary)
-	cur := value(c.e.Key)
+	cur := c.m.value(c.e.Key)
 	if cur == "" {
 		cur = "(unbound)"
 	}
@@ -504,7 +498,7 @@ type listEditor struct {
 }
 
 func newListEditor(m *Model, e Entry) *listEditor {
-	return &listEditor{m: m, e: e, items: splitList(value(e.Key))}
+	return &listEditor{m: m, e: e, items: splitList(m.value(e.Key))}
 }
 
 // splitList parses the flat rendering of a list value ("[a b]" from the typed
@@ -529,7 +523,7 @@ func splitList(v string) []string {
 func (l *listEditor) Value() any      { return append([]string{}, l.items...) }
 func (l *listEditor) Capturing() bool { return l.editing }
 func (l *listEditor) Dirty() bool {
-	return strings.Join(l.items, ",") != strings.Join(splitList(value(l.e.Key)), ",")
+	return strings.Join(l.items, ",") != strings.Join(splitList(l.m.value(l.e.Key)), ",")
 }
 
 func (l *listEditor) Paste(text string) bool {

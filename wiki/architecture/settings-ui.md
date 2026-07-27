@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-27T18:00:00Z
+timestamp: 2026-07-27T23:30:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -442,6 +442,36 @@ a list is possible.
   column can do, plus `? all keys`. The full set lives in the `?` cheatsheet
   overlay, grouped move / edit / global.
 
-Still open on the epic: staged apply with a diff panel (#1296), search inside
-the grid (#1297), the keymap (#1298) and toolchain (#1299) pages on the grid,
-and noise folding (#1300).
+## Staged apply (0460, #1296)
+
+Schema edits no longer hit disk per keystroke. They collect in an ordered
+**staging buffer** (`internal/settings/staged.go`) and reach the config only
+when the batch is applied — one write pass, **one** reload, so the app
+re-themes and rebuilds its keymaps once instead of once per changed key
+(`config.ApplyAndReload`).
+
+- **Reads** go through `m.value(key)`: the staged value when one exists,
+  otherwise the live config. Nothing else in the panel had to learn about
+  staging.
+- **Counting.** The header carries `● n changes · ctrl+s apply` (clickable),
+  the rail marks each page with `●n`, and the detail column shows the selected
+  row's `● old → new`. A value edited back to where it started drops out of the
+  buffer, so the counter cannot lie.
+- **Applying** is `ctrl+s`, not enter — enter is the editor key on every row.
+  It opens the **diff panel**: one line per change as `page · key · old → new`,
+  the target layer in the title, `enter` writes, `u` drops the selected line,
+  `s` retargets the whole batch at another layer, `d` discards everything.
+  Clicking a line selects it; clicking the selected line drops it.
+- **esc never discards silently.** With edits pending it opens the same diff,
+  and writing or discarding from there completes the close.
+- **Live preview.** Keys whose whole point is their appearance (today
+  `theme.name`) emit a `settings.PreviewMsg` when staged; the app applies it
+  without persisting. Discarding — or dropping the line — sends the previous
+  value back the same way, so a previewed theme is always undone.
+- **Reset (`r`) stages a removal** like any other edit; the diff shows
+  `old → default`.
+- Custom pages keep writing directly: installing a plugin or creating a
+  virtualenv is not "a value in a file" and cannot be staged meaningfully.
+
+Still open on the epic: search inside the grid (#1297), the keymap (#1298) and
+toolchain (#1299) pages on the grid, and noise folding (#1300).

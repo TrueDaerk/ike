@@ -12,7 +12,6 @@ import (
 	"ike/internal/keymap"
 )
 
-
 // capturePanel fetches the open chord-capture sub-panel (#892).
 func capturePanel(t *testing.T, k *KeymapPage) *keymapCapture {
 	t.Helper()
