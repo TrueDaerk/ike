@@ -13,13 +13,31 @@ import (
 // pure text heuristic — no Tree-sitter — so an opener inside a trailing string
 // literal false-positives; acceptable for v1.
 
-// smartIndent returns the leading whitespace for a line opened after ref: ref's
-// own leading whitespace, deepened by one tab unit when the trimmed text ends
-// with one of the language's IndentAfter suffixes. Without rules for the buffer
-// path (or without an opener) it degrades to plain copy-indent.
-func (m *Model) smartIndent(ref string) string {
+// indentOpeners returns the block-opening suffixes governing line: the
+// embedded region's language when one covers it (#1304) — a JSON body inside a
+// .http file indents by JSON's rules, an XML body by XML's — otherwise the
+// buffer's own language. A region whose language has no rules deliberately
+// yields none: a plain-text body must not inherit the host's openers.
+func (m *Model) indentOpeners(line int) ([]string, bool) {
+	if l, ok := lang.ByPath(m.path); ok && l.Regions != nil {
+		if r, ok := lang.RegionAt(l.ID, m.buf.Lines(), line); ok {
+			el, known := lang.ByID(r.Lang)
+			if !known || len(el.IndentAfter) == 0 {
+				return nil, false
+			}
+			return el.IndentAfter, true
+		}
+	}
+	return lang.IndentAfter(m.path)
+}
+
+// smartIndent returns the leading whitespace for a line opened after ref, the
+// text of line: ref's own leading whitespace, deepened by one tab unit when the
+// trimmed text ends with one of the governing language's IndentAfter suffixes.
+// Without rules (or without an opener) it degrades to plain copy-indent.
+func (m *Model) smartIndent(line int, ref string) string {
 	indent := leadingWhitespace(ref)
-	openers, ok := lang.IndentAfter(m.path)
+	openers, ok := m.indentOpeners(line)
 	if !ok {
 		return indent
 	}
@@ -48,7 +66,7 @@ func (m *Model) splitBlock(pos buffer.Position) (buffer.Position, bool) {
 	}
 	left := []rune(m.buf.Line(pos.Line))
 	ref := string(left[:min(pos.Col, len(left))])
-	mid := m.smartIndent(ref)
+	mid := m.smartIndent(pos.Line, ref)
 	m.insert.rec.Apply(buffer.Insert(pos, "\n"+mid+"\n"+leadingWhitespace(ref)))
 	return buffer.Position{Line: pos.Line + 1, Col: len([]rune(mid))}, true
 }
