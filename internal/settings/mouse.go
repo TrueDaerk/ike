@@ -31,7 +31,11 @@ func (m *Model) Hover(x, y int) {
 		m.pageHover(-1, -1)
 		return
 	}
-	if x >= 1 && x < 1+catWidth && m.filter == "" {
+	if x >= 1 && x < 1+catWidth {
+		if m.filter != "" {
+			m.pageHover(-1, -1)
+			return // search-mode rail rows have no hover state of their own
+		}
 		rows := m.railRows()
 		if idx := row + m.catOff; idx >= 0 && idx < len(rows) && rows[idx].header == "" {
 			m.hoverCat = rows[idx].page
@@ -121,6 +125,8 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 		m.openKeyHelp()
 	case "apply":
 		return m.openApply()
+	case "openpage":
+		m.openHitPage()
 	case "close":
 		m.Close()
 	}

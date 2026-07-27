@@ -184,14 +184,14 @@ func (m *Model) openKeyHelp() {
 	lines := []string{
 		"move:   ↑↓ jk row · ↔ tab column (nav → settings → detail)",
 		"        home/end pgup/pgdn top / bottom / page",
-		"edit:   enter open editor · confirm",
-		"        ‹ › stepper (numbers) · cycle (enums)",
-		"        space toggle a boolean · d remove a list value",
+		"edit:   enter open editor · confirm · space toggle a boolean",
+		"        ‹ › stepper (numbers) · cycle (enums) · d remove a list value",
 		"        r reset to default",
 		"apply:  ctrl+s review and write the staged changes",
 		"        esc with changes pending opens the same review",
-		"global: / search all settings",
-		"        s write-scope: auto → user → project",
+		"search: / all settings · the rail lists the pages with hits",
+		"        enter sets the value here · tab opens its page",
+		"global: s write-scope: auto → user → project",
 		"        ? this overlay · esc back / close",
 	}
 	title := "Settings"

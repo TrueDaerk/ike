@@ -105,11 +105,14 @@ type Model struct {
 	// selection only when it moved, so wheel scrolling the viewport away is
 	// not snapped back by the next render.
 	hoverCat, hoverRow int
-	chipSpan           span
-	countSpan          span
-	hintHits           []hintAction
-	followCat          bool
-	followForm         bool
+	// hitSel is the nav column's selection while a filter is active (#1297):
+	// an index into hitPages, not into m.pages.
+	hitSel     int
+	chipSpan   span
+	countSpan  span
+	hintHits   []hintAction
+	followCat  bool
+	followForm bool
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -333,9 +336,18 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	// jumps to the page (#886 — the rail is never dead); section headers
 	// (#890) are not click targets.
 	if x >= 1 && x < 1+catWidth {
+		if m.filter != "" {
+			// Search mode: the rail lists the pages with hits (#1297), and a
+			// press jumps the match list to that page's first match. The
+			// header row is not a target.
+			if idx := row - 1 + m.catOff; idx >= 0 && idx < len(m.hitPages()) {
+				m.focus = catColumn
+				m.jumpToHitPage(idx)
+			}
+			return nil
+		}
 		rows := m.railRows()
 		if idx := row + m.catOff; idx >= 0 && idx < len(rows) && rows[idx].header == "" {
-			m.filter, m.filtering = "", false
 			m.cat, m.sel, m.focus = rows[idx].page, 0, catColumn
 			m.followCat, m.followForm = true, true
 		}
@@ -394,14 +406,18 @@ func (m *Model) Wheel(x, delta int) {
 	if m.filtering {
 		return
 	}
-	if x >= 1 && x < 1+catWidth && m.filter == "" {
-		// Viewport scroll, one category per notch (#885): the wheel browses,
-		// it does not yank the selection around.
+	if x >= 1 && x < 1+catWidth {
+		// Viewport scroll, one row per notch (#885): the wheel browses, it
+		// does not yank the selection around.
 		step := 1
 		if delta < 0 {
 			step = -1
 		}
-		m.catOff = clamp(m.catOff+step, 0, maxOff(len(m.railRows()), m.height-4))
+		n := len(m.railRows())
+		if m.filter != "" {
+			n = len(m.hitPages()) + 1 // the "pages with hits" header row
+		}
+		m.catOff = clamp(m.catOff+step, 0, maxOff(n, m.height-4))
 		return
 	}
 	// Custom pages own their scrolling: forward through the optional
@@ -526,6 +542,11 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.closeOrApply()
 	case "tab":
+		if m.filter != "" && m.focus == formColumn {
+			// Search mode: tab leaves for the match's own page (#1297).
+			m.openHitPage()
+			return nil
+		}
 		// The grid cycles nav → settings → detail → nav (#1295).
 		switch {
 		case m.focus == catColumn:
@@ -556,9 +577,11 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			m.jumpToLetter(key.String())
 		}
 	case "right", "l":
-		if m.focus == catColumn && m.filter == "" {
+		if m.focus == catColumn {
 			m.focus = formColumn
-			m.sel = 0
+			if m.filter == "" {
+				m.sel = 0
+			}
 			m.syncEditor()
 			return nil
 		}
@@ -589,9 +612,11 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 			return m.stepInt(-1)
 		}
 	case "enter":
-		if m.focus == catColumn && m.filter == "" {
+		if m.focus == catColumn {
 			m.focus = formColumn
-			m.sel = 0
+			if m.filter == "" {
+				m.sel = 0
+			}
 			m.syncEditor()
 			return nil
 		}
@@ -644,7 +669,14 @@ func (m *Model) jumpToLetter(letter string) {
 
 // moveNav applies pgup/pgdn/home/end to the focused column (#887).
 func (m *Model) moveNav(key string) {
-	if m.focus == catColumn && m.filter == "" {
+	if m.focus == catColumn {
+		if m.filter != "" {
+			sel := m.hitSel
+			if listNav(key, &sel, len(m.hitPages()), navPage) {
+				m.jumpToHitPage(sel)
+			}
+			return
+		}
 		if listNav(key, &m.cat, len(m.pages), navPage) {
 			m.sel = 0
 			m.followCat, m.followForm = true, true
@@ -653,13 +685,20 @@ func (m *Model) moveNav(key string) {
 	}
 	if listNav(key, &m.sel, len(m.rows()), navPage) {
 		m.followForm = true
+		m.syncHitSel()
 	}
 }
 
 // move shifts the focused column's selection.
 func (m *Model) move(dir int) {
 	m.notice, m.writeErr = "", ""
-	if m.focus == catColumn && m.filter == "" {
+	if m.focus == catColumn {
+		if m.filter != "" {
+			// In search mode the rail walks the pages with hits (#1297) and
+			// the match list follows it.
+			m.jumpToHitPage(clamp(m.hitSel+dir, 0, len(m.hitPages())-1))
+			return
+		}
 		m.cat = clamp(m.cat+dir, 0, len(m.pages)-1)
 		m.sel = 0
 		m.followCat, m.followForm = true, true
@@ -668,6 +707,7 @@ func (m *Model) move(dir int) {
 	if n := len(m.rows()); n > 0 {
 		m.sel = clamp(m.sel+dir, 0, n-1)
 		m.followForm = true
+		m.syncHitSel()
 	}
 }
 
