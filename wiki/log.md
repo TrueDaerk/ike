@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (tests: isolate $HOME, not just $IKE_CONFIG_DIR)
+
+- Six `internal/app` tests failed on any machine with a saved **default
+  layout** (#1288). `IKE_CONFIG_DIR` is only the first lookup, and the
+  project-switch tests clear it on purpose, so the user-level stores fell back
+  to the developer's real `~/.ike`: every test model materialized the personal
+  default layout, its terminals made workspaces look busy, and LRU eviction
+  prompted instead of evicting. `TestMain` now redirects `$HOME` too, with two
+  regression guards. Updated [Configuration System](/architecture/config.md).
+
 ## 2026-07-27 (http: in-flight indicator, duplicate guard, cancel)
 
 - A running .http dispatch is visible now (#1272): a statusline segment with
