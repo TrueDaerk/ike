@@ -141,6 +141,8 @@ Active when an editor pane has focus.
 | Reformat file | `cmd+alt+l` | `ctrl+alt+l` | `lsp.format` |
 | Rename symbol | `shift+f6` | `shift+f6` | `lsp.rename` |
 | Replace in file | `cmd+r` | `ctrl+r` | `editor.replace` |
+| Run HTTP request | `cmd+enter` | `ctrl+enter` | `http.run` |
+| Run HTTP request | `ctrl+f9` | `ctrl+f9` | `http.run` |
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |

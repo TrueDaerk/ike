@@ -16,6 +16,7 @@ import (
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/httppane"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -56,6 +57,10 @@ const (
 	// panel with the latest panel-targeted find-references results, under
 	// key "usages".
 	KindUsages
+	// KindHTTP is the HTTP response viewer (#1250): a singleton bottom-split
+	// read-only panel showing the last dispatched .http request's response,
+	// under key "http".
+	KindHTTP
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -71,6 +76,7 @@ const (
 	ctxProblems = "problems"
 	ctxStruct   = "structure"
 	ctxUsages   = "usages"
+	ctxHTTP     = "http"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -92,6 +98,7 @@ type Instance struct {
 	pp   problems.Model
 	sp   structpanel.Model
 	up   usages.Model
+	hp   httppane.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -186,6 +193,8 @@ func (i *Instance) ContextID() string {
 		return ctxStruct
 	case KindUsages:
 		return ctxUsages
+	case KindHTTP:
+		return ctxHTTP
 	}
 	return ctxEditor
 }
@@ -225,6 +234,10 @@ func (i *Instance) Structure() *structpanel.Model { return &i.sp }
 // Usages returns the underlying Usages tool-window model (#1155). It is only
 // valid for a usages instance; callers gate on Kind first.
 func (i *Instance) Usages() *usages.Model { return &i.up }
+
+// HTTP returns the underlying HTTP response viewer model (#1250). It is only
+// valid for an http instance; callers gate on Kind first.
+func (i *Instance) HTTP() *httppane.Model { return &i.hp }
 
 // DiffEditor returns the diff pane's edit-mode editor, nil while browsing.
 func (i *Instance) DiffEditor() *editor.Model { return i.dfEdit }
@@ -623,6 +636,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.sp.SetSize(w, h)
 	case KindUsages:
 		i.up.SetSize(w, h)
+	case KindHTTP:
+		i.hp.SetSize(w, h)
 	}
 }
 
@@ -656,6 +671,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.sp.SetFocused(f)
 	case KindUsages:
 		i.up.SetFocused(f)
+	case KindHTTP:
+		i.hp.SetFocused(f)
 	}
 }
 
@@ -703,6 +720,8 @@ func (i *Instance) View() string {
 		return i.sp.View()
 	case KindUsages:
 		return i.up.View()
+	case KindHTTP:
+		return i.hp.View()
 	}
 	return ""
 }
@@ -747,6 +766,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.sp.Update(msg)
 	case KindUsages:
 		cmd = i.up.Update(msg)
+	case KindHTTP:
+		cmd = i.hp.Update(msg)
 	}
 	return cmd
 }
@@ -848,6 +869,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.sp.SetPalette(p)
 	case KindUsages:
 		i.up.SetPalette(p)
+	case KindHTTP:
+		i.hp.SetPalette(p)
 	}
 }
 

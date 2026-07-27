@@ -170,6 +170,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.StructureKey, "structure")
 	case pane.KindUsages:
 		return singleton(pane.UsagesKey, "usages")
+	case pane.KindHTTP:
+		return singleton(pane.HTTPKey, "http")
 	case pane.KindTerminal:
 		k := st.mintTerminal()
 		if tool := inst.Terminal().Tool(); tool != "" {
@@ -393,6 +395,8 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			reg.Get(key).Usages().SetDisplayPath(displayPath)
 		}
 		return key, ok
+	case "http":
+		return singleton(reg.AddHTTP)
 	case "terminal":
 		if len(st.shells) > 0 {
 			key := st.shells[0]
