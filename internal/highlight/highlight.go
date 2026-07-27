@@ -61,12 +61,28 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 // then as a file extension ("py"), since hover markdown uses either. It returns
 // nil when the tag resolves to no language or the language has no grammar.
 func HighlightFenced(tag string, lines []string) []Span {
-	l, ok := lang.ByID(strings.ToLower(tag))
-	if !ok {
-		l, ok = lang.ByExt(tag)
-	}
+	l, ok := fencedLang(tag)
 	if !ok || l.Grammar == nil {
 		return nil
 	}
 	return parse(l.Grammar, lines)
+}
+
+// FencedSupported reports whether a fence tag resolves to a language with a
+// compiled-in grammar, i.e. whether HighlightFenced can produce spans at all.
+// Consumers use it to say *why* a body renders plain (#1270): in a CGo-free
+// build (or one without the grammar plugin linked) HighlightFenced returns
+// nil silently.
+func FencedSupported(tag string) bool {
+	l, ok := fencedLang(tag)
+	return ok && l.Grammar != nil
+}
+
+// fencedLang resolves a fence tag as a language id first, then an extension.
+func fencedLang(tag string) (lang.Language, bool) {
+	l, ok := lang.ByID(strings.ToLower(tag))
+	if !ok {
+		l, ok = lang.ByExt(tag)
+	}
+	return l, ok
 }

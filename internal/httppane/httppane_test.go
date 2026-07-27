@@ -137,6 +137,17 @@ func TestContentTag(t *testing.T) {
 		"text/javascript":           "js",
 		"application/octet-stream":  "",
 		"":                          "",
+		// Real-world headers (#1270): charset parameters, vendor suffixes
+		// and the javascript spellings servers actually send.
+		"application/json; charset=utf-8":   "json",
+		"application/vnd.api+json":          "json",
+		"  APPLICATION/JSON  ":              "json",
+		"application/xhtml+xml":             "xml",
+		"text/css; charset=UTF-8":           "css",
+		"application/x-javascript":          "js",
+		"application/ecmascript":            "js",
+		"text/plain; charset=iso-8859-1":    "",
+		"multipart/form-data; boundary=xyz": "",
 	}
 	for ct, want := range cases {
 		if got := contentTag(ct); got != want {
