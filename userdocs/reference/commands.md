@@ -121,6 +121,7 @@ bring their own.
 | New Scratch File: Plain Text | `scratch.new.text` | — | — | everywhere |
 | New Scratch File: Toml | `scratch.new.toml` | — | — | everywhere |
 | New Scratch File: Typescript | `scratch.new.typescript` | — | — | everywhere |
+| New Scratch File: XML | `scratch.new.xml` | — | — | everywhere |
 | New Scratch File: Yaml | `scratch.new.yaml` | — | — | everywhere |
 | Next Search Match | `search.nextMatch` | `f3` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |

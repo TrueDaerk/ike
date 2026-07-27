@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Language Registry
@@ -175,6 +175,22 @@ so it is highlighting-only. Make recipes require a literal tab, so the
 language declares the `UseTabs` indent default (#1137, see
 [EditorConfig](./editorconfig.md) for the resolution order); Go declares it
 too (gofmt output is tab-indented).
+And `xml` (#1253, tree-sitter-grammars/tree-sitter-xml — **vendored C source**
+under the plugin's `grammar/`, upstream's Go binding sits behind a nested
+go.mod inside the grammar repo; only that repo's `xml` grammar is vendored,
+its sibling `dtd` grammar is out of scope). The external scanner includes the
+repo's shared `common/scanner.h`, kept at `grammar/common/scanner.h` with the
+include path adjusted (the upstream layout puts it two directories up, which
+does not survive flattening). Matches `.xml` plus the dialects that share the
+syntax — `.xsd`, `.xsl`/`.xslt`, `.svg`, `.plist`, `.wsdl` and the MSBuild
+family `.csproj`/`.vbproj`/`.fsproj`/`.props`/`.targets`; `.xhtml` stays with
+the HTML plugin, which has both a better grammar and a server for it. Tags,
+attributes, entity references (the five predefined ones as `constant.builtin`),
+CDATA sections, processing instructions and the doctype-internal subset all
+highlight; elements are sticky-scroll scopes and fold, as do CDATA sections
+and comments. XML has no line comment, so only the `<!-- -->` block toggle is
+registered. No LSP server: the mainstream one (lemminx) needs a JVM, so this
+is highlighting-only.
 
 ### Server delegation (#1063)
 
@@ -398,6 +414,7 @@ projects so pyproject.toml and uv.lock stay in sync — see
 | TOML | taplo (`taplo lsp stdio`, via `@taplo/cli`) | Schema-store completion (Cargo.toml, pyproject.toml, … by filename), formatting, diagnostics. IKE's own config is TOML. **Caveat:** the Homebrew `taplo` formula is built *without* the LSP feature and dies at startup; IKE recognizes that failure and points at `npm install -g @taplo/cli` (or `cargo install taplo-cli --features lsp`), #1065. |
 | Dockerfile | docker-langserver (`dockerfile-language-server-nodejs`) | Completes instructions, flags, image tags; diagnostics for common mistakes. |
 | Makefile | — (none) | No mainstream Makefile language server exists (#1136) — highlighting only, with recipe bodies injected as shell; tab indentation by default (#1137). |
+| XML | — (none) | The mainstream server (lemminx) ships as a JVM application; highlighting only (#1253), covering `.xml` and the dialects `.xsd`/`.xsl`/`.xslt`/`.svg`/`.plist`/`.wsdl`/`.csproj` & co. |
 | YAML | yaml-language-server (Red Hat) | Schema-store completion auto-detected by filename (Kubernetes, GitHub Actions, docker-compose, …), hover, diagnostics. |
 | Shell | bash-language-server (`bash-language-server start`) | Completes commands from PATH, variables, functions; shellcheck diagnostics automatic when shellcheck is on PATH (declared companion — a one-time hint fires when it is missing, #1067). |
 | Markdown | marksman (`marksman server`, `brew install marksman`) | Single static binary; completes link targets, heading anchors, wiki-links, reference labels. Prose keeps the word-index source. |
