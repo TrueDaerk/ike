@@ -40,6 +40,11 @@ func ForShebang(firstLine string) (Language, bool) {
 	return Language{}, false
 }
 
+// ShebangInterpreter extracts the interpreter base name from a shebang line,
+// or "" when the line is no shebang. Exported for run-command providers that
+// resolve a file's interpreter from its shebang (shell, #1225).
+func ShebangInterpreter(line string) string { return shebangInterpreter(line) }
+
 // shebangInterpreter extracts the interpreter base name from a shebang line,
 // or "" when the line is no shebang. The env indirection is resolved: the
 // interpreter is the first word after env that is neither a flag (-S, -i, …)

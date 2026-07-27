@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (run: shell files runnable)
+
+- `run.file` on a shell script works (#1225): the shell plugin contributes a
+  run command — `<interpreter> <file>`, explicit `[lang.shell] interpreter` >
+  shebang shell (when installed, falling back instead of pointing at a
+  missing binary) > extension's natural shell. Updated
+  [Run Configurations](/architecture/run-configurations.md).
+
 ## 2026-07-27 (layouts: tool tabs survive the snapshot)
 
 - Saved layouts no longer degrade tab-hosted tools to plain editors (#1277).

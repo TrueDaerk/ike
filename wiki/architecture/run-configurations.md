@@ -4,7 +4,7 @@ title: Run Configurations
 description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json.
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -63,6 +63,7 @@ Registered providers:
 | Python | `<interpreter> file.py` / `<interpreter> -m pkg.mod` | dotted path when every directory from root to the file is a package (`__init__.py` chain); `__main__.py` maps to its package |
 | PHP | `<php> file.php` | — |
 | Go | `<go> run file.go` | — |
+| Shell | `<shell> file.sh` — explicit `[lang.shell] interpreter` > the file's shebang shell (only when that binary is on PATH) > the extension's natural shell (`.bash` → bash, `.zsh` → zsh, `.sh` → sh); never executes via the shebang directly (no chmod) | — |
 
 ## Running (#576)
 

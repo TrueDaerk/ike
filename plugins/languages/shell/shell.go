@@ -26,6 +26,8 @@ func init() {
 		// Shebang fallback (#893): extensionless scripts.
 		Interpreters: []string{"sh", "bash", "zsh", "dash"},
 		Grammar:      grammar(),
+		// Run-command seam only (#1225); no server settings to detect.
+		Toolchain: toolchain{},
 		Server: &lang.ServerSpec{
 			Language:    "shell",
 			Command:     "bash-language-server",
