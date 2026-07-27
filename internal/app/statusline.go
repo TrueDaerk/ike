@@ -44,6 +44,7 @@ var statusLeft = []statusSegment{
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
+	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
 }
 
 // emptyHintSegment is the empty-editor discovery hint (#659): while the

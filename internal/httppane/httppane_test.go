@@ -418,3 +418,36 @@ func TestSearchPromptSwallowsNavigationKeys(t *testing.T) {
 		t.Errorf("prompt keys must not scroll: top %d → %d", top, m.top)
 	}
 }
+
+// TestPendingMarkerShownInHeader covers the pane side of #1272: while a
+// dispatch runs the header says so, and the previous response stays readable.
+func TestPendingMarkerShownInHeader(t *testing.T) {
+	m := searchViewer(t)
+	if m.Pending() != "" {
+		t.Fatal("a fresh viewer has nothing pending")
+	}
+	m.SetPending("one", time.Now())
+	view := m.View()
+	if !strings.Contains(view, "running one") {
+		t.Errorf("header must mark the in-flight request:\n%s", view)
+	}
+	if !strings.Contains(view, "token") {
+		t.Error("the previous response must stay readable while running")
+	}
+	m.ClearPending()
+	if strings.Contains(m.View(), "running") {
+		t.Error("clearing must drop the marker")
+	}
+}
+
+// TestCancelKeyEmitsCancelMsg: "x" asks the host to abort (#1272).
+func TestCancelKeyEmitsCancelMsg(t *testing.T) {
+	m := searchViewer(t)
+	cmd := m.handleKey(keyPress("x"))
+	if cmd == nil {
+		t.Fatal("x must emit a command")
+	}
+	if _, ok := cmd().(CancelMsg); !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+}

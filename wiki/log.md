@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http: in-flight indicator, duplicate guard, cancel)
+
+- A running .http dispatch is visible now (#1272): a statusline segment with
+  the elapsed time, a `⟳ running` marker in the response pane header (the
+  previous response stays readable below), a duplicate-dispatch guard that
+  refuses to fire the same request twice in parallel, and a cancel action
+  (`http.cancel` in the palette, `x` in the pane) that aborts through the
+  dispatch context and reports as a confirmation rather than an error.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: completion in request files)
 
 - `.http` files complete without a language server (#1268): methods and

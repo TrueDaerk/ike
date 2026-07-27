@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T17:00:00Z
+timestamp: 2026-07-27T18:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -186,6 +186,32 @@ config file paths, or disable detection entirely.
   usable grammar, prints `(no <tag> highlighter in this build — showing plain
   text)` above the body. An unrecognized content type stays plain without a
   notice — there is nothing to highlight by design.
+
+## In-flight requests (#1272)
+
+A dispatch used to be invisible until its response arrived — for a slow
+endpoint the IDE looked idle and a second, impatient `http.run` was easy to
+trigger. `Model.httpFlight` tracks the running dispatches, keyed by source
+file plus request key, and carries the label, the start time and the
+dispatch's `context.CancelFunc`:
+
+- **Indicator**: a statusline segment (`⟳ http: GET /_cat/indices (1.2s)`, or
+  `⟳ http: 2 requests (…)` when several run) repainted by a 250 ms tick that
+  only runs while something is in flight. The response viewer marks the
+  pending request in its header (`⟳ running one (1.2s)`) and keeps the
+  previous response readable below — it is simply no longer presented as the
+  current answer.
+- **Duplicate guard**: dispatching a request that is already running is
+  rejected with a notice naming the cancel action; nothing fires twice in
+  parallel behind the user's back.
+- **Cancel**: `http.cancel` (palette) and `x` in the response pane abort
+  through the dispatch context — `ctrl+c` is copy (#1266), so the abort key
+  is its own. The resulting `context.Canceled` is reported as a confirmation
+  ("http: one canceled"), not as a transport error, and no response pane
+  opens for it.
+
+Indicator, pane marker and tick all clear on response, error and cancel
+alike.
 
 ## Response history (#1251)
 
