@@ -35,6 +35,12 @@ func (s *httpSource) Name() string { return "http" }
 // Priority implements complete.Source: above the word echo — a header name is
 // a better answer than a word that happens to appear in the file — and below
 // a language server, which .http files do not have anyway.
+// Exclusive claims .http buffers for this source (#1302): the header/method
+// catalogs are the only sensible completions there, so the buffer-word,
+// project-scan and symbol sources must not merge their identifiers into the
+// popup — and a request body offers nothing rather than every word in the file.
+func (s *httpSource) Exclusive(path string) bool { return isHTTPFile(path) }
+
 func (s *httpSource) Priority() int { return ilsp.PriorityEmmet }
 
 // Observe implements complete.EventObserver: keep the current text of every

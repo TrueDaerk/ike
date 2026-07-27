@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-27 (http: completion exclusivity)
+
+- Typing `CTy` on a `.http` header line offered `Content-Type` next to
+  `contentYOff`, `Capability` and every other identifier the buffer-word and
+  project-scan tiers had seen (#1302): `internal/complete` dispatched every
+  source for every buffer. Sources can now claim a path through the optional
+  `ExclusiveSource` extension, and the engine then dispatches only claiming
+  sources; the `.http` source claims `.http`/`.rest`. Nothing claims anything by
+  default, so other languages keep the full merged popup. Updated
+  [Completion](/architecture/completion.md) and
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (settings: three-column master·detail grid)
 
 - The settings panel moved onto the 0460 wireframes' fixed raster (#1295,

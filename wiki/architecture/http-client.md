@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T21:15:00Z
+timestamp: 2026-07-27T21:40:00Z
 ---
 
 # HTTP Client (.http files)
@@ -204,6 +204,14 @@ config file paths, or disable detection entirely.
   usable grammar, prints `(no <tag> highlighter in this build — showing plain
   text)` above the body. An unrecognized content type stays plain without a
   notice — there is nothing to highlight by design.
+
+## Completion is exclusive (#1302)
+
+The `.http` source claims its buffers through `complete.ExclusiveSource`, so the
+engine dispatches nothing else for them. Before that, typing `CTy` on a header
+line offered `Content-Type` alongside `contentYOff`, `Capability` and whatever
+else the buffer-word and project-scan tiers had indexed, and a request body
+offered *only* those — the http source returns nothing there by design.
 
 ## In-flight requests (#1272)
 
