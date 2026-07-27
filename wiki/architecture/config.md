@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T20:00:00Z
 ---
 
 # Configuration System
@@ -25,6 +25,15 @@ Three layers merge lowest-to-highest, **project always wins**:
    guessed inside the package.
 
 A field absent from a higher layer inherits the lower layer; it is never zeroed.
+
+`$IKE_CONFIG_DIR` is only the **first** lookup for the user-global layer (and
+for the other user-level stores: `layouts.json`, the session, scratches). With
+it unset — or set to the empty string — resolution falls back to `$HOME/.ike`.
+Tests that clear the variable on purpose, to exercise the project-local `.ike`
+under the cwd, therefore have to redirect `$HOME` as well, or they read the
+developer's real configuration: `internal/app`'s `TestMain` does both, and
+`TestHomeIsIsolated` / `TestDefaultPanesAreNotUserConfigured` fail loudly if
+that ever regresses (#1288).
 
 ## Merge semantics
 

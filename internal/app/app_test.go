@@ -26,12 +26,15 @@ import (
 	"ike/internal/registry"
 )
 
-// TestMain redirects the layout/session store and user-config discovery to a
-// throwaway directory: several tests persist state (saveLayout on file opens,
-// splits and drags; saveSession on quit) and New() restores it, so without
-// isolation one test's artifacts leak into the next run — and into the
-// developer's real .ike. newSized additionally rotates to a fresh subdirectory
-// per model, so tests never see each other's persisted state either.
+// TestMain redirects the layout/session store, user-config discovery AND the
+// home directory to a throwaway tree: several tests persist state (saveLayout
+// on file opens, splits and drags; saveSession on quit) and New() restores it,
+// so without isolation one test's artifacts leak into the next run — and into
+// the developer's real .ike. newSized additionally rotates to a fresh
+// subdirectory per model, so tests never see each other's persisted state
+// either. Redirecting $HOME as well is what makes the isolation complete
+// (#1288): IKE_CONFIG_DIR is only the first lookup, and the tests that clear
+// it on purpose fall through to $HOME/.ike.
 var testStoreRoot string
 
 func TestMain(m *testing.M) {
@@ -43,6 +46,17 @@ func TestMain(m *testing.M) {
 	if err == nil {
 		testStoreRoot = dir
 		os.Setenv("IKE_CONFIG_DIR", dir)
+		// A temp HOME too. IKE_CONFIG_DIR is only the *first* lookup: with it
+		// unset — which the project-switch tests do deliberately, so the
+		// per-project .ike under cwd is used — the user-level stores fall back
+		// to $HOME/.ike. Without this, those tests read the developer's real
+		// layouts.json and session, and a personal default layout (say, one
+		// with two terminals) silently changes what every model starts with.
+		home := filepath.Join(dir, "home")
+		if os.MkdirAll(home, 0o755) == nil {
+			os.Setenv("HOME", home)
+			os.Setenv("USERPROFILE", home) // os.UserHomeDir on Windows
+		}
 	}
 	code := m.Run()
 	if err == nil {
@@ -1111,5 +1125,51 @@ func TestSearchEverywherePrimesSymbolHook(t *testing.T) {
 	}
 	if got := m.palette.View(); !strings.Contains(got, "Search everywhere") {
 		t.Fatal("priming must keep the search-everywhere palette open")
+	}
+}
+
+// TestDefaultPanesAreNotUserConfigured is the regression guard for #1288: a
+// fresh model must start with the built-in explorer+editor pair. When test
+// isolation leaks — IKE_CONFIG_DIR cleared *and* a real $HOME reachable — the
+// developer's designated default layout (#1175) materializes instead, and
+// tests silently run against someone's personal pane set (terminals included,
+// which makes workspaces look busy and eviction prompt).
+func TestDefaultPanesAreNotUserConfigured(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", "") // the project-switch tests' setup
+	t.Chdir(t.TempDir())
+	m := NewWith(registry.New(), host.MapConfig{})
+	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = out.(Model)
+
+	keys := m.activeWS().Panes.Keys()
+	if len(keys) != 2 {
+		t.Fatalf("default panes = %v, want the built-in explorer+editor pair", keys)
+	}
+	kinds := map[pane.Kind]int{}
+	for _, k := range keys {
+		if inst := m.activeWS().Panes.Get(k); inst != nil {
+			kinds[inst.Kind()]++
+		}
+	}
+	if kinds[pane.KindExplorer] != 1 || kinds[pane.KindEditor] != 1 {
+		t.Errorf("default pane kinds = %v, want one explorer and one editor", kinds)
+	}
+	if kinds[pane.KindTerminal] != 0 {
+		t.Error("a terminal in the default set means a user layout leaked in")
+	}
+}
+
+// TestHomeIsIsolated states the invariant directly: no test in this package
+// may resolve to the real home directory (#1288).
+func TestHomeIsIsolated(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip("no home directory resolvable")
+	}
+	if testStoreRoot == "" {
+		t.Skip("no temp store root: TestMain could not create one")
+	}
+	if !strings.HasPrefix(home, testStoreRoot) {
+		t.Fatalf("tests resolve home to %q, want a path under the temp store %q", home, testStoreRoot)
 	}
 }
