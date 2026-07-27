@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http: folded query lines)
+
+- The `.http` parser accepts the JetBrains query-folding form (#1269):
+  indented continuation lines starting with `?` or `&` extend the request
+  target instead of failing as invalid headers. Whitespace is stripped,
+  several params may share a line, valueless flags and values containing `=`
+  survive, and placeholders resolve as usual. The grammar already treats the
+  folded lines as part of the URL, so highlighting needed no change.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: body highlighting is build-dependent, and says so)
 
 - Response bodies render plain whenever the fence tag's grammar is missing

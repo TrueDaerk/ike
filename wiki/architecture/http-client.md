@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T12:00:00Z
+timestamp: 2026-07-27T13:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -33,6 +33,22 @@ Authorization: Bearer {{$env TOKEN}}
 
 - **Request line:** `METHOD request-target [HTTP-version]`; the version is
   optional and defaults to `HTTP/1.1`. The method must be an RFC 9110 token.
+- **Folded query lines** (#1269): a long query may be wrapped onto indented
+  continuation lines starting with `?` or `&`, the JetBrains spelling:
+
+  ```
+  GET https://example.net:9210/_cat/indices
+      ? v =
+      & s = i
+  ```
+
+  dispatches as `GET https://example.net:9210/_cat/indices?v=&s=i`.
+  Whitespace around `?`, `&`, `=` and the tokens is stripped, several params
+  may share a line, a param without `=` stays a valueless flag (`? pretty`),
+  and only the first `=` separates (so `? filter = a=b` survives). Folding
+  starts right after the request line and ends at the first header line,
+  blank line or `###`; comments in between are ignored. Placeholders inside
+  folded params resolve like anywhere else in the target.
 - **Headers:** `Name: value` lines up to the first empty line; order and
   repetitions are preserved.
 - **Body:** everything after the empty line until the next `###` or EOF,

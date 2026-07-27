@@ -174,6 +174,24 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	}
 	i++
 
+	// Folded query lines (#1269): indented continuation lines starting with
+	// "?" or "&" extend the request target, the JetBrains spelling of a long
+	// query. Folding ends at the first header line, blank line or block end.
+	var query []string
+	for i < end {
+		if isComment(lines[i]) {
+			i++
+			continue
+		}
+		t := strings.TrimSpace(lines[i])
+		if t == "" || (!strings.HasPrefix(t, "?") && !strings.HasPrefix(t, "&")) {
+			break
+		}
+		query = append(query, queryParams(t)...)
+		i++
+	}
+	req.Target = appendQuery(req.Target, query)
+
 	// Header field lines until the empty line that starts the body.
 	for i < end && strings.TrimSpace(lines[i]) != "" {
 		if isComment(lines[i]) {
@@ -199,6 +217,51 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	}
 
 	f.Requests = append(f.Requests, req)
+}
+
+// queryParams splits one folded query line into "key=value" fragments
+// (#1269). The leading "?"/"&" is dropped, several params may share a line
+// ("? a = 1 & b = 2"), and whitespace around the separators and the tokens is
+// stripped — "? v =" yields "v=", "? v" yields "v" (a valueless flag param).
+// A value may itself contain "=" ("?filter=a=b"), so only the first one
+// separates.
+func queryParams(line string) []string {
+	line = strings.TrimSpace(line)
+	line = strings.TrimLeft(line, "?&")
+	var out []string
+	for _, part := range strings.Split(line, "&") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		key, value, hasValue := strings.Cut(part, "=")
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if !hasValue {
+			out = append(out, key)
+			continue
+		}
+		out = append(out, key+"="+strings.TrimSpace(value))
+	}
+	return out
+}
+
+// appendQuery attaches folded query params to a request target, opening the
+// query with "?" or extending an existing one with "&" (#1269).
+func appendQuery(target string, params []string) string {
+	if len(params) == 0 {
+		return target
+	}
+	sep := "?"
+	switch {
+	case strings.HasSuffix(target, "?"), strings.HasSuffix(target, "&"):
+		sep = "" // the request line already opened the query
+	case strings.Contains(target, "?"):
+		sep = "&"
+	}
+	return target + sep + strings.Join(params, "&")
 }
 
 // RequestAt returns the request whose block (separator line through last
