@@ -91,6 +91,14 @@ last yank (so a delete in between cannot clobber it), `"-` the last small
 delete, `"1` through `"9` a ring of the recent line-wise deletes, and `"+` /
 `"*` the system clipboard — `"+p` pastes what another application copied.
 
+Plain yanks reach the system clipboard too: `yy`, `y{motion}` and visual `y`
+mirror onto it, so what you yank in IKE pastes into any other application
+without a `"+` prefix. Only *yanks* sync — named registers (`"ayy`) and
+deletes or changes (`dw`, `cw`) stay internal, so a stray delete never
+clobbers your clipboard, and `p` keeps pasting the internal register. Turn it
+off with `editor.clipboard_sync = false` (Settings → Editor → *Yank to system
+clipboard*).
+
 Macros use the same letters: `q` records, `@` replays, `@@` repeats the last
 replay, and counts work (`5@a`).
 

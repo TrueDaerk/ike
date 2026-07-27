@@ -66,6 +66,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.use_spaces", Type: Bool, Title: "Use spaces", Description: "Indent with spaces instead of tab characters", Scope: config.UserScope},
 			{Key: "editor.auto_indent", Type: Bool, Title: "Auto indent", Description: "Carry the current line's indentation into new lines", Scope: config.UserScope},
 			{Key: "editor.auto_close_pairs", Type: Bool, Title: "Auto-close brackets", Description: "Insert the matching ), ] or } when typing an opening bracket", Scope: config.UserScope},
+			{Key: "editor.clipboard_sync", Type: Bool, Title: "Yank to system clipboard", Description: "Mirror yanks (yy, y{motion}, visual y) onto the system clipboard; named registers and deletes stay internal", Scope: config.UserScope},
 			{Key: "editor.auto_save", Type: Enum, Title: "Auto save", Description: "Save a dirty buffer when focus leaves its pane (focus), additionally after an idle delay while editing (idle), or never (off)", Scope: config.UserScope, Options: []string{"focus", "idle", "off"}},
 			{Key: "editor.auto_save_idle_ms", Type: Int, Title: "Auto save idle delay", Description: "Milliseconds a dirty buffer must stay quiet before idle auto save writes it (auto_save = idle)", Scope: config.UserScope, Min: 100, Max: 60000},
 			{Key: "editor.trim_trailing_whitespace", Type: Bool, Title: "Trim trailing whitespace", Description: "Strip line-end whitespace on save", Scope: config.UserScope},

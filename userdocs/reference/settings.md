@@ -27,6 +27,7 @@ Settings, or run `settings.open` from the palette.
 | Use spaces | `editor.use_spaces` | boolean | `true` | user | Indent with spaces instead of tab characters |
 | Auto indent | `editor.auto_indent` | boolean | `true` | user | Carry the current line's indentation into new lines |
 | Auto-close brackets | `editor.auto_close_pairs` | boolean | `true` | user | Insert the matching ), ] or } when typing an opening bracket |
+| Yank to system clipboard | `editor.clipboard_sync` | boolean | `true` | user | Mirror yanks (yy, y{motion}, visual y) onto the system clipboard; named registers and deletes stay internal |
 | Auto save | `editor.auto_save` | enum: `focus`, `idle`, `off` | `focus` | user | Save a dirty buffer when focus leaves its pane (focus), additionally after an idle delay while editing (idle), or never (off) |
 | Auto save idle delay | `editor.auto_save_idle_ms` | integer (100–60000) | `2000` | user | Milliseconds a dirty buffer must stay quiet before idle auto save writes it (auto_save = idle) |
 | Trim trailing whitespace | `editor.trim_trailing_whitespace` | boolean | `true` | user | Strip line-end whitespace on save |

@@ -98,6 +98,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.auto_save_idle_ms", c.Editor.AutoSaveIdleMs)
 	put("editor.tab_width", c.Editor.TabWidth)
 	put("editor.use_spaces", c.Editor.UseSpaces)
+	put("editor.clipboard_sync", c.Editor.ClipboardSync)
 	put("editor.line_numbers", c.Editor.LineNumbers)
 	put("editor.relative_line_numbers", c.Editor.RelativeLineNumbers)
 	put("editor.wrap", c.Editor.Wrap)

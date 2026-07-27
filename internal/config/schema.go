@@ -198,6 +198,12 @@ type Editor struct {
 	// TextWidth is the hard-wrap column the gq reflow operator targets
 	// (#1193); 0 falls back to vim's 79.
 	TextWidth              int  `toml:"text_width"`
+	// ClipboardSync mirrors unnamed-register yanks (yy, y{motion}, visual y)
+	// onto the system clipboard (#1256) — the conservative half of vim's
+	// `clipboard=unnamed`: named registers and deletes/changes never sync.
+	// On by default; false keeps yanks internal, leaving Cmd+C as the only
+	// route to the system clipboard.
+	ClipboardSync          bool `toml:"clipboard_sync"`
 	AutoIndent             bool `toml:"auto_indent"`
 	AutoClosePairs         bool `toml:"auto_close_pairs"`
 	TrimTrailingWhitespace bool `toml:"trim_trailing_whitespace"`
