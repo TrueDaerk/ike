@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -55,6 +56,9 @@ type KeymapPage struct {
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
 	listW int // settings-column width of the last render (#1298), 0 = full width
+	// expanded remembers which numbered runs are unfolded (#1300), per
+	// session — a fold the user opened stays open while the panel is used.
+	expanded map[string]bool
 }
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
@@ -83,7 +87,12 @@ func (k *KeymapPage) Capturing() bool { return k.filtering }
 // command.
 type keymapRow struct {
 	keymap.Binding
-	unbound bool
+	// rangeKey/rangeCount/rangeLast mark a folded run of numbered bindings
+	// (#1300): the row stands for rangeCount bindings ending at rangeLast.
+	rangeKey   string
+	rangeCount int
+	rangeLast  string
+	unbound    bool
 	// nobind marks a registered command with no binding at all (#771): no
 	// chord to unbind or reset, enter captures its first chord.
 	nobind bool
@@ -112,6 +121,11 @@ func (k *KeymapPage) defaults() []keymap.Binding {
 // rebound to another command (#736). The row keeps the command reachable for
 // rebinding and carries the default chord for a per-binding reset.
 func (k *KeymapPage) rows() []keymapRow {
+	return k.foldRanges(k.unfoldedRows())
+}
+
+// unfoldedRows is rows() before numbered runs are folded (#1300).
+func (k *KeymapPage) unfoldedRows() []keymapRow {
 	all := k.table().Bindings()
 	have := make(map[string]bool, len(all))
 	for _, b := range all {
@@ -207,7 +221,14 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		if k.sel < len(k.rows())-1 {
 			k.sel++
 		}
+	case "z":
+		k.toggleRange()
+		return nil
 	case "enter":
+		if b, ok := k.current(); ok && b.rangeKey != "" {
+			k.toggleRange() // a folded run opens before it can be rebound
+			return nil
+		}
 		if b, ok := k.current(); ok && k.host != nil {
 			k.host.Push(newKeymapCapture(k, k.host, b))
 		}
@@ -378,7 +399,7 @@ func (k *KeymapPage) View(w, h int) string {
 		return list
 	}
 	k.listW = listW
-	return lipgloss.JoinHorizontal(lipgloss.Top, list, " │ ", k.renderDetail(detailW, h))
+	return lipgloss.JoinHorizontal(lipgloss.Top, list, columnRule(h), k.renderDetail(detailW, h))
 }
 
 // renderList renders the chord/command table.
@@ -394,9 +415,13 @@ func (k *KeymapPage) renderList(w, h int) string {
 	default:
 		head += "   (/ to filter)"
 	}
+	// Every line is clipped to the column width so the settings column has a
+	// fixed edge (#1298): an over-long row must not push the detail column
+	// sideways on its line alone.
+	clip := lipgloss.NewStyle().MaxWidth(w)
 	var list []string
 	for i, b := range rows {
-		list = append(list, k.renderRow(b, i == k.sel, w))
+		list = append(list, clip.Render(k.renderRow(b, i == k.sel, w)))
 	}
 	if len(rows) == 0 {
 		list = append(list, "no bindings match")
@@ -463,12 +488,17 @@ func (k *KeymapPage) Wheel(delta int) {
 // renderRow renders one binding line.
 func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	pal := k.theme()
-	chord := b.Chord.String()
+	chord, title := b.Chord.String(), b.Title
 	if b.unbound {
 		chord = "(unbound)"
 	}
 	if b.nobind {
 		chord = "(no binding)"
+	}
+	if b.rangeKey != "" {
+		// A folded run reads as one fact (#1300); ▸ says it opens.
+		chord, title = b.rangeLabel()
+		title += " ▸ " + strconv.Itoa(b.rangeCount)
 	}
 	// Context, layer and provenance moved to the detail column (#1298); the
 	// table is the chord and what it runs.
@@ -476,7 +506,7 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	if w < 44 {
 		chordW = 14
 	}
-	label := " " + pad(chord, chordW) + b.Title
+	label := " " + pad(chord, chordW) + title
 	if reason, blocked := keymap.BlockedReason(b.Command); blocked || (k.registered != nil && !k.registered(b.Command)) {
 		hint := reason
 		if hint == "" {

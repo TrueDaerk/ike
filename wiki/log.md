@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-28 (settings: fold the numbered binding runs)
+
+- Nine lines saying "alt+N goes to tab N" became one (#1300): the keymap page
+  folds three or more consecutive bindings whose chord and command differ only
+  in a matching trailing number into `alt+1 … alt+9 · Go to tab 1–9 ▸ 9`, with
+  `z` expanding it in place and the detail column listing what it stands for.
+  Runs are detected on consecutive rows only, fold state is remembered per
+  session, and a filter never folds. The column rule is now drawn per line and
+  each column clips to its own width, so a long row cannot push the detail
+  column sideways. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-28 (settings: toolchain page on the grid)
 
 - The toolchain page adopted the raster (#1299). Languages group by state —

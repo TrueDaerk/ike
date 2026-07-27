@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T01:40:00Z
+timestamp: 2026-07-28T02:20:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -543,4 +543,28 @@ type paths into.
   and offers `a · accept all n recommendations`: one key writes every detected
   interpreter (one batch, one reload) instead of a guided picker per language.
 
-Still open on the epic: noise folding (#1300).
+## Folding the noise (0460, #1300)
+
+Only real information should occupy a line.
+
+- **Not-installed toolchains** collapse into one counted caption (landed with
+  #1299): `not installed · 12   z to unfold`.
+- **Numbered binding runs** collapse in the keymap page
+  (`keymap_ranges.go`): three or more *consecutive* bindings whose chord and
+  command differ only in a matching trailing number become one row —
+  `alt+1 … alt+9 · Go to tab 1–9 ▸ 9`. `z` (or enter on the folded row)
+  expands it in place; the detail column meanwhile lists every binding the row
+  stands for. Runs are detected on consecutive rows only, so a fold can never
+  reorder the list, and two-row runs are left alone — folding them saves
+  nothing.
+- **Fold state is remembered per page for the session**, so a run you opened
+  stays open while you work.
+- **Search never folds.** With a filter active both pages show exactly what
+  matched, and activating a toolchain search result unfolds the group it lives
+  in.
+
+Rendering note: each column clips its lines to its own width and the `│` rule
+is drawn per line, so a long row can no longer push the detail column sideways
+on its line alone.
+
+The epic is complete.
