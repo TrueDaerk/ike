@@ -51,6 +51,14 @@ type Request struct {
 	Proto   string // e.g. "HTTP/1.1"; DefaultProto when omitted
 	Headers []Header
 	Body    string
+	// BodyFile is the path of an external body — the `< ./payload.json` form
+	// (#1305) — with placeholders unresolved. Empty when the body is inline;
+	// when set, Body is empty, so a consumer that only knows about Body never
+	// sends the directive line verbatim.
+	BodyFile string
+	// BodyFileSubstitute reports the `<@ ./payload.json` spelling: the file's
+	// own placeholders are substituted before it is sent.
+	BodyFileSubstitute bool
 	// BodyStart/BodyEnd delimit the body's lines (1-based, inclusive), with
 	// the surrounding blank lines excluded — 0 when the request has no body.
 	// Consumers that need the body *in* the file rather than as a string use
@@ -229,10 +237,32 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		if bs <= be {
 			req.Body = strings.Join(lines[bs:be+1], "\n")
 			req.BodyStart, req.BodyEnd = bs+1, be+1
+			if path, substitute, ok := externalBody(req.Body); ok {
+				req.Body, req.BodyFile, req.BodyFileSubstitute = "", path, substitute
+			}
 		}
 	}
 
 	f.Requests = append(f.Requests, req)
+}
+
+// externalBodyRE matches the JetBrains external-body directive: "< path"
+// sends the file verbatim, "<@ path" substitutes the file's own placeholders
+// first, and "<@encoding path" additionally names a source encoding.
+var externalBodyRE = regexp.MustCompile(`^<(@[A-Za-z0-9_-]*)?[ \t]+(\S.*)$`)
+
+// externalBody recognises a body that is nothing but a file directive. A body
+// with any further line is inline text — a lone "<" line inside a larger
+// payload must keep its literal meaning.
+func externalBody(body string) (path string, substitute, ok bool) {
+	if strings.ContainsAny(body, "\n") {
+		return "", false, false
+	}
+	m := externalBodyRE.FindStringSubmatch(strings.TrimSpace(body))
+	if m == nil {
+		return "", false, false
+	}
+	return strings.TrimSpace(m[2]), m[1] != "", true
 }
 
 // queryParams splits one folded query line into "key=value" fragments
@@ -341,6 +371,7 @@ func (r *Request) Resolve(lookup func(string) (string, bool)) (*Request, error) 
 		return v
 	}
 	out.Target = sub(r.Target)
+	out.BodyFile = sub(r.BodyFile)
 	for i, h := range r.Headers {
 		out.Headers[i] = Header{Name: h.Name, Value: sub(h.Value)}
 	}

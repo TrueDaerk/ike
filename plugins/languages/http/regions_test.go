@@ -122,3 +122,18 @@ func TestRegionAtResolvesTheBodyLanguage(t *testing.T) {
 		t.Fatal("a header line must not resolve to the body language")
 	}
 }
+
+// TestBodyRegionsSkipExternalBodies guards #1305: `< ./payload.json` is a
+// directive line, not JSON, however the request is typed.
+func TestBodyRegionsSkipExternalBodies(t *testing.T) {
+	registerFake(t, "json", "json")
+	lines := []string{
+		"POST https://example.com/a",
+		"Content-Type: application/json",
+		"",
+		"< ./payload.json",
+	}
+	if got := bodyRegions(lines); len(got) != 0 {
+		t.Fatalf("regions = %+v, want none for an external body", got)
+	}
+}

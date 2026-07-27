@@ -1,5 +1,18 @@
 # Log
 
+## 2026-07-27 (http: body from a file)
+
+- `< ./payload.json` was sent as literal text (#1305). The parser now
+  recognises a body that is nothing but a `< path` / `<@ path` directive and
+  records it on `Request.BodyFile`, leaving `Body` empty so no consumer can
+  send the directive by accident; `Resolve` substitutes placeholders in the
+  path too. The dispatcher reads the file against a new `Options.BaseDir` —
+  the `.http` file's own directory, wired in by the app — expands `~`,
+  substitutes the file's own placeholders for the `<@` form, and fails with a
+  message naming the file when it cannot be read. The directive line is not
+  Content-Type-highlighted, since it is not payload. Updated
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (editor: indent by the embedded region's language)
 
 - Pressing enter after `{` in a `.http` JSON body gave plain copy-indent

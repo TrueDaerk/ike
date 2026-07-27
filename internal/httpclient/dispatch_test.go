@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"encoding/base64"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -351,5 +352,110 @@ func TestCurlrcParsing(t *testing.T) {
 	}
 	if len(cfg.Warnings) != 0 {
 		t.Errorf("warnings: %v", cfg.Warnings)
+	}
+}
+
+// echoBodyServer answers with whatever body it received.
+func echoBodyServer(t *testing.T) (*httptest.Server, *string) {
+	t.Helper()
+	var got string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = string(b)
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &got
+}
+
+// TestDispatchExternalBody guards #1305: `< ./payload.json` sends the file,
+// resolved against the .http file's own directory.
+func TestDispatchExternalBody(t *testing.T) {
+	srv, got := echoBodyServer(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "payload.json"), []byte(`{"from":"disk"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := parseOne(t, "POST "+srv.URL+"/x\nContent-Type: application/json\n\n< ./payload.json\n")
+
+	opts := noConfig
+	opts.BaseDir = dir
+	if _, err := Dispatch(context.Background(), req, opts); err != nil {
+		t.Fatal(err)
+	}
+	if *got != `{"from":"disk"}` {
+		t.Fatalf("sent body = %q, want the file contents", *got)
+	}
+}
+
+// TestDispatchExternalBodySubstitutes: the `<@` form resolves placeholders
+// inside the file, the plain form does not.
+func TestDispatchExternalBodySubstitutes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "p.json"), []byte(`{"id":"${ID}"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lookup := func(name string) (string, bool) {
+		if name == "ID" {
+			return "42", true
+		}
+		return "", false
+	}
+
+	srv, got := echoBodyServer(t)
+	opts := noConfig
+	opts.BaseDir, opts.Lookup = dir, lookup
+
+	req := parseOne(t, "POST "+srv.URL+"/x\n\n<@ ./p.json\n")
+	if _, err := Dispatch(context.Background(), req, opts); err != nil {
+		t.Fatal(err)
+	}
+	if *got != `{"id":"42"}` {
+		t.Fatalf("<@ must substitute the file, got %q", *got)
+	}
+
+	plain := parseOne(t, "POST "+srv.URL+"/x\n\n< ./p.json\n")
+	if _, err := Dispatch(context.Background(), plain, opts); err != nil {
+		t.Fatal(err)
+	}
+	if *got != `{"id":"${ID}"}` {
+		t.Fatalf("< must send the file verbatim, got %q", *got)
+	}
+}
+
+// TestDispatchExternalBodyMissingFile: a missing file is a named error, never
+// a silently empty body.
+func TestDispatchExternalBodyMissingFile(t *testing.T) {
+	srv, got := echoBodyServer(t)
+	opts := noConfig
+	opts.BaseDir = t.TempDir()
+	req := parseOne(t, "POST "+srv.URL+"/x\n\n< ./nope.json\n")
+
+	_, err := Dispatch(context.Background(), req, opts)
+	if err == nil {
+		t.Fatal("a missing body file must fail the request")
+	}
+	if !strings.Contains(err.Error(), "nope.json") {
+		t.Fatalf("error must name the file, got %v", err)
+	}
+	if *got != "" {
+		t.Fatalf("nothing must be sent, got %q", *got)
+	}
+}
+
+// TestDispatchExternalBodyUnresolvedPlaceholder: an unresolvable placeholder
+// inside a <@ file aborts instead of sending the raw text.
+func TestDispatchExternalBodyUnresolvedPlaceholder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "p.json"), []byte(`{"id":"${MISSING}"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	srv, _ := echoBodyServer(t)
+	opts := noConfig
+	opts.BaseDir = dir
+	opts.Lookup = func(string) (string, bool) { return "", false }
+
+	if _, err := Dispatch(context.Background(), parseOne(t, "POST "+srv.URL+"/x\n\n<@ ./p.json\n"), opts); err == nil {
+		t.Fatal("an unresolved placeholder in the body file must abort")
 	}
 }

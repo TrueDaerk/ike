@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T22:10:00Z
+timestamp: 2026-07-27T22:45:00Z
 ---
 
 # HTTP Client (.http files)
@@ -53,6 +53,25 @@ Authorization: Bearer {{$env TOKEN}}
   repetitions are preserved.
 - **Body:** everything after the empty line until the next `###` or EOF,
   with trailing blank lines trimmed.
+- **Body from a file** (#1305): a body consisting of nothing but a directive
+  line takes the payload from disk, the JetBrains spelling:
+
+  ```
+  POST https://example.com/upload
+  Content-Type: application/json
+
+  < ./payload.json
+  ```
+
+  `< path` sends the file verbatim; `<@ path` (and `<@encoding path`)
+  substitutes the file's *own* placeholders first. Relative paths resolve
+  against the `.http` file's directory — not the process working directory —
+  and a leading `~` expands. The path itself takes placeholders
+  (`< ./{{$env FIXTURE}}.json`). A missing or unreadable file fails the
+  request with a message naming it, never sends an empty body. The directive
+  is only recognised when it *is* the whole body, so a lone `<` inside an XML
+  payload keeps its literal meaning, and the directive line is not
+  Content-Type-highlighted (it is not payload).
 - **Comments:** lines starting with `#` or `//` outside a body. Inside a
   body nothing is stripped.
 
