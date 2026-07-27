@@ -17,10 +17,13 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"ike/internal/httpfile"
+	"ike/internal/pathcomplete"
 )
 
 // Defaults applied when neither the request nor .curlrc override them.
@@ -64,6 +67,38 @@ type Options struct {
 	Timeout time.Duration
 	// Now returns the current time; defaults to time.Now (tests).
 	Now func() time.Time
+	// BaseDir resolves relative external-body paths — the `< ./payload.json`
+	// form (#1305). It is the .http file's own directory; empty falls back to
+	// the process working directory.
+	BaseDir string
+}
+
+// requestBody returns the reader for a resolved request's body: the inline
+// text, or the contents of an external `< ./file` body (#1305). Relative paths
+// resolve against opts.BaseDir — the .http file's own directory, not the
+// process working directory — and a leading ~ expands. The file is read up
+// front rather than streamed so its length is known (no chunked encoding) and
+// so the `<@` form can substitute the file's own placeholders.
+func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (string, bool)) (io.Reader, error) {
+	if resolved.BodyFile == "" {
+		return strings.NewReader(resolved.Body), nil
+	}
+	path := pathcomplete.Expand(resolved.BodyFile)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(opts.BaseDir, path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("body file %s: %v", resolved.BodyFile, err)
+	}
+	text := string(data)
+	if resolved.BodyFileSubstitute {
+		text, err = httpfile.Substitute(text, lookup)
+		if err != nil {
+			return nil, fmt.Errorf("body file %s: %v", resolved.BodyFile, err)
+		}
+	}
+	return strings.NewReader(text), nil
 }
 
 // Dispatch resolves placeholders in req, applies local configuration and
@@ -101,7 +136,11 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 		warnings = append(warnings, cfg.Warnings...)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, resolved.Method, target.String(), strings.NewReader(resolved.Body))
+	reqBody, err := requestBody(resolved, opts, lookup)
+	if err != nil {
+		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, resolved.Method, target.String(), reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
 	}

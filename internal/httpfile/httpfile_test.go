@@ -486,3 +486,64 @@ func TestParseInvalidLineAfterRequestStillErrors(t *testing.T) {
 		t.Errorf("error line: %d", f.Errors[0].Line)
 	}
 }
+
+// TestParseExternalBody guards #1305: a body that is nothing but a
+// "< path" directive is recorded as an external body, not sent verbatim.
+func TestParseExternalBody(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		body       string
+		wantPath   string
+		wantSubst  bool
+		wantInline string
+	}{
+		{name: "plain", body: "< ./payload.json", wantPath: "./payload.json"},
+		{name: "tab separated", body: "<\t/abs/payload.json", wantPath: "/abs/payload.json"},
+		{name: "substituting", body: "<@ ./payload.json", wantPath: "./payload.json", wantSubst: true},
+		{name: "encoded", body: "<@utf-8 ./payload.json", wantPath: "./payload.json", wantSubst: true},
+		{name: "path with spaces", body: "< ./my payload.json", wantPath: "./my payload.json"},
+		{name: "indented", body: "  < ./payload.json  ", wantPath: "./payload.json"},
+		// Not directives: no space, no path, or part of a larger payload.
+		{name: "no separator", body: "<./payload.json", wantInline: "<./payload.json"},
+		{name: "bare", body: "<", wantInline: "<"},
+		{name: "xml payload", body: "<root>\n  <a/>\n</root>", wantInline: "<root>\n  <a/>\n</root>"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := Parse("POST https://example.com/x\nContent-Type: application/json\n\n" + tc.body + "\n")
+			if len(f.Requests) != 1 {
+				t.Fatalf("requests = %d, want 1", len(f.Requests))
+			}
+			r := f.Requests[0]
+			if r.BodyFile != tc.wantPath {
+				t.Errorf("BodyFile = %q, want %q", r.BodyFile, tc.wantPath)
+			}
+			if r.BodyFileSubstitute != tc.wantSubst {
+				t.Errorf("BodyFileSubstitute = %v, want %v", r.BodyFileSubstitute, tc.wantSubst)
+			}
+			if r.Body != tc.wantInline {
+				t.Errorf("Body = %q, want %q", r.Body, tc.wantInline)
+			}
+		})
+	}
+}
+
+// TestResolveSubstitutesTheBodyPath: `< ./{{$env FIXTURE}}.json` resolves like
+// every other placeholder-bearing field.
+func TestResolveSubstitutesTheBodyPath(t *testing.T) {
+	f := Parse("POST https://example.com/x\n\n< ./{{$env FIXTURE}}.json\n")
+	if len(f.Requests) != 1 {
+		t.Fatalf("requests = %d, want 1", len(f.Requests))
+	}
+	out, err := f.Requests[0].Resolve(func(name string) (string, bool) {
+		if name == "FIXTURE" {
+			return "order", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if out.BodyFile != "./order.json" {
+		t.Fatalf("BodyFile = %q, want ./order.json", out.BodyFile)
+	}
+}

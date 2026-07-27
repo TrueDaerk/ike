@@ -83,7 +83,9 @@ func bodyRegions(lines []string) []lang.Region {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
 	var out []lang.Region
 	for _, r := range f.Requests {
-		if r.BodyStart == 0 {
+		if r.BodyStart == 0 || r.BodyFile != "" {
+			// An external body (`< ./payload.json`, #1305) is a directive
+			// line, not payload — the host grammar already styles it.
 			continue
 		}
 		ct, ok := r.Header("Content-Type")

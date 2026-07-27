@@ -109,7 +109,10 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		cancel:  cancel,
 	})
 	dispatch := func() tea.Msg {
-		resp, err := httpclient.Dispatch(ctx, req, httpclient.Options{})
+		// The .http file's directory anchors relative external-body paths
+		// (#1305): `< ./payload.json` is relative to the request file, not to
+		// wherever IKE was started.
+		resp, err := httpclient.Dispatch(ctx, req, httpclient.Options{BaseDir: filepath.Dir(source)})
 		cancel() // release the context regardless of the outcome
 		return HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 	}
