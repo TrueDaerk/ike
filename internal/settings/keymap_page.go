@@ -54,6 +54,7 @@ type KeymapPage struct {
 	importNote  string
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
+	listW int // settings-column width of the last render (#1298), 0 = full width
 }
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
@@ -367,11 +368,24 @@ func (k *KeymapPage) theme() *theme.Palette {
 	return theme.DefaultPalette()
 }
 
-// View implements PageModel.
+// View implements PageModel. The page renders on the panel's grid (#1298):
+// the chord/command table in the settings column, the selected command's
+// detail — every binding, its provenance, its conflicts — in the third.
 func (k *KeymapPage) View(w, h int) string {
+	listW, detailW, side := splitGrid(w)
+	list := k.renderList(listW, h)
+	if !side {
+		return list
+	}
+	k.listW = listW
+	return lipgloss.JoinHorizontal(lipgloss.Top, list, " │ ", k.renderDetail(detailW, h))
+}
+
+// renderList renders the chord/command table.
+func (k *KeymapPage) renderList(w, h int) string {
 	pal := k.theme()
 	rows := k.rows()
-	head := " chord · command · context · layer"
+	head := " chord · command"
 	switch {
 	case k.filtering:
 		head += "   filter: " + k.filter + "▌"
@@ -405,10 +419,13 @@ func (k *KeymapPage) View(w, h int) string {
 // capture or its conflict confirmation cancels it (the mouse cannot be part
 // of a chord); a press while the filter input is open keeps the filter and
 // returns to the list (enter semantics).
-func (k *KeymapPage) Click(_, y int) tea.Cmd {
+func (k *KeymapPage) Click(x, y int) tea.Cmd {
 	if k.filtering {
 		k.filtering = false
 		return nil
+	}
+	if k.listW > 0 && x >= k.listW {
+		return nil // the detail column is read-only chrome (#1298)
 	}
 	if y == 0 { // header row carries the filter display
 		k.filtering = true
@@ -453,7 +470,13 @@ func (k *KeymapPage) renderRow(b keymapRow, selected bool, w int) string {
 	if b.nobind {
 		chord = "(no binding)"
 	}
-	label := " " + pad(chord, 22) + pad(b.Title, 32) + pad(string(b.Context), 10) + "@" + b.Layer.String()
+	// Context, layer and provenance moved to the detail column (#1298); the
+	// table is the chord and what it runs.
+	chordW := 18
+	if w < 44 {
+		chordW = 14
+	}
+	label := " " + pad(chord, chordW) + b.Title
 	if reason, blocked := keymap.BlockedReason(b.Command); blocked || (k.registered != nil && !k.registered(b.Command)) {
 		hint := reason
 		if hint == "" {

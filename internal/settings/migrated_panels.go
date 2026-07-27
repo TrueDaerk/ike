@@ -38,6 +38,18 @@ func (c *keymapCapture) Title() string   { return "Rebind " + c.row.Command }
 func (c *keymapCapture) Capturing() bool { return true }
 
 func (c *keymapCapture) Buttons() []Button {
+	if c.conflict != "" {
+		// A collision is a decision, not a yes/no (#1298): take the chord
+		// from the other command, or go back and record a different one.
+		return []Button{
+			{Label: "Replace & unbind other", Key: "enter", Do: c.commit},
+			{Label: "Pick a different chord", Key: "p", Do: func() tea.Cmd {
+				c.steps, c.conflict, c.warn = nil, "", ""
+				return nil
+			}},
+			{Label: "Cancel", Do: func() tea.Cmd { c.host.Pop(); return nil }},
+		}
+	}
 	return []Button{
 		{Label: "Apply", Do: c.confirm, Disabled: len(c.steps) == 0},
 		{Label: "Cancel", Do: func() tea.Cmd { c.host.Pop(); return nil }},
@@ -47,10 +59,15 @@ func (c *keymapCapture) Buttons() []Button {
 func (c *keymapCapture) chord() keymap.Chord { return keymap.Chord{Steps: c.steps} }
 
 func (c *keymapCapture) Update(key tea.KeyPressMsg) tea.Cmd {
-	// A pending conflict waits for an explicit confirm/cancel.
+	// A pending conflict waits for an explicit decision (#1298): enter takes
+	// the chord, "p" records a different one, esc abandons the rebind.
 	if c.conflict != "" {
-		if key.Code == tea.KeyEnter {
+		switch key.String() {
+		case "enter":
 			return c.commit()
+		case "p":
+			c.steps, c.conflict, c.warn = nil, "", ""
+			return nil
 		}
 		c.host.Pop()
 		return nil
@@ -109,7 +126,11 @@ func (c *keymapCapture) View(w, h int) string {
 		lines = append(lines, warn.Render(" ⚠ "+c.warn))
 	}
 	if c.conflict != "" {
-		lines = append(lines, warn.Render(" conflicts with "+c.conflict+" — enter overrides, any other key cancels"))
+		lines = append(lines, warn.Render(" ⚠ already runs "+c.conflict))
+		lines = append(lines, sec.Render(" enter replace & unbind it · p pick a different chord · esc cancel"))
+		if free := c.page.suggestChords(2); len(free) > 0 {
+			lines = append(lines, sec.Render(" free: "+strings.Join(free, " · ")))
+		}
 	} else {
 		lines = append(lines, sec.Render(" enter apply · backspace undo a step · esc cancel"))
 	}
