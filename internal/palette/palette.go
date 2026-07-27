@@ -249,6 +249,23 @@ func (p *Palette) visibleRows() int {
 	return ui.ClampDelta(p.maxResults, dh, 3, 99)
 }
 
+// Paste inserts a pasted block into the query at the cursor and returns any
+// command the resulting query edit schedules (#1273). The root model routes
+// both bracketed paste and Cmd+V here while the palette is open — before this
+// the overlay swallowed pastes outright, so nothing could be pasted into
+// search-everywhere or any other mode. handled is false when the block
+// flattened to nothing, so the caller can fall through.
+func (p *Palette) Paste(text string) (cmd tea.Cmd, handled bool) {
+	out, ncur, changed := ui.PasteText(p.query, p.cur, text)
+	if !changed {
+		return nil, false
+	}
+	p.query, p.cur = out, ncur
+	p.sideManual = false
+	p.recompute()
+	return p.liveKick(), true
+}
+
 // Update handles a key while the palette is open and returns a command for the
 // activated item, if any. esc closes; enter activates the selection and closes;
 // up/down/ctrl+p/ctrl+n navigate; backspace/ctrl+u edit; typed runes extend the

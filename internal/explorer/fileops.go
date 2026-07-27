@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/lang"
+	"ike/internal/ui"
 )
 
 // promptKind selects how a prompt reads input: a free-text line, or a yes/no
@@ -88,6 +89,43 @@ type fileOp struct {
 // Prompting reports whether a modal prompt is open, so the root model can route
 // raw keys straight to the explorer instead of the keymap/global layer.
 func (m Model) Prompting() bool { return m.prompt != nil }
+
+// Paste inserts a pasted block into whichever of the explorer's own inputs is
+// open (#1273): a name prompt's text at its cursor — replacing a preselected
+// range, the way a typed character does — or the speed-search query. It
+// returns false for confirmation and notice prompts, which have no text to
+// paste into.
+func (m *Model) Paste(text string) (handled bool) {
+	if p := m.prompt; p != nil {
+		if p.kind != promptInput {
+			return false
+		}
+		at, into := p.pos, p.input
+		if p.selStart < p.selEnd {
+			// A preselected range (rename's name stem, #1047) is replaced.
+			r := []rune(p.input)
+			into = string(r[:p.selStart]) + string(r[p.selEnd:])
+			at = p.selStart
+		}
+		out, ncur, changed := ui.PasteText(into, at, text)
+		if !changed {
+			return false
+		}
+		p.input, p.pos = out, ncur
+		p.selStart, p.selEnd = 0, 0
+		return true
+	}
+	if s := m.search; s != nil {
+		out, _, changed := ui.PasteText(s.query, len([]rune(s.query)), text)
+		if !changed {
+			return false
+		}
+		s.query = out
+		m.searchJump()
+		return true
+	}
+	return false
+}
 
 // handlePromptKey feeds one key to the open prompt and returns any Cmd produced
 // by accepting it. It clears the prompt on accept or cancel.

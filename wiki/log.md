@@ -1,5 +1,20 @@
 # Log
 
+## 2026-07-27 (overlays: pasting into floating inputs)
+
+- Pastes reach overlay text inputs (#1273). `handlePaste` bailed on
+  `overlayCapturesKeyboard()` and discarded the block, so nothing could be
+  pasted into search-everywhere, the find-in-path query, a rename prompt or
+  any other floating input; `Cmd+V` was equally dead (it maps to
+  `editor.paste`, which no overlay handles). New router
+  `internal/app/overlaypaste.go` mirrors the `KeyPressMsg` guard chain and
+  delivers to `palette.Paste`, `finder.Paste`, `settings.Paste`,
+  `explorer.Paste` and the app's rename prompts; overlays with no text input
+  still swallow the paste rather than leaking it into the editor below.
+  `ui.PasteText` flattens a block for these single-line fields — one-line
+  pastes verbatim, multi-line trimmed and joined with spaces, control
+  characters stripped (`/architecture/command-palette.md`).
+
 ## 2026-07-27 (editor: clipboard failures surface, yank syncs)
 
 - System-clipboard writes no longer swallow their error (#1255): the register

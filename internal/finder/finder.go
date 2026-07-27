@@ -253,6 +253,28 @@ func splitGlobs(s string) []string {
 	return out
 }
 
+// Paste inserts a pasted block into the focused field at the cursor (#1273):
+// query, replacement, include or exclude globs alike. A pending prefill
+// selection (#277) is replaced wholesale, the same way a typed character
+// replaces it. handled is false when the block flattened to nothing.
+func (m *Model) Paste(text string) (handled bool) {
+	pre := m.preselect
+	f := m.focused()
+	cur := m.cur
+	if pre && m.focus == fieldQuery {
+		// The remembered query is selected: a paste replaces it, not appends.
+		*f, cur = "", 0
+	}
+	out, ncur, changed := ui.PasteText(*f, cur, text)
+	if !changed {
+		return false
+	}
+	m.preselect = false
+	*f, m.cur = out, ncur
+	m.editedField()
+	return true
+}
+
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	// Selection semantics for the remembered query (#277): the first typed

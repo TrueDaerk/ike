@@ -78,8 +78,10 @@ line runs that test (see /architecture/run-configurations.md).
   inserts the whole block as a single edit and one undo unit — visual mode
   replaces the selection, mid-insert it splices in, normal mode pastes after the
   cursor like `p` — without touching the yank registers or system clipboard
-  (#603). A modal overlay owning the keyboard suppresses the route; a focused
-  terminal pane gets the block through its own bracketed-paste path.
+  (#603). A focused terminal pane gets the block through its own
+  bracketed-paste path; a modal overlay owning the keyboard takes it through
+  the **overlay paste router** (`internal/app/overlaypaste.go`, #1273) instead
+  — see [command palette](./command-palette.md).
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
   #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
   **Yank → system clipboard (#1256).** `editor.clipboard_sync` (default on,

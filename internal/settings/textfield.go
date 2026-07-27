@@ -49,5 +49,15 @@ func (f *textField) Handle(key tea.KeyPressMsg) (handled, changed bool) {
 	return handled, changed
 }
 
+// Paste inserts a pasted block at the cursor (#1273). changed is false when
+// the block flattened to nothing.
+func (f *textField) Paste(text string) (changed bool) {
+	out, cur, changed := ui.PasteText(f.text, f.cur, text)
+	if changed {
+		f.text, f.cur = out, cur
+	}
+	return changed
+}
+
 // View renders the text with the cursor cell.
 func (f textField) View() string { return ui.CursorView(f.text, f.cur) }

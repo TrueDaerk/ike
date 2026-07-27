@@ -93,3 +93,43 @@ func TestCursorView(t *testing.T) {
 		}
 	}
 }
+
+// TestPasteTextFlattens guards #1273: single-line inputs take a multi-line
+// block joined into one line rather than rejecting it, with control
+// characters dropped and tabs kept as word boundaries.
+func TestPasteTextFlattens(t *testing.T) {
+	cases := []struct {
+		name        string
+		text        string
+		cur         int
+		paste       string
+		wantTxt     string
+		wantCur     int
+		wantChanged bool
+	}{
+		{"plain insert at cursor", "ho", 1, "ell", "hello", 4, true},
+		{"append at end", "abc", 3, "def", "abcdef", 6, true},
+		{"insert at start", "world", 0, "hello ", "hello world", 6, true},
+		{"multi-line joins", "", 0, "one\ntwo", "one two", 7, true},
+		{"trailing newline dropped", "", 0, "path/to/file.go\n", "path/to/file.go", 15, true},
+		{"crlf and blank lines", "", 0, "  a  \r\n\r\n  b  ", "a b", 3, true},
+		{"tab becomes a space", "", 0, "a\tb", "a b", 3, true},
+		{"control chars dropped", "", 0, "a\x1b[31mb", "a[31mb", 6, true},
+		{"blank block is a no-op", "keep", 4, " \n\t\n ", "keep", 4, false},
+		{"empty paste is a no-op", "keep", 2, "", "keep", 2, false},
+		{"cursor clamped high", "ab", 99, "c", "abc", 3, true},
+		{"cursor clamped low", "ab", -5, "c", "cab", 1, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, cur, changed := PasteText(tc.text, tc.cur, tc.paste)
+			if out != tc.wantTxt || cur != tc.wantCur || changed != tc.wantChanged {
+				t.Fatalf("PasteText(%q, %d, %q) = (%q, %d, %v), want (%q, %d, %v)",
+					tc.text, tc.cur, tc.paste, out, cur, changed, tc.wantTxt, tc.wantCur, tc.wantChanged)
+			}
+			if strings.ContainsAny(out, "\n\r") {
+				t.Fatalf("PasteText left a line break in a single-line field: %q", out)
+			}
+		})
+	}
+}

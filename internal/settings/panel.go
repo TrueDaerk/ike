@@ -10,6 +10,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/pathcomplete"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // PageModel is a self-rendered settings page. The panel hosts it on the form
@@ -803,6 +804,37 @@ func (m *Model) updatePick(key tea.KeyPressMsg) tea.Cmd {
 		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[m.pickIdx])
 	}
 	return nil
+}
+
+// Paste inserts a pasted block into whichever of the panel's own text inputs
+// is active (#1273): the inline value editor, else the category/entry filter.
+// It returns false when neither is active — the panel is then navigating, and
+// the caller drops the paste rather than typing into a list. Sub-panels and
+// custom pages (the keymap page captures chords, not text) are deliberately
+// not routed.
+func (m *Model) Paste(text string) (handled bool) {
+	if m.topSub() != nil {
+		return false
+	}
+	switch {
+	case m.editing:
+		if !m.edit.Paste(text) {
+			return false
+		}
+		if r, ok := m.current(); ok && r.entry.Type == Path {
+			m.suggest.refresh(m.edit.text)
+		}
+		return true
+	case m.filtering:
+		out, _, changed := ui.PasteText(m.filter, len([]rune(m.filter)), text)
+		if !changed {
+			return false
+		}
+		m.filter = out
+		m.sel = 0
+		return true
+	}
+	return false
 }
 
 // updateEdit handles keys during an inline edit.
