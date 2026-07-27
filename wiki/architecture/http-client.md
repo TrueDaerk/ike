@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T15:00:00Z
+timestamp: 2026-07-27T16:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -177,10 +177,24 @@ other `.ike/` stores). Entries are keyed by source file + request key
 (`httpfile.Request.Key`), so every request in a multi-request file keeps its
 own history; one JSON file per request (debuggable base-name prefix + hash),
 newest first, pruned on append, all writes best effort — losing a history
-entry never fails a dispatch. Bodies round-trip as base64, so binary
-responses store safely.
+entry never fails a dispatch.
 
 After each dispatch the app appends the response and hands the stored list
 to the viewer: `h`/`l` (or arrow keys) browse older/newer responses of the
 current request, with the footer showing the position (`h/l history 2/5`)
 and the stored timestamp.
+
+**Discoverability** (#1267): the footer hint appears from the *first*
+response on (`h/l history 1/1`), not only once a second one exists; the
+palette carries `http.responseHistory` ("Browse HTTP Response History"),
+which focuses the viewer and reports how many responses are stored; and the
+help overlay gains an `http response pane` group listing the pane-local keys
+(`h/l`, `j/k`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+registry command, so nothing else would document them. `help.SetExtra` takes
+several groups for that.
+
+**On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
+plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in
+the editor; only a binary body falls back to the base64 `body` field. The
+reader accepts both shapes, so history files written before the split keep
+loading. Files are written indented for the same reason.

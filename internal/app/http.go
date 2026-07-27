@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/help"
 	"ike/internal/host"
 	"ike/internal/httpclient"
 	"ike/internal/httpfile"
@@ -33,6 +35,10 @@ type HTTPCopyBodyMsg struct{}
 
 // HTTPCopyHeadersMsg runs http.copyHeaders: status line plus headers.
 type HTTPCopyHeadersMsg struct{}
+
+// HTTPResponseHistoryMsg runs http.responseHistory: focus the viewer and
+// report how many stored responses the current request has (#1267).
+type HTTPResponseHistoryMsg struct{}
 
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
@@ -193,4 +199,53 @@ func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg { return httppane.CopyMsg{Text: text, What: what} }
+}
+
+// httpPaneKeys documents the response viewer's pane-local keys for the help
+// overlay (#1267): they belong to no command in the registry, so the
+// cheatsheet would otherwise never mention that responses can be browsed,
+// searched or copied at all.
+var httpPaneKeys = []struct{ Key, Title string }{
+	{"h / l", "Browse older / newer stored response"},
+	{"j / k", "Scroll"},
+	{"g / G", "Top / bottom"},
+	{"/", "Search in the response"},
+	{"n / N", "Next / previous match"},
+	{"y", "Copy selection (or the whole body)"},
+	{"Y", "Copy status line and headers"},
+	{"esc", "Clear search and selection"},
+}
+
+// showHTTPHistory runs http.responseHistory (#1267): it focuses the response
+// viewer and says how many stored responses the current request has, making
+// the h/l browsing discoverable from the palette.
+func (m *Model) showHTTPHistory() {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response yet — run an .http request first")
+		return
+	}
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+	idx, n := p.HistoryIndex()
+	if n <= 1 {
+		m.host.Notify(host.Info, "http: 1 stored response — h/l browse older/newer ones as they arrive")
+		return
+	}
+	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d/%d stored responses — h/l browse", idx+1, n))
+}
+
+// paneKeysHelpGroup lists the focused pane's local keys for the cheatsheet
+// (#1267). Only the HTTP response viewer contributes so far; other panes can
+// join the same way.
+func (m Model) paneKeysHelpGroup() help.Group {
+	g := help.Group{}
+	if m.focusContext() != "http" {
+		return g
+	}
+	g.Label = "http response pane"
+	for _, k := range httpPaneKeys {
+		g.Entries = append(g.Entries, help.Entry{ID: "http.pane." + k.Key, Title: k.Title, Shortcut: k.Key})
+	}
+	return g
 }

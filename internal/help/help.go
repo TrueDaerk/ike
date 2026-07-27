@@ -30,7 +30,7 @@ type Help struct {
 
 	groups     []Group
 	essentials []Group
-	extra      Group
+	extra      []Group
 	filter     string // live typed filter (#271); "" shows everything
 	showAll    bool   // false = curated Essentials view (#656); tab toggles
 }
@@ -67,8 +67,10 @@ func New(src CommandSource, res BindingResolver, minCol int) *Help {
 // shell is opened so the cheat sheet reflects the current registry and focus.
 func (h *Help) Snapshot(contextID string) {
 	h.groups = Snapshot(h.src, h.res, contextID)
-	if len(h.extra.Entries) > 0 {
-		h.groups = append(h.groups, h.extra)
+	for _, g := range h.extra {
+		if len(g.Entries) > 0 {
+			h.groups = append(h.groups, g)
+		}
 	}
 	h.essentials = EssentialsSnapshot(h.src, h.res)
 	// Every open starts on the curated Essentials view (#656); the full dump
@@ -90,10 +92,11 @@ func (h *Help) HandleKey(key string) bool {
 	return true
 }
 
-// SetExtra appends one caller-supplied group to every snapshot — the honest
-// "blocked" section (0081/40): bindings whose command has no owner yet are
-// shown with their dependency, never hidden.
-func (h *Help) SetExtra(g Group) { h.extra = g }
+// SetExtra appends caller-supplied groups to every snapshot: the honest
+// "blocked" section (0081/40) — bindings whose command has no owner yet are
+// shown with their dependency, never hidden — and the focused pane's own
+// local keys (#1267), which no command registry knows about.
+func (h *Help) SetExtra(groups ...Group) { h.extra = groups }
 
 // Title implements ui.Content; an active filter is echoed so the user sees
 // what they typed. The unfiltered titles carry the version (#1214) — the help

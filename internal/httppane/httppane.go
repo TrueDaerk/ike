@@ -532,7 +532,10 @@ func (m *Model) footerText() string {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
 	s := " j/k scroll · g/G top/bottom · / search · y copy body (Y headers)"
-	if len(m.hist) > 1 {
+	// The history hint is permanent while a response is shown (#1267): it
+	// used to appear only once a second response existed, which is exactly
+	// when nobody was looking for it.
+	if len(m.hist) > 0 {
 		s += fmt.Sprintf(" · h/l history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
 			s += " (" + at.Local().Format("15:04:05") + ")"

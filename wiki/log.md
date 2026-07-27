@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http: findable response history, readable history files)
+
+- Response history stopped hiding (#1267): the footer hint shows from the
+  first response, the palette gained `http.responseHistory`, and the help
+  overlay lists the response pane's own keys (`help.SetExtra` now takes
+  several groups). Text bodies are stored as plain JSON strings under
+  `bodyText` instead of base64, so `.ike/http/*.json` is readable and
+  diffable; binary bodies keep the base64 field and old files still load.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: selecting and copying a response)
 
 - The HTTP response viewer supports text selection and copy (#1266): mouse
