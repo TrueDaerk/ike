@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T01:00:00Z
+timestamp: 2026-07-27T02:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -12,8 +12,8 @@ timestamp: 2026-07-27T01:00:00Z
 IKE gains a JetBrains-style HTTP client (epic #1247): requests are written as
 plain-text `.http` files, dispatched from the editor, and answered in a
 read-only response viewer with per-request history. This document tracks the
-subsystem as its milestones land; currently the **parser & format** layer
-(`internal/httpfile`, #1248) is implemented.
+subsystem as its milestones land; parser (#1248), dispatch (#1249) and the
+editor UX (#1250) are implemented, response history (#1251) is next.
 
 ## File format
 
@@ -95,10 +95,29 @@ capped at 10 MiB with a truncation warning so huge downloads cannot freeze
 the TUI. `Options` lets callers (and tests) override the env lookup, the
 config file paths, or disable detection entirely.
 
+## Editor UX (#1250)
+
+- **Syntax highlighting**: the `http` language (`plugins/languages/http`,
+  extensions `.http`/`.rest`) uses the vendored rest-nvim/tree-sitter-http
+  grammar — request line (method, target, version), header names/values,
+  comments, `###` separators, placeholders.
+- **Run action**: `http.run` ("Run HTTP Request", Run menu + palette,
+  default `cmd+enter` with `ctrl+f9` as the delivered fallback, editor
+  context) parses the focused buffer, resolves the request block under the
+  cursor via `httpfile.RequestAt` (the block spans its `###` line through
+  its body) and dispatches it off-loop. Not-an-`.http`-file, no block under
+  the cursor, parse errors, unresolved placeholders and transport failures
+  all surface as notifications — nothing broken is ever sent.
+- **Response viewer** (`internal/httppane`, pane kind `KindHTTP`, singleton
+  key `http`): a read-only bottom-split pane opened on the first response
+  and **reused** for every later dispatch. It shows status line + duration,
+  sorted headers, warnings, and the body — JSON pretty-printed, JSON/XML/
+  HTML/CSS/JS highlighted through the fenced-highlight path, binary bodies
+  collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
+  the mouse wheel; the pane persists across restarts as an empty singleton
+  slot like the Usages panel.
+
 ## Planned milestones
 
-- **UX** (#1250): syntax highlighting for `.http`, run action/keybinding, and
-  a reusable read-only response viewer with content-type-aware
-  pretty-printing.
 - **History** (#1251): last 5 responses per request persisted under
   `.ike/http/`, browsable from the viewer.

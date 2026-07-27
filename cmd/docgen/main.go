@@ -40,6 +40,7 @@ import (
 	_ "ike/plugins/languages/ansible"
 	_ "ike/plugins/languages/dockerfile"
 	_ "ike/plugins/languages/go"
+	_ "ike/plugins/languages/http"
 	_ "ike/plugins/languages/json"
 	_ "ike/plugins/languages/make"
 	_ "ike/plugins/languages/markdown"
@@ -172,7 +173,7 @@ reporting, which fewer terminals implement. See
 
 	b.WriteString(`## Rebinding
 
-Bindings live under `+ "`[keymap.bindings]`" + ` in ` + "`settings.toml`" + `, keyed by command
+Bindings live under ` + "`[keymap.bindings]`" + ` in ` + "`settings.toml`" + `, keyed by command
 ID:
 
 ` + "```toml" + `

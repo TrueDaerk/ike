@@ -67,6 +67,7 @@ bring their own.
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |
@@ -108,6 +109,7 @@ bring their own.
 | New Scratch File: Dockerfile | `scratch.new.dockerfile` | — | — | everywhere |
 | New Scratch File: GO | `scratch.new.go` | — | — | everywhere |
 | New Scratch File: Html | `scratch.new.html` | — | — | everywhere |
+| New Scratch File: Http | `scratch.new.http` | — | — | everywhere |
 | New Scratch File: Json | `scratch.new.json` | — | — | everywhere |
 | New Scratch File: Make | `scratch.new.make` | — | — | everywhere |
 | New Scratch File: Markdown | `scratch.new.markdown` | — | — | everywhere |

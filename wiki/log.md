@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-27 (http client: highlighting, run action, response viewer)
+
+- HTTP client UX (#1250): new `http` language plugin with the vendored
+  tree-sitter-http grammar; `http.run` (cmd+enter / ctrl+f9, Run menu,
+  palette) dispatches the request block under the cursor; responses land in
+  the reusable read-only `internal/httppane` viewer (pane kind `KindHTTP`)
+  with JSON pretty-printing, content-type-aware highlighting and
+  binary/truncation notices (`/architecture/http-client.md`).
+
 ## 2026-07-27 (http client: dispatch with .curlrc/.netrc detection)
 
 - New `internal/httpclient` package (#1249): executes parsed request blocks

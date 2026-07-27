@@ -195,6 +195,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The panel restores empty (#1155): find-references results are
 			// session state; the next lsp.referencesPanel run re-fills it.
 			ids[key] = paneIdentity{Kind: "usages"}
+		case pane.KindHTTP:
+			// The viewer restores empty (#1250): responses are session
+			// state; the next http.run dispatch re-fills it.
+			ids[key] = paneIdentity{Kind: "http"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
 			if ed := inst.Editor(); ed != nil {

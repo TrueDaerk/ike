@@ -345,6 +345,8 @@ func (m Model) statusLine() string {
 			left += "DEBUG"
 		case inst.Kind() == pane.KindProblems:
 			left += "PROBLEMS"
+		case inst.Kind() == pane.KindHTTP:
+			left += "HTTP │ " + inst.HTTP().Title()
 		case inst.Kind() == pane.KindVCS:
 			left += "VCS"
 			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {

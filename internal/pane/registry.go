@@ -10,6 +10,7 @@ import (
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/host"
+	"ike/internal/httppane"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/structpanel"
@@ -49,6 +50,9 @@ const StructureKey = "structure"
 
 // UsagesKey is the stable key of the singleton Usages tool window (#1155).
 const UsagesKey = "usages"
+
+// HTTPKey is the stable key of the singleton HTTP response viewer (#1250).
+const HTTPKey = "http"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -408,6 +412,18 @@ func (r *Registry) AddUsages() string {
 	inst.up = usages.New(r.pal)
 	r.put(inst)
 	return UsagesKey
+}
+
+// AddHTTP creates the singleton HTTP response viewer under HTTPKey (#1250)
+// and returns its key; a second call returns the existing key.
+func (r *Registry) AddHTTP() string {
+	if _, ok := r.instances[HTTPKey]; ok {
+		return HTTPKey
+	}
+	inst := &Instance{key: HTTPKey, kind: KindHTTP, cfg: r.cfg, pal: r.pal}
+	inst.hp = httppane.New(r.pal)
+	r.put(inst)
+	return HTTPKey
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)

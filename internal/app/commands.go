@@ -336,6 +336,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("run.rerun", "Rerun Last", RunRerunMsg{}),
 			appCommand("run.testAtCursor", "Run Test at Cursor", RunTestAtCursorMsg{}),
 			appCommand("run.testsInFile", "Run Tests in File", RunTestsInFileMsg{}),
+			appCommand("http.run", "Run HTTP Request", HTTPRunMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),

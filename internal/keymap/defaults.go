@@ -236,6 +236,13 @@ var jetbrainsRows = []row{
 	{"f9", "debug.continue", "Continue (debug)", Global, "Run (0350)"},
 	// JetBrains Windows-scheme Rerun and Stop (#1048), staying in the same
 	// scheme as the run/debug F-key family above; both deliver everywhere.
+	// JetBrains HTTP client run (#1250): cmd+enter dispatches the .http
+	// request under the cursor, editor-scoped like the run marker it mirrors.
+	{"cmd+enter", "http.run", "Run HTTP request", Editor, "HTTP client (0450)"},
+	// ctrl+f9 is the everywhere-deliverable fallback (modified F-keys
+	// deliver under the Kitty protocol; cmd+enter needs a Cmd-forwarding
+	// terminal).
+	{"ctrl+f9", "http.run", "Run HTTP request", Editor, "HTTP client (0450)"},
 	{"ctrl+f5", "run.rerun", "Rerun last", Global, "Run (0350)"},
 	{"ctrl+f2", "debug.stop", "Stop debug session", Global, "Run (0350)"},
 	// Problems and Structure tool windows (#1048): JetBrains' cmd+6/cmd+7 are

@@ -306,3 +306,44 @@ func TestResolveUnresolvedAborts(t *testing.T) {
 		t.Errorf("error must name the variable: %q", err.Error())
 	}
 }
+
+func TestRequestAt(t *testing.T) {
+	src := strings.Join([]string{
+		"# leading comment", // 1
+		"GET https://a/",    // 2
+		"### second",        // 3
+		"GET https://b/",    // 4
+		"Accept: */*",       // 5
+		"",                  // 6
+		"body",              // 7
+		"###",               // 8
+		"GET https://c/",    // 9
+	}, "\n")
+	f := Parse(src)
+	if len(f.Requests) != 3 || len(f.Errors) != 0 {
+		t.Fatalf("requests=%d errors=%v", len(f.Requests), f.Errors)
+	}
+	cases := []struct {
+		line, wantIdx int
+		ok            bool
+	}{
+		{1, 0, true}, // comment above first request still belongs to its block
+		{2, 0, true},
+		{3, 1, true}, // separator line belongs to the following request
+		{5, 1, true},
+		{7, 1, true}, // body line
+		{8, 2, true},
+		{9, 2, true},
+		{42, 0, false},
+	}
+	for _, c := range cases {
+		r, ok := f.RequestAt(c.line)
+		if ok != c.ok {
+			t.Errorf("line %d: ok=%v want %v", c.line, ok, c.ok)
+			continue
+		}
+		if ok && r.Index != c.wantIdx {
+			t.Errorf("line %d: request %d, want %d", c.line, r.Index, c.wantIdx)
+		}
+	}
+}

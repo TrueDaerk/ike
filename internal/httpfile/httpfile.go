@@ -40,6 +40,11 @@ type Request struct {
 	Index int
 	// Line is the 1-based line number of the request line.
 	Line int
+	// BlockStart/BlockEnd delimit the whole block (1-based, inclusive),
+	// including the introducing "###" separator line — the range RequestAt
+	// matches a cursor line against.
+	BlockStart int
+	BlockEnd   int
 
 	Method  string
 	Target  string // raw request-target, placeholders unresolved
@@ -106,7 +111,8 @@ func Parse(src string) *File {
 		if !atEnd && !strings.HasPrefix(lines[i], separator) {
 			continue
 		}
-		parseBlock(f, lines, blockStart, i, name)
+		sep := blockStart - 1 // line index of the introducing ###, -1 for none
+		parseBlock(f, lines, blockStart, i, name, sep)
 		if atEnd {
 			break
 		}
@@ -123,9 +129,10 @@ func isComment(line string) bool {
 }
 
 // parseBlock parses lines[start:end] as one request block and appends the
-// result (or an error) to f. Blocks holding only blanks/comments are
-// skipped silently.
-func parseBlock(f *File, lines []string, start, end int, name string) {
+// result (or an error) to f. sep is the line index of the block's "###"
+// separator (-1 when the block opens the file). Blocks holding only
+// blanks/comments are skipped silently.
+func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	i := start
 	for i < end && (strings.TrimSpace(lines[i]) == "" || isComment(lines[i])) {
 		i++
@@ -140,7 +147,14 @@ func parseBlock(f *File, lines []string, start, end int, name string) {
 
 	// Request line.
 	fields := strings.Fields(lines[i])
-	req := &Request{Name: name, Index: len(f.Requests), Line: i + 1, Proto: DefaultProto}
+	blockStart := sep // 0-based: the separator line, or 0 at file start
+	if sep < 0 {
+		blockStart = 0
+	}
+	req := &Request{
+		Name: name, Index: len(f.Requests), Line: i + 1,
+		BlockStart: blockStart + 1, BlockEnd: end, Proto: DefaultProto,
+	}
 	switch len(fields) {
 	case 2:
 		req.Method, req.Target = fields[0], fields[1]
@@ -185,6 +199,18 @@ func parseBlock(f *File, lines []string, start, end int, name string) {
 	}
 
 	f.Requests = append(f.Requests, req)
+}
+
+// RequestAt returns the request whose block (separator line through last
+// body line) contains the 1-based cursor line, mirroring how run-at-cursor
+// resolves its target.
+func (f *File) RequestAt(line int) (*Request, bool) {
+	for _, r := range f.Requests {
+		if line >= r.BlockStart && line <= r.BlockEnd {
+			return r, true
+		}
+	}
+	return nil, false
 }
 
 // placeholderRE matches both supported placeholder forms:

@@ -1012,6 +1012,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#1025)
 		} else if ids[key].Kind == "usages" {
 			continue // restored below as the empty singleton panel (#1155)
+		} else if ids[key].Kind == "http" {
+			continue // restored below as the empty singleton viewer (#1250)
 		} else if !isEditorKey(key) && !isTerminalKey(key) {
 			// A terminal-shaped key may carry an editor identity: a
 			// converted tab host (#836) restores as an editor pane below.
@@ -1108,6 +1110,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// find-references results are session state; the next
 			// lsp.referencesPanel run re-fills it.
 			panes.Get(panes.AddUsages()).Usages().SetDisplayPath(displayPath)
+			continue
+		}
+		if id := ids[key]; id.Kind == "http" {
+			// The HTTP response viewer restores empty in its saved slot
+			// (#1250): the next http.run dispatch re-fills it.
+			panes.AddHTTP()
 			continue
 		}
 		if id := ids[key]; id.Kind == "structure" {
@@ -2901,6 +2909,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case RunTestsInFileMsg:
 		// run.testsInFile (Run menu / palette, #1150): the file's package tests.
 		m.runTestsInFile()
+		return m, nil
+
+	case HTTPRunMsg:
+		// http.run (Run menu / palette / cmd+enter, #1250): dispatch the
+		// .http request under the cursor off-loop.
+		return m, m.runHTTPRequestAtCursor()
+
+	case HTTPResponseMsg:
+		// One dispatch finished (#1250): open/reuse the response viewer.
+		m.fillHTTPPanel(msg)
 		return m, nil
 
 	case DebugToggleBreakpointMsg:
@@ -6002,6 +6020,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Usages().Wheel(lines)
 			}
+		case pane.KindHTTP:
+			// The wheel scrolls the response viewer (#1250).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.HTTP().Scroll(-lines)
+			case tea.MouseWheelDown:
+				inst.HTTP().Scroll(lines)
+			}
 		case pane.KindTerminal:
 			// The pane routes the wheel (#226): mouse-reporting children get
 			// the event, alt-screen children arrow keys, a plain shell pages
@@ -7674,6 +7700,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "STRUCTURE"
 		case pane.KindUsages:
 			title = "USAGES"
+		case pane.KindHTTP:
+			title = strings.ToUpper(inst.HTTP().Title())
 		}
 	}
 
