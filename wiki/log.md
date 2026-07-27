@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-27 (http: search inside the response viewer)
+
+- The HTTP response viewer got in-pane search (#1265): `/` opens a prompt,
+  `n`/`N` step through the matches with wrap-around, `Esc` clears, and the
+  footer shows the position. Matching runs over the whole composed view
+  (status line, headers, formatted body) through `internal/editor/search`, so
+  smartcase behaves exactly like the editor's `/`.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: folded query lines)
 
 - The `.http` parser accepts the JetBrains query-folding form (#1269):

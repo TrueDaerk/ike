@@ -19,6 +19,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/editor/buffer"
+	"ike/internal/editor/search"
 	"ike/internal/highlight"
 	"ike/internal/httpclient"
 	"ike/internal/theme"
@@ -66,6 +68,15 @@ type Model struct {
 	// bodyIx indexes the highlight spans of the body lines only.
 	bodyIx highlight.Index
 	top    int
+
+	// In-pane search (#1265) over the whole composed view — status line,
+	// headers and formatted body alike. searching marks the open "/" prompt,
+	// query is the live pattern, matches every hit in row order and cur the
+	// selected one (n/N step through them).
+	searching bool
+	query     string
+	matches   []search.Span
+	cur       int
 }
 
 // New returns an empty viewer; responses arrive via Set.
@@ -155,6 +166,7 @@ func (m *Model) compose(resp *httpclient.Response) {
 	m.rows = nil
 	m.bodyIx = highlight.Index{}
 	if resp == nil {
+		m.research()
 		return
 	}
 
@@ -192,6 +204,7 @@ func (m *Model) compose(resp *httpclient.Response) {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
 		}
 	}
+	m.research() // the search survives history browsing and new responses
 }
 
 // formatBody renders the response body for display: pretty-printed JSON,
@@ -262,7 +275,23 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) {
+	if m.searching {
+		m.searchKey(msg)
+		return
+	}
 	switch msg.String() {
+	case "/":
+		// Open the in-pane search prompt (#1265), editor conventions.
+		m.searching = true
+		m.query = ""
+		m.matches = nil
+		m.cur = 0
+	case "n":
+		m.step(1)
+	case "N":
+		m.step(-1)
+	case "esc":
+		m.clearSearch()
 	case "j", "down":
 		m.Scroll(1)
 	case "k", "up":
@@ -282,6 +311,112 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) {
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
 	}
+}
+
+// search.go territory (#1265) ------------------------------------------------
+
+// SearchQuery reports the active pattern and whether the prompt is open
+// (tests).
+func (m *Model) SearchQuery() (string, bool) { return m.query, m.searching }
+
+// MatchPosition reports the 1-based current match and the total (tests);
+// 0/0 when nothing matches.
+func (m *Model) MatchPosition() (int, int) {
+	if len(m.matches) == 0 {
+		return 0, 0
+	}
+	return m.cur + 1, len(m.matches)
+}
+
+// research recomputes the matches of the current query over the composed
+// rows. It runs after every compose too, so browsing history or a new
+// response keeps the search live instead of pointing at stale lines.
+func (m *Model) research() {
+	m.matches = nil
+	if m.query == "" {
+		m.cur = 0
+		return
+	}
+	lines := make([]string, len(m.rows))
+	for i, r := range m.rows {
+		lines[i] = r.text
+	}
+	// Smartcase like the editor's "/" (#257): an all-lowercase pattern folds
+	// case, any uppercase rune makes it exact.
+	m.matches = search.Compile(m.query, false, search.CaseSmart).AllMatches(buffer.New(lines))
+	if m.cur >= len(m.matches) {
+		m.cur = 0
+	}
+}
+
+// searchKey handles one key while the "/" prompt is open.
+func (m *Model) searchKey(msg tea.KeyPressMsg) {
+	switch msg.String() {
+	case "esc":
+		m.clearSearch()
+	case "enter":
+		m.searching = false
+		m.scrollToMatch()
+	case "backspace":
+		if r := []rune(m.query); len(r) > 0 {
+			m.query = string(r[:len(r)-1])
+		}
+		m.research()
+		m.scrollToMatch()
+	default:
+		if t := msg.Text; t != "" {
+			m.query += t
+			m.research()
+			m.scrollToMatch()
+		}
+	}
+}
+
+// clearSearch drops the prompt, the pattern and every match (Esc).
+func (m *Model) clearSearch() {
+	m.searching = false
+	m.query = ""
+	m.matches = nil
+	m.cur = 0
+}
+
+// step moves to the next (delta 1) or previous (-1) match, wrapping around.
+func (m *Model) step(delta int) {
+	if len(m.matches) == 0 {
+		return
+	}
+	m.cur = (m.cur + delta + len(m.matches)) % len(m.matches)
+	m.scrollToMatch()
+}
+
+// scrollToMatch brings the current match into view, keeping the viewport
+// where it is when the match is already visible.
+func (m *Model) scrollToMatch() {
+	if len(m.matches) == 0 {
+		return
+	}
+	line := m.matches[m.cur].Line
+	switch h := m.bodyHeight(); {
+	case line < m.top:
+		m.top = line
+	case line >= m.top+h:
+		m.top = line - h + 1
+	}
+	m.Scroll(0) // clamp
+}
+
+// matchState reports whether column col of row i is inside a match (1) or
+// inside the current match (2); 0 otherwise.
+func (m *Model) matchState(rowIx, col int) int {
+	for i, s := range m.matches {
+		if s.Line == rowIx && col >= s.Start && col < s.End {
+			if i == m.cur {
+				return 2
+			}
+			return 1
+		}
+	}
+	return 0
 }
 
 // showHistory switches the viewer to history entry i, clamped to the range.
@@ -359,7 +494,19 @@ func (m *Model) View() string {
 // footerText renders the key hints plus the history position when older
 // responses are browsable (#1251).
 func (m *Model) footerText() string {
-	s := " j/k scroll · g/G top/bottom"
+	// The open "/" prompt owns the footer line: the pattern being typed plus
+	// the live match count (#1265).
+	if m.searching {
+		s := " /" + m.query + "▏"
+		if m.query != "" {
+			s += "  " + m.matchCount()
+		}
+		return s
+	}
+	if m.query != "" {
+		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
+	}
+	s := " j/k scroll · g/G top/bottom · / search"
 	if len(m.hist) > 1 {
 		s += fmt.Sprintf(" · h/l history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
@@ -369,6 +516,15 @@ func (m *Model) footerText() string {
 	return s
 }
 
+// matchCount renders the match position, "no matches" when the pattern hits
+// nothing (#1265).
+func (m *Model) matchCount() string {
+	if len(m.matches) == 0 {
+		return "no matches"
+	}
+	return fmt.Sprintf("%d/%d", m.cur+1, len(m.matches))
+}
+
 func (m *Model) emptyText() string {
 	if m.loaded {
 		return "(empty response)"
@@ -376,47 +532,82 @@ func (m *Model) emptyText() string {
 	return "(no response yet — run an .http request)"
 }
 
-// renderRow draws one composed line per kind.
+// renderRow draws one composed line per kind, with the search-match overlay
+// painted on top (#1265). Every kind renders through paintRow so a match
+// highlights the same way in the status line, a header and the body.
 func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	r := m.rows[i]
-	switch r.kind {
-	case kindStatus:
-		return lipgloss.NewStyle().Foreground(pal.Accent).Bold(true).Render(m.clip(" " + r.text))
-	case kindHeader:
-		name, value, _ := strings.Cut(r.text, ": ")
-		nm := " " + name + ":"
-		if st, ok := m.hl.Style("constant"); ok {
-			nm = st.Render(m.clip(nm))
-		}
-		return nm + " " + m.clip(value)
-	case kindWarn:
-		return lipgloss.NewStyle().Foreground(pal.Warning).Render(m.clip(" " + r.text))
-	case kindBody:
-		return " " + m.styledBodyLine(r.body, m.clipRaw(r.text))
-	default:
+	if r.kind == kindBlank {
 		return ""
 	}
+	text := m.clipRaw(r.text)
+	return " " + m.paintRow(i, text, m.baseStyle(pal, r))
 }
 
-// styledBodyLine applies capture styles from the body highlight index,
-// grouping adjacent runes with the same capture into one styled segment.
-func (m *Model) styledBodyLine(ln int, line string) string {
-	if m.bodyIx.Empty() {
-		return line
+// styleFn resolves the non-match styling of one column: the style plus a key
+// that groups adjacent columns sharing it into a single rendered segment.
+type styleFn func(col int) (lipgloss.Style, string)
+
+// baseStyle returns the per-kind column styling of a row.
+func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
+	plain := lipgloss.NewStyle()
+	switch r.kind {
+	case kindStatus:
+		st := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+		return func(int) (lipgloss.Style, string) { return st, "status" }
+	case kindWarn:
+		st := lipgloss.NewStyle().Foreground(pal.Warning)
+		return func(int) (lipgloss.Style, string) { return st, "warn" }
+	case kindHeader:
+		// The name (up to and including the colon) reads as a constant, the
+		// value plain — the pre-#1265 look, now column-addressed.
+		name, _, _ := strings.Cut(r.text, ": ")
+		nameEnd := len([]rune(name)) + 1
+		nameStyle, ok := m.hl.Style("constant")
+		if !ok {
+			nameStyle = plain
+		}
+		return func(col int) (lipgloss.Style, string) {
+			if col < nameEnd {
+				return nameStyle, "name"
+			}
+			return plain, "value"
+		}
+	case kindBody:
+		return func(col int) (lipgloss.Style, string) {
+			capture := m.bodyIx.CaptureAt(r.body, col)
+			if st, ok := m.hl.Style(capture); ok {
+				return st, capture
+			}
+			return plain, capture
+		}
 	}
-	runes := []rune(line)
+	return func(int) (lipgloss.Style, string) { return plain, "" }
+}
+
+// paintRow renders text with base styling per column and the search-match
+// overlay: every match gets a muted background, the current one the
+// selection background plus an underline — the editor's convention (#255).
+func (m *Model) paintRow(rowIx int, text string, base styleFn) string {
+	runes := []rune(text)
 	var b strings.Builder
 	for col := 0; col < len(runes); {
-		capture := m.bodyIx.CaptureAt(ln, col)
+		st, key := base(col)
+		state := m.matchState(rowIx, col)
 		end := col + 1
-		for end < len(runes) && m.bodyIx.CaptureAt(ln, end) == capture {
+		for end < len(runes) {
+			if _, k := base(end); k != key || m.matchState(rowIx, end) != state {
+				break
+			}
 			end++
 		}
-		seg := string(runes[col:end])
-		if st, ok := m.hl.Style(capture); ok {
-			seg = st.Render(seg)
+		switch state {
+		case 2:
+			st = st.Background(m.theme().Selection).Underline(true)
+		case 1:
+			st = st.Background(m.theme().SelectionMuted)
 		}
-		b.WriteString(seg)
+		b.WriteString(st.Render(string(runes[col:end])))
 		col = end
 	}
 	return b.String()

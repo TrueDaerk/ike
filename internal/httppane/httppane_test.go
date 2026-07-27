@@ -212,3 +212,209 @@ func TestHistoryBrowsing(t *testing.T) {
 func keyPress(s string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
+
+// searchSample is a response whose composed view has hits in the status
+// line, a header and the body — search spans the whole view (#1265).
+func searchSample() *httpclient.Response {
+	return &httpclient.Response{
+		Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.1",
+		Headers: http.Header{
+			"Content-Type": {"application/json"},
+			"X-Token":      {"token-abc"},
+		},
+		Body:     []byte(`{"token":"abc","list":[{"token":"def"}]}`),
+		Duration: 3 * time.Millisecond,
+	}
+}
+
+func searchViewer(t *testing.T) *Model {
+	t.Helper()
+	m := New(nil)
+	m.SetSize(120, 20)
+	m.Set("r", searchSample())
+	return &m
+}
+
+// typeSearch opens the prompt and types pattern rune by rune.
+func typeSearch(m *Model, pattern string) {
+	m.handleKey(keyPress("/"))
+	for _, r := range pattern {
+		m.handleKey(keyPress(string(r)))
+	}
+}
+
+func TestSearchFindsMatchesAcrossTheView(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token")
+	if q, open := m.SearchQuery(); q != "token" || !open {
+		t.Fatalf("prompt state: %q open=%v", q, open)
+	}
+	// Two hits in the X-Token header line (its name and its value, folded by
+	// smartcase) plus two in the body.
+	cur, total := m.MatchPosition()
+	if cur != 1 || total != 4 {
+		t.Fatalf("match position: %d/%d, want 1/4", cur, total)
+	}
+	// The hits really do span header and body rows.
+	kinds := map[rowKind]bool{}
+	for _, s := range m.matches {
+		kinds[m.rows[s.Line].kind] = true
+	}
+	if !kinds[kindHeader] || !kinds[kindBody] {
+		t.Errorf("matches must cover headers and body, got %v", kinds)
+	}
+}
+
+func TestSearchSmartcase(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "Token") // an uppercase rune forces an exact match
+	if _, total := m.MatchPosition(); total != 1 {
+		t.Errorf("exact-case matches: %d, want 1 (the X-Token header)", total)
+	}
+}
+
+func TestSearchNextPrevWrap(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token")
+	m.handleKey(keyPress("enter"))
+	if _, open := m.SearchQuery(); open {
+		t.Fatal("enter must close the prompt and keep the query")
+	}
+	for want := 2; want <= 4; want++ {
+		m.handleKey(keyPress("n"))
+		if cur, _ := m.MatchPosition(); cur != want {
+			t.Fatalf("n step: got %d, want %d", cur, want)
+		}
+	}
+	m.handleKey(keyPress("n")) // wraps
+	if cur, _ := m.MatchPosition(); cur != 1 {
+		t.Errorf("n must wrap to 1, got %d", cur)
+	}
+	m.handleKey(keyPress("N")) // wraps backwards
+	if cur, _ := m.MatchPosition(); cur != 4 {
+		t.Errorf("N must wrap to 4, got %d", cur)
+	}
+}
+
+func TestSearchEscClearsState(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token")
+	m.handleKey(keyPress("esc"))
+	if q, open := m.SearchQuery(); q != "" || open {
+		t.Fatalf("esc during typing must clear: %q open=%v", q, open)
+	}
+	if _, total := m.MatchPosition(); total != 0 {
+		t.Error("esc must drop the matches")
+	}
+
+	// Esc after committing clears just as well.
+	typeSearch(m, "token")
+	m.handleKey(keyPress("enter"))
+	m.handleKey(keyPress("esc"))
+	if q, _ := m.SearchQuery(); q != "" {
+		t.Errorf("esc after commit must clear the query, got %q", q)
+	}
+}
+
+func TestSearchBackspaceReRuns(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "tokenz")
+	if _, total := m.MatchPosition(); total != 0 {
+		t.Fatalf("no hits expected for 'tokenz', got %d", total)
+	}
+	m.handleKey(keyPress("backspace"))
+	if q, _ := m.SearchQuery(); q != "token" {
+		t.Fatalf("query after backspace: %q", q)
+	}
+	if _, total := m.MatchPosition(); total != 4 {
+		t.Errorf("matches must come back after backspace, got %d", total)
+	}
+}
+
+func TestSearchFooterShowsPosition(t *testing.T) {
+	m := searchViewer(t)
+	typeSearch(m, "token")
+	if !strings.Contains(m.View(), "1/4") {
+		t.Errorf("typing footer must show the position:\n%s", m.View())
+	}
+	m.handleKey(keyPress("enter"))
+	view := m.View()
+	if !strings.Contains(view, "1/4") || !strings.Contains(view, "n/N") {
+		t.Errorf("committed footer must show position and hints:\n%s", view)
+	}
+	typeSearch(m, "zzz")
+	if !strings.Contains(m.View(), "no matches") {
+		t.Errorf("a pattern without hits must say so:\n%s", m.View())
+	}
+}
+
+func TestSearchScrollsCurrentMatchIntoView(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 6) // 4 body rows visible
+	resp := searchSample()
+	var b strings.Builder
+	b.WriteString("{\n")
+	for i := 0; i < 60; i++ {
+		b.WriteString("  \"pad\": 0,\n")
+	}
+	b.WriteString(`  "needle": 1` + "\n}")
+	resp.Body = []byte(b.String())
+	resp.Headers = http.Header{"Content-Type": {"text/plain"}}
+	m.Set("r", resp)
+
+	typeSearch(&m, "needle")
+	cur, total := m.MatchPosition()
+	if cur != 1 || total != 1 {
+		t.Fatalf("match position: %d/%d", cur, total)
+	}
+	line := m.matches[0].Line
+	if line < m.top || line >= m.top+m.bodyHeight() {
+		t.Errorf("match on row %d not in view [%d,%d)", line, m.top, m.top+m.bodyHeight())
+	}
+}
+
+func TestSearchSurvivesHistoryBrowsing(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 20)
+	newest := searchSample()
+	older := searchSample()
+	older.Body = []byte(`{"token":"only-once"}`)
+	m.Set("r", newest)
+	m.SetHistory([]HistoryItem{{Resp: newest}, {Resp: older}})
+
+	typeSearch(&m, "token")
+	m.handleKey(keyPress("enter"))
+	if _, total := m.MatchPosition(); total != 4 {
+		t.Fatalf("newest response matches: %d, want 4", total)
+	}
+	m.handleKey(keyPress("h")) // older entry
+	if _, total := m.MatchPosition(); total != 3 {
+		t.Errorf("older response matches: %d, want 3 (two in the header, one in the body)", total)
+	}
+}
+
+func TestSearchHighlightsMatches(t *testing.T) {
+	m := searchViewer(t)
+	plain := m.View()
+	typeSearch(m, "token")
+	if m.View() == plain {
+		t.Error("matches must change the rendered output")
+	}
+}
+
+// TestSearchPromptSwallowsNavigationKeys: while typing, j/k/h/l are pattern
+// text, not scroll and history commands.
+func TestSearchPromptSwallowsNavigationKeys(t *testing.T) {
+	m := searchViewer(t)
+	top := m.top
+	m.handleKey(keyPress("/"))
+	for _, k := range []string{"j", "k", "h", "l"} {
+		m.handleKey(keyPress(k))
+	}
+	if q, _ := m.SearchQuery(); q != "jkhl" {
+		t.Errorf("prompt must collect the keys, got %q", q)
+	}
+	if m.top != top {
+		t.Errorf("prompt keys must not scroll: top %d → %d", top, m.top)
+	}
+}

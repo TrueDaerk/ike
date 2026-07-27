@@ -251,3 +251,25 @@ func TestHTTPResponseReattachesAfterHideAllTools(t *testing.T) {
 		t.Fatalf("request label after re-attach: %q", got)
 	}
 }
+
+// TestHTTPPaneReceivesSearchKeys guards the routing (#1265): with the
+// response viewer focused, "/" and the pattern reach the pane instead of
+// being swallowed by a keymap binding or a global handler.
+func TestHTTPPaneReceivesSearchKeys(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	for _, k := range []string{"/", "o", "k"} {
+		out, _ = m.Update(tea.KeyPressMsg{Code: rune(k[0]), Text: k})
+		m = out.(Model)
+	}
+	q, open := m.httpPanel().SearchQuery()
+	if !open || q != "ok" {
+		t.Fatalf("pane search state: query=%q open=%v", q, open)
+	}
+	if cur, total := m.httpPanel().MatchPosition(); cur != 1 || total == 0 {
+		t.Errorf("match position: %d/%d", cur, total)
+	}
+}
