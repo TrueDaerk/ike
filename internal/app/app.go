@@ -2725,6 +2725,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case settings.PreviewMsg:
+		// A staged settings value shown without being written (#1296). Only
+		// keys whose whole point is their appearance preview; discarding the
+		// batch sends the previous value back through here.
+		if msg.Key == "theme.name" {
+			m.previewTheme(msg.Value)
+		}
+		return m, nil
+
 	case settings.VersionMsg:
 		// Async interpreter version probes land in the toolchain page's cache.
 		return m, m.settings.Deliver(msg)

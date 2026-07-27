@@ -93,9 +93,6 @@ func (t *DebugMapPage) openForm(idx int) {
 	}
 }
 
-
-
-
 // deleteEntry removes the entry at idx and writes the list back.
 func (t *DebugMapPage) deleteEntry(idx int) tea.Cmd {
 	entries := append([]config.DebugPathMap(nil), t.entries()...)
@@ -178,7 +175,6 @@ func (t *DebugMapPage) View(w, h int) string {
 	t.listH = h - 1 - len(footer)
 	return headLine + "\n" + pinFooter(list, footer, t.sel, t.sel, h-1, &t.off)
 }
-
 
 // Click implements the optional PageClicker seam (enter semantics on the
 // selected row).

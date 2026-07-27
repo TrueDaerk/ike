@@ -292,7 +292,6 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-
 // settingsJSON renders the server's settings override as compact JSON for the
 // inline editor ("" when none is set).
 func settingsJSON(id string) string {
@@ -306,7 +305,6 @@ func settingsJSON(id string) string {
 	}
 	return string(data)
 }
-
 
 // commitInput writes the edited override through write-back (project scope).
 // commitOverride writes one override for lang (#892); an empty raw resets it.

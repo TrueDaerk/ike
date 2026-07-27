@@ -67,6 +67,13 @@ func apply(t *testing.T, cmd tea.Cmd) {
 	config.Set(msg.Config)
 }
 
+// commit applies the panel's staged batch (#1296): schema edits reach disk
+// only through apply now, so every write test stages and then commits.
+func commit(t *testing.T, m *Model) {
+	t.Helper()
+	apply(t, m.applyChanges())
+}
+
 func testPages() []Page {
 	return []Page{
 		{Title: "Interface", Entries: []Entry{
@@ -167,7 +174,11 @@ func TestBoolToggleWritesAndReloads(t *testing.T) {
 	m.SetSize(90, 20)
 	m.Open()
 	m.Update(key("tab")) // focus the form
-	apply(t, m.Update(key("enter")))
+	m.Update(key("enter"))
+	if !m.Dirty() {
+		t.Fatal("a toggle must stage a change")
+	}
+	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("toggle must flip ui.menu_bar to false")
 	}
@@ -199,7 +210,8 @@ func TestScopeSelectorWritesProjectLayer(t *testing.T) {
 	if !strings.Contains(m.View(), "scope: project") {
 		t.Fatalf("title must show the forced scope:\n%s", m.View())
 	}
-	apply(t, m.Update(key("enter"))) // toggle ui.menu_bar in project scope
+	m.Update(key("enter")) // toggle ui.menu_bar in project scope
+	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("toggle must flip ui.menu_bar to false")
 	}
@@ -214,7 +226,8 @@ func TestScopeSelectorWritesProjectLayer(t *testing.T) {
 	}
 
 	// Reset in project scope removes the key; the value falls back.
-	apply(t, m.Update(key("r")))
+	m.Update(key("r"))
+	commit(t, m)
 	if !config.Get().UI.MenuBar {
 		t.Fatal("reset must fall back (default true)")
 	}
@@ -242,17 +255,20 @@ func TestScopeSelectorProjectOverridesUser(t *testing.T) {
 	m.Open()
 	m.Update(key("tab"))
 
-	m.Update(key("s"))               // user
-	apply(t, m.Update(key("enter"))) // menu_bar -> false @user
-	m.Update(key("s"))               // project
-	apply(t, m.Update(key("enter"))) // menu_bar -> true @project
+	m.Update(key("s"))     // user
+	m.Update(key("enter")) // menu_bar -> false @user
+	commit(t, m)
+	m.Update(key("s"))     // project
+	m.Update(key("enter")) // menu_bar -> true @project
+	commit(t, m)
 	if !config.Get().UI.MenuBar {
 		t.Fatal("project layer must win")
 	}
 	if got := config.Origin(opts, "ui.menu_bar"); got != "project" {
 		t.Fatalf("origin = %q, want project", got)
 	}
-	apply(t, m.Update(key("r"))) // remove the project key
+	m.Update(key("r")) // remove the project key
+	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("removing the project key must fall back to the user value (false)")
 	}
@@ -283,7 +299,8 @@ func TestIntEditValidatesAndClamps(t *testing.T) {
 	}
 	// A too-large value clamps to Max.
 	ed.tf.Set("99")
-	apply(t, m.Update(key("enter")))
+	m.Update(key("enter"))
+	commit(t, m)
 	if got := config.Get().Editor.TabWidth; got != 16 {
 		t.Fatalf("tab_width = %d, want clamped 16", got)
 	}
@@ -318,7 +335,8 @@ func TestEnumEditor(t *testing.T) {
 	// Re-enter, move down, commit.
 	m.Update(key("enter"))
 	m.Update(key("down"))
-	apply(t, m.Update(key("enter")))
+	m.Update(key("enter"))
+	commit(t, m)
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
 		t.Fatalf("enter must write the highlighted option, got %q", got)
 	}
@@ -341,7 +359,8 @@ func TestEnumEditorFilters(t *testing.T) {
 	if got := ed.matches(); len(got) != 1 || got[0] != "tokyo-night" {
 		t.Fatalf("matches = %v, want only tokyo-night", got)
 	}
-	apply(t, m.Update(key("enter")))
+	m.Update(key("enter"))
+	commit(t, m)
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
 		t.Fatalf("enter must write the filtered option, got %q", got)
 	}
@@ -357,20 +376,23 @@ func TestEnumQuickCycle(t *testing.T) {
 	m.Open()
 	m.Update(key("down")) // Appearance page
 	m.Update(key("tab"))
-	apply(t, m.Update(key("right")))
+	m.Update(key("right"))
+	commit(t, m)
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
 		t.Fatalf("right must cycle to the next option, got %q", got)
 	}
 	if m.focus != formColumn {
 		t.Fatal("quick cycle must not move the focus into the detail column")
 	}
-	apply(t, m.Update(key("l")))
+	m.Update(key("l"))
+	commit(t, m)
 	if got := config.Get().Theme.Name; got != "default" {
 		t.Fatalf("l must wrap to the first option, got %q", got)
 	}
 	// ← mirrors → as a value change on enum rows (#889): it cycles back and
 	// keeps the focus in the form column.
-	apply(t, m.Update(key("left")))
+	m.Update(key("left"))
+	commit(t, m)
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
 		t.Fatalf("left must cycle to the previous option, got %q", got)
 	}
@@ -452,8 +474,10 @@ func TestResetRemovesOverride(t *testing.T) {
 	m.SetSize(90, 20)
 	m.Open()
 	m.Update(key("tab"))
-	apply(t, m.Update(key("enter"))) // menu_bar -> false (user layer)
-	apply(t, m.Update(key("r")))     // reset to default
+	m.Update(key("enter")) // menu_bar -> false (user layer)
+	commit(t, m)
+	m.Update(key("r")) // reset to default
+	commit(t, m)
 	if !config.Get().UI.MenuBar {
 		t.Fatal("reset must fall back to the default (true)")
 	}
@@ -501,12 +525,8 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	// returns the write command.
 	m.focus = formColumn
 	m.Click(formX, 2+0) // select row 0 (bool)
-	m.Click(formX, 2+0)
-	wcmd := m.Update(key("enter"))
-	if wcmd == nil {
-		t.Fatal("activating the bool entry must return the write command")
-	}
-	apply(t, wcmd)
+	m.Click(formX, 2+0) // second click activates: the toggle stages
+	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("bool click-activation must toggle the value")
 	}
@@ -707,7 +727,8 @@ func TestBoolEditorWrites(t *testing.T) {
 	if _, ok := m.editor.(*boolEditor); !ok {
 		t.Fatalf("editor = %T, want *boolEditor", m.editor)
 	}
-	apply(t, m.Update(key("space")))
+	m.Update(key("space"))
+	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("space in the toggle editor must write the other value")
 	}

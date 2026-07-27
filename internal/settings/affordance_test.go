@@ -38,18 +38,15 @@ func TestIntStepperClampsWithNotice(t *testing.T) {
 	m.Open()
 	m.focus = formColumn
 	m.sel = 1 // editor.tab_width, Min 1 Max 16
-	apply(t, m.Update(key("+")))
-	after := value("editor.tab_width")
-	if after == "" {
-		t.Fatal("stepper must write a value")
+	m.Update(key("+"))
+	if m.value("editor.tab_width") == "" {
+		t.Fatal("stepper must stage a value")
 	}
-	// Step far past the max: the write clamps and says so.
+	// Step far past the max: the staged value clamps and says so.
 	for i := 0; i < 20; i++ {
-		if cmd := m.Update(key("+")); cmd != nil {
-			apply(t, cmd)
-		}
+		m.Update(key("+"))
 	}
-	if got := value("editor.tab_width"); got != "16" {
+	if got := m.value("editor.tab_width"); got != "16" {
 		t.Fatalf("value = %q, want the max 16", got)
 	}
 	m.Update(key("+")) // at the cap: no write, visible notice
@@ -69,11 +66,12 @@ func TestIntCommitClampNotice(t *testing.T) {
 	m.sel = 1
 	m.Update(key("enter")) // focus the detail column's stepper
 	m.editor.(*intEditor).tf.Set("99")
-	apply(t, m.Update(key("enter")))
-	if got := config.Get().Editor.TabWidth; got != 16 {
-		t.Fatalf("committed = %d, want 16", got)
-	}
+	m.Update(key("enter"))
 	if !strings.Contains(m.notice, "clamped to 16") {
 		t.Fatalf("notice = %q", m.notice)
+	}
+	apply(t, m.applyChanges())
+	if got := config.Get().Editor.TabWidth; got != 16 {
+		t.Fatalf("committed = %d, want 16", got)
 	}
 }

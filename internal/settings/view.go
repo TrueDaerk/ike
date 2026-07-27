@@ -135,6 +135,7 @@ func (m *Model) View() string {
 	chip := "[scope: " + m.scopeLabel() + "] "
 	m.chipSpan = span{start: 1 + lipgloss.Width(titleText), end: 1 + lipgloss.Width(titleText) + lipgloss.Width(chip)}
 	title += chipStyle.Render(chip)
+	title += m.renderChangeCount(pal, lipgloss.Width(titleText)+lipgloss.Width(chip))
 	title += m.renderFilter()
 	hint := m.renderHint(pal)
 
@@ -176,6 +177,10 @@ func (m *Model) renderHint(pal *theme.Palette) string {
 	default:
 		segs = []hintSeg{{"enter edit", "edit"}, {"r reset", "reset"}}
 	}
+	if m.Dirty() {
+		// With edits pending, applying them is what matters most here.
+		segs = append(segs[:1:1], hintSeg{"ctrl+s apply", "apply"})
+	}
 	segs = append(segs, hintSeg{"? all keys", "help"})
 
 	x := 1 // border column 0
@@ -196,6 +201,20 @@ func (m *Model) renderHint(pal *theme.Palette) string {
 		x += w
 	}
 	return style.Render(out)
+}
+
+// renderChangeCount renders the staged-apply counter in the header (#1296) and
+// records its clickable span: "● n changed · ctrl+s apply" while edits are
+// pending, nothing at all when there are none — a quiet header means a clean
+// panel.
+func (m *Model) renderChangeCount(pal *theme.Palette, x int) string {
+	m.countSpan = span{}
+	if !m.Dirty() {
+		return ""
+	}
+	text := "● " + plural(len(m.changes), "change") + " · ctrl+s apply "
+	m.countSpan = span{start: 1 + x, end: 1 + x + lipgloss.Width(text)}
+	return lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(text)
 }
 
 // hintSeg is one footer segment: its text and the action a click runs.
@@ -260,6 +279,11 @@ func (m *Model) renderCategories(h int) string {
 		}
 		p := m.pages[r.page]
 		label := " " + p.Title
+		if n := m.changedOnPage(r.page); n > 0 {
+			// The rail says which pages carry staged edits (#1296), so a
+			// batch spanning pages is visible from anywhere.
+			label += " ●" + strconv.Itoa(n)
+		}
 		switch {
 		case r.page == m.cat && m.focus == catColumn:
 			lines = append(lines, sel.Render(label))
@@ -492,6 +516,15 @@ func (m *Model) detailFoot(e Entry, w int, clip, dim lipgloss.Style, pal *theme.
 	default:
 		out = append(out, "")
 	}
+	if c, staged := m.change(e.Key); staged {
+		// A staged row says where it came from and how to take it back
+		// (#1296) — the counter alone would not tell you what changed.
+		arrow := " ● " + c.old + " → " + c.shown
+		if c.reset {
+			arrow = " ● " + c.old + " → default"
+		}
+		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Warning).Render(arrow)))
+	}
 	origin := config.Origin(m.opts, e.Key)
 	scope := "user"
 	if m.scopeFor(e) == config.ProjectScope {
@@ -588,7 +621,7 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	if m.filter != "" {
 		title = " " + m.pages[r.page].Title + " › " + e.Title
 	}
-	right := affordanceValue(e, value(e.Key)) + " "
+	right := affordanceValue(e, m.value(e.Key)) + " "
 	// The value yields before the title does: a long list still shows its
 	// marker, and the row never overflows the fixed column.
 	if over := lipgloss.Width(title) + lipgloss.Width(right) + 1 - w; over > 0 {

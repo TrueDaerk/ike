@@ -128,7 +128,10 @@ func (m Model) themePickBody() string {
 	return b.String()
 }
 
-// previewTheme applies a theme by name without persisting it.
+// previewTheme applies a theme by name without persisting it — the setup
+// wizard's live preview, and the settings panel's staged theme (#1296): a
+// staged value must be visible while it is chosen without reaching disk.
+// Discarding the batch sends the previous name back through here.
 func (m *Model) previewTheme(name string) {
 	sel, _ := theme.Select(name, m.reg.Themes())
 	m.applyTheme(theme.NewPalette(sel))

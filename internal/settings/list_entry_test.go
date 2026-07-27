@@ -40,7 +40,8 @@ func TestListEntryCommitsArray(t *testing.T) {
 	ed.idx = len(ed.items) // the "+ add value…" row
 	m.Update(key("enter"))
 	ed.tf.Set("node_modules")
-	apply(t, m.Update(key("enter")))
+	m.Update(key("enter"))
+	apply(t, m.applyChanges())
 	got := config.Get().Explorer.Exclude
 	want := []string{".git", "*.pyc", "node_modules"}
 	if len(got) != len(want) {
@@ -65,8 +66,9 @@ func TestListEntryCommitsEmptyList(t *testing.T) {
 	ed := m.editor.(*listEditor)
 	for len(ed.items) > 0 {
 		ed.idx = 0
-		apply(t, m.Update(key("d")))
+		m.Update(key("d"))
 	}
+	apply(t, m.applyChanges())
 	if got := config.Get().Explorer.Exclude; len(got) != 0 {
 		t.Fatalf("exclude = %v, want empty", got)
 	}

@@ -15,11 +15,11 @@ import (
 
 // confirmPanel implements SubPanel.
 type confirmPanel struct {
-	host  SubPanelHost
-	what  string // "delete the tool htop"
-	verb  string // button label, e.g. "Delete"
-	doIt  func() tea.Cmd
-	pal   *theme.Palette
+	host SubPanelHost
+	what string // "delete the tool htop"
+	verb string // button label, e.g. "Delete"
+	doIt func() tea.Cmd
+	pal  *theme.Palette
 }
 
 // newConfirm builds the dialog; verb labels the destructive button.

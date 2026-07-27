@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-27 (settings: staged apply with a diff)
+
+- Settings edits stopped writing per keystroke (#1296). They collect in a
+  staging buffer, the header counts them (`● n changes · ctrl+s apply`), the
+  rail marks the pages carrying them and the detail column shows the selected
+  row's `old → new`. `ctrl+s` opens a diff panel — `page · key · old → new`,
+  target layer in the title — where `u` drops a line, `s` retargets the batch
+  and enter writes it through the new `config.ApplyAndReload`, which reloads
+  **once** for the whole batch. `esc` with pending edits opens the same review
+  instead of discarding silently. Keys whose point is their appearance
+  (`theme.name`) preview live via `settings.PreviewMsg` without ever reaching
+  disk, and a discard sends the previous value back. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-27 (http: body from a file)
 
 - `< ./payload.json` was sent as literal text (#1305). The parser now

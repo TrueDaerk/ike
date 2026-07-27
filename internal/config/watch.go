@@ -41,6 +41,40 @@ func RemoveAndReload(opts Options, scope Scope, key string) tea.Cmd {
 	return applyAndReload(opts, key, func() error { return RemoveKey(opts, scope, key) })
 }
 
+// Mutation is one staged write-back edit for ApplyAndReload: a value to write,
+// or a key to remove when Remove is set.
+type Mutation struct {
+	Scope  Scope
+	Key    string
+	Value  any
+	Remove bool
+}
+
+// ApplyAndReload persists a whole batch of mutations and reloads **once**
+// (#1296): the settings panel stages edits and applies them together, so the
+// app must not re-theme and rebuild its keymaps once per changed key. Every
+// failure surfaces as a Diagnostic on the reloaded message, and a failing
+// mutation never stops the rest — the batch is a best-effort write of
+// independent keys, exactly like the same edits made by hand.
+func ApplyAndReload(opts Options, muts []Mutation) tea.Cmd {
+	return func() tea.Msg {
+		var diags []Diagnostic
+		for _, m := range muts {
+			var err error
+			if m.Remove {
+				err = RemoveKey(opts, m.Scope, m.Key)
+			} else {
+				err = WriteKey(opts, m.Scope, m.Key, m.Value)
+			}
+			if err != nil {
+				diags = append(diags, Diagnostic{Field: m.Key, Message: err.Error()})
+			}
+		}
+		c, loadDiags := Load(opts)
+		return ConfigReloadedMsg{Config: c, Diags: append(diags, loadDiags...)}
+	}
+}
+
 // applyAndReload runs one write-back mutation and always follows with Load.
 func applyAndReload(opts Options, key string, fn func() error) tea.Cmd {
 	return func() tea.Msg {
