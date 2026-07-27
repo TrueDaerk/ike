@@ -43,6 +43,7 @@ import (
 	_ "ike/plugins/languages/sql"
 	_ "ike/plugins/languages/toml"
 	_ "ike/plugins/languages/web"
+	_ "ike/plugins/languages/xml"
 	_ "ike/plugins/languages/yaml"
 )
 

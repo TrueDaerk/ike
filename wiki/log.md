@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (lang: XML highlighting)
+
+- New `xml` language plugin (#1253, `plugins/languages/xml`): Tree-sitter
+  highlighting via a vendored tree-sitter-grammars/tree-sitter-xml (`xml`
+  grammar only, `dtd` out of scope) for tags, attributes, entity references,
+  CDATA, processing instructions, the doctype-internal subset and comments.
+  Matches `.xml` plus `.xsd`/`.xsl`/`.xslt`/`.svg`/`.plist`/`.wsdl` and the
+  MSBuild family; `<!-- -->` block-comment toggle, element sticky scopes and
+  folding; no LSP server (`/architecture/languages.md`).
+
 ## 2026-07-27 (php: suppress intelephense by-ref P1006 false positive)
 
 - Default `lsp.diagnostics_ignore` rules (#1260) drop intelephense's P1006
