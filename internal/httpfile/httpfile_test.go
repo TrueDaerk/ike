@@ -347,3 +347,142 @@ func TestRequestAt(t *testing.T) {
 		}
 	}
 }
+
+// TestParseFoldedQueryLines covers the JetBrains query-folding form (#1269):
+// indented continuation lines starting with "?" or "&" extend the target.
+func TestParseFoldedQueryLines(t *testing.T) {
+	cases := []struct {
+		name, src, want string
+	}{
+		{
+			"jetbrains example",
+			"GET https://example.net:9210/_cat/indices\n    ? v =\n    & s = i\n",
+			"https://example.net:9210/_cat/indices?v=&s=i",
+		},
+		{
+			"tight spelling",
+			"GET https://api.test/x\n?a=1\n&b=2\n",
+			"https://api.test/x?a=1&b=2",
+		},
+		{
+			"several params per line",
+			"GET https://api.test/x\n  ? a = 1 & b = 2\n  & c=3\n",
+			"https://api.test/x?a=1&b=2&c=3",
+		},
+		{
+			"valueless flag param",
+			"GET https://api.test/x\n  ? pretty\n",
+			"https://api.test/x?pretty",
+		},
+		{
+			"value containing =",
+			"GET https://api.test/x\n  ? filter = a=b\n",
+			"https://api.test/x?filter=a=b",
+		},
+		{
+			"query already on the request line",
+			"GET https://api.test/x?a=1\n  & b = 2\n",
+			"https://api.test/x?a=1&b=2",
+		},
+		{
+			"request line ends with the query opener",
+			"GET https://api.test/x?\n  & b = 2\n",
+			"https://api.test/x?b=2",
+		},
+		{
+			"comment between folded lines",
+			"GET https://api.test/x\n  ? a = 1\n  # why\n  & b = 2\n",
+			"https://api.test/x?a=1&b=2",
+		},
+		{
+			"folding stops at the blank line",
+			"GET https://api.test/x\n  ? a = 1\n\n?not=a-param\n",
+			"https://api.test/x?a=1",
+		},
+		{
+			"no folded lines leaves the target untouched",
+			"GET https://api.test/x\nAccept: application/json\n",
+			"https://api.test/x",
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			f := Parse(c.src)
+			if len(f.Errors) != 0 {
+				t.Fatalf("unexpected errors: %v", f.Errors)
+			}
+			if len(f.Requests) != 1 {
+				t.Fatalf("want 1 request, got %d", len(f.Requests))
+			}
+			if got := f.Requests[0].Target; got != c.want {
+				t.Errorf("target: got %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestParseFoldedQueryThenHeadersAndBody: folding ends at the first header
+// line; headers and body parse as usual behind it.
+func TestParseFoldedQueryThenHeadersAndBody(t *testing.T) {
+	src := strings.Join([]string{
+		"POST https://api.test/things",
+		"    ? dry = true",
+		"    & mode = fast",
+		"Content-Type: application/json",
+		"",
+		`{"name":"x"}`,
+	}, "\n")
+	f := Parse(src)
+	if len(f.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", f.Errors)
+	}
+	r := f.Requests[0]
+	if r.Target != "https://api.test/things?dry=true&mode=fast" {
+		t.Errorf("target: %q", r.Target)
+	}
+	if len(r.Headers) != 1 || r.Headers[0].Name != "Content-Type" {
+		t.Errorf("headers: %+v", r.Headers)
+	}
+	if r.Body != `{"name":"x"}` {
+		t.Errorf("body: %q", r.Body)
+	}
+}
+
+// TestParseFoldedQueryPlaceholders: placeholders inside folded params resolve
+// like anywhere else in the target.
+func TestParseFoldedQueryPlaceholders(t *testing.T) {
+	f := Parse("GET https://${HOST}/search\n  ? q = {{$env TERM}}\n  & lang = ${LANG}\n")
+	if len(f.Errors) != 0 {
+		t.Fatalf("unexpected errors: %v", f.Errors)
+	}
+	r := f.Requests[0]
+	if r.Target != "https://${HOST}/search?q={{$env TERM}}&lang=${LANG}" {
+		t.Fatalf("target kept verbatim: %q", r.Target)
+	}
+	env := map[string]string{"HOST": "api.test", "TERM": "cats", "LANG": "de"}
+	out, err := r.Resolve(func(k string) (string, bool) {
+		v, ok := env[k]
+		return v, ok
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Target != "https://api.test/search?q=cats&lang=de" {
+		t.Errorf("resolved target: %q", out.Target)
+	}
+}
+
+// TestParseInvalidLineAfterRequestStillErrors: a line that is neither a
+// folded query line nor a header keeps its clear parse error.
+func TestParseInvalidLineAfterRequestStillErrors(t *testing.T) {
+	f := Parse("GET https://api.test/x\nthis is not a header\n")
+	if len(f.Errors) != 1 {
+		t.Fatalf("want 1 error, got %v", f.Errors)
+	}
+	if !strings.Contains(f.Errors[0].Msg, "invalid header field") {
+		t.Errorf("error message: %q", f.Errors[0].Msg)
+	}
+	if f.Errors[0].Line != 2 {
+		t.Errorf("error line: %d", f.Errors[0].Line)
+	}
+}

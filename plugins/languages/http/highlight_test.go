@@ -49,3 +49,24 @@ func TestHighlighting(t *testing.T) {
 		t.Errorf("header name: got capture %q, want constant", got)
 	}
 }
+
+// TestFoldedQueryHighlighting: indented "?"/"&" continuation lines (#1269)
+// are part of the request target for the grammar too, so they highlight as
+// the URL does — not as a broken header.
+func TestFoldedQueryHighlighting(t *testing.T) {
+	lines := []string{
+		"GET https://example.net:9210/_cat/indices",
+		"    ? v =",
+		"    & s = i",
+		"Accept: application/json",
+	}
+	ix := highlight.NewIndex(highlight.Highlight("req.http", lines))
+	for _, ln := range []int{1, 2} {
+		if got := ix.CaptureAt(ln, 4); got != "string" {
+			t.Errorf("folded query line %d: got capture %q, want string", ln, got)
+		}
+	}
+	if got := ix.CaptureAt(3, 0); got != "constant" {
+		t.Errorf("header after the fold: got capture %q, want constant", got)
+	}
+}
