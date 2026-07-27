@@ -42,11 +42,7 @@ func TestToolchainCustomPathTabCompletes(t *testing.T) {
 	p := NewToolchainPage(testOpts(t), root, nil)
 	p.run = func(string, ...string) string { return "" }
 	p.look = func(string) string { return "" }
-	for i, l := range p.languages() {
-		if l.ID == "tcsuggest" {
-			p.sel = i
-		}
-	}
+	selectToolchainLang(t, p, "tcsuggest")
 	p.custom = true
 
 	// Typing an ambiguous prefix surfaces both directory candidates.

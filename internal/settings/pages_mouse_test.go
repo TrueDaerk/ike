@@ -90,6 +90,7 @@ func TestToolchainPageMouse(t *testing.T) {
 		}
 	}
 	p.View(120, 40) // sets the list-window height; off stays 0 (tall window)
+	p.sel = -1      // start with nothing selected, so the first click selects
 
 	// Click selects the row (header is line 0, rows start at 1).
 	p.Click(3, 1+idx)

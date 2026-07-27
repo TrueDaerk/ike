@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T00:50:00Z
+timestamp: 2026-07-28T01:40:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -518,5 +518,29 @@ the wireframe's `r rebind` would have collided with the established reset.
 Range folding of `alt+1 … alt+9` style runs lands with the rest of the noise
 folding in #1300.
 
-Still open on the epic: the toolchain page on the grid (#1299) and noise
-folding (#1300).
+## Toolchain page on the grid (0460, #1299)
+
+Two things were wrong before: the flat list mixed twelve `(not found)` rows in
+with the three that mattered, and the candidate picker only appeared *after*
+pressing enter — so a first run looked like an empty slate you were expected to
+type paths into.
+
+- **Grouping.** Rows group by state: `configured`, `detected · not configured`,
+  `not installed · n`. The last group is **folded** behind its counted caption
+  until `z`. Captions are structure, not targets: navigation and clicks skip
+  them, and search reaches into the folded group (activating a result unfolds
+  it).
+- **The selection follows the language, not the line.** Configuring an
+  interpreter moves its row into another group; `selKey` re-resolves the
+  cursor after every regrouping.
+- **Detail column** (`toolchain_detail.go`): the discovered candidates for the
+  selected language — every one a real find, with its provenance and probed
+  version, the one in use marked `●`, and *enter a path manually…* as the
+  **last** row. While discovery is in flight it says `scanning…`, never an
+  empty field. Long paths elide from the left so the version and provenance —
+  what actually distinguishes two candidates — stay visible.
+- **First run.** With nothing selected the column explains what a toolchain is
+  and offers `a · accept all n recommendations`: one key writes every detected
+  interpreter (one batch, one reload) instead of a guided picker per language.
+
+Still open on the epic: noise folding (#1300).
