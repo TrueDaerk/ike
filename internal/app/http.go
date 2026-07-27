@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,10 +94,26 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 	}
 	key := req.Key()
 	source := ed.Path()
-	return func() tea.Msg {
-		resp, err := httpclient.Dispatch(context.Background(), req, httpclient.Options{})
+	flightKey := httpFlightKey(source, key)
+	if _, running := m.httpFlight[flightKey]; running {
+		// Duplicate-dispatch guard (#1272): never fire the same request twice
+		// in parallel behind the user's back.
+		m.host.Notify(host.Info, "http: "+key+" is already running — cancel it with http.cancel (or x in the response pane)")
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	tick := m.startHTTPFlight(flightKey, &httpFlightEntry{
+		label:   requestLabel(req),
+		request: key,
+		started: time.Now(),
+		cancel:  cancel,
+	})
+	dispatch := func() tea.Msg {
+		resp, err := httpclient.Dispatch(ctx, req, httpclient.Options{})
+		cancel() // release the context regardless of the outcome
 		return HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 	}
+	return tea.Batch(dispatch, tick)
 }
 
 // httpPanel returns the singleton viewer model, or nil when it is not open
@@ -150,7 +168,13 @@ func (m *Model) openHTTPPanel() {
 // when it is not part of the layout — the reuse path: a later dispatch
 // replaces the content of the existing pane.
 func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
+	canceled := m.finishHTTPFlight(httpFlightKey(msg.Source, msg.Request))
 	if msg.Err != nil {
+		if canceled || errors.Is(msg.Err, context.Canceled) {
+			// The user aborted it (#1272): a confirmation, not a failure.
+			m.host.Notify(host.Info, "http: "+msg.Request+" canceled")
+			return
+		}
 		m.host.Notify(host.Error, "http: "+msg.Err.Error())
 		return
 	}
@@ -213,6 +237,7 @@ var httpPaneKeys = []struct{ Key, Title string }{
 	{"n / N", "Next / previous match"},
 	{"y", "Copy selection (or the whole body)"},
 	{"Y", "Copy status line and headers"},
+	{"x", "Cancel the running request"},
 	{"esc", "Clear search and selection"},
 }
 
@@ -248,4 +273,135 @@ func (m Model) paneKeysHelpGroup() help.Group {
 		g.Entries = append(g.Entries, help.Entry{ID: "http.pane." + k.Key, Title: k.Title, Shortcut: k.Key})
 	}
 	return g
+}
+
+// --- in-flight tracking (#1272) ---
+
+// httpFlightEntry is one dispatch currently running: what it is, since when,
+// and how to abort it.
+type httpFlightEntry struct {
+	label   string // "GET /_cat/indices", for the indicator
+	request string // request key, for the pane's pending marker
+	started time.Time
+	cancel  context.CancelFunc
+	// canceled marks an abort the user asked for, so the resulting
+	// context.Canceled reads as a confirmation instead of a transport error.
+	canceled bool
+}
+
+// httpTickMsg repaints the in-flight indicator while requests run.
+type httpTickMsg struct{}
+
+// HTTPCancelMsg runs http.cancel: abort every in-flight dispatch (#1272).
+type HTTPCancelMsg struct{}
+
+// httpFlightTick is the indicator's repaint interval — fast enough that the
+// elapsed time visibly moves, slow enough to stay free.
+const httpFlightTick = 250 * time.Millisecond
+
+// httpFlightKey identifies one request across dispatches.
+func httpFlightKey(source, request string) string { return source + "\x00" + request }
+
+// httpFlightSegment renders the statusline indicator: the running request
+// with its elapsed time, or a count when several run at once.
+func (m Model) httpFlightSegment() string {
+	if len(m.httpFlight) == 0 {
+		return ""
+	}
+	if len(m.httpFlight) > 1 {
+		oldest := time.Now()
+		for _, e := range m.httpFlight {
+			if e.started.Before(oldest) {
+				oldest = e.started
+			}
+		}
+		return fmt.Sprintf("⟳ http: %d requests (%s)", len(m.httpFlight), elapsed(oldest))
+	}
+	for _, e := range m.httpFlight {
+		return fmt.Sprintf("⟳ http: %s (%s)", e.label, elapsed(e.started))
+	}
+	return ""
+}
+
+// elapsed formats a running duration for the indicator.
+func elapsed(since time.Time) string {
+	d := time.Since(since)
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
+}
+
+// requestLabel is the short "METHOD /path" form the indicator shows.
+func requestLabel(req *httpfile.Request) string {
+	target := req.Target
+	if u, err := url.Parse(target); err == nil && u.Path != "" {
+		target = u.Path
+		if u.RawQuery != "" {
+			target += "?" + u.RawQuery
+		}
+	}
+	if len(target) > 40 {
+		target = target[:39] + "…"
+	}
+	return req.Method + " " + target
+}
+
+// startHTTPFlight registers a dispatch and returns its context plus the tick
+// command that keeps the indicator moving.
+func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
+	if m.httpFlight == nil {
+		m.httpFlight = map[string]*httpFlightEntry{}
+	}
+	first := len(m.httpFlight) == 0
+	m.httpFlight[key] = e
+	m.markHTTPPending()
+	if !first {
+		return nil // a tick loop is already running
+	}
+	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
+}
+
+// finishHTTPFlight drops a finished dispatch and reports whether the user had
+// canceled it.
+func (m *Model) finishHTTPFlight(key string) (canceled bool) {
+	e, ok := m.httpFlight[key]
+	if !ok {
+		return false
+	}
+	delete(m.httpFlight, key)
+	m.markHTTPPending()
+	return e.canceled
+}
+
+// markHTTPPending mirrors the in-flight state into the response pane, so the
+// viewer says "running" instead of presenting a stale response as current.
+func (m *Model) markHTTPPending() {
+	p := m.httpPanel()
+	if p == nil {
+		return
+	}
+	for _, e := range m.httpFlight {
+		p.SetPending(e.request, e.started)
+		return
+	}
+	p.ClearPending()
+}
+
+// cancelHTTPRequests aborts every in-flight dispatch (http.cancel, palette,
+// and "x" in the response pane).
+func (m *Model) cancelHTTPRequests() {
+	if len(m.httpFlight) == 0 {
+		m.host.Notify(host.Info, "http: no request is running")
+		return
+	}
+	n := 0
+	for _, e := range m.httpFlight {
+		e.canceled = true
+		if e.cancel != nil {
+			e.cancel()
+			n++
+		}
+	}
+	m.host.Notify(host.Info, fmt.Sprintf("http: canceling %d request(s)", n))
 }

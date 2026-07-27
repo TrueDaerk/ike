@@ -67,6 +67,7 @@ bring their own.
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Cancel Running HTTP Request | `http.cancel` | — | — | everywhere |
 | Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
 | Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Browse HTTP Response History | `http.responseHistory` | — | — | everywhere |

@@ -340,6 +340,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.copyBody", "Copy HTTP Response Body", HTTPCopyBodyMsg{}),
 			appCommand("http.copyHeaders", "Copy HTTP Response Headers", HTTPCopyHeadersMsg{}),
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
+			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),

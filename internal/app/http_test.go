@@ -96,11 +96,8 @@ func TestHTTPRunDispatchesRequestUnderCursor(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("http.run on an .http file must return a dispatch command")
 	}
-	msg := cmd()
-	resp, ok := msg.(HTTPResponseMsg)
-	if !ok {
-		t.Fatalf("dispatch result: %T", msg)
-	}
+	// The dispatch comes back batched with the in-flight tick (#1272).
+	resp := drainHTTPResponse(t, cmd)
 	if resp.Err != nil {
 		t.Fatal(resp.Err)
 	}
@@ -444,5 +441,195 @@ func TestHTTPFooterAlwaysShowsHistory(t *testing.T) {
 	m = out.(Model)
 	if view := m.activeWS().Panes.Get(pane.HTTPKey).View(); !strings.Contains(view, "h/l history 1/1") {
 		t.Errorf("footer must advertise history from the first response:\n%s", view)
+	}
+}
+
+// slowServer answers only when release is closed, so a dispatch can be
+// observed while it is in flight.
+func slowServer(t *testing.T, release <-chan struct{}) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-release:
+		case <-r.Context().Done():
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// httpFileApp opens a one-request .http file pointing at url and returns the
+// app with the cursor on the request.
+func httpFileApp(t *testing.T, url string) Model {
+	t.Helper()
+	m := httpApp(t)
+	path := filepath.Join(t.TempDir(), "req.http")
+	if err := os.WriteFile(path, []byte("### one\nGET "+url+"/slow\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	return out.(Model)
+}
+
+// TestHTTPInFlightIndicator covers #1272: while a dispatch runs the
+// statusline shows it, the pane marks the pending request, and both clear
+// when the response lands.
+func TestHTTPInFlightIndicator(t *testing.T) {
+	release := make(chan struct{})
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, cmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("http.run must dispatch")
+	}
+	if len(m.httpFlight) != 1 {
+		t.Fatalf("in-flight entries: %d, want 1", len(m.httpFlight))
+	}
+	seg := m.httpFlightSegment()
+	if !strings.Contains(seg, "GET /slow") {
+		t.Errorf("statusline segment: %q", seg)
+	}
+
+	// Run the dispatch to completion and route the response back.
+	close(release)
+	msg := drainHTTPResponse(t, cmd)
+	out, _ = m.Update(msg)
+	m = out.(Model)
+	if len(m.httpFlight) != 0 {
+		t.Errorf("the indicator must clear on response: %+v", m.httpFlight)
+	}
+	if m.httpFlightSegment() != "" {
+		t.Errorf("segment must be empty when idle: %q", m.httpFlightSegment())
+	}
+	if p := m.httpPanel(); p == nil || p.Pending() != "" {
+		t.Error("the pane's pending marker must clear")
+	}
+}
+
+// drainHTTPResponse runs cmd (possibly a batch) until the response message
+// appears, discarding the tick commands.
+func drainHTTPResponse(t *testing.T, cmd tea.Cmd) HTTPResponseMsg {
+	t.Helper()
+	queue := []tea.Cmd{cmd}
+	for len(queue) > 0 {
+		c := queue[0]
+		queue = queue[1:]
+		if c == nil {
+			continue
+		}
+		switch msg := c().(type) {
+		case HTTPResponseMsg:
+			return msg
+		case tea.BatchMsg:
+			queue = append(queue, msg...)
+		}
+	}
+	t.Fatal("no response message produced")
+	return HTTPResponseMsg{}
+}
+
+// TestHTTPDuplicateDispatchRejected: the same request may not fire twice in
+// parallel (#1272).
+func TestHTTPDuplicateDispatchRejected(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, first := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if first == nil {
+		t.Fatal("the first dispatch must run")
+	}
+	out, second := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if second != nil {
+		if _, ok := second().(HTTPResponseMsg); ok {
+			t.Fatal("a duplicate dispatch must not fire a second request")
+		}
+	}
+	if len(m.httpFlight) != 1 {
+		t.Errorf("in-flight entries after the duplicate: %d, want 1", len(m.httpFlight))
+	}
+}
+
+// TestHTTPCancelAbortsDispatch: http.cancel aborts through the dispatch
+// context and the abort reads as a confirmation, not an error (#1272).
+func TestHTTPCancelAbortsDispatch(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, cmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if len(m.httpFlight) != 1 {
+		t.Fatalf("dispatch must be tracked, got %d", len(m.httpFlight))
+	}
+
+	// Cancel while the server still holds the request.
+	out, _ = m.Update(HTTPCancelMsg{})
+	m = out.(Model)
+
+	msg := drainHTTPResponse(t, cmd)
+	if msg.Err == nil {
+		t.Fatal("a canceled dispatch must report an error")
+	}
+	out, _ = m.Update(msg)
+	m = out.(Model)
+	if len(m.httpFlight) != 0 {
+		t.Errorf("cancel must clear the in-flight entry: %+v", m.httpFlight)
+	}
+	if m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Error("a canceled request must not open a response pane")
+	}
+}
+
+// TestHTTPCancelWithoutFlightIsQuiet: the palette command is always
+// reachable; with nothing running it just says so.
+func TestHTTPCancelWithoutFlightIsQuiet(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPCancelMsg{})
+	m = out.(Model)
+	if len(m.httpFlight) != 0 {
+		t.Error("nothing to cancel must stay nothing")
+	}
+}
+
+// TestHTTPPaneCancelKeyRoutes: "x" in the focused pane reaches the host's
+// cancel path (#1272).
+func TestHTTPPaneCancelKeyRoutes(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	out, runCmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if runCmd == nil {
+		t.Fatal("dispatch expected")
+	}
+	out, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("x must emit a command")
+	}
+	if _, ok := cmd().(httppane.CancelMsg); !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+	out, _ = m.Update(httppane.CancelMsg{})
+	m = out.(Model)
+	for _, e := range m.httpFlight {
+		if !e.canceled {
+			t.Error("the entry must be marked canceled")
+		}
 	}
 }

@@ -22,6 +22,10 @@ type CopyMsg struct {
 	What string
 }
 
+// CancelMsg asks the host to abort the in-flight dispatch (#1272); the pane
+// knows a request is running but not how to stop it.
+type CancelMsg struct{}
+
 // pos is a caret position in the composed view: a row index plus a rune
 // column into that row's text.
 type pos struct {

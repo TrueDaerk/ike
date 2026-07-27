@@ -80,6 +80,12 @@ type Model struct {
 
 	// sel is the mouse text selection (#1266), see selection.go.
 	sel selection
+
+	// pending marks a dispatch in flight (#1272): the shown response is the
+	// previous one, so the header says so rather than presenting stale
+	// content as the current answer. pendingSince drives the elapsed time.
+	pending      string
+	pendingSince time.Time
 }
 
 // New returns an empty viewer; responses arrive via Set.
@@ -166,6 +172,19 @@ func (m *Model) SetHistory(items []HistoryItem) {
 	m.histIdx = 0
 	m.compose(items[0].Resp)
 }
+
+// SetPending marks request as in flight since at (#1272). The composed rows
+// stay untouched — the previous response remains readable, it is just no
+// longer presented as the current one.
+func (m *Model) SetPending(request string, at time.Time) {
+	m.pending, m.pendingSince = request, at
+}
+
+// ClearPending drops the in-flight marker (response, error or cancel).
+func (m *Model) ClearPending() { m.pending, m.pendingSince = "", time.Time{} }
+
+// Pending reports the in-flight request, "" when none (tests).
+func (m *Model) Pending() string { return m.pending }
 
 // HistoryIndex reports the shown entry and the history length (tests).
 func (m *Model) HistoryIndex() (int, int) { return m.histIdx, len(m.hist) }
@@ -316,6 +335,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return copyCmd(m.BodyText(), "response body")
 	case "Y":
 		return copyCmd(m.HeadersText(), "response headers")
+	case "x":
+		// Cancel the in-flight dispatch (#1272). ctrl+c is taken by copy
+		// (#1266), so the abort key is its own.
+		return func() tea.Msg { return CancelMsg{} }
 	case "j", "down":
 		m.Scroll(1)
 	case "k", "up":
@@ -497,6 +520,12 @@ func (m *Model) View() string {
 	if m.status != "" {
 		b.WriteString(lipgloss.NewStyle().Faint(true).Render("   " + m.status))
 	}
+	if m.pending != "" {
+		// An in-flight dispatch (#1272): the rows below are the *previous*
+		// response until the new one lands.
+		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
+			fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince))))
+	}
 	b.WriteString("\n")
 
 	height := m.bodyHeight()
@@ -542,6 +571,18 @@ func (m *Model) footerText() string {
 		}
 	}
 	return s
+}
+
+// runningFor formats how long the in-flight dispatch has been running.
+func runningFor(since time.Time) string {
+	if since.IsZero() {
+		return "0ms"
+	}
+	d := time.Since(since)
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // matchCount renders the match position, "no matches" when the pattern hits

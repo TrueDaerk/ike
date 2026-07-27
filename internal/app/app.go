@@ -146,6 +146,10 @@ type Model struct {
 	// recentEditor is the key of the most-recently-focused editor, used as the
 	// Replace open-target when the explorer (not an editor) holds focus.
 	recentEditor string
+	// httpFlight tracks the .http requests currently in flight (#1272), keyed
+	// by source file + request key: the duplicate-dispatch guard, the
+	// statusline indicator and the cancel action all read it.
+	httpFlight map[string]*httpFlightEntry
 	// closedFileViews collects the file paths whose editor view disappeared
 	// during the current Update pass (tab close, pane close, tab-limit
 	// eviction, drag). The Update wrapper drains it once the whole operation
@@ -2934,6 +2938,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fillHTTPPanel(msg)
 		return m, nil
 
+	case httpTickMsg:
+		// Keep the in-flight indicator moving while dispatches run (#1272).
+		if len(m.httpFlight) == 0 {
+			return m, nil
+		}
+		return m, tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{} })
+
+	case HTTPCancelMsg:
+		// http.cancel (palette, x in the response pane, #1272).
+		m.cancelHTTPRequests()
+		return m, nil
+
 	case HTTPResponseHistoryMsg:
 		// http.responseHistory (palette, #1267): focus the viewer, say how
 		// many stored responses are browsable.
@@ -2947,6 +2963,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPCopyHeadersMsg:
 		// http.copyHeaders (palette, #1266): status line plus headers.
 		return m, m.copyHTTPResponse(true)
+
+	case httppane.CancelMsg:
+		// "x" in the response pane (#1272): the pane cannot reach the
+		// dispatch context, so the host aborts on its behalf.
+		m.cancelHTTPRequests()
+		return m, nil
 
 	case httppane.CopyMsg:
 		// The response viewer asks the host for the clipboard (#1266) — the
