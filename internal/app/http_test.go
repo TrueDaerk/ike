@@ -372,3 +372,77 @@ func TestHTTPCopyWithoutPaneNotifies(t *testing.T) {
 		}
 	}
 }
+
+// TestHTTPResponseHistoryCommand covers http.responseHistory (#1267): it
+// focuses the viewer and reports the stored count.
+func TestHTTPResponseHistoryCommand(t *testing.T) {
+	m := httpApp(t)
+	for i := 0; i < 3; i++ {
+		resp := sampleResponse("one")
+		resp.Body = []byte(`{"n":` + strconv.Itoa(i) + `}`)
+		out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: resp})
+		m = out.(Model)
+	}
+	// Focus something else first, so the command has work to do.
+	m.setFocus(m.activeEditorKey())
+
+	out, _ := m.Update(HTTPResponseHistoryMsg{})
+	m = out.(Model)
+	if m.activeWS().Panes.Focused() != pane.HTTPKey {
+		t.Errorf("the command must focus the response pane, focused=%q", m.activeWS().Panes.Focused())
+	}
+	if idx, n := m.httpPanel().HistoryIndex(); idx != 0 || n != 3 {
+		t.Errorf("history state: %d/%d, want 0/3", idx, n)
+	}
+}
+
+// TestHTTPResponseHistoryWithoutPane must not panic or open anything.
+func TestHTTPResponseHistoryWithoutPane(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseHistoryMsg{})
+	m = out.(Model)
+	if m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Error("the command must not conjure a viewer without a response")
+	}
+}
+
+// TestHTTPPaneKeysInHelp: the viewer's pane-local keys reach the cheatsheet
+// (#1267) — they belong to no registry command, so nothing else documents
+// that history browsing exists.
+func TestHTTPPaneKeysInHelp(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+
+	g := m.paneKeysHelpGroup()
+	if len(g.Entries) == 0 {
+		t.Fatal("the focused response pane must contribute help entries")
+	}
+	found := false
+	for _, e := range g.Entries {
+		if e.Shortcut == "h / l" && strings.Contains(e.Title, "stored response") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("history browsing must be documented: %+v", g.Entries)
+	}
+
+	// An editor-focused help overlay must not carry the pane keys.
+	m.setFocus(m.activeEditorKey())
+	if len(m.paneKeysHelpGroup().Entries) != 0 {
+		t.Error("pane keys must be scoped to the focused pane")
+	}
+}
+
+// TestHTTPFooterAlwaysShowsHistory: the hint is there from the first
+// response, not only once a second one exists (#1267).
+func TestHTTPFooterAlwaysShowsHistory(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	if view := m.activeWS().Panes.Get(pane.HTTPKey).View(); !strings.Contains(view, "h/l history 1/1") {
+		t.Errorf("footer must advertise history from the first response:\n%s", view)
+	}
+}

@@ -2934,6 +2934,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.fillHTTPPanel(msg)
 		return m, nil
 
+	case HTTPResponseHistoryMsg:
+		// http.responseHistory (palette, #1267): focus the viewer, say how
+		// many stored responses are browsable.
+		m.showHTTPHistory()
+		return m, nil
+
 	case HTTPCopyBodyMsg:
 		// http.copyBody (palette, #1266): the shown body to the clipboard.
 		return m, m.copyHTTPResponse(false)
@@ -4870,7 +4876,7 @@ func (m *Model) openHelp() {
 	// Honest blocked section (0081/40): bindings whose command has no owner
 	// yet appear with their dependency instead of vanishing. Built live from
 	// the effective table on every open.
-	m.help.SetExtra(m.blockedHelpGroup())
+	m.help.SetExtra(m.blockedHelpGroup(), m.paneKeysHelpGroup())
 	m.help.SetFilter("") // each open starts unfiltered (#271)
 	m.help.Snapshot(m.focusContext())
 	m.shell.SetContent(m.help)
