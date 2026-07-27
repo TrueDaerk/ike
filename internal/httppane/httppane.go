@@ -93,6 +93,22 @@ func (m *Model) Request() string { return m.request }
 // Rows reports the composed row count (tests).
 func (m *Model) Rows() int { return len(m.rows) }
 
+// Highlighted reports whether the shown body carries syntax-highlight spans
+// (tests, #1270): false for an unhighlightable body *and* for a recognized
+// content type whose grammar is missing from the build.
+func (m *Model) Highlighted() bool { return !m.bodyIx.Empty() }
+
+// Warnings reports the warning rows currently composed (tests).
+func (m *Model) Warnings() []string {
+	var out []string
+	for _, r := range m.rows {
+		if r.kind == kindWarn {
+			out = append(out, r.text)
+		}
+	}
+	return out
+}
+
 func (m *Model) rebuildTheme() {
 	var captures map[string]string
 	if m.pal != nil {
@@ -165,6 +181,12 @@ func (m *Model) compose(resp *httpclient.Response) {
 		m.rows = append(m.rows, row{kind: kindWarn, text: notice})
 	}
 	if len(body) > 0 {
+		if tag != "" && !highlight.FencedSupported(tag) {
+			// A recognized Content-Type whose grammar is not in this build
+			// (CGo-free, or the plugin not linked) renders plain — say so
+			// instead of failing silently (#1270).
+			m.rows = append(m.rows, row{kind: kindWarn, text: fmt.Sprintf("(no %s highlighter in this build — showing plain text)", tag)})
+		}
 		m.bodyIx = highlight.NewIndex(highlight.HighlightFenced(tag, body))
 		for i, line := range body {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
@@ -202,11 +224,12 @@ func contentTag(ct string) string {
 		return "json"
 	case strings.HasSuffix(ct, "/xml") || strings.HasSuffix(ct, "+xml"):
 		return "xml"
-	case ct == "text/html":
+	case ct == "text/html" || ct == "application/xhtml":
 		return "html"
 	case ct == "text/css":
 		return "css"
-	case ct == "application/javascript" || ct == "text/javascript":
+	case ct == "application/javascript" || ct == "text/javascript" ||
+		ct == "application/x-javascript" || ct == "application/ecmascript":
 		return "js"
 	}
 	return ""

@@ -1,5 +1,25 @@
 # Log
 
+## 2026-07-27 (http: body highlighting is build-dependent, and says so)
+
+- Response bodies render plain whenever the fence tag's grammar is missing
+  from the build — a `CGO_ENABLED=0` binary has stub grammars, and a grammar
+  plugin not blank-imported in `cmd/ike/main.go` is equally absent (#1270).
+  That failed silently; the viewer now shows
+  `(no <tag> highlighter in this build — showing plain text)` via the new
+  `highlight.FencedSupported`. `contentTag` additionally covers the
+  javascript spellings and `application/xhtml` servers really send.
+  Updated [HTTP Client](/architecture/http-client.md).
+
+## 2026-07-27 (http: dispatch reopens a closed response pane)
+
+- After closing (or hiding via window.hideAllTools) the HTTP response pane, a
+  later `http.run` filled a registered-but-invisible pane: request executed,
+  history grew, nothing on screen (#1271). Pane lookup now requires a visible
+  layout leaf, so the dispatch re-attaches it; an impossible reopen notifies
+  instead of returning silently.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (run: shell files runnable)
 
 - `run.file` on a shell script works (#1225): the shell plugin contributes a

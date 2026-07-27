@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T03:00:00Z
+timestamp: 2026-07-27T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -116,6 +116,18 @@ config file paths, or disable detection entirely.
   collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
+- **Body highlighting depends on the build** (#1270): `contentTag` maps the
+  Content-Type onto a fence tag (charset parameters and `+json`/`+xml`
+  vendor suffixes stripped) and `highlight.HighlightFenced` resolves that tag
+  through the **language registry** — so a body only highlights when the
+  matching grammar plugin is both linked into the binary
+  (`cmd/ike/main.go` blank imports `json`, `web`, `xml`, …) and compiled with
+  **CGo enabled**; a `CGO_ENABLED=0` build has stub grammars and highlights
+  nothing. That used to fail silently. The viewer now consults
+  `highlight.FencedSupported(tag)` and, for a recognized content type with no
+  usable grammar, prints `(no <tag> highlighter in this build — showing plain
+  text)` above the body. An unrecognized content type stays plain without a
+  notice — there is nothing to highlight by design.
 
 ## Response history (#1251)
 
