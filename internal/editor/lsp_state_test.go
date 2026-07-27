@@ -806,6 +806,24 @@ func TestCompletionAcceptHyphenatedPrefix(t *testing.T) {
 	}
 }
 
+// TestCompletionAcceptFuzzyPrefix guards #1292: an item the typed text only
+// fuzzy-matches ("Cen" against "Content-Encoding") replaces that text whole
+// rather than being spliced behind it.
+func TestCompletionAcceptFuzzyPrefix(t *testing.T) {
+	m, _ := loaded(t, "Cen\n")
+	m = insertModeAt(m, 0, 3)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 3, Items: []ilsp.CompletionItem{
+		{Label: "Content-Encoding", InsertText: "Content-Encoding: "},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "Content-Encoding: " {
+		t.Fatalf("after accept line = %q, want %q", got, "Content-Encoding: ")
+	}
+}
+
 // TestCompletionAcceptHyphenKeepsUnrelatedText: widening still only takes
 // text the insertion actually starts with — a hyphen after unrelated words
 // stays put.

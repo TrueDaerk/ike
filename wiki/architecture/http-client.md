@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T20:30:00Z
+timestamp: 2026-07-27T21:15:00Z
 ---
 
 # HTTP Client (.http files)
@@ -127,9 +127,19 @@ config file paths, or disable detection entirely.
     cursor lands on the value) and, for known headers, their typical values —
     MIME types for `Content-Type`/`Accept`, schemes for `Authorization`,
     directives for `Cache-Control`, encodings for `Accept-Encoding`, and so
-    on. Values match by substring, so `jso` reaches `application/json`.
+    on. The catalog covers the IANA request headers plus the common `X-`/
+    `Sec-` ones; values are listed only for headers with a small closed set.
   - **nothing** inside bodies, comments, `###` lines or folded query
     continuation lines.
+
+  Matching is a case-insensitive **subsequence** (`internal/fuzzy`), not a
+  prefix (#1292): `Cen` reaches `Content-Encoding`, `ctype` reaches
+  `Content-Type`, `jso` reaches `application/json`. A prefix-only source made
+  the popup close on the first non-prefix keystroke — an empty batch hides the
+  popup, so the editor's own fuzzy filter never saw the items. Ranking stays
+  with the editor. There is no established language server for `.http` files
+  (JetBrains and the VS Code REST Client ship static tables too), so this
+  local catalog is the whole story.
 
   Accepting a hyphenated prefix required a fix in the editor's completion
   widening (`extendPrefixMatch`/`extendAnchorMatch`): it stopped at the first
