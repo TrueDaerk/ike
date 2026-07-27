@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-27 (http: completion in request files)
+
+- `.http` files complete without a language server (#1268): methods and
+  `HTTP/1.x` on the request line, header names inserting `: `, and typical
+  values for the headers people type by hand — nothing inside bodies,
+  comments or folded query lines. Registered through the local completion
+  engine's plugin seam. The editor's completion widening now takes the
+  furthest matching column, so a hyphenated prefix (`Content-`) is replaced
+  whole instead of being duplicated.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: findable response history, readable history files)
 
 - Response history stopped hiding (#1267): the footer hint shows from the

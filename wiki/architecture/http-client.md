@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T16:00:00Z
+timestamp: 2026-07-27T17:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -117,6 +117,24 @@ config file paths, or disable detection entirely.
   extensions `.http`/`.rest`) uses the vendored rest-nvim/tree-sitter-http
   grammar — request line (method, target, version), header names/values,
   comments, `###` separators, placeholders.
+- **Completion** (#1268): the `http` plugin registers a completion source
+  with the local engine (roadmap 0410, `complete.RegisterSource`), so `.http`
+  files complete without a language server. It is position-aware, mirroring
+  the parser's block rules:
+  - **request line**: method keywords on the first token, `HTTP/1.x` once a
+    target is typed; the target itself completes nothing locally.
+  - **header block**: header names (inserting the `: ` separator so the
+    cursor lands on the value) and, for known headers, their typical values —
+    MIME types for `Content-Type`/`Accept`, schemes for `Authorization`,
+    directives for `Cache-Control`, encodings for `Accept-Encoding`, and so
+    on. Values match by substring, so `jso` reaches `application/json`.
+  - **nothing** inside bodies, comments, `###` lines or folded query
+    continuation lines.
+
+  Accepting a hyphenated prefix required a fix in the editor's completion
+  widening (`extendPrefixMatch`/`extendAnchorMatch`): it stopped at the first
+  non-matching column, so `Content-` + `Content-Type: ` inserted
+  `Content-Content-Type: `. Both now take the *furthest* matching column.
 - **Run action**: `http.run` ("Run HTTP Request", Run menu + palette,
   default `cmd+enter` with `ctrl+f9` as the delivered fallback, editor
   context) parses the focused buffer, resolves the request block under the

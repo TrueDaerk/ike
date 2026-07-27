@@ -663,50 +663,55 @@ func (m Model) identifierStart(pos buffer.Position) buffer.Position {
 }
 
 // extendPrefixMatch widens the replacement span leftwards beyond the
-// identifier boundary while the widened typed text is still a prefix of the
-// insert text. This covers sigil-carrying completions — PHP's "$he" completed
-// to "$hello" must replace the "$" too, or the insert doubles it ("$$hello",
-// #427) — without hard-coding per-language identifier characters.
+// identifier boundary to the furthest column whose typed text is still a
+// prefix of the insert text. This covers sigil-carrying completions — PHP's
+// "$he" completed to "$hello" must replace the "$" too, or the insert doubles
+// it ("$$hello", #427) — without hard-coding per-language identifier
+// characters.
+//
+// The scan takes the *furthest* match rather than stopping at the first
+// mismatch (#1268): a typed "Content-" completed to "Content-Type: " fails at
+// the intermediate "-", so a first-mismatch scan would leave the typed text
+// in place and insert after it ("Content-Content-Type: "). Only columns that
+// match are ever taken, so widening never eats unrelated text.
 func (m Model) extendPrefixMatch(start, cursor buffer.Position, insertText string) buffer.Position {
 	runes := []rune(m.buf.Line(start.Line))
 	end := cursor.Col
 	if end > len(runes) {
 		end = len(runes)
 	}
-	col := start.Col
-	for col > 0 && strings.HasPrefix(insertText, string(runes[col-1:end])) {
-		col--
+	best := start.Col
+	for col := start.Col; col > 0; col-- {
+		if strings.HasPrefix(insertText, string(runes[col-1:end])) {
+			best = col - 1
+		}
 	}
-	return buffer.Position{Line: start.Line, Col: col}
+	return buffer.Position{Line: start.Line, Col: best}
 }
 
 // extendAnchorMatch widens the popup anchor leftwards beyond the identifier
-// boundary while the widened prefix still case-insensitively prefixes some
-// item's label or insert text — the filter-side twin of extendPrefixMatch, so
-// a sigil-carrying prefix ("$he" against "$hello") keeps matching.
+// boundary to the furthest column whose text still case-insensitively
+// prefixes some item's label or insert text — the filter-side twin of
+// extendPrefixMatch, so a sigil-carrying prefix ("$he" against "$hello") and
+// a hyphenated one ("Content-" against "Content-Type", #1268) keep matching.
 func (m Model) extendAnchorMatch(start, pos buffer.Position, items []ilsp.CompletionItem) buffer.Position {
 	runes := []rune(m.buf.Line(start.Line))
 	end := pos.Col
 	if end > len(runes) {
 		end = len(runes)
 	}
-	col := start.Col
-	for col > 0 && col <= end {
+	best := start.Col
+	for col := start.Col; col > 0 && col <= end; col-- {
 		widened := strings.ToLower(string(runes[col-1 : end]))
-		ok := false
 		for _, it := range items {
 			if strings.HasPrefix(strings.ToLower(it.Label), widened) ||
 				strings.HasPrefix(strings.ToLower(it.InsertText), widened) {
-				ok = true
+				best = col - 1
 				break
 			}
 		}
-		if !ok {
-			break
-		}
-		col--
 	}
-	return buffer.Position{Line: start.Line, Col: col}
+	return buffer.Position{Line: start.Line, Col: best}
 }
 
 // isIdentRune reports whether r can appear in a completion identifier.

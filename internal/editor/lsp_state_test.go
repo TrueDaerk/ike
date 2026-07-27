@@ -786,3 +786,37 @@ func TestShowDiagnosticsMultilineMessage(t *testing.T) {
 		}
 	}
 }
+
+// TestCompletionAcceptHyphenatedPrefix guards #1268: a typed prefix whose
+// interior character is not an identifier rune ("Content-") must still be
+// replaced whole — the widening takes the furthest matching column, not the
+// first mismatch, or the insert doubles the typed text.
+func TestCompletionAcceptHyphenatedPrefix(t *testing.T) {
+	m, _ := loaded(t, "Content-\n")
+	m = insertModeAt(m, 0, 8)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 8, Items: []ilsp.CompletionItem{
+		{Label: "Content-Type", InsertText: "Content-Type: "},
+	}})
+	if !m.CompletionOpen() {
+		t.Fatal("completion popup should be open")
+	}
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "Content-Type: " {
+		t.Fatalf("after accept line = %q, want %q", got, "Content-Type: ")
+	}
+}
+
+// TestCompletionAcceptHyphenKeepsUnrelatedText: widening still only takes
+// text the insertion actually starts with — a hyphen after unrelated words
+// stays put.
+func TestCompletionAcceptHyphenKeepsUnrelatedText(t *testing.T) {
+	m, _ := loaded(t, "list: no-\n")
+	m = insertModeAt(m, 0, 9)
+	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 9, Items: []ilsp.CompletionItem{
+		{Label: "no-cache", InsertText: "no-cache"},
+	}})
+	m = send(m, special(tea.KeyEnter))
+	if got := line(m, 0); got != "list: no-cache" {
+		t.Fatalf("after accept line = %q, want %q", got, "list: no-cache")
+	}
+}
