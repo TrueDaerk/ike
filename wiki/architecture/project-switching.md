@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -45,7 +45,11 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   and the home directory is never a restore target — one accidental `ike`
   in `~` would otherwise self-sustain at the history head (RecordOpen
   re-records the restored root) and point the recursive watcher at the
-  whole home tree.
+  whole home tree. The home directory is exempt from the marker rule
+  (#1245): `~/.ike` is the user config directory, so the marker matches for
+  everyone who ever wrote a setting and would suppress every restore started
+  from `~` — dotfile repos make the same true of `~/.git`. Home is not a
+  project on either side of the check.
 
 ## Command & picker (#12)
 
