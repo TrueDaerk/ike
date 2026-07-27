@@ -85,6 +85,14 @@ type ToolchainPage struct {
 	prov map[string]string // interpreter path -> provenance (cached stats)
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
+	listW int // settings-column width of the last render (#1299), 0 = full width
+	// candTop is the detail column's first candidate line, detailHead the
+	// lines above the candidate list (mouse hit-testing, #1299).
+	candTop, detailHead int
+	// showMissing unfolds the not-installed group (#1299), per session;
+	// selKey remembers the selection by language so a regrouping keeps it.
+	showMissing bool
+	selKey      string
 }
 
 // NewToolchainPage builds the page. restart may be nil (no LSP integration).
@@ -190,25 +198,85 @@ func (t *ToolchainPage) languages() []lang.Language {
 type tcRow struct {
 	lang   lang.Language
 	action string // "" = language row; "newenv" = create environment
+	// header is a non-selectable group caption (#1299): "configured",
+	// "detected · not configured", "not installed · 12  (z)".
+	header string
 }
 
-// rows lists the visible rows: every language, plus the new-environment
-// action row right under python.
+// rows lists the visible rows grouped by state (#1299): configured first,
+// then detected-but-unconfigured, then the not-installed languages folded
+// behind a counted caption — twelve "(not found)" lines are noise, not
+// information. The new-environment action row stays under python.
 func (t *ToolchainPage) rows() []tcRow {
-	var out []tcRow
+	byState := map[tcState][]lang.Language{}
 	for _, l := range t.languages() {
-		out = append(out, tcRow{lang: l})
-		if l.ID == "python" {
-			out = append(out, tcRow{action: "newenv"})
+		st := t.stateOf(l)
+		byState[st] = append(byState[st], l)
+	}
+	var out []tcRow
+	for _, st := range []tcState{tcConfigured, tcDetected, tcMissing} {
+		langs := byState[st]
+		if len(langs) == 0 {
+			continue
+		}
+		caption := groupTitles[st] + " · " + strconv.Itoa(len(langs))
+		if st == tcMissing && !t.showMissing {
+			out = append(out, tcRow{header: caption + "   z to unfold"})
+			continue
+		}
+		if st == tcMissing {
+			caption += "   z to fold"
+		}
+		out = append(out, tcRow{header: caption})
+		for _, l := range langs {
+			out = append(out, tcRow{lang: l})
+			if l.ID == "python" {
+				out = append(out, tcRow{action: "newenv"})
+			}
 		}
 	}
+	// Python may live in a folded group; its action row must stay reachable.
+	if !hasNewEnv(out) {
+		out = append(out, tcRow{action: "newenv"})
+	}
 	return out
+}
+
+// hasNewEnv reports whether the create-environment row is already present.
+func hasNewEnv(rows []tcRow) bool {
+	for _, r := range rows {
+		if r.action == "newenv" {
+			return true
+		}
+	}
+	return false
+}
+
+// skipHeader moves the selection off a group caption in the direction of
+// travel (#1299): captions are structure, never a destination.
+func (t *ToolchainPage) skipHeader(dir string) {
+	rows := t.rows()
+	step := 1
+	if dir == "up" || dir == "k" || dir == "pgup" || dir == "home" {
+		step = -1
+	}
+	for t.sel >= 0 && t.sel < len(rows) && rows[t.sel].header != "" {
+		next := t.sel + step
+		if next < 0 || next >= len(rows) {
+			step = -step
+			next = t.sel + step
+		}
+		if next < 0 || next >= len(rows) {
+			return
+		}
+		t.sel = next
+	}
 }
 
 // current returns the selected language row (ok=false on action rows).
 func (t *ToolchainPage) current() (lang.Language, bool) {
 	rows := t.rows()
-	if t.sel < 0 || t.sel >= len(rows) || rows[t.sel].action != "" {
+	if t.sel < 0 || t.sel >= len(rows) || rows[t.sel].action != "" || rows[t.sel].header != "" {
 		return lang.Language{}, false
 	}
 	return rows[t.sel].lang, true
@@ -221,8 +289,68 @@ func (t *ToolchainPage) interpreter(id string) (path, source string) {
 	return lang.Interpreter(id, t.root, explicit)
 }
 
-// Update implements PageModel.
+// selectRow positions the page on the first row matching want (no-op when
+// nothing matches), the seam search results and tests use — a row index is
+// not a languages() index once the list groups (#1299).
+func (t *ToolchainPage) selectRow(want func(tcRow) bool) bool {
+	for i, r := range t.rows() {
+		if want(r) {
+			t.sel = i
+			t.rememberSel()
+			return true
+		}
+	}
+	return false
+}
+
+// rememberSel records what the selection *is*, so a regrouping can restore it.
+func (t *ToolchainPage) rememberSel() {
+	rows := t.rows()
+	if t.sel < 0 || t.sel >= len(rows) {
+		return
+	}
+	switch r := rows[t.sel]; {
+	case r.action != "":
+		t.selKey = "\x00" + r.action
+	case r.header == "":
+		t.selKey = r.lang.ID
+	}
+}
+
+// normalizeSel keeps the selection on a real row: grouping (#1299) inserts
+// captions and reorders on state changes, and a page opened cold would
+// otherwise start on a caption.
+func (t *ToolchainPage) normalizeSel() {
+	rows := t.rows()
+	if len(rows) == 0 {
+		return
+	}
+	if t.selKey != "" {
+		for i, r := range rows {
+			if (r.action != "" && "\x00"+r.action == t.selKey) ||
+				(r.header == "" && r.action == "" && r.lang.ID == t.selKey) {
+				t.sel = i
+				return
+			}
+		}
+	}
+	t.sel = clamp(t.sel, 0, len(rows)-1)
+	if rows[t.sel].header != "" {
+		t.skipHeader("down")
+	}
+}
+
+// Update implements PageModel. The selection is remembered by language, not
+// by index (#1299): choosing an interpreter moves the row into another group,
+// and the cursor must follow the language rather than stay on a line number.
 func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
+	t.normalizeSel()
+	cmd := t.update(key)
+	t.rememberSel()
+	return cmd
+}
+
+func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 	if t.custom {
 		return t.updateCustom(key)
 	}
@@ -233,9 +361,19 @@ func (t *ToolchainPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return t.updatePkgView(key)
 	}
 	if listNav(key.String(), &t.sel, len(t.rows()), navPage) {
+		t.skipHeader(key.String())
 		return nil
 	}
 	switch key.String() {
+	case "z":
+		// Fold or unfold the not-installed group (#1299).
+		t.showMissing = !t.showMissing
+		t.sel = clamp(t.sel, 0, len(t.rows())-1)
+		t.skipHeader("down")
+		return nil
+	case "a":
+		// Take every detected toolchain at once — the first run in one key.
+		return t.acceptAll()
 	case "enter":
 		if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
 			t.pushWizard()
@@ -564,40 +702,42 @@ func (t *ToolchainPage) theme() *theme.Palette {
 // so moving the selection never shifts the rows; only the pickers and the
 // custom-path input still expand inline (explicit actions).
 func (t *ToolchainPage) View(w, h int) string {
+	t.normalizeSel()
+	listW, detailW, side := splitGrid(w)
+	t.listW = 0
+	list := t.renderList(listW, h)
+	if !side {
+		return list
+	}
+	t.listW = listW
+	return lipgloss.JoinHorizontal(lipgloss.Top, list, " │ ", t.renderDetail(detailW, h))
+}
+
+// renderList renders the grouped language list.
+func (t *ToolchainPage) renderList(w, h int) string {
 	pal := t.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
-	head := sec.Render(" language · interpreter · source · env · version")
+	head := sec.Render(" language · interpreter · version")
 	var list []string
 	selStart, selEnd := 0, 0
 	for i, r := range t.rows() {
 		if i == t.sel {
 			selStart = len(list)
 		}
-		if r.action != "" {
+		switch {
+		case r.header != "":
+			list = append(list, sec.Faint(true).Render(" "+r.header))
+		case r.action != "":
 			list = append(list, t.renderAction(i == t.sel))
-			if i == t.sel {
-				selEnd = len(list) - 1
-			}
-			continue
-		}
-		l := r.lang
-		list = append(list, t.renderLang(l, i == t.sel))
-		if i == t.sel {
-			switch {
-			case t.custom:
-				detail := "   custom path: " + t.inputField.View()
-				if t.invalid != "" {
-					detail += "  ✗ " + t.invalid
-				}
-				list = append(list, sec.Render(detail))
-				for _, s := range t.suggest.lines() {
-					list = append(list, sec.Render(s))
-				}
-			case t.pkgViewing:
+		default:
+			list = append(list, t.renderLang(r.lang, i == t.sel, w))
+			// The package view is the one flow that still expands inline; the
+			// candidate picker moved into the detail column (#1299).
+			if i == t.sel && t.pkgViewing {
 				list = append(list, t.renderPackages()...)
-			case t.picking:
-				list = append(list, t.renderPicker()...)
 			}
+		}
+		if i == t.sel {
 			selEnd = len(list) - 1
 		}
 	}
@@ -624,6 +764,25 @@ func (t *ToolchainPage) listLine(y int) (int, bool) {
 // closes it. The other modal flows (custom input, wizard, package view) stay
 // keyboard-driven.
 func (t *ToolchainPage) Click(x, y int) tea.Cmd {
+	defer t.rememberSel()
+	if t.listW > 0 && x >= t.listW {
+		// The detail column: a press picks the candidate under the pointer
+		// while the picker is open (#1299), and is inert otherwise.
+		if !t.picking || t.candTop == 0 {
+			return nil
+		}
+		opt := y - t.candTop
+		switch {
+		case opt < 0 || opt > len(t.candidates):
+			return nil
+		case opt == len(t.candidates): // "enter a path manually…"
+			t.picking, t.custom, t.inputField.text = false, true, ""
+		default:
+			t.pick = opt
+			return t.choose(t.candidates[opt])
+		}
+		return nil
+	}
 	if t.picking {
 		idx, ok := t.listLine(y)
 		if !ok {
@@ -650,6 +809,9 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 	idx, ok := t.listLine(y)
 	if !ok || idx >= len(t.rows()) {
 		return nil
+	}
+	if rows := t.rows(); rows[idx].header != "" {
+		return nil // group captions are structure, not targets
 	}
 	if idx == t.sel {
 		if rows := t.rows(); rows[idx].action == "newenv" {
@@ -801,19 +963,20 @@ func (t *ToolchainPage) renderAction(selected bool) string {
 }
 
 // renderLang renders one language row.
-func (t *ToolchainPage) renderLang(l lang.Language, selected bool) string {
+func (t *ToolchainPage) renderLang(l lang.Language, selected bool, w int) string {
 	pal := t.theme()
 	path, source := t.interpreter(l.ID)
 	display := path
 	if display == "" {
 		display, source = "(not found)", "-"
 	}
-	env := ""
-	if l.ID == "python" {
-		env = t.provenance(path)
+	// Source, provenance and version live in the detail column now (#1299);
+	// the row is the language and the binary it resolves to.
+	pathW := maxInt(w-14, 12)
+	if i := strings.LastIndexByte(display, '/'); i > 0 && lipgloss.Width(display) > pathW {
+		display = "…" + display[i:]
 	}
-	version := t.versions[path]
-	label := " " + pad(l.ID, 10) + pad(display, 52) + pad("@"+source, 12) + pad(env, 12) + version
+	label := " " + pad(l.ID, 10) + display
 	style := lipgloss.NewStyle()
 	switch {
 	case selected:
@@ -865,8 +1028,8 @@ func fileExists(p string) bool {
 // KeyHelp implements KeyHelper (#887).
 func (t *ToolchainPage) KeyHelp() []string {
 	return []string{
-		"enter  pick the interpreter (or run the selected action row)",
-		"p  probe the version · r  reset to detection",
+		"enter  pick the interpreter · p  probe version · r  reset to detection",
+		"a  accept every detected toolchain · z  fold/unfold not-installed",
 		"n  new Python environment · i  packages · u  uv-install a Python",
 		"packages view: +  install · -  uninstall · u  upgrade selection",
 	}

@@ -1,5 +1,20 @@
 # Log
 
+## 2026-07-28 (settings: toolchain page on the grid)
+
+- The toolchain page adopted the raster (#1299). Languages group by state —
+  configured · detected-not-configured · not-installed — with the last group
+  folded behind a counted caption until `z`; captions are skipped by
+  navigation and clicks, and search unfolds what it matches. The candidate
+  picker moved out of an inline expansion into the detail column, where it is
+  always visible: real finds with provenance and probed version, the one in use
+  marked, "enter a path manually…" last, and `scanning…` while discovery is in
+  flight. With nothing selected the column explains the category and offers
+  `a` — accept every detected interpreter in one batch. The selection now
+  follows the language rather than the line number, so configuring one does not
+  move the cursor. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-28 (settings: keymap page on the grid)
 
 - The keymap page adopted the panel's raster (#1298). The table is `chord ·

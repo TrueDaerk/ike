@@ -467,3 +467,140 @@ func TestOpenPickerPreselectsAndProbes(t *testing.T) {
 		t.Fatalf("open must probe candidate versions, got %v", p.versions)
 	}
 }
+
+// selectToolchainLang positions the page on a language row by id — the row
+// index is not the languages() index once the list groups (#1299).
+func selectToolchainLang(t *testing.T, p *ToolchainPage, id string) {
+	t.Helper()
+	p.showMissing = true // a language with no interpreter lives in the folded group
+	if !p.selectRow(func(r tcRow) bool { return r.header == "" && r.action == "" && r.lang.ID == id }) {
+		t.Fatalf("no row for language %q", id)
+	}
+}
+
+// --- the grid (0460, #1299) ---
+
+// gridToolchain builds a page with one configured, one detected and two
+// missing languages.
+func gridToolchain(t *testing.T) *ToolchainPage {
+	t.Helper()
+	restoreConfig(t)
+	lang.Register(lang.Language{ID: "gtdetected", Extensions: []string{"gtdetected"}, Toolchain: fakeTC{detected: "/detected/bin/a"}})
+	lang.Register(lang.Language{ID: "gtdetected2", Extensions: []string{"gtdetected2"}, Toolchain: fakeTC{detected: "/detected/bin/b"}})
+	proj := t.TempDir()
+	opts := testOpts(t)
+	opts.ProjectRoot = proj
+	p := NewToolchainPage(opts, proj, nil)
+	p.look = func(string) string { return "" }
+	p.run = func(string, ...string) string { return "" }
+	return p
+}
+
+// TestToolchainGroupsAndFolds: languages group by state and the not-installed
+// group is folded behind a counted caption until "z".
+func TestToolchainGroupsAndFolds(t *testing.T) {
+	p := gridToolchain(t)
+	captions := func() []string {
+		var out []string
+		for _, r := range p.rows() {
+			if r.header != "" {
+				out = append(out, r.header)
+			}
+		}
+		return out
+	}
+	folded := captions()
+	joined := strings.Join(folded, "|")
+	if !strings.Contains(joined, "not installed") || !strings.Contains(joined, "z to unfold") {
+		t.Fatalf("captions = %v, want a folded not-installed group", folded)
+	}
+	before := len(p.rows())
+	p.Update(tea.KeyPressMsg{Text: "z", Code: 'z'})
+	if len(p.rows()) <= before {
+		t.Fatalf("z must unfold the group: %d → %d rows", before, len(p.rows()))
+	}
+	if !strings.Contains(strings.Join(captions(), "|"), "z to fold") {
+		t.Fatalf("an unfolded group must offer to fold again: %v", captions())
+	}
+}
+
+// TestToolchainCaptionsAreNotTargets: navigation and clicks skip group
+// captions.
+func TestToolchainCaptionsAreNotTargets(t *testing.T) {
+	p := gridToolchain(t)
+	p.View(130, 20)
+	for i := 0; i < len(p.rows())+2; i++ {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		if rows := p.rows(); p.sel >= 0 && p.sel < len(rows) && rows[p.sel].header != "" {
+			t.Fatalf("selection landed on the caption %q", rows[p.sel].header)
+		}
+	}
+}
+
+// TestToolchainSelectionFollowsTheLanguage: configuring an interpreter moves
+// the row into another group; the cursor must follow the language.
+func TestToolchainSelectionFollowsTheLanguage(t *testing.T) {
+	p := gridToolchain(t)
+	p.selectRow(func(r tcRow) bool { return r.lang.ID == "gtdetected" })
+	if _, ok := p.current(); !ok {
+		t.Fatal("setup: a language row must be selected")
+	}
+	cmd := p.acceptAll()
+	drainBatch(t, p, cmd)
+	p.normalizeSel()
+	l, ok := p.current()
+	if !ok || l.ID != "gtdetected" {
+		t.Fatalf("selection = %v (%v), want it still on gtdetected", l.ID, ok)
+	}
+}
+
+// TestToolchainAcceptAll: one key adopts every detected-but-unconfigured
+// interpreter.
+func TestToolchainAcceptAll(t *testing.T) {
+	p := gridToolchain(t)
+	pending := p.detectedUnconfigured()
+	if len(pending) < 2 {
+		t.Skipf("only %d detected languages, need two", len(pending))
+	}
+	drainBatch(t, p, p.acceptAll())
+	for _, l := range pending {
+		if got := config.Get().Lang[l.ID]["interpreter"]; got == "" {
+			t.Fatalf("%s must be configured after accept-all", l.ID)
+		}
+	}
+	if len(p.detectedUnconfigured()) != 0 {
+		t.Fatal("accept-all must leave nothing detected-but-unconfigured")
+	}
+}
+
+// TestToolchainDetailShowsCandidates: the detail column carries the real
+// finds, with "enter a path manually…" last, and says so while scanning.
+func TestToolchainDetailShowsCandidates(t *testing.T) {
+	p := gridToolchain(t)
+	p.selectRow(func(r tcRow) bool { return r.lang.ID == "gtdetected" })
+	v := p.View(130, 20)
+	if !strings.Contains(v, "found ·") || !strings.Contains(v, "enter a path manually…") {
+		t.Fatalf("detail column must list the finds:\n%s", v)
+	}
+	if i, j := strings.Index(v, "found ·"), strings.Index(v, "enter a path manually…"); i > j {
+		t.Fatal("the manual-path row must come last")
+	}
+	p.picking, p.candidates = true, nil
+	if v := p.View(130, 20); !strings.Contains(v, "scanning…") {
+		t.Fatalf("an in-flight scan must say so instead of showing an empty field:\n%s", v)
+	}
+}
+
+// TestToolchainOnboardingOffersAcceptAll: with no row selected the detail
+// column explains the category and offers the accept-all.
+func TestToolchainOnboardingOffersAcceptAll(t *testing.T) {
+	p := gridToolchain(t)
+	p.sel = -1
+	p.selKey = ""
+	v := p.renderDetail(70, 12)
+	for _, want := range []string{"What is Toolchain?", "accept all", "do not have to type"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("onboarding detail missing %q:\n%s", want, v)
+		}
+	}
+}

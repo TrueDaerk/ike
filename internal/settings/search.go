@@ -50,21 +50,22 @@ func (m *Model) activateResult(r row) {
 // language (interpreter keywords included) plus the create-environment
 // action.
 func (t *ToolchainPage) SearchItems() []SearchItem {
-	var out []SearchItem
-	for i, r := range t.rows() {
-		i := i
-		if r.action == "newenv" {
-			out = append(out, SearchItem{
-				Label:    "New Python environment",
-				Keywords: "venv uv virtualenv create python environment",
-				Activate: func() { t.sel = i },
-			})
-			continue
-		}
+	out := []SearchItem{{
+		Label:    "New Python environment",
+		Keywords: "venv uv virtualenv create python environment",
+		Activate: func() { t.selectRow(func(r tcRow) bool { return r.action == "newenv" }) },
+	}}
+	for _, l := range t.languages() {
+		id := l.ID
 		out = append(out, SearchItem{
-			Label:    r.lang.ID,
-			Keywords: "interpreter toolchain version " + r.lang.ID,
-			Activate: func() { t.sel = i },
+			Label:    id,
+			Keywords: "interpreter toolchain version " + id,
+			// Search reaches into the folded not-installed group (#1299):
+			// activating unfolds it so the row is actually there.
+			Activate: func() {
+				t.showMissing = true
+				t.selectRow(func(r tcRow) bool { return r.header == "" && r.action == "" && r.lang.ID == id })
+			},
 		})
 	}
 	return out
