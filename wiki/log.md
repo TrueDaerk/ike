@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (floating shell: z-ordered stack infrastructure)
+
+- Added `ui.Stack` (#1237, `internal/ui/stack.go`): floating shells layered in
+  z-order — persistent base layers vs transient `Push`ed layers, input routed
+  to the topmost open layer only, dismiss/outside-click pops one layer at a
+  time, compositing bottom-to-top via `overlay.Center`. The root now hosts its
+  `shell` as the stack's base layer; a stack of one behaves exactly as before,
+  so all existing floating consumers are unchanged
+  (`/architecture/floating-shell.md`).
+
 ## 2026-07-26 (themes: broadened palette set — 10 new built-ins)
 
 - Added the #1230 batch: `everforest-dark`/`everforest-light` (the missing

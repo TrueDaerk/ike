@@ -206,8 +206,12 @@ type Model struct {
 	marketPage *settings.MarketplacePage
 	cfgOpts    config.Options
 	help       *help.Help
-	// shell is the single active floating overlay (Roadmap 0035).
-	shell *ui.Floating
+	// shell is the base floating overlay (Roadmap 0035); floats is the
+	// z-ordered stack of floating panes it lives in (#1237) — shell is its
+	// persistent bottom layer, extra dialogs are pushed on top and the
+	// topmost open layer owns key input and compositing order.
+	shell  *ui.Floating
+	floats *ui.Stack
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -670,9 +674,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		focusKeys:      focusKeys(cfg),
 		keys:           buildKeymap(cfg, bindings),
 	}
-	m.shell.SetSizeStore(winSizes)            // resizable modal shell (#774)
+	m.floats = ui.NewStack(m.shell)           // z-ordered floating stack (#1237)
+	m.floats.SetSizeStore(winSizes)           // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)          // resizable palette box (#774)
-	m.shell.SetMaxWidth(popupMaxWidth())      // centered-popup width cap (#932)
+	m.floats.SetMaxWidth(popupMaxWidth())     // centered-popup width cap (#932)
 	highlight.SetRainbow(rainbowConfigured()) // rainbow brackets (#789)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
@@ -2349,7 +2354,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
-		m.shell.SetSize(m.width, m.height)
+		m.floats.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
 		m.todo.SetSize(m.width, m.height)
@@ -4292,11 +4297,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.lspRenameOpen() {
 			return m.updateLSPRenamePrompt(msg)
 		}
-		if m.shell.IsOpen() && !m.tourOpen() {
+		if m.floats.IsOpen() && !m.tourOpen() {
 			// The tour never reaches this branch: its keys are handled (or
 			// deliberately passed through, #680) above, and the shell scroller
-			// must not swallow a try-it chord.
-			m.shell.Update(msg)
+			// must not swallow a try-it chord. The stack routes to the topmost
+			// open layer only (#1237).
+			m.floats.Update(msg)
 			return m, nil
 		}
 		// A focused explorer with an open prompt (new-file name entry, delete/undo
@@ -5675,7 +5681,11 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 	case "palette":
 		m.palette.AdjustSize(ddw, ddh)
 	case "shell":
-		m.shell.AdjustSize(ddw, ddh)
+		// The drag grabbed the topmost open layer of the floating stack
+		// (#1237); with a single layer that is the shell, as before.
+		if top := m.floats.Top(); top != nil {
+			top.AdjustSize(ddw, ddh)
+		}
 	}
 }
 
@@ -5826,13 +5836,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	if m.shell.IsOpen() {
-		if clickOutside(msg, m.shell.View(), m.width, m.height) {
-			m.shell.Close()
+	if top := m.floats.Top(); top != nil {
+		// Mouse routes to the topmost open layer (#1237): a press outside it
+		// pops only that layer, a border press resizes it.
+		if clickOutside(msg, top.View(), m.width, m.height) {
+			m.floats.Pop()
 			return m, nil
 		}
 		if msg.action == mousePress && msg.Button == tea.MouseLeft {
-			v := m.shell.View()
+			v := top.View()
 			w, h := lipgloss.Width(v), lipgloss.Height(v)
 			bx, by := (m.width-w)/2, (m.height-h)/2
 			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
@@ -7186,8 +7198,10 @@ func (m Model) render() string {
 		} else {
 			result = overlay.Center(base, v, m.width, m.height)
 		}
-	case m.shell.IsOpen():
-		result = overlay.Center(base, m.shell.View(), m.width, m.height)
+	case m.floats.IsOpen():
+		// The floating stack composites bottom-to-top (#1237): the topmost
+		// layer is drawn last and fully readable over the lower ones.
+		result = m.floats.Composite(base, m.width, m.height)
 	}
 	result = m.compositeToasts(result)
 	// The palette wash paints the theme background/foreground under the whole

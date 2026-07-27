@@ -85,7 +85,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 	m.activeWS().Panes.SetPalette(p)
 	m.palette.SetPalette(p)
 	m.finder.SetPalette(p)
-	m.shell.SetPalette(p)
+	m.floats.SetPalette(p)
 	m.help.SetPalette(p)
 	m.menu.SetPalette(p)
 	m.ctxMenu.SetPalette(p)
@@ -149,7 +149,7 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	m.keys = buildKeymap(hcfg, m.bindings)
 	// ui.popup_max_width (#932) applies live to the capped popups — including
 	// the settings panel currently hosting the edit.
-	m.shell.SetMaxWidth(popupMaxWidth())
+	m.floats.SetMaxWidth(popupMaxWidth())
 	m.palette.SetMaxWidth(popupMaxWidth())
 	if m.settings.IsOpen() {
 		w, h := m.settingsSize()
