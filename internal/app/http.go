@@ -2,14 +2,17 @@ package app
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 	"ike/internal/httpclient"
 	"ike/internal/httpfile"
+	"ike/internal/httphistory"
 	"ike/internal/httppane"
 	"ike/internal/layout"
 	"ike/internal/pane"
@@ -26,9 +29,20 @@ type HTTPRunMsg struct{}
 
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
+	Source  string // .http file the request came from (history keying, #1251)
 	Request string // httpfile request key, labels the viewer
 	Resp    *httpclient.Response
 	Err     error
+}
+
+// httpHistoryDir is the project-local response-history location (#1251),
+// following the .ike/ convention of localHistoryDir.
+func httpHistoryDir() string {
+	base := ".ike"
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		base = d
+	}
+	return filepath.Join(base, "http")
 }
 
 // isHTTPPath reports whether path is a request file the HTTP client runs.
@@ -64,9 +78,10 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 		return nil
 	}
 	key := req.Key()
+	source := ed.Path()
 	return func() tea.Msg {
 		resp, err := httpclient.Dispatch(context.Background(), req, httpclient.Options{})
-		return HTTPResponseMsg{Request: key, Resp: resp, Err: err}
+		return HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 	}
 }
 
@@ -116,5 +131,17 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		return
 	}
 	p.Set(msg.Request, msg.Resp)
+	if msg.Source != "" {
+		// Persist under .ike/http/ and hand the stored predecessors to the
+		// viewer for h/l browsing (#1251); best effort like local history.
+		store := httphistory.New(httpHistoryDir())
+		store.Append(msg.Source, msg.Request, httphistory.FromResponse(msg.Resp, time.Now()))
+		entries := store.List(msg.Source, msg.Request)
+		items := make([]httppane.HistoryItem, 0, len(entries))
+		for _, e := range entries {
+			items = append(items, httppane.HistoryItem{Resp: e.Response(msg.Request), At: e.Time})
+		}
+		p.SetHistory(items)
+	}
 	m.layout()
 }

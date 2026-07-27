@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/httpclient"
+	"ike/internal/httphistory"
 	"ike/internal/pane"
 	"ike/internal/registry"
 )
@@ -161,5 +163,30 @@ func TestHTTPPanePersistsAsEmptySingleton(t *testing.T) {
 	}
 	if ids[pane.HTTPKey].Kind != "http" {
 		t.Fatalf("persisted kind: %+v", ids[pane.HTTPKey])
+	}
+}
+
+func TestHTTPResponsePersistsHistory(t *testing.T) {
+	m := httpApp(t)
+	for i := 0; i < 7; i++ {
+		resp := sampleResponse("one")
+		resp.Body = []byte(`{"n":` + strconv.Itoa(i) + `}`)
+		out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: resp})
+		m = out.(Model)
+	}
+
+	// Persisted under the .ike-convention dir (IKE_CONFIG_DIR in tests),
+	// pruned to the last 5.
+	entries := httphistory.New(httpHistoryDir()).List("/p/req.http", "one")
+	if len(entries) != httphistory.MaxPerRequest {
+		t.Fatalf("stored entries: %d, want %d", len(entries), httphistory.MaxPerRequest)
+	}
+	if string(entries[0].Body) != `{"n":6}` {
+		t.Errorf("newest first: %s", entries[0].Body)
+	}
+
+	// The viewer received the browsable history.
+	if idx, n := m.httpPanel().HistoryIndex(); idx != 0 || n != httphistory.MaxPerRequest {
+		t.Errorf("viewer history: %d/%d", idx, n)
 	}
 }
