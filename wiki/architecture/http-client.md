@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-27T01:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -68,10 +68,35 @@ never rewritten. Any unresolved variable aborts resolution with an error
 naming all missing variables — a broken request is never dispatched.
 `httpfile.Substitute` exposes the same substitution for single strings.
 
+## Dispatch (`internal/httpclient`)
+
+`httpclient.Dispatch(ctx, request, options)` resolves placeholders, applies
+local client configuration and executes the request, returning a `Response`
+(status, headers, body, duration, request key, warnings) for the viewer and
+history layers. Unresolved placeholders abort before anything is sent; HTTP
+error statuses are regular responses, only transport failures error.
+
+Configuration auto-detection at dispatch time — always best effort, never a
+hard failure, and **explicit values in the `.http` file always win**:
+
+- **`.netrc`** (`$NETRC` override, else `$HOME/.netrc`): machine-matched
+  (or `default`) credentials become basic auth, but only when the request
+  carries no `Authorization` header. `macdef` bodies are skipped.
+- **`.curlrc`** (curl's lookup: `$CURL_HOME/.curlrc`, else
+  `$XDG_CONFIG_HOME/curlrc`, else `$HOME/.curlrc`): supported options map
+  onto the request — `header` (only when the request doesn't set that header
+  itself), `user-agent`, `referer`, `user` (basic auth), `proxy`,
+  `insecure`, `location`, `max-time`, `connect-timeout`. Unsupported options
+  are collected as response warnings, never errors.
+
+Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
+`insecure`), 30 s overall timeout (`max-time` overrides), response bodies
+capped at 10 MiB with a truncation warning so huge downloads cannot freeze
+the TUI. `Options` lets callers (and tests) override the env lookup, the
+config file paths, or disable detection entirely.
+
 ## Planned milestones
 
-- **Dispatch** (#1249): HTTP execution with `.curlrc`/`.netrc` auto-detection;
-  explicit values in the `.http` file always win.
 - **UX** (#1250): syntax highlighting for `.http`, run action/keybinding, and
   a reusable read-only response viewer with content-type-aware
   pretty-printing.
