@@ -121,10 +121,14 @@ One setting recolours everything — syntax, file tree, chrome:
 name = "tokyo-night"
 ```
 
-Fourteen themes ship with IKE: `default`, `tokyo-night`, `nord`, `gruvbox`,
+Twenty-six themes ship with IKE: `default`, `tokyo-night`, `nord`, `gruvbox`,
 `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`,
 `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`,
-`solarized-light` and `dracula`. Plugins can register more.
+`solarized-light`, `dracula`, `darcula`, `intellij-light`,
+`everforest-dark`, `everforest-light`, `ayu-dark`, `ayu-mirage`,
+`ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`
+and `zenburn`. Plugins can register more. The README shows a
+[screenshot of every theme](https://github.com/TrueDaerk/ike#themes).
 
 Switching live is easiest from the palette — type `:` and then `Theme`. The
 **Appearance** settings page lists them too, and previews as you move through

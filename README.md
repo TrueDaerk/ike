@@ -154,7 +154,7 @@ Most settings can also be edited interactively in the settings panel
 - **Integrated terminal** — a real PTY-spawned shell in a pane, with raw key
   routing (`ctrl+arrows` escape back to the IDE), mouse passthrough, and text
   selection.
-- **Themes** — one `[theme].name` recolors the whole IDE; fourteen built-ins
+- **Themes** — one `[theme].name` recolors the whole IDE; twenty-six built-ins
   plus plugin-registered themes, switchable live from the palette
   (see [screenshots](#themes) below).
 - **Session restore & crash recovery** — open files, cursors, and explorer
@@ -178,9 +178,8 @@ concept document per subsystem.
 ## Themes
 
 Select a theme in `settings.toml` (`[theme] name = "..."`) or at runtime via
-the command palette (`:` → "Theme: …"). Nine of the fourteen built-ins are
-shown below; `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light` and
-`dracula` ship too.
+the command palette (`:` → "Theme: …"). All twenty-six built-ins are shown
+below.
 
 | | |
 |---|---|
@@ -188,7 +187,15 @@ shown below; `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light` and
 | **nord** ![nord](docs/screenshots/nord.png) | **gruvbox** ![gruvbox](docs/screenshots/gruvbox.png) |
 | **gruvbox-light** ![gruvbox-light](docs/screenshots/gruvbox-light.png) | **rose-pine** ![rose-pine](docs/screenshots/rose-pine.png) |
 | **rose-pine-dawn** ![rose-pine-dawn](docs/screenshots/rose-pine-dawn.png) | **catppuccin-mocha** ![catppuccin-mocha](docs/screenshots/catppuccin-mocha.png) |
-| **catppuccin-latte** ![catppuccin-latte](docs/screenshots/catppuccin-latte.png) | |
+| **catppuccin-latte** ![catppuccin-latte](docs/screenshots/catppuccin-latte.png) | **kanagawa** ![kanagawa](docs/screenshots/kanagawa.png) |
+| **one-dark** ![one-dark](docs/screenshots/one-dark.png) | **solarized-dark** ![solarized-dark](docs/screenshots/solarized-dark.png) |
+| **solarized-light** ![solarized-light](docs/screenshots/solarized-light.png) | **dracula** ![dracula](docs/screenshots/dracula.png) |
+| **darcula** ![darcula](docs/screenshots/darcula.png) | **intellij-light** ![intellij-light](docs/screenshots/intellij-light.png) |
+| **everforest-dark** ![everforest-dark](docs/screenshots/everforest-dark.png) | **everforest-light** ![everforest-light](docs/screenshots/everforest-light.png) |
+| **ayu-dark** ![ayu-dark](docs/screenshots/ayu-dark.png) | **ayu-mirage** ![ayu-mirage](docs/screenshots/ayu-mirage.png) |
+| **ayu-light** ![ayu-light](docs/screenshots/ayu-light.png) | **github-dark** ![github-dark](docs/screenshots/github-dark.png) |
+| **github-light** ![github-light](docs/screenshots/github-light.png) | **oxocarbon** ![oxocarbon](docs/screenshots/oxocarbon.png) |
+| **monokai-pro** ![monokai-pro](docs/screenshots/monokai-pro.png) | **zenburn** ![zenburn](docs/screenshots/zenburn.png) |
 
 ## Development
 
