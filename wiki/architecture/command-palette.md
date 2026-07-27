@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T14:00:00Z
 ---
 
 # Command Palette
@@ -226,6 +226,38 @@ back to the plain listing (#263). The workspace-symbol mode holds its
 reserved seat (#295): a **live source** — `palette.LiveMode`, re-queried
 per settled keystroke through the debounce plumbing (`live.go`), its cached
 rows composed and capped like any other source.
+
+## Pasting into overlay inputs (#1273)
+
+The palette's `Paste(text)` inserts a block into the query at the cursor and
+returns the command the resulting edit schedules (the live-mode debounce kick).
+It is one of several implementations of the same seam: `finder.Paste` (the
+focused query / replacement / include / exclude field), `settings.Paste` (the
+inline value editor, else the entry filter), `explorer.Paste` (a name prompt
+or the speed-search query), and the app's own rename prompts.
+
+The root model routes to them through **`internal/app/overlaypaste.go`**,
+whose `routeOverlayPaste` mirrors the guard chain of the `KeyPressMsg` handler
+exactly — the surface that owns the keyboard is the surface that gets the
+paste. Overlays with no text input (menus, list overlays, decision prompts)
+return false and the block is **dropped, not forwarded**: a paste must never
+leak into the hidden editor underneath.
+
+Two routes feed it. Bracketed paste (`tea.PasteMsg`, #603) reaches it from
+`handlePaste`, which used to bail on `overlayCapturesKeyboard()` and discard
+the block — that was the bug: nothing could be pasted into search-everywhere
+or any other overlay input. `Cmd+V` needs its own hop because it maps to
+`editor.paste`, which no overlay handles, and overlays own the keyboard before
+the keymap layer runs; the handler intercepts the chord, reads the system
+clipboard and hands the text to the same router, the same shape the terminal
+pane's `Cmd+V` uses (#727).
+
+Every target is a single-line field, so `ui.PasteText` flattens the block: a
+one-line paste is inserted verbatim (a deliberate leading space survives, and
+a path copied with its trailing newline arrives clean), while a genuinely
+multi-line block is trimmed per line, empties dropped, joined with single
+spaces. Control characters are stripped and tabs become spaces, so no paste
+can corrupt the rendered row or smuggle a line break into a one-line input.
 
 ## Resizing (#774)
 

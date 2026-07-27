@@ -4152,6 +4152,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Also dismisses the large-file banner (#1124), equally additive.
 			m.dismissLargeBanner()
 		}
+		// Cmd+V into an overlay's text input (#1273). The chord maps to
+		// editor.paste, which no overlay handles, and overlays own the
+		// keyboard before the keymap layer runs — so without this the only
+		// paste route into the palette or a prompt would be the terminal's
+		// bracketed paste. Same shape as the terminal pane's Cmd+V (#727):
+		// read the system clipboard and hand the block to the focused input.
+		if m.overlayCapturesKeyboard() {
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
+				if text := clipboardRead(); text != "" {
+					cmd, _ := m.routeOverlayPaste(text)
+					return m, cmd
+				}
+				return m, nil
+			}
+		}
 		// The settings panel is a full-window modal: it owns the keyboard.
 		if m.settings.IsOpen() {
 			// Resize chords (#774) adjust the panel size — unless a page is

@@ -204,12 +204,18 @@ func (m Model) overlayCapturesKeyboard() bool {
 }
 
 // handlePaste routes a bracketed-paste block (#603) to the focused editable
-// surface: a terminal pane through its bracketed-paste path, otherwise the
-// focused editor as a single block insert. It is a no-op while a modal overlay
-// owns the keyboard (the paste would otherwise land in a hidden buffer).
+// surface: an overlay's text input when one owns the keyboard (#1273),
+// a terminal pane through its bracketed-paste path, otherwise the focused
+// editor as a single block insert. An overlay with no text input still
+// swallows the paste — it must never fall through into the hidden buffer
+// underneath.
 func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
-	if text == "" || m.overlayCapturesKeyboard() {
+	if text == "" {
 		return m, nil
+	}
+	if m.overlayCapturesKeyboard() {
+		cmd, _ := m.routeOverlayPaste(text)
+		return m, cmd
 	}
 	if m.terminalFocused() {
 		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {

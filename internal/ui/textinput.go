@@ -4,6 +4,7 @@
 package ui
 
 import (
+	"strings"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
@@ -79,6 +80,69 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 		return out, cur + len(ins), true, true
 	}
 	return text, cur, false, false
+}
+
+// PasteText inserts a pasted block into a single-line input at rune cursor
+// cur (clamped into range first), returning the new text, the new cursor and
+// whether anything changed (#1273).
+//
+// Every caller here is a one-line field, so a multi-line paste is flattened
+// rather than rejected: lines are trimmed and joined with single spaces, and
+// empty lines drop out. That makes the common cases behave — a path copied
+// with its trailing newline pastes clean, a wrapped multi-line snippet
+// becomes one searchable line — without a single-line input ever holding a
+// line break, which EditKey also forbids.
+func PasteText(text string, cur int, paste string) (out string, ncur int, changed bool) {
+	r := []rune(text)
+	if cur < 0 {
+		cur = 0
+	}
+	if cur > len(r) {
+		cur = len(r)
+	}
+	ins := []rune(flattenPaste(paste))
+	if len(ins) == 0 {
+		return text, cur, false
+	}
+	return string(r[:cur]) + string(ins) + string(r[cur:]), cur + len(ins), true
+}
+
+// flattenPaste collapses a possibly multi-line block into one line. Other
+// control characters are dropped so a stray escape sequence cannot corrupt
+// the rendered row.
+//
+// A block that holds a single line of content is inserted verbatim — a
+// deliberate leading or trailing space survives, and a path copied with its
+// trailing newline arrives clean, because the empty segment after the break
+// carries no content. Only a genuinely multi-line block is normalised: each
+// line trimmed, empties dropped, the rest joined with single spaces, which is
+// what makes a wrapped snippet usable as one query.
+func flattenPaste(paste string) string {
+	lines := strings.FieldsFunc(paste, func(c rune) bool { return c == '\n' || c == '\r' })
+	if len(lines) == 1 {
+		return stripControl(lines[0])
+	}
+	var out []string
+	for _, line := range lines {
+		if line = strings.TrimSpace(stripControl(line)); line != "" {
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// stripControl removes non-printable runes (tabs become spaces, so a pasted
+// indented line keeps its word boundaries).
+func stripControl(s string) string {
+	return strings.Map(func(c rune) rune {
+		switch {
+		case c == '\t':
+			return ' '
+		case unicode.IsControl(c):
+			return -1
+		}
+		return c
+	}, s)
 }
 
 // CursorView renders text with a reverse-video cursor at rune index cur
