@@ -16,6 +16,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/httpclient"
 	"ike/internal/httphistory"
+	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/registry"
 )
@@ -188,5 +189,65 @@ func TestHTTPResponsePersistsHistory(t *testing.T) {
 	// The viewer received the browsable history.
 	if idx, n := m.httpPanel().HistoryIndex(); idx != 0 || n != httphistory.MaxPerRequest {
 		t.Errorf("viewer history: %d/%d", idx, n)
+	}
+}
+
+func TestHTTPResponseReopensViewerAfterClose(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	if !m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Fatal("first response must open the viewer")
+	}
+
+	// Close the pane the ordinary way (pane.close on the focused viewer).
+	m.closePane(pane.HTTPKey)
+	if leafHas(m.activeWS().Tree, pane.HTTPKey) {
+		t.Fatal("close must remove the viewer leaf")
+	}
+
+	// A later dispatch must reopen the pane and show the response.
+	out, _ = m.Update(HTTPResponseMsg{Request: "two", Resp: sampleResponse("two")})
+	m = out.(Model)
+	if !leafHas(m.activeWS().Tree, pane.HTTPKey) {
+		t.Fatal("dispatch after close must reopen the viewer leaf")
+	}
+	if got := m.httpPanel().Request(); got != "two" {
+		t.Fatalf("request label after reopen: %q", got)
+	}
+}
+
+// leafHas reports whether the layout tree contains a leaf named key.
+func leafHas(root layout.Node, key string) bool {
+	for _, k := range layout.Leaves(root) {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+func TestHTTPResponseReattachesAfterHideAllTools(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+
+	// hideAllTools removes the leaf but keeps the instance registered (#791).
+	m.hideToolWindows()
+	if leafHas(m.activeWS().Tree, pane.HTTPKey) {
+		t.Fatal("hide must remove the viewer leaf")
+	}
+	if !m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Fatal("hide must keep the instance registered")
+	}
+
+	// A dispatch while hidden must re-attach the leaf, not fill the void.
+	out, _ = m.Update(HTTPResponseMsg{Request: "two", Resp: sampleResponse("two")})
+	m = out.(Model)
+	if !leafHas(m.activeWS().Tree, pane.HTTPKey) {
+		t.Fatal("dispatch while hidden must re-attach the viewer leaf")
+	}
+	if got := m.httpPanel().Request(); got != "two" {
+		t.Fatalf("request label after re-attach: %q", got)
 	}
 }
