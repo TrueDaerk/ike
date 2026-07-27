@@ -253,18 +253,30 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Theme: ayu-dark | `themes.select.ayu-dark` | — | — | everywhere |
+| Theme: ayu-light | `themes.select.ayu-light` | — | — | everywhere |
+| Theme: ayu-mirage | `themes.select.ayu-mirage` | — | — | everywhere |
 | Theme: catppuccin-latte | `themes.select.catppuccin-latte` | — | — | everywhere |
 | Theme: catppuccin-mocha | `themes.select.catppuccin-mocha` | — | — | everywhere |
+| Theme: darcula | `themes.select.darcula` | — | — | everywhere |
 | Theme: default | `themes.select.default` | — | — | everywhere |
 | Theme: dracula | `themes.select.dracula` | — | — | everywhere |
+| Theme: everforest-dark | `themes.select.everforest-dark` | — | — | everywhere |
+| Theme: everforest-light | `themes.select.everforest-light` | — | — | everywhere |
+| Theme: github-dark | `themes.select.github-dark` | — | — | everywhere |
+| Theme: github-light | `themes.select.github-light` | — | — | everywhere |
 | Theme: gruvbox | `themes.select.gruvbox` | — | — | everywhere |
 | Theme: gruvbox-light | `themes.select.gruvbox-light` | — | — | everywhere |
+| Theme: intellij-light | `themes.select.intellij-light` | — | — | everywhere |
 | Theme: kanagawa | `themes.select.kanagawa` | — | — | everywhere |
+| Theme: monokai-pro | `themes.select.monokai-pro` | — | — | everywhere |
 | Theme: nord | `themes.select.nord` | — | — | everywhere |
 | Theme: one-dark | `themes.select.one-dark` | — | — | everywhere |
+| Theme: oxocarbon | `themes.select.oxocarbon` | — | — | everywhere |
 | Theme: rose-pine | `themes.select.rose-pine` | — | — | everywhere |
 | Theme: rose-pine-dawn | `themes.select.rose-pine-dawn` | — | — | everywhere |
 | Theme: solarized-dark | `themes.select.solarized-dark` | — | — | everywhere |
 | Theme: solarized-light | `themes.select.solarized-light` | — | — | everywhere |
 | Theme: tokyo-night | `themes.select.tokyo-night` | — | — | everywhere |
+| Theme: zenburn | `themes.select.zenburn` | — | — | everywhere |
 
