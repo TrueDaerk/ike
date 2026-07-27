@@ -15,6 +15,26 @@ import (
 // provenance, whether anything collides with it, and what free chords are
 // available if it does.
 
+// renderRangeDetail describes a folded run of numbered bindings (#1300): the
+// individual chords it stands for, and how to open it.
+func (k *KeymapPage) renderRangeDetail(b keymapRow, w, h int, clip, title, dim lipgloss.Style) string {
+	chord, label := b.rangeLabel()
+	lines := []string{
+		clip.Render(title.Render(" " + label)),
+		clip.Render(dim.Render(" " + chord + " · " + strconv.Itoa(b.rangeCount) + " bindings")),
+		clip.Render(dim.Render(" " + strings.Repeat("─", maxInt(w-2, 1)))),
+	}
+	for _, bb := range k.rangeBindings(b) {
+		lines = append(lines, clip.Render(" "+pad(bb.Chord.String(), 14)+bb.Command))
+	}
+	foot := []string{clip.Render(dim.Render(" z or enter unfolds the run"))}
+	for len(lines) < h-len(foot) {
+		lines = append(lines, "")
+	}
+	lines = append(lines, foot...)
+	return strings.Join(padTo(lines, h), "\n")
+}
+
 // bindingsFor returns every effective binding of a command, in table order.
 func (k *KeymapPage) bindingsFor(command string) []keymap.Binding {
 	var out []keymap.Binding
@@ -88,6 +108,9 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 		}, h), "\n")
 	}
 
+	if b.rangeKey != "" {
+		return k.renderRangeDetail(b, w, h, clip, title, dim)
+	}
 	lines := []string{clip.Render(title.Render(" " + b.Title))}
 	lines = append(lines, clip.Render(dim.Render(" "+b.Command+" · chord")))
 	if reason, blocked := keymap.BlockedReason(b.Command); blocked {
@@ -127,7 +150,7 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 		lines = append(lines, clip.Render(warn.Render(" ⚠ "+fragileWarning(b.Chord))))
 	}
 
-	foot := []string{clip.Render(dim.Render(" enter rebind · u unbind · r reset · i import"))}
+	foot := []string{clip.Render(dim.Render(" enter rebind · u unbind · r reset · z fold runs"))}
 	for len(lines) < h-len(foot) {
 		lines = append(lines, "")
 	}

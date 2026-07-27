@@ -710,7 +710,7 @@ func (t *ToolchainPage) View(w, h int) string {
 		return list
 	}
 	t.listW = listW
-	return lipgloss.JoinHorizontal(lipgloss.Top, list, " │ ", t.renderDetail(detailW, h))
+	return lipgloss.JoinHorizontal(lipgloss.Top, list, columnRule(h), t.renderDetail(detailW, h))
 }
 
 // renderList renders the grouped language list.
@@ -718,6 +718,7 @@ func (t *ToolchainPage) renderList(w, h int) string {
 	pal := t.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	head := sec.Render(" language · interpreter · version")
+	clip := lipgloss.NewStyle().MaxWidth(w)
 	var list []string
 	selStart, selEnd := 0, 0
 	for i, r := range t.rows() {
@@ -726,11 +727,11 @@ func (t *ToolchainPage) renderList(w, h int) string {
 		}
 		switch {
 		case r.header != "":
-			list = append(list, sec.Faint(true).Render(" "+r.header))
+			list = append(list, clip.Render(sec.Faint(true).Render(" "+r.header)))
 		case r.action != "":
-			list = append(list, t.renderAction(i == t.sel))
+			list = append(list, clip.Render(t.renderAction(i == t.sel)))
 		default:
-			list = append(list, t.renderLang(r.lang, i == t.sel, w))
+			list = append(list, clip.Render(t.renderLang(r.lang, i == t.sel, w)))
 			// The package view is the one flow that still expands inline; the
 			// candidate picker moved into the detail column (#1299).
 			if i == t.sel && t.pkgViewing {

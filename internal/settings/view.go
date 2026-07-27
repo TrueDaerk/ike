@@ -78,6 +78,20 @@ func (m *Model) gridFor() grid {
 	return g
 }
 
+// columnRule is the vertical " │ " separator as an h-line block. A single
+// " │ " string would only rule the first line — JoinHorizontal pads the rest
+// with blanks — so the columns would visibly run together below row 0.
+func columnRule(h int) string {
+	if h < 1 {
+		return " │ "
+	}
+	lines := make([]string, h)
+	for i := range lines {
+		lines[i] = " │ "
+	}
+	return strings.Join(lines, "\n")
+}
+
 // splitGrid splits a custom page's area into the grid's settings and detail
 // columns (#1298). Pages adopting the raster get the same widths the schema
 // pages have, so the eye keeps one layout across the whole panel; too narrow
@@ -111,7 +125,7 @@ func (m *Model) View() string {
 	pal := m.theme()
 	innerW := m.width - 2 // content columns inside the border (v2 sizes outer)
 	inner := m.height - 4 // border rows + title row + hint row
-	sep := " │ "
+	sep := columnRule(inner)
 
 	m.syncEditor()
 	left := m.renderCategories(inner)

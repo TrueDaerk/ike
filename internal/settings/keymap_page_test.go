@@ -1,8 +1,10 @@
 package settings
 
 import (
+	"charm.land/lipgloss/v2"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -58,6 +60,8 @@ func TestKeymapPageListsEffectiveBindings(t *testing.T) {
 	// Tall enough for the whole default table; the assertion is about the
 	// listing, not pagination.
 	v := k.View(120, 80)
+	selectChord(t, k, "ctrl+s") // a plain binding, not a folded run (#1300)
+	v = k.View(120, 80)
 	// Context, layer and provenance moved to the detail column (#1298).
 	for _, want := range []string{"ctrl+s", "@default", "chord · command", "bindings ·"} {
 		if !strings.Contains(v, want) {
@@ -68,6 +72,16 @@ func TestKeymapPageListsEffectiveBindings(t *testing.T) {
 	// The real ledger emptied with 0320 (#466), so the rendering is
 	// exercised through a stubbed entry.
 	defer keymap.StubBlockedForTest("vcs.revertFile", "unit-test dependency")()
+	found := false
+	for i, r := range k.rows() {
+		if r.Command == "vcs.revertFile" {
+			k.sel, found = i, true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("the stubbed blocked command must be listed")
+	}
 	if v := k.View(120, 80); !strings.Contains(v, "✗") {
 		t.Fatalf("blocked bindings must render disabled-with-reason:\n%s", v)
 	}
@@ -312,12 +326,17 @@ func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
 		t.Fatalf("footer must show the selected command:\n%s", strings.Join(lines, "\n"))
 	}
 	// Moving the selection must not shift unselected rows: line 3 (third
-	// binding) is identical before and after one step down.
-	before := lines[3]
+	// binding) is identical before and after one step down. Only the
+	// settings column is compared — the detail column is *supposed* to
+	// change with the selection (#1298).
+	listCol := func(line string) string {
+		return stripANSI(lipgloss.NewStyle().MaxWidth(k.listW).Render(line))
+	}
+	before := listCol(lines[3])
 	k.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	lines = strings.Split(k.View(160, h), "\n")
-	if lines[3] != before {
-		t.Fatalf("selection move shifted an unselected row:\n%q\n%q", before, lines[3])
+	if listCol(lines[3]) != before {
+		t.Fatalf("selection move shifted an unselected row:\n%q\n%q", before, listCol(lines[3]))
 	}
 	// Walking to the last binding scrolls the list so it stays visible.
 	for range rows {
@@ -588,5 +607,101 @@ func TestConflictOffersResolutions(t *testing.T) {
 	}
 	if len(host.stack) == 0 {
 		t.Fatal("picking a different chord must stay in the capture")
+	}
+}
+
+// --- numbered-run folding (0460, #1300) ---
+
+// findRange returns the folded row for a chord prefix, if the list has one.
+func findRange(k *KeymapPage, chordPrefix string) (keymapRow, int, bool) {
+	for i, r := range k.rows() {
+		if r.rangeKey != "" && strings.HasPrefix(r.Chord.String(), chordPrefix) {
+			return r, i, true
+		}
+	}
+	return keymapRow{}, 0, false
+}
+
+// TestNumberedBindingsFoldIntoOneRow: alt+1 … alt+9 is one fact, not nine
+// lines.
+func TestNumberedBindingsFoldIntoOneRow(t *testing.T) {
+	k, _ := keymapPage(t)
+	row, idx, ok := findRange(k, "alt+")
+	if !ok {
+		t.Skip("the default preset has no numbered run to fold")
+	}
+	if row.rangeCount < minRange {
+		t.Fatalf("a folded run must stand for at least %d bindings, got %d", minRange, row.rangeCount)
+	}
+	chord, label := row.rangeLabel()
+	if !strings.Contains(chord, "…") || !strings.Contains(label, "–") {
+		t.Fatalf("range label = %q / %q, want a spanned chord and title", chord, label)
+	}
+	if v := k.View(130, 40); !strings.Contains(v, "▸") {
+		t.Fatalf("a folded run must advertise that it opens:\n%s", v)
+	}
+
+	// z unfolds it in place; the rows it stood for are now individual.
+	before := len(k.rows())
+	k.sel = idx
+	k.Update(tea.KeyPressMsg{Text: "z", Code: 'z'})
+	after := len(k.rows())
+	if after != before+row.rangeCount-1 {
+		t.Fatalf("unfolding must add the run's rows: %d → %d (run of %d)", before, after, row.rangeCount)
+	}
+	// …and the fold state survives (it is remembered per page for the session).
+	if len(k.rows()) != after {
+		t.Fatal("the unfolded state must persist across rows() calls")
+	}
+	// z again folds it back.
+	k.Update(tea.KeyPressMsg{Text: "z", Code: 'z'})
+	if len(k.rows()) != before {
+		t.Fatalf("z must fold the run again, got %d rows want %d", len(k.rows()), before)
+	}
+}
+
+// TestFoldedRunDescribesItself: the detail column lists what the folded row
+// stands for.
+func TestFoldedRunDescribesItself(t *testing.T) {
+	k, _ := keymapPage(t)
+	row, idx, ok := findRange(k, "alt+")
+	if !ok {
+		t.Skip("the default preset has no numbered run to fold")
+	}
+	k.sel = idx
+	v := k.View(130, 40)
+	if !strings.Contains(v, strconv.Itoa(row.rangeCount)+" bindings") {
+		t.Fatalf("detail must count the run:\n%s", v)
+	}
+	if got := k.rangeBindings(row); len(got) != row.rangeCount {
+		t.Fatalf("rangeBindings = %d, want %d", len(got), row.rangeCount)
+	}
+}
+
+// TestSearchNeverFolds: a filter must show exactly what it matched.
+func TestSearchNeverFolds(t *testing.T) {
+	k, _ := keymapPage(t)
+	if _, _, ok := findRange(k, "alt+"); !ok {
+		t.Skip("the default preset has no numbered run to fold")
+	}
+	k.filter = "tab"
+	for _, r := range k.rows() {
+		if r.rangeKey != "" {
+			t.Fatalf("a filtered list must not fold, found %q", r.Chord.String())
+		}
+	}
+}
+
+// TestShortRunsDoNotFold: folding two rows into one plus a caption saves
+// nothing, so it does not happen.
+func TestShortRunsDoNotFold(t *testing.T) {
+	if _, _, ok := splitTrailingDigits("alt+"); ok {
+		t.Fatal("a chord without a trailing number must not split")
+	}
+	if p, n, ok := splitTrailingDigits("alt+12"); !ok || p != "alt+" || n != 12 {
+		t.Fatalf("splitTrailingDigits(alt+12) = %q,%d,%v", p, n, ok)
+	}
+	if _, _, ok := splitTrailingDigits("123"); ok {
+		t.Fatal("an all-digit string has no prefix to fold on")
 	}
 }
