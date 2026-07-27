@@ -62,7 +62,7 @@ Settings, or run `settings.open` from the palette.
 | Git added marks | `editor.marks.git_added` | boolean | `true` | user | Mark added lines in the gutter and scrollbar |
 | Git changed marks | `editor.marks.git_changed` | boolean | `true` | user | Mark changed lines in the gutter and scrollbar |
 | Git deleted marks | `editor.marks.git_deleted` | boolean | `true` | user | Mark deletions in the gutter and scrollbar |
-| Ignored diagnostics | `lsp.diagnostics_ignore` | list | *(empty)* | project | Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here |
+| Ignored diagnostics | `lsp.diagnostics_ignore` | list | `source=intelephense code=P1006 msg=*Found 'null'*,source=intelephense code=P1006 msg=*Found 'unset'*` | project | Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here |
 
 ### Explorer
 
