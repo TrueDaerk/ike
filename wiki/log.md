@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http: selecting and copying a response)
+
+- The HTTP response viewer supports text selection and copy (#1266): mouse
+  drag with word/line multi-click like the terminal pane, `y` (or
+  `ctrl+c`/`cmd+c`) for the selection — falling back to the whole body — and
+  `Y` for the headers block, plus the palette commands `http.copyBody` and
+  `http.copyHeaders`. The pane emits `httppane.CopyMsg`; the app performs the
+  clipboard write through the existing seam.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: search inside the response viewer)
 
 - The HTTP response viewer got in-pane search (#1265): `/` opens a prompt,

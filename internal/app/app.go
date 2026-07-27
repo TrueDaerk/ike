@@ -40,6 +40,7 @@ import (
 	"ike/internal/help"
 	"ike/internal/highlight"
 	"ike/internal/host"
+	"ike/internal/httppane"
 	"ike/internal/keymap"
 	"ike/internal/lang"
 	"ike/internal/largefile"
@@ -506,6 +507,7 @@ const (
 	dragExplScroll                 // dragging the explorer scrollbar thumb (#1036)
 	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
+	dragHTTPSelect                 // dragging a text selection in the HTTP response pane (#1266)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -2930,6 +2932,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case HTTPResponseMsg:
 		// One dispatch finished (#1250): open/reuse the response viewer.
 		m.fillHTTPPanel(msg)
+		return m, nil
+
+	case HTTPCopyBodyMsg:
+		// http.copyBody (palette, #1266): the shown body to the clipboard.
+		return m, m.copyHTTPResponse(false)
+
+	case HTTPCopyHeadersMsg:
+		// http.copyHeaders (palette, #1266): status line plus headers.
+		return m, m.copyHTTPResponse(true)
+
+	case httppane.CopyMsg:
+		// The response viewer asks the host for the clipboard (#1266) — the
+		// pane never touches globals itself.
+		clipboardWrite(msg.Text)
+		m.host.Notify(host.Info, "copied "+msg.What)
 		return m, nil
 
 	case DebugToggleBreakpointMsg:
@@ -6271,6 +6288,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.Debug().ResizeSeparator(m.drag.sep, lx)
 				}
 			}
+		case dragHTTPSelect:
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+					inst.HTTP().MouseDrag(lx, ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -6302,6 +6325,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragEditSelect:
 			m.drag = nil
 			return m, nil // the editor selection is already in place; nothing to commit
+		case dragHTTPSelect:
+			if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+				inst.HTTP().MouseRelease()
+			}
+			m.drag = nil
+			return m, nil // a selection drag never moved the layout
 		case dragEditScroll:
 			m.drag = nil
 			return m, nil // the viewport already followed the thumb; nothing to commit
@@ -6862,6 +6891,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the reference's location, mirroring the Problems panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usages().Click(localX, localY)
+		}
+	case pane.KindHTTP:
+		// Response-viewer clicks (#1266): a left press anchors a text
+		// selection and tracks the drag, exactly like a terminal pane —
+		// double click selects a word, triple click the line.
+		if msg.Button == tea.MouseLeft {
+			inst.HTTP().MousePress(localX, localY)
+			m.drag = &dragState{kind: dragHTTPSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 		}
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to

@@ -77,6 +77,9 @@ type Model struct {
 	query     string
 	matches   []search.Span
 	cur       int
+
+	// sel is the mouse text selection (#1266), see selection.go.
+	sel selection
 }
 
 // New returns an empty viewer; responses arrive via Set.
@@ -103,6 +106,14 @@ func (m *Model) Request() string { return m.request }
 
 // Rows reports the composed row count (tests).
 func (m *Model) Rows() int { return len(m.rows) }
+
+// RowText reports the text of composed row i, "" out of range (tests).
+func (m *Model) RowText(i int) string {
+	if i < 0 || i >= len(m.rows) {
+		return ""
+	}
+	return m.rows[i].text
+}
 
 // Highlighted reports whether the shown body carries syntax-highlight spans
 // (tests, #1270): false for an unhighlightable body *and* for a recognized
@@ -204,7 +215,8 @@ func (m *Model) compose(resp *httpclient.Response) {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
 		}
 	}
-	m.research() // the search survives history browsing and new responses
+	m.ClearSelection() // the rows changed: an old selection means nothing
+	m.research()       // the search survives history browsing and new responses
 }
 
 // formatBody renders the response body for display: pretty-printed JSON,
@@ -269,15 +281,15 @@ func roundDuration(d time.Duration) time.Duration {
 // it, focus-filtered by the pane layer.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
-		m.handleKey(k)
+		return m.handleKey(k)
 	}
 	return nil
 }
 
-func (m *Model) handleKey(msg tea.KeyPressMsg) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.searching {
 		m.searchKey(msg)
-		return
+		return nil
 	}
 	switch msg.String() {
 	case "/":
@@ -292,6 +304,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) {
 		m.step(-1)
 	case "esc":
 		m.clearSearch()
+		m.ClearSelection()
+	case "y", "ctrl+c", "cmd+c", "super+c":
+		// Copy the selection, or the whole body when nothing is selected —
+		// the common case is "give me this response" (#1266).
+		if m.sel.on {
+			text := m.SelectionText()
+			m.ClearSelection()
+			return copyCmd(text, "selection")
+		}
+		return copyCmd(m.BodyText(), "response body")
+	case "Y":
+		return copyCmd(m.HeadersText(), "response headers")
 	case "j", "down":
 		m.Scroll(1)
 	case "k", "up":
@@ -311,6 +335,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) {
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
 	}
+	return nil
 }
 
 // search.go territory (#1265) ------------------------------------------------
@@ -506,7 +531,7 @@ func (m *Model) footerText() string {
 	if m.query != "" {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
-	s := " j/k scroll · g/G top/bottom · / search"
+	s := " j/k scroll · g/G top/bottom · / search · y copy body (Y headers)"
 	if len(m.hist) > 1 {
 		s += fmt.Sprintf(" · h/l history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
@@ -595,16 +620,21 @@ func (m *Model) paintRow(rowIx int, text string, base styleFn) string {
 		st, key := base(col)
 		state := m.matchState(rowIx, col)
 		end := col + 1
+		selected := m.selState(rowIx, col)
 		for end < len(runes) {
-			if _, k := base(end); k != key || m.matchState(rowIx, end) != state {
+			if _, k := base(end); k != key || m.matchState(rowIx, end) != state || m.selState(rowIx, end) != selected {
 				break
 			}
 			end++
 		}
-		switch state {
-		case 2:
+		switch {
+		case selected:
+			// The mouse selection wins the background (#1266): it is the
+			// thing the user is acting on right now.
+			st = st.Background(m.theme().Selection).Foreground(m.theme().SelectionText)
+		case state == 2:
 			st = st.Background(m.theme().Selection).Underline(true)
-		case 1:
+		case state == 1:
 			st = st.Background(m.theme().SelectionMuted)
 		}
 		b.WriteString(st.Render(string(runes[col:end])))

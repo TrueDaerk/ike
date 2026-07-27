@@ -16,6 +16,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/httpclient"
 	"ike/internal/httphistory"
+	"ike/internal/httppane"
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/registry"
@@ -271,5 +272,103 @@ func TestHTTPPaneReceivesSearchKeys(t *testing.T) {
 	}
 	if cur, total := m.httpPanel().MatchPosition(); cur != 1 || total == 0 {
 		t.Errorf("match position: %d/%d", cur, total)
+	}
+}
+
+// TestHTTPPaneMouseSelectionCopies covers the app wiring of #1266: a press,
+// motion and release over the response pane select text, and "y" hands it to
+// the clipboard through the pane's CopyMsg.
+func TestHTTPPaneMouseSelectionCopies(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+
+	r, ok := m.lay.Panes[pane.HTTPKey]
+	if !ok {
+		t.Fatal("the response pane must be laid out")
+	}
+	// The first body row inside the pane; coordinates are pane-local plus the
+	// pane's own origin and content inset.
+	p := m.httpPanel()
+	bodyRow := -1
+	for i := 0; i < p.Rows(); i++ {
+		if p.RowText(i) == "{" {
+			bodyRow = i
+		}
+	}
+	if bodyRow < 0 {
+		t.Fatal("no body row found")
+	}
+	x := r.X + paneContentX + 1
+	y := r.Y + paneContentY + bodyRow + 1
+
+	m = step(m, press(x, y))
+	m = step(m, motion(x+4, y+1))
+	m = step(m, release(x+4, y+1))
+	if !p.HasSelection() {
+		t.Fatal("the drag must select in the response pane")
+	}
+
+	var copied httppane.CopyMsg
+	clipped := ""
+	prev := clipboardWrite
+	clipboardWrite = func(s string) { clipped = s }
+	defer func() { clipboardWrite = prev }()
+
+	out, cmd := m.Update(tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("y must emit a copy command")
+	}
+	msg, ok := cmd().(httppane.CopyMsg)
+	if !ok {
+		t.Fatalf("copy message type: %T", cmd())
+	}
+	copied = msg
+	out, _ = m.Update(copied)
+	m = out.(Model)
+	if clipped == "" || clipped != copied.Text {
+		t.Errorf("clipboard got %q, want %q", clipped, copied.Text)
+	}
+}
+
+// TestHTTPCopyBodyCommand covers the palette entry (#1266).
+func TestHTTPCopyBodyCommand(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+
+	_, cmd := m.Update(HTTPCopyBodyMsg{})
+	if cmd == nil {
+		t.Fatal("http.copyBody must emit a copy command")
+	}
+	msg, ok := cmd().(httppane.CopyMsg)
+	if !ok {
+		t.Fatalf("message type: %T", cmd())
+	}
+	if !strings.Contains(msg.Text, `"ok"`) || msg.What != "response body" {
+		t.Errorf("copy message: %+v", msg)
+	}
+
+	_, cmd = m.Update(HTTPCopyHeadersMsg{})
+	if cmd == nil {
+		t.Fatal("http.copyHeaders must emit a copy command")
+	}
+	hdr := cmd().(httppane.CopyMsg)
+	if !strings.Contains(hdr.Text, "Content-Type: application/json") || strings.Contains(hdr.Text, `"ok"`) {
+		t.Errorf("headers copy: %q", hdr.Text)
+	}
+}
+
+// TestHTTPCopyWithoutPaneNotifies: the palette command is reachable with no
+// pane open; it must say so instead of emitting an empty clipboard write.
+func TestHTTPCopyWithoutPaneNotifies(t *testing.T) {
+	m := httpApp(t)
+	if _, cmd := m.Update(HTTPCopyBodyMsg{}); cmd != nil {
+		if _, ok := cmd().(httppane.CopyMsg); ok {
+			t.Fatal("no pane open: nothing may be copied")
+		}
 	}
 }
