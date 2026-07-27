@@ -4,7 +4,7 @@ title: Problems Tool Window
 description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'f' toggles current-file vs project scope; pure consumer of the publishDiagnostics flow (#1024, part of #33).
 resource: internal/problems/problems.go
 tags: [architecture, lsp, diagnostics, tool-window, pane]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-27T12:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -29,6 +29,14 @@ seam:
   -diagnostic servers report the whole project; per-document servers only
   files that were opened at some point). An empty publish deletes the path,
   so fixed files drop out.
+
+Both consumers sit behind the app's diagnostic ignore filter (#1259,
+`internal/app/diag_ignore.go`): a diagnostic matching an
+`lsp.diagnostics_ignore` rule is dropped before either sees it, so the pane
+and the editor decorations always agree. The per-severity decoration toggles
+(`editor.marks.lsp_*`) are deliberately different: they only gate the
+*painting* (scrollbar/gutter/underline) — the Problems pane keeps showing
+every non-ignored diagnostic regardless, so nothing is silently lost.
 
 No new LSP traffic originates in the pane.
 

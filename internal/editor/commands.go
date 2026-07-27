@@ -98,6 +98,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("vcs.prevChange", "Previous Change (Editor)", "prev_hunk", "[c"),
 			action("lsp.nextDiagnostic", "Next Diagnostic", "next_diagnostic", ""),
 			action("lsp.prevDiagnostic", "Previous Diagnostic", "prev_diagnostic", ""),
+			// Diagnostic ignore rules (#1259): suppress the caret diagnostic's
+			// rule (source+code, or exact message) project-wide via
+			// lsp.diagnostics_ignore.
+			action("lsp.ignoreDiagnostic", "Ignore Diagnostic Under Caret", "ignore_diagnostic", ""),
 			// Merge-conflict resolution (#1149): palette-only (the cmd-chord
 			// budget is full, #711); the accepts also surface contextually in
 			// the editor context menu when the cursor is inside a block.

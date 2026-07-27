@@ -126,6 +126,13 @@ func (c *Config) Flat() map[string]string {
 	put("editor.breadcrumbs", c.Editor.Breadcrumbs)
 	put("editor.tabs.always_show", c.Editor.Tabs.AlwaysShow)
 	put("editor.tabs.limit", c.Editor.Tabs.Limit)
+	put("editor.marks.lsp_errors", c.Editor.Marks.LSPErrors)
+	put("editor.marks.lsp_warnings", c.Editor.Marks.LSPWarnings)
+	put("editor.marks.lsp_info", c.Editor.Marks.LSPInfo)
+	put("editor.marks.lsp_hints", c.Editor.Marks.LSPHints)
+	put("editor.marks.git_added", c.Editor.Marks.GitAdded)
+	put("editor.marks.git_changed", c.Editor.Marks.GitChanged)
+	put("editor.marks.git_deleted", c.Editor.Marks.GitDeleted)
 
 	put("explorer.show_hidden", c.Explorer.ShowHidden)
 	put("explorer.git_status", c.Explorer.GitStatus)
@@ -150,6 +157,7 @@ func (c *Config) Flat() map[string]string {
 	put("lsp.completion_auto", c.LSP.CompletionAuto)
 	put("lsp.log_level", c.LSP.LogLevel)
 	put("lsp.onboarded", c.LSP.Onboarded)
+	put("lsp.diagnostics_ignore", strings.Join(c.LSP.DiagnosticsIgnore, ","))
 	for srv, kv := range c.LSP.Servers {
 		for k, v := range kv {
 			put("lsp.servers."+srv+"."+k, v)

@@ -433,7 +433,7 @@ func (m Model) View() string {
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Success).Bold(true)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
-		} else if mk, ok := m.gitMarks[i]; ok {
+		} else if mk, ok := m.gitMarks[i]; ok && m.gitVisible(mk) {
 			gs = lipgloss.NewStyle().Foreground(m.gitMarkColor(mk))
 		}
 		raw := m.view.Gutter(i, m.cursor.Line, lineCount)

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-07-27 (diagnostics: decoration toggles + ignore rules)
+
+- Per-source, per-severity decoration toggles (#1259): `editor.marks.lsp_*`
+  and `editor.marks.git_*` gate the scrollbar stripe, gutter colouring and
+  inline underlines (`editor/marktoggles.go`); the Problems pane keeps the
+  full set. Diagnostic ignore rules (`lsp.diagnostics_ignore`, project scope)
+  drop matching diagnostics before every consumer via the app-level filter
+  (`internal/app/diag_ignore.go`, engine in `internal/lsp/ignore.go`); the
+  `lsp.ignoreDiagnostic` command appends the caret diagnostic's rule. New
+  settings page "Diagnostics" (`/architecture/editor.md`,
+  `/architecture/lsp.md`, `/architecture/problems.md`,
+  `/architecture/settings-ui.md`).
+
 ## 2026-07-27 (http client: response history under .ike/http/)
 
 - Response history (#1251) completes epic #1247: `internal/httphistory`

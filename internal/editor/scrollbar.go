@@ -148,7 +148,7 @@ func (m Model) stripesFor(track, total int) (stripe map[int]int, git map[int]vcs
 	// visually); record their lines over any conflict/git line on the same row.
 	for _, d := range m.diags {
 		ln := d.Range.Start.Line
-		if ln < 0 || ln >= total {
+		if ln < 0 || ln >= total || !m.sevVisible(d.Severity) {
 			continue
 		}
 		y := ln * track / total
@@ -223,7 +223,7 @@ func (m Model) scrollbarGitMarks(track, total int) (map[int]vcs.LineMark, map[in
 	git := make(map[int]vcs.LineMark)
 	lines := make(map[int]int)
 	for ln, mk := range m.gitMarks {
-		if ln < 0 || ln >= total {
+		if ln < 0 || ln >= total || !m.gitVisible(mk) {
 			continue
 		}
 		y := ln * track / total
@@ -249,7 +249,7 @@ func (m Model) scrollbarStripe(track, total int) map[int]int {
 	stripe := make(map[int]int)
 	for _, d := range m.diags {
 		ln := d.Range.Start.Line
-		if ln < 0 || ln >= total {
+		if ln < 0 || ln >= total || !m.sevVisible(d.Severity) {
 			continue
 		}
 		y := ln * track / total

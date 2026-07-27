@@ -246,8 +246,24 @@ type Editor struct {
 	// clickable per segment. On by default (the JetBrains default); the row
 	// only appears while symbol data exists for the file, so files without a
 	// documentSymbol provider spend no editor row on it.
-	Breadcrumbs bool `toml:"breadcrumbs"`
-	Tabs        Tabs `toml:"tabs"`
+	Breadcrumbs bool  `toml:"breadcrumbs"`
+	Tabs        Tabs  `toml:"tabs"`
+	Marks       Marks `toml:"marks"`
+}
+
+// Marks holds the per-source, per-severity editor decoration toggles (#1259):
+// each switch gates one mark class everywhere the editor decorates it —
+// scrollbar stripe, gutter colouring and inline underlines. All on by default.
+// The Problems tool window intentionally keeps showing every diagnostic
+// regardless of these toggles, so nothing is silently lost.
+type Marks struct {
+	LSPErrors   bool `toml:"lsp_errors"`
+	LSPWarnings bool `toml:"lsp_warnings"`
+	LSPInfo     bool `toml:"lsp_info"`
+	LSPHints    bool `toml:"lsp_hints"`
+	GitAdded    bool `toml:"git_added"`
+	GitChanged  bool `toml:"git_changed"`
+	GitDeleted  bool `toml:"git_deleted"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
@@ -308,6 +324,14 @@ type LSP struct {
 	CompletionAuto bool                      `toml:"completion_auto"`
 	LogLevel       string                    `toml:"log_level"`
 	Servers        map[string]map[string]any `toml:"servers"`
+	// DiagnosticsIgnore suppresses matching diagnostics everywhere they surface
+	// (#1259): editor decorations AND the Problems window — an ignored
+	// diagnostic is dropped before any consumer sees it. Each rule is a string
+	// of space-separated `source=<glob>` / `code=<glob>` conditions plus an
+	// optional trailing `msg=<glob>` that consumes the rest of the rule; a bare
+	// token is shorthand for code=. All present conditions must match
+	// (case-insensitive, * wildcards). Conventionally project-scoped.
+	DiagnosticsIgnore []string `toml:"diagnostics_ignore"`
 	// Onboarded records that the first-start server-install dialog (#301) has
 	// had its say (answered or skipped); it is never shown again once set.
 	Onboarded bool `toml:"onboarded"`

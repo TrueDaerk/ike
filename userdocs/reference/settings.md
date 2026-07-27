@@ -51,6 +51,19 @@ Settings, or run `settings.open` from the palette.
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
 | Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables) |
 
+### Diagnostics
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Error marks | `editor.marks.lsp_errors` | boolean | `true` | user | Decorate LSP errors (scrollbar stripe, gutter, underline); the Problems window is unaffected |
+| Warning marks | `editor.marks.lsp_warnings` | boolean | `true` | user | Decorate LSP warnings (scrollbar stripe, gutter, underline); the Problems window is unaffected |
+| Info marks | `editor.marks.lsp_info` | boolean | `true` | user | Decorate LSP information diagnostics (scrollbar stripe, gutter, underline); the Problems window is unaffected |
+| Hint marks | `editor.marks.lsp_hints` | boolean | `true` | user | Decorate LSP hints (scrollbar stripe, gutter, underline); the Problems window is unaffected |
+| Git added marks | `editor.marks.git_added` | boolean | `true` | user | Mark added lines in the gutter and scrollbar |
+| Git changed marks | `editor.marks.git_changed` | boolean | `true` | user | Mark changed lines in the gutter and scrollbar |
+| Git deleted marks | `editor.marks.git_deleted` | boolean | `true` | user | Mark deletions in the gutter and scrollbar |
+| Ignored diagnostics | `lsp.diagnostics_ignore` | list | *(empty)* | project | Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here |
+
 ### Explorer
 
 | Setting | Key | Type | Default | Scope | Description |

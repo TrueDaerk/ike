@@ -183,6 +183,7 @@ bring their own.
 | Encoding: Windows-1252 | `file.setEncoding.windows1252` | — | — | `editor` pane |
 | Line Endings: CRLF | `file.setLineEndings.crlf` | — | — | `editor` pane |
 | Line Endings: LF | `file.setLineEndings.lf` | — | — | `editor` pane |
+| Ignore Diagnostic Under Caret | `lsp.ignoreDiagnostic` | — | — | `editor` pane |
 | Next Diagnostic | `lsp.nextDiagnostic` | `f2` | — | `editor` pane |
 | Previous Diagnostic | `lsp.prevDiagnostic` | `shift+f2` | — | `editor` pane |
 | Merge: Accept Both | `merge.acceptBoth` | — | — | `editor` pane |

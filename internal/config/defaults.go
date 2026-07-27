@@ -86,6 +86,15 @@ func defaults() *Config {
 			SearchIgnoreCase:       false,
 			Breadcrumbs:            true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
+			Marks: Marks{
+				LSPErrors:   true,
+				LSPWarnings: true,
+				LSPInfo:     true,
+				LSPHints:    true,
+				GitAdded:    true,
+				GitChanged:  true,
+				GitDeleted:  true,
+			},
 		},
 		Explorer: Explorer{
 			ShowHidden: false,
@@ -106,8 +115,9 @@ func defaults() *Config {
 			InlayHints:     false,
 			SignatureAuto:  true,
 			CompletionAuto: true,
-			LogLevel:       "warn",
-			Servers:        map[string]map[string]any{},
+			LogLevel:          "warn",
+			Servers:           map[string]map[string]any{},
+			DiagnosticsIgnore: []string{},
 		},
 		Theme: Theme{
 			Name: "default",

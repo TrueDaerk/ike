@@ -130,6 +130,7 @@ var reachableAlternatives = map[string]string{
 	"vcs.revertFile":           "palette",
 	"vcs.panel":                "palette",
 	"problems.toggle":          "palette",
+	"lsp.ignoreDiagnostic":     "palette",
 	"structure.toggle":         "palette",
 	"explorer.newFile":         "palette (or a in the explorer)",
 	"scratch.new":              "palette",

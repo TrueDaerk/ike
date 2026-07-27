@@ -622,6 +622,10 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		cmd := m.commentBlock()
 		m.scroll()
 		return m, cmd
+	case "ignore_diagnostic":
+		// Ignore the diagnostic under the caret (#1259): the app persists the
+		// rule to lsp.diagnostics_ignore in the project config.
+		return m, m.ignoreDiagnosticUnderCaret()
 	case "next_diagnostic", "prev_diagnostic":
 		if m.insert.active {
 			m.commitInsert()
