@@ -61,7 +61,7 @@ Settings, or run `settings.open` from the palette.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Theme | `theme.name` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`, `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light`, `dracula` | `default` | user | Color scheme; applies immediately on selection |
+| Theme | `theme.name` | enum: `default`, `tokyo-night`, `nord`, `gruvbox`, `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`, `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`, `solarized-light`, `dracula`, `darcula`, `intellij-light`, `everforest-dark`, `everforest-light`, `ayu-dark`, `ayu-mirage`, `ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`, `zenburn` | `default` | user | Color scheme; applies immediately on selection |
 | Menu bar | `ui.menu_bar` | boolean | `true` | user | Show the File/Edit/… menu row above the panes |
 | Popup max width | `ui.popup_max_width` | integer | `110` | user | Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables |
 | Command palette key | `palette.toggle_key` | key chord | *(empty)* | user | Chord that opens the command palette |
