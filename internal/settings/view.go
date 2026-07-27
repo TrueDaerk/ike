@@ -78,6 +78,21 @@ func (m *Model) gridFor() grid {
 	return g
 }
 
+// splitGrid splits a custom page's area into the grid's settings and detail
+// columns (#1298). Pages adopting the raster get the same widths the schema
+// pages have, so the eye keeps one layout across the whole panel; too narrow
+// for both, the page keeps the full width and renders detail its own way.
+func splitGrid(w int) (listW, detailW int, side bool) {
+	if w < minFormWidth+sepWidth+minDetailWidth {
+		return w, 0, false
+	}
+	listW = formWidth
+	if maxList := w - sepWidth - minDetailWidth; listW > maxList {
+		listW = maxList
+	}
+	return listW, w - listW - sepWidth, true
+}
+
 // theme returns the active palette, defaulting when none was threaded in.
 func (m *Model) theme() *theme.Palette {
 	if m.pal != nil {

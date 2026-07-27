@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-28 (settings: keymap page on the grid)
+
+- The keymap page adopted the panel's raster (#1298). The table is `chord ·
+  command`; context, layer and provenance moved into a detail column that
+  explains the selected command — every binding with its context and
+  `@default`/`@user` layer, its conflict state, and free chords pulled from the
+  live table when something collides. The capture sub-panel now offers
+  *Replace & unbind other* / *Pick a different chord* / *Cancel* instead of a
+  bare enter-or-cancel; the wireframes' "keep both, resolve by context" needs
+  context-qualified overrides and is tracked as #1312. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-28 (settings: search inside the grid)
 
 - `/` used to flatten every match into one list next to a dead rail (#1297).

@@ -58,7 +58,8 @@ func TestKeymapPageListsEffectiveBindings(t *testing.T) {
 	// Tall enough for the whole default table; the assertion is about the
 	// listing, not pagination.
 	v := k.View(120, 80)
-	for _, want := range []string{"ctrl+s", "@default", "chord · command · context · layer"} {
+	// Context, layer and provenance moved to the detail column (#1298).
+	for _, want := range []string{"ctrl+s", "@default", "chord · command", "bindings ·"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -489,5 +490,103 @@ func TestNeverBoundCommandCapturesFirstChord(t *testing.T) {
 		if r.Command == "tool.lazygit" && r.nobind {
 			t.Fatal("bound command must lose its nobind row")
 		}
+	}
+}
+
+// --- the grid (0460, #1298) ---
+
+// TestKeymapDetailColumnExplainsTheCommand: browsing without editing, the
+// third column names the command, lists every binding with context and
+// provenance, and reports the conflict state.
+func TestKeymapDetailColumnExplainsTheCommand(t *testing.T) {
+	k, _ := keymapPage(t)
+	b := selectChord(t, k, "ctrl+s")
+	v := k.View(130, 40)
+	for _, want := range []string{b.Command, "bindings ·", "@default", "no conflicts"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("detail column missing %q:\n%s", want, v)
+		}
+	}
+}
+
+// TestKeymapDetailReportsCollisions: two commands on one chord is named in the
+// detail column, with free chords offered.
+func TestKeymapDetailReportsCollisions(t *testing.T) {
+	k, opts := keymapPage(t)
+	b := selectChord(t, k, "ctrl+s")
+	// Bind a second command to the same chord behind the page's back.
+	if err := config.WriteKey(opts, config.UserScope, "keymap.bindings."+b.Chord.String(), "editor.write"); err != nil {
+		t.Fatal(err)
+	}
+	if free := k.suggestChords(2); len(free) != 2 {
+		t.Fatalf("suggestChords must offer unbound chords, got %v", free)
+	}
+	for _, c := range k.suggestChords(3) {
+		for _, bound := range k.table().Bindings() {
+			if bound.Chord.String() == c {
+				t.Fatalf("suggested chord %q is already bound to %s", c, bound.Command)
+			}
+		}
+	}
+}
+
+// TestKeymapGridSplitsColumns: a wide page splits into table + detail, a
+// narrow one keeps the single column.
+func TestKeymapGridSplitsColumns(t *testing.T) {
+	listW, detailW, side := splitGrid(130)
+	if !side || listW != formWidth || detailW != 130-formWidth-sepWidth {
+		t.Fatalf("wide split = %d/%d side=%v", listW, detailW, side)
+	}
+	if _, _, side := splitGrid(40); side {
+		t.Fatal("a narrow page must not split")
+	}
+	k, _ := keymapPage(t)
+	if v := k.View(40, 20); strings.Contains(v, "│") {
+		t.Fatalf("a narrow keymap page must render one column:\n%s", v)
+	}
+}
+
+// TestKeymapDetailClicksAreInert: the detail column is read-only chrome — a
+// press there must not move the table's selection.
+func TestKeymapDetailClicksAreInert(t *testing.T) {
+	k, _ := keymapPage(t)
+	k.View(130, 40) // records the column widths
+	selectChord(t, k, "ctrl+s")
+	before := k.sel
+	k.Click(k.listW+5, 3)
+	if k.sel != before {
+		t.Fatalf("sel = %d, want it unchanged at %d", k.sel, before)
+	}
+}
+
+// TestConflictOffersResolutions guards #1298: a colliding chord is a decision
+// — replace, or record a different chord — not a bare yes/no.
+func TestConflictOffersResolutions(t *testing.T) {
+	k, _ := keymapPage(t)
+	b := selectChord(t, k, "ctrl+s")
+	host := &stubHost{}
+	host.stack = append(host.stack, nil) // the capture level itself
+	c := newKeymapCapture(k, host, keymapRow{Binding: b})
+	c.conflict = "some.other.command"
+
+	labels := map[string]bool{}
+	for _, btn := range c.Buttons() {
+		labels[btn.Label] = true
+	}
+	for _, want := range []string{"Replace & unbind other", "Pick a different chord", "Cancel"} {
+		if !labels[want] {
+			t.Fatalf("conflict buttons = %v, want %q", labels, want)
+		}
+	}
+	// "p" clears the recorded chord and returns to capture rather than
+	// writing anything.
+	if cmd := c.Update(key("p")); cmd != nil {
+		t.Fatal("picking a different chord must not write")
+	}
+	if c.conflict != "" || len(c.steps) != 0 {
+		t.Fatalf("after p: conflict=%q steps=%v", c.conflict, c.steps)
+	}
+	if len(host.stack) == 0 {
+		t.Fatal("picking a different chord must stay in the capture")
 	}
 }

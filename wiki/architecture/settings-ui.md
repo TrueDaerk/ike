@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T00:10:00Z
+timestamp: 2026-07-28T00:50:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -494,5 +494,29 @@ takes over the grid instead, keeping all three columns doing their job:
 Custom-page items keep coming through the `Searchable` seam (#886) and still
 navigate on enter.
 
-Still open on the epic: the keymap (#1298) and toolchain (#1299) pages on the
-grid, and noise folding (#1300).
+## Keymap page on the grid (0460, #1298)
+
+The keymap page adopts the same raster through `splitGrid`, so a custom page
+looks like a schema page:
+
+- **Settings column**: `chord · command`. Context, layer and provenance left
+  the table — they are detail, not scanning cues.
+- **Detail column** (`keymap_detail.go`): the selected command's title and id,
+  then `bindings · n` listing **every** chord bound to it with its context and
+  `@default` / `@user` layer, then its conflict state — `✓ no conflicts`, or
+  the other commands sharing the chord plus two **free chords** taken from the
+  live table (`suggestChords` never offers a bound one). Fragile chords keep
+  their warning. Clicks there are inert: it is read-only chrome.
+- **Conflicts are a decision, not a yes/no.** The capture sub-panel offers
+  *Replace & unbind other* (`enter`), *Pick a different chord* (`p`, which
+  clears the recorded steps and keeps capturing) and *Cancel*. The wireframes'
+  third option — keep both, resolve by context — needs a config spelling for
+  context-qualified overrides and is tracked as #1312.
+
+Keys stay as they were (`enter` rebind · `u` unbind · `r` reset · `i` import):
+the wireframe's `r rebind` would have collided with the established reset.
+Range folding of `alt+1 … alt+9` style runs lands with the rest of the noise
+folding in #1300.
+
+Still open on the epic: the toolchain page on the grid (#1299) and noise
+folding (#1300).
