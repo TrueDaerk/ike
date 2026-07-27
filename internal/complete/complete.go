@@ -41,6 +41,17 @@ type Source interface {
 	Complete(ctx context.Context, req Request) ([]ilsp.CompletionItem, error)
 }
 
+// ExclusiveSource is an optional Source extension (#1302): a language source
+// that fully owns completion for its own files declares it here. While a source
+// claims a path, the engine dispatches only claiming sources for it — a `.http`
+// header line offers header names, never the buffer's random identifiers, and a
+// request body offers nothing rather than every word in the file. The LSP bridge
+// is not a Source and is unaffected; no source claims anything by default, so
+// every other language keeps the full merged popup.
+type ExclusiveSource interface {
+	Exclusive(path string) bool
+}
+
 // Engine dispatches registered sources per completion trigger. It implements
 // host.EditorEmitter and is registered with the host next to the LSP bridge.
 type Engine struct {
@@ -151,6 +162,21 @@ func localTrigger(ch string) bool {
 	return len(r) == 1 && (r[0] == '_' || unicode.IsLetter(r[0]) || unicode.IsDigit(r[0]))
 }
 
+// exclusiveFor narrows sources to the ones claiming path exclusively (#1302).
+// With no claim the full set runs, which is the normal case.
+func exclusiveFor(path string, sources []Source) []Source {
+	var claimed []Source
+	for _, s := range sources {
+		if x, ok := s.(ExclusiveSource); ok && x.Exclusive(path) {
+			claimed = append(claimed, s)
+		}
+	}
+	if len(claimed) == 0 {
+		return sources
+	}
+	return claimed
+}
+
 // dispatch cancels the previous dispatch and runs every source concurrently,
 // sending each result as a tagged batch (an empty batch clears the source's
 // contribution from a merged popup). Results landing after the context died
@@ -165,6 +191,7 @@ func (e *Engine) dispatch(req Request) {
 	sources := make([]Source, len(e.sources))
 	copy(sources, e.sources)
 	e.mu.Unlock()
+	sources = exclusiveFor(req.Path, sources)
 	for _, s := range sources {
 		go func(s Source) {
 			items, err := s.Complete(ctx, req)

@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T20:30:00Z
 ---
 
 # Completion Engine
@@ -50,6 +50,20 @@ dispatch**, so late results are dropped rather than delivered stale. Only
 identifier runes and manual requests dispatch the local sources — punctuation
 trigger characters (`.`, `->`, `$`) are the LSP bridge's business; a local
 index has nothing position-specific to say after a `.`.
+
+**Exclusive sources (#1302).** A language source that fully owns completion for
+its own files implements the optional extension
+
+```go
+type ExclusiveSource interface{ Exclusive(path string) bool }
+```
+
+While a source claims a path, the engine dispatches **only claiming sources**
+for it. Without it every source answers every buffer: a `.http` header line
+offered `Content-Type` next to `contentYOff` and every other identifier the
+buffer-word and project-scan tiers had seen, and a request body offered nothing
+but buffer words. No source claims anything by default, so every other language
+keeps the full merged popup; the LSP bridge is not a `Source` and is unaffected.
 
 ## Editor-side merge (`internal/editor/lsp_state.go`)
 
@@ -161,4 +175,7 @@ shape the insert-mode Tab trigger produces (see
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
-`internal/app`) at build time. All Phase-2 sources have landed.
+`internal/app`) at build time. A source that owns a language's files
+end-to-end should also implement `ExclusiveSource` (see above), or the generic
+indexes will merge their identifiers into its popup. All Phase-2 sources have
+landed.

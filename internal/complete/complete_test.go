@@ -2,6 +2,7 @@ package complete
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,8 +19,8 @@ type fakeSource struct {
 	delay time.Duration
 }
 
-func (f fakeSource) Name() string   { return f.name }
-func (f fakeSource) Priority() int  { return f.prio }
+func (f fakeSource) Name() string  { return f.name }
+func (f fakeSource) Priority() int { return f.prio }
 func (f fakeSource) Complete(ctx context.Context, req Request) ([]ilsp.CompletionItem, error) {
 	if f.delay > 0 {
 		select {
@@ -131,4 +132,35 @@ func TestNonIdentTriggersSkipLocalSources(t *testing.T) {
 	}
 	e.Emit(trigger(""))
 	collect(t, ch, 1)
+}
+
+// exclusiveFake claims every path ending in .http.
+type exclusiveFake struct{ fakeSource }
+
+func (e exclusiveFake) Exclusive(path string) bool { return strings.HasSuffix(path, ".http") }
+
+// TestExclusiveSourceSilencesTheRest guards #1302: a language source that owns
+// its files keeps the generic indexes out of the popup — and only there.
+func TestExclusiveSourceSilencesTheRest(t *testing.T) {
+	e, ch := newTestEngine()
+	e.Register(fakeSource{name: "words", prio: ilsp.PriorityWords})
+	e.Register(exclusiveFake{fakeSource{name: "http", prio: ilsp.PriorityEmmet}})
+
+	// A claimed buffer: only the claiming source answers.
+	e.Emit(host.EditorEvent{Kind: host.EditorCompletionTrigger, Path: "/r.http", Line: 1, Col: 2, Char: "a"})
+	got := collect(t, ch, 1)
+	if got[0].Source != "http" {
+		t.Fatalf("batch source = %q, want http", got[0].Source)
+	}
+	select {
+	case m := <-ch:
+		t.Fatalf("a claimed buffer must not dispatch %q", m.Source)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	// Any other buffer keeps the full merged popup.
+	e.Emit(trigger("a"))
+	if len(collect(t, ch, 2)) != 2 {
+		t.Fatal("unclaimed buffers must still dispatch every source")
+	}
 }

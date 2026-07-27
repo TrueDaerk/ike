@@ -254,3 +254,19 @@ func TestCompleteLargeBufferDropsText(t *testing.T) {
 		t.Errorf("a dropped buffer completes nothing, got %v", labels(items))
 	}
 }
+
+// TestSourceClaimsHTTPBuffersExclusively guards #1302: the popup in a .http
+// file must never carry buffer words or project identifiers.
+func TestSourceClaimsHTTPBuffersExclusively(t *testing.T) {
+	s := &httpSource{}
+	for _, path := range []string{"/x/api.http", "/x/api.rest"} {
+		if !s.Exclusive(path) {
+			t.Errorf("%s must be claimed exclusively", path)
+		}
+	}
+	for _, path := range []string{"/x/main.go", "/x/notes.md", ""} {
+		if s.Exclusive(path) {
+			t.Errorf("%s must not be claimed", path)
+		}
+	}
+}
