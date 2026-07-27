@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (php: suppress intelephense by-ref P1006 false positive)
+
+- Default `lsp.diagnostics_ignore` rules (#1260) drop intelephense's P1006
+  "Expected type '...'. Found 'null'/'unset'." false positives on
+  by-reference arguments (upstream bmewburn/vscode-intelephense#3504, no fix
+  as of 1.18.5); other P1006 findings still surface
+  (`/architecture/lsp.md`).
+
 ## 2026-07-27 (diagnostics: decoration toggles + ignore rules)
 
 - Per-source, per-severity decoration toggles (#1259): `editor.marks.lsp_*`

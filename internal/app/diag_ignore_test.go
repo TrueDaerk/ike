@@ -75,8 +75,9 @@ func TestIgnoreRulesFilterPublishes(t *testing.T) {
 // screen from the raw cache — no republish needed (#1259).
 func TestIgnoreRuleEditRefiltersLive(t *testing.T) {
 	m := problemsApp(t)
+	// A real type mismatch: no default rule (#1260) matches it.
 	out, _ := m.Update(ilsp.DiagnosticsMsg{Path: "/a.php", Diagnostics: []ilsp.Diagnostic{
-		ignoreDiag("intelephense", "P1006", "Expected type 'array'. Found 'null'."),
+		ignoreDiag("intelephense", "P1006", "Expected type 'int'. Found 'string'."),
 		ignoreDiag("intelephense", "P1005", "too few arguments"),
 	}})
 	m = out.(Model)

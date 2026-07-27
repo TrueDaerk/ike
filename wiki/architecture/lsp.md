@@ -236,7 +236,14 @@ published set first passes the **diagnostic ignore filter** (#1259,
 globs plus a trailing `msg=` pattern, bare token = code) drop suppressed
 entries, and only the filtered set reaches the Problems store and the editors.
 A rule edit re-filters the raw cache live on config reload — no republish
-needed. The editor's `lsp.ignoreDiagnostic` command (palette, "Ignore
+needed. Two rules ship as defaults (#1260): intelephense's P1006 TypeError
+cannot infer types written through by-reference parameters (`&$param`,
+[bmewburn/vscode-intelephense#3504](https://github.com/bmewburn/vscode-intelephense/issues/3504),
+open as of 1.18.5) and floods by-ref-heavy PHP with bogus
+`Expected type '...'. Found 'null'.` / `... Found 'unset'.` errors, so the
+defaults suppress exactly those message variants — real P1006 type mismatches
+still surface, and a user-set `lsp.diagnostics_ignore` replaces the defaults
+wholesale. The editor's `lsp.ignoreDiagnostic` command (palette, "Ignore
 Diagnostic Under Caret") appends the caret diagnostic's rule
 (source+code, or exact message when the server sent no code) to the project
 config. The app routes each filtered set (by

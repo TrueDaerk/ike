@@ -115,9 +115,21 @@ func defaults() *Config {
 			InlayHints:     false,
 			SignatureAuto:  true,
 			CompletionAuto: true,
-			LogLevel:          "warn",
-			Servers:           map[string]map[string]any{},
-			DiagnosticsIgnore: []string{},
+			LogLevel: "warn",
+			Servers:  map[string]map[string]any{},
+			// Default ignore rules (#1260): intelephense's P1006 TypeError
+			// cannot infer types written through by-reference parameters
+			// (&$param) and floods by-ref-heavy PHP with bogus
+			// "Expected type '...'. Found 'null'." / "... Found 'unset'."
+			// errors (bmewburn/vscode-intelephense#3504, open as of 1.18.5).
+			// Only the null/unset variants are suppressed — other P1006
+			// findings (real type mismatches) still surface. A user-set
+			// lsp.diagnostics_ignore list replaces these defaults wholesale,
+			// like any other list setting.
+			DiagnosticsIgnore: []string{
+				"source=intelephense code=P1006 msg=*Found 'null'*",
+				"source=intelephense code=P1006 msg=*Found 'unset'*",
+			},
 		},
 		Theme: Theme{
 			Name: "default",
