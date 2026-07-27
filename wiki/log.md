@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-27 (http client: dispatch with .curlrc/.netrc detection)
+
+- New `internal/httpclient` package (#1249): executes parsed request blocks
+  after placeholder substitution. `.netrc` credentials apply when no explicit
+  `Authorization` header exists; supported `.curlrc` options (headers, proxy,
+  insecure, user-agent, user, referer, location, timeouts) map onto the
+  request with explicit `.http` values always winning; unsupported options
+  become warnings. Sensible defaults for redirects/TLS/timeout, 10 MiB body
+  cap (`/architecture/http-client.md`).
+
 ## 2026-07-27 (http client: .http file parser)
 
 - New `internal/httpfile` package (#1248, epic #1247) parses `.http` files
