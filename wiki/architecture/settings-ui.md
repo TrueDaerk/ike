@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -161,6 +161,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   #174), trim trailing whitespace, insert final newline, line numbers
   (+relative), scroll offset, soft wrap, show whitespace: every key
   `applyConfig` reads live.
+- **Diagnostics** (#1259) — the per-source, per-severity decoration toggles
+  (`editor.marks.lsp_*`, `editor.marks.git_*`; user scope) and the
+  project-scoped `lsp.diagnostics_ignore` rule list the editor's
+  "Ignore Diagnostic Under Caret" command appends to.
 - **Appearance** — theme (enum fed from the registry's theme list; writing
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.

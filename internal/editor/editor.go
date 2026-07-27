@@ -419,6 +419,14 @@ type Model struct {
 	wsSet        bool
 	guidesSet    bool
 	rulersRaw    string
+
+	// Per-source, per-severity decoration toggles (#1259): sevShow[1..4] gates
+	// LSP marks by severity, gitShow gates git change marks by kind, across the
+	// scrollbar stripe, gutter colouring and inline underlines. The diagnostic
+	// set itself stays complete — the details popup, diagnostic jump and the
+	// Problems window keep seeing everything.
+	sevShow [5]bool
+	gitShow map[vcs.LineMark]bool
 }
 
 // whitespaceMode selects which whitespace runs render visibly (#64).
@@ -468,6 +476,12 @@ func New() Model {
 		mdRender:           true,
 		mdTables:           &mdTableState{},
 		colorPreview:       true,
+		sevShow:            [5]bool{false, true, true, true, true},
+		gitShow: map[vcs.LineMark]bool{
+			vcs.LineAdded:   true,
+			vcs.LineChanged: true,
+			vcs.LineDeleted: true,
+		},
 	}
 	m.view.LineNumbers = false
 	return m
@@ -568,6 +582,7 @@ func (m *Model) applyConfig() {
 		m.rulersRaw = v
 		m.rulers = parseRulers(v)
 	}
+	m.applyMarkToggles()
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
 	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)

@@ -311,6 +311,14 @@ type Model struct {
 	// from every publish — files without an open editor included.
 	problemsReturnFocus string
 	probStore           *problems.Store
+	// rawDiags caches each path's last published, unfiltered diagnostic set;
+	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
+	// and their source strings (#1259). Publishes filter through the rules
+	// before reaching probStore or an editor; a rule edit re-filters the cache
+	// live (diag_ignore.go).
+	rawDiags      map[string][]ilsp.Diagnostic
+	diagIgnore    ilsp.IgnoreRules
+	diagIgnoreRaw []string
 	// structReturnFocus is the same dance for the Structure tool window
 	// (#1025); structReqPath is the last path a documentSymbol refresh was
 	// issued for (the request dedup), and structForce marks a save-triggered
@@ -692,6 +700,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.finder.SetHistories(m.qhist) // persistent query recall (#1171)
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
+	m.rawDiags = map[string][]ilsp.Diagnostic{}
+	m.compileDiagIgnore() // seed the ignore rules (#1259)
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
 	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
 	m.todo.SetPalette(themePal)
@@ -2554,6 +2564,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// findings from the Problems store (#1102).
 		m.closeEditorsForPath(msg.Path, msg.IsDir)
 		m.probStore.Drop(msg.Path, msg.IsDir)
+		m.dropRawDiags(msg.Path, msg.IsDir)
 		m.refreshProblemsPanel()
 		return m, nil
 
@@ -3517,6 +3528,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyConfigDiags(msg.Diags)
 		m.settings.NoteReloadDiags(msg.Diags) // inline in the panel too (#891)
 		m.palette.Refresh()
+		// Diagnostic ignore rules (#1259) apply live: a rule change re-filters
+		// every cached raw set into the Problems store and the open editors.
+		if m.compileDiagIgnore() {
+			if cmds := m.refilterDiagnostics(); len(cmds) > 0 {
+				return m, tea.Batch(cmds...)
+			}
+		}
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor
 		// so the change lands without waiting for the next edit.
 		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
@@ -3650,25 +3668,30 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ilsp.DiagnosticsMsg:
 		// The Problems store (#1024) keeps every published set — opened in an
-		// editor or not — so the tool window aggregates project-wide.
-		m.probStore.Set(msg.Path, msg.Diagnostics)
+		// editor or not — so the tool window aggregates project-wide. Sets pass
+		// the ignore filter first (#1259, diag_ignore.go).
+		cmd := m.applyDiagnostics(msg.Path, msg.Diagnostics)
 		m.refreshProblemsPanel()
-		return m, m.routeToEditor(msg.Path, msg)
+		return m, cmd
 
 	case ilsp.DiagnosticsBatchMsg:
 		// Coalesced diagnostics (#597): route each document's set to its editor
 		// leaf in one Update pass, so a workspace publish storm re-renders once
 		// instead of once per file. Unopened paths route to nothing (cheap) but
-		// still land in the Problems store (#1024).
+		// still land in the Problems store (#1024). Sets pass the ignore filter
+		// first (#1259, diag_ignore.go).
 		var cmds []tea.Cmd
 		for _, d := range msg.Items {
-			m.probStore.Set(d.Path, d.Diagnostics)
-			if cmd := m.routeToEditor(d.Path, d); cmd != nil {
+			if cmd := m.applyDiagnostics(d.Path, d.Diagnostics); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
 		m.refreshProblemsPanel()
 		return m, tea.Batch(cmds...)
+
+	case ilsp.IgnoreDiagnosticMsg:
+		// The editor's "ignore diagnostic under caret" action (#1259).
+		return m, m.ignoreDiagnostic(msg.Diagnostic)
 	case ilsp.CompletionMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.HoverMsg:

@@ -110,14 +110,22 @@ func (m Model) worstSeverityOnLine(line int) (int, bool) {
 	if len(ds) == 0 {
 		return 0, false
 	}
-	worst := 5
+	worst, found := 5, false
 	for _, d := range ds {
-		if d.Severity != 0 && d.Severity < worst {
-			worst = d.Severity
+		if !m.sevVisible(d.Severity) { // decoration toggle (#1259)
+			continue
+		}
+		found = true
+		sev := d.Severity
+		if sev == 0 {
+			sev = 1 // unspecified severity: treat as error
+		}
+		if sev < worst {
+			worst = sev
 		}
 	}
-	if worst == 5 {
-		worst = 1 // unspecified severity: treat as error
+	if !found {
+		return 0, false
 	}
 	return worst, true
 }
@@ -127,7 +135,7 @@ func (m Model) worstSeverityOnLine(line int) (int, bool) {
 func (m Model) diagSeverityAt(line, col int) (int, bool) {
 	worst, found := 5, false
 	for _, d := range m.diagByLine[line] {
-		if !diagCovers(d, line, col) {
+		if !diagCovers(d, line, col) || !m.sevVisible(d.Severity) {
 			continue
 		}
 		found = true
@@ -1286,6 +1294,26 @@ func (m Model) diagLines(ds []ilsp.Diagnostic) []hoverLine {
 		}
 	}
 	return out
+}
+
+// ignoreDiagnosticUnderCaret emits the ignore request for the diagnostic under
+// the caret (#1259): the one covering the caret cell when there is one, else
+// the first on the caret line. The app appends the rule to
+// lsp.diagnostics_ignore (project scope) and reloads; without a diagnostic it
+// returns the "nothing to ignore" notice instead.
+func (m *Model) ignoreDiagnosticUnderCaret() tea.Cmd {
+	ds := m.diagByLine[m.cursor.Line]
+	if len(ds) == 0 {
+		return notice("no diagnostic under the caret to ignore")
+	}
+	pick := ds[0]
+	for _, d := range ds {
+		if diagCovers(d, m.cursor.Line, m.cursor.Col) {
+			pick = d
+			break
+		}
+	}
+	return func() tea.Msg { return ilsp.IgnoreDiagnosticMsg{Diagnostic: pick} }
 }
 
 // diagAttribution renders "source · code" for the popup header, whichever

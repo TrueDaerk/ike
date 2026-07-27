@@ -50,6 +50,14 @@ type Diagnostic struct {
 // caret in a popup (#739). Dispatched by lsp.diagnosticInfo.
 type DiagnosticInfoMsg struct{}
 
+// IgnoreDiagnosticMsg asks the root model to persist an ignore rule for the
+// given diagnostic (#1259): the editor emits it for the diagnostic under the
+// caret, the app appends IgnoreRuleFor's rule to lsp.diagnostics_ignore in the
+// project config and reloads.
+type IgnoreDiagnosticMsg struct {
+	Diagnostic Diagnostic
+}
+
 // CompletionMsg delivers completion items for an in-flight request, anchored at
 // the cursor position the request was issued from.
 type CompletionMsg struct {

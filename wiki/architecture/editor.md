@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-26T12:00:00Z
+timestamp: 2026-07-27T12:00:00Z
 ---
 
 # Editor
@@ -412,6 +412,19 @@ above/below the thumb jumps the viewport to the proportional position.
 Right-click (context menu) and left drags on content (selection) are
 untouched; the bar renders only as an overlay, so text width, wrap, and click
 mapping never shift when it appears.
+
+**Decoration toggles (#1259, `editor/marktoggles.go`).** The `editor.marks.*`
+config switches gate which mark classes decorate the buffer, per source and
+severity: `lsp_errors`/`lsp_warnings`/`lsp_info`/`lsp_hints` for LSP
+diagnostics and `git_added`/`git_changed`/`git_deleted` for the VCS line
+marks. A disabled class disappears consistently from the scrollbar stripe
+(including click-to-jump targets), the gutter colouring and the inline
+underlines — `sevVisible`/`gitVisible` are consulted at all render seams, and
+a toggle flip bumps the diags/marks epochs so the memoized stripe rebuilds.
+The diagnostic *data* stays complete: the details popup (#739), the
+diagnostic jump (#369) and the Problems window keep the full set, so a hidden
+severity is still reachable, just not painted. All switches live in the
+settings panel's Diagnostics page and apply live.
 
 Resting the pointer over content for ~600ms opens the hover popup at the
 hovered cell (#1129, mouse-idle hover): the diagnostic covering the cell

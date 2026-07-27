@@ -90,6 +90,19 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
+		{Title: "Diagnostics", Entries: []Entry{
+			// Per-source, per-severity decoration toggles (#1259): each switch
+			// gates one mark class across the scrollbar stripe, gutter and
+			// inline underlines. The Problems window keeps showing everything.
+			{Key: "editor.marks.lsp_errors", Type: Bool, Title: "Error marks", Description: "Decorate LSP errors (scrollbar stripe, gutter, underline); the Problems window is unaffected", Scope: config.UserScope},
+			{Key: "editor.marks.lsp_warnings", Type: Bool, Title: "Warning marks", Description: "Decorate LSP warnings (scrollbar stripe, gutter, underline); the Problems window is unaffected", Scope: config.UserScope},
+			{Key: "editor.marks.lsp_info", Type: Bool, Title: "Info marks", Description: "Decorate LSP information diagnostics (scrollbar stripe, gutter, underline); the Problems window is unaffected", Scope: config.UserScope},
+			{Key: "editor.marks.lsp_hints", Type: Bool, Title: "Hint marks", Description: "Decorate LSP hints (scrollbar stripe, gutter, underline); the Problems window is unaffected", Scope: config.UserScope},
+			{Key: "editor.marks.git_added", Type: Bool, Title: "Git added marks", Description: "Mark added lines in the gutter and scrollbar", Scope: config.UserScope},
+			{Key: "editor.marks.git_changed", Type: Bool, Title: "Git changed marks", Description: "Mark changed lines in the gutter and scrollbar", Scope: config.UserScope},
+			{Key: "editor.marks.git_deleted", Type: Bool, Title: "Git deleted marks", Description: "Mark deletions in the gutter and scrollbar", Scope: config.UserScope},
+			{Key: "lsp.diagnostics_ignore", Type: List, Title: "Ignored diagnostics", Description: "Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here", Scope: config.ProjectScope},
+		}},
 		{Title: "Explorer", Entries: []Entry{
 			{Key: "explorer.exclude", Type: List, Title: "Excluded entries", Description: "Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them", Scope: config.UserScope},
 		}},

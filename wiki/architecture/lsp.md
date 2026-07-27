@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-24T22:00:00Z
+timestamp: 2026-07-27T12:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -229,7 +229,17 @@ workspace-diagnostic server (pyright over a populated `.venv`) publishes for
 hundreds of library files, and one `tea.Msg` per file would mean one Update pass
 + re-render per file, starving keystrokes. Publishes accumulate in the bridge
 (latest per path) over a 50ms `diagCoalesce` window and flush as a single
-`DiagnosticsBatchMsg`, so the storm costs one re-render. The app routes each (by
+`DiagnosticsBatchMsg`, so the storm costs one re-render. In the app every
+published set first passes the **diagnostic ignore filter** (#1259,
+`internal/app/diag_ignore.go`): the raw set is cached per path, the
+`lsp.diagnostics_ignore` rules (`internal/lsp/ignore.go` — `source=`/`code=`
+globs plus a trailing `msg=` pattern, bare token = code) drop suppressed
+entries, and only the filtered set reaches the Problems store and the editors.
+A rule edit re-filters the raw cache live on config reload — no republish
+needed. The editor's `lsp.ignoreDiagnostic` command (palette, "Ignore
+Diagnostic Under Caret") appends the caret diagnostic's rule
+(source+code, or exact message when the server sent no code) to the project
+config. The app routes each filtered set (by
 file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition
