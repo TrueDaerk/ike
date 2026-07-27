@@ -306,6 +306,12 @@ named, user-scoped snapshots of the split tree.
   terminal slots reuse live shells in order, then spawn fresh ones; per-project
   panels (problems, usages, VCS, debug, structure) restore empty exactly as
   they do on project restore.
+- **Tool tabs in snapshots (#1277):** a tab host (#836) whose tabs are exactly
+  one tool session and no file-backed editors snapshots as a dedicated
+  `tool` slot; any other editor-kind pane hosting tool tabs keeps the tool
+  names in its identity, and a fresh editor slot restarts them as tabs on
+  apply (the startup restore of `id.Tools` already did the same). Plain
+  terminal tabs stay session-local either way.
 - **New projects:** `restoreLayout` falls back to materializing the designated
   default layout when the project has no persisted `layout.json`; the built-in
   `layout.Default` pair stays the last resort. A project that saves its own

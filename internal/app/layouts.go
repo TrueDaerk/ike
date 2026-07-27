@@ -180,7 +180,20 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return k, paneIdentity{Kind: "terminal"}, true
 	case pane.KindEditor, pane.KindMarkdown, pane.KindDiff:
 		// Content panes are anonymous editor slots: what files they held is
-		// session state, only the space they occupied is layout.
+		// session state, only the space they occupied is layout. Tool sessions
+		// hosted as tabs (#836) are the exception, like in saveLayout: a host
+		// carrying exactly one tool and no files snapshots as the dedicated
+		// tool slot it visually is, any other host keeps the tool names so the
+		// apply can restart them as tabs (#1277).
+		if inst.Kind() == pane.KindEditor {
+			tools, files := editorPaneTools(inst)
+			if len(tools) == 1 && files == 0 {
+				return st.mintTerminal(), paneIdentity{Kind: "tool", Tool: tools[0]}, true
+			}
+			if len(tools) > 0 {
+				return st.mintEditor(), paneIdentity{Kind: "editor", Tools: tools}, true
+			}
+		}
 		return st.mintEditor(), paneIdentity{Kind: "editor"}, true
 	}
 	return "", paneIdentity{}, false
@@ -463,7 +476,31 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			st.content = st.content[1:]
 			return key, true
 		}
-		return reg.AddEditor(), true
+		key := reg.AddEditor()
+		// A fresh editor slot restarts the tool sessions the snapshot hosted
+		// as tabs (#1277), mirroring the startup restore of id.Tools; a live
+		// content pane re-slotted above keeps its own tabs instead.
+		if len(id.Tools) > 0 {
+			inst := reg.Get(key)
+			spawned := 0
+			for _, tool := range id.Tools {
+				entry, ok := toolEntry(tool)
+				if !ok {
+					continue // tool no longer configured: restores as nothing
+				}
+				dir := entry.Cwd
+				if dir == "" {
+					dir = "."
+				}
+				argv := append([]string{entry.Command}, entry.Args...)
+				inst.AddTerminalTab(reg.NewToolSession(entry.Name, argv, dir, toolSpawnEnv(m.pal()), m.host.Send))
+				spawned++
+			}
+			if spawned > 0 {
+				inst.CloseTab(0) // drop the placeholder scratch tab
+			}
+		}
+		return key, true
 	}
 	return "", false
 }
@@ -487,6 +524,24 @@ func lastEditorSlot(reg *pane.Registry, slots []string) *pane.Instance {
 		}
 	}
 	return nil
+}
+
+// editorPaneTools returns the tool names hosted as terminal tabs of an
+// editor-kind pane and the count of its file-backed editor tabs (#1277).
+// Plain terminal tabs stay session-local, like in saveLayout.
+func editorPaneTools(inst *pane.Instance) (tools []string, files int) {
+	for i := 0; i < inst.TabCount(); i++ {
+		if tt := inst.TabTerminal(i); tt != nil {
+			if tool := tt.Tool(); tool != "" {
+				tools = append(tools, tool)
+			}
+			continue
+		}
+		if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
+			files++
+		}
+	}
+	return tools, files
 }
 
 // lastTerminalSlot returns the last resolved slot holding a terminal-kind

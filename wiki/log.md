@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (layouts: tool tabs survive the snapshot)
+
+- Saved layouts no longer degrade tab-hosted tools to plain editors (#1277).
+  A tab host carrying exactly one tool session snapshots as a dedicated
+  `tool` slot; mixed hosts keep the tool names in the editor identity and
+  the apply restarts them as tabs in fresh editor slots.
+  Updated [Pane Layout & Drag](/architecture/pane-layout.md).
+
 ## 2026-07-27 (layouts: orphaned terminals merge as tabs)
 
 - Applying a layout no longer strands running terminals (#1275). Surplus
