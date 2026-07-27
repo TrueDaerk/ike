@@ -85,12 +85,25 @@ func (m *Model) runHTTPRequestAtCursor() tea.Cmd {
 	}
 }
 
-// httpPanel returns the singleton viewer model, or nil when it is not open.
+// httpPanel returns the singleton viewer model, or nil when it is not open
+// as a *visible* layout leaf. The registry entry alone is not enough (#1271):
+// window.hideAllTools removes the leaf but keeps the instance registered, and
+// filling an invisible pane looks like a dispatch that did nothing.
 func (m Model) httpPanel() *httppane.Model {
-	if !m.activeWS().Panes.Has(pane.HTTPKey) {
+	if !m.activeWS().Panes.Has(pane.HTTPKey) || !m.leafVisible(pane.HTTPKey) {
 		return nil
 	}
 	return m.activeWS().Panes.Get(pane.HTTPKey).HTTP()
+}
+
+// leafVisible reports whether key is a leaf of the active layout tree.
+func (m Model) leafVisible(key string) bool {
+	for _, k := range layout.Leaves(m.activeWS().Tree) {
+		if k == key {
+			return true
+		}
+	}
+	return false
 }
 
 // openHTTPPanel splits the active editor (fallback: focused leaf) at the
@@ -103,10 +116,15 @@ func (m *Model) openHTTPPanel() {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
+	existed := m.activeWS().Panes.Has(pane.HTTPKey)
 	key := m.activeWS().Panes.AddHTTP()
 	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
 	if !ok {
-		m.activeWS().Panes.Close(key)
+		if !existed {
+			// Only a freshly created instance is discarded — a hidden one
+			// (hideAllTools) keeps its registration for the restore (#1271).
+			m.activeWS().Panes.Close(key)
+		}
 		return
 	}
 	m.activeWS().Tree = tree
@@ -128,6 +146,9 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 	}
 	p := m.httpPanel()
 	if p == nil {
+		// Reopening failed (no target leaf, empty tree) — never swallow a
+		// finished dispatch silently (#1271).
+		m.host.Notify(host.Error, "http: response received but the viewer cannot open — "+msg.Request)
 		return
 	}
 	p.Set(msg.Request, msg.Resp)
