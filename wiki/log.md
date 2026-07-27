@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (http client: .http file parser)
+
+- New `internal/httpfile` package (#1248, epic #1247) parses `.http` files
+  into RFC 9112 request blocks: `###` separation with optional request names,
+  `#`/`//` comments outside bodies, per-block tolerant errors with line
+  numbers, and `${NAME}` / `{{$env NAME}}` placeholders resolved at dispatch
+  time via `Request.Resolve` (`/architecture/http-client.md`).
+
 ## 2026-07-27 (restore last project: home is not a project marker)
 
 - `project.restore_last` never fired from `$HOME` (#1245): `isProjectDir`
