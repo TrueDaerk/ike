@@ -170,6 +170,10 @@ func (m *Model) renderHint(pal *theme.Palette) string {
 	}
 	var segs []hintSeg
 	switch {
+	case m.filter != "" && m.focus == formColumn:
+		// Search owns the grid (#1297): a value is settable straight from a
+		// result, and tab leaves for the owning page.
+		segs = []hintSeg{{"enter set here", "edit"}, {"tab open page", "openpage"}}
 	case m.focus == catColumn:
 		segs = []hintSeg{{"enter settings", "edit"}, {"/ search", "filter"}}
 	case m.focus == detailColumn:
@@ -244,11 +248,16 @@ func (m *Model) renderFilter() string {
 		return ""
 	}
 	pal := m.theme()
-	text := " /" + m.filter
+	text := " ⌕ " + m.filter
 	if m.filtering {
 		text += "▌"
 	}
-	return lipgloss.NewStyle().Foreground(pal.Info).Render(text)
+	out := lipgloss.NewStyle().Foreground(pal.Info).Render(text)
+	if m.filter != "" {
+		// The header answers "how much did that match, and where" (#1297).
+		out += lipgloss.NewStyle().Foreground(pal.Secondary).Render(" · " + m.hitSummary())
+	}
+	return out
 }
 
 // renderCategories renders the page list; filtering dims it (results span all
@@ -256,6 +265,9 @@ func (m *Model) renderFilter() string {
 // unfocused column keeps a dimmed selection background so the focused column
 // is unambiguous.
 func (m *Model) renderCategories(h int) string {
+	if m.filter != "" {
+		return m.renderHitPages(h)
+	}
 	pal := m.theme()
 	base := lipgloss.NewStyle().Width(catWidth)
 	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
@@ -306,6 +318,38 @@ func (m *Model) renderCategories(h int) string {
 	}
 	if m.catOff+h < len(rows) && len(lines) > 0 {
 		lines[h-1] = base.Render(dim.Render(" ▼ more"))
+	}
+	return strings.Join(lines[:h], "\n")
+}
+
+// renderHitPages is the nav column in search mode (#1297): the pages carrying
+// matches, with their counts, instead of the full category list — the query's
+// shape at a glance, and a way to jump the match list page by page.
+func (m *Model) renderHitPages(h int) string {
+	pal := m.theme()
+	base := lipgloss.NewStyle().Width(catWidth)
+	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	dim := base.Foreground(pal.Secondary)
+
+	pages := m.hitPages()
+	lines := []string{dim.Render(" pages with hits")}
+	m.hitSel = clamp(m.hitSel, 0, len(pages)-1)
+	m.catOff = clamp(m.catOff, 0, maxOff(len(pages), h-1))
+	for i := m.catOff; i < len(pages) && len(lines) < h; i++ {
+		p := pages[i]
+		label := " " + m.pages[p.page].Title + " " + strconv.Itoa(p.count)
+		switch {
+		case i == m.hitSel && m.focus == catColumn:
+			lines = append(lines, sel.Render(label))
+		case i == m.hitSel:
+			lines = append(lines, inactiveSel.Render(label))
+		default:
+			lines = append(lines, base.Render(label))
+		}
+	}
+	for len(lines) < h {
+		lines = append(lines, base.Render(""))
 	}
 	return strings.Join(lines[:h], "\n")
 }
@@ -593,6 +637,21 @@ func (m *Model) customPagesNote() string {
 	return "   (not searched: " + strings.Join(names, ", ") + ")"
 }
 
+// highlightMatch marks the first case-insensitive occurrence of needle in
+// text. Styling only the match keeps the row readable: the eye lands on why
+// the row is in the list.
+func highlightMatch(text, needle string, pal *theme.Palette) string {
+	if needle == "" {
+		return text
+	}
+	i := strings.Index(strings.ToLower(text), strings.ToLower(needle))
+	if i < 0 {
+		return text
+	}
+	hit := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	return text[:i] + hit.Render(text[i:i+len(needle)]) + text[i+len(needle):]
+}
+
 // renderEntry renders one settings-column row: "Title … value marker". The
 // origin badge moved into the detail column (#1295) — the marker earns that
 // space, and provenance is a detail, not a scanning cue.
@@ -600,9 +659,9 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	pal := m.theme()
 	if r.kind != rowEntry {
 		// A filter jump row (#886): a page or a custom-page item.
-		label := " → " + r.label
+		label := " → " + highlightMatch(r.label, m.filter, pal)
 		if r.kind == rowPage {
-			label = " → " + r.label + "  (page)"
+			label += "  (page)"
 		}
 		style := lipgloss.NewStyle().Foreground(pal.Info)
 		switch {
@@ -619,7 +678,9 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 
 	title := " " + e.Title
 	if m.filter != "" {
-		title = " " + m.pages[r.page].Title + " › " + e.Title
+		// Search mode marks what matched (#1297), so a hit list is readable
+		// without re-reading the query.
+		title = " " + m.pages[r.page].Title + " › " + highlightMatch(e.Title, m.filter, pal)
 	}
 	right := affordanceValue(e, m.value(e.Key)) + " "
 	// The value yields before the title does: a long list still shows its

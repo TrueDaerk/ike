@@ -1,5 +1,15 @@
 # Log
 
+## 2026-07-28 (settings: search inside the grid)
+
+- `/` used to flatten every match into one list next to a dead rail (#1297).
+  The query now takes over the grid: the nav column lists the pages carrying
+  matches with their counts, the settings column marks the matched substring,
+  and the detail column keeps the editor — so `enter` sets a value straight
+  from a result and `tab` leaves for its own page. Rail and match list follow
+  each other, and the header reads `⌕ query · n hits · m pages`. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-27 (settings: staged apply with a diff)
 
 - Settings edits stopped writing per keystroke (#1296). They collect in a

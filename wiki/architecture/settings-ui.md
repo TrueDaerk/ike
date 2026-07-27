@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-27T23:30:00Z
+timestamp: 2026-07-28T00:10:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -473,5 +473,26 @@ re-themes and rebuilds its keymaps once instead of once per changed key
 - Custom pages keep writing directly: installing a plugin or creating a
   virtualenv is not "a value in a file" and cannot be staged meaningfully.
 
-Still open on the epic: search inside the grid (#1297), the keymap (#1298) and
-toolchain (#1299) pages on the grid, and noise folding (#1300).
+## Search inside the grid (0460, #1297)
+
+`/` no longer flattens everything into one list beside a dead rail. The query
+takes over the grid instead, keeping all three columns doing their job:
+
+- **Column 1** becomes *pages with hits* — one row per page carrying matches,
+  with its count. Moving there jumps the match list to that page's first hit;
+  moving in the match list walks the rail back (`syncHitSel`), so the two
+  always agree on "where am I".
+- **Column 2** lists every match as `Page › Title`, with the matched substring
+  marked and the value marker intact.
+- **Column 3** stays the editor for the highlighted match, so `enter` **sets
+  the value right there** — the search is not a navigation detour.
+- `tab` leaves for the match's own page, positioned on that row; `esc` clears
+  the query.
+- The header reads `⌕ query · 7 hits · 5 pages`, and the footer switches to
+  `enter set here · tab open page · ? all keys`.
+
+Custom-page items keep coming through the `Searchable` seam (#886) and still
+navigate on enter.
+
+Still open on the epic: the keymap (#1298) and toolchain (#1299) pages on the
+grid, and noise folding (#1300).
