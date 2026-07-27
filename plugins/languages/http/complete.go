@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"ike/internal/complete"
+	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
@@ -79,9 +80,9 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 
 	switch classify(lines, req.Line, before) {
 	case ctxMethod:
-		return prefixItems(methods, strings.TrimLeft(before, " \t"), "method"), nil
+		return fuzzyItems(methods, strings.TrimLeft(before, " \t"), "method"), nil
 	case ctxVersion:
-		return prefixItems(protoVersions, lastField(before), "http version"), nil
+		return fuzzyItems(protoVersions, lastField(before), "http version"), nil
 	case ctxHeaderName:
 		return headerNameItems(strings.TrimLeft(before, " \t")), nil
 	case ctxHeaderValue:
@@ -198,12 +199,25 @@ func clampCol(line string, col int) int {
 	return col
 }
 
-// prefixItems offers every candidate matching prefix case-insensitively.
-func prefixItems(candidates []string, prefix, detail string) []ilsp.CompletionItem {
-	lower := strings.ToLower(prefix)
+// matches reports whether typed selects candidate. The test is a
+// case-insensitive subsequence, the same shape the editor's popup filter uses
+// (#1292): a strict prefix would only ever reach a header from its very first
+// letters, so "Cen" missed "Content-Encoding" and — because an empty batch
+// closes the popup — the editor never got to filter fuzzily either. Ranking
+// stays with the editor, which scores matches with internal/fuzzy.
+func matches(typed, candidate string) bool {
+	if typed == "" {
+		return true
+	}
+	_, ok := fuzzy.Match(typed, candidate)
+	return ok
+}
+
+// fuzzyItems offers every candidate the typed text selects.
+func fuzzyItems(candidates []string, typed, detail string) []ilsp.CompletionItem {
 	var items []ilsp.CompletionItem
 	for _, c := range candidates {
-		if !strings.HasPrefix(strings.ToLower(c), lower) {
+		if !matches(typed, c) {
 			continue
 		}
 		items = append(items, ilsp.CompletionItem{
@@ -215,11 +229,10 @@ func prefixItems(candidates []string, prefix, detail string) []ilsp.CompletionIt
 
 // headerNameItems completes header names, inserting the ": " separator so the
 // cursor lands where the value goes.
-func headerNameItems(prefix string) []ilsp.CompletionItem {
-	lower := strings.ToLower(prefix)
+func headerNameItems(typed string) []ilsp.CompletionItem {
 	var items []ilsp.CompletionItem
 	for _, h := range headerNames {
-		if !strings.HasPrefix(strings.ToLower(h), lower) {
+		if !matches(typed, h) {
 			continue
 		}
 		items = append(items, ilsp.CompletionItem{
@@ -234,17 +247,17 @@ func headerNameItems(prefix string) []ilsp.CompletionItem {
 }
 
 // headerValueItems completes the typical values of a known header. The typed
-// value prefix filters by substring, not by prefix: a user types "json" to
-// reach "application/json".
+// value matches loosely too, so "jso" still reaches "application/json" and
+// "wwwform" reaches "application/x-www-form-urlencoded".
 func headerValueItems(name, typed string) []ilsp.CompletionItem {
 	values, ok := headerValues[strings.ToLower(strings.TrimSpace(name))]
 	if !ok {
 		return nil
 	}
-	needle := strings.ToLower(strings.TrimSpace(typed))
+	needle := strings.TrimSpace(typed)
 	var items []ilsp.CompletionItem
 	for _, v := range values {
-		if needle != "" && !strings.Contains(strings.ToLower(v), needle) {
+		if !matches(needle, v) {
 			continue
 		}
 		items = append(items, ilsp.CompletionItem{
@@ -262,16 +275,26 @@ var methods = []string{
 // protoVersions are the versions the parser accepts on a request line.
 var protoVersions = []string{"HTTP/1.0", "HTTP/1.1", "HTTP/2", "HTTP/3"}
 
-// headerNames is the request-header set worth offering by hand.
+// headerNames is the request-header set worth offering by hand: the IANA
+// registry's request headers plus the de-facto X- and Sec- ones people type
+// against real APIs (#1292).
 var headerNames = []string{
-	"Accept", "Accept-Charset", "Accept-Encoding", "Accept-Language",
-	"Authorization", "Cache-Control", "Connection", "Content-Disposition",
-	"Content-Encoding", "Content-Language", "Content-Length", "Content-Type",
-	"Cookie", "Expect", "Forwarded", "From", "Host", "If-Match",
-	"If-Modified-Since", "If-None-Match", "If-Unmodified-Since", "Origin",
-	"Prefer", "Proxy-Authorization", "Range", "Referer", "TE", "Transfer-Encoding",
-	"Upgrade", "User-Agent", "Via", "X-Api-Key", "X-Correlation-Id",
-	"X-Forwarded-For", "X-Request-Id", "X-Requested-With",
+	"A-IM", "Accept", "Accept-Charset", "Accept-Datetime", "Accept-Encoding",
+	"Accept-Language", "Access-Control-Request-Headers",
+	"Access-Control-Request-Method", "Authorization", "Cache-Control",
+	"Connection", "Content-Disposition", "Content-Encoding", "Content-Language",
+	"Content-Length", "Content-Location", "Content-MD5", "Content-Range",
+	"Content-Type", "Cookie", "DNT", "Date", "Expect", "Forwarded", "From",
+	"Host", "Idempotency-Key", "If-Match", "If-Modified-Since", "If-None-Match",
+	"If-Range", "If-Unmodified-Since", "Keep-Alive", "Max-Forwards", "Origin",
+	"Pragma", "Prefer", "Proxy-Authorization", "Range", "Referer",
+	"Sec-Fetch-Dest", "Sec-Fetch-Mode", "Sec-Fetch-Site", "Sec-Fetch-User",
+	"Sec-WebSocket-Key", "Sec-WebSocket-Protocol", "Sec-WebSocket-Version", "TE",
+	"Trailer", "Transfer-Encoding", "Upgrade", "Upgrade-Insecure-Requests",
+	"User-Agent", "Via", "Warning", "X-Api-Key", "X-Api-Version",
+	"X-CSRF-Token", "X-Correlation-Id", "X-Forwarded-For", "X-Forwarded-Host",
+	"X-Forwarded-Proto", "X-HTTP-Method-Override", "X-Request-Id",
+	"X-Requested-With",
 }
 
 // mimeTypes are the content types a request body (or an Accept) usually names.
@@ -282,30 +305,61 @@ var mimeTypes = []string{
 	"application/octet-stream",
 	"application/pdf",
 	"application/graphql",
+	"application/ld+json",
+	"application/problem+json",
+	"application/vnd.api+json",
+	"application/yaml",
+	"application/zip",
 	"multipart/form-data",
+	"multipart/mixed",
 	"text/plain",
 	"text/html",
 	"text/csv",
 	"text/xml",
+	"text/event-stream",
+	"image/png",
+	"image/jpeg",
+	"image/svg+xml",
 	"*/*",
 }
 
-// headerValues maps a lowercase header name onto its typical values.
+// headerValues maps a lowercase header name onto its typical values. Only
+// headers with a small closed set (or a handful of values people actually
+// type) are listed — a free-form header is better left alone than answered
+// with a guess.
 var headerValues = map[string][]string{
-	"content-type":      mimeTypes,
-	"accept":            mimeTypes,
-	"authorization":     {"Bearer ", "Basic ", "Digest ", "Token "},
-	"cache-control":     {"no-cache", "no-store", "no-transform", "only-if-cached", "max-age=0", "max-stale", "min-fresh="},
-	"connection":        {"keep-alive", "close"},
-	"accept-encoding":   {"gzip", "deflate", "br", "identity", "gzip, deflate, br"},
-	"content-encoding":  {"gzip", "deflate", "br", "identity"},
-	"accept-charset":    {"utf-8", "iso-8859-1"},
-	"expect":            {"100-continue"},
-	"te":                {"trailers", "compress", "deflate", "gzip"},
-	"prefer":            {"respond-async", "return=minimal", "return=representation", "wait="},
-	"transfer-encoding": {"chunked", "compress", "deflate", "gzip"},
-	"x-requested-with":  {"XMLHttpRequest"},
-	"accept-language":   {"en", "en-US", "de", "de-DE", "*"},
+	"content-type":                  mimeTypes,
+	"accept":                        mimeTypes,
+	"authorization":                 {"Bearer ", "Basic ", "Digest ", "Token ", "ApiKey "},
+	"proxy-authorization":           {"Bearer ", "Basic ", "Digest "},
+	"cache-control":                 {"no-cache", "no-store", "no-transform", "only-if-cached", "max-age=0", "max-stale", "min-fresh="},
+	"connection":                    {"keep-alive", "close", "Upgrade"},
+	"accept-encoding":               {"gzip", "deflate", "br", "zstd", "identity", "gzip, deflate, br"},
+	"content-encoding":              {"gzip", "deflate", "br", "zstd", "identity"},
+	"accept-charset":                {"utf-8", "iso-8859-1"},
+	"expect":                        {"100-continue"},
+	"te":                            {"trailers", "compress", "deflate", "gzip"},
+	"prefer":                        {"respond-async", "return=minimal", "return=representation", "wait=", "handling=strict", "handling=lenient"},
+	"transfer-encoding":             {"chunked", "compress", "deflate", "gzip"},
+	"x-requested-with":              {"XMLHttpRequest"},
+	"x-http-method-override":        {"DELETE", "PATCH", "PUT"},
+	"accept-language":               {"en", "en-US", "de", "de-DE", "*"},
+	"accept-datetime":               {"Thu, 01 Jan 1970 00:00:00 GMT"},
+	"pragma":                        {"no-cache"},
+	"dnt":                           {"0", "1"},
+	"upgrade":                       {"websocket", "h2c", "HTTP/2.0", "TLS/1.2"},
+	"upgrade-insecure-requests":     {"1"},
+	"if-match":                      {"*"},
+	"if-none-match":                 {"*"},
+	"content-disposition":           {"form-data", `form-data; name=""`, `attachment; filename=""`, "inline"},
+	"access-control-request-method": methods,
+	"sec-fetch-dest":                {"document", "empty", "image", "script", "style", "iframe", "font"},
+	"sec-fetch-mode":                {"cors", "navigate", "no-cors", "same-origin", "websocket"},
+	"sec-fetch-site":                {"cross-site", "same-origin", "same-site", "none"},
+	"sec-fetch-user":                {"?1"},
+	"sec-websocket-version":         {"13"},
+	"range":                         {"bytes=0-", "bytes=0-1023"},
+	"max-forwards":                  {"0", "1"},
 }
 
 func init() { complete.RegisterSource(newHTTPSource()) }

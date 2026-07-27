@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-27 (http: fuzzy completion, wider header catalog)
+
+- `.http` completion only matched header names by prefix (#1292), so `Cen`
+  offered nothing for `Content-Encoding` — and because an empty source batch
+  closes the popup, the editor's own fuzzy filter never got the items. The
+  source now matches by case-insensitive subsequence (`internal/fuzzy`) for
+  header names, values, methods and versions; ranking stays with the editor.
+  The header catalog grew to the IANA request set plus the common `X-`/`Sec-`
+  headers, with values for the closed-set ones. Updated
+  [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-27 (http: pan the response viewer sideways)
 
 - Wide response lines were unreachable (#1290): the viewer clipped every row

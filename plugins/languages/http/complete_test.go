@@ -82,6 +82,36 @@ func TestCompleteHeaderNameAfterHyphen(t *testing.T) {
 	}
 }
 
+// TestCompleteHeaderNameFuzzy: matching is a subsequence, not a prefix
+// (#1292) — "Cen" must reach Content-Encoding, which a prefix match missed.
+func TestCompleteHeaderNameFuzzy(t *testing.T) {
+	cases := []struct{ src, want string }{
+		{"GET https://api.test/x\nCen|\n", "Content-Encoding"},
+		{"GET https://api.test/x\nctype|\n", "Content-Type"},
+		{"GET https://api.test/x\naenc|\n", "Accept-Encoding"},
+		{"GET https://api.test/x\nidem|\n", "Idempotency-Key"},
+		{"GET https://api.test/x\nxreqid|\n", "X-Request-Id"},
+	}
+	for _, c := range cases {
+		items := completeAt(t, c.src)
+		if !has(items, c.want) {
+			t.Errorf("%q: want %q offered, got %v", c.src, c.want, labels(items))
+		}
+	}
+	// Unrelated headers still stay out.
+	if items := completeAt(t, "GET https://api.test/x\nCen|\n"); has(items, "Host") {
+		t.Errorf("nonsense matches must not pass: %v", labels(items))
+	}
+}
+
+// TestCompleteMethodFuzzy: the request line matches loosely too.
+func TestCompleteMethodFuzzy(t *testing.T) {
+	items := completeAt(t, "OPS|\n")
+	if !has(items, "OPTIONS") {
+		t.Errorf("OPTIONS must be offered for %q, got %v", "OPS", labels(items))
+	}
+}
+
 func TestCompleteHeaderValues(t *testing.T) {
 	cases := []struct{ src, want string }{
 		{"POST https://api.test/x\nContent-Type: jso|\n", "application/json"},
@@ -89,6 +119,9 @@ func TestCompleteHeaderValues(t *testing.T) {
 		{"POST https://api.test/x\nAuthorization: Bea|\n", "Bearer "},
 		{"POST https://api.test/x\nCache-Control: no-|\n", "no-cache"},
 		{"POST https://api.test/x\nAccept-Encoding: gz|\n", "gzip"},
+		{"POST https://api.test/x\nContent-Type: wwwform|\n", "application/x-www-form-urlencoded"},
+		{"POST https://api.test/x\nSec-Fetch-Mode: cors|\n", "cors"},
+		{"POST https://api.test/x\nX-HTTP-Method-Override: pa|\n", "PATCH"},
 	}
 	for _, c := range cases {
 		items := completeAt(t, c.src)
