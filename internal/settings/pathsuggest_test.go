@@ -103,26 +103,27 @@ func TestPanelPathEntryTabCompletes(t *testing.T) {
 	m.Open()
 	m.SetSize(100, 30)
 	m.focus = formColumn
-	m.Update(key("enter")) // start editing
-	if !m.editing {
-		t.Fatal("enter must start the inline edit")
+	m.Update(key("enter")) // focus the path editor in the detail column
+	ed, ok := m.editor.(*pathEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *pathEditor", m.editor)
 	}
 	for _, r := range filepath.Join(root, "Dev") {
 		m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
 	}
-	if len(m.suggest.candidates) != 1 {
-		t.Fatalf("candidates = %v, want Development only", m.suggest.candidates)
+	if len(ed.suggest.candidates) != 1 {
+		t.Fatalf("candidates = %v, want Development only", ed.suggest.candidates)
 	}
 	if v := m.View(); !strings.Contains(v, "Development"+string(filepath.Separator)) {
 		t.Fatalf("view must show the suggestion:\n%s", v)
 	}
 	m.Update(key("tab"))
-	if want := filepath.Join(root, "Development") + string(filepath.Separator); m.edit.text != want {
-		t.Fatalf("input after tab = %q, want %q", m.edit.text, want)
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.text != want {
+		t.Fatalf("input after tab = %q, want %q", ed.tf.text, want)
 	}
 	m.Update(key("esc"))
-	if m.suggest.candidates != nil {
-		t.Fatalf("esc must clear suggestions, got %v", m.suggest.candidates)
+	if ed.suggest.candidates != nil {
+		t.Fatalf("esc must clear suggestions, got %v", ed.suggest.candidates)
 	}
 }
 

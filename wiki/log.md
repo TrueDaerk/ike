@@ -1,5 +1,20 @@
 # Log
 
+## 2026-07-27 (settings: three-column master·detail grid)
+
+- The settings panel moved onto the 0460 wireframes' fixed raster (#1295,
+  epic #1294): 24ch nav · 44ch settings + value marker · rest detail. The third
+  column is never blank — it explains the category while the rail has the
+  focus and otherwise carries the selected entry's documentation, its
+  provenance and its **editor**. Every entry type now implements one `Editor`
+  interface (toggle, stepper, filterable enum list, path candidates, indexed
+  multi-value list, chord capture, free text), so a new setting needs a type
+  plus documentation and never new UI. Nothing expands inline any more, the
+  `@layer` column gave way to the value marker, and the footer shrank to three
+  context keys with the full set behind the `?` cheatsheet. Narrow panels keep
+  the detail as a band under the list rather than losing it. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-27 (http: fuzzy completion, wider header catalog)
 
 - `.http` completion only matched header names by prefix (#1292), so `Cen`

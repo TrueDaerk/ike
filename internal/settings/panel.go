@@ -1,7 +1,6 @@
 package settings
 
 import (
-	"os"
 	"strconv"
 	"strings"
 
@@ -45,6 +44,7 @@ type column int
 const (
 	catColumn column = iota
 	formColumn
+	detailColumn
 )
 
 // row is one visible form line: an entry plus the page it came from (the
@@ -75,15 +75,14 @@ type Model struct {
 	catOff  int // scroll offset of the category column
 	formOff int // scroll offset (in rendered lines) of the form column
 
-	editing  bool
-	edit     textField   // shared cursor input (#888)
-	invalid  string      // inline validation error for the current edit
-	notice   string      // transient info line (clamp feedback #889, saved flash #891)
-	writeErr string      // inline write/reload error (#891), cleared on the next action
-	suggest  pathSuggest // live path completion while editing a Path entry (#541)
+	// editor is the detail column's typed editor for the selected entry
+	// (0460, #1295), rebuilt whenever the selection moves to another key; it
+	// owns the input state that used to live on the panel.
+	editor    Editor
+	editorKey string
 
-	picking bool // enum picker open for the selected row
-	pickIdx int  // highlighted option inside the picker
+	notice   string // transient info line (clamp feedback #889, saved flash #891)
+	writeErr string // inline write/reload error (#891), cleared on the next action
 
 	filtering bool
 	filter    string
@@ -187,9 +186,9 @@ func (m *Model) Open() {
 	m.catOff, m.formOff = 0, 0
 	m.hoverCat, m.hoverRow = -1, -1
 	m.followCat, m.followForm = true, true
-	m.editing, m.filtering, m.picking = false, false, false
-	m.filter, m.invalid, m.notice = "", "", ""
-	m.edit = textField{}
+	m.filtering = false
+	m.filter, m.notice, m.writeErr = "", "", ""
+	m.editor, m.editorKey = nil, ""
 	m.stack = nil
 }
 
@@ -209,7 +208,10 @@ func (m *Model) Capturing() bool {
 	if top := m.topSub(); top != nil {
 		return top.Capturing()
 	}
-	if m.editing || m.picking || m.filtering {
+	if m.filtering {
+		return true
+	}
+	if m.focus == detailColumn && m.editor != nil && m.editor.Capturing() {
 		return true
 	}
 	if page := m.customPage(); page != nil {
@@ -282,10 +284,32 @@ func value(key string) string {
 	return config.Get().Flat()[key]
 }
 
+// syncEditor keeps the detail column's editor in step with the selection
+// (#1295): moving to another key rebuilds it, so the third column always shows
+// the editor for what is highlighted — and staying on a key keeps the input
+// state the user was typing into.
+func (m *Model) syncEditor() {
+	r, ok := m.current()
+	if !ok || r.kind != rowEntry {
+		m.editor, m.editorKey = nil, ""
+		return
+	}
+	if m.editor == nil || m.editorKey != r.entry.Key {
+		m.editor, m.editorKey = newEditor(m, r.entry), r.entry.Key
+	}
+}
+
+// formX is the settings column's first panel-local x.
+func formX() int { return 1 + catWidth + sepWidth }
+
+// detailX is the detail column's first panel-local x in the three-column grid.
+func (m *Model) detailX() int { return formX() + m.gridFor().formW + sepWidth }
+
 // Click handles a mouse press at panel-local coordinates (0,0 = the box's
-// top-left border cell, #127): a category row selects that page; a form row
-// selects its entry, and a press on the already-selected entry activates it —
-// the same semantics as enter.
+// top-left border cell, #127): a category row selects that page; a settings
+// row selects its entry, and a press on the already-selected entry activates
+// it — the same semantics as enter. A press in the detail column focuses the
+// editor there.
 func (m *Model) Click(x, y int) tea.Cmd {
 	if !m.open {
 		return nil
@@ -294,12 +318,6 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		return m.clickSub(x, y)
 	}
 	const bodyTop = 2 // border row + title row
-	if m.picking {
-		return m.clickPick(x, y-bodyTop)
-	}
-	if m.editing {
-		return m.clickEdit(x, y-bodyTop)
-	}
 	if m.filtering {
 		// A click ends filter typing (like enter) and then hit-tests normally.
 		m.filtering = false
@@ -323,99 +341,43 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		}
 		return nil
 	}
-	// Custom pages own their form column: forward the press page-locally
-	// through the optional PageClicker seam (#674).
+	// Custom pages own everything right of the rail: forward the press
+	// page-locally through the optional PageClicker seam (#674).
 	if page := m.customPage(); page != nil && m.filter == "" {
-		if c, ok := page.(PageClicker); ok && x >= 1+catWidth+3 {
+		if c, ok := page.(PageClicker); ok && x >= formX() {
 			m.focus = formColumn
-			return c.Click(x-(1+catWidth+3), row)
+			return c.Click(x-formX(), row)
 		}
 		return nil
 	}
-	if x < 1+catWidth+3 {
+	if x < formX() {
 		return nil
 	}
-	// The description sits in a pinned footer (#535, wrapped over
-	// detailLines lines #549), so list lines map 1:1 to rows; the footer
-	// lines themselves are not clickable.
-	if row >= m.height-4-detailLines {
+	g := m.gridFor()
+	// Detail column (or, on a narrow panel, the detail band under the list):
+	// a press focuses the editor.
+	if (g.side && x >= m.detailX()) || (!g.side && row > g.listH) {
+		if m.editor != nil {
+			m.focus = detailColumn
+		}
 		return nil
 	}
+	if !g.side && row == g.listH {
+		return nil // the divider row
+	}
+	if row >= g.listH {
+		return nil
+	}
+	// Rows map 1:1 to lines now that nothing expands inline (#1295).
 	if idx := row + m.formOff; idx < len(m.rows()) {
 		if idx == m.sel && m.focus == formColumn {
 			return m.activate()
 		}
 		m.sel, m.focus = idx, formColumn
 		m.followForm = true
+		m.syncEditor()
 	}
 	return nil
-}
-
-// formLine maps a body-local click to a form-column line index (the same
-// indexing renderForm uses, so inline expansions like the picker line up).
-// ok is false when the click is outside the form list area.
-func (m *Model) formLine(x, row int) (int, bool) {
-	if x < 1+catWidth+3 || row < 0 || row >= m.height-4-detailLines {
-		return 0, false
-	}
-	return row + m.formOff, true
-}
-
-// clickPick handles a press while the enum picker is open: an option chooses
-// it (like enter), anything else closes the picker. The options render
-// directly under the selected row, which occupies line m.sel — rows above the
-// selection are 1:1 with lines, expansions only happen at the selection.
-func (m *Model) clickPick(x, row int) tea.Cmd {
-	m.picking = false
-	r, ok := m.current()
-	if !ok || len(r.entry.Options) == 0 {
-		return nil
-	}
-	idx, ok := m.formLine(x, row)
-	if !ok {
-		return nil
-	}
-	if opt := idx - m.sel - 1; opt >= 0 && opt < len(r.entry.Options) {
-		e := r.entry
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[opt])
-	}
-	return nil
-}
-
-// clickEdit handles a press while an inline edit is active: a click on the
-// row being edited keeps the edit, a click on a completion suggestion takes
-// it (#885), anything else commits the input (falling back to cancel when
-// the value does not validate — a click cannot fix it).
-func (m *Model) clickEdit(x, row int) tea.Cmd {
-	r, ok := m.current()
-	if !ok {
-		m.editing = false
-		return nil
-	}
-	if idx, hit := m.formLine(x, row); hit && idx == m.sel {
-		return nil // stay in the edit
-	} else if hit && r.entry.Type == Path {
-		// Suggestion lines render directly under the edited row (#885): a
-		// press takes the candidate outright (the rendered line only shows
-		// the last path component, so index into the candidates).
-		if opt := idx - m.sel - 1; opt >= 0 && opt < len(m.suggest.candidates) && opt < maxSuggestLines {
-			m.edit.Set(m.suggest.candidates[opt])
-			m.suggest.refresh(m.edit.text)
-			return nil
-		}
-	}
-	if r.entry.Type == Chord {
-		// There is nothing to commit mid-capture; the click cancels.
-		m.editing = false
-		return nil
-	}
-	cmd := m.commit(r.entry)
-	if m.editing { // validation rejected the input: cancel instead
-		m.editing = false
-		m.invalid = ""
-		m.suggest.clear()
-	}
-	return cmd
 }
 
 // Wheel scrolls the column under the pointer by moving its selection (the
@@ -429,7 +391,7 @@ func (m *Model) Wheel(x, delta int) {
 		m.wheelSub(delta)
 		return
 	}
-	if m.editing || m.picking || m.filtering {
+	if m.filtering {
 		return
 	}
 	if x >= 1 && x < 1+catWidth && m.filter == "" {
@@ -451,7 +413,7 @@ func (m *Model) Wheel(x, delta int) {
 		return
 	}
 	// Schema form: viewport scroll, decoupled from the selection (#885).
-	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), m.height-4-detailLines))
+	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), m.gridFor().listH))
 }
 
 // maxOff is the largest sensible scroll offset for n lines in an h window.
@@ -515,14 +477,23 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	if m.SubOpen() {
 		return m.updateSub(key)
 	}
-	if m.editing {
-		return m.updateEdit(key)
-	}
-	if m.picking {
-		return m.updatePick(key)
-	}
 	if m.filtering {
 		return m.updateFilter(key)
+	}
+	m.syncEditor()
+	// The detail column's editor owns every key while it has the focus
+	// (#1295) — including esc, which each editor uses to cancel its own input
+	// before handing the focus back to the settings column. Only tab is panel
+	// chrome, so the three-column cycle always works.
+	if m.focus == detailColumn && m.editor != nil {
+		// Tab is the grid's column cycle — unless the editor is a text input,
+		// where tab is completion (a path editor would otherwise never
+		// complete, #541).
+		if key.String() == "tab" && !m.editor.Capturing() {
+			m.focus = catColumn
+			return nil
+		}
+		return m.editor.Update(key)
 	}
 	// A custom page in capture mode gets every key verbatim; otherwise it gets
 	// everything but the panel's own chrome keys (tab / esc / arrow-left back
@@ -556,9 +527,13 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 		m.Close()
 	case "tab":
-		if m.focus == catColumn {
+		// The grid cycles nav → settings → detail → nav (#1295).
+		switch {
+		case m.focus == catColumn:
 			m.focus = formColumn
-		} else {
+		case m.editor != nil:
+			m.focus = detailColumn
+		default:
 			m.focus = catColumn
 		}
 	case "up", "k":
@@ -570,7 +545,8 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "space":
 		// Space toggles booleans (#887); other rows keep enter semantics.
 		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry && r.entry.Type == Bool {
-			return m.activate()
+			e := r.entry
+			return m.writeValue(e, value(e.Key) != "true")
 		}
 	case "?":
 		m.openKeyHelp()
@@ -584,6 +560,7 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		if m.focus == catColumn && m.filter == "" {
 			m.focus = formColumn
 			m.sel = 0
+			m.syncEditor()
 			return nil
 		}
 		if m.focus == formColumn {
@@ -616,11 +593,13 @@ func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
 		if m.focus == catColumn && m.filter == "" {
 			m.focus = formColumn
 			m.sel = 0
+			m.syncEditor()
 			return nil
 		}
 		return m.activate()
 	case "r":
 		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry {
+			m.editor, m.editorKey = nil, "" // rebuild against the restored value
 			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
 		}
 	case "s":
@@ -676,9 +655,10 @@ func (m *Model) move(dir int) {
 	}
 }
 
-// activate begins editing the selected entry — Bool and Enum apply
-// immediately, the text-shaped types open an inline input, Chord captures the
-// next key.
+// activate opens the selected entry's editor: the focus moves to the detail
+// column, where the typed editor already renders (#1295). Chord entries skip
+// straight into the shared capture sub-panel, which is the only editor that
+// needs every key including esc and tab.
 func (m *Model) activate() tea.Cmd {
 	r, ok := m.current()
 	if !ok {
@@ -688,35 +668,23 @@ func (m *Model) activate() tea.Cmd {
 		m.activateResult(r)
 		return nil
 	}
+	m.syncEditor()
 	e := r.entry
 	switch e.Type {
-	case Bool:
-		next := "true"
-		if value(e.Key) == "true" {
-			next = "false"
-		}
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, next == "true")
-	case Enum:
-		if len(e.Options) == 0 {
-			return nil
-		}
-		m.picking = true
-		m.pickIdx = optionIndex(e, value(e.Key))
-		return nil
 	case Chord:
-		// The shared capture sub-panel (#887): keymap-page semantics —
-		// multi-step, enter confirms — instead of grab-the-next-keypress.
 		m.Push(newChordCapture(m, m.opts, m.scopeFor(e), e.Key, e.Title, m.pal))
 		return nil
-	default:
-		m.editing = true
-		m.invalid = ""
-		m.edit = newTextField(value(e.Key))
-		if e.Type == Path {
-			m.suggest.refresh(m.edit.text)
+	case Bool:
+		// A toggle has one obvious action; making it a two-step trip through
+		// the detail column would be worse, not clearer. The ◉/○ rows still
+		// render there, and tab reaches them.
+		if b, ok := m.editor.(*boolEditor); ok {
+			b.idx = 1 - b.idx
 		}
-		return nil
+		return m.writeValue(e, value(e.Key) != "true")
 	}
+	m.focus = detailColumn
+	return nil
 }
 
 // savedNotice flashes a write confirmation (#891) unless a more important
@@ -784,48 +752,17 @@ func (m *Model) cycleEnum(dir int) tea.Cmd {
 	return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[next])
 }
 
-// updatePick handles keys while the enum picker is open.
-func (m *Model) updatePick(key tea.KeyPressMsg) tea.Cmd {
-	r, ok := m.current()
-	if !ok || len(r.entry.Options) == 0 {
-		m.picking = false
-		return nil
-	}
-	e := r.entry
-	switch key.String() {
-	case "esc":
-		m.picking = false
-	case "up", "k":
-		m.pickIdx = clamp(m.pickIdx-1, 0, len(e.Options)-1)
-	case "down", "j":
-		m.pickIdx = clamp(m.pickIdx+1, 0, len(e.Options)-1)
-	case "enter":
-		m.picking = false
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, e.Options[m.pickIdx])
-	}
-	return nil
-}
-
 // Paste inserts a pasted block into whichever of the panel's own text inputs
-// is active (#1273): the inline value editor, else the category/entry filter.
-// It returns false when neither is active — the panel is then navigating, and
-// the caller drops the paste rather than typing into a list. Sub-panels and
-// custom pages (the keymap page captures chords, not text) are deliberately
-// not routed.
+// is active (#1273): the focused detail-column editor when it is text-backed,
+// else the category/entry filter. It returns false when neither is active —
+// the panel is then navigating, and the caller drops the paste rather than
+// typing into a list. Sub-panels and custom pages (the keymap page captures
+// chords, not text) are deliberately not routed.
 func (m *Model) Paste(text string) (handled bool) {
 	if m.topSub() != nil {
 		return false
 	}
-	switch {
-	case m.editing:
-		if !m.edit.Paste(text) {
-			return false
-		}
-		if r, ok := m.current(); ok && r.entry.Type == Path {
-			m.suggest.refresh(m.edit.text)
-		}
-		return true
-	case m.filtering:
+	if m.filtering {
 		out, _, changed := ui.PasteText(m.filter, len([]rune(m.filter)), text)
 		if !changed {
 			return false
@@ -834,93 +771,12 @@ func (m *Model) Paste(text string) (handled bool) {
 		m.sel = 0
 		return true
 	}
+	if m.focus == detailColumn && m.editor != nil {
+		if p, ok := m.editor.(pasteEditor); ok {
+			return p.Paste(text)
+		}
+	}
 	return false
-}
-
-// updateEdit handles keys during an inline edit.
-func (m *Model) updateEdit(key tea.KeyPressMsg) tea.Cmd {
-	r, ok := m.current()
-	if !ok {
-		m.editing = false
-		return nil
-	}
-	e := r.entry
-	switch key.Code {
-	case tea.KeyEscape:
-		m.editing = false
-		m.invalid = ""
-		m.suggest.clear()
-		return nil
-	case tea.KeyEnter:
-		return m.commit(e)
-	case tea.KeyTab:
-		if e.Type == Path {
-			m.edit.Set(m.suggest.complete(m.edit.text))
-		}
-		return nil
-	}
-	if _, changed := m.edit.Handle(key); changed && e.Type == Path {
-		m.suggest.refresh(m.edit.text)
-	}
-	return nil
-}
-
-// commit validates the inline input and writes it.
-func (m *Model) commit(e Entry) tea.Cmd {
-	switch e.Type {
-	case Int:
-		n, err := strconv.Atoi(strings.TrimSpace(m.edit.text))
-		if err != nil {
-			m.invalid = "not a number"
-			return nil
-		}
-		if e.Min != 0 || e.Max != 0 {
-			clamped := clamp(n, e.Min, e.Max)
-			if clamped != n {
-				// The silent clamp committed a different number than typed
-				// (#889) — say so.
-				m.notice = "clamped to " + strconv.Itoa(clamped)
-			}
-			n = clamped
-		}
-		m.editing = false
-		m.savedNotice(m.scopeFor(e))
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, n)
-	case Path:
-		p := strings.TrimSpace(m.edit.text)
-		if p != "" {
-			if _, err := os.Stat(expandHome(p)); err != nil {
-				m.invalid = "path does not exist"
-				return nil
-			}
-		}
-		m.editing = false
-		m.suggest.clear()
-		m.savedNotice(m.scopeFor(e))
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, p)
-	case List:
-		// A comma-separated edit persists as a TOML string array (#1139):
-		// the schema field is a []string, so writing the raw comma string
-		// would fail the typed decode. Empty input writes an empty list
-		// (explicitly "no entries" — resetting to the default is the
-		// remove-key operation, like every other entry).
-		var items []string
-		for _, p := range strings.Split(m.edit.text, ",") {
-			if p = strings.TrimSpace(p); p != "" {
-				items = append(items, p)
-			}
-		}
-		if items == nil {
-			items = []string{}
-		}
-		m.editing = false
-		m.savedNotice(m.scopeFor(e))
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, items)
-	default: // String
-		m.editing = false
-		m.savedNotice(m.scopeFor(e))
-		return config.WriteAndReload(m.opts, m.scopeFor(e), e.Key, m.edit.text)
-	}
 }
 
 // updateFilter handles keys while the filter input is active.

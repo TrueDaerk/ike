@@ -179,14 +179,18 @@ func (k *keyHelp) View(w, h int) string {
 
 // openKeyHelp pushes the "?" overlay for the active page.
 func (m *Model) openKeyHelp() {
+	// The footer only shows three keys now (#1295); this overlay is where the
+	// full set lives, grouped the way the wireframes' cheatsheet does.
 	lines := []string{
-		"Shared:",
-		"  ↑↓/jk pgup/pgdn home/end   navigate",
-		"  enter                      activate · space toggles a boolean",
-		"  r                          reset to default",
-		"  s                          write-scope (auto → user → project)",
-		"  /                          filter across every page",
-		"  ?                          this overlay · esc close",
+		"move:   ↑↓ jk row · ↔ tab column (nav → settings → detail)",
+		"        home/end pgup/pgdn top / bottom / page",
+		"edit:   enter open editor · confirm",
+		"        ‹ › stepper (numbers) · cycle (enums)",
+		"        space toggle a boolean · d remove a list value",
+		"        r reset to default",
+		"global: / search all settings",
+		"        s write-scope: auto → user → project",
+		"        ? this overlay · esc back / close",
 	}
 	title := "Settings"
 	if m.cat >= 0 && m.cat < len(m.pages) {

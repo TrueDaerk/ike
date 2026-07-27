@@ -52,6 +52,53 @@ type Page struct {
 	// Section groups the category rail (#890): pages sharing a Section render
 	// under one header. Empty joins the previous section.
 	Section string
+	// Description explains what the category is for. The detail column shows
+	// it whenever no entry is selected (0460, #1295) — the third column is
+	// never blank, and browsing the rail already teaches what a page does.
+	Description string
+}
+
+// typeName names an entry's value type for the detail column's meta row
+// (#1295): the reader sees what shape a value has before editing it.
+func typeName(t EntryType) string {
+	switch t {
+	case Bool:
+		return "bool"
+	case Int:
+		return "int"
+	case Enum:
+		return "enum"
+	case Path:
+		return "path"
+	case Chord:
+		return "chord"
+	case List:
+		return "list"
+	default:
+		return "string"
+	}
+}
+
+// marker is the value marker rendered after a value in the settings column
+// (#1295): it announces which editor the detail column opens, so the row says
+// how it is edited before enter is pressed.
+//
+//	▸ list · ‹› stepper · ◉ toggle · ⌨ capture · ≡ multi-list · ✎ free text
+func marker(t EntryType) string {
+	switch t {
+	case Bool:
+		return "◉"
+	case Int:
+		return "‹›"
+	case Enum:
+		return "▸"
+	case Chord:
+		return "⌨"
+	case List:
+		return "≡"
+	default: // String, Path
+		return "✎"
+	}
 }
 
 // BasePages returns the built-in core pages (#92). themes is the registry's
@@ -61,7 +108,7 @@ type Page struct {
 // exist in the typed schema (guarded by the no-dead-keys test).
 func BasePages(themes []string) []Page {
 	return []Page{
-		{Section: "CORE", Title: "Editor", Entries: []Entry{
+		{Section: "CORE", Title: "Editor", Description: "How text is edited: indentation, saving, wrapping and the gutter. Language-specific overrides come from .editorconfig when it is enabled.", Entries: []Entry{
 			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
 			{Key: "editor.use_spaces", Type: Bool, Title: "Use spaces", Description: "Indent with spaces instead of tab characters", Scope: config.UserScope},
 			{Key: "editor.auto_indent", Type: Bool, Title: "Auto indent", Description: "Carry the current line's indentation into new lines", Scope: config.UserScope},
@@ -91,7 +138,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
-		{Title: "Diagnostics", Entries: []Entry{
+		{Title: "Diagnostics", Description: "Which problem markers decorate the editor — per source and severity. The Problems window always lists everything, regardless of these switches.", Entries: []Entry{
 			// Per-source, per-severity decoration toggles (#1259): each switch
 			// gates one mark class across the scrollbar stripe, gutter and
 			// inline underlines. The Problems window keeps showing everything.
@@ -104,16 +151,16 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.marks.git_deleted", Type: Bool, Title: "Git deleted marks", Description: "Mark deletions in the gutter and scrollbar", Scope: config.UserScope},
 			{Key: "lsp.diagnostics_ignore", Type: List, Title: "Ignored diagnostics", Description: "Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here", Scope: config.ProjectScope},
 		}},
-		{Title: "Explorer", Entries: []Entry{
+		{Title: "Explorer", Description: "The project file tree: what it hides. Excluding an entry here hides it from the tree only; go-to-file and find-in-path still reach it.", Entries: []Entry{
 			{Key: "explorer.exclude", Type: List, Title: "Excluded entries", Description: "Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them", Scope: config.UserScope},
 		}},
-		{Title: "Appearance", Entries: []Entry{
+		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection", Scope: config.UserScope, Options: themes},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
 		}},
-		{Title: "Files & Session", Entries: []Entry{
+		{Title: "Files & Session", Description: "Opening, watching and restoring files: which project comes back on start, how external changes are handled and when a file counts as too large for language features.", Entries: []Entry{
 			{Key: "project.restore_last", Type: Bool, Title: "Restore last project", Description: "Reopen the previous project's workspace on start", Scope: config.UserScope},
 			{Key: "files.watch", Type: Bool, Title: "Watch files", Description: "Report external file changes (fsnotify on the project root)", Scope: config.UserScope},
 			{Key: "files.auto_reload", Type: Enum, Title: "Auto reload", Description: "Reload clean buffers when their file changes on disk", Scope: config.UserScope, Options: []string{"clean", "never"}},
@@ -121,22 +168,22 @@ func BasePages(themes []string) []Page {
 			{Key: "files.large_file_kb", Type: Int, Title: "Large file threshold (KB)", Description: "Above this size, highlighting and language features are disabled for the file (#149); 0 disables the size guard. Applies to subsequently opened or reloaded files", Scope: config.UserScope, Min: 0},
 			{Key: "files.large_file_lines", Type: Int, Title: "Large file threshold (lines)", Description: "Above this line count, highlighting and language features are disabled for the file (#149); 0 disables the line guard. Applies to subsequently opened or reloaded files", Scope: config.UserScope, Min: 0},
 		}},
-		{Title: "Backup", Entries: []Entry{
+		{Title: "Backup", Description: "Crash recovery: dirty buffers are snapshotted while you type and offered back after an unclean exit.", Entries: []Entry{
 			{Key: "backup.enable", Type: Bool, Title: "Crash recovery", Description: "Snapshot dirty buffers for recovery; off also purges existing snapshots", Scope: config.UserScope},
 			{Key: "backup.debounce_ms", Type: Int, Title: "Snapshot debounce", Description: "Milliseconds a dirty buffer must stay quiet before it is snapshotted", Scope: config.UserScope, Min: 100, Max: 60000},
 			{Key: "backup.max_age_days", Type: Int, Title: "Snapshot max age", Description: "Days before leftover snapshots are pruned at startup (after the restore prompt)", Scope: config.UserScope, Min: 1, Max: 365},
 		}},
-		{Title: "Terminal", Entries: []Entry{
+		{Title: "Terminal", Description: "The integrated terminal and what it offers while you type at the shell prompt.", Entries: []Entry{
 			{Key: "terminal.autosuggest", Type: Bool, Title: "Command auto-suggest", Description: "Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way", Scope: config.UserScope},
 		}},
-		{Title: "Run", Entries: []Entry{
+		{Title: "Run", Description: "Where a run configuration opens its output.", Entries: []Entry{
 			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},
 		}},
-		{Title: "Debug", Entries: []Entry{
+		{Title: "Debug", Description: "Debugger transport settings. PHP debugging listens for incoming Xdebug connections; the hostname filter keeps foreign sessions out.", Entries: []Entry{
 			{Key: "debug.php.port", Type: Int, Title: "PHP listen port", Description: "DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)", Scope: config.UserScope, Min: 1, Max: 65535},
 			{Key: "debug.php.hostname", Type: String, Title: "PHP hostname filter", Description: "Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project", Scope: config.ProjectScope},
 		}},
-		{Title: "Notifications", Entries: []Entry{
+		{Title: "Notifications", Description: "Toasts and the notification history: how long they stay and which severities are worth interrupting for.", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
 		}},

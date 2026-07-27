@@ -1,8 +1,8 @@
 package settings
 
-// list_entry_test.go covers the List entry type (#1139): edited as a
-// comma-separated text field, persisted as a TOML string array so the typed
-// []string schema field decodes cleanly.
+// list_entry_test.go covers the List entry type (#1139): edited as an indexed
+// multi-value list in the detail column (#1295), persisted as a TOML string
+// array so the typed []string schema field decodes cleanly.
 
 import (
 	"testing"
@@ -25,14 +25,21 @@ func TestListEntryCommitsArray(t *testing.T) {
 	m.Open()
 	m.Update(key("tab"))
 	m.Update(key("enter"))
-	if !m.editing {
-		t.Fatal("enter on a List entry must start a text edit")
+	if m.focus != detailColumn {
+		t.Fatal("enter on a List entry must focus the detail column's editor")
 	}
-	// The field pre-fills with the Flat comma-joined value.
-	if m.edit.text != config.Get().Flat()["explorer.exclude"] {
-		t.Fatalf("edit prefill = %q, want the flat value", m.edit.text)
+	ed, ok := m.editor.(*listEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *listEditor", m.editor)
 	}
-	m.edit.text = " .git , *.pyc ,, node_modules "
+	// The editor pre-fills one row per existing element.
+	if len(ed.items) != len(config.Get().Explorer.Exclude) {
+		t.Fatalf("items = %v, want the live list", ed.items)
+	}
+	ed.items = []string{".git", "*.pyc"}
+	ed.idx = len(ed.items) // the "+ add value…" row
+	m.Update(key("enter"))
+	ed.tf.Set("node_modules")
 	apply(t, m.Update(key("enter")))
 	got := config.Get().Explorer.Exclude
 	want := []string{".git", "*.pyc", "node_modules"}
@@ -55,8 +62,11 @@ func TestListEntryCommitsEmptyList(t *testing.T) {
 	m.Open()
 	m.Update(key("tab"))
 	m.Update(key("enter"))
-	m.edit.text = ""
-	apply(t, m.Update(key("enter")))
+	ed := m.editor.(*listEditor)
+	for len(ed.items) > 0 {
+		ed.idx = 0
+		apply(t, m.Update(key("d")))
+	}
 	if got := config.Get().Explorer.Exclude; len(got) != 0 {
 		t.Fatalf("exclude = %v, want empty", got)
 	}

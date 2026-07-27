@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-27T12:00:00Z
+timestamp: 2026-07-27T18:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -45,8 +45,10 @@ lower; `ui.menu_bar = false` hides it and returns the row).
 ## Settings panel framework (#91)
 
 `internal/settings` is a centered **floating panel** (#115): a rounded-border
-box capped at ~110×32 cells above the workspace, category list left, form
-right, opened via `settings.open` (cmd+, / menu bar / palette).
+box capped at ~110×32 cells above the workspace, laid out as the
+**three-column master·detail grid** described under
+[Master·detail grid (0460)](#masterdetail-grid-0460-1295), opened via
+`settings.open` (cmd+, / menu bar / palette).
 
 - **Schema-driven.** A `Page` is a titled list of `Entry` descriptors — config
   key, control type (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`), write scope,
@@ -55,21 +57,14 @@ right, opened via `settings.open` (cmd+, / menu bar / palette).
 - **Apply-on-change, single source of truth.** The panel never caches values:
   every render reads `config.Get().Flat()`, and every edit returns a
   `config.WriteAndReload` command — the write-back layer persists the key and
-  the reload pipeline re-applies it. Bool toggles apply on enter; Enum opens a
-  **picker list** on enter (↑↓ move, enter commits, esc cancels) while →/l on
-  the row quick-cycles to the next option (wrapping) without opening it
-  (#383); ← never cycles — it always returns to the category column, the
-  mirror of → (#533); Int/String/Path
-  open an inline input (int parses + clamps to bounds, path validates
-  existence); Chord captures the next key press; List (#1139) edits like a
-  String — a comma-separated text field prefilled with the Flat comma-joined
-  value — but commits a **TOML string array** (`[]string`), because the typed
-  schema field is a string slice and a raw comma string would fail the decode.
-  The pinned footer is **two lines** and
-  the description (plus its `(key)` suffix) **word-wraps** across them (#549)
-  — long help stays readable instead of clipping; an overflow beyond two
-  lines is marked with an ellipsis, a validation error takes the first line
-  and the wrapped description continues below. Path inputs get shell-style
+  the reload pipeline re-applies it. Bool toggles apply on enter (space too);
+  every other type opens its **typed editor in the detail column** (0460,
+  #1295) — see the grid section below. On the settings row itself, →/l
+  quick-cycles an enum to the next option (wrapping) without leaving the
+  column (#383) and steps an int; ← mirrors it on those two types and
+  otherwise returns to the category column (#533). List (#1139) commits a
+  **TOML string array** (`[]string`), because the typed schema field is a
+  string slice and a raw comma string would fail the decode. Path inputs get shell-style
   **tab completion** (#541) via the shared `internal/pathcomplete` engine:
   matching entries render as a suggestion list under the row (final path
   component only, capped with a `+N more` tail), tab extends the input to the
@@ -348,12 +343,13 @@ forms, and the LSP override fields.
 
 ## Widget affordances (0420, #889)
 
-Every schema row announces how it edits before enter is pressed: booleans as
-`[x]`/`[ ]` (space toggles), enums as `‹ value ›` (**←/→ cycle** on the row,
-enter opens the picker — ← on other rows still returns to the rail, #533),
-ints as `value ±` (**+/−/←/→** step, range-clamped), text rows as `value ✎`
-and chords as `value ⌨`. Range clamps are never silent: stepping or typing
-past Min/Max shows an `ℹ clamped to N` notice in the detail footer.
+Every schema row announces how it edits before enter is pressed. The glyphs
+were unified into the wireframes' **value markers** in 0460 (#1295): `◉`
+toggle · `‹›` stepper · `▸` list · `⌨` capture · `≡` multi-value list · `✎`
+free text. The row still carries `←/→` cycling for enums (← on other rows
+returns to the rail, #533) and `+/−/←/→` stepping for ints, range-clamped.
+Range clamps are never silent: stepping or typing past Min/Max shows an
+`ℹ clamped to N` notice in the detail column.
 
 ## Rail & chrome (0420, #890)
 
@@ -372,7 +368,7 @@ confirm, esc/n cancel) — Tools delete, PHP-mapping delete, Marketplace
 remove, Keymap unbind. Successful schema writes flash `✓ saved to
 user/project` in the detail footer; config write/reload diagnostics surface
 **inline** there too (error-styled, until the next action), not only as
-toasts. Open enum pickers **follow the highlighted option** — a long theme
+toasts. The enum option list **follows the highlighted option** — a long theme
 list can no longer move the highlight below the fold.
 
 ## Modal-flow migrations complete (0420, #892)
@@ -387,3 +383,65 @@ Python-install picker** (windowed list, wheel, click-to-install) and the
 themselves no longer capture keys; all seven custom pages export
 `SearchItems`, so the "not searched" note is gone. Toolchain package
 management (#571) should land as a sub-panel on this same pattern.
+
+## Master·detail grid (0460, #1295)
+
+The panel renders a **fixed three-column raster** on every schema page, taken
+verbatim from the 0460 wireframes (epic #1294). The rule behind it: *every
+value has a type, and every type has a picker* — never a free text field where
+a list is possible.
+
+```
+24ch nav │ 44ch settings + value marker │ rest detail = explanation + editor
+```
+
+- **Geometry** (`gridFor`, `internal/settings/view.go`). The rail is fixed at
+  24 columns. The settings column takes its nominal 44 where there is room and
+  **shrinks to 28 before the detail column is dropped** — three columns beat a
+  wide value column. Below that the detail becomes a **band under the list**,
+  separated by a rule: a narrow terminal loses the column, never the content.
+- **Focus** is a three-state cycle: `tab` walks nav → settings → detail → nav,
+  `↑↓`/`jk` move inside the focused column. `←`/`h` still returns to the rail
+  from the settings column except on enum/int rows, where it is a value change.
+- **The detail column is never empty.** With the rail focused — or with nothing
+  selectable — it shows the **page description** (`Page.Description`, filled
+  for every built-in page) and what the page contains. With an entry selected
+  it shows title, wrapped description, a meta row (`key · type · default: …`,
+  the default read from the new `config.Defaults()`), the editor, and a pinned
+  bottom band carrying the write feedback and `set in <origin> · writes to
+  <scope>`. Provenance moved here from the old `@layer` column — the marker
+  earns that space.
+- **Typed editors** (`internal/settings/editor.go`) implement one interface:
+
+  ```go
+  type Editor interface {
+      View(w, h int) []string
+      Update(key tea.KeyPressMsg) tea.Cmd
+      Value() any
+      Dirty() bool
+      Capturing() bool
+  }
+  ```
+
+  `boolEditor` (◉/○ radio rows), `intEditor` (`‹ n ›` stepper plus typed
+  entry, both clamped), `enumEditor` (**type-to-filter** option list, current
+  value marked `●`), `pathEditor` (text plus live `pathcomplete` candidates and
+  an existence check), `listEditor` (indexed rows, `enter` edits, `d` removes,
+  `+ add value…`), `chordEditor` (hands off to the shared capture sub-panel)
+  and `textEditor` (the last-resort free text). Adding a setting needs a type
+  and documentation, never new UI.
+- **Key routing.** While the detail column has the focus its editor receives
+  every key, including `esc` — each editor decides whether that cancels its
+  input or hands the focus back. `tab` is the only reserved chord, and only
+  when the editor is not a text input (a path editor needs tab for
+  completion).
+- **Nothing expands inline any more.** The settings rows map 1:1 to lines, so a
+  selection move cannot shift what is under the pointer, and a click hit-test
+  is a plain offset.
+- **The footer is three context keys**, not a nine-key legend: what the focused
+  column can do, plus `? all keys`. The full set lives in the `?` cheatsheet
+  overlay, grouped move / edit / global.
+
+Still open on the epic: staged apply with a diff panel (#1296), search inside
+the grid (#1297), the keymap (#1298) and toolchain (#1299) pages on the grid,
+and noise folding (#1300).
