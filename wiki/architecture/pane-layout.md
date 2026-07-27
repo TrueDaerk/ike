@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — with per-project geometry persisted in a dedicated state store, plus named user-scoped saved layouts.
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, persistence, bubbletea]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-27T00:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -296,9 +296,13 @@ named, user-scoped snapshots of the split tree.
   layout's editor slots in order; surplus editor panes merge their tabs into
   the last slot (terminal tabs move live via detach/re-attach, editor tabs
   re-share their document, #142, so dirtiness and undo survive); surplus
-  markdown/diff viewers close; extra slots become scratch editors. Tool panes
-  absent from the layout lose their leaf but **stay registered** (the
-  hide-all-tools precedent) — running terminals are never killed. Plain
+  markdown/diff viewers close; extra slots become scratch editors. Singleton
+  tool panels absent from the layout lose their leaf but **stay registered**
+  (the hide-all-tools precedent) — their toggles resurface them. Running
+  terminals are never killed: shells and TUI tool panes that don't fit a slot
+  merge as **live terminal tabs** into the last terminal slot — which converts
+  to a tab host, #836 — or, with no terminal slot in the layout, into the last
+  editor slot (#1275), so a running process always stays reachable. Plain
   terminal slots reuse live shells in order, then spawn fresh ones; per-project
   panels (problems, usages, VCS, debug, structure) restore empty exactly as
   they do on project restore.

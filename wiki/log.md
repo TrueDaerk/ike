@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-27 (layouts: orphaned terminals merge as tabs)
+
+- Applying a layout no longer strands running terminals (#1275). Surplus
+  shells and TUI tool panes that don't fit a slot used to stay registered but
+  leafless — process alive, pane unreachable. They now merge as live terminal
+  tabs into the last terminal slot (converted to a tab host, #836) or, with
+  no terminal slot, into the last editor slot; sessions never restart.
+  Updated [Pane Layout & Drag](/architecture/pane-layout.md).
+
 ## 2026-07-27 (overlays: pasting into floating inputs)
 
 - Pastes reach overlay text inputs (#1273). `handlePaste` bailed on

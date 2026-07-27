@@ -239,9 +239,11 @@ type applyState struct {
 // applyLayoutByName re-shapes the ACTIVE workspace to the named saved layout
 // (#1175). Open files never close: the session's content panes re-slot into
 // the layout's editor slots in order, surplus panes merge their tabs into the
-// last slot. Tool panes absent from the layout lose their leaf but stay
-// registered (the toolhide precedent, #791) — running terminals are never
-// killed by applying a layout. Parked workspaces (#777) are untouched.
+// last slot. Singleton tool panels absent from the layout lose their leaf but
+// stay registered (the toolhide precedent, #791) — their toggles resurface
+// them. Running terminals are never killed by applying a layout: shells and
+// TUI tools that don't fit a slot merge as live tabs into a remaining
+// terminal or editor slot (#1275). Parked workspaces (#777) are untouched.
 func (m *Model) applyLayoutByName(name string) {
 	tree, ids, ok := namedLayout(name)
 	if !ok {
@@ -318,6 +320,40 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			}
 		case pane.KindMarkdown, pane.KindDiff:
 			reg.Close(key)
+		}
+	}
+	// Surplus running shells and tool panes must stay reachable (#1275):
+	// they merge as live terminal tabs into the last terminal slot — which
+	// becomes a tab host (#836) — or, when the layout has no terminal slot,
+	// into the last editor slot. Sessions never restart. Only a layout with
+	// neither slot kind leaves them registered but leafless.
+	surplus := append([]string{}, st.shells...)
+	toolNames := make([]string, 0, len(st.tools))
+	for name := range st.tools {
+		toolNames = append(toolNames, name)
+	}
+	sort.Strings(toolNames)
+	for _, name := range toolNames {
+		surplus = append(surplus, st.tools[name]...)
+	}
+	if len(surplus) > 0 {
+		dst := lastTerminalSlot(reg, st.slots)
+		if dst != nil {
+			dst.ConvertToTabHost()
+		} else {
+			dst = target
+		}
+		if dst != nil {
+			for _, key := range surplus {
+				inst := reg.Get(key)
+				if inst == nil {
+					continue
+				}
+				if tm, ok := inst.DetachTerminal(); ok {
+					reg.Close(key)
+					dst.AddTerminalTab(tm)
+				}
+			}
 		}
 	}
 	// The old hide-all snapshot and zoom describe the old tree.
@@ -447,6 +483,17 @@ func (m *Model) spawnShellPane() string {
 func lastEditorSlot(reg *pane.Registry, slots []string) *pane.Instance {
 	for i := len(slots) - 1; i >= 0; i-- {
 		if inst := reg.Get(slots[i]); inst != nil && inst.Kind() == pane.KindEditor {
+			return inst
+		}
+	}
+	return nil
+}
+
+// lastTerminalSlot returns the last resolved slot holding a terminal-kind
+// instance — the preferred host for surplus running shells (#1275) — or nil.
+func lastTerminalSlot(reg *pane.Registry, slots []string) *pane.Instance {
+	for i := len(slots) - 1; i >= 0; i-- {
+		if inst := reg.Get(slots[i]); inst != nil && inst.Kind() == pane.KindTerminal {
 			return inst
 		}
 	}
