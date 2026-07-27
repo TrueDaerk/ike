@@ -27,6 +27,13 @@ import (
 // HTTPRunMsg runs http.run: dispatch the request under the cursor.
 type HTTPRunMsg struct{}
 
+// HTTPCopyBodyMsg runs http.copyBody: the shown response body to the
+// clipboard (#1266).
+type HTTPCopyBodyMsg struct{}
+
+// HTTPCopyHeadersMsg runs http.copyHeaders: status line plus headers.
+type HTTPCopyHeadersMsg struct{}
+
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
 	Source  string // .http file the request came from (history keying, #1251)
@@ -165,4 +172,25 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) {
 		p.SetHistory(items)
 	}
 	m.layout()
+}
+
+// copyHTTPResponse copies the shown response to the system clipboard
+// (#1266): the headers block when headers is true, the body otherwise. It
+// goes through the pane's CopyMsg like the pane-local "y"/"Y" keys, so both
+// entry points share one confirmation path.
+func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Info, "http: no response pane open")
+		return nil
+	}
+	text, what := p.BodyText(), "response body"
+	if headers {
+		text, what = p.HeadersText(), "response headers"
+	}
+	if text == "" {
+		m.host.Notify(host.Info, "http: nothing to copy")
+		return nil
+	}
+	return func() tea.Msg { return httppane.CopyMsg{Text: text, What: what} }
 }

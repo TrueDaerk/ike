@@ -67,6 +67,8 @@ bring their own.
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Copy HTTP Response Body | `http.copyBody` | — | — | everywhere |
+| Copy HTTP Response Headers | `http.copyHeaders` | — | — | everywhere |
 | Run HTTP Request | `http.run` | `ctrl+f9` | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |

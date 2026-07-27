@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T14:00:00Z
+timestamp: 2026-07-27T15:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -144,6 +144,18 @@ config file paths, or disable detection entirely.
   (`/token  3/17 · n/N next/prev · esc clear`) or `no matches`. The search
   survives history browsing and new responses: matches recompute on every
   re-compose.
+- **Selection & copy** (#1266): a left-button drag selects text across the
+  composed view, with the terminal pane's gestures (#227, #951) — double
+  click selects a word (hyphens and dots included, so ids and tokens select
+  whole), triple click the line, and a drag started on a word/line extends by
+  that unit. `y` (or `ctrl+c`/`cmd+c`) copies the selection; without one it
+  copies the **whole body**, `Y` copies the status line plus headers. The
+  palette carries the same two actions as `http.copyBody` /
+  `http.copyHeaders`. What is copied is what is shown, so a pretty-printed
+  JSON body pastes as it reads. The pane never touches the clipboard itself:
+  it emits `httppane.CopyMsg` and the app writes it through the same
+  `clipboardWrite` seam as the editor and terminal, then confirms with a
+  notification. A new response or history entry drops a stale selection.
 - **Body highlighting depends on the build** (#1270): `contentTag` maps the
   Content-Type onto a fence tag (charset parameters and `+json`/`+xml`
   vendor suffixes stripped) and `highlight.HighlightFenced` resolves that tag
