@@ -10,12 +10,14 @@ import "ike/internal/lang"
 // (typically "string") — host colouring still shows through between injected
 // tokens.
 
-// overlayFragments returns spans for lines parsed with the host grammar g,
-// prefixed with the spans of every embedded fragment parsed with its own
-// grammar. Hosts without an injection query, fragments without a registered
-// grammar, and CGo-disabled builds all degrade to the plain host spans.
-func overlayFragments(g lang.Grammar, lines []string, host []Span) []Span {
-	frags := detectFragments(g, lines)
+// overlayFragments returns spans for lines parsed with the host language l's
+// grammar, prefixed with the spans of every embedded fragment parsed with its
+// own grammar. Fragments come from the host's injection query or, for hosts
+// registering one, its Go-level region detector (#1303). Hosts without either,
+// fragments without a registered grammar, and CGo-disabled builds all degrade
+// to the plain host spans.
+func overlayFragments(l lang.Language, lines []string, host []Span) []Span {
+	frags := fragmentsFor(l, lines)
 	if len(frags) == 0 {
 		return host
 	}

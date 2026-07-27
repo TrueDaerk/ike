@@ -1,6 +1,10 @@
 package highlight
 
-import "testing"
+import (
+	"testing"
+
+	"ike/internal/lang"
+)
 
 func TestFragmentCapture(t *testing.T) {
 	cases := []struct {
@@ -63,5 +67,51 @@ func TestGuessFragmentUnknownLang(t *testing.T) {
 func TestFragmentsUnknownLanguage(t *testing.T) {
 	if got := Fragments("nosuchlang", []string{"SELECT 1"}); got != nil {
 		t.Errorf("Fragments(nosuchlang) = %v, want nil", got)
+	}
+}
+
+// TestRegionDetectorWinsOverInjections guards #1303: a host language may
+// resolve its embedded regions in Go when an injection query cannot express
+// the rule, and the fragment's Lines are exactly the host text in that range.
+func TestRegionDetectorWinsOverInjections(t *testing.T) {
+	lang.Register(lang.Language{ID: "json", Extensions: []string{"json"}})
+	lang.Register(lang.Language{
+		ID:         "regionhost",
+		Extensions: []string{"regionhost"},
+		Regions: func(lines []string) []lang.Region {
+			return []lang.Region{{Lang: "json", StartLine: 1, EndLine: 2, EndCol: len(lines[2])}}
+		},
+	})
+	lines := []string{"header", `{"a": 1,`, `"b": 2}`, "trailer"}
+	got := Fragments("regionhost", lines)
+	if len(got) != 1 {
+		t.Fatalf("fragments = %+v, want one", got)
+	}
+	f := got[0]
+	if f.Lang != "json" || f.StartLine != 1 || f.EndLine != 2 {
+		t.Fatalf("fragment = %+v, want json over lines 1–2", f)
+	}
+	if len(f.Lines) != 2 || f.Lines[0] != lines[1] || f.Lines[1] != lines[2] {
+		t.Fatalf("fragment lines = %q, want the host text verbatim", f.Lines)
+	}
+}
+
+// TestRegionsOutsideTheBufferAreDropped: a detector may report optimistically;
+// the consumer clamps or drops rather than panicking.
+func TestRegionsOutsideTheBufferAreDropped(t *testing.T) {
+	lang.Register(lang.Language{ID: "json", Extensions: []string{"json"}})
+	lang.Register(lang.Language{
+		ID: "sloppyhost", Extensions: []string{"sloppyhost"},
+		Regions: func([]string) []lang.Region {
+			return []lang.Region{
+				{Lang: "json", StartLine: 99, EndLine: 120},
+				{Lang: "json", StartLine: 0, EndLine: 99},
+				{Lang: "", StartLine: 0, EndLine: 0},
+			}
+		},
+	})
+	got := Fragments("sloppyhost", []string{"a", "b"})
+	if len(got) != 1 || got[0].EndLine != 1 {
+		t.Fatalf("fragments = %+v, want one clamped to the buffer", got)
 	}
 }

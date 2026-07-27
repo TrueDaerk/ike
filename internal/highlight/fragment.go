@@ -33,10 +33,57 @@ type Fragment struct {
 //	                        strings — resolved as id first, then extension)
 func Fragments(langID string, lines []string) []Fragment {
 	l, ok := lang.ByID(langID)
-	if !ok || l.Grammar == nil {
+	if !ok {
+		return nil
+	}
+	return fragmentsFor(l, lines)
+}
+
+// fragmentsFor resolves a host's fragments: a Go-level region detector wins
+// when the language registers one (#1303 — a .http body's language comes from
+// its Content-Type header, which no injection query can read), otherwise the
+// grammar's injections.scm decides.
+func fragmentsFor(l lang.Language, lines []string) []Fragment {
+	if l.Regions != nil {
+		return regionFragments(l.Regions(lines), lines)
+	}
+	if l.Grammar == nil {
 		return nil
 	}
 	return detectFragments(l.Grammar, lines)
+}
+
+// regionFragments turns registry regions into fragments, filling each one's
+// Lines from the host text. Regions reaching outside the buffer are clamped;
+// empty ones are dropped, so a detector may report a range optimistically.
+func regionFragments(regions []lang.Region, lines []string) []Fragment {
+	var out []Fragment
+	for _, r := range regions {
+		if r.Lang == "" || r.StartLine < 0 || r.StartLine >= len(lines) {
+			continue
+		}
+		end := r.EndLine
+		if end >= len(lines) {
+			end = len(lines) - 1
+		}
+		if end < r.StartLine {
+			continue
+		}
+		frag := Fragment{Lang: r.Lang, StartLine: r.StartLine, StartCol: r.StartCol, EndLine: end, EndCol: r.EndCol}
+		frag.Lines = append([]string{}, lines[r.StartLine:end+1]...)
+		if len(frag.Lines) > 0 {
+			first := frag.Lines[0]
+			if r.StartCol > 0 && r.StartCol <= len(first) {
+				frag.Lines[0] = first[r.StartCol:]
+			}
+			last := len(frag.Lines) - 1
+			if r.EndCol > 0 && r.EndCol <= len(frag.Lines[last]) {
+				frag.Lines[last] = frag.Lines[last][:r.EndCol]
+			}
+		}
+		out = append(out, frag)
+	}
+	return out
 }
 
 // fragmentCapture parses an injection capture name of the form

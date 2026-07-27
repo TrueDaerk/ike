@@ -53,7 +53,7 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 		foldKinds = l.ScopeNodes
 	}
 	spans, scopes, folds := parseScoped(l.Grammar, l.ScopeNodes, foldKinds, lines)
-	return overlayFragments(l.Grammar, lines, spans), scopes, folds
+	return overlayFragments(l, lines, spans), scopes, folds
 }
 
 // HighlightFenced parses lines tagged with a markdown fence info string (as in
