@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
 	"ike/internal/lang"
@@ -97,8 +98,8 @@ func (t *ToolchainPage) renderDetail(w, h int) string {
 	}
 
 	lines := []string{clip.Render(title.Render(" " + l.ID + " — interpreter"))}
-	lines = append(lines, clip.Render(dim.Render(" One interpreter per language. Run, Debug and the language")))
-	lines = append(lines, clip.Render(dim.Render(" servers all follow this choice.")))
+	lines = append(lines, wrapDetail(w, dim, clip,
+		"One interpreter per language. Run, Debug and the language servers all follow this choice.")...)
 	lines = append(lines, clip.Render(dim.Render(" "+strings.Repeat("─", maxInt(w-2, 1)))))
 	t.detailHead = len(lines)
 
@@ -184,6 +185,16 @@ func (t *ToolchainPage) candidateLines(l lang.Language, cur string, w int, clip,
 	return out
 }
 
+// wrapDetail word-wraps prose to the detail column instead of clipping it —
+// a truncated sentence teaches nothing.
+func wrapDetail(w int, style, clip lipgloss.Style, text string) []string {
+	var out []string
+	for _, l := range strings.Split(ansi.Wordwrap(text, maxInt(w-2, 8), ""), "\n") {
+		out = append(out, clip.Render(style.Render(" "+l)))
+	}
+	return out
+}
+
 // elideLeft shortens a path from the left, keeping the distinguishing tail
 // ("…/uv/python/3.13/bin/python3"). Paths shorter than w are returned as-is.
 func elideLeft(s string, w int) string {
@@ -197,12 +208,10 @@ func elideLeft(s string, w int) string {
 // onboardingDetail is the no-selection state — and the first run's whole
 // point: explain the category and offer to take every recommendation at once.
 func (t *ToolchainPage) onboardingDetail(w int, clip, title, dim lipgloss.Style) []string {
-	out := []string{
-		clip.Render(title.Render(" What is Toolchain?")),
-		clip.Render(dim.Render(" One interpreter or compiler per language. Run, Debug")),
-		clip.Render(dim.Render(" and the language servers then know which binary to use.")),
-		"",
-	}
+	out := []string{clip.Render(title.Render(" What is Toolchain?"))}
+	out = append(out, wrapDetail(w, dim, clip,
+		"One interpreter or compiler per language. Run, Debug and the language servers then know which binary to use.")...)
+	out = append(out, "")
 	pending := t.detectedUnconfigured()
 	if len(pending) == 0 {
 		out = append(out, clip.Render(dim.Render(" Everything detected here is already configured.")))
@@ -212,12 +221,12 @@ func (t *ToolchainPage) onboardingDetail(w int, clip, title, dim lipgloss.Style)
 	for _, l := range pending {
 		names = append(names, l.ID)
 	}
+	out = append(out, wrapDetail(w, dim, clip, "detected, not configured: "+strings.Join(names, ", "))...)
 	out = append(out,
-		clip.Render(dim.Render(" detected, not configured: "+strings.Join(names, ", "))),
 		"",
 		clip.Render(lipgloss.NewStyle().Foreground(t.theme().Info).Render(
 			" a · accept all "+strconv.Itoa(len(pending))+" recommendations")),
-		clip.Render(dim.Render(" You do not have to type anything here.")),
 	)
+	out = append(out, wrapDetail(w, dim, clip, "You do not have to type anything here.")...)
 	return out
 }

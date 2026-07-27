@@ -563,8 +563,10 @@ Only real information should occupy a line.
   matched, and activating a toolchain search result unfolds the group it lives
   in.
 
-Rendering note: each column clips its lines to its own width and the `│` rule
-is drawn per line, so a long row can no longer push the detail column sideways
-on its line alone.
+Rendering notes: each column clips **and pads** its lines to its own width and
+the `│` rule is drawn per line, so neither an over-long row nor a short filter
+result can move the column edges. Detail-column prose word-wraps rather than
+clipping mid-sentence, and a filter jump row's detail says what enter does with
+the result instead of describing whatever page the cursor sits on.
 
 The epic is complete.

@@ -100,12 +100,11 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 
 	b, has := k.current()
 	if !has {
-		return strings.Join(padTo([]string{
-			clip.Render(title.Render(" Keymap")),
-			clip.Render(dim.Render(" Every command and the chord that runs it.")),
-			"",
-			clip.Render(dim.Render(" / filters · enter rebinds the selection")),
-		}, h), "\n")
+		lines := []string{clip.Render(title.Render(" Keymap"))}
+		lines = append(lines, wrapDetail(w, dim, clip, "Every command and the chord that runs it.")...)
+		lines = append(lines, "")
+		lines = append(lines, wrapDetail(w, dim, clip, "/ filters · enter rebinds the selection")...)
+		return strings.Join(padTo(lines, h), "\n")
 	}
 
 	if b.rangeKey != "" {
