@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T02:00:00Z
+timestamp: 2026-07-27T03:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -12,8 +12,8 @@ timestamp: 2026-07-27T02:00:00Z
 IKE gains a JetBrains-style HTTP client (epic #1247): requests are written as
 plain-text `.http` files, dispatched from the editor, and answered in a
 read-only response viewer with per-request history. This document tracks the
-subsystem as its milestones land; parser (#1248), dispatch (#1249) and the
-editor UX (#1250) are implemented, response history (#1251) is next.
+subsystem: parser (#1248), dispatch (#1249), editor UX (#1250) and response
+history (#1251) — the full epic — are implemented.
 
 ## File format
 
@@ -117,7 +117,18 @@ config file paths, or disable detection entirely.
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
 
-## Planned milestones
+## Response history (#1251)
 
-- **History** (#1251): last 5 responses per request persisted under
-  `.ike/http/`, browsable from the viewer.
+`internal/httphistory` persists the last **5** responses per request under
+the project-local `.ike/http/` directory (`IKE_CONFIG_DIR` override like the
+other `.ike/` stores). Entries are keyed by source file + request key
+(`httpfile.Request.Key`), so every request in a multi-request file keeps its
+own history; one JSON file per request (debuggable base-name prefix + hash),
+newest first, pruned on append, all writes best effort — losing a history
+entry never fails a dispatch. Bodies round-trip as base64, so binary
+responses store safely.
+
+After each dispatch the app appends the response and hands the stored list
+to the viewer: `h`/`l` (or arrow keys) browse older/newer responses of the
+current request, with the footer showing the position (`h/l history 2/5`)
+and the stored timestamp.

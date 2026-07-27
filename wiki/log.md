@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-27 (http client: response history under .ike/http/)
+
+- Response history (#1251) completes epic #1247: `internal/httphistory`
+  stores the last 5 responses per request (keyed by file + request key)
+  under `.ike/http/`, pruned on append, best-effort writes; the response
+  viewer browses them with h/l and shows position + timestamp in the footer
+  (`/architecture/http-client.md`).
+
 ## 2026-07-27 (http client: highlighting, run action, response viewer)
 
 - HTTP client UX (#1250): new `http` language plugin with the vendored

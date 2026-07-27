@@ -1,6 +1,8 @@
 package httppane
 
 import (
+	tea "charm.land/bubbletea/v2"
+
 	"net/http"
 	"strings"
 	"testing"
@@ -141,4 +143,61 @@ func TestContentTag(t *testing.T) {
 			t.Errorf("%q: want %q, got %q", ct, want, got)
 		}
 	}
+}
+
+func TestHistoryBrowsing(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 20)
+	newest := sample()
+	newest.Body = []byte(`{"v":3}`)
+	mid := sample()
+	mid.Body = []byte(`{"v":2}`)
+	oldest := sample()
+	oldest.Body = []byte(`{"v":1}`)
+
+	m.Set("r", newest)
+	m.SetHistory([]HistoryItem{
+		{Resp: newest},
+		{Resp: mid, At: time.Date(2026, 7, 27, 11, 0, 0, 0, time.UTC)},
+		{Resp: oldest, At: time.Date(2026, 7, 27, 10, 0, 0, 0, time.UTC)},
+	})
+	if idx, n := m.HistoryIndex(); idx != 0 || n != 3 {
+		t.Fatalf("initial index: %d/%d", idx, n)
+	}
+	if !strings.Contains(m.View(), `"v": 3`) {
+		t.Error("latest response must show first")
+	}
+	if !strings.Contains(m.View(), "1/3") {
+		t.Errorf("history position missing:\n%s", m.View())
+	}
+
+	// h steps to older entries, clamped at the oldest.
+	m.handleKey(keyPress("h"))
+	if !strings.Contains(m.View(), `"v": 2`) {
+		t.Error("h must show the older response")
+	}
+	m.handleKey(keyPress("h"))
+	m.handleKey(keyPress("h"))
+	if idx, _ := m.HistoryIndex(); idx != 2 {
+		t.Errorf("index must clamp at oldest, got %d", idx)
+	}
+	if !strings.Contains(m.View(), `"v": 1`) {
+		t.Error("oldest response must show")
+	}
+
+	// l steps back to newer.
+	m.handleKey(keyPress("l"))
+	if !strings.Contains(m.View(), `"v": 2`) {
+		t.Error("l must show the newer response")
+	}
+
+	// A new dispatch resets browsing to the fresh response only.
+	m.Set("r", newest)
+	if idx, n := m.HistoryIndex(); idx != 0 || n != 1 {
+		t.Errorf("Set must reset history: %d/%d", idx, n)
+	}
+}
+
+func keyPress(s string) tea.KeyPressMsg {
+	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }

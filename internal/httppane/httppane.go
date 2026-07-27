@@ -57,6 +57,11 @@ type Model struct {
 	status  string
 	loaded  bool
 
+	// hist is the browsable response history of the current request, newest
+	// first (#1251); histIdx selects the shown entry, 0 = latest.
+	hist    []HistoryItem
+	histIdx int
+
 	rows []row
 	// bodyIx indexes the highlight spans of the body lines only.
 	bodyIx highlight.Index
@@ -96,10 +101,39 @@ func (m *Model) rebuildTheme() {
 	m.hl = highlight.NewTheme(captures, nil)
 }
 
+// HistoryItem is one browsable response of the current request (#1251).
+type HistoryItem struct {
+	Resp *httpclient.Response
+	At   time.Time // zero when unknown (the just-dispatched response)
+}
+
 // Set replaces the viewer content with one dispatch result — the reuse
-// entry point (#1250).
+// entry point (#1250). History browsing resets to just this response; use
+// SetHistory to hand over the stored predecessors.
 func (m *Model) Set(request string, resp *httpclient.Response) {
+	m.hist = []HistoryItem{{Resp: resp}}
+	m.histIdx = 0
 	m.request = request
+	m.compose(resp)
+}
+
+// SetHistory replaces the browsable history of the current request, newest
+// first (#1251); the shown entry jumps to the latest. Call after Set with
+// the stored responses (including the fresh one at index 0).
+func (m *Model) SetHistory(items []HistoryItem) {
+	if len(items) == 0 {
+		return
+	}
+	m.hist = items
+	m.histIdx = 0
+	m.compose(items[0].Resp)
+}
+
+// HistoryIndex reports the shown entry and the history length (tests).
+func (m *Model) HistoryIndex() (int, int) { return m.histIdx, len(m.hist) }
+
+// compose rebuilds the display rows for one response.
+func (m *Model) compose(resp *httpclient.Response) {
 	m.loaded = true
 	m.top = 0
 	m.rows = nil
@@ -218,7 +252,22 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) {
 		m.top = 0
 	case "G", "end":
 		m.top = m.maxTop()
+	case "h", "left":
+		// Older stored response of the same request (#1251).
+		m.showHistory(m.histIdx + 1)
+	case "l", "right":
+		// Newer stored response.
+		m.showHistory(m.histIdx - 1)
 	}
+}
+
+// showHistory switches the viewer to history entry i, clamped to the range.
+func (m *Model) showHistory(i int) {
+	if i < 0 || i >= len(m.hist) || i == m.histIdx {
+		return
+	}
+	m.histIdx = i
+	m.compose(m.hist[i].Resp)
 }
 
 // Scroll moves the viewport by delta lines (mouse wheel + keys).
@@ -280,8 +329,21 @@ func (m *Model) View() string {
 			b.WriteString("\n")
 		}
 	}
-	b.WriteString(lipgloss.NewStyle().Faint(true).Render(m.clip(" j/k scroll · g/G top/bottom")))
+	b.WriteString(lipgloss.NewStyle().Faint(true).Render(m.clip(m.footerText())))
 	return b.String()
+}
+
+// footerText renders the key hints plus the history position when older
+// responses are browsable (#1251).
+func (m *Model) footerText() string {
+	s := " j/k scroll · g/G top/bottom"
+	if len(m.hist) > 1 {
+		s += fmt.Sprintf(" · h/l history %d/%d", m.histIdx+1, len(m.hist))
+		if at := m.hist[m.histIdx].At; !at.IsZero() {
+			s += " (" + at.Local().Format("15:04:05") + ")"
+		}
+	}
+	return s
 }
 
 func (m *Model) emptyText() string {
