@@ -424,3 +424,25 @@ Every default is a plain `ServerSpec` and can be replaced per project or user
 via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
 in the Settings → LSP page, which lists each registered language's effective
 command line, its config layer, and offers install/restart.
+
+## Embedded regions (#1303)
+
+Most embedded-language highlighting comes from a grammar's `injections.scm`.
+That fails when a region's language is not derivable from its own syntax — a
+`.http` request body is JSON, XML or HTML depending on a *sibling*
+`Content-Type` header. Such hosts register a Go-level detector instead:
+
+```go
+lang.Language{
+    ID:      "http",
+    Regions: func(lines []string) []lang.Region { … },
+}
+```
+
+A `Region` names a language id and a 0-based `[StartLine:StartCol,
+EndLine:EndCol)` range. `internal/highlight` consults `Regions` before the
+injection query and clamps or drops ranges outside the buffer, so a detector
+may report optimistically. `lang.RegionAt(langID, lines, line)` answers the
+same question for one line — the editor uses it to indent an embedded body by
+the embedded language. The detector runs on every highlight pass, so it must
+stay cheap.

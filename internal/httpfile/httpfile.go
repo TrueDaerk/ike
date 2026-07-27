@@ -51,6 +51,13 @@ type Request struct {
 	Proto   string // e.g. "HTTP/1.1"; DefaultProto when omitted
 	Headers []Header
 	Body    string
+	// BodyStart/BodyEnd delimit the body's lines (1-based, inclusive), with
+	// the surrounding blank lines excluded — 0 when the request has no body.
+	// Consumers that need the body *in* the file rather than as a string use
+	// them: the editor highlights a JSON body as JSON (#1303) and indents it
+	// by its own language (#1304).
+	BodyStart int
+	BodyEnd   int
 }
 
 // Key returns the stable identifier used to address the request across
@@ -210,10 +217,19 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		i++
 	}
 
-	// Body: everything after the blank line, trailing blank lines trimmed.
+	// Body: everything after the blank line, surrounding blank lines trimmed.
 	if i < end {
-		body := strings.Join(lines[i+1:end], "\n")
-		req.Body = strings.Trim(body, "\n")
+		bs, be := i+1, end-1
+		for bs <= be && lines[bs] == "" {
+			bs++
+		}
+		for be >= bs && lines[be] == "" {
+			be--
+		}
+		if bs <= be {
+			req.Body = strings.Join(lines[bs:be+1], "\n")
+			req.BodyStart, req.BodyEnd = bs+1, be+1
+		}
 	}
 
 	f.Requests = append(f.Requests, req)

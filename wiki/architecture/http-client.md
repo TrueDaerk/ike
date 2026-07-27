@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T21:40:00Z
+timestamp: 2026-07-27T22:10:00Z
 ---
 
 # HTTP Client (.http files)
@@ -204,6 +204,30 @@ config file paths, or disable detection entirely.
   usable grammar, prints `(no <tag> highlighter in this build — showing plain
   text)` above the body. An unrecognized content type stays plain without a
   notice — there is nothing to highlight by design.
+
+## Body highlighting by Content-Type (#1303)
+
+A request body is highlighted as **its own language**: `Content-Type:
+application/json` makes the body JSON, `text/xml` makes it XML, and so on. The
+body's language comes from a *sibling header*, which a Tree-sitter injection
+query cannot read, so the http plugin resolves it in Go through the registry's
+region seam:
+
+```go
+lang.Language{ID: "http", …, Regions: bodyRegions}
+```
+
+`bodyRegions` (`plugins/languages/http/regions.go`) parses the buffer with
+`internal/httpfile` — whose `Request` now carries `BodyStart`/`BodyEnd` line
+numbers — and reports one `lang.Region` per body whose media type maps to a
+registered language. The mapping handles parameters (`; charset=utf-8`),
+`x-` prefixes and structured suffixes, so `application/vnd.api+json` is JSON;
+media types with no mapping (`application/octet-stream`, `multipart/form-data`)
+leave the body with the host's own styling rather than guessing.
+
+`internal/highlight` consults a host's `Regions` before its `injections.scm`,
+and `lang.RegionAt` answers "which language is this line" for consumers that
+need it outside highlighting.
 
 ## Completion is exclusive (#1302)
 

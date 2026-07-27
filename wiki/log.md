@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-27 (http: bodies highlighted by Content-Type)
+
+- A JSON or XML request body rendered as flat text (#1303). The body's language
+  comes from a sibling `Content-Type` header, which a Tree-sitter injection
+  query cannot read, so `lang.Language` gained an optional Go-level region
+  detector (`Regions`), consulted by `internal/highlight` before
+  `injections.scm`; `lang.RegionAt` answers the same question per line. The
+  http plugin maps media types — parameters, `x-` prefixes and `+json`-style
+  suffixes included — to registered languages and reports each body's range,
+  using the new `BodyStart`/`BodyEnd` fields on `httpfile.Request`. Unmapped
+  types keep the host's styling. Updated
+  [HTTP Client](/architecture/http-client.md) and
+  [Languages](/architecture/languages.md).
+
 ## 2026-07-27 (http: completion exclusivity)
 
 - Typing `CTy` on a `.http` header line offered `Content-Type` next to

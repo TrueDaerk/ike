@@ -1,7 +1,8 @@
 // Package langhttp registers the .http request-file language (#1250, epic
 // #1247): Tree-sitter highlighting via the rest-nvim/tree-sitter-http grammar
 // (vendored C source, see grammar_cgo.go) for request lines, headers,
-// comments, ### separators and placeholders. The files themselves are parsed
+// comments, ### separators and placeholders, plus the Content-Type-driven
+// body regions that make a JSON body JSON (regions.go). The files themselves are parsed
 // and dispatched by internal/httpfile and internal/httpclient. Self-registers
 // via init(); blank-imported in cmd/ike/main.go.
 package langhttp
@@ -22,5 +23,8 @@ func init() {
 		Extensions:  []string{"http", "rest"},
 		Grammar:     grammar(),
 		LineComment: "#",
+		// A request body is highlighted and indented as its Content-Type's
+		// language (#1303/#1304); see regions.go.
+		Regions: bodyRegions,
 	})
 }

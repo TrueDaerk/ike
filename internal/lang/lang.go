@@ -93,10 +93,50 @@ type Language struct {
 	// override it per language via `[lang.<id>] template` in the config.
 	Template string
 
+	// Regions optionally detects embedded-language regions in a buffer of this
+	// language (#1303). It exists for hosts whose embedded regions cannot be
+	// expressed as a Tree-sitter injection query because the region's language
+	// is not derivable from its own syntax: a .http request body is JSON, XML
+	// or HTML depending on a *sibling header*. Nil — the normal case — means
+	// the host uses injections.scm, or has no embedded regions at all.
+	//
+	// The detector runs on every highlight pass, so it must be cheap and must
+	// not allocate more than the regions it returns. Regions outside the
+	// buffer, or naming an unregistered language, are ignored by the consumer.
+	Regions func(lines []string) []Region
+
 	// Test declares how the language's test functions are detected and run
 	// (#1150) — gutter run markers and run.testAtCursor. Nil means the
 	// language has no test runner. See test.go.
 	Test *TestSpec
+}
+
+// Region is one embedded-language range inside a host buffer, in editor
+// coordinates: it covers [StartLine:StartCol, EndLine:EndCol) with 0-based
+// lines and columns — the same convention highlight.Fragment uses.
+type Region struct {
+	Lang      string // language id of the embedded region, e.g. "json"
+	StartLine int
+	StartCol  int
+	EndLine   int
+	EndCol    int
+}
+
+// RegionAt returns the embedded region covering line (0-based) in a buffer of
+// language langID, if the language has a region detector and one covers it
+// (#1304): the editor indents a .http request body by the body's own language,
+// not by the host's.
+func RegionAt(langID string, lines []string, line int) (Region, bool) {
+	l, ok := ByID(langID)
+	if !ok || l.Regions == nil {
+		return Region{}, false
+	}
+	for _, r := range l.Regions(lines) {
+		if line >= r.StartLine && line <= r.EndLine {
+			return r, true
+		}
+	}
+	return Region{}, false
 }
 
 var (
