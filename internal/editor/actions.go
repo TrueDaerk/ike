@@ -720,8 +720,14 @@ func (m *Model) clipboardCut() tea.Cmd {
 
 // clipboardNotice reports what the copy/cut just put in the clipboard
 // ("copied 3 lines", "cut 12 chars"), read from the unnamed register — every
-// `+` write mirrors into it, so no system-clipboard read-back is needed.
+// `+` write mirrors into it, so no system-clipboard read-back is needed. A
+// write that never reached the system clipboard reports the failure instead
+// (#1255): the register is filled either way, so a success toast on top of a
+// dead bridge is exactly the misleading signal the bug report described.
 func (m *Model) clipboardNotice(verb string) tea.Cmd {
+	if cmd := m.takeClipboardSignal(); cmd != nil {
+		return cmd
+	}
 	e := m.regs.Get(0)
 	if e.Text == "" {
 		return nil

@@ -1,5 +1,21 @@
 # Log
 
+## 2026-07-27 (editor: clipboard failures surface, yank syncs)
+
+- System-clipboard writes no longer swallow their error (#1255): the register
+  store records it (`Store.TakeClipboardError`, destructive read), the
+  Cmd+C/Cmd+X toasts drain it before reporting success, and `Update` drains it
+  after every keypress, so a missing or failing clipboard utility reports
+  `system clipboard unavailable: <cause>` instead of a misleading "copied 3
+  lines". A failed read still falls back to the unnamed register. The reported
+  `Cmd+C` regression itself did not reproduce — the app-side bridge writes
+  through on every editor path; the host terminal takes the chord first
+  (Ghostty binds `super+c` to `copy_to_clipboard:mixed` by default).
+- Vim yanks reach the system clipboard (#1256): `editor.clipboard_sync`
+  (default on, Settings → Editor) mirrors unnamed `yy` / `y{motion}` / visual
+  `y`. Named registers, deletes and changes stay internal; `p`/`P` are
+  unchanged (`/architecture/editor.md`, `/architecture/keybindings.md`).
+
 ## 2026-07-27 (lang: XML highlighting)
 
 - New `xml` language plugin (#1253, `plugins/languages/xml`): Tree-sitter

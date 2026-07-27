@@ -549,6 +549,8 @@ func (m *Model) applyConfig() {
 		}
 	}
 	m.useSpaces = boolOr(m.cfg, "editor.use_spaces", m.useSpaces)
+	// Yank → system clipboard mirroring (#1256), vim's clipboard=unnamed.
+	m.regs.SetClipboardSync(boolOr(m.cfg, "editor.clipboard_sync", m.regs.ClipboardSync()))
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
 	m.autoClosePairs = boolOr(m.cfg, "editor.auto_close_pairs", m.autoClosePairs)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
@@ -1112,6 +1114,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// A blocked edit on a dependency file asks the host to confirm (#565).
 		if dep := m.takeDepSignal(); dep != nil {
 			cmd = tea.Batch(cmd, dep)
+		}
+		// A system-clipboard write that failed reports here (#1255), covering
+		// every key-driven path at once: `"+y`, the Cmd+C/Cmd+X actions when
+		// they arrive as keys, and the synced yanks of #1256.
+		if clip := m.takeClipboardSignal(); clip != nil {
+			cmd = tea.Batch(cmd, clip)
 		}
 		m.scroll()
 		return m.maybeReparse(before, cmd)

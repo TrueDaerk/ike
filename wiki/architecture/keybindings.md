@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-24T18:00:00Z
+timestamp: 2026-07-27T12:30:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -180,7 +180,12 @@ signature-help popup on demand, in insert and normal mode.
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
 `editor.paste` commands (visual selection or current line, through the system
-clipboard via the `"+` register), and `cmd+left` / `cmd+right` target
+clipboard via the `"+` register). Vim-native yanks reach the system clipboard
+too when `editor.clipboard_sync` is on (the default, #1256), so `yy` needs no
+chord at all. Note `cmd+c` may never arrive: Ghostty binds `super+c` to
+`copy_to_clipboard:mixed` by default and a terminal-side selection wins —
+`keybind = super+c=unbind` hands the chord back to IKE (#1255). `cmd+left` /
+`cmd+right` target
 `editor.lineStart` (also `home`) / `editor.lineEnd`. Word/paragraph navigation
 (`alt+arrows`, with `ctrl+arrows` fallback) and `shift+arrow` /
 `shift+alt+arrow` selection are vim-layer keys handled inside the editor, not

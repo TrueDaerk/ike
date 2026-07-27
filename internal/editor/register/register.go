@@ -41,6 +41,14 @@ type Store struct {
 	// hist is the bounded yank/delete history, newest first (#57). Every
 	// Yank/Delete pushes; consecutive duplicates collapse.
 	hist []Entry
+	// clipErr holds the most recent system-clipboard failure until a caller
+	// takes it (#1255). Clipboard writes used to be dropped with `_ =`, so a
+	// broken bridge looked exactly like a working one.
+	clipErr error
+	// sync mirrors unnamed-register yanks onto the system clipboard (#1256),
+	// vim's `clipboard=unnamed`. Off by default so the package stays inert
+	// standalone; the editor turns it on from editor.clipboard_sync.
+	sync bool
 }
 
 // New returns an empty register store backed by a no-op clipboard.
@@ -53,17 +61,48 @@ func (s *Store) SetClipboard(c Clipboard) {
 	}
 }
 
+// SetClipboardSync enables mirroring unnamed-register yanks onto the system
+// clipboard (#1256). Named registers never sync, and deletes/changes never do
+// — only explicit yanks, which is the conservative half of vim's
+// `clipboard=unnamed`.
+func (s *Store) SetClipboardSync(on bool) { s.sync = on }
+
+// ClipboardSync reports whether unnamed yanks mirror to the system clipboard.
+func (s *Store) ClipboardSync() bool { return s.sync }
+
+// TakeClipboardError returns the most recent system-clipboard failure and
+// clears it (#1255). The editor drains this after every keypress and reports
+// it, so a clipboard utility that is missing, sandboxed or failing surfaces
+// instead of being silently dropped.
+func (s *Store) TakeClipboardError() error {
+	err := s.clipErr
+	s.clipErr = nil
+	return err
+}
+
+// writeClip pushes text to the system clipboard, recording a failure for
+// TakeClipboardError instead of discarding it.
+func (s *Store) writeClip(text string) {
+	if err := s.clip.Write(text); err != nil {
+		s.clipErr = err
+	}
+}
+
 // Yank records a yank into reg. When reg is 0 (unnamed) the text lands in both
-// the unnamed register and the yank register `"0`. A named register stores
-// directly; an uppercase name appends to its lowercase counterpart.
+// the unnamed register and the yank register `"0` — and, with clipboard sync
+// on (#1256), on the system clipboard too. A named register stores directly
+// and never syncs; an uppercase name appends to its lowercase counterpart.
 func (s *Store) Yank(reg rune, e Entry) {
 	s.pushHistory(e)
 	switch {
 	case reg == 0 || reg == '"':
 		s.regs['"'] = e
 		s.regs['0'] = e
+		if s.sync {
+			s.writeClip(e.Text)
+		}
 	case reg == '+' || reg == '*':
-		_ = s.clip.Write(e.Text)
+		s.writeClip(e.Text)
 		s.regs['"'] = e
 	default:
 		s.writeNamed(reg, e)
@@ -86,7 +125,7 @@ func (s *Store) Delete(reg rune, e Entry) {
 			s.regs['-'] = e
 		}
 	case reg == '+' || reg == '*':
-		_ = s.clip.Write(e.Text)
+		s.writeClip(e.Text)
 		s.regs['"'] = e
 	default:
 		s.writeNamed(reg, e)
@@ -102,6 +141,12 @@ func (s *Store) Get(reg rune) Entry {
 		return s.regs['"']
 	case reg == '+' || reg == '*':
 		text, err := s.clip.Read()
+		if err != nil {
+			// The unnamed fallback below still runs — a paste should not die
+			// because the clipboard utility did — but the failure is recorded
+			// rather than swallowed (#1255).
+			s.clipErr = err
+		}
 		if err == nil && text != "" {
 			return Entry{Text: text, Linewise: strings.HasSuffix(text, "\n")}
 		}

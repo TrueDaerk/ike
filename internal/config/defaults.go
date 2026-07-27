@@ -68,6 +68,7 @@ func defaults() *Config {
 			Wrap:                   false,
 			ScrollOff:              3,
 			TextWidth:              80,
+			ClipboardSync:          true,
 			AutoIndent:             true,
 			AutoClosePairs:         true,
 			TrimTrailingWhitespace: true,

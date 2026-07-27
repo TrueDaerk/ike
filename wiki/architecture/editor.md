@@ -82,6 +82,26 @@ line runs that test (see /architecture/run-configurations.md).
   terminal pane gets the block through its own bracketed-paste path.
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
   #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
+  **Yank → system clipboard (#1256).** `editor.clipboard_sync` (default on,
+  Settings → Editor) mirrors *unnamed* yanks — `yy`, `y{motion}`, visual `y`
+  — onto the system clipboard, the conservative half of vim's
+  `clipboard=unnamed`. Named registers (`"ay`) never sync, and neither do
+  deletes or changes: a stray `dw` must not clobber what the user has on
+  their clipboard. `p`/`P` keep reading the internal register unchanged —
+  external content still comes in through `Cmd+V` / bracketed paste.
+  **Clipboard failures surface (#1255).** Every `"+` write used to be
+  `_ = clip.Write(text)`, so a clipboard utility that was missing, sandboxed
+  or failing produced the same "copied 3 lines" toast as a working one — the
+  internal register is filled either way. The store now records the error
+  (`Store.TakeClipboardError`, destructive read); the copy/cut toasts drain it
+  before reporting success, and `Update` drains it after every keypress, so
+  any key-driven path — `"+y`, a synced yank — reports
+  `system clipboard unavailable: <cause>` instead. A failed *read* still falls
+  back to the unnamed register: a paste degrades rather than dying.
+  Note that the host terminal can take the chord before IKE ever sees it —
+  Ghostty binds `super+c` to `copy_to_clipboard:mixed` by default, so a
+  terminal-side selection wins over `Cmd+C`; `keybind = super+c=unbind` in
+  `~/.config/ghostty/config` hands it back to IKE.
   Every yank/delete also feeds a bounded 20-entry **history** (#57,
   `Store.History`, consecutive duplicates collapse); `editor.pasteFromHistory`
   (`cmd+shift+v`, Edit menu) opens a palette picker over it — first line +
