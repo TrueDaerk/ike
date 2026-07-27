@@ -32,29 +32,19 @@ func TestHoverHighlightsRows(t *testing.T) {
 	}
 }
 
-// TestHoverMovesPickerHighlight: hovering an open enum picker follows the
-// pointer like the menu dropdown.
-func TestHoverMovesPickerHighlight(t *testing.T) {
+// TestDetailColumnClickFocusesEditor guards #1295: a press in the detail
+// column moves the focus to the typed editor rendered there.
+func TestDetailColumnClickFocusesEditor(t *testing.T) {
 	m := mouseModel(t)
 	m.focus = formColumn
-	// Find an enum row on the first page.
-	found := false
-	for i, r := range m.rows() {
-		if r.entry.Type == Enum && len(r.entry.Options) >= 2 {
-			m.sel, found = i, true
-			break
-		}
+	m.syncEditor()
+	g := m.gridFor()
+	if !g.side {
+		t.Skip("panel too narrow for the three-column grid")
 	}
-	if !found {
-		t.Skip("no enum row in the test pages")
-	}
-	m.activate()
-	if !m.picking {
-		t.Fatal("setup: picker must open")
-	}
-	m.Hover(1+catWidth+4, 2+m.sel-m.formOff+2) // second option line
-	if m.pickIdx != 1 {
-		t.Fatalf("pickIdx = %d, want 1", m.pickIdx)
+	m.Click(m.detailX()+1, 3)
+	if m.focus != detailColumn {
+		t.Fatalf("focus = %v, want the detail column", m.focus)
 	}
 }
 
@@ -83,16 +73,16 @@ func TestHintRowClickRunsAction(t *testing.T) {
 	m.View() // computes the hint spans
 	var scopeHit hintAction
 	for _, h := range m.hintHits {
-		if h.action == "scope" {
+		if h.action == "filter" {
 			scopeHit = h
 		}
 	}
 	if scopeHit.end == 0 {
-		t.Fatal("hint spans must include the scope action")
+		t.Fatal("hint spans must include the search action")
 	}
 	m.Click(scopeHit.start, m.hintRowY())
-	if m.writeScope != scopeUser {
-		t.Fatalf("hint click must cycle the scope, got %v", m.writeScope)
+	if !m.filtering {
+		t.Fatal("hint click must start the search")
 	}
 	if m.Click(0, m.hintRowY()) != nil || !m.IsOpen() {
 		t.Fatal("dead hint cells must swallow the press")
@@ -131,28 +121,17 @@ func TestWheelScrollsViewportNotSelection(t *testing.T) {
 	}
 }
 
-// TestPathSuggestionClickCompletes guards #885: clicking a rendered
-// completion suggestion takes it instead of cancelling the edit.
-func TestPathSuggestionClickCompletes(t *testing.T) {
+// TestSettingsRowsMapOneToOne guards #1295: nothing expands inline any more,
+// so the row under the pointer is the row at that line — even with an editor
+// open in the detail column.
+func TestSettingsRowsMapOneToOne(t *testing.T) {
 	m := mouseModel(t)
 	m.focus = formColumn
-	found := false
-	for i, r := range m.rows() {
-		if r.entry.Type == Path {
-			m.sel, found = i, true
-			break
-		}
-	}
-	if !found {
-		t.Skip("no path row in the test pages")
-	}
-	m.activate()
-	if !m.editing {
-		t.Fatal("setup: edit must open")
-	}
-	m.suggest.candidates = []string{"/tmp/sugg-a", "/tmp/sugg-b"}
-	m.Click(1+catWidth+4, 2+(m.sel-m.formOff)+2) // second suggestion line
-	if !m.editing || m.edit.text != "/tmp/sugg-b" {
-		t.Fatalf("suggestion click: editing=%v input=%q", m.editing, m.edit.text)
+	m.sel = 0
+	m.activate() // opens the editor in the detail column
+	m.focus = formColumn
+	m.Click(formX()+1, 2+1)
+	if m.sel != 1 {
+		t.Fatalf("sel = %d, want the second row", m.sel)
 	}
 }

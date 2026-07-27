@@ -18,25 +18,14 @@ type PageHoverer interface {
 }
 
 // Hover records the pointer position for the hover highlight: the category
-// row or form row under it. Panel-local coordinates like Click.
+// row or settings row under it. Panel-local coordinates like Click.
 func (m *Model) Hover(x, y int) {
 	m.hoverCat, m.hoverRow = -1, -1
-	if !m.open || m.SubOpen() || m.editing {
+	if !m.open || m.SubOpen() {
 		m.pageHover(-1, -1)
 		return
 	}
 	const bodyTop = 2
-	if m.picking {
-		// Hovering an open enum picker moves its highlight (menu parity).
-		if r, ok := m.current(); ok && len(r.entry.Options) > 0 {
-			if idx, hit := m.formLine(x, y-bodyTop); hit {
-				if opt := idx - m.sel - 1; opt >= 0 && opt < len(r.entry.Options) {
-					m.pickIdx = opt
-				}
-			}
-		}
-		return
-	}
 	row := y - bodyTop
 	if row < 0 || row >= m.height-4 {
 		m.pageHover(-1, -1)
@@ -51,13 +40,17 @@ func (m *Model) Hover(x, y int) {
 		return
 	}
 	if page := m.customPage(); page != nil && m.filter == "" {
-		if x >= 1+catWidth+3 {
-			m.pageHover(x-(1+catWidth+3), row)
+		if x >= formX() {
+			m.pageHover(x-formX(), row)
 		}
 		return
 	}
-	if x < 1+catWidth+3 || row >= m.height-4-detailLines {
+	g := m.gridFor()
+	if x < formX() || row >= g.listH {
 		return
+	}
+	if g.side && x >= m.detailX() {
+		return // the detail column has its own cursor, not a hover row
 	}
 	if idx := row + m.formOff; idx < len(m.rows()) {
 		m.hoverRow = idx
@@ -104,9 +97,13 @@ func (m *Model) clickChrome(x, y int) (tea.Cmd, bool) {
 func (m *Model) runHintAction(action string) tea.Cmd {
 	switch action {
 	case "edit":
-		if m.focus == formColumn {
-			return m.activate()
+		if m.focus == catColumn {
+			m.focus = formColumn
+			m.sel = 0
+			m.syncEditor()
+			return nil
 		}
+		return m.activate()
 	case "reset":
 		if r, ok := m.current(); ok && m.focus == formColumn {
 			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
@@ -116,6 +113,8 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 	case "filter":
 		m.filtering = true
 		m.focus = formColumn
+	case "help":
+		m.openKeyHelp()
 	case "close":
 		m.Close()
 	}

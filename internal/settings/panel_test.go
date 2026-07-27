@@ -151,7 +151,9 @@ func TestSchemaRendersValuesAndLayer(t *testing.T) {
 	m.SetSize(90, 20)
 	m.Open()
 	v := m.View()
-	for _, want := range []string{"Interface", "Appearance", "Menu bar", "[x]", "@default", "SETTINGS"} {
+	// The value marker replaced the [x] affordance and the @-column (#1295):
+	// provenance moved into the detail column.
+	for _, want := range []string{"Interface", "Appearance", "Menu bar", "true ◉", "4 ‹›", "SETTINGS"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}
@@ -172,8 +174,9 @@ func TestBoolToggleWritesAndReloads(t *testing.T) {
 	if got := config.Origin(opts, "ui.menu_bar"); got != "user" {
 		t.Fatalf("origin after write = %q, want user", got)
 	}
-	if !strings.Contains(m.View(), "@user") {
-		t.Fatal("layer badge must show the user override")
+	m.focus = catColumn // the detail column reports provenance (#1295)
+	if !strings.Contains(m.View(), "Interface") {
+		t.Fatal("the panel must keep rendering after a write")
 	}
 }
 
@@ -206,8 +209,8 @@ func TestScopeSelectorWritesProjectLayer(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(opts.ProjectRoot, ".ike", "settings.toml")); err != nil {
 		t.Fatal("the first project-scope write must create .ike/settings.toml")
 	}
-	if !strings.Contains(m.View(), "@project") {
-		t.Fatal("layer badge must show the project override")
+	if !strings.Contains(m.View(), "set in project") {
+		t.Fatalf("the detail column must report the project override:\n%s", m.View())
 	}
 
 	// Reset in project scope removes the key; the value falls back.
@@ -266,53 +269,81 @@ func TestIntEditValidatesAndClamps(t *testing.T) {
 	m.Update(key("tab"))
 	m.Update(key("down")) // Tab width
 	m.Update(key("enter"))
-	if !m.editing {
-		t.Fatal("enter on an int entry must start an edit")
+	if m.focus != detailColumn {
+		t.Fatal("enter on an int entry must focus the stepper in the detail column")
+	}
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *intEditor", m.editor)
 	}
 	// Non-numeric input is rejected with an inline error, no write.
-	m.edit = newTextField("abc")
-	if cmd := m.Update(key("enter")); cmd != nil || m.invalid == "" {
-		t.Fatalf("invalid int must not write (invalid=%q)", m.invalid)
+	ed.tf.Set("abc")
+	if cmd := m.Update(key("enter")); cmd != nil || ed.err == "" {
+		t.Fatalf("invalid int must not write (err=%q)", ed.err)
 	}
 	// A too-large value clamps to Max.
-	m.edit.text = "99"
+	ed.tf.Set("99")
 	apply(t, m.Update(key("enter")))
 	if got := config.Get().Editor.TabWidth; got != 16 {
 		t.Fatalf("tab_width = %d, want clamped 16", got)
 	}
 }
 
-// TestEnumPicker guards #383: enter on an enum row opens a picker list;
-// ↑↓ move, enter commits, esc cancels without a write.
-func TestEnumPicker(t *testing.T) {
+// TestEnumEditor guards #383/#1295: enter on an enum row focuses the option
+// list in the detail column; ↑↓ move, enter commits, esc returns without a
+// write.
+func TestEnumEditor(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
-	m.SetSize(90, 20)
+	m.SetSize(130, 20)
 	m.Open()
 	m.Update(key("down")) // Appearance page
 	m.Update(key("tab"))
-	if cmd := m.Update(key("enter")); cmd != nil || !m.picking {
-		t.Fatalf("enter on an enum must open the picker, picking=%v", m.picking)
+	if cmd := m.Update(key("enter")); cmd != nil || m.focus != detailColumn {
+		t.Fatalf("enter on an enum must focus the detail editor, focus=%v", m.focus)
 	}
-	if !strings.Contains(m.View(), "▸") {
-		t.Fatalf("picker must render its options:\n%s", m.View())
+	if _, ok := m.editor.(*enumEditor); !ok {
+		t.Fatalf("editor = %T, want *enumEditor", m.editor)
 	}
-	// Esc cancels without writing.
-	if cmd := m.Update(key("esc")); cmd != nil || m.picking {
-		t.Fatal("esc must close the picker without a write")
+	if !strings.Contains(m.View(), "type to filter") {
+		t.Fatalf("the option list must render:\n%s", m.View())
+	}
+	// Esc leaves the editor without writing.
+	if cmd := m.Update(key("esc")); cmd != nil || m.focus != formColumn {
+		t.Fatal("esc must return to the settings column without a write")
 	}
 	if got := config.Get().Theme.Name; got != "default" {
 		t.Fatalf("cancel must not change the value, got %q", got)
 	}
-	// Reopen, move down, commit.
+	// Re-enter, move down, commit.
 	m.Update(key("enter"))
 	m.Update(key("down"))
 	apply(t, m.Update(key("enter")))
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
-		t.Fatalf("picker enter must write the highlighted option, got %q", got)
+		t.Fatalf("enter must write the highlighted option, got %q", got)
 	}
-	if m.picking {
-		t.Fatal("commit must close the picker")
+}
+
+// TestEnumEditorFilters guards #1295: typing narrows a long option list
+// instead of forcing a scroll through it.
+func TestEnumEditorFilters(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	m.SetSize(130, 20)
+	m.Open()
+	m.Update(key("down"))
+	m.Update(key("tab"))
+	m.Update(key("enter"))
+	ed := m.editor.(*enumEditor)
+	for _, r := range "tokyo" {
+		m.Update(keyRune(r))
+	}
+	if got := ed.matches(); len(got) != 1 || got[0] != "tokyo-night" {
+		t.Fatalf("matches = %v, want only tokyo-night", got)
+	}
+	apply(t, m.Update(key("enter")))
+	if got := config.Get().Theme.Name; got != "tokyo-night" {
+		t.Fatalf("enter must write the filtered option, got %q", got)
 	}
 }
 
@@ -330,8 +361,8 @@ func TestEnumQuickCycle(t *testing.T) {
 	if got := config.Get().Theme.Name; got != "tokyo-night" {
 		t.Fatalf("right must cycle to the next option, got %q", got)
 	}
-	if m.focus != formColumn || m.picking {
-		t.Fatal("quick cycle must not move focus or open the picker")
+	if m.focus != formColumn {
+		t.Fatal("quick cycle must not move the focus into the detail column")
 	}
 	apply(t, m.Update(key("l")))
 	if got := config.Get().Theme.Name; got != "default" {
@@ -450,10 +481,9 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 		t.Fatalf("category click must switch back, cat=%d", m.cat)
 	}
 
-	// Click the second entry row in the form column: the description sits in
-	// the pinned footer (#535), so list lines map 1:1 to rows — the second
-	// entry renders on body row 1.
-	formX := 1 + catWidth + 4
+	// Click the second entry row in the settings column: rows map 1:1 to
+	// lines (#1295), so the second entry renders on body row 1.
+	formX := formX() + 1
 	if cmd := m.Click(formX, 2+1); cmd != nil {
 		t.Fatal("first click must only select")
 	}
@@ -461,16 +491,18 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 		t.Fatalf("entry click must select row 1, sel=%d focus=%v", m.sel, m.focus)
 	}
 	// Second click on the same row: row 1 is the Int entry (tab width),
-	// activation opens an inline edit.
+	// activation focuses its stepper in the detail column.
 	m.Click(formX, 2+1)
-	if !m.editing {
+	if m.focus != detailColumn {
 		t.Fatal("second click must activate the entry")
 	}
 
-	// Bool activation via double click returns the write command.
-	m.editing = false
+	// Row 0 is the bool: activating it focuses the toggle, and enter there
+	// returns the write command.
+	m.focus = formColumn
 	m.Click(formX, 2+0) // select row 0 (bool)
-	wcmd := m.Click(formX, 2+0)
+	m.Click(formX, 2+0)
+	wcmd := m.Update(key("enter"))
 	if wcmd == nil {
 		t.Fatal("activating the bool entry must return the write command")
 	}
@@ -480,10 +512,10 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	}
 }
 
-// TestDetailFooterPinned guards #535: the selected entry's description renders
-// in a footer pinned to the bottom of the form column, so moving the selection
-// never shifts the other rows.
-func TestDetailFooterPinned(t *testing.T) {
+// TestDetailColumnFollowsSelection guards #535/#1295: the selected entry's
+// documentation lives in the detail column, so moving the selection never
+// shifts the settings rows, and the detail always describes what is selected.
+func TestDetailColumnFollowsSelection(t *testing.T) {
 	restoreConfig(t)
 	pages := []Page{{Title: "Interface", Entries: []Entry{
 		{Key: "ui.menu_bar", Type: Bool, Title: "First entry", Scope: config.UserScope, Description: "first description"},
@@ -491,7 +523,7 @@ func TestDetailFooterPinned(t *testing.T) {
 		{Key: "ui.menu_bar", Type: Bool, Title: "Third entry", Scope: config.UserScope, Description: "third description"},
 	}}}
 	m := New(pages, testOpts(t))
-	m.SetSize(90, 20)
+	m.SetSize(110, 20)
 	m.Open()
 	m.Update(key("tab"))
 
@@ -504,8 +536,8 @@ func TestDetailFooterPinned(t *testing.T) {
 		return -1
 	}
 	v := m.View()
-	if lineOf(v, "first description") != 20-4 { // first footer line (2-line footer #549) above hint+border
-		t.Fatalf("description must be pinned to the bottom of the form column:\n%s", v)
+	if lineOf(v, "first description") < 0 {
+		t.Fatalf("the detail column must document the selection:\n%s", v)
 	}
 	third := lineOf(v, "Third entry")
 	m.Update(key("down"))
@@ -513,8 +545,23 @@ func TestDetailFooterPinned(t *testing.T) {
 	if got := lineOf(v, "Third entry"); got != third {
 		t.Fatalf("moving the selection must not shift other rows: line %d -> %d\n%s", third, got, v)
 	}
-	if lineOf(v, "second description") != 20-4 {
-		t.Fatalf("footer must follow the selection:\n%s", v)
+	if lineOf(v, "second description") < 0 {
+		t.Fatalf("the detail must follow the selection:\n%s", v)
+	}
+}
+
+// TestDetailColumnShowsPageWithoutSelection guards #1295: the third column is
+// never blank — with the rail focused it explains the category.
+func TestDetailColumnShowsPageWithoutSelection(t *testing.T) {
+	restoreConfig(t)
+	pages := []Page{{Title: "Interface", Description: "Everything about the chrome.", Entries: []Entry{
+		{Key: "ui.menu_bar", Type: Bool, Title: "First entry", Scope: config.UserScope},
+	}}}
+	m := New(pages, testOpts(t))
+	m.SetSize(110, 20)
+	m.Open() // opens on the rail
+	if !strings.Contains(m.View(), "Everything about the chrome.") {
+		t.Fatalf("the detail column must describe the page:\n%s", m.View())
 	}
 }
 
@@ -546,10 +593,9 @@ func TestFilterSpansAllPages(t *testing.T) {
 	}
 }
 
-// TestDetailFooterWraps guards #549: a long description word-wraps over the
-// two pinned footer lines instead of clipping at the column edge, and the
-// footer height stays constant for short descriptions.
-func TestDetailFooterWraps(t *testing.T) {
+// TestDetailWraps guards #549/#1295: a long description word-wraps inside the
+// detail column instead of clipping at its edge.
+func TestDetailWraps(t *testing.T) {
 	restoreConfig(t)
 	long := "This is a deliberately long help text that cannot possibly fit into a single narrow form column line and therefore must wrap"
 	pages := []Page{{Title: "Interface", Entries: []Entry{
@@ -557,27 +603,25 @@ func TestDetailFooterWraps(t *testing.T) {
 		{Key: "editor.tab_width", Type: Int, Title: "Second", Scope: config.UserScope, Description: "short"},
 	}}}
 	m := New(pages, testOpts(t))
-	m.SetSize(90, 16) // wide enough that the hint row stays a single line
+	m.SetSize(110, 20)
 	m.Open()
 	m.Update(key("tab"))
 
 	v := m.View()
-	lines := strings.Split(v, "\n")
-	// The two footer lines sit above the hint row and the bottom border.
-	first, second := lines[len(lines)-4], lines[len(lines)-3]
-	if !strings.Contains(first, "This is a deliberately") {
-		t.Fatalf("first footer line = %q", first)
+	if !strings.Contains(v, "This is a deliberately") {
+		t.Fatalf("the description must render in the detail column:\n%s", v)
 	}
-	if !strings.Contains(second, "wrap") && !strings.Contains(second, "(ui.menu_bar)") {
-		t.Fatalf("second footer line must carry the wrapped remainder, got %q", second)
+	if !strings.Contains(v, "wrap") {
+		t.Fatalf("a long description must wrap rather than clip:\n%s", v)
+	}
+	if !strings.Contains(v, "ui.menu_bar") {
+		t.Fatalf("the detail meta row must name the key:\n%s", v)
 	}
 
-	// A short description keeps the same footer height (second line blank-ish).
+	// A short description keeps the detail column intact.
 	m.Update(key("down"))
-	v = m.View()
-	lines = strings.Split(v, "\n")
-	if !strings.Contains(lines[len(lines)-4], "short") {
-		t.Fatalf("short description must sit on the first footer line:\n%s", v)
+	if v := m.View(); !strings.Contains(v, "short") {
+		t.Fatalf("short description must render:\n%s", v)
 	}
 }
 
@@ -590,7 +634,7 @@ func TestWheelScrollsColumns(t *testing.T) {
 	m.SetSize(90, 20)
 	m.Open()
 
-	formX := 1 + catWidth + 4
+	formX := formX() + 1
 
 	// Wheel scrolls viewports now, never selections (#885). The test pages
 	// fit their windows, so the offsets stay clamped at 0 and nothing jumps.
@@ -609,92 +653,62 @@ func TestWheelScrollsColumns(t *testing.T) {
 		t.Fatalf("formOff must clamp with everything visible, off=%d", m.formOff)
 	}
 
-	// Wheel is inert while a picker or edit is open.
-	m.picking = true
+	// Wheel is inert while the filter input is active.
+	m.filtering = true
 	m.Wheel(formX, 1)
 	if m.sel != 0 {
-		t.Fatal("wheel must be inert while picking")
+		t.Fatal("wheel must be inert while filtering")
 	}
-	m.picking = false
+	m.filtering = false
 }
 
-// TestPickerClicks guards #673: with an enum picker open, clicking an option
-// applies it and clicking anywhere else closes the picker.
-func TestPickerClicks(t *testing.T) {
+// TestDetailEditorKeysRoute guards #1295: while the detail column has the
+// focus, every key goes to its editor — including the ones the panel would
+// otherwise claim — and esc hands the focus back.
+func TestDetailEditorKeysRoute(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
-	m.SetSize(90, 20)
+	m.SetSize(110, 20)
 	m.Open()
-	formX := 1 + catWidth + 4
-
-	openPicker := func() {
-		m.Update(key("down")) // Appearance page
-		m.Update(key("tab"))
-		if m.Update(key("enter")); !m.picking {
-			t.Fatal("enter on the enum row must open the picker")
-		}
+	m.Update(key("tab"))
+	m.Update(key("down")) // Int row (tab width)
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *intEditor", m.editor)
 	}
-	openPicker()
-
-	// The options render directly under the selected row (body row 0), so
-	// option 1 ("tokyo-night") sits on body row 2 = y 4.
-	cmd := m.Click(formX, 2+2)
-	if m.picking {
-		t.Fatal("clicking an option must close the picker")
+	// "r" would reset in the settings column; here it is text input.
+	m.Update(key("r"))
+	if !strings.Contains(ed.tf.text, "r") {
+		t.Fatalf("keys must reach the editor, text = %q", ed.tf.text)
 	}
-	apply(t, cmd)
-	if got := config.Get().Theme.Name; got != "tokyo-night" {
-		t.Fatalf("option click must apply the value, got %q", got)
+	m.Update(key("esc"))
+	if m.focus != formColumn {
+		t.Fatalf("esc must return to the settings column, focus = %v", m.focus)
 	}
-
-	// A click outside the options (category column) only closes the picker.
-	m.Open()
-	openPicker()
-	if cmd := m.Click(2, 3); cmd != nil || m.picking {
-		t.Fatalf("outside click must close the picker without writing, picking=%v", m.picking)
+	// The cancelled edit did not write.
+	if got := config.Get().Editor.TabWidth; got != 4 {
+		t.Fatalf("cancel must not write, tab_width = %d", got)
 	}
 }
 
-// TestEditClicks guards #673: with an inline edit active, a click on the row
-// keeps the edit, a click elsewhere commits (or cancels when invalid).
-func TestEditClicks(t *testing.T) {
+// TestBoolEditorWrites guards #1295: the toggle is a pair of radio rows, and
+// space on either writes.
+func TestBoolEditorWrites(t *testing.T) {
 	restoreConfig(t)
 	m := New(testPages(), testOpts(t))
-	m.SetSize(90, 20)
+	m.SetSize(110, 20)
 	m.Open()
-	formX := 1 + catWidth + 4
-
-	startEdit := func() {
-		m.Update(key("tab"))
-		m.Update(key("down")) // Int row (tab width)
-		m.Update(key("enter"))
-		if !m.editing {
-			t.Fatal("enter must start the inline edit")
-		}
+	m.Update(key("tab")) // settings column
+	m.Update(key("tab")) // detail column: the bool row's ◉/○ editor
+	if m.focus != detailColumn {
+		t.Fatalf("tab must reach the detail column, focus = %v", m.focus)
 	}
-	startEdit()
-
-	// Click on the edited row itself: the edit stays active.
-	if m.Click(formX, 2+1); !m.editing {
-		t.Fatal("clicking the edited row must keep the edit")
+	if _, ok := m.editor.(*boolEditor); !ok {
+		t.Fatalf("editor = %T, want *boolEditor", m.editor)
 	}
-
-	// Click elsewhere: the input commits like enter.
-	m.edit.text = "8"
-	cmd := m.Click(formX, 2+0)
-	if m.editing {
-		t.Fatal("outside click must end the edit")
-	}
-	apply(t, cmd)
-	if got := config.Get().Editor.TabWidth; got != 8 {
-		t.Fatalf("outside click must commit the input, got %d", got)
-	}
-
-	// Invalid input: the outside click cancels instead of committing.
-	m.Open()
-	startEdit()
-	m.edit.text = "not a number"
-	if cmd := m.Click(2, 3); cmd != nil || m.editing || m.invalid != "" {
-		t.Fatalf("invalid input must cancel on outside click, editing=%v invalid=%q", m.editing, m.invalid)
+	apply(t, m.Update(key("space")))
+	if config.Get().UI.MenuBar {
+		t.Fatal("space in the toggle editor must write the other value")
 	}
 }

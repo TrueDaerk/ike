@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -10,8 +11,72 @@ import (
 	"ike/internal/theme"
 )
 
-// catWidth is the left category column's width.
-const catWidth = 22
+// The panel renders a fixed three-column grid (0460, #1295): the wireframes
+// make the raster the law, so a page always looks the same and the eye learns
+// one layout instead of one per page.
+//
+//	24ch nav · 44ch settings + value marker · rest detail = explanation + editor
+const (
+	// catWidth is the left category column's width.
+	catWidth = 24
+	// formWidth is the settings column's width when the panel is wide enough.
+	formWidth = 44
+	// minFormWidth is the narrowest the settings column may shrink to before
+	// the grid gives up on three columns.
+	minFormWidth = 28
+	// minDetailWidth is the narrowest useful detail column; below it the
+	// detail moves under the settings column instead of beside it.
+	minDetailWidth = 24
+	// sepWidth is the " │ " column separator's width.
+	sepWidth = 3
+	// bandDetailHeight is the detail band's height in the stacked fallback.
+	bandDetailHeight = 8
+)
+
+// grid is the resolved column geometry for the current panel size.
+type grid struct {
+	formW, detailW int
+	// side reports the detail column renders beside the settings column; when
+	// false the panel is too narrow for three columns and the detail becomes a
+	// band under the settings list.
+	side    bool
+	detailH int
+	// listH is the settings column's list height.
+	listH int
+}
+
+// gridFor resolves the column geometry for the panel's size. rightW is the
+// width available to everything right of the category rail.
+func (m *Model) gridFor() grid {
+	innerW := m.width - 2
+	innerH := m.height - 4
+	rightW := innerW - catWidth - sepWidth
+	if rightW >= minFormWidth+sepWidth+minDetailWidth {
+		// The settings column takes its nominal 44ch where there is room and
+		// shrinks before the detail column is dropped: three columns are worth
+		// more than a wide value column.
+		formW := formWidth
+		if max := rightW - sepWidth - minDetailWidth; formW > max {
+			formW = max
+		}
+		return grid{formW: formW, detailW: rightW - formW - sepWidth, side: true, detailH: innerH, listH: innerH}
+	}
+	// Stacked fallback: the detail keeps its editor, it just moves under the
+	// list — narrow terminals lose the column, never the third column's
+	// content (#1295).
+	g := grid{formW: rightW, detailW: rightW, detailH: bandDetailHeight}
+	if g.detailH > innerH/2 {
+		g.detailH = innerH / 2
+	}
+	if g.detailH < 1 {
+		g.detailH = 1
+	}
+	g.listH = innerH - g.detailH - 1 // the divider row
+	if g.listH < 1 {
+		g.listH = 1
+	}
+	return g
+}
 
 // theme returns the active palette, defaulting when none was threaded in.
 func (m *Model) theme() *theme.Palette {
@@ -22,7 +87,7 @@ func (m *Model) theme() *theme.Palette {
 }
 
 // View renders the panel as a floating box: a rounded border around the title
-// row, the two-column body and the hint row. m.width/m.height are the box's
+// row, the three-column body and the hint row. m.width/m.height are the box's
 // outer dimensions; the app centers the result above the workspace (#115).
 func (m *Model) View() string {
 	if !m.open || m.width < 24 || m.height < 8 {
@@ -31,17 +96,29 @@ func (m *Model) View() string {
 	pal := m.theme()
 	innerW := m.width - 2 // content columns inside the border (v2 sizes outer)
 	inner := m.height - 4 // border rows + title row + hint row
+	sep := " │ "
 
+	m.syncEditor()
 	left := m.renderCategories(inner)
-	rightW := innerW - catWidth - 3
-	var right string
+	var body string
 	if page := m.customPage(); page != nil && m.filter == "" {
-		right = page.View(rightW, inner)
+		// Custom pages own everything right of the rail and bring their own
+		// internal layout; the grid applies to schema pages.
+		right := page.View(innerW-catWidth-sepWidth, inner)
+		right = lipgloss.NewStyle().MaxWidth(innerW - catWidth - sepWidth).Render(right)
+		body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep, right)
 	} else {
-		right = m.renderForm(rightW, inner)
+		g := m.gridFor()
+		form := m.renderForm(g.formW, g.listH)
+		detail := m.renderDetailColumn(g.detailW, g.detailH)
+		if g.side {
+			body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep, form, sep, detail)
+		} else {
+			div := lipgloss.NewStyle().Foreground(pal.Secondary).Render(strings.Repeat("─", g.formW))
+			body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep,
+				strings.Join([]string{form, div, detail}, "\n"))
+		}
 	}
-	right = lipgloss.NewStyle().MaxWidth(rightW).Render(right)
-	body := lipgloss.JoinHorizontal(lipgloss.Top, left, " │ ", right)
 
 	titleText := " SETTINGS "
 	if m.cat >= 0 && m.cat < len(m.pages) {
@@ -77,37 +154,40 @@ func (m *Model) View() string {
 	return box
 }
 
-// renderHint renders the bottom hint row and records its clickable key
-// segments (#885): a press on "r reset" resets, on "s scope" cycles, and so
-// on — the hints are buttons now, not just documentation.
+// renderHint renders the bottom hint row: three context keys, not a permanent
+// nine-key legend (#1295). The full list lives behind "?" — the cheatsheet
+// overlay — so the footer can always say the three things that matter here.
+// The segments stay clickable (#885).
 func (m *Model) renderHint(pal *theme.Palette) string {
 	m.hintHits = nil
 	style := lipgloss.NewStyle().Foreground(pal.Secondary)
 	switch {
 	case m.SubOpen():
 		return style.Render(" esc back · click a button")
-	case m.picking:
-		return style.Render(" ↑↓ choose · enter apply · esc cancel")
+	case m.filtering:
+		return style.Render(" type to filter · enter keep · esc clear")
 	}
-	if r, ok := m.current(); ok && m.editing && r.entry.Type == Path {
-		return style.Render(" tab complete path · enter apply · esc cancel")
+	var segs []hintSeg
+	switch {
+	case m.focus == catColumn:
+		segs = []hintSeg{{"enter settings", "edit"}, {"/ search", "filter"}}
+	case m.focus == detailColumn:
+		segs = m.editorHint()
+	default:
+		segs = []hintSeg{{"enter edit", "edit"}, {"r reset", "reset"}}
 	}
-	type seg struct{ text, action string }
-	segs := []seg{
-		{" ↑↓/jk navigate · ←→ column · ", ""},
-		{"enter edit", "edit"},
-		{" · ", ""},
-		{"r reset", "reset"},
-		{" · ", ""},
-		{"s scope", "scope"},
-		{" · ", ""},
-		{"/ filter", "filter"},
-		{" · ", ""},
-		{"esc", "close"},
-	}
+	segs = append(segs, hintSeg{"? all keys", "help"})
+
 	x := 1 // border column 0
 	var out string
-	for _, sg := range segs {
+	for i, sg := range segs {
+		if i > 0 {
+			out += " · "
+			x += 3
+		} else {
+			out += " "
+			x++
+		}
 		w := lipgloss.Width(sg.text)
 		if sg.action != "" {
 			m.hintHits = append(m.hintHits, hintAction{start: x, end: x + w, action: sg.action})
@@ -116,6 +196,27 @@ func (m *Model) renderHint(pal *theme.Palette) string {
 		x += w
 	}
 	return style.Render(out)
+}
+
+// hintSeg is one footer segment: its text and the action a click runs.
+type hintSeg struct{ text, action string }
+
+// editorHint names the two keys that matter for the focused editor.
+func (m *Model) editorHint() []hintSeg {
+	switch m.editor.(type) {
+	case *enumEditor:
+		return []hintSeg{{"↑↓ select", ""}, {"enter apply", ""}}
+	case *listEditor:
+		return []hintSeg{{"enter edit", ""}, {"d remove", ""}}
+	case *intEditor:
+		return []hintSeg{{"‹› value", ""}, {"enter apply", ""}}
+	case *boolEditor:
+		return []hintSeg{{"space toggle", ""}, {"esc back", ""}}
+	case *chordEditor:
+		return []hintSeg{{"enter record", ""}, {"esc back", ""}}
+	default:
+		return []hintSeg{{"enter apply", ""}, {"esc cancel", ""}}
+	}
 }
 
 // renderFilter shows the live filter input on the title row.
@@ -234,10 +335,6 @@ func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string 
 	return strings.Join(out, "\n")
 }
 
-// detailLines is the pinned description footer's constant height (#549): the
-// help text word-wraps over this many lines instead of clipping at one.
-const detailLines = 2
-
 // footerLine couples a pinned-footer text with its style before wrapping.
 type footerLine struct {
 	text  string
@@ -275,46 +372,29 @@ func wrapFooter(lines []footerLine, w, want int) []string {
 	return out
 }
 
-// renderForm renders the visible entries with value and layer badge. The
-// selected entry's description lives in a footer pinned to the bottom of the
-// column — never inline — so moving the selection cannot shift the rows below
-// it (#535); it wraps over detailLines lines (#549). Only the enum picker
-// still expands inline (an explicit action).
+// padTo pads lines with blanks and clamps them to exactly h entries.
+func padTo(lines []string, h int) []string {
+	for len(lines) < h {
+		lines = append(lines, "")
+	}
+	return lines[:h]
+}
+
+// renderForm renders the settings column: one line per entry, "Title … value
+// marker". Nothing expands inline any more (0460, #1295) — the editor and the
+// help both live in the detail column, so the rows map 1:1 to lines and a
+// selection move can never shift what is under the pointer.
 func (m *Model) renderForm(w, h int) string {
 	pal := m.theme()
+	clip := lipgloss.NewStyle().MaxWidth(w)
 	rows := m.rows()
 	if len(rows) == 0 {
-		return lipgloss.NewStyle().Foreground(pal.Secondary).Render("no matching settings")
+		empty := clip.Render(lipgloss.NewStyle().Foreground(pal.Secondary).Render(" no matching settings"))
+		return strings.Join(padTo([]string{empty}, h), "\n")
 	}
-	clip := lipgloss.NewStyle().MaxWidth(w)
-	listH := h - detailLines // the last lines are the pinned detail footer
-	if listH < 1 {
-		listH = 1
-	}
-	var lines []string
-	selStart, selEnd := 0, 0
+	lines := make([]string, 0, len(rows)+1)
 	for i, r := range rows {
-		if i == m.sel {
-			selStart = len(lines)
-		}
 		lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
-		if i == m.sel {
-			pickerStart := len(lines)
-			if m.picking {
-				lines = append(lines, m.renderPicker(r.entry, clip)...)
-				// The follow target is the highlighted option, not the whole
-				// expansion (#891) — a long theme list must never move the
-				// highlight below the fold.
-				selStart = pickerStart + m.pickIdx
-			}
-			if m.editing && r.entry.Type == Path {
-				sug := lipgloss.NewStyle().Foreground(pal.Secondary)
-				for _, s := range m.suggest.lines() {
-					lines = append(lines, clip.Render(sug.Render(s)))
-				}
-			}
-			selEnd = len(lines) - 1
-		}
 	}
 	if m.filter != "" {
 		if note := m.customPagesNote(); note != "" {
@@ -323,11 +403,11 @@ func (m *Model) renderForm(w, h int) string {
 		}
 	}
 	if m.followForm {
-		m.formOff = follow(m.formOff, selStart, selEnd, len(lines), listH)
+		m.formOff = follow(m.formOff, m.sel, m.sel, len(lines), h)
 		m.followForm = false
 	}
-	m.formOff = clamp(m.formOff, 0, maxOff(len(lines), listH))
-	end := m.formOff + listH
+	m.formOff = clamp(m.formOff, 0, maxOff(len(lines), h))
+	end := m.formOff + h
 	if end > len(lines) {
 		end = len(lines)
 	}
@@ -340,99 +420,126 @@ func (m *Model) renderForm(w, h int) string {
 	if end < len(lines) && len(out) > 0 {
 		out[len(out)-1] = clip.Render(ind.Render(" ▼ more"))
 	}
-	if h > detailLines {
-		for len(out) < listH {
-			out = append(out, "")
-		}
-		for _, d := range m.renderDetail(w) {
-			out = append(out, clip.Render(d))
-		}
-	}
-	return strings.Join(out, "\n")
+	return strings.Join(padTo(out, h), "\n")
 }
 
-// renderDetail renders the pinned footer (#535): the selected entry's
-// description and key, word-wrapped over a constant detailLines lines (#549)
-// — long help stays readable instead of clipping at the column edge. A
-// validation error takes the first line; the wrapped description continues
-// below it. The result always has exactly detailLines entries so the footer
-// height never shifts the list.
-func (m *Model) renderDetail(w int) []string {
-	out := make([]string, 0, detailLines)
+// renderDetailColumn renders the third column (#1295). It is never blank: with
+// the rail focused — or with nothing selectable — it explains the category, so
+// browsing pages already teaches what they are for; otherwise it carries the
+// selected entry's documentation, its provenance and its editor.
+func (m *Model) renderDetailColumn(w, h int) string {
+	if h < 1 || w < 4 {
+		return ""
+	}
+	pal := m.theme()
+	clip := lipgloss.NewStyle().MaxWidth(w)
+	title := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
+	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
+
+	wrap := func(text string, style lipgloss.Style) []string {
+		var out []string
+		for _, l := range strings.Split(ansi.Wordwrap(text, w-2, ""), "\n") {
+			out = append(out, clip.Render(style.Render(" "+l)))
+		}
+		return out
+	}
+
 	r, ok := m.current()
-	if ok {
-		pal := m.theme()
-		style := lipgloss.NewStyle().Foreground(pal.Secondary)
-		if m.invalid != "" {
-			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.invalid))
-		}
-		if m.writeErr != "" {
-			out = append(out, lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.writeErr))
-		}
-		if m.notice != "" {
-			out = append(out, lipgloss.NewStyle().Foreground(pal.Info).Render(" "+m.notice))
-		}
-		text := r.entry.Description + "  (" + r.entry.Key + ")"
-		for _, line := range strings.Split(ansi.Wordwrap(text, w-1, ""), "\n") {
-			if len(out) == detailLines {
-				// Even the wrapped footer overflows: mark the cut (the
-				// clip style trims the ellipsis back into the column).
-				out[detailLines-1] += "…"
-				break
+	if !ok || r.kind != rowEntry || m.focus == catColumn {
+		return strings.Join(padTo(m.renderPageDetail(w, h, wrap, title, dim), h), "\n")
+	}
+
+	e := r.entry
+	head := []string{clip.Render(title.Render(" " + e.Title))}
+	head = append(head, wrap(e.Description, dim)...)
+	meta := e.Key + " · " + typeName(e.Type)
+	if def, hasDefault := config.Defaults()[e.Key]; hasDefault {
+		meta += " · default: " + def
+	}
+	head = append(head, wrap(meta, dim)...)
+	head = append(head, clip.Render(dim.Render(" "+strings.Repeat("─", maxInt(w-2, 1)))))
+
+	foot := m.detailFoot(e, w, clip, dim, pal)
+
+	body := []string{}
+	if m.editor != nil {
+		bodyH := h - len(head) - len(foot)
+		if bodyH > 0 {
+			body = m.editor.View(w, bodyH)
+			if len(body) > bodyH {
+				body = body[:bodyH]
 			}
-			out = append(out, style.Render(" "+line))
 		}
 	}
-	for len(out) < detailLines {
+	out := append(append([]string{}, head...), body...)
+	for len(out) < h-len(foot) {
 		out = append(out, "")
 	}
+	out = append(out, foot...)
+	return strings.Join(padTo(out, h), "\n")
+}
+
+// detailFoot renders the detail column's pinned bottom band: the write
+// feedback (clamp notice, validation and write errors, #889/#891) and where
+// the value comes from and where an edit would go.
+func (m *Model) detailFoot(e Entry, w int, clip, dim lipgloss.Style, pal *theme.Palette) []string {
+	var out []string
+	switch {
+	case m.writeErr != "":
+		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+m.writeErr)))
+	case m.notice != "":
+		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Info).Render(" "+m.notice)))
+	default:
+		out = append(out, "")
+	}
+	origin := config.Origin(m.opts, e.Key)
+	scope := "user"
+	if m.scopeFor(e) == config.ProjectScope {
+		scope = "project"
+	}
+	out = append(out, clip.Render(dim.Render(" set in "+origin+" · writes to "+scope)))
 	return out
 }
 
-// renderPicker renders the open enum dropdown under the selected row.
-func (m *Model) renderPicker(e Entry, clip lipgloss.Style) []string {
-	pal := m.theme()
-	base := lipgloss.NewStyle().Foreground(pal.Secondary)
-	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
-	cur := value(e.Key)
-	out := make([]string, 0, len(e.Options))
-	for i, o := range e.Options {
-		line := "     " + o
-		if i == m.pickIdx {
-			line = "   ▸ " + o
-		}
-		if o == cur {
-			line += " ●"
-		}
-		style := base
-		if i == m.pickIdx {
-			style = sel
-		}
-		out = append(out, clip.Render(style.Render(line)))
+// renderPageDetail is the detail column's no-selection state: the category's
+// own description plus what it contains.
+func (m *Model) renderPageDetail(w, h int, wrap func(string, lipgloss.Style) []string, title, dim lipgloss.Style) []string {
+	clip := lipgloss.NewStyle().MaxWidth(w)
+	if m.cat < 0 || m.cat >= len(m.pages) {
+		return nil
+	}
+	p := m.pages[m.cat]
+	out := []string{clip.Render(title.Render(" " + p.Title))}
+	if p.Description != "" {
+		out = append(out, wrap(p.Description, dim)...)
+	}
+	out = append(out, "")
+	switch {
+	case p.Custom != nil:
+		out = append(out, clip.Render(dim.Render(" enter opens this page")))
+	case len(p.Entries) > 0:
+		out = append(out, clip.Render(dim.Render(" "+strconv.Itoa(len(p.Entries))+" settings")))
+		out = append(out, clip.Render(dim.Render(" enter to browse them")))
 	}
 	return out
 }
 
-// affordanceValue renders a value with its widget affordance (#889): a
-// checkbox for booleans, chevrons for enums (a picker opens / ←→ cycle),
-// steppers for ints, a pencil for text-shaped rows — so the row says how it
-// is edited before enter is pressed.
+// affordanceValue renders a value with its type's marker (#1295): the suffix
+// says what enter will open — ▸ a list, ‹› a stepper, ◉ a toggle, ⌨ a capture,
+// ≡ a multi-value list, ✎ free text — so beginners do not have to guess and
+// power users read it peripherally.
 func affordanceValue(e Entry, val string) string {
-	switch e.Type {
-	case Bool:
-		if val == "true" {
-			return "[x]"
+	if e.Type == List {
+		val = strings.Trim(val, "[]")
+		val = strings.Join(splitList(val), ", ")
+		if val == "" {
+			val = "(empty)"
 		}
-		return "[ ]"
-	case Enum:
-		return "‹ " + val + " ›"
-	case Int:
-		return val + " ±"
-	case Chord:
-		return val + " ⌨"
-	default: // String, Path, List
-		return val + " ✎"
 	}
+	if e.Type == Chord && val == "" {
+		val = "(unbound)"
+	}
+	return val + " " + marker(e.Type)
 }
 
 // customPagesNote names the custom pages the filter cannot search (the ones
@@ -453,7 +560,9 @@ func (m *Model) customPagesNote() string {
 	return "   (not searched: " + strings.Join(names, ", ") + ")"
 }
 
-// renderEntry renders one form row: "Title  [page]  value  @layer".
+// renderEntry renders one settings-column row: "Title … value marker". The
+// origin badge moved into the detail column (#1295) — the marker earns that
+// space, and provenance is a detail, not a scanning cue.
 func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	pal := m.theme()
 	if r.kind != rowEntry {
@@ -475,17 +584,16 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	}
 	e := r.entry
 
-	val := affordanceValue(e, value(e.Key))
-	if selected && m.editing {
-		val = m.edit.View() // shared cursor input (#888)
-	}
-	origin := config.Origin(m.opts, e.Key)
-
 	title := " " + e.Title
 	if m.filter != "" {
 		title = " " + m.pages[r.page].Title + " › " + e.Title
 	}
-	right := val + "  @" + origin + " "
+	right := affordanceValue(e, value(e.Key)) + " "
+	// The value yields before the title does: a long list still shows its
+	// marker, and the row never overflows the fixed column.
+	if over := lipgloss.Width(title) + lipgloss.Width(right) + 1 - w; over > 0 {
+		right = ansi.Truncate(right, maxInt(lipgloss.Width(right)-over, 0), "…")
+	}
 	gap := w - lipgloss.Width(title) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
@@ -494,7 +602,7 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 
 	style := lipgloss.NewStyle()
 	switch {
-	case selected && m.focus == formColumn:
+	case selected && m.focus != catColumn:
 		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	case selected:
 		// Unfocused column: keep the selection visible but dimmed, so the
@@ -502,10 +610,17 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
 	case hovered:
 		style = style.Underline(true) // pointer affordance (#885)
-	case origin == "default":
+	case config.Origin(m.opts, e.Key) == "default":
 		style = style.Foreground(pal.Foreground)
 	default:
 		style = style.Foreground(pal.Info) // overridden values stand out
 	}
 	return style.Render(line)
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

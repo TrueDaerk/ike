@@ -39,13 +39,14 @@ func TestSchemaEditCursorInsert(t *testing.T) {
 	m.focus = formColumn
 	m.sel = 1 // editor.tab_width (Int)
 	m.Update(key("enter"))
-	if !m.editing {
-		t.Fatal("setup: edit must open")
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("setup: editor = %T, want *intEditor", m.editor)
 	}
-	m.edit = newTextField("100")
+	ed.tf = newTextField("100")
 	m.Update(key("home"))
 	m.Update(keyRune('8'))
-	if m.edit.text != "8100" || m.edit.cur != 1 {
-		t.Fatalf("mid-edit insert = %q cur %d", m.edit.text, m.edit.cur)
+	if ed.tf.text != "8100" || ed.tf.cur != 1 {
+		t.Fatalf("mid-edit insert = %q cur %d", ed.tf.text, ed.tf.cur)
 	}
 }

@@ -85,6 +85,16 @@ func Get() *Config {
 	return d
 }
 
+// Defaults renders the built-in default values as dotted string keys, before
+// any user or project layer applies (0460, #1295): the settings panel names a
+// setting's factory value next to its current one, so "what would reset give
+// me" is answerable without reading the source.
+func Defaults() map[string]string {
+	d := defaults()
+	applyExtensionDefaults(d)
+	return d.Flat()
+}
+
 // Flat renders the scalar configuration as dotted string keys. It backs the
 // read-only key/value view that internal/host exposes to plugins, keeping the
 // typed schema the single source of truth for those keys. Slot-map entries

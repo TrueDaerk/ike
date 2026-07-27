@@ -7,18 +7,21 @@ import (
 	"ike/internal/config"
 )
 
-// TestAffordanceGlyphs guards #889: each widget type announces how it edits.
+// TestAffordanceGlyphs guards #889/#1295: each type announces its editor with
+// the wireframes' value marker.
 func TestAffordanceGlyphs(t *testing.T) {
 	for _, tc := range []struct {
 		e    Entry
 		val  string
 		want string
 	}{
-		{Entry{Type: Bool}, "true", "[x]"},
-		{Entry{Type: Bool}, "false", "[ ]"},
-		{Entry{Type: Enum}, "dark", "‹ dark ›"},
-		{Entry{Type: Int}, "4", "4 ±"},
+		{Entry{Type: Bool}, "true", "true ◉"},
+		{Entry{Type: Bool}, "false", "false ◉"},
+		{Entry{Type: Enum}, "dark", "dark ▸"},
+		{Entry{Type: Int}, "4", "4 ‹›"},
 		{Entry{Type: String}, "abc", "abc ✎"},
+		{Entry{Type: Chord}, "", "(unbound) ⌨"},
+		{Entry{Type: List}, "[80 120]", "80, 120 ≡"},
 	} {
 		if got := affordanceValue(tc.e, tc.val); got != tc.want {
 			t.Errorf("affordance(%v, %q) = %q, want %q", tc.e.Type, tc.val, got, tc.want)
@@ -64,8 +67,8 @@ func TestIntCommitClampNotice(t *testing.T) {
 	m.Open()
 	m.focus = formColumn
 	m.sel = 1
-	m.Update(key("enter"))
-	m.edit = newTextField("99")
+	m.Update(key("enter")) // focus the detail column's stepper
+	m.editor.(*intEditor).tf.Set("99")
 	apply(t, m.Update(key("enter")))
 	if got := config.Get().Editor.TabWidth; got != 16 {
 		t.Fatalf("committed = %d, want 16", got)
