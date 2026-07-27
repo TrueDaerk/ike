@@ -40,7 +40,7 @@ func RestoreLastRoot(opts config.Options, cwd string) (root, notice string) {
 	// The home directory is never a real project (#1010): an accidental
 	// `ike` in ~ records it, and restoring into it points the recursive
 	// watcher at the whole home tree.
-	if home, herr := os.UserHomeDir(); herr == nil && abs == home {
+	if isHome(abs) {
 		return "", ""
 	}
 	return abs, ""
@@ -48,8 +48,14 @@ func RestoreLastRoot(opts config.Options, cwd string) (root, notice string) {
 
 // isProjectDir reports whether dir carries a project marker — a .git or .ike
 // entry — meaning a start there targets that project deliberately.
+//
+// The home directory never qualifies (#1245): ~/.ike is the user config
+// directory, so the marker would match for everyone who ever wrote a setting
+// and would suppress every restore started from ~. Dotfile repos make the same
+// true of ~/.git. Home is not a project either way — see the target-side guard
+// in RestoreLastRoot.
 func isProjectDir(dir string) bool {
-	if dir == "" {
+	if dir == "" || isHome(dir) {
 		return false
 	}
 	for _, marker := range []string{".git", ".ike"} {
@@ -58,4 +64,18 @@ func isProjectDir(dir string) bool {
 		}
 	}
 	return false
+}
+
+// isHome reports whether dir is the user's home directory. dir is cleaned
+// before comparing so a trailing separator or "." segment still matches; an
+// undiscoverable home makes this false.
+func isHome(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return false
+	}
+	return filepath.Clean(dir) == filepath.Clean(home)
 }

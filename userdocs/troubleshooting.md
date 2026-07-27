@@ -86,6 +86,11 @@ If you started it somewhere that is not a project — no `.git`, no `.ike` — a
 the current directory. Starting inside a project directory, or naming a file
 on the command line, always wins over the history.
 
+Your home directory is the exception: `~/.ike` is IKE's own config directory
+and `~/.git` may be a dotfiles repo, but neither makes `~` a project. Running
+`ike` there restores your most recent project like any other non-project
+directory.
+
 ## A setting has no effect
 
 **Check the spelling.** An unknown key is ignored rather than rejected, with a

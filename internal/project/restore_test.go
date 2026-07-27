@@ -100,6 +100,36 @@ func TestRestoreLastRootSkipsProjectCwd(t *testing.T) {
 	}
 }
 
+// #1245: ~/.ike is the user config directory, so the project marker would
+// otherwise match in every home and suppress every restore started from ~.
+func TestRestoreLastRootRestoresFromHomeWithMarkers(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, marker := range []string{".git", ".ike"} {
+		if err := os.Mkdir(filepath.Join(home, marker), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	last := t.TempDir()
+	opts := seedRestore(t, last)
+	root, notice := RestoreLastRoot(opts, home)
+	if notice != "" {
+		t.Fatalf("unexpected notice %q", notice)
+	}
+	want, _ := Validate(last)
+	if root != want {
+		t.Fatalf("home cwd must still restore: root=%q want %q", root, want)
+	}
+	// A marker outside home keeps suppressing the restore (#1010 intact).
+	cwd := t.TempDir()
+	if err := os.Mkdir(filepath.Join(cwd, ".ike"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if root, _ := RestoreLastRoot(opts, cwd); root != "" {
+		t.Fatalf("non-home .ike cwd must suppress the restore, got %q", root)
+	}
+}
+
 func TestRestoreLastRootNeverTargetsHome(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {

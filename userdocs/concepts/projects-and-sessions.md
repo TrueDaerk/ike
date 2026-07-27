@@ -22,7 +22,9 @@ With `project.restore_last` turned on (it is off by default), running `ike`
 from a directory that is *not* a project — no `.git`, no `.ike` — reopens your most recent project
 instead. Inside a project directory that never happens: an explicit checkout
 always wins over the history. Passing a file or a pipe on the command line
-also counts as explicit.
+also counts as explicit. Your home directory never counts as a project, even
+though `~/.ike` (IKE's config directory) and a dotfiles `~/.git` live there —
+`ike` in `~` restores your most recent project.
 
 **Switch project** (++cmd+shift+p++) moves to another workspace without
 restarting, offering your recent-projects history. Unsaved changes are guarded

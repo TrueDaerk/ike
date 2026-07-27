@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-27 (restore last project: home is not a project marker)
+
+- `project.restore_last` never fired from `$HOME` (#1245): `isProjectDir`
+  treats a `.ike` entry as a project marker, but `~/.ike` is the user config
+  directory — present for everyone who ever wrote a setting — so the cwd guard
+  from #1010 suppressed every restore started in the home directory. Home is
+  now exempt from the marker rule on the cwd side, matching the existing
+  target-side guard (`/architecture/project-switching.md`).
+
 ## 2026-07-27 (float resize drag: edge tracks the pointer)
 
 - Mouse resize of centered floats (#933) doubled its pointer-to-size mapping
