@@ -39,6 +39,7 @@ import (
 	"ike/internal/finder"
 	"ike/internal/help"
 	"ike/internal/highlight"
+	"ike/internal/histories"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/keymap"
@@ -46,10 +47,9 @@ import (
 	"ike/internal/largefile"
 	"ike/internal/layout"
 	"ike/internal/localhistory"
-	"ike/internal/histories"
-	"ike/internal/marks"
 	ilsp "ike/internal/lsp"
 	"ike/internal/market"
+	"ike/internal/marks"
 	"ike/internal/menu"
 	"ike/internal/nav"
 	"ike/internal/overlay"
@@ -260,7 +260,7 @@ type Model struct {
 	// flight (#1001). See hover_idle.go.
 	hoverIdle          mouseHoverState
 	hoverIdleTickArmed bool
-	autosaveIdleIv        time.Duration
+	autosaveIdleIv     time.Duration
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
@@ -647,11 +647,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	bookmarks := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{} // shared before the literal: the reverts picker mode reads it
-	layoutsPicker := newLayoutsMode(layoutNames) // saved window layouts picker (#1175)
-	cmdUsage := palette.LoadUsage(usageFile())     // most-used ranking (#773)
-	winSizes := ui.LoadWinSizes(winSizeFile())     // resizable floats (#774)
-	wsMgr := wsManager(mgr, resumed, root, panes)  // hoisted: the palette's recent-projects sources read it (#820)
+	vcsSt := &vcsState{}                          // shared before the literal: the reverts picker mode reads it
+	layoutsPicker := newLayoutsMode(layoutNames)  // saved window layouts picker (#1175)
+	cmdUsage := palette.LoadUsage(usageFile())    // most-used ranking (#773)
+	winSizes := ui.LoadWinSizes(winSizeFile())    // resizable floats (#774)
+	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	m := Model{
 		cmdUsage:       cmdUsage,
 		winSizes:       winSizes,
@@ -722,6 +722,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
 	pages := settings.BasePages(themeNames(reg))
+	// The [theme.captures] editor (#1238) belongs with the theme picker.
+	pages = settings.InsertAfter(pages, "Appearance", settings.Page{
+		Title:  "Syntax Colors",
+		Custom: settings.NewColorsPage(m.cfgOpts),
+	})
 	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok

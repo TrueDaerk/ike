@@ -1,5 +1,18 @@
 # Log
 
+## 2026-07-28 (settings: syntax colours page)
+
+- Single highlight colours are editable in the UI (#1238). A new **Syntax
+  Colors** page, behind Appearance in the CORE section, lists every capture the
+  active theme defines plus the six rainbow slots plus anything a config layer
+  names — each with a swatch painted in the colour that actually resolves, the
+  token in use and an override marker. `enter` picks from the named colours,
+  `e` types a hex or ANSI token (validated before it is written), `r` restores
+  the theme's own. Writes go straight to `theme.captures.<name>` at user scope,
+  so the open editors recolour immediately. Updated
+  [Settings UI & Menu Bar](/architecture/settings-ui.md) and
+  [Themes](/architecture/themes.md).
+
 ## 2026-07-28 (config: theme.captures was documented but dead)
 
 - Per-capture colour overrides were documented in two wiki pages and read by

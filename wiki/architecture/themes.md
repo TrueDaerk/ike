@@ -89,6 +89,10 @@ Two things follow from capture names containing dots (`constant.builtin`,
   grammar-specific `function.builtin`. `NewTheme` (no enumeration) is the
   fallback for consumers without a config, e.g. the response viewer.
 
+`[theme.captures]` has a settings UI: **Settings → Syntax Colors** (#1238) lists
+every capture with a swatch, marks the overridden ones and writes user-scope
+overrides — see [Settings UI](./settings-ui.md).
+
 **Colour tokens are validated.** `theme.ValidToken` accepts a name from
 `theme.Names()`, a `#rgb`/`#rrggbb` hex literal or an ANSI index 0–255;
 anything else is dropped from `theme.captures` with a diagnostic, because
