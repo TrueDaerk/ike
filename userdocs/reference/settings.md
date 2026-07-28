@@ -91,6 +91,7 @@ Settings, or run `settings.open` from the palette.
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Restore last project | `project.restore_last` | boolean | `false` | user | Reopen the previous project's workspace on start |
+| Project directory | `project.directory` | string | `~/IkeProjects` | user | Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use |
 | Watch files | `files.watch` | boolean | `true` | user | Report external file changes (fsnotify on the project root) |
 | Auto reload | `files.auto_reload` | enum: `clean`, `never` | `clean` | user | Reload clean buffers when their file changes on disk |
 | Persistent undo | `files.persistent_undo` | boolean | `true` | user | Keep undo history across restarts while the file is unchanged |

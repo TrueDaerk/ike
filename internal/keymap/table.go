@@ -1,6 +1,9 @@
 package keymap
 
-import "fmt"
+import (
+	"fmt"
+	"sort"
+)
 
 // BindingTable is the effective, platform-normalised binding set: defaults
 // overlaid by config overrides, with same-chord+context conflicts resolved at
@@ -12,11 +15,17 @@ type BindingTable struct {
 }
 
 // BuildTable builds the effective table from a default set and a merged override
-// map (chord string → command id; "" unbinds). Overrides arrive already merged
+// map (binding key → command id; "" unbinds). Overrides arrive already merged
 // by config precedence (defaults < user < project), so each non-empty entry is
 // treated as a user/project layer that replaces matching default chords. Chords
 // are normalised for goos once here. Unparseable override keys are skipped as
 // diagnostics (the focus_* config stopgap lives in the same map and is ignored).
+//
+// A key is either a bare chord ("ctrl+s"), which applies in every context the
+// defaults bind it in, or a context-qualified chord ("editor.ctrl+s", #1312),
+// which touches that one context only — the config spelling behind "keep both,
+// resolve by context". Unqualified keys are applied first and qualified ones
+// after, so the narrower statement wins whatever the map order was.
 func BuildTable(defaults []Binding, overrides map[string]string, goos string) *BindingTable {
 	var diags []string
 	// Start from normalised defaults.
@@ -25,30 +34,48 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 		b.Chord = NormalizeChord(b.Chord, goos)
 		bindings = append(bindings, b)
 	}
-	for raw, cmd := range overrides {
-		chord, err := ParseChord(raw)
+	var bare, qualified []string
+	for raw := range overrides {
+		key, err := ParseOverrideKey(raw)
 		if err != nil {
 			diags = append(diags, fmt.Sprintf("keymap: ignoring override key %q: %v", raw, err))
 			continue
 		}
-		chord = NormalizeChord(chord, goos)
+		if key.Qualified {
+			qualified = append(qualified, raw)
+		} else {
+			bare = append(bare, raw)
+		}
+	}
+	sort.Strings(bare)
+	sort.Strings(qualified)
+	for _, raw := range append(bare, qualified...) {
+		key, _ := ParseOverrideKey(raw) // re-parse: the erroring keys are gone
+		cmd := overrides[raw]
+		chord := NormalizeChord(key.Chord, goos)
 		cs := chord.String()
+		// An unqualified key matches the chord in any context; a qualified one
+		// matches only its own.
+		matches := func(b Binding) bool {
+			return b.Chord.String() == cs && (!key.Qualified || b.Context == key.Context)
+		}
 		if cmd == "" {
-			// Unbind: drop every binding with this chord, any context.
+			// Unbind: drop the matching bindings.
 			filtered := bindings[:0:0]
 			for _, b := range bindings {
-				if b.Chord.String() != cs {
+				if !matches(b) {
 					filtered = append(filtered, b)
 				}
 			}
 			bindings = filtered
 			continue
 		}
-		// Rebind: replace the command on matching default chords (keeping their
-		// context); if none exist, add a new Global override binding.
+		// Rebind: replace the command on matching bindings (keeping their
+		// context); if none exist, add a new override binding in the key's
+		// context — Global for the unqualified form.
 		replaced := false
 		for i := range bindings {
-			if bindings[i].Chord.String() == cs {
+			if matches(bindings[i]) {
 				bindings[i].Command = cmd
 				bindings[i].Layer = LayerUser
 				replaced = true
@@ -58,7 +85,7 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 			bindings = append(bindings, Binding{
 				Chord:   chord,
 				Command: cmd,
-				Context: Global,
+				Context: key.Context,
 				Title:   cmd,
 				Owner:   "user",
 				Layer:   LayerUser,

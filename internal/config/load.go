@@ -27,7 +27,64 @@ func decodeFile(path string) (map[string]any, error) {
 	if err := toml.Unmarshal(data, &raw); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	flattenSlotMaps(raw)
 	return raw, nil
+}
+
+// slotMapPaths are the tables whose keys are single map keys rather than paths
+// of nested tables (the write-back side of the same rule lives in
+// slotMapPrefixes). TOML's grammar invites writing a dotted map key as a
+// sub-table — `[keymap.bindings.editor]` for `"editor.ctrl+s"` (#1312), or
+// `[theme.captures.constant]` for `"constant.builtin"` — which would otherwise
+// fail to decode into a map[string]string.
+var slotMapPaths = [][]string{
+	{"theme", "captures"},
+	{"explorer", "colors"},
+	{"keymap", "bindings"},
+}
+
+// flattenSlotMaps rewrites nested sub-tables inside the slot maps of raw into
+// dotted keys, in place, so both spellings decode identically. It runs per
+// layer, before the merge, so a nested table in one layer and the equivalent
+// dotted key in another still merge key by key.
+func flattenSlotMaps(raw map[string]any) {
+	for _, path := range slotMapPaths {
+		cur := raw
+		for _, p := range path[:len(path)-1] {
+			child, ok := cur[p].(map[string]any)
+			if !ok {
+				cur = nil
+				break
+			}
+			cur = child
+		}
+		if cur == nil {
+			continue
+		}
+		slot, ok := cur[path[len(path)-1]].(map[string]any)
+		if !ok {
+			continue
+		}
+		cur[path[len(path)-1]] = flattenTable("", slot)
+	}
+}
+
+// flattenTable returns t with every nested sub-table folded into dotted keys.
+// Non-table values are carried over untouched, so an ill-typed entry still
+// reaches the decoder and is reported there rather than dropped here.
+func flattenTable(prefix string, t map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range t {
+		key := prefix + k
+		if sub, ok := v.(map[string]any); ok {
+			for kk, vv := range flattenTable(key+".", sub) {
+				out[kk] = vv
+			}
+			continue
+		}
+		out[key] = v
+	}
+	return out
 }
 
 // decodeOnto overlays the merged override map onto dst (which already holds the

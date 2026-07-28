@@ -320,6 +320,12 @@ type Explorer struct {
 
 // Keymap selects a binding preset and carries per-action overrides. Bindings is
 // a slot filled by Roadmap 0080.
+// A binding key is a chord ("ctrl+s") or, since #1312, a chord qualified by
+// the context it applies in ("editor.ctrl+s") — the config spelling that lets
+// one chord run different commands in different panes. The keymap package
+// parses the keys; this map only carries them, and the nested TOML spelling
+// ([keymap.bindings.editor]) is flattened into it before decoding (see
+// flattenSlotMaps).
 type Keymap struct {
 	Preset   string            `toml:"preset"`
 	Bindings map[string]string `toml:"bindings"`

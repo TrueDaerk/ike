@@ -479,3 +479,38 @@ func TestSlotKeyLeavesRoundTrip(t *testing.T) {
 		t.Fatal("removing one leaf must not disturb its siblings")
 	}
 }
+
+// TestNestedSlotTableFlattensToDottedKey (0460, #1312): a context-qualified
+// binding may be written as a sub-table — TOML's own spelling for a dotted map
+// key — and must decode to exactly the same map entry as the quoted form.
+func TestNestedSlotTableFlattensToDottedKey(t *testing.T) {
+	proj := writeProject(t, "[keymap.bindings.editor]\n\"ctrl+g\" = \"editor.cmd\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unknown setting") {
+			t.Fatalf("the nested spelling must not warn: %+v", d)
+		}
+	}
+	if got := c.Keymap.Bindings["editor.ctrl+g"]; got != "editor.cmd" {
+		t.Fatalf("bindings = %v, want editor.ctrl+g → editor.cmd", c.Keymap.Bindings)
+	}
+	// It is exposed flat under the same key the write-back layer uses.
+	if got := c.Flat()["keymap.bindings.editor.ctrl+g"]; got != "editor.cmd" {
+		t.Fatalf("flat key = %q", got)
+	}
+}
+
+// TestNestedAndDottedBindingSpellingsMerge: the two spellings are the same key,
+// so one layer may use either and still merge key by key with the other.
+func TestNestedAndDottedBindingSpellingsMerge(t *testing.T) {
+	user := writeUser(t, "[keymap.bindings.editor]\n\"ctrl+g\" = \"editor.one\"\n\"ctrl+h\" = \"editor.two\"\n")
+	proj := writeProject(t, "[keymap.bindings]\n\"editor.ctrl+g\" = \"editor.override\"\n")
+	c, _ := Load(Options{UserPath: user, ProjectRoot: proj})
+
+	if got := c.Keymap.Bindings["editor.ctrl+g"]; got != "editor.override" {
+		t.Errorf("project layer should win: %q", got)
+	}
+	if got := c.Keymap.Bindings["editor.ctrl+h"]; got != "editor.two" {
+		t.Errorf("the user-only key should survive: %q", got)
+	}
+}

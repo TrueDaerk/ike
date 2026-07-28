@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-28T00:00:00Z
+timestamp: 2026-07-28T18:00:00Z
 ---
 
 # Configuration System
@@ -45,6 +45,12 @@ map is decoded onto the defaults-filled struct (`load.go`):
   key-by-key; a higher layer adds/overrides individual keys, lower keys survive.
 - **Lists** (`project.history`): **replace by default**, never append — appending
   is surprising for bounded/ordered lists.
+- **Slot maps whose keys contain dots** (`theme.captures`, `explorer.colors`,
+  `keymap.bindings`): a key may be written quoted (`"editor.ctrl+g" = …`) or as
+  the sub-table TOML's grammar suggests (`[keymap.bindings.editor]`). Nested
+  sub-tables inside those slots are flattened into dotted keys **per layer,
+  before the merge** (`flattenSlotMaps` in `load.go`, #1312), so the two
+  spellings are the same key and still merge key by key across layers.
 
 ## Validation: clamp, then warn
 
@@ -82,6 +88,8 @@ Sections and their default-bearing slots (`schema.go`):
   (autoscroll from source, default `false`, #1042), plus an empty
   `[explorer.colors]` slot (Roadmap 0050 fills entries).
 - `[keymap]` — `preset` + an empty `[keymap.bindings]` slot (Roadmap 0080).
+  Keys are chords (`"ctrl+s"`), optionally qualified by the context they apply
+  in (`"editor.ctrl+s"`, or the sub-table `[keymap.bindings.editor]`, #1312).
 - `[lsp]` — enabled, log-level, `inlay_hints` (default `false`, #523),
   `signature_auto` (default `true`, #523), `completion_auto` (default `true`,
   #527) + an empty `[lsp.servers]` slot (Roadmap 0100).

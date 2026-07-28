@@ -1,5 +1,27 @@
 # Log
 
+## 2026-07-28 (keymap: context-qualified overrides — "keep both, resolve by context")
+
+- `keymap.bindings` keys may now carry a context qualifier — `"editor.ctrl+g"`,
+  or the equivalent sub-table `[keymap.bindings.editor]` (#1312). A qualified
+  key binds (or unbinds, with `""`) the chord in that pane only; the bare form
+  keeps applying wherever the chord is bound. Qualifiers are `global`, `editor`,
+  `explorer`, `palette`, `diff`; anything else parses as part of the chord, so
+  dotted chords (`cmd+.`) are unaffected. Qualified keys are applied after bare
+  ones, so the narrower statement wins deterministically.
+- The config package flattens nested slot-map sub-tables into dotted keys per
+  layer before merging (`flattenSlotMaps`), so both spellings are one key and
+  still merge across layers.
+- The keymap page's conflict dialog offers **Keep both, resolve by context**
+  (`b`) when the two commands are pane-scoped in different panes, and hides it
+  when either is global. The conflict check now also reports a collision in a
+  non-overlapping context — a bare rebind would have taken that chord silently.
+  `u` unbinds through the qualified key when a chord is shared, `r` resets
+  whichever key carries the override.
+- The detail column lists both sides of a shared chord with their contexts and
+  reports `↔ … resolved by context` (no replacement suggestions) when they
+  cannot overlap.
+
 ## 2026-07-28 (project: clone a repository into the project directory)
 
 - `project.clone` ("Clone Repository…", File menu + palette, #1349) opens a

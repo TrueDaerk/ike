@@ -122,7 +122,7 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 	bound := k.bindingsFor(b.Command)
 	lines = append(lines, clip.Render(dim.Render(" bindings · "+strconv.Itoa(len(bound)))))
 	for _, bb := range bound {
-		row := " " + pad(bb.Chord.String(), 18) + pad(string(bb.Context), 9) + "@" + bb.Layer.String()
+		row := " " + pad(bb.Chord.String(), 18) + pad(keymap.ContextName(bb.Context), 9) + "@" + bb.Layer.String()
 		style := lipgloss.NewStyle().Foreground(pal.Foreground)
 		if bb.Layer != keymap.LayerDefault {
 			style = lipgloss.NewStyle().Foreground(pal.Info)
@@ -134,12 +134,27 @@ func (k *KeymapPage) renderDetail(w, h int) string {
 	}
 
 	if others := k.collisions(b); len(others) > 0 {
+		// Both sides of a shared chord are listed with their context (#1312):
+		// when the contexts never overlap the chord is not a conflict at all
+		// but a deliberate "keep both", and saying so beats a bare warning.
+		separated := true
 		names := make([]string, 0, len(others))
 		for _, o := range others {
 			names = append(names, o.Command)
+			if !separableContexts(b.Context, o.Context) {
+				separated = false
+			}
 		}
-		lines = append(lines, clip.Render(warn.Render(" ⚠ "+b.Chord.String()+" also runs "+strings.Join(names, ", "))))
-		if free := k.suggestChords(2); len(free) > 0 {
+		head, style := " ⚠ "+b.Chord.String()+" also runs "+strings.Join(names, ", "), warn
+		if separated {
+			head, style = " ↔ "+b.Chord.String()+" is shared, resolved by context", ok
+		}
+		lines = append(lines, clip.Render(style.Render(head)))
+		lines = append(lines, clip.Render(dim.Render("   "+pad(b.Command, 22)+keymap.ContextName(b.Context))))
+		for _, o := range others {
+			lines = append(lines, clip.Render(dim.Render("   "+pad(o.Command, 22)+keymap.ContextName(o.Context)+" @"+o.Layer.String())))
+		}
+		if free := k.suggestChords(2); len(free) > 0 && !separated {
 			lines = append(lines, clip.Render(dim.Render(" free: "+strings.Join(free, " · "))))
 		}
 	} else if !b.unbound && !b.nobind {

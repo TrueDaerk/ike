@@ -739,3 +739,115 @@ func TestCaptureUnrecordableKeyWarns(t *testing.T) {
 		t.Fatalf("unrecordable key must warn, warn = %q", c.warn)
 	}
 }
+
+// --- context-qualified overrides (0460, #1312) ---
+
+// TestConflictOffersKeepBothWhenContextsAreDisjoint: two pane-scoped commands
+// can share a chord, so the dialog offers the third resolution — and hides it
+// when either side is global and would shadow the other.
+func TestConflictOffersKeepBothWhenContextsAreDisjoint(t *testing.T) {
+	k, _ := keymapPage(t)
+	host := &stubHost{}
+	host.stack = append(host.stack, nil) // the capture level itself
+	c := newKeymapCapture(k, host, keymapRow{Binding: keymap.Binding{
+		Command: "editor.write", Context: keymap.Editor,
+	}})
+	c.conflict = "explorer.delete"
+	c.other = keymap.Binding{Command: "explorer.delete", Context: keymap.Explorer}
+
+	if !c.canKeepBoth() {
+		t.Fatal("editor vs explorer must be separable by context")
+	}
+	labels := map[string]bool{}
+	for _, btn := range c.Buttons() {
+		labels[btn.Label] = true
+	}
+	if !labels["Keep both, resolve by context"] {
+		t.Fatalf("conflict buttons = %v, want the keep-both option", labels)
+	}
+	// A global counterpart matches in every pane: keeping both would just
+	// shadow one of them, so the option is hidden.
+	c.other = keymap.Binding{Command: "app.quit", Context: keymap.Global}
+	if c.canKeepBoth() {
+		t.Fatal("a global binding overlaps every context")
+	}
+	for _, btn := range c.Buttons() {
+		if btn.Label == "Keep both, resolve by context" {
+			t.Fatal("the keep-both option must be hidden for overlapping contexts")
+		}
+	}
+}
+
+// TestKeepBothWritesContextQualifiedOverride: taking "keep both" writes the
+// context-qualified key, and both commands stay reachable — each in its pane.
+func TestKeepBothWritesContextQualifiedOverride(t *testing.T) {
+	k, opts := keymapPage(t)
+	// An explorer-only command on an otherwise free chord, to collide with.
+	free := k.suggestChords(1)[0]
+	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+free, "explorer.thing"))
+
+	b := selectChord(t, k, "ctrl+s") // an editor-scoped command
+	if b.Context != keymap.Editor {
+		t.Fatalf("ctrl+s should be editor-scoped, got %q", b.Context)
+	}
+	c := newKeymapCapture(k, k.host.(*stubHost), keymapRow{Binding: b})
+	c.steps = keymap.MustParseChord(free).Steps
+	if cmd := c.confirm(); cmd != nil {
+		t.Fatal("the collision must wait for a decision")
+	}
+	if !c.canKeepBoth() {
+		t.Fatalf("editor vs explorer must be separable, other = %+v", c.other)
+	}
+	apply(t, c.keepBoth())
+
+	table := k.table()
+	if nb, ok := table.Lookup(keymap.MustParseChord(free), keymap.Editor); !ok || nb.Command != b.Command {
+		t.Fatalf("editor %s = %+v ok=%v, want %s", free, nb, ok, b.Command)
+	}
+	if nb, ok := table.Lookup(keymap.MustParseChord(free), keymap.Explorer); !ok || nb.Command != "explorer.thing" {
+		t.Fatalf("explorer %s = %+v ok=%v, want the untouched explorer.thing", free, nb, ok)
+	}
+	if got := config.Origin(opts, "keymap.bindings.editor."+free); got != "user" {
+		t.Fatalf("the qualified override must persist, origin = %q", got)
+	}
+	// The rebound command's old chord is released in its context only.
+	if _, ok := table.Lookup(keymap.MustParseChord("ctrl+s"), keymap.Editor); ok {
+		t.Fatal("the old chord must be unbound for the rebound command")
+	}
+}
+
+// TestDetailShowsBothBindingsWithContexts: a chord shared by two contexts is
+// reported as resolved-by-context, naming both commands and their panes.
+func TestDetailShowsBothBindingsWithContexts(t *testing.T) {
+	k, opts := keymapPage(t)
+	b := selectChord(t, k, "ctrl+s")
+	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
+	selectChord(t, k, "ctrl+s")
+
+	v := k.View(130, 40)
+	for _, want := range []string{"resolved by context", "explorer.thing", "explorer", "editor"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("detail column missing %q:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "free:") {
+		t.Fatalf("a context-resolved chord needs no replacement suggestions:\n%s", v)
+	}
+}
+
+// TestUnbindOfASharedChordSparesTheOtherContext: "u" on one half of a
+// keep-both pair writes the qualified unbind, so the other half survives.
+func TestUnbindOfASharedChordSparesTheOtherContext(t *testing.T) {
+	k, opts := keymapPage(t)
+	b := selectChord(t, k, "ctrl+s")
+	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
+	selectChord(t, k, "ctrl+s")
+	apply(t, unbind(t, k))
+
+	if _, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Editor); ok {
+		t.Fatal("the editor binding must be gone")
+	}
+	if nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Explorer); !ok || nb.Command != "explorer.thing" {
+		t.Fatalf("explorer ctrl+s = %+v ok=%v, want explorer.thing untouched", nb, ok)
+	}
+}
