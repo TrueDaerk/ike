@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-28T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -249,8 +249,13 @@ word **case-insensitively** (#968, like every other typed search in the UI);
 an exact-prefix candidate strictly extends the typed word, so **accepting
 (enter/tab) pastes just the remainder** through the bracketed-paste path,
 while a candidate matching only case-insensitively erases the typed word
-with backspaces and pastes the canonical spelling (`mak` → `Makefile`). A
-directory re-arms the popup to keep descending. `ctrl+space` opens the popup on demand
+with backspaces and pastes the canonical spelling (`mak` → `Makefile`).
+Accepting always **ends** the interaction, directories included (#1335) — the
+popup closes and the pending refresh is cleared, so the echo of the pasted
+remainder cannot reopen it and the next enter submits the command line
+(`cd an` → tab → enter runs `cd ansible/`, it does not insert
+`ansible/ansible.cfg`). Typing on, or `ctrl+space`, completes inside the
+accepted directory. `ctrl+space` opens the popup on demand
 (empty word shows everything); **auto-suggest** re-arms on every printable
 key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-28 (terminal: accepting a completion ends the interaction)
+
+- Tab-accepting a **directory** in the completion popup re-opened the popup on
+  that directory's contents with the first entry preselected, so the next
+  enter — the natural key to run the command — inserted that entry instead of
+  submitting: `cd an` → tab → enter became `cd ansible/ansible.cfg` (#1335).
+  Accepting now always closes the popup and clears the pending auto-suggest
+  refresh, so the echo of the pasted remainder cannot reopen it either.
+  Continued typing (or `ctrl+space`) still completes inside the accepted
+  directory. Updated [Integrated Terminal](/architecture/terminal.md).
+
 ## 2026-07-28 (php debug: the listener stops losing requests)
 
 - With "listen for connections" active most requests passed through without

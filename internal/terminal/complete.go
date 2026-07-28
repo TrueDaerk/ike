@@ -158,10 +158,18 @@ func sameItems(a, b []string) bool {
 // typed); a candidate matching only case-insensitively (#968) erases the
 // typed word with backspaces first and pastes the candidate in its canonical
 // case, so `mak` accepting `Makefile` lands as Makefile, not makMakefile.
-// A directory keeps suggesting its children.
+//
+// Accepting always ends the completion interaction, directories included
+// (#1335): re-opening the popup on the accepted directory's contents left a
+// preselected entry under the very next Enter, so `cd an` → tab → enter ran
+// `cd ansible/ansible.cfg` instead of submitting `cd ansible/`. The pending
+// refresh is cleared too — the pasted remainder echoes back through OnOutput,
+// which would otherwise reopen the popup for the accepted word. Typing on (or
+// ctrl+space) completes inside the accepted directory as usual.
 func (m *Model) acceptCompletion() {
 	c := m.comp
 	m.comp = completion{}
+	m.pendingSuggest = false
 	if c.sel >= len(c.items) {
 		return
 	}
@@ -178,9 +186,6 @@ func (m *Model) acceptCompletion() {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
 		m.sess.Paste(item)
-	}
-	if strings.HasSuffix(item, "/") {
-		m.pendingSuggest = true // keep completing into the directory
 	}
 }
 
