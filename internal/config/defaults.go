@@ -145,6 +145,9 @@ func defaults() *Config {
 			History:     []ProjectHistoryEntry{},
 			MaxHistory:  20,
 			RestoreLast: false,
+			// The visible default mirrors JetBrains' ~/IdeaProjects; it is
+			// only materialised when a feature needs it (project.clone).
+			Directory: "~/IkeProjects",
 		},
 		Palette: Palette{
 			MaxResults:  12,

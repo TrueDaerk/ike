@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-28 (project: a project directory setting)
+
+- `[project] directory` (default `~/IkeProjects`, #1348) names the default
+  parent for projects IKE creates itself. `project.ProjectsDir` resolves it
+  (`~` expansion, absolute, cleaned) and `EnsureDirectory` creates it on
+  demand; the setting is editable under Settings → Files & Session.
+
 ## 2026-07-28 (docs: screenshots for the high-contrast themes)
 
 - The README theme grid and the "twenty-six themes" counts now cover

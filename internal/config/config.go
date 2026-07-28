@@ -183,6 +183,7 @@ func (c *Config) Flat() map[string]string {
 	put("project.max_history", c.Project.MaxHistory)
 	put("project.restore_last", c.Project.RestoreLast)
 	put("project.max_workspaces", c.Project.MaxWorkspaces)
+	put("project.directory", c.Project.Directory)
 	paths := make([]string, len(c.Project.History))
 	for i, e := range c.Project.History {
 		paths[i] = e.Path

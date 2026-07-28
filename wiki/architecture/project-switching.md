@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-28T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -50,6 +50,20 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   everyone who ever wrote a setting and would suppress every restore started
   from `~` — dotfile repos make the same true of `~/.git`. Home is not a
   project on either side of the check.
+
+## Project directory (#1348)
+
+- **`[project] directory`** (default `~/IkeProjects`) is the default parent for
+  projects IKE creates itself — JetBrains' `~/IdeaProjects`. It is *not* the
+  place projects are opened from: opening and switching still take any path.
+- `ProjectsDir` (`directory.go`) resolves the setting to an absolute, cleaned
+  path: a leading `~` expands, a relative value resolves against the working
+  directory, an empty value selects `~/IkeProjects`. The path need not exist.
+- `EnsureDirectory` creates it (0755, parents included) **on demand** — only a
+  feature that places a project there calls it, never startup. An existing
+  directory is left alone; a file at the path is an error rather than a
+  silently reused target.
+- Settings UI: "Files & Session" → *Project directory* (user scope).
 
 ## Command & picker (#12)
 

@@ -380,6 +380,12 @@ type Project struct {
 	// least-recently-used one (with a confirm when unsaved buffers or
 	// running processes would die). <=0 selects the default (3).
 	MaxWorkspaces int `toml:"max_workspaces"`
+	// Directory is the default parent for projects IKE creates itself —
+	// today the clone target of project.clone (#1349), mirroring JetBrains'
+	// ~/IdeaProjects. A leading `~` is expanded; empty selects the built-in
+	// default (~/IkeProjects). The directory is created on first use, never
+	// at startup. internal/project owns the resolution (ProjectsDir).
+	Directory string `toml:"directory"`
 }
 
 // ProjectHistoryEntry is one recently opened project as persisted in
