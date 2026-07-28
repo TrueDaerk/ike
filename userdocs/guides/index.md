@@ -15,6 +15,9 @@ Task-oriented pages, one per feature area.
   inline blame — and why the Git *workflow* is delegated to a tool pane.
 - **[Running and debugging](run-and-debug.md)** — run configurations, tests,
   where output goes, breakpoints, stepping, and PHP/Xdebug.
+- **[The HTTP client](http-client.md)** — `.http` files in the repository,
+  running the request under the cursor, and the response viewer with its
+  per-request history.
 - **[Scratch files and snippets](scratch-and-snippets.md)** — throwaway
   buffers that outlive the session, and live templates.
 - **[Customising IKE](customising.md)** — settings, rebinding keys, importing

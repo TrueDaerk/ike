@@ -91,6 +91,29 @@ auto-save deliberately never reformats under you:
 | `editor.format_on_save` | Runs the server's formatter before writing |
 | `editor.organize_imports_on_save` | Applies the organize-imports action before writing |
 
+## Toolchains
+
+The **Toolchain** settings page is where the interpreter or SDK per language
+is decided. Run, debug and the language server all read that one answer.
+
+Rows group by state, so the page shows the situation rather than a flat list:
+`configured`, `detected · not configured`, and a folded `not installed · n`
+caption you open with `z`. Selecting a language fills the detail column with
+the candidates actually discovered for it — an active venv, a project
+`.venv`, `uv python list`, pyenv shims, Homebrew and other versioned install
+directories, PATH — each with its provenance and probed version, the one in
+use marked `●`, and *enter a path manually…* as the last entry. While the scan
+runs it says `scanning…`.
+
+On a fresh machine, the column starts with the point of the page and
+`a · accept all n recommendations`: one key writes every detected interpreter
+in a single batch instead of walking you through a picker per language.
+
+A choice is written to the **project** config and restarts the language
+servers against the new interpreter; `r` goes back to detection. Python rows
+additionally offer `p` (probe the version), `i` (installed packages, with
+install/uninstall/upgrade) and `n` (the guided new-environment wizard).
+
 ## When something does not work
 
 **No diagnostics, no completion, nothing.** The server for that language is
