@@ -705,3 +705,37 @@ func TestShortRunsDoNotFold(t *testing.T) {
 		t.Fatal("an all-digit string has no prefix to fold on")
 	}
 }
+
+// TestCapturePlusChord guards #1331: a "+" press records like any other key
+// and the written binding parses back, instead of leaving the field empty.
+func TestCapturePlusChord(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	c := capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Code: '+', Mod: tea.ModSuper}) // cmd++
+	if got := c.chord().String(); got != "cmd++" {
+		t.Fatalf("captured chord = %q, want %q", got, "cmd++")
+	}
+	apply(t, c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
+	nb, ok := k.table().Lookup(keymap.MustParseChord("cmd++"), keymap.Global)
+	if !ok || nb.Command != "editor.write" {
+		t.Fatalf("cmd++ must resolve to editor.write, got %+v ok=%v", nb, ok)
+	}
+}
+
+// TestCaptureUnrecordableKeyWarns guards #1331: a press the chord format
+// cannot carry is reported, never silently dropped.
+func TestCaptureUnrecordableKeyWarns(t *testing.T) {
+	k, _ := keymapPage(t)
+	selectChord(t, k, "ctrl+s")
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	c := capturePanel(t, k)
+	c.Update(tea.KeyPressMsg{Text: "a_b", Code: 'a'}) // underscore bases are rejected
+	if len(c.steps) != 0 {
+		t.Fatalf("unrecordable key must not become a step: %+v", c.steps)
+	}
+	if c.warn == "" || !strings.Contains(c.View(120, 10), "⚠") {
+		t.Fatalf("unrecordable key must warn, warn = %q", c.warn)
+	}
+}

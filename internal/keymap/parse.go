@@ -73,8 +73,16 @@ func MustParseChord(s string) Chord {
 func ParseKey(s string) (Key, error) {
 	parts := strings.Split(s, "+")
 	base := parts[len(parts)-1]
+	modParts := parts[:len(parts)-1]
+	// A literal "+" base (#1331): the separator split leaves it as a trailing
+	// empty part preceded by another empty one — "+" → ["", ""], "cmd++" →
+	// ["cmd", "", ""]. A single trailing empty ("cmd+") is still a missing base.
+	if base == "" && len(modParts) > 0 && modParts[len(modParts)-1] == "" {
+		base = "+"
+		modParts = modParts[:len(modParts)-1]
+	}
 	var mods Mod
-	for _, p := range parts[:len(parts)-1] {
+	for _, p := range modParts {
 		m, ok := modAlias[strings.ToLower(p)]
 		if !ok {
 			return Key{}, fmt.Errorf("keymap: unknown modifier %q in %q", p, s)

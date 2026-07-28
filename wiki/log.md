@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-28 (keymap: the "+" key can be bound)
+
+- `ParseKey` split a step naively on `+`, so `"+"` and `"cmd++"` left an empty
+  base and errored (#1331): a plus binding could neither be captured nor read
+  back from `[keymap.bindings]`, and the capture dialog swallowed the failure —
+  the field just stayed empty. A trailing empty part preceded by another empty
+  one is now the literal plus base (a lone `"cmd+"` is still an error), so
+  `String()` → `ParseKey` round-trips, and the capture dialog rejects anything
+  that fails that round-trip with a visible warning instead of silently.
+  Updated [Keybindings & Shortcuts](/architecture/keybindings.md).
+
 ## 2026-07-28 (editor: the current mode is now visible)
 
 - The input mode was rendered as plain text in the status line's leftmost
