@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T10:00:00Z
+timestamp: 2026-07-28T18:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -331,12 +331,42 @@ picker's highlight (menu-bar parity; custom pages opt in via `PageHoverer`).
 The **wheel scrolls viewports, not selections** — one category per notch on
 the rail, list lines on the schema form; render only re-follows the selection
 after it actually moved, so wheel-browsing is never snapped back. Clickable
-chrome: the **scope chip** is always visible on the title row and cycles
+chrome: the **detail column's editors** (see below), the **scope chip** is
+always visible on the title row and cycles
 auto/user/project on click, the **hint-row keys** execute their action
 (enter/r/s///esc), and **path-completion suggestion rows** complete the edit
 instead of cancelling it. The Plugins and Marketplace lists scroll through
 `pinFooter` offsets — previously a `MaxHeight` clip made rows past the window
 unreachable.
+
+### The detail column is operable (#1325)
+
+A press in the detail column used to only move the focus there — every control
+lived on the keyboard. Editors now take part through two optional seams beside
+`pasteEditor`: `clickEditor{Click(x, y)}` and `wheelEditor{Wheel(delta)}`, with
+coordinates **editor-body-local** (y counts the editor's own `View` lines). The
+panel maps a press by subtracting the detail column's origin and the recorded
+`detailBodyTop` — the head above the editor (title, wrapped description, meta,
+rule) has no fixed height, so the offset is recorded at render, like the hint
+row's clickable spans are. A press on the head focuses the column and does
+nothing else; the same routing serves the stacked narrow-panel band, where the
+detail sits under the list.
+
+Per type, following the panel's own rule that pickers pick in one press while
+destructive edits are select-then-activate:
+
+| Editor | Click | Wheel |
+|---|---|---|
+| bool | picks the clicked radio row and stages it | — |
+| enum | picks the option under the pointer | moves the selection (the option window follows it on render, so a bare offset would be undone) |
+| int | `‹` / `›` step; the number itself only focuses | — |
+| list | selects a value row; a press on the selected row starts editing it (the `+ add value…` row is last) | walks the rows |
+| path | takes the clicked completion suggestion | — |
+| chord | opens the capture dialog (enter's action) | — |
+| text | — (focus only: there is no target but the field) | — |
+
+Every write goes through the same staged-apply buffer as the keyboard's, so a
+mis-click is undone by discarding the batch rather than by hitting disk.
 
 ## Search over everything (0420, #886)
 
