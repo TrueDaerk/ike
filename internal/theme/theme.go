@@ -10,6 +10,7 @@ package theme
 
 import (
 	"image/color"
+	"math"
 	"sync"
 )
 
@@ -217,6 +218,50 @@ func slotOrMix(token string, fg, bg color.Color, frac float64) color.Color {
 		return Resolve(token)
 	}
 	return Mix(fg, bg, frac)
+}
+
+// Luminance is c's WCAG 2.x relative luminance in [0, 1]
+// (https://www.w3.org/TR/WCAG21/#dfn-relative-luminance).
+func Luminance(c color.Color) float64 {
+	if c == nil {
+		return 0
+	}
+	r, g, b, _ := c.RGBA()
+	lin := func(v uint32) float64 {
+		s := float64(v) / 0xffff
+		if s <= 0.04045 {
+			return s / 12.92
+		}
+		return math.Pow((s+0.055)/1.055, 2.4)
+	}
+	return 0.2126*lin(r) + 0.7152*lin(g) + 0.0722*lin(b)
+}
+
+// ContrastRatio is the WCAG contrast ratio between a and b, in [1, 21].
+func ContrastRatio(a, b color.Color) float64 {
+	la, lb := Luminance(a), Luminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+// Readable picks the option that reads best on bg. Renderers that paint text
+// on a semantic colour (a mode badge on its mode colour, #1323) can't know
+// whether that colour came out light or dark in the active theme, so they let
+// the contrast decide instead of hard-coding a foreground.
+func Readable(bg color.Color, options ...color.Color) color.Color {
+	var best color.Color
+	bestRatio := -1.0
+	for _, o := range options {
+		if o == nil {
+			continue
+		}
+		if r := ContrastRatio(o, bg); r > bestRatio {
+			best, bestRatio = o, r
+		}
+	}
+	return best
 }
 
 // Mix returns fg blended over bg: frac of fg, the rest bg. It backs the

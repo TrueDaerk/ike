@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-07-28T00:00:00Z
 ---
 
 # Status Line Segments
@@ -48,6 +48,24 @@ cells), then low-priority segments drop in a defined order (hint, eol,
 encoding, indent, toolchain, todo, host, notifications, macro, branch,
 diagnostics, lsp — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
+
+## Mode badge (#1323)
+
+The `mode` slot renders as a **coloured badge**, not as plain panel text: the
+label reads in bold on a background taken from `editor.ModeColor` — Accent for
+`NORMAL`, Success for `INSERT`, Warning for the visual modes, Error for
+`REPLACE`, Info for the `:` command line. The same colour paints the caret cell
+in the editor (see [Editor](/architecture/editor.md)), so the two signals always
+agree and the mode is recognizable by colour alone.
+
+Mechanics: the bar is composed as plain text first, then `badgeMode` splices the
+badge over the mode span reported by `composeStatusSpans` (plus the pad cell on
+either side) and re-styles the tail with the panel background, which the badge's
+own SGR reset would otherwise drop. No cells are added, so segment spans stay
+valid for hit-testing, and a hard clip that cuts the mode segment away falls back
+to the plain bar. The badge's text colour is picked by contrast
+(`theme.Readable` over `Background`/`Foreground`), so a theme with a light or a
+dark mode colour both stay readable.
 
 ## Toolchain segment
 

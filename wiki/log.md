@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-28 (editor: the current mode is now visible)
+
+- The input mode was rendered as plain text in the status line's leftmost
+  segment and nowhere else (#1323) — nothing said whether typing inserts text.
+  The mode now drives two colour signals: the caret cell is painted in a
+  mode colour (`editor.ModeColor`; Accent normal, Success insert, Warning
+  visual, Error replace, Info command line) and the status line's mode segment
+  renders as a badge in that same colour, spliced over the composed bar so no
+  cells shift and click hit-testing stays valid. Foregrounds are picked by
+  contrast (`theme.Readable`, new alongside `theme.Luminance` /
+  `theme.ContrastRatio`), guarded by a WCAG AA test over every built-in theme.
+  Updated [Editor](/architecture/editor.md) and
+  [Status Line Segments](/architecture/status-line.md).
+
 ## 2026-07-28 (settings: syntax colours page)
 
 - Single highlight colours are editable in the UI (#1238). A new **Syntax

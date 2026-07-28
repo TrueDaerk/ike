@@ -13,6 +13,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/lang"
 	"ike/internal/pane"
+	"ike/internal/theme"
 )
 
 // statusline.go is the status line's segment model (#101): the editor status
@@ -368,8 +369,54 @@ func (m Model) statusLine() string {
 	// The ":" / "/" command line renders inside the editor pane (vim-style),
 	// not here — the status line keeps its segments while typing a command.
 	ed := m.activeEditor()
-	line := composeStatus(renderParts(m, ed, statusLeft), renderParts(m, ed, statusRight), m.width)
+	line, spans := composeStatusSpans(renderParts(m, ed, statusLeft), renderParts(m, ed, statusRight), m.width)
+	if badged, ok := m.badgeMode(line, spans, ed); ok {
+		return badged
+	}
 	return style.Render(line)
+}
+
+// badgeMode re-renders the mode segment of an already-styled status line as a
+// coloured badge (#1323): plain text in the panel style made the mode read as
+// just another label. The mode span always sits at the head of the line and
+// carries no wide runes, so its cell range maps 1:1 onto the plain line's
+// prefix — the badge is spliced in there and the tail is re-styled with the
+// panel background, which the badge's own reset would otherwise drop.
+func (m Model) badgeMode(plain string, spans []statusSpan, ed *editor.Model) (string, bool) {
+	var span statusSpan
+	for _, s := range spans {
+		if s.id == "mode" {
+			span = s
+		}
+	}
+	// A hard clip can cut the mode segment away entirely; the plain bar then
+	// renders unbadged rather than splicing at a bogus offset.
+	if span.x1 <= span.x0 || span.x1 > len(plain) {
+		return "", false
+	}
+	md := editor.Normal
+	if ed != nil {
+		md = ed.ModeName()
+	}
+	// The badge swallows the bar's leading pad cell and the pad cell after the
+	// label, so the colour block reads as a badge rather than as a tinted word.
+	// Both are plain spaces the layout already reserved — nothing shifts, so
+	// the segment spans stay valid for hit-testing (#1128).
+	from, to := span.x0-1, span.x1
+	if from < 0 || plain[from] != ' ' {
+		from = span.x0
+	}
+	if to < len(plain) && plain[to] == ' ' {
+		to++
+	}
+	panel := lipgloss.NewStyle().Background(m.pal().Panel).Foreground(m.pal().Foreground)
+	bg := editor.ModeColor(md, m.pal())
+	badge := lipgloss.NewStyle().
+		Background(bg).
+		Foreground(theme.Readable(bg, m.pal().Background, m.pal().Foreground)).
+		Bold(true).
+		Render(plain[from:to])
+	return panel.Render(plain[:from]) + badge + panel.Render(plain[to:]), true
 }
 
 // renderedSeg is one rendered, non-empty status segment with its slot id, so

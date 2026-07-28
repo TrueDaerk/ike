@@ -17,6 +17,39 @@ import (
 	"ike/internal/ui"
 )
 
+// ModeColor is the accent colour that identifies an input mode (#1323), shared
+// by the caret cell and the status line's mode badge so both signals agree.
+// The colours come from existing palette slots, so every theme — built-in or
+// third-party — carries them without a schema change.
+func ModeColor(md Mode, pal *theme.Palette) color.Color {
+	if pal == nil {
+		pal = theme.DefaultPalette()
+	}
+	switch {
+	case md == Insert:
+		return pal.Success
+	case md.IsVisual():
+		return pal.Warning
+	case md == Replace:
+		return pal.Error
+	case md == Command:
+		return pal.Info
+	default:
+		return pal.Accent
+	}
+}
+
+// cursorStyle is the primary caret cell's style: a block tinted with the input
+// mode's colour (#1323). Mode feedback right at the caret means the user never
+// has to look down at the status line to know whether typing inserts text.
+func (m Model) cursorStyle() lipgloss.Style {
+	pal := m.theme()
+	bg := ModeColor(m.mode, pal)
+	return lipgloss.NewStyle().
+		Background(bg).
+		Foreground(theme.Readable(bg, pal.Background, pal.Foreground))
+}
+
 // conflictTintFrac is how much of the VCS status colour mixes into the surface
 // for the ours/theirs section backgrounds (#1149) — subtle, like the diff
 // pane's slotOrMix fractions.
@@ -371,7 +404,7 @@ func (m Model) View() string {
 	}
 	lineCount := m.buf.LineCount()
 	gutterStyle := lipgloss.NewStyle().Faint(true)
-	cursorStyle := lipgloss.NewStyle().Reverse(true)
+	cursorStyle := m.cursorStyle()
 	textWidth := m.view.TextWidth(lineCount)
 
 	selStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)

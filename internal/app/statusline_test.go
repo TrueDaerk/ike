@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -195,4 +196,40 @@ func TestMiddleEllipsis(t *testing.T) {
 	if got := middleEllipsis("abcdef", 1); got != "…" {
 		t.Fatalf("max 1 = %q", got)
 	}
+}
+
+// TestStatusLineModeBadge guards the mode badge (#1323): the mode segment
+// renders in its mode colour, so the mode is recognizable without reading the
+// label, and the colour changes with the mode.
+func TestStatusLineModeBadge(t *testing.T) {
+	m := newSized()
+	m.setFocus(m.activeEditorKey())
+
+	normal := m.statusLine()
+	if !strings.Contains(normal, modeSGR(m, editor.Normal)) {
+		t.Fatalf("normal mode badge missing its colour: %q", normal)
+	}
+	if strings.Contains(normal, modeSGR(m, editor.Insert)) {
+		t.Fatalf("normal mode must not paint the insert colour: %q", normal)
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Text: "i", Code: 'i'})
+	insert := m.statusLine()
+	if !strings.Contains(insert, "INSERT") {
+		t.Fatalf("mode segment should read INSERT: %q", insert)
+	}
+	if !strings.Contains(insert, modeSGR(m, editor.Insert)) {
+		t.Fatalf("insert mode badge missing its colour: %q", insert)
+	}
+
+	// The badge only recolours cells the layout already reserved.
+	if w := lipgloss.Width(insert); w != lipgloss.Width(normal) {
+		t.Fatalf("badge changed the bar width: %d vs %d", w, lipgloss.Width(normal))
+	}
+}
+
+// modeSGR is the background-colour parameter a mode's badge must carry.
+func modeSGR(m Model, md editor.Mode) string {
+	r, g, b, _ := editor.ModeColor(md, m.pal()).RGBA()
+	return fmt.Sprintf("48;2;%d;%d;%d", r>>8, g>>8, b>>8)
 }
