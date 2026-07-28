@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-07-27T20:00:00Z
+timestamp: 2026-07-28T00:00:00Z
 ---
 
 # Configuration System
@@ -91,7 +91,10 @@ Sections and their default-bearing slots (`schema.go`):
   `max_history`, `restore_last`, and `max_workspaces` (0370 M4, #780: how
   many live background workspaces seamless switching keeps, default 3;
   exceeding it evicts the least-recently-used one, confirming first when
-  unsaved buffers or running processes would die). The entry semantics —
+  unsaved buffers or running processes would die), plus `directory` (#1348,
+  default `~/IkeProjects`: the default parent for projects IKE creates
+  itself, resolved and created on demand by `project.ProjectsDir` /
+  `EnsureDirectory`). The entry semantics —
   validation, upsert, dedupe, cap — live in `internal/project` (Roadmap
   0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
