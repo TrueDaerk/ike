@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-28 (settings: the detail column takes the mouse)
+
+- On the master·detail grid a press in the detail column only moved the focus
+  there; every control was keyboard-only (#1325). Editors now opt into two
+  seams — `clickEditor` and `wheelEditor` — with editor-body-local coordinates,
+  and the panel maps presses through the detail origin plus a `detailBodyTop`
+  recorded at render (the documentation head has no fixed height). Bool radios
+  and enum options pick in one press, the int stepper's `‹`/`›` step, list rows
+  select then edit, path suggestions complete, a chord row opens the capture;
+  the wheel walks enum and list rows. The stacked narrow-panel band routes the
+  same way. Updated [Settings UI & Menu Bar](/architecture/settings-ui.md).
+
 ## 2026-07-28 (editor: clicks repaint again)
 
 - In large projects a click moved the caret logically but not visibly, and a

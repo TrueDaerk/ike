@@ -107,12 +107,17 @@ type Model struct {
 	hoverCat, hoverRow int
 	// hitSel is the nav column's selection while a filter is active (#1297):
 	// an index into hitPages, not into m.pages.
-	hitSel     int
-	chipSpan   span
-	countSpan  span
-	hintHits   []hintAction
-	followCat  bool
-	followForm bool
+	hitSel    int
+	chipSpan  span
+	countSpan span
+	hintHits  []hintAction
+	// detailBodyTop is the editor body's first line inside the detail column,
+	// recorded at render (#1325): the head above it — title, wrapped
+	// description, meta, rule — has no fixed height, so a click can only be
+	// mapped onto an editor row with what the last frame actually drew.
+	detailBodyTop int
+	followCat     bool
+	followForm    bool
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -367,12 +372,10 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	}
 	g := m.gridFor()
 	// Detail column (or, on a narrow panel, the detail band under the list):
-	// a press focuses the editor.
+	// a press focuses the editor and, on the editor's own rows, operates the
+	// control under the pointer (#1325).
 	if (g.side && x >= m.detailX()) || (!g.side && row > g.listH) {
-		if m.editor != nil {
-			m.focus = detailColumn
-		}
-		return nil
+		return m.clickDetail(x, row, g)
 	}
 	if !g.side && row == g.listH {
 		return nil // the divider row
@@ -424,6 +427,14 @@ func (m *Model) Wheel(x, delta int) {
 	// PageWheeler seam (#674).
 	if page := m.customPage(); page != nil && m.filter == "" {
 		if w, ok := page.(PageWheeler); ok {
+			w.Wheel(delta)
+		}
+		return
+	}
+	// The detail column scrolls its own editor (#1325): a long enum list is
+	// the one thing over there with more content than room.
+	if g := m.gridFor(); g.side && x >= m.detailX() {
+		if w, ok := m.editor.(wheelEditor); ok {
 			w.Wheel(delta)
 		}
 		return
@@ -863,4 +874,29 @@ func clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// clickDetail routes a press inside the detail column (#1325): it focuses the
+// column and forwards the press to the editor at editor-body-local
+// coordinates, so an editor decides what its own rows mean. row is the
+// body-local y the caller already computed; g the grid this frame drew.
+func (m *Model) clickDetail(x, row int, g grid) tea.Cmd {
+	if m.editor == nil {
+		return nil
+	}
+	m.focus = detailColumn
+	dx, dy := x-m.detailX(), row
+	if !g.side {
+		// Stacked fallback: the detail band sits under the list and the
+		// divider row, and spans the full width.
+		dx, dy = x-formX(), row-g.listH-1
+	}
+	c, ok := m.editor.(clickEditor)
+	if !ok {
+		return nil
+	}
+	if dy -= m.detailBodyTop; dy < 0 {
+		return nil // the head: documentation, not a control
+	}
+	return c.Click(dx, dy)
 }

@@ -38,6 +38,20 @@ type pasteEditor interface {
 	Paste(text string) bool
 }
 
+// clickEditor and wheelEditor are the detail column's pointer seams (#1325):
+// an editor that can map its rendered rows onto an action implements Click
+// (coordinates are editor-body-local: y counts its own View lines), and one
+// with more content than room implements Wheel. Editors without a meaningful
+// pointer target — a text field, say — implement neither and a press there
+// only focuses the column.
+type clickEditor interface {
+	Click(x, y int) tea.Cmd
+}
+
+type wheelEditor interface {
+	Wheel(delta int)
+}
+
 // newEditor builds the editor for an entry's type.
 func newEditor(m *Model, e Entry) Editor {
 	switch e.Type {
@@ -119,6 +133,17 @@ func (b *boolEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		return b.m.writeValue(b.e, b.idx == 0)
 	}
 	return nil
+}
+
+// Click picks the clicked radio row (#1325): a toggle is exactly the control
+// a pointer expects to operate in one press, and the write is staged like
+// every other edit, so it is undone by discarding the batch.
+func (b *boolEditor) Click(_, y int) tea.Cmd {
+	if y != 0 && y != 1 {
+		return nil
+	}
+	b.idx = y
+	return b.m.writeValue(b.e, b.idx == 0)
 }
 
 func (b *boolEditor) View(w, h int) []string {
@@ -221,6 +246,25 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// Click picks the option under the pointer (#1325). Row 0 is the filter head,
+// the rows below are the visible window of the option list.
+func (n *enumEditor) Click(_, y int) tea.Cmd {
+	opts := n.matches()
+	idx := n.off + y - 1
+	if y < 1 || idx < 0 || idx >= len(opts) {
+		return nil
+	}
+	n.idx = idx
+	return n.m.writeValue(n.e, opts[idx])
+}
+
+// Wheel moves the selection, which the option window follows (#1325): the
+// window offset is derived from the selection on every render, so scrolling it
+// on its own would be undone by the next frame.
+func (n *enumEditor) Wheel(delta int) {
+	n.idx = clamp(n.idx+delta, 0, len(n.matches())-1)
+}
+
 func (n *enumEditor) View(w, h int) []string {
 	pal := n.m.theme()
 	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
@@ -320,6 +364,21 @@ func (n *intEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		return n.m.writeValue(n.e, v)
 	}
 	n.tf.Handle(key)
+	return nil
+}
+
+// Click operates the stepper (#1325): the ‹ and › glyphs step the value, a
+// press on the number itself only focuses the field.
+func (n *intEditor) Click(x, y int) tea.Cmd {
+	if y != 0 {
+		return nil
+	}
+	switch {
+	case x <= 2: // " ‹ "
+		return n.step(-1)
+	case x >= lipgloss.Width(" ‹ "+n.tf.View()+" "):
+		return n.step(1)
+	}
 	return nil
 }
 
@@ -426,6 +485,21 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
+// Click takes a completion suggestion (#1325): row 0 is the input, an error
+// line may follow it, and the suggestion rows come after — the same order
+// View renders them in.
+func (p *pathEditor) Click(_, y int) tea.Cmd {
+	first := 1
+	if p.err != "" {
+		first = 2
+	}
+	if idx := y - first; idx >= 0 && idx < len(p.suggest.candidates) && idx < maxSuggestLines {
+		p.tf.Set(p.suggest.candidates[idx])
+		p.suggest.refresh(p.tf.text)
+	}
+	return nil
+}
+
 func (p *pathEditor) View(w, h int) []string {
 	pal := p.m.theme()
 	clip := lipgloss.NewStyle().MaxWidth(w)
@@ -467,6 +541,16 @@ func (c *chordEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		c.m.Push(newChordCapture(c.m, c.m.opts, c.m.scopeFor(c.e), c.e.Key, c.e.Title, c.m.pal))
 	}
+	return nil
+}
+
+// Click opens the capture dialog from the chord row (#1325) — the same thing
+// enter does; the hint line below it is not a target.
+func (c *chordEditor) Click(_, y int) tea.Cmd {
+	if y != 0 {
+		return nil
+	}
+	c.m.Push(newChordCapture(c.m, c.m.opts, c.m.scopeFor(c.e), c.e.Key, c.e.Title, c.m.pal))
 	return nil
 }
 
@@ -588,6 +672,34 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	}
 	listNav(key.String(), &l.idx, len(l.items)+1, navPage)
 	return nil
+}
+
+// Click selects the value row under the pointer, and a press on the row that
+// is already selected starts editing it — the settings column's own
+// select-then-activate rule (#1325), so a stray click never opens an input.
+// The "+ add value…" row is the last one.
+func (l *listEditor) Click(_, y int) tea.Cmd {
+	if l.editing || y < 0 || y > len(l.items) {
+		return nil
+	}
+	if y == l.idx {
+		l.editing = true
+		if l.idx < len(l.items) {
+			l.tf = newTextField(l.items[l.idx])
+		} else {
+			l.tf = newTextField("")
+		}
+		return nil
+	}
+	l.idx = y
+	return nil
+}
+
+// Wheel walks the value rows, the add row included.
+func (l *listEditor) Wheel(delta int) {
+	if !l.editing {
+		l.idx = clamp(l.idx+delta, 0, len(l.items))
+	}
 }
 
 func (l *listEditor) View(w, h int) []string {

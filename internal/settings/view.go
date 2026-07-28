@@ -572,6 +572,7 @@ func (m *Model) renderDetailColumn(w, h int) string {
 
 	foot := m.detailFoot(e, w, clip, dim, pal)
 
+	m.detailBodyTop = len(head) // the editor body's first line (#1325)
 	body := []string{}
 	if m.editor != nil {
 		bodyH := h - len(head) - len(foot)
