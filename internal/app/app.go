@@ -7801,6 +7801,20 @@ func joinV(blocks ...string) string {
 	return strings.Join(blocks, "\n")
 }
 
+// paneEditorMode reports the input mode of the editor a pane is showing, and
+// whether it is showing one at all: a non-editor pane, or an editor pane whose
+// active tab hosts a terminal (#573), has no mode to signal.
+func paneEditorMode(inst *pane.Instance) (editor.Mode, bool) {
+	if inst == nil || inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil {
+		return editor.Normal, false
+	}
+	ed := inst.Editor()
+	if ed == nil {
+		return editor.Normal, false
+	}
+	return ed.ModeName(), true
+}
+
 // renderPane renders a single leaf at its outer rectangle, resolving its key to
 // an instance for title, content, and focus state. During a move drag the source
 // pane and the hovered drop target are recolored. An unknown key (no instance)
@@ -7866,6 +7880,14 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 	border := m.pal().Border
 	if focused {
 		border = m.pal().BorderFocus
+		// The focused editor's input mode paints the whole border (#1353): the
+		// caret alone is too small a signal to catch at a glance. Normal mode
+		// keeps BorderFocus, so the resting look is unchanged and a coloured
+		// border always means "this pane is doing something other than
+		// navigating" — green insert, yellow visual, red replace, blue command.
+		if md, ok := paneEditorMode(inst); ok && md != editor.Normal {
+			border = editor.ModeColor(md, m.pal())
+		}
 	}
 	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
 		if key == d.srcPane {

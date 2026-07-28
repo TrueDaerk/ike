@@ -2,6 +2,7 @@ package editor
 
 import (
 	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,21 +85,102 @@ func TestCaretColorTracksMode(t *testing.T) {
 	m.SetFocused(true)
 	m.SetSize(40, 5)
 
-	bgSGR := func(md Mode) string {
-		r, g, b, _ := ModeColor(md, m.theme()).RGBA()
+	bgSGR := func(c color.Color) string {
+		r, g, b, _ := c.RGBA()
 		return fmt.Sprintf("48;2;%d;%d;%d", r>>8, g>>8, b>>8)
 	}
-	if v := m.View(); !strings.Contains(v, bgSGR(Normal)) {
+	block := func(md Mode) string { return bgSGR(ModeColor(md, m.theme())) }
+	if v := m.View(); !strings.Contains(v, block(Normal)) {
 		t.Fatalf("normal-mode caret missing its colour: %q", v)
 	}
 	m.mode = Insert
 	m.bumpRender()
 	v := m.View()
-	if !strings.Contains(v, bgSGR(Insert)) {
+	tint := bgSGR(theme.Mix(ModeColor(Insert, m.theme()), m.theme().Background, insertCaretTintFrac))
+	if !strings.Contains(v, tint) {
 		t.Fatalf("insert-mode caret missing its colour: %q", v)
 	}
-	if strings.Contains(v, bgSGR(Normal)) {
+	if strings.Contains(v, block(Normal)) {
 		t.Fatalf("insert mode must not paint the normal caret colour: %q", v)
+	}
+}
+
+// TestCaretShapeTracksMode guards the shape half of the mode signal (#1353):
+// insert mode draws an underline caret, every other mode the solid block, so
+// the mode reads without comparing colours.
+func TestCaretShapeTracksMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	os.WriteFile(path, []byte("package main\n"), 0o644)
+	m := New()
+	if err := m.Load(path); err != nil {
+		t.Fatal(err)
+	}
+	m.SetFocused(true)
+	m.SetSize(40, 5)
+
+	shape := func(md Mode) lipgloss.Underline {
+		m.mode = md
+		return m.cursorStyle().GetUnderlineStyle()
+	}
+	if shape(Insert) == lipgloss.UnderlineNone {
+		t.Fatal("insert-mode caret is not an underline caret")
+	}
+	for _, md := range []Mode{Normal, Visual, VisualLine, VisualBlock, Replace, Command} {
+		if shape(md) != lipgloss.UnderlineNone {
+			t.Fatalf("%s caret must stay a solid block, not an underline caret", md)
+		}
+	}
+	// The block caret inverts the cell (mode colour behind the glyph); the
+	// underline caret must not, or the shape difference is invisible.
+	m.mode = Normal
+	if got := m.cursorStyle().GetBackground(); !sameColor(got, ModeColor(Normal, m.theme())) {
+		t.Fatalf("normal caret background = %v, want the solid mode colour", got)
+	}
+	m.mode = Insert
+	if got := m.cursorStyle().GetBackground(); sameColor(got, ModeColor(Insert, m.theme())) {
+		t.Fatal("insert caret must tint its cell, not fill it like the block caret")
+	}
+}
+
+// sameColor compares two colours by their RGBA components.
+func sameColor(a, b color.Color) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	ar, ag, ab, aa := a.RGBA()
+	br, bg, bb, ba := b.RGBA()
+	return ar == br && ag == bg && ab == bb && aa == ba
+}
+
+// TestInsertCaretContrast guards that tinting the insert caret's background
+// (#1353) keeps the character under it readable on every built-in theme. The
+// bar is the theme's own body text contrast rather than a fixed ratio: the
+// caret must not cost meaningfully more readability than ordinary text does,
+// and it must clear the WCAG AA large-text floor outright.
+func TestInsertCaretContrast(t *testing.T) {
+	const (
+		floor    = 3.0
+		aa       = 4.5
+		keepFrac = 0.8
+	)
+	for _, th := range theme.Builtins() {
+		pal := theme.NewPalette(th)
+		bg := theme.Mix(ModeColor(Insert, pal), pal.Background, insertCaretTintFrac)
+		fg := theme.Readable(bg, pal.Background, pal.Foreground)
+		got := theme.ContrastRatio(fg, bg)
+		base := theme.ContrastRatio(pal.Foreground, pal.Background)
+		want := base * keepFrac
+		if want > aa {
+			want = aa // a high-contrast theme need not stay high-contrast under the tint
+		}
+		if want < floor {
+			want = floor
+		}
+		if got < want {
+			t.Errorf("%s: insert caret contrast %.2f:1, want >= %.2f:1 (theme body text %.2f:1)",
+				th.Name, got, want, base)
+		}
 	}
 }
 
