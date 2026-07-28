@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-28 (docs: screenshots for the high-contrast themes)
+
+- The README theme grid and the "twenty-six themes" counts now cover
+  `high-contrast-dark` / `high-contrast-light` (#1229), with
+  `docs/screenshots/high-contrast-{dark,light}.png` at the 1600x905 of the
+  existing set (`userdocs/screenshots` is a symlink to the same directory).
+
 ## 2026-07-28 (themes: an accessibility tier)
 
 - `high-contrast-dark` and `high-contrast-light` join the built-ins (#1229) as
