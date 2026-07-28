@@ -117,7 +117,7 @@ does both, but check that neither is disabled in its configuration — and that
 you are not inside an old `tmux` or `screen` stripping them.
 
 If the colours are merely not to your taste rather than broken, there are
-twenty-six themes to pick from — see
+twenty-eight themes to pick from — see
 [Customising IKE](guides/customising.md).
 
 ## No highlighting or code intelligence in one file

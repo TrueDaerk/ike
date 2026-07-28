@@ -154,7 +154,7 @@ Most settings can also be edited interactively in the settings panel
 - **Integrated terminal** — a real PTY-spawned shell in a pane, with raw key
   routing (`ctrl+arrows` escape back to the IDE), mouse passthrough, and text
   selection.
-- **Themes** — one `[theme].name` recolors the whole IDE; twenty-six built-ins
+- **Themes** — one `[theme].name` recolors the whole IDE; twenty-eight built-ins
   plus plugin-registered themes, switchable live from the palette
   (see [screenshots](#themes) below).
 - **Session restore & crash recovery** — open files, cursors, and explorer
@@ -178,7 +178,7 @@ concept document per subsystem.
 ## Themes
 
 Select a theme in `settings.toml` (`[theme] name = "..."`) or at runtime via
-the command palette (`:` → "Theme: …"). All twenty-six built-ins are shown
+the command palette (`:` → "Theme: …"). All twenty-eight built-ins are shown
 below.
 
 | | |
@@ -196,6 +196,7 @@ below.
 | **ayu-light** ![ayu-light](docs/screenshots/ayu-light.png) | **github-dark** ![github-dark](docs/screenshots/github-dark.png) |
 | **github-light** ![github-light](docs/screenshots/github-light.png) | **oxocarbon** ![oxocarbon](docs/screenshots/oxocarbon.png) |
 | **monokai-pro** ![monokai-pro](docs/screenshots/monokai-pro.png) | **zenburn** ![zenburn](docs/screenshots/zenburn.png) |
+| **high-contrast-dark** ![high-contrast-dark](docs/screenshots/high-contrast-dark.png) | **high-contrast-light** ![high-contrast-light](docs/screenshots/high-contrast-light.png) |
 
 ## Development
 
