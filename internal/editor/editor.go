@@ -133,8 +133,8 @@ type Model struct {
 	cmdHistIdx  int
 	cmdHistLive string
 	searching   bool
-	searchDir  search.Direction
-	query      search.Query
+	searchDir   search.Direction
+	query       search.Query
 	// searchIgnoreCase mirrors editor.search_ignore_case (#1111): in-file
 	// searches fold case by default; \C in the query forces exact matching.
 	searchIgnoreCase bool
@@ -391,8 +391,8 @@ type Model struct {
 	signature  *signatureState
 	// peek is the peek-definition popup (#1154): a cursor-anchored excerpt of
 	// the definition target; owns esc/enter/scroll keys while open (peek.go).
-	peek *peekState
-	popupMaxW  int // app-set popup content-width cap (#316); 0 = pane-derived
+	peek      *peekState
+	popupMaxW int // app-set popup content-width cap (#316); 0 = pane-derived
 
 	// Editor settings, refreshed from cfg on each event so live config changes
 	// take effect without a restart.
@@ -522,10 +522,13 @@ func (m *Model) rebuildTheme() {
 		captures = m.pal.Captures
 	}
 	var get func(string) (string, bool)
+	var keys func() []string
 	if m.cfg != nil {
-		get = m.cfg.Get
+		get, keys = m.cfg.Get, m.cfg.Keys
 	}
-	m.hlTheme = highlight.NewTheme(captures, get)
+	// Enumeration (#1318) so an override may name a capture the theme itself
+	// does not define, e.g. a grammar-specific "function.builtin".
+	m.hlTheme = highlight.NewThemeKeys(captures, get, keys)
 	// Pre-rendered markdown table rows bake in theme styles (#945): drop them
 	// so the next render re-resolves against the new theme.
 	if m.mdTables != nil {
@@ -692,7 +695,7 @@ func (m *Model) NewFile(path string) {
 	m.buf = buffer.FromString(lang.TemplateFor(path))
 	m.seedBreakpointLines()
 	m.seedMarkLines()
-	m.clearLocalMarks() // local marks belong to the previous content (#1151)
+	m.clearLocalMarks()                                        // local marks belong to the previous content (#1151)
 	m.eol, m.enc, m.mixedEOL = textenc.LF, textenc.UTF8, false // nothing on disk to preserve (#66)
 	// A new file has no on-disk flavor to preserve, so .editorconfig picks
 	// the initial line endings and charset outright (#63).
@@ -750,7 +753,7 @@ func (m *Model) RestoreText(text string) {
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
 	m.hist.MarkNeverSaved()  // recovered text is dirty even after undoing back to it
-	m.diskHash = ""         // recovered content matches no on-disk state
+	m.diskHash = ""          // recovered content matches no on-disk state
 	m.dirty = true
 	m.docVersion++
 	m.hlIndex = highlight.Index{}

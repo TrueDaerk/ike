@@ -24,7 +24,9 @@ Capture}` runs, where `Capture` is a Tree-sitter capture name (`keyword`,
 `string`, `function`, …). A `Theme` resolves capture names to lipgloss colours,
 including the **rainbow bracket** captures below,
 falling back from a dotted name (`function.builtin`) to its head (`function`), and
-layered over built-in defaults by the `[theme.captures.*]` config keys.
+layered over built-in defaults by the `[theme.captures]` config table (a typed
+slot map since #1318; see [Themes](./themes.md) for the precedence and the
+colour-token rules).
 
 ```
 internal/highlight/

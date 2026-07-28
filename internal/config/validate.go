@@ -3,7 +3,10 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"unicode"
+
+	"ike/internal/theme"
 )
 
 // identWord reports whether s consists only of identifier runes (letters,
@@ -75,6 +78,20 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "editor.rulers", Message: fmt.Sprintf("ruler column %d below minimum 1, using 1", r)})
 			c.Editor.Rulers[i] = 1
 		}
+	}
+
+	// Per-capture colour overrides (#1318): lipgloss renders an unparseable
+	// token as the terminal default, so a typo would silently un-style a
+	// capture instead of failing. Drop it and say so.
+	for name, token := range c.Theme.Captures {
+		if theme.ValidToken(token) {
+			continue
+		}
+		diags = append(diags, Diagnostic{
+			Field:   "theme.captures." + name,
+			Message: fmt.Sprintf("unknown colour %q, using the theme's own; expected a name (%s, …), a #rrggbb hex or an ANSI index 0-255", token, strings.Join(theme.Names()[:3], ", ")),
+		})
+		delete(c.Theme.Captures, name)
 	}
 
 	clampMin("editor.tab_width", &c.Editor.TabWidth, 1)

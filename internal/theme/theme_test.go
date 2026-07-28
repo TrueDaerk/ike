@@ -98,3 +98,31 @@ func TestResolve(t *testing.T) {
 		t.Errorf("ANSI index should pass through, got %v", got)
 	}
 }
+
+// TestValidToken guards #1318: lipgloss renders anything it cannot parse as
+// the terminal default, so configuration has to reject bad tokens up front.
+func TestValidToken(t *testing.T) {
+	for _, ok := range []string{"red", "ORANGE", "grey", "#fff", "#1f6feb", "#1F6FEB", "0", "39", "255", " cyan "} {
+		if !ValidToken(ok) {
+			t.Errorf("ValidToken(%q) = false, want true", ok)
+		}
+	}
+	for _, bad := range []string{"", "   ", "nosuchcolour", "#", "#12", "#12345", "#gggggg", "-1", "256", "12.5", "rgb(1,2,3)"} {
+		if ValidToken(bad) {
+			t.Errorf("ValidToken(%q) = true, want false", bad)
+		}
+	}
+	// Every offered name resolves.
+	names := Names()
+	if len(names) == 0 {
+		t.Fatal("Names must list the accepted colour names")
+	}
+	for _, n := range names {
+		if !ValidToken(n) {
+			t.Errorf("offered name %q must be valid", n)
+		}
+	}
+	if names[0] > names[len(names)-1] {
+		t.Error("Names must be sorted")
+	}
+}

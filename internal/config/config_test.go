@@ -382,3 +382,100 @@ func TestViewOptionKeys(t *testing.T) {
 		t.Errorf("legacy boolean spelling must not warn: %v", diags)
 	}
 }
+
+// --- per-capture colour overrides (#1318) ---
+
+// TestThemeCapturesDecodeAndFlatten: [theme.captures] is a slot map like
+// explorer.colors — it decodes, merges key by key, and reaches Flat() under
+// its dotted name, including capture names that themselves contain dots.
+func TestThemeCapturesDecodeAndFlatten(t *testing.T) {
+	user := writeUser(t, "[theme.captures]\nkeyword = \"#ff8800\"\n\"constant.builtin\" = \"orange\"\n")
+	proj := writeProject(t, "[theme.captures]\nkeyword = \"cyan\"\n\"rainbow.0\" = \"42\"\n")
+	c, diags := Load(Options{UserPath: user, ProjectRoot: proj})
+
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unknown setting") {
+			t.Fatalf("theme.captures must be a known slot map, got %v", d)
+		}
+	}
+	want := map[string]string{"keyword": "cyan", "constant.builtin": "orange", "rainbow.0": "42"}
+	for k, v := range want {
+		if got := c.Theme.Captures[k]; got != v {
+			t.Errorf("captures[%q] = %q, want %q", k, got, v)
+		}
+	}
+	flat := c.Flat()
+	for k, v := range want {
+		if got := flat["theme.captures."+k]; got != v {
+			t.Errorf("Flat()[theme.captures.%s] = %q, want %q", k, got, v)
+		}
+	}
+}
+
+// TestInvalidCaptureColourDropped: lipgloss renders an unparseable token as
+// the terminal default, so a typo must be reported and dropped rather than
+// silently un-styling the capture.
+func TestInvalidCaptureColourDropped(t *testing.T) {
+	proj := writeProject(t, "[theme.captures]\nkeyword = \"nosuchcolour\"\nstring = \"#00ff00\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+
+	if _, still := c.Theme.Captures["keyword"]; still {
+		t.Fatal("an unparseable colour must not survive validation")
+	}
+	if c.Theme.Captures["string"] != "#00ff00" {
+		t.Fatal("a valid colour beside it must survive")
+	}
+	var reported bool
+	for _, d := range diags {
+		if d.Field == "theme.captures.keyword" && strings.Contains(d.Message, "nosuchcolour") {
+			reported = true
+		}
+	}
+	if !reported {
+		t.Fatalf("the dropped colour must be reported, diags = %+v", diags)
+	}
+}
+
+// TestSlotKeyLeavesRoundTrip guards the dotted-leaf write path: a slot-map key
+// whose leaf contains dots must survive write → read → decode instead of
+// being split into nested tables.
+func TestSlotKeyLeavesRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	opts := Options{UserPath: filepath.Join(dir, "settings.toml")}
+	keys := map[string]string{
+		"theme.captures.constant.builtin": "orange",
+		"theme.captures.rainbow.0":        "42",
+		"explorer.colors.go":              "cyan",
+	}
+	for k, v := range keys {
+		if err := WriteKey(opts, UserScope, k, v); err != nil {
+			t.Fatalf("WriteKey(%s): %v", k, err)
+		}
+	}
+	c, diags := Load(opts)
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unknown setting") {
+			t.Fatalf("a written slot key must decode again, got %v", d)
+		}
+	}
+	flat := c.Flat()
+	for k, v := range keys {
+		if got := flat[k]; got != v {
+			t.Errorf("after round-trip Flat()[%s] = %q, want %q", k, got, v)
+		}
+		if got := Origin(opts, k); got != "user" {
+			t.Errorf("Origin(%s) = %q, want user", k, got)
+		}
+	}
+	// Removing one leaf leaves its siblings alone.
+	if err := RemoveKey(opts, UserScope, "theme.captures.constant.builtin"); err != nil {
+		t.Fatal(err)
+	}
+	c, _ = Load(opts)
+	if _, still := c.Theme.Captures["constant.builtin"]; still {
+		t.Fatal("RemoveKey must drop the leaf")
+	}
+	if c.Theme.Captures["rainbow.0"] != "42" {
+		t.Fatal("removing one leaf must not disturb its siblings")
+	}
+}
