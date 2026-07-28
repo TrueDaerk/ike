@@ -1,5 +1,21 @@
 # Log
 
+## 2026-07-28 (themes: an accessibility tier)
+
+- `high-contrast-dark` and `high-contrast-light` join the built-ins (#1229) as
+  the strict tier above the #1226 readability floor: **WCAG AAA (7:1)** for all
+  text on `Background`/`Surface`/`Panel`, syntax captures on `Surface` and file
+  colors on `Surface`/`Panel`; **no dim class** — `InlayHint`, `VCSDeleted`,
+  `capture:comment`, `capture:punctuation` and `file:lock` clear AAA too, the
+  deliberate trade of visual hierarchy for legibility; and overlays within
+  **1.2:1** of `Surface`, so the worst pair in either theme is still ~5.8:1.
+  With lightness pinned at the extremes hue carries all the meaning, so the
+  semantic slots take widely separated hues instead of shades of one accent.
+  `TestBuiltinThemeFullContrast` grew a per-theme `contrastTier` (`tierFor`,
+  defaulting to `baselineTier`), and a new test asserts both that the two are
+  audited at the AAA tier and that no other built-in was tightened with them.
+  Updated [Themes](/architecture/themes.md).
+
 ## 2026-07-28 (terminal: completion only at the shell prompt)
 
 - The completion popup also fired while a foreground program was reading

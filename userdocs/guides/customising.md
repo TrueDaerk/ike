@@ -193,13 +193,16 @@ One setting recolours everything — syntax, file tree, chrome:
 name = "tokyo-night"
 ```
 
-Twenty-six themes ship with IKE: `default`, `tokyo-night`, `nord`, `gruvbox`,
+Twenty-eight themes ship with IKE: `default`, `tokyo-night`, `nord`, `gruvbox`,
 `gruvbox-light`, `rose-pine`, `rose-pine-dawn`, `catppuccin-mocha`,
 `catppuccin-latte`, `kanagawa`, `one-dark`, `solarized-dark`,
 `solarized-light`, `dracula`, `darcula`, `intellij-light`,
 `everforest-dark`, `everforest-light`, `ayu-dark`, `ayu-mirage`,
-`ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`
-and `zenburn`. Plugins can register more. The README shows a
+`ayu-light`, `github-dark`, `github-light`, `oxocarbon`, `monokai-pro`,
+`zenburn`, `high-contrast-dark` and `high-contrast-light`. The last two are
+the accessibility tier: they target WCAG AAA (7:1) everywhere and give up the
+dimmed comment/hint layer entirely, for low-vision use, bright rooms and
+washed-out projectors. Plugins can register more. The README shows a
 [screenshot of every theme](https://github.com/TrueDaerk/ike#themes).
 
 Switching live is easiest from the palette — type `:` and then `Theme`. The

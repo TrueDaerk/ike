@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-26T00:00:00Z
+timestamp: 2026-07-28T00:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -110,7 +110,8 @@ internal/theme/
                 catppuccin-mocha(+latte), kanagawa, one-dark,
                 solarized-dark(+light), dracula, darcula, intellij-light,
                 everforest-dark(+light), ayu-dark(+mirage, +light),
-                github-dark(+light), oxocarbon, monokai-pro, zenburn
+                github-dark(+light), oxocarbon, monokai-pro, zenburn,
+                high-contrast-dark(+light)
   registry.go   theme.Select(name, extra) — lookup over builtins + plugin
                 themes, fallback to default (found=false lets callers warn)
   theme_test.go slot completeness, unique names, lookup/fallback, overrides
@@ -196,6 +197,36 @@ each accent that clears the bar rather than inventing new hues, and pick a
 *hued but luminance-close* `Selection` rather than a bright one: hue alone
 reads as "selected" in a terminal.
 
+### The strict tier: `high-contrast-dark` / `high-contrast-light` (#1229)
+
+The thresholds above are a **floor**. Two built-ins treat them as a design
+target instead and are audited against a stricter tier — `contrastTier` in
+`contrast_test.go`, selected per theme name by `tierFor`, defaulting to
+`baselineTier` so adding a strict theme can never tighten the other 26:
+
+| | baseline | high-contrast tier |
+|---|---|---|
+| text on `Background`/`Surface`/`Panel`, captures on `Surface`, file colors on `Surface`/`Panel` | AA, 4.5:1 | **AAA, 7:1** |
+| the dim class (`InlayHint`, `VCSDeleted`, `capture:comment`, `capture:punctuation`, `file:lock`) | 3.5:1 | **7:1 — no dim class** |
+| overlays vs `Surface` | 1.35:1 (1.5:1 for `Selection`/`Primary`) | **1.2:1 for all of them** |
+| text over an overlay | 2.3:1 | **5.8:1** |
+
+**Dropping the dim class is the deliberate difference from every other
+built-in.** Comments, punctuation, inlay hints and deleted-file rows carry the
+same weight as body text here: the visual hierarchy that low-emphasis text
+buys is traded for legibility, for low-vision users, bright ambient light and
+low-quality projectors. The tighter overlay cap follows from the same goal —
+at 7:1 text over a 1.2:1 overlay the worst pair in the theme is still ≈ 5.8:1,
+so a selection or a diff line costs almost nothing.
+
+Design consequence: with lightness pinned near the extremes (`Surface`
+`#000000` / `#ffffff`, `Foreground` the inverse), **hue is the only channel
+left** to tell `Error` from `Warning` from `Info`, so the two themes pick
+widely separated hues — red, amber, green, cyan, blue, magenta — rather than
+shades of one accent. The dark tier needs every foreground at relative
+luminance ≥ ~0.33, the light tier at ≤ ~0.084; that is what fixes each hue to
+its pale (dark theme) or deep (light theme) end.
+
 Renderers must never pair a hardcoded color with a theme color: a
 `Selection`/`Primary` background either sets `Foreground(SelectionText)`
 explicitly or keeps a semantic palette foreground (terminal-default text on a
@@ -241,7 +272,11 @@ foregrounds (`InlayHint`, `VCSDeleted`, `file:lock`, comments), darkened the
 light variants' syntax accents, and pulled every overlay background —
 `Selection`, `Primary`, `SelectionMuted`, `Ruler`, the occurrence marks, and
 the three diff tints — back toward `Surface` so semantic row colors survive
-underneath them. Select via:
+underneath them.
+
+`high-contrast-dark` / `high-contrast-light` (#1229) are the accessibility
+tier described above — near-black/near-white surfaces, AAA everywhere, no dim
+class, 1.2:1 overlays. Select via:
 
 ```toml
 [theme]

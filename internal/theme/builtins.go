@@ -31,6 +31,8 @@ func Builtins() []Theme {
 		oxocarbon(),
 		monokaiPro(),
 		zenburn(),
+		highContrastDark(),
+		highContrastLight(),
 	}
 }
 
@@ -2113,6 +2115,175 @@ func zenburn() Theme {
 			"json":    "#f0dfaf",
 			"yaml":    "#f0dfaf",
 			"lock":    "#abab9e", // lightened for contrast from #989888
+		},
+	}
+}
+
+// highContrastDark is the strict tier for dark environments (#1229): near-black
+// surfaces, near-white text, and every foreground held to WCAG **AAA** (7:1) on
+// every base it can land on — including the slots every other built-in ships as
+// a deliberately dim class (comments, punctuation, inlay hints, deleted files,
+// lock files). Trading that low-emphasis layer away is the point: for low-vision
+// users, bright ambient light or a washed-out projector, legibility beats visual
+// hierarchy. Overlays (selection, ruler, occurrence marks, diff lines) stay
+// within 1.2:1 of Surface instead of the usual 1.35/1.5, so painting one under
+// text costs almost nothing — 7:1 text over a 1.2:1 overlay is still ~5.8:1.
+//
+// With lightness pinned near the extremes, hue is the only channel left to tell
+// the semantic slots apart, so they take widely separated hues (red / amber /
+// green / cyan / blue / magenta) rather than shades of one accent.
+func highContrastDark() Theme {
+	return Theme{
+		Name: "high-contrast-dark",
+		Dark: true,
+		UI: UI{
+			Background:      "#000000",
+			Foreground:      "#ffffff",
+			Surface:         "#000000",
+			Panel:           "#0d0d0d",
+			Border:          "#b0b0b0", // borders are structure: bright, not hinted at
+			BorderFocus:     "#ffd54f",
+			Selection:       "#001a2b", // every overlay within 1.2:1 of Surface
+			SelectionText:   "#ffffff",
+			SelectionMuted:  "#181818",
+			OccurrenceRead:  "#00141f",
+			OccurrenceWrite: "#1a1200",
+			InlayHint:       "#c0c0c0", // no dim class: AAA like body text
+			Whitespace:      "#8a8a8a",
+			IndentGuide:     "#8a8a8a",
+			Ruler:           "#141414",
+			Accent:          "#ffab40", // orange
+			Primary:         "#001a2b",
+			Secondary:       "#ff79c6", // magenta
+			Success:         "#69f0ae", // green
+			Warning:         "#ffd54f", // amber
+			Error:           "#ff8a80", // red
+			Info:            "#8ab4ff", // blue
+			Hint:            "#00e5ff", // cyan
+			MoveSource:      "#ff8a80",
+			DropTarget:      "#ffd54f",
+			Ghost:           "#ffab40",
+			ScrollbarTrack:  "#3d3d3d",
+			ScrollbarThumb:  "#b0b0b0",
+			DiffAdded:       "#001a00",
+			DiffRemoved:     "#1a0000",
+			DiffChanged:     "#1a1a00",
+			VCSModified:     "#8ab4ff",
+			VCSAdded:        "#69f0ae",
+			VCSUntracked:    "#ffd54f",
+			VCSDeleted:      "#c0c0c0", // no dim class
+			VCSConflicted:   "#ff8a80",
+		},
+		Captures: map[string]string{
+			"keyword":          "#ff79c6",
+			"operator":         "#ffffff",
+			"string":           "#69f0ae",
+			"number":           "#ffab40",
+			"comment":          "#c0c0c0", // no dim class
+			"function":         "#8ab4ff",
+			"type":             "#00e5ff",
+			"constant":         "#ffab40",
+			"constant.builtin": "#ffab40",
+			"variable":         "#ffffff",
+			"variable.builtin": "#ff8a80",
+			"property":         "#ffffff",
+			"label":            "#ff79c6",
+			"attribute":        "#ffd54f",
+			"punctuation":      "#e0e0e0", // no dim class
+			"escape":           "#ffab40",
+			"boolean":          "#ffab40",
+			"tag":              "#ff8a80",
+			"embedded":         "#ffffff",
+		},
+		Files: map[string]string{
+			"dir":     "#8ab4ff",
+			"default": "#ffffff",
+			"go":      "#00e5ff",
+			"md":      "#69f0ae",
+			"toml":    "#ffd54f",
+			"json":    "#ffd54f",
+			"yaml":    "#ffd54f",
+			"lock":    "#c0c0c0", // no dim class
+		},
+	}
+}
+
+// highContrastLight is the inverse of highContrastDark: near-white surfaces,
+// near-black text, the same AAA / no-dim-class / 1.2:1-overlay rules. The hues
+// are the dark tier's, rotated to the dark end of each so they clear 7:1 on
+// white.
+func highContrastLight() Theme {
+	return Theme{
+		Name: "high-contrast-light",
+		Dark: false,
+		UI: UI{
+			Background:      "#f2f2f2",
+			Foreground:      "#000000",
+			Surface:         "#ffffff",
+			Panel:           "#f2f2f2",
+			Border:          "#4d4d4d",
+			BorderFocus:     "#7a3600",
+			Selection:       "#dfefff", // every overlay within 1.2:1 of Surface
+			SelectionText:   "#000000",
+			SelectionMuted:  "#ebebeb",
+			OccurrenceRead:  "#e0f0ff",
+			OccurrenceWrite: "#fff0d0",
+			InlayHint:       "#4d4d4d", // no dim class: AAA like body text
+			Whitespace:      "#767676",
+			IndentGuide:     "#767676",
+			Ruler:           "#ebebeb",
+			Accent:          "#7a3600", // orange
+			Primary:         "#dfefff",
+			Secondary:       "#8b1a6b", // magenta
+			Success:         "#00591c", // green
+			Warning:         "#6b4a00", // amber
+			Error:           "#96000e", // red
+			Info:            "#123a8a", // blue
+			Hint:            "#005252", // cyan
+			MoveSource:      "#96000e",
+			DropTarget:      "#6b4a00",
+			Ghost:           "#7a3600",
+			ScrollbarTrack:  "#d0d0d0",
+			ScrollbarThumb:  "#4d4d4d",
+			DiffAdded:       "#e0ffe0",
+			DiffRemoved:     "#ffe8e8",
+			DiffChanged:     "#fffbd6",
+			VCSModified:     "#123a8a",
+			VCSAdded:        "#00591c",
+			VCSUntracked:    "#6b4a00",
+			VCSDeleted:      "#4d4d4d", // no dim class
+			VCSConflicted:   "#96000e",
+		},
+		Captures: map[string]string{
+			"keyword":          "#8b1a6b",
+			"operator":         "#000000",
+			"string":           "#00591c",
+			"number":           "#7a3600",
+			"comment":          "#4d4d4d", // no dim class
+			"function":         "#123a8a",
+			"type":             "#005252",
+			"constant":         "#7a3600",
+			"constant.builtin": "#7a3600",
+			"variable":         "#000000",
+			"variable.builtin": "#96000e",
+			"property":         "#000000",
+			"label":            "#8b1a6b",
+			"attribute":        "#6b4a00",
+			"punctuation":      "#333333", // no dim class
+			"escape":           "#7a3600",
+			"boolean":          "#7a3600",
+			"tag":              "#96000e",
+			"embedded":         "#000000",
+		},
+		Files: map[string]string{
+			"dir":     "#123a8a",
+			"default": "#000000",
+			"go":      "#005252",
+			"md":      "#00591c",
+			"toml":    "#6b4a00",
+			"json":    "#6b4a00",
+			"yaml":    "#6b4a00",
+			"lock":    "#4d4d4d", // no dim class
 		},
 	}
 }

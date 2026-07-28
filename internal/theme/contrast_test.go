@@ -93,13 +93,60 @@ const (
 	minOverlayTextContrast = 2.3
 )
 
-// dimTextSlots are the slots held to minDimContrast instead of minTextContrast.
+// dimTextSlots are the slots held to the tier's dim threshold instead of its
+// text threshold. A tier may set both to the same number, which is exactly what
+// "no dim class" means for the high-contrast themes.
 var dimTextSlots = map[string]bool{
 	"InlayHint":           true,
 	"VCSDeleted":          true,
 	"capture:comment":     true,
 	"capture:punctuation": true,
 	"file:lock":           true,
+}
+
+// contrastTier is the threshold set one theme is audited against. Themes may
+// aim above the baseline floor; the audit then holds them to what they aim for,
+// so a stricter theme cannot silently regress to merely passing (#1229).
+type contrastTier struct {
+	text        float64 // fg on Background/Surface/Panel
+	dim         float64 // same, for dimTextSlots
+	overlay     float64 // max drift of an overlay background from Surface
+	selection   float64 // same, for the two strong backgrounds
+	overlayText float64 // dim text over the strongest overlay
+}
+
+// baselineTier is the readability floor every built-in must clear (#1226).
+var baselineTier = contrastTier{
+	text:        minTextContrast,
+	dim:         minDimContrast,
+	overlay:     maxOverlayContrast,
+	selection:   maxSelectionContrast,
+	overlayText: minOverlayTextContrast,
+}
+
+// aaaTier is the stricter target of the two high-contrast themes (#1229):
+// WCAG AAA everywhere, no dim class (dim == text), and overlays capped at
+// 1.2:1 — so the worst pair in the theme is still ~5.8:1 (7 / 1.2).
+var aaaTier = contrastTier{
+	text:        7,
+	dim:         7,
+	overlay:     1.2,
+	selection:   1.2,
+	overlayText: 5.8,
+}
+
+// tierByTheme overrides the baseline per theme name; everything absent here
+// keeps baselineTier, so adding a strict theme never tightens the others.
+var tierByTheme = map[string]contrastTier{
+	"high-contrast-dark":  aaaTier,
+	"high-contrast-light": aaaTier,
+}
+
+func tierFor(name string) contrastTier {
+	if t, ok := tierByTheme[name]; ok {
+		return t
+	}
+	return baselineTier
 }
 
 // TestBuiltinThemeFullContrast is the exhaustive version of the audit above: it
@@ -109,6 +156,7 @@ var dimTextSlots = map[string]bool{
 func TestBuiltinThemeFullContrast(t *testing.T) {
 	for _, th := range Builtins() {
 		p := NewPalette(th)
+		tier := tierFor(th.Name)
 		t.Run(th.Name, func(t *testing.T) {
 			// eps absorbs the rounding loss of storing tuned colors as 8-bit hex.
 			const eps = 0.02
@@ -124,15 +172,15 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				c    color.Color
 				max  float64
 			}{
-				{"SelectionMuted", p.SelectionMuted, maxOverlayContrast},
-				{"Ruler", p.Ruler, maxOverlayContrast},
-				{"OccurrenceRead", p.OccurrenceRead, maxOverlayContrast},
-				{"OccurrenceWrite", p.OccurrenceWrite, maxOverlayContrast},
-				{"DiffAdded", p.DiffAdded, maxOverlayContrast},
-				{"DiffRemoved", p.DiffRemoved, maxOverlayContrast},
-				{"DiffChanged", p.DiffChanged, maxOverlayContrast},
-				{"Selection", p.Selection, maxSelectionContrast},
-				{"Primary", p.Primary, maxSelectionContrast},
+				{"SelectionMuted", p.SelectionMuted, tier.overlay},
+				{"Ruler", p.Ruler, tier.overlay},
+				{"OccurrenceRead", p.OccurrenceRead, tier.overlay},
+				{"OccurrenceWrite", p.OccurrenceWrite, tier.overlay},
+				{"DiffAdded", p.DiffAdded, tier.overlay},
+				{"DiffRemoved", p.DiffRemoved, tier.overlay},
+				{"DiffChanged", p.DiffChanged, tier.overlay},
+				{"Selection", p.Selection, tier.selection},
+				{"Primary", p.Primary, tier.selection},
 			} {
 				if r := contrastRatio(o.c, p.Surface); r > o.max+eps {
 					t.Errorf("%s/Surface: overlay contrast %.2f:1, want <= %.2f:1", o.name, r, o.max)
@@ -158,15 +206,15 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				{"DiffRemoved", p.DiffRemoved}, {"DiffChanged", p.DiffChanged},
 			}
 			audit := func(fg named, bases []named) {
-				want := minTextContrast
+				want := tier.text
 				if dimTextSlots[fg.name] {
-					want = minDimContrast
+					want = tier.dim
 				}
 				for _, b := range bases {
 					check(fg.name+"/"+b.name, fg.c, b.c, want)
 				}
 				for _, b := range overlays {
-					check(fg.name+"/"+b.name, fg.c, b.c, minOverlayTextContrast)
+					check(fg.name+"/"+b.name, fg.c, b.c, tier.overlayText)
 				}
 			}
 			for _, f := range []named{
@@ -186,8 +234,8 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				audit(named{"file:" + k, Resolve(v)}, fileBases)
 			}
 			// The two strong backgrounds also carry SelectionText.
-			check("SelectionText/Selection", p.SelectionText, p.Selection, minTextContrast)
-			check("SelectionText/Primary", p.SelectionText, p.Primary, minTextContrast)
+			check("SelectionText/Selection", p.SelectionText, p.Selection, tier.text)
+			check("SelectionText/Primary", p.SelectionText, p.Primary, tier.text)
 		})
 	}
 }
@@ -205,6 +253,31 @@ func TestContrastRatioFormula(t *testing.T) {
 		got := contrastRatio(Resolve(c.a), Resolve(c.b))
 		if math.Abs(got-c.want) > 0.02 {
 			t.Errorf("contrastRatio(%s, %s) = %.2f, want %.2f", c.a, c.b, got, c.want)
+		}
+	}
+}
+
+// TestHighContrastThemesUseStrictTier guards #1229 from both sides: the two
+// high-contrast built-ins are registered and audited at the AAA tier (a rename
+// or a dropped map entry would silently demote them to the baseline), and no
+// other built-in was tightened along with them.
+func TestHighContrastThemesUseStrictTier(t *testing.T) {
+	strict := map[string]bool{"high-contrast-dark": false, "high-contrast-light": false}
+	for _, th := range Builtins() {
+		if _, ok := strict[th.Name]; ok {
+			strict[th.Name] = true
+			if tierFor(th.Name) != aaaTier {
+				t.Errorf("%s must be audited at the AAA tier", th.Name)
+			}
+			continue
+		}
+		if tierFor(th.Name) != baselineTier {
+			t.Errorf("%s must keep the baseline tier: adding a strict theme may not tighten the others", th.Name)
+		}
+	}
+	for name, found := range strict {
+		if !found {
+			t.Errorf("built-in theme %q missing from Builtins()", name)
 		}
 	}
 }

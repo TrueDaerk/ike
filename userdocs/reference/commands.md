@@ -275,6 +275,8 @@ bring their own.
 | Theme: github-light | `themes.select.github-light` | — | — | everywhere |
 | Theme: gruvbox | `themes.select.gruvbox` | — | — | everywhere |
 | Theme: gruvbox-light | `themes.select.gruvbox-light` | — | — | everywhere |
+| Theme: high-contrast-dark | `themes.select.high-contrast-dark` | — | — | everywhere |
+| Theme: high-contrast-light | `themes.select.high-contrast-light` | — | — | everywhere |
 | Theme: intellij-light | `themes.select.intellij-light` | — | — | everywhere |
 | Theme: kanagawa | `themes.select.kanagawa` | — | — | everywhere |
 | Theme: monokai-pro | `themes.select.monokai-pro` | — | — | everywhere |
