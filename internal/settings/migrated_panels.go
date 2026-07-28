@@ -29,6 +29,9 @@ type keymapCapture struct {
 	steps    []keymap.Key
 	conflict string
 	warn     string
+	// other is the colliding binding behind conflict (0460, #1312): its
+	// context decides whether "keep both, resolve by context" is possible.
+	other keymap.Binding
 }
 
 func newKeymapCapture(page *KeymapPage, host SubPanelHost, row keymapRow) *keymapCapture {
@@ -41,15 +44,19 @@ func (c *keymapCapture) Capturing() bool { return true }
 func (c *keymapCapture) Buttons() []Button {
 	if c.conflict != "" {
 		// A collision is a decision, not a yes/no (#1298): take the chord
-		// from the other command, or go back and record a different one.
-		return []Button{
-			{Label: "Replace & unbind other", Key: "enter", Do: c.commit},
-			{Label: "Pick a different chord", Key: "p", Do: func() tea.Cmd {
-				c.steps, c.conflict, c.warn = nil, "", ""
+		// from the other command, keep both when their panes never overlap
+		// (#1312), or go back and record a different one.
+		btns := []Button{{Label: "Replace & unbind other", Key: "enter", Do: c.commit}}
+		if c.canKeepBoth() {
+			btns = append(btns, Button{Label: "Keep both, resolve by context", Key: "b", Do: c.keepBoth})
+		}
+		return append(btns,
+			Button{Label: "Pick a different chord", Key: "p", Do: func() tea.Cmd {
+				c.steps, c.conflict, c.warn, c.other = nil, "", "", keymap.Binding{}
 				return nil
 			}},
-			{Label: "Cancel", Do: func() tea.Cmd { c.host.Pop(); return nil }},
-		}
+			Button{Label: "Cancel", Do: func() tea.Cmd { c.host.Pop(); return nil }},
+		)
 	}
 	return []Button{
 		{Label: "Apply", Do: c.confirm, Disabled: len(c.steps) == 0},
@@ -66,8 +73,12 @@ func (c *keymapCapture) Update(key tea.KeyPressMsg) tea.Cmd {
 		switch key.String() {
 		case "enter":
 			return c.commit()
+		case "b":
+			if c.canKeepBoth() {
+				return c.keepBoth()
+			}
 		case "p":
-			c.steps, c.conflict, c.warn = nil, "", ""
+			c.steps, c.conflict, c.warn, c.other = nil, "", "", keymap.Binding{}
 			return nil
 		}
 		c.host.Pop()
@@ -111,15 +122,30 @@ func (c *keymapCapture) confirm() tea.Cmd {
 		return nil
 	}
 	if other, found := c.page.conflictWith(c.chord(), c.row); found {
-		c.conflict = other
+		c.conflict, c.other = other.Command, other
 		return nil
 	}
 	return c.commit()
 }
 
+// canKeepBoth reports whether the collision can be resolved by context rather
+// than by taking the chord away (#1312): both commands must be pane-scoped, in
+// different panes, so neither ever shadows the other.
+func (c *keymapCapture) canKeepBoth() bool {
+	return c.conflict != "" && separableContexts(c.row.Context, c.other.Context)
+}
+
 func (c *keymapCapture) commit() tea.Cmd {
 	c.host.Pop()
-	return c.page.commitRebindChord(c.row, c.chord())
+	return c.page.commitRebindChord(c.row, c.chord(), false)
+}
+
+// keepBoth writes the chord as a context-qualified override, leaving the
+// colliding command bound in its own context. Both bindings stay; the resolver
+// picks the one whose pane is focused.
+func (c *keymapCapture) keepBoth() tea.Cmd {
+	c.host.Pop()
+	return c.page.commitRebindChord(c.row, c.chord(), true)
 }
 
 func (c *keymapCapture) View(w, h int) string {
@@ -138,8 +164,15 @@ func (c *keymapCapture) View(w, h int) string {
 		lines = append(lines, warn.Render(" ⚠ "+c.warn))
 	}
 	if c.conflict != "" {
-		lines = append(lines, warn.Render(" ⚠ already runs "+c.conflict))
-		lines = append(lines, sec.Render(" enter replace & unbind it · p pick a different chord · esc cancel"))
+		where := " (" + keymap.ContextName(c.other.Context) + ")"
+		lines = append(lines, warn.Render(" ⚠ already runs "+c.conflict+where))
+		hint := " enter replace & unbind it · p pick a different chord · esc cancel"
+		if c.canKeepBoth() {
+			lines = append(lines, sec.Render(" b keeps both: "+c.row.Command+" in "+
+				keymap.ContextName(c.row.Context)+", "+c.conflict+" in "+keymap.ContextName(c.other.Context)))
+			hint = " enter replace · b keep both by context · p different chord · esc cancel"
+		}
+		lines = append(lines, sec.Render(hint))
 		if free := c.page.suggestChords(2); len(free) > 0 {
 			lines = append(lines, sec.Render(" free: "+strings.Join(free, " · ")))
 		}

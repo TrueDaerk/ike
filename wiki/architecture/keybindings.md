@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-28T13:00:00Z
+timestamp: 2026-07-28T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -66,13 +66,48 @@ Normalisation is idempotent, so the resolver only ever compares concrete keys.
 ## Table & conflicts
 
 `BuildTable(defaults, overrides, goos)` (`table.go`) starts from the normalised
-default set and overlays the merged `[keymap.bindings]` map (chord string →
+default set and overlays the merged `[keymap.bindings]` map (binding key →
 command id; `""` unbinds). Overrides arrive already merged by config precedence
 (04), so each non-empty entry replaces matching default chords (a brand-new chord
-becomes a `Global` user binding). `conflict.go` then detects same chord+context
+becomes a user binding). `conflict.go` then detects same chord+context
 clashes: it keeps the highest-`Layer` binding and surfaces the rest as non-fatal
 diagnostics — never a silent shadow. Unparseable override keys are skipped as
 diagnostics too.
+
+### Binding keys: bare and context-qualified (0460, #1312)
+
+`override.go` parses the map keys. A key is either
+
+- a **bare chord** — `"ctrl+s"` — which applies **wherever the chord is bound**:
+  a rebind replaces the command in every context, an unbind drops them all; or
+- a **context-qualified chord** — `"editor.ctrl+s"` — which touches that one
+  context only. The qualifier is one of `global`, `editor`, `explorer`,
+  `palette`, `diff` (`ParseContextName`); anything else is not a qualifier and
+  is parsed as part of the chord, so dotted chords (`cmd+.`) keep working.
+  `global.<chord>` is therefore narrower than the bare form: it binds in the
+  `Global` context and leaves pane-scoped bindings of the same chord alone.
+
+Qualified keys are applied **after** bare ones (both in sorted order), so the
+narrower statement wins regardless of Go's map iteration order. Because
+conflict detection groups by chord *and* context, two qualified bindings in
+different panes are not a conflict at all — the resolver simply picks the one
+whose pane has focus. That is the config spelling behind the keymap page's
+"keep both, resolve by context".
+
+TOML's own grammar invites writing a dotted map key as a sub-table, so both
+spellings are accepted and mean the same entry (the config package flattens
+nested slot-map tables per layer before merging, `config/load.go`):
+
+```toml
+[keymap.bindings.editor]
+"ctrl+g" = "editor.nextOccurrence"
+
+[keymap.bindings]
+"editor.ctrl+g" = "editor.nextOccurrence"
+```
+
+`BindingConfigKey(ctx, chord, qualified)` renders the dotted config key the
+settings page writes back through.
 
 ## Resolver
 
@@ -215,9 +250,9 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   would not survive `String()` → `ParseChord` — is rejected with a visible
   warning instead of being dropped in silence (#1331).
 - On confirm the capture runs conflict detection against the effective table;
-  a collision names the other command and waits — enter overrides, any other
-  key cancels. Capturing a cmd chord (or ctrl+tab/i/m) raises the 0081 honesty
-  warning.
+  a collision names the other command **and its context** and waits for a
+  decision (see "Conflict resolution" below). Capturing a cmd chord (or
+  ctrl+tab/i/m) raises the 0081 honesty warning.
 - A rebind writes `keymap.bindings.<new-chord> = <command>` and unbinds the
   old chord (`= ""`) in one write-back + reload; `u` unbinds, `r` resets to
   the preset (removes the override). The root model rebuilds its resolver on
@@ -232,6 +267,36 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   registry (`Registry.Commands()`), match the `/` filter (also via the
   literal words "no binding"), and enter captures the command's first chord
   through the normal capture/conflict flow; `u`/`r` are no-ops.
+
+### Conflict resolution (0460, #1298, #1312)
+
+A captured chord that another command already carries is a decision, not a
+yes/no. `conflictWith` reports the colliding binding — including one in a
+context that never overlaps, because the plain rebind writes an *unqualified*
+override and would take the chord in every context silently. The dialog offers:
+
+| choice | key | what it writes |
+|---|---|---|
+| Replace & unbind other | `enter` | `keymap.bindings.<chord> = <command>` (the other binding loses the chord) |
+| Keep both, resolve by context | `b` | `keymap.bindings.<context>.<chord> = <command>` — both bindings survive |
+| Pick a different chord | `p` | nothing; capture restarts |
+| Cancel | `esc` | nothing |
+
+"Keep both" is offered only when `separableContexts` holds: both commands are
+pane-scoped and the panes differ. A `Global` binding matches in every pane, so
+keeping both would just shadow one of them and the option is hidden.
+
+Two consequences for the other page keys:
+
+- `r` (reset) removes the context-qualified override when one is set for
+  exactly this chord+context, else the flat one (`overrideKeyFor`).
+- `u` (unbind) writes the *qualified* `= ""` when the chord is also bound in
+  another context (`unbindKeyFor`) — a flat unbind would drop the other half of
+  a keep-both pair too.
+
+The detail column lists both sides of a shared chord with their contexts, and
+says `↔ … resolved by context` (with no replacement suggestions) instead of
+warning when the contexts cannot overlap.
 
 ## JetBrains keymap XML import (#677)
 

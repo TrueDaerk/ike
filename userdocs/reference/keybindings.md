@@ -171,13 +171,31 @@ Active when a diff pane has focus.
 
 ## Rebinding
 
-Bindings live under `[keymap.bindings]` in `settings.toml`, keyed by command
-ID:
+Bindings live under `[keymap.bindings]` in `settings.toml`, keyed by chord;
+the value is the command ID, and an empty value unbinds the chord:
 
 ```toml
 [keymap.bindings]
-"editor.commentLine" = "cmd+7"
+"cmd+7" = "editor.commentLine"
+"cmd+j" = ""                      # unbind
 ```
+
+A chord may be qualified with the pane it applies in — `global`, `editor`,
+`explorer`, `palette` or `diff` — so one chord can run different
+commands depending on what has focus. The qualified form only touches its own
+context; the bare form applies wherever the chord is bound:
+
+```toml
+[keymap.bindings.editor]
+"ctrl+g" = "editor.nextOccurrence"
+
+# The same thing written as a dotted key:
+[keymap.bindings]
+"editor.ctrl+g" = "editor.nextOccurrence"
+```
+
+The keymap settings page offers this as **keep both, resolve by context** when a
+captured chord collides with a command in another pane.
 
 The [Commands reference](commands.md) lists every command ID, including the
 ones with no default chord.

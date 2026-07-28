@@ -238,15 +238,16 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		// unbind is easy to fat-finger and non-obvious to restore.
 		if b, ok := k.current(); ok && !b.unbound && !b.nobind && k.host != nil {
 			chord := b.Chord.String()
+			key := k.unbindKeyFor(b)
 			k.host.Push(newConfirm(k.host, "unbind "+chord, "Unbind", k.pal, func() tea.Cmd {
-				return config.WriteAndReload(k.opts, config.UserScope, "keymap.bindings."+chord, "")
+				return config.WriteAndReload(k.opts, config.UserScope, key, "")
 			}))
 		}
 	case "r":
 		// Reset to preset: remove the override; the default falls back. A
 		// never-bound command has no override to remove.
 		if b, ok := k.current(); ok && !b.nobind {
-			return config.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings."+b.Chord.String())
+			return config.RemoveAndReload(k.opts, config.UserScope, k.overrideKeyFor(b))
 		}
 	case "backspace":
 		if k.filter != "" {
@@ -340,13 +341,18 @@ func (k *KeymapPage) commitImportPath(raw string) tea.Cmd {
 // reload, so the table re-resolves atomically. An unbound row (#736) has no
 // live chord to drop — its default chord's ""-override stays as-is (it is what
 // keeps that chord unbound) and the new chord simply binds the command again.
-func (k *KeymapPage) commitRebindChord(b keymapRow, chord keymap.Chord) tea.Cmd {
+//
+// byContext qualifies both writes with the row's context (0460, #1312): the
+// chord then binds — and the old one unbinds — in that pane only, which is how
+// "keep both, resolve by context" leaves the colliding command untouched
+// everywhere else.
+func (k *KeymapPage) commitRebindChord(b keymapRow, chord keymap.Chord, byContext bool) tea.Cmd {
 	if chord.Len() == 0 {
 		return nil
 	}
 	opts := k.opts
-	newKey := "keymap.bindings." + chord.String()
-	oldKey := "keymap.bindings." + b.Chord.String()
+	newKey := keymap.BindingConfigKey(b.Context, chord.String(), byContext)
+	oldKey := keymap.BindingConfigKey(b.Context, b.Chord.String(), byContext)
 	command := b.Command
 	sameChord := chord.Equal(b.Chord)
 	unbound := b.unbound || b.nobind
@@ -583,10 +589,17 @@ func pad(s string, n int) string {
 	return s + strings.Repeat(" ", n-lipgloss.Width(s))
 }
 
-// conflictWith reports the command a chord would collide with in the effective
-// table (same chord, overlapping context), ignoring the binding being rebound.
-func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (string, bool) {
+// conflictWith reports the binding a chord already carries in the effective
+// table, ignoring the binding being rebound. A binding in a context that never
+// overlaps is reported too (#1312): the plain rebind writes an unqualified
+// override, which takes the chord in *every* context and would clobber it
+// silently — the decision belongs to the user, who can keep both instead.
+// An overlapping binding is preferred as the reported one, since it is the
+// collision that would actually shadow something.
+func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (keymap.Binding, bool) {
 	cs := chord.String()
+	var fallback keymap.Binding
+	found := false
 	for _, b := range k.table().Bindings() {
 		if b.Chord.String() != cs {
 			continue
@@ -594,10 +607,49 @@ func (k *KeymapPage) conflictWith(chord keymap.Chord, self keymapRow) (string, b
 		if b.Chord.Equal(self.Chord) && b.Command == self.Command {
 			continue
 		}
-		if b.Context.Matches(self.Context) || self.Context.Matches(b.Context) ||
-			b.Context == keymap.Global || self.Context == keymap.Global {
-			return b.Command, true
+		if !separableContexts(b.Context, self.Context) {
+			return b, true
+		}
+		if !found {
+			fallback, found = b, true
 		}
 	}
-	return "", false
+	return fallback, found
+}
+
+// overrideKeyFor returns the config key that carries this row's override: the
+// context-qualified spelling when one is set for exactly this chord+context
+// (#1312), the flat one otherwise. It is what "r" removes to reset a binding.
+func (k *KeymapPage) overrideKeyFor(b keymapRow) string {
+	chord := b.Chord.String()
+	qualified := keymap.BindingConfigKey(b.Context, chord, true)
+	if _, ok := config.Get().Keymap.Bindings[strings.TrimPrefix(qualified, "keymap.bindings.")]; ok {
+		return qualified
+	}
+	return "keymap.bindings." + chord
+}
+
+// unbindKeyFor returns the config key that drops exactly this binding. A flat
+// chord→"" unbinds every context at once, so a pane-scoped binding whose chord
+// another context also uses is unbound through its qualified key instead —
+// otherwise "unbind" on one half of a "keep both" pair would silently remove
+// the other half too (#1312).
+func (k *KeymapPage) unbindKeyFor(b keymapRow) string {
+	chord := b.Chord.String()
+	if b.Context != keymap.Global {
+		for _, other := range k.table().Bindings() {
+			if other.Chord.String() == chord && other.Context != b.Context {
+				return keymap.BindingConfigKey(b.Context, chord, true)
+			}
+		}
+	}
+	return "keymap.bindings." + chord
+}
+
+// separableContexts reports whether two bindings can share a chord without
+// shadowing each other — both are pane-scoped and the panes differ (0460,
+// #1312). A Global binding matches in every pane, so it always overlaps and
+// "keep both" is not on offer for it.
+func separableContexts(a, b keymap.Context) bool {
+	return a != keymap.Global && b != keymap.Global && a != b
 }

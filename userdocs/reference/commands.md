@@ -255,6 +255,7 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Clone Repository… | `project.clone` | — | — | everywhere |
 | Switch Project… | `project.switch` | `cmd+shift+p` | — | everywhere |
 
 ## themes

@@ -569,14 +569,35 @@ looks like a schema page:
 - **Detail column** (`keymap_detail.go`): the selected command's title and id,
   then `bindings · n` listing **every** chord bound to it with its context and
   `@default` / `@user` layer, then its conflict state — `✓ no conflicts`, or
-  the other commands sharing the chord plus two **free chords** taken from the
-  live table (`suggestChords` never offers a bound one). Fragile chords keep
-  their warning. Clicks there are inert: it is read-only chrome.
+  **both sides** of a shared chord with their contexts (#1312) plus two **free
+  chords** taken from the live table (`suggestChords` never offers a bound
+  one). When the contexts cannot overlap the line reads `↔ … resolved by
+  context` and the suggestions are dropped: nothing needs replacing. Fragile
+  chords keep their warning. Clicks there are inert: it is read-only chrome.
 - **Conflicts are a decision, not a yes/no.** The capture sub-panel offers
-  *Replace & unbind other* (`enter`), *Pick a different chord* (`p`, which
-  clears the recorded steps and keeps capturing) and *Cancel*. The wireframes'
-  third option — keep both, resolve by context — needs a config spelling for
-  context-qualified overrides and is tracked as #1312.
+  *Replace & unbind other* (`enter`), *Keep both, resolve by context* (`b`),
+  *Pick a different chord* (`p`, which clears the recorded steps and keeps
+  capturing) and *Cancel*.
+
+### Keep both, resolve by context (0460, #1312)
+
+The third wireframe option landed with the config spelling it needed:
+`keymap.bindings.<context>.<chord>` (see
+[Keybindings](./keybindings.md#binding-keys-bare-and-context-qualified-0460-1312)).
+Taking it writes the captured chord as a context-qualified override, so the
+colliding command keeps the chord in its own pane and the resolver picks
+whichever binding matches the focus.
+
+The option appears only when the two commands are **separable**: both
+pane-scoped, in different panes. A `Global` binding matches everywhere, so
+keeping both would only shadow one of them — then the option is hidden and the
+choice is genuinely replace-or-pick-another.
+
+Because a *bare* `keymap.bindings.<chord>` write takes the chord in every
+context, the conflict check now also reports a collision in a non-overlapping
+context — otherwise the plain rebind would clobber it silently. For the same
+reason `u` unbinds through the qualified key when the chord is shared, and `r`
+resets whichever key (flat or qualified) actually carries the override.
 
 Keys stay as they were (`enter` rebind · `u` unbind · `r` reset · `i` import):
 the wireframe's `r rebind` would have collided with the established reset.
