@@ -2,6 +2,7 @@ package settings
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -85,9 +86,20 @@ func (c *keymapCapture) Update(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 	}
-	if kk, ok := keymap.FromKeyMsg(key); ok {
-		c.steps = append(c.steps, keymap.NormalizeKey(kk, keymap.GOOS))
-		c.warn = fragileWarning(c.chord())
+	kk, ok := keymap.FromKeyMsg(key)
+	if !ok {
+		// A press the chord format cannot carry used to vanish without a trace
+		// (#1331) — the field simply stayed empty. Say so instead.
+		c.warn = "cannot record " + strconv.Quote(key.String()) + " as a chord"
+		return nil
+	}
+	c.steps = append(c.steps, keymap.NormalizeKey(kk, keymap.GOOS))
+	c.warn = fragileWarning(c.chord())
+	// A recorded step must survive the round-trip through the config's chord
+	// string, or the binding would be written and never read back (#1331).
+	if _, err := keymap.ParseChord(c.chord().String()); err != nil {
+		c.steps = c.steps[:len(c.steps)-1]
+		c.warn = "cannot record " + strconv.Quote(key.String()) + " as a chord"
 	}
 	return nil
 }

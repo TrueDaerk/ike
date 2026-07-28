@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-27T12:30:00Z
+timestamp: 2026-07-28T13:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -40,6 +40,11 @@ than as a typo.
   fixed order meta, ctrl, alt, shift), so parse→format→parse is idempotent. A bare
   uppercase letter folds to base+`Shift`; an underscore base is rejected (so the
   `focus_*` config stopgap sharing the bindings map is treated as a non-chord).
+  The separator can also be the base: a trailing empty part *preceded by another
+  empty one* is the literal plus key (#1331) — `"+"` and `"cmd++"` parse to base
+  `+`, while a single trailing `+` (`"cmd+"`) stays a missing-base error. That
+  makes `String()` → `ParseKey` stable for plus bindings, which previously could
+  neither be captured nor read back from config.
 - **`Binding`** (`binding.go`) — `Chord`, `Command`, `Context`, presentation
   metadata (`Title`, `Owner`), a `Fragile` flag, and a `Layer` (default < user <
   project).
@@ -206,7 +211,9 @@ The settings panel's **Keymap** page (`internal/settings/keymap_page.go`, a
   esc clears it; enter on a row starts a **capture**: each key press appends a
   chord step
   (`keymap.FromKeyMsg` + platform normalisation, multi-step supported), enter
-  confirms, esc cancels.
+  confirms, esc cancels. A press the chord format cannot carry — or a step that
+  would not survive `String()` → `ParseChord` — is rejected with a visible
+  warning instead of being dropped in silence (#1331).
 - On confirm the capture runs conflict detection against the effective table;
   a collision names the other command and waits — enter overrides, any other
   key cancels. Capturing a cmd chord (or ctrl+tab/i/m) raises the 0081 honesty

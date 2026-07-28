@@ -21,6 +21,10 @@ func TestChordParseFormatRoundTrip(t *testing.T) {
 		{"cmd+left-bracket", "cmd+left-bracket"},
 		{"A", "shift+a"}, // bare uppercase folds to base+shift
 		{"escape", "esc"},
+		// A literal "+" base (#1331): bare and modified, both round-trip.
+		{"+", "+"},
+		{"cmd++", "cmd++"},
+		{"ctrl+shift++", "ctrl+shift++"},
 	}
 	for _, c := range cases {
 		got, err := ParseChord(c.in)
@@ -405,5 +409,35 @@ func TestMouseNavButtonsBindAndRebind(t *testing.T) {
 	table = BuildTable(Defaults(PresetJetBrains), map[string]string{"mouse-forward": "explorer.toggle"}, "darwin")
 	if b, ok := table.Lookup(MustParseChord("mouse-forward"), Editor); !ok || b.Command != "explorer.toggle" {
 		t.Fatalf("rebound mouse-forward = %+v ok=%v, want explorer.toggle", b, ok)
+	}
+}
+
+// TestParsePlusKey guards the literal "+" base (#1331): the naive split on "+"
+// used to leave an empty base, so a plus binding could never be written or read
+// back. A single trailing "+" ("cmd+") is still a missing base.
+func TestParsePlusKey(t *testing.T) {
+	for _, c := range []struct {
+		in   string
+		base string
+		mods Mod
+	}{
+		{"+", "+", 0},
+		{"cmd++", "+", ModMeta},
+		{"ctrl+shift++", "+", ModCtrl | ModShift},
+	} {
+		k, err := ParseKey(c.in)
+		if err != nil {
+			t.Fatalf("ParseKey(%q): %v", c.in, err)
+		}
+		if k.Base != c.base || k.Mods != c.mods {
+			t.Errorf("ParseKey(%q) = %+v, want base %q mods %v", c.in, k, c.base, c.mods)
+		}
+	}
+	if _, err := ParseKey("cmd+"); err == nil {
+		t.Error(`ParseKey("cmd+") must still report a missing base key`)
+	}
+	// The bubbletea adapter must accept the bare press as well.
+	if k, ok := FromKeyMsg(tea.KeyPressMsg{Text: "+", Code: '+'}); !ok || k.Base != "+" {
+		t.Errorf("FromKeyMsg(+) = %+v ok=%v, want base %q", k, ok, "+")
 	}
 }
