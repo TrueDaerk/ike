@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-28 (terminal: completion only at the shell prompt)
+
+- The completion popup also fired while a foreground program was reading
+  stdin — typing into `python3 -c 'input("Give me something: ")'` opened file
+  suggestions over the program's own prompt, and popup-bound keys risked being
+  swallowed instead of reaching the program (#1340). `Session.AtPrompt()` now
+  answers "is the shell itself the foreground job" from the PTY's foreground
+  process group (`TIOCGPGRP`, the same signal `Busy()` uses, so no shell
+  prompt integration is required), and `completionActive` requires it. While a
+  program runs, typing arms nothing, `ctrl+space` does nothing, an open popup
+  is dropped, and tab/enter/arrows/esc pass through raw; completion returns
+  with the prompt. An unavailable ioctl fails open.
+  Updated [Integrated Terminal](/architecture/terminal.md).
+
 ## 2026-07-28 (terminal: accepting a completion ends the interaction)
 
 - Tab-accepting a **directory** in the completion popup re-opened the popup on

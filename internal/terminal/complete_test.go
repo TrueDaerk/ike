@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/vt"
 )
 
 func TestParseCmdline(t *testing.T) {
@@ -381,5 +382,71 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 	m.OnOutput()
 	if !m.comp.open || m.comp.items[0] != "ansible/ansible.cfg" {
 		t.Fatalf("continued typing must complete inside the directory, got open=%v items=%v", m.comp.open, m.comp.items)
+	}
+}
+
+// TestPopupInactiveWhileProgramRuns (#1340): the completion popup is a shell
+// feature. While a foreground program reads stdin its suggestions are wrong,
+// and its keys must reach the program — so typing never opens it, ctrl+space
+// does nothing, an already-open popup is dropped, and popup-bound keys are not
+// consumed. Completion returns with the prompt.
+func TestPopupInactiveWhileProgramRuns(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startShModelIn(t, c, dir)
+	waitFor(t, "idle prompt", func() bool { return m.completionActive() })
+
+	// Open the popup, then hand the terminal to a foreground program.
+	m.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	waitFor(t, "echo of t", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "t"
+	})
+	m.OnOutput()
+	if !m.comp.open {
+		t.Fatal("auto-suggest must open the popup at the prompt")
+	}
+	for _, r := range "\x15cat\r" { // ctrl+u clears the line, then run cat
+		m.sess.SendKey(keyFor(r))
+	}
+	waitFor(t, "cat owns the foreground", func() bool { return !m.completionActive() })
+
+	// Typing into the program neither arms a refresh nor opens the popup.
+	m.pendingSuggest = false
+	m.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	if m.pendingSuggest {
+		t.Fatal("typing into a running program must not arm auto-suggest")
+	}
+	if m.comp.open {
+		t.Fatal("the open popup must be dropped once a program owns the terminal")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if m.comp.open {
+		t.Fatal("ctrl+space must not open the popup while a program runs")
+	}
+	// Popup-bound keys stay unconsumed, so the raw route hands them to the child.
+	for _, key := range []string{"tab", "enter", "up", "down", "esc"} {
+		if m.completionKey(key) {
+			t.Fatalf("%s must reach the running program, not the popup", key)
+		}
+	}
+
+	// Back at the prompt, completion works again.
+	m.sess.SendKey(vt.KeyPressEvent{Code: 'c', Mod: vt.ModCtrl}) // interrupt ends cat
+	waitFor(t, "back at the prompt", func() bool { return m.completionActive() })
+	m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	m.Update(tea.KeyPressMsg{Code: ' ', Text: " "})
+	m.Update(tea.KeyPressMsg{Code: 't', Text: "t"})
+	waitFor(t, "echo of 'ls t'", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "t"
+	})
+	m.OnOutput()
+	if !m.comp.open || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("completion must return with the prompt, got open=%v items=%v", m.comp.open, m.comp.items)
 	}
 }

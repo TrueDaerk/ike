@@ -261,9 +261,23 @@ key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via
 `terminal.autosuggest` (default on, applies live). up/down move, esc
 dismisses, any other key invalidates and passes through raw. The popup is
-inactive on the alternate screen (vim/htop), in command sessions, and while
-paging scrollback; it renders as a bordered list composited over the grid at
+inactive on the alternate screen (vim/htop), in command sessions, while
+paging scrollback, and **whenever the shell is not at its prompt** (#1340);
+it renders as a bordered list composited over the grid at
 the word's start column, below the cursor row when it fits, above otherwise.
+
+**Prompt gating (#1340).** Completion is a shell feature, so it only runs
+while the shell itself is the foreground job — `Session.AtPrompt()` compares
+the PTY's foreground process group (`TIOCGPGRP`) with the shell's pid, the
+same signal `Busy()` (#986) uses, so it needs no shell prompt integration and
+works with any shell. While a program owns stdin
+(`python3 -c 'input("…")'`, a REPL, an interactive installer) its own prompt
+is not a shell command line: typing never opens the popup, `ctrl+space` does
+nothing, an already-open popup is dropped on the next key or `OutputMsg`, and
+the popup-bound keys (tab/enter/up/down/esc) stay unconsumed so the raw route
+delivers them to the program. Completion returns the moment the shell prompt
+does. If the ioctl is unavailable the shell counts as at its prompt, so the
+gate can only ever fail open.
 
 **Live cwd (OSC 7, #770).** Shells with prompt integration emit
 `OSC 7 ; file://host/path` on every prompt; the emulator's

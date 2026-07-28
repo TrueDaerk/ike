@@ -39,10 +39,18 @@ type completion struct {
 func (m *Model) SetAutoSuggest(on bool) { m.autoSuggest = on }
 
 // completionActive reports whether the popup may operate at all: a live
-// shell session on the primary screen, at the live view (no scrollback).
+// shell session on the primary screen, at the live view (no scrollback), and
+// with the shell itself at its prompt.
+//
+// The prompt check (#1340) is what keeps the popup out of a foreground
+// program's way: while e.g. `python3 -c 'input("Give me something: ")'` reads
+// stdin, shell-command and path suggestions are simply wrong, and the popup's
+// own keys (tab/enter/arrows/esc) must reach the program instead of being
+// swallowed. `Session.AtPrompt` answers it from the PTY's foreground process
+// group, so it works with any shell — no prompt-integration marks required.
 func (m *Model) completionActive() bool {
 	return m.sess != nil && m.sess.Running() && !m.sess.IsCommand() &&
-		!m.sess.AltScreen() && m.scroll == 0
+		!m.sess.AltScreen() && m.scroll == 0 && m.sess.AtPrompt()
 }
 
 // completionKey intercepts msg while the popup is open (or opens it on
