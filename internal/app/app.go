@@ -274,7 +274,24 @@ type Model struct {
 	saveAsPos   int
 	saveAsClose bool
 	saveAsErr   string
-	renamePos   int
+
+	// cloneOpen marks the clone-repository dialog (#1349) while the shell
+	// shows it; cloneURL/cloneName are the two inputs with their cursors,
+	// cloneField the focused one, cloneNameEdited stops the name from
+	// following the URL once it was typed by hand, cloneRunning freezes the
+	// fields while the git subprocess runs, and cloneErr is the validation or
+	// git message shown under the fields.
+	cloneOpen       bool
+	cloneURL        string
+	cloneURLPos     int
+	cloneName       string
+	cloneNamePos    int
+	cloneField      int
+	cloneNameEdited bool
+	cloneRunning    bool
+	cloneErr        string
+
+	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
 	// shell shows it; input/pos are the typed name and cursor, err the
 	// overwrite-confirmation hint. layoutsPicker is the palette mode listing
@@ -3505,6 +3522,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, project.PickerPrefix)
 		return m, nil
 
+	case project.OpenCloneMsg:
+		// project.clone (palette / File menu): the two-field clone dialog.
+		m.startClonePrompt()
+		return m, nil
+
+	case vcs.CloneDoneMsg:
+		// The clone finished: switch to the fresh checkout or show the error.
+		return m.finishClone(msg)
+
 	case project.PickedMsg:
 		// Picker selection: validate off the Update loop; the result comes
 		// back as SwitchProjectMsg or SwitchFailedMsg.
@@ -4394,6 +4420,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// characters build the new name, enter applies, esc cancels.
 		if m.renameOpen() {
 			return m.updateRenamePrompt(msg)
+		}
+		// The clone-repository dialog (#1349) mirrors it, with tab moving
+		// between the URL and the directory-name field.
+		if m.clonePromptOpen() {
+			return m.updateClonePrompt(msg)
 		}
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {

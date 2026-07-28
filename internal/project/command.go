@@ -30,6 +30,13 @@ func (commands) Capabilities() plugin.Capabilities {
 			Title: "Switch Project…",
 			Scope: plugin.GlobalScope(),
 			Run:   open,
+		}, {
+			// No default chord: cloning is a rare, dialog-driven action
+			// (palette / File menu), and the chord budget is full (#711).
+			ID:    "project.clone",
+			Title: "Clone Repository…",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(OpenCloneMsg{}) },
 		}},
 		// Default binding slot only — the canonical chord is owned by Roadmap
 		// 0080/0081. cmd+shift+p mirrors JetBrains' Recent Projects popup

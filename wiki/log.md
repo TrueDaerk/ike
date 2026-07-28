@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-28 (project: clone a repository into the project directory)
+
+- `project.clone` ("Clone Repository…", File menu + palette, #1349) opens a
+  two-field dialog (URL, directory name derived from the URL), clones into
+  `[project] directory` via `vcs.CloneCmd` (async, own 30-minute timeout,
+  no terminal prompting, partial clones removed) and opens the checkout
+  through the regular switch transaction.
+
 ## 2026-07-28 (project: a project directory setting)
 
 - `[project] directory` (default `~/IkeProjects`, #1348) names the default
