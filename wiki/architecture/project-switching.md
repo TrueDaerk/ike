@@ -65,6 +65,35 @@ layer (#2), the command + picker (#12) and the switch orchestration (#3).
   silently reused target.
 - Settings UI: "Files & Session" → *Project directory* (user scope).
 
+## Clone Repository (#1349)
+
+JetBrains' *Get from VCS*: fetch a repository into the project directory and
+open the result.
+
+- **`project.clone`** ("Clone Repository…", global scope, no default chord —
+  the chord budget is full, #711) dispatches `OpenCloneMsg`; reachable from the
+  palette and File → *Clone Repository…*.
+- **Dialog** (`internal/app/clone_prompt.go`) — two fields, the shell-prompt
+  pattern: *Repository URL* and *Directory name*. The name follows the URL
+  (`vcs.CloneName`: last segment, `.git` stripped, ssh/https/file forms) until
+  it is typed by hand; `tab` switches fields, `enter` clones, `esc` closes.
+  The dialog shows the resolved target (`<project directory>/<name>`).
+- **Target rules** (`project.CloneTarget`): the name must be a single path
+  segment, the project directory is created on demand (`EnsureDirectory`), and
+  an existing target is refused — no clone lands inside an unrelated checkout.
+- **The clone** (`vcs.CloneCmd`, `internal/vcs/clone.go`) is one async
+  `tea.Cmd`, so the UI keeps rendering; it has its own 30-minute timeout
+  instead of the 5s `gitTimeout` and runs with `GIT_TERMINAL_PROMPT=0` (no
+  terminal is attached, so a credential prompt would hang forever — a private
+  repository fails fast with git's own message). A failed clone removes the
+  directory git created, so retrying the same name works.
+- **Outcome**: success closes the dialog, toasts and hands the path to
+  `SwitchTo` — the clone is opened through the regular switch transaction
+  (unsaved-changes guard, history recording). A failure keeps the dialog open
+  and editable with the decisive git line. If the dialog was dismissed while
+  the clone ran, the outcome only toasts — the IDE is never re-rooted under
+  the user.
+
 ## Command & picker (#12)
 
 - **`project.switch`** (`command.go`): a compile-in plugin (id `project`)
