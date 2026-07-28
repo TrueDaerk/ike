@@ -122,3 +122,24 @@ func TestRainbowToggle(t *testing.T) {
 		t.Fatal("SetRainbow(true) must re-enable")
 	}
 }
+
+// TestThemeOverrideBeyondTheDefaults guards #1318: an override may name a
+// capture the active theme does not define itself — a grammar-specific
+// "function.builtin" — when the config can be enumerated.
+func TestThemeOverrideBeyondTheDefaults(t *testing.T) {
+	defaults := map[string]string{"function": "blue"}
+	cfg := map[string]string{"theme.captures.function.builtin": "orange"}
+	get := func(k string) (string, bool) { v, ok := cfg[k]; return v, ok }
+	keys := func() []string { return []string{"theme.captures.function.builtin"} }
+
+	th := NewThemeKeys(defaults, get, keys)
+	if _, ok := th.Style("function.builtin"); !ok {
+		t.Fatal("an enumerated override must apply")
+	}
+	// Without enumeration the same config is invisible, and the capture falls
+	// back to its head by prefix.
+	plain := NewTheme(defaults, get)
+	if _, ok := plain.Style("function.builtin"); !ok {
+		t.Fatal("prefix fallback must still resolve the head capture")
+	}
+}

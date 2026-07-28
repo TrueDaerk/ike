@@ -116,8 +116,8 @@ func defaults() *Config {
 			InlayHints:     false,
 			SignatureAuto:  true,
 			CompletionAuto: true,
-			LogLevel: "warn",
-			Servers:  map[string]map[string]any{},
+			LogLevel:       "warn",
+			Servers:        map[string]map[string]any{},
 			// Default ignore rules (#1260): intelephense's P1006 TypeError
 			// cannot infer types written through by-reference parameters
 			// (&$param) and floods by-ref-heavy PHP with bogus
@@ -135,6 +135,9 @@ func defaults() *Config {
 		Theme: Theme{
 			Name: "default",
 			Dark: true,
+			// A slot map like explorer.colors / keymap.bindings: seeded
+			// non-nil so layers merge into it key by key (#1318).
+			Captures: map[string]string{},
 		},
 		Plugins: map[string]map[string]any{},
 		Project: Project{

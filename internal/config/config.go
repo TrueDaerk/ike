@@ -2,9 +2,10 @@
 // TOML files that merge across three layers — built-in defaults < user-global <
 // project — and every subsystem reads strongly typed structs through Load/Get.
 //
-// The package is leaf-level: it depends on nothing in IKE (only the TOML library,
-// isolated in load.go, and bubbletea for the reload message in watch.go), so any
-// package can import it without cycles. internal/host backs host.API on top of
+// The package is leaf-level: its only IKE dependency is the equally leaf
+// internal/theme (colour-token validation, #1318); otherwise just the TOML
+// library, isolated in load.go, and bubbletea for the reload message in
+// watch.go — so any package can import it without cycles. internal/host backs host.API on top of
 // it; plugins read config as plain data and never touch this package directly.
 package config
 
@@ -186,6 +187,14 @@ func (c *Config) Flat() map[string]string {
 		paths[i] = e.Path
 	}
 	put("project.history", strings.Join(paths, ","))
+
+	// Per-capture colour overrides (#1318). Capture names contain dots
+	// ("constant.builtin", "rainbow.0"); the flat key keeps them verbatim and
+	// the write-back layer knows theme.captures is a slot map, so the leaf is
+	// never split into nested tables.
+	for k, v := range c.Theme.Captures {
+		put("theme.captures."+k, v)
+	}
 
 	put("notifications.timeout_seconds", c.Notifications.TimeoutSeconds)
 	put("notifications.min_severity", c.Notifications.MinSeverity)

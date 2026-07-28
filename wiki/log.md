@@ -1,5 +1,21 @@
 # Log
 
+## 2026-07-28 (config: theme.captures was documented but dead)
+
+- Per-capture colour overrides were documented in two wiki pages and read by
+  `highlight.NewTheme`, but nothing ever produced them (#1318): `config.Theme`
+  had no `Captures` field, so `[theme.captures]` decoded into nothing and even
+  warned as an unknown setting, and `Flat()` never carried the keys. The
+  override path was live code with a permanently empty input — invisible to the
+  tests, which stub the lookup instead of going through the config. The table
+  is now a typed slot map, flattened as `theme.captures.<name>`; the write-back
+  layer treats a slot-map remainder as one leaf so dotted capture names
+  (`constant.builtin`, `rainbow.0`) round-trip; colour tokens are validated and
+  a bad one is dropped with a diagnostic instead of silently rendering as the
+  terminal default; and `NewThemeKeys` enumerates the config so an override may
+  name a capture the theme does not define. Updated
+  [Themes](/architecture/themes.md).
+
 ## 2026-07-28 (settings: grid rendering polish)
 
 - Three things found by driving the finished panel (#1316): the settings column

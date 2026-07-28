@@ -29,6 +29,15 @@ type styleHit struct {
 // palette's captures. get reads a config key (theme.captures.keyword, …); pass
 // nil to use only the defaults.
 func NewTheme(defaults map[string]string, get func(key string) (string, bool)) Theme {
+	return NewThemeKeys(defaults, get, nil)
+}
+
+// NewThemeKeys is NewTheme with enumeration: keys lists every configuration
+// key, so an override may name a capture the active theme does not define
+// itself ("function.builtin", a grammar-specific capture) instead of being
+// limited to the palette's own table (#1318). A nil keys behaves like
+// NewTheme.
+func NewThemeKeys(defaults map[string]string, get func(key string) (string, bool), keys func() []string) Theme {
 	if defaults == nil {
 		defaults = theme.Default().Captures
 	}
@@ -40,6 +49,18 @@ func NewTheme(defaults map[string]string, get func(key string) (string, bool)) T
 		for k := range defaults {
 			if v, ok := get("theme.captures." + k); ok && v != "" {
 				colors[k] = v
+			}
+		}
+	}
+	if keys != nil {
+		const prefix = "theme.captures."
+		for _, k := range keys() {
+			name, isCapture := strings.CutPrefix(k, prefix)
+			if !isCapture || name == "" {
+				continue
+			}
+			if v, ok := get(k); ok && v != "" {
+				colors[name] = v
 			}
 		}
 	}

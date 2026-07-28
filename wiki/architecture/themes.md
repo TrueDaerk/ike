@@ -69,6 +69,32 @@ palette.Files     <  [explorer.colors]
                      user config  <  project config
 ```
 
+`[theme.captures]` is a **slot map** in the typed schema (`config.Theme.Captures`),
+merged key by key across layers and exposed by `Config.Flat()` as
+`theme.captures.<name>`. Until #1318 the table had no schema field at all: it
+decoded into nothing, produced an *"unknown setting (ignored)"* diagnostic and
+never reached `highlight.NewTheme` — the override path was live code with a
+permanently empty input, invisible to the tests because they stubbed the
+lookup.
+
+Two things follow from capture names containing dots (`constant.builtin`,
+`rainbow.0`):
+
+- The **write-back layer** treats everything after a slot-map prefix
+  (`theme.captures.`, `explorer.colors.`, `keymap.bindings.`) as one leaf key,
+  so `theme.captures.constant.builtin` round-trips instead of being written as
+  `[theme.captures.constant] builtin = …`, which would no longer decode.
+- `highlight.NewThemeKeys(defaults, get, keys)` enumerates the config, so an
+  override may name a capture the active theme does not define itself — a
+  grammar-specific `function.builtin`. `NewTheme` (no enumeration) is the
+  fallback for consumers without a config, e.g. the response viewer.
+
+**Colour tokens are validated.** `theme.ValidToken` accepts a name from
+`theme.Names()`, a `#rgb`/`#rrggbb` hex literal or an ANSI index 0–255;
+anything else is dropped from `theme.captures` with a diagnostic, because
+lipgloss silently renders an unparseable token as the terminal default and the
+capture would just look unstyled.
+
 ## Structure
 
 ```

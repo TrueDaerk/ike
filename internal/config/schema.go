@@ -197,7 +197,7 @@ type Editor struct {
 	ScrollOff           int    `toml:"scroll_off"`
 	// TextWidth is the hard-wrap column the gq reflow operator targets
 	// (#1193); 0 falls back to vim's 79.
-	TextWidth              int  `toml:"text_width"`
+	TextWidth int `toml:"text_width"`
 	// ClipboardSync mirrors unnamed-register yanks (yy, y{motion}, visual y)
 	// onto the system clipboard (#1256) — the conservative half of vim's
 	// `clipboard=unnamed`: named registers and deletes/changes never sync.
@@ -347,6 +347,11 @@ type LSP struct {
 type Theme struct {
 	Name string `toml:"name"`
 	Dark bool   `toml:"dark"`
+	// Captures overrides individual syntax-highlighting colours on top of the
+	// active theme (#1318): capture name ("keyword", "constant.builtin",
+	// "rainbow.0") -> colour token (name, #rrggbb, ANSI index). A slot map,
+	// so it merges key by key across layers.
+	Captures map[string]string `toml:"captures"`
 }
 
 // Project holds recent-project history. History is a replace-by-default list

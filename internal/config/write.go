@@ -60,6 +60,30 @@ func Origin(opts Options, key string) string {
 	return "default"
 }
 
+// slotMapPrefixes are the dotted key prefixes whose remainder is a single map
+// key rather than a path of nested tables (#1318). Slot-map keys routinely
+// contain dots — "theme.captures.constant.builtin", "explorer.colors.*.go",
+// "keymap.bindings.cmd+." — and splitting those on every dot would write
+// `[theme.captures.constant] builtin = "..."`, which no longer decodes back
+// into the map.
+var slotMapPrefixes = []string{
+	"theme.captures.",
+	"explorer.colors.",
+	"keymap.bindings.",
+}
+
+// splitKey splits a dotted key into its parent tables and its leaf, honouring
+// the slot-map prefixes above.
+func splitKey(key string) (parents []string, leaf string) {
+	for _, p := range slotMapPrefixes {
+		if strings.HasPrefix(key, p) && len(key) > len(p) {
+			return strings.Split(strings.TrimSuffix(p, "."), "."), key[len(p):]
+		}
+	}
+	parts := strings.Split(key, ".")
+	return parts[:len(parts)-1], parts[len(parts)-1]
+}
+
 // hasKey reports whether the TOML file at path sets the dotted key.
 func hasKey(path, key string) bool {
 	if path == "" {
@@ -69,16 +93,16 @@ func hasKey(path, key string) bool {
 	if err != nil || raw == nil {
 		return false
 	}
-	parts := strings.Split(key, ".")
+	parents, leaf := splitKey(key)
 	cur := raw
-	for _, p := range parts[:len(parts)-1] {
+	for _, p := range parents {
 		child, ok := cur[p].(map[string]any)
 		if !ok {
 			return false
 		}
 		cur = child
 	}
-	_, ok := cur[parts[len(parts)-1]]
+	_, ok := cur[leaf]
 	return ok
 }
 
@@ -136,9 +160,9 @@ func rewrite(opts Options, scope Scope, key string, mutate func(parent map[strin
 		raw = map[string]any{}
 	}
 
-	parts := strings.Split(key, ".")
+	parents, leaf := splitKey(key)
 	parent := raw
-	for _, p := range parts[:len(parts)-1] {
+	for _, p := range parents {
 		child, ok := parent[p].(map[string]any)
 		if !ok {
 			child = map[string]any{}
@@ -146,7 +170,7 @@ func rewrite(opts Options, scope Scope, key string, mutate func(parent map[strin
 		}
 		parent = child
 	}
-	mutate(parent, parts[len(parts)-1])
+	mutate(parent, leaf)
 	prune(raw)
 
 	data, err := toml.Marshal(raw)
