@@ -101,6 +101,25 @@ func marker(t EntryType) string {
 	}
 }
 
+// InsertAfter puts page directly behind the page titled after, so a custom
+// page can sit next to the schema page it belongs with (#1238: Syntax Colors
+// behind Appearance) without BasePages having to know how to build it.
+// Appends when the anchor is not found.
+func InsertAfter(pages []Page, after string, page Page) []Page {
+	for i, p := range pages {
+		if p.Title != after {
+			continue
+		}
+		// The following page must keep its own section header; a page
+		// inserted mid-section carries none.
+		out := make([]Page, 0, len(pages)+1)
+		out = append(out, pages[:i+1]...)
+		out = append(out, page)
+		return append(out, pages[i+1:]...)
+	}
+	return append(pages, page)
+}
+
 // BasePages returns the built-in core pages (#92). themes is the registry's
 // theme-name list for the Appearance enum (live preview: writing theme.name
 // hot-reloads through the normal pipeline). Pages grow as features land;

@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T02:20:00Z
+timestamp: 2026-07-28T10:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -163,12 +163,47 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Appearance** — theme (enum fed from the registry's theme list; writing
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.
+- **Syntax Colors** (#1238) — a custom page holding the `[theme.captures]`
+  overrides; see below.
 - **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
   (clean|never, #81), `files.persistent_undo` (undo survives restarts, #148).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
 - **Notifications** — toast timeout, severity floor.
+
+## Syntax Colors page (#1238)
+
+The settings surface for the per-capture colour overrides wired up in #1318
+(`internal/settings/colors_page.go`, rendering in `colors_view.go`). It sits
+behind Appearance in the CORE section — `settings.InsertAfter` places a custom
+page next to the schema page it belongs with, without `BasePages` having to
+know how to build it.
+
+- **The list** is every capture the active theme defines, the six
+  `rainbow.N` slots, **and** any capture a config layer names that the theme
+  does not — an override must never become unreachable. Each row carries a
+  swatch painted in the colour that actually resolves (through
+  `highlight.NewThemeKeys`, so rainbow derivation and prefix fallback are
+  reflected), the capture name, and the token in use; `(derived)` marks a slot
+  with no token of its own. Overridden rows render in the Info colour, the same
+  cue a schema row uses.
+- **The detail column** explains what the capture paints, names the config key,
+  shows the effective colour and says where it comes from — *the &lt;theme&gt;
+  theme* or *your config (user|project)*.
+- **Editing**: `enter` opens the colour list (the named colours plus the
+  capture's own theme default, then *type a token…*), `e` goes straight to the
+  free-token input, `r` removes the override. A token is validated with
+  `theme.ValidToken` before it is written — lipgloss renders an unparseable one
+  as the terminal default, so the capture would silently look unstyled.
+  An empty token clears, like `r`.
+- **Writes go straight through** (`theme.captures.<name>` at user scope) rather
+  than into the staged-apply buffer: a colour has to be visible while it is
+  being chosen, and the write *is* the preview — the reload path re-themes the
+  open editors immediately.
+- Mouse-complete: the header opens the filter, a press selects a row, a press
+  on the selection opens the picker, and a press on a candidate takes it. Every
+  capture is reachable from the panel-wide `/` search through `SearchItems`.
 
 ## Keymap page (#93)
 

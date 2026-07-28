@@ -819,6 +819,13 @@ func (m *Model) Paste(text string) (handled bool) {
 			return p.Paste(text)
 		}
 	}
+	// A custom page with a text input of its own (the colour-token entry,
+	// #1238) opts in through the same seam.
+	if page := m.customPage(); page != nil && m.filter == "" && page.Capturing() {
+		if p, ok := page.(pasteEditor); ok {
+			return p.Paste(text)
+		}
+	}
 	return false
 }
 
