@@ -146,9 +146,17 @@ func collectScopes(n *ts.Node, kinds map[string]bool, out *[]Scope) {
 // (e.g. a Go type_declaration and its type_spec fold as one region).
 func collectFolds(n *ts.Node, kinds map[string]bool, out *[]Fold) {
 	start, end := n.StartPosition(), n.EndPosition()
-	if kinds[n.Kind()] && end.Row > start.Row {
+	endRow := int(end.Row)
+	// Tree-sitter's end position is exclusive: a node ending at column 0 stops
+	// *before* that row, so its last content line is the one above. Delimited
+	// nodes hit this (a .http "section" ends where the next ### begins, #1329);
+	// brace-closed bodies never do, since their closer occupies a column.
+	if end.Column == 0 && endRow > int(start.Row) {
+		endRow--
+	}
+	if kinds[n.Kind()] && endRow > int(start.Row) {
 		if l := len(*out); l == 0 || (*out)[l-1].HeaderLine != int(start.Row) {
-			*out = append(*out, Fold{HeaderLine: int(start.Row), EndLine: int(end.Row)})
+			*out = append(*out, Fold{HeaderLine: int(start.Row), EndLine: endRow})
 		}
 	}
 	for i := uint(0); i < n.NamedChildCount(); i++ {

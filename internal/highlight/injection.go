@@ -16,23 +16,52 @@ import "ike/internal/lang"
 // registering one, its Go-level region detector (#1303). Hosts without either,
 // fragments without a registered grammar, and CGo-disabled builds all degrade
 // to the plain host spans.
-func overlayFragments(l lang.Language, lines []string, host []Span) []Span {
+// It also returns the fragments' foldable ranges in host coordinates (#1329):
+// a JSON body embedded in a .http request folds by JSON's own fold nodes, so
+// collapsing a large request body works exactly as it does in a .json buffer.
+func overlayFragments(l lang.Language, lines []string, host []Span) ([]Span, []Fold) {
 	frags := fragmentsFor(l, lines)
 	if len(frags) == 0 {
-		return host
+		return host, nil
 	}
 	var injected []Span
+	var folds []Fold
 	for _, f := range frags {
-		l, ok := lang.ByID(f.Lang)
-		if !ok || l.Grammar == nil {
+		el, ok := lang.ByID(f.Lang)
+		if !ok || el.Grammar == nil {
 			continue
 		}
-		injected = append(injected, offsetSpans(parse(l.Grammar, f.Lines), f)...)
+		spans, _, ff := parseScoped(el.Grammar, nil, foldKinds(el), f.Lines)
+		injected = append(injected, offsetSpans(spans, f)...)
+		folds = append(folds, offsetFolds(ff, f)...)
 	}
 	if len(injected) == 0 {
-		return host
+		return host, folds
 	}
-	return append(injected, host...)
+	return append(injected, host...), folds
+}
+
+// foldKinds are the node kinds that fold in language l: its FoldNodes, falling
+// back to its sticky-scroll scopes — the same resolution HighlightScoped uses
+// for the host language.
+func foldKinds(l lang.Language) []string {
+	if len(l.FoldNodes) > 0 {
+		return l.FoldNodes
+	}
+	return l.ScopeNodes
+}
+
+// offsetFolds shifts fragment-local folds into host coordinates. Only lines
+// shift: a fold is line-granular, and a fragment's lines are exactly the host
+// lines in its range.
+func offsetFolds(folds []Fold, f Fragment) []Fold {
+	out := folds[:0]
+	for _, fold := range folds {
+		fold.HeaderLine += f.StartLine
+		fold.EndLine += f.StartLine
+		out = append(out, fold)
+	}
+	return out
 }
 
 // offsetSpans shifts fragment-local spans into host coordinates: lines shift by

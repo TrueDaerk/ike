@@ -26,5 +26,10 @@ func init() {
 		// A request body is highlighted and indented as its Content-Type's
 		// language (#1303/#1304); see regions.go.
 		Regions: bodyRegions,
+		// Whole-request folding (#1329): a "section" spans a ### separator
+		// through the end of its request, so a long file of requests collapses
+		// to its separator lines. The body's own structure folds too — those
+		// ranges come from the embedded language's grammar via the region seam.
+		FoldNodes: []string{"section"},
 	})
 }

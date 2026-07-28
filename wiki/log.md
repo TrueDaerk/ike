@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-28 (http: request bodies and whole requests fold)
+
+- Folding stopped at the `.http` host language (#1329): an embedded body was
+  parsed for highlighting only, so a large JSON request body could not be
+  collapsed. Fragments now also yield fold ranges — each is parsed with its own
+  language's fold kinds and shifted into host coordinates (`offsetFolds`) — so a
+  JSON body folds like a `.json` buffer's objects do, HTML/XML by their
+  elements. The http language additionally declares `FoldNodes: ["section"]`, so
+  a whole request folds from its `###` line. Tree-sitter end positions are
+  exclusive, so a node ending at column 0 (a delimited `section`) now folds to
+  the row above — otherwise a collapsed request swallowed the next request's
+  header. Updated [HTTP Client](/architecture/http-client.md) and
+  [Syntax Highlighting](/architecture/highlighting.md).
+
 ## 2026-07-28 (editor: typing assistance — the space after ":")
 
 - Typing a JSON member used to leave the space after `:` to the user (#1326).

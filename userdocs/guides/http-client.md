@@ -124,6 +124,13 @@ and header lines above keep their own rules. Parameters (`; charset=utf-8`),
 
 A media type that maps to no language keeps plain styling rather than a guess.
 
+Bodies **fold** by their own structure too: `zc` on a JSON object or array line
+collapses it behind a placeholder with the hidden-line count, `zo` reopens it,
+`zM`/`zR` close and open everything — the same keys as anywhere else in the
+editor. A whole request folds as well: `zc` on a `###` line collapses that
+request up to the next separator, so a long file reads as a list of its
+requests.
+
 !!! note "Highlighting needs the grammar"
     A body only highlights when the matching grammar is in your build — a
     `CGO_ENABLED=0` build has none. When the content type is recognised but

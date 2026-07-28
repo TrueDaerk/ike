@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-27T22:45:00Z
+timestamp: 2026-07-28T15:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -254,6 +254,16 @@ opens the three-line block, and an XML body indents after `>` — all by the
 body's rules, while request and header lines keep the host's. A body whose
 media type maps to no language, or to one without indent rules, keeps plain
 copy-indent.
+
+The same answer drives **folding** (#1329): each region is parsed with its own
+language's fold kinds, so a JSON body's objects and arrays collapse (`za zc zo
+zM zR`, placeholder with hidden-line count) exactly as they do in a `.json`
+buffer, and an HTML/XML body folds by its elements. On top of that the http
+language itself declares `FoldNodes: ["section"]`, so a whole request — from its
+`###` line to just before the next one — folds to a single line; a file of many
+requests reads as a list of its separators. Body folds nest inside their
+request's fold. Both are derived from the parse on every pass, so they follow
+edits without stale ranges.
 
 Completion inside a body stays deliberately off: the source claims the buffer
 exclusively (#1302), so a JSON body offers nothing rather than every identifier
