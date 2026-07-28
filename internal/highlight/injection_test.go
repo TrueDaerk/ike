@@ -35,3 +35,17 @@ func TestInjectedSpanPrecedence(t *testing.T) {
 		t.Errorf("outside fragment: got %q, want string", got)
 	}
 }
+
+func TestOffsetFolds(t *testing.T) {
+	f := Fragment{Lang: "json", StartLine: 4, StartCol: 0, EndLine: 9}
+	got := offsetFolds([]Fold{{HeaderLine: 0, EndLine: 4}, {HeaderLine: 1, EndLine: 2}}, f)
+	want := []Fold{{HeaderLine: 4, EndLine: 8}, {HeaderLine: 5, EndLine: 6}}
+	if len(got) != len(want) {
+		t.Fatalf("offsetFolds returned %d folds, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("fold %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+}

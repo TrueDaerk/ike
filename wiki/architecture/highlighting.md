@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-28T15:00:00Z
 ---
 
 # Syntax Highlighting
@@ -72,6 +72,15 @@ EndLine}` (fold.go, pure Go), emitted in pre-order with same-header nodes (a
 declaration and its body block) merged into one region. Folds travel in
 `SpansMsg.Folds`; the per-view collapse state lives in
 `internal/editor/fold.go` (see [editor](/architecture/editor.md)).
+
+**Embedded regions fold too** (#1329): every fragment is parsed with its own
+language's fold kinds and its ranges are shifted into host coordinates
+(`offsetFolds`), so a JSON body inside a `.http` request collapses exactly as it
+would in a `.json` buffer, nested inside the host's own folds. Tree-sitter end
+positions are exclusive, so a node ending at column 0 (a delimited node such as
+a `.http` `section`, which ends where the next `###` begins) folds to the row
+above — without that correction a collapsed request would swallow the next
+request's header line.
 
 ## Language injections (issue #299)
 

@@ -48,12 +48,11 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 	if !ok || l.Grammar == nil {
 		return nil, nil, nil
 	}
-	foldKinds := l.FoldNodes
-	if len(foldKinds) == 0 {
-		foldKinds = l.ScopeNodes
-	}
-	spans, scopes, folds := parseScoped(l.Grammar, l.ScopeNodes, foldKinds, lines)
-	return overlayFragments(l, lines, spans), scopes, folds
+	spans, scopes, folds := parseScoped(l.Grammar, l.ScopeNodes, foldKinds(l), lines)
+	spans, injected := overlayFragments(l, lines, spans)
+	// An embedded region folds by its own language's rules (#1329): a .http
+	// request body that is JSON collapses like a JSON buffer's objects do.
+	return spans, scopes, append(folds, injected...)
 }
 
 // HighlightFenced parses lines tagged with a markdown fence info string (as in
