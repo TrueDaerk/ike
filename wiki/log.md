@@ -1,5 +1,20 @@
 # Log
 
+## 2026-07-28 (editor: typing assistance — the space after ":")
+
+- Typing a JSON member used to leave the space after `:` to the user (#1326).
+  Languages now declare their typing convention as `lang.SpaceAfter` (JSON and
+  ndjson list `':'`), and the editor writes the space as the character is typed
+  — per caret, inside the open insert's undo unit, suppressed inside strings
+  and line comments and when a separator already follows. The rule is resolved
+  per line, so a JSON body embedded in a `.http` request follows JSON's
+  conventions (#1304) rather than the host's. Context detection is deliberately
+  a text heuristic (quote parity + the line-comment marker): the Tree-sitter
+  pass lags a keystroke behind and would be stale exactly when it matters.
+  New `editor.typing.space_after_punctuation` switch on a new **Typing
+  Assistance** settings page (CORE, behind Editor). Updated
+  [Editor](/architecture/editor.md) and [Languages](/architecture/languages.md).
+
 ## 2026-07-28 (keymap: the "+" key can be bound)
 
 - `ParseKey` split a step naively on `+`, so `"+"` and `"cmd++"` left an empty

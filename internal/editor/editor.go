@@ -400,6 +400,7 @@ type Model struct {
 	useSpaces          bool
 	autoIndent         bool
 	autoClosePairs     bool
+	spaceAfterPunct    bool
 	trimTrailing       bool
 	insertFinalNewline bool
 	showInlayHints     bool
@@ -461,6 +462,7 @@ func New() Model {
 		tabWidth:           4,
 		textWidth:          80,
 		insertFinalNewline: true,
+		spaceAfterPunct:    true,
 		showInlayHints:     false,
 		stickyScroll:       true,
 		stickyDepth:        4,
@@ -556,6 +558,7 @@ func (m *Model) applyConfig() {
 	m.regs.SetClipboardSync(boolOr(m.cfg, "editor.clipboard_sync", m.regs.ClipboardSync()))
 	m.autoIndent = boolOr(m.cfg, "editor.auto_indent", m.autoIndent)
 	m.autoClosePairs = boolOr(m.cfg, "editor.auto_close_pairs", m.autoClosePairs)
+	m.spaceAfterPunct = boolOr(m.cfg, "editor.typing.space_after_punctuation", m.spaceAfterPunct)
 	m.trimTrailing = boolOr(m.cfg, "editor.trim_trailing_whitespace", m.trimTrailing)
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)

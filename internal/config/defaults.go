@@ -87,6 +87,7 @@ func defaults() *Config {
 			SearchIgnoreCase:       false,
 			Breadcrumbs:            true,
 			Tabs:                   Tabs{AlwaysShow: false, Limit: 5},
+			Typing:                 Typing{SpaceAfterPunctuation: true},
 			Marks: Marks{
 				LSPErrors:   true,
 				LSPWarnings: true,

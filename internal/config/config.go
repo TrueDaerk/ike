@@ -136,6 +136,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.rainbow_brackets", c.Editor.RainbowBrackets)
 	put("editor.search_ignore_case", c.Editor.SearchIgnoreCase)
 	put("editor.breadcrumbs", c.Editor.Breadcrumbs)
+	put("editor.typing.space_after_punctuation", c.Editor.Typing.SpaceAfterPunctuation)
 	put("editor.tabs.always_show", c.Editor.Tabs.AlwaysShow)
 	put("editor.tabs.limit", c.Editor.Tabs.Limit)
 	put("editor.marks.lsp_errors", c.Editor.Marks.LSPErrors)

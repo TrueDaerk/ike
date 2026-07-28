@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-28T14:00:00Z
 ---
 
 # Language Registry
@@ -34,6 +34,7 @@ type Language struct {
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
     UseTabs      *bool      // indent-style default (#1137): tabs/spaces; nil = no opinion
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
+    SpaceAfter   []rune     // punctuation typed with a following space (#1326): ':' in JSON
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
     Template     string     // initial content for new files (#170); "" = start empty
     Test         *TestSpec  // test detection + run templates (#1150); nil = no test runner
@@ -59,6 +60,14 @@ unavailable". Go and PHP declare `//` + `/* */`, Python declares `#` only.
 deeper. Python declares `":"` plus the open brackets `( [ {`; Go and PHP
 declare `{ ( [`. `ok` is false when no language matches or none are declared —
 the editor then falls back to plain copy-indent.
+
+`SpaceAfter` lists the punctuation runes the language writes a space after
+while typing (#1326) — JSON (and ndjson) declare `':'`, so `"key":` completes
+to `"key": ` as you type. It is the language's typing convention, not a user
+setting: users only toggle the aid as a whole
+(`editor.typing.space_after_punctuation`). The editor resolves it per line, so
+an embedded region (a JSON body in a `.http` file) follows the region's
+language. See [Editor](./editor.md).
 
 `ScopeNodes` names the Tree-sitter node kinds that define **sticky-scroll
 scopes** (#168) — declarations whose header line pins at the top of the editor

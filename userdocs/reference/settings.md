@@ -52,6 +52,12 @@ Settings, or run `settings.open` from the palette.
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
 | Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables) |
 
+### Typing Assistance
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Space after punctuation | `editor.typing.space_after_punctuation` | boolean | `true` | user | Insert the conventional space after punctuation the language declares — ":" in JSON, so "key": is completed as you type. Suppressed inside strings and comments |
+
 ### Diagnostics
 
 | Setting | Key | Type | Default | Scope | Description |

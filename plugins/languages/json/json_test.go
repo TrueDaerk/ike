@@ -43,3 +43,17 @@ func TestJSONRegistered(t *testing.T) {
 		t.Error("json must not declare comment syntax")
 	}
 }
+
+// TestSpaceAfterColon guards the typing aid's language rule (#1326): a JSON
+// member's colon carries its space.
+func TestSpaceAfterColon(t *testing.T) {
+	for _, id := range []string{"json", "ndjson"} {
+		l, ok := lang.ByID(id)
+		if !ok {
+			t.Fatalf("%s not registered", id)
+		}
+		if len(l.SpaceAfter) != 1 || l.SpaceAfter[0] != ':' {
+			t.Errorf("%s SpaceAfter = %q, want [':']", id, string(l.SpaceAfter))
+		}
+	}
+}
