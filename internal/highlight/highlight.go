@@ -67,6 +67,24 @@ func HighlightFenced(tag string, lines []string) []Span {
 	return parse(l.Grammar, lines)
 }
 
+// FencedFolds parses lines tagged with a fence info string and returns their
+// foldable ranges (#1330) — the fenced counterpart of HighlightScoped's folds,
+// for viewers that show text they know only by content type: the HTTP response
+// pane folds a JSON body's objects the same way an editor buffer folds them.
+// nil when the tag resolves to no language, no grammar or no fold kinds.
+func FencedFolds(tag string, lines []string) []Fold {
+	l, ok := fencedLang(tag)
+	if !ok || l.Grammar == nil {
+		return nil
+	}
+	kinds := foldKinds(l)
+	if len(kinds) == 0 {
+		return nil
+	}
+	_, _, folds := parseScoped(l.Grammar, nil, kinds, lines)
+	return folds
+}
+
 // FencedSupported reports whether a fence tag resolves to a language with a
 // compiled-in grammar, i.e. whether HighlightFenced can produce spans at all.
 // Consumers use it to say *why* a body renders plain (#1270): in a CGo-free

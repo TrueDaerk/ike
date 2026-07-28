@@ -67,7 +67,15 @@ type Model struct {
 	rows []row
 	// bodyIx indexes the highlight spans of the body lines only.
 	bodyIx highlight.Index
-	top    int
+	// Folding (#1330): folds are the body's foldable ranges in row
+	// coordinates, folded the collapsed ones (header row -> end row), and
+	// visible the display projection the viewport scrolls over. See fold.go.
+	folds   []highlight.Fold
+	folded  map[int]int
+	visible []int
+	// top is a *display* index into visible, not a row index: a collapsed
+	// fold's body rows are not scrolled through.
+	top int
 	// left is the horizontal viewport offset in runes (#1290): minified JSON
 	// and long header values are wider than the pane, so the view pans
 	// sideways instead of clipping the rest away for good.
@@ -81,6 +89,9 @@ type Model struct {
 	query     string
 	matches   []search.Span
 	cur       int
+
+	// pendingZ marks a typed "z" waiting for its fold command (#1330).
+	pendingZ bool
 
 	// sel is the mouse text selection (#1266), see selection.go.
 	sel selection
@@ -200,6 +211,7 @@ func (m *Model) compose(resp *httpclient.Response) {
 	m.left = 0
 	m.rows = nil
 	m.bodyIx = highlight.Index{}
+	m.folds, m.folded, m.visible = nil, nil, nil
 	if resp == nil {
 		m.research()
 		return
@@ -235,10 +247,14 @@ func (m *Model) compose(resp *httpclient.Response) {
 			m.rows = append(m.rows, row{kind: kindWarn, text: fmt.Sprintf("(no %s highlighter in this build — showing plain text)", tag)})
 		}
 		m.bodyIx = highlight.NewIndex(highlight.HighlightFenced(tag, body))
+		bodyStart := len(m.rows)
 		for i, line := range body {
 			m.rows = append(m.rows, row{kind: kindBody, text: line, body: i})
 		}
+		// The body folds by its own language's rules (#1330).
+		m.setFolds(highlight.FencedFolds(tag, body), bodyStart)
 	}
+	m.syncVisible()
 	m.ClearSelection() // the rows changed: an old selection means nothing
 	m.research()       // the search survives history browsing and new responses
 }
@@ -315,6 +331,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.searchKey(msg)
 		return nil
 	}
+	if m.pendingZ {
+		m.pendingZ = false
+		m.foldKey(msg.String())
+		return nil
+	}
 	switch msg.String() {
 	case "/":
 		// Open the in-pane search prompt (#1265), editor conventions.
@@ -369,6 +390,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ScrollX(-hScrollStep)
 	case "right":
 		m.ScrollX(hScrollStep)
+	case "z":
+		// A fold command's second key (#1330); the viewer has no cursor, so
+		// the target is the fold at the top of the view (see targetFold).
+		m.pendingZ = true
+		return nil
 	case "0", "^":
 		m.left = 0
 	case "$":
@@ -460,11 +486,15 @@ func (m *Model) scrollToMatch() {
 		return
 	}
 	sp := m.matches[m.cur]
+	// A match inside a collapsed fold opens it (#1330): hiding a hit would be
+	// indistinguishable from having no hit at all.
+	m.reveal(sp.Line)
+	d := m.displayOf(sp.Line)
 	switch h := m.bodyHeight(); {
-	case sp.Line < m.top:
-		m.top = sp.Line
-	case sp.Line >= m.top+h:
-		m.top = sp.Line - h + 1
+	case d < m.top:
+		m.top = d
+	case d >= m.top+h:
+		m.top = d - h + 1
 	}
 	// A match past the right edge is as invisible as one below the fold
 	// (#1290): pan sideways until it reads.
@@ -532,7 +562,7 @@ func (m *Model) ScrollX(delta int) {
 func (m *Model) Left() int { return m.left }
 
 func (m *Model) maxTop() int {
-	return max(0, len(m.rows)-m.bodyHeight())
+	return max(0, len(m.visible)-m.bodyHeight())
 }
 
 // maxLeft is the offset at which the longest row's last rune is still shown.
@@ -594,8 +624,7 @@ func (m *Model) View() string {
 		b.WriteString(strings.Repeat("\n", height))
 	} else {
 		for k := 0; k < height; k++ {
-			i := m.top + k
-			if i < len(m.rows) {
+			if i := m.rowAt(m.top + k); i >= 0 {
 				b.WriteString(m.renderRow(pal, i))
 			}
 			b.WriteString("\n")
@@ -621,6 +650,10 @@ func (m *Model) footerText() string {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
 	s := " j/k ←/→ scroll · g/G top/bottom · / search · y copy (Y headers)"
+	// The fold hint only appears when the body actually has ranges (#1330).
+	if len(m.folds) > 0 {
+		s += " · za/zM/zR fold"
+	}
 	// The history hint is permanent while a response is shown (#1267): it
 	// used to appear only once a second response existed, which is exactly
 	// when nobody was looking for it.
@@ -678,7 +711,14 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	if w := m.rowWidth(); to-from > w {
 		to, tail = from+w-1, "…"
 	}
-	return " " + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, r)) + tail
+	// The leading gutter cell carries the fold marker (#1330); a collapsed
+	// header states how many rows it hides, like the editor's placeholder.
+	gutter := lipgloss.NewStyle().Foreground(pal.Secondary).Render(m.foldGutter(i))
+	line := gutter + m.paintRow(i, runes[from:to], from, m.baseStyle(pal, r)) + tail
+	if ph := m.foldPlaceholder(i); ph != "" {
+		line += lipgloss.NewStyle().Faint(true).Render(ph)
+	}
+	return line
 }
 
 // styleFn resolves the non-match styling of one column: the style plus a key

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-07-28 (http: the response viewer folds)
+
+- The response viewer rendered a body as flat text (#1330): a large JSON
+  response could not be collapsed section by section. Fold ranges now come from
+  the body's own language (`highlight.FencedFolds`, new) and are stored in row
+  coordinates, with a `visible` display projection the viewport scrolls over —
+  so search, selection and copy keep working on real rows. A ▾/▸ marker in the
+  gutter toggles on click, `za`/`zc`/`zo` act on the fold at the top of the view
+  and `zM`/`zR` on all of them, and a collapsed header carries the editor's
+  `⋯ N lines` placeholder. A search hit inside a collapsed fold opens it; a
+  selection spanning one copies the hidden content, never the placeholder.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-07-28 (http: request bodies and whole requests fold)
 
 - Folding stopped at the `.http` host language (#1329): an embedded body was
