@@ -128,7 +128,14 @@ func TestCandidatesSourceRouting(t *testing.T) {
 // startShModel spawns a live /bin/sh model for popup integration tests.
 func startShModel(t *testing.T, c *collector) *Model {
 	t.Helper()
-	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+	return startShModelIn(t, c, t.TempDir())
+}
+
+// startShModelIn is startShModel with an explicit working directory, for tests
+// that need known files to complete against.
+func startShModelIn(t *testing.T, c *collector, dir string) *Model {
+	t.Helper()
+	m := New("terminal", "/bin/sh", dir, 80, 24, nil, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
@@ -312,4 +319,67 @@ func TestAcceptCaseCorrects(t *testing.T) {
 		_, word := parseCmdline(m.lineBeforeCursor())
 		return word == "Makefile"
 	})
+}
+
+// TestAcceptDirectoryClosesPopup (#1335): tab-accepting a directory inserts it
+// and ends the completion interaction. The popup used to re-open on the
+// accepted directory's contents, so the next Enter — the natural key to run
+// the command — accepted a preselected child instead of submitting, turning
+// `cd an` → tab → enter into `cd ansible/ansible.cfg`.
+func TestAcceptDirectoryClosesPopup(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "ansible"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ansible", "ansible.cfg"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startShModelIn(t, c, dir)
+	for _, r := range "cd an" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of 'cd an'", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "an"
+	})
+	m.OnOutput()
+	if !m.comp.open || m.comp.items[0] != "ansible/" {
+		t.Fatalf("auto popup must suggest ansible/, got open=%v items=%v", m.comp.open, m.comp.items)
+	}
+
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.comp.open {
+		t.Fatal("tab-accepting a directory must close the popup")
+	}
+	if m.pendingSuggest {
+		t.Fatal("tab-accept must not arm an auto-suggest refresh")
+	}
+	waitFor(t, "pasted directory", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ansible/"
+	})
+	// The echo of the pasted remainder must not reopen the popup either.
+	m.OnOutput()
+	if m.comp.open {
+		t.Fatal("the accepted directory must not auto-reopen the popup")
+	}
+	// Enter is therefore not consumed: it reaches the shell and submits.
+	if m.completionKey("enter") {
+		t.Fatal("enter after a tab-accept must reach the shell")
+	}
+
+	// Typing on still completes inside the accepted directory.
+	m.Update(tea.KeyPressMsg{Code: 'a', Text: "a"})
+	if !m.pendingSuggest {
+		t.Fatal("typing after an accept must arm the refresh again")
+	}
+	waitFor(t, "echo of 'ansible/a'", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ansible/a"
+	})
+	m.OnOutput()
+	if !m.comp.open || m.comp.items[0] != "ansible/ansible.cfg" {
+		t.Fatalf("continued typing must complete inside the directory, got open=%v items=%v", m.comp.open, m.comp.items)
+	}
 }
