@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-28T14:00:00Z
+timestamp: 2026-07-28T17:00:00Z
 ---
 
 # Editor
@@ -31,6 +31,21 @@ every visible line. The gutter (line numbers, diagnostic/git/breakpoint/paused
 signs) renders fresh each frame, so those decorations can never go stale from the
 cache. The cache is per-view: `New` and `ShareDocumentWith` each install a fresh
 one so split views of a shared document (#142) never collide.
+
+`renderEpoch` alone was **not** a complete guard (#1327): it is bumped from
+`Update`, while the mouse entry points (`MouseClick`, `MouseDrag`, `AltClick`,
+`ContextClick`) mutate the caret directly. A click therefore left both the line
+cache and the pane-level View cache (#615) valid, and the pane served its
+previous frame — the caret stayed drawn at its old position while typing went to
+the new one, and a drag selection was invisible although operations used it (the
+symptom only showed in big projects, where fewer async decoration messages
+happen to bump the epoch). The caches are now additionally keyed on
+`caretState()`: a hash of the primary cursor, the mode + visual anchor, the
+focus flag and the secondary carets — every direct render input the epoch does
+not stand for. Deriving the state beats bumping a counter at each call site,
+because a mouse path added later is covered without having to remember; an
+unchanged caret hashes equal, so vertical scrolling still hits the cache and the
+0400 benchmark is unchanged.
 
 The gutter's sign column also carries the **test run marker** (#1150): a `▶`
 in the success tone on every detected test declaration (`testmarks.go` —

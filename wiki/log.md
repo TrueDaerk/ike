@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-28 (editor: clicks repaint again)
+
+- In large projects a click moved the caret logically but not visibly, and a
+  drag selection was never highlighted (#1327). Root cause: both render caches
+  keyed on `renderEpoch`, which only `Update` bumps — the mouse entry points
+  mutate the caret directly, so the line cache (#614) and the pane View cache
+  (#615) both stayed valid and the previous frame was reused. Small projects
+  masked it: their steadier stream of decoration messages bumped the epoch by
+  accident. Both caches now also key on `caretState()` (cursor, mode + visual
+  anchor, focus, secondary carets), so every mouse path — including ones added
+  later — invalidates exactly when it changes what is drawn. Vertical scrolling
+  still hits the cache; the warm-View benchmark is unchanged. Updated
+  [Editor](/architecture/editor.md).
+
 ## 2026-07-28 (http: the response viewer folds)
 
 - The response viewer rendered a body as flat text (#1330): a large JSON

@@ -31,6 +31,7 @@ const lineCacheCap = 4096
 
 type lineCacheStore struct {
 	epoch   uint64
+	caret   uint64
 	entries map[lineKey]string
 }
 
@@ -38,16 +39,50 @@ func newLineCache() *lineCacheStore {
 	return &lineCacheStore{entries: make(map[lineKey]string)}
 }
 
-// syncEpoch drops every entry when the render epoch has moved since the cache was
-// last valid, so a stale body is never returned. Called once per View.
+// syncEpoch drops every entry when the render epoch or the caret state has moved
+// since the cache was last valid, so a stale body is never returned. Called once
+// per View.
 func (m *Model) syncEpoch() {
 	if m.lineCache == nil {
 		m.lineCache = newLineCache()
 	}
-	if m.lineCache.epoch != m.renderEpoch || len(m.lineCache.entries) > lineCacheCap {
+	caret := m.caretState()
+	if m.lineCache.epoch != m.renderEpoch || m.lineCache.caret != caret ||
+		len(m.lineCache.entries) > lineCacheCap {
 		clear(m.lineCache.entries)
-		m.lineCache.epoch = m.renderEpoch
+		m.lineCache.epoch, m.lineCache.caret = m.renderEpoch, caret
 	}
+}
+
+// caretState folds everything about the caret set that a rendered line body
+// depends on: the primary cursor (its line draws the cursor cell and shows raw
+// markdown source), the selection (mode + anchor), and the secondary carets
+// (#145). The render epoch alone used to stand for all of this, but it is only
+// bumped from Update — so a *mouse*-driven cursor or selection change left both
+// caches valid and the pane served the previous frame, drawing the caret at its
+// old position while typing went to the new one (#1327). Deriving the state
+// instead of bumping a counter keeps every future mouse entry point correct
+// without it having to remember, and costs nothing when nothing moved: an
+// unchanged caret keeps the cache warm, so vertical scrolling still hits it.
+func (m Model) caretState() uint64 {
+	const prime = 1099511628211
+	h := uint64(1469598103934665603)
+	mix := func(v uint64) { h ^= v; h *= prime }
+	mix(uint64(m.cursor.Line))
+	mix(uint64(m.cursor.Col))
+	mix(uint64(m.mode))
+	if m.mode.IsVisual() {
+		mix(uint64(m.anchor.Line))
+		mix(uint64(m.anchor.Col))
+	}
+	if m.focused {
+		mix(1)
+	}
+	for _, c := range m.carets {
+		mix(uint64(c.pos.Line))
+		mix(uint64(c.pos.Col))
+	}
+	return h
 }
 
 // cachedSpan returns the memoized body for key and whether it was present. The
@@ -83,7 +118,12 @@ func (m Model) RenderVersion() uint64 {
 	h := uint64(1469598103934665603)
 	mix := func(v uint64) { h ^= v; h *= prime }
 	mix(m.renderEpoch)
+	// The caret set is a direct render input that no epoch bump stands for on
+	// the mouse paths (#1327): without it a click or drag produced an
+	// identical version and the pane reused its previous frame.
+	mix(m.caretState())
 	mix(uint64(m.view.Top))
+	mix(uint64(m.view.Left))
 	mix(uint64(m.height))
 	if m.bpSource != nil {
 		for _, ln := range m.bpSource(m.path) {
