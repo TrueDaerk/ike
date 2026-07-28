@@ -442,6 +442,32 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		} else {
 			m.host.Notify(host.Warn, "debug: detached request from "+fd.Host+" (host filter: "+fd.Filter+")")
 		}
+	case "ike.debugDrop":
+		// A listening session turned a connection away (#1328). Every drop
+		// path reports itself, so "the request never stopped" always has a
+		// reason on screen. One page load can produce a burst of them
+		// (assets, subrequests), so the notification is throttled: the first
+		// of each reason and then every tenth — the debug console keeps the
+		// complete list either way.
+		var drop struct {
+			Reason string `json:"reason"`
+			Detail string `json:"detail"`
+			Count  int    `json:"count"`
+		}
+		if json.Unmarshal(ev.Body, &drop) != nil || drop.Reason == "filter" {
+			break // the filter drop has its own, more specific notification
+		}
+		if drop.Count > 1 && drop.Count%10 != 0 {
+			break
+		}
+		text := drop.Detail
+		if text == "" {
+			text = drop.Reason
+		}
+		if drop.Count > 1 {
+			text = fmt.Sprintf("%s (%d times)", text, drop.Count)
+		}
+		m.host.Notify(host.Warn, "debug: dropped a connection — "+text)
 	case "ike.pathMappingHint":
 		// A listening session (#832) accepted a request whose entry file
 		// does not resolve locally: offer mapping the server directory to

@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
-timestamp: 2026-07-22T00:00:00Z
+timestamp: 2026-07-28T19:00:00Z
 ---
 
 # Debugger (0350)
@@ -66,6 +66,33 @@ undisturbed), and when a request finishes the bridge emits `continued`,
 drops the connection and keeps listening. Stopping the listener detaches a
 live request instead of killing it mid-response.
 
+**Vetting is concurrent, adoption is not** (#1328). php-fpm opens several DBGp
+connections for one page load (subrequests, assets), and both the handshake and
+the hostname probe are round trips — running them inside the accept loop meant
+every pending request waited behind the slowest one, and a connection that
+never completed its handshake stalled the listener for the whole 30s accept
+timeout. Each connection is now vetted in its own goroutine; `adoptConn`
+re-checks the session under the lock, so exactly one of several racing
+connections becomes the session and the losers are turned away like any other
+drop.
+
+**No silent drop path remains** (#1328). Every rejection goes through
+`dropConn`, which logs a console line *and* emits `ike.debugDrop`
+`{reason, detail, count}`; the reasons are `handshake` (no DBGp init in time —
+previously the one path that left no evidence at all), `busy` (another request
+is being debugged), `filter` (hostname mismatch, keeping its more specific
+`ike.filterDetach` event) and `ended`. The client notifies on the first drop of
+each reason and then every tenth, since one page load can produce a burst; the
+debug console keeps the complete list.
+
+**Dead sessions are reaped** (#1328). While the debuggee is paused no command
+is outstanding, so a php-fpm worker that dies (browser abort, request timeout)
+went unnoticed: `b.dc` stayed set and the bridge answered *every* later request
+with "one session at a time" until the user pressed continue — the intermittent
+capture the issue reported. Before deciding a connection is a latecomer the
+bridge now checks `Conn.Closed()` on the live session and, if it is gone, ends
+the run like a normal request end.
+
 Settings live in `[debug.php]`:
 
 - `port` — DBGp listener port (default 9003, Xdebug's default).
@@ -94,8 +121,9 @@ engine lives in the server's PHP, not the CLI interpreter.
 
 Listener state is visible throughout: the debug console logs
 "Listening for Xdebug connections on port N (host filter: …)…",
-"Accepted debug connection (path)", "Detached request from …",
-"Detached a concurrent debug connection" and "Request finished —
+"Accepted debug connection (path)", "Dropped debug connection: …" (one line per
+turned-away connection, with the reason), "Debugged request ended without a
+reply — listening…" (a reaped dead session) and "Request finished —
 listening…" as they happen (the first output auto-opens the panel).
 
 Troubleshooting a request that never stops at breakpoints:
@@ -111,7 +139,14 @@ Troubleshooting a request that never stops at breakpoints:
    "Detached request from …" console line — it names the host the request
    actually sent, so a filter typo or an unexpected `HTTP_HOST` is visible
    immediately. An empty host means the request never sent one (CLI).
-4. Breakpoints in files the request never executes: check the path
+4. Requests dropped rather than ignored? Since #1328 every connection the
+   listener turns away says so — a console line plus a throttled warning
+   notification with the reason. `busy` in a burst means requests arrive while
+   an earlier one is paused (continue or stop the session first); `handshake`
+   means something dialed the port without speaking DBGp; `filter` is the
+   hostname check. Nothing on screen while `xdebug.log` shows a connect
+   attempt is now a bug, not a configuration question.
+5. Breakpoints in files the request never executes: check the path
    mappings — breakpoint paths translate local→server on replay, and a
    mapping miss binds them to files the server doesn't run. The
    `ike.pathMappingHint` prompt fires when the entry file doesn't resolve
