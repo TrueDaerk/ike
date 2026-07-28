@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-28 (editor: unmistakable input mode — caret shape + mode-coloured pane border)
+
+- The mode-coloured caret (#1323) was too quiet on its own. The caret now also
+  changes **shape**: insert mode draws a double underline caret in the mode
+  colour over a light tint of it, every other mode keeps the solid block
+  (`editor.Model.cursorStyle`, `insertCaretTintFrac`).
+- The **focused pane's border** takes `editor.ModeColor` while its editor is in
+  a non-Normal mode (`app.paneEditorMode`, `renderPane`). Normal mode keeps
+  `BorderFocus`, unfocused panes keep `Border`, and the move/tab drag colours
+  still win.
+- See [Editor](/architecture/editor.md) — "Mode visibility".
+
 ## 2026-07-28 (keymap: context-qualified overrides — "keep both, resolve by context")
 
 - `keymap.bindings` keys may now carry a context qualifier — `"editor.ctrl+g"`,

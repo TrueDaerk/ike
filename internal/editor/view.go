@@ -39,15 +39,33 @@ func ModeColor(md Mode, pal *theme.Palette) color.Color {
 	}
 }
 
-// cursorStyle is the primary caret cell's style: a block tinted with the input
-// mode's colour (#1323). Mode feedback right at the caret means the user never
-// has to look down at the status line to know whether typing inserts text.
+// insertCaretTintFrac is how much of the mode colour mixes into the surface
+// behind the insert-mode underline caret: enough to locate the caret at a
+// glance, light enough that the character under it stays readable (the caret
+// no longer inverts the cell, so the glyph keeps the theme's own contrast).
+const insertCaretTintFrac = 0.15
+
+// cursorStyle is the primary caret cell's style. The caret carries the input
+// mode in two ways (#1353): its colour (#1323) and — the signal that reads
+// without comparing colours — its shape. Normal, visual, command and replace
+// mode draw the vim-conventional solid block; insert mode draws an underline
+// caret over a light tint, so "typing inserts text" is obvious at the caret
+// itself instead of only in the status line.
 func (m Model) cursorStyle() lipgloss.Style {
 	pal := m.theme()
-	bg := ModeColor(m.mode, pal)
+	c := ModeColor(m.mode, pal)
+	if m.mode == Insert {
+		bg := theme.Mix(c, pal.Background, insertCaretTintFrac)
+		return lipgloss.NewStyle().
+			Background(bg).
+			Foreground(theme.Readable(bg, pal.Background, pal.Foreground)).
+			UnderlineStyle(lipgloss.UnderlineDouble).
+			UnderlineColor(c).
+			Bold(true)
+	}
 	return lipgloss.NewStyle().
-		Background(bg).
-		Foreground(theme.Readable(bg, pal.Background, pal.Foreground))
+		Background(c).
+		Foreground(theme.Readable(c, pal.Background, pal.Foreground))
 }
 
 // conflictTintFrac is how much of the VCS status colour mixes into the surface
