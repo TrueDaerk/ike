@@ -36,6 +36,11 @@ func TestInstanceViewCacheNeverStale(t *testing.T) {
 		{"resize-height", func(i *Instance, ed *editor.Model) { ed.SetSize(60, 12) }},
 		{"blur", func(i *Instance, ed *editor.Model) { ed.SetFocused(false) }},
 		{"edit", func(i *Instance, ed *editor.Model) { i.Update(tea.KeyPressMsg{Text: "x", Code: 'x'}) }},
+		// Mouse-driven caret changes (#1327): these mutate outside Update, so
+		// no render-epoch bump stands for them.
+		{"mouse-click", func(i *Instance, ed *editor.Model) { ed.MouseClick(10, 5) }},
+		{"mouse-drag", func(i *Instance, ed *editor.Model) { ed.MouseClick(10, 5); ed.MouseDrag(24, 7) }},
+		{"alt-click", func(i *Instance, ed *editor.Model) { ed.AltClick(12, 6) }},
 		{"paused", func(i *Instance, ed *editor.Model) { ed.SetPausedLine(5) }},
 		{"blame", func(i *Instance, ed *editor.Model) { ed.ToggleBlame() }},
 		{"breakpoint-change", func(i *Instance, ed *editor.Model) {
