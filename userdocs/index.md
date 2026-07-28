@@ -5,7 +5,7 @@ IKE is a terminal IDE: a JetBrains-inspired TUI built with
 in the editor. It brings the pieces you expect from a desktop IDE into the
 terminal — a file explorer, resizable panes with tabs, a command palette,
 LSP-powered code intelligence, Tree-sitter highlighting, an integrated
-terminal, themes, and a plugin system.
+terminal, an HTTP client for `.http` files, themes, and a plugin system.
 
 ![IKE with the tokyo-night theme](screenshots/tokyo-night.png)
 

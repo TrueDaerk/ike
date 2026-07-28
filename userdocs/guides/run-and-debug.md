@@ -32,6 +32,21 @@ The terminal gets the project's toolchain environment plus the configuration's
 own overrides, so the interpreter that runs your code is the one IKE shows
 everywhere else.
 
+### Shell scripts
+
+`.sh`, `.bash` and `.zsh` files run too, including scratch buffers. The
+interpreter is resolved in this order:
+
+1. an explicit `[lang.shell] interpreter`,
+2. the file's shebang shell, when that binary is actually on `PATH`,
+3. the shell the extension implies (`.bash` → `bash`, `.zsh` → `zsh`,
+   `.sh` → `sh`).
+
+The command is `<interpreter> <file>` from the project root. IKE never
+executes the file directly through its shebang, so your scripts do not need to
+be executable and nothing gets `chmod`ed behind your back. A shebang naming a
+shell you have not installed falls back to step 3 instead of failing.
+
 ### Tests
 
 **Run Test at Cursor** and **Run Tests in File** run tests specifically. Test

@@ -30,6 +30,11 @@ its `[lang.<id>] interpreter` setting, its detected toolchain version. So a
 Python or PHP scratch can exercise the project it sits next to without being
 part of it. Languages that contribute no run command say so instead.
 
+An **Http** scratch is the exception worth knowing: it is not run with
+++shift+f10++ but with ++cmd+enter++, which sends the request under the cursor
+— a throwaway API call without adding a file to the repository. See
+[The HTTP client](http-client.md).
+
 ### Where they live
 
 Outside your project tree, under the user state directory. That is the
