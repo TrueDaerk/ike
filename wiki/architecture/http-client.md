@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-28T15:00:00Z
+timestamp: 2026-07-28T16:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -187,6 +187,22 @@ config file paths, or disable detection entirely.
   absolute so syntax highlight, search matches and mouse selection remain
   aligned with the text; a clipped row ends in `…`. History browsing keeps
   `h`/`l` only — the arrows now scroll.
+- **Folding** (#1330, `internal/httppane/fold.go`): the body's fold ranges come
+  from its own language (`highlight.FencedFolds`, resolved through the content
+  type — the same Tree-sitter fold nodes an editor buffer uses) and are stored
+  in **row** coordinates, so search, selection and copy keep addressing rows
+  unchanged. A collapsed fold hides rows from the display only: `visible` is the
+  row-index projection the viewport scrolls over (`top` is an index into it),
+  while `rows` stays the whole response. The leading gutter cell carries the
+  marker (▾ open, ▸ collapsed) and a click on it toggles instead of starting a
+  selection; a collapsed header renders the editor's `⋯ N lines` placeholder.
+  Keyboard: `za`/`zc`/`zo` act on *the fold at the top of the view* (the
+  viewer has no cursor — the innermost fold containing the top visible row,
+  else the first below it), `zM`/`zR` fold and unfold everything. Two
+  composition rules fall out of the row-coordinate design: a search hit inside
+  a collapsed fold **reveals** it (`scrollToMatch` opens every fold hiding the
+  match), and copy takes real content — a selection spanning a collapsed fold
+  copies what is inside it, never the placeholder.
 - **In-pane search** (#1265): `/` opens a search prompt in the pane footer,
   matching incrementally over the **whole composed view** — status line,
   headers and formatted body alike — with the editor's smartcase rule (an

@@ -157,11 +157,21 @@ highlighted, binary bodies collapsed to a notice.
 | `Y` | Copy the status line plus headers |
 | `h` / `l` | Older / newer response for this request |
 | `x` | Cancel the request that is running |
+| `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
+| `zM` / `zR` | Collapse every fold / open them all |
 | ++esc++ | Clear the search |
 
 Search uses the editor's smartcase rule: an all-lowercase pattern ignores
 case, any uppercase letter makes it exact. The footer shows the position
 (`/token  3/17`).
+
+A JSON, XML or HTML body **folds** like a file in the editor does: foldable
+lines carry a ▾ marker in the left column, clicking it collapses the block to a
+`⋯ N lines` placeholder, and clicking the ▸ opens it again. The keyboard
+commands act on the fold at the top of the view, since the viewer has no
+cursor; `zM` and `zR` fold and unfold everything. Folding is display-only —
+searching still finds text inside a collapsed block (and opens it to show you
+the hit), and copying takes the real content, never the placeholder.
 
 Selection works with the mouse like the terminal pane does — drag to select,
 double click for a word (ids and dotted tokens select whole), triple click for

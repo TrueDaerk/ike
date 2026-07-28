@@ -32,7 +32,7 @@ func selViewer(t *testing.T) *Model {
 // cell converts a row/column of the composed view into pane-local mouse
 // coordinates: the title bar takes y == 0, every row renders with one leading
 // space.
-func cell(m *Model, row, col int) (x, y int) { return col + 1, row - m.top + 1 }
+func cell(m *Model, row, col int) (x, y int) { return col + 1, m.displayOf(row) - m.top + 1 }
 
 // clickAt presses (and releases) at a composed position.
 func press(m *Model, row, col int) {

@@ -71,6 +71,14 @@ type selection struct {
 // MousePress anchors a selection at the pane-local cell (x, y). The click
 // streak cycles char → word → line like the terminal's.
 func (m *Model) MousePress(x, y int) {
+	// The gutter column toggles a fold instead of starting a selection
+	// (#1330): it is the marker the glyph sits in, nothing selectable.
+	if x == 0 && y > 0 {
+		if row := m.rowAt(m.top + y - 1); row >= 0 && m.Foldable(row) {
+			m.ToggleFold(row)
+			return
+		}
+	}
 	p := m.posAt(x, y)
 	now := timeNow()
 	if p == m.sel.lastPos && now.Sub(m.sel.lastAt) <= multiClickWindow {
@@ -190,12 +198,15 @@ func (m *Model) SelectionText() string {
 // content starts one line below the title bar and one column right of the
 // leading gutter space every row renders with.
 func (m *Model) posAt(x, y int) pos {
-	row := m.top + y - 1 // the title line occupies y == 0
+	// y maps through the display projection: a collapsed fold's body rows are
+	// not on screen, so the row under the pointer is visible[top + y - 1]
+	// (the title line occupies y == 0).
+	row := m.rowAt(m.top + y - 1)
 	if row < 0 {
-		row = 0
-	}
-	if row > len(m.rows) {
 		row = len(m.rows)
+		if y <= 0 {
+			row = 0
+		}
 	}
 	col := x - 1 + m.left // the leading space, plus the horizontal pan (#1290)
 	if col < 0 {
