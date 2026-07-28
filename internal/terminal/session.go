@@ -732,11 +732,28 @@ func (s *Session) Busy() bool {
 		_, exited := s.ExitCode()
 		return !exited
 	}
-	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
-	if err != nil {
+	return !s.AtPrompt()
+}
+
+// AtPrompt reports whether the interactive shell itself owns the terminal: the
+// PTY's foreground process group is the shell's own, so nothing else is
+// reading stdin and the cursor row is the shell's command line (#1340).
+// A foreground job — a build, vim, `python3 -c 'input(…)'` — is put into its
+// own process group by the shell's job control, which is exactly what this
+// distinguishes. Command sessions (0350) never have a prompt.
+//
+// When the ioctl is unavailable the shell is assumed to be at its prompt: the
+// features gated on this (command completion) then behave as they did before
+// the gate rather than disappearing.
+func (s *Session) AtPrompt() bool {
+	if s.closed.Load() || s.cmd == nil || s.cmd.Process == nil || s.ptmx == nil || s.IsCommand() {
 		return false
 	}
-	return pgrp != s.cmd.Process.Pid
+	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	if err != nil {
+		return true
+	}
+	return pgrp == s.cmd.Process.Pid
 }
 
 // IsCommand reports whether the session runs a program (0350, #574) rather
