@@ -1,5 +1,22 @@
 # Log
 
+## 2026-07-28 (php debug: the listener stops losing requests)
+
+- With "listen for connections" active most requests passed through without
+  attaching, some stopped at breakpoints, and nothing said why (#1328). Three
+  causes, all fixed: vetting ran **inside** the accept loop, so one slow (or
+  silent) connection blocked every request behind it for up to the 30s accept
+  timeout — each connection is now vetted in its own goroutine while adoption
+  stays single-session under the lock; a session whose php-fpm worker died
+  while paused was never noticed, so the bridge answered every later request
+  with "one session at a time" — the live connection's `Closed()` is now
+  checked and a dead session is reaped like a finished request; and the
+  handshake-failure path returned without a word — every rejection now goes
+  through `dropConn`, which logs a console line and emits `ike.debugDrop`
+  {reason, detail, count} (handshake/busy/filter/ended). The client notifies on
+  the first drop per reason and every tenth after that, so an asset burst does
+  not spam. Updated [Debugger](/architecture/debugger.md).
+
 ## 2026-07-28 (settings: the detail column takes the mouse)
 
 - On the master·detail grid a press in the detail column only moved the focus

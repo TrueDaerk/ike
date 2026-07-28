@@ -84,6 +84,10 @@ type bridge struct {
 	hostname   string
 	maps       []pathMapping
 	bpLines    map[string][]int
+	// drops counts the connections turned away per reason (#1328), so a
+	// repeated drop can be reported without one notification per asset
+	// request; the counter rides the event the client throttles on.
+	drops map[string]int
 }
 
 // serve runs the DAP read loop until the pipe closes. A panic anywhere in
@@ -446,8 +450,14 @@ func (b *bridge) handleListen(req envelope, args launchArgs) {
 }
 
 // acceptLoop accepts DBGp connections until the listener closes (disconnect
-// or shutdown). Each accepted connection is vetted and, when it passes,
-// becomes the live debug session; the loop then waits for the next request.
+// or shutdown). Vetting runs per connection in its own goroutine (#1328):
+// php-fpm opens several connections at once for one page load (subrequests,
+// assets), and the handshake plus the hostname probe are round trips — doing
+// them in the loop meant every other pending request waited behind the
+// slowest one, and a connection that never completed its handshake stalled
+// the listener for the whole accept timeout. Adoption stays single-session:
+// adoptConn re-checks under the lock, so exactly one of several racing
+// connections becomes the session and the rest are turned away visibly.
 func (b *bridge) acceptLoop(l net.Listener) {
 	defer b.recoverClose()
 	for {
@@ -455,8 +465,55 @@ func (b *bridge) acceptLoop(l net.Listener) {
 		if err != nil {
 			return // listener closed: shutdown owns the teardown
 		}
-		b.handleIncoming(conn)
+		go func(conn net.Conn) {
+			defer b.recoverClose()
+			b.handleIncoming(conn)
+		}(conn)
 	}
+}
+
+// dropConn turns one connection away, always visibly (#1328): the console
+// gets a line and the client a structured event carrying the reason and how
+// often it has fired, so a request that never attaches is never indistinguishable
+// from a broken setup. Detach lets the PHP request run on undisturbed.
+func (b *bridge) dropConn(dc *dbgp.Conn, reason, detail string) {
+	b.mu.Lock()
+	if b.drops == nil {
+		b.drops = map[string]int{}
+	}
+	b.drops[reason]++
+	count := b.drops[reason]
+	b.mu.Unlock()
+
+	text := detail
+	if text == "" {
+		text = reason
+	}
+	b.event("output", map[string]any{"category": "console",
+		"output": fmt.Sprintf("Dropped debug connection: %s\n", text)})
+	b.event("ike.debugDrop", map[string]any{"reason": reason, "detail": detail, "count": count})
+	if dc != nil {
+		_ = dc.Detach()
+		_ = dc.Close()
+	}
+}
+
+// reapDeadSession clears a live session whose connection has gone away
+// (#1328). Nothing else notices such a death while the debuggee is paused —
+// no command is outstanding to fail — so the bridge kept reporting "busy" and
+// turned every later request away until the user pressed continue. Reported
+// like a normal end of request, because that is what it is.
+func (b *bridge) reapDeadSession() {
+	b.mu.Lock()
+	dc := b.dc
+	dead := dc != nil && dc.Closed()
+	b.mu.Unlock()
+	if !dead {
+		return
+	}
+	b.event("output", map[string]any{"category": "console",
+		"output": "Debugged request ended without a reply — listening…\n"})
+	b.endRun()
 }
 
 // handleIncoming vets one dialed-in engine connection: handshake, busy
@@ -473,33 +530,37 @@ func (b *bridge) handleIncoming(conn net.Conn) {
 	})
 	init, err := dc.WaitInit(acceptTimeout)
 	if err != nil {
-		_ = dc.Close()
+		// A connection that never completes its handshake used to vanish
+		// without a trace (#1328) — the one drop path that left no evidence
+		// at all when capture "just didn't work".
+		b.dropConn(dc, "handshake", "no DBGp init within "+acceptTimeout.String())
 		return
 	}
+	// A session whose connection died unnoticed would refuse everything that
+	// follows (#1328); collect it before deciding this one is a latecomer.
+	b.reapDeadSession()
 	b.mu.Lock()
-	busy, host := b.dc != nil || b.ended, b.hostname
+	busy, ended, host := b.dc != nil, b.ended, b.hostname
 	b.mu.Unlock()
+	if ended {
+		b.dropConn(dc, "ended", "the debug session is over")
+		return
+	}
 	if busy {
 		// Sequential sessions only: a request arriving while another is
 		// being debugged runs through undisturbed. Say so (#938) — listener
 		// state must never change silently.
-		b.event("output", map[string]any{"category": "console",
-			"output": "Detached a concurrent debug connection — one session at a time\n"})
-		_ = dc.Detach()
-		_ = dc.Close()
+		b.dropConn(dc, "busy", "another request is being debugged — one session at a time")
 		return
 	}
 	if host != "" {
 		reqHost, ok := b.requestHost(dc)
 		if !ok || !hostMatches(reqHost, host) {
-			b.event("output", map[string]any{"category": "console",
-				"output": fmt.Sprintf("Detached request from %q (host filter: %s)\n", reqHost, host)})
 			// Never a silent drop (#938): the client raises a visible
 			// notification, otherwise a filter false-negative is
 			// indistinguishable from "debugging is broken".
 			b.event("ike.filterDetach", map[string]any{"host": reqHost, "filter": host})
-			_ = dc.Detach()
-			_ = dc.Close()
+			b.dropConn(dc, "filter", fmt.Sprintf("request from %q does not match the host filter %s", reqHost, host))
 			return
 		}
 	}
@@ -548,8 +609,10 @@ func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init) {
 	b.mu.Lock()
 	if b.ended || b.dc != nil {
 		b.mu.Unlock()
-		_ = dc.Detach()
-		_ = dc.Close()
+		// Lost the race against another connection accepted at the same
+		// moment (#1328): the loser is turned away like any other drop, not
+		// dropped in silence.
+		b.dropConn(dc, "busy", "another request won the session — one session at a time")
 		return
 	}
 	b.dc = dc

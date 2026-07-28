@@ -135,3 +135,55 @@ func TestDebugMapPromptWritesMapping(t *testing.T) {
 		t.Fatalf("project settings = %q, %v", data, err)
 	}
 }
+
+// TestDebugDropNotifiesThrottled guards #1328's client half: a dropped
+// connection is surfaced, and a burst of them (one page load can open many)
+// notifies on the first and then every tenth — the console keeps all of them.
+func TestDebugDropNotifiesThrottled(t *testing.T) {
+	t.Chdir(t.TempDir())
+	m := sized(t, 100, 40)
+	out, _ := m.Update(DebugListenMsg{})
+	m = out.(Model)
+	if m.dbg == nil {
+		t.Fatal("fixture: listen session must be running")
+	}
+	// Notifications become history entries once the Update loop drains them.
+	notes := func(m Model) []string {
+		var out []string
+		for _, h := range m.history {
+			if strings.Contains(h.text, "dropped a connection") {
+				out = append(out, h.text)
+			}
+		}
+		return out
+	}
+	drop := func(reason string, count int) Model {
+		body, _ := json.Marshal(map[string]any{
+			"reason": reason, "detail": "another request is being debugged", "count": count,
+		})
+		out, cmd := m.Update(debugEventMsg{ev: dap.Event{Name: "ike.debugDrop", Body: body}})
+		m = out.(Model)
+		return drainCmd(m, cmd)
+	}
+
+	m = drop("busy", 1)
+	if got := notes(m); len(got) != 1 {
+		t.Fatalf("the first drop must notify, got %+v", got)
+	}
+	for _, n := range []int{2, 3, 9} {
+		m = drop("busy", n)
+	}
+	if got := notes(m); len(got) != 1 {
+		t.Fatalf("drops 2..9 must stay in the console, got %+v", got)
+	}
+	m = drop("busy", 10)
+	got := notes(m)
+	if len(got) != 2 || !strings.Contains(got[0], "10 times") {
+		t.Fatalf("every tenth drop must notify with its count, got %+v", got)
+	}
+	// The hostname filter keeps its own, more specific notification.
+	m = drop("filter", 1)
+	if got := notes(m); len(got) != 2 {
+		t.Fatalf("filter drops must not double-notify, got %+v", got)
+	}
+}

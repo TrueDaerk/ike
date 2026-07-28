@@ -102,6 +102,15 @@ debugging a **web request** rather than a script, run **Listen for PHP Debug
 Connections** — IKE waits for Xdebug to call in, so you trigger the request
 from your browser and the session starts when it hits your breakpoint.
 
+One request is debugged at a time. A page load usually opens several
+connections (subrequests, assets), and any that arrive while a request is
+paused are let through undebugged — IKE says so instead of ignoring them: the
+debug console gets a line per dropped connection with the reason, and a warning
+notification for the first of each kind. So if a request never stops at a
+breakpoint, the reason is on screen: `busy` (finish or stop the paused session
+first), `filter` (the hostname filter in **Settings › Debug** rejected it) or
+`handshake` (something dialed the port without speaking DBGp).
+
 ## When something does not run
 
 **"No configuration"** — the language has no run template. Running is
