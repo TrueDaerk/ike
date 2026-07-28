@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-27T12:00:00Z
+timestamp: 2026-07-28T12:00:00Z
 ---
 
 # Editor
@@ -269,6 +269,20 @@ line runs that test (see /architecture/run-configurations.md).
   editor executes recognised names (`:w :q :wq :q! :e`, plus a bare range as a
   line jump); `:g` / `:v` / `:s` are reserved and report *not implemented*. See
   [command line](#command-line-ex-commands-roadmap-0200).
+
+## Mode visibility (#1323)
+
+The current mode has two glanceable signals, both driven by
+`editor.ModeColor(mode, palette)`: the **caret cell** is painted in the mode's
+colour (`Model.cursorStyle`, formerly a plain reverse-video block) and the
+status line's mode segment renders as a badge in the same colour (see
+[Status Line Segments](/architecture/status-line.md)). The mapping reuses
+existing palette slots — Accent for `NORMAL`, Success for `INSERT`, Warning for
+the visual modes, Error for `REPLACE`, Info for the `:` command line — so every
+theme, built-in or third-party, carries it without a schema change; the text on
+top is chosen by contrast (`theme.Readable`). A contrast test guards WCAG AA for
+every built-in theme × mode pair. The caret colour rides the line cache safely:
+a mode change always arrives through `Update`, which bumps the render epoch.
 
 ## Modes & keys
 

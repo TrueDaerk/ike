@@ -24,8 +24,12 @@ character it lands on instead of pushing it right; ++esc++ leaves. For a single
 character you do not need the mode at all — `r` in normal mode replaces the one
 under the cursor and stays put (`3rx` overwrites three).
 
-The active mode is always shown at the left of the status bar. When in doubt,
-press ++esc++ — from anywhere it lands you in normal mode.
+The active mode is always shown at the left of the status bar, as a coloured
+badge — and the cursor itself takes the same colour, so you can tell the mode
+without looking away from what you are typing: the theme's accent for normal,
+green for insert, yellow for visual, red for replace and blue while you are on
+the `:` command line. When in doubt, press ++esc++ — from anywhere it lands you
+in normal mode.
 
 ## The grammar
 
