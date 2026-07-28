@@ -42,6 +42,9 @@ func init() {
 			Install:     []string{"npm", "install", "-g", "vscode-langservers-extracted"},
 		},
 		IndentAfter: []string{"{", "["},
+		// Typing assistance (#1326): a JSON member reads "key": value, so the
+		// space after the colon is written for you as you type.
+		SpaceAfter: []rune{':'},
 		// Foldable regions (#144): multi-line objects and arrays.
 		FoldNodes: []string{"object", "array"},
 	})
@@ -51,5 +54,6 @@ func init() {
 		Extensions: []string{"ndjson", "jsonl"},
 		Grammar:    g,
 		FoldNodes:  []string{"object", "array"},
+		SpaceAfter: []rune{':'},
 	})
 }

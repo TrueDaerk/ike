@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-28T12:00:00Z
+timestamp: 2026-07-28T14:00:00Z
 ---
 
 # Editor
@@ -379,6 +379,20 @@ doubled quotes insert alone. Everything applies per caret
 open insert's undo unit. The `.`-replay text records only the keystrokes, so a
 fully typed `(x)` run replays exactly; an insert that never types the closer
 replays without it (same approximation as backspace).
+
+**Typing assistance** (#1326, `smarttyping.go`): punctuation a language
+declares in `lang.SpaceAfter` gets its conventional space written as you type —
+`':'` in JSON, so `"key":` becomes `"key": ` mid-keystroke. Gated on
+`editor.typing.space_after_punctuation` (on by default; the Settings → Typing
+Assistance page). The governing language is resolved like the indent openers
+are: an embedded region's language wins over the host's, so a JSON body inside
+a `.http` request follows JSON's conventions (#1304) — the case the issue came
+from. Suppression is a pure text heuristic on purpose: highlighting is parsed
+off the event loop and lags the keystroke by a frame, so the aid checks quote
+parity and the language's line-comment marker on the line left of the caret
+instead of a (stale) capture. No space is added when a space or tab already
+follows. Like auto-close it decides per caret and rides the open insert's undo
+unit; the `.`-replay records what the primary caret produced.
 
 **Macros** (#58, `macro.go`): `q{a-z}` records, `q` stops, `@{a-z}` replays,
 `@@` repeats the last replay, and a count multiplies (`5@a`). Recording taps
@@ -1098,7 +1112,8 @@ same per-path dedup and save-triggered re-request.
 
 `Configure(host.Config)` retains the config reference and `applyConfig` re-reads
 the `[editor]` section on every event, so `tab_width`, `use_spaces`,
-`auto_indent`, `auto_close_pairs`, `trim_trailing_whitespace`, `insert_final_newline`,
+`auto_indent`, `auto_close_pairs`, `typing.space_after_punctuation` (#1326),
+`trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `color_preview`

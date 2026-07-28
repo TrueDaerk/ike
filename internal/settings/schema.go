@@ -157,6 +157,9 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
 			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
 		}},
+		{Title: "Typing Assistance", Description: "What the editor writes for you while you type. Each aid is one switch; which characters it applies to is the language's convention (#1326), not a setting.", Entries: []Entry{
+			{Key: "editor.typing.space_after_punctuation", Type: Bool, Title: "Space after punctuation", Description: "Insert the conventional space after punctuation the language declares — \":\" in JSON, so \"key\": is completed as you type. Suppressed inside strings and comments", Scope: config.UserScope},
+		}},
 		{Title: "Diagnostics", Description: "Which problem markers decorate the editor — per source and severity. The Problems window always lists everything, regardless of these switches.", Entries: []Entry{
 			// Per-source, per-severity decoration toggles (#1259): each switch
 			// gates one mark class across the scrollbar stripe, gutter and

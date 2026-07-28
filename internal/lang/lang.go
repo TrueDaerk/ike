@@ -73,6 +73,15 @@ type Language struct {
 	// falls back to plain copy-indent.
 	IndentAfter []string
 
+	// SpaceAfter lists the punctuation runes that get a space inserted after
+	// them while typing (#1326), e.g. ':' in JSON so `"key":` becomes
+	// `"key": ` as you type. This is the language's typing-convention table:
+	// a language opts in by listing its runes, and the editor suppresses the
+	// aid inside strings/comments, when a space already follows, and when the
+	// user turns editor.typing.space_after_punctuation off. Empty means the
+	// language has no such convention.
+	SpaceAfter []rune
+
 	// ScopeNodes lists the Tree-sitter node kinds that define a sticky-scroll
 	// scope (#168): declarations whose first line is pinned at the top of the
 	// editor while their body is scrolled through, e.g. "function_declaration"

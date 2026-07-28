@@ -252,9 +252,23 @@ type Editor struct {
 	// clickable per segment. On by default (the JetBrains default); the row
 	// only appears while symbol data exists for the file, so files without a
 	// documentSymbol provider spend no editor row on it.
-	Breadcrumbs bool  `toml:"breadcrumbs"`
-	Tabs        Tabs  `toml:"tabs"`
-	Marks       Marks `toml:"marks"`
+	Breadcrumbs bool   `toml:"breadcrumbs"`
+	Tabs        Tabs   `toml:"tabs"`
+	Marks       Marks  `toml:"marks"`
+	Typing      Typing `toml:"typing"`
+}
+
+// Typing holds the while-you-type assistance switches (#1326) — edits the
+// editor makes on its own as a character is typed, beyond auto-close pairs.
+// Each aid is one switch so a user can keep the ones they like: which
+// characters an aid applies to is the language's call (lang.SpaceAfter), not
+// the user's.
+type Typing struct {
+	// SpaceAfterPunctuation inserts a space after punctuation the language
+	// declares in SpaceAfter — ":" in JSON, so `"key":` becomes `"key": ` as
+	// you type. Suppressed inside strings and comments, and when a space (or
+	// the line end) already follows.
+	SpaceAfterPunctuation bool `toml:"space_after_punctuation"`
 }
 
 // Marks holds the per-source, per-severity editor decoration toggles (#1259):

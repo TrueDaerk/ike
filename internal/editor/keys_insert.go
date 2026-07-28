@@ -154,7 +154,10 @@ func (m *Model) writeRunes(text string) {
 		m.replaceText(text)
 		return
 	}
-	if !m.autoClosePairs || !m.autoCloseWrite(text) {
+	switch {
+	case m.autoClosePairs && m.autoCloseWrite(text):
+	case m.smartSpaceWrite(text): // space after ':' & friends (#1326)
+	default:
 		m.insertText(text)
 	}
 	m.maybeAutoComplete(text)
