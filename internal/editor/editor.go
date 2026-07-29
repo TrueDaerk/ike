@@ -899,15 +899,39 @@ func (m *Model) SetCursor(line, col int) {
 // (#996): the jumped-to line sits this far below the pane's top edge.
 const jumpTopMargin = 3
 
+// jumpEdgeMargin is the scrolloff-style comfort zone for on-screen jump
+// targets (#1373): a visible target within this many rows of the viewport's
+// top or bottom edge gets a minimal scroll onto the margin line instead of
+// the full near-top reframe. editor.scroll_off widens it when set larger.
+const jumpEdgeMargin = 5
+
 // JumpTo places the cursor like SetCursor and frames the landing for a
-// navigation jump (#996): the target line sits jumpTopMargin rows below the
-// viewport's top edge (small context margin, JetBrains-like) instead of being
-// scrolled minimally into view. Already-visible targets reframe too —
-// consistent landings beat the occasional saved scroll (documented decision).
-// SetScroll clamps, so a target near the end of the buffer never over-scrolls.
+// navigation jump. Off-screen targets sit jumpTopMargin rows below the
+// viewport's top edge (small context margin, JetBrains-like, #996). Targets
+// already comfortably visible move only the cursor, and targets inside the
+// jumpEdgeMargin comfort zone scroll minimally onto the margin line (#1373) —
+// no viewport yank when the destination is in sight. SetScroll clamps, so a
+// target near the end of the buffer never over-scrolls.
 func (m *Model) JumpTo(line, col int) {
+	oldTop := m.view.Top
 	m.SetCursor(line, col)
-	top := m.cursor.Line - jumpTopMargin
+	line = m.cursor.Line
+	margin := jumpEdgeMargin
+	if m.view.ScrollOff > margin {
+		margin = m.view.ScrollOff
+	}
+	h := m.view.Height()
+	top := line - jumpTopMargin // off-screen (or margin-swallowed pane): #996 near-top framing
+	if h > 2*margin {
+		switch {
+		case line >= oldTop+margin && line < oldTop+h-margin:
+			top = oldTop // comfortably visible: cursor only, viewport untouched
+		case line >= oldTop && line < oldTop+margin:
+			top = line - margin // near the top edge: settle on the margin line
+		case line >= oldTop+h-margin && line < oldTop+h:
+			top = line - (h - 1 - margin) // near the bottom edge: settle on the margin line
+		}
+	}
 	if top < 0 {
 		top = 0
 	}

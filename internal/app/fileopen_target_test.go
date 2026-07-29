@@ -107,3 +107,20 @@ func TestOpenPathAtFramesJumpNearTop(t *testing.T) {
 		t.Fatalf("line=%d top=%d want 150/147 (#996)", line, top)
 	}
 }
+
+// TestOpenPathAtVisibleTargetKeepsViewport guards #1373: a same-file jump to a
+// line already comfortably visible moves only the cursor.
+func TestOpenPathAtVisibleTargetKeepsViewport(t *testing.T) {
+	m := sized(t, 100, 40)
+	path := tmpFile(t, "big.txt", strings.Repeat("x\n", 300))
+	out, _ := m.openPathAt(path, 150, 0)
+	m = out.(Model)
+	out, _ = m.openPathAt(path, 160, 0) // inside the framed viewport, away from edges
+	m = out.(Model)
+	ed := m.activeWS().Panes.Get(m.activeWS().Panes.Focused()).Editor()
+	line, _ := ed.CursorPos()
+	top, _ := ed.ScrollOffset()
+	if line != 160 || top != 147 {
+		t.Fatalf("line=%d top=%d want 160/147 (visible target must not scroll, #1373)", line, top)
+	}
+}
