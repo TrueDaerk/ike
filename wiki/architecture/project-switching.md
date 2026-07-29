@@ -100,9 +100,10 @@ The inverse of a quick visit: instead of switching back and closing the
 visited workspace from the list (#820), one action closes the **current**
 project.
 
-- **`project.close`** ("Close Project", global scope, no default chord — the
-  chord budget is full, #711) dispatches `CloseProjectMsg`; reachable from the
-  palette and File → *Close Project*.
+- **`project.close`** ("Close Project", global scope, default chord
+  `cmd+shift+w` with `ctrl+shift+w` as the delivered secondary, #1358 —
+  the project.switch pattern) dispatches `CloseProjectMsg`; also reachable
+  from the palette and File → *Close Project*.
 - **With background workspaces** (`internal/app/project_close.go`): the
   active workspace closes — session + layout persist first (reopening later
   restores), terminals/runs/debug tear down like a close-from-list

@@ -124,3 +124,22 @@ func TestRetiredDefaults(t *testing.T) {
 		t.Error("bare space must not open a pending sequence anymore")
 	}
 }
+
+// TestCloseProjectDefaultChords (#1358): project.close ships on cmd+shift+w
+// with the delivered ctrl+shift+w secondary, mirroring project.switch.
+func TestCloseProjectDefaultChords(t *testing.T) {
+	want := map[string]bool{"cmd+shift+w": false, "ctrl+shift+w": false}
+	for _, b := range Defaults(PresetJetBrains) {
+		if b.Command != "project.close" {
+			continue
+		}
+		if _, ok := want[b.Chord.String()]; ok {
+			want[b.Chord.String()] = true
+		}
+	}
+	for chord, found := range want {
+		if !found {
+			t.Errorf("project.close default %s missing", chord)
+		}
+	}
+}

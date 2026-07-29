@@ -1,5 +1,12 @@
 # Log
 
+## 2026-07-29 (keymap: default chord for Close Project)
+
+- `project.close` now ships on `cmd+shift+w` with `ctrl+shift+w` as the
+  delivered secondary (#1358), mirroring the project.switch pattern; palette
+  and File menu remain the universal escape.
+- See [Project Switching](/architecture/project-switching.md).
+
 ## 2026-07-29 (project: Close Project — close the current project, resume the MRU background workspace)
 
 - New `project.close` command ("Close Project", palette + File menu, no
