@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-29 (theme: paste into editor-internal inputs, #1380)
+
+- Paste routing (#1380): with the in-editor search (`/`, cmd+f), the `:` ex
+  line or the find/replace panel open, a bracketed paste (and cmd+v) now lands
+  in that input instead of the buffer — `pasteIntoPrompt`
+  (`internal/editor/cmdline_paste.go`), same flattening as overlay inputs
+  (#1273); the `:s///c` confirm swallows pastes. Editor doc updated.
+
 ## 2026-07-29 (theme: debug.stop freeze — non-blocking teardown, #1375)
 
 - Fixed the whole-IDE freeze on `debug.stop` during listen-mode web-request
