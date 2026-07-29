@@ -47,6 +47,29 @@ func TestSuffixTintOnlyOnCleanFiles(t *testing.T) {
 	}
 }
 
+// TestFilenameTint guards #1366: extensionless well-known filenames
+// (Makefile, Dockerfile) and dotted ones (go.mod) tint via their exact-name
+// key, and the exact key wins over the extension fallback. The "dir" and
+// "default" keys never act as filename matches.
+func TestFilenameTint(t *testing.T) {
+	m := New(".")
+	for _, name := range []string{"Makefile", "Dockerfile", "Containerfile", "go.mod", "go.sum"} {
+		if m.suffixTint(&node{name: name}) == nil {
+			t.Errorf("%s must carry a filename tint", name)
+		}
+	}
+	for _, name := range []string{"app.py", "index.php", "main.ts", "style.css", "query.sql"} {
+		if m.suffixTint(&node{name: name}) == nil {
+			t.Errorf("%s must carry an extension tint", name)
+		}
+	}
+	for _, name := range []string{"dir", "default"} {
+		if m.suffixTint(&node{name: name}) != nil {
+			t.Errorf("file literally named %q must not tint via the fallback keys", name)
+		}
+	}
+}
+
 // TestStatusLetterMapping guards #1051: the one-cell non-colour cue.
 func TestStatusLetterMapping(t *testing.T) {
 	want := map[vcs.FileStatus]string{

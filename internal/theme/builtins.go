@@ -126,16 +126,27 @@ func defaultTheme() Theme {
 			"tag":              "red",
 			"embedded":         "white",
 		},
-		Files: map[string]string{
-			"dir":     "blue",
-			"default": "white",
-			"go":      "cyan",
-			"md":      "green",
-			"toml":    "yellow",
-			"json":    "yellow",
-			"yaml":    "yellow",
-			"lock":    "gray",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "blue",
+			Default: "white",
+			Lock:    "gray",
+			Go:      "cyan",
+			Md:      "green",
+			Toml:    "yellow",
+			JSON:    "yellow",
+			YAML:    "yellow",
+			Py:      "blue",
+			PHP:     "magenta",
+			JS:      "yellow",
+			HTML:    "#ff6464",
+			CSS:     "cyan",
+			Shell:   "green",
+			SQL:     "orange",
+			XML:     "yellow",
+			Make:    "yellow",
+			Docker:  "blue",
+			HTTP:    "cyan",
+		}),
 	}
 }
 
@@ -202,16 +213,27 @@ func tokyoNight() Theme {
 			"tag":              "#f7768e",
 			"embedded":         "#a9b1d6",
 		},
-		Files: map[string]string{
-			"dir":     "#7aa2f7",
-			"default": "#a9b1d6",
-			"go":      "#7dcfff",
-			"md":      "#9ece6a",
-			"toml":    "#e0af68",
-			"json":    "#e0af68",
-			"yaml":    "#e0af68",
-			"lock":    "#717aa6",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#7aa2f7",
+			Default: "#a9b1d6",
+			Lock:    "#717aa6",
+			Go:      "#7dcfff",
+			Md:      "#9ece6a",
+			Toml:    "#e0af68",
+			JSON:    "#e0af68",
+			YAML:    "#e0af68",
+			Py:      "#7aa2f7",
+			PHP:     "#bb9af7",
+			JS:      "#e0af68",
+			HTML:    "#f7768e",
+			CSS:     "#2ac3de",
+			Shell:   "#9ece6a",
+			SQL:     "#ff9e64",
+			XML:     "#e0af68",
+			Make:    "#e0af68",
+			Docker:  "#7aa2f7",
+			HTTP:    "#73daca",
+		}),
 	}
 }
 
@@ -278,16 +300,27 @@ func nord() Theme {
 			"tag":              "#cf8990",
 			"embedded":         "#d8dee9",
 		},
-		Files: map[string]string{
-			"dir":     "#99b3cd",
-			"default": "#d8dee9",
-			"go":      "#88c0d0",
-			"md":      "#a3be8c",
-			"toml":    "#ebcb8b",
-			"json":    "#ebcb8b",
-			"yaml":    "#ebcb8b",
-			"lock":    "#909bb0",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#99b3cd",
+			Default: "#d8dee9",
+			Lock:    "#909bb0",
+			Go:      "#88c0d0",
+			Md:      "#a3be8c",
+			Toml:    "#ebcb8b",
+			JSON:    "#ebcb8b",
+			YAML:    "#ebcb8b",
+			Py:      "#88c0d0",
+			PHP:     "#dba291",
+			JS:      "#ebcb8b",
+			HTML:    "#d9a1a6",
+			CSS:     "#8fbcbb",
+			Shell:   "#a3be8c",
+			SQL:     "#ebcb8b",
+			XML:     "#ebcb8b",
+			Make:    "#ebcb8b",
+			Docker:  "#97b2cc",
+			HTTP:    "#8fbcbb",
+		}),
 	}
 }
 
@@ -334,16 +367,27 @@ func gruvbox() Theme {
 			VCSConflicted:   "#fc7d6e",
 		},
 		Captures: gruvboxCaptures(false),
-		Files: map[string]string{
-			"dir":     "#89a99d",
-			"default": "#ebdbb2",
-			"go":      "#8ec07c",
-			"md":      "#b8bb26",
-			"toml":    "#fabd2f",
-			"json":    "#fabd2f",
-			"yaml":    "#fabd2f",
-			"lock":    "#9b8d7f",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#89a99d",
+			Default: "#ebdbb2",
+			Lock:    "#9b8d7f",
+			Go:      "#8ec07c",
+			Md:      "#b8bb26",
+			Toml:    "#fabd2f",
+			JSON:    "#fabd2f",
+			YAML:    "#fabd2f",
+			Py:      "#b8bb26",
+			PHP:     "#fe8019",
+			JS:      "#fabd2f",
+			HTML:    "#fc7d6e",
+			CSS:     "#fabd2f",
+			Shell:   "#b8bb26",
+			SQL:     "#fabd2f",
+			XML:     "#fabd2f",
+			Make:    "#fabd2f",
+			Docker:  "#8aaa9e",
+			HTTP:    "#8ec07c",
+		}),
 	}
 }
 
@@ -390,16 +434,27 @@ func gruvboxLight() Theme {
 			VCSConflicted:   "#ba211a",
 		},
 		Captures: gruvboxCaptures(true),
-		Files: map[string]string{
-			"dir":     "#36676a",
-			"default": "#3c3836",
-			"go":      "#456a46",
-			"md":      "#646311",
-			"toml":    "#7f5a13",
-			"json":    "#7f5a13",
-			"yaml":    "#7f5a13",
-			"lock":    "#7c6f64",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#36676a",
+			Default: "#3c3836",
+			Lock:    "#7c6f64",
+			Go:      "#456a46",
+			Md:      "#646311",
+			Toml:    "#7f5a13",
+			JSON:    "#7f5a13",
+			YAML:    "#7f5a13",
+			Py:      "#646311",
+			PHP:     "#9f450a",
+			JS:      "#7f5a13",
+			HTML:    "#ba211a",
+			CSS:     "#7f5a13",
+			Shell:   "#446845",
+			SQL:     "#7c5813",
+			XML:     "#7f5a13",
+			Make:    "#7f5a13",
+			Docker:  "#36676a",
+			HTTP:    "#446845",
+		}),
 	}
 }
 
@@ -517,16 +572,27 @@ func rosePine() Theme {
 			"tag":              "#eb6f92",
 			"embedded":         "#e0def4",
 		},
-		Files: map[string]string{
-			"dir":     "#3f96b9",
-			"default": "#e0def4",
-			"go":      "#9ccfd8",
-			"md":      "#f6c177",
-			"toml":    "#c4a7e7",
-			"json":    "#c4a7e7",
-			"yaml":    "#c4a7e7",
-			"lock":    "#7b7693",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#3f96b9",
+			Default: "#e0def4",
+			Lock:    "#7b7693",
+			Go:      "#9ccfd8",
+			Md:      "#f6c177",
+			Toml:    "#c4a7e7",
+			JSON:    "#c4a7e7",
+			YAML:    "#c4a7e7",
+			Py:      "#ebbcba",
+			PHP:     "#c4a7e7",
+			JS:      "#c4a7e7",
+			HTML:    "#eb6f92",
+			CSS:     "#9ccfd8",
+			Shell:   "#f6c177",
+			SQL:     "#ebbcba",
+			XML:     "#c4a7e7",
+			Make:    "#c4a7e7",
+			Docker:  "#4097bb",
+			HTTP:    "#9ccfd8",
+		}),
 	}
 }
 
@@ -593,16 +659,27 @@ func rosePineDawn() Theme {
 			"tag":              "#ab526c",
 			"embedded":         "#575279",
 		},
-		Files: map[string]string{
-			"dir":     "#286983",
-			"default": "#575279",
-			"go":      "#416f77",
-			"md":      "#945c0f",
-			"toml":    "#765e92",
-			"json":    "#765e92",
-			"yaml":    "#765e92",
-			"lock":    "#7d778e",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#286983",
+			Default: "#575279",
+			Lock:    "#7d778e",
+			Go:      "#416f77",
+			Md:      "#945c0f",
+			Toml:    "#765e92",
+			JSON:    "#765e92",
+			YAML:    "#765e92",
+			Py:      "#286983",
+			PHP:     "#765e92",
+			JS:      "#765e92",
+			HTML:    "#a34e66",
+			CSS:     "#416f77",
+			Shell:   "#945c0f",
+			SQL:     "#a34e66",
+			XML:     "#765e92",
+			Make:    "#765e92",
+			Docker:  "#286983",
+			HTTP:    "#416f77",
+		}),
 	}
 }
 
@@ -669,16 +746,27 @@ func catppuccinMocha() Theme {
 			"tag":              "#f38ba8",
 			"embedded":         "#cdd6f4",
 		},
-		Files: map[string]string{
-			"dir":     "#89b4fa",
-			"default": "#cdd6f4",
-			"go":      "#94e2d5",
-			"md":      "#a6e3a1",
-			"toml":    "#f9e2af",
-			"json":    "#f9e2af",
-			"yaml":    "#f9e2af",
-			"lock":    "#84889c",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#89b4fa",
+			Default: "#cdd6f4",
+			Lock:    "#84889c",
+			Go:      "#94e2d5",
+			Md:      "#a6e3a1",
+			Toml:    "#f9e2af",
+			JSON:    "#f9e2af",
+			YAML:    "#f9e2af",
+			Py:      "#89b4fa",
+			PHP:     "#cba6f7",
+			JS:      "#f9e2af",
+			HTML:    "#f38ba8",
+			CSS:     "#89dceb",
+			Shell:   "#a6e3a1",
+			SQL:     "#fab387",
+			XML:     "#f9e2af",
+			Make:    "#f9e2af",
+			Docker:  "#89dceb",
+			HTTP:    "#94e2d5",
+		}),
 	}
 }
 
@@ -749,16 +837,27 @@ func kanagawa() Theme {
 			"tag":              "#e46876",
 			"embedded":         "#dcd7ba",
 		},
-		Files: map[string]string{
-			"dir":     "#7e9cd8",
-			"default": "#dcd7ba",
-			"go":      "#7aa89f",
-			"md":      "#98bb6c",
-			"toml":    "#e6c384",
-			"json":    "#e6c384",
-			"yaml":    "#e6c384",
-			"lock":    "#828178",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#7e9cd8",
+			Default: "#dcd7ba",
+			Lock:    "#828178",
+			Go:      "#7aa89f",
+			Md:      "#98bb6c",
+			Toml:    "#e6c384",
+			JSON:    "#e6c384",
+			YAML:    "#e6c384",
+			Py:      "#7e9cd8",
+			PHP:     "#d27e99",
+			JS:      "#e6c384",
+			HTML:    "#ff5d62",
+			CSS:     "#7aa89f",
+			Shell:   "#98bb6c",
+			SQL:     "#d27e99",
+			XML:     "#e6c384",
+			Make:    "#e6c384",
+			Docker:  "#7fb4ca",
+			HTTP:    "#7aa89f",
+		}),
 	}
 }
 
@@ -828,16 +927,27 @@ func oneDark() Theme {
 			"tag":              "#e17079",
 			"embedded":         "#abb2bf",
 		},
-		Files: map[string]string{
-			"dir":     "#61afef",
-			"default": "#abb2bf",
-			"go":      "#56b6c2",
-			"md":      "#98c379",
-			"toml":    "#e5c07b",
-			"json":    "#e5c07b",
-			"yaml":    "#e5c07b",
-			"lock":    "#798191",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#61afef",
+			Default: "#abb2bf",
+			Lock:    "#798191",
+			Go:      "#56b6c2",
+			Md:      "#98c379",
+			Toml:    "#e5c07b",
+			JSON:    "#e5c07b",
+			YAML:    "#e5c07b",
+			Py:      "#61afef",
+			PHP:     "#c678dd",
+			JS:      "#e5c07b",
+			HTML:    "#e17079",
+			CSS:     "#e5c07b",
+			Shell:   "#98c379",
+			SQL:     "#d19a66",
+			XML:     "#d19a66",
+			Make:    "#e5c07b",
+			Docker:  "#61afef",
+			HTTP:    "#56b6c2",
+		}),
 	}
 }
 
@@ -889,16 +999,27 @@ func solarizedDark() Theme {
 			VCSConflicted:   "#e87674",
 		},
 		Captures: solarizedCaptures(false),
-		Files: map[string]string{
-			"dir":     "#48a0de",
-			"default": "#93a1a1",
-			"go":      "#2ca9a0",
-			"md":      "#8ea300",
-			"toml":    "#c49500",
-			"json":    "#c49500",
-			"yaml":    "#c49500",
-			"lock":    "#6e8992",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#48a0de",
+			Default: "#93a1a1",
+			Lock:    "#6e8992",
+			Go:      "#2ca9a0",
+			Md:      "#8ea300",
+			Toml:    "#c49500",
+			JSON:    "#c49500",
+			YAML:    "#c49500",
+			Py:      "#4b9fda",
+			PHP:     "#db815c",
+			JS:      "#c49500",
+			HTML:    "#e87674",
+			CSS:     "#bb9316",
+			Shell:   "#8ea300",
+			SQL:     "#db815c",
+			XML:     "#4b9fda",
+			Make:    "#c49500",
+			Docker:  "#4b9fda",
+			HTTP:    "#39a89f",
+		}),
 	}
 }
 
@@ -948,16 +1069,27 @@ func solarizedLight() Theme {
 			VCSConflicted:   "#c52d2a",
 		},
 		Captures: solarizedCaptures(true),
-		Files: map[string]string{
-			"dir":     "#1d6ca2",
-			"default": "#586b72",
-			"go":      "#1e756e",
-			"md":      "#5d6b00",
-			"toml":    "#826200",
-			"json":    "#826200",
-			"yaml":    "#826200",
-			"lock":    "#6c7c7c",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#1d6ca2",
+			Default: "#586b72",
+			Lock:    "#6c7c7c",
+			Go:      "#1e756e",
+			Md:      "#5d6b00",
+			Toml:    "#826200",
+			JSON:    "#826200",
+			YAML:    "#826200",
+			Py:      "#1e6da5",
+			PHP:     "#b64314",
+			JS:      "#826200",
+			HTML:    "#c52d2a",
+			CSS:     "#846400",
+			Shell:   "#1e746d",
+			SQL:     "#b64314",
+			XML:     "#1d6ca2",
+			Make:    "#826200",
+			Docker:  "#1e6da5",
+			HTTP:    "#1e746d",
+		}),
 	}
 }
 
@@ -1084,16 +1216,27 @@ func dracula() Theme {
 			"tag":              "#ff79c6", // HTML tags pink
 			"embedded":         "#f8f8f2",
 		},
-		Files: map[string]string{
-			"dir":     "#bd93f9",
-			"default": "#f8f8f2",
-			"go":      "#8be9fd",
-			"md":      "#50fa7b",
-			"toml":    "#f1fa8c",
-			"json":    "#f1fa8c",
-			"yaml":    "#f1fa8c",
-			"lock":    "#6f7eab",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#bd93f9",
+			Default: "#f8f8f2",
+			Lock:    "#6f7eab",
+			Go:      "#8be9fd",
+			Md:      "#50fa7b",
+			Toml:    "#f1fa8c",
+			JSON:    "#f1fa8c",
+			YAML:    "#f1fa8c",
+			Py:      "#50fa7b",
+			PHP:     "#bd93f9",
+			JS:      "#f1fa8c",
+			HTML:    "#ff79c6",
+			CSS:     "#8be9fd",
+			Shell:   "#f1fa8c",
+			SQL:     "#bd93f9",
+			XML:     "#50fa7b",
+			Make:    "#f1fa8c",
+			Docker:  "#8be9fd",
+			HTTP:    "#ffb86c",
+		}),
 	}
 }
 
@@ -1160,16 +1303,27 @@ func catppuccinLatte() Theme {
 			"tag":              "#d20f39",
 			"embedded":         "#4c4f69",
 		},
-		Files: map[string]string{
-			"dir":     "#094cd2",
-			"default": "#4c4f69",
-			"go":      "#0f5f64",
-			"md":      "#28641b",
-			"toml":    "#7c4f10",
-			"json":    "#7c4f10",
-			"yaml":    "#7c4f10",
-			"lock":    "#64697d",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#094cd2",
+			Default: "#4c4f69",
+			Lock:    "#64697d",
+			Go:      "#0f5f64",
+			Md:      "#28641b",
+			Toml:    "#7c4f10",
+			JSON:    "#7c4f10",
+			YAML:    "#7c4f10",
+			Py:      "#094cd2",
+			PHP:     "#a1197d",
+			JS:      "#7c4f10",
+			HTML:    "#b10d30",
+			CSS:     "#7c4f10",
+			Shell:   "#28641b",
+			SQL:     "#9b3901",
+			XML:     "#7c4f10",
+			Make:    "#7c4f10",
+			Docker:  "#025f83",
+			HTTP:    "#0f6166",
+		}),
 	}
 }
 
@@ -1240,16 +1394,27 @@ func darcula() Theme {
 			"tag":              "#e8bf6a", // HTML tag yellow
 			"embedded":         "#a9b7c6",
 		},
-		Files: map[string]string{
-			"dir":     "#8aaeca", // number blue lightened for AA on Panel
-			"default": "#a9b7c6",
-			"go":      "#86b57b", // doc green lightened for AA on Panel
-			"md":      "#98b189", // string green lightened for AA on Panel
-			"toml":    "#bbb529",
-			"json":    "#bbb529",
-			"yaml":    "#bbb529",
-			"lock":    "#959595", // lightened for 3.5:1 over overlays
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#8aaeca", // number blue lightened for AA on Panel
+			Default: "#a9b7c6",
+			Lock:    "#959595", // lightened for 3.5:1 over overlays
+			Go:      "#86b57b", // doc green lightened for AA on Panel
+			Md:      "#98b189", // string green lightened for AA on Panel
+			Toml:    "#bbb529",
+			JSON:    "#bbb529",
+			YAML:    "#bbb529",
+			Py:      "#ffc66d",
+			PHP:     "#dd9795",
+			JS:      "#bbb529",
+			HTML:    "#e8bf6a",
+			CSS:     "#8aaeca",
+			Shell:   "#98b189",
+			SQL:     "#8aaeca",
+			XML:     "#bbb529",
+			Make:    "#bbb529",
+			Docker:  "#8aaeca",
+			HTTP:    "#86b57b",
+		}),
 	}
 }
 
@@ -1320,16 +1485,27 @@ func intellijLight() Theme {
 			"tag":              "#0033b3",
 			"embedded":         "#000000",
 		},
-		Files: map[string]string{
-			"dir":     "#1750eb",
-			"default": "#000000",
-			"go":      "#00627a",
-			"md":      "#067d17",
-			"toml":    "#806e0b", // metadata gold darkened for AA on Panel
-			"json":    "#806e0b",
-			"yaml":    "#806e0b",
-			"lock":    "#808080", // darkened for 3.5:1 on Panel
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#1750eb",
+			Default: "#000000",
+			Lock:    "#808080", // darkened for 3.5:1 on Panel
+			Go:      "#00627a",
+			Md:      "#067d17",
+			Toml:    "#806e0b", // metadata gold darkened for AA on Panel
+			JSON:    "#806e0b",
+			YAML:    "#806e0b",
+			Py:      "#00627a",
+			PHP:     "#871094",
+			JS:      "#806e0b",
+			HTML:    "#0033b3",
+			CSS:     "#174ad4",
+			Shell:   "#067d17",
+			SQL:     "#1750eb",
+			XML:     "#174ad4",
+			Make:    "#806e0b",
+			Docker:  "#1750eb",
+			HTTP:    "#00627a",
+		}),
 	}
 }
 
@@ -1400,16 +1576,27 @@ func everforestDark() Theme {
 			"tag":              "#e67e80",
 			"embedded":         "#d3c6aa",
 		},
-		Files: map[string]string{
-			"dir":     "#7fbbb3",
-			"default": "#d3c6aa",
-			"go":      "#83c092",
-			"md":      "#a7c080",
-			"toml":    "#dbbc7f",
-			"json":    "#dbbc7f",
-			"yaml":    "#dbbc7f",
-			"lock":    "#89968d", // lightened for contrast from #859289
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#7fbbb3",
+			Default: "#d3c6aa",
+			Lock:    "#89968d", // lightened for contrast from #859289
+			Go:      "#83c092",
+			Md:      "#a7c080",
+			Toml:    "#dbbc7f",
+			JSON:    "#dbbc7f",
+			YAML:    "#dbbc7f",
+			Py:      "#83c092",
+			PHP:     "#d699b6",
+			JS:      "#dbbc7f",
+			HTML:    "#e98f91",
+			CSS:     "#dbbc7f",
+			Shell:   "#a7c080",
+			SQL:     "#d699b6",
+			XML:     "#dbbc7f",
+			Make:    "#dbbc7f",
+			Docker:  "#7fbbb3",
+			HTTP:    "#83c092",
+		}),
 	}
 }
 
@@ -1480,16 +1667,27 @@ func everforestLight() Theme {
 			"tag":              "#e10d09", // darkened for contrast from #f85552
 			"embedded":         "#5c6a72",
 		},
-		Files: map[string]string{
-			"dir":     "#2c7096", // darkened for contrast from #3a94c5
-			"default": "#5c6a72",
-			"go":      "#267758", // darkened for contrast from #35a77c
-			"md":      "#627001", // darkened for contrast from #8da101
-			"toml":    "#896300", // darkened for contrast from #dfa000
-			"json":    "#896300", // darkened for contrast from #dfa000
-			"yaml":    "#896300", // darkened for contrast from #dfa000
-			"lock":    "#727f6f", // darkened for contrast from #939f91
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#2c7096", // darkened for contrast from #3a94c5
+			Default: "#5c6a72",
+			Lock:    "#727f6f", // darkened for contrast from #939f91
+			Go:      "#267758", // darkened for contrast from #35a77c
+			Md:      "#627001", // darkened for contrast from #8da101
+			Toml:    "#896300", // darkened for contrast from #dfa000
+			JSON:    "#896300", // darkened for contrast from #dfa000
+			YAML:    "#896300", // darkened for contrast from #dfa000
+			Py:      "#2c7096",
+			PHP:     "#ad4d08",
+			JS:      "#896300",
+			HTML:    "#d50c09",
+			CSS:     "#896300",
+			Shell:   "#627001",
+			SQL:     "#ad4d08",
+			XML:     "#896300",
+			Make:    "#896300",
+			Docker:  "#2c7096",
+			HTTP:    "#267758",
+		}),
 	}
 }
 
@@ -1560,16 +1758,27 @@ func ayuDark() Theme {
 			"tag":              "#39bae6",
 			"embedded":         "#bfbdb6",
 		},
-		Files: map[string]string{
-			"dir":     "#59c2ff",
-			"default": "#bfbdb6",
-			"go":      "#95e6cb",
-			"md":      "#aad94c",
-			"toml":    "#e6b450",
-			"json":    "#e6b450",
-			"yaml":    "#e6b450",
-			"lock":    "#8a9199",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#59c2ff",
+			Default: "#bfbdb6",
+			Lock:    "#8a9199",
+			Go:      "#95e6cb",
+			Md:      "#aad94c",
+			Toml:    "#e6b450",
+			JSON:    "#e6b450",
+			YAML:    "#e6b450",
+			Py:      "#ffb454",
+			PHP:     "#d2a6ff",
+			JS:      "#e6b450",
+			HTML:    "#39bae6",
+			CSS:     "#59c2ff",
+			Shell:   "#aad94c",
+			SQL:     "#d2a6ff",
+			XML:     "#ffb454",
+			Make:    "#e6b450",
+			Docker:  "#73b8ff",
+			HTTP:    "#95e6cb",
+		}),
 	}
 }
 
@@ -1640,16 +1849,27 @@ func ayuMirage() Theme {
 			"tag":              "#5ccfe6",
 			"embedded":         "#cccac2",
 		},
-		Files: map[string]string{
-			"dir":     "#73d0ff",
-			"default": "#cccac2",
-			"go":      "#5ccfe6",
-			"md":      "#d5ff80",
-			"toml":    "#ffcc66",
-			"json":    "#ffcc66",
-			"yaml":    "#ffcc66",
-			"lock":    "#707a8c",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#73d0ff",
+			Default: "#cccac2",
+			Lock:    "#707a8c",
+			Go:      "#5ccfe6",
+			Md:      "#d5ff80",
+			Toml:    "#ffcc66",
+			JSON:    "#ffcc66",
+			YAML:    "#ffcc66",
+			Py:      "#ffd173",
+			PHP:     "#dfbfff",
+			JS:      "#ffcc66",
+			HTML:    "#5ccfe6",
+			CSS:     "#73d0ff",
+			Shell:   "#d5ff80",
+			SQL:     "#dfbfff",
+			XML:     "#ffd173",
+			Make:    "#ffcc66",
+			Docker:  "#80bfff",
+			HTTP:    "#95e6cb",
+		}),
 	}
 }
 
@@ -1720,16 +1940,27 @@ func ayuLight() Theme {
 			"tag":              "#277d9a", // darkened for contrast from #55b4d4
 			"embedded":         "#5c6166",
 		},
-		Files: map[string]string{
-			"dir":     "#166faf", // darkened for contrast from #399ee6
-			"default": "#5c6166",
-			"go":      "#2b785f", // darkened for contrast from #4cbf99
-			"md":      "#587600", // darkened for contrast from #86b300
-			"toml":    "#975f0b", // darkened for contrast from #f2ae49
-			"json":    "#975f0b", // darkened for contrast from #f2ae49
-			"yaml":    "#975f0b", // darkened for contrast from #f2ae49
-			"lock":    "#757e87", // darkened for contrast from #8a9199
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#166faf", // darkened for contrast from #399ee6
+			Default: "#5c6166",
+			Lock:    "#757e87", // darkened for contrast from #8a9199
+			Go:      "#2b785f", // darkened for contrast from #4cbf99
+			Md:      "#587600", // darkened for contrast from #86b300
+			Toml:    "#975f0b", // darkened for contrast from #f2ae49
+			JSON:    "#975f0b", // darkened for contrast from #f2ae49
+			YAML:    "#975f0b", // darkened for contrast from #f2ae49
+			Py:      "#975f0b",
+			PHP:     "#7a4cae",
+			JS:      "#975f0b",
+			HTML:    "#b34e05",
+			CSS:     "#166faf",
+			Shell:   "#587600",
+			SQL:     "#7a4cae",
+			XML:     "#975f0b",
+			Make:    "#975f0b",
+			Docker:  "#306fae",
+			HTTP:    "#2b785f",
+		}),
 	}
 }
 
@@ -1800,16 +2031,27 @@ func githubDark() Theme {
 			"tag":              "#7ee787",
 			"embedded":         "#e6edf3",
 		},
-		Files: map[string]string{
-			"dir":     "#58a6ff",
-			"default": "#e6edf3",
-			"go":      "#39c5cf",
-			"md":      "#7ee787",
-			"toml":    "#d29922",
-			"json":    "#d29922",
-			"yaml":    "#d29922",
-			"lock":    "#8b949e",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#58a6ff",
+			Default: "#e6edf3",
+			Lock:    "#8b949e",
+			Go:      "#39c5cf",
+			Md:      "#7ee787",
+			Toml:    "#d29922",
+			JSON:    "#d29922",
+			YAML:    "#d29922",
+			Py:      "#d2a8ff",
+			PHP:     "#ff7b72",
+			JS:      "#d29922",
+			HTML:    "#7ee787",
+			CSS:     "#79c0ff",
+			Shell:   "#a5d6ff",
+			SQL:     "#79c0ff",
+			XML:     "#79c0ff",
+			Make:    "#d29922",
+			Docker:  "#58a6ff",
+			HTTP:    "#39c5cf",
+		}),
 	}
 }
 
@@ -1880,16 +2122,27 @@ func githubLight() Theme {
 			"tag":              "#116329",
 			"embedded":         "#1f2328",
 		},
-		Files: map[string]string{
-			"dir":     "#0969da",
-			"default": "#1f2328",
-			"go":      "#1b7c83",
-			"md":      "#1a7f37",
-			"toml":    "#9a6700",
-			"json":    "#9a6700",
-			"yaml":    "#9a6700",
-			"lock":    "#6e7781",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#0969da",
+			Default: "#1f2328",
+			Lock:    "#6e7781",
+			Go:      "#1b7c83",
+			Md:      "#1a7f37",
+			Toml:    "#9a6700",
+			JSON:    "#9a6700",
+			YAML:    "#9a6700",
+			Py:      "#8250df",
+			PHP:     "#6639ba",
+			JS:      "#9a6700",
+			HTML:    "#116329",
+			CSS:     "#0550ae",
+			Shell:   "#0a3069",
+			SQL:     "#0550ae",
+			XML:     "#0550ae",
+			Make:    "#9a6700",
+			Docker:  "#0969da",
+			HTTP:    "#1b7c83",
+		}),
 	}
 }
 
@@ -1962,16 +2215,27 @@ func oxocarbon() Theme {
 			"tag":              "#ee5396",
 			"embedded":         "#f2f4f8",
 		},
-		Files: map[string]string{
-			"dir":     "#78a9ff",
-			"default": "#f2f4f8",
-			"go":      "#3ddbd9",
-			"md":      "#42be65",
-			"toml":    "#82cfff",
-			"json":    "#82cfff",
-			"yaml":    "#82cfff",
-			"lock":    "#7a7a7a", // lightened for contrast from #6f6f6f
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#78a9ff",
+			Default: "#f2f4f8",
+			Lock:    "#7a7a7a", // lightened for contrast from #6f6f6f
+			Go:      "#3ddbd9",
+			Md:      "#42be65",
+			Toml:    "#82cfff",
+			JSON:    "#82cfff",
+			YAML:    "#82cfff",
+			Py:      "#42be65",
+			PHP:     "#be95ff",
+			JS:      "#82cfff",
+			HTML:    "#ee5396",
+			CSS:     "#33b1ff",
+			Shell:   "#42be65",
+			SQL:     "#78a9ff",
+			XML:     "#78a9ff",
+			Make:    "#82cfff",
+			Docker:  "#78a9ff",
+			HTTP:    "#08bdba",
+		}),
 	}
 }
 
@@ -2042,16 +2306,27 @@ func monokaiPro() Theme {
 			"tag":              "#ff6188",
 			"embedded":         "#fcfcfa",
 		},
-		Files: map[string]string{
-			"dir":     "#78dce8",
-			"default": "#fcfcfa",
-			"go":      "#ab9df2",
-			"md":      "#a9dc76",
-			"toml":    "#ffd866",
-			"json":    "#ffd866",
-			"yaml":    "#ffd866",
-			"lock":    "#939293",
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#78dce8",
+			Default: "#fcfcfa",
+			Lock:    "#939293",
+			Go:      "#ab9df2",
+			Md:      "#a9dc76",
+			Toml:    "#ffd866",
+			JSON:    "#ffd866",
+			YAML:    "#ffd866",
+			Py:      "#a9dc76",
+			PHP:     "#ab9df2",
+			JS:      "#ffd866",
+			HTML:    "#ff6188",
+			CSS:     "#78dce8",
+			Shell:   "#ffd866",
+			SQL:     "#ab9df2",
+			XML:     "#78dce8",
+			Make:    "#ffd866",
+			Docker:  "#78dce8",
+			HTTP:    "#ab9df2",
+		}),
 	}
 }
 
@@ -2123,16 +2398,27 @@ func zenburn() Theme {
 			"tag":              "#de92c6", // lightened for contrast from #dc8cc3
 			"embedded":         "#dcdccc",
 		},
-		Files: map[string]string{
-			"dir":     "#9dc4f4", // lightened for contrast from #94bff3
-			"default": "#dcdccc",
-			"go":      "#93e0e3",
-			"md":      "#a7caa7", // lightened for contrast from #9fc59f
-			"toml":    "#f0dfaf",
-			"json":    "#f0dfaf",
-			"yaml":    "#f0dfaf",
-			"lock":    "#abab9e", // lightened for contrast from #989888
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#9dc4f4", // lightened for contrast from #94bff3
+			Default: "#dcdccc",
+			Lock:    "#abab9e", // lightened for contrast from #989888
+			Go:      "#93e0e3",
+			Md:      "#a7caa7", // lightened for contrast from #9fc59f
+			Toml:    "#f0dfaf",
+			JSON:    "#f0dfaf",
+			YAML:    "#f0dfaf",
+			Py:      "#93e0e3",
+			PHP:     "#eab3da",
+			JS:      "#f0dfaf",
+			HTML:    "#deb8b8",
+			CSS:     "#dfdfbf",
+			Shell:   "#deb8b8",
+			SQL:     "#8cd0d3",
+			XML:     "#9dc4f4",
+			Make:    "#f0dfaf",
+			Docker:  "#9dc4f4",
+			HTTP:    "#93e0e3",
+		}),
 	}
 }
 
@@ -2212,16 +2498,27 @@ func highContrastDark() Theme {
 			"tag":              "#ff8a80",
 			"embedded":         "#ffffff",
 		},
-		Files: map[string]string{
-			"dir":     "#8ab4ff",
-			"default": "#ffffff",
-			"go":      "#00e5ff",
-			"md":      "#69f0ae",
-			"toml":    "#ffd54f",
-			"json":    "#ffd54f",
-			"yaml":    "#ffd54f",
-			"lock":    "#c0c0c0", // no dim class
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#8ab4ff",
+			Default: "#ffffff",
+			Lock:    "#c0c0c0", // no dim class
+			Go:      "#00e5ff",
+			Md:      "#69f0ae",
+			Toml:    "#ffd54f",
+			JSON:    "#ffd54f",
+			YAML:    "#ffd54f",
+			Py:      "#8ab4ff",
+			PHP:     "#ff79c6",
+			JS:      "#ffd54f",
+			HTML:    "#ff8a80",
+			CSS:     "#00e5ff",
+			Shell:   "#69f0ae",
+			SQL:     "#ffab40",
+			XML:     "#ffd54f",
+			Make:    "#ffd54f",
+			Docker:  "#8ab4ff",
+			HTTP:    "#00e5ff",
+		}),
 	}
 }
 
@@ -2292,15 +2589,26 @@ func highContrastLight() Theme {
 			"tag":              "#96000e",
 			"embedded":         "#000000",
 		},
-		Files: map[string]string{
-			"dir":     "#123a8a",
-			"default": "#000000",
-			"go":      "#005252",
-			"md":      "#00591c",
-			"toml":    "#6b4a00",
-			"json":    "#6b4a00",
-			"yaml":    "#6b4a00",
-			"lock":    "#4d4d4d", // no dim class
-		},
+		Files: filesTable(fileColors{
+			Dir:     "#123a8a",
+			Default: "#000000",
+			Lock:    "#4d4d4d", // no dim class
+			Go:      "#005252",
+			Md:      "#00591c",
+			Toml:    "#6b4a00",
+			JSON:    "#6b4a00",
+			YAML:    "#6b4a00",
+			Py:      "#123a8a",
+			PHP:     "#8b1a6b",
+			JS:      "#6b4a00",
+			HTML:    "#96000e",
+			CSS:     "#005252",
+			Shell:   "#00591c",
+			SQL:     "#7a3600",
+			XML:     "#6b4a00",
+			Make:    "#6b4a00",
+			Docker:  "#123a8a",
+			HTTP:    "#005252",
+		}),
 	}
 }

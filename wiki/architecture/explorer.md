@@ -109,11 +109,16 @@ the filesystem themselves and never read explorer state. Malformed glob
 patterns are dropped with a config diagnostic (`validate`); at match time a
 pattern error simply never matches.
 
-Colours (`colors.go`) resolve a node by checking, in order: an exact **glob**
-match (globs sorted for determinism), the `dir` fallback for directories, a bare
-**extension** match, then `default`. Values are colour names (`blue`, `cyan`,
-`gray`, …), hex (`#1f6feb`), or raw ANSI indices. When no `[explorer.colors]` is
-configured, a built-in default table is used so the tree is never monochrome.
+Colours (`colors.go`) resolve a node by checking, in order: an exact
+**filename** key (`Makefile`, `Dockerfile`, `go.mod` — #1366), an exact
+**glob** match (globs sorted for determinism), the `dir` fallback for
+directories, a bare **extension** match, then `default`. Values are colour
+names (`blue`, `cyan`, `gray`, …), hex (`#1f6feb`), or raw ANSI indices. When
+no `[explorer.colors]` is configured, a built-in default table is used so the
+tree is never monochrome. Every built-in theme's `Files` table is expanded
+from a compact per-group spec (`internal/theme/files.go`) covering **all**
+extensions and filenames the language plugins register; a drift test in
+`cmd/ike` fails when a registered language lacks an entry.
 
 ## Navigation
 
@@ -291,7 +296,7 @@ its status hue, JetBrains-style — directories take their subtree's dominant st
 (`M`/`R`/`A`/`U`/`D`/`C`) at the row's right edge as a non-colour cue for
 ANSI256 terminals and colour-blind users. On **clean files** only the extension
 suffix takes the filetype colour (`colors.suffixColor`, resolved from the
-`[explorer.colors]` ext/glob keys; the legacy `dir`/`default` keys are accepted
+`[explorer.colors]` ext/glob/filename keys; the legacy `dir`/`default` keys are accepted
 but no longer paint rows — directories stay uncoloured, caret + `/` carry the
 distinction). Hidden (dot-prefixed) entries add italics. `rowKind` then classifies how the
 row is highlighted, strongest first: the focused **cursor** (Selection

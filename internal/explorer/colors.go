@@ -23,7 +23,8 @@ func defaultColors() colorTable {
 }
 
 // suffixColor resolves the filetype tint for a file's extension suffix
-// (#1051): exact glob match first (globs sorted for determinism), then a
+// (#1051): an exact filename key first (Makefile, Dockerfile, go.mod —
+// #1366), then a glob match (globs sorted for determinism), then a
 // bare-extension match. Directories and files without a match return nil —
 // the suffix-tint model colours only the extension of clean files; the "dir"
 // and "default" keys of older configs are accepted but no longer paint whole
@@ -36,6 +37,9 @@ func defaultColors() colorTable {
 func (t colorTable) suffixColor(n *node, globs []string, vals map[string]color.Color) color.Color {
 	if n.isDir {
 		return nil
+	}
+	if _, ok := t[n.name]; ok && n.name != "dir" && n.name != "default" {
+		return vals[n.name]
 	}
 	for _, pat := range globs {
 		if ok, _ := filepath.Match(pat, n.name); ok {
