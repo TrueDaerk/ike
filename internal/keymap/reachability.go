@@ -81,6 +81,13 @@ func classifyKey(k Key) Reachability {
 		// keyboard protocol, and the OS/terminal menu intercepts several
 		// (cmd+q/w/t/…) regardless.
 		return Fragile
+	case k.Mods == ModCtrl && isFunctionKey(k.Base) && GOOS == "darwin":
+		// Plain ctrl+F-keys are macOS system shortcuts (ctrl+F2 "move focus
+		// to menu bar", ctrl+F8 "move focus to status menus", …) and are
+		// swallowed before the terminal sees them — Ghostty's inspector
+		// confirms they never arrive (#1374). Shifted variants
+		// (ctrl+shift+f10) are not system-bound and stay delivered.
+		return Fragile
 	case k.Has(ModAlt):
 		// Alt chords need option-as-meta (macOS) or an emulator that encodes
 		// them; delivery is configuration-dependent.
@@ -106,15 +113,20 @@ func csiParamEncoded(base string) bool {
 	case "up", "down", "left", "right", "home", "end", "pgup", "pgdown", "insert", "delete":
 		return true
 	}
-	if len(base) >= 2 && base[0] == 'f' {
-		for _, c := range base[1:] {
-			if c < '0' || c > '9' {
-				return false
-			}
-		}
-		return true
+	return isFunctionKey(base)
+}
+
+// isFunctionKey reports whether a base key is one of the fN function keys.
+func isFunctionKey(base string) bool {
+	if len(base) < 2 || base[0] != 'f' {
+		return false
 	}
-	return false
+	for _, c := range base[1:] {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // ReachabilityNote explains a non-delivered class in one phrase, for honest
@@ -130,6 +142,8 @@ func ReachabilityNote(c Chord) string {
 		switch {
 		case k.Has(ModMeta):
 			return "Cmd needs the Kitty keyboard protocol; the OS/terminal menu intercepts several"
+		case k.Mods == ModCtrl && isFunctionKey(k.Base) && GOOS == "darwin":
+			return "macOS system shortcuts intercept plain ctrl+F-keys before the terminal sees them"
 		case k.Has(ModAlt):
 			return "needs option-as-meta / meta-encoding in the terminal"
 		case k.Has(ModCtrl) && k.Has(ModShift) && !csiParamEncoded(k.Base):

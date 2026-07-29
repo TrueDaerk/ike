@@ -81,6 +81,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Reopen closed tab | `alt+shift+t` | `alt+shift+t` | `editor.tab.reopenClosed` |
 | Reopen closed tab | `cmd+shift+t` | `ctrl+shift+t` | `editor.tab.reopenClosed` |
 | Replace in path | `cmd+shift+r` | `ctrl+shift+r` | `project.replaceInPath` |
+| Rerun last | `cmd+f5` | `ctrl+f5` | `run.rerun` |
 | Rerun last | `ctrl+f5` | `ctrl+f5` | `run.rerun` |
 | Restore default layout | `shift+f12` | `shift+f12` | `window.restoreLayout` |
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
@@ -100,6 +101,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Step into | `f7` | `f7` | `debug.stepInto` |
 | Step out | `shift+f8` | `shift+f8` | `debug.stepOut` |
 | Step over | `f8` | `f8` | `debug.stepOver` |
+| Stop debug session | `cmd+f2` | `ctrl+f2` | `debug.stop` |
 | Stop debug session | `ctrl+f2` | `ctrl+f2` | `debug.stop` |
 | Structure tool window | `cmd+3` | `ctrl+3` | `structure.toggle` |
 | Switch pane focus | `ctrl+tab` | `ctrl+tab` | `pane.switcher` |
@@ -107,6 +109,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Switch project | `ctrl+shift+p` | `ctrl+shift+p` | `project.switch` |
 | TODO index | `cmd+6` | `ctrl+6` | `todo.list` |
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |
+| Toggle breakpoint | `cmd+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle breakpoint | `ctrl+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle project tree | `cmd+1` | `ctrl+1` | `explorer.toggle` |
 | Toggle terminal | `alt+f12` | `alt+f12` | `terminal.toggle` |
@@ -125,6 +128,7 @@ Active when an editor pane has focus.
 | Comment line | `cmd+7` | `ctrl+7` | `editor.commentLine` |
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
+| Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |

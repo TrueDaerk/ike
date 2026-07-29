@@ -35,8 +35,8 @@ bring their own.
 | Step Into | `debug.stepInto` | `f7` | — | everywhere |
 | Step Out | `debug.stepOut` | `shift+f8` | — | everywhere |
 | Step Over | `debug.stepOver` | `f8` | — | everywhere |
-| Stop Debug Session | `debug.stop` | `ctrl+f2` | — | everywhere |
-| Toggle Breakpoint | `debug.toggleBreakpoint` | `ctrl+f8` | — | everywhere |
+| Stop Debug Session | `debug.stop` | `cmd+f2` | — | everywhere |
+| Toggle Breakpoint | `debug.toggleBreakpoint` | `cmd+f8` | — | everywhere |
 | Diff Two Files… | `diff.files` | — | — | everywhere |
 | Next Change (Diff) | `diff.nextChange` | `f7` | — | everywhere |
 | Previous Change (Diff) | `diff.prevChange` | `shift+f7` | — | everywhere |
@@ -105,7 +105,7 @@ bring their own.
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
-| Rerun Last | `run.rerun` | `ctrl+f5` | — | everywhere |
+| Rerun Last | `run.rerun` | `cmd+f5` | — | everywhere |
 | Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
@@ -237,7 +237,7 @@ bring their own.
 | LSP: Call Hierarchy | `lsp.callHierarchy` | `ctrl+alt+h` | — | `editor` pane |
 | LSP: Show Intention Actions | `lsp.codeAction` | `alt+enter` | — | `editor` pane |
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
-| LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `ctrl+f1` | — | `editor` pane |
+| LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
 | LSP: Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
 | LSP: Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |

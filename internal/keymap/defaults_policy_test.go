@@ -150,6 +150,53 @@ func TestAuditDefaultChords(t *testing.T) {
 	}
 }
 
+// TestDebugFKeyPlatformDefaults (#1374): the run/debug F-key family ships the
+// JetBrains macOS cmd form as the darwin primary with the Windows-scheme ctrl
+// form alongside; off macOS both fold onto the ctrl chord. Plain ctrl+F-keys
+// classify fragile on darwin (macOS system shortcuts swallow them) and
+// delivered elsewhere.
+func TestDebugFKeyPlatformDefaults(t *testing.T) {
+	prev := GOOS
+	defer func() { GOOS = prev }()
+
+	pairs := []struct {
+		cmd, ctrl, id string
+		ctx           Context
+	}{
+		{"cmd+f8", "ctrl+f8", "debug.toggleBreakpoint", Global},
+		{"cmd+f2", "ctrl+f2", "debug.stop", Global},
+		{"cmd+f5", "ctrl+f5", "run.rerun", Global},
+		{"cmd+f1", "ctrl+f1", "lsp.diagnosticInfo", Editor},
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		GOOS = goos
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		for _, p := range pairs {
+			for _, chord := range []string{p.cmd, p.ctrl} {
+				c := NormalizeChord(MustParseChord(chord), goos)
+				if b, ok := table.Lookup(c, p.ctx); !ok || b.Command != p.id {
+					t.Errorf("%s: %s = %+v ok=%v, want %s", goos, chord, b, ok, p.id)
+				}
+			}
+		}
+	}
+
+	// Classification: plain ctrl+F-keys are system-eaten on darwin only;
+	// shifted ones carry their modifier in the CSI parameter and stay
+	// delivered everywhere.
+	GOOS = "darwin"
+	if got := Classify(MustParseChord("ctrl+f8")); got != Fragile {
+		t.Errorf("darwin ctrl+f8 = %v, want Fragile (macOS system shortcut)", got)
+	}
+	if got := Classify(MustParseChord("ctrl+shift+f10")); got != Delivered {
+		t.Errorf("darwin ctrl+shift+f10 = %v, want Delivered", got)
+	}
+	GOOS = "linux"
+	if got := Classify(MustParseChord("ctrl+f8")); got != Delivered {
+		t.Errorf("linux ctrl+f8 = %v, want Delivered", got)
+	}
+}
+
 // TestCloseProjectDefaultChords (#1358): project.close ships on cmd+shift+w
 // with the delivered ctrl+shift+w secondary, mirroring project.switch.
 func TestCloseProjectDefaultChords(t *testing.T) {
