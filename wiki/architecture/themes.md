@@ -53,7 +53,7 @@ Name      "tokyo-night"
 Dark      true
 UI        semantic chrome slots (see above)
 Captures  map[capture]color   defaults for internal/highlight (keyword, string …)
-Files     map[glob|ext]color  defaults for internal/explorer (dir, go, md …)
+Files     map[glob|ext|filename]color  defaults for internal/explorer (dir, go, Makefile …)
 Terminal  16 ANSI colors + terminal default fg/bg (#1363, all optional)
 ```
 

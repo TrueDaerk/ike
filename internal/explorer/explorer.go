@@ -1991,6 +1991,11 @@ func (m Model) View() string {
 					if dot := strings.LastIndex(name, "."); dot > 0 {
 						nameRendered = nameStyle.Render(name[:dot]) +
 							nameStyle.Foreground(c).Render(name[dot:])
+					} else {
+						// Extensionless filename matches (Makefile,
+						// Dockerfile — #1366): no suffix to tint, the
+						// whole name takes the filetype colour.
+						nameRendered = nameStyle.Foreground(c).Render(name)
 					}
 				}
 			}
