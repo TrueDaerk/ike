@@ -108,6 +108,39 @@ func NewCommand(key string, argv []string, dir string, w, h int, extraEnv []stri
 	return m
 }
 
+// NewPipe starts a process-less terminal model (#1370): a pipe session whose
+// content arrives through FeedText. The debug integration renders DAP output
+// events through it so debuggee output gets the real terminal pane's reflow,
+// scrollback and search.
+func NewPipe(key string, w, h int, send func(tea.Msg)) Model {
+	m := Model{w: w, h: h, send: send}
+	m.sess = NewPipeSession(key, w, h, send)
+	return m
+}
+
+// IsPipe reports whether the model wraps a process-less pipe session (#1370).
+func (m Model) IsPipe() bool { return m.sess != nil && m.sess.IsPipe() }
+
+// FeedText appends debuggee output to a pipe session (#1370). DAP output uses
+// bare newlines; the emulator needs carriage returns, so line endings are
+// normalized to \r\n. A no-op on PTY-backed sessions.
+func (m *Model) FeedText(text string) {
+	if m.sess == nil || text == "" {
+		return
+	}
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\n", "\r\n")
+	m.sess.FeedBytes([]byte(text))
+}
+
+// FinishPipe ends a pipe session with the debuggee's exit status (#1370); the
+// pane then renders the usual dead view with the output still reviewable.
+func (m *Model) FinishPipe(exitCode int, hasCode bool) {
+	if m.sess != nil {
+		m.sess.FinishPipe(exitCode, hasCode)
+	}
+}
+
 // StartCommand replaces the model's session with a fresh command session
 // (#574): the reuse path when a run takes over an unoccupied terminal. Any
 // previous session ends; scroll, selection and the occupied flag reset.
@@ -798,7 +831,7 @@ func (m Model) View() string {
 		lines[len(lines)-1] = m.searchLine()
 		return strings.Join(lines, "\n")
 	}
-	if !m.sess.Running() {
+	if !m.sess.Running() || m.sess.PipeDone() {
 		return m.deadView(view)
 	}
 	if !m.focused {

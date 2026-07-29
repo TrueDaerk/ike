@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Debugger
-description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
+description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit, paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8), one session at a time; frames/variables panel plus a real debuggee terminal pane; Python via debugpy, PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, run, breakpoints]
-timestamp: 2026-07-28T19:00:00Z
+timestamp: 2026-07-29T12:00:00Z
 ---
 
 # Debugger (0350)
@@ -211,7 +211,7 @@ dead adapter is diagnosable from the notification alone.
   dropped on mismatch, so no session starts after the install resolves.
 - Session state lives in a `debugState` behind a pointer on the root model:
   thread id, paused flag, the current stack frames, and the debuggee's DAP
-  `output` events (rendered by the debug tool window, #580).
+  `output` events (rendered by the debuggee terminal pane, #1370).
 
 ## Interactive input — runInTerminal (#625)
 
@@ -229,34 +229,34 @@ instead of running it under the adapter's `/dev/null` stdin.
 - The handler runs on the read-loop goroutine and MUST hand off — it sends a
   `debugRunInTerminalMsg` onto the Update loop. There `runDebuggeeInTerminal`
   builds a command terminal (`terminal.NewCommand`, the same infra `run.file`
-  uses) and **embeds it in the debug panel's Output column** (#676,
-  `debugpanel.SetTerminal`) — the panel is force-opened first so the PTY has a
-  host even when the program never pauses. It answers with the child's pid
-  (`terminal.Model.Pid`). The debuggee connects back to the adapter on its
-  own; breakpoints, stepping, frames and variables all work as usual — its
-  stdio lives in the embedded terminal, where the user types input. The
-  session key is minted via `Registry.MintTerminalKey` so output/exit messages
-  route uniquely (an `ExitedMsg` for a non-pane key is a no-op).
+  uses) and **installs it in the debuggee terminal pane** (#1370,
+  `Instance.ReplaceTerminal`, taking over the pipe placeholder's slot) — the
+  pane pair is force-opened first so the PTY has a host even when the program
+  never pauses. It answers with the child's pid (`terminal.Model.Pid`). The
+  debuggee connects back to the adapter on its own; breakpoints, stepping,
+  frames and variables all work as usual — its stdio lives in the terminal
+  pane, where the user types input. The session key is minted via
+  `Registry.MintTerminalKey` so output/exit messages route uniquely (the
+  debuggee is a command session, so its `ExitedMsg` never closes the pane).
 - **Every bail-out path answers** (#638): once the reverse handler claims the
   request the adapter blocks on the response, so a gone session (the message
   carries its own `*dap.Session`), an empty argv, a missing panel host and a
-  failed spawn all send an error refusal. A failed spawn embeds nothing — the
-  Output column keeps showing DAP output. Malformed `runInTerminal` arguments
+  failed spawn all send an error refusal. A failed spawn installs nothing —
+  the pipe-fed terminal pane keeps showing DAP output. Malformed `runInTerminal` arguments
   are refused with a diagnostic in `Session.OnRunInTerminal` instead of being
   silently zeroed; `RunInTerminalArgs.Env` is `map[string]*string` because the
   spec allows JSON `null` values (= unset; the spawn path skips them). Other
   reverse requests are still refused "unsupported" (off the read loop — a
   synchronous write there can deadlock against a mid-write adapter).
-- **Terminal lifetime** (#638, #676): the embedded debuggee terminal
-  deliberately stays in the panel after its process exits so the output can be
-  reviewed; the next session's runInTerminal replaces it (`SetTerminal` closes
-  the old model). It dies with its host: closing the debug panel — by the user,
-  or via a new launch's `ResetSession` — closes the embedded session
-  (`CloseTerminal` in the pane registry's `Close`).
+- **Terminal lifetime** (#638, #1370): the debuggee terminal pane deliberately
+  stays open after its process exits so the output can be reviewed; the next
+  session reuses the pane slot (`ReplaceTerminal` closes the old session).
+  Closing the pane — a normal `ctrl+w`, guarded by the busy check while the
+  debuggee runs — ends the session like any terminal pane.
 - Trade-off: with `integratedTerminal` the debuggee's output goes to the PTY,
   so the DAP `output` stream and `.ike/debug-session.log` (#624) stay empty
-  for Python sessions — but the PTY now renders inside the Output column, so
-  the tool window shows the live program anyway.
+  for Python sessions — but the PTY renders in the debuggee terminal pane, so
+  the pane pair shows the live program anyway.
 
 ## Stops and stepping
 
@@ -273,78 +273,66 @@ instead of running it under the adapter's `/dev/null` stdin.
 - Toggling a breakpoint during a live session pushes the file's new set to
   the adapter immediately.
 
-## Debug tool window (#580)
+## Debug pane pair (#580, #1370)
 
 `internal/debugpanel` + `pane.KindDebug` (singleton key `debug`, vcspanel
-pattern): a bottom-split panel that opens on the first stop — without
-stealing focus from the paused line. When the session ends the panel **stays
-open in a finished state** (#689): frames/variables clear to a
-`finished (exit code N)` placeholder while the Output column — text lines or
-the embedded terminal's scrollback — remains reviewable; trailing adapter
-output flushed past `terminated` still appends. The user closes it like any
-pane; the next launch reuses it after `ResetSession` wipes the previous
-session's output and dead terminal.
+pattern) is the frames/variables panel; the debuggee's output lives in a
+**real terminal pane** directly to its right (#1370). On session start (first
+stop, first output, or a `runInTerminal` request) the pair opens without
+stealing focus: the panel bottom-splits the active editor
+(`layout.SplitLeaf`, `ZoneBottom`) and the debuggee terminal splits the panel
+(`ZoneRight`). Both are ordinary panes: independently resizable, movable and
+closable through the normal windowing system.
 
-The three columns are **resizable** (#691): dragging a column separator with
-the mouse adjusts the widths (`SeparatorHit`/`ResizeSeparator`, app gesture
-`dragDebugDiv` mirroring the pane-divider drag), clamped to a minimum column
-width. Drag semantics (#695): the frames│vars separator moves the vars│output
-separator along by the same amount (variables keep their width, frames trade
-with output, clamped so output — and its separator — never vanishes); the
-vars│output separator leaves the left one untouched. Widths are stored in
-exact cells (no fraction re-encoding, so the untouched column never drifts)
-and rescale proportionally only on panel resize; they are session-local like
-scroll state.
+**Debuggee terminal pane** (#1370): a `KindTerminal` instance marked
+`debugTerm` (`Registry.AddDebugTerminalFrom`), so persistence treats it as
+session state and runs never take it over. Two feeding modes:
+
+- **Pipe mode** (`terminal.NewPipe` / `Session.FeedBytes`): a process-less
+  terminal session — emulator, spool and feed loop without a PTY — fed with
+  the DAP `output` events (`FeedText` normalizes `\n` to `\r\n`). All the
+  real pane's behavior comes for free: width reflow (#935/#1369), scrollback
+  paging, scrollback search (#1169), selection and link decoration. Output
+  arriving before the pane opens is buffered on `debugState` (capped at 5000
+  chunks) and flushed in on open. On session end `FinishPipe` renders the
+  usual `[process exited with code N]` dead view while the session stays
+  feedable, so trailing output the adapter flushes past `terminated` still
+  lands (#637).
+- **PTY mode**: a `runInTerminal` debuggee's command session replaces the
+  pipe placeholder in the same pane slot (see "Interactive input" above);
+  keys, mouse, paste and scrollback behave exactly like any terminal pane —
+  the former raw-key special case (`debugPanelTermCapturing`) is gone.
+
+When the session ends the pair **stays open in a finished state** (#689): the
+panel's frames clear to a `finished (exit code N)` placeholder and the
+terminal keeps its scrollback reviewable; closing either is an explicit user
+action. The next launch reuses both: `ResetSession` wipes the panel, and the
+terminal pane's slot gets a fresh pipe session (`ReplaceTerminal`) — so the
+placement the user arranged survives across sessions. Every chunk is also
+appended to the per-project transcript `.ike/debug-session.log` (#624; stderr
+chunks prefixed `[stderr] `, ANSI stripped via `debugpanel.StripANSI`).
+
+**Persistence** (#1370): `saveLayout` records the panel as `debug` (restored
+empty — session state never resurrects) and the terminal as `debugTerm`;
+restore **prunes** the `debugTerm` leaf instead of resurrecting a shell in
+its place, and the next session recreates the pane beside the panel.
+
+The panel's two columns are **resizable** (#691): dragging the
+frames│variables separator adjusts the widths
+(`SeparatorHit`/`ResizeSeparator`, app gesture `dragDebugDiv`), clamped to a
+minimum column width; the width is stored in exact cells (#695) and rescales
+proportionally on panel resize, session-local like scroll state.
 
 - **Frames view** (left): the paused thread's stack; `j`/`k` move, `enter`
   emits `SelectFrameMsg` — the app navigates the editor to the frame's
   location and re-fetches its scopes, so the variables show the state
-  *outside* the current function too.
-- **Output column** (#624, live behavior #637): the debuggee's captured
-  stdout/stderr, streamed from DAP `output` events. The panel renders its
-  columns in **every state** — before the first stop the frames column shows a
-  `not paused` placeholder; while the debuggee runs (input wait, sleep, IO) a
+  *outside* the current function too. The panel renders in **every state**
+  (#637) — `not paused` before the first stop; while the debuggee runs a
   `running…` indicator leads and the **last stop's frames/variables stay
-  visible faint as stale context** (#693). The OUTPUT column keeps streaming,
-  which is exactly when output arrives; the
-  first output event **opens the tool window** if it is closed (once per
-  session, so a panel the user closes stays closed) — a program that never hits
-  a breakpoint is still visible. stderr lines take the error tone; the column
-  has its own scroll offset (`outTop`) reachable via the `tab`/`h`/`l` column
-  cycle, `j`/`k` and the wheel. **Auto-follow**: the view pins to the newest
-  line; a manual scroll away from the bottom holds the position (appends stop
-  re-pinning), scrolling back to the bottom resumes following. Chunks are
-  **sanitized before buffering** (`sanitize.go`): ANSI escapes (CSI/OSC/two-byte
-  ESC) are stripped per completed line — so an escape split across chunks is
-  still removed whole — a `\r` keeps only the text after it (progress-bar
-  overwrites; CRLF endings survive), tabs expand to 8-column stops and other
-  control bytes are dropped. Output that arrives before the panel opens is
-  buffered on `debugState` (capped at 5000 chunks, oldest dropped) and flushed
-  in on open. Every chunk is also appended to a per-project transcript,
-  `.ike/debug-session.log` (stderr chunks prefixed `[stderr] `, ANSI stripped
-  too, `\r`/`\t` kept as printed; a `──── debug session: <name> · <time> ────`
-  delimiter separates sessions, and trailing output arriving after `terminated`
-  still reaches the log), reusing the `debug.log` append-logger pattern. Note:
-  the DAP-event rows are populated only for adapters using `internalConsole`;
-  Python launches with `integratedTerminal`, so its I/O lives in the
-  **embedded debuggee terminal** that renders in this very column (see below).
-- **Embedded debuggee terminal** (#676, `debugpanel/terminal.go`): a
-  `runInTerminal` debuggee's PTY (`terminal.Model`) embeds into the Output
-  column via `SetTerminal` — while set, its grid view replaces the DAP output
-  rows (they return when it detaches) and is sized to the column
-  (`colWidths` × rows under the title) on every `SetSize`. **Keys**: with the
-  Output column focused and the process running, the app routes keys raw to
-  the panel (`debugPanelTermCapturing`, bypassing the keymap like a terminal
-  pane) and the panel forwards them to the PTY; `shift+tab` is the reserved
-  escape back to the variables column, and the spatial focus moves
-  (ctrl+arrows) still leave the pane. After the process exits the panel's
-  navigation returns (`h` leaves, `j`/`k` page the dead terminal's
-  scrollback). **Mouse**: clicks/wheel/drags forward with column-local
-  coordinates (`MousePress`/`MouseWheel`; drags via the app's `dragDebugTerm`
-  gesture → `TermDrag`/`TermRelease`), so child mouse reporting and text
-  selection work as in a terminal pane. Lifecycle: the terminal is replaced
-  across sessions and closed with the panel (see "Terminal lifetime" above).
-- **Variables tree** (middle, `tab`/`h`/`l` switch columns): roots are the
+  visible faint as stale context** (#693). The first output event **opens the
+  pane pair** if it is closed (once per session, so panes the user closes
+  stay closed) — a program that never hits a breakpoint is still visible.
+- **Variables tree** (right, `tab`/`h`/`l` switch columns): roots are the
   selected frame's scopes (Locals expands eagerly); `enter` expands/collapses
   a node — unloaded references emit `ExpandVarMsg` and the app answers with
   the adapter's `variables` response (`SetChildren`), loaded ones toggle
@@ -357,17 +345,15 @@ scroll state.
   the cursor (x against the separator) and selects the row; a **double-click**
   (same row within 400ms) activates it, mirroring `enter`. The wheel scrolls
   the focused column. Both columns carry a scroll offset (`frameTop`/`varTop`),
-  and keyboard `j`/`k` auto-scroll to keep the selection visible — the panel
-  previously clipped long stacks/var lists at the pane height. Hardening
+  and keyboard `j`/`k` auto-scroll to keep the selection visible. Hardening
   (#639): coordinates outside the pane interior (border clicks — the layout
   hit-test spans the whole pane rectangle) are rejected instead of mapping onto
-  a row/column; every click — including output-column and title-row clicks —
-  records into the double-click tracker, so an intervening click elsewhere
-  resets a pending double-click; the wheel drags the selection along to stay
-  inside the visible window (vcspanel behavior); a click while the inline value
-  editor is open cancels the edit first and then selects normally, and a wheel
-  while editing scrolls without moving the selection (which would re-anchor the
-  editor onto a different row).
+  a row/column; every click records into the double-click tracker, so an
+  intervening click elsewhere resets a pending double-click; the wheel drags
+  the selection along to stay inside the visible window (vcspanel behavior); a
+  click while the inline value editor is open cancels the edit first and then
+  selects normally, and a wheel while editing scrolls without moving the
+  selection (which would re-anchor the editor onto a different row).
 - **Editing values** (#627): `e` on a variable row opens an inline line editor
   (prefilled with the current value); typing/backspace/←→/home/end edit it,
   `enter` commits and `esc` cancels. Commit emits `SetVarMsg{Ref, Name, Value}`;
@@ -378,8 +364,8 @@ scroll state.
   to the panel via `SetEditable` when it opens); scope roots aren't editable.
   While the editor is open the app routes every key to the panel
   (`debugPanelEditing`), like an editor in insert mode. Hardening (#640):
-  `openDebugPanel` runs the attach step (`attachDebugPanel`: `SetEditable` gate
-  + pending-output flush) even when the panel already exists — a panel restored
+  `openDebugPanel` runs the attach step (`attachDebugPanel`: the `SetEditable`
+  gate) even when the panel already exists — a panel restored
   from a saved layout becomes editable at the session's first stop instead of
   staying read-only; `SetScopes`/`SetChildren` cancel an open inline editor
   (an async refresh replaces the tree, and enter would commit a stale

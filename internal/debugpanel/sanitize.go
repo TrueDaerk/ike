@@ -2,10 +2,8 @@ package debugpanel
 
 import "strings"
 
-// sanitize.go cleans debuggee output before it is buffered (#637): programs
-// print ANSI colour/cursor escapes, carriage-return progress bars and tabs,
-// none of which may reach the TUI raw — an escape injected into a rendered
-// row corrupts the whole frame, and truncate would happily cut mid-sequence.
+// sanitize.go holds the ANSI stripper the debug session log shares (#637):
+// escapes must not reach the transcript file raw.
 
 // StripANSI removes ANSI escape sequences from s: CSI (ESC [ … final byte),
 // OSC (ESC ] … BEL or ESC \) and two-byte ESC sequences. Plain text and the
@@ -51,39 +49,3 @@ func StripANSI(s string) string {
 	}
 	return b.String()
 }
-
-// sanitizeLine cleans one completed output line for display: ANSI escapes are
-// stripped; a carriage return keeps only the text after the last \r (the
-// progress-bar overwrite semantic, minimal form — a trailing \r from a CRLF
-// line ending is dropped first so Windows-style output survives intact); tabs
-// expand to 8-column stops; remaining C0 control bytes are removed.
-func sanitizeLine(s string) string {
-	s = StripANSI(s)
-	s = strings.TrimSuffix(s, "\r")
-	if i := strings.LastIndexByte(s, '\r'); i >= 0 {
-		s = s[i+1:]
-	}
-	if strings.IndexFunc(s, isControl) < 0 {
-		return s
-	}
-	var b strings.Builder
-	b.Grow(len(s))
-	col := 0
-	for _, r := range s {
-		switch {
-		case r == '\t':
-			n := 8 - col%8
-			b.WriteString(strings.Repeat(" ", n))
-			col += n
-		case isControl(r):
-			// Other control runes (BEL, backspace, …) carry no text.
-		default:
-			b.WriteRune(r)
-			col++
-		}
-	}
-	return b.String()
-}
-
-// isControl reports a C0 control rune or DEL.
-func isControl(r rune) bool { return r < 0x20 || r == 0x7f }

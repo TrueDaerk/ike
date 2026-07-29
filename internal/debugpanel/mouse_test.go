@@ -95,19 +95,19 @@ func TestDoubleClickExpires(t *testing.T) {
 }
 
 // TestCrossColumnClickResetsDoubleClick guards #639's stale-tracker defect:
-// frames-click → output-click → frames-click within the window must not count
+// frames-click → vars-click → frames-click within the window must not count
 // as a double-click on the frame row.
 func TestCrossColumnClickResetsDoubleClick(t *testing.T) {
 	m, clk := mouseModel(t)
 	m.Click(4, 2) // frames row 1
 	*clk = clk.Add(100 * time.Millisecond)
-	m.Click(70, 2) // output column: focus only, but it must record
-	if m.col != colOutput {
-		t.Fatalf("col = %d, output click must focus the output column", m.col)
+	m.Click(70, 2) // variables column: selects, but it must also record
+	if m.col != colVars {
+		t.Fatalf("col = %d, vars click must focus the variables column", m.col)
 	}
 	*clk = clk.Add(100 * time.Millisecond)
 	if cmd := m.Click(4, 2); cmd != nil {
-		t.Fatal("an intervening output click must reset the double-click state")
+		t.Fatal("an intervening vars click must reset the double-click state")
 	}
 }
 

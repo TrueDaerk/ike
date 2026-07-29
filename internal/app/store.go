@@ -171,8 +171,12 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.
 			// A tool pane (#741) persists its tool name instead and restarts
-			// the configured program on restore.
-			if tool := inst.Terminal().Tool(); tool != "" {
+			// the configured program on restore. The debuggee terminal
+			// (#1370) is pure session state: its identity is recorded so the
+			// restore can drop the leaf instead of spawning a shell there.
+			if inst.IsDebugTerm() {
+				ids[key] = paneIdentity{Kind: "debugTerm"}
+			} else if tool := inst.Terminal().Tool(); tool != "" {
 				ids[key] = paneIdentity{Kind: "tool", Tool: tool}
 			} else {
 				ids[key] = paneIdentity{Kind: "terminal", Path: inst.Terminal().Dir()}

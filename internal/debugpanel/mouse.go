@@ -34,22 +34,16 @@ func (m *Model) doubleClicked(col column, row int) bool {
 }
 
 // columnAt maps a content-local x to the column under it, matching View's
-// three-column split (frames │ variables │ output).
+// two-column split (frames │ variables).
 func (m Model) columnAt(x int) column {
-	fw, vw, _ := m.colWidths()
-	switch {
-	case x < fw:
+	fw, _ := m.colWidths()
+	if x < fw {
 		return colFrames
-	case x < fw+1+vw:
-		return colVars
-	default:
-		return colOutput
 	}
+	return colVars
 }
 
-// Wheel scrolls the focused column by delta rows (positive = down). It works
-// in every panel state (#637): the OUTPUT column keeps streaming while the
-// debuggee runs, and scrolling it toggles auto-follow (see scrollOutput).
+// Wheel scrolls the focused column by delta rows (positive = down).
 // Frames/vars drag the selection along so it stays inside the visible window
 // (#639, matching the vcs panel) — except while the inline value editor is
 // open: then the wheel only scrolls, because moving varSel would re-anchor the
@@ -62,15 +56,6 @@ func (m *Model) Wheel(delta int) {
 		if !m.editing {
 			m.frameSel = clamp(m.frameSel, m.frameTop, max(m.frameTop, m.frameTop+body-1))
 		}
-	case colOutput:
-		// The embedded debuggee terminal gets the wheel with the terminal
-		// convention (#676): its delta is in lines, positive = towards
-		// history, so the panel's positive-down delta flips sign.
-		if m.term != nil {
-			m.term.MouseWheel(0, 0, -delta)
-			return
-		}
-		m.scrollOutput(delta)
 	default:
 		m.varTop = clamp(m.varTop+delta, 0, max(0, len(m.flat())-body))
 		if !m.editing {
@@ -111,26 +96,10 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			return nil
 		}
 		m.col = colFrames
-		m.syncTermFocus()
 		m.frameSel = i
 		if double {
 			return m.activate()
 		}
-	case colOutput:
-		// Clicking the output column only focuses it (for wheel/keys); output
-		// rows have no activation, but the click still records into the
-		// double-click tracker (#639) so frames → output → frames within the
-		// window does not count as a double-click.
-		m.doubleClicked(colOutput, m.outTop+(y-1))
-		m.col = colOutput
-		// An embedded terminal gets the press with column-local coordinates
-		// (#676): a mouse-reporting child sees the click, otherwise it
-		// anchors a text selection (the app tracks the drag).
-		if m.term != nil {
-			ox, oy := m.termOrigin()
-			m.term.MousePress(x-ox, y-oy)
-		}
-		m.syncTermFocus()
 	default:
 		rows := m.flat()
 		i := m.varTop + (y - 1)
@@ -139,7 +108,6 @@ func (m *Model) Click(x, y int) tea.Cmd {
 			return nil
 		}
 		m.col = colVars
-		m.syncTermFocus()
 		m.varSel = i
 		if double {
 			return m.activate()

@@ -303,10 +303,16 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false
-	// A still-open panel from the previous session starts clean (#689): drop
-	// the finished marker, the old output, and the dead embedded terminal.
+	// A still-open pane pair from the previous session starts clean (#689):
+	// the panel drops its finished marker, and the debuggee terminal pane's
+	// slot is reused with a fresh pipe session (the dead one closes with it).
 	if p := m.debugPanel(); p != nil {
 		p.ResetSession()
+	}
+	if inst := m.debugTermInstance(); inst != nil {
+		t := terminal.NewPipe(m.activeWS().Panes.MintTerminalKey(), 80, 24, m.host.Send)
+		t.SetLabel("debug: " + cfg.Name)
+		inst.ReplaceTerminal(t)
 	}
 	logDebugSessionStart(cfg.Name) // delimit consecutive sessions in the transcript (#637)
 	// integratedTerminal (#625): debugpy asks the client to launch the debuggee
@@ -345,10 +351,9 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		// transcript (#637) — and the still-open finished panel (#689).
 		if ev.Name == "output" {
 			if o := ev.Output(); o.Category != "telemetry" {
-				stderr := o.Category == "stderr"
-				logDebugOutput(stderr, o.Output)
-				if p := m.debugPanel(); p != nil {
-					p.AppendOutput(stderr, o.Output)
+				logDebugOutput(o.Category == "stderr", o.Output)
+				if inst := m.debugTermInstance(); inst != nil && inst.Terminal().IsPipe() {
+					inst.Terminal().FeedText(o.Output)
 				}
 			}
 		}
@@ -408,16 +413,18 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		}
 		stderr := o.Category == "stderr"
 		logDebugOutput(stderr, o.Output) // persist the transcript (#624)
-		p := m.debugPanel()
-		if p == nil && !dbg.panelOpened {
-			// First output with the panel closed opens it (#637): a program
-			// that never hits a breakpoint is otherwise invisible. Once per
-			// session — a panel the user closes stays closed.
+		if m.debugPanel() == nil && !dbg.panelOpened {
+			// First output with the panes closed opens the pair (#637): a
+			// program that never hits a breakpoint is otherwise invisible.
+			// Once per session — panes the user closes stay closed.
 			m.openDebugPanel()
-			p = m.debugPanel()
 		}
-		if p != nil {
-			p.AppendOutput(stderr, o.Output)
+		if inst := m.debugTermInstance(); inst != nil {
+			if inst.Terminal().IsPipe() {
+				inst.Terminal().FeedText(o.Output)
+			}
+			// A runInTerminal debuggee's output arrives through its PTY; DAP
+			// output events (adapter console noise) stay in the log file only.
 		} else {
 			dbg.pendingOut = appendPendingOut(dbg.pendingOut, debugOut{stderr: stderr, text: o.Output})
 		}
@@ -619,15 +626,17 @@ func (m Model) debugPanelEditing() bool {
 	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().Editing()
 }
 
-// openDebugPanel splits the active editor (fallback: focused leaf) at the
-// bottom with the singleton panel — without stealing focus; the stop already
-// moved the caret to the paused line.
+// openDebugPanel opens the debug pane pair (#1370): the frames/variables
+// panel bottom-splits the active editor (fallback: focused leaf), and the
+// debuggee terminal pane opens directly to its right — without stealing
+// focus; the stop already moved the caret to the paused line.
 func (m *Model) openDebugPanel() {
 	if m.activeWS().Panes.Has(pane.DebugKey) {
 		// The panel already exists — restored from a saved layout, or left
 		// open across stops. The session still attaches to it: the editable
-		// gate and any buffered output must reach the panel too (#640).
+		// gate must reach the panel too (#640).
 		m.attachDebugPanel(m.activeWS().Panes.Get(pane.DebugKey).Debug())
+		m.ensureDebugTerminal()
 		return
 	}
 	target := m.activeEditorKey()
@@ -645,25 +654,82 @@ func (m *Model) openDebugPanel() {
 	}
 	m.activeWS().Tree = tree
 	m.attachDebugPanel(m.activeWS().Panes.Get(key).Debug())
+	m.ensureDebugTerminal()
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
 // attachDebugPanel binds the live session to the panel: it gates the
 // variable-edit affordance on the adapter's setVariable capability (#627 —
-// the handshake has completed by the first stop) and flushes output captured
-// before the panel existed (#624). Runs on every openDebugPanel, including
-// when the panel pre-exists from a restored layout (#640).
+// the handshake has completed by the first stop). Runs on every
+// openDebugPanel, including when the panel pre-exists from a restored
+// layout (#640).
 func (m *Model) attachDebugPanel(p *debugpanel.Model) {
 	if p == nil || m.dbg == nil {
 		return
 	}
 	p.SetEditable(m.dbg.sess.SupportsSetVariable())
-	for _, o := range m.dbg.pendingOut {
-		p.AppendOutput(o.stderr, o.text)
-	}
-	m.dbg.pendingOut = nil
 	m.dbg.panelOpened = true
+}
+
+// debugTermInstance returns the debuggee terminal pane's instance (#1370),
+// nil while none is open in the active workspace.
+func (m Model) debugTermInstance() *pane.Instance {
+	if m.dbgTermKey == "" {
+		return nil
+	}
+	inst := m.activeWS().Panes.Get(m.dbgTermKey)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		return nil
+	}
+	return inst
+}
+
+// ensureDebugTerminal opens the debuggee terminal pane right of the debug
+// panel when a session runs and none is open yet (#1370): a pipe-fed
+// terminal shows DAP output events with the real pane's reflow, scrollback
+// and search; a runInTerminal debuggee replaces it with its PTY session.
+// Buffered pre-pane output flushes into it.
+func (m *Model) ensureDebugTerminal() {
+	dbg := m.dbg
+	if dbg == nil {
+		return
+	}
+	if inst := m.debugTermInstance(); inst != nil {
+		m.flushDebugOutput()
+		return
+	}
+	if !m.activeWS().Panes.Has(pane.DebugKey) || m.activeWS().Tree == nil {
+		return
+	}
+	key := m.activeWS().Panes.MintTerminalKey()
+	t := terminal.NewPipe(key, 80, 24, m.host.Send)
+	t.SetLabel("debug: " + dbg.cfgName)
+	paneKey := m.activeWS().Panes.AddDebugTerminalFrom(t)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, pane.DebugKey, paneKey, layout.ZoneRight)
+	if !ok {
+		m.activeWS().Panes.Close(paneKey)
+		return
+	}
+	m.activeWS().Tree = tree
+	m.dbgTermKey = paneKey
+	m.flushDebugOutput()
+	m.layout()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// flushDebugOutput drains the pre-pane output buffer into the debuggee
+// terminal (#624/#1370).
+func (m *Model) flushDebugOutput() {
+	dbg := m.dbg
+	inst := m.debugTermInstance()
+	if dbg == nil || inst == nil {
+		return
+	}
+	for _, o := range dbg.pendingOut {
+		inst.Terminal().FeedText(o.text)
+	}
+	dbg.pendingOut = nil
 }
 
 // fetchScopes loads a frame's scopes plus the first scope's variables and
@@ -709,11 +775,11 @@ func (m *Model) fetchVariables(ref int) {
 }
 
 // runDebuggeeInTerminal answers a runInTerminal reverse request (#625): it
-// spawns the debuggee command in a terminal embedded in the debug panel's
-// Output column (#676) — giving it a real tty so input() works — and replies
-// with the process id. The debuggee connects back to the adapter on its own;
-// the pid is for process tracking. Every bail-out path refuses the request —
-// the reverse handler claimed it, so a silent return would leave the adapter
+// spawns the debuggee command in the debuggee terminal pane (#1370) — a real
+// terminal pane, giving it a tty so input() works — and replies with the
+// process id. The debuggee connects back to the adapter on its own; the pid
+// is for process tracking. Every bail-out path refuses the request — the
+// reverse handler claimed it, so a silent return would leave the adapter
 // waiting forever (#638).
 func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	refuse := func(reason string) {
@@ -732,11 +798,11 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 		refuse("no command")
 		return
 	}
-	// The debuggee terminal lives inside the debug panel (#676): force the
-	// panel open — the PTY needs a host, even when the program never pauses.
+	// The PTY needs a host pane, even when the program never pauses: force
+	// the pane pair open (the ensure step opens the pipe placeholder).
 	m.openDebugPanel()
-	p := m.debugPanel()
-	if p == nil {
+	inst := m.debugTermInstance()
+	if inst == nil {
 		refuse("no pane to place the debuggee terminal")
 		return
 	}
@@ -746,34 +812,25 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	}
 	env := terminal.MergeEnv(terminalEnv(), envMapToSlice(msg.args.Env))
 	// The session key is minted from the terminal registry so output/exit
-	// messages route uniquely; an ExitedMsg for a non-pane key is a no-op, so
-	// the embedded session's exit never closes anything by accident.
+	// messages route uniquely; an ExitedMsg for the debuggee session's key is
+	// a no-op pane-wise, so its exit never closes the pane by accident.
 	key := m.activeWS().Panes.MintTerminalKey()
 	t := terminal.NewCommand(key, msg.args.Args, dir, 80, 24, env, m.host.Send)
 	t.SetLabel("debug: " + dbg.cfgName)
 	pid := t.Pid()
 	if pid == 0 {
-		// The spawn failed (bad binary, PTY failure): don't embed the dead
-		// model — the Output column keeps showing DAP output instead (#638).
+		// The spawn failed (bad binary, PTY failure): don't install the dead
+		// model — the pipe terminal keeps showing DAP output instead (#638).
 		t.Close()
 		refuse("debuggee failed to start")
 		return
 	}
-	// SetTerminal replaces (and closes) the previous session's terminal — it
-	// stayed embedded after that debuggee exited so its output was reviewable.
-	p.SetTerminal(&t)
+	// ReplaceTerminal swaps out the pipe placeholder (or a previous session's
+	// terminal), closing it; the debuggee PTY takes over the pane slot.
+	inst.ReplaceTerminal(t)
 	seq := msg.seq
 	sess := msg.sess
 	go func() { _ = sess.RespondRunInTerminal(seq, pid) }()
-}
-
-// debugPanelTermCapturing reports whether the focused pane is the debug panel
-// with its embedded debuggee terminal owning the keyboard (#676): the Output
-// column is focused and the process runs. The app then routes keys raw to the
-// panel, bypassing the keymap layer like it does for terminal panes.
-func (m Model) debugPanelTermCapturing() bool {
-	inst := m.activeWS().Panes.FocusedInstance()
-	return inst != nil && inst.Kind() == pane.KindDebug && inst.Debug().OutputTermCapturing()
 }
 
 // envMapToSlice converts a runInTerminal env map into "K=V" entries. A nil
@@ -845,10 +902,14 @@ func (m *Model) stopDebugSession(notify bool) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
-	// The panel stays open (#689): the Output column keeps the program's
-	// output reviewable until the user closes it or a new launch resets it.
+	// The pane pair stays open (#689): the debuggee terminal keeps the
+	// program's output reviewable until the user closes it or a new launch
+	// resets it.
 	if p := m.debugPanel(); p != nil {
 		p.SetFinished(0, false)
+	}
+	if inst := m.debugTermInstance(); inst != nil {
+		inst.Terminal().FinishPipe(0, false)
 	}
 	sess := dbg.sess
 	go func() {
@@ -869,10 +930,13 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	m.clearPausedMarker()
 	m.dbg = nil
 	m.dbgLaunching = false
-	// Keep the panel open in a finished state (#689) so the final output —
-	// including the embedded terminal's scrollback — stays visible.
+	// Keep the pane pair open in a finished state (#689) so the final output
+	// — the debuggee terminal's scrollback — stays reviewable.
 	if p := m.debugPanel(); p != nil {
 		p.SetFinished(msg.exitCode, msg.hasCode)
+	}
+	if inst := m.debugTermInstance(); inst != nil {
+		inst.Terminal().FinishPipe(msg.exitCode, msg.hasCode)
 	}
 	go dbg.sess.Close()
 	note := "debug: " + dbg.cfgName + " finished"

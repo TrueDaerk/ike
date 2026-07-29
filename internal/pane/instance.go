@@ -103,6 +103,11 @@ type Instance struct {
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
 
+	// debugTerm marks a terminal instance as the debuggee terminal (#1370):
+	// persistence records it separately (the pane is session state and never
+	// resurrects as a shell) and runs never reuse it for their own output.
+	debugTerm bool
+
 	// Editor state: the ordered tab list and the active index. A tab holds a
 	// document editor or an embedded terminal (#573). cfg/pal/size and focus
 	// are remembered so tabs created later match the live pane.
@@ -206,6 +211,23 @@ func (i *Instance) Explorer() *explorer.Model { return &i.exp }
 // Terminal returns the underlying terminal model. It is only valid for a
 // terminal instance; callers gate on Kind first.
 func (i *Instance) Terminal() *terminal.Model { return &i.term }
+
+// IsDebugTerm reports whether the terminal instance is the debuggee terminal
+// pane (#1370).
+func (i *Instance) IsDebugTerm() bool { return i.debugTerm }
+
+// ReplaceTerminal swaps the instance's terminal model for t, closing the
+// previous session (#1370): a new debug session reuses the debuggee terminal
+// pane's slot, and a runInTerminal debuggee takes over the pipe placeholder.
+func (i *Instance) ReplaceTerminal(t terminal.Model) {
+	w, h := i.term.Size()
+	i.term.Close()
+	i.term = t
+	i.term.SetPalette(i.pal)
+	if w > 0 && h > 0 {
+		i.term.SetSize(w, h)
+	}
+}
 
 // Preview returns the underlying markdown preview model. It is only valid for
 // a markdown instance; callers gate on Kind first.

@@ -282,48 +282,6 @@ func TestTerminalPasteKey(t *testing.T) {
 	}
 }
 
-// TestDebugTerminalPasteKey: cmd+v pastes the clipboard into the debug panel's
-// embedded debuggee terminal the same way (#727).
-func TestDebugTerminalPasteKey(t *testing.T) {
-	orig := clipboardRead
-	clipboardRead = func() string { return "IKE_PASTE_MARKER" }
-	t.Cleanup(func() { clipboardRead = orig })
-
-	m := sized(t, 100, 40)
-	m.openDebugPanel()
-	inst := m.activeWS().Panes.Get(pane.DebugKey)
-	if inst == nil || inst.Kind() != pane.KindDebug {
-		t.Fatal("debug panel should open")
-	}
-	p := inst.Debug()
-	tm := terminal.NewCommand("dbg-paste-test", []string{"/bin/cat"}, t.TempDir(), 80, 24, nil, func(tea.Msg) {})
-	t.Cleanup(tm.Close)
-	if tm.Pid() == 0 {
-		t.Fatal("spawn failed for /bin/cat")
-	}
-	p.SetTerminal(&tm)
-	m.activeWS().Panes.SetFocused(pane.DebugKey)
-	p.SetFocused(true)
-	p.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // frames -> vars
-	p.Update(tea.KeyPressMsg{Code: tea.KeyTab}) // vars -> output
-	if !m.debugPanelTermCapturing() {
-		t.Fatal("precondition: the embedded terminal must capture the keyboard")
-	}
-	out, _ := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModSuper})
-	m = out.(Model)
-	if m.activeWS().Panes.Focused() != pane.DebugKey {
-		t.Fatal("cmd+v must not move focus")
-	}
-	// cat echoes the pasted text back onto the grid.
-	deadline := time.Now().Add(3 * time.Second)
-	for !strings.Contains(p.View(), "IKE_PASTE_MARKER") && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !strings.Contains(p.View(), "IKE_PASTE_MARKER") {
-		t.Fatal("cmd+v should paste the clipboard into the debuggee terminal")
-	}
-}
-
 func TestTerminalExitClosesPane(t *testing.T) {
 	m, key := openTestTerminal(t)
 	out, _ := m.Update(terminal.ExitedMsg{Key: key})

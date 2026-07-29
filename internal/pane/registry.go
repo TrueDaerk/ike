@@ -164,6 +164,18 @@ func (r *Registry) AddTerminalPaneFrom(term terminal.Model) string {
 	return key
 }
 
+// AddDebugTerminalFrom wraps an already-running terminal model as the
+// debuggee terminal pane (#1370): a fresh terminal instance marked debugTerm,
+// so persistence treats it as session state and runs never reuse it.
+func (r *Registry) AddDebugTerminalFrom(term terminal.Model) string {
+	key := r.MintTerminalKey()
+	inst := &Instance{key: key, kind: KindTerminal, cfg: r.cfg, pal: r.pal, debugTerm: true}
+	inst.term = term
+	inst.term.SetPalette(r.pal)
+	r.put(inst)
+	return key
+}
+
 // AddCommandTerminal creates a terminal pane running argv as a command
 // session (0350, #576): the new-terminal placement of a run. label names the
 // pane/tab after the run configuration.
@@ -278,6 +290,9 @@ func (r *Registry) ReusableRunTerminal() (*Instance, int, *terminal.Model) {
 		inst := r.instances[key]
 		switch inst.Kind() {
 		case KindTerminal:
+			if inst.debugTerm {
+				continue // the debuggee terminal (#1370) is never a run target
+			}
 			if reusableTerminal(&inst.term) {
 				return inst, -1, &inst.term
 			}
@@ -589,9 +604,6 @@ func (r *Registry) Close(key string) {
 	}
 	if inst.Kind() == KindTerminal {
 		inst.term.Close()
-	}
-	if inst.Kind() == KindDebug {
-		inst.dp.CloseTerminal() // the embedded debuggee PTY dies with the panel (#676)
 	}
 	inst.CloseTerminalTabs() // editor panes may host terminal tabs (#573)
 	delete(r.instances, key)
