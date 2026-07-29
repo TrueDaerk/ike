@@ -1,5 +1,13 @@
 # Log
 
+## 2026-07-29 (theme: process docs moved from CLAUDE.md)
+
+- New `/process/` section: [Change Workflow](/process/change-workflow.md)
+  (issue first, issue branch, patch-version bump, PR, merge, branch cleanup),
+  [GitHub Issue Workflow](/process/issues.md) (epics, labels, conventions,
+  duplicate check) and [Wiki Format (OKF)](/process/wiki-format.md) — content
+  moved out of CLAUDE.md, which now keeps only a compact summary and links here.
+
 ## 2026-07-29 (theme: live cwd without OSC 7, #1383)
 
 - Terminal (#1383): `Session.Cwd()` no longer sticks to the start directory
