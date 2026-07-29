@@ -197,6 +197,11 @@ func (c *Config) Flat() map[string]string {
 	for k, v := range c.Theme.Captures {
 		put("theme.captures."+k, v)
 	}
+	// Terminal palette overrides (#1363); plain single-word keys, so no
+	// slot-map special casing is needed on the write-back side.
+	for k, v := range c.Theme.Terminal {
+		put("theme.terminal."+k, v)
+	}
 
 	put("notifications.timeout_seconds", c.Notifications.TimeoutSeconds)
 	put("notifications.min_severity", c.Notifications.MinSeverity)

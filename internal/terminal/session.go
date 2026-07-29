@@ -24,6 +24,8 @@ import (
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
+
+	"ike/internal/theme"
 )
 
 // OutputMsg reports that the emulator's screen changed; the root model only
@@ -110,6 +112,10 @@ type Session struct {
 	viewCache string
 	viewVer   uint64
 	viewValid bool
+	// grid maps the screen's indexed colours onto the active theme (#1363);
+	// nil renders the grid's own colours unchanged. Guarded by viewMu — it is
+	// read on every render and replaced when the theme changes.
+	grid *gridPalette
 
 	// out decouples the PTY read loop from the emulator feed (#734): PTY
 	// output is spooled immediately so the kernel TTY queue stays drained
@@ -707,8 +713,25 @@ func (s *Session) View() string {
 	// File references get their underline affordance here (#1168), inside the
 	// cache: the scan+decorate runs once per grid version, so the cached fast
 	// path stays a plain string return.
-	s.viewCache, s.viewVer, s.viewValid = decorateLinks(s.em.Render()), v, true
+	s.viewCache, s.viewVer, s.viewValid = decorateLinks(s.grid.remap(s.em.Render())), v, true
 	return s.viewCache
+}
+
+// SetPalette installs the theme palette the grid's indexed colours resolve
+// against (#1363) and drops the render cache, so a live theme switch repaints
+// the terminal in the new colours.
+func (s *Session) SetPalette(p *theme.Palette) {
+	g := newGridPalette(p)
+	s.viewMu.Lock()
+	s.grid, s.viewValid = g, false
+	s.viewMu.Unlock()
+}
+
+// gridPal reads the installed palette under the view lock.
+func (s *Session) gridPal() *gridPalette {
+	s.viewMu.Lock()
+	defer s.viewMu.Unlock()
+	return s.grid
 }
 
 // CursorPosition returns the emulator's cursor cell (column, row).
@@ -857,7 +880,7 @@ func (s *Session) HistoryLine(y int) string {
 			line.Set(x, c)
 		}
 	}
-	return line.Render()
+	return s.gridPal().remap(line.Render())
 }
 
 // LineText returns the plain text of virtual line v — an index into

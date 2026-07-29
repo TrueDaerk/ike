@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-28T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -184,6 +184,35 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 grid per step, position marker on the bottom line, any typed key snaps back
 to live — except `/`, which opens the scrollback search, #1169 below). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
+
+## Theme ANSI palette (#1363)
+
+The emulator stores a cell's colour exactly as the program set it, so a shell
+painting with SGR 30–37 / 90–97 (or a 256-colour index below 16) used to render
+in the **outer** terminal's palette while its background came from IKE's own
+frame wash — foreground and background regularly landed too close to read.
+
+`ansipalette.go` closes that gap: every rendered line passes through
+`gridPalette.remap`, which rewrites the indexed colour parameters of each SGR
+sequence into the theme's truecolor values before the line reaches the screen.
+
+- **Scope**: SGR 30–37, 40–47, 90–97, 100–107, the `38;5;n` / `48;5;n` forms
+  with `n` below 16, and the defaults `39` / `49` (to the theme's terminal
+  foreground/background). Indexes 16–255 are the fixed xterm cube and pass
+  through, as do truecolor runs, underline colours (58), sub-parameter forms
+  (`4:3`), non-SGR CSI sequences and OSC hyperlinks.
+- **Where**: `Session.View` (inside the version-keyed render cache, #803, next
+  to the link decoration) and `Session.HistoryLine`, so the live screen and the
+  scrollback are remapped identically.
+- **Threading**: `Model.SetPalette` forwards to `Session.SetPalette`, which
+  pre-renders the 16 colours as `"r;g;b"` parameter strings (no per-cell colour
+  formatting) and drops the render cache — a live theme switch repaints the
+  terminal in the new colours. A session without a palette (tests, a model
+  before the registry threads one in) renders exactly as the emulator wrote it.
+
+The colours themselves — including the derived fallback for themes that ship
+none and the contrast floor every entry clears — belong to
+[Themes](./themes.md), together with the `[theme.terminal]` overrides.
 
 ## File:line links (#1168)
 

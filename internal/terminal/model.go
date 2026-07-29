@@ -129,6 +129,7 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 		return
 	}
 	m.sess = sess
+	m.sess.SetPalette(m.pal)
 }
 
 // Restart reruns a finished command session in place (#810): same pane, same
@@ -200,9 +201,15 @@ func (m Model) ExitCode() (int, bool) {
 	return m.sess.ExitCode()
 }
 
-// SetPalette threads the active theme palette (chrome only; the grid's colors
-// come from the application's own escape codes).
-func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+// SetPalette threads the active theme palette: the pane chrome plus the
+// grid's indexed colours, which resolve against the theme's terminal palette
+// instead of the outer terminal's (#1363).
+func (m *Model) SetPalette(p *theme.Palette) {
+	m.pal = p
+	if m.sess != nil {
+		m.sess.SetPalette(p)
+	}
+}
 
 // SetSize resizes the grid and the PTY.
 func (m *Model) SetSize(w, h int) {

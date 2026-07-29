@@ -69,7 +69,17 @@ func resolveTheme(reg *registry.Registry, cfg host.Config) (*theme.Palette, stri
 	if !found {
 		warning = "unknown theme " + strconvQuote(name) + ", using " + theme.DefaultName
 	}
-	return theme.NewPalette(sel), warning
+	return themePalette(sel, cfg), warning
+}
+
+// themePalette resolves a theme and layers the `[theme.terminal]` overrides (#1363)
+// on top, the terminal-palette counterpart of theme.captures.
+func themePalette(t theme.Theme, cfg host.Config) *theme.Palette {
+	p := theme.NewPalette(t)
+	if cfg != nil {
+		theme.ApplyTerminalConfig(p, cfg.Get)
+	}
+	return p
 }
 
 // strconvQuote is a tiny local quote so the warning reads well without pulling
@@ -100,7 +110,7 @@ func (m *Model) applyTheme(p *theme.Palette) {
 // projects instead of living in the per-project session.
 func (m *Model) selectTheme(name string) tea.Cmd {
 	sel, found := theme.Select(name, m.reg.Themes())
-	m.applyTheme(theme.NewPalette(sel))
+	m.applyTheme(themePalette(sel, m.host.Config()))
 	if !found {
 		m.host.Notify(host.Warn, "unknown theme "+strconvQuote(name)+", using "+theme.DefaultName)
 		return nil

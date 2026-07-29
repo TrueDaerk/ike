@@ -372,6 +372,11 @@ type Theme struct {
 	// "rainbow.0") -> colour token (name, #rrggbb, ANSI index). A slot map,
 	// so it merges key by key across layers.
 	Captures map[string]string `toml:"captures"`
+	// Terminal overrides the integrated terminal's 16-colour ANSI palette and
+	// its default foreground/background (#1363): "black", "bright_blue", …,
+	// "foreground", "background" -> colour token. A slot map, so it merges key
+	// by key across layers.
+	Terminal map[string]string `toml:"terminal"`
 }
 
 // Project holds recent-project history. History is a replace-by-default list
