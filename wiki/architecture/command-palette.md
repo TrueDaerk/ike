@@ -123,7 +123,9 @@ A fuzzy file finder over the project tree. It matches the query against each
 file's path **relative to the root, directory segments included**, so `@app/app`
 finds `internal/app/app.go` the way a JetBrains/Claude-Code file picker does —
 the fuzzy matcher's word-boundary bonus rewards matches at path separators. The
-disk walk is cached per-root (filtered on every keystroke, walked once), skips
+disk walk is cached per palette open (filtered on every keystroke, walked once;
+the palette drops every mode's cache via the optional `Refresher` extension on
+each open, #1372, so newly created files appear and deleted ones vanish), skips
 hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.

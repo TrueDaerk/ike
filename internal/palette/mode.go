@@ -43,6 +43,15 @@ type Mode interface {
 	Results(query string, cx Context) []Item
 }
 
+// Refresher is an optional Mode extension (#1372): a mode holding a cached
+// snapshot of external state drops it here. The palette calls Refresh on every
+// mode each time it opens, so a fresh open never serves stale results — the
+// file finder re-walks the project and picks up files created or deleted since
+// the last open.
+type Refresher interface {
+	Refresh()
+}
+
 // Completer is an optional Mode extension (#542): a mode that can extend the
 // query body on tab — the project picker completes filesystem paths this way.
 // Complete returns the extended body; returning the input unchanged means

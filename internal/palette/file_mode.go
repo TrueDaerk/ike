@@ -19,8 +19,10 @@ const maxFiles = 10000
 // included), so "@app/app" finds internal/app/app.go the way Claude Code's file
 // picker does. The chosen item carries an OpenFileMsg the root model opens.
 //
-// The walk is cached per-root for the lifetime of one root: Results filters the
-// cached snapshot on every keystroke instead of re-walking the disk.
+// The walk is cached per-root for the lifetime of one palette open: Results
+// filters the cached snapshot on every keystroke instead of re-walking the
+// disk, and the palette drops the cache via Refresh each time it opens (#1372)
+// so files created or deleted since the last open are reflected.
 type FileMode struct {
 	// walk lists project-relative file paths under root. Injectable for tests;
 	// defaults to walkProject.
@@ -75,7 +77,16 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 	return items
 }
 
-// files returns the cached file list for root, walking once per root.
+// Refresh implements Refresher (#1372): it drops the cached walk so the next
+// Results call re-walks the project and sees files created or deleted since
+// the cache filled.
+func (f *FileMode) Refresh() {
+	f.haveCache = false
+	f.cached = nil
+	f.cachedRoot = ""
+}
+
+// files returns the cached file list for root, walking once per palette open.
 func (f *FileMode) files(root string) []string {
 	if f.haveCache && f.cachedRoot == root {
 		return f.cached
