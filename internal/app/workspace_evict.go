@@ -143,8 +143,8 @@ func (m *Model) openEvictPrompt(root string) {
 			return "the background workspace\n" +
 				project.CompactPath(root) + "\nstill has unsaved changes or running processes\n" +
 				"(limit project.max_workspaces exceeded).\n\n" +
-				"  [e]   evict it — stop its processes, discard unsaved changes\n" +
-				"  [esc] keep it running (over the limit, asked again next switch)"
+				guardLine("e", "evict it — stop its processes, discard unsaved changes", true) +
+				guardCancel("keep it running (over the limit, asked again next switch)")
 		},
 	})
 	m.shell.SetSize(m.width, m.height)
@@ -154,9 +154,10 @@ func (m *Model) openEvictPrompt(root string) {
 // evictPromptOpen reports whether the shell currently shows the guard.
 func (m Model) evictPromptOpen() bool { return m.evictPending != "" && m.shell.IsOpen() }
 
-// updateEvictPrompt consumes every key while the guard is open.
+// updateEvictPrompt consumes every key while the guard is open; enter answers
+// for the primary option, e (#1356).
 func (m Model) updateEvictPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	switch guardAnswer(msg, "e") {
 	case "e":
 		root := m.evictPending
 		m.evictPending = ""

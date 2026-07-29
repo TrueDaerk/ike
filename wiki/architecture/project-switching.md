@@ -115,7 +115,7 @@ project.
 - **Busy guard**: a dirty or running active workspace prompts first with the
   #821 shape — `[s]` save all then close (offered only when buffers are
   dirty; a failed write keeps the project open), `[d]` close discarding,
-  `[esc]` cancel.
+  `[esc]` cancel. `[enter]` confirms the primary option (#1356).
 - **Last project**: with no background workspace the request degrades to an
   app quit through the existing quit guard (#287/#821).
 - Mechanically the close is `performSwitch` to the MRU root (which parks the
@@ -173,8 +173,9 @@ subsystem (it must not import editor/explorer), the root model routes:
    failure toasts and changes nothing.
 2. The root model (`internal/app/switch.go`): the current root is a friendly
    no-op; dirty buffers emit `UnsavedChangesMsg{Root}`, which opens the
-   **unsaved-changes guard** in the floating shell — `[s]` save all then
-   switch, `[d]` discard and switch, `[esc]` cancel (project untouched).
+   **unsaved-changes guard** in the floating shell — `[s]` (or `[enter]`,
+   #1356) save all then switch, `[d]` discard and switch, `[esc]` cancel
+   (project untouched).
    The prompt renders the root through `CompactPath`: the shell drops a box
    wider than the terminal, which a raw absolute root can force.
 3. `performSwitch` re-roots: persist the old project's session + layout, stop

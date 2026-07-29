@@ -102,11 +102,13 @@ func (m *Model) openQuitPrompt(dirty, running []string) {
 		parts = append(parts, "unsaved changes: "+strings.Join(dirty, ", "))
 	}
 	body := strings.Join(parts, "\n") + "\n\n"
+	// The primary option — the one enter confirms (#1356) — is "save all"
+	// whenever there is anything to save, otherwise the plain quit.
 	if len(dirty) > 0 {
-		body += "  [s]   save all, then quit\n"
+		body += guardLine("s", "save all, then quit", true)
 	}
-	body += "  [d]   quit — stop processes, discard unsaved changes\n" +
-		"  [esc] cancel — keep ike running"
+	body += guardLine("d", "quit — stop processes, discard unsaved changes", len(dirty) == 0) +
+		guardCancel("cancel — keep ike running")
 	heading := "Unsaved changes"
 	if len(running) > 0 {
 		heading = "Quit ike?"
@@ -152,9 +154,9 @@ func (m *Model) dirtyOnClose(inst *pane.Instance, idx int) []string {
 func (m *Model) openClosePrompt(key string, tab int, dirty []string) {
 	m.closePending = &pendingClose{key: key, tab: tab, dirty: dirty}
 	body := strings.Join(dirty, ", ") + " has unsaved changes.\n\n" +
-		"  [s]   save, then close\n" +
-		"  [d]   discard changes and close\n" +
-		"  [esc] cancel — keep the file open"
+		guardLine("s", "save, then close", true) +
+		guardLine("d", "discard changes and close", false) +
+		guardCancel("cancel — keep the file open")
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Unsaved changes",
 		Body:    func() string { return body },
@@ -166,15 +168,16 @@ func (m *Model) openClosePrompt(key string, tab int, dirty []string) {
 // closePromptOpen reports whether the guard currently owns the keyboard.
 func (m Model) closePromptOpen() bool { return m.closePending != nil && m.shell.IsOpen() }
 
-// updateClosePrompt consumes every key while the guard is open: s saves the
-// dirty tabs then closes, d discards and closes, esc cancels. A failed save
-// (read-only file) keeps the tab open with an error instead of closing.
+// updateClosePrompt consumes every key while the guard is open: s — or enter,
+// the primary option (#1356) — saves the dirty tabs then closes, d discards
+// and closes, esc cancels. A failed save (read-only file) keeps the tab open
+// with an error instead of closing.
 func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pending := m.closePending
 	if pending.quit {
 		return m.updateQuitPrompt(msg)
 	}
-	switch msg.String() {
+	switch guardAnswer(msg, "s") {
 	case "s":
 		m.closePending = nil
 		m.shell.Close()
@@ -224,9 +227,14 @@ func (m *Model) resumePendingClose(p *pendingClose) {
 
 // updateQuitPrompt is the quit flavor of the guard (#287): s writes every
 // dirty buffer (staying open if any write fails), d quits discarding, esc
-// cancels.
+// cancels. Enter takes the primary option — saving when there is anything to
+// save, otherwise the plain quit (#1356).
 func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
+	primary := "s"
+	if len(m.closePending.dirty) == 0 {
+		primary = "d"
+	}
+	switch guardAnswer(msg, primary) {
 	case "s":
 		if len(m.closePending.dirty) == 0 {
 			return m, nil // running-only prompt: no save option offered

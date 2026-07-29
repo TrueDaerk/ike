@@ -70,10 +70,10 @@ func (m *Model) openProjectClosePrompt(target string, act wsActivity) {
 	body := "the current project still has:\n  " +
 		strings.Join(act.summary(), "\n  ") + "\n\n"
 	if len(act.dirty) > 0 {
-		body += "  [s]   save all, then close it\n"
+		body += guardLine("s", "save all, then close it", true)
 	}
-	body += "  [d]   close it — stop processes, discard unsaved changes\n" +
-		"  [esc] cancel — keep the project open"
+	body += guardLine("d", "close it — stop processes, discard unsaved changes", len(act.dirty) == 0) +
+		guardCancel("cancel — keep the project open")
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Close project?",
 		Body:    func() string { return body },
@@ -89,10 +89,16 @@ func (m Model) projectClosePromptOpen() bool {
 
 // updateProjectClosePrompt consumes every key while the guard is open: s saves
 // the active workspace's dirty buffers then closes (staying open when a write
-// fails), d closes discarding, esc cancels with the project untouched.
+// fails), d closes discarding, esc cancels with the project untouched. Enter
+// takes the primary option — saving when there is anything to save, otherwise
+// the plain close (#1356).
 func (m Model) updateProjectClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pending := m.projectClosePending
-	switch msg.String() {
+	primary := "s"
+	if len(pending.act.dirty) == 0 {
+		primary = "d"
+	}
+	switch guardAnswer(msg, primary) {
 	case "s":
 		if len(pending.act.dirty) == 0 {
 			return m, nil

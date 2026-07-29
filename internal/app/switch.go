@@ -66,9 +66,9 @@ func (m *Model) openSwitchPrompt(root string) {
 			// than the terminal, which a raw absolute root can force.
 			return plural(dirty, "buffer has", "buffers have") + " unsaved changes; switching to\n" +
 				project.CompactPath(root) + " closes every open file.\n\n" +
-				"  [s]   save all, then switch\n" +
-				"  [d]   discard changes and switch\n" +
-				"  [esc] cancel — stay in the current project"
+				guardLine("s", "save all, then switch", true) +
+				guardLine("d", "discard changes and switch", false) +
+				guardCancel("cancel — stay in the current project")
 		},
 	})
 	m.shell.SetSize(m.width, m.height)
@@ -86,12 +86,13 @@ func plural(n int, one, many string) string {
 // switchPromptOpen reports whether the shell currently shows the guard.
 func (m Model) switchPromptOpen() bool { return m.switchPending != "" && m.shell.IsOpen() }
 
-// updateSwitchPrompt consumes every key while the guard is open: s saves all
-// dirty buffers and switches, d discards them and switches, esc cancels.
-// Other keys are swallowed so nothing leaks past a modal decision.
+// updateSwitchPrompt consumes every key while the guard is open: s — or enter,
+// the primary option (#1356) — saves all dirty buffers and switches, d discards
+// them and switches, esc cancels. Other keys are swallowed so nothing leaks
+// past a modal decision.
 func (m Model) updateSwitchPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	root := m.switchPending
-	switch msg.String() {
+	switch guardAnswer(msg, "s") {
 	case "s":
 		m.switchPending = ""
 		m.shell.Close()

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-07-29 (guard prompts: enter confirms)
+
+- Every modal guard prompt (close #259, quit #287, switch #3, workspace close
+  #821, LRU eviction #780, project close #1355) now accepts `enter` as its
+  primary answer (#1356); the letter shortcuts and `esc` are unchanged. The
+  primary option is "save all, then …" whenever dirty buffers are involved
+  and the plain confirm otherwise.
+- The option lines render through the shared `guardLine`/`guardCancel`
+  helpers (`internal/app/guardprompt.go`), so the primary line advertises the
+  alias as `[s/enter]` and every description stays aligned.
+
 ## 2026-07-29 (keymap: default chord for Close Project)
 
 - `project.close` now ships on `cmd+shift+w` with `ctrl+shift+w` as the
