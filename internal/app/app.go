@@ -540,6 +540,7 @@ const (
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 	dragHTTPSelect                 // dragging a text selection in the HTTP response pane (#1266)
 	dragHTTPScroll                 // dragging the HTTP response scrollbar thumb (#1367)
+	dragTermScroll                 // dragging the terminal scrollback scrollbar thumb (#1368)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -6433,6 +6434,15 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.HTTP().ScrollbarDrag(ly)
 				}
 			}
+		case dragTermScroll:
+			// The scrollback thumb follows the pointer (#1368).
+			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
+					if term := inst.ActiveTerminal(); term != nil {
+						term.ScrollbarDrag(ly)
+					}
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -6479,6 +6489,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragHTTPScroll:
 			m.drag = nil
 			return m, nil // the viewport already followed the thumb; nothing to commit
+		case dragTermScroll:
+			m.drag = nil
+			return m, nil // the scrollback view already followed the thumb; nothing to commit
 		case dragDebugDiv:
 			m.drag = nil
 			return m, nil // column ratios are panel-local, nothing to persist
@@ -6902,6 +6915,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				// cmd+click on a file:line reference opens it (#1168),
 				// mirroring the editor's cmd+click; it never anchors a
 				// selection, so plain-click selection stays untouched.
+				// The scrollback scrollbar (#1368) outranks the link and
+				// selection routing, like in a dedicated terminal pane.
+				if term.ScrollbarHit(localX, localY) {
+					if term.ScrollbarPress(localY) {
+						m.drag = &dragState{kind: dragTermScroll, srcPane: key, curX: msg.X, curY: msg.Y}
+					}
+					return m, nil
+				}
 				if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
 					if p, line, col, ok := term.LinkAt(localX, localY); ok {
 						return m.openPathAt(p, line, col)
@@ -6988,6 +7009,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "close":
 				m.closePane(key)
+				return m, nil
+			}
+			// A press on the scrollback scrollbar (#1368) outranks the link
+			// and selection routing there; the hit is false for a
+			// mouse-reporting child, whose clicks keep passing through.
+			if inst.Terminal().ScrollbarHit(localX, localY) {
+				if inst.Terminal().ScrollbarPress(localY) {
+					m.drag = &dragState{kind: dragTermScroll, srcPane: key, curX: msg.X, curY: msg.Y}
+				}
 				return m, nil
 			}
 			// cmd+click on a file:line reference opens it (#1168); no link

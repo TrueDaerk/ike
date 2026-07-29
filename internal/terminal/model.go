@@ -70,6 +70,9 @@ type Model struct {
 	// Scrollback search (#1169): open while non-nil; it owns the keyboard.
 	// Lives behind a pointer so value-receiver View copies share it.
 	search *termSearch
+	// sbGrab is the in-thumb grab offset of a scrollbar drag (#1368), see
+	// scrollbar.go.
+	sbGrab int
 }
 
 // vpos is a cell position with a virtual line index (scrollback + screen).
@@ -805,8 +808,14 @@ func toVTKeys(k tea.KeyPressMsg) []vt.KeyPressEvent {
 
 // View renders the grid, with the cursor cell reversed while focused; a
 // scrolled view windows over [scrollback ++ screen] instead. A dead or failed
-// session renders its state.
+// session renders its state. The scrollback scrollbar (#1368) overlays the
+// rightmost column on top of whatever the base view rendered.
 func (m Model) View() string {
+	return m.overlayScrollbar(m.baseView())
+}
+
+// baseView is the view without the scrollbar overlay.
+func (m Model) baseView() string {
 	if m.sess == nil {
 		return "terminal failed: " + m.err
 	}
