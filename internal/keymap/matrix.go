@@ -136,6 +136,12 @@ var reachableAlternatives = map[string]string{
 	"structure.toggle":         "palette",
 	"explorer.newFile":         "palette (or a in the explorer)",
 	"scratch.new":              "palette",
+	// Unbound-command audit (#1378): Cmd-primary chords without a delivered
+	// secondary escape through the palette.
+	"lsp.documentSymbols": "palette (or the cmd+3 Structure panel)",
+	"lsp.peekDefinition":  "palette",
+	"lsp.referencesPanel": "palette",
+	"nav.bookmarks":       "palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

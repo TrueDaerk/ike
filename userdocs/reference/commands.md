@@ -77,7 +77,7 @@ bring their own.
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |
 | Navigate Back | `nav.back` | `mouse-back` | — | everywhere |
-| Bookmarks | `nav.bookmarks` | — | — | everywhere |
+| Bookmarks | `nav.bookmarks` | `cmd+f3` | — | everywhere |
 | Navigate Forward | `nav.forward` | `mouse-forward` | — | everywhere |
 | Go to Pinned File 1 | `nav.pinGoto1` | `ctrl+shift+1` | — | everywhere |
 | Go to Pinned File 2 | `nav.pinGoto2` | `ctrl+shift+2` | — | everywhere |
@@ -106,7 +106,7 @@ bring their own.
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
 | Run File | `run.file` | `shift+f10` | — | everywhere |
 | Rerun Last | `run.rerun` | `ctrl+f5` | — | everywhere |
-| Run Test at Cursor | `run.testAtCursor` | — | — | everywhere |
+| Run Test at Cursor | `run.testAtCursor` | `ctrl+shift+f10` | — | everywhere |
 | Run Tests in File | `run.testsInFile` | — | — | everywhere |
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
@@ -238,15 +238,15 @@ bring their own.
 | LSP: Show Intention Actions | `lsp.codeAction` | `alt+enter` | — | `editor` pane |
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `ctrl+f1` | — | `editor` pane |
-| LSP: Document Symbols | `lsp.documentSymbols` | — | — | everywhere |
+| LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
 | LSP: Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
 | LSP: Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
-| LSP: Peek Definition | `lsp.peekDefinition` | — | — | `editor` pane |
+| LSP: Peek Definition | `lsp.peekDefinition` | `cmd+y` | — | `editor` pane |
 | LSP: Find Usages | `lsp.references` | `alt+f7` | — | `editor` pane |
-| LSP: Find Usages (Panel) | `lsp.referencesPanel` | — | — | `editor` pane |
+| LSP: Find Usages (Panel) | `lsp.referencesPanel` | `cmd+alt+f7` | — | `editor` pane |
 | LSP: Rename Symbol | `lsp.rename` | `shift+f6` | — | `editor` pane |
 | LSP: Restart Servers | `lsp.restart` | — | — | everywhere |
 | LSP: Show Server Log | `lsp.showLog` | — | — | everywhere |

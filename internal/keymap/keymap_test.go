@@ -140,10 +140,13 @@ func TestPaneScopeShadowsGlobal(t *testing.T) {
 
 func TestOverrideRebindAndUnbind(t *testing.T) {
 	overrides := map[string]string{
-		"cmd+d":      "editor.somethingElse", // rebind existing
-		"cmd+s":      "",                     // unbind
-		"ctrl+y":     "custom.thing",         // brand-new binding
-		"focus_left": "ctrl+left",            // stopgap non-chord key, ignored
+		"cmd+d": "editor.somethingElse", // rebind existing
+		"cmd+s": "",                     // unbind
+		// ctrl+alt+u is absent from the default table on every platform
+		// (ctrl+y stopped qualifying when cmd+y — lsp.peekDefinition, #1378 —
+		// started folding onto it off macOS).
+		"ctrl+alt+u": "custom.thing", // brand-new binding
+		"focus_left": "ctrl+left",    // stopgap non-chord key, ignored
 	}
 	table := BuildTable(Defaults(PresetJetBrains), overrides, "linux")
 	dup := NormalizeChord(MustParseChord("cmd+d"), "linux")
@@ -154,8 +157,8 @@ func TestOverrideRebindAndUnbind(t *testing.T) {
 	if _, ok := table.Lookup(save, Editor); ok {
 		t.Errorf("cmd+s should be unbound")
 	}
-	if b, ok := table.Lookup(MustParseChord("ctrl+y"), Global); !ok || b.Command != "custom.thing" {
-		t.Errorf("new binding ctrl+y = %+v ok=%v", b, ok)
+	if b, ok := table.Lookup(MustParseChord("ctrl+alt+u"), Global); !ok || b.Command != "custom.thing" {
+		t.Errorf("new binding ctrl+alt+u = %+v ok=%v", b, ok)
 	}
 	// The non-chord stopgap key must be ignored as a diagnostic, not crash.
 	foundDiag := false

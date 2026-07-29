@@ -217,6 +217,24 @@ default toggle chord, freed because the palette's primary entry is esc-esc
 collapse to one `ctrl+p` binding off macOS. `lsp.parameterInfo` opens the
 signature-help popup on demand, in insert and normal mode.
 
+The unbound-command audit (#1378) gave five more palette-only commands their
+JetBrains chords: `lsp.documentSymbols` (`cmd+f12`, the File Structure popup —
+the `cmd+3` Structure tool window stays the persistent counterpart),
+`lsp.peekDefinition` (`cmd+y`, Quick Definition), `lsp.referencesPanel`
+(`cmd+alt+f7`, Show Usages — the persistent panel variant of the `alt+f7`
+popup), `run.testAtCursor` (`ctrl+shift+f10`, the Windows-scheme
+run-context-configuration chord; the macOS `ctrl+shift+r` would collide with
+`project.replaceInPath` once Cmd folds onto Ctrl off macOS) and
+`nav.bookmarks` (`cmd+f3`, Show Bookmarks). Everything else stays palette-only
+deliberately: enumerated variants (`scratch.new.*`, `themes.select.*`,
+`file.setEncoding.*`/`file.setLineEndings.*`), pane-local commands the pane
+already keys (`explorer.*` speed keys, terminal pass-through), commands with a
+vim-native equivalent (`editor.fold.*` = `za`/`zc`/`zo`/`zM`/`zR`,
+`vcs.nextChange`/`vcs.prevChange` = `]c`/`[c`, `editor.quit`/
+`editor.write_quit` = `:q`/`:wq`), and commands JetBrains itself ships without
+a default (local history, pin/close-others tab actions, window layouts, HTTP
+client utilities, maintenance commands).
+
 Editor clipboard and line navigation are live default bindings: `cmd+c` /
 `cmd+x` / `cmd+v` target the registered `editor.copy` / `editor.cut` /
 `editor.paste` commands (visual selection or current line, through the system
@@ -486,16 +504,20 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
 | `lsp.diagnosticInfo` | `ctrl+f1` | delivered | `—` | live |
+| `lsp.documentSymbols` | `cmd+f12` | fragile | `palette (or the cmd+3 Structure panel)` | live via palette (or the cmd+3 Structure panel) |
 | `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
 | `lsp.parameterInfo` | `cmd+p` | fragile | `ctrl+p` | live via ctrl+p |
+| `lsp.peekDefinition` | `cmd+y` | fragile | `palette` | live via palette |
 | `lsp.prevDiagnostic` | `shift+f2` | delivered | `—` | live |
 | `lsp.references` | `alt+f7` | fragile | `palette` | live via palette |
+| `lsp.referencesPanel` | `cmd+alt+f7` | fragile | `palette` | live via palette |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
 | `markdown.preview` | `cmd+alt+m` | fragile | `palette` | live via palette |
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `mouse-back` | live via mouse-back |
+| `nav.bookmarks` | `cmd+f3` | fragile | `palette` | live via palette |
 | `nav.forward` | `cmd+right-bracket` | fragile | `mouse-forward` | live via mouse-forward |
 | `nav.pinGoto1` | `ctrl+shift+1` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto2` | `ctrl+shift+2` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
@@ -521,6 +543,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `ctrl+f5` | delivered | `—` | live |
+| `run.testAtCursor` | `ctrl+shift+f10` | delivered | `—` | live |
 | `scratch.new` | `cmd+shift+n` | fragile | `palette` | live via palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
