@@ -108,10 +108,10 @@ func (m *Model) openWsClosePrompt(root string, act wsActivity) {
 	body := project.CompactPath(root) + " still has:\n  " +
 		strings.Join(act.summary(), "\n  ") + "\n\n"
 	if len(act.dirty) > 0 {
-		body += "  [s]   save all, then close it\n"
+		body += guardLine("s", "save all, then close it", true)
 	}
-	body += "  [d]   close it — stop processes, discard unsaved changes\n" +
-		"  [esc] cancel — keep it running"
+	body += guardLine("d", "close it — stop processes, discard unsaved changes", len(act.dirty) == 0) +
+		guardCancel("cancel — keep it running")
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Close background workspace?",
 		Body:    func() string { return body },
@@ -136,9 +136,15 @@ func (m Model) wsClosePromptOpen() bool { return m.wsClosePending != nil && m.sh
 // updateWsClosePrompt consumes every key while the guard is open: s saves the
 // workspace's dirty buffers then closes it (staying open when a write
 // fails), d closes discarding, esc cancels with the workspace untouched.
+// Enter takes the primary option — saving when there is anything to save,
+// otherwise the plain close (#1356).
 func (m Model) updateWsClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	pending := m.wsClosePending
-	switch msg.String() {
+	primary := "s"
+	if len(pending.act.dirty) == 0 {
+		primary = "d"
+	}
+	switch guardAnswer(msg, primary) {
 	case "s":
 		if len(pending.act.dirty) == 0 {
 			return m, nil

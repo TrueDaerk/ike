@@ -4,7 +4,7 @@ title: Workspace
 description: Per-project UI state unit (pane registry, split tree, terminal return-focus) behind a Manager — the Roadmap 0370 seam for seamless project switching.
 resource: internal/workspace
 tags: [architecture, workspace, project-switching, panes, layout]
-timestamp: 2026-07-21T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 
 # Workspace
@@ -66,8 +66,8 @@ drops least-recently-used parked workspaces past the cap: an **idle** one
 parked debug session — `workspaceBusy`) tears down silently
 (`teardownWorkspace` closes every terminal session and disconnects a parked
 debug session; buffers need no teardown), a **busy** one opens the eviction
-guard — `e` evicts, `esc` keeps it over the limit until the next switch
-re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
+guard — `e` (or `enter`, #1356) evicts, `esc` keeps it over the limit
+until the next switch re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
 plain switching never prompts. Per-project layout/session persistence needs
 no extra machinery: every workspace's layout is saved at park time, so an
 evicted project restores from disk on its next visit like any first visit.
@@ -113,12 +113,15 @@ Tearing down a workspace with live state asks first
   (`collectActivity`, the detailed sibling of `workspaceBusy`) — opens a
   prompt summarising what is running: `s` saves the workspace's dirty
   buffers then closes (writes work without focus or rendering; a failed
-  write cancels), `d` closes discarding, `esc` cancels untouched.
+  write cancels), `d` closes discarding, `esc` cancels untouched. `enter`
+  confirms the primary option — `s` when buffers are dirty, otherwise `d`
+  (#1356).
 - **IDE quit** aggregates dirty buffers and running debug/run/tool activity
   across **every** in-memory workspace (active + parked, entries labeled
   with their project root). Idle interactive shells never gate the quit —
   every session has one open. `s` saves everywhere then quits, `d` quits
-  discarding, `esc` cancels.
+  discarding, `esc` cancels; `enter` confirms the primary option — `s` when
+  anything is dirty, otherwise `d` (#1356).
 - **LRU eviction** keeps its own #780 guard (busy workspaces prompt, never
   evict silently).
 
