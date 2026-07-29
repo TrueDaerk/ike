@@ -1826,6 +1826,7 @@ var terminalGlobalCommands = map[string]bool{
 	"palette.searchEverywhere": true,
 	"palette.recentFiles":      true,
 	"project.switch":           true,
+	"project.close":            true,
 	// #973: IDE-level chords the shell can never meaningfully use.
 	"settings.open":         true,
 	"project.goToFile":      true,

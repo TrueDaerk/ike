@@ -103,7 +103,9 @@ project.
 - **`project.close`** ("Close Project", global scope, default chord
   `cmd+shift+w` with `ctrl+shift+w` as the delivered secondary, #1358 —
   the project.switch pattern) dispatches `CloseProjectMsg`; also reachable
-  from the palette and File → *Close Project*.
+  from the palette and File → *Close Project*. The chord is on the #805
+  terminal allowlist (`terminalGlobalCommands`), so it escapes a focused
+  live terminal or tool pane like the other IDE-level entry points (#1360).
 - **With background workspaces** (`internal/app/project_close.go`): the
   active workspace closes — session + layout persist first (reopening later
   restores), terminals/runs/debug tear down like a close-from-list
