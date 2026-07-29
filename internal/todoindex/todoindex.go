@@ -21,6 +21,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/locations"
 	"ike/internal/search"
@@ -486,7 +487,11 @@ func (m *Model) View() string {
 	if boxW < 40 {
 		boxW = min(40, m.width-2)
 	}
-	innerW := boxW - 4 // border + padding
+	// The box style below renders at Width(boxW-2) *including* its border and
+	// padding, so the text area is boxW-2 minus 2 border minus 2 padding cells.
+	// The old boxW-4 budget was 2 cells too wide (#1379): every full-budget row
+	// wrapped onto a second line inside the box.
+	innerW := boxW - 6
 
 	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("TODO Index")
 	lay := layoutInfo{listTop: -1}
@@ -530,7 +535,15 @@ func (m *Model) filtersRow(width int) string {
 	if m.fileOnly {
 		file = on.Render("[x] " + fileLabel)
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(tag + "  " + file)
+	return clipRow(tag+"  "+file, width)
+}
+
+// clipRow hard-caps a styled row to width cells (#1379). ansi.Truncate, not
+// lipgloss MaxWidth — MaxWidth WRAPS overlong content onto a second line
+// (precedent: #971 in the palette), which shifts every row below it and
+// breaks the overlay's fixed layout.
+func clipRow(s string, width int) string {
+	return ansi.Truncate(s, width, "…")
 }
 
 // statusRow summarizes the index: live progress, counts, truncation, errors.
@@ -539,12 +552,15 @@ func (m *Model) statusRow(width int) string {
 	dim := lipgloss.NewStyle().Faint(true)
 	switch {
 	case m.errText != "":
+		// Clip the plain text first, then style: an ANSI-aware truncate of an
+		// already-styled string is fine too, but clipping first keeps the
+		// ellipsis inside the error color.
 		return lipgloss.NewStyle().Foreground(pal.Error).Render(
-			lipgloss.NewStyle().MaxWidth(width).Render("error: " + m.errText))
+			clipRow("error: "+m.errText, width))
 	case m.scanning && m.list.Total() == 0:
 		return dim.Render("scanning…")
 	case m.list.Total() == 0:
-		return dim.Render("no tags — enter opens, esc closes, ctrl+t tag, ctrl+o file, ctrl+r rescan")
+		return dim.Render(clipRow("no tags — enter opens, esc closes, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
 	}
 	s := plural(m.list.Total(), "tag", "tags") + " in " + plural(m.list.Files(), "file", "files")
 	if m.truncated {
@@ -552,7 +568,7 @@ func (m *Model) statusRow(width int) string {
 	} else if m.scanning {
 		s += "…"
 	}
-	return dim.Render(s + " — enter opens, ctrl+t tag, ctrl+o file, ctrl+r rescan")
+	return dim.Render(clipRow(s+" — enter opens, ctrl+t tag, ctrl+o file, ctrl+r rescan", width))
 }
 
 // plural renders "1 tag" / "3 tags" style counts.

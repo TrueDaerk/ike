@@ -4,7 +4,7 @@ title: TODO Index
 description: "#61 — JetBrains-style TODO tool window: project-wide comment-tag index (TODO/FIXME/HACK/XXX, configurable) as a centered overlay over the locations list, own search.Service scan, per-file rescan on save, tag/current-file filters, status-line count."
 resource: internal/todoindex
 tags: [architecture, todo, comment-tags, overlay, search]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-29T12:00:00Z
 ---
 
 # TODO Index (#61)
@@ -51,6 +51,19 @@ rescans. `ctrl+t`/`alt+t` (or clicking the label) cycles the tag filter
 (All → TODO → FIXME → …), `ctrl+o`/`alt+o` toggles current-file-only (the
 active editor's file at open time). The status row shows filtered counts and
 truncation; `Count()` stays the unfiltered total.
+
+## Rendering
+
+Every overlay row hard-clips to the box's text area — one row is always one
+terminal line (#1379). The text budget is `boxW - 6`: the lipgloss box style
+renders at `Width(boxW-2)` *including* its border and padding, so the old
+`boxW - 4` budget was two cells too wide and full-width rows wrapped, shifting
+the whole layout. List rows and group headers clip in the shared locations
+component (`ansiClip`); the filter and status rows clip through the local
+`clipRow` — both are `ansi.Truncate`, never lipgloss `MaxWidth`, which wraps
+overlong content instead of clipping (precedent: #971). Rune-count budgets
+(`truncateRunes`) are safe against double-width runes (CJK/emoji) because the
+cell-width `ansiClip`/`clipRow` pass is always the last step.
 
 ## Configuration
 

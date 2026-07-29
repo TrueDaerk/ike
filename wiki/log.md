@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-29 (theme: TODO-index rows never wrap, #1379)
+
+- TODO index (#1379): every overlay row hard-clips to one terminal line. Root
+  cause was a 2-cell-too-wide text budget — the box style's `Width(boxW-2)`
+  includes border and padding, so the text area is `boxW-6`, not the `boxW-4`
+  the rows rendered at — plus lipgloss `MaxWidth` (which wraps, #971) on the
+  filter/status rows, now `ansi.Truncate`-based `clipRow`. Rendering section
+  added to the TODO-index doc.
+
 ## 2026-07-29 (theme: paste into editor-internal inputs, #1380)
 
 - Paste routing (#1380): with the in-editor search (`/`, cmd+f), the `:` ex
