@@ -8,7 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/pane"
 	"ike/internal/project"
+	"ike/internal/registry"
 )
 
 // closeCurrentFixture: dirty buffer in a (active), clean b parked in the
@@ -175,5 +177,35 @@ func TestCloseProjectSaveThenClose(t *testing.T) {
 	}
 	if !strings.HasPrefix(string(data), "Xone") {
 		t.Fatalf("s must write the dirty buffer, got %q", data)
+	}
+}
+
+// TestCloseProjectChordEscapesTerminal (#1360): cmd+shift+w resolves
+// project.close even while a live terminal is focused — the running shell
+// makes the active workspace busy, so the close guard opens instead of the
+// chord being swallowed by the shell.
+func TestCloseProjectChordEscapesTerminal(t *testing.T) {
+	base := t.TempDir()
+	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
+	for _, d := range []string{a, b} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(a)
+	m := sizedWith(t, registry.Global(), 100, 40)
+	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
+	m = out.(Model)
+	out, _ = m.Update(TerminalNewMsg{})
+	m = out.(Model)
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatal("terminal.new must focus a terminal pane")
+	}
+	t.Cleanup(func() { inst.Terminal().Close() })
+
+	m = drainKey(m, tea.KeyPressMsg{Code: 'w', Mod: tea.ModSuper | tea.ModShift})
+	if !m.projectClosePromptOpen() {
+		t.Fatal("cmd+shift+w in a terminal must trigger project.close (busy guard)")
 	}
 }
