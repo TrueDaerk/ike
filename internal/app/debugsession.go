@@ -363,8 +363,12 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 	sess := dbg.sess
 	switch ev.Name {
 	case "initialized":
-		// Configuration phase: push every stored breakpoint, then finish.
-		files := m.bpts.All()
+		// Configuration phase: push every stored enabled breakpoint (#1377
+		// keeps disabled ones out of the adapter), then finish.
+		files := map[string][]int{}
+		for file := range m.bpts.All() {
+			files[file] = m.bpts.EnabledLines(file)
+		}
 		root := dbg.root
 		go func() {
 			for file, lines := range files {

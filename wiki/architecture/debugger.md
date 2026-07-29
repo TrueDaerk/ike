@@ -198,8 +198,9 @@ dead adapter is diagnosable from the notification alone.
   the first. Empty program `args` are omitted from the `launch` request — a
   JSON `null` trips debugpy's vectorizing validator (`"args"[0] must be str`).
   The handshake runs asynchronously: `initialize` → `launch` (answered late by design) —
-  and on the adapter's `initialized` event every stored breakpoint is pushed
-  (`setBreakpoints` per file, absolute paths, 1-based on the wire) before
+  and on the adapter's `initialized` event every stored **enabled** breakpoint
+  is pushed (`setBreakpoints` per file, absolute paths, 1-based on the wire;
+  disabled breakpoints (#1377) stay out of the adapter) before
   `configurationDone` releases the debuggee.
 - **One session at a time** (MVP): starting a new session stops the old.
   `debug.stop` disconnects (terminating the debuggee); `terminated`/`exited`
@@ -278,8 +279,32 @@ instead of running it under the adapter's `/dev/null` stdin.
   stays more specific and wins there), shift+F8 `debug.stepOut`, F9
   `debug.continue`. A step clears the paused state; the next `stopped` event
   re-marks wherever execution lands.
-- Toggling a breakpoint during a live session pushes the file's new set to
-  the adapter immediately.
+- Toggling a breakpoint during a live session pushes the file's new enabled
+  set to the adapter immediately (`syncSessionBreakpoints`); list-side
+  enable/disable/delete actions (#1377) sync the same way.
+
+## Breakpoints list (#1377)
+
+`internal/breakpanel` + `pane.KindBreakpoints` (singleton key `breakpoints`,
+Problems-panel pattern) is the Breakpoints tool window — JetBrains'
+cmd+shift+F8 dialog as a bottom-split pane, reachable via `debug.breakpoints`
+(palette, Run menu, cmd+shift+f8). It lists every breakpoint grouped by file
+with a source-line preview and is a **pure consumer** of the store: enter (or
+double-click) jumps through the standard open funnel, space (or a click on
+the glyph cell) toggles enable/disable, `d` deletes, `D` deletes all — each
+action is a message the root model handles (`handleBreakpanelMsg`), which
+mutates the store, saves, refreshes the panel and syncs a live session, so
+gutter, list, persistence and adapter never disagree. Gutter toggles call
+`refreshBreakpointsPanel` for the reverse direction.
+
+The store (#577) gained a **disabled subset** (#1377): `SetEnabled`/`Enabled`,
+`EnabledLines` (what adapters receive), `DisabledLines` (rendered hollow `○`
+faint in the gutter via `SetBreakpointDisabledSource`, vs. the filled `●`).
+Persistence moved to `{"files": …, "disabled": …}` in `.ike/breakpoints.json`;
+the legacy bare-map layout still loads (upgraded on the next save), and
+`AdjustEdit` shifts the disabled flag together with its line. The panel
+restores from saved layouts seeded from the persisted store (identity kind
+`breakpoints`).
 
 ## Debug pane pair (#580, #1370)
 

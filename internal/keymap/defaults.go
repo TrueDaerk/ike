@@ -230,6 +230,9 @@ var jetbrainsRows = []row{
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
 	// JetBrains toggle breakpoint (ctrl+f8 on every platform's keymap).
 	{"ctrl+f8", "debug.toggleBreakpoint", "Toggle breakpoint", Global, "Run (0350)"},
+	// JetBrains Breakpoints dialog (cmd+shift+f8 on the macOS keymap),
+	// mirrored verbatim (#1377): the breakpoints list tool window.
+	{"cmd+shift+f8", "debug.breakpoints", "Breakpoints", Global, "Run (0350)"},
 	// JetBrains debug chords, identical across platforms: shift+f9 debug,
 	// F8/F7/shift+F8/F9 stepping (no-ops without a paused session; the diff
 	// pane's context-scoped f7 stays more specific and wins there).

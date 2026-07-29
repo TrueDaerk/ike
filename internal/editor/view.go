@@ -446,6 +446,7 @@ func (m Model) View() string {
 		height = lineCount + len(sticky)
 	}
 	bps := m.breakpointSet()
+	bpsOff := m.disabledBreakpointSet()
 	tests := m.testMarks()
 	bookmarks := m.bookmarkSet()
 	for i := m.view.Top + len(sticky); len(out) < height && i < lineCount; i++ {
@@ -471,8 +472,15 @@ func (m Model) View() string {
 			sign = "▶"
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true)
 		} else if bps[i] {
-			sign = "●"
-			signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+			// A disabled breakpoint (#1377) keeps its slot but draws hollow
+			// and faint — visible, not armed.
+			if bpsOff[i] {
+				sign = "○"
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Faint(true)
+			} else {
+				sign = "●"
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Error).Bold(true)
+			}
 		} else if bookmarks[i] {
 			// A bookmark/mark glyph (#1151) slots below the breakpoint —
 			// breakpoints stay visible everywhere — and above the test run

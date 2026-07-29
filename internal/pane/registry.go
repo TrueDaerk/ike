@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/breakpanel"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/host"
@@ -53,6 +54,9 @@ const UsagesKey = "usages"
 
 // HTTPKey is the stable key of the singleton HTTP response viewer (#1250).
 const HTTPKey = "http"
+
+// BreakpointsKey is the stable key of the singleton Breakpoints tool window (#1377).
+const BreakpointsKey = "breakpoints"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -427,6 +431,19 @@ func (r *Registry) AddUsages() string {
 	inst.up = usages.New(r.pal)
 	r.put(inst)
 	return UsagesKey
+}
+
+// AddBreakpoints creates the singleton Breakpoints tool window under
+// BreakpointsKey (#1377) and returns its key; a second call returns the
+// existing key.
+func (r *Registry) AddBreakpoints() string {
+	if _, ok := r.instances[BreakpointsKey]; ok {
+		return BreakpointsKey
+	}
+	inst := &Instance{key: BreakpointsKey, kind: KindBreakpoints, cfg: r.cfg, pal: r.pal}
+	inst.bp = breakpanel.New(r.pal)
+	r.put(inst)
+	return BreakpointsKey
 }
 
 // AddHTTP creates the singleton HTTP response viewer under HTTPKey (#1250)

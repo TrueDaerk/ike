@@ -172,6 +172,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.UsagesKey, "usages")
 	case pane.KindHTTP:
 		return singleton(pane.HTTPKey, "http")
+	case pane.KindBreakpoints:
+		return singleton(pane.BreakpointsKey, "breakpoints")
 	case pane.KindTerminal:
 		k := st.mintTerminal()
 		if tool := inst.Terminal().Tool(); tool != "" {
@@ -446,6 +448,12 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return key, ok
 	case "http":
 		return singleton(reg.AddHTTP)
+	case "breakpoints":
+		key, ok := singleton(reg.AddBreakpoints)
+		if ok {
+			m.wireBreakpointsPanel(reg.Get(key).Breakpoints())
+		}
+		return key, ok
 	case "terminal":
 		if len(st.shells) > 0 {
 			key := st.shells[0]

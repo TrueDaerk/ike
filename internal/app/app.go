@@ -32,6 +32,7 @@ import (
 	"ike/internal/complete/words"
 	"ike/internal/config"
 	"ike/internal/debug"
+	"ike/internal/breakpanel"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
@@ -337,6 +338,9 @@ type Model struct {
 	// from every publish — files without an open editor included.
 	problemsReturnFocus string
 	probStore           *problems.Store
+	// breakpointsReturnFocus is the same dance for the Breakpoints tool
+	// window (#1377).
+	breakpointsReturnFocus string
 	// rawDiags caches each path's last published, unfiltered diagnostic set;
 	// diagIgnore/diagIgnoreRaw are the compiled lsp.diagnostics_ignore rules
 	// and their source strings (#1259). Publishes filter through the rules
@@ -999,11 +1003,12 @@ func (m *Model) wireEditorEmitters() {
 // pane. It is idempotent, so re-running it after a tab is added is cheap.
 func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-		source, adjust := breakpointHooks(m.bpts)
+		source, disabled, adjust := breakpointHooks(m.bpts)
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
 			ed.SetBreakpointSource(source)
+			ed.SetBreakpointDisabledSource(disabled)
 			ed.SetBreakpointAdjuster(adjust)
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
@@ -1062,6 +1067,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (#1155)
 		} else if ids[key].Kind == "http" {
 			continue // restored below as the empty singleton viewer (#1250)
+		} else if ids[key].Kind == "breakpoints" {
+			continue // restored below seeded from the persisted store (#1377)
 		} else if !isEditorKey(key) && !isTerminalKey(key) {
 			// A terminal-shaped key may carry an editor identity: a
 			// converted tab host (#836) restores as an editor pane below.
@@ -1185,6 +1192,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The HTTP response viewer restores empty in its saved slot
 			// (#1250): the next http.run dispatch re-fills it.
 			panes.AddHTTP()
+			continue
+		}
+		if id := ids[key]; id.Kind == "breakpoints" {
+			// The Breakpoints panel restores in its saved slot (#1377),
+			// seeded from the persisted store loaded at start.
+			m.wireBreakpointsPanel(panes.Get(panes.AddBreakpoints()).Breakpoints())
 			continue
 		}
 		if id := ids[key]; id.Kind == "structure" {
@@ -3221,6 +3234,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// problems.toggle (#1024): same state machine for the Problems pane.
 		m.toggleProblemsPanel()
 		return m, nil
+
+	case BreakpointsToggleMsg:
+		// debug.breakpoints (#1377): same state machine for the Breakpoints
+		// tool window.
+		m.toggleBreakpointsPanel()
+		return m, nil
+
+	case breakpanel.OpenLocationMsg, breakpanel.ToggleEnabledMsg,
+		breakpanel.RemoveMsg, breakpanel.RemoveAllMsg:
+		// Breakpoints-list actions (#1377): jump, enable/disable, delete,
+		// delete-all — the root model mutates the store so the gutter, the
+		// persistence file and a live session stay in sync.
+		model, cmd, _ := m.handleBreakpanelMsg(msg)
+		return model, cmd
 
 	case UsagesToggleMsg:
 		// usages.toggle (#1155): same state machine for the Usages pane.
@@ -6151,6 +6178,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Problems().Wheel(lines)
 			}
+		case pane.KindBreakpoints:
+			// The wheel scrolls the breakpoints list (#1377).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Breakpoints().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Breakpoints().Wheel(lines)
+			}
 		case pane.KindStructure:
 			// The wheel scrolls the symbol list (#1025).
 			switch msg.Button {
@@ -6967,6 +7002,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the row opens the diagnostic's location, mirroring the VCS panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Problems().Click(localX, localY)
+		}
+	case pane.KindBreakpoints:
+		// Breakpoints-list clicks (#1377): a click selects, the glyph cell
+		// flips enabled, a double-click jumps to the breakpoint.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Breakpoints().Click(localX, localY)
 		}
 	case pane.KindStructure:
 		// Structure-pane clicks (#1025): a row click selects, a double-click
@@ -7868,6 +7909,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "DEBUG"
 		case pane.KindProblems:
 			title = "PROBLEMS"
+		case pane.KindBreakpoints:
+			title = "BREAKPOINTS"
 		case pane.KindStructure:
 			title = "STRUCTURE"
 		case pane.KindUsages:

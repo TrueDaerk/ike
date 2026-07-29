@@ -369,8 +369,11 @@ type Model struct {
 	// reports edit-driven line-count deltas back to the store; bpLines is the
 	// last observed count (the folds' foldLines pattern).
 	bpSource func(path string) []int
-	bpAdjust func(path string, cursorAfter, delta int)
-	bpLines  int
+	// bpDisabledSource reports the disabled subset (#1377); those lines draw
+	// a hollow ○ marker.
+	bpDisabledSource func(path string) []int
+	bpAdjust         func(path string, cursorAfter, delta int)
+	bpLines          int
 	// paused/pausedLine mark the debugger's current line (#579), set by the
 	// app while a session is stopped in this buffer.
 	paused     bool

@@ -13,14 +13,18 @@ import (
 )
 
 // Breakpoints is the per-project breakpoint set. Not safe for concurrent use;
-// it lives on the root model and is only touched inside Update.
+// it lives on the root model and is only touched inside Update. Every
+// breakpoint is enabled unless it appears in the disabled subset (#1377);
+// disabled breakpoints keep their gutter marker but are never pushed to a
+// debug adapter.
 type Breakpoints struct {
-	files map[string][]int
+	files    map[string][]int
+	disabled map[string]map[int]bool
 }
 
 // NewBreakpoints returns an empty store.
 func NewBreakpoints() *Breakpoints {
-	return &Breakpoints{files: map[string][]int{}}
+	return &Breakpoints{files: map[string][]int{}, disabled: map[string]map[int]bool{}}
 }
 
 // File returns the path of the persisted store.
@@ -31,6 +35,14 @@ func File() string {
 	return filepath.Join(".ike", "breakpoints.json")
 }
 
+// persisted is the on-disk shape since #1377: the full set plus the disabled
+// subset. Files written before #1377 hold the bare files map; Load falls back
+// to that layout, so old stores upgrade silently on the next Save.
+type persisted struct {
+	Files    map[string][]int `json:"files"`
+	Disabled map[string][]int `json:"disabled,omitempty"`
+}
+
 // Load reads the persisted set; missing or malformed files load empty —
 // breakpoints are convenience state, never a startup error.
 func Load() *Breakpoints {
@@ -39,13 +51,23 @@ func Load() *Breakpoints {
 	if err != nil {
 		return b
 	}
-	var files map[string][]int
-	if json.Unmarshal(data, &files) != nil || files == nil {
-		return b
+	var p persisted
+	if json.Unmarshal(data, &p) != nil || p.Files == nil {
+		// Legacy layout (pre-#1377): the bare files map.
+		var files map[string][]int
+		if json.Unmarshal(data, &files) != nil || files == nil {
+			return b
+		}
+		p = persisted{Files: files}
 	}
-	for path, lines := range files {
+	for path, lines := range p.Files {
 		for _, l := range lines {
 			b.set(path, l)
+		}
+	}
+	for path, lines := range p.Disabled {
+		for _, l := range lines {
+			b.SetEnabled(path, l, false)
 		}
 	}
 	return b
@@ -53,7 +75,22 @@ func Load() *Breakpoints {
 
 // Save persists the set; an error is the caller's to surface (never fatal).
 func (b *Breakpoints) Save() error {
-	data, err := json.MarshalIndent(b.files, "", "  ")
+	p := persisted{Files: b.files}
+	for path, lines := range b.disabled {
+		if len(lines) == 0 {
+			continue
+		}
+		if p.Disabled == nil {
+			p.Disabled = map[string][]int{}
+		}
+		out := make([]int, 0, len(lines))
+		for l := range lines {
+			out = append(out, l)
+		}
+		sort.Ints(out)
+		p.Disabled[path] = out
+	}
+	data, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -104,6 +141,71 @@ func (b *Breakpoints) All() map[string][]int {
 	return out
 }
 
+// Remove deletes the breakpoint on path:line, reporting whether one existed.
+func (b *Breakpoints) Remove(path string, line int) bool {
+	if !b.Has(path, line) {
+		return false
+	}
+	b.clear(path, line)
+	return true
+}
+
+// RemoveAll empties the store, reporting how many breakpoints it dropped.
+func (b *Breakpoints) RemoveAll() int {
+	n := b.Count()
+	b.files = map[string][]int{}
+	b.disabled = map[string]map[int]bool{}
+	return n
+}
+
+// SetEnabled marks path:line enabled or disabled (#1377); a line without a
+// breakpoint is ignored.
+func (b *Breakpoints) SetEnabled(path string, line int, on bool) {
+	if !b.Has(path, line) {
+		return
+	}
+	if on {
+		delete(b.disabled[path], line)
+		if len(b.disabled[path]) == 0 {
+			delete(b.disabled, path)
+		}
+		return
+	}
+	if b.disabled[path] == nil {
+		b.disabled[path] = map[int]bool{}
+	}
+	b.disabled[path][line] = true
+}
+
+// Enabled reports whether path:line carries an enabled breakpoint.
+func (b *Breakpoints) Enabled(path string, line int) bool {
+	return b.Has(path, line) && !b.disabled[path][line]
+}
+
+// EnabledLines returns path's enabled breakpoint lines, sorted ascending —
+// the set a debug adapter receives (#1377).
+func (b *Breakpoints) EnabledLines(path string) []int {
+	out := make([]int, 0, len(b.files[path]))
+	for _, l := range b.files[path] {
+		if !b.disabled[path][l] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// DisabledLines returns path's disabled breakpoint lines, sorted ascending —
+// the gutter renders these hollow (#1377).
+func (b *Breakpoints) DisabledLines(path string) []int {
+	var out []int
+	for _, l := range b.files[path] {
+		if b.disabled[path][l] {
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
 // Count reports the total number of breakpoints.
 func (b *Breakpoints) Count() int {
 	n := 0
@@ -135,7 +237,9 @@ func (b *Breakpoints) AdjustEdit(path string, cursorAfter, delta int) {
 	}
 	next := make([]int, 0, len(lines))
 	seen := map[int]bool{}
+	var disabled map[int]bool
 	for _, l := range lines {
+		wasDisabled := b.disabled[path][l]
 		if l >= threshold {
 			l += delta
 			if l < cursorAfter {
@@ -147,9 +251,21 @@ func (b *Breakpoints) AdjustEdit(path string, cursorAfter, delta int) {
 		}
 		seen[l] = true
 		next = append(next, l)
+		// The disabled flag travels with its shifted line (#1377).
+		if wasDisabled {
+			if disabled == nil {
+				disabled = map[int]bool{}
+			}
+			disabled[l] = true
+		}
 	}
 	sort.Ints(next)
 	b.files[path] = next
+	if disabled == nil {
+		delete(b.disabled, path)
+	} else {
+		b.disabled[path] = disabled
+	}
 }
 
 func (b *Breakpoints) set(path string, line int) {
@@ -162,6 +278,10 @@ func (b *Breakpoints) set(path string, line int) {
 }
 
 func (b *Breakpoints) clear(path string, line int) {
+	delete(b.disabled[path], line)
+	if len(b.disabled[path]) == 0 {
+		delete(b.disabled, path)
+	}
 	lines := b.files[path]
 	for i, l := range lines {
 		if l == line {

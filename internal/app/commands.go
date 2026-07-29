@@ -342,6 +342,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.responseHistory", "Browse HTTP Response History", HTTPResponseHistoryMsg{}),
 			appCommand("http.cancel", "Cancel Running HTTP Request", HTTPCancelMsg{}),
 			appCommand("debug.toggleBreakpoint", "Toggle Breakpoint", DebugToggleBreakpointMsg{}),
+			appCommand("debug.breakpoints", "Breakpoints", BreakpointsToggleMsg{}),
 			appCommand("debug.start", "Debug File", DebugStartMsg{}),
 			appCommand("debug.listen", "Listen for PHP Debug Connections", DebugListenMsg{}),
 			appCommand("debug.stop", "Stop Debug Session", DebugStopMsg{}),
