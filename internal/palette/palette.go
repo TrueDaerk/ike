@@ -184,8 +184,14 @@ func (p *Palette) OpenLockedWith(cx Context, prefix rune, body string) {
 	p.recompute()
 }
 
-// reset clears the per-open transient state.
+// reset clears the per-open transient state and drops any mode-held caches
+// (#1372): every open starts from fresh external state.
 func (p *Palette) reset(cx Context) {
+	for _, m := range p.modes {
+		if r, ok := m.(Refresher); ok {
+			r.Refresh()
+		}
+	}
 	p.open = true
 	p.query = ""
 	p.cur = 0
