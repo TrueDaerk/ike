@@ -187,6 +187,12 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 		argv: []string{},
 	}
 	s.mouseModes = make(map[ansi.Mode]struct{})
+	// Mouse-mode tracking mirrors the PTY path: fed output flipping a DEC
+	// mouse mode gates the scrollback scrollbar (#1368) here too.
+	s.em.SetCallbacks(vt.Callbacks{
+		EnableMode:  func(mode ansi.Mode) { s.trackMouseMode(mode, true) },
+		DisableMode: func(mode ansi.Mode) { s.trackMouseMode(mode, false) },
+	})
 	s.out = newSpool()
 	s.ioWG.Add(1)
 	s.wlWG.Add(1)

@@ -200,6 +200,22 @@ grid per step, position marker on the bottom line, any typed key snaps back
 to live — except `/`, which opens the scrollback search, #1169 below). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
 
+## Scrollback scrollbar (#1368)
+
+`scrollbar.go` overlays the shared track/thumb bar (`internal/scrollbar`,
+#1367) on the pane's rightmost column, mapping the virtual buffer
+`[scrollback ++ screen]` so the thumb shows where the view sits in the
+history. It renders while scrolled back, and on the live view once scrollback
+exists — but never over a mouse-reporting or alt-screen child at the live
+view: their UI owns the grid, and since `ScrollbarHit` is false there, every
+click keeps passing through to the child untouched. A thumb press starts a
+`dragTermScroll` drag whose motion feeds `ScrollbarDrag`; a track press jumps
+proportionally into the scrollback. The wheel keeps its existing routing
+(#226/#669). The overlay wraps the composed view last (`View` →
+`overlayScrollbar(baseView())`), so scrolled, live, search and dead views all
+carry the bar. Pipe sessions (#1370) track DEC mouse modes like PTY sessions
+so the gating applies to them too.
+
 ## Theme ANSI palette (#1363)
 
 The emulator stores a cell's colour exactly as the program set it, so a shell
