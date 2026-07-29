@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-28T20:00:00Z
+timestamp: 2026-07-29T12:00:00Z
 ---
 
 # Editor
@@ -97,6 +97,15 @@ line runs that test (see /architecture/run-configurations.md).
   bracketed-paste path; a modal overlay owning the keyboard takes it through
   the **overlay paste router** (`internal/app/overlaypaste.go`, #1273) instead
   — see [command palette](./command-palette.md).
+  **Editor-internal inputs** are one level deeper (#1380): the `/`/`?`/`:`
+  command line and the find/replace panel are editor state, invisible to the
+  app router, so `PasteText` (and `Cmd+V`'s `clipboardPaste`) first route
+  through `pasteIntoPrompt` (`internal/editor/cmdline_paste.go`) — the paste
+  lands in the open input, flattened to one line by `ui.PasteText` exactly
+  like overlay fields, and re-runs the same hooks typing does (incsearch
+  preview / path suggest). The `:s///c` confirm prompt has no input but still
+  swallows the block, so a paste can never fall through into the buffer while
+  any of these own the keyboard.
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",
   #252) via `NoticeMsg`; the vim-native `y`/`d` flows stay silent.
   **Yank → system clipboard (#1256).** `editor.clipboard_sync` (default on,

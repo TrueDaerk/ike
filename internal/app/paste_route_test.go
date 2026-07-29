@@ -60,3 +60,30 @@ func TestPasteMsgIgnoredWhenOverlayOpen(t *testing.T) {
 	}
 }
 
+// TestPasteMsgRoutesIntoEditorSearchLine is the #1380 regression guard: with
+// the in-editor search bar open ("/" or cmd+f), a bracketed paste lands in the
+// search input — before the fix it fell through into the buffer at the cursor.
+// The search line is editor-internal state, not an overlay, so the app-level
+// router (#1273) cannot see it; the editor routes it itself.
+func TestPasteMsgRoutesIntoEditorSearchLine(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "x.txt")
+	if err := os.WriteFile(path, []byte("abc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = tm.(Model)
+	m = drainKey(m, tea.KeyPressMsg{Text: "/", Code: '/'})
+
+	tm, _ = m.Update(tea.PasteMsg{Content: "needle"})
+	m = tm.(Model)
+
+	got := ansi.Strip(m.activeEditor().View())
+	if !strings.Contains(got, "/needle") {
+		t.Fatalf("paste did not reach the search line: %q", got)
+	}
+	if strings.Contains(got, "needleabc") || strings.Contains(got, "aneedle") {
+		t.Fatalf("paste leaked into the buffer: %q", got)
+	}
+}

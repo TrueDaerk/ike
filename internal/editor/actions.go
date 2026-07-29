@@ -752,6 +752,11 @@ func (m *Model) clipboardNotice(verb string) tea.Cmd {
 // replaces the selection in visual mode and, mid-insert, splices through the
 // open insert session so the paste joins the same undo unit.
 func (m *Model) clipboardPaste() {
+	// An open editor-internal input takes the clipboard too (#1380): cmd+v on
+	// the "/" line must land in the search input, never in the buffer.
+	if m.pasteIntoPrompt(m.regs.Get('+').Text) {
+		return
+	}
 	if m.mode.IsVisual() {
 		m.visualPaste('+')
 		return
@@ -775,6 +780,11 @@ func (m *Model) clipboardPaste() {
 // sync and highlighting see one edit.
 func (m *Model) PasteText(text string) {
 	if text == "" {
+		return
+	}
+	// An open editor-internal input (search/ex line, find/replace panel,
+	// substitute confirm) owns the paste (#1380) — never the buffer under it.
+	if m.pasteIntoPrompt(text) {
 		return
 	}
 	e := register.Entry{Text: text, Linewise: strings.HasSuffix(text, "\n")}
