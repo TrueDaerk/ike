@@ -539,6 +539,7 @@ const (
 	dragExplScroll                 // dragging the explorer scrollbar thumb (#1036)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 	dragHTTPSelect                 // dragging a text selection in the HTTP response pane (#1266)
+	dragHTTPScroll                 // dragging the HTTP response scrollbar thumb (#1367)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -6425,6 +6426,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.HTTP().MouseDrag(lx, ly)
 				}
 			}
+		case dragHTTPScroll:
+			// The response-viewer thumb follows the pointer (#1367).
+			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindHTTP {
+					inst.HTTP().ScrollbarDrag(ly)
+				}
+			}
 		}
 	case mouseRelease:
 		if m.drag == nil {
@@ -6468,6 +6476,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragExplScroll:
 			m.drag = nil
 			return m, nil // the tree already followed the thumb; nothing to commit
+		case dragHTTPScroll:
+			m.drag = nil
+			return m, nil // the viewport already followed the thumb; nothing to commit
 		case dragDebugDiv:
 			m.drag = nil
 			return m, nil // column ratios are panel-local, nothing to persist
@@ -7026,6 +7037,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// selection and tracks the drag, exactly like a terminal pane —
 		// double click selects a word, triple click the line.
 		if msg.Button == tea.MouseLeft {
+			// A press on the scrollbar column (#1367) outranks the selection
+			// there: thumb presses start a drag, track presses jump.
+			if inst.HTTP().ScrollbarHit(localX, localY) {
+				if inst.HTTP().ScrollbarPress(localY) {
+					m.drag = &dragState{kind: dragHTTPScroll, srcPane: key, curX: msg.X, curY: msg.Y}
+				}
+				return m, nil
+			}
 			inst.HTTP().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragHTTPSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 		}

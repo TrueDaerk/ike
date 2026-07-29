@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/overlay"
+	"ike/internal/scrollbar"
 	"ike/internal/theme"
 	"ike/internal/vcs"
 	"ike/internal/watch"
@@ -1548,33 +1549,6 @@ func (m Model) viewport() (textW, textH int, needV, needH bool, contentW int) {
 	return
 }
 
-// scrollThumb sizes and positions a scrollbar thumb on a track of the given
-// length for a window of visible cells over a total content size at offset.
-func scrollThumb(track, total, visible, offset int) (start, length int) {
-	if track <= 0 {
-		return 0, 0
-	}
-	if total <= visible {
-		return 0, track
-	}
-	length = track * visible / total
-	if length < 1 {
-		length = 1
-	}
-	if length > track {
-		length = track
-	}
-	maxOff := total - visible
-	start = (track - length) * offset / maxOff
-	if start < 0 {
-		start = 0
-	}
-	if start > track-length {
-		start = track - length
-	}
-	return
-}
-
 // ScrollBy moves the vertical viewport by delta rows (positive scrolls down)
 // without moving the cursor — the way a mouse wheel scrolls independently of the
 // selection.
@@ -1774,14 +1748,12 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 	if !needV || textH <= 1 {
 		return false
 	}
-	start, length := scrollThumb(textH, len(m.rows), textH, m.offset)
+	start, length := scrollbar.Thumb(textH, len(m.rows), textH, m.offset)
 	if y >= start && y < start+length {
 		m.sbGrab = y - start
 		return true
 	}
-	if maxOff := len(m.rows) - textH; maxOff > 0 {
-		m.offset = clamp(y*maxOff/(textH-1), 0, maxOff)
-	}
+	m.offset = scrollbar.Jump(y, textH, len(m.rows), textH, m.offset)
 	return false
 }
 
@@ -1792,15 +1764,7 @@ func (m *Model) ScrollbarDrag(y int) {
 	if !needV {
 		return
 	}
-	_, length := scrollThumb(textH, len(m.rows), textH, m.offset)
-	if textH-length <= 0 {
-		return
-	}
-	maxOff := len(m.rows) - textH
-	if maxOff <= 0 {
-		return
-	}
-	m.offset = clamp((y-m.sbGrab)*maxOff/(textH-length), 0, maxOff)
+	m.offset = scrollbar.Drag(y, m.sbGrab, textH, len(m.rows), textH, m.offset)
 }
 
 // onMarker reports whether content-local column x (before horizontal scroll)
@@ -1999,7 +1963,7 @@ func (m Model) View() string {
 	offX := clamp(m.offsetX, 0, maxz(contentW-textW))
 	ss := m.styleSet() // frame-invariant style blocks, built once (#1100)
 
-	vStart, vLen := scrollThumb(textH, len(m.rows), textH, offY)
+	vStart, vLen := scrollbar.Thumb(textH, len(m.rows), textH, offY)
 
 	var lines []string
 	for k := 0; k < textH; k++ {
@@ -2101,7 +2065,7 @@ func (m Model) View() string {
 	}
 
 	if needH {
-		hStart, hLen := scrollThumb(textW, contentW, textW, offX)
+		hStart, hLen := scrollbar.Thumb(textW, contentW, textW, offX)
 		var b strings.Builder
 		for k := 0; k < textW; k++ {
 			b.WriteString(m.bar("─", "━", k >= hStart && k < hStart+hLen))

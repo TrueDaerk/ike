@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/scrollbar"
 	"ike/internal/vcs"
 )
 
@@ -28,36 +29,8 @@ func (m Model) scrollbarGeometry() (track, total, thumbStart, thumbLen int, ok b
 	if track <= 0 || total <= track || m.width < 2 {
 		return 0, 0, 0, 0, false
 	}
-	thumbStart, thumbLen = scrollThumb(track, total, track, m.view.Top)
+	thumbStart, thumbLen = scrollbar.Thumb(track, total, track, m.view.Top)
 	return track, total, thumbStart, thumbLen, true
-}
-
-// scrollThumb sizes and positions a scrollbar thumb on a track of the given
-// length for a window of visible rows over a total content size at offset.
-// Same math as the explorer's scrollbar so the two bars feel identical.
-func scrollThumb(track, total, visible, offset int) (start, length int) {
-	if track <= 0 {
-		return 0, 0
-	}
-	if total <= visible {
-		return 0, track
-	}
-	length = track * visible / total
-	if length < 1 {
-		length = 1
-	}
-	if length > track {
-		length = track
-	}
-	maxOff := total - visible
-	start = (track - length) * offset / maxOff
-	if start < 0 {
-		start = 0
-	}
-	if start > track-length {
-		start = track - length
-	}
-	return
 }
 
 // ScrollbarHit reports whether a content-local press lands on the scrollbar:
@@ -90,23 +63,18 @@ func (m *Model) ScrollbarPress(y int) (drag bool) {
 			return false
 		}
 	}
-	if track > 1 {
-		maxOff := total - track
-		m.SetScroll(clampInt(y*maxOff/(track-1), 0, maxOff), m.view.Left)
-	}
+	m.SetScroll(scrollbar.Jump(y, track, total, track, m.view.Top), m.view.Left)
 	return false
 }
 
 // ScrollbarDrag continues a thumb drag: the thumb's top follows the pointer
 // minus the recorded grab offset, mapped back to a scroll offset.
 func (m *Model) ScrollbarDrag(y int) {
-	track, total, _, length, ok := m.scrollbarGeometry()
-	if !ok || track-length <= 0 {
+	track, total, _, _, ok := m.scrollbarGeometry()
+	if !ok {
 		return
 	}
-	maxOff := total - track
-	top := clampInt((y-m.sbGrab)*maxOff/(track-length), 0, maxOff)
-	m.SetScroll(top, m.view.Left)
+	m.SetScroll(scrollbar.Drag(y, m.sbGrab, track, total, track, m.view.Top), m.view.Left)
 }
 
 // sbCache memoizes the scrollbar stripe across frames (#1097): the map was

@@ -496,8 +496,8 @@ the next cursor motion re-derives the offset to follow the cursor again.
 A vertical scrollbar with a JetBrains-style diagnostics error stripe (#1022,
 `editor/scrollbar.go`) overlays the pane's rightmost content column whenever
 the buffer has more lines than the viewport: a dim track, a heavier thumb
-whose position/size mirror `view.Top` and the visible fraction (same
-`scrollThumb` math and glyphs as the explorer scrollbar), and a severity-
+whose position/size mirror `view.Top` and the visible fraction (the shared
+`internal/scrollbar` math and glyphs, #1367 — same bar as the explorer's), and a severity-
 colored `■` marker at each cached diagnostic line's proportional track row
 (worst severity wins a shared cell; markers draw over track and thumb). Mouse:
 `ScrollbarHit` claims the rightmost column before any content click, so the

@@ -67,19 +67,6 @@ func TestScrollbarGeometry(t *testing.T) {
 	}
 }
 
-// TestScrollThumbClamps covers the shared thumb math edge cases.
-func TestScrollThumbClamps(t *testing.T) {
-	if s, l := scrollThumb(10, 5, 10, 0); s != 0 || l != 10 {
-		t.Fatalf("no overflow: thumb = %d/%d, want full track 0/10", s, l)
-	}
-	if _, l := scrollThumb(10, 1000, 10, 0); l != 1 {
-		t.Fatalf("huge buffer: thumb length = %d, want minimum 1", l)
-	}
-	if s, l := scrollThumb(10, 1000, 10, 990); s+l != 10 {
-		t.Fatalf("max offset: thumb = %d+%d, want flush with track end", s, l)
-	}
-}
-
 // TestScrollbarHit verifies only the rightmost column within the track hits,
 // and never while the buffer fits.
 func TestScrollbarHit(t *testing.T) {

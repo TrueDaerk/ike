@@ -203,6 +203,14 @@ config file paths, or disable detection entirely.
   a collapsed fold **reveals** it (`scrollToMatch` opens every fold hiding the
   match), and copy takes real content — a selection spanning a collapsed fold
   copies what is inside it, never the placeholder.
+- **Scrollbar** (#1367, `internal/httppane/scrollbar.go`): the shared
+  track/thumb bar (`internal/scrollbar`, the editor's #1022 / explorer's #1036
+  visual language) overlays the pane's rightmost column whenever the composed
+  view has more display rows than the body viewport. It maps the `visible`
+  display projection, so folding (#1330) composes: collapsed rows are not part
+  of the track's world. Mouse: `ScrollbarHit` claims the column before the
+  selection press; a thumb press starts a `dragHTTPScroll` drag whose motion
+  feeds `ScrollbarDrag`, a track press jumps proportionally.
 - **In-pane search** (#1265): `/` opens a search prompt in the pane footer,
   matching incrementally over the **whole composed view** — status line,
   headers and formatted body alike — with the editor's smartcase rule (an
