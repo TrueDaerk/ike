@@ -31,9 +31,8 @@ func (commands) Capabilities() plugin.Capabilities {
 			Scope: plugin.GlobalScope(),
 			Run:   open,
 		}, {
-			// No default chord (#711 budget): closing the current project is a
-			// palette / File-menu action. The root model resumes the MRU
-			// background workspace, or quits when none is open (#1355).
+			// The root model resumes the MRU background workspace, or quits
+			// when none is open (#1355). Default chord cmd+shift+w (#1358).
 			ID:    "project.close",
 			Title: "Close Project",
 			Scope: plugin.GlobalScope(),
@@ -55,6 +54,12 @@ func (commands) Capabilities() plugin.Capabilities {
 			CommandID: "project.switch",
 			Priority:  plugin.CorePriority,
 			Action:    open,
+		}, {
+			Keys:      "cmd+shift+w",
+			Scope:     plugin.GlobalScope(),
+			CommandID: "project.close",
+			Priority:  plugin.CorePriority,
+			Action:    func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
 		}},
 	}
 }

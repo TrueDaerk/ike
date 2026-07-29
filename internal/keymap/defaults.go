@@ -30,6 +30,10 @@ var jetbrainsRows = []row{
 	// keymap layer does not.
 	{"cmd+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
 	{"ctrl+shift+p", "project.switch", "Switch project", Global, "Project (0090)"},
+	// Close Project (#1355/#1358): cmd+shift+w with the delivered ctrl
+	// secondary, same pattern as project.switch above.
+	{"cmd+shift+w", "project.close", "Close project", Global, "Project (#1355)"},
+	{"ctrl+shift+w", "project.close", "Close project", Global, "Project (#1355)"},
 	{"cmd+o", "project.goToClass", "Go to symbol/class", Global, "Project (09)/LSP (10)"},
 	{"cmd+e", "palette.recentFiles", "Recent files", Global, "Palette (07)"},
 	// Reconciled (#5): the LSP plugin registers find-usages as lsp.references;
