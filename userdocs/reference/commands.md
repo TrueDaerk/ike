@@ -28,6 +28,7 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Breakpoints | `debug.breakpoints` | `cmd+shift+f8` | — | everywhere |
 | Continue | `debug.continue` | `f9` | — | everywhere |
 | Listen for PHP Debug Connections | `debug.listen` | — | — | everywhere |
 | Debug File | `debug.start` | `shift+f9` | — | everywhere |

@@ -430,6 +430,7 @@ Generated from `keymap.StatusMatrix` against the shipped plugin set (run
 regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
+| `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.continue` | `f9` | delivered | `—` | live |
 | `debug.start` | `shift+f9` | delivered | `—` | live |
 | `debug.stepInto` | `f7` | delivered | `—` | live |
@@ -480,6 +481,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
+| `http.run` | `cmd+enter` | fragile | `ctrl+f9` | live via ctrl+f9 |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
@@ -511,6 +513,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
+| `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
@@ -530,3 +533,4 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
 | `view.zenMode` | `ctrl+alt+f` | fragile | `palette / View menu` | live via palette / View menu |
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |
+| `window.restoreLayout` | `shift+f12` | delivered | `—` | live |

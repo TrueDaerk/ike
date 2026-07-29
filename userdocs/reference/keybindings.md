@@ -29,6 +29,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |

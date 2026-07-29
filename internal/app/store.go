@@ -203,6 +203,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// The viewer restores empty (#1250): responses are session
 			// state; the next http.run dispatch re-fills it.
 			ids[key] = paneIdentity{Kind: "http"}
+		case pane.KindBreakpoints:
+			// The panel restores seeded from the persisted store (#1377).
+			ids[key] = paneIdentity{Kind: "breakpoints"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
 			if ed := inst.Editor(); ed != nil {

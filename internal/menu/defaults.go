@@ -50,6 +50,7 @@ func Defaults() []Menu {
 			{Title: "Run Tests in File", Command: "run.testsInFile"},
 			{Title: "Run HTTP Request", Command: "http.run"},
 			{Title: "Toggle Breakpoint", Command: "debug.toggleBreakpoint"},
+		{Title: "Breakpoints", Command: "debug.breakpoints"},
 			{Title: "Debug File", Command: "debug.start"},
 			{Title: "Listen for PHP Debug Connections", Command: "debug.listen"},
 			{Title: "Step Over", Command: "debug.stepOver"},

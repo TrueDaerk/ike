@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
@@ -61,6 +62,10 @@ const (
 	// read-only panel showing the last dispatched .http request's response,
 	// under key "http".
 	KindHTTP
+	// KindBreakpoints is the Breakpoints tool window (#1377): a singleton
+	// bottom-split panel listing every breakpoint in the project, under key
+	// "breakpoints".
+	KindBreakpoints
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -77,6 +82,7 @@ const (
 	ctxStruct   = "structure"
 	ctxUsages   = "usages"
 	ctxHTTP     = "http"
+	ctxBreak    = "breakpoints"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -99,6 +105,7 @@ type Instance struct {
 	sp   structpanel.Model
 	up   usages.Model
 	hp   httppane.Model
+	bp   breakpanel.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -200,6 +207,8 @@ func (i *Instance) ContextID() string {
 		return ctxUsages
 	case KindHTTP:
 		return ctxHTTP
+	case KindBreakpoints:
+		return ctxBreak
 	}
 	return ctxEditor
 }
@@ -256,6 +265,10 @@ func (i *Instance) Structure() *structpanel.Model { return &i.sp }
 // Usages returns the underlying Usages tool-window model (#1155). It is only
 // valid for a usages instance; callers gate on Kind first.
 func (i *Instance) Usages() *usages.Model { return &i.up }
+
+// Breakpoints returns the underlying Breakpoints tool-window model (#1377).
+// It is only valid for a breakpoints instance; callers gate on Kind first.
+func (i *Instance) Breakpoints() *breakpanel.Model { return &i.bp }
 
 // HTTP returns the underlying HTTP response viewer model (#1250). It is only
 // valid for an http instance; callers gate on Kind first.
@@ -660,6 +673,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.up.SetSize(w, h)
 	case KindHTTP:
 		i.hp.SetSize(w, h)
+	case KindBreakpoints:
+		i.bp.SetSize(w, h)
 	}
 }
 
@@ -695,6 +710,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.up.SetFocused(f)
 	case KindHTTP:
 		i.hp.SetFocused(f)
+	case KindBreakpoints:
+		i.bp.SetFocused(f)
 	}
 }
 
@@ -744,6 +761,8 @@ func (i *Instance) View() string {
 		return i.up.View()
 	case KindHTTP:
 		return i.hp.View()
+	case KindBreakpoints:
+		return i.bp.View()
 	}
 	return ""
 }
@@ -790,6 +809,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.up.Update(msg)
 	case KindHTTP:
 		cmd = i.hp.Update(msg)
+	case KindBreakpoints:
+		cmd = i.bp.Update(msg)
 	}
 	return cmd
 }
@@ -893,6 +914,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.up.SetPalette(p)
 	case KindHTTP:
 		i.hp.SetPalette(p)
+	case KindBreakpoints:
+		i.bp.SetPalette(p)
 	}
 }
 

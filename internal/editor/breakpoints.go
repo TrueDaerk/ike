@@ -10,6 +10,11 @@ package editor
 // an absolute file path). Nil disables the feature.
 func (m *Model) SetBreakpointSource(src func(path string) []int) { m.bpSource = src }
 
+// SetBreakpointDisabledSource injects the lookup for the disabled subset
+// (#1377): those lines render a hollow ○ instead of the filled ● so a muted
+// breakpoint stays visible without reading as armed. Nil renders all filled.
+func (m *Model) SetBreakpointDisabledSource(src func(path string) []int) { m.bpDisabledSource = src }
+
 // SetBreakpointAdjuster injects the callback fired after a buffer mutation
 // changed the line count, so the store can shift breakpoints like the editor
 // shifts folds (dissolveFoldsAtEdit): cursorAfter is the 0-based edit site,
@@ -60,6 +65,23 @@ func (m Model) breakpointSet() map[int]bool {
 		return nil
 	}
 	lines := m.bpSource(m.Path())
+	if len(lines) == 0 {
+		return nil
+	}
+	set := make(map[int]bool, len(lines))
+	for _, l := range lines {
+		set[l] = true
+	}
+	return set
+}
+
+// disabledBreakpointSet snapshots the disabled subset (#1377), empty when no
+// source is wired or the buffer has no file.
+func (m Model) disabledBreakpointSet() map[int]bool {
+	if m.bpDisabledSource == nil || !m.HasFile() {
+		return nil
+	}
+	lines := m.bpDisabledSource(m.Path())
 	if len(lines) == 0 {
 		return nil
 	}

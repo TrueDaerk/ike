@@ -100,6 +100,7 @@ var reachableAlternatives = map[string]string{
 	"editor.tab.select8":       "palette",
 	"editor.tab.select9":       "palette",
 	"pane.maximize":            "palette",
+	"debug.breakpoints":        "palette / Run menu",
 	"nav.pins":                 "palette",
 	"window.hideAllTools":      "palette",
 	"nav.pinGoto1":             "palette (or the cmd+2 picker)",
