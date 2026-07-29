@@ -373,6 +373,9 @@ type Model struct {
 	// wsClosePending is the busy close-from-list guard state (#821): the
 	// background workspace whose teardown awaits the user's answer.
 	wsClosePending *pendingWsClose
+	// projectClosePending is the busy close-current guard state (#1355): the
+	// MRU background root to resume once the user confirms the close.
+	projectClosePending *pendingProjectClose
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -3536,6 +3539,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// back as SwitchProjectMsg or SwitchFailedMsg.
 		return m, project.SwitchTo(msg.Path)
 
+	case project.CloseProjectMsg:
+		// project.close (#1355): close the current project and resume the MRU
+		// background workspace; quit (guarded) when none is open.
+		return m.handleCloseProject()
+
 	case project.CloseWorkspaceMsg:
 		// Close-from-list (#820): unload the background workspace without
 		// switching — sessions terminated, memory freed; the history entry
@@ -4364,6 +4372,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The busy close-from-list guard (#821): s / d / esc answer it.
 		if m.wsClosePromptOpen() {
 			return m.updateWsClosePrompt(msg)
+		}
+		// The busy close-current-project guard (#1355): s / d / esc answer it.
+		if m.projectClosePromptOpen() {
+			return m.updateProjectClosePrompt(msg)
 		}
 		// The PHP path-mapping suggestion (#832): m / esc answer it.
 		if m.debugMapPromptOpen() {

@@ -31,6 +31,14 @@ func (commands) Capabilities() plugin.Capabilities {
 			Scope: plugin.GlobalScope(),
 			Run:   open,
 		}, {
+			// No default chord (#711 budget): closing the current project is a
+			// palette / File-menu action. The root model resumes the MRU
+			// background workspace, or quits when none is open (#1355).
+			ID:    "project.close",
+			Title: "Close Project",
+			Scope: plugin.GlobalScope(),
+			Run:   func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
+		}, {
 			// No default chord: cloning is a rare, dialog-driven action
 			// (palette / File menu), and the chord budget is full (#711).
 			ID:    "project.clone",

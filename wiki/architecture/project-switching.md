@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-28T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -93,6 +93,31 @@ open the result.
   and editable with the decisive git line. If the dialog was dismissed while
   the clone ran, the outcome only toasts — the IDE is never re-rooted under
   the user.
+
+## Close Project (#1355)
+
+The inverse of a quick visit: instead of switching back and closing the
+visited workspace from the list (#820), one action closes the **current**
+project.
+
+- **`project.close`** ("Close Project", global scope, no default chord — the
+  chord budget is full, #711) dispatches `CloseProjectMsg`; reachable from the
+  palette and File → *Close Project*.
+- **With background workspaces** (`internal/app/project_close.go`): the
+  active workspace closes — session + layout persist first (reopening later
+  restores), terminals/runs/debug tear down like a close-from-list
+  (#820/#825) — and the **most recently used** parked workspace resumes in
+  place through the seamless-switch path (#777). The recent-projects history
+  entry stays.
+- **Busy guard**: a dirty or running active workspace prompts first with the
+  #821 shape — `[s]` save all then close (offered only when buffers are
+  dirty; a failed write keeps the project open), `[d]` close discarding,
+  `[esc]` cancel.
+- **Last project**: with no background workspace the request degrades to an
+  app quit through the existing quit guard (#287/#821).
+- Mechanically the close is `performSwitch` to the MRU root (which parks the
+  closing workspace) followed by `Drop` + teardown of exactly that parked
+  unit — a failed switch (chdir error) parks nothing and closes nothing.
 
 ## Command & picker (#12)
 
