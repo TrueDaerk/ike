@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/search"
 )
@@ -218,6 +219,96 @@ func TestViewRendersFiltersAndStatus(t *testing.T) {
 	for _, want := range []string{"Tag: All", "Current file", "a.go", "2 tags in 1 file"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
+		}
+	}
+}
+
+// --- #1379: every overlay row hard-clips to the box width, never wraps ------
+
+// assertRowsClip strips styling and verifies each rendered line fits the box:
+// a wrapped row would show up either as an overwide line (pre-clip) or as
+// extra lines (post-wrap), so both the per-line width and the line count are
+// checked.
+func assertRowsClip(t *testing.T, m *Model, wantLines int) {
+	t.Helper()
+	v := ansi.Strip(m.View())
+	lines := strings.Split(v, "\n")
+	if len(lines) != wantLines {
+		t.Fatalf("view has %d lines, want %d (a row wrapped):\n%s", len(lines), wantLines, v)
+	}
+	boxW := m.width - 12
+	if boxW > 100 {
+		boxW = 100
+	}
+	if boxW < 40 {
+		boxW = min(40, m.width-2)
+	}
+	for i, l := range lines {
+		if w := ansi.StringWidth(l); w > boxW {
+			t.Fatalf("line %d is %d cells wide, box is %d:\n%s", i, w, boxW, v)
+		}
+	}
+}
+
+// TestViewClipsOverlongRows: overlong todo text and an overlong path each stay
+// on one line in a narrow window. Layout: border + title + blank + filters +
+// blank + (header + 2 items) + blank + status + border = 11 lines.
+func TestViewClipsOverlongRows(t *testing.T) {
+	m := New(search.New(nil), t.TempDir(), nil)
+	m.SetSize(46, 30) // boxW clamps to 40
+	m.open = true
+	long := strings.Repeat("long todo text ", 20)
+	batch(m,
+		match(filepath.Join(strings.Repeat("deeply/nested/", 10), "file.go"), 1, "// TODO: "+long, "TODO"),
+		match(filepath.Join(strings.Repeat("deeply/nested/", 10), "file.go"), 2, "// FIXME: two", "FIXME"),
+	)
+	done(m)
+	assertRowsClip(t, m, 11)
+}
+
+// TestViewClipsWideRuneRows: rows full of double-width runes pass a rune-count
+// budget but overflow cells — they must still render as exactly one line.
+func TestViewClipsWideRuneRows(t *testing.T) {
+	m := New(search.New(nil), t.TempDir(), nil)
+	m.SetSize(46, 30)
+	m.open = true
+	cjk := strings.Repeat("漢字テスト", 20)
+	batch(m, match("wide.go", 1, "// TODO: "+cjk, "TODO"))
+	done(m)
+	// border + title + blank + filters + blank + (header + 1 item) + blank +
+	// status + border = 10 lines.
+	assertRowsClip(t, m, 10)
+}
+
+// TestStatusRowClipsError: a long error (root path, scanner failure) clips on
+// the status row instead of wrapping and shifting the layout.
+func TestStatusRowClipsError(t *testing.T) {
+	m := New(search.New(nil), t.TempDir(), nil)
+	m.SetSize(46, 30)
+	m.open = true
+	m.errText = "open " + strings.Repeat("/very/long/root/path", 10) + ": permission denied"
+	// border + title + blank + filters + blank + blank + status + border = 8.
+	assertRowsClip(t, m, 8)
+	if !strings.Contains(ansi.Strip(m.View()), "error: open") {
+		t.Fatal("clipped status row lost the error prefix")
+	}
+}
+
+// TestStatusAndFilterRowsClipDirect: the row renderers themselves respect the
+// width budget (the no-tags hint is longer than a narrow box).
+func TestStatusAndFilterRowsClipDirect(t *testing.T) {
+	m := New(search.New(nil), t.TempDir(), nil)
+	for _, w := range []int{10, 20, 36} {
+		for name, row := range map[string]string{
+			"filters": m.filtersRow(w),
+			"status":  m.statusRow(w),
+		} {
+			if strings.Contains(row, "\n") {
+				t.Fatalf("%s row at width %d contains a line break", name, w)
+			}
+			if got := ansi.StringWidth(ansi.Strip(row)); got > w {
+				t.Fatalf("%s row at width %d renders %d cells", name, w, got)
+			}
 		}
 	}
 }
