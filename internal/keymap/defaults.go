@@ -117,9 +117,12 @@ var jetbrainsRows = []row{
 	// above). f1 — the macOS JetBrains quick-doc key — is taken by the
 	// cheatsheet.
 	{"ctrl+q", "lsp.hover", "Quick documentation", Editor, "LSP (0100)"},
-	// JetBrains error description (#739): ctrl+f1 shows the caret line's
-	// diagnostics — message, severity, source, rule code. Modified F-keys
-	// deliver under the Kitty keyboard protocol (the 0081 reality probe).
+	// JetBrains error description (#739): shows the caret line's diagnostics —
+	// message, severity, source, rule code. cmd+f1 is the macOS-keymap chord
+	// and the darwin primary (#1374: macOS system shortcuts swallow plain
+	// ctrl+F-keys before the terminal sees them); ctrl+f1 is the Windows-scheme
+	// form and the delivered chord off macOS (both fold together there).
+	{"cmd+f1", "lsp.diagnosticInfo", "Diagnostic under caret", Editor, "LSP (0100)"},
 	{"ctrl+f1", "lsp.diagnosticInfo", "Diagnostic under caret", Editor, "LSP (0100)"},
 	// JetBrains parameter info (#523). cmd+p matches JetBrains where the
 	// terminal can deliver Cmd; ctrl+p is the everywhere-deliverable fallback
@@ -228,7 +231,11 @@ var jetbrainsRows = []row{
 	// JetBrains Run (Windows keymap's shift+f10; macOS ctrl+r would shadow
 	// vim's redo in the editor, so the F-key is the delivered primary, 0350).
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
-	// JetBrains toggle breakpoint (ctrl+f8 on every platform's keymap).
+	// JetBrains toggle breakpoint: cmd+f8 is the macOS-keymap chord and the
+	// darwin primary (#1374 — plain ctrl+F-keys are macOS system shortcuts and
+	// never reach the terminal); ctrl+f8 is the Windows-scheme form, delivered
+	// off macOS (both fold together there).
+	{"cmd+f8", "debug.toggleBreakpoint", "Toggle breakpoint", Global, "Run (0350)"},
 	{"ctrl+f8", "debug.toggleBreakpoint", "Toggle breakpoint", Global, "Run (0350)"},
 	// JetBrains Breakpoints dialog (cmd+shift+f8 on the macOS keymap),
 	// mirrored verbatim (#1377): the breakpoints list tool window.
@@ -250,7 +257,13 @@ var jetbrainsRows = []row{
 	// deliver under the Kitty protocol; cmd+enter needs a Cmd-forwarding
 	// terminal).
 	{"ctrl+f9", "http.run", "Run HTTP request", Editor, "HTTP client (0450)"},
+	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
+	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
+	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl
+	// forms stay as the delivered chords off macOS (both fold together there).
+	{"cmd+f5", "run.rerun", "Rerun last", Global, "Run (0350)"},
 	{"ctrl+f5", "run.rerun", "Rerun last", Global, "Run (0350)"},
+	{"cmd+f2", "debug.stop", "Stop debug session", Global, "Run (0350)"},
 	{"ctrl+f2", "debug.stop", "Stop debug session", Global, "Run (0350)"},
 	// Problems and Structure tool windows (#1048): JetBrains' cmd+6/cmd+7 are
 	// taken (TODO index, comment toggle on the German layout), so the free

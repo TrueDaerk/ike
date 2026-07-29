@@ -374,13 +374,26 @@ classes, not off JetBrains nostalgia.
 | Class | Meaning | Chord families |
 |---|---|---|
 | **delivered** | arrives in every mainstream terminal | plain keys, `ctrl+letter`, `f1–f12`, `shift+fN` |
-| **fragile** | terminal/configuration/protocol dependent | `cmd+*` (Kitty protocol required; OS/terminal menus intercept several), `alt+*` (option-as-meta), `ctrl+shift+letter` (collapses without Kitty disambiguation), `ctrl+tab` (terminal-eaten) |
+| **fragile** | terminal/configuration/protocol dependent | `cmd+*` (Kitty protocol required; OS/terminal menus intercept several), `alt+*` (option-as-meta), `ctrl+shift+letter` (collapses without Kitty disambiguation), `ctrl+tab` (terminal-eaten), plain `ctrl+fN` **on darwin builds only** (macOS system shortcuts — ctrl+F2 "move focus to menu bar" etc. — swallow them before the terminal sees them, #1374; shifted variants like `ctrl+shift+f10` stay delivered) |
 
 The ctrl+shift collapse only affects **character keys**: CSI-parameter-encoded
 keys (arrows, home/end, pgup/pgdown, insert/delete, fN) carry their modifier
 bitset in the legacy encoding (`CSI 5;6~` = ctrl+shift+pgup), so chords like
 `ctrl+shift+pgup` are **delivered** (`csiParamEncoded` in `reachability.go`).
 The C0-mapped keys (enter, tab, space, esc, backspace) are not exempt.
+
+The `ctrl+fN` rule (#1374) makes `Classify` platform-aware for the first time
+(it reads `keymap.GOOS`): Ghostty's Terminal Inspector confirmed plain
+ctrl+F-keys never reach the terminal on macOS, while `opt+F[x]` and `cmd+F[x]`
+are delivered. Consequently the run/debug F-key family ships **both** forms —
+the JetBrains-macOS cmd chord as the darwin primary and the Windows-scheme
+ctrl chord alongside (`cmd+f8`/`ctrl+f8` toggle breakpoint,
+`cmd+f2`/`ctrl+f2` stop, `cmd+f5`/`ctrl+f5` rerun,
+`cmd+f1`/`ctrl+f1` diagnostic under caret; JetBrains' macOS Rerun `cmd+r` is
+taken by `editor.replace`, so rerun keeps the F5 position). Off macOS both
+rows fold onto the ctrl chord. The status matrix below is generated on a
+darwin build, so those rows honestly read fragile-with-palette-fallback; a
+Linux build classifies the ctrl forms delivered.
 | **undetectable** | invisible to key-press events | bare-modifier taps (`shift shift` — needs key-up reporting) |
 
 Multi-step chords take the worst class of their steps.
@@ -454,8 +467,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.stepInto` | `f7` | delivered | `—` | live |
 | `debug.stepOut` | `shift+f8` | delivered | `—` | live |
 | `debug.stepOver` | `f8` | delivered | `—` | live |
-| `debug.stop` | `ctrl+f2` | delivered | `—` | live |
-| `debug.toggleBreakpoint` | `ctrl+f8` | delivered | `—` | live |
+| `debug.stop` | `cmd+f2` | fragile | `palette / Run menu` | live via palette / Run menu |
+| `debug.toggleBreakpoint` | `cmd+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
 | `editor.caret.addAll` | `ctrl+shift+g` | fragile | `palette` | live via palette |
@@ -499,11 +512,11 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
-| `http.run` | `cmd+enter` | fragile | `ctrl+f9` | live via ctrl+f9 |
+| `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |
-| `lsp.diagnosticInfo` | `ctrl+f1` | delivered | `—` | live |
+| `lsp.diagnosticInfo` | `cmd+f1` | fragile | `palette` | live via palette |
 | `lsp.documentSymbols` | `cmd+f12` | fragile | `palette (or the cmd+3 Structure panel)` | live via palette (or the cmd+3 Structure panel) |
 | `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
@@ -542,7 +555,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `run.file` | `shift+f10` | delivered | `—` | live |
-| `run.rerun` | `ctrl+f5` | delivered | `—` | live |
+| `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.testAtCursor` | `ctrl+shift+f10` | delivered | `—` | live |
 | `scratch.new` | `cmd+shift+n` | fragile | `palette` | live via palette |
 | `search.nextMatch` | `f3` | delivered | `—` | live |

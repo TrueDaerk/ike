@@ -142,6 +142,15 @@ var reachableAlternatives = map[string]string{
 	"lsp.peekDefinition":  "palette",
 	"lsp.referencesPanel": "palette",
 	"nav.bookmarks":       "palette",
+	// #1374: on darwin plain ctrl+F-keys are macOS system shortcuts (never
+	// delivered) and the cmd+F primaries need the Kitty protocol, so these
+	// commands have no delivered chord there; off macOS the ctrl forms
+	// deliver and these entries go unused.
+	"debug.stop":             "palette / Run menu",
+	"debug.toggleBreakpoint": "palette / Run menu",
+	"run.rerun":              "palette / Run menu",
+	"lsp.diagnosticInfo":     "palette",
+	"http.run":               "palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists
