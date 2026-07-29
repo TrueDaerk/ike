@@ -209,6 +209,14 @@ dead adapter is diagnosable from the notification alone.
   counter (`dbgLaunchGen`), and toasts "launch cancelled"; the deferred
   post-install retry carries the generation it was started under and is
   dropped on mismatch, so no session starts after the install resolves.
+  Stop teardown is fully non-blocking (#1375): the pipe terminal's
+  `FinishPipe` repaint send is asynchronous (a synchronous `Program.Send`
+  from the Update goroutine self-deadlocks — the event loop is the only
+  receiver and is busy executing Update), and the PHP bridge's polite
+  `detach`/`stop` DBGp round trips during shutdown are bounded
+  (`teardownTimeout`, 5s): an engine that never answers — DBGp processes no
+  commands mid-run — gets its connection force-closed, which releases every
+  pending call.
 - Session state lives in a `debugState` behind a pointer on the root model:
   thread id, paused flag, the current stack frames, and the debuggee's DAP
   `output` events (rendered by the debuggee terminal pane, #1370).
