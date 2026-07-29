@@ -96,6 +96,10 @@ type Model struct {
 	// sel is the mouse text selection (#1266), see selection.go.
 	sel selection
 
+	// sbGrab is the in-thumb grab offset of a scrollbar drag (#1367), see
+	// scrollbar.go.
+	sbGrab int
+
 	// pending marks a dispatch in flight (#1272): the shown response is the
 	// previous one, so the header says so rather than presenting stale
 	// content as the current answer. pendingSince drives the elapsed time.
@@ -623,10 +627,18 @@ func (m *Model) View() string {
 		b.WriteString(lipgloss.NewStyle().Faint(true).Render(" " + m.emptyText()))
 		b.WriteString(strings.Repeat("\n", height))
 	} else {
+		body := make([]string, 0, height)
 		for k := 0; k < height; k++ {
+			line := ""
 			if i := m.rowAt(m.top + k); i >= 0 {
-				b.WriteString(m.renderRow(pal, i))
+				line = m.renderRow(pal, i)
 			}
+			body = append(body, line)
+		}
+		// The scrollbar (#1367) overlays the rightmost column when the
+		// composed view overflows the viewport.
+		for _, line := range m.overlayScrollbar(body) {
+			b.WriteString(line)
 			b.WriteString("\n")
 		}
 	}

@@ -485,7 +485,8 @@ to the horizontal window with `ansi.Cut`, so long names and deep nesting scroll
 sideways instead of wrapping.
 
 Each bar is a dim track (`│` / `─`) with a brighter, heavier thumb (`┃` / `━`)
-sized and positioned by `scrollThumb`, in the style of table TUIs. Bars are
+sized and positioned by the shared `scrollbar.Thumb` (`internal/scrollbar`,
+#1367), in the style of table TUIs. Bars are
 hidden when the content fits.
 
 **Cursor-anchored clamping is intentional (#1140).** A wheel scroll
