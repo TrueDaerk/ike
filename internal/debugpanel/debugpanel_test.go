@@ -93,7 +93,7 @@ func TestScopesAndVariableExpansion(t *testing.T) {
 }
 
 // TestViewStates covers the running and empty placeholders: the frames column
-// shows them, but the columns (OUTPUT above all) render in every state (#637).
+// shows them, the columns render in every state (#637).
 func TestViewStates(t *testing.T) {
 	m := New(nil)
 	m.SetSize(60, 6)
@@ -101,16 +101,13 @@ func TestViewStates(t *testing.T) {
 	if !strings.Contains(v, "not paused") {
 		t.Fatalf("empty panel must show the placeholder:\n%s", v)
 	}
-	if !strings.Contains(v, "OUTPUT") {
-		t.Fatalf("OUTPUT column must render without frames:\n%s", v)
-	}
 	m.SetFrames(frames())
 	if !strings.Contains(m.View(), "FRAMES") || !strings.Contains(m.View(), "VARIABLES") {
 		t.Fatal("panel must render the columns")
 	}
 	m.SetRunning()
 	v = m.View()
-	if !strings.Contains(v, "running") || !strings.Contains(v, "OUTPUT") {
+	if !strings.Contains(v, "running") || !strings.Contains(v, "VARIABLES") {
 		t.Fatalf("running state must keep the columns with a placeholder:\n%s", v)
 	}
 }
@@ -163,108 +160,77 @@ func TestStaleDataWhileRunning(t *testing.T) {
 	}
 }
 
-// TestColumnResize (#691): the two separators hit-test at their rendered x,
-// dragging moves them proportionally with min-width clamping, and untouched
-// panels keep the built-in proportions.
+// TestColumnResize (#691): the separator hit-tests at its rendered x,
+// dragging moves it with min-width clamping, and untouched panels keep the
+// built-in proportions.
 func TestColumnResize(t *testing.T) {
 	m := New(nil)
-	m.SetSize(102, 8) // usable 100: defaults 40 | 30 | 30
-	fw, vw, ow := m.colWidths()
-	if fw != 40 || vw != 30 || ow != 30 {
-		t.Fatalf("default widths = %d/%d/%d, want 40/30/30", fw, vw, ow)
+	m.SetSize(101, 8) // usable 100: defaults 40 | 60
+	fw, vw := m.colWidths()
+	if fw != 40 || vw != 60 {
+		t.Fatalf("default widths = %d/%d, want 40/60", fw, vw)
 	}
-	if m.SeparatorHit(fw) != 0 || m.SeparatorHit(fw+1+vw) != 1 {
-		t.Fatal("separators must hit-test at their rendered columns")
+	if m.SeparatorHit(fw) != 0 {
+		t.Fatal("separator must hit-test at its rendered column")
 	}
 	if m.SeparatorHit(fw-1) != -1 || m.SeparatorHit(fw+1) != -1 {
 		t.Fatal("column interiors must not hit-test as separators")
 	}
-	// Drag the first separator right: frames grow, output untouched.
+	// Drag the separator right: frames grow, vars shrink.
 	m.ResizeSeparator(0, 60)
-	fw, vw, _ = m.colWidths()
-	if fw != 60 {
-		t.Fatalf("frames = %d after drag, want 60", fw)
+	fw, vw = m.colWidths()
+	if fw != 60 || vw != 40 {
+		t.Fatalf("widths = %d/%d after drag, want 60/40", fw, vw)
 	}
-	// Drag the second separator far left: vars clamp to the minimum.
-	m.ResizeSeparator(1, fw+1)
-	if _, vw, _ = m.colWidths(); vw != minColWidth {
-		t.Fatalf("vars = %d after clamped drag, want %d", vw, minColWidth)
+	// Drag far right: vars clamp to the minimum.
+	m.ResizeSeparator(0, 500)
+	if fw, vw = m.colWidths(); vw != minColWidth || fw != 100-minColWidth {
+		t.Fatalf("widths = %d/%d after clamped drag, want %d/%d", fw, vw, 100-minColWidth, minColWidth)
 	}
 	// Proportions stick across a panel resize instead of snapping back.
-	m.SetSize(52, 8)
-	fw, vw, ow = m.colWidths()
-	if fw <= vw || vw < minColWidth || ow < minColWidth {
-		t.Fatalf("resized widths = %d/%d/%d, want proportional with minima", fw, vw, ow)
+	m.ResizeSeparator(0, 60)
+	m.SetSize(51, 8) // usable 50
+	fw, vw = m.colWidths()
+	if fw != 30 || vw != 20 {
+		t.Fatalf("resized widths = %d/%d, want 30/20 (proportional)", fw, vw)
 	}
 	// A drag on a too-narrow panel is ignored rather than corrupting state.
-	m.SetSize(20, 8)
-	before := m
-	m.ResizeSeparator(0, 15)
-	if m.colFW != before.colFW || m.colVW != before.colVW {
+	m.SetSize(16, 8)
+	before := m.colFW
+	m.ResizeSeparator(0, 12)
+	if m.colFW != before {
 		t.Fatal("a drag below the minimum panel width must be a no-op")
 	}
 }
 
-// TestResizeNoDrift (#695): repeated motion events on one separator must
-// leave the untouched column bit-for-bit stable — no integer-rounding drift —
-// and dragging sep0 right clamps once output reaches its minimum, keeping the
-// pushed right separator on screen.
+// TestResizeNoDrift (#695): repeated motion events on the separator store the
+// dragged width in exact cells — wiggling it never accumulates rounding error.
 func TestResizeNoDrift(t *testing.T) {
 	m := New(nil)
-	m.SetSize(102, 8) // usable 100: defaults 40 | 30 | 30
-	// Wiggle sep0 many times: vars must never change.
+	m.SetSize(101, 8) // usable 100
 	for i := 0; i < 50; i++ {
-		m.ResizeSeparator(0, 41+i%3)
-		if _, vw, _ := m.colWidths(); vw != 30 {
-			t.Fatalf("vars drifted to %d while dragging sep0 (iteration %d)", vw, i)
+		m.ResizeSeparator(0, 41)
+		fw, _ := m.colWidths()
+		if fw != 41 {
+			t.Fatalf("frames drifted to %d (iteration %d)", fw, i)
 		}
-	}
-	// Wiggle sep1: frames must never change.
-	fw0, _, _ := m.colWidths()
-	for i := 0; i < 50; i++ {
-		m.ResizeSeparator(1, fw0+10+i%3)
-		if fw, _, _ := m.colWidths(); fw != fw0 {
-			t.Fatalf("frames drifted to %d while dragging sep1 (iteration %d)", fw, i)
-		}
-	}
-	// Pushing sep0 far right shoves sep1 along but clamps at output's
-	// minimum: both separators stay visible.
-	m.ResizeSeparator(1, fw0+1+30) // vars back to 30
-	m.ResizeSeparator(0, 500)
-	fw, vw, ow := m.colWidths()
-	if ow != minColWidth {
-		t.Fatalf("output = %d after max push, want %d", ow, minColWidth)
-	}
-	if vw != 30 {
-		t.Fatalf("vars = %d after max push, want 30 (right separator follows)", vw)
-	}
-	if fw != 100-30-minColWidth {
-		t.Fatalf("frames = %d after max push, want %d", fw, 100-30-minColWidth)
 	}
 }
 
 // TestFinishedState (#689): a terminated session keeps the panel usable — the
-// FRAMES column shows the exit status, output stays rendered, and a new
-// session's ResetSession clears both.
+// FRAMES column shows the exit status, and a new session's ResetSession
+// clears it (output review lives in the debuggee terminal pane, #1370).
 func TestFinishedState(t *testing.T) {
 	m := New(nil)
 	m.SetSize(120, 8)
 	m.SetFrames(frames())
-	m.AppendOutput(false, "final words\n")
 	m.SetFinished(3, true)
 	v := m.View()
 	if !strings.Contains(v, "finished (exit code 3)") {
 		t.Fatalf("finished state must show the exit code:\n%s", v)
 	}
-	if !strings.Contains(v, "final words") {
-		t.Fatalf("finished state must keep the output visible:\n%s", v)
-	}
 	if !m.Finished() {
 		t.Fatal("Finished() must report the terminated session")
-	}
-	m.AppendOutput(false, "trailing flush\n")
-	if v := m.View(); !strings.Contains(v, "trailing flush") {
-		t.Fatalf("trailing output must still append while finished:\n%s", v)
 	}
 	m.SetFinished(0, false)
 	if v := m.View(); !strings.Contains(v, "finished") || strings.Contains(v, "exit code") {
@@ -272,27 +238,8 @@ func TestFinishedState(t *testing.T) {
 	}
 	m.ResetSession()
 	v = m.View()
-	if m.Finished() || strings.Contains(v, "finished") || strings.Contains(v, "final words") {
-		t.Fatalf("ResetSession must clear the finished marker and old output:\n%s", v)
-	}
-}
-
-// TestOutputVisibleWhileRunning guards #637's headline defect: output streams
-// exactly while the debuggee runs (or before the first stop), so the OUTPUT
-// column must render it in both states.
-func TestOutputVisibleWhileRunning(t *testing.T) {
-	m := New(nil)
-	m.SetSize(120, 8)
-	m.AppendOutput(false, "before first stop\n")
-	if v := m.View(); !strings.Contains(v, "before first stop") {
-		t.Fatalf("output not rendered without frames:\n%s", v)
-	}
-	m.SetFrames(frames())
-	m.SetRunning()
-	m.AppendOutput(false, "while running\n")
-	v := m.View()
-	if !strings.Contains(v, "before first stop") || !strings.Contains(v, "while running") {
-		t.Fatalf("output not rendered while running:\n%s", v)
+	if m.Finished() || strings.Contains(v, "finished") {
+		t.Fatalf("ResetSession must clear the finished marker:\n%s", v)
 	}
 }
 
@@ -534,7 +481,7 @@ func TestEditorRowWindowedToColumn(t *testing.T) {
 	if !m.Editing() {
 		t.Fatal("precondition: editor open")
 	}
-	_, vw, _ := m.colWidths()
+	_, vw := m.colWidths()
 	for i, row := range m.renderVars(vw) {
 		if got := lipgloss.Width(row); got > vw {
 			t.Fatalf("row %d width = %d, exceeds column width %d", i, got, vw)
@@ -545,84 +492,6 @@ func TestEditorRowWindowedToColumn(t *testing.T) {
 	rows := m.renderVars(vw)
 	if got := StripANSI(rows[2]); !strings.HasSuffix(got, "abcdefghij ") {
 		t.Fatalf("editor row must window to the cursor at the tail, got %q", got)
-	}
-}
-
-// TestAppendOutputSplitsLinesAndPartials verifies output chunking: complete
-// lines are stored, an incomplete trailing chunk is held as a partial until its
-// newline arrives, and stderr is tagged.
-func TestAppendOutputSplitsLinesAndPartials(t *testing.T) {
-	m := New(nil)
-	m.SetSize(90, 10)
-	m.AppendOutput(false, "hello\nwor")
-	m.AppendOutput(false, "ld\n")
-	m.AppendOutput(true, "boom\n")
-	rows := m.outputRows()
-	if len(rows) != 3 {
-		t.Fatalf("rows = %d (%+v), want 3", len(rows), rows)
-	}
-	if rows[0].text != "hello" || rows[1].text != "world" {
-		t.Fatalf("lines = %q,%q", rows[0].text, rows[1].text)
-	}
-	if !rows[2].stderr || rows[2].text != "boom" {
-		t.Fatalf("stderr line = %+v", rows[2])
-	}
-}
-
-// TestOutputScrollFollow verifies auto-follow (#637): appends pin the view to
-// the newest line, a manual scroll up holds the position across appends, and
-// scrolling back to the bottom resumes following.
-func TestOutputScrollFollow(t *testing.T) {
-	m := New(nil)
-	m.SetSize(90, 4) // bodyHeight = 3
-	for i := 0; i < 10; i++ {
-		m.AppendOutput(false, "line\n")
-	}
-	if m.outTop != 7 { // 10 rows, 3 visible → pinned at 7
-		t.Fatalf("outTop = %d, want pinned at 7", m.outTop)
-	}
-	m.col = colOutput
-	m.Wheel(-2) // scroll up: unfollow
-	if m.outTop != 5 {
-		t.Fatalf("outTop = %d, want 5 after wheel-up", m.outTop)
-	}
-	m.AppendOutput(false, "more\n")
-	if m.outTop != 5 {
-		t.Fatalf("outTop = %d, append must not clobber a held scroll", m.outTop)
-	}
-	// Keyboard scroll behaves the same (j/k route through move → scrollOutput).
-	m.Update(key("j"))
-	m.AppendOutput(false, "again\n")
-	if m.outTop != 6 {
-		t.Fatalf("outTop = %d, want 6 held after keyboard scroll", m.outTop)
-	}
-	m.Wheel(100) // back to the bottom: refollow
-	m.AppendOutput(false, "tail\n")
-	if want := m.outputRowCount() - 3; m.outTop != want {
-		t.Fatalf("outTop = %d, want %d (following again)", m.outTop, want)
-	}
-}
-
-// TestAppendOutputSanitizes verifies ANSI escapes are stripped and \r/\t are
-// normalized before buffering (#637), including an escape split across chunks
-// within one line.
-func TestAppendOutputSanitizes(t *testing.T) {
-	m := New(nil)
-	m.SetSize(90, 10)
-	m.AppendOutput(false, "\x1b[31mred\x1b[0m text\n")
-	m.AppendOutput(false, "progress 1\rprogress 2\n")
-	m.AppendOutput(false, "a\tb\n")
-	m.AppendOutput(false, "split \x1b[3")
-	m.AppendOutput(false, "2mgreen\x1b[0m\n")
-	rows := m.outputRows()
-	want := []string{"red text", "progress 2", "a       b", "split green"}
-	if len(rows) != len(want) {
-		t.Fatalf("rows = %d (%+v), want %d", len(rows), rows, len(want))
-	}
-	for i, w := range want {
-		if rows[i].text != w {
-			t.Fatalf("row %d = %q, want %q", i, rows[i].text, w)
-		}
 	}
 }
 
@@ -642,17 +511,5 @@ func TestStripANSI(t *testing.T) {
 		if got := StripANSI(c.in); got != c.want {
 			t.Errorf("StripANSI(%q) = %q, want %q", c.in, got, c.want)
 		}
-	}
-}
-
-// TestOutputVisibleInView verifies the OUTPUT column renders the debuggee text.
-func TestOutputVisibleInView(t *testing.T) {
-	m := New(nil)
-	m.SetSize(120, 8)
-	m.SetFrames(frames())
-	m.AppendOutput(false, "computed 42\n")
-	v := m.View()
-	if !strings.Contains(v, "OUTPUT") || !strings.Contains(v, "computed 42") {
-		t.Fatalf("output not rendered:\n%s", v)
 	}
 }

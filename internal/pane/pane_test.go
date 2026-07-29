@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"ike/internal/host"
+	"ike/internal/terminal"
 )
 
 func newReg() *Registry { return NewRegistry(host.MapConfig{}) }
@@ -107,4 +108,19 @@ func TestKeysInsertionOrder(t *testing.T) {
 	if len(keys) != 3 || keys[0] != ExplorerKey || keys[1] != a || keys[2] != b {
 		t.Fatalf("keys order = %v", keys)
 	}
+}
+
+// TestDebugTerminalNeverReusedForRuns (#1370): the debuggee terminal pane is
+// excluded from run take-over even though nobody typed into it.
+func TestDebugTerminalNeverReusedForRuns(t *testing.T) {
+	r := newReg()
+	key := r.AddDebugTerminalFrom(terminal.NewPipe(r.MintTerminalKey(), 40, 6, nil))
+	inst := r.Get(key)
+	if inst == nil || !inst.IsDebugTerm() {
+		t.Fatal("AddDebugTerminalFrom must mark the instance as the debug terminal")
+	}
+	if got, _, _ := r.ReusableRunTerminal(); got != nil {
+		t.Fatal("a run must never take over the debuggee terminal pane")
+	}
+	r.Close(key)
 }

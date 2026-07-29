@@ -96,6 +96,9 @@ type Session struct {
 	cwd      string // live working directory from OSC 7 ("" until reported)
 	exitCode int
 	exited   bool
+	// pipeDone marks a pipe session (#1370) whose debuggee ended: the pane
+	// renders the dead view while the session stays open for trailing output.
+	pipeDone bool
 	closed   atomic.Bool
 	// mouseModes holds the DEC mouse-reporting modes the child currently has
 	// enabled (?9/?1000/…); non-empty means wheel events belong to the child.
@@ -162,6 +165,73 @@ func StartCommandSession(key string, argv []string, dir string, w, h int, extraE
 		return nil, fmt.Errorf("terminal: empty command")
 	}
 	return startSession(key, argv, true, dir, w, h, extraEnv, send)
+}
+
+// NewPipeSession builds a process-less session (#1370): the emulator, spool
+// and feed/write loops exist as usual, but no PTY and no child — bytes arrive
+// through FeedBytes instead of a read loop. The debug integration uses it to
+// show DAP `output` events in a real terminal pane (reflow, scrollback,
+// search) when the debuggee has no PTY of its own. argv is set to an empty
+// (non-nil) slice so the pane's dead view reports the exit code like a
+// command session; FinishPipe supplies it.
+func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
+	key = key + "#" + strconv.FormatUint(atomic.AddUint64(&sessSeq, 1), 10)
+	if w < 2 || h < 2 {
+		w, h = 80, 24
+	}
+	s := &Session{
+		key:  key,
+		em:   vt.NewSafeEmulator(w, h),
+		send: send,
+		w:    w, h: h,
+		argv: []string{},
+	}
+	s.mouseModes = make(map[ansi.Mode]struct{})
+	s.out = newSpool()
+	s.ioWG.Add(1)
+	s.wlWG.Add(1)
+	go s.feedLoop()
+	go s.writeLoop()
+	return s
+}
+
+// IsPipe reports whether the session is process-less (#1370): fed through
+// FeedBytes rather than a PTY.
+func (s *Session) IsPipe() bool { return s.ptmx == nil && s.cmd == nil }
+
+// FeedBytes spools raw bytes into the emulator — the pipe session's input
+// seam (#1370). A no-op on PTY-backed or finished sessions.
+func (s *Session) FeedBytes(b []byte) {
+	if !s.IsPipe() || s.closed.Load() || len(b) == 0 {
+		return
+	}
+	s.out.put(b)
+}
+
+// FinishPipe marks a pipe session's debuggee as ended (#1370): the exit
+// status is recorded (shown in the pane's dead view when hasCode) and the
+// pane renders the exited state — but the session stays open and feedable, so
+// output the adapter flushes past `terminated` still lands (#637). The
+// emulator only closes with the pane (or when a new session replaces it).
+func (s *Session) FinishPipe(exitCode int, hasCode bool) {
+	if !s.IsPipe() {
+		return
+	}
+	s.mu.Lock()
+	s.exitCode, s.exited = exitCode, hasCode
+	s.pipeDone = true
+	s.mu.Unlock()
+	if s.send != nil {
+		s.send(OutputMsg{Key: s.key}) // repaint with the dead view
+	}
+}
+
+// PipeDone reports whether FinishPipe ran: the pipe's debuggee ended, so the
+// pane renders the dead view even though the session itself stays open.
+func (s *Session) PipeDone() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pipeDone
 }
 
 // startSession is the shared spawn path; isCommand marks a program session.
@@ -376,7 +446,9 @@ func (s *Session) applyResizeLocked(w, h int) {
 		lines, tail := s.logicalLinesLocked(oldW, oldH)
 		s.w, s.h = w, h
 		s.lastResize = time.Now()
-		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+		if s.ptmx != nil {
+			_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+		}
 		s.em.Resize(w, h)
 		s.replayLocked(lines, tail, w)
 		// The replay rewrote everything at the new width; stale reserve rows
@@ -397,7 +469,9 @@ func (s *Session) applyResizeLocked(w, h int) {
 	}
 	s.w, s.h = w, h
 	s.lastResize = time.Now()
-	_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+	if s.ptmx != nil {
+		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+	}
 	s.em.Resize(w, h)
 	if h > oldH {
 		s.pullShrinkLocked(oldH, w, h)

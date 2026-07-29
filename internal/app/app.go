@@ -137,7 +137,11 @@ type Model struct {
 	// during the launching window bumps it, and the deferred post-install
 	// retry only fires when its message still carries the current generation.
 	dbgLaunchGen int
-	navSkip      bool
+	// dbgTermKey is the debuggee terminal pane's key (#1370), "" while none
+	// is open. It outlives the session (the output stays reviewable) and is
+	// reused by the next launch when the pane is still open.
+	dbgTermKey string
+	navSkip    bool
 	// ws manages the active workspace (Roadmap 0370, #776): the pane registry,
 	// the split tree and the terminal return-focus live behind it so a project
 	// switch can later swap the whole unit atomically. Focus is the registry's
@@ -529,7 +533,6 @@ const (
 	dragEditSelect                 // dragging a text selection inside an editor pane (#977)
 	dragEditScroll                 // dragging the editor scrollbar thumb (#1022)
 	dragExplScroll                 // dragging the explorer scrollbar thumb (#1036)
-	dragDebugTerm                  // dragging a selection in the debug panel's embedded terminal (#676)
 	dragDebugDiv                   // dragging a column separator inside the debug panel (#691)
 	dragHTTPSelect                 // dragging a text selection in the HTTP response pane (#1266)
 )
@@ -833,6 +836,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		m.dbg = extras.dbg
 		m.dbgLaunching = extras.dbgLaunching
 		m.dbgLaunchGen = extras.dbgLaunchGen
+		m.dbgTermKey = extras.dbgTermKey
 		resumed.Aux = nil
 	}
 	// restoreLayout replaces m.activeWS().Panes with a fresh registry that never saw the
@@ -871,6 +875,7 @@ type wsExtras struct {
 	dbg          *debugState
 	dbgLaunching bool
 	dbgLaunchGen int
+	dbgTermKey   string
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
@@ -1047,6 +1052,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton panel (0330)
 		} else if ids[key].Kind == "debug" {
 			continue // restored below as the empty singleton panel (#580)
+		} else if ids[key].Kind == "debugTerm" {
+			continue // dropped below: the debuggee terminal is session state (#1370)
 		} else if ids[key].Kind == "problems" {
 			continue // restored below as the empty singleton panel (#1024; fix #1157)
 		} else if ids[key].Kind == "structure" {
@@ -1087,9 +1094,30 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		first[path] = ed
 		return true
 	}
+	// The debuggee terminal pane (#1370) never resurrects — its content is
+	// session state, and restoring a shell in its place would be misleading.
+	// Its leaf is pruned; the next debug session recreates the pane beside
+	// the panel.
+	prunedTerm := map[string]bool{}
+	for _, key := range leaves {
+		if ids[key].Kind == "debugTerm" {
+			if pruned, ok := layout.Close(tree, key); ok {
+				tree = pruned
+				prunedTerm[key] = true
+			}
+		}
+	}
 	for _, key := range leaves {
 		if key == pane.ExplorerKey {
 			continue
+		}
+		if id := ids[key]; id.Kind == "debugTerm" {
+			if prunedTerm[key] {
+				continue // leaf pruned above (#1370)
+			}
+			// The sole leaf cannot be pruned; restore an empty editor so the
+			// layout stays consistent.
+			ids[key] = paneIdentity{Kind: "editor"}
 		}
 		if id := ids[key]; id.Kind == "terminal" {
 			// A terminal restores as a *fresh* shell in the saved position
@@ -4480,28 +4508,6 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.lastEsc = false
 			return m.routeKey(msg)
 		}
-		// A running debuggee terminal embedded in the debug panel's Output
-		// column takes keys raw like a terminal pane (#676): plain letters
-		// must reach the debuggee's stdin, not the keymap. shift+tab leaves
-		// the column (panel-side); the spatial focus moves leave the pane.
-		if m.debugPanelTermCapturing() {
-			m.lastEsc = false
-			if dir, ok := m.focusKeys[msg.String()]; ok {
-				m.FocusDir(dir)
-				return m, nil
-			}
-			// cmd+v pastes the system clipboard into the embedded debuggee
-			// terminal, mirroring the terminal-pane path (#727).
-			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta && k.Base == "v" {
-				if term := m.activeWS().Panes.FocusedInstance().Debug().Terminal(); term != nil {
-					if text := clipboardRead(); text != "" {
-						term.PasteText(text)
-					}
-				}
-				return m, nil
-			}
-			return m.routeKey(msg)
-		}
 		keys := msg.String()
 		if m.paletteKey != "" && keys == m.paletteKey {
 			m.lastEsc = false
@@ -6372,12 +6378,6 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.Explorer().ScrollbarDrag(ly)
 				}
 			}
-		case dragDebugTerm:
-			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
-					inst.Debug().TermDrag(lx, ly)
-				}
-			}
 		case dragDebugDiv:
 			if lx, _, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
@@ -6433,14 +6433,6 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragExplScroll:
 			m.drag = nil
 			return m, nil // the tree already followed the thumb; nothing to commit
-		case dragDebugTerm:
-			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDebug {
-					inst.Debug().TermRelease(lx, ly)
-				}
-			}
-			m.drag = nil
-			return m, nil // a selection drag never moved the layout
 		case dragDebugDiv:
 			m.drag = nil
 			return m, nil // column ratios are panel-local, nothing to persist
@@ -6999,17 +6991,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	case pane.KindDebug:
 		// Debug-panel clicks (#626): select a frame/variable, double-click to
 		// activate (frame select / variable expand); messages route like keys.
-		// A press on the embedded debuggee terminal (#676) also tracks a
-		// selection drag, like a terminal pane.
 		if msg.Button == tea.MouseLeft {
-			// A press on a column separator starts a resize drag (#691),
+			// A press on the column separator starts a resize drag (#691),
 			// mirroring the layout divider gesture; it never selects a row.
 			if sep := inst.Debug().SeparatorHit(localX); sep >= 0 {
 				m.drag = &dragState{kind: dragDebugDiv, srcPane: key, sep: sep, curX: msg.X, curY: msg.Y}
 				return m, nil
-			}
-			if inst.Debug().OutputTermHit(localX, localY) {
-				m.drag = &dragState{kind: dragDebugTerm, srcPane: key, curX: msg.X, curY: msg.Y}
 			}
 			return m, inst.Debug().Click(localX, localY)
 		}

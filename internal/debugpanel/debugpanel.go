@@ -3,7 +3,8 @@
 // DAP session, following the vcspanel component pattern. The panel is pure
 // view/state — data arrives through setters, and user intents (select a
 // frame, expand a variable) leave as messages the app resolves against the
-// live session.
+// live session. Debuggee output lives in its own terminal pane beside the
+// panel (#1370) — the former Output column is gone.
 package debugpanel
 
 import (
@@ -15,7 +16,6 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/dap"
-	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -41,18 +41,7 @@ type column int
 const (
 	colFrames column = iota
 	colVars
-	colOutput
 )
-
-// maxOutputLines caps the retained debuggee output so a chatty program cannot
-// grow the panel's memory without bound (#624).
-const maxOutputLines = 5000
-
-// outLine is one line of debuggee output, tagged with its stream.
-type outLine struct {
-	text   string
-	stderr bool
-}
 
 // varNode is one row of the variables tree.
 type varNode struct {
@@ -83,33 +72,18 @@ type Model struct {
 	col     column
 	running bool // true between steps (no paused data to show)
 
-	// User-dragged column widths in cells (#691); zero means the built-in
-	// defaults. Stored exact — not as re-encoded fractions — so the column a
-	// drag does not touch never drifts (#695). SetSize rescales them
-	// proportionally via lastUsable. Session-local, like scroll.
+	// User-dragged frames-column width in cells (#691); zero means the
+	// built-in default. Stored exact — not as a re-encoded fraction — so it
+	// never drifts (#695). SetSize rescales it proportionally via lastUsable.
+	// Session-local, like scroll.
 	colFW      int
-	colVW      int
 	lastUsable int
 
-	// finished marks a terminated session (#689): the panel stays open so the
-	// Output column remains reviewable; frames show the exit status instead.
+	// finished marks a terminated session (#689): the panel stays open beside
+	// the debuggee's terminal pane; frames show the exit status instead.
 	finished bool
 	exitCode int
 	hasExit  bool
-
-	// Debuggee output (#624): completed lines plus a pending partial (DAP
-	// output events can split mid-line); outTop is the scroll offset. outHold
-	// is set by a manual scroll away from the bottom (#637): while held,
-	// AppendOutput stops re-pinning outTop; scrolling back to the bottom
-	// releases it (auto-follow resumes).
-	outLines   []outLine
-	outPartial outLine
-	outTop     int
-	outHold    bool
-
-	// term is the embedded debuggee terminal (#676): while set, its PTY view
-	// replaces the DAP output rows in the Output column (see terminal.go).
-	term *terminal.Model
 
 	// Mouse double-click tracking (#626), mirroring the vcs panel; now is
 	// injectable so tests drive the clock.
@@ -132,32 +106,22 @@ type Model struct {
 // New returns an empty panel.
 func New(pal *theme.Palette) Model { return Model{pal: pal, now: time.Now} }
 
-// SetSize records the pane's interior size and refits the embedded terminal.
-// User-dragged column widths rescale proportionally — the only place they are
-// converted, so drags themselves stay drift-free (#695).
+// SetSize records the pane's interior size. A user-dragged column width
+// rescales proportionally — the only place it is converted, so drags
+// themselves stay drift-free (#695).
 func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
-	if usable := w - 2; m.colFW > 0 && m.lastUsable > 0 && usable > 0 && usable != m.lastUsable {
+	if usable := w - 1; m.colFW > 0 && m.lastUsable > 0 && usable > 0 && usable != m.lastUsable {
 		m.colFW = m.colFW * usable / m.lastUsable
-		m.colVW = m.colVW * usable / m.lastUsable
 		m.lastUsable = usable
 	}
-	m.sizeTerminal()
 }
 
 // SetFocused records focus.
-func (m *Model) SetFocused(f bool) {
-	m.focused = f
-	m.syncTermFocus()
-}
+func (m *Model) SetFocused(f bool) { m.focused = f }
 
 // SetPalette re-threads the theme palette.
-func (m *Model) SetPalette(p *theme.Palette) {
-	m.pal = p
-	if m.term != nil {
-		m.term.SetPalette(p)
-	}
-}
+func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 
 // SetEditable records whether the adapter supports setVariable (#627); when
 // false, the edit affordance is disabled.
@@ -165,63 +129,6 @@ func (m *Model) SetEditable(v bool) { m.canEdit = v }
 
 // Editable reports the recorded setVariable capability (#640).
 func (m Model) Editable() bool { return m.canEdit }
-
-// AppendOutput appends a debuggee output chunk (#624), splitting it into lines
-// and carrying an incomplete trailing line as a pending partial (DAP output
-// events can split mid-line). Completed lines are sanitized (ANSI/\r/\t, #637)
-// — the partial stays raw so an escape split across chunks is stripped whole
-// once its line completes. The view stays pinned to the newest output unless
-// the user scrolled away (outHold).
-func (m *Model) AppendOutput(stderr bool, text string) {
-	if text == "" {
-		return
-	}
-	// A stream switch mid-line flushes the pending partial as its own line.
-	if m.outPartial.text != "" && m.outPartial.stderr != stderr {
-		m.outLines = append(m.outLines, outLine{text: sanitizeLine(m.outPartial.text), stderr: m.outPartial.stderr})
-		m.outPartial = outLine{}
-	}
-	parts := strings.Split(m.outPartial.text+text, "\n")
-	for _, p := range parts[:len(parts)-1] {
-		m.outLines = append(m.outLines, outLine{text: sanitizeLine(p), stderr: stderr})
-	}
-	m.outPartial = outLine{text: parts[len(parts)-1], stderr: stderr}
-	if len(m.outLines) > maxOutputLines {
-		m.outLines = m.outLines[len(m.outLines)-maxOutputLines:]
-	}
-	if !m.outHold {
-		m.outTop = max(0, m.outputRowCount()-m.bodyHeight()) // follow the newest
-	}
-}
-
-// outputRowCount is the number of visible output rows (completed lines plus a
-// non-empty pending partial).
-func (m Model) outputRowCount() int {
-	n := len(m.outLines)
-	if m.outPartial.text != "" {
-		n++
-	}
-	return n
-}
-
-// outputRows returns the output as display lines including the pending
-// partial, sanitized for display (its stored text stays raw, see AppendOutput).
-func (m Model) outputRows() []outLine {
-	if m.outPartial.text == "" {
-		return m.outLines
-	}
-	p := outLine{text: sanitizeLine(m.outPartial.text), stderr: m.outPartial.stderr}
-	return append(append([]outLine(nil), m.outLines...), p)
-}
-
-// scrollOutput shifts the output scroll offset by delta, clamped, and tracks
-// auto-follow (#637): moving away from the bottom holds the view in place,
-// returning to the bottom resumes following new output.
-func (m *Model) scrollOutput(delta int) {
-	maxTop := max(0, m.outputRowCount()-m.bodyHeight())
-	m.outTop = clamp(m.outTop+delta, 0, maxTop)
-	m.outHold = m.outTop < maxTop
-}
 
 // Editing reports whether an inline value editor is open, so the app routes
 // every key to the panel instead of the global keymap.
@@ -261,9 +168,9 @@ func (m *Model) SetRunning() {
 	m.cancelEdit()
 }
 
-// SetFinished marks the session as terminated (#689): paused data is cleared
-// but the output (text lines or the embedded terminal's scrollback) stays for
-// review until the user closes the panel or a new session resets it.
+// SetFinished marks the session as terminated (#689): paused data is cleared;
+// the debuggee's output stays reviewable in its terminal pane (#1370) until
+// the user closes it or a new session resets it.
 func (m *Model) SetFinished(exitCode int, hasCode bool) {
 	m.finished = true
 	m.exitCode = exitCode
@@ -279,9 +186,9 @@ func (m *Model) SetFinished(exitCode int, hasCode bool) {
 // Finished reports whether the panel shows a terminated session.
 func (m Model) Finished() bool { return m.finished }
 
-// ResetSession clears everything a previous session left behind — finished
-// marker, output lines, and the embedded terminal — for a fresh launch that
-// reuses the still-open panel (#689).
+// ResetSession clears everything a previous session left behind — the
+// finished marker and stale frames/variables — for a fresh launch that reuses
+// the still-open panel (#689).
 func (m *Model) ResetSession() {
 	m.finished = false
 	m.hasExit = false
@@ -291,11 +198,6 @@ func (m *Model) ResetSession() {
 	m.roots = nil
 	m.frameSel, m.varSel = 0, 0
 	m.frameTop, m.varTop = 0, 0
-	m.outLines = nil
-	m.outPartial = outLine{}
-	m.outTop = 0
-	m.outHold = false
-	m.CloseTerminal()
 	m.cancelEdit()
 }
 
@@ -378,22 +280,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if m.editing {
 		return m.editKey(k)
 	}
-	// The Output column with an embedded terminal has its own key routing
-	// (#676): a running debuggee takes keys raw, an exited one restores the
-	// panel's navigation (see terminal.go).
-	if m.col == colOutput && m.term != nil {
-		return m.outputTermKey(k)
-	}
 	switch k.String() {
 	case "tab", "l", "right":
-		if m.col < colOutput {
+		if m.col < colVars {
 			m.col++
-			m.syncTermFocus()
 		}
 	case "h", "left":
 		if m.col > colFrames {
 			m.col--
-			m.syncTermFocus()
 		}
 	case "j", "down":
 		m.move(1)
@@ -477,8 +371,6 @@ func (m *Model) move(delta int) {
 	case colFrames:
 		m.frameSel = clamp(m.frameSel+delta, 0, len(m.frames)-1)
 		m.frameTop = scrollToShow(m.frameTop, m.frameSel, m.bodyHeight(), len(m.frames))
-	case colOutput:
-		m.scrollOutput(delta)
 	default:
 		m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
 		m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
@@ -554,53 +446,46 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
-// View renders the three columns side by side: frames, variables, output. The
-// columns render in every state (#637) — while the debuggee runs or before the
-// first stop the frames column shows a placeholder, but the OUTPUT column keeps
-// streaming: that is exactly when output arrives.
+// View renders the two columns side by side: frames, variables. The columns
+// render in every state (#637) — while the debuggee runs or before the first
+// stop the frames column shows a placeholder.
 func (m Model) View() string {
 	if m.w < 4 || m.h < 1 {
 		return ""
 	}
-	fw, vw, ow := m.colWidths()
+	fw, vw := m.colWidths()
 	frames := m.renderFrames(fw)
 	vars := m.renderVars(vw)
-	output := m.renderOutput(ow)
 	sep := lipgloss.NewStyle().Foreground(m.theme().Border).Render("│")
 	rows := make([]string, 0, m.h)
 	for i := 0; i < m.h; i++ {
-		rows = append(rows, pad(rowAt(frames, i), fw)+sep+pad(rowAt(vars, i), vw)+sep+rowAt(output, i))
+		rows = append(rows, pad(rowAt(frames, i), fw)+sep+rowAt(vars, i))
 	}
 	return strings.Join(rows, "\n")
 }
 
-// colWidths splits the interior into frames | variables | output, reserving one
-// cell for each of the two separators.
+// colWidths splits the interior into frames | variables, reserving one cell
+// for the separator.
 // minColWidth is the smallest width a column may be dragged to (#691),
 // mirroring the layout tree's minCell idea so no column collapses.
 const minColWidth = 8
 
-func (m Model) colWidths() (frames, vars, output int) {
-	usable := m.w - 2 // two separators
-	if usable < 3 {
-		usable = 3
+func (m Model) colWidths() (frames, vars int) {
+	usable := m.w - 1 // one separator
+	if usable < 2 {
+		usable = 2
 	}
-	if m.colFW > 0 && m.colVW > 0 {
-		// User-adjusted widths (#691), exact cells (#695), clamped so every
-		// column keeps its minimum where space allows.
-		frames = clampCol(m.colFW, usable-2*minColWidth)
-		vars = clampCol(m.colVW, usable-frames-minColWidth)
-		output = usable - frames - vars
-		return frames, vars, output
+	if m.colFW > 0 {
+		// A user-adjusted width (#691), exact cells (#695), clamped so the
+		// variables column keeps its minimum where space allows.
+		frames = clampCol(m.colFW, usable-minColWidth)
+		return frames, usable - frames
 	}
 	frames = usable * 2 / 5
 	if frames < 12 {
-		frames = min(12, usable/3)
+		frames = min(12, usable/2)
 	}
-	rest := usable - frames
-	vars = rest / 2
-	output = rest - vars
-	return frames, vars, output
+	return frames, usable - frames
 }
 
 // clampCol bounds a dragged column width to [minColWidth, max]; a panel too
@@ -612,45 +497,29 @@ func clampCol(w, max int) int {
 	return clamp(w, minColWidth, max)
 }
 
-// SeparatorHit reports which column separator sits at content-local x
-// (0 = frames│vars, 1 = vars│output, -1 = none), so the app can start a
-// resize drag (#691) instead of a row click.
+// SeparatorHit reports whether content-local x sits on the frames│variables
+// separator (0) or not (-1), so the app can start a resize drag (#691)
+// instead of a row click.
 func (m Model) SeparatorHit(x int) int {
-	fw, vw, _ := m.colWidths()
-	switch x {
-	case fw:
+	fw, _ := m.colWidths()
+	if x == fw {
 		return 0
-	case fw + 1 + vw:
-		return 1
 	}
 	return -1
 }
 
-// ResizeSeparator drags separator sep to content-local x (#691). Widths are
-// stored in exact cells so the untouched column never drifts (#695):
-//   - sep 0 (frames│vars): the variables column keeps its width — the right
-//     separator follows by the same amount, frames trade with output. The
-//     push clamps when output reaches minColWidth, so the right separator
-//     always stays on screen.
-//   - sep 1 (vars│output): the left separator stays put — variables trade
-//     with output.
+// ResizeSeparator drags the frames│variables separator to content-local x
+// (#691). The width is stored in exact cells so it never drifts (#695).
 func (m *Model) ResizeSeparator(sep, x int) {
-	fw, vw, _ := m.colWidths()
-	usable := m.w - 2
-	if usable < 3*minColWidth {
+	if sep != 0 {
 		return
 	}
-	switch sep {
-	case 0:
-		fw = clamp(x, minColWidth, usable-vw-minColWidth)
-	case 1:
-		vw = clamp(x-fw-1, minColWidth, usable-fw-minColWidth)
-	default:
+	usable := m.w - 1
+	if usable < 2*minColWidth {
 		return
 	}
-	m.colFW, m.colVW = fw, vw
+	m.colFW = clamp(x, minColWidth, usable-minColWidth)
 	m.lastUsable = usable
-	m.sizeTerminal()
 }
 
 func rowAt(rows []string, i int) string {
@@ -662,7 +531,7 @@ func rowAt(rows []string, i int) string {
 
 // renderFrames renders the stack rows, selection highlighted. With no paused
 // data (running, or no stop yet) a placeholder row stands in (#637) — the
-// other columns render regardless.
+// other column renders regardless.
 func (m Model) renderFrames(w int) []string {
 	title := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Render(" FRAMES")
 	out := []string{title}
@@ -773,42 +642,6 @@ func (m Model) renderVars(w int) []string {
 			}
 		}
 		out = append(out, style.Render(label))
-	}
-	return out
-}
-
-// renderOutput renders the debuggee's captured stdout/stderr (#624); stderr
-// lines take the error tone.
-func (m Model) renderOutput(w int) []string {
-	title := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true).Render(" OUTPUT")
-	out := []string{title}
-	// An embedded debuggee terminal wins over the DAP output rows (#676): its
-	// grid is already sized to the column, so its lines splice in verbatim.
-	if m.term != nil {
-		for _, ln := range strings.Split(m.term.View(), "\n") {
-			if len(out) >= m.h {
-				break
-			}
-			out = append(out, ln)
-		}
-		return out
-	}
-	dim := lipgloss.NewStyle().Foreground(m.theme().Foreground)
-	errStyle := lipgloss.NewStyle().Foreground(m.theme().Error)
-	rows := m.outputRows()
-	// Clamp against the current size: output may have been appended before the
-	// panel was sized (flush-on-open), leaving outTop pinned past the content.
-	top := clamp(m.outTop, 0, max(0, len(rows)-m.bodyHeight()))
-	for i := top; i < len(rows); i++ {
-		if len(out) >= m.h {
-			break
-		}
-		ln := rows[i]
-		style := dim
-		if ln.stderr {
-			style = errStyle
-		}
-		out = append(out, style.Render(truncate(" "+ln.text, w)))
 	}
 	return out
 }

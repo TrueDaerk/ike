@@ -1,5 +1,26 @@
 # Log
 
+## 2026-07-29 (theme: debug pane pair — real terminal pane for the debuggee)
+
+- The debug panel split into two real panes (#1370): the singleton panel keeps
+  frames + variables (two columns, one draggable separator), and the debuggee's
+  output moved into a **real terminal pane** opened directly to its right on
+  session start — independently resizable, movable and closable through the
+  normal windowing system. The panel's Output column, the embedded terminal
+  seam (#676) and the raw-key special case (`debugPanelTermCapturing`) are
+  gone.
+- `internal/terminal` gained **pipe sessions** (`NewPipeSession`/`NewPipe`):
+  process-less emulator sessions fed via `FeedBytes`/`FeedText`. DAP `output`
+  events render through one, inheriting the pane's reflow, scrollback and
+  search; `FinishPipe` shows the `[process exited with code N]` dead view
+  while staying feedable for trailing output. A `runInTerminal` debuggee's
+  PTY replaces the pipe placeholder in the same pane slot
+  (`Instance.ReplaceTerminal`).
+- The pair survives session end for review (#689) and is reused by the next
+  launch; the layout store records the terminal as `debugTerm` and restore
+  prunes its leaf instead of resurrecting a shell. Runs never take the
+  debuggee terminal over (`ReusableRunTerminal` exclusion).
+
 ## 2026-07-29 (theme: the 16 standard ANSI colors)
 
 - Themes now define the integrated terminal's 16 ANSI colours plus its default
