@@ -54,12 +54,15 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
   jumps to another *line* — so every jump source (definition, references,
   search results, file switches) is covered at two choke points instead of
   per-feature hooks.
-- **Landing framing** (#996): `openPathAt` places the caret through
-  `editor.JumpTo`, which frames the target line `jumpTopMargin` (3) rows
-  below the viewport's top edge (JetBrains-like context margin) instead of
-  scrolling it minimally into view. Already-visible targets reframe too —
-  consistent landings are the documented choice; `SetScroll`'s clamp keeps
-  end-of-buffer jumps sane. Interactive cursor motion is untouched.
+- **Landing framing** (#996, #1373): `openPathAt` places the caret through
+  `editor.JumpTo`. Off-screen targets frame `jumpTopMargin` (3) rows below
+  the viewport's top edge (JetBrains-like context margin). Targets already
+  comfortably visible move only the caret — no viewport yank — and targets
+  within `jumpEdgeMargin` (5, widened by `editor.scroll_off` when larger)
+  rows of an edge scroll minimally onto that margin line, vim
+  `scrolloff`-style. Panes too short for the margin zones always use the
+  near-top framing; `SetScroll`'s clamp keeps end-of-buffer jumps sane.
+  Interactive cursor motion is untouched.
 - In-file jumps come through the editor's event seam (#219): the editor
   emits `EventJump` carrying the *departure* position immediately before a
   large motion or search landing moves the caret (`motion.Result.Jump` for

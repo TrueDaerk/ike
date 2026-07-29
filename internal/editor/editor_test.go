@@ -1911,14 +1911,66 @@ func TestJumpToFramesTargetNearTop(t *testing.T) {
 	if m.view.Top != 0 {
 		t.Fatalf("Top=%d want 0 for a near-start jump", m.view.Top)
 	}
-	// A visible target reframes too (consistent landings).
-	m.JumpTo(5, 0)
-	if m.view.Top != 2 {
-		t.Fatalf("Top=%d want 2 for a visible-target jump", m.view.Top)
-	}
 	// End-of-buffer jump clamps sanely — no overscroll past the last line.
 	m.JumpTo(199, 0)
 	if want := m.buf.LineCount() - m.view.Height(); m.view.Top != want || m.cursor.Line != 199 {
 		t.Fatalf("Top=%d cursor=%d want %d/199", m.view.Top, m.cursor.Line, want)
+	}
+}
+
+// TestJumpToVisibleTargetKeepsViewport: a target already comfortably on screen
+// moves only the cursor — the viewport stays put (#1373).
+func TestJumpToVisibleTargetKeepsViewport(t *testing.T) {
+	m, _ := loaded(t, strings.Repeat("line\n", 200))
+	m.SetSize(80, 20)
+	m.JumpTo(100, 0) // frame: Top=97, visible 97..116
+	m.JumpTo(108, 0) // inside the comfort zone (102..111)
+	if m.cursor.Line != 108 || m.view.Top != 97 {
+		t.Fatalf("Top=%d cursor=%d want 97/108 (visible target must not scroll)", m.view.Top, m.cursor.Line)
+	}
+}
+
+// TestJumpToEdgeTargetScrollsToMargin: a visible target inside the 5-row edge
+// zone scrolls minimally so it sits on the margin line (#1373).
+func TestJumpToEdgeTargetScrollsToMargin(t *testing.T) {
+	m, _ := loaded(t, strings.Repeat("line\n", 200))
+	m.SetSize(80, 20)
+	m.JumpTo(100, 0) // frame: Top=97, visible 97..116
+	// Top edge: line 99 is within the first 5 visible rows → settle 5 below Top.
+	m.JumpTo(99, 0)
+	if m.view.Top != 94 {
+		t.Fatalf("Top=%d want 94 (target on the 5th row from the top)", m.view.Top)
+	}
+	// Bottom edge: visible now 94..113, line 112 within the last 5 rows →
+	// settle on the 5th row from the bottom.
+	m.JumpTo(112, 0)
+	if m.view.Top != 98 {
+		t.Fatalf("Top=%d want 98 (target on the 5th row from the bottom)", m.view.Top)
+	}
+}
+
+// TestJumpToMarginFollowsScrollOff: an editor.scroll_off larger than the
+// default widens the jump comfort zone (#1373).
+func TestJumpToMarginFollowsScrollOff(t *testing.T) {
+	m, _ := loaded(t, strings.Repeat("line\n", 200))
+	m.SetSize(80, 30)
+	m.view.ScrollOff = 8
+	m.JumpTo(100, 0) // frame: Top=97, visible 97..126
+	// Line 101 is within 8 rows of the top edge → settle 8 below Top.
+	m.JumpTo(101, 0)
+	if m.view.Top != 93 {
+		t.Fatalf("Top=%d want 93 (scroll_off=8 margin)", m.view.Top)
+	}
+}
+
+// TestJumpToTinyPaneFallsBackToNearTop: when the pane is too short for the
+// margin zones, every jump keeps the #996 near-top framing.
+func TestJumpToTinyPaneFallsBackToNearTop(t *testing.T) {
+	m, _ := loaded(t, strings.Repeat("line\n", 200))
+	m.SetSize(80, 8)
+	m.JumpTo(100, 0)
+	m.JumpTo(102, 0) // visible, but no comfort zone in 8 rows
+	if m.view.Top != 99 {
+		t.Fatalf("Top=%d want 99 (near-top framing in a tiny pane)", m.view.Top)
 	}
 }
