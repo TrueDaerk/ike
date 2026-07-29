@@ -125,6 +125,31 @@ func TestRetiredDefaults(t *testing.T) {
 	}
 }
 
+// TestAuditDefaultChords (#1378): the unbound-command audit's new defaults
+// resolve on both platforms in their scoped context.
+func TestAuditDefaultChords(t *testing.T) {
+	cases := []struct {
+		chord string
+		ctx   Context
+		cmd   string
+	}{
+		{"cmd+f12", Global, "lsp.documentSymbols"},
+		{"cmd+y", Editor, "lsp.peekDefinition"},
+		{"cmd+alt+f7", Editor, "lsp.referencesPanel"},
+		{"ctrl+shift+f10", Global, "run.testAtCursor"},
+		{"cmd+f3", Global, "nav.bookmarks"},
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(Defaults(PresetJetBrains), nil, goos)
+		for _, c := range cases {
+			chord := NormalizeChord(MustParseChord(c.chord), goos)
+			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
+				t.Errorf("%s: %s = %+v ok=%v, want %s", goos, c.chord, b, ok, c.cmd)
+			}
+		}
+	}
+}
+
 // TestCloseProjectDefaultChords (#1358): project.close ships on cmd+shift+w
 // with the delivered ctrl+shift+w secondary, mirroring project.switch.
 func TestCloseProjectDefaultChords(t *testing.T) {

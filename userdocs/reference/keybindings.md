@@ -29,12 +29,14 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Bookmarks | `cmd+f3` | `ctrl+f3` | `nav.bookmarks` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
+| File structure | `cmd+f12` | `ctrl+f12` | `lsp.documentSymbols` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |
 | Go to pinned file 1 | `ctrl+shift+1` | `ctrl+shift+1` | `nav.pinGoto1` |
@@ -84,6 +86,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |
+| Run test at cursor | `ctrl+shift+f10` | `ctrl+shift+f10` | `run.testAtCursor` |
 | Save all | `cmd+shift+s` | `ctrl+shift+s` | `editor.saveAll` |
 | Search everywhere | `cmd+shift+a` | `ctrl+shift+a` | `palette.searchEverywhere` |
 | Search everywhere (double-shift) | `shift shift` ⚠️ | `shift shift` ⚠️ | `palette.searchEverywhere` |
@@ -126,6 +129,7 @@ Active when an editor pane has focus.
 | Duplicate line(s) | `cmd+d` | `ctrl+d` | `editor.duplicateLine` |
 | Find in file | `cmd+f` | `ctrl+f` | `editor.find` |
 | Find usages | `alt+f7` | `alt+f7` | `lsp.references` |
+| Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |
 | Go to declaration | `cmd+b` | `ctrl+b` | `lsp.definition` |
 | Go to declaration | `f4` | `f4` | `lsp.definition` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
@@ -137,6 +141,7 @@ Active when an editor pane has focus.
 | Parameter info | `ctrl+p` | `ctrl+p` | `lsp.parameterInfo` |
 | Paste | `cmd+v` | `ctrl+v` | `editor.paste` |
 | Paste from history | `cmd+shift+v` | `ctrl+shift+v` | `editor.pasteFromHistory` |
+| Peek definition | `cmd+y` | `ctrl+y` | `lsp.peekDefinition` |
 | Previous diagnostic | `shift+f2` | `shift+f2` | `lsp.prevDiagnostic` |
 | Quick documentation | `ctrl+q` | `ctrl+q` | `lsp.hover` |
 | Redo | `cmd+shift+z` | `ctrl+shift+z` | `editor.redo` |

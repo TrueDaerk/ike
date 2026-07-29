@@ -260,6 +260,23 @@ var jetbrainsRows = []row{
 	{"cmd+3", "structure.toggle", "Structure tool window", Global, "Structure (#1025)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
+	// Unbound-command audit (#1378): JetBrains chords for palette-only
+	// commands where one exists and is conflict-free on both platforms.
+	// cmd+f12 is JetBrains' File Structure popup (macOS keymap verbatim);
+	// the cmd+3 Structure tool window stays the persistent counterpart.
+	{"cmd+f12", "lsp.documentSymbols", "File structure", Global, "LSP (#1153)"},
+	// cmd+y is JetBrains' Quick Definition on the macOS keymap.
+	{"cmd+y", "lsp.peekDefinition", "Peek definition", Editor, "LSP (#1154)"},
+	// cmd+alt+f7 is JetBrains' Show Usages; the persistent panel variant of
+	// the alt+f7 popup above.
+	{"cmd+alt+f7", "lsp.referencesPanel", "Find usages (panel)", Editor, "LSP (#1155)"},
+	// JetBrains' run-context-configuration chord from the Windows scheme
+	// (ctrl+shift+f10); the macOS ctrl+shift+r would collide with
+	// project.replaceInPath's cmd+shift+r once folded onto Ctrl off macOS.
+	// Modified F-keys deliver everywhere (CSI parameter encoding).
+	{"ctrl+shift+f10", "run.testAtCursor", "Run test at cursor", Global, "Run (#1150)"},
+	// cmd+f3 is JetBrains' Show Bookmarks on the macOS keymap.
+	{"cmd+f3", "nav.bookmarks", "Bookmarks", Global, "Marks (#1151)"},
 }
 
 // Defaults returns the default binding set for the named preset. Unknown presets
