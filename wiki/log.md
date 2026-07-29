@@ -1,5 +1,14 @@
 # Log
 
+## 2026-07-29 (theme: live cwd without OSC 7, #1383)
+
+- Terminal (#1383): `Session.Cwd()` no longer sticks to the start directory
+  when the shell lacks OSC 7 prompt integration — it queries the kernel for
+  the child's actual cwd (darwin `proc_pidinfo` raw syscall, linux
+  `/proc/<pid>/cwd`), so the completion popup, pane title and status line
+  follow a plain `cd`. Precedence: OSC 7 > kernel query > start dir.
+  Terminal doc's "Live cwd" section updated.
+
 ## 2026-07-29 (theme: TODO-index rows never wrap, #1379)
 
 - TODO index (#1379): every overlay row hard-clips to one terminal line. Root

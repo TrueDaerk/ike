@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-29T12:00:00Z
+timestamp: 2026-07-29T18:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -328,9 +328,13 @@ gate can only ever fail open.
 `WorkingDirectory` callback stores it on the session (`Session.Cwd()`,
 percent-decoded, bare absolute paths accepted too). Completion candidates,
 the pane title and the status-line segment all read `Cwd()`, so they follow
-a `cd`; without any OSC 7 report — a shell without prompt integration —
-`Cwd()` falls back to the start directory (`Dir()`), which is the documented
-fallback (no pid-based resolve). `Dir()` itself stays the origin root, used
+a `cd`. Without any OSC 7 report — a shell without prompt integration —
+`Cwd()` asks the kernel for the child process's actual working directory
+(#1383): `proc_pidinfo(PROC_PIDVNODEPATHINFO)` as a raw cgo-free syscall on
+darwin (`cwd_darwin.go`), `readlink /proc/<pid>/cwd` on linux
+(`cwd_linux.go`). The kernel answer is symlink-resolved (macOS `/tmp` →
+`/private/tmp`). Precedence: OSC 7 report > kernel query > start directory
+(other platforms, child gone). `Dir()` itself stays the origin root, used
 for respawn and layout persistence.
 
 **Mouse selection & copy** (#227, `MousePress`/`MouseDrag`/`MouseRelease` in

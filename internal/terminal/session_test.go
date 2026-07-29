@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -772,12 +773,14 @@ func TestParseOSC7Path(t *testing.T) {
 }
 
 // TestSessionCwdFollowsOSC7 (#770): an OSC 7 report updates Cwd(); before any
-// report Cwd falls back to the start directory.
+// report Cwd answers with the shell's actual directory (kernel query, #1383,
+// symlink-resolved — hence EvalSymlinks) which at spawn is the start dir.
 func TestSessionCwdFollowsOSC7(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)
-	if s.Cwd() != s.Dir() {
-		t.Fatalf("Cwd before any report = %q, want start dir %q", s.Cwd(), s.Dir())
+	want, _ := filepath.EvalSymlinks(s.Dir())
+	if got, _ := filepath.EvalSymlinks(s.Cwd()); got != want {
+		t.Fatalf("Cwd before any report = %q, want start dir %q", got, want)
 	}
 	cmd := `printf '\033]7;file://host/tmp\033\\'` + "\r"
 	for _, r := range cmd {

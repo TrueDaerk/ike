@@ -886,14 +886,22 @@ func (s *Session) ExitCode() (code int, ok bool) {
 func (s *Session) ShellPath() string { return s.shell }
 func (s *Session) Dir() string       { return s.dir }
 
-// Cwd returns the shell's live working directory, as last reported via
-// OSC 7 (#770). Shells without prompt integration never report one; then the
-// start directory stands in — the documented fallback.
+// Cwd returns the shell's live working directory: the last OSC 7 report
+// (#770) when the shell has prompt integration, otherwise the child
+// process's actual cwd as the kernel knows it (#1383) — so completion and
+// the pane chrome follow a `cd` in plain shells too. The start directory is
+// the last resort (child gone, unsupported platform).
 func (s *Session) Cwd() string {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.cwd != "" {
-		return s.cwd
+	cwd := s.cwd
+	s.mu.Unlock()
+	if cwd != "" {
+		return cwd
+	}
+	if pid := s.Pid(); pid > 0 {
+		if p := processCwd(pid); p != "" {
+			return p
+		}
 	}
 	return s.dir
 }
