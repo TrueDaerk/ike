@@ -256,6 +256,7 @@ bring their own.
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
 | Clone Repository… | `project.clone` | — | — | everywhere |
+| Close Project | `project.close` | `cmd+shift+w` | — | everywhere |
 | Switch Project… | `project.switch` | `cmd+shift+p` | — | everywhere |
 
 ## themes

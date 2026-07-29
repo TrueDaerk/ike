@@ -30,6 +30,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
+| Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
+| Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
