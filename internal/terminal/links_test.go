@@ -94,8 +94,12 @@ func TestLinkAtResolvesClick(t *testing.T) {
 	row := screenRow(s, findRow(s, "main.go:3:7"))
 
 	p, line, col, ok := m.LinkAt(2, row) // inside "main.go"
-	if !ok || p != filepath.Join(dir, "main.go") || line != 2 || col != 6 {
-		t.Fatalf("LinkAt = %q %d %d %v, want %q 2 6 true", p, line, col, ok, filepath.Join(dir, "main.go"))
+	// Cwd() may answer symlink-resolved (kernel query, #1383) — compare
+	// resolved forms.
+	want, _ := filepath.EvalSymlinks(filepath.Join(dir, "main.go"))
+	got, _ := filepath.EvalSymlinks(p)
+	if !ok || got != want || line != 2 || col != 6 {
+		t.Fatalf("LinkAt = %q %d %d %v, want %q 2 6 true", p, line, col, ok, want)
 	}
 	if _, _, _, ok := m.LinkAt(9, row); !ok { // on the ":3" digits: still the link
 		t.Fatal("the line/col suffix must be part of the clickable span")
