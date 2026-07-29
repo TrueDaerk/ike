@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-29 (project: Close Project — close the current project, resume the MRU background workspace)
+
+- New `project.close` command ("Close Project", palette + File menu, no
+  default chord) (#1355): closes the active workspace — session/layout
+  persisted, processes torn down like close-from-list (#820/#825) — and
+  seamlessly resumes the most recently used background workspace. With no
+  background workspace it quits the IDE through the existing quit guard.
+  A busy active workspace prompts first (save all / discard / cancel, #821
+  shape). History entry stays.
+- See [Project Switching](/architecture/project-switching.md) — "Close
+  Project (#1355)".
+
 ## 2026-07-28 (editor: unmistakable input mode — caret shape + mode-coloured pane border)
 
 - The mode-coloured caret (#1323) was too quiet on its own. The caret now also

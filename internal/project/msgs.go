@@ -22,6 +22,12 @@ type SwitchFailedMsg struct {
 	Err  error
 }
 
+// CloseProjectMsg asks the root model to close the current project (#1355):
+// tear the active workspace down and resume the most recently used background
+// workspace; with no background workspace the request becomes an app quit.
+// Dispatched by project.close.
+type CloseProjectMsg struct{}
+
 // CloseWorkspaceMsg asks the root model to unload the background workspace at
 // Path (#820): terminate its terminals/runs/debug sessions and free the
 // memory, without switching to it. Emitted as the aux action of marked
