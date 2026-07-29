@@ -29,6 +29,29 @@ import (
 // client confirmed the terminal launch.
 const acceptTimeout = 30 * time.Second
 
+// teardownTimeout bounds the polite detach/stop round trip during teardown
+// (#1375): an engine mid-run does not process commands until it breaks, so
+// dbgp.Conn.Call would otherwise wait forever and leak the goroutine with the
+// connection open. Past the deadline the connection is closed outright — the
+// engine treats a dropped link like a detach and lets the request finish.
+var teardownTimeout = 5 * time.Second
+
+// callBounded runs call and forces the connection closed when it does not
+// return within teardownTimeout; Close releases the pending Call, so the
+// spawned goroutine always exits.
+func callBounded(dc *dbgp.Conn, call func()) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		call()
+	}()
+	select {
+	case <-done:
+	case <-time.After(teardownTimeout):
+	}
+	_ = dc.Close()
+}
+
 // New starts a bridge for the given PHP interpreter and returns the client
 // end of its DAP connection. The bridge lives until the connection closes.
 func New(php string) io.ReadWriteCloser {
@@ -145,7 +168,7 @@ func (b *bridge) shutdown() {
 	}
 	b.mu.Unlock()
 	if dc != nil {
-		go func() {
+		go callBounded(dc, func() {
 			if listen {
 				// A web request being debugged when the user stops listening
 				// (#823) runs to completion instead of dying mid-response.
@@ -153,8 +176,7 @@ func (b *bridge) shutdown() {
 			} else {
 				_, _ = dc.Stop() // best effort: ends the script if still alive
 			}
-			_ = dc.Close()
-		}()
+		})
 	}
 	if l != nil {
 		_ = l.Close()
@@ -493,8 +515,9 @@ func (b *bridge) dropConn(dc *dbgp.Conn, reason, detail string) {
 		"output": fmt.Sprintf("Dropped debug connection: %s\n", text)})
 	b.event("ike.debugDrop", map[string]any{"reason": reason, "detail": detail, "count": count})
 	if dc != nil {
-		_ = dc.Detach()
-		_ = dc.Close()
+		// Bounded (#1375): an engine that never answers the polite detach must
+		// not pin this goroutine and its connection forever.
+		callBounded(dc, func() { _ = dc.Detach() })
 	}
 }
 

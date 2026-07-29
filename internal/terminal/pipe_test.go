@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // waitView polls the model's view until want appears — the pipe feed runs on
@@ -78,5 +80,36 @@ func TestPipeIgnoredOnPTYSessions(t *testing.T) {
 	m.FinishPipe(9, true)
 	if strings.Contains(m.View(), "must not corrupt") || strings.Contains(m.View(), "code 9") {
 		t.Fatalf("pipe seams must be no-ops on PTY sessions:\n%s", m.View())
+	}
+}
+
+// TestPipeFinishDoesNotBlockOnSend (#1375): FinishPipe runs on the bubbletea
+// Update goroutine (stopDebugSession), and Program.Send blocks until that very
+// loop receives — a synchronous repaint send deadlocked the whole UI. The send
+// must be async: FinishPipe returns even when nobody is receiving yet, and the
+// repaint message still arrives.
+func TestPipeFinishDoesNotBlockOnSend(t *testing.T) {
+	got := make(chan tea.Msg) // unbuffered, like Program.Send from the Update loop
+	m := NewPipe("pipe-freeze", 40, 6, func(msg tea.Msg) { got <- msg })
+	t.Cleanup(m.Close)
+
+	done := make(chan struct{})
+	go func() {
+		m.FinishPipe(3, true)
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("FinishPipe blocked on its repaint send (#1375)")
+	}
+	// The repaint still arrives once the loop is free to receive.
+	select {
+	case msg := <-got:
+		if _, ok := msg.(OutputMsg); !ok {
+			t.Fatalf("expected OutputMsg repaint, got %T", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("FinishPipe never sent the repaint message")
 	}
 }

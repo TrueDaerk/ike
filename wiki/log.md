@@ -1,5 +1,19 @@
 # Log
 
+## 2026-07-29 (theme: debug.stop freeze — non-blocking teardown, #1375)
+
+- Fixed the whole-IDE freeze on `debug.stop` during listen-mode web-request
+  debugging (#1375): `Session.FinishPipe` (new in #1370) sent its repaint
+  message synchronously from the Update goroutine — `Program.Send` blocks on
+  the unbuffered message channel whose only receiver was busy executing
+  Update; permanent self-deadlock. The send is now asynchronous. Only listen
+  mode froze because launch mode replaces the pipe terminal with a
+  runInTerminal PTY (`IsPipe()` false → FinishPipe no-ops).
+- The bridge's polite `detach`/`stop` DBGp calls in teardown paths (shutdown,
+  `dropConn`) are now bounded by `teardownTimeout` (5s): an unresponsive
+  engine gets its connection force-closed, releasing all pending calls
+  instead of leaking the goroutine with the connection open.
+
 ## 2026-07-29 (theme: debug pane pair — real terminal pane for the debuggee)
 
 - The debug panel split into two real panes (#1370): the singleton panel keeps

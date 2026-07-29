@@ -222,7 +222,10 @@ func (s *Session) FinishPipe(exitCode int, hasCode bool) {
 	s.pipeDone = true
 	s.mu.Unlock()
 	if s.send != nil {
-		s.send(OutputMsg{Key: s.key}) // repaint with the dead view
+		// Off this goroutine: FinishPipe runs on the Update loop
+		// (stopDebugSession), and Program.Send blocks until that very loop
+		// receives — a synchronous send here deadlocks the whole UI (#1375).
+		go s.send(OutputMsg{Key: s.key}) // repaint with the dead view
 	}
 }
 
