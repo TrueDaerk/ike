@@ -514,3 +514,57 @@ func TestNestedAndDottedBindingSpellingsMerge(t *testing.T) {
 		t.Errorf("the user-only key should survive: %q", got)
 	}
 }
+
+// --- terminal palette overrides (#1363) ---
+
+// TestThemeTerminalDecodeAndFlatten: [theme.terminal] decodes, merges key by
+// key across layers, and reaches Flat() under its dotted name.
+func TestThemeTerminalDecodeAndFlatten(t *testing.T) {
+	user := writeUser(t, "[theme.terminal]\nred = \"#ff0000\"\nbackground = \"#101010\"\n")
+	proj := writeProject(t, "[theme.terminal]\nred = \"#cc0000\"\nbright_blue = \"blue\"\n")
+	c, diags := Load(Options{UserPath: user, ProjectRoot: proj})
+
+	for _, d := range diags {
+		if strings.Contains(d.Message, "unknown setting") {
+			t.Fatalf("theme.terminal must be a known table, got %v", d)
+		}
+	}
+	want := map[string]string{"red": "#cc0000", "background": "#101010", "bright_blue": "blue"}
+	for k, v := range want {
+		if got := c.Theme.Terminal[k]; got != v {
+			t.Errorf("terminal[%q] = %q, want %q", k, got, v)
+		}
+		if got := c.Flat()["theme.terminal."+k]; got != v {
+			t.Errorf("Flat()[theme.terminal.%s] = %q, want %q", k, got, v)
+		}
+	}
+}
+
+// TestInvalidTerminalPaletteEntriesDropped: an unknown slot name and an
+// unparseable colour are both reported and dropped, so neither silently does
+// nothing at render time.
+func TestInvalidTerminalPaletteEntriesDropped(t *testing.T) {
+	proj := writeProject(t, "[theme.terminal]\nbrightblue = \"#00ff00\"\nred = \"nosuchcolour\"\ngreen = \"#00ff00\"\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+
+	for _, k := range []string{"brightblue", "red"} {
+		if _, still := c.Theme.Terminal[k]; still {
+			t.Errorf("invalid entry %q must not survive validation", k)
+		}
+	}
+	if c.Theme.Terminal["green"] != "#00ff00" {
+		t.Errorf("valid entries must survive, got %q", c.Theme.Terminal["green"])
+	}
+	var slotDiag, colourDiag bool
+	for _, d := range diags {
+		switch {
+		case strings.Contains(d.Message, "unknown terminal colour slot"):
+			slotDiag = true
+		case d.Field == "theme.terminal.red":
+			colourDiag = true
+		}
+	}
+	if !slotDiag || !colourDiag {
+		t.Fatalf("both problems must be reported, got %v", diags)
+	}
+}

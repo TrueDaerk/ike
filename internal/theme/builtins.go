@@ -4,6 +4,19 @@ package theme
 // palette set. Each supplies all three color groups (ui + captures + files).
 // "default" reproduces IKE's historical colors exactly.
 func Builtins() []Theme {
+	themes := builtinThemes()
+	// The terminal palettes (#1363) live in ansi_builtins.go; a theme without
+	// an entry there derives its own from its semantic colors.
+	for i := range themes {
+		if term, ok := builtinTerminals[themes[i].Name]; ok {
+			themes[i].Terminal = term
+		}
+	}
+	return themes
+}
+
+// builtinThemes is the raw list, before the terminal palettes are attached.
+func builtinThemes() []Theme {
 	return []Theme{
 		defaultTheme(),
 		tokyoNight(),
@@ -39,7 +52,11 @@ func Builtins() []Theme {
 // Default is the fallback theme: today's colors (the former defaultCaptures,
 // defaultColors, and chrome literals) re-expressed as one palette. Visually
 // identical to pre-theme IKE.
-func Default() Theme { return defaultTheme() }
+func Default() Theme {
+	t := defaultTheme()
+	t.Terminal = builtinTerminals[DefaultName]
+	return t
+}
 
 // DefaultName is the theme selected when [theme].name is empty or unknown.
 const DefaultName = "default"

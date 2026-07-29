@@ -134,7 +134,7 @@ func (m Model) themePickBody() string {
 // Discarding the batch sends the previous name back through here.
 func (m *Model) previewTheme(name string) {
 	sel, _ := theme.Select(name, m.reg.Themes())
-	m.applyTheme(theme.NewPalette(sel))
+	m.applyTheme(themePalette(sel, m.host.Config()))
 }
 
 // updateThemePick handles a key while the theme picker is open. Moving the

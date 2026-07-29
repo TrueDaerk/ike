@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Themes / Color Schemes
-description: Named-palette system — one [theme].name recolors syntax, explorer, and chrome together; one shared color resolver; plugin-extensible built-ins.
+description: Named-palette system — one [theme].name recolors syntax, explorer, chrome and the integrated terminal ANSI palette together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-07-28T00:00:00Z
+timestamp: 2026-07-29T00:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -54,6 +54,7 @@ Dark      true
 UI        semantic chrome slots (see above)
 Captures  map[capture]color   defaults for internal/highlight (keyword, string …)
 Files     map[glob|ext]color  defaults for internal/explorer (dir, go, md …)
+Terminal  16 ANSI colors + terminal default fg/bg (#1363, all optional)
 ```
 
 `theme.NewPalette(t)` resolves a Theme into a `*theme.Palette` of concrete
@@ -99,6 +100,63 @@ anything else is dropped from `theme.captures` with a diagnostic, because
 lipgloss silently renders an unparseable token as the terminal default and the
 capture would just look unstyled.
 
+## Terminal palette (#1363)
+
+A theme also owns the **integrated terminal's 16 standard ANSI colors** plus
+its default foreground/background. Without them a shell painting with SGR
+30–37 / 90–97 resolves against the **outer** terminal's palette while its
+background comes from IKE's own wash — a combination that regularly lands
+unreadable. `internal/terminal` rewrites the grid's indexed colors to the
+values resolved here; see [Terminal](./terminal.md).
+
+```
+Theme.Terminal.ANSI[0..15]   black, red, green, yellow, blue, magenta, cyan,
+                             white, then the eight bright_* variants
+Theme.Terminal.Foreground    terminal default foreground (SGR 39)
+Theme.Terminal.Background    terminal default background (SGR 49)
+```
+
+Every field is optional; resolution fills the gaps:
+
+- **Defaults**: `Foreground`/`Background` fall back to the theme's own
+  `UI.Foreground` / `UI.Background` — the colors the frame's palette wash
+  already paints, so the terminal matches the rest of the IDE by default.
+- **Derived palette** (`deriveANSI`): the six hues come from the semantic slots
+  the theme already tunes — error→red, success→green, warning→yellow,
+  info→blue, accent→magenta, secondary→cyan — the greys are a
+  foreground↔background ramp, and each bright variant is its base pulled toward
+  the foreground. Because everything is expressed relative to the theme's own
+  two poles, the same derivation works for dark and light themes, and any
+  third-party theme gets a coherent palette for free.
+- **Contrast floor**: every entry is lifted toward the foreground until it
+  clears **3.0:1** against the terminal background (**1.7:1** for the four grey
+  slots — black/white and their bright variants, one end of that ramp always
+  sits near the background by design). The floor applies to a theme's *own*
+  values too: several upstream palettes ship a "normal" half that is genuinely
+  too dim to read, which is the complaint #1363 started from. A value that
+  already clears the floor is kept byte-exact.
+- **Built-ins**: `ansi_builtins.go` carries the upstream palettes of the themes
+  whose project publishes one (default, tokyo-night, nord, gruvbox(+light),
+  dracula, solarized-dark(+light), catppuccin-mocha(+latte), one-dark,
+  github-dark(+light)). The remaining built-ins derive theirs — which is why
+  that table is allowed to be partial.
+
+`[theme.terminal]` overrides single slots by name, layered on the resolved
+palette by `theme.ApplyTerminalConfig` (called from `internal/app`, since the
+theme package itself never reads configuration):
+
+```toml
+[theme.terminal]
+red        = "#ff5f5f"
+bright_red = "#ff8787"
+background = "#101010"
+```
+
+Slot names are validated like colour tokens: an unknown slot (`brightblue`) or
+an unparseable colour is dropped with a diagnostic rather than silently doing
+nothing. Unlike theme-shipped values, a user override is honoured verbatim —
+the contrast floor does not second-guess an explicit choice.
+
 ## Structure
 
 ```
@@ -106,6 +164,9 @@ internal/theme/
   theme.go      UI slots, Theme, Palette (resolved colors), DefaultPalette()
   resolve.go    theme.Resolve — the ONE color-token resolver (name/hex/ANSI);
                 replaced the duplicated copies in highlight and explorer
+  ansi.go       terminal palette (#1363): Terminal, the 16 slot names, the
+                derived fallback and the contrast floor
+  ansi_builtins.go  the upstream ANSI palettes of the built-ins that publish one
   builtins.go   default, tokyo-night, nord, gruvbox(+light), rose-pine(+dawn),
                 catppuccin-mocha(+latte), kanagawa, one-dark,
                 solarized-dark(+light), dracula, darcula, intellij-light,

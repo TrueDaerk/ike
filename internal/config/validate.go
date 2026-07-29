@@ -94,6 +94,27 @@ func validate(c *Config) []Diagnostic {
 		delete(c.Theme.Captures, name)
 	}
 
+	// Terminal palette overrides (#1363): the same treatment, plus a check on
+	// the slot name — a misspelled "brightblue" would otherwise be accepted
+	// and then silently ignored at render time.
+	for name, token := range c.Theme.Terminal {
+		switch {
+		case !validTerminalSlot(name):
+			diags = append(diags, Diagnostic{
+				Field:   "theme.terminal." + name,
+				Message: fmt.Sprintf("unknown terminal colour slot %q; expected one of %s, foreground, background", name, strings.Join(theme.ANSINames(), ", ")),
+			})
+		case !theme.ValidToken(token):
+			diags = append(diags, Diagnostic{
+				Field:   "theme.terminal." + name,
+				Message: fmt.Sprintf("unknown colour %q, using the theme's own; expected a name (%s, …), a #rrggbb hex or an ANSI index 0-255", token, strings.Join(theme.Names()[:3], ", ")),
+			})
+		default:
+			continue
+		}
+		delete(c.Theme.Terminal, name)
+	}
+
 	clampMin("editor.tab_width", &c.Editor.TabWidth, 1)
 	clampMin("editor.scroll_off", &c.Editor.ScrollOff, 0)
 	clampMin("editor.text_width", &c.Editor.TextWidth, 0)
@@ -176,4 +197,18 @@ func validate(c *Config) []Diagnostic {
 		}
 	}
 	return diags
+}
+
+// validTerminalSlot reports whether name addresses a `[theme.terminal]` slot:
+// one of the 16 ANSI colour names or the two terminal defaults (#1363).
+func validTerminalSlot(name string) bool {
+	if name == "foreground" || name == "background" {
+		return true
+	}
+	for _, n := range theme.ANSINames() {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }

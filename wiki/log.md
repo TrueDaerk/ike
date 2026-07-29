@@ -1,5 +1,25 @@
 # Log
 
+## 2026-07-29 (theme: the 16 standard ANSI colors)
+
+- Themes now define the integrated terminal's 16 ANSI colours plus its default
+  foreground/background (#1363). `internal/terminal` rewrites the grid's
+  indexed SGR colours (30-37, 90-97, `38;5;n`/`48;5;n` below 16, and 39/49) to
+  those truecolor values, so shell output no longer mixes the outer terminal's
+  palette with IKE's own background.
+- A theme that ships no palette derives one from its semantic slots
+  (error to red, success to green, ...) with a foreground/background grey ramp,
+  so third-party themes are covered too. Every entry is lifted until it clears
+  3.0:1 contrast against the terminal background (1.7:1 for the grey slots) -
+  including a theme's own values, several upstream palettes being genuinely
+  too dim to read.
+- Built-in ANSI palettes ship for the themes whose upstream publishes one
+  (default, tokyo-night, nord, gruvbox(+light), dracula, solarized-dark(+light),
+  catppuccin-mocha(+latte), one-dark, github-dark(+light)).
+- `[theme.terminal]` overrides single slots by name (`red`, `bright_blue`,
+  `foreground`, `background`); unknown slot names and unparseable colours are
+  reported and dropped.
+
 ## 2026-07-29 (guard prompts: enter confirms)
 
 - Every modal guard prompt (close #259, quit #287, switch #3, workspace close

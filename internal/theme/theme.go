@@ -66,6 +66,10 @@ type Theme struct {
 	UI       UI
 	Captures map[string]string // capture name -> color token (internal/highlight defaults)
 	Files    map[string]string // glob|ext -> color token (internal/explorer defaults)
+	// Terminal is the integrated terminal's 16-color ANSI palette plus its
+	// default foreground/background (#1363). Optional: empty entries derive
+	// from the theme's own colors (see ansi.go).
+	Terminal Terminal
 }
 
 // Palette is a resolved Theme: every ui slot resolved to a concrete color,
@@ -114,6 +118,14 @@ type Palette struct {
 	VCSUntracked    color.Color
 	VCSDeleted      color.Color
 	VCSConflicted   color.Color
+
+	// ANSI is the resolved 16-color terminal palette; TerminalFg/TerminalBg
+	// are the terminal's default foreground/background (#1363). Indexed
+	// colors in the integrated terminal's grid resolve against these instead
+	// of the outer terminal's own palette.
+	ANSI       [ANSICount]color.Color
+	TerminalFg color.Color
+	TerminalBg color.Color
 }
 
 // firstNonEmpty returns the first non-empty token, for slot fallback chains.
@@ -208,6 +220,9 @@ func NewPalette(t Theme) *Palette {
 	p.VCSUntracked = slot(t.UI.VCSUntracked, firstNonEmpty(t.UI.Warning, def.UI.Warning))
 	p.VCSDeleted = slot(t.UI.VCSDeleted, firstNonEmpty(t.UI.Border, def.UI.Border))
 	p.VCSConflicted = slot(t.UI.VCSConflicted, firstNonEmpty(t.UI.Error, def.UI.Error))
+	// The terminal palette resolves last: entries the theme omits derive from
+	// the semantic slots filled in above (#1363).
+	p.resolveTerminal(t.Terminal)
 	return p
 }
 
