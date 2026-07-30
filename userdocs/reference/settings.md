@@ -132,11 +132,6 @@ Settings, or run `settings.open` from the palette.
 | Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
 | Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
 
-### Language Servers
-
-This page is an interactive editor in the settings panel rather than a
-list of keys.
-
 ### Formatters
 
 The **Formatters** page lists each language's external reformat command, the
@@ -168,4 +163,9 @@ Languages with a built-in formatter (SQL, XML) accept two extra keys:
 `builtin = false` disables the built-in (falling back to the language
 server), and for SQL `keywords = "upper" | "lower" | "preserve"` controls
 keyword casing.
+
+### Language Servers
+
+This page is an interactive editor in the settings panel rather than a
+list of keys.
 

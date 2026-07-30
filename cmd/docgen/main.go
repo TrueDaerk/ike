@@ -35,6 +35,7 @@ import (
 	_ "ike/internal/explorer"
 	_ "ike/internal/project"
 
+	_ "ike/plugins/format"
 	_ "ike/plugins/lsp"
 
 	_ "ike/plugins/languages/ansible"
@@ -82,6 +83,42 @@ func main() {
 			fail(err)
 		}
 	}
+}
+
+// customPageProse documents entry-less settings pages whose backing config
+// is a free-form slot table the schema cannot describe (Roadmap 0470, #1402:
+// the [format.<languageID>] overrides behind the Formatters page). Keyed by
+// the page title; pages not listed keep the generic interactive-editor note.
+var customPageProse = map[string]string{
+	"Formatters": "The **Formatters** page lists each language's external reformat command, the\n" +
+		"config layer supplying it and whether the binary is installed. Overrides live\n" +
+		"in the config file as a `[format.<languageID>]` table (project or user\n" +
+		"layer), mirroring `[lsp.servers.*]`:\n" +
+		"\n" +
+		"```toml\n" +
+		"[format.python]\n" +
+		"command = \"ruff\"\n" +
+		"args = [\"format\", \"--stdin-filename\", \"${FILE}\", \"-\"]\n" +
+		"range_args = [\"format\", \"--range\", \"${START_LINE}-${END_LINE}\", \"-\"]\n" +
+		"enabled = true      # false switches external formatting off for the language\n" +
+		"temp_file = false   # true for tools that cannot read stdin\n" +
+		"install = \"pip install ruff\"\n" +
+		"```\n" +
+		"\n" +
+		"The command reads the buffer on stdin and prints the formatted text on\n" +
+		"stdout (set `temp_file = true` for in-place-only tools; IKE then formats a\n" +
+		"temp copy and reads it back — your file is never written behind the\n" +
+		"editor's back). Available placeholders: `${FILE}`, `${TAB_WIDTH}`,\n" +
+		"`${INDENT_STYLE}`, `${MAX_LINE_LENGTH}`, and in `range_args`\n" +
+		"`${START_LINE}` / `${END_LINE}` (1-based). `range_args` opts into\n" +
+		"**Reformat Selection**; without it the selection command falls back to\n" +
+		"another range-capable source or tells you only whole-file reformat is\n" +
+		"available.\n" +
+		"\n" +
+		"Languages with a built-in formatter (SQL, XML) accept two extra keys:\n" +
+		"`builtin = false` disables the built-in (falling back to the language\n" +
+		"server), and for SQL `keywords = \"upper\" | \"lower\" | \"preserve\"` controls\n" +
+		"keyword casing.",
 }
 
 func fail(err error) {
@@ -251,8 +288,14 @@ Settings, or run `+"`settings.open`"+` from the palette.`))
 		fmt.Fprintf(&b, "### %s\n\n", p.Title)
 		if len(p.Entries) == 0 {
 			// Custom pages (the keymap editor, the plugin manager) render
-			// their own UI and have no schema entries to document.
-			b.WriteString("This page is an interactive editor in the settings panel rather than a\nlist of keys.\n\n")
+			// their own UI and have no schema entries to document; pages
+			// whose backing config is a free-form table carry hand-written
+			// prose from customPageProse instead.
+			if prose, ok := customPageProse[p.Title]; ok {
+				b.WriteString(prose + "\n\n")
+			} else {
+				b.WriteString("This page is an interactive editor in the settings panel rather than a\nlist of keys.\n\n")
+			}
 			continue
 		}
 		b.WriteString("| Setting | Key | Type | Default | Scope | Description |\n")
