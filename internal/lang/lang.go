@@ -232,10 +232,14 @@ func ByExt(ext string) (Language, bool) {
 	return Language{}, false
 }
 
-// ByPath returns the language for a file path: a sniffed per-path association
-// (#893) wins, then an exact base name match (e.g. "Dockerfile"), then the
-// extension.
+// ByPath returns the language for a file path: a user-configured association
+// (#1365, explicit intent beats detection) wins, then a sniffed per-path
+// association (#893), then an exact base name match (e.g. "Dockerfile"), then
+// the extension.
 func ByPath(path string) (Language, bool) {
+	if l, ok := ByAssociation(path); ok {
+		return l, true
+	}
 	base := filepath.Base(path)
 	mu.RLock()
 	if id, ok := pathIx[path]; ok {

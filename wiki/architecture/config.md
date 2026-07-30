@@ -46,7 +46,8 @@ map is decoded onto the defaults-filled struct (`load.go`):
 - **Lists** (`project.history`): **replace by default**, never append — appending
   is surprising for bounded/ordered lists.
 - **Slot maps whose keys contain dots** (`theme.captures`, `explorer.colors`,
-  `keymap.bindings`): a key may be written quoted (`"editor.ctrl+g" = …`) or as
+  `keymap.bindings`, `files.associations`): a key may be written quoted
+  (`"editor.ctrl+g" = …`) or as
   the sub-table TOML's grammar suggests (`[keymap.bindings.editor]`). Nested
   sub-tables inside those slots are flattened into dotted keys **per layer,
   before the merge** (`flattenSlotMaps` in `load.go`, #1312), so the two
@@ -107,6 +108,18 @@ Sections and their default-bearing slots (`schema.go`):
   0090); config only fixes the persisted shape.
 - `[backup]` — `enable`, `debounce_ms`, `max_age_days` for crash-recovery
   snapshots (Roadmap 0210, see [crash recovery](./crash-recovery.md)).
+- `[files]` — `watch`, `auto_reload` (`clean|never`), the large-file
+  thresholds `large_file_kb` / `large_file_lines` (#149), `persistent_undo`
+  (#148), plus the `[files.associations]` slot (#1365): a slot map of file
+  patterns to registered language ids (`"*.mytool" = "toml"`,
+  `"Jenkinsfile" = "groovy"`), matched against a file's base name. User
+  associations outrank the plugins' built-in extension/filename lists and the
+  content sniffers — resolution lives in `lang.ByAssociation`, see
+  [languages](./languages.md). An entry naming an unregistered language id is
+  inert (the file falls back to built-in detection or plain text) and is
+  surfaced as a warning by the root model on load/reload
+  (`associationDiags`); config itself cannot validate the ids — the registry
+  lives above it.
 - `[[snippets]]` — user live templates (#1152): array-of-tables entries with
   `trigger` (identifier word), `body` (LSP snippet syntax — `$1`,
   `${2:default}`; TOML multiline strings work for multi-line bodies) and an

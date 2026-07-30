@@ -41,6 +41,7 @@ var slotMapPaths = [][]string{
 	{"theme", "captures"},
 	{"explorer", "colors"},
 	{"keymap", "bindings"},
+	{"files", "associations"},
 }
 
 // flattenSlotMaps rewrites nested sub-tables inside the slot maps of raw into

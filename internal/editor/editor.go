@@ -783,6 +783,11 @@ func (m *Model) sniffLanguage() {
 	if m.path == "" || m.buf.LineCount() == 0 {
 		return
 	}
+	// A user-configured association (#1365) is explicit intent: it beats the
+	// sniffers, so an associated file never gets re-classified by content.
+	if _, ok := lang.ByAssociation(m.path); ok {
+		return
+	}
 	if l, ok := lang.Sniff(m.path); ok {
 		lang.AssociatePath(m.path, l.ID)
 		return

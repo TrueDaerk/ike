@@ -167,6 +167,7 @@ func defaults() *Config {
 			LargeFileKB:    largefile.DefaultMaxKB,
 			LargeFileLines: largefile.DefaultMaxLines,
 			PersistentUndo: true,
+			Associations:   map[string]string{},
 		},
 		UI: UI{
 			MenuBar:       true,

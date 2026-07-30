@@ -174,12 +174,19 @@ type Backup struct {
 // PersistentUndo (#148) keeps undo history across restarts (vim's undofile):
 // stacks are written to the state store on save/close and adopted on open
 // while the file content is unchanged.
+// Associations (#1365) maps file patterns to registered language ids —
+// `"*.mytool" = "toml"`, `"Jenkinsfile" = "groovy"` — a slot map like
+// explorer.colors: keys are single map keys (they contain dots and globs),
+// matched against the base name. User associations win over the plugins'
+// built-in extension/filename lists and sniffers; internal/lang resolves them
+// (see lang.ByAssociation).
 type Files struct {
-	Watch          bool   `toml:"watch"`
-	AutoReload     string `toml:"auto_reload"`
-	LargeFileKB    int    `toml:"large_file_kb"`
-	LargeFileLines int    `toml:"large_file_lines"`
-	PersistentUndo bool   `toml:"persistent_undo"`
+	Watch          bool              `toml:"watch"`
+	AutoReload     string            `toml:"auto_reload"`
+	LargeFileKB    int               `toml:"large_file_kb"`
+	LargeFileLines int               `toml:"large_file_lines"`
+	PersistentUndo bool              `toml:"persistent_undo"`
+	Associations   map[string]string `toml:"associations"`
 }
 
 // Editor holds text-editing behaviour (Roadmap 0060 consumes most of it).
