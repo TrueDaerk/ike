@@ -176,9 +176,11 @@ func diagCovers(d ilsp.Diagnostic, line, col int) bool {
 
 // diagnosticJump moves the cursor to the next (forward) or previous diagnostic
 // in document order, wrapping around the file (#369). Document order — not
-// severity order — keeps repeated presses a monotone walk through the file;
-// the severity is surfaced in the toast instead. Returns the toast command
-// with the diagnostic's message, or a "no diagnostics" notice.
+// severity order — keeps repeated presses a monotone walk through the file.
+// The diagnostic's message opens as a popup anchored at the diagnostic's
+// start (#1420) — the #739 content shape, not the generic toast queue — and
+// dismisses like any hover popup: the next key (further navigation, cursor
+// motion, esc) drops it. Only the empty case stays a toast notice.
 func (m *Model) diagnosticJump(forward bool) tea.Cmd {
 	if len(m.diags) == 0 {
 		return notice("no diagnostics in this file")
@@ -208,16 +210,14 @@ func (m *Model) diagnosticJump(forward bool) tea.Cmd {
 			}
 		}
 	}
-	wrapped := ""
-	if !found {
-		wrapped = " (wrapped)"
-	}
 	m.SetCursor(pick.Range.Start.Line, pick.Range.Start.Col)
-	msg := pick.Message
-	if i := strings.IndexByte(msg, '\n'); i >= 0 {
-		msg = msg[:i]
+	lines := m.diagLines([]ilsp.Diagnostic{pick})
+	if !found {
+		dim := lipgloss.NewStyle().Foreground(m.theme().Border)
+		lines = append(lines, hoverLine{text: dim.Render("(wrapped)")})
 	}
-	return notice(severityLabel(pick.Severity) + ": " + msg + wrapped)
+	m.hover = &hoverState{lines: lines, anchor: pick.Range.Start, anchored: true}
+	return nil
 }
 
 // severityLabel names an LSP severity for the diagnostic-jump toast;
