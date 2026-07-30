@@ -3,6 +3,8 @@ package palette
 import (
 	"fmt"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // stubMode is a fixed-prefix Mode returning canned items regardless of query.
@@ -165,5 +167,115 @@ func TestSearchAllEmptyQueryWithoutRecentsKeepsListing(t *testing.T) {
 	items := m.Results("", Context{})
 	if len(items) != 2 {
 		t.Fatalf("empty MRU must fall back to the plain listing, got %d items", len(items))
+	}
+}
+
+// recordingMode is a Mode that remembers the last query body it was asked for,
+// so prefix stripping can be asserted.
+type recordingMode struct {
+	prefix rune
+	items  []Item
+	last   string
+	live   []string // queries seen through QueryChanged
+}
+
+func (r *recordingMode) Prefix() rune        { return r.prefix }
+func (r *recordingMode) Placeholder() string { return "" }
+func (r *recordingMode) Results(query string, _ Context) []Item {
+	r.last = query
+	return r.items
+}
+func (r *recordingMode) QueryChanged(query string, _ Context) tea.Cmd {
+	r.live = append(r.live, query)
+	return nil
+}
+
+func TestSearchAllCommandPrefixScopesToCommands(t *testing.T) {
+	cmds := &recordingMode{prefix: ':', items: []Item{{Title: "Save All", Score: 90}}}
+	files := &recordingMode{prefix: '@', items: []Item{{Title: "save.go", Score: 95}}}
+	items := NewSearchAllMode(cmds, files).Results(":sa", Context{})
+	if len(items) != 1 || items[0].Title != ": Save All" {
+		t.Fatalf("items = %+v, want only the command row", items)
+	}
+	if cmds.last != "sa" {
+		t.Errorf("command mode queried with %q, want the prefix stripped", cmds.last)
+	}
+}
+
+func TestSearchAllFilePrefixScopesToFiles(t *testing.T) {
+	cmds := &recordingMode{prefix: ':', items: []Item{{Title: "Save All", Score: 90}}}
+	files := &recordingMode{prefix: '@', items: []Item{{Title: "save.go", Score: 10}}}
+	syms := &recordingMode{prefix: '$', items: []Item{{Title: "Save", Score: 99}}}
+	items := NewSearchAllMode(cmds, files, syms).Results("@save", Context{})
+	if len(items) != 1 || items[0].Title != "@ save.go" {
+		t.Fatalf("items = %+v, want only the file row", items)
+	}
+	if files.last != "save" {
+		t.Errorf("file mode queried with %q, want the prefix stripped", files.last)
+	}
+}
+
+func TestSearchAllPrefixOnlyQueryListsThatSource(t *testing.T) {
+	cmds := &recordingMode{prefix: ':', items: []Item{{Title: "Cmd A"}, {Title: "Cmd B"}}}
+	files := &recordingMode{prefix: '@', items: []Item{{Title: "f.go"}}}
+	items := NewSearchAllMode(cmds, files).Results(":", Context{})
+	if len(items) != 2 || items[0].Title != ": Cmd A" || items[1].Title != ": Cmd B" {
+		t.Fatalf("items = %+v, want the full command listing", items)
+	}
+	if cmds.last != "" {
+		t.Errorf("command mode queried with %q, want the empty body", cmds.last)
+	}
+}
+
+func TestSearchAllScopedResultsAreNotCapped(t *testing.T) {
+	var many []Item
+	for i := 0; i < searchAllPerKind+5; i++ {
+		many = append(many, Item{Title: fmt.Sprintf("f%d.go", i), Score: 100 - i})
+	}
+	files := &recordingMode{prefix: '@', items: many}
+	items := NewSearchAllMode(files).Results("@f", Context{})
+	if len(items) != len(many) {
+		t.Fatalf("got %d items, want all %d (no per-kind cap when scoped)", len(items), len(many))
+	}
+}
+
+func TestSearchAllUnknownPrefixStaysLiteral(t *testing.T) {
+	cmds := &recordingMode{prefix: ':', items: []Item{{Title: "Cmd", Score: 1}}}
+	files := &recordingMode{prefix: '@', items: []Item{{Title: "f.go", Score: 1}}}
+	items := NewSearchAllMode(cmds, files).Results("?x", Context{})
+	if len(items) != 2 {
+		t.Fatalf("got %d items, want both sources composed", len(items))
+	}
+	if cmds.last != "?x" || files.last != "?x" {
+		t.Errorf("queries = %q/%q, want the raw query passed through", cmds.last, files.last)
+	}
+}
+
+func TestSearchAllScopedQueryChangedForwardsStrippedBodyOnly(t *testing.T) {
+	cmds := &recordingMode{prefix: ':'}
+	syms := &recordingMode{prefix: '$'}
+	m := NewSearchAllMode(cmds, syms)
+
+	m.QueryChanged("$sym", Context{})
+	if len(syms.live) != 1 || syms.live[0] != "sym" {
+		t.Fatalf("symbol queries = %v, want [sym]", syms.live)
+	}
+	if len(cmds.live) != 0 {
+		t.Fatalf("command queries = %v, want none while scoped to symbols", cmds.live)
+	}
+
+	// Scoped to a non-live source: nothing re-queries.
+	m.QueryChanged(":run", Context{})
+	if len(syms.live) != 1 {
+		t.Fatalf("symbol queries = %v, want no extra re-query while scoped to commands", syms.live)
+	}
+	if len(cmds.live) != 1 || cmds.live[0] != "run" {
+		t.Fatalf("command queries = %v, want [run]", cmds.live)
+	}
+
+	// Unscoped: every live source sees the raw query.
+	m.QueryChanged("plain", Context{})
+	if len(syms.live) != 2 || syms.live[1] != "plain" {
+		t.Fatalf("symbol queries = %v, want the raw query forwarded", syms.live)
 	}
 }
