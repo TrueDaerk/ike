@@ -42,19 +42,30 @@ func TestDiagnosticsWrongPathIgnored(t *testing.T) {
 	}
 }
 
-// jumpNotice runs a diagnostic-jump action and returns the toast text.
-func jumpNotice(t *testing.T, m *Model, action string) string {
+// jumpPopup runs a diagnostic-jump action and returns the anchored popup's
+// plain text (#1420) — all hover lines joined, ANSI styling included.
+func jumpPopup(t *testing.T, m *Model, action string) string {
 	t.Helper()
 	next, cmd := m.runAction(action)
 	*m = next
-	if cmd == nil {
-		t.Fatalf("%s must produce a NoticeMsg", action)
+	if cmd != nil {
+		t.Fatalf("%s must open a popup, not emit a command (got %#v)", action, cmd())
 	}
-	n, ok := cmd().(NoticeMsg)
-	if !ok {
-		t.Fatalf("%s: expected a NoticeMsg, got %#v", action, cmd())
+	if !m.HoverOpen() {
+		t.Fatalf("%s must open the diagnostic popup", action)
 	}
-	return n.Text
+	if !m.hover.anchored {
+		t.Fatalf("%s popup must anchor at the diagnostic, not the cursor", action)
+	}
+	if m.hover.anchor != m.cursor {
+		t.Fatalf("%s popup anchor = %+v, cursor = %+v", action, m.hover.anchor, m.cursor)
+	}
+	var b strings.Builder
+	for _, l := range m.hover.lines {
+		b.WriteString(l.text)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 func TestDiagnosticJumpNextPrevWraps(t *testing.T) {
@@ -64,47 +75,94 @@ func TestDiagnosticJumpNextPrevWraps(t *testing.T) {
 		{Range: buffer.Range{Start: buffer.Position{Line: 2, Col: 1}, End: buffer.Position{Line: 2, Col: 2}}, Severity: 2, Message: "warn here"},
 		{Range: buffer.Range{Start: buffer.Position{Line: 0, Col: 1}, End: buffer.Position{Line: 0, Col: 2}}, Severity: 1, Message: "first line\nsecond detail line"},
 	}})
-	if got := jumpNotice(t, &m, "next_diagnostic"); got != "error: first line" {
-		t.Errorf("first jump toast = %q (message must be its first line)", got)
+	got := jumpPopup(t, &m, "next_diagnostic")
+	if !strings.Contains(got, "error") || !strings.Contains(got, "first line") {
+		t.Errorf("first jump popup = %q, want severity and message", got)
+	}
+	if !strings.Contains(got, "second detail line") {
+		t.Errorf("popup must keep the full multi-line message, got %q", got)
+	}
+	if strings.Contains(got, "(wrapped)") {
+		t.Errorf("no wrap yet, popup = %q", got)
 	}
 	if m.cursor != (buffer.Position{Line: 0, Col: 1}) {
 		t.Fatalf("first jump cursor = %+v", m.cursor)
 	}
-	if got := jumpNotice(t, &m, "next_diagnostic"); got != "warning: warn here" {
-		t.Errorf("second jump toast = %q", got)
+	got = jumpPopup(t, &m, "next_diagnostic")
+	if !strings.Contains(got, "warning") || !strings.Contains(got, "warn here") {
+		t.Errorf("second jump popup = %q", got)
 	}
 	if m.cursor != (buffer.Position{Line: 2, Col: 1}) {
 		t.Fatalf("second jump cursor = %+v", m.cursor)
 	}
-	// Past the last diagnostic: wrap to the first, flagged in the toast.
-	if got := jumpNotice(t, &m, "next_diagnostic"); got != "error: first line (wrapped)" {
-		t.Errorf("wrap jump toast = %q", got)
+	// Past the last diagnostic: wrap to the first, flagged in the popup.
+	got = jumpPopup(t, &m, "next_diagnostic")
+	if !strings.Contains(got, "first line") || !strings.Contains(got, "(wrapped)") {
+		t.Errorf("wrap jump popup = %q", got)
 	}
 	if m.cursor != (buffer.Position{Line: 0, Col: 1}) {
 		t.Fatalf("wrap jump cursor = %+v", m.cursor)
 	}
 	// Backwards from the first diagnostic: wrap to the last.
-	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "warning: warn here (wrapped)" {
-		t.Errorf("prev wrap toast = %q", got)
+	got = jumpPopup(t, &m, "prev_diagnostic")
+	if !strings.Contains(got, "warn here") || !strings.Contains(got, "(wrapped)") {
+		t.Errorf("prev wrap popup = %q", got)
 	}
 	if m.cursor != (buffer.Position{Line: 2, Col: 1}) {
 		t.Fatalf("prev wrap cursor = %+v", m.cursor)
 	}
-	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "error: first line" {
-		t.Errorf("prev jump toast = %q", got)
+	got = jumpPopup(t, &m, "prev_diagnostic")
+	if !strings.Contains(got, "first line") || strings.Contains(got, "(wrapped)") {
+		t.Errorf("prev jump popup = %q", got)
+	}
+}
+
+// TestDiagnosticJumpPopupDismissesOnKey guards #1420's dismissal contract: the
+// popup drops on the next key like any hover popup (cursor motion, esc, or a
+// further navigation press before its own popup re-opens).
+func TestDiagnosticJumpPopupDismissesOnKey(t *testing.T) {
+	m, _ := loaded(t, "aaa\nbbb\n")
+	m, _ = m.Update(ilsp.DiagnosticsMsg{Path: m.path, Diagnostics: []ilsp.Diagnostic{
+		{Range: buffer.Range{Start: buffer.Position{Line: 1, Col: 0}, End: buffer.Position{Line: 1, Col: 1}}, Severity: 1, Message: "boom"},
+	}})
+	jumpPopup(t, &m, "next_diagnostic")
+	m, _ = m.Update(tea.KeyPressMsg{Code: 'j'})
+	if m.HoverOpen() {
+		t.Fatal("cursor-motion key must dismiss the diagnostic popup")
+	}
+	jumpPopup(t, &m, "next_diagnostic")
+	m, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.HoverOpen() {
+		t.Fatal("esc must dismiss the diagnostic popup")
 	}
 }
 
 func TestDiagnosticJumpEmptyNotifies(t *testing.T) {
 	m, _ := loaded(t, "clean\n")
-	if got := jumpNotice(t, &m, "next_diagnostic"); got != "no diagnostics in this file" {
+	empty := func(action string) string {
+		t.Helper()
+		next, cmd := m.runAction(action)
+		m = next
+		if cmd == nil {
+			t.Fatalf("%s without diagnostics must produce a NoticeMsg", action)
+		}
+		n, ok := cmd().(NoticeMsg)
+		if !ok {
+			t.Fatalf("%s: expected a NoticeMsg, got %#v", action, cmd())
+		}
+		return n.Text
+	}
+	if got := empty("next_diagnostic"); got != "no diagnostics in this file" {
 		t.Errorf("empty next toast = %q", got)
 	}
-	if got := jumpNotice(t, &m, "prev_diagnostic"); got != "no diagnostics in this file" {
+	if got := empty("prev_diagnostic"); got != "no diagnostics in this file" {
 		t.Errorf("empty prev toast = %q", got)
 	}
 	if m.cursor != (buffer.Position{}) {
 		t.Errorf("empty jump must not move the cursor, got %+v", m.cursor)
+	}
+	if m.HoverOpen() {
+		t.Error("empty jump must not open a popup")
 	}
 }
 

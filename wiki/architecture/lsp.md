@@ -309,9 +309,12 @@ round-trip: the editor already caches the set (`m.diags`), so the commands are
 editor actions (`next_diagnostic` / `prev_diagnostic`, registered by the
 editor plugin). The walk is document-ordered (not severity-ordered — repeated
 presses stay a monotone sweep through the file) and wraps around either end;
-each jump lands on the diagnostic's start position and raises a toast with
-the severity label and the message's first line ("error: undefined: foo",
-"(wrapped)" appended on wrap-around). No diagnostics → info toast.
+each jump lands on the diagnostic's start position and opens a **popup
+anchored there** (#1420) — the #739 content shape (colored severity header
+with attribution, the full multi-line message), with a dim "(wrapped)" row on
+wrap-around — instead of routing through the generic toast queue. It dismisses
+like any hover popup: the next key (further navigation before its own popup
+re-opens, cursor motion, esc) drops it. No diagnostics → info toast.
 
 **Request errors surface (#372).** Every user-initiated request (hover,
 definition, references, formatting, code actions — rename already had its own
