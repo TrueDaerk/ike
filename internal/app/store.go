@@ -68,6 +68,15 @@ func usageFile() string {
 	return filepath.Join(".ike", "cmdusage.json")
 }
 
+// fileUsageFile returns the path of the per-project file-usage counter
+// (#1419), following the layout store's IKE_CONFIG_DIR redirection seam.
+func fileUsageFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "fileusage.json")
+	}
+	return filepath.Join(".ike", "fileusage.json")
+}
+
 // winSizeFile returns the path of the per-project floating-window size store
 // (#774), following the layout store's IKE_CONFIG_DIR redirection seam.
 func winSizeFile() string {

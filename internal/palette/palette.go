@@ -398,17 +398,39 @@ func (p *Palette) focusedItem() (Item, bool) {
 }
 
 // activate emits the selected item's message and closes the palette. With no
-// results it is a dismiss-less no-op (the palette stays open).
+// results it is a dismiss-less no-op (the palette stays open). A file opened
+// from one of the two ranked windows is marked for the usage counter (#1419).
 func (p *Palette) activate() tea.Cmd {
 	if p.selected < 0 || p.selected >= len(p.items) {
 		return nil
 	}
 	msg := p.items[p.selected].Msg
+	if of, ok := msg.(OpenFileMsg); ok && p.fileUsageEligible() {
+		of.CountUsage = true
+		msg = of
+	}
 	p.Close()
 	if msg == nil {
 		return nil
 	}
 	return func() tea.Msg { return msg }
+}
+
+// fileUsageEligible reports whether the current open is one of the two ranked
+// palette windows whose file selections feed the usage counter (#1419): the
+// unlocked palette in file mode (Run a Command's "@" source) or the locked
+// Search Everywhere window. Locked or anchored file finders (go-to-file, the
+// editor's anchored "@" finder) and the recent-files mode never count.
+func (p *Palette) fileUsageEligible() bool {
+	if _, ok := p.locked.(*SearchAllMode); ok {
+		return true
+	}
+	if p.locked != nil {
+		return false
+	}
+	m, _ := p.mode()
+	_, ok := m.(*FileMode)
+	return ok
 }
 
 // activateSide emits the selected left-column item's message and closes the

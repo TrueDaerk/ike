@@ -28,6 +28,11 @@ type FileMode struct {
 	// defaults to walkProject.
 	walk func(root string) []string
 
+	// usage is the optional per-file selection counter (#1419), keyed by the
+	// same path the emitted OpenFileMsg carries; nil-safe. Among equal fuzzy
+	// scores, more-often-chosen files rank first — match quality still wins.
+	usage *Usage
+
 	cachedRoot string
 	cached     []string
 	haveCache  bool
@@ -36,19 +41,27 @@ type FileMode struct {
 // NewFileMode builds the "@" mode using the default on-disk project walk.
 func NewFileMode() *FileMode { return &FileMode{walk: walkProject} }
 
+// SetUsage installs the per-file selection counter (#1419), mirroring
+// CommandMode.SetUsage (#773): only selections confirmed from the Run a
+// Command / Search Everywhere windows bump it (the root model increments on a
+// CountUsage-marked OpenFileMsg).
+func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
+
 // Prefix implements Mode.
 func (f *FileMode) Prefix() rune { return '@' }
 
 // Placeholder implements Mode.
 func (f *FileMode) Placeholder() string { return "Find a file…" }
 
-// Results implements Mode. With an empty query it lists files in path order; with
-// a query it fuzzy-matches the relative path and ranks by score then path.
+// Results implements Mode. With an empty query it lists files in path order;
+// with a query it fuzzy-matches the relative path and ranks by score, then
+// usage count (#1419), then path.
 func (f *FileMode) Results(query string, cx Context) []Item {
 	files := f.files(cx.Root)
 	type scored struct {
 		path  string
 		score int
+		usage int
 		spans []int
 	}
 	out := make([]scored, 0, len(files))
@@ -57,11 +70,19 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		if !ok {
 			continue
 		}
-		out = append(out, scored{path: p, score: m.Score, spans: m.Positions})
+		out = append(out, scored{
+			path:  p,
+			score: m.Score,
+			usage: f.usage.Count(filepath.Join(cx.Root, p)),
+			spans: m.Positions,
+		})
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].score != out[j].score {
 			return out[i].score > out[j].score
+		}
+		if out[i].usage != out[j].usage {
+			return out[i].usage > out[j].usage
 		}
 		return out[i].path < out[j].path
 	})

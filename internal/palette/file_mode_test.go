@@ -1,6 +1,45 @@
 package palette
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
+
+// TestFileModeUsageBreaksScoreTies guards #1419: among equal fuzzy scores the
+// more-often-chosen file ranks first; a better match still wins over usage.
+func TestFileModeUsageBreaksScoreTies(t *testing.T) {
+	f := fileMode("ax.go", "bax.go")
+	cx := Context{Root: "/proj"}
+	u := &Usage{}
+	u.Bump(filepath.Join("/proj", "bax.go"))
+	f.SetUsage(u)
+
+	// Empty query: every file scores 0, usage decides.
+	got := f.Results("", cx)
+	if len(got) != 2 || got[0].Title != "bax.go" {
+		t.Fatalf("usage tie-break: got %v, want bax.go first", got)
+	}
+
+	// "ax" matches ax.go strictly better (start anchor): score beats usage.
+	got = f.Results("ax", cx)
+	if len(got) != 2 || got[0].Title != "ax.go" {
+		t.Fatalf("score must beat usage: got %v, want ax.go first", got)
+	}
+}
+
+// TestFileModeUsageKeyMatchesEmittedPath guards #1419's key contract: the
+// counter is keyed by the same joined path the activated OpenFileMsg carries.
+func TestFileModeUsageKeyMatchesEmittedPath(t *testing.T) {
+	f := fileMode("a.go", "b.go")
+	cx := Context{Root: "/proj"}
+	items := f.Results("", cx)
+	u := &Usage{}
+	u.Bump(items[1].Msg.(OpenFileMsg).Path) // choose b.go
+	f.SetUsage(u)
+	if got := f.Results("", cx); got[0].Title != "b.go" {
+		t.Fatalf("bump via emitted path had no effect: got %v", got)
+	}
+}
 
 // TestFileModeRefreshDropsCache guards #1372: Refresh invalidates the cached
 // walk, so the next Results call re-walks and reflects created and deleted

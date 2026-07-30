@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 )
 
-// usage.go implements most-used command ranking (#773): a persisted
-// per-command selection counter. Only choices confirmed from the palette
-// window bump it — the root model increments on palette.RunCommandMsg, a path
-// keybind invocations never take — so shortcut users don't push their
-// commands up the palette listing.
+// usage.go implements most-used ranking: a persisted per-key selection
+// counter. Only choices confirmed from the palette window bump it — the root
+// model increments on palette.RunCommandMsg (#773, keyed by command id) and
+// on a CountUsage-marked palette.OpenFileMsg (#1419, keyed by file path), a
+// path keybind or explorer invocations never take — so shortcut users don't
+// push their entries up the palette listing.
 
-// Usage is the persisted per-command selection counter. The zero value (and
+// Usage is the persisted per-key selection counter. The zero value (and
 // nil) is inert: Count returns 0 and Bump is a no-op without a path.
 type Usage struct {
 	path   string

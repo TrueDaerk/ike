@@ -67,4 +67,13 @@ type RunCommandMsg struct{ ID string }
 
 // OpenFileMsg is emitted when a file-mode item is activated. The root model
 // opens it through its normal open-file path.
-type OpenFileMsg struct{ Path string }
+type OpenFileMsg struct {
+	Path string
+	// CountUsage marks a selection confirmed from one of the two ranked
+	// palette windows — Run a Command's file source or Search Everywhere
+	// (#1419): the root model bumps the persisted file-usage counter only for
+	// these. The palette sets it during activation; every other OpenFileMsg
+	// producer (explorer, anchored "@" finder, go-to-file, recent-files mode)
+	// leaves the zero value.
+	CountUsage bool
+}

@@ -435,6 +435,7 @@ type Model struct {
 	// default key that opens it (the final binding is Roadmap 0080's).
 	palette     *palette.Palette
 	cmdUsage    *palette.Usage       // most-used command ranking (#773)
+	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
 	pins        *pinStore            // harpoon-style pinned file slots (#788)
@@ -703,11 +704,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	recent := &recentFiles{}
 	vcsSt := &vcsState{}                          // shared before the literal: the reverts picker mode reads it
 	layoutsPicker := newLayoutsMode(layoutNames)  // saved window layouts picker (#1175)
-	cmdUsage := palette.LoadUsage(usageFile())    // most-used ranking (#773)
+	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
+	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())    // resizable floats (#774)
 	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
 	m := Model{
 		cmdUsage:       cmdUsage,
+		fileUsage:      fileUsage,
 		winSizes:       winSizes,
 		pins:           loadPins(),                          // pinned file slots (#788)
 		lhStore:        localhistory.New(localHistoryDir()), // local history (#1023)
@@ -727,7 +730,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		help:           help.New(reg, bindings, helpMinCol(cfg)),
 		shell:          ui.New(shellConfig(cfg)),
 		vcs:            vcsSt,
-		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, wsMgr, layoutsPicker),
+		palette:        buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarks, vcsSt, cmdUsage, fileUsage, wsMgr, layoutsPicker),
 		layoutsPicker:  layoutsPicker,
 		refs:           refs,
 		lspStatus:      map[string]string{},
@@ -1633,7 +1636,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, wsMgr *workspace.Manager, layouts *layoutsMode) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -1641,6 +1644,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
 	cmd.SetUsage(usage)
 	file := palette.NewFileMode()
+	file.SetUsage(fileUsage)
 	dir := palette.NewDirMode()
 	proj := project.NewPickerMode(nil)
 	mru := palette.NewRecentMode(func() []palette.RecentEntry {
@@ -3778,6 +3782,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.RunCommand(msg.ID)
 
 	case palette.OpenFileMsg:
+		// A file selection confirmed from Run a Command / Search Everywhere —
+		// never the explorer, go-to-file or the anchored "@" finder — bumps
+		// the file-usage counter (#1419), mirroring the command bump above.
+		if msg.CountUsage {
+			m.fileUsage.Bump(msg.Path)
+		}
 		switch m.diffPick {
 		case 1:
 			// First diff.files pick (#60): remember the left file and re-open
