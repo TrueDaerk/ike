@@ -770,9 +770,14 @@ rename save coalesces to the latter) is reloaded in place. Cursor and scroll are
 preserved, clamped to the new content exactly like session restore
 (`SetCursor` + `SetScroll`). The reload emits `EventChange`, so `docVersion`
 bumps, Tree-sitter reparses, and the LSP bridge sends the new text — identical
-to an ordinary edit. **Undo history restarts on reload**: the old change records
-describe positions in text that no longer exists, so replaying them could
-corrupt the buffer; losing the stack is the documented trade-off.
+to an ordinary edit. **Undo history restarts on a content-changing reload**:
+the old change records describe positions in text that no longer exists, so
+replaying them could corrupt the buffer; losing the stack is the documented
+trade-off. A reload whose decoded disk content **equals the buffer** is a
+no-op (#1406): nothing is reloaded, so nothing resets — the undo history
+survives, the current history node is marked as the saved state, and dirty and
+stale clear. This makes a save always a checkpoint, never a history reset,
+even when an own-write event slips past the watcher's suppression.
 
 A **dirty** buffer is never silently reloaded (#82): the external change marks
 it *stale* (`Stale()`), shown as `!` after the tab title's dirty `*` and a
