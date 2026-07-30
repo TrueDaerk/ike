@@ -36,18 +36,24 @@ func init() {
 	iformat.Register(overrideProvider())
 	// [format.<lang>] enabled = false switches a language's external
 	// formatting off — both the override and the plugin default.
-	iformat.SetExternalEnabled(func(langID string) bool {
-		c := config.Get()
-		if c == nil {
-			return true
-		}
-		if raw, ok := c.Format[langID]; ok {
-			if b, isBool := raw["enabled"].(bool); isBool {
-				return b
-			}
-		}
+	iformat.SetExternalEnabled(func(langID string) bool { return formatFlag(langID, "enabled") })
+	// [format.<lang>] builtin = false disables a language's built-in
+	// formatter (#1403): for SQL that re-exposes sqls' LSP formatting.
+	iformat.SetBuiltinEnabled(func(langID string) bool { return formatFlag(langID, "builtin") })
+}
+
+// formatFlag reads a [format.<lang>] boolean; absent or non-bool means true.
+func formatFlag(langID, key string) bool {
+	c := config.Get()
+	if c == nil {
 		return true
-	})
+	}
+	if raw, ok := c.Format[langID]; ok {
+		if b, isBool := raw[key].(bool); isBool {
+			return b
+		}
+	}
+	return true
 }
 
 // applyDefaults seeds the free-form override slot.

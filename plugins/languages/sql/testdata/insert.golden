@@ -1,0 +1,4 @@
+INSERT INTO users (name, email, plan_id)
+VALUES ('ada', 'ada@example.com', 1), ('bob', 'bob@example.com', 2)
+RETURNING id,
+    name;

@@ -1,0 +1,12 @@
+-- daily revenue
+SELECT day,
+    SUM(total) -- gross
+FROM orders
+/* only paid
+   orders count */
+WHERE paid = true
+GROUP BY day; -- per day
+
+-- cleanup
+DELETE FROM sessions
+WHERE expired = true;

@@ -1,0 +1,1 @@
+create table if not exists orders (id bigserial primary key, user_id bigint not null references users(id), total numeric(10,2) default 0, note text, created timestamptz default current_timestamp, constraint total_positive check (total >= 0));

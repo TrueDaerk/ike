@@ -295,6 +295,7 @@ var (
 	externalDefaults = map[string]External{}
 	notifier         func(text string)
 	enabledHook      func(langID string) bool
+	builtinHook      func(langID string) bool
 	hinted           = map[string]bool{}
 )
 
@@ -304,6 +305,25 @@ func SetNotifier(f func(text string)) {
 	extMu.Lock()
 	notifier = f
 	extMu.Unlock()
+}
+
+// SetBuiltinEnabled installs the config hook answering whether a language's
+// built-in formatter is enabled (`[format.<lang>] builtin = false` turns it
+// off, e.g. to reach the sqls LSP formatting instead, #1403). Nil means
+// always enabled.
+func SetBuiltinEnabled(f func(langID string) bool) {
+	extMu.Lock()
+	builtinHook = f
+	extMu.Unlock()
+}
+
+// BuiltinEnabled answers the hook; built-in providers gate their Available
+// on it.
+func BuiltinEnabled(langID string) bool {
+	extMu.Lock()
+	f := builtinHook
+	extMu.Unlock()
+	return f == nil || f(langID)
 }
 
 // SetExternalEnabled installs the config hook answering whether external

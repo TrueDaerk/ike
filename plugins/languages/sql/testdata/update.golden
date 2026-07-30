@@ -1,0 +1,6 @@
+UPDATE users
+SET name = 'Ada',
+    email = 'ada@example.com',
+    updated = CURRENT_TIMESTAMP
+WHERE id = 7
+    AND active = true;

@@ -1,0 +1,15 @@
+WITH recent AS (
+    SELECT *
+    FROM orders
+    WHERE ts > now() - INTERVAL '7 days'
+),
+big AS (
+    SELECT *
+    FROM recent
+    WHERE total > 100
+)
+SELECT big.id,
+    big.total
+FROM big
+JOIN users u
+ON u.id = big.user_id;

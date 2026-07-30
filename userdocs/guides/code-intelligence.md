@@ -104,6 +104,12 @@ says so when only whole-file reformat is available. See the
 [settings reference](../reference/settings.md#formatters) for configuring a
 formatter per language or project.
 
+SQL reformats out of the box: IKE ships a built-in SQL formatter
+(clause-per-line layout, indented lists and AND/OR chains, configurable
+keyword casing via `keywords = "upper" | "lower" | "preserve"` under
+`[format.sql]`). Malformed SQL is never touched. Prefer sqls' formatting?
+Set `builtin = false` under `[format.sql]`.
+
 ## Toolchains
 
 The **Toolchain** settings page is where the interpreter or SDK per language
