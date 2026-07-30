@@ -143,6 +143,24 @@ reformats exactly the statements overlapping the selection. The provider
 registers **above the LSP tier** — #1403 pins the built-in over sqls —
 and `[format.sql] builtin = false` restores the sqls path.
 
+## Built-in XML formatter (#1404)
+
+XML has no server in IKE (lemminx is a JVM application, #1253), so the XML
+plugin ships a pretty-printer for `.xml` and its dialects
+(`.xsd/.xsl/.xslt/.svg/.plist/.wsdl/.csproj` & co):
+`plugins/languages/xml/formatter.go`, a pure-Go tokenizer + tree + printer
+with the Tree-sitter parse as a second validity gate (documents that fail to
+parse are left untouched with a message). Element nesting indents per
+editorconfig/settings; attributes stay on one line until the effective
+`max_line_length`, then wrap one per line aligned under the first (0 = never
+wrap). Passed through verbatim: XML declaration, DOCTYPE, processing
+instructions, comments, CDATA, entity references, `xml:space="preserve"`
+subtrees and mixed content (whitespace there is significant). Text-only
+elements stay on one line (`<name>value</name>`), self-closing tags stay
+self-closing, nothing beyond whitespace is rewritten. Range formatting
+narrows to the element subtrees overlapping the selection. Registered at the
+built-in tier; `[format.xml] builtin = false` disables it.
+
 ## Format-on-save
 
 The [save chain](/architecture/lsp.md) (#1148) routes its format step through

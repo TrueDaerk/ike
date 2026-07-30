@@ -34,3 +34,21 @@ import (
 func grammar() lang.Grammar {
 	return highlight.NewGrammar(ts.NewLanguage(unsafe.Pointer(C.tree_sitter_xml())), query)
 }
+
+// xmlParseHasErrors runs the Tree-sitter XML parse as the formatter's second
+// validity gate (#1404): checked is true when a verdict was possible, bad
+// when the tree contains error nodes. Lives here because the vendored parser
+// may be cgo-included only once per package.
+func xmlParseHasErrors(text string) (bad, checked bool) {
+	parser := ts.NewParser()
+	defer parser.Close()
+	if err := parser.SetLanguage(ts.NewLanguage(unsafe.Pointer(C.tree_sitter_xml()))); err != nil {
+		return false, false
+	}
+	tree := parser.Parse([]byte(text), nil)
+	if tree == nil {
+		return false, false
+	}
+	defer tree.Close()
+	return tree.RootNode().HasError(), true
+}

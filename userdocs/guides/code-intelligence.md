@@ -110,6 +110,11 @@ keyword casing via `keywords = "upper" | "lower" | "preserve"` under
 `[format.sql]`). Malformed SQL is never touched. Prefer sqls' formatting?
 Set `builtin = false` under `[format.sql]`.
 
+XML (and its dialects — SVG, plist, csproj, XSD/XSLT …) also reformats out
+of the box with a built-in pretty-printer: indentation per your settings,
+attribute wrapping at `max_line_length`, comments/CDATA/`xml:space` content
+untouched.
+
 ## Toolchains
 
 The **Toolchain** settings page is where the interpreter or SDK per language
