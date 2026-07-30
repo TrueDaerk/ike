@@ -175,7 +175,7 @@ func (m Model) dragTerminal(key string) *terminal.Model {
 // scrollbar/links, the wheel pages the scrollback. Motion and release with an
 // active drag never reach this — the generic drag machinery owns them. done
 // reports whether the event was consumed.
-func (m *Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
+func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 	px, py, pw, ph := m.popupTermRect()
 	if msg.action == mousePress && !inRect(msg.X, msg.Y, px, py, pw, ph) {
 		// A press outside dismisses (hide, sessions keep running), like the
@@ -269,7 +269,7 @@ func (m Model) popupChordCommand(keys string) string {
 // from inside, cmd+t opens a sibling tab, tab-cycling and cmd+w act on the
 // popup's tabs, and the floating-window resize chords (#774) adjust the box.
 // Everything else belongs to the popup's shell.
-func (m *Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
+func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	if k, err := keymap.ParseKey(keys); err == nil {
 		keys = k.String()
 	}
