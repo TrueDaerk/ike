@@ -339,6 +339,17 @@ instead of cancelling it. The Plugins and Marketplace lists scroll through
 `pinFooter` offsets — previously a `MaxHeight` clip made rows past the window
 unreachable.
 
+Pointer dispatch is render-free (#1396): the app hit-tests motion, wheel and
+outside-clicks against `Model.Size()` — the box's known outer dimensions —
+instead of measuring `Model.View()`, which paid a full panel render per mouse
+event and froze the panel under high-frequency motion (buffered keys then
+trickled in one by one). On the same issue the keymap page memoizes its
+binding table and row list (keyed on the live `*config.Config` pointer, the
+filter text and the fold generation — every edit reloads the config, which
+swaps the pointer and drops the cache) and renders only the visible list
+window through `pinFooterLazy`, so a frame costs the window, not the full
+command list.
+
 ### The detail column is operable (#1325)
 
 A press in the detail column used to only move the focus there — every control

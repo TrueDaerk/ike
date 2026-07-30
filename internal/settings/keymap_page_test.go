@@ -851,3 +851,54 @@ func TestUnbindOfASharedChordSparesTheOtherContext(t *testing.T) {
 		t.Fatalf("explorer ctrl+s = %+v ok=%v, want explorer.thing untouched", nb, ok)
 	}
 }
+
+// The row list and the binding table are memoized (#1396): rebuilding both on
+// every key event and render frame is what froze the settings panel. The cache
+// must survive repeated reads and drop on exactly the inputs it derives from —
+// the live config, the filter text and the fold state.
+func TestKeymapRowsAndTableAreMemoized(t *testing.T) {
+	k, _ := keymapPage(t)
+	a, b := k.rows(), k.rows()
+	if len(a) == 0 {
+		t.Fatal("expected default bindings")
+	}
+	if &a[0] != &b[0] {
+		t.Fatal("rows must be served from the cache between reads")
+	}
+	if k.table() != k.table() {
+		t.Fatal("table must be served from the cache between reads")
+	}
+
+	// A filter change rebuilds the rows.
+	k.Update(tea.KeyPressMsg{Text: "/", Code: '/'})
+	k.Update(tea.KeyPressMsg{Text: "w", Code: 'w'})
+	filtered := k.rows()
+	if len(filtered) >= len(a) {
+		t.Fatalf("filter must narrow the list: %d -> %d", len(a), len(filtered))
+	}
+	k.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+
+	// A fold toggle rebuilds the rows.
+	before := len(k.rows())
+	var folded bool
+	for i, r := range k.rows() {
+		if r.rangeKey != "" {
+			k.sel, folded = i, true
+			break
+		}
+	}
+	if folded {
+		k.toggleRange()
+		if len(k.rows()) == before {
+			t.Fatal("expanding a fold must rebuild the rows")
+		}
+	}
+
+	// A config reload (pointer swap) rebuilds table and rows.
+	tbl := k.table()
+	cfg := *config.Get()
+	config.Set(&cfg)
+	if k.table() == tbl {
+		t.Fatal("a config reload must rebuild the table")
+	}
+}

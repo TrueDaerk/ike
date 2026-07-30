@@ -410,6 +410,14 @@ func follow(off, selStart, selEnd, n, h int) int {
 // renders below it — so a selection move can never shift the list rows. When
 // the window is too short for the footer, the list wins.
 func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string {
+	return pinFooterLazy(len(list), func(i int) string { return list[i] }, footer, selStart, selEnd, h, off)
+}
+
+// pinFooterLazy is pinFooter for lists whose rows map 1:1 to lines and are
+// rendered on demand (#1396): the window is resolved first and render is only
+// called for the visible rows, so a long list (the keymap table) costs the
+// window per frame, not the list.
+func pinFooterLazy(n int, render func(i int) string, footer []string, selStart, selEnd, h int, off *int) string {
 	if h < 1 {
 		return ""
 	}
@@ -417,12 +425,15 @@ func pinFooter(list, footer []string, selStart, selEnd, h int, off *int) string 
 	if listH < 1 {
 		footer, listH = nil, h
 	}
-	*off = follow(*off, selStart, selEnd, len(list), listH)
+	*off = follow(*off, selStart, selEnd, n, listH)
 	end := *off + listH
-	if end > len(list) {
-		end = len(list)
+	if end > n {
+		end = n
 	}
-	out := append([]string{}, list[*off:end]...)
+	out := make([]string, 0, listH+len(footer))
+	for i := *off; i < end; i++ {
+		out = append(out, render(i))
+	}
 	if len(footer) > 0 {
 		for len(out) < listH {
 			out = append(out, "")
