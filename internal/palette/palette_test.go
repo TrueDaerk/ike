@@ -140,6 +140,65 @@ func TestFileOpenMsg(t *testing.T) {
 	}
 }
 
+// TestFileUsageMarking guards #1419: only selections from the two ranked
+// windows — the unlocked palette's "@" source and Search Everywhere — carry
+// CountUsage; the locked/anchored finders never do.
+func TestFileUsageMarking(t *testing.T) {
+	newP := func() *Palette {
+		fm := fileMode("main.go")
+		all := NewSearchAllMode(NewCommandMode(fakeSource{}, nil, false), fm)
+		p := New(Config{DefaultPrefix: ':'}, NewCommandMode(fakeSource{}, nil, false), fm, all)
+		p.SetSize(80, 24)
+		return p
+	}
+	cx := Context{ContextID: "editor", Root: "."}
+
+	activate := func(t *testing.T, p *Palette) OpenFileMsg {
+		t.Helper()
+		cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatal("enter should emit an open-file command")
+		}
+		open, ok := cmd().(OpenFileMsg)
+		if !ok {
+			t.Fatalf("want OpenFileMsg, got %T", cmd())
+		}
+		return open
+	}
+
+	// Run a Command window, "@" source: counts.
+	p := newP()
+	p.Open(cx)
+	p.Update(runes("@main"))
+	if !activate(t, p).CountUsage {
+		t.Fatal("unlocked palette file selection must set CountUsage")
+	}
+
+	// Search Everywhere: counts.
+	p = newP()
+	p.OpenLocked(cx, SearchAllPrefix)
+	p.Update(runes("main"))
+	if !activate(t, p).CountUsage {
+		t.Fatal("search-everywhere file selection must set CountUsage")
+	}
+
+	// Locked "@" finder (go-to-file): never counts.
+	p = newP()
+	p.OpenLocked(cx, '@')
+	p.Update(runes("main"))
+	if activate(t, p).CountUsage {
+		t.Fatal("locked go-to-file selection must not set CountUsage")
+	}
+
+	// Anchored "@" finder: never counts.
+	p = newP()
+	p.OpenAnchored(cx, '@', 0, 0, 40)
+	p.Update(runes("main"))
+	if activate(t, p).CountUsage {
+		t.Fatal("anchored finder selection must not set CountUsage")
+	}
+}
+
 func TestEscCloses(t *testing.T) {
 	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode())
 	p.SetSize(80, 24)

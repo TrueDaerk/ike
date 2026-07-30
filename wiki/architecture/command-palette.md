@@ -130,6 +130,16 @@ hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root.
 
+Ranking is fuzzy score, then **most-used** (#1419), then path: the file-usage
+counter (same `Usage` type as #773, persisted in `.ike/fileusage.json`,
+`IKE_CONFIG_DIR`-redirectable) counts only file selections confirmed from the
+two **ranked palette windows** — Run a Command's `@` source and Search
+Everywhere. The palette marks such an activation (`OpenFileMsg.CountUsage`)
+and the root model bumps the counter; opens via the explorer, go-to-file, the
+editor's anchored `@` finder or the recent-files mode never count. Match
+quality still wins — usage only breaks equal scores, notably the empty-query
+listing.
+
 ## Open-path mode (`file.openPath`, #999)
 
 The "Open File…" picker (`openpath_mode.go`) opens files **outside the
