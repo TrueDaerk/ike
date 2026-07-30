@@ -194,9 +194,19 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   keep pumping (the same goroutine independence tool-window hide relies on)
   and reopening reveals the same tabs and scrollback. A shell exit closes its
   tab; the last tab drops the instance and hides the popup, and the next
-  toggle spawns fresh. App quit ends the popup's sessions tidily. Nothing
+  toggle spawns fresh. App quit ends the popup's sessions tidily — the parked
+  workspaces' popups included (#1407). Nothing
   resurrects across restarts; only the resize delta persists (`ui.WinSizes`
   key `popupterm`).
+- **Per-project** (#1407): the popup belongs to its project like pane
+  terminals do (#777). A seamless switch parks it with the workspace
+  (`wsExtras` in `Workspace.Aux`) — tabs, scrollback, running processes and
+  open state come back unchanged when the project resumes; the new project
+  starts with its own empty popup (nothing renders, no keys are swallowed).
+  Workspace teardown (LRU eviction #780, close-from-list #820,
+  `project.close` #1355) ends the parked popup's sessions, and the busy
+  guards count popup activity — a running popup process prompts before
+  dying unseen.
 - It is **not a `ui.Floating`** — the shell's dismiss/filter/scroll priority
   is the inverse of a PTY's raw pass-through (esc must reach vim). Instead it
   renders pane-style chrome (`paneBox` + the regular tab bar) centered via

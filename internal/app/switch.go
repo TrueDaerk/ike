@@ -161,7 +161,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// Park the live workspace under its root; the debug session rides along
 	// in Aux (its bridge goroutines keep running while parked, though events
 	// arriving in the background are not applied until re-attach).
-	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen, dbgTermKey: m.dbgTermKey}
+	// The popup terminal (#1398) parks too (#1407): its shells keep running in
+	// the background and the whole overlay — tabs, scrollback, open state —
+	// comes back when this project resumes. The fresh model starts with a zero
+	// popup of its own.
+	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen, dbgTermKey: m.dbgTermKey, popup: m.popup}
 	m.ws.Park()
 
 	cfg, diags := config.Load(config.Discover("."))

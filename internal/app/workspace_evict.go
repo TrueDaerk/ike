@@ -59,8 +59,19 @@ func workspaceBusy(w *workspace.Workspace) bool {
 			}
 		}
 	}
-	if extras, ok := w.Aux.(wsExtras); ok && extras.dbg != nil && extras.dbg.sess != nil {
-		return true
+	if extras, ok := w.Aux.(wsExtras); ok {
+		if extras.dbg != nil && extras.dbg.sess != nil {
+			return true
+		}
+		// A parked popup terminal (#1407) with a running session dies with the
+		// workspace — ask first, like pane terminals.
+		if inst := extras.popup.inst; inst != nil {
+			for i := 0; i < inst.TabCount(); i++ {
+				if t := inst.TabTerminal(i); t != nil && t.Running() {
+					return true
+				}
+			}
+		}
 	}
 	return false
 }
@@ -86,10 +97,16 @@ func teardownWorkspace(w *workspace.Workspace) {
 			inst.CloseTerminalTabs()
 		}
 	}
-	if extras, ok := w.Aux.(wsExtras); ok && extras.dbg != nil && extras.dbg.sess != nil {
-		sess := extras.dbg.sess
-		_ = sess.Disconnect()
-		go sess.Close()
+	if extras, ok := w.Aux.(wsExtras); ok {
+		if extras.dbg != nil && extras.dbg.sess != nil {
+			sess := extras.dbg.sess
+			_ = sess.Disconnect()
+			go sess.Close()
+		}
+		if extras.popup.inst != nil {
+			// Parked popup terminal shells (#1407) end tidily, like the quit path.
+			extras.popup.inst.CloseTerminalTabs()
+		}
 	}
 	w.Aux = nil
 	w.Panes = nil
