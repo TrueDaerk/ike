@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-30 (theme: popup terminal, #1398)
+
+- Popup terminal (#1398): quake-style floating terminal overlay with tabs,
+  toggled by `terminal.popup` (`cmd+alt+t`; `terminal.new` moved to
+  `cmd+alt+shift+t`). A detached `pane.Instance` tab host outside every
+  registry and the split tree — toggling never touches the pane layout,
+  sessions keep running while hidden, the resize delta persists via
+  `ui.WinSizes` (`popupterm`). Deliberately not a `ui.Floating` (raw PTY key
+  pass-through). New section in [Integrated Terminal](/architecture/terminal.md);
+  boundary note in [Floating Shell](/architecture/floating-shell.md). Minor
+  version bump to 0.2.0.
+
 ## 2026-07-30 (theme: settings-panel freeze under mouse motion, #1396)
 
 - Settings (#1396): the panel — worst on the Keymap page — froze under mouse

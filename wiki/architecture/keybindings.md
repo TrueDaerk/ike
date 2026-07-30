@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-28T18:00:00Z
+timestamp: 2026-07-30T12:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -562,7 +562,8 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
-| `terminal.new` | `cmd+alt+t` | fragile | `palette` | live via palette |
+| `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
+| `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |

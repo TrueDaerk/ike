@@ -133,8 +133,9 @@ bring their own.
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |
 | Clear Terminal | `terminal.clear` | — | — | everywhere |
-| New Terminal | `terminal.new` | `cmd+alt+t` | — | everywhere |
+| New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |
 | New Terminal Tab | `terminal.newTab` | — | — | everywhere |
+| Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |

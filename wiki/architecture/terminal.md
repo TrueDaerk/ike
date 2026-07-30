@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-07-29T18:00:00Z
+timestamp: 2026-07-30T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -176,6 +176,48 @@ live session **takes over that pane** (`Registry.AdoptTerminal` closes the
 placeholder and swaps in place, #320) instead of splitting a second leaf,
 which would both duplicate the terminal and render one instance in two
 mirrored panes.
+
+## Popup terminal (#1398)
+
+`internal/app/popupterm.go` adds a **quake-style floating terminal overlay**,
+toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
+`cmd+alt+shift+t` for it). Design decisions:
+
+- The popup owns a **detached `pane.Instance` tab host**
+  (`pane.NewDetachedTerminalHost`) that lives outside every registry and
+  outside the split tree: toggling never touches the pane layout, `layout()`
+  never sizes it (every size-affecting event calls `applyPopupSize`), and
+  layout persistence never records it. Session keys mint in their own
+  `popup:term:N` namespace; `terminalModelForSession` and the `ExitedMsg`
+  handler check the popup first, so output and exits resolve while hidden.
+- **Hide ≠ close**: the toggle only flips rendering/routing off — the sessions
+  keep pumping (the same goroutine independence tool-window hide relies on)
+  and reopening reveals the same tabs and scrollback. A shell exit closes its
+  tab; the last tab drops the instance and hides the popup, and the next
+  toggle spawns fresh. App quit ends the popup's sessions tidily. Nothing
+  resurrects across restarts; only the resize delta persists (`ui.WinSizes`
+  key `popupterm`).
+- It is **not a `ui.Floating`** — the shell's dismiss/filter/scroll priority
+  is the inverse of a PTY's raw pass-through (esc must reach vim). Instead it
+  renders pane-style chrome (`paneBox` + the regular tab bar) centered via
+  `overlay.Center`, below the exclusive overlays: palette/finder draw on top,
+  the settings modal suppresses it for its lifetime.
+- **Keys**: while open, the popup's branch in the funnel sits after the modal
+  prompts and before the pane-terminal block. Its reserved set mirrors the
+  pane one: the toggle chord (resolved via the live binding table) hides from
+  inside, `cmd+t` opens a sibling popup tab, `ctrl+tab` and the
+  `editor.tab.next/prev` chords cycle popup tabs, `cmd+w` closes the active
+  tab through the busy guard (`termClosePopup` targets the shared prompt),
+  the float resize chords (#774) adjust the box, cmd+c/cmd+v copy/paste, and
+  the `terminalGlobalCommands` allowlist stays with the IDE. Everything else
+  goes raw to the shell. `terminal.popup` is itself allowlisted, so a focused
+  pane terminal can summon the popup.
+- **Mouse**: outside press hides (state retained), the border ring starts a
+  `popupterm` resize drag (centered doubled-delta math), the tab-bar row
+  activates/closes tabs, body presses anchor selections / hit the scrollbar
+  and cmd+click links, the wheel routes like a terminal pane. Selection and
+  scrollbar drags run through the generic drag machinery via the `popup`
+  sentinel pane key (`termLocal` / `dragTerminal`).
 
 ## Key routing — the reserved set
 

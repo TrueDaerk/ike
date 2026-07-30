@@ -222,6 +222,9 @@ type Model struct {
 	// topmost open layer owns key input and compositing order.
 	shell  *ui.Floating
 	floats *ui.Stack
+	// popup is the popup terminal (#1398): a floating tab-host terminal
+	// overlay outside the layout tree, toggled by terminal.popup.
+	popup popupTerm
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -391,6 +394,9 @@ type Model struct {
 	// termClosePending is true while the busy-terminal close guard (#986)
 	// owns the keyboard.
 	termClosePending bool
+	// termClosePopup targets the open guard at the popup terminal's active
+	// tab (#1398) instead of the focused pane.
+	termClosePopup bool
 
 	// explorerRatio remembers the hidden explorer's split ratio so
 	// explorer.toggle restores the tree at its prior width (#268); 0 means
@@ -1426,6 +1432,11 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.activeWS().Tree != nil {
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
+	if m.popup.inst != nil {
+		// Popup terminal sessions (#1398) are session state only — end them
+		// tidily instead of leaving the shells to die with the process.
+		m.popup.inst.CloseTerminalTabs()
+	}
 	m.backupCleanShutdown()
 	return m, tea.Quit
 }
@@ -1916,6 +1927,8 @@ var terminalGlobalCommands = map[string]bool{
 	// #934: zen must toggle (and untoggle) with a terminal or tool pane
 	// focused; the shell never meaningfully sees the zen chord.
 	"view.zenMode": true,
+	// #1398: the popup terminal must open from a focused pane terminal too.
+	"terminal.popup": true,
 }
 
 // terminalShellChords are chords that stay with the shell even when they
@@ -2467,6 +2480,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
+		m.applyPopupSize() // the popup lives outside the tree; layout() never sizes it
 		m.floats.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
@@ -3361,6 +3375,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case TerminalPopupMsg:
+		// terminal.popup: show/hide the floating popup terminal (#1398).
+		m.togglePopupTerminal()
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {
@@ -3382,6 +3401,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// refuses (last leaf), the pane stays showing [process exited]. A
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
+		if idx, t := m.popupTabForSession(msg.Key); t != nil {
+			// A popup terminal shell ended (#1398): its tab closes; the last
+			// tab drops the whole popup, and the next toggle spawns fresh.
+			m.closePopupTab(idx)
+			return m, nil
+		}
 		key := m.terminalPaneForSession(msg.Key)
 		// Command sessions (#576) stay open — their output is the point of
 		// the run. Tool panes (#741) stay open too (#810): the footer offers
@@ -4468,6 +4493,37 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.termClosePromptOpen() {
 			return m.updateTermClosePrompt(msg)
 		}
+		// The open popup terminal (#1398) owns the keyboard like a focused
+		// terminal pane: its shell takes every key raw except the reserved
+		// popup set. The overlays and prompts above still win — they can be
+		// opened from inside the popup and must get their keys back.
+		if m.popup.open && m.popup.inst != nil {
+			if handled, tm, cmd := m.popupReservedKey(msg.String()); handled {
+				return tm, cmd
+			}
+			// cmd+c copies an active mouse selection, cmd+v pastes — the same
+			// pair the pane-terminal block below reserves (#227, #727).
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta {
+				if term := m.popup.inst.ActiveTerminal(); term != nil {
+					switch {
+					case k.Base == "c" && term.HasSelection():
+						m.copyTerminalSelection(term)
+						return m, nil
+					case k.Base == "v":
+						if text := clipboardRead(); text != "" {
+							term.PasteText(text)
+						}
+						return m, nil
+					}
+				}
+			}
+			// Global navigation chords (palette, settings, …) stay with the
+			// IDE (#805); everything else belongs to the popup's shell.
+			if handled, cmd := m.terminalGlobalChord(msg); handled {
+				return m, cmd
+			}
+			return m, m.popup.inst.Update(msg)
+		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by
 		// the pane itself.
@@ -5078,6 +5134,11 @@ func (m Model) editorNormalMode() bool {
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
+	if m.popup.open && m.popup.inst != nil {
+		// The open popup terminal (#1398) owns the keyboard, so bindings and
+		// the mode indicator resolve under its context, not the pane below.
+		return m.popup.inst.ContextID()
+	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 		return inst.ContextID()
 	}
@@ -5901,6 +5962,10 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 		if top := m.floats.Top(); top != nil {
 			top.AdjustSize(ddw, ddh)
 		}
+	case "popupterm":
+		// The popup terminal (#1398) re-clamps in popupSize; the PTYs follow.
+		m.winSizes.Nudge(popupTermSizeKey, ddw, ddh)
+		m.applyPopupSize()
 	}
 }
 
@@ -6094,6 +6159,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	// The popup terminal (#1398) hit-tests after the overlays that render
+	// above it. An active drag (selection, scrollbar) skips the branch — the
+	// generic drag machinery below handles motion and release popup-aware.
+	if m.popup.open && m.popup.inst != nil && m.drag == nil {
+		if tm, cmd, done := m.popupTermMouse(msg); done {
+			return tm, cmd
+		}
 	}
 	// Menu bar (Roadmap 0160): with a dropdown open, moving the mouse over an
 	// entry selects it (hover follows focus, like keyboard navigation).
@@ -6404,7 +6477,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.layout()
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
 					term.MouseDrag(lx, ly)
 				}
 			}
@@ -6453,10 +6526,8 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragTermScroll:
 			// The scrollback thumb follows the pointer (#1368).
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
-					if term := inst.ActiveTerminal(); term != nil {
-						term.ScrollbarDrag(ly)
-					}
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
+					term.ScrollbarDrag(ly)
 				}
 			}
 		}
@@ -6481,7 +6552,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
 					term.MouseRelease(lx, ly)
 				}
 			}
@@ -7187,6 +7258,15 @@ func explorerContextItems() []menu.Item {
 // termLocal translates a screen-cell mouse event into pane-content-local
 // coordinates for the given terminal pane key.
 func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
+	if key == popupPaneKey {
+		// The popup terminal (#1398) is not a layout leaf: its content-local
+		// coordinates derive from the centered box rectangle.
+		if !m.popup.open || m.popup.inst == nil {
+			return 0, 0, false
+		}
+		px, py, _, _ := m.popupTermRect()
+		return msg.X - (px + paneContentX), msg.Y - (py + paneContentY), true
+	}
 	r, found := m.lay.Panes[key]
 	if !found || m.activeWS().Panes.Get(key) == nil {
 		return 0, 0, false
@@ -7472,6 +7552,13 @@ func (m Model) render() string {
 		// The right-click context menu (#1020) floats at its clamped anchor.
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
+	}
+	if m.popup.open && m.popup.inst != nil && !m.settings.IsOpen() {
+		// The popup terminal (#1398) floats centered above the workspace but
+		// below the exclusive overlays: a palette or the settings panel opened
+		// from inside it must draw on top (settings composites earlier, so it
+		// suppresses the popup for its modal lifetime instead).
+		base = overlay.Center(base, m.renderPopupTerm(), m.width, m.height)
 	}
 	result := base
 	switch {
@@ -7805,6 +7892,11 @@ func (m Model) terminalPaneForSession(sess string) string {
 // dedicated terminal panes and editor-hosted terminal tabs (#573) alike; nil
 // when the session's pane is gone.
 func (m Model) terminalModelForSession(sess string) *terminal.Model {
+	// Popup terminal tabs (#1398) live outside every registry — check them
+	// first so their output/exit messages resolve while the popup is hidden.
+	if _, t := m.popupTabForSession(sess); t != nil {
+		return t
+	}
 	for _, k := range m.activeWS().Panes.Keys() {
 		inst := m.activeWS().Panes.Get(k)
 		if inst == nil {

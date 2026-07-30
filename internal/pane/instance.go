@@ -877,6 +877,21 @@ func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette) *In
 	return i
 }
 
+// NewDetachedTerminalHost builds a tab-host instance that lives outside every
+// registry and outside the layout tree (#1398): the popup terminal owns it
+// directly. It starts as an editor-kind tab host whose only tab is term, so
+// the popup gets the full pane-tab machinery without a layout leaf.
+func NewDetachedTerminalHost(key string, term terminal.Model, cfg host.Config, pal *theme.Palette) *Instance {
+	i := &Instance{key: key, kind: KindTerminal, cfg: cfg, pal: pal, term: term}
+	i.ConvertToTabHost()
+	return i
+}
+
+// SetPalette re-threads the active theme palette into the wrapped components.
+// Registry-held instances get this via Registry.SetPalette; detached instances
+// (the popup terminal host) need the direct seam.
+func (i *Instance) SetPalette(p *theme.Palette) { i.setPalette(p) }
+
 // newEditorModel constructs one tab's editor model configured against cfg.
 func newEditorModel(cfg host.Config, pal *theme.Palette) editor.Model {
 	ed := editor.New()
