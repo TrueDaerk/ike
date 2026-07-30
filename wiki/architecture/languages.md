@@ -41,7 +41,8 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // sniffed path association, exact base name, then extension
+func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, then extension
+func ByAssociation(path string) (Language, bool) // user-configured [files.associations] match (#1365)
 func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
 func AssociatePath(path, id string)         // record a content-sniffed language for one path
 func Comments(path string) (line string, block [2]string, ok bool)
@@ -76,6 +77,24 @@ functions, methods, func literals and type declarations; Python declares
 function and class definitions; PHP declares functions, methods, anonymous
 functions, class/interface/trait/enum declarations and namespaces. An empty
 list leaves sticky scroll inert for the language.
+
+### User file associations (#1365)
+
+Users map extra extensions or filenames to a registered language via the
+`[files.associations]` config slot map (`"*.mytool" = "toml"`,
+`"Jenkinsfile" = "groovy"`; see [config](./config.md)). `ByAssociation`
+(`associations.go`) matches a pattern against the file's **base name**: an
+exact-name key wins, then glob patterns (`filepath.Match`) in sorted key
+order. Explicit user intent beats detection, so `ByPath` consults it **first**
+— before the sniffed per-path index, base names and extensions — and the
+editor's open-time sniff skips content sniffing entirely for an associated
+file. Because every language-keyed feature resolves through `ByPath`,
+the association drives highlighting, folding, comment toggling and the LSP
+bridge alike. An entry whose target id names no registered language never
+matches (fail soft: built-in detection, else plain text);
+`InvalidAssociations` lists such entries and the root model toasts them as
+config warnings on load/reload. The **File Associations** settings page
+(`internal/settings/associations_page.go`) edits the map at user scope.
 
 ### Context sniffers (#897)
 

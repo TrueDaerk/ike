@@ -582,8 +582,23 @@ func New() Model {
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
 	m := NewWith(registry.Global(), host.FromConfig(cfg))
-	m.notifyConfigDiags(diags)
+	m.notifyConfigDiags(append(diags, associationDiags()...))
 	return m
+}
+
+// associationDiags reports every [files.associations] entry whose target
+// names no registered language (#1365): the association is silently inert —
+// the file falls back to built-in detection or plain text — so the broken
+// entry must be visible like any other config problem.
+func associationDiags() []config.Diagnostic {
+	var out []config.Diagnostic
+	for _, a := range lang.InvalidAssociations() {
+		out = append(out, config.Diagnostic{
+			Field:   "files.associations." + a.Pattern,
+			Message: "unknown language id " + strconv.Quote(a.Lang) + " — file falls back to plain text",
+		})
+	}
+	return out
 }
 
 // notifyConfigDiags surfaces config-load diagnostics as warning notifications
@@ -755,6 +770,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	pages = settings.InsertAfter(pages, "Appearance", settings.Page{
 		Title:  "Syntax Colors",
 		Custom: settings.NewColorsPage(m.cfgOpts),
+	})
+	// The [files.associations] editor (#1365) belongs with the file settings.
+	pages = settings.InsertAfter(pages, "Files & Session", settings.Page{
+		Title:  "File Associations",
+		Custom: settings.NewAssocPage(m.cfgOpts),
 	})
 	pages = append(pages, settings.Page{Section: "TOOLS", Title: "Keymap", Custom: settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
@@ -3676,8 +3696,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// recomputes so config-backed lists (recent projects, #842) reflect
 		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
-		m.notifyConfigDiags(msg.Diags)
-		m.settings.NoteReloadDiags(msg.Diags) // inline in the panel too (#891)
+		diags := append(msg.Diags, associationDiags()...)
+		m.notifyConfigDiags(diags)
+		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
 		m.palette.Refresh()
 		// Diagnostic ignore rules (#1259) apply live: a rule change re-filters
 		// every cached raw set into the Problems store and the open editors.

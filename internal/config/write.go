@@ -70,6 +70,7 @@ var slotMapPrefixes = []string{
 	"theme.captures.",
 	"explorer.colors.",
 	"keymap.bindings.",
+	"files.associations.",
 }
 
 // splitKey splits a dotted key into its parent tables and its leaf, honouring
