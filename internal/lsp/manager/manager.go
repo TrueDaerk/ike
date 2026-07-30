@@ -815,6 +815,23 @@ func (m *Manager) FormatSupported(path string) bool {
 	return ok && srv.cl.Caps().Formatting
 }
 
+// RangeFormatSupported reports whether a ready server tracks path and offers
+// range formatting — the formatter registry's per-path range gate (#1401).
+func (m *Manager) RangeFormatSupported(path string) bool {
+	srv, _, ok := m.docServer(path)
+	return ok && srv.cl.Caps().RangeFormatting
+}
+
+// ServerName returns the base name of the server binary handling path ("" when
+// none) — the formatter registry's status-line label (`reformat: gopls`).
+func (m *Manager) ServerName(path string) string {
+	srv, _, ok := m.docServer(path)
+	if !ok {
+		return ""
+	}
+	return filepath.Base(srv.spec.Command)
+}
+
 // OrganizeImportsSupported reports whether a ready server tracks path and
 // offers the source.organizeImports code-action kind (#1148).
 func (m *Manager) OrganizeImportsSupported(path string) bool {

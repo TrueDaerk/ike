@@ -4,6 +4,8 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/format"
 )
 
 // savechain.go is the editor↔bridge seam for format/organize-imports on save
@@ -13,31 +15,44 @@ import (
 // registered by the LSP plugin's bridge — package-level like the host's editor
 // emitters, so internal/editor needs no plugin import.
 
+// SaveChainRequest carries one pre-save chain invocation: which steps the
+// config enables, plus the buffer snapshot and effective per-buffer options
+// the format step hands to text-based formatter providers (Roadmap 0470 —
+// format-on-save routes through the formatter registry, so it needs what the
+// registry's Request needs).
+type SaveChainRequest struct {
+	Path     string
+	Organize bool
+	Format   bool
+	Lines    []string
+	Options  format.Options
+}
+
 var (
 	saveChainMu sync.Mutex
-	saveChainFn func(path string, organize, format bool) tea.Cmd
+	saveChainFn func(req SaveChainRequest) tea.Cmd
 )
 
 // SetSaveChain registers (or clears, with nil) the save-chain provider.
-func SetSaveChain(f func(path string, organize, format bool) tea.Cmd) {
+func SetSaveChain(f func(req SaveChainRequest) tea.Cmd) {
 	saveChainMu.Lock()
 	saveChainFn = f
 	saveChainMu.Unlock()
 }
 
-// StartSaveChain returns the command running the pre-save LSP steps for path
-// — organize imports, then format, each capability-gated and time-boxed — or
-// nil when no provider is registered or no capable server tracks the file.
+// StartSaveChain returns the command running the pre-save steps for the
+// request — organize imports, then format, each capability-gated and
+// time-boxed — or nil when no provider is registered or no step applies.
 // A nil return means "write immediately"; a non-nil command obliges the
 // caller to defer its write until the SaveChainDoneMsg for path arrives.
-func StartSaveChain(path string, organize, format bool) tea.Cmd {
+func StartSaveChain(req SaveChainRequest) tea.Cmd {
 	saveChainMu.Lock()
 	f := saveChainFn
 	saveChainMu.Unlock()
 	if f == nil {
 		return nil
 	}
-	return f(path, organize, format)
+	return f(req)
 }
 
 // SaveChainDoneMsg reports a finished save chain for Path — every step ran,

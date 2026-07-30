@@ -1,5 +1,25 @@
 # Log
 
+## 2026-07-30 (theme: formatter registry, #1401)
+
+- Formatter registry (Roadmap 0470, #1401): reformat is no longer LSP-only.
+  New leaf package `internal/format` holds providers in a fixed resolution
+  chain (config override → external command → LSP → built-in); the
+  `lsp.format` / `lsp.formatRange` commands (ids kept for keymaps) moved to
+  the new `plugins/format` plugin with neutral titles ("Reformat File" /
+  "Reformat Selection"), resolved and run by `internal/app/reformat.go` with
+  the buffer's effective editorconfig-layered options
+  (`editor.FormatOptions`, incl. new `max_line_length`). The LSP provider
+  (`plugins/lsp/provider.go`) is one chain entry; the save chain's format
+  step routes through the registry (`ilsp.SaveChainRequest` now carries the
+  buffer snapshot + options). Status toast names the source
+  (`reformat: gopls`); reformat-selection falls back to the next
+  range-capable provider or says only whole-file is available; no provider is
+  a clear "no formatter" toast. New concept doc
+  [Formatter Registry](/architecture/format.md); LSP/editor/editorconfig docs
+  updated. Follow-ups: #1402 external commands, #1403 SQL built-in, #1404 XML
+  built-in, #1405 per-language defaults.
+
 ## 2026-07-30 (theme: popup terminal, #1398)
 
 - Popup terminal (#1398): quake-style floating terminal overlay with tabs,

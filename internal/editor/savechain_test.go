@@ -27,8 +27,8 @@ type providerCall struct {
 // it up afterwards; every call is appended to calls.
 func withProvider(t *testing.T, calls *[]providerCall) {
 	t.Helper()
-	ilsp.SetSaveChain(func(path string, organize, format bool) tea.Cmd {
-		*calls = append(*calls, providerCall{path: path, organize: organize, format: format})
+	ilsp.SetSaveChain(func(req ilsp.SaveChainRequest) tea.Cmd {
+		*calls = append(*calls, providerCall{path: req.Path, organize: req.Organize, format: req.Format})
 		return func() tea.Msg { return nil }
 	})
 	t.Cleanup(func() { ilsp.SetSaveChain(nil) })

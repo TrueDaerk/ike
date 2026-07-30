@@ -5,7 +5,6 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -784,74 +783,6 @@ func locationsToRefs(mgr *manager.Manager, path string, locs []protocol.Location
 		refs = append(refs, ref)
 	}
 	return refs
-}
-
-// format requests whole-document formatting with the editor's indent settings
-// and delivers the edits as a FormatEditsMsg the owning editor applies.
-func (b *bridge) format(h host.API) tea.Cmd {
-	b.ensure(h)
-	path, _, _ := b.cur()
-	mgr := b.manager()
-	if path == "" || mgr == nil {
-		return nil
-	}
-	opts := formattingOptions(h)
-	go func() {
-		edits, err := mgr.Format(context.Background(), path, opts)
-		if requestFailed(h, "reformat", err) || len(edits) == 0 {
-			return
-		}
-		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
-	}()
-	return nil
-}
-
-// formatRange formats the active visual selection; without one it reports
-// what to do instead of silently doing nothing.
-func (b *bridge) formatRange(h host.API) tea.Cmd {
-	b.ensure(h)
-	path, _, _ := b.cur()
-	mgr := b.manager()
-	if path == "" || mgr == nil {
-		return nil
-	}
-	start, end, ok := b.sel()
-	if !ok {
-		return func() tea.Msg {
-			return ilsp.ServerStatusMsg{Text: "select a range first (visual mode), or use LSP: Reformat File", Kind: ilsp.ServerEventInfo}
-		}
-	}
-	opts := formattingOptions(h)
-	go func() {
-		edits, err := mgr.FormatRange(context.Background(), path, start, end, opts)
-		if requestFailed(h, "reformat selection", err) || len(edits) == 0 {
-			return
-		}
-		h.Send(ilsp.FormatEditsMsg{Path: path, Edits: edits})
-	}()
-	return nil
-}
-
-// formattingOptions reads the editor indent settings from config; the defaults
-// mirror internal/config's editor defaults.
-func formattingOptions(h host.API) protocol.FormattingOptions {
-	opts := protocol.FormattingOptions{TabSize: 4, InsertSpaces: true}
-	if h == nil {
-		return opts
-	}
-	cfg := h.Config()
-	if cfg == nil {
-		return opts
-	}
-	if v, ok := cfg.Get("editor.tab_width"); ok {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 {
-			opts.TabSize = n
-		}
-	}
-	if v, ok := cfg.Get("editor.use_spaces"); ok {
-		opts.InsertSpaces = v == "true"
-	}
-	return opts
 }
 
 // rename starts the rename flow: prepareRename validates the cursor position

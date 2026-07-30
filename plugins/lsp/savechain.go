@@ -7,7 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/format"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
@@ -36,21 +38,24 @@ import (
 var saveChainStepTimeout = 2 * time.Second
 
 // saveChainCmd is the ilsp.SetSaveChain provider: it decides synchronously
-// whether any enabled step has a capable ready server for path — nil means
-// "no chain, write immediately" — and coalesces re-entrant requests: a second
+// whether any enabled step has a capable source for path — nil means "no
+// chain, write immediately" — and coalesces re-entrant requests: a second
 // save while path's chain is pending returns a no-op command, and the pending
-// chain's SaveChainDoneMsg completes that save too.
-func (b *bridge) saveChainCmd(path string, organize, format bool) tea.Cmd {
+// chain's SaveChainDoneMsg completes that save too. Organize-imports needs a
+// capable server; the format step routes through the formatter registry
+// (#1401), so any resolvable provider — server or not — qualifies.
+func (b *bridge) saveChainCmd(req ilsp.SaveChainRequest) tea.Cmd {
 	mgr := b.manager()
 	b.mu.Lock()
 	h := b.h
 	b.mu.Unlock()
-	if mgr == nil || h == nil || path == "" {
+	path := req.Path
+	if h == nil || path == "" {
 		return nil
 	}
-	organize = organize && mgr.OrganizeImportsSupported(path)
-	format = format && mgr.FormatSupported(path)
-	if !organize && !format {
+	organize := req.Organize && mgr != nil && mgr.OrganizeImportsSupported(path)
+	doFormat := req.Format && format.Has(langIDFor(path), path)
+	if !organize && !doFormat {
 		return nil
 	}
 	b.mu.Lock()
@@ -63,28 +68,35 @@ func (b *bridge) saveChainCmd(path string, organize, format bool) tea.Cmd {
 	}
 	b.saveChains[path] = true
 	b.mu.Unlock()
-	opts := formattingOptions(h)
 	return func() tea.Msg {
-		go b.runSaveChain(h, mgr, path, organize, format, opts)
+		go b.runSaveChain(h, mgr, req, organize, doFormat)
 		return nil
 	}
 }
 
 // runSaveChain executes the chain off the Update goroutine and always ends
 // with the SaveChainDoneMsg that releases the editor's deferred write.
-func (b *bridge) runSaveChain(h host.API, mgr *manager.Manager, path string, organize, format bool, opts protocol.FormattingOptions) {
+func (b *bridge) runSaveChain(h host.API, mgr *manager.Manager, req ilsp.SaveChainRequest, organize, doFormat bool) {
 	defer func() {
 		b.mu.Lock()
-		delete(b.saveChains, path)
+		delete(b.saveChains, req.Path)
 		b.mu.Unlock()
-		h.Send(ilsp.SaveChainDoneMsg{Path: path})
+		h.Send(ilsp.SaveChainDoneMsg{Path: req.Path})
 	}()
 	if organize {
-		b.organizeImportsStep(h, mgr, path)
+		b.organizeImportsStep(h, mgr, req.Path)
 	}
-	if format {
-		b.formatStep(h, mgr, path, opts)
+	if doFormat {
+		b.formatStep(h, mgr, req)
 	}
+}
+
+// langIDFor resolves path's registered language id ("" when unknown).
+func langIDFor(path string) string {
+	if l, ok := lang.ByPath(path); ok {
+		return l.ID
+	}
+	return ""
 }
 
 // organizeImportsStep requests the source.organizeImports actions and applies
@@ -130,16 +142,50 @@ func (b *bridge) organizeImportsStep(h host.API, mgr *manager.Manager, path stri
 	}
 }
 
-// formatStep requests whole-document formatting and applies the edits acked.
-func (b *bridge) formatStep(h host.API, mgr *manager.Manager, path string, opts protocol.FormattingOptions) {
-	b.flushChange(path) // sync the organize-imports result before formatting
-	ctx, cancel := context.WithTimeout(context.Background(), saveChainStepTimeout)
-	edits, err := mgr.Format(ctx, path, opts)
-	cancel()
-	if err != nil || len(edits) == 0 {
+// formatStep resolves the buffer's formatter through the registry (#1401) and
+// applies the winning provider's edits acked. Text-based providers read the
+// freshest lines available: the manager's synced document when a server
+// tracks the file (the organize step's edits are in there), else the buffer
+// snapshot the editor sent with the request (no server means no organize step
+// ran, so it cannot be stale).
+func (b *bridge) formatStep(h host.API, mgr *manager.Manager, req ilsp.SaveChainRequest) {
+	path := req.Path
+	prov, ok := format.Resolve(langIDFor(path), path)
+	if !ok {
 		return
 	}
-	b.applyEditsAcked(h, path, edits)
+	b.flushChange(path) // sync the organize-imports result before formatting
+	lines := req.Lines
+	if mgr != nil {
+		if dl, tracked := mgr.DocLines(path); tracked {
+			lines = dl
+		}
+	}
+	freq := format.Request{Path: path, Language: langIDFor(path), Lines: lines, Options: req.Options}
+	ctx, cancel := context.WithTimeout(context.Background(), saveChainStepTimeout)
+	res, err := prov.Format(ctx, freq)
+	cancel()
+	if err != nil {
+		return
+	}
+	edits := format.EditsForResult(lines, res)
+	if len(edits) == 0 {
+		return
+	}
+	b.applyEditsAcked(h, path, toFormatEdits(edits))
+}
+
+// toFormatEdits converts registry edits into the FormatEditsMsg shape.
+func toFormatEdits(edits []format.Edit) []ilsp.FormatEdit {
+	out := make([]ilsp.FormatEdit, len(edits))
+	for i, e := range edits {
+		out[i] = ilsp.FormatEdit{
+			StartLine: e.StartLine, StartCol: e.StartCol,
+			EndLine: e.EndLine, EndCol: e.EndCol,
+			Text: e.Text,
+		}
+	}
+	return out
 }
 
 // applyEditsAcked delivers edits for path and blocks until the app applied

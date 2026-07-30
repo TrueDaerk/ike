@@ -9,6 +9,7 @@ import (
 	// The compiled-in plugins register their commands via init(), mirroring
 	// cmd/ike; without these imports the registry would under-report and the
 	// audit below would flag live bindings as dead.
+	_ "ike/plugins/format"
 	_ "ike/plugins/lsp"
 )
 

@@ -36,7 +36,7 @@ func TestSaveChainDoneCompletesDeferredWrite(t *testing.T) {
 	// Register the fake provider after openPath: the app test binary links
 	// plugins/lsp (keymap coverage), whose fileOpened hook installs the real
 	// bridge provider and would overwrite an earlier registration.
-	ilsp.SetSaveChain(func(path string, organize, format bool) tea.Cmd {
+	ilsp.SetSaveChain(func(req ilsp.SaveChainRequest) tea.Cmd {
 		return func() tea.Msg { return nil }
 	})
 	t.Cleanup(func() { ilsp.SetSaveChain(nil) })

@@ -69,5 +69,6 @@ Consumed keys map onto existing behaviour:
 | `indent_size` / `tab_width` | `tabWidth` (tab_width wins; `indent_size = tab` defers to tab_width) |
 | `trim_trailing_whitespace` | trim on save |
 | `insert_final_newline` | final newline on save |
+| `max_line_length` | handed to formatter providers via `editor.FormatOptions` ([Formatter Registry](./format.md), 0470); not enforced by the editor itself |
 | `end_of_line` | stored EOL flavor (#66): applied on save, so an lf/crlf mismatch converts on the next write; `cr` is unsupported and ignored |
 | `charset` | decode fallback on load (a BOM or valid UTF-8 still wins — readable bytes are never re-interpreted) and the initial encoding of new files; outranks `files.encoding` |

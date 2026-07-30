@@ -104,18 +104,9 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Scope: plugin.PaneScope("editor"),
 				Run:   func(h host.API) tea.Cmd { return shared().rename(h) },
 			},
-			{
-				ID:    "lsp.format",
-				Title: "LSP: Reformat File",
-				Scope: plugin.PaneScope("editor"),
-				Run:   func(h host.API) tea.Cmd { return shared().format(h) },
-			},
-			{
-				ID:    "lsp.formatRange",
-				Title: "LSP: Reformat Selection",
-				Scope: plugin.PaneScope("editor"),
-				Run:   func(h host.API) tea.Cmd { return shared().formatRange(h) },
-			},
+			// lsp.format / lsp.formatRange moved to plugins/format (#1401):
+			// reformat resolves through the formatter registry now, with this
+			// plugin's LSP provider (provider.go) as one chain entry.
 			{
 				ID:    "project.goToClass",
 				Title: "Go to Symbol",
