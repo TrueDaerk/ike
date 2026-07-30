@@ -222,6 +222,9 @@ type Model struct {
 	// topmost open layer owns key input and compositing order.
 	shell  *ui.Floating
 	floats *ui.Stack
+	// popup is the popup terminal (#1398): a floating tab-host terminal
+	// overlay outside the layout tree, toggled by terminal.popup.
+	popup popupTerm
 	// conflictKey is the editor pane awaiting a save-conflict answer (Roadmap
 	// 0140, #82) while the shell shows the prompt; "" when no conflict is open.
 	conflictKey string
@@ -2467,6 +2470,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.layout()
+		m.applyPopupSize() // the popup lives outside the tree; layout() never sizes it
 		m.floats.SetSize(m.width, m.height)
 		m.palette.SetSize(m.width, m.height)
 		m.finder.SetSize(m.width, m.height)
@@ -3382,6 +3386,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// refuses (last leaf), the pane stays showing [process exited]. A
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
+		if idx, t := m.popupTabForSession(msg.Key); t != nil {
+			// A popup terminal shell ended (#1398): its tab closes; the last
+			// tab drops the whole popup, and the next toggle spawns fresh.
+			m.closePopupTab(idx)
+			return m, nil
+		}
 		key := m.terminalPaneForSession(msg.Key)
 		// Command sessions (#576) stay open — their output is the point of
 		// the run. Tool panes (#741) stay open too (#810): the footer offers
@@ -7473,6 +7483,12 @@ func (m Model) render() string {
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
+	if m.popup.open && m.popup.inst != nil {
+		// The popup terminal (#1398) floats centered above the workspace but
+		// below the exclusive overlays: a palette opened from inside it must
+		// draw on top.
+		base = overlay.Center(base, m.renderPopupTerm(), m.width, m.height)
+	}
 	result := base
 	switch {
 	case m.finder.IsOpen():
@@ -7805,6 +7821,11 @@ func (m Model) terminalPaneForSession(sess string) string {
 // dedicated terminal panes and editor-hosted terminal tabs (#573) alike; nil
 // when the session's pane is gone.
 func (m Model) terminalModelForSession(sess string) *terminal.Model {
+	// Popup terminal tabs (#1398) live outside every registry — check them
+	// first so their output/exit messages resolve while the popup is hidden.
+	if _, t := m.popupTabForSession(sess); t != nil {
+		return t
+	}
 	for _, k := range m.activeWS().Panes.Keys() {
 		inst := m.activeWS().Panes.Get(k)
 		if inst == nil {
