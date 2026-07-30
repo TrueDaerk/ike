@@ -189,6 +189,10 @@ type (
 // previously focused pane. Dispatched by terminal.toggle.
 type TerminalToggleMsg struct{}
 
+// TerminalPopupMsg toggles the popup terminal (#1398): the floating tab-host
+// terminal overlay outside the pane layout. Dispatched by terminal.popup.
+type TerminalPopupMsg struct{}
+
 // TerminalClearMsg clears the focused (else first) terminal's scrollback and
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
@@ -351,6 +355,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("debug.stepOut", "Step Out", DebugStepOutMsg{}),
 			appCommand("debug.continue", "Continue", DebugContinueMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
+			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),

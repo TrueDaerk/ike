@@ -126,6 +126,7 @@ var reachableAlternatives = map[string]string{
 	"settings.open":            "palette",
 	"terminal.toggle":          "palette",
 	"terminal.new":             "palette",
+	"terminal.popup":           "palette",
 	"notifications.history":    "palette",
 	"markdown.preview":         "palette",
 	"todo.list":                "palette",

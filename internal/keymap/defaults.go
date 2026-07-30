@@ -219,9 +219,15 @@ var jetbrainsRows = []row{
 	// hence fragile; inside a focused terminal the reserved-set handler picks
 	// it up before the chord layer (raw pass-through).
 	{"alt+f12", "terminal.toggle", "Toggle terminal", Global, "Terminal (0170)"},
+	// Popup terminal (#1398): the floating tab-host terminal overlay. cmd+alt+t
+	// took this chord from terminal.new, which moved to cmd+alt+shift+t —
+	// the quick toggle earns the shorter chord. Inside the popup (and inside
+	// focused pane terminals) the reserved-set handlers intercept it before
+	// raw pass-through.
+	{"cmd+alt+t", "terminal.popup", "Popup terminal", Global, "Terminal (#1398)"},
 	// New terminal session and notification history: single chords since the
 	// leader layer retired (#711); JetBrains has no defaults for either.
-	{"cmd+alt+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
+	{"cmd+alt+shift+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
 	{"cmd+alt+n", "notifications.history", "Notification history", Global, "Notifications (#242)"},
 	// New file / scratch (#1145): cmd+n mirrors JetBrains' New-in-project-view
 	// — the prompt targets the explorer selection and works with an editor

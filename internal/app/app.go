@@ -1922,6 +1922,8 @@ var terminalGlobalCommands = map[string]bool{
 	// #934: zen must toggle (and untoggle) with a terminal or tool pane
 	// focused; the shell never meaningfully sees the zen chord.
 	"view.zenMode": true,
+	// #1398: the popup terminal must open from a focused pane terminal too.
+	"terminal.popup": true,
 }
 
 // terminalShellChords are chords that stay with the shell even when they
@@ -3366,6 +3368,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.host.Notify(host.Info, msg.Name+" is ready — open it with the tool."+toolSlug(msg.Name)+" command")
 		}
+		return m, nil
+
+	case TerminalPopupMsg:
+		// terminal.popup: show/hide the floating popup terminal (#1398).
+		m.togglePopupTerminal()
 		return m, nil
 
 	case TerminalClearMsg:
