@@ -106,9 +106,11 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			Time: RelTime(s.entry.LastOpened, now),
 		}
 		if m.open != nil && m.open(s.entry.Path) {
-			// Loaded in memory (#820): dot badge + close-in-place aux action.
+			// Loaded in memory (#820): dot badge + close-in-place aux action,
+			// marked with its own glyph (#1418) to tell it apart from removal.
 			it.Badge = "●"
 			it.Aux = CloseWorkspaceMsg{Path: s.entry.Path}
+			it.AuxGlyph = CloseAuxGlyph
 		} else {
 			// Unloaded entries prune from the history instead (#842).
 			it.Aux = RemoveFromHistoryMsg{Path: s.entry.Path}

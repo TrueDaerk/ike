@@ -152,8 +152,10 @@ project.
   column — clearly separated from the name and from the `✕` control; narrow
   rows truncate the name (ellipsis) while the time and `✕` stay intact, and
   below a minimum name width the time drops. In-memory workspaces (#820)
-  keep the `●` badge next to the name and their aux action (`shift+delete` /
-  the `✕` zone) closes the workspace; unloaded entries' aux action instead
+  keep the `●` badge next to the name and their aux action (`shift+delete` or
+  `cmd+backspace` — the forward-delete-free alias, #1418 — / a click on the
+  aux zone, rendered as `⏏` on these rows to set the close apart from
+  removal) closes the workspace; unloaded entries' aux action instead
   **removes the entry from the history** (`RemoveFromHistoryMsg` → off-loop
   `RemoveFromHistory` write-back at user scope → config reload → the
   still-open palette re-lists). The Recent Projects column of the Recent

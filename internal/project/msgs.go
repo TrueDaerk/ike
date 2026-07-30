@@ -34,6 +34,12 @@ type CloseProjectMsg struct{}
 // recent-projects entries; the history entry itself stays.
 type CloseWorkspaceMsg struct{ Path string }
 
+// CloseAuxGlyph is the aux-zone glyph for close-workspace rows (#1418): "⏏"
+// (unload, keep the entry) distinguishes them from the default removal "✕"
+// on unloaded rows, wherever recent-projects entries render (the picker and
+// the Recent Files dialog's projects column).
+const CloseAuxGlyph = "⏏"
+
 // RemoveFromHistoryMsg asks the root model to delete the history entry at
 // Path (#842): the aux action of unloaded recent-projects entries. Only the
 // persisted list changes — nothing is closed or switched.
