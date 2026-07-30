@@ -52,6 +52,11 @@ type External struct {
 	// Install is the one-line install hint shown when Command is missing
 	// (the #1067 companion-hint pattern), e.g. "pip install ruff".
 	Install string
+	// Adjust, when set, post-processes the expanded argument list per
+	// invocation — for flags no static placeholder can express (#1405):
+	// shfmt's indent flag from the effective options, the shell dialect from
+	// the buffer's shebang. Applied to Args and RangeArgs alike.
+	Adjust func(req Request, argv []string) []string
 }
 
 // maxExternalInput guards runaway invocations: buffers beyond this size are
@@ -143,6 +148,9 @@ func (e External) run(ctx context.Context, req Request, args []string, extra map
 			a = strings.ReplaceAll(a, k, v)
 		}
 		expanded[i] = a
+	}
+	if e.Adjust != nil {
+		expanded = e.Adjust(req, expanded)
 	}
 
 	cmd := exec.CommandContext(ctx, e.Command, expanded...)
@@ -263,19 +271,88 @@ func HintMissing(langID string, e External) { hintMissing(langID, e) }
 // formatter (TierExternal) and records the spec for the settings page
 // (#1402). Call from init(), like Register.
 func RegisterExternalDefault(langID string, e External) {
-	extMu.Lock()
-	externalDefaults[langID] = e
-	extMu.Unlock()
-	Register(e.Provider(langID, TierExternal))
+	RegisterExternalDefaults(langID, e)
 }
 
-// ExternalDefault returns the plugin-declared default external spec for a
-// language, when one was registered.
+// RegisterExternalDefaults registers a fallback chain of external defaults
+// for a language (#1405): the first spec whose binary is on PATH serves
+// (`ruff format` else `black`); when none is installed, the chain never
+// resolves and the primary spec's install hint fires once. One registry
+// entry covers the whole chain, so the resolution order between languages
+// stays purely tier-driven.
+func RegisterExternalDefaults(langID string, specs ...External) {
+	if len(specs) == 0 {
+		return
+	}
+	extMu.Lock()
+	externalDefaults[langID] = specs
+	extMu.Unlock()
+	pick := func() (External, bool) {
+		for _, e := range specs {
+			if e.Ok() {
+				return e, true
+			}
+		}
+		return External{}, false
+	}
+	p := Provider{
+		Name:      specs[0].Command,
+		Languages: []string{langID},
+		Tier:      TierExternal,
+		NameFor: func(path string) string {
+			if e, ok := pick(); ok {
+				return e.Command
+			}
+			return ""
+		},
+		Available: func(path string) bool {
+			if !externalEnabled(langID) {
+				return false
+			}
+			if _, ok := pick(); !ok {
+				hintMissing(langID, specs[0])
+				return false
+			}
+			return true
+		},
+		RangeAvailable: func(path string) bool {
+			e, ok := pick()
+			return ok && externalEnabled(langID) && len(e.RangeArgs) > 0
+		},
+		Format: func(ctx context.Context, req Request) (Result, error) {
+			e, ok := pick()
+			if !ok {
+				return Result{}, errors.New("no formatter binary installed for " + langID)
+			}
+			return e.Run(ctx, req)
+		},
+		FormatRange: func(ctx context.Context, req Request, start, end Pos) (Result, error) {
+			e, ok := pick()
+			if !ok {
+				return Result{}, errors.New("no formatter binary installed for " + langID)
+			}
+			return e.RunRange(ctx, req, start, end)
+		},
+	}
+	Register(p)
+}
+
+// ExternalDefault returns the language's effective default external spec —
+// the first chain entry whose binary is installed, else the primary — for
+// the settings page.
 func ExternalDefault(langID string) (External, bool) {
 	extMu.Lock()
-	defer extMu.Unlock()
-	e, ok := externalDefaults[langID]
-	return e, ok
+	specs, ok := externalDefaults[langID]
+	extMu.Unlock()
+	if !ok || len(specs) == 0 {
+		return External{}, false
+	}
+	for _, e := range specs {
+		if e.Ok() {
+			return e, true
+		}
+	}
+	return specs[0], true
 }
 
 // ExternalDefaultLangs lists the languages with a registered default external
@@ -292,7 +369,7 @@ func ExternalDefaultLangs() []string {
 
 var (
 	extMu            sync.Mutex
-	externalDefaults = map[string]External{}
+	externalDefaults = map[string][]External{}
 	notifier         func(text string)
 	enabledHook      func(langID string) bool
 	builtinHook      func(langID string) bool

@@ -115,6 +115,13 @@ of the box with a built-in pretty-printer: indentation per your settings,
 attribute wrapping at `max_line_length`, comments/CDATA/`xml:space` content
 untouched.
 
+What reformats out of the box: Go, TS/JS, HTML/CSS, JSON, TOML, PHP, YAML
+and Dockerfile via their language servers; SQL and XML via the built-in
+formatters. Python (`ruff` or `black`), Markdown (`prettier` or
+`mdformat`), Shell (`shfmt`) and Ansible (`prettier` or `yamlfmt`) use the
+ecosystem tool — install one and `cmd+alt+l` picks it up; if it is missing,
+IKE tells you once what to install.
+
 ## Toolchains
 
 The **Toolchain** settings page is where the interpreter or SDK per language

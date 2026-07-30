@@ -229,7 +229,7 @@ func ResetForTest() {
 	providers = nil
 	mu.Unlock()
 	extMu.Lock()
-	externalDefaults = map[string]External{}
+	externalDefaults = map[string][]External{}
 	hinted = map[string]bool{}
 	extMu.Unlock()
 }

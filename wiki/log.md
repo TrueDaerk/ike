@@ -1,5 +1,18 @@
 # Log
 
+## 2026-07-30 (theme: per-language formatter defaults, #1405)
+
+- Per-language external formatter defaults (Roadmap 0470, #1405): Python
+  `ruff format` → `black` (project venv copies preferred), Markdown
+  `prettier` → `mdformat` (no prose reflow), Shell `shfmt` (indent flag
+  from editorconfig, `-ln` dialect from the shebang, explicit hint replaces
+  bash-language-server's silent path), Ansible `prettier --parser yaml` →
+  `yamlfmt`. New `format.RegisterExternalDefaults` fallback chains + an
+  `External.Adjust` hook for flags placeholders cannot express. Servers log
+  their observed formatting capabilities on startup. Reformat coverage
+  matrix added to [Language Registry](/architecture/languages.md); userdocs
+  list what works out of the box.
+
 ## 2026-07-30 (theme: built-in XML formatter, #1404)
 
 - Built-in XML formatter (Roadmap 0470, #1404): pure-Go tokenizer + tree +
