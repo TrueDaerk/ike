@@ -5957,6 +5957,10 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 		if top := m.floats.Top(); top != nil {
 			top.AdjustSize(ddw, ddh)
 		}
+	case "popupterm":
+		// The popup terminal (#1398) re-clamps in popupSize; the PTYs follow.
+		m.winSizes.Nudge(popupTermSizeKey, ddw, ddh)
+		m.applyPopupSize()
 	}
 }
 
@@ -6150,6 +6154,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+	// The popup terminal (#1398) hit-tests after the overlays that render
+	// above it. An active drag (selection, scrollbar) skips the branch — the
+	// generic drag machinery below handles motion and release popup-aware.
+	if m.popup.open && m.popup.inst != nil && m.drag == nil {
+		if tm, cmd, done := m.popupTermMouse(msg); done {
+			return tm, cmd
+		}
 	}
 	// Menu bar (Roadmap 0160): with a dropdown open, moving the mouse over an
 	// entry selects it (hover follows focus, like keyboard navigation).
@@ -6460,7 +6472,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			m.layout()
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
 					term.MouseDrag(lx, ly)
 				}
 			}
@@ -6509,10 +6521,8 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		case dragTermScroll:
 			// The scrollback thumb follows the pointer (#1368).
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if inst := m.activeWS().Panes.Get(m.drag.srcPane); inst != nil {
-					if term := inst.ActiveTerminal(); term != nil {
-						term.ScrollbarDrag(ly)
-					}
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
+					term.ScrollbarDrag(ly)
 				}
 			}
 		}
@@ -6537,7 +6547,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 		case dragTermSelect:
 			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
-				if term := m.activeWS().Panes.Get(m.drag.srcPane).ActiveTerminal(); term != nil {
+				if term := m.dragTerminal(m.drag.srcPane); term != nil {
 					term.MouseRelease(lx, ly)
 				}
 			}
@@ -7243,6 +7253,15 @@ func explorerContextItems() []menu.Item {
 // termLocal translates a screen-cell mouse event into pane-content-local
 // coordinates for the given terminal pane key.
 func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
+	if key == popupPaneKey {
+		// The popup terminal (#1398) is not a layout leaf: its content-local
+		// coordinates derive from the centered box rectangle.
+		if !m.popup.open || m.popup.inst == nil {
+			return 0, 0, false
+		}
+		px, py, _, _ := m.popupTermRect()
+		return msg.X - (px + paneContentX), msg.Y - (py + paneContentY), true
+	}
 	r, found := m.lay.Panes[key]
 	if !found || m.activeWS().Panes.Get(key) == nil {
 		return 0, 0, false

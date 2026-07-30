@@ -22,6 +22,10 @@ import (
 // popupTermSizeKey is the WinSizes delta key for the popup box (#774 store).
 const popupTermSizeKey = "popupterm"
 
+// popupPaneKey is the sentinel pane key the drag machinery uses for gestures
+// anchored inside the popup (termLocal and dragTerminal special-case it).
+const popupPaneKey = "popup"
+
 // Popup box geometry: fraction of the screen the box takes by default, and
 // the floors a resize can never go below.
 const (
@@ -147,6 +151,99 @@ func (m Model) popupTabForSession(sess string) (int, *terminal.Model) {
 		}
 	}
 	return -1, nil
+}
+
+// dragTerminal resolves a drag's source pane key to the live terminal a
+// selection or scrollbar gesture targets: the popup's active shell for the
+// popup sentinel, the pane's active terminal otherwise.
+func (m Model) dragTerminal(key string) *terminal.Model {
+	if key == popupPaneKey {
+		if m.popup.inst != nil {
+			return m.popup.inst.ActiveTerminal()
+		}
+		return nil
+	}
+	if inst := m.activeWS().Panes.Get(key); inst != nil {
+		return inst.ActiveTerminal()
+	}
+	return nil
+}
+
+// popupTermMouse routes a mouse event while the popup terminal is open and no
+// drag is active: outside press hides, border press starts a resize drag, the
+// tab-bar row activates/closes tabs, body presses anchor selections or hit the
+// scrollbar/links, the wheel pages the scrollback. Motion and release with an
+// active drag never reach this — the generic drag machinery owns them. done
+// reports whether the event was consumed.
+func (m *Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
+	px, py, pw, ph := m.popupTermRect()
+	if msg.action == mousePress && !inRect(msg.X, msg.Y, px, py, pw, ph) {
+		// A press outside dismisses (hide, sessions keep running), like the
+		// floating stack's outside-press pop.
+		m.togglePopupTerminal()
+		return m, nil, true
+	}
+	term := m.popup.inst.ActiveTerminal()
+	lx, ly := msg.X-(px+paneContentX), msg.Y-(py+paneContentY)
+	switch {
+	case msg.action == mousePress && msg.Button == tea.MouseLeft:
+		// The border ring starts a mouse resize (#933), centered geometry.
+		if sx, sy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok {
+			m.floatDrag = &floatResizeDrag{kind: "popupterm", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+			return m, nil, true
+		}
+		// Tab-bar row (#157/#1128): a segment click activates, its ✕ closes —
+		// the active tab through the busy guard, others directly.
+		if msg.Y == py+1 && (m.popup.inst.TabCount() > 1 || m.tabsAlwaysShow()) {
+			labels := tabLabels(m.popup.inst)
+			if idx, closeHit := tabHit(labels, m.popup.inst.ActiveTab(), pw-paneChromeW, lx); idx >= 0 {
+				switch {
+				case !closeHit:
+					m.popup.inst.ActivateTab(idx)
+				case idx == m.popup.inst.ActiveTab():
+					m.requestPopupTabClose()
+				default:
+					m.closePopupTab(idx)
+				}
+			}
+			return m, nil, true
+		}
+		if term == nil {
+			return m, nil, true
+		}
+		// Scrollback scrollbar (#1368) outranks links and selection.
+		if term.ScrollbarHit(lx, ly) {
+			if term.ScrollbarPress(ly) {
+				m.drag = &dragState{kind: dragTermScroll, srcPane: popupPaneKey, curX: msg.X, curY: msg.Y}
+			}
+			return m, nil, true
+		}
+		// cmd+click opens a file:line reference (#1168).
+		if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
+			if p, line, col, ok := term.LinkAt(lx, ly); ok {
+				tm, cmd := m.openPathAt(p, line, col)
+				return tm, cmd, true
+			}
+			return m, nil, true
+		}
+		term.MousePress(lx, ly)
+		m.drag = &dragState{kind: dragTermSelect, srcPane: popupPaneKey, curX: msg.X, curY: msg.Y}
+		return m, nil, true
+	case msg.action == mouseWheel && term != nil:
+		// Wheel like a terminal pane (#226): mouse-reporting children get the
+		// event, a plain shell pages the scrollback.
+		lines := wheelLines * msg.ticks()
+		switch msg.Button {
+		case tea.MouseWheelUp:
+			term.MouseWheel(lx, ly, lines)
+		case tea.MouseWheelDown:
+			term.MouseWheel(lx, ly, -lines)
+		}
+		return m, nil, true
+	}
+	// Motion (hover) and stray releases stay with the popup — they must not
+	// leak into the panes underneath.
+	return m, nil, true
 }
 
 // popupChordCommand resolves a single-step chord against the live binding
