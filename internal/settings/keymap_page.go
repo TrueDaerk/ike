@@ -59,6 +59,21 @@ type KeymapPage struct {
 	// expanded remembers which numbered runs are unfolded (#1300), per
 	// session — a fold the user opened stays open while the panel is used.
 	expanded map[string]bool
+
+	// Memoization (#1396): BuildTable resolves the full overlay stack and
+	// rows() filters+sorts every command — repeated per key event and per
+	// render frame, that saturated the Update loop and froze the panel. The
+	// table is keyed on the live *config.Config (every edit reloads the config,
+	// which swaps the pointer); the row list additionally on the filter text
+	// and the fold generation. Commands registered after the cache filled
+	// (plugins) appear on the next config reload.
+	cachedTable  *keymap.BindingTable
+	tableCfg     *config.Config
+	rowCache     []keymapRow
+	rowCacheOK   bool
+	cacheFilter  string
+	foldGen      int // bumped by toggleRange
+	cacheFoldGen int
 }
 
 // NewKeymapPage builds the keymap editor writing overrides through opts;
@@ -102,7 +117,11 @@ type keymapRow struct {
 // construction the app's resolver uses, so the page always shows reality.
 func (k *KeymapPage) table() *keymap.BindingTable {
 	c := config.Get()
-	return keymap.BuildTable(k.defaults(), c.Keymap.Bindings, keymap.GOOS)
+	if k.cachedTable == nil || k.tableCfg != c {
+		k.cachedTable, k.tableCfg = keymap.BuildTable(k.defaults(), c.Keymap.Bindings, keymap.GOOS), c
+		k.rowCacheOK = false // the rows derive from the table
+	}
+	return k.cachedTable
 }
 
 // defaults returns the active preset's default bindings.
@@ -121,7 +140,12 @@ func (k *KeymapPage) defaults() []keymap.Binding {
 // rebound to another command (#736). The row keeps the command reachable for
 // rebinding and carries the default chord for a per-binding reset.
 func (k *KeymapPage) rows() []keymapRow {
-	return k.foldRanges(k.unfoldedRows())
+	k.table() // refresh the table cache; a config change drops the row cache too
+	if !k.rowCacheOK || k.filter != k.cacheFilter || k.foldGen != k.cacheFoldGen {
+		k.rowCache = k.foldRanges(k.unfoldedRows())
+		k.rowCacheOK, k.cacheFilter, k.cacheFoldGen = true, k.filter, k.foldGen
+	}
+	return k.rowCache
 }
 
 // unfoldedRows is rows() before numbered runs are folded (#1300).
@@ -425,13 +449,6 @@ func (k *KeymapPage) renderList(w, h int) string {
 	// fixed edge (#1298): an over-long row must not push the detail column
 	// sideways on its line alone.
 	clip := lipgloss.NewStyle().MaxWidth(w)
-	var list []string
-	for i, b := range rows {
-		list = append(list, clip.Render(k.renderRow(b, i == k.sel, w)))
-	}
-	if len(rows) == 0 {
-		list = append(list, "no bindings match")
-	}
 	// The detail line is a footer pinned below the list (#537): moving the
 	// selection never shifts the rows, and the list scrolls to follow it.
 	// It wraps to the column width over a constant two lines (#553).
@@ -441,7 +458,14 @@ func (k *KeymapPage) renderList(w, h int) string {
 	}
 	headLine := lipgloss.NewStyle().Foreground(pal.Secondary).Render(head)
 	k.listH = h - 1 - len(footer)
-	return headLine + "\n" + pinFooter(list, footer, k.sel, k.sel, h-1, &k.off)
+	if len(rows) == 0 {
+		return headLine + "\n" + pinFooter([]string{"no bindings match"}, footer, 0, 0, h-1, &k.off)
+	}
+	// Only the visible window is styled (#1396): the full command list runs to
+	// hundreds of rows, and rendering them all per frame is what a mouse move
+	// over the panel used to pay.
+	render := func(i int) string { return clip.Render(k.renderRow(rows[i], i == k.sel, w)) }
+	return headLine + "\n" + pinFooterLazy(len(rows), render, footer, k.sel, k.sel, h-1, &k.off)
 }
 
 // Click implements the optional PageClicker seam (#674): the header row opens

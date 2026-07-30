@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
 	"ike/internal/theme"
@@ -731,5 +732,29 @@ func TestBoolEditorWrites(t *testing.T) {
 	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("space in the toggle editor must write the other value")
+	}
+}
+
+// Size reports the rendered box dimensions without rendering (#1396): the
+// app's mouse dispatch hit-tests with it on every motion event.
+func TestPanelSizeMirrorsView(t *testing.T) {
+	restoreConfig(t)
+	m := New(testPages(), testOpts(t))
+	if w, h := m.Size(); w != 0 || h != 0 {
+		t.Fatalf("closed panel Size = %d×%d, want 0×0", w, h)
+	}
+	m.SetSize(100, 30)
+	m.Open()
+	w, h := m.Size()
+	if w != 100 || h != 30 {
+		t.Fatalf("open panel Size = %d×%d, want 100×30", w, h)
+	}
+	v := m.View()
+	if gw, gh := lipgloss.Width(v), lipgloss.Height(v); gw != w || gh != h {
+		t.Fatalf("View renders %d×%d, Size says %d×%d", gw, gh, w, h)
+	}
+	m.SetSize(10, 4) // too small to render — View returns "", Size mirrors it
+	if w, h := m.Size(); w != 0 || h != 0 {
+		t.Fatalf("tiny panel Size = %d×%d, want 0×0", w, h)
 	}
 }

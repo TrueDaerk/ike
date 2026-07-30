@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-30 (theme: settings-panel freeze under mouse motion, #1396)
+
+- Settings (#1396): the panel — worst on the Keymap page — froze under mouse
+  motion and drained buffered keys one by one. Three compounding costs: the
+  app measured `settings.View()` (a full panel render) up to twice per mouse
+  event just for geometry, now `Model.Size()`; the keymap page rebuilt
+  `keymap.BuildTable` + filter + sort on every `rows()` call (2-3× per key,
+  more per frame via the detail column), now memoized on config pointer /
+  filter / fold generation; and the list styled all rows before windowing,
+  now `pinFooterLazy` styles only the visible window. Settings-UI doc's
+  "Mouse parity" section updated.
+
 ## 2026-07-29 (theme: process docs moved from CLAUDE.md)
 
 - New `/process/` section: [Change Workflow](/process/change-workflow.md)

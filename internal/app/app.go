@@ -6021,18 +6021,19 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.settings.IsOpen() {
-		if clickOutside(msg, m.settings.View(), m.width, m.height) {
+		// The panel's geometry comes from Size(), never from measuring View()
+		// (#1396): mouse motion arrives at very high frequency, and a full
+		// panel render per event saturated the Update loop.
+		w, h := m.settings.Size()
+		bx, by := (m.width-w)/2, (m.height-h)/2
+		if msg.action == mousePress && w > 0 && !inRect(msg.X, msg.Y, bx, by, w, h) {
 			m.settings.Close()
 			return m, nil
 		}
 		switch {
 		case msg.action == mousePress && msg.Button == tea.MouseLeft:
-			// Translate to panel-local coordinates (the box is centered).
-			v := m.settings.View()
-			w, h := lipgloss.Width(v), lipgloss.Height(v)
-			bx, by := (m.width-w)/2, (m.height-h)/2
 			// The border ring starts a mouse resize (#933); anything inside
-			// is a content click.
+			// is a content click (panel-local coordinates, the box is centered).
 			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
 				m.floatDrag = &floatResizeDrag{kind: "settings", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
 				return m, nil
@@ -6040,16 +6041,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, m.settings.Click(msg.X-bx, msg.Y-by)
 		case msg.action == mouseMotion:
 			// Hover affordance (#885), menu-bar parity.
-			v := m.settings.View()
-			bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
 			m.settings.Hover(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			v := m.settings.View()
-			bx := (m.width - lipgloss.Width(v)) / 2
 			m.settings.Wheel(msg.X-bx, -wheelLines*msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			v := m.settings.View()
-			bx := (m.width - lipgloss.Width(v)) / 2
 			m.settings.Wheel(msg.X-bx, wheelLines*msg.ticks())
 		}
 		return m, nil

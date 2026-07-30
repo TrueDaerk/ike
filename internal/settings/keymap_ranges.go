@@ -122,6 +122,7 @@ func (k *KeymapPage) toggleRange() bool {
 		k.expanded = map[string]bool{}
 	}
 	k.expanded[key] = !k.expanded[key]
+	k.foldGen++ // fold state feeds the row cache (#1396)
 	k.sel = clamp(k.sel, 0, len(k.rows())-1)
 	return true
 }

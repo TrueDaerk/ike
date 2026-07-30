@@ -186,6 +186,18 @@ func (m *Model) SetPalette(p *theme.Palette) {
 // SetSize sets the full-window render size.
 func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
 
+// Size returns the panel's rendered outer dimensions — the box View draws at
+// exactly width × height — without rendering it (#1396): the app's mouse
+// dispatch needs the geometry on every motion/wheel event for hit-testing,
+// and measuring View() there made each pointer move pay a full panel render.
+// (0, 0) when the panel is closed or too small to render, mirroring View.
+func (m *Model) Size() (w, h int) {
+	if !m.open || m.width < 24 || m.height < 8 {
+		return 0, 0
+	}
+	return m.width, m.height
+}
+
 // IsOpen reports whether the panel is visible (it owns the keyboard then).
 func (m *Model) IsOpen() bool { return m.open }
 
