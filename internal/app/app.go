@@ -1678,6 +1678,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 			if openInMemory(e.Path) {
 				it.Badge = "●"
 				it.Aux = project.CloseWorkspaceMsg{Path: e.Path}
+				it.AuxGlyph = project.CloseAuxGlyph
 			} else {
 				// Unloaded entries prune from the history (#842), like in
 				// the project picker.

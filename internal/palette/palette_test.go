@@ -531,6 +531,61 @@ func TestAuxActionKeyAndBadge(t *testing.T) {
 	}
 }
 
+// TestAuxActionCmdBackspaceAlias guards #1418: cmd+backspace fires the aux
+// action like shift+delete, so the chord works without a forward-delete key.
+func TestAuxActionCmdBackspaceAlias(t *testing.T) {
+	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode(), auxMode{})
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{}, '&')
+
+	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModSuper})
+	if cmd == nil {
+		t.Fatal("cmd+backspace must emit the Aux msg")
+	}
+	if msg, ok := cmd().(RunCommandMsg); !ok || msg.ID != "close-ws" {
+		t.Fatalf("aux msg = %#v, want RunCommandMsg{close-ws}", cmd())
+	}
+	if !p.IsOpen() {
+		t.Fatal("aux action must keep the palette open")
+	}
+	// Plain backspace still edits the query, never fires the aux action.
+	p.Update(runes("x"))
+	if cmd := p.Update(tea.KeyPressMsg{Code: tea.KeyBackspace}); cmd != nil {
+		if _, ok := cmd().(RunCommandMsg); ok {
+			t.Fatal("plain backspace must not fire the aux action")
+		}
+	}
+}
+
+// auxGlyphMode carries a close-style row with its own aux glyph (#1418).
+type auxGlyphMode struct{}
+
+func (auxGlyphMode) Prefix() rune        { return '^' }
+func (auxGlyphMode) Placeholder() string { return "" }
+func (auxGlyphMode) Results(string, Context) []Item {
+	return []Item{
+		{Title: "open-proj", Badge: "●", Msg: OpenFileMsg{Path: "proj"}, Aux: RunCommandMsg{ID: "close-ws"}, AuxGlyph: "⏏"},
+		{Title: "cold-proj", Msg: OpenFileMsg{Path: "cold"}, Aux: RunCommandMsg{ID: "remove"}},
+	}
+}
+
+// TestAuxGlyphOverride guards #1418: a row's AuxGlyph replaces the default
+// "✕" in the aux zone, so close-workspace rows are visually distinct.
+func TestAuxGlyphOverride(t *testing.T) {
+	p := New(Config{}, NewCommandMode(fakeSource{}, nil, false), fileMode(), auxGlyphMode{})
+	p.SetSize(100, 40)
+	p.OpenLocked(Context{}, '^')
+
+	view := p.View()
+	if !strings.Contains(view, "⏏") {
+		t.Fatalf("close row must render its own aux glyph:\n%s", view)
+	}
+	if !strings.Contains(view, "✕") {
+		t.Fatalf("removal row must keep the default aux glyph:\n%s", view)
+	}
+}
+
 // TestAuxActionClick guards #820's mouse path: a click on a row activates
 // it; a click on its ✕ zone runs the aux action and keeps the palette open.
 func TestAuxActionClick(t *testing.T) {

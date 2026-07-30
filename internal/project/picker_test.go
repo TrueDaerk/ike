@@ -222,4 +222,15 @@ func TestPickerShowsLastOpenedTime(t *testing.T) {
 	if aux, ok := items[1].Aux.(RemoveFromHistoryMsg); !ok || aux.Path != "/p/beta" {
 		t.Fatalf("unloaded entry aux = %#v, want RemoveFromHistoryMsg", items[1].Aux)
 	}
+	// #1418: the close action carries its distinguishing glyph, removal the
+	// default (empty = "✕").
+	if aux, ok := items[0].Aux.(CloseWorkspaceMsg); !ok || aux.Path != "/p/alpha" {
+		t.Fatalf("open entry aux = %#v, want CloseWorkspaceMsg", items[0].Aux)
+	}
+	if items[0].AuxGlyph != CloseAuxGlyph {
+		t.Fatalf("open entry aux glyph = %q, want %q", items[0].AuxGlyph, CloseAuxGlyph)
+	}
+	if items[1].AuxGlyph != "" {
+		t.Fatalf("unloaded entry aux glyph = %q, want default", items[1].AuxGlyph)
+	}
 }

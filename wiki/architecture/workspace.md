@@ -100,8 +100,10 @@ assert the dropped `Workspace` and its `pane.Registry` become garbage.
 The recent-projects lists (the `project.switch` picker and the Recent Files
 dialog's Recent Projects column) mark entries whose workspace is parked in
 memory with a **`●` badge** and offer a close-in-place aux action rendered as
-a right-pinned `✕`: `shift+delete` on the selected row or a click on the `✕`
-zone emits `project.CloseWorkspaceMsg`, which tears the background workspace
+a right-pinned **`⏏`** (#1418, `project.CloseAuxGlyph` — distinct from the
+removal `✕` on unloaded rows): `shift+delete` **or `cmd+backspace`** (#1418,
+the chord that needs no physical forward-delete key) on the selected row, or
+a click on the `⏏` zone, emits `project.CloseWorkspaceMsg`, which tears the background workspace
 down (`teardownWorkspace`) without switching — the palette stays open and
 refreshes, the badge disappears, the history entry remains. The active
 project refuses the action with an info toast. Manual close is the explicit

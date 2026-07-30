@@ -22,11 +22,17 @@ type Item struct {
 	// pinned to the right with clear separation from the title and the "✕"
 	// zone, and drops first when the row gets too narrow.
 	Time string
-	// Aux is an optional secondary action (#820): shift+delete on the
-	// selected row (or a click on the row's "✕" zone) emits it without
-	// closing the palette — e.g. closing a background workspace from the
-	// recent-projects list. Nil hides the affordance.
+	// Aux is an optional secondary action (#820): shift+delete or
+	// cmd+backspace (#1418, the forward-delete-free chord) on the selected
+	// row — or a click on the row's aux zone — emits it without closing the
+	// palette, e.g. closing a background workspace from the recent-projects
+	// list. Nil hides the affordance.
 	Aux tea.Msg
+	// AuxGlyph overrides the aux zone's default "✕" glyph (#1418), so rows
+	// whose aux action is not a removal — closing an in-memory workspace
+	// keeps the history entry — are visually distinct. Single-cell glyphs
+	// only; "" renders the default.
+	AuxGlyph string
 }
 
 // Mode is a palette sub-mode selected by a single leading prefix rune. It turns

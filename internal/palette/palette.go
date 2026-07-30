@@ -322,8 +322,11 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	// The aux action (#820): shift+delete emits the focused row's Aux msg —
 	// e.g. close a background workspace — and keeps the palette open; the
-	// caller refreshes the lists via Refresh.
-	if msg.Code == tea.KeyDelete && msg.Mod == tea.ModShift {
+	// caller refreshes the lists via Refresh. cmd+backspace is the delivered
+	// alias (#1418): shift+delete needs a physical forward-delete key many
+	// Mac keyboards lack, cmd+backspace is macOS's native "delete" chord.
+	if (msg.Code == tea.KeyDelete && msg.Mod == tea.ModShift) ||
+		(msg.Code == tea.KeyBackspace && msg.Mod == tea.ModSuper) {
 		return p.auxCmd()
 	}
 	switch {
@@ -703,8 +706,17 @@ func (p *Palette) sideView(width int) string {
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
 }
 
-// auxGlyphW is the right-pinned "✕" affordance's width (glyph + one space).
+// auxGlyphW is the right-pinned aux affordance's width (glyph + one space).
 const auxGlyphW = 2
+
+// auxGlyph is the aux zone's glyph: the row's override (#1418 — "⏏" marks a
+// close-in-place action that keeps the entry) or the default removal "✕".
+func auxGlyph(it Item) string {
+	if it.AuxGlyph != "" {
+		return it.AuxGlyph
+	}
+	return "✕"
+}
 
 // timeSepW is the separation reserved on the left of the right-aligned Time
 // column (#1114), keeping it visually apart from the title / detail chip.
@@ -753,7 +765,7 @@ func (p *Palette) sideRow(it Item, selected bool, width int) string {
 			line += timeStr + " "
 		}
 		if it.Aux != nil {
-			line += lipgloss.NewStyle().Foreground(p.theme().Border).Render("✕ ")
+			line += lipgloss.NewStyle().Foreground(p.theme().Border).Render(auxGlyph(it) + " ")
 		}
 	}
 	return clipRow(line, width, selected, p.theme().Panel)
@@ -807,7 +819,7 @@ func (p *Palette) row(it Item, selected bool, width int) string {
 	aux := ""
 	if it.Aux != nil {
 		auxW = auxGlyphW
-		aux = lipgloss.NewStyle().Foreground(p.theme().Border).Render(" ✕")
+		aux = lipgloss.NewStyle().Foreground(p.theme().Border).Render(" " + auxGlyph(it))
 	}
 	avail := width - markerW
 	rightW := detailW + auxW
