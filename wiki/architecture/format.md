@@ -123,6 +123,26 @@ fallback. The **Formatters settings page**
 each language's effective command, the supplying layer (plugin default /
 user / project) and whether the binary was found.
 
+## Built-in SQL formatter (#1403)
+
+SQL is the language with no dependable external option, so the SQL plugin
+ships its own formatter (`plugins/languages/sql/formatter.go`): a pure-Go
+lexer + clause-layout printer (runs without CGo) with the Tree-sitter parse
+as validity gate where available (`parsecheck_cgo.go`) — SQL that fails to
+lex (unterminated string/comment, unbalanced parens) or parse is left
+untouched. Layout: clause-per-line (SELECT/FROM/JOIN/ON/WHERE/GROUP BY/
+HAVING/ORDER BY/LIMIT), select lists / SET assignments / CREATE TABLE column
+lists one item per line indented one level, AND/OR chains broken under
+WHERE/ON/HAVING, subqueries as indented blocks with the closing parenthesis
+on its own line. Keyword casing via `[format.sql] keywords = "upper" |
+"lower" | "preserve"` (upper default); identifiers, strings and quoted
+identifiers are never re-cased. Comments stay with their statement (trailing
+end-of-line comments remain trailing); statements separate with one blank
+line, `;` kept. Output is idempotent (golden-tested). Range formatting
+reformats exactly the statements overlapping the selection. The provider
+registers **above the LSP tier** — #1403 pins the built-in over sqls —
+and `[format.sql] builtin = false` restores the sqls path.
+
 ## Format-on-save
 
 The [save chain](/architecture/lsp.md) (#1148) routes its format step through

@@ -164,3 +164,8 @@ editor's back). Available placeholders: `${FILE}`, `${TAB_WIDTH}`,
 another range-capable source or tells you only whole-file reformat is
 available.
 
+Languages with a built-in formatter (SQL) accept two extra keys:
+`builtin = false` disables the built-in (falling back to the language
+server), and for SQL `keywords = "upper" | "lower" | "preserve"` controls
+keyword casing.
+

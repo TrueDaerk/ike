@@ -1,0 +1,13 @@
+SELECT id,
+    (
+        SELECT COUNT(*)
+        FROM orders o
+        WHERE o.user_id = u.id
+    ) AS n
+FROM users u
+WHERE u.id IN (
+    SELECT user_id
+    FROM orders
+    WHERE total > 50
+)
+    AND u.active = true;

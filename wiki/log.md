@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-30 (theme: built-in SQL formatter, #1403)
+
+- Built-in SQL formatter (Roadmap 0470, #1403): pure-Go lexer +
+  clause-layout printer in the SQL plugin, Tree-sitter parse as validity
+  gate (malformed SQL untouched). Clause-per-line layout, broken select/SET/
+  DDL lists, AND/OR chains indented, subquery blocks, configurable keyword
+  casing (`[format.sql] keywords`), comments preserved, one blank line
+  between statements, idempotent (golden-tested), statement-wise range
+  formatting. Registered above the LSP tier so it beats sqls by default;
+  `[format.sql] builtin = false` restores sqls. New `builtin` flag wired
+  through plugins/format.
+
 ## 2026-07-30 (theme: external formatter commands, #1402)
 
 - External-command formatter provider (Roadmap 0470, #1402):

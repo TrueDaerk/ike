@@ -1,0 +1,1 @@
+SELECT u.id, u.name, o.total FROM users u LEFT OUTER JOIN orders o ON o.user_id = u.id AND o.open = true INNER JOIN plans p ON p.id = u.plan_id WHERE u.active = true AND (o.total > 100 OR o.vip = true) ORDER BY o.total DESC LIMIT 10 OFFSET 20;
