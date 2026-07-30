@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"os"
 	"sync"
 	"time"
 
@@ -161,7 +162,8 @@ func (b *bridge) formatStep(h host.API, mgr *manager.Manager, req ilsp.SaveChain
 			lines = dl
 		}
 	}
-	freq := format.Request{Path: path, Language: langIDFor(path), Lines: lines, Options: req.Options}
+	root, _ := os.Getwd() // project root: external tools run with it as cwd (#1402)
+	freq := format.Request{Path: path, Language: langIDFor(path), Lines: lines, Options: req.Options, Root: root}
 	ctx, cancel := context.WithTimeout(context.Background(), saveChainStepTimeout)
 	res, err := prov.Format(ctx, freq)
 	cancel()

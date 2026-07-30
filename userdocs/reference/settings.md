@@ -137,3 +137,30 @@ Settings, or run `settings.open` from the palette.
 This page is an interactive editor in the settings panel rather than a
 list of keys.
 
+### Formatters
+
+The **Formatters** page lists each language's external reformat command, the
+config layer supplying it and whether the binary is installed. Overrides live
+in the config file as a `[format.<languageID>]` table (project or user
+layer), mirroring `[lsp.servers.*]`:
+
+```toml
+[format.python]
+command = "ruff"
+args = ["format", "--stdin-filename", "${FILE}", "-"]
+range_args = ["format", "--range", "${START_LINE}-${END_LINE}", "-"]
+enabled = true      # false switches external formatting off for the language
+temp_file = false   # true for tools that cannot read stdin
+install = "pip install ruff"
+```
+
+The command reads the buffer on stdin and prints the formatted text on
+stdout (set `temp_file = true` for in-place-only tools; IKE then formats a
+temp copy and reads it back — your file is never written behind the
+editor's back). Available placeholders: `${FILE}`, `${TAB_WIDTH}`,
+`${INDENT_STYLE}`, `${MAX_LINE_LENGTH}`, and in `range_args`
+`${START_LINE}` / `${END_LINE}` (1-based). `range_args` opts into
+**Reformat Selection**; without it the selection command falls back to
+another range-capable source or tells you only whole-file reformat is
+available.
+

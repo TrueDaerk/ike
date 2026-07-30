@@ -48,6 +48,12 @@ type Config struct {
 	// examples live in code (internal/snippets) and are only shadowed per
 	// trigger+language, never wiped.
 	Snippets []SnippetEntry `toml:"snippets"`
+	// Format holds per-language formatter overrides as a free-form slot
+	// (Roadmap 0470, #1402, mirrors LSP.Servers): [format.<languageID>] with
+	// command, args, range_args, temp_file, enabled. The formatter registry's
+	// config-override provider reads it; enabled = false switches a
+	// language's external formatting off entirely.
+	Format map[string]map[string]any `toml:"format"`
 }
 
 // SnippetEntry is one user live template ([[snippets]], #1152). Trigger is the

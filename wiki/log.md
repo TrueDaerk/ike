@@ -1,5 +1,21 @@
 # Log
 
+## 2026-07-30 (theme: external formatter commands, #1402)
+
+- External-command formatter provider (Roadmap 0470, #1402):
+  `format.External` runs ecosystem CLIs (ruff/prettier/shfmt) with
+  placeholder args, buffer on stdin / text on stdout (temp-file mode for
+  stdin-less tools), project-root cwd, timeout + 10 MB guard, truncated
+  stderr on failure — the buffer is never touched on error and the tool
+  never writes the file. `[format.<languageID>]` config table (user <
+  project, like `[lsp.servers.*]`) overrides plugin defaults; `enabled =
+  false` disables external formatting per language; `range_args` opts into
+  reformat-selection. Missing binaries raise a one-time install hint (#1067
+  pattern). New read-only **Formatters** settings page shows the effective
+  command, layer and binary state. Docs: [Formatter
+  Registry](/architecture/format.md) extended; userdocs settings reference +
+  code-intelligence guide.
+
 ## 2026-07-30 (theme: formatter registry, #1401)
 
 - Formatter registry (Roadmap 0470, #1401): reformat is no longer LSP-only.

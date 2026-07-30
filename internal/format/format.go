@@ -68,6 +68,9 @@ type Request struct {
 	Language string // language id (lang.Language.ID), "" when unknown
 	Lines    []string
 	Options  Options
+	// Root is the project root external tools run in (their cwd, so they
+	// pick up project config); empty falls back to the file's directory.
+	Root string
 }
 
 // Result is a provider's answer: either the full formatted text or a set of
@@ -218,10 +221,15 @@ func Has(langID, path string) bool {
 	return ok
 }
 
-// ResetForTest clears the registry (tests only — production providers
-// register once from init() and never unregister).
+// ResetForTest clears the registry and the external-formatter side state
+// (tests only — production providers register once from init() and never
+// unregister).
 func ResetForTest() {
 	mu.Lock()
-	defer mu.Unlock()
 	providers = nil
+	mu.Unlock()
+	extMu.Lock()
+	externalDefaults = map[string]External{}
+	hinted = map[string]bool{}
+	extMu.Unlock()
 }

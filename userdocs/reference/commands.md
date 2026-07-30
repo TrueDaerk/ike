@@ -240,8 +240,8 @@ bring their own.
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
-| LSP: Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
-| LSP: Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |
+| Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
+| Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
