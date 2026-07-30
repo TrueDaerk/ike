@@ -903,7 +903,9 @@ leaving idle mode drops pending marks.
 default **off**; Settings → Editor) run LSP steps before a **manual** save:
 organize imports (the `source.organizeImports` code action, requested with
 `CodeActionContext.Only` and applied without the picker), then whole-document
-formatting, then the actual write. Because both steps are async server
+formatting — routed through the [formatter registry](./format.md) since
+#1401, so external and built-in formatters apply on save too — then the
+actual write. Because both steps are async server
 requests while the editor's write is synchronous, the save runs as an
 explicit **chain**: `saveGuarded` parks the write (`Model.pendingSave`,
 `editor/savechain.go`) and dispatches the bridge-registered provider
@@ -919,9 +921,9 @@ Guarantees:
 - **Never blocks, never loses the save.** Every step — the server request
   and the applied-ack wait — is time-boxed (`saveChainStepTimeout`, 2 s);
   errors, empty answers and timeouts fall through to the next step, and the
-  done message always fires. No server / no capability (formatting, or the
-  organize-imports kind in `codeActionKinds`) means no chain at all: the
-  write happens immediately.
+  done message always fires. No capable source (no resolvable formatter
+  provider for the format step, no server offering the organize-imports kind
+  in `codeActionKinds`) means no chain at all: the write happens immediately.
 - **Manual saves only.** `:w`, `:wq`, `editor.write`, `editor.write_quit`
   and `editor.saveAll` chain (save-all per dirty buffer); autosave
   (focus/idle), crash-backup snapshots and the shutdown/switch/close-guard

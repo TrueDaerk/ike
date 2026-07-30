@@ -255,6 +255,15 @@ func (s Settings) InsertFinalNewline() (insert, ok bool) {
 	return s.boolKey("insert_final_newline")
 }
 
+// MaxLineLength reads max_line_length (formatter providers honour it,
+// Roadmap 0470); "off", unset or non-positive values report !ok.
+func (s Settings) MaxLineLength() (length int, ok bool) {
+	if n, err := strconv.Atoi(s["max_line_length"]); err == nil && n > 0 {
+		return n, true
+	}
+	return 0, false
+}
+
 // EndOfLine reads end_of_line, normalized to lowercase ("lf", "crlf", "cr").
 // The editor ignores values it cannot store ("cr" — textenc supports LF and
 // CRLF, #66).

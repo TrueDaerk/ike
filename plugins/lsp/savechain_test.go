@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/format"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/client"
@@ -110,7 +111,20 @@ func chainBridge(t *testing.T, connect manager.Connector) (*bridge, string, chan
 	if err := b.mgr.Open(path, "go", "package main\n"); err != nil {
 		t.Fatalf("Open: %v", err)
 	}
+	// The format step routes through the formatter registry (#1401): bind the
+	// LSP provider to this test bridge instead of the shared singleton.
+	format.ResetForTest()
+	format.Register(lspProvider(b))
+	t.Cleanup(func() {
+		format.ResetForTest()
+		format.Register(lspProvider(shared()))
+	})
 	return b, path, msgs
+}
+
+// chainReq is the standard both-steps-enabled request for path.
+func chainReq(path string, organize, doFormat bool) ilsp.SaveChainRequest {
+	return ilsp.SaveChainRequest{Path: path, Organize: organize, Format: doFormat, Lines: []string{"package main", ""}}
 }
 
 // recvMsg waits for the next host message or fails the test.
@@ -133,7 +147,7 @@ func TestSaveChainOrderOrganizeThenFormatThenDone(t *testing.T) {
 	reqs := make(chan string, 8)
 	b, path, msgs := chainBridge(t, chainConnector(chainCaps(), reqs, nil))
 
-	cmd := b.saveChainCmd(path, true, true)
+	cmd := b.saveChainCmd(chainReq(path, true, true))
 	if cmd == nil {
 		t.Fatal("capable server + both flags must start a chain")
 	}
@@ -179,7 +193,7 @@ func TestSaveChainTimeoutFallsThrough(t *testing.T) {
 	reqs := make(chan string, 8)
 	b, path, msgs := chainBridge(t, chainConnector(chainCaps(), reqs, map[string]bool{"textDocument/codeAction": true}))
 
-	cmd := b.saveChainCmd(path, true, true)
+	cmd := b.saveChainCmd(chainReq(path, true, true))
 	if cmd == nil {
 		t.Fatal("chain must start")
 	}
@@ -207,10 +221,10 @@ func TestSaveChainSkipsWithoutCapability(t *testing.T) {
 		CodeActionProvider: json.RawMessage(`{"codeActionKinds":["quickfix"]}`),
 	}
 	b, path, _ := chainBridge(t, chainConnector(caps, make(chan string, 8), nil))
-	if cmd := b.saveChainCmd(path, true, true); cmd != nil {
+	if cmd := b.saveChainCmd(chainReq(path, true, true)); cmd != nil {
 		t.Fatal("no formatting + no organize-imports kind must skip the chain")
 	}
-	if cmd := b.saveChainCmd(path, false, false); cmd != nil {
+	if cmd := b.saveChainCmd(chainReq(path, false, false)); cmd != nil {
 		t.Fatal("disabled flags must never chain")
 	}
 }
@@ -224,7 +238,7 @@ func TestSaveChainCoalescesReentrantSaves(t *testing.T) {
 	b.saveChains = map[string]bool{path: true} // a chain is pending
 	b.mu.Unlock()
 
-	cmd := b.saveChainCmd(path, true, true)
+	cmd := b.saveChainCmd(chainReq(path, true, true))
 	if cmd == nil {
 		t.Fatal("re-entrant save must coalesce, not fall back to a raw write")
 	}

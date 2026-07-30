@@ -26,6 +26,7 @@ import (
 	// here to change the build-time plugin set. plugins/example stays out of
 	// the shipped binary (#716) — it is the documented reference plugin and
 	// its per-open "example saw open" hook is pure noise in the real IDE.
+	_ "ike/plugins/format"
 	_ "ike/plugins/lsp"
 
 	// Language plugins register their grammar + LSP server + toolchain in the

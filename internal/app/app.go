@@ -38,6 +38,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/finder"
+	"ike/internal/format"
 	"ike/internal/help"
 	"ike/internal/highlight"
 	"ike/internal/histories"
@@ -4006,6 +4007,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case palette.LiveTickMsg:
 		// A live mode's settled-query debounce fired (#295).
 		return m, m.palette.LiveTick(msg)
+
+	case format.FileRequestMsg:
+		// Reformat File (#1401): resolve the formatter registry's provider
+		// chain for the active buffer and run the winner (reformat.go).
+		return m, m.handleReformat(false)
+
+	case format.RangeRequestMsg:
+		return m, m.handleReformat(true)
 
 	case ilsp.FormatEditsMsg:
 		// lsp.format / rename / code actions: applied as one undo unit

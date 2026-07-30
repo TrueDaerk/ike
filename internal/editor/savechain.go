@@ -40,7 +40,13 @@ func (m *Model) beginSaveChain(closeAfter bool) tea.Cmd {
 	if !organize && !format {
 		return nil
 	}
-	cmd := ilsp.StartSaveChain(m.path, organize, format)
+	cmd := ilsp.StartSaveChain(ilsp.SaveChainRequest{
+		Path:     m.path,
+		Organize: organize,
+		Format:   format,
+		Lines:    m.buf.Lines(),
+		Options:  m.FormatOptions(),
+	})
 	if cmd == nil {
 		return nil // no provider or no capable server: plain write, right now
 	}

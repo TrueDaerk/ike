@@ -137,7 +137,9 @@ var jetbrainsRows = []row{
 	{"shift+f2", "lsp.prevDiagnostic", "Previous diagnostic", Editor, "LSP (#369)"},
 	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
 	// variant keys off the active visual selection inside lsp.formatRange.
-	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "LSP (0100)"},
+	// The id predates the formatter registry (0470): the command now resolves
+	// config override → external tool → LSP → built-in, not only LSP.
+	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "Format (0470)"},
 	// JetBrains intention actions. Alt+enter delivery depends on the
 	// terminal's option-as-meta setting, hence fragile; 0081 owns the final
 	// reachability call.
