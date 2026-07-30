@@ -109,6 +109,25 @@ func TestSelfEventSuppression(t *testing.T) {
 	}
 }
 
+func TestMarkSavedAfterNoteStillSuppresses(t *testing.T) {
+	// The write event routinely beats MarkSaved into note() (#1406): the
+	// editor writes the file first and stamps the epoch a few milliseconds
+	// later. The flush-time re-check must still drop the pending event.
+	s, c := service()
+	s.note("/p/mine.go", FileChanged)
+	s.MarkSaved("/p/mine.go")
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("own save noted before MarkSaved must still be suppressed, got %d events", n)
+	}
+	// A removal pending at flush time is never dropped: our own saves do not
+	// remove files, so the event is genuinely external.
+	s.note("/p/mine.go", FileRemoved)
+	if got := c.wait(t, 1); got[0].Kind != FileRemoved {
+		t.Fatalf("removal must survive the flush re-check, got %v", got)
+	}
+}
+
 func TestFsnotifyEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 	s, c := service()

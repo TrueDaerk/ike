@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor/buffer"
 	"ike/internal/highlight"
 	"ike/internal/textenc"
 	"ike/internal/undostore"
@@ -67,6 +68,11 @@ func (m Model) autoReload() bool {
 // stack is the documented trade-off. The change event bumps docVersion and
 // carries the new text, so highlighting and LSP re-sync exactly as after an
 // edit.
+//
+// A reload whose decoded content equals the current buffer is a no-op (#1406):
+// there is nothing to reload, so nothing may be reset — an own-write that
+// slipped past the watcher's suppression (or a bare touch) must never cost the
+// undo history.
 func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 	data, err := os.ReadFile(m.path)
 	if err != nil {
@@ -77,6 +83,15 @@ func (m Model) reloadFromDisk() (Model, tea.Cmd) {
 		// The rewritten file is no longer decodable (#66): keep the buffer as
 		// is rather than replacing it with mojibake; the next open reports the
 		// error properly.
+		return m, nil
+	}
+	if buffer.FromString(text).String() == m.buf.String() {
+		// The buffer already is the on-disk content: mark the current history
+		// node as the saved state (the modified indicator keys off it, #251)
+		// and keep the whole stack.
+		m.hist.MarkSaved()
+		m.dirty = false
+		m.stale = false
 		return m, nil
 	}
 	line, col := m.cursor.Line, m.cursor.Col

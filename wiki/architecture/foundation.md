@@ -86,7 +86,11 @@ model routes file kinds to the editor leaf owning the path
 - **Self-event suppression:** the editor emits `EventSave` after every disk
   write; the app's emitter adapter stamps `watcher.MarkSaved(path)`, and
   events for that path within 500ms are dropped — IKE's own saves never
-  round-trip as external changes.
+  round-trip as external changes. Suppression is checked twice: at ingest and
+  again at flush (#1406) — the write event routinely reaches the watcher
+  goroutine *before* the editor's post-write bookkeeping stamps `MarkSaved`,
+  so a pending event whose epoch has landed by flush time is dropped there.
+  Removals are exempt from the flush re-check: own saves never delete files.
 - **Poll fallback:** for filesystems where fsnotify under-reports (network
   mounts), open buffers are `Track`ed and `Poll()` compares mtime+size,
   hashing on suspicion (an mtime-only touch never reports), behind the same

@@ -127,6 +127,53 @@ func TestExternalChangeResetsUndoHistory(t *testing.T) {
 	}
 }
 
+func TestReloadIdenticalContentKeepsUndoHistory(t *testing.T) {
+	// An own write whose watcher event slipped past suppression (#1406): the
+	// event fires, but disk equals the buffer — nothing may be reset.
+	m, path := loaded(t, "one\ntwo\n")
+	m = send(m, key('d'), key('d'))
+	if err := m.save(); err != nil {
+		t.Fatal(err)
+	}
+	m, bumped := changed(m, path)
+	if bumped {
+		t.Fatal("identical content must not reload (no docVersion bump)")
+	}
+	m = send(m, key('u')) // undo must still reach past the save
+	if got := strings.TrimRight(m.buf.String(), "\n"); got != "one\ntwo" {
+		t.Fatalf("undo after save lost: %q, want %q", got, "one\ntwo")
+	}
+	m = send(m, modKey('r', tea.ModCtrl)) // redo back to the saved state
+	if got := strings.TrimRight(m.buf.String(), "\n"); got != "two" {
+		t.Fatalf("redo after undo-past-save broken: %q, want %q", got, "two")
+	}
+	if m.Dirty() {
+		t.Fatal("redo landed back on the saved state, buffer must be clean")
+	}
+}
+
+func TestUndoSurvivesChainedSave(t *testing.T) {
+	// The format-on-save chain writes via CompleteChainedSave (#1148); a
+	// leaked own-write event after it must not cost the history either.
+	var calls []providerCall
+	withProvider(t, &calls)
+	m, path := dirtyChained(t, "one\n")
+	tm, _ := m.Update(ActionMsg{Action: "write"})
+	m = tm
+	m.CompleteChainedSave()
+	if m.Dirty() {
+		t.Fatal("test setup: chained save must have written")
+	}
+	m, bumped := changed(m, path)
+	if bumped {
+		t.Fatal("identical content after chained save must not reload")
+	}
+	m = send(m, key('u'))
+	if got := strings.TrimRight(m.buf.String(), "\n"); got != "one" {
+		t.Fatalf("undo after chained save lost: %q, want %q", got, "one")
+	}
+}
+
 func TestExternalChangeEmitsChangeEvent(t *testing.T) {
 	m, path := loaded(t, "one\n")
 	var got []Event

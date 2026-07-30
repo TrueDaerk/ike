@@ -419,13 +419,27 @@ func mergeKinds(old, next Kind) Kind {
 	return next
 }
 
-// flush emits every pending event as one EventMsg per path.
+// flush emits every pending event as one EventMsg per path. Suppression is
+// re-checked here (#1406): the editor writes first and stamps MarkSaved a few
+// milliseconds later, and on macOS fsnotify routinely delivers the write event
+// inside that gap — at note time the epoch is not stamped yet, so the event
+// slips into pending. By flush time (one debounce later) the stamp has landed,
+// so the own-write is recognized and dropped.
 func (s *Service) flush() {
 	s.mu.Lock()
 	batch := s.pending
 	s.pending = map[string]Kind{}
 	s.timer = nil
 	send := s.send
+	now := s.now()
+	for path, kind := range batch {
+		if kind == DirChanged || kind == FileRemoved {
+			continue
+		}
+		if at, ok := s.epochs[path]; ok && now.Sub(at) < suppressWindow {
+			delete(batch, path)
+		}
+	}
 	s.mu.Unlock()
 	if send == nil {
 		return
