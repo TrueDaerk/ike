@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-07-27T00:00:00Z
+timestamp: 2026-07-30T12:00:00Z
 ---
 
 # Floating Shell
@@ -172,5 +172,12 @@ host per shell.
   `ui.Stack`.
 - Specific modal content (confirm dialogs, pickers) are separate features that
   *consume* this shell.
+- The **popup terminal** (#1398) deliberately does *not* use this shell: the
+  shell's dismiss/filter/scroll key priority is the inverse of a PTY's raw
+  pass-through (esc must reach vim inside the popup). It composites its own
+  pane-style box via `overlay.Center` with its own funnel branch — see
+  [Integrated Terminal](/architecture/terminal.md). It does reuse the shared
+  size machinery: `ui.WinSizes` (key `popupterm`), `ResizeZone` and the
+  resize chords.
 - The plugin "open as modal" contract beyond the minimal additive
   `OpenModalRequest` seam is owned by the plugin roadmaps.

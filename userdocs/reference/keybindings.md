@@ -65,13 +65,14 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Navigate forward (mouse button 5) | `mouse-forward` | `mouse-forward` | `nav.forward` |
 | New file | `cmd+n` | `ctrl+n` | `explorer.newFile` |
 | New scratch file | `cmd+shift+n` | `ctrl+shift+n` | `scratch.new` |
-| New terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.new` |
+| New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
 | Next search match | `f3` | `f3` | `search.nextMatch` |
 | Next tab | `cmd+ctrl+right` | `ctrl+right` | `editor.tab.next` |
 | Next tab | `ctrl+alt+right` | `ctrl+alt+right` | `editor.tab.next` |
 | Notification history | `cmd+alt+n` | `ctrl+alt+n` | `notifications.history` |
 | Open menu bar | `f10` | `f10` | `menu.open` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
+| Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
 | Previous search match | `shift+f3` | `shift+f3` | `search.prevMatch` |
 | Previous tab | `cmd+ctrl+left` | `ctrl+left` | `editor.tab.prev` |
 | Previous tab | `ctrl+alt+left` | `ctrl+alt+left` | `editor.tab.prev` |
