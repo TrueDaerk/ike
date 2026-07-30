@@ -231,6 +231,13 @@ bring their own.
 | Explorer: Jump to Top | `explorer.top` | — | `gg` | `explorer` pane |
 | Explorer: Undo File Operation | `explorer.undo` | `cmd+z` | — | `explorer` pane |
 
+## format
+
+| Command | ID | Chord | In the editor | Available in |
+|---|---|---|---|---|
+| Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
+| Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |
+
 ## lsp
 
 | Command | ID | Chord | In the editor | Available in |
@@ -240,8 +247,6 @@ bring their own.
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
-| Reformat File | `lsp.format` | `cmd+alt+l` | — | `editor` pane |
-| Reformat Selection | `lsp.formatRange` | — | — | `editor` pane |
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
