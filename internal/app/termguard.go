@@ -54,10 +54,20 @@ func (m Model) updateTermClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		m.termClosePending = false
 		m.shell.Close()
+		if m.termClosePopup {
+			// The guard was raised for the popup terminal's active tab
+			// (#1398), not the focused pane.
+			m.termClosePopup = false
+			if m.popup.inst != nil {
+				m.closePopupTab(m.popup.inst.ActiveTab())
+			}
+			return m, nil
+		}
 		m.closeFocused()
 		return m, nil
 	case "esc":
 		m.termClosePending = false
+		m.termClosePopup = false
 		m.shell.Close()
 		return m, nil
 	}

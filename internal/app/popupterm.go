@@ -3,6 +3,9 @@ package app
 import (
 	"fmt"
 
+	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/keymap"
 	"ike/internal/pane"
 	"ike/internal/terminal"
 	"ike/internal/ui"
@@ -144,6 +147,96 @@ func (m Model) popupTabForSession(sess string) (int, *terminal.Model) {
 		}
 	}
 	return -1, nil
+}
+
+// popupChordCommand resolves a single-step chord against the live binding
+// table under the terminal context, so rebinds move the reserved popup chords
+// along (the same rule terminalGlobalChord follows).
+func (m Model) popupChordCommand(keys string) string {
+	table := m.bindings.Table()
+	if table == nil {
+		return ""
+	}
+	k, err := keymap.ParseKey(keys)
+	if err != nil {
+		return ""
+	}
+	if b, found := table.Lookup(keymap.Chord{Steps: []keymap.Key{k}}, keymap.Context("terminal")); found {
+		return b.Command
+	}
+	return ""
+}
+
+// popupReservedKey is the reserved chord set while the popup terminal owns the
+// keyboard, mirroring terminalReservedKey: the toggle chord hides the popup
+// from inside, cmd+t opens a sibling tab, tab-cycling and cmd+w act on the
+// popup's tabs, and the floating-window resize chords (#774) adjust the box.
+// Everything else belongs to the popup's shell.
+func (m *Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
+	if k, err := keymap.ParseKey(keys); err == nil {
+		keys = k.String()
+	}
+	if !terminalShellChords[keys] {
+		switch m.popupChordCommand(keys) {
+		case "terminal.popup":
+			m.togglePopupTerminal()
+			return true, m, nil
+		case "editor.tab.next":
+			m.cyclePopupTab(1)
+			return true, m, nil
+		case "editor.tab.prev":
+			m.cyclePopupTab(-1)
+			return true, m, nil
+		}
+	}
+	switch keys {
+	case "cmd+t":
+		// iTerm-style sibling tab, like the pane-terminal reserved cmd+t.
+		m.newPopupTerminalTab()
+		return true, m, nil
+	case "ctrl+tab":
+		m.cyclePopupTab(1)
+		return true, m, nil
+	case "cmd+w":
+		m.requestPopupTabClose()
+		return true, m, nil
+	}
+	if ddw, ddh, ok := ui.ResizeDelta(keys); ok {
+		m.winSizes.Adjust(popupTermSizeKey, ddw, ddh)
+		m.applyPopupSize()
+		return true, m, nil
+	}
+	return false, m, nil
+}
+
+// cyclePopupTab activates the next/previous popup tab, wrapping around.
+func (m *Model) cyclePopupTab(step int) {
+	inst := m.popup.inst
+	if inst == nil || inst.TabCount() < 2 {
+		return
+	}
+	n := inst.TabCount()
+	inst.ActivateTab(((inst.ActiveTab()+step)%n + n) % n)
+}
+
+// requestPopupTabClose handles the reserved cmd+w inside the popup (#986
+// semantics): an idle shell gets an EOF — the exit path closes its tab — and
+// a busy one raises the confirmation guard targeted at the popup.
+func (m *Model) requestPopupTabClose() {
+	inst := m.popup.inst
+	if inst == nil {
+		return
+	}
+	term := inst.ActiveTerminal()
+	if term == nil {
+		return
+	}
+	if term.Busy() {
+		m.termClosePopup = true
+		m.openTermClosePrompt()
+		return
+	}
+	term.SendEOF()
 }
 
 // closePopupTab closes popup tab idx (session ends). Closing the last tab

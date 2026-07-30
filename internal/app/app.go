@@ -394,6 +394,9 @@ type Model struct {
 	// termClosePending is true while the busy-terminal close guard (#986)
 	// owns the keyboard.
 	termClosePending bool
+	// termClosePopup targets the open guard at the popup terminal's active
+	// tab (#1398) instead of the focused pane.
+	termClosePopup bool
 
 	// explorerRatio remembers the hidden explorer's split ratio so
 	// explorer.toggle restores the tree at its prior width (#268); 0 means
@@ -4478,6 +4481,37 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.termClosePromptOpen() {
 			return m.updateTermClosePrompt(msg)
 		}
+		// The open popup terminal (#1398) owns the keyboard like a focused
+		// terminal pane: its shell takes every key raw except the reserved
+		// popup set. The overlays and prompts above still win — they can be
+		// opened from inside the popup and must get their keys back.
+		if m.popup.open && m.popup.inst != nil {
+			if handled, tm, cmd := m.popupReservedKey(msg.String()); handled {
+				return tm, cmd
+			}
+			// cmd+c copies an active mouse selection, cmd+v pastes — the same
+			// pair the pane-terminal block below reserves (#227, #727).
+			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta {
+				if term := m.popup.inst.ActiveTerminal(); term != nil {
+					switch {
+					case k.Base == "c" && term.HasSelection():
+						m.copyTerminalSelection(term)
+						return m, nil
+					case k.Base == "v":
+						if text := clipboardRead(); text != "" {
+							term.PasteText(text)
+						}
+						return m, nil
+					}
+				}
+			}
+			// Global navigation chords (palette, settings, …) stay with the
+			// IDE (#805); everything else belongs to the popup's shell.
+			if handled, cmd := m.terminalGlobalChord(msg); handled {
+				return m, cmd
+			}
+			return m, m.popup.inst.Update(msg)
+		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by
 		// the pane itself.
@@ -5088,6 +5122,11 @@ func (m Model) editorNormalMode() bool {
 
 // focusContext reports the context id advertised by the focused pane.
 func (m Model) focusContext() string {
+	if m.popup.open && m.popup.inst != nil {
+		// The open popup terminal (#1398) owns the keyboard, so bindings and
+		// the mode indicator resolve under its context, not the pane below.
+		return m.popup.inst.ContextID()
+	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 		return inst.ContextID()
 	}

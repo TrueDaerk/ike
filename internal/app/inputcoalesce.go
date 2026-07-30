@@ -217,6 +217,14 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		cmd, _ := m.routeOverlayPaste(text)
 		return m, cmd
 	}
+	if m.popup.open && m.popup.inst != nil {
+		// The open popup terminal (#1398) owns the keyboard: bracketed
+		// pastes go to its active shell, never the surfaces underneath.
+		if term := m.popup.inst.ActiveTerminal(); term != nil {
+			term.PasteText(text)
+		}
+		return m, nil
+	}
 	if m.terminalFocused() {
 		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 			if term := inst.ActiveTerminal(); term != nil {
