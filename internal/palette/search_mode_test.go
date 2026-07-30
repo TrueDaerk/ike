@@ -45,6 +45,45 @@ func TestSearchAllTiesKeepCommandsFirst(t *testing.T) {
 	}
 }
 
+func TestSearchAllComparableScoresFollowSourceTier(t *testing.T) {
+	// Scores within one band (searchAllScoreBand) count as comparable: the
+	// source order decides — command > file > symbol (#1421) — even when the
+	// lower-tier match scores slightly higher.
+	cmds := stubMode{prefix: ':', items: []Item{{Title: "cmd", Score: 48}}}
+	files := stubMode{prefix: '@', items: []Item{{Title: "file.go", Score: 55}}}
+	syms := stubMode{prefix: '#', items: []Item{{Title: "sym", Score: 52}}}
+	items := NewSearchAllMode(cmds, files, syms).Results("x", Context{})
+	want := []string{": cmd", "@ file.go", "# sym"}
+	if len(items) != len(want) {
+		t.Fatalf("got %d items, want %d", len(items), len(want))
+	}
+	for i, w := range want {
+		if items[i].Title != w {
+			t.Errorf("items[%d] = %q, want %q", i, items[i].Title, w)
+		}
+	}
+}
+
+func TestSearchAllClearlyStrongerMatchBeatsTier(t *testing.T) {
+	// A full band apart is no longer comparable: the stronger file match
+	// outranks the weak command match despite the lower tier.
+	cmds := stubMode{prefix: ':', items: []Item{{Title: "cmd", Score: 20}}}
+	files := stubMode{prefix: '@', items: []Item{{Title: "file.go", Score: 20 + 2*searchAllScoreBand}}}
+	items := NewSearchAllMode(cmds, files).Results("x", Context{})
+	if len(items) != 2 || items[0].Title != "@ file.go" || items[1].Title != ": cmd" {
+		t.Fatalf("order = %+v, want the clearly stronger file first", items)
+	}
+}
+
+func TestSearchAllSymbolsRankAfterFilesInBand(t *testing.T) {
+	files := stubMode{prefix: '@', items: []Item{{Title: "file.go", Score: 50}}}
+	syms := stubMode{prefix: '#', items: []Item{{Title: "sym", Score: 50}}}
+	items := NewSearchAllMode(files, syms).Results("x", Context{})
+	if len(items) != 2 || items[0].Title != "@ file.go" || items[1].Title != "# sym" {
+		t.Fatalf("order = %+v, want file before symbol on equal scores", items)
+	}
+}
+
 func TestSearchAllCapsPerKind(t *testing.T) {
 	var many []Item
 	for i := 0; i < searchAllPerKind+5; i++ {

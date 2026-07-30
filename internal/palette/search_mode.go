@@ -17,21 +17,32 @@ const SearchAllPrefix = '*'
 // commands).
 const searchAllPerKind = 8
 
+// searchAllScoreBand quantises fuzzy scores before the source-priority tier
+// applies (#1421): two results whose scores differ by less than one
+// word-boundary bonus (internal/fuzzy's strongest per-rune reward) count as
+// comparable matches, and within a band the earlier source wins — command
+// before file before symbol. A clearly stronger match (a full band apart)
+// still outranks a higher-priority source.
+const searchAllScoreBand = 16
+
 // SearchAllMode is the search-everywhere mode (Roadmap 0230): one query ranked
 // across commands and files, JetBrains' Search Everywhere palette-style. It
 // composes the already-ranked result lists of the command and file modes
 // rather than duplicating their ranking: each source's top rows (per-kind cap)
-// interleave by match score, ties keeping commands first. Rows show their kind
-// as the source mode's prefix glyph; command rows keep their binding chip,
-// file rows their project-relative path. Activation dispatches whatever the
-// underlying item carries (RunCommandMsg / OpenFileMsg).
+// interleave by banded match score with an explicit source-priority tier
+// (#1421) — within a score band the earlier source wins, so a command beats a
+// comparably-matched file, which beats a comparably-matched symbol. Rows show
+// their kind as the source mode's prefix glyph; command rows keep their
+// binding chip, file rows their project-relative path. Activation dispatches
+// whatever the underlying item carries (RunCommandMsg / OpenFileMsg).
 type SearchAllMode struct {
 	sources []Mode // composed modes, in kind-tiebreak order
 	recents Mode   // optional; listed first on an empty query (#263)
 }
 
 // NewSearchAllMode builds the search-everywhere mode over the already-built
-// command and file modes (in that order — earlier sources win score ties).
+// command and file modes (in that order — the source order is the priority
+// tier: earlier sources win within a score band).
 func NewSearchAllMode(sources ...Mode) *SearchAllMode {
 	return &SearchAllMode{sources: sources}
 }
@@ -48,10 +59,14 @@ func (s *SearchAllMode) Prefix() rune { return SearchAllPrefix }
 func (s *SearchAllMode) Placeholder() string { return "Search everywhere…" }
 
 // Results implements Mode. Each source is queried and capped, then the union
-// is ordered by score; the stable sort keeps earlier sources (commands) ahead
-// on equal scores. An empty query lists the recent files first (most recent
-// first, active file excluded) followed by the first source's listing; with
-// no MRU history it falls through to the plain source listing.
+// is ordered by (score band, source tier, score): scores quantised to
+// searchAllScoreBand rank first, the source's position in s.sources breaks
+// band ties (command > file > symbol), and the raw score orders within a
+// source's band. The stable sort keeps each source's own ranking — usage
+// boost (#773), MRU order — for fully equal keys. An empty query lists the
+// recent files first (most recent first, active file excluded) followed by
+// the first source's listing; with no MRU history it falls through to the
+// plain source listing.
 func (s *SearchAllMode) Results(query string, cx Context) []Item {
 	if query == "" && s.recents != nil {
 		if rec := capped(s.recents, "", cx); len(rec) > 0 {
@@ -61,12 +76,31 @@ func (s *SearchAllMode) Results(query string, cx Context) []Item {
 			return rec
 		}
 	}
-	var merged []Item
-	for _, src := range s.sources {
-		merged = append(merged, capped(src, query, cx)...)
+	type tiered struct {
+		item Item
+		tier int
 	}
-	sort.SliceStable(merged, func(i, j int) bool { return merged[i].Score > merged[j].Score })
-	return merged
+	var merged []tiered
+	for tier, src := range s.sources {
+		for _, it := range capped(src, query, cx) {
+			merged = append(merged, tiered{item: it, tier: tier})
+		}
+	}
+	sort.SliceStable(merged, func(i, j int) bool {
+		bi, bj := merged[i].item.Score/searchAllScoreBand, merged[j].item.Score/searchAllScoreBand
+		if bi != bj {
+			return bi > bj
+		}
+		if merged[i].tier != merged[j].tier {
+			return merged[i].tier < merged[j].tier
+		}
+		return merged[i].item.Score > merged[j].item.Score
+	})
+	out := make([]Item, len(merged))
+	for i, t := range merged {
+		out[i] = t.item
+	}
+	return out
 }
 
 // capped returns src's top rows (at most searchAllPerKind), each retitled with
