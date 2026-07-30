@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"os"
 	"strings"
 	"time"
 
@@ -41,11 +42,13 @@ func (m *Model) handleReformat(ranged bool) tea.Cmd {
 	if l, ok := lang.ByPath(path); ok {
 		langID, langName = l.ID, l.ID
 	}
+	root, _ := os.Getwd() // project root: external tools run with it as cwd
 	req := format.Request{
 		Path:     path,
 		Language: langID,
 		Lines:    strings.Split(ed.Text(), "\n"),
 		Options:  ed.FormatOptions(),
+		Root:     root,
 	}
 
 	if !ranged {

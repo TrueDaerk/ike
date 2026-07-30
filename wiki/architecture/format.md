@@ -52,7 +52,7 @@ format.Register(format.Provider{
 returns the first whose `Available` answers true:
 
 1. **TierOverride** — explicit `[format.<languageID>]` config (#1402)
-2. **TierExternal** — the language plugin's default external command (#1402)
+2. **TierExternal** — the language plugin's default external command formatter
 3. **TierLSP** — `textDocument/formatting` via the attached server
 4. **TierBuiltin** — a built-in Go formatter shipped by the language plugin
    (#1403 SQL, #1404 XML)
@@ -84,6 +84,44 @@ The LSP entry (`plugins/lsp/provider.go`) serves every language; its
 capability, `NameFor` reports the server binary's name for the status toast,
 and its `Format` reads only `Request.Path` — the manager owns the synced
 document text and the UTF-16 conversion, exactly as before.
+
+## External command formatters (#1402)
+
+`format.External` (external.go) is the generic ecosystem-CLI invoker: a
+command line with per-invocation placeholders (`${FILE}`, `${TAB_WIDTH}`,
+`${INDENT_STYLE}`, `${MAX_LINE_LENGTH}`; `${START_LINE}`/`${END_LINE}` in
+`RangeArgs`), the buffer on **stdin** and the formatted text on **stdout** —
+or *temp-file mode* for tools that cannot read stdin: the buffer is written
+to a temp copy (same extension), the tool formats it in place via `${FILE}`,
+the copy is read back. The tool runs with the project root as cwd (so it
+picks up its own project config), under the caller's timeout context
+(`WaitDelay` force-closes pipes a killed tool's children hold), behind a
+10 MB size guard, with stderr captured and truncated into the error. The
+original file is **never** written by the tool — output flows back through
+the registry like every other provider's.
+
+Two registration paths:
+
+- **Plugin defaults** (`RegisterExternalDefault`, TierExternal): a language
+  plugin declares its ecosystem tool (#1405 wires Python/Markdown/Shell/
+  Ansible); the spec is also recorded for the settings page.
+- **Config overrides** (`plugins/format.overrideProvider`, TierOverride): a
+  `[format.<languageID>]` table — `command`, `args`, `range_args`,
+  `temp_file`, `install`, `enabled` — layered user < project like
+  `[lsp.servers.*]`, read live from `config.Get()` on every resolution so
+  edits apply without a restart. `enabled = false` turns a language's
+  external formatting off entirely (override *and* plugin default, via the
+  `SetExternalEnabled` hook).
+
+`Available` gates on the binary being on PATH; a missing binary raises the
+**one-time install hint** (the #1067 companion-hint pattern, `SetNotifier`
+wired to a warn toast by the app) naming the install command, then the chain
+falls through to the next tier. `range_args` opts into reformat-selection
+(1-based inclusive line numbers); absent means the registry's usual range
+fallback. The **Formatters settings page**
+(`internal/settings/format_page.go`, registered by `plugins/format`) lists
+each language's effective command, the supplying layer (plugin default /
+user / project) and whether the binary was found.
 
 ## Format-on-save
 

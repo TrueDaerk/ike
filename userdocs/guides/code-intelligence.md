@@ -88,8 +88,21 @@ auto-save deliberately never reformats under you:
 
 | Setting | What it does |
 |---|---|
-| `editor.format_on_save` | Runs the server's formatter before writing |
+| `editor.format_on_save` | Runs the reformat chain (external tool, server or built-in formatter) before writing |
 | `editor.organize_imports_on_save` | Applies the organize-imports action before writing |
+
+## Reformatting
+
+++cmd+alt+l++ (**Reformat File**) is not tied to the language server: IKE
+resolves a chain per buffer — an explicit `[format.<language>]` override from
+your config, then the language plugin's external tool, then the server's
+formatter, then a built-in one — and the status line names what ran
+(`reformat: ruff`, `reformat: gopls`). A missing tool produces a one-time
+install hint; a failing tool leaves the buffer untouched and shows its error.
+**Reformat Selection** works where the winning source supports ranges and
+says so when only whole-file reformat is available. See the
+[settings reference](../reference/settings.md#formatters) for configuring a
+formatter per language or project.
 
 ## Toolchains
 

@@ -40,6 +40,7 @@ func DefaultScope(key string) Scope {
 		strings.HasPrefix(key, "lsp.servers."),
 		key == "lsp.diagnostics_ignore",
 		strings.HasPrefix(key, "lang."),
+		strings.HasPrefix(key, "format."),
 		strings.HasPrefix(key, "toolchain."):
 		return ProjectScope
 	}
