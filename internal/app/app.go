@@ -869,6 +869,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		m.dbgLaunching = extras.dbgLaunching
 		m.dbgLaunchGen = extras.dbgLaunchGen
 		m.dbgTermKey = extras.dbgTermKey
+		// The popup terminal comes back exactly as left (#1407) — tabs,
+		// scrollback, running processes, open state. Its palette re-threads
+		// like the pane registry's below.
+		m.popup = extras.popup
+		if m.popup.inst != nil {
+			m.popup.inst.SetPalette(themePal)
+		}
 		resumed.Aux = nil
 	}
 	// restoreLayout replaces m.activeWS().Panes with a fresh registry that never saw the
@@ -908,6 +915,7 @@ type wsExtras struct {
 	dbgLaunching bool
 	dbgLaunchGen int
 	dbgTermKey   string
+	popup        popupTerm // popup terminal (#1398) is per-project state (#1407)
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
@@ -1436,6 +1444,17 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 		// Popup terminal sessions (#1398) are session state only — end them
 		// tidily instead of leaving the shells to die with the process.
 		m.popup.inst.CloseTerminalTabs()
+	}
+	// Parked workspaces carry their popup terminals in Aux (#1407): end those
+	// sessions too, not only the active model's.
+	for _, root := range m.ws.Background() {
+		w := m.ws.Peek(root)
+		if w == nil {
+			continue
+		}
+		if extras, ok := w.Aux.(wsExtras); ok && extras.popup.inst != nil {
+			extras.popup.inst.CloseTerminalTabs()
+		}
 	}
 	m.backupCleanShutdown()
 	return m, tea.Quit

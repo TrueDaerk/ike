@@ -33,7 +33,9 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 		return m.guardedQuit()
 	}
 	target := bg[len(bg)-1] // most-recently-used parked root
-	if act := collectActivity(m.activeWS()); act.busy() {
+	act := collectActivity(m.activeWS())
+	act.addPopup(m.popup.inst) // the active popup terminal lives on the model (#1407)
+	if act.busy() {
 		m.openProjectClosePrompt(target, act)
 		return m, nil
 	}

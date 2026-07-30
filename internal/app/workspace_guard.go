@@ -90,10 +90,35 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 			}
 		}
 	}
-	if extras, ok := w.Aux.(wsExtras); ok && extras.dbg != nil && extras.dbg.sess != nil {
-		a.running = append(a.running, "debug session")
+	if extras, ok := w.Aux.(wsExtras); ok {
+		if extras.dbg != nil && extras.dbg.sess != nil {
+			a.running = append(a.running, "debug session")
+		}
+		// A parked workspace carries its popup terminal in Aux (#1407); the
+		// active one's is counted by the caller via addPopup.
+		a.addPopup(extras.popup.inst)
 	}
 	return a
+}
+
+// addPopup counts the popup terminal's running sessions (#1407): a busy tab
+// (running command inside the shell) lists as running work, an idle shell
+// counts like a pane shell — its state dies with the workspace too.
+func (a *wsActivity) addPopup(inst *pane.Instance) {
+	if inst == nil {
+		return
+	}
+	for i := 0; i < inst.TabCount(); i++ {
+		t := inst.TabTerminal(i)
+		if t == nil || !t.Running() {
+			continue
+		}
+		if t.Busy() {
+			a.running = append(a.running, "popup terminal — running process")
+		} else {
+			a.shells++
+		}
+	}
 }
 
 // pendingWsClose is the close-from-list guard state (#821).
@@ -211,6 +236,10 @@ func (m Model) quitActivity() (dirty, running []string) {
 			return
 		}
 		act := collectActivity(w)
+		if m.ws.Active() == w {
+			// The active popup terminal lives on the model, not in Aux (#1407).
+			act.addPopup(m.popup.inst)
+		}
 		for _, d := range act.dirty {
 			dirty = append(dirty, label(bgRoot(m, w), d))
 		}

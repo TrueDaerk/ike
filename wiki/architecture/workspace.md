@@ -23,7 +23,8 @@ state the root model owns into one swappable unit:
   it (LRU order, least-recently-used first) and `Drop` is the M4 eviction
   seam. Parked workspaces stay fully alive — PTY readers, run processes and
   debug bridges never depended on being rendered. `Workspace.Aux` carries
-  app-owned live extras across the park (the debug session state).
+  app-owned live extras across the park (the debug session state and, since
+  #1407, the popup terminal).
 
 ## Root-model integration
 
@@ -38,7 +39,8 @@ fields one by one.
 ## Seamless switching (#777)
 
 `performSwitch` persists the old project's session/layout, chdirs, **parks**
-the live workspace (debug state stashed in `Aux`) and rebuilds the model
+the live workspace (debug state and the popup terminal stashed in `Aux`,
+#1407) and rebuilds the model
 through the fresh-start path with the manager carried over: a parked
 workspace for the target root resumes exactly as left (layout/session
 restore from disk is skipped), a first visit builds panes from the saved
@@ -63,8 +65,10 @@ layout as before. Consequences:
 After every switch `enforceWorkspaceCap` (`internal/app/workspace_evict.go`)
 drops least-recently-used parked workspaces past the cap: an **idle** one
 (no dirty buffers, no running terminal/tool/command sessions or tabs, no
-parked debug session — `workspaceBusy`) tears down silently
-(`teardownWorkspace` closes every terminal session and disconnects a parked
+parked debug session, no running popup-terminal session (#1407) —
+`workspaceBusy`) tears down silently
+(`teardownWorkspace` closes every terminal session — the parked popup's
+included — and disconnects a parked
 debug session; buffers need no teardown), a **busy** one opens the eviction
 guard — `e` (or `enter`, #1356) evicts, `esc` keeps it over the limit
 until the next switch re-asks. This is the 0090 unsaved-changes prompt reborn at eviction time;
@@ -109,7 +113,8 @@ Tearing down a workspace with live state asks first
 (`internal/app/workspace_guard.go`):
 
 - **Close-from-list** on a busy background workspace — running debug
-  session, runs/tools, running shells, or dirty buffers
+  session, runs/tools, running shells (popup-terminal sessions included,
+  #1407), or dirty buffers
   (`collectActivity`, the detailed sibling of `workspaceBusy`) — opens a
   prompt summarising what is running: `s` saves the workspace's dirty
   buffers then closes (writes work without focus or rendering; a failed
