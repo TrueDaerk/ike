@@ -1432,6 +1432,11 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.activeWS().Tree != nil {
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
+	if m.popup.inst != nil {
+		// Popup terminal sessions (#1398) are session state only — end them
+		// tidily instead of leaving the shells to die with the process.
+		m.popup.inst.CloseTerminalTabs()
+	}
 	m.backupCleanShutdown()
 	return m, tea.Quit
 }
@@ -7548,10 +7553,11 @@ func (m Model) render() string {
 		x, y := m.ctxMenu.Pos()
 		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
-	if m.popup.open && m.popup.inst != nil {
+	if m.popup.open && m.popup.inst != nil && !m.settings.IsOpen() {
 		// The popup terminal (#1398) floats centered above the workspace but
-		// below the exclusive overlays: a palette opened from inside it must
-		// draw on top.
+		// below the exclusive overlays: a palette or the settings panel opened
+		// from inside it must draw on top (settings composites earlier, so it
+		// suppresses the popup for its modal lifetime instead).
 		base = overlay.Center(base, m.renderPopupTerm(), m.width, m.height)
 	}
 	result := base
