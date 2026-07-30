@@ -34,7 +34,9 @@ const searchAllScoreBand = 16
 // comparably-matched file, which beats a comparably-matched symbol. Rows show
 // their kind as the source mode's prefix glyph; command rows keep their
 // binding chip, file rows their project-relative path. Activation dispatches
-// whatever the underlying item carries (RunCommandMsg / OpenFileMsg).
+// whatever the underlying item carries (RunCommandMsg / OpenFileMsg). A query
+// led by a composed source's own prefix rune scopes the list to that source
+// (#1417) — see scoped.
 type SearchAllMode struct {
 	sources []Mode // composed modes, in kind-tiebreak order
 	recents Mode   // optional; listed first on an empty query (#263)
@@ -66,8 +68,12 @@ func (s *SearchAllMode) Placeholder() string { return "Search everywhere…" }
 // boost (#773), MRU order — for fully equal keys. An empty query lists the
 // recent files first (most recent first, active file excluded) followed by
 // the first source's listing; with no MRU history it falls through to the
-// plain source listing.
+// plain source listing. A prefix-scoped query returns that source's own ranked
+// list, uncapped and unmerged.
 func (s *SearchAllMode) Results(query string, cx Context) []Item {
+	if src, body, ok := s.scoped(query); ok {
+		return glyphed(src, src.Results(body, cx))
+	}
 	if query == "" && s.recents != nil {
 		if rec := capped(s.recents, "", cx); len(rec) > 0 {
 			if len(s.sources) > 0 {
@@ -103,14 +109,41 @@ func (s *SearchAllMode) Results(query string, cx Context) []Item {
 	return out
 }
 
-// capped returns src's top rows (at most searchAllPerKind), each retitled with
-// the source's prefix glyph so the row shows its kind; match spans shift with
-// the added glyph so highlighting stays aligned.
+// scoped resolves a prefix-scoped query (#1417): a query whose leading rune is
+// one composed source's prefix (":" command, "@" file, "$" symbol) restricts
+// the result list to that source alone and matches on the remaining body.
+// Search Everywhere is a locked mode, so the palette core never strips the
+// prefix itself — the users typing it know it from the unlocked palette and
+// expect the list to narrow, not to fuzzy-match the raw prefixed string. A
+// leading rune that names no source is ordinary query text.
+func (s *SearchAllMode) scoped(query string) (Mode, string, bool) {
+	r := []rune(query)
+	if len(r) == 0 {
+		return nil, query, false
+	}
+	for _, src := range s.sources {
+		if src.Prefix() == r[0] {
+			return src, string(r[1:]), true
+		}
+	}
+	return nil, query, false
+}
+
+// capped returns src's top rows (at most searchAllPerKind), glyphed with the
+// source's prefix. The cap only exists to keep one source from drowning the
+// others in the composed list, so prefix-scoped results skip it and call
+// glyphed directly.
 func capped(src Mode, query string, cx Context) []Item {
 	items := src.Results(query, cx)
 	if len(items) > searchAllPerKind {
 		items = items[:searchAllPerKind]
 	}
+	return glyphed(src, items)
+}
+
+// glyphed retitles items with their source's prefix glyph so each row shows its
+// kind; match spans shift with the added glyph so highlighting stays aligned.
+func glyphed(src Mode, items []Item) []Item {
 	kind := string(src.Prefix()) + " "
 	shift := len([]rune(kind))
 	out := make([]Item, len(items))
@@ -128,8 +161,16 @@ func capped(src Mode, query string, cx Context) []Item {
 
 // QueryChanged implements LiveMode by forwarding to every composed live
 // source (#295), so an asynchronous source — the workspace-symbol mode —
-// re-queries inside search everywhere exactly as it does standalone.
+// re-queries inside search everywhere exactly as it does standalone. A
+// prefix-scoped query (#1417) forwards the stripped body to that one source
+// only; the sources it filters out need no re-query.
 func (s *SearchAllMode) QueryChanged(query string, cx Context) tea.Cmd {
+	if src, body, ok := s.scoped(query); ok {
+		if live, isLive := src.(LiveMode); isLive {
+			return live.QueryChanged(body, cx)
+		}
+		return nil
+	}
 	var cmds []tea.Cmd
 	for _, src := range s.sources {
 		if live, ok := src.(LiveMode); ok {

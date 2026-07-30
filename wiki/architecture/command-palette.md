@@ -245,6 +245,18 @@ reserved seat (#295): a **live source** — `palette.LiveMode`, re-queried
 per settled keystroke through the debounce plumbing (`live.go`), its cached
 rows composed and capped like any other source.
 
+**Prefix scoping (#1417).** Search everywhere is locked, so the palette core
+never strips a prefix here — but a query whose **leading rune is one composed
+source's own prefix** scopes the list to that source alone: `:` restricts it to
+commands, `@` to files, `$` to workspace symbols, matching on the remaining
+body. The scoped source keeps its own ranking and is **not** per-kind capped
+(the cap only exists to stop one source drowning the others), rows still carry
+the kind glyph, and a live source scoped this way receives the stripped body —
+the filtered-out sources are not re-queried. A prefix-only query (`:`) lists
+that source's full listing. A leading rune naming no source is ordinary query
+text, and an unprefixed query composes everything as before; the empty-query
+recents listing (#263) is untouched.
+
 ## Pasting into overlay inputs (#1273)
 
 The palette's `Paste(text)` inserts a block into the query at the cursor and
