@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1238,6 +1239,12 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	}
 
 	m.status(lang, lang+" language server ready", lsp.ServerState)
+	// Record the observed formatting capabilities per server (#1405): the
+	// formatter-registry coverage matrix is verifiable against the log
+	// instead of folklore ("LSP: Show Server Log").
+	caps := cl.Caps()
+	appendLog(lang, "capabilities: formatting="+strconv.FormatBool(caps.Formatting)+
+		" rangeFormatting="+strconv.FormatBool(caps.RangeFormatting))
 	// Ready is the moment a missing optional companion becomes relevant: the
 	// server works, but a delegated capability is silently off (#1067).
 	m.hintCompanions(lang, spec)

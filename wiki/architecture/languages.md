@@ -453,6 +453,35 @@ via the `[lsp.servers.<id>]` config table (command/args/settings) — editable
 in the Settings → LSP page, which lists each registered language's effective
 command line, its config layer, and offers install/restart.
 
+## Reformat coverage (Roadmap 0470)
+
+Which source serves `Reformat File` per language, through the [formatter
+registry](./format.md)'s chain (config override → external tool → LSP →
+built-in). Every row is overridable via `[format.<id>]` (#1402); external
+defaults resolve only when the binary is installed, with a one-time install
+hint otherwise. The observed server capabilities are logged per server on
+startup (`capabilities: formatting=… rangeFormatting=…`, "LSP: Show Server
+Log", #1405).
+
+| Language | Default reformat source | Install |
+|---|---|---|
+| Go | LSP (gopls) | — |
+| TS/JS/TSX | LSP (vtsls) | — |
+| HTML / CSS / SCSS / LESS | LSP (vscode-*-language-server) | — |
+| JSON | LSP (vscode-json-language-server); ndjson/jsonl: none | — |
+| TOML | LSP (taplo) | — |
+| PHP | LSP (Intelephense) | — |
+| YAML | LSP (yaml-language-server) | — |
+| Dockerfile | LSP (docker-langserver) | — |
+| Python | external: `ruff format` → `black` (project venv copies first) | `pip install ruff` |
+| Markdown | external: `prettier` → `mdformat` (no prose reflow by default) | `npm install -g prettier` |
+| Shell | external: `shfmt` (indent from editorconfig, dialect from shebang) | `brew install shfmt` |
+| Ansible | external: `prettier --parser yaml` → `yamlfmt` | `npm install -g prettier` |
+| SQL | **built-in** (#1403; `[format.sql] builtin = false` → sqls) | — |
+| XML & dialects | **built-in** (#1404) | — |
+| Makefile | none (tabs are the format) | — |
+| .http | none (own follow-up) | — |
+
 ## Embedded regions (#1303)
 
 Most embedded-language highlighting comes from a grammar's `injections.scm`.
