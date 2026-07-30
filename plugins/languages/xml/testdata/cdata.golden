@@ -1,0 +1,12 @@
+<root>
+    <script>
+        <![CDATA[
+if (a < b && c > d) { run(); }
+]]>
+    </script>
+    <pre xml:space="preserve">  spaces
+	and tabs  </pre>
+    <note>text with <em>markup</em> inside</note>
+    <!-- keep
+me -->
+</root>

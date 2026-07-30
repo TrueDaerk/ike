@@ -1,5 +1,17 @@
 # Log
 
+## 2026-07-30 (theme: built-in XML formatter, #1404)
+
+- Built-in XML formatter (Roadmap 0470, #1404): pure-Go tokenizer + tree +
+  pretty-printer in the XML plugin, Tree-sitter parse as second validity
+  gate (unparseable documents untouched). Indent per editorconfig;
+  attributes wrap aligned under the first beyond max_line_length;
+  declaration/DOCTYPE/PIs/comments/CDATA/entities/xml:space=preserve/mixed
+  content verbatim; text-only elements one line; self-closing kept; range
+  formatting per element subtree; idempotent (golden-tested incl. SVG and
+  plist). Registered at the built-in tier; [format.xml] builtin = false
+  disables it. XML is no longer highlighting-only.
+
 ## 2026-07-30 (theme: built-in SQL formatter, #1403)
 
 - Built-in SQL formatter (Roadmap 0470, #1403): pure-Go lexer +
