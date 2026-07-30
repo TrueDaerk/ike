@@ -216,8 +216,14 @@ the recent-files mode (`palette.searchEverywhere` opens it via `OpenLocked`);
 off macOS too (it needs key-up reporting, hence the palette as the universal
 escape). One query is ranked across **commands and files** by *composing* the
 already-built `CommandMode` and `FileMode` — no duplicated ranking. Each
-source's top rows (per-kind cap, `searchAllPerKind`) interleave by fuzzy score,
-ties keeping commands first; every row is retitled with its source's prefix
+source's top rows (per-kind cap, `searchAllPerKind`) interleave by **banded**
+fuzzy score with an explicit source-priority tier (#1421): scores are quantised
+to `searchAllScoreBand` (one word-boundary bonus), and within a band the
+earlier source wins — command > file > symbol — so comparably-matched results
+group by kind while a clearly stronger match (a full band apart) still outranks
+a higher-priority source. Each source's own inner ranking (fuzzy score, #773
+usage boost, MRU order) is preserved by the stable sort. Every row is retitled
+with its source's prefix
 glyph (`:` / `@`, match spans shifted alongside) so the kind is visible, command
 rows keep their binding chip, file rows their project-relative path. Activation
 dispatches whatever the underlying item carries (`RunCommandMsg` /
