@@ -96,7 +96,9 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 		}
 		// A parked workspace carries its popup terminal in Aux (#1407); the
 		// active one's is counted by the caller via addPopup.
-		a.addPopup(extras.popup.inst)
+		for _, inst := range extras.popup.instances() {
+			a.addPopup(inst)
+		}
 	}
 	return a
 }
@@ -238,7 +240,9 @@ func (m Model) quitActivity() (dirty, running []string) {
 		act := collectActivity(w)
 		if m.ws.Active() == w {
 			// The active popup terminal lives on the model, not in Aux (#1407).
-			act.addPopup(m.popup.inst)
+			for _, inst := range m.popup.instances() {
+				act.addPopup(inst)
+			}
 		}
 		for _, d := range act.dirty {
 			dirty = append(dirty, label(bgRoot(m, w), d))

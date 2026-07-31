@@ -65,7 +65,7 @@ func workspaceBusy(w *workspace.Workspace) bool {
 		}
 		// A parked popup terminal (#1407) with a running session dies with the
 		// workspace — ask first, like pane terminals.
-		if inst := extras.popup.inst; inst != nil {
+		for _, inst := range extras.popup.instances() {
 			for i := 0; i < inst.TabCount(); i++ {
 				if t := inst.TabTerminal(i); t != nil && t.Running() {
 					return true
@@ -103,9 +103,9 @@ func teardownWorkspace(w *workspace.Workspace) {
 			_ = sess.Disconnect()
 			go sess.Close()
 		}
-		if extras.popup.inst != nil {
+		for _, inst := range extras.popup.instances() {
 			// Parked popup terminal shells (#1407) end tidily, like the quit path.
-			extras.popup.inst.CloseTerminalTabs()
+			inst.CloseTerminalTabs()
 		}
 	}
 	w.Aux = nil

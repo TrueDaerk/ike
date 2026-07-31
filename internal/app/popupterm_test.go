@@ -187,6 +187,143 @@ func TestPopupResizeDragPersistsDelta(t *testing.T) {
 	}
 }
 
+// splitTestPopup opens the popup and splits it via the reserved cmd+d (#1427).
+func splitTestPopup(t *testing.T) Model {
+	t.Helper()
+	m := openTestPopup(t)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModSuper})
+	m = out.(Model)
+	if m.popup.split == nil {
+		t.Fatal("cmd+d inside the popup should split it")
+	}
+	split := m.popup.split
+	t.Cleanup(func() { split.CloseTerminalTabs() })
+	return m
+}
+
+// TestPopupSplit: cmd+d splits the popup into two side-by-side shells (#1427),
+// the fresh right side takes focus, and a second cmd+d is a no-op.
+func TestPopupSplit(t *testing.T) {
+	m := splitTestPopup(t)
+	if !m.popup.focusRight {
+		t.Fatal("the fresh split side should take focus")
+	}
+	if m.popupFocused() != m.popup.split {
+		t.Fatal("popupFocused should resolve the right side")
+	}
+	left := m.popup.inst.ActiveTerminal().SessionKey()
+	right := m.popup.split.ActiveTerminal().SessionKey()
+	if left == right {
+		t.Fatal("the split side must run its own shell session")
+	}
+	if v := m.render(); strings.Count(v, "POPUP TERMINAL") != 2 {
+		t.Fatal("a split popup should render two side boxes")
+	}
+	// A second cmd+d is a no-op — only one split is supported.
+	prev := m.popup.split
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModSuper})
+	m = out.(Model)
+	if m.popup.split != prev {
+		t.Fatal("a second cmd+d must not replace the split")
+	}
+	// cmd+t opens the sibling tab on the focused (right) side.
+	out, _ = m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
+	m = out.(Model)
+	if m.popup.split.TabCount() != 2 || m.popup.inst.TabCount() != 1 {
+		t.Fatalf("cmd+t should add a tab on the focused side, got left=%d right=%d",
+			m.popup.inst.TabCount(), m.popup.split.TabCount())
+	}
+}
+
+// TestPopupSplitFocusKeys: the spatial focus keys (default ctrl+left/right)
+// move the keyboard between the split sides (#1427).
+func TestPopupSplitFocusKeys(t *testing.T) {
+	m := splitTestPopup(t)
+	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.popup.focusRight {
+		t.Fatal("ctrl+left should focus the left side")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModCtrl})
+	m = out.(Model)
+	if !m.popup.focusRight {
+		t.Fatal("ctrl+right should focus the right side")
+	}
+}
+
+// TestPopupBroadcastToggle: cmd+shift+i mirrors input to both split sides
+// (#1427) — the toggle needs a split, marks both titles, and routes pastes to
+// every active shell.
+func TestPopupBroadcastToggle(t *testing.T) {
+	m := openTestPopup(t)
+	// Unsplit the chord is a no-op.
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	if m.popup.broadcast {
+		t.Fatal("broadcast must not toggle without a split")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModSuper})
+	m = out.(Model)
+	split := m.popup.split
+	t.Cleanup(func() { split.CloseTerminalTabs() })
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	if !m.popup.broadcast {
+		t.Fatal("cmd+shift+i should enable broadcast on a split popup")
+	}
+	if got := len(m.popupInputTerminals()); got != 2 {
+		t.Fatalf("broadcast input should target both shells, got %d", got)
+	}
+	if v := m.render(); strings.Count(v, "⇉") != 2 {
+		t.Fatal("broadcast should mark both side titles")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	if m.popup.broadcast {
+		t.Fatal("cmd+shift+i should toggle broadcast off again")
+	}
+	if got := len(m.popupInputTerminals()); got != 1 {
+		t.Fatalf("without broadcast input targets the focused shell only, got %d", got)
+	}
+}
+
+// TestPopupSplitCollapse: a side's last shell exit collapses the split back to
+// a single box (#1427) — the surviving side keeps running, broadcast resets.
+func TestPopupSplitCollapse(t *testing.T) {
+	m := splitTestPopup(t)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	leftSess := m.popup.inst.ActiveTerminal().SessionKey()
+	rightSess := m.popup.split.ActiveTerminal().SessionKey()
+
+	// The right side's shell exits: the primary spans the box again.
+	out, _ = m.Update(terminal.ExitedMsg{Key: rightSess})
+	m = out.(Model)
+	if m.popup.split != nil || m.popup.inst == nil || !m.popup.open {
+		t.Fatal("the split side's exit should collapse to the primary")
+	}
+	if m.popup.broadcast || m.popup.focusRight {
+		t.Fatal("collapsing must reset broadcast and focus")
+	}
+	if m.popup.inst.ActiveTerminal().SessionKey() != leftSess {
+		t.Fatal("the primary session must survive the collapse")
+	}
+
+	// Split again, then the primary's shell exits: the right side is promoted.
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'd', Mod: tea.ModSuper})
+	m = out.(Model)
+	promoted := m.popup.split
+	t.Cleanup(func() { promoted.CloseTerminalTabs() })
+	out, _ = m.Update(terminal.ExitedMsg{Key: leftSess})
+	m = out.(Model)
+	if m.popup.inst != promoted || m.popup.split != nil {
+		t.Fatal("the primary's exit should promote the split side")
+	}
+	if !m.popup.open {
+		t.Fatal("the popup stays open across the promotion")
+	}
+}
+
 func TestPopupPaletteOpensAbove(t *testing.T) {
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m = openTestPopupWith(t, m)

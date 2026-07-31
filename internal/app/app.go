@@ -880,8 +880,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		// scrollback, running processes, open state. Its palette re-threads
 		// like the pane registry's below.
 		m.popup = extras.popup
-		if m.popup.inst != nil {
-			m.popup.inst.SetPalette(themePal)
+		for _, inst := range m.popup.instances() {
+			inst.SetPalette(themePal)
 		}
 		resumed.Aux = nil
 	}
@@ -1447,10 +1447,10 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 	if m.activeWS().Tree != nil {
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	}
-	if m.popup.inst != nil {
+	for _, inst := range m.popup.instances() {
 		// Popup terminal sessions (#1398) are session state only — end them
 		// tidily instead of leaving the shells to die with the process.
-		m.popup.inst.CloseTerminalTabs()
+		inst.CloseTerminalTabs()
 	}
 	// Parked workspaces carry their popup terminals in Aux (#1407): end those
 	// sessions too, not only the active model's.
@@ -1459,8 +1459,10 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 		if w == nil {
 			continue
 		}
-		if extras, ok := w.Aux.(wsExtras); ok && extras.popup.inst != nil {
-			extras.popup.inst.CloseTerminalTabs()
+		if extras, ok := w.Aux.(wsExtras); ok {
+			for _, inst := range extras.popup.instances() {
+				inst.CloseTerminalTabs()
+			}
 		}
 	}
 	m.backupCleanShutdown()
@@ -3429,10 +3431,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// refuses (last leaf), the pane stays showing [process exited]. A
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
-		if idx, t := m.popupTabForSession(msg.Key); t != nil {
+		if inst, idx, t := m.popupTabForSession(msg.Key); t != nil {
 			// A popup terminal shell ended (#1398): its tab closes; the last
 			// tab drops the whole popup, and the next toggle spawns fresh.
-			m.closePopupTab(idx)
+			m.closePopupTab(inst, idx)
 			return m, nil
 		}
 		key := m.terminalPaneForSession(msg.Key)
@@ -4544,27 +4546,35 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return tm, cmd
 			}
 			// cmd+c copies an active mouse selection, cmd+v pastes — the same
-			// pair the pane-terminal block below reserves (#227, #727).
+			// pair the pane-terminal block below reserves (#227, #727). Both
+			// act on the focused split side; a broadcast paste (#1427) goes
+			// to every side's active shell like typed keys do.
 			if k, ok := keymap.FromKeyMsg(msg); ok && k.Mods == keymap.ModMeta {
-				if term := m.popup.inst.ActiveTerminal(); term != nil {
+				if term := m.popupFocused().ActiveTerminal(); term != nil {
 					switch {
 					case k.Base == "c" && term.HasSelection():
 						m.copyTerminalSelection(term)
 						return m, nil
 					case k.Base == "v":
 						if text := clipboardRead(); text != "" {
-							term.PasteText(text)
+							for _, t := range m.popupInputTerminals() {
+								t.PasteText(text)
+							}
 						}
 						return m, nil
 					}
 				}
 			}
 			// Global navigation chords (palette, settings, …) stay with the
-			// IDE (#805); everything else belongs to the popup's shell.
+			// IDE (#805); everything else belongs to the popup's shell —
+			// under broadcast (#1427) to both split sides at once.
 			if handled, cmd := m.terminalGlobalChord(msg); handled {
 				return m, cmd
 			}
-			return m, m.popup.inst.Update(msg)
+			if m.popup.broadcast && m.popup.split != nil {
+				return m, tea.Batch(m.popup.inst.Update(msg), m.popup.split.Update(msg))
+			}
+			return m, m.popupFocused().Update(msg)
 		}
 		// A focused terminal takes every key raw (vim/htop must see them all)
 		// except the reserved set below; scrollback paging keys are handled by
@@ -5179,7 +5189,7 @@ func (m Model) focusContext() string {
 	if m.popup.open && m.popup.inst != nil {
 		// The open popup terminal (#1398) owns the keyboard, so bindings and
 		// the mode indicator resolve under its context, not the pane below.
-		return m.popup.inst.ContextID()
+		return m.popupFocused().ContextID()
 	}
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 		return inst.ContextID()
@@ -7302,11 +7312,16 @@ func explorerContextItems() []menu.Item {
 func (m Model) termLocal(key string, msg mouseEvent) (x, y int, ok bool) {
 	if key == popupPaneKey {
 		// The popup terminal (#1398) is not a layout leaf: its content-local
-		// coordinates derive from the centered box rectangle.
+		// coordinates derive from the centered box rectangle — offset to the
+		// focused split side's box while split (#1427).
 		if !m.popup.open || m.popup.inst == nil {
 			return 0, 0, false
 		}
 		px, py, _, _ := m.popupTermRect()
+		if m.popup.focusRight && m.popup.split != nil {
+			wl, _ := m.popupSplitWidths()
+			px += wl
+		}
 		return msg.X - (px + paneContentX), msg.Y - (py + paneContentY), true
 	}
 	r, found := m.lay.Panes[key]
@@ -7936,7 +7951,7 @@ func (m Model) terminalPaneForSession(sess string) string {
 func (m Model) terminalModelForSession(sess string) *terminal.Model {
 	// Popup terminal tabs (#1398) live outside every registry — check them
 	// first so their output/exit messages resolve while the popup is hidden.
-	if _, t := m.popupTabForSession(sess); t != nil {
+	if _, _, t := m.popupTabForSession(sess); t != nil {
 		return t
 	}
 	for _, k := range m.activeWS().Panes.Keys() {

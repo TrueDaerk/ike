@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, clickable file:line references, layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-07-30T12:00:00Z
@@ -215,19 +215,34 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
 - **Keys**: while open, the popup's branch in the funnel sits after the modal
   prompts and before the pane-terminal block. Its reserved set mirrors the
   pane one: the toggle chord (resolved via the live binding table) hides from
-  inside, `cmd+t` opens a sibling popup tab, `ctrl+tab` and the
-  `editor.tab.next/prev` chords cycle popup tabs, `cmd+w` closes the active
-  tab through the busy guard (`termClosePopup` targets the shared prompt),
-  the float resize chords (#774) adjust the box, cmd+c/cmd+v copy/paste, and
-  the `terminalGlobalCommands` allowlist stays with the IDE. Everything else
-  goes raw to the shell. `terminal.popup` is itself allowlisted, so a focused
-  pane terminal can summon the popup.
+  inside, `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
+  (#1427), `cmd+shift+i` toggles input broadcast (#1427), `ctrl+tab` and the
+  `editor.tab.next/prev` chords cycle the focused side's tabs, `cmd+w` closes
+  the active tab through the busy guard (`termClosePopup` targets the shared
+  prompt), the float resize chords (#774) adjust the box, cmd+c/cmd+v
+  copy/paste, and the `terminalGlobalCommands` allowlist stays with the IDE.
+  Everything else goes raw to the shell. `terminal.popup` is itself
+  allowlisted, so a focused pane terminal can summon the popup.
+- **Split & broadcast** (#1427): the reserved `cmd+d` (the pane-terminal split
+  chord, #982) splits the popup into two side-by-side detached tab hosts —
+  `popupTerm.split` holds the right side, each side is its own `pane.Instance`
+  with its own tabs, and only one split level is supported. The fresh right
+  side takes focus; the spatial focus keys (default `ctrl+left/right`, the
+  same `focusKeys` map pane terminals use) move the keyboard between sides,
+  and a mouse press claims focus for its side. Only the focused side renders
+  the focus border. `cmd+shift+i` toggles **input broadcast**: while on, typed
+  keys and pastes mirror to both sides' active shells and a `⇉` marker
+  prefixes both title rows. A side's last shell exit collapses the split back
+  to a single box (the right side is promoted when the primary empties) and
+  resets broadcast. Every whole-popup walk (theme, quit, teardown, busy
+  guards) iterates `popupTerm.instances()` instead of touching `inst` alone.
 - **Mouse**: outside press hides (state retained), the border ring starts a
   `popupterm` resize drag (centered doubled-delta math), the tab-bar row
-  activates/closes tabs, body presses anchor selections / hit the scrollbar
-  and cmd+click links, the wheel routes like a terminal pane. Selection and
-  scrollbar drags run through the generic drag machinery via the `popup`
-  sentinel pane key (`termLocal` / `dragTerminal`).
+  activates/closes tabs on its side, body presses anchor selections / hit the
+  scrollbar and cmd+click links, the wheel routes like a terminal pane —
+  split, the x offset picks the side box first. Selection and scrollbar drags
+  run through the generic drag machinery via the `popup` sentinel pane key
+  (`termLocal` / `dragTerminal`, resolving the focused side).
 
 ## Key routing — the reserved set
 

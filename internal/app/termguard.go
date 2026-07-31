@@ -58,8 +58,8 @@ func (m Model) updateTermClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			// The guard was raised for the popup terminal's active tab
 			// (#1398), not the focused pane.
 			m.termClosePopup = false
-			if m.popup.inst != nil {
-				m.closePopupTab(m.popup.inst.ActiveTab())
+			if inst := m.popupFocused(); inst != nil {
+				m.closePopupTab(inst, inst.ActiveTab())
 			}
 			return m, nil
 		}

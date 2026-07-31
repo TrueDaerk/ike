@@ -93,10 +93,10 @@ func strconvQuote(s string) string { return "\"" + s + "\"" }
 func (m *Model) applyTheme(p *theme.Palette) {
 	m.themePal = p
 	m.activeWS().Panes.SetPalette(p)
-	if m.popup.inst != nil {
-		// The popup terminal's host is detached (#1398): no registry threads
-		// the palette into it.
-		m.popup.inst.SetPalette(p)
+	for _, inst := range m.popup.instances() {
+		// The popup terminal's hosts are detached (#1398): no registry
+		// threads the palette into them.
+		inst.SetPalette(p)
 	}
 	m.palette.SetPalette(p)
 	m.finder.SetPalette(p)

@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/keymap"
 	"ike/internal/pane"
@@ -37,11 +38,31 @@ const (
 
 // popupTerm is the popup terminal's state on the root model. The instance is
 // created on first toggle and dropped when its last tab closes; open merely
-// gates rendering and key routing.
+// gates rendering and key routing. cmd+d splits the box into two side-by-side
+// tab hosts (#1427): split holds the right side while it exists, focusRight
+// tracks which side owns the keyboard, and broadcast (cmd+shift+i) mirrors
+// typed input to both sides' active shells.
 type popupTerm struct {
-	inst *pane.Instance // detached tab host; nil until first use
-	open bool
-	seq  int // key minting counter for "popup:term:N"
+	inst       *pane.Instance // primary (left) detached tab host; nil until first use
+	split      *pane.Instance // right split host (#1427); nil while unsplit
+	focusRight bool           // keyboard owner: false = inst, true = split
+	broadcast  bool           // cmd+shift+i (#1427): input mirrors to both sides
+	open       bool
+	seq        int // key minting counter for "popup:term:N"
+}
+
+// instances returns the popup's live tab hosts, primary first — one entry
+// while unsplit, two while split (#1427). Callers that must touch every popup
+// shell (theme, quit, teardown, activity) iterate this instead of inst.
+func (p popupTerm) instances() []*pane.Instance {
+	out := make([]*pane.Instance, 0, 2)
+	if p.inst != nil {
+		out = append(out, p.inst)
+	}
+	if p.split != nil {
+		out = append(out, p.split)
+	}
+	return out
 }
 
 // togglePopupTerminal shows or hides the popup terminal (terminal.popup). The
@@ -51,8 +72,8 @@ type popupTerm struct {
 func (m *Model) togglePopupTerminal() {
 	if m.popup.open {
 		m.popup.open = false
-		if m.popup.inst != nil {
-			m.popup.inst.SetFocused(false)
+		for _, inst := range m.popup.instances() {
+			inst.SetFocused(false)
 		}
 		return
 	}
@@ -62,7 +83,60 @@ func (m *Model) togglePopupTerminal() {
 	}
 	m.popup.open = true
 	m.applyPopupSize()
-	m.popup.inst.SetFocused(true)
+	m.setPopupFocus(m.popup.focusRight)
+}
+
+// popupFocused resolves the split side that owns the keyboard: the right host
+// while it exists and holds focus, the primary otherwise (#1427).
+func (m Model) popupFocused() *pane.Instance {
+	if m.popup.focusRight && m.popup.split != nil {
+		return m.popup.split
+	}
+	return m.popup.inst
+}
+
+// setPopupFocus moves keyboard ownership to one split side (#1427); right is
+// coerced to the primary while no split exists.
+func (m *Model) setPopupFocus(right bool) {
+	m.popup.focusRight = right && m.popup.split != nil
+	if m.popup.inst != nil {
+		m.popup.inst.SetFocused(!m.popup.focusRight)
+	}
+	if m.popup.split != nil {
+		m.popup.split.SetFocused(m.popup.focusRight)
+	}
+}
+
+// splitPopupTerminal splits the popup into two side-by-side shells (#1427,
+// reserved cmd+d inside the popup — the same chord that splits a terminal
+// pane, #982). Only one split is supported; the fresh right side takes focus.
+func (m *Model) splitPopupTerminal() {
+	if m.popup.inst == nil || m.popup.split != nil {
+		return
+	}
+	term := m.newPopupShell()
+	m.popup.split = pane.NewDetachedTerminalHost("popup2", term, m.host.Config(), m.pal())
+	m.applyPopupSize()
+	m.setPopupFocus(true)
+}
+
+// popupInputTerminals returns the shells typed input goes to: both sides'
+// active terminals under broadcast (#1427), otherwise the focused side's only.
+func (m Model) popupInputTerminals() []*terminal.Model {
+	insts := []*pane.Instance{m.popupFocused()}
+	if m.popup.broadcast && m.popup.split != nil {
+		insts = m.popup.instances()
+	}
+	out := make([]*terminal.Model, 0, len(insts))
+	for _, inst := range insts {
+		if inst == nil {
+			continue
+		}
+		if t := inst.ActiveTerminal(); t != nil {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // newPopupShell spawns a fresh shell session for the popup, mirroring the
@@ -77,12 +151,14 @@ func (m *Model) newPopupShell() terminal.Model {
 	return terminal.New(key, terminal.Shell(shell), ".", 80, 24, terminalEnv(), m.host.Send)
 }
 
-// newPopupTerminalTab opens a sibling shell tab inside the popup (cmd+t there).
+// newPopupTerminalTab opens a sibling shell tab inside the popup (cmd+t
+// there), on the focused split side (#1427).
 func (m *Model) newPopupTerminalTab() {
-	if m.popup.inst == nil {
+	inst := m.popupFocused()
+	if inst == nil {
 		return
 	}
-	m.popup.inst.AddTerminalTab(m.newPopupShell())
+	inst.AddTerminalTab(m.newPopupShell())
 	m.applyPopupSize()
 }
 
@@ -105,15 +181,32 @@ func (m Model) popupSize() (w, h int) {
 	return w, h
 }
 
+// popupSplitWidths returns the outer widths of the left and right boxes: the
+// full box width (and 0) while unsplit, halves while split (#1427) — the left
+// side takes the floor so both sides sum to the box width exactly.
+func (m Model) popupSplitWidths() (wl, wr int) {
+	w, _ := m.popupSize()
+	if m.popup.split == nil {
+		return w, 0
+	}
+	wl = w / 2
+	return wl, w - wl
+}
+
 // applyPopupSize pushes the current box interior into the instance (and every
 // tab's PTY). The popup lives outside the layout tree, so layout() never sizes
-// it — every size-affecting event calls this instead.
+// it — every size-affecting event calls this instead. While split (#1427) each
+// side gets its half's interior.
 func (m *Model) applyPopupSize() {
 	if m.popup.inst == nil {
 		return
 	}
-	w, h := m.popupSize()
-	m.popup.inst.SetSize(paneInterior(w, paneChromeW), paneInterior(h, paneChromeH))
+	_, h := m.popupSize()
+	wl, wr := m.popupSplitWidths()
+	m.popup.inst.SetSize(paneInterior(wl, paneChromeW), paneInterior(h, paneChromeH))
+	if m.popup.split != nil {
+		m.popup.split.SetSize(paneInterior(wr, paneChromeW), paneInterior(h, paneChromeH))
+	}
 }
 
 // popupTermRect is the popup box's screen rectangle (centered geometry), for
@@ -125,32 +218,53 @@ func (m Model) popupTermRect() (x, y, w, h int) {
 
 // renderPopupTerm renders the popup box: pane-style chrome (rounded border,
 // title row) whose title row is the tab bar once multiple tabs exist, exactly
-// like an editor pane hosting terminal tabs.
+// like an editor pane hosting terminal tabs. While split (#1427) the two side
+// boxes join horizontally; only the focused side gets the focus border.
 func (m Model) renderPopupTerm() string {
-	inst := m.popup.inst
-	w, h := m.popupSize()
+	_, h := m.popupSize()
+	wl, wr := m.popupSplitWidths()
+	if m.popup.split == nil {
+		return m.renderPopupSide(m.popup.inst, wl, h, true)
+	}
+	left := m.renderPopupSide(m.popup.inst, wl, h, !m.popup.focusRight)
+	right := m.renderPopupSide(m.popup.split, wr, h, m.popup.focusRight)
+	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+}
+
+// renderPopupSide renders one split side's pane box. Under broadcast (#1427)
+// a ⇉ marker prefixes the title row of both sides so it is obvious that
+// keystrokes go to every shell.
+func (m Model) renderPopupSide(inst *pane.Instance, w, h int, focused bool) string {
+	marker := ""
+	if m.popup.broadcast && m.popup.split != nil {
+		marker = "⇉ "
+	}
 	title := "POPUP TERMINAL"
 	if t := inst.Tab(inst.ActiveTab()); t != nil && t.IsTerminal() {
 		title = "POPUP TERMINAL — " + t.Title()
 	}
-	if bar, ok := m.tabBar(inst, w-paneChromeW); ok {
+	if bar, ok := m.tabBar(inst, w-paneChromeW-lipgloss.Width(marker)); ok {
 		title = bar
 	}
-	return paneBox(title, inst.View(), w, h, m.pal().BorderFocus)
+	border := m.pal().Border
+	if focused {
+		border = m.pal().BorderFocus
+	}
+	return paneBox(marker+title, inst.View(), w, h, border)
 }
 
-// popupTabForSession resolves a session key to the popup tab hosting it;
-// returns the tab index and its terminal model, or (-1, nil).
-func (m Model) popupTabForSession(sess string) (int, *terminal.Model) {
-	if m.popup.inst == nil {
-		return -1, nil
-	}
-	for i := 0; i < m.popup.inst.TabCount(); i++ {
-		if t := m.popup.inst.TabTerminal(i); t != nil && t.SessionKey() == sess {
-			return i, t
+// popupTabForSession resolves a session key to the popup tab hosting it, on
+// either split side (#1427); returns the hosting instance, the tab index and
+// its terminal model, or (nil, -1, nil).
+func (m Model) popupTabForSession(sess string) (*pane.Instance, int, *terminal.Model) {
+	for _, inst := range m.popup.instances() {
+		for i := 0; i < inst.TabCount(); i++ {
+			if t := inst.TabTerminal(i); t != nil && t.SessionKey() == sess {
+				return inst, i, t
+			}
 		}
 	}
-	return -1, nil
+	return nil, -1, nil
 }
 
 // dragTerminal resolves a drag's source pane key to the live terminal a
@@ -158,8 +272,10 @@ func (m Model) popupTabForSession(sess string) (int, *terminal.Model) {
 // popup sentinel, the pane's active terminal otherwise.
 func (m Model) dragTerminal(key string) *terminal.Model {
 	if key == popupPaneKey {
-		if m.popup.inst != nil {
-			return m.popup.inst.ActiveTerminal()
+		// The focused split side (#1427): a press focuses its side before the
+		// drag starts, so the anchor and the drag resolve the same shell.
+		if inst := m.popupFocused(); inst != nil {
+			return inst.ActiveTerminal()
 		}
 		return nil
 	}
@@ -183,27 +299,45 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 		m.togglePopupTerminal()
 		return m, nil, true
 	}
-	term := m.popup.inst.ActiveTerminal()
-	lx, ly := msg.X-(px+paneContentX), msg.Y-(py+paneContentY)
+	// Resolve the split side under the pointer (#1427): the x offset picks the
+	// box; unsplit, the primary spans the whole popup.
+	wl, wr := m.popupSplitWidths()
+	inst, sx, sw, right := m.popup.inst, px, wl, false
+	if m.popup.split != nil && msg.X >= px+wl {
+		inst, sx, sw, right = m.popup.split, px+wl, wr, true
+	}
+	term := inst.ActiveTerminal()
+	lx, ly := msg.X-(sx+paneContentX), msg.Y-(py+paneContentY)
 	switch {
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
 		// The border ring starts a mouse resize (#933), centered geometry.
-		if sx, sy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok {
-			m.floatDrag = &floatResizeDrag{kind: "popupterm", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+		if zx, zy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok {
+			m.floatDrag = &floatResizeDrag{kind: "popupterm", sx: zx, sy: zy, lastX: msg.X, lastY: msg.Y}
 			return m, nil, true
+		}
+		// A press claims the keyboard for its split side (#1427), like pane
+		// focus follows clicks.
+		if right != m.popup.focusRight {
+			m.setPopupFocus(right)
 		}
 		// Tab-bar row (#157/#1128): a segment click activates, its ✕ closes —
 		// the active tab through the busy guard, others directly.
-		if msg.Y == py+1 && (m.popup.inst.TabCount() > 1 || m.tabsAlwaysShow()) {
-			labels := tabLabels(m.popup.inst)
-			if idx, closeHit := tabHit(labels, m.popup.inst.ActiveTab(), pw-paneChromeW, lx); idx >= 0 {
+		if msg.Y == py+1 && (inst.TabCount() > 1 || m.tabsAlwaysShow()) {
+			labels := tabLabels(inst)
+			// The broadcast marker (#1427) prefixes the title row, shifting
+			// the bar right by its width — mirror that in the hit test.
+			bx := lx
+			if m.popup.broadcast && m.popup.split != nil {
+				bx -= lipgloss.Width("⇉ ")
+			}
+			if idx, closeHit := tabHit(labels, inst.ActiveTab(), sw-paneChromeW, bx); idx >= 0 {
 				switch {
 				case !closeHit:
-					m.popup.inst.ActivateTab(idx)
-				case idx == m.popup.inst.ActiveTab():
+					inst.ActivateTab(idx)
+				case idx == inst.ActiveTab():
 					m.requestPopupTabClose()
 				default:
-					m.closePopupTab(idx)
+					m.closePopupTab(inst, idx)
 				}
 			}
 			return m, nil, true
@@ -291,12 +425,33 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// iTerm-style sibling tab, like the pane-terminal reserved cmd+t.
 		m.newPopupTerminalTab()
 		return true, m, nil
+	case "cmd+d":
+		// iTerm-style split (#1427): two side-by-side shells, like the
+		// pane-terminal reserved cmd+d (#982). A second cmd+d is a no-op.
+		m.splitPopupTerminal()
+		return true, m, nil
+	case "cmd+shift+i":
+		// Broadcast toggle (#1427): while on, typed input mirrors to both
+		// split sides' active shells. Meaningless unsplit — ignored then.
+		if m.popup.split != nil {
+			m.popup.broadcast = !m.popup.broadcast
+		}
+		return true, m, nil
 	case "ctrl+tab":
 		m.cyclePopupTab(1)
 		return true, m, nil
 	case "cmd+w":
 		m.requestPopupTabClose()
 		return true, m, nil
+	}
+	// The spatial focus keys (default ctrl+left/right, #228 overrides apply)
+	// move the keyboard between the split sides (#1427); unsplit they stay
+	// with the shell like every other unreserved key.
+	if m.popup.split != nil {
+		if dir, ok := m.focusKeys[keys]; ok && (dir == DirLeft || dir == DirRight) {
+			m.setPopupFocus(dir == DirRight)
+			return true, m, nil
+		}
 	}
 	if ddw, ddh, ok := ui.ResizeDelta(keys); ok {
 		m.winSizes.Adjust(popupTermSizeKey, ddw, ddh)
@@ -306,9 +461,10 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	return false, m, nil
 }
 
-// cyclePopupTab activates the next/previous popup tab, wrapping around.
+// cyclePopupTab activates the next/previous tab on the focused split side,
+// wrapping around.
 func (m *Model) cyclePopupTab(step int) {
-	inst := m.popup.inst
+	inst := m.popupFocused()
 	if inst == nil || inst.TabCount() < 2 {
 		return
 	}
@@ -320,7 +476,7 @@ func (m *Model) cyclePopupTab(step int) {
 // semantics): an idle shell gets an EOF — the exit path closes its tab — and
 // a busy one raises the confirmation guard targeted at the popup.
 func (m *Model) requestPopupTabClose() {
-	inst := m.popup.inst
+	inst := m.popupFocused()
 	if inst == nil {
 		return
 	}
@@ -336,19 +492,36 @@ func (m *Model) requestPopupTabClose() {
 	term.SendEOF()
 }
 
-// closePopupTab closes popup tab idx (session ends). Closing the last tab
-// drops the whole instance and hides the popup — the next toggle starts a
-// fresh shell, mirroring terminal.toggle's create-on-demand arm.
-func (m *Model) closePopupTab(idx int) {
-	inst := m.popup.inst
+// closePopupTab closes tab idx on the given split side (session ends).
+// Closing a side's last tab collapses the split back to a single box (#1427);
+// closing the last tab of an unsplit popup drops the whole instance and hides
+// the popup — the next toggle starts a fresh shell, mirroring terminal.toggle's
+// create-on-demand arm.
+func (m *Model) closePopupTab(inst *pane.Instance, idx int) {
 	if inst == nil {
 		return
 	}
-	if inst.TabCount() <= 1 {
-		inst.CloseTerminalTabs()
-		m.popup.inst = nil
-		m.popup.open = false
+	if inst.TabCount() > 1 {
+		inst.CloseTab(idx)
 		return
 	}
-	inst.CloseTab(idx)
+	inst.CloseTerminalTabs()
+	switch {
+	case inst == m.popup.split:
+		// The right side emptied: the primary spans the box again.
+		m.popup.split = nil
+		m.popup.broadcast = false
+		m.setPopupFocus(false)
+		m.applyPopupSize()
+	case m.popup.split != nil:
+		// The primary emptied while split: the right side is promoted.
+		m.popup.inst = m.popup.split
+		m.popup.split = nil
+		m.popup.broadcast = false
+		m.setPopupFocus(false)
+		m.applyPopupSize()
+	default:
+		m.popup.inst = nil
+		m.popup.open = false
+	}
 }

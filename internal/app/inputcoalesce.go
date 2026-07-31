@@ -219,8 +219,9 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 	}
 	if m.popup.open && m.popup.inst != nil {
 		// The open popup terminal (#1398) owns the keyboard: bracketed
-		// pastes go to its active shell, never the surfaces underneath.
-		if term := m.popup.inst.ActiveTerminal(); term != nil {
+		// pastes go to its focused shell — under broadcast (#1427) to both
+		// split sides — never the surfaces underneath.
+		for _, term := range m.popupInputTerminals() {
 			term.PasteText(text)
 		}
 		return m, nil
