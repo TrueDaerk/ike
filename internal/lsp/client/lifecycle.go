@@ -97,6 +97,8 @@ func clientCapabilities() protocol.ClientCapabilities {
 			Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: true}},
 			Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
 			Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
+			Implementation:  &protocol.LinkSupportCaps{LinkSupport: true},
+			TypeHierarchy:   &protocol.ReferencesClientCaps{},
 			References:      &protocol.ReferencesClientCaps{},
 			Formatting:      &protocol.ReferencesClientCaps{},
 			RangeFormatting: &protocol.ReferencesClientCaps{},

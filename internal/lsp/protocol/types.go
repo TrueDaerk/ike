@@ -106,6 +106,8 @@ type TextDocumentClientCaps struct {
 	Completion      *CompletionClientCaps     `json:"completion,omitempty"`
 	Hover           *HoverClientCaps          `json:"hover,omitempty"`
 	Definition      *LinkSupportCaps          `json:"definition,omitempty"`
+	Implementation  *LinkSupportCaps          `json:"implementation,omitempty"`
+	TypeHierarchy   *ReferencesClientCaps     `json:"typeHierarchy,omitempty"`
 	References      *ReferencesClientCaps     `json:"references,omitempty"`
 	Formatting      *ReferencesClientCaps     `json:"formatting,omitempty"`
 	RangeFormatting *ReferencesClientCaps     `json:"rangeFormatting,omitempty"`
@@ -213,6 +215,8 @@ type ServerCapabilities struct {
 	WorkspaceSymbolProvider         json.RawMessage        `json:"workspaceSymbolProvider,omitempty"`
 	CallHierarchyProvider           json.RawMessage        `json:"callHierarchyProvider,omitempty"`
 	DocumentSymbolProvider          json.RawMessage        `json:"documentSymbolProvider,omitempty"`
+	ImplementationProvider          json.RawMessage        `json:"implementationProvider,omitempty"`
+	TypeHierarchyProvider           json.RawMessage        `json:"typeHierarchyProvider,omitempty"`
 }
 
 // DocumentSymbolParams is the textDocument/documentSymbol request (#1025):
@@ -681,6 +685,48 @@ type CallHierarchyIncomingCall struct {
 type CallHierarchyOutgoingCall struct {
 	To         CallHierarchyItem `json:"to"`
 	FromRanges []Range           `json:"fromRanges"`
+}
+
+// --- implementation ---
+
+// ImplementationParams is the textDocument/implementation request (#1449): the
+// implementations of the symbol at a position. gopls answers bidirectionally —
+// a concrete method yields its interface method(s) and vice versa — which the
+// inheritance features exploit.
+type ImplementationParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// --- type hierarchy ---
+
+// TypeHierarchyPrepareParams is the textDocument/prepareTypeHierarchy request
+// (#1449): resolve the symbol at a position into hierarchy items.
+type TypeHierarchyPrepareParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// TypeHierarchyItem is one node of a type hierarchy: a type with its
+// declaration range and the selection range naming it. Data is the server's
+// opaque resolve token and must round-trip verbatim into the supertypes/
+// subtypes follow-up requests.
+type TypeHierarchyItem struct {
+	Name           string          `json:"name"`
+	Kind           int             `json:"kind"`
+	Tags           []int           `json:"tags,omitempty"`
+	Detail         string          `json:"detail,omitempty"`
+	URI            string          `json:"uri"`
+	Range          Range           `json:"range"`
+	SelectionRange Range           `json:"selectionRange"`
+	Data           json.RawMessage `json:"data,omitempty"`
+}
+
+// TypeHierarchyItemParams is the shared parameter shape of the
+// typeHierarchy/supertypes and typeHierarchy/subtypes requests: the prepared
+// item whose parents/children are wanted.
+type TypeHierarchyItemParams struct {
+	Item TypeHierarchyItem `json:"item"`
 }
 
 // --- formatting ---

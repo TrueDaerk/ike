@@ -185,6 +185,17 @@ func (c *Client) Definition(ctx context.Context, p protocol.DefinitionParams) ([
 	return decodeLocations(raw), nil
 }
 
+// Implementation requests the implementations of the symbol at a position
+// (#1449); it normalises `Location | []Location | LocationLink[]` into a slice
+// of Locations like Definition.
+func (c *Client) Implementation(ctx context.Context, p protocol.ImplementationParams) ([]protocol.Location, error) {
+	raw, err := c.call(ctx, "textDocument/implementation", p)
+	if err != nil {
+		return nil, err
+	}
+	return decodeLocations(raw), nil
+}
+
 // References requests every reference to the symbol at a position; the result
 // is a plain Location array (normalised like Definition for safety).
 func (c *Client) References(ctx context.Context, p protocol.ReferenceParams) ([]protocol.Location, error) {
@@ -261,6 +272,46 @@ func (c *Client) OutgoingCalls(ctx context.Context, p protocol.CallHierarchyCall
 		return nil, nil
 	}
 	return calls, nil
+}
+
+// PrepareTypeHierarchy resolves the symbol at a position into type-hierarchy
+// items (#1449). A null result (position not on a type) is an empty slice.
+func (c *Client) PrepareTypeHierarchy(ctx context.Context, p protocol.TypeHierarchyPrepareParams) ([]protocol.TypeHierarchyItem, error) {
+	raw, err := c.call(ctx, "textDocument/prepareTypeHierarchy", p)
+	if err != nil {
+		return nil, err
+	}
+	var items []protocol.TypeHierarchyItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, nil // null / unexpected shape: nothing to show
+	}
+	return items, nil
+}
+
+// Supertypes requests the parents of a prepared type-hierarchy item (#1449).
+func (c *Client) Supertypes(ctx context.Context, p protocol.TypeHierarchyItemParams) ([]protocol.TypeHierarchyItem, error) {
+	raw, err := c.call(ctx, "typeHierarchy/supertypes", p)
+	if err != nil {
+		return nil, err
+	}
+	var items []protocol.TypeHierarchyItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, nil
+	}
+	return items, nil
+}
+
+// Subtypes requests the children of a prepared type-hierarchy item (#1449).
+func (c *Client) Subtypes(ctx context.Context, p protocol.TypeHierarchyItemParams) ([]protocol.TypeHierarchyItem, error) {
+	raw, err := c.call(ctx, "typeHierarchy/subtypes", p)
+	if err != nil {
+		return nil, err
+	}
+	var items []protocol.TypeHierarchyItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, nil
+	}
+	return items, nil
 }
 
 // WorkspaceSymbols requests project-wide symbols matching query (0250, #294).
