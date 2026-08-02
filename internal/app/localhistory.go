@@ -75,11 +75,18 @@ func (m *Model) openLocalHistoryPicker() {
 	m.lhEntries = entries
 	m.lhSel = 0
 	m.lhPicker = true
+	m.setLocalHistoryContent()
+	m.shell.Open()
+}
+
+// setLocalHistoryContent (re-)binds the shell body to THIS model copy (#1440).
+// The root model is a value model, so a closure bound once at open time would
+// keep rendering the open-time selection; every selection change re-binds.
+func (m *Model) setLocalHistoryContent() {
 	m.shell.SetContent(ui.ModelContent{
-		Heading: "LOCAL HISTORY — " + baseName(path),
+		Heading: "LOCAL HISTORY — " + baseName(m.lhPath),
 		Body:    m.renderLocalHistoryPicker,
 	})
-	m.shell.Open()
 }
 
 // localHistoryOpen reports whether the shell currently shows the snapshot
@@ -124,11 +131,13 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 	case "j", "down":
 		if m.lhSel < len(m.lhEntries)-1 {
 			m.lhSel++
+			m.setLocalHistoryContent()
 		}
 		return m, nil
 	case "k", "up":
 		if m.lhSel > 0 {
 			m.lhSel--
+			m.setLocalHistoryContent()
 		}
 		return m, nil
 	case "enter":
