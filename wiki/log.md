@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-02 (theme: inheritance analysis & navigation, 0480 #1448)
+
+- Work stream 0480 (#1448–#1455): IntelliJ-style inheritance features on two
+  new LSP request families (`textDocument/implementation`, type hierarchy
+  prepare/supertypes/subtypes), wired protocol → client → manager → bridge
+  after the call-hierarchy template. `lsp.goToSuper` (`cmd+u`),
+  `lsp.implementations` (`cmd+alt+b`) — 1 target jumps, N open the locked
+  refs picker; `lsp.typeHierarchy` (`ctrl+h`) opens the new
+  `internal/typehier` overlay (callhier pattern, tab = supertypes/subtypes).
+  Passive gutter marks: debounced, capped `documentSymbol` + per-symbol
+  `implementation` batch in the manager yields ↑/↓ arrows in the sign column
+  (below test marks, above diagnostic/git tints), toggle
+  `editor.marks.inheritance` gates render + traffic. New `SymKind*`
+  SymbolKind constants (distinct from CompletionItemKind). Navigate menu +
+  editor context-menu entries; docgen + status-matrix ledger regenerated.
+
 ## 2026-08-02 (theme: show history for selection, #1430)
 
 - Show History for Selection (#1430): `vcs.historyForSelection` runs

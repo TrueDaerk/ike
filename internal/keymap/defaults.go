@@ -45,6 +45,11 @@ var jetbrainsRows = []row{
 	{"shift+f7", "diff.prevChange", "Previous change (diff)", Diff, "Diff (0340)"},
 	// JetBrains' call-hierarchy chord (#173).
 	{"ctrl+alt+h", "lsp.callHierarchy", "Call hierarchy", Editor, "LSP (0100)"},
+	// Inheritance navigation (#1455), JetBrains-macOS chords verbatim: cmd+u
+	// go to super, cmd+alt+b go to implementations, ctrl+h type hierarchy.
+	{"cmd+u", "lsp.goToSuper", "Go to super", Editor, "LSP (#1455)"},
+	{"cmd+alt+b", "lsp.implementations", "Go to implementations", Editor, "LSP (#1455)"},
+	{"ctrl+h", "lsp.typeHierarchy", "Type hierarchy", Editor, "LSP (#1455)"},
 	// shift+f6 is JetBrains' context-aware refactor-rename (0082 sheet 13):
 	// with an editor focused it renames the *symbol* at the cursor (LSP #6);
 	// everywhere else the Global file.rename row owns the chord (explorer

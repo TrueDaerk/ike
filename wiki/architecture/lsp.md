@@ -62,6 +62,7 @@ from LSP itself; `[lsp.servers.<id>]` config only *overlays* them. The `plugins/
 compile-in plugin is the wiring layer: it enables the subsystem, owns the
 `manager.Manager`, installs the editor-event bridge, and
 exposes `lsp.hover` / `lsp.parameterInfo` / `lsp.diagnosticInfo` / `lsp.definition` / `lsp.peekDefinition` / `lsp.references` / `lsp.callHierarchy`
+/ `lsp.goToSuper` / `lsp.implementations` / `lsp.typeHierarchy` (0480, #1448)
 / `lsp.rename` / `lsp.codeAction` / `lsp.documentSymbols`
 (the [Structure pane](./structure-view.md)'s refresh, #1025) / `lsp.restart`
 as registry commands. The `lsp.format` / `lsp.formatRange` commands moved to
@@ -360,6 +361,38 @@ shared `DefinitionMsg` path — a caller row jumps to the call site
 (`fromRanges[0]`), a callee row to its declaration. Nothing prepared (cursor
 not on a callable, or the server lacks `callHierarchyProvider`) is an info
 toast.
+
+**Inheritance analysis & navigation (0480, #1448).** Rides on two request
+families added M1-style beside call hierarchy: `textDocument/implementation`
+(decoded like definition — `Location | [] | LocationLink[]`) and
+`textDocument/prepareTypeHierarchy` + `typeHierarchy/supertypes`/`subtypes`
+(opaque `data` round-trips verbatim). Capability-gated as usual
+(`implementationProvider`, `typeHierarchyProvider`; missing = graceful empty,
+plus `ImplementationSupported`/`TypeHierarchySupported` probes for #858
+toast wording). Three surfaces:
+
+- `lsp.goToSuper` (default `cmd+u`) — supertypes of the prepared item when
+  the server offers type hierarchy, else the *bidirectional* implementation
+  answer (on a concrete method gopls returns the interface method = "super"
+  in Go). `lsp.implementations` (default `cmd+alt+b`) is the plain
+  implementation request. Both deliver an `ImplementationsMsg`: one target
+  navigates via `openPathAt`, several open the locked refs picker with a
+  direction-specific placeholder; empty toasts in the bridge (#858).
+- `lsp.typeHierarchy` (default `ctrl+h`) — the prepared roots open the
+  type-hierarchy overlay (`internal/typehier`, the callhier pattern verbatim
+  with `tab` toggling supertypes/subtypes); expansion replies arrive as
+  `TypeHierarchyItemsMsg` keyed by request id, stale ones fall on the floor.
+- **Gutter marks (#1453)** — the passive decoration: the bridge schedules a
+  debounced (750 ms), per-path-coalesced `InheritanceMarks` batch on open and
+  after edits; the manager walks `documentSymbol` filtered to
+  `SymKind{Class,Method,Interface,Struct}` (a *SymbolKind* block in
+  `protocol/enums.go`, deliberately distinct from the CompletionItemKind
+  numbering), caps at 150 symbols, probes each with `implementation` through
+  a 4-worker pool under a 5 s batch timeout, and derives ↑ (implements/
+  overrides) or ↓ (has implementations) from the symbol kind. Replies are
+  stamped with the manager doc version and dropped when an edit raced the
+  batch. The `editor.marks.inheritance` toggle (default on) gates rendering
+  *and* the probe traffic. Rendering: [editor](./editor.md) sign column.
 
 **Workspace symbols (0250, #294/#295).** `project.goToClass` (default
 `cmd+o` — off macOS `ctrl+o` is vim jump-back; palette fallback) opens the palette
