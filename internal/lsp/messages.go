@@ -264,6 +264,57 @@ type CallHierarchyCallsMsg struct {
 	Calls    []CallHierarchyEntry
 }
 
+// ImplementationsMsg delivers go-to-implementations results (#1451), or the
+// super-declaration targets when Super is set (lsp.goToSuper). The app treats
+// it like definition candidates: one target navigates directly, several open
+// the locked picker, an empty slice never arrives (the bridge toasts instead).
+type ImplementationsMsg struct {
+	Refs  []Reference
+	Super bool
+}
+
+// TypeHierarchyEntry is one type-hierarchy node payload (#1451): the raw
+// protocol item (kept verbatim for the supertypes/subtypes follow-up requests)
+// plus its presentation fields and the navigation target in editor coordinates.
+type TypeHierarchyEntry struct {
+	Item   protocol.TypeHierarchyItem
+	Name   string
+	Detail string
+	Path   string
+	Line   int
+	Col    int
+}
+
+// TypeHierarchyMsg opens the type-hierarchy overlay (lsp.typeHierarchy, #1451)
+// on the prepared root items. Fetch is the bridge-built continuation the
+// overlay runs to expand a node lazily; the result arrives as a
+// TypeHierarchyItemsMsg carrying the same ReqID — the manager stays
+// unreachable from the app, as with every other LSP action.
+type TypeHierarchyMsg struct {
+	Path  string
+	Roots []TypeHierarchyEntry
+	Fetch func(reqID int, item protocol.TypeHierarchyItem, supertypes bool) tea.Cmd
+}
+
+// TypeHierarchyItemsMsg delivers one node expansion: the supertypes or
+// subtypes of the item requested under ReqID. An empty slice marks the node a
+// leaf.
+type TypeHierarchyItemsMsg struct {
+	ReqID      int
+	Supertypes bool
+	Items      []TypeHierarchyEntry
+}
+
+// InheritanceMarksMsg replaces the gutter inheritance-mark set for one
+// document (#1450); Version stamps the document version the batch ran
+// against, so a reply that raced an edit is recognisably stale. An empty set
+// clears the marks.
+type InheritanceMarksMsg struct {
+	Path    string
+	Version int
+	Marks   []InheritanceMark
+}
+
 // SymbolPromptMsg asks the app to prompt for a workspace-symbol query (0250,
 // #294); Apply runs the workspace/symbol request with the typed query.
 type SymbolPromptMsg struct {

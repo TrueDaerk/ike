@@ -93,6 +93,27 @@ func (Plugin) Capabilities() plugin.Capabilities {
 				Run:   func(h host.API) tea.Cmd { return shared().callHierarchy(h) },
 			},
 			{
+				// The super declaration of the symbol under the cursor (#1451):
+				// supertypes via type hierarchy when the server offers it, the
+				// bidirectional implementation answer otherwise.
+				ID:    "lsp.goToSuper",
+				Title: "LSP: Go to Super",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().goToSuper(h) },
+			},
+			{
+				ID:    "lsp.implementations",
+				Title: "LSP: Go to Implementations",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().implementations(h) },
+			},
+			{
+				ID:    "lsp.typeHierarchy",
+				Title: "LSP: Type Hierarchy",
+				Scope: plugin.PaneScope("editor"),
+				Run:   func(h host.API) tea.Cmd { return shared().typeHierarchy(h) },
+			},
+			{
 				ID:    "lsp.codeAction",
 				Title: "LSP: Show Intention Actions",
 				Scope: plugin.PaneScope("editor"),
