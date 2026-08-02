@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"ike/internal/fuzzy"
+	"ike/internal/pathcomplete"
 )
 
 // maxFiles caps how many paths the file walk collects, so a huge tree never
@@ -51,12 +52,19 @@ func (f *FileMode) SetUsage(u *Usage) { f.usage = u }
 func (f *FileMode) Prefix() rune { return '@' }
 
 // Placeholder implements Mode.
-func (f *FileMode) Placeholder() string { return "Find a file…" }
+func (f *FileMode) Placeholder() string { return "Find a file… (/, ~/ for any path)" }
 
 // Results implements Mode. With an empty query it lists files in path order;
 // with a query it fuzzy-matches the relative path and ranks by score, then
-// usage count (#1419), then path.
+// usage count (#1419), then path. A query typed as a filesystem path (#1433:
+// leading /, ~/, ./ or ../) is served by the shared pathcomplete engine
+// instead — the same candidates the ';' picker produces — so '@' also reaches
+// files outside the project; a non-path query with no project match falls
+// back to filesystem candidates shown by absolute path.
 func (f *FileMode) Results(query string, cx Context) []Item {
+	if isPathQuery(query) {
+		return pathItems(query, '@')
+	}
 	files := f.files(cx.Root)
 	type scored struct {
 		path  string
@@ -94,6 +102,46 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 			Score: s.score,
 			Msg:   OpenFileMsg{Path: filepath.Join(cx.Root, s.path)},
 		}
+	}
+	if len(items) == 0 && strings.TrimSpace(query) != "" {
+		return fsFallbackItems(cx.Root, query)
+	}
+	return items
+}
+
+// isPathQuery reports whether the '@' query is written as a filesystem path
+// (#1433) — absolute, home-relative, or explicitly cwd-relative — and should
+// be served by pathcomplete instead of the project fuzzy walk.
+func isPathQuery(q string) bool {
+	return strings.HasPrefix(q, "/") || q == "~" || strings.HasPrefix(q, "~/") ||
+		strings.HasPrefix(q, "./") || strings.HasPrefix(q, "../")
+}
+
+// Complete implements Completer (#1433): tab extends a path query through the
+// shared engine, exactly like the ';' picker; fuzzy queries stay inert.
+func (f *FileMode) Complete(query string) string {
+	if isPathQuery(query) {
+		return pathcomplete.Complete(query).Completed
+	}
+	return query
+}
+
+// fsFallbackItems (#1433) serves a non-path query that matched nothing in the
+// project walk: the same prefix completion the path queries use, anchored at
+// root, with every hit shown by absolute path so out-of-project results stay
+// visually distinct from the project-relative fuzzy matches. Project matches
+// always rank above these — the fallback only exists when there are none.
+func fsFallbackItems(root, query string) []Item {
+	res := pathcomplete.Complete(filepath.Join(root, query))
+	items := make([]Item, 0, len(res.Candidates))
+	for _, c := range res.Candidates {
+		if strings.HasSuffix(c, string(filepath.Separator)) {
+			abs := expandedAbs(c) + string(filepath.Separator)
+			items = append(items, Item{Title: abs, Msg: OpenPathDescendMsg{Query: abs, Prefix: '@'}})
+			continue
+		}
+		abs := expandedAbs(c)
+		items = append(items, Item{Title: abs, Msg: OpenFileMsg{Path: abs}})
 	}
 	return items
 }

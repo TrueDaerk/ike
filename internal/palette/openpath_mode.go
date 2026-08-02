@@ -8,10 +8,15 @@ import (
 	"ike/internal/pathcomplete"
 )
 
-// OpenPathDescendMsg is emitted when an open-path directory candidate is
+// OpenPathDescendMsg is emitted when a filesystem directory candidate is
 // activated (#999): the root model re-opens the picker with the accepted
-// directory as the new query, so enter descends like tab does.
-type OpenPathDescendMsg struct{ Query string }
+// directory as the new query, so enter descends like tab does. Prefix is the
+// palette mode to re-open — the '@' file finder's path queries descend within
+// '@' (#1433); the zero value means the ';' open-path mode.
+type OpenPathDescendMsg struct {
+	Query  string
+	Prefix rune
+}
 
 // OpenPathMode is the "Open File…" picker (#999): a filesystem path browser
 // over absolute and ~-relative paths, for files outside the workspace (the
@@ -43,6 +48,13 @@ func (o *OpenPathMode) Results(query string, cx Context) []Item {
 			{Title: "/", Msg: OpenPathDescendMsg{Query: "/"}},
 		}
 	}
+	return pathItems(query, OpenPathPrefix)
+}
+
+// pathItems turns the pathcomplete candidates for a typed path query into
+// palette items — files open, directories descend back into descendPrefix's
+// mode. Shared by the ';' picker and the '@' finder's path queries (#1433).
+func pathItems(query string, descendPrefix rune) []Item {
 	res := pathcomplete.Complete(query)
 	items := make([]Item, 0, len(res.Candidates)+1)
 	exact := false
@@ -51,7 +63,7 @@ func (o *OpenPathMode) Results(query string, cx Context) []Item {
 			exact = true
 		}
 		if strings.HasSuffix(c, string(filepath.Separator)) {
-			items = append(items, Item{Title: c, Msg: OpenPathDescendMsg{Query: c}})
+			items = append(items, Item{Title: c, Msg: OpenPathDescendMsg{Query: c, Prefix: descendPrefix}})
 			continue
 		}
 		items = append(items, Item{Title: c, Msg: OpenFileMsg{Path: expandedAbs(c)}})
