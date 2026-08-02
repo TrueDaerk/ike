@@ -781,6 +781,19 @@ func (s *Session) Paste(text string) {
 	}
 }
 
+// SendText types text as individual key presses, deliberately bypassing the
+// bracketed-paste path: shells may render a pasted region highlighted (zsh's
+// default zle_highlight does), which is wrong for programmatic insertions
+// that should look typed, like an accepted completion (#1442).
+func (s *Session) SendText(text string) {
+	if s.closed.Load() {
+		return
+	}
+	for _, r := range text {
+		s.em.SendKey(vt.KeyPressEvent{Code: r, Text: string(r)})
+	}
+}
+
 // View renders the current screen as ANSI-styled lines, cached per grid
 // version (#803): an unchanged grid returns the previous render without
 // touching the emulator. A version bump racing the render at worst stamps a

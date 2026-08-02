@@ -651,3 +651,34 @@ func TestPopupInactiveWhileProgramRuns(t *testing.T) {
 		t.Fatalf("completion must return with the prompt, got open=%v items=%v", m.comp.open, m.comp.items)
 	}
 }
+
+// TestUnfocusedPopupNoHighlight (#1442): an unfocused popup highlights no row
+// — enter would run the typed line, so a reversed first entry would falsely
+// promise acceptance. Focusing brings the highlight back.
+func TestUnfocusedPopupNoHighlight(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	base := strings.TrimSuffix(strings.Repeat(strings.Repeat(" ", 80)+"\n", 24), "\n")
+	m.comp = completion{open: true, items: []string{"alpha", "beta"}, sel: 0, word: "a", auto: true}
+	if v := m.completionView(base); strings.Contains(v, "\x1b[7m") {
+		t.Fatal("unfocused popup must not reverse-video any row")
+	}
+	m.comp.focused = true
+	if v := m.completionView(base); !strings.Contains(v, "\x1b[7m") {
+		t.Fatal("focused popup must reverse-video the selected row")
+	}
+}
+
+// TestAcceptTypesInsteadOfPaste (#1442): accepting sends the text as key
+// presses, not a bracketed paste — zsh standout-highlights a pasted region,
+// so the accepted text sat on the command line with a background. SendText
+// must land on the shell line like typed input.
+func TestAcceptTypesInsteadOfPaste(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	m.sess.SendText("echo hi")
+	waitFor(t, "typed text echoed", func() bool {
+		cmd, word := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && word == "hi"
+	})
+}
