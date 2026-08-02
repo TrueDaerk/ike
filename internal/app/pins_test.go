@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/ui"
 )
 
 // pins_test.go covers harpoon-style pinned file slots (#788): the store
@@ -159,5 +161,32 @@ func TestPinCommandsRegistered(t *testing.T) {
 		if _, ok := m.reg.Command(id); !ok {
 			t.Errorf("%s must be registered", id)
 		}
+	}
+}
+
+// TestPinPickerRenderFollowsSelection guards #1446: the shell body must
+// reflect selection and slot mutations made in LATER model copies (the root
+// model is a value model — a closure bound only at open time renders the
+// open-time state forever).
+func TestPinPickerRenderFollowsSelection(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	for i := 0; i < 2; i++ {
+		tm, _ := m.openPath(files[i], false)
+		m = tm.(Model)
+		m = step(m, PinSlotMsg{Slot: i + 1})
+	}
+	m = step(m, PinPickerMsg{})
+	m = step(m, tea.KeyPressMsg{Text: "j", Code: 'j'})
+	body := m.shell.Content().(ui.ModelContent).Render(80)
+	lines := strings.Split(body, "\n")
+	if len(lines) < 2 || !strings.HasPrefix(lines[1], "▍") {
+		t.Fatalf("marker not on row 2 after j:\n%s", body)
+	}
+	// x unpins the selected slot — the shell body must show it emptied.
+	m = step(m, tea.KeyPressMsg{Text: "x", Code: 'x'})
+	body = m.shell.Content().(ui.ModelContent).Render(80)
+	if !strings.Contains(strings.Split(body, "\n")[1], "(empty)") {
+		t.Fatalf("slot 2 not rendered empty after x:\n%s", body)
 	}
 }
