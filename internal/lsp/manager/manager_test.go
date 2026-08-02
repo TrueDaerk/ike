@@ -47,6 +47,11 @@ type fakeOpts struct {
 	// noInlayHint withholds the inlayHintProvider capability, so the
 	// manager's gate is observable (#171).
 	noInlayHint bool
+	// noImplementation withholds the implementationProvider capability, so
+	// the inheritance gates are observable (#1450).
+	noImplementation bool
+	// noTypeHierarchy withholds the typeHierarchyProvider capability (#1450).
+	noTypeHierarchy bool
 	// watched receives every workspace/didChangeWatchedFiles notification
 	// (#1144).
 	watched chan protocol.DidChangeWatchedFilesParams
@@ -94,6 +99,24 @@ func renameCap(opts fakeOpts) json.RawMessage {
 		return json.RawMessage(`false`)
 	}
 	return json.RawMessage(`{"prepareProvider":true}`)
+}
+
+// implementationCap is the initialize capability the fake advertises unless
+// the options withhold it.
+func implementationCap(opts fakeOpts) json.RawMessage {
+	if opts.noImplementation {
+		return nil
+	}
+	return json.RawMessage(`true`)
+}
+
+// typeHierarchyCap is the initialize capability the fake advertises unless
+// the options withhold it.
+func typeHierarchyCap(opts fakeOpts) json.RawMessage {
+	if opts.noTypeHierarchy {
+		return nil
+	}
+	return json.RawMessage(`true`)
 }
 
 // fakeConnectorOpts is fakeConnector with the server behaviour tuned.
@@ -147,6 +170,10 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 
 				DocumentHighlightProvider: documentHighlightCap(opts),
 				InlayHintProvider:         inlayHintCap(opts),
+
+				DocumentSymbolProvider: json.RawMessage(`true`),
+				ImplementationProvider: implementationCap(opts),
+				TypeHierarchyProvider:  typeHierarchyCap(opts),
 			}}
 			respond(out, msg.ID, result)
 		case msg.Method == "textDocument/definition":
@@ -218,6 +245,53 @@ func runFakeServer(in *bufio.Reader, out io.Writer, opts fakeOpts) {
 			respond(out, msg.ID, []protocol.CallHierarchyOutgoingCall{{
 				To:         protocol.CallHierarchyItem{Name: "callee", URI: "file:///tmp/callee.go"},
 				FromRanges: []protocol.Range{{Start: protocol.Position{Line: 3, Character: 1}}},
+			}})
+		case msg.Method == "textDocument/documentSymbol":
+			// A small inheritance fixture (#1450): an interface with a method,
+			// a struct with a method, and a constant the filter must skip.
+			respond(out, msg.ID, json.RawMessage(`[
+				{"name":"Shape","kind":11,"range":{"start":{"line":1,"character":0},"end":{"line":3,"character":1}},"selectionRange":{"start":{"line":1,"character":5},"end":{"line":1,"character":10}},
+					"children":[{"name":"Area","kind":6,"range":{"start":{"line":2,"character":1},"end":{"line":2,"character":10}},"selectionRange":{"start":{"line":2,"character":1},"end":{"line":2,"character":5}}}]},
+				{"name":"Circle","kind":23,"range":{"start":{"line":4,"character":0},"end":{"line":6,"character":1}},"selectionRange":{"start":{"line":4,"character":5},"end":{"line":4,"character":11}},
+					"children":[{"name":"Area","kind":6,"range":{"start":{"line":5,"character":1},"end":{"line":5,"character":10}},"selectionRange":{"start":{"line":5,"character":1},"end":{"line":5,"character":5}}}]},
+				{"name":"answer","kind":14,"range":{"start":{"line":8,"character":0},"end":{"line":8,"character":10}},"selectionRange":{"start":{"line":8,"character":6},"end":{"line":8,"character":12}}}
+			]`))
+		case msg.Method == "textDocument/implementation":
+			// The struct's own probe (line 4) answers empty so a probed symbol
+			// without implementations observably earns no mark (#1450).
+			var p protocol.ImplementationParams
+			_ = json.Unmarshal(msg.Params, &p)
+			if p.Position.Line == 4 {
+				respond(out, msg.ID, nil)
+				break
+			}
+			respond(out, msg.ID, []protocol.Location{{
+				URI:   "file:///tmp/other.go",
+				Range: protocol.Range{Start: protocol.Position{Line: 9, Character: 0}},
+			}})
+		case msg.Method == "textDocument/prepareTypeHierarchy":
+			var p protocol.TypeHierarchyPrepareParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.TypeHierarchyItem{{
+				Name:           fmt.Sprintf("type@%d:%d", p.Position.Line, p.Position.Character),
+				URI:            string(p.TextDocument.URI),
+				SelectionRange: protocol.Range{Start: protocol.Position{Line: 1, Character: 0}},
+				Data:           json.RawMessage(`"ttoken"`),
+			}})
+		case msg.Method == "typeHierarchy/supertypes":
+			// Echo the item's opaque data into the parent name so the test can
+			// assert it round-trips verbatim.
+			var p protocol.TypeHierarchyItemParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.TypeHierarchyItem{{
+				Name: "super-of-" + p.Item.Name + "-" + string(p.Item.Data),
+				URI:  "file:///tmp/super.go",
+			}})
+		case msg.Method == "typeHierarchy/subtypes":
+			var p protocol.TypeHierarchyItemParams
+			_ = json.Unmarshal(msg.Params, &p)
+			respond(out, msg.ID, []protocol.TypeHierarchyItem{{
+				Name: "sub", URI: "file:///tmp/sub.go",
 			}})
 		case msg.Method == "textDocument/semanticTokens/full":
 			// keyword at 0:0 len4.
