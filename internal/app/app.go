@@ -2691,6 +2691,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case OpenInBrowserMsg:
+		// #1429: open the focused file (explorer selection or editor file)
+		// in the platform default browser; non-viewable types toast instead.
+		return m, m.openInBrowser()
+
 	case CopyPathMsg:
 		// #1173: resolve the subject — explorer selection when the explorer
 		// is focused, else the focused editor's file — and copy the wanted
@@ -7255,6 +7260,7 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
 		{Title: "Copy Reference", Command: "file.copyReference"},
+		{Title: "Open in Browser", Command: "file.openInBrowser"},
 		{Title: "Reformat File", Command: "lsp.format"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}
@@ -7307,6 +7313,7 @@ func explorerContextItems() []menu.Item {
 		{Title: "Delete", Command: "explorer.delete"},
 		{Title: "Copy Path", Command: "file.copyPath"},
 		{Title: "Copy Relative Path", Command: "file.copyRelPath"},
+		{Title: "Open in Browser", Command: "file.openInBrowser"},
 		{Title: "Refresh", Command: "explorer.refresh"},
 		{Title: "Expand All", Command: "explorer.expandAll"},
 		{Title: "Reveal Open File", Command: "explorer.reveal"},

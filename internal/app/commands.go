@@ -262,6 +262,11 @@ const (
 	copyRef
 )
 
+// OpenInBrowserMsg opens the focused file in the platform default browser
+// (#1429). With the explorer focused, its selection is the subject; only
+// browser-viewable types (markup, images, PDF) are opened.
+type OpenInBrowserMsg struct{}
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
@@ -333,6 +338,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
 			appCommand("file.localHistory", "Show Local History", LocalHistoryMsg{}),
+			appCommand("file.openInBrowser", "Open in Browser", OpenInBrowserMsg{}),
 			appCommand("tools.setup", "Set Up Tool Panes", ShowToolSetupMsg{}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),
