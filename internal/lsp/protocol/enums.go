@@ -55,6 +55,17 @@ const (
 	KindTypeParameter = 25
 )
 
+// SymbolKind: the kind of a DocumentSymbol / SymbolInformation node. This is a
+// DIFFERENT numbering than CompletionItemKind above (SymbolKind Class is 5,
+// CompletionItemKind Class is 7) — never mix the two blocks. Only the kinds the
+// inheritance features filter on are modelled (#1449).
+const (
+	SymKindClass     = 5
+	SymKindMethod    = 6
+	SymKindInterface = 11
+	SymKindStruct    = 23
+)
+
 // Position encodings a client may negotiate.
 const (
 	EncodingUTF16 = "utf-16"

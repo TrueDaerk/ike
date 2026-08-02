@@ -41,6 +41,8 @@ type Capabilities struct {
 	WorkspaceSymbol    bool
 	CallHierarchy      bool
 	DocumentSymbol     bool
+	Implementation     bool
+	TypeHierarchy      bool
 }
 
 // OffersCodeActionKind reports whether the server declared kind — or one of
@@ -88,6 +90,8 @@ func parseCapabilities(sc protocol.ServerCapabilities) Capabilities {
 	caps.WorkspaceSymbol = truthyProvider(sc.WorkspaceSymbolProvider)
 	caps.CallHierarchy = truthyProvider(sc.CallHierarchyProvider)
 	caps.DocumentSymbol = truthyProvider(sc.DocumentSymbolProvider)
+	caps.Implementation = truthyProvider(sc.ImplementationProvider)
+	caps.TypeHierarchy = truthyProvider(sc.TypeHierarchyProvider)
 	caps.Formatting = truthyProvider(sc.DocumentFormattingProvider)
 	caps.RangeFormatting = truthyProvider(sc.DocumentRangeFormattingProvider)
 	caps.Rename = truthyProvider(sc.RenameProvider)
