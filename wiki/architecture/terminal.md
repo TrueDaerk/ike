@@ -378,11 +378,14 @@ absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).
 Candidates match the typed
 word **case-insensitively** (#968, like every other typed search in the UI);
 an exact-prefix candidate strictly extends the typed word, so **accepting
-pastes just the remainder** through the bracketed-paste path,
-while a candidate matching only case-insensitively erases the typed word
-with backspaces and pastes the canonical spelling (`mak` → `Makefile`).
+types just the remainder**, while a candidate matching only
+case-insensitively erases the typed word with backspaces and types the
+canonical spelling (`mak` → `Makefile`). The accepted text goes in as
+**plain key presses, not a bracketed paste** (#1442): zsh standout-highlights
+a pasted region by default, which made the completed text sit on the command
+line with a background.
 Accepting always **ends** the interaction, directories included (#1335) — the
-popup closes and the pending refresh is cleared, so the echo of the pasted
+popup closes and the pending refresh is cleared, so the echo of the typed
 remainder cannot reopen it and the next enter submits the command line
 (`cd an` → tab → enter runs `cd ansible/`, it does not insert
 `ansible/ansible.cfg`). Typing on, or `ctrl+space`, completes inside the
@@ -394,7 +397,10 @@ keystroke before the cursor row reads current — and is togglable via
 dismisses, any other key invalidates and passes through raw.
 **Focus rule (#1432):** an auto-suggest popup opens *unfocused* — it was
 never asked for, so **enter passes through to the shell** and runs the typed
-line (the popup closes, nothing is inserted). up/down focus the popup; once
+line (the popup closes, nothing is inserted). An unfocused popup highlights
+**no row** (#1442) — a reversed first entry would falsely promise that enter
+accepts it; the selection highlight appears once the popup is focused.
+up/down focus the popup; once
 focused, enter accepts the selection, and an auto refresh from typing on
 keeps the focus. `ctrl+space` opens the popup focused, so enter accepts
 right away. **Tab accepts in both states**, esc closes in both states. The popup is

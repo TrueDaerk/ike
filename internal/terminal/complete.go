@@ -184,16 +184,19 @@ func sameItems(a, b []string) bool {
 }
 
 // acceptCompletion applies the selected candidate and closes the popup: an
-// exact-prefix candidate pastes just the remainder (the word is already
+// exact-prefix candidate types just the remainder (the word is already
 // typed); a candidate matching only case-insensitively (#968) erases the
-// typed word with backspaces first and pastes the candidate in its canonical
+// typed word with backspaces first and types the candidate in its canonical
 // case, so `mak` accepting `Makefile` lands as Makefile, not makMakefile.
+// The text goes in as plain key presses, not a bracketed paste (#1442): zsh
+// standout-highlights a pasted region by default, so the accepted text sat
+// on the command line with a background.
 //
 // Accepting always ends the completion interaction, directories included
 // (#1335): re-opening the popup on the accepted directory's contents left a
 // preselected entry under the very next Enter, so `cd an` → tab → enter ran
 // `cd ansible/ansible.cfg` instead of submitting `cd ansible/`. The pending
-// refresh is cleared too — the pasted remainder echoes back through OnOutput,
+// refresh is cleared too — the typed remainder echoes back through OnOutput,
 // which would otherwise reopen the popup for the accepted word. Typing on (or
 // ctrl+space) completes inside the accepted directory as usual.
 func (m *Model) acceptCompletion() {
@@ -210,12 +213,12 @@ func (m *Model) acceptCompletion() {
 		if rest == "" {
 			return
 		}
-		m.sess.Paste(rest)
+		m.sess.SendText(rest)
 	default:
 		for range []rune(c.word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.Paste(item)
+		m.sess.SendText(item)
 	}
 }
 
@@ -426,7 +429,9 @@ func (m Model) completionView(view string) string {
 			r = r[:width]
 		}
 		line := " " + string(r) + strings.Repeat(" ", width-len(r)) + " "
-		if i == m.comp.sel {
+		// Unfocused (#1442): no row highlights — enter would run the typed
+		// line, so a reversed first row would falsely promise acceptance.
+		if i == m.comp.sel && m.comp.focused {
 			line = sel.Render(line)
 		} else {
 			line = row.Render(line)
