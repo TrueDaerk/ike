@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/pane"
+	"ike/internal/ui"
 )
 
 // TestLocalHistoryRecordsOnSave: the save-side hook (#1023) stores the
@@ -133,5 +134,33 @@ func TestLocalHistoryPickerNeedsSnapshots(t *testing.T) {
 	m.openLocalHistoryPicker()
 	if m.localHistoryOpen() {
 		t.Fatal("picker opened with no snapshots")
+	}
+}
+
+// TestLocalHistoryPickerRenderFollowsSelection guards #1440: the shell body
+// must reflect a selection move made in a LATER model copy (the root model is
+// a value model — a closure bound only at open time renders the open-time
+// selection forever).
+func TestLocalHistoryPickerRenderFollowsSelection(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	m = openDirty(t, m, path)
+	m.lhStore.Record(path, []byte("SNAP1\n"))
+	m.lhStore.Record(path, []byte("SNAP2\n"))
+
+	m.openLocalHistoryPicker()
+	if !m.localHistoryOpen() {
+		t.Fatal("picker did not open")
+	}
+	tm, _ := m.updateLocalHistoryPicker(tea.KeyPressMsg{Code: 'j', Text: "j"})
+	m2 := tm.(Model)
+	body := m2.shell.Content().(ui.ModelContent).Render(80)
+	lines := strings.Split(body, "\n")
+	if len(lines) < 2 || !strings.HasPrefix(lines[1], "▍") {
+		t.Fatalf("marker not on row 2 after j:\n%s", body)
 	}
 }
