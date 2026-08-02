@@ -1,7 +1,9 @@
 package palette
 
 import (
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -96,5 +98,115 @@ func TestPaletteOpenRefreshesFileMode(t *testing.T) {
 		if got := f.Results("fresh", cx); len(got) != 1 || got[0].Title != "fresh.go" {
 			t.Fatalf("%s: Results(fresh) = %v, want fresh.go", name, got)
 		}
+	}
+}
+
+// TestFileModeIsPathQuery (#1433): only queries explicitly written as
+// filesystem paths bypass the project fuzzy walk.
+func TestFileModeIsPathQuery(t *testing.T) {
+	for q, want := range map[string]bool{
+		"/etc/hos": true, "~/": true, "~": true, "./x": true, "../x": true,
+		"": false, "app": false, "src/main.go": false, "a/b": false,
+	} {
+		if got := isPathQuery(q); got != want {
+			t.Errorf("isPathQuery(%q) = %v, want %v", q, got, want)
+		}
+	}
+}
+
+// TestFileModePathQueryListsFilesystem (#1433): an '@' query typed as a path
+// serves pathcomplete candidates — files open via OpenFileMsg, directories
+// descend back into the '@' mode.
+func TestFileModePathQueryListsFilesystem(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode("project.go")
+	items := f.Results(dir+string(filepath.Separator), Context{Root: "/proj"})
+	var file, sub bool
+	for _, it := range items {
+		switch {
+		case strings.HasSuffix(it.Title, "note.txt"):
+			file = true
+			msg, ok := it.Msg.(OpenFileMsg)
+			if !ok || msg.Path != filepath.Join(dir, "note.txt") {
+				t.Fatalf("file item msg=%v", it.Msg)
+			}
+		case strings.HasSuffix(it.Title, "sub"+string(filepath.Separator)):
+			sub = true
+			msg, ok := it.Msg.(OpenPathDescendMsg)
+			if !ok || msg.Prefix != '@' {
+				t.Fatalf("dir item must descend back into '@', msg=%v", it.Msg)
+			}
+		}
+	}
+	if !file || !sub {
+		t.Fatalf("want file+dir filesystem candidates, got %v", items)
+	}
+}
+
+// TestFileModePathQueryTabCompletes (#1433): tab extends a path query through
+// the shared engine; a fuzzy query stays inert.
+func TestFileModePathQueryTabCompletes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "unique-dir"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode("project.go")
+	got := f.Complete(filepath.Join(dir, "uni"))
+	want := filepath.Join(dir, "unique-dir") + string(filepath.Separator)
+	if got != want {
+		t.Fatalf("Complete=%q want %q", got, want)
+	}
+	if got := f.Complete("proj"); got != "proj" {
+		t.Fatalf("fuzzy query must stay inert on tab, got %q", got)
+	}
+}
+
+// TestFileModeFsFallback (#1433): a non-path query with no project match
+// falls back to filesystem prefix candidates anchored at the root, shown by
+// absolute path; a query with project matches never reaches the fallback.
+func TestFileModeFsFallback(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "zebra.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(root, "zoo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	f := fileMode("main.go")
+	cx := Context{Root: root}
+
+	items := f.Results("zeb", cx)
+	if len(items) != 1 || items[0].Title != filepath.Join(root, "zebra.txt") {
+		t.Fatalf("fallback = %v, want absolute zebra.txt", items)
+	}
+	if msg, ok := items[0].Msg.(OpenFileMsg); !ok || msg.Path != filepath.Join(root, "zebra.txt") {
+		t.Fatalf("fallback file msg=%v", items[0].Msg)
+	}
+
+	items = f.Results("zo", cx)
+	wantDir := filepath.Join(root, "zoo") + string(filepath.Separator)
+	if len(items) != 1 || items[0].Title != wantDir {
+		t.Fatalf("dir fallback = %v, want %q", items, wantDir)
+	}
+	if msg, ok := items[0].Msg.(OpenPathDescendMsg); !ok || msg.Prefix != '@' || msg.Query != wantDir {
+		t.Fatalf("dir fallback msg=%v", items[0].Msg)
+	}
+
+	// A project match wins outright: no filesystem rows mixed in.
+	f2 := fileMode("zebra-project.go")
+	items = f2.Results("zeb", cx)
+	if len(items) != 1 || items[0].Title != "zebra-project.go" {
+		t.Fatalf("project match must suppress the fallback, got %v", items)
+	}
+
+	// No match anywhere: empty result, no raw-query row in fuzzy mode.
+	if items = f.Results("nothing-here", cx); len(items) != 0 {
+		t.Fatalf("no-match fallback must stay empty, got %v", items)
 	}
 }

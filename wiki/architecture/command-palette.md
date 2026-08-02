@@ -140,6 +140,18 @@ editor's anchored `@` finder or the recent-files mode never count. Match
 quality still wins — usage only breaks equal scores, notably the empty-query
 listing.
 
+**Filesystem reach (#1433).** `@` is no longer project-only: a query typed as
+a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shared
+`internal/pathcomplete` engine instead of the fuzzy walk, the same candidates
+the `;` picker produces. Tab extends a path query (`Completer` seam), enter on
+a directory descends (`OpenPathDescendMsg` with `Prefix: '@'`, so the re-open
+stays in the `@` finder), enter on a file opens it via the normal
+`OpenFileMsg` path. A non-path query with **no project match** falls back to
+filesystem prefix candidates anchored at the root, rendered by **absolute
+path** so out-of-project rows stay visually distinct; project matches always
+rank above filesystem ones — the fallback only exists when there are none.
+`;` stays the explicit path-only picker.
+
 ## Open-path mode (`file.openPath`, #999)
 
 The "Open File…" picker (`openpath_mode.go`) opens files **outside the
@@ -151,7 +163,8 @@ rows activate the normal `OpenFileMsg` open path (out-of-root buffers behave
 like jumped-to dependency files, #565 — full editing/LSP, no explorer entry);
 directory rows emit `OpenPathDescendMsg`, which re-opens the picker with the
 accepted directory as the query (`OpenLockedWith`), so enter descends like
-tab. Tab completes via the `Completer` seam. With no matching candidate the
+tab — the msg's `Prefix` names the mode to return to (zero means `;`; the
+`@` finder's path queries descend within `@`, #1433). Tab completes via the `Completer` seam. With no matching candidate the
 raw query stays activatable — a missing file surfaces as an error toast
 (`openInTab` now reports load failures instead of failing silently). An empty
 query seeds `~/` and `/`.

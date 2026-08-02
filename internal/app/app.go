@@ -3471,9 +3471,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case palette.OpenPathDescendMsg:
 		// Enter on a directory candidate (#999): re-open the picker with the
-		// accepted directory as the query, so enter descends like tab.
+		// accepted directory as the query, so enter descends like tab. The
+		// msg names the mode to return to — the '@' finder's path queries
+		// descend within '@' (#1433), the ';' picker within ';'.
+		prefix := msg.Prefix
+		if prefix == 0 {
+			prefix = palette.OpenPathPrefix
+		}
 		m.palette.SetSize(m.width, m.height)
-		m.palette.OpenLockedWith(palette.Context{ContextID: m.focusContext(), Root: "."}, palette.OpenPathPrefix, msg.Query)
+		m.palette.OpenLockedWith(palette.Context{ContextID: m.focusContext(), Root: "."}, prefix, msg.Query)
 		return m, nil
 
 	case ShowRecentFilesMsg:
