@@ -137,6 +137,8 @@ Active when an editor pane has focus.
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |
 | Go to declaration | `cmd+b` | `ctrl+b` | `lsp.definition` |
 | Go to declaration | `f4` | `f4` | `lsp.definition` |
+| Go to implementations | `cmd+alt+b` | `ctrl+alt+b` | `lsp.implementations` |
+| Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
 | Move to line end | `cmd+right` | `ctrl+right` | `editor.lineEnd` |
 | Move to line start | `cmd+left` | `ctrl+left` | `editor.lineStart` |
@@ -159,6 +161,7 @@ Active when an editor pane has focus.
 | Save | `cmd+s` | `ctrl+s` | `editor.write` |
 | Save | `ctrl+s` | `ctrl+s` | `editor.write` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
+| Type hierarchy | `ctrl+h` | `ctrl+h` | `lsp.typeHierarchy` |
 | Undo | `cmd+z` | `ctrl+z` | `editor.undo` |
 | Undo | `ctrl+z` | `ctrl+z` | `editor.undo` |
 

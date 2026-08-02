@@ -252,9 +252,9 @@ bring their own.
 | LSP: Go to Definition | `lsp.definition` | `f4` | — | `editor` pane |
 | LSP: Diagnostic Under Caret | `lsp.diagnosticInfo` | `cmd+f1` | — | `editor` pane |
 | LSP: Document Symbols | `lsp.documentSymbols` | `cmd+f12` | — | everywhere |
-| LSP: Go to Super | `lsp.goToSuper` | — | — | `editor` pane |
+| LSP: Go to Super | `lsp.goToSuper` | `cmd+u` | — | `editor` pane |
 | LSP: Hover | `lsp.hover` | `ctrl+q` | — | `editor` pane |
-| LSP: Go to Implementations | `lsp.implementations` | — | — | `editor` pane |
+| LSP: Go to Implementations | `lsp.implementations` | `cmd+alt+b` | — | `editor` pane |
 | LSP: Install Missing Servers | `lsp.installMissing` | — | — | everywhere |
 | LSP: Parameter Info | `lsp.parameterInfo` | `cmd+p` | — | `editor` pane |
 | LSP: Peek Definition | `lsp.peekDefinition` | `cmd+y` | — | `editor` pane |
@@ -263,7 +263,7 @@ bring their own.
 | LSP: Rename Symbol | `lsp.rename` | `shift+f6` | — | `editor` pane |
 | LSP: Restart Servers | `lsp.restart` | — | — | everywhere |
 | LSP: Show Server Log | `lsp.showLog` | — | — | everywhere |
-| LSP: Type Hierarchy | `lsp.typeHierarchy` | — | — | `editor` pane |
+| LSP: Type Hierarchy | `lsp.typeHierarchy` | `ctrl+h` | — | `editor` pane |
 | Go to Symbol | `project.goToClass` | `cmd+o` | — | everywhere |
 
 ## project

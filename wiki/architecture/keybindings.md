@@ -519,7 +519,9 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.diagnosticInfo` | `cmd+f1` | fragile | `palette` | live via palette |
 | `lsp.documentSymbols` | `cmd+f12` | fragile | `palette (or the cmd+3 Structure panel)` | live via palette (or the cmd+3 Structure panel) |
 | `lsp.format` | `cmd+alt+l` | fragile | `palette` | live via palette |
+| `lsp.goToSuper` | `cmd+u` | fragile | `palette / Navigate menu / context menu` | live via palette / Navigate menu / context menu |
 | `lsp.hover` | `ctrl+q` | delivered | `—` | live |
+| `lsp.implementations` | `cmd+alt+b` | fragile | `palette / Navigate menu / context menu` | live via palette / Navigate menu / context menu |
 | `lsp.nextDiagnostic` | `f2` | delivered | `—` | live |
 | `lsp.parameterInfo` | `cmd+p` | fragile | `ctrl+p` | live via ctrl+p |
 | `lsp.peekDefinition` | `cmd+y` | fragile | `palette` | live via palette |
@@ -527,6 +529,7 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `lsp.references` | `alt+f7` | fragile | `palette` | live via palette |
 | `lsp.referencesPanel` | `cmd+alt+f7` | fragile | `palette` | live via palette |
 | `lsp.rename` | `shift+f6` | delivered | `—` | live |
+| `lsp.typeHierarchy` | `ctrl+h` | delivered | `—` | live |
 | `markdown.preview` | `cmd+alt+m` | fragile | `palette` | live via palette |
 | `menu.open` | `f10` | delivered | `—` | live |
 | `nav.back` | `cmd+left-bracket` | fragile | `mouse-back` | live via mouse-back |
