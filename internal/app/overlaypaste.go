@@ -35,7 +35,7 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, false // navigation-only overlays
 	case m.finder.IsOpen():
 		return nil, m.finder.Paste(text)
-	case m.todo.IsOpen(), m.undoTree.IsOpen(), m.callhier.IsOpen():
+	case m.todo.IsOpen(), m.undoTree.IsOpen(), m.callhier.IsOpen(), m.typehier.IsOpen():
 		return nil, false // list overlays, no text input
 	case m.palette.IsOpen():
 		return m.palette.Paste(text)
