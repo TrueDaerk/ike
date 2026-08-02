@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-02 (theme: open in browser, #1429)
+
+- "Open in Browser" (#1429): new `file.openInBrowser` command opens the
+  focused file — explorer selection when the tree is focused, else the
+  focused editor's file — in the platform default browser (`open` /
+  `start` / `xdg-open`). Gated to browser-viewable types (markup, images,
+  PDF; markdown stays with `markdown.preview`); non-viewable files toast
+  instead of silently doing nothing. Palette entry plus editor and
+  explorer context-menu items; no default chord (#711 budget).
+
 ## 2026-07-30 (theme: per-language formatter defaults, #1405)
 
 - Per-language external formatter defaults (Roadmap 0470, #1405): Python
