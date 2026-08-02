@@ -95,6 +95,7 @@ since the leader layer retired (#711):
 | `vcs.revertHunk` | palette | JetBrains "Rollback Lines": restore the contiguous change under the caret (the gutter-marked region, deletion anchors included) to its HEAD content. Applied as one buffer edit through the undo tree — plain undo brings the hunk back; works against unsaved edits too (`internal/editor/vcs_revert.go`). |
 | `vcs.diff` | palette | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
 | `vcs.blameLine` | palette | Toggle the inline blame annotation. |
+| `vcs.historyForSelection` | palette / editor context menu | JetBrains "Show History for Selection" (#1430): `git log -L` over the visual selection's lines (caret line fallback) — modal picker of the commits that touched exactly that range (`internal/vcs/rangelog.go`, capped at 200 commits); enter expands one commit to the patch git computed for the tracked range. Git follows the range across edits and renames itself. |
 | `vcs.panel` | `cmd+9` | Toggle the VCS tool window (below). |
 | `tool.lazygit` | palette | Open/focus the preconfigured lazygit tool pane (when lazygit is on PATH; a [#741 custom tool](/architecture/tool-panes.md), not part of `internal/vcs`). |
 

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-02 (theme: show history for selection, #1430)
+
+- Show History for Selection (#1430): `vcs.historyForSelection` runs
+  `git log -L <start>,<end>:<file>` over the editor's visual selection
+  (caret line fallback) via the new `internal/vcs/rangelog.go` async
+  command (200-commit cap, truncation hinted). Commits that touched
+  exactly that range show in the modal shell — enter expands one commit
+  to the range patch, esc steps back. New `editor.SelectionLines()`
+  accessor (1-based, normalized). Picker re-binds its shell body on
+  every selection move — the root model is a value model, so a closure
+  bound once at open time renders stale state (the local-history picker
+  shares that latent issue). Palette + editor context menu; no chord.
+
 ## 2026-08-02 (theme: open in browser, #1429)
 
 - "Open in Browser" (#1429): new `file.openInBrowser` command opens the
