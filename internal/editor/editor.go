@@ -888,6 +888,20 @@ func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col
 // CursorPos returns the 0-based line and column, for session persistence.
 func (m Model) CursorPos() (line, col int) { return m.cursor.Line, m.cursor.Col }
 
+// SelectionLines returns the 1-based, inclusive line range of the active
+// visual selection; ok is false outside visual mode. Used by range-scoped
+// actions like Show History for Selection (#1430).
+func (m Model) SelectionLines() (start, end int, ok bool) {
+	if !m.mode.IsVisual() {
+		return 0, 0, false
+	}
+	start, end = m.anchor.Line, m.cursor.Line
+	if start > end {
+		start, end = end, start
+	}
+	return start + 1, end + 1, true
+}
+
 // SetCursor moves the cursor to a 0-based line/column, clamping to a valid
 // normal-mode position and scrolling it into view. Used for programmatic
 // placement (session restore, go-to-definition, usages picks, nav history);

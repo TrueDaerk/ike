@@ -448,6 +448,12 @@ type Model struct {
 	lhPicker    bool                 // local-history picker owns the modal shell
 	lhPath      string               // file the open picker lists
 	lhEntries   []localhistory.Entry // its snapshots, newest-first
+
+	histResult vcs.RangeLogMsg // range-history picker data (#1430)
+	histLabel  string          // human range label ("lines 4–9")
+	histSel    int             // selected commit row
+	histPatch  bool            // patch view (vs commit list)
+	histPicker bool            // range-history picker owns the modal shell
 	paletteKey  string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
@@ -4260,6 +4266,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openDiffHeadPane(msg.Path, msg.Head)
 		return m, nil
 
+	case HistoryForSelectionMsg:
+		// #1430: git log -L over the visual selection (caret line fallback).
+		return m.historyForSelection()
+
+	case vcs.RangeLogMsg:
+		m.openHistoryPicker(msg)
+		return m, nil
+
 	case ToggleBlameMsg:
 		// vcs.blameLine (#468): flip the focused document's annotation and
 		// fetch the blame map when it just turned on.
@@ -4510,6 +4524,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The local-history picker (#1023) owns the keyboard the same way.
 		if m.localHistoryOpen() {
 			return m.updateLocalHistoryPicker(msg)
+		}
+		// The range-history picker (#1430) owns the keyboard the same way.
+		if m.historyPickerOpen() {
+			return m.updateHistoryPicker(msg)
 		}
 		// The revert-file confirmation (0320, #466): enter / esc answer it.
 		if m.revertPromptOpen() {
@@ -7261,6 +7279,7 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
 		{Title: "Copy Reference", Command: "file.copyReference"},
 		{Title: "Open in Browser", Command: "file.openInBrowser"},
+		{Title: "Show History for Selection", Command: "vcs.historyForSelection"},
 		{Title: "Reformat File", Command: "lsp.format"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
 	}

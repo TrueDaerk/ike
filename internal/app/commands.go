@@ -262,6 +262,11 @@ const (
 	copyRef
 )
 
+// HistoryForSelectionMsg runs vcs.historyForSelection (#1430): git history of
+// the focused editor's visual selection lines (caret line fallback) via
+// `git log -L`, shown as a commit picker with per-commit range patches.
+type HistoryForSelectionMsg struct{}
+
 // OpenInBrowserMsg opens the focused file in the platform default browser
 // (#1429). With the explorer focused, its selection is the subject; only
 // browser-viewable types (markup, images, PDF) are opened.
@@ -389,6 +394,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.undoRevert", "Undo Revert…", UndoRevertMsg{}),
 			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),
+			appCommand("vcs.historyForSelection", "Show History for Selection", HistoryForSelectionMsg{}),
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),
 			appCommand("problems.toggle", "Problems", ProblemsToggleMsg{}),
 			appCommand("structure.toggle", "Structure", StructureToggleMsg{}),
