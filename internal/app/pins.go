@@ -146,11 +146,19 @@ func (m *Model) openPinPicker(sel int) {
 	}
 	m.pinSel = sel
 	m.pinPicker = true
+	m.setPinPickerContent()
+	m.shell.Open()
+}
+
+// setPinPickerContent (re-)binds the shell body to THIS model copy (#1446).
+// The root model is a value model, so a closure bound once at open time would
+// keep rendering the open-time selection and slot contents; every mutating
+// key re-binds.
+func (m *Model) setPinPickerContent() {
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "PINNED FILES",
 		Body:    m.renderPinPicker,
 	})
-	m.shell.Open()
 }
 
 // pinPickerOpen reports whether the shell currently shows the slot picker —
@@ -199,33 +207,39 @@ func (m Model) updatePinPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "j", "down":
 		if m.pinSel < pinSlotCount-1 {
 			m.pinSel++
+			m.setPinPickerContent()
 		}
 		return m, nil
 	case "k", "up":
 		if m.pinSel > 0 {
 			m.pinSel--
+			m.setPinPickerContent()
 		}
 		return m, nil
 	case "J", "shift+down":
 		if m.pinSel < pinSlotCount-1 {
 			m.pins.Swap(m.pinSel, m.pinSel+1)
 			m.pinSel++
+			m.setPinPickerContent()
 		}
 		return m, nil
 	case "K", "shift+up":
 		if m.pinSel > 0 {
 			m.pins.Swap(m.pinSel, m.pinSel-1)
 			m.pinSel--
+			m.setPinPickerContent()
 		}
 		return m, nil
 	case "x", "d", "backspace":
 		m.pins.Clear(m.pinSel)
+		m.setPinPickerContent()
 		return m, nil
 	case "p":
 		// Pin the active file to the selected slot — the picker-side twin of
 		// nav.pinSlotN, since the pin commands have no default chord (the
 		// ctrl+shift+digit family is taken by the jumps).
 		m.pinCurrent(m.pinSel + 1)
+		m.setPinPickerContent()
 		return m, nil
 	case "1", "2", "3", "4":
 		closePicker()
