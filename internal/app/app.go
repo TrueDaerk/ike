@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/backup"
+	"ike/internal/breakpanel"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
 	"ike/internal/complete"
@@ -32,7 +33,6 @@ import (
 	"ike/internal/complete/words"
 	"ike/internal/config"
 	"ike/internal/debug"
-	"ike/internal/breakpanel"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
@@ -72,6 +72,7 @@ import (
 	"ike/internal/todoindex"
 	"ike/internal/toolcatalog"
 	"ike/internal/tour"
+	"ike/internal/typehier"
 	"ike/internal/ui"
 	"ike/internal/undotree"
 	"ike/internal/vcs"
@@ -405,6 +406,8 @@ type Model struct {
 	explorerRatio float64
 	// callhier is the call-hierarchy tree overlay (lsp.callHierarchy, #173).
 	callhier *callhier.Model
+	// typehier is the type-hierarchy tree overlay (lsp.typeHierarchy, #1454).
+	typehier *typehier.Model
 	// finder is the find-in-path overlay (Roadmap 0150); searcher is the
 	// streaming scan service it drives.
 	finder   *finder.Model
@@ -454,7 +457,7 @@ type Model struct {
 	histSel    int             // selected commit row
 	histPatch  bool            // patch view (vs commit list)
 	histPicker bool            // range-history picker owns the modal shell
-	paletteKey  string
+	paletteKey string
 	// themePal is the resolved color scheme (Roadmap 0110): [theme].name mapped
 	// to a theme.Palette. Chrome renders from its ui slots; panes get it threaded
 	// at construction and on config reloads.
@@ -708,12 +711,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	bookmarks := &bookmarksMode{}
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
-	vcsSt := &vcsState{}                          // shared before the literal: the reverts picker mode reads it
-	layoutsPicker := newLayoutsMode(layoutNames)  // saved window layouts picker (#1175)
+	vcsSt := &vcsState{}                            // shared before the literal: the reverts picker mode reads it
+	layoutsPicker := newLayoutsMode(layoutNames)    // saved window layouts picker (#1175)
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
-	winSizes := ui.LoadWinSizes(winSizeFile())    // resizable floats (#774)
-	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
+	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
+	wsMgr := wsManager(mgr, resumed, root, panes)   // hoisted: the palette's recent-projects sources read it (#820)
 	m := Model{
 		cmdUsage:       cmdUsage,
 		fileUsage:      fileUsage,
@@ -777,9 +780,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.todo.SetDisplayPath(displayPath)
 	m.callhier = callhier.New()
 	m.callhier.SetPalette(themePal)
+	m.typehier = typehier.New()
+	m.typehier.SetPalette(themePal)
 	m.undoTree = undotree.New()
 	m.undoTree.SetPalette(themePal)
 	m.callhier.SetDisplayPath(displayPath)
+	m.typehier.SetDisplayPath(displayPath)
 	m.menu = menu.New(menu.Defaults(), m.commandInfo(reg))
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
 	m.ctxMenu.SetPalette(themePal)
@@ -2522,6 +2528,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finder.SetSize(m.width, m.height)
 		m.todo.SetSize(m.width, m.height)
 		m.callhier.SetSize(m.width, m.height)
+		m.typehier.SetSize(m.width, m.height)
 		m.undoTree.SetSize(m.width, m.height)
 		m.menu.SetWidth(m.width)
 		{
@@ -4119,6 +4126,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// One lazy node expansion; stale replies are dropped inside.
 		m.callhier.Apply(msg)
 		return m, nil
+	case ilsp.TypeHierarchyMsg:
+		// lsp.typeHierarchy (#1454): the prepared roots open the tree overlay;
+		// nothing prepared never reaches here (the bridge toasts instead).
+		m.typehier.SetSize(m.width, m.height)
+		return m, m.typehier.Open(msg)
+	case ilsp.TypeHierarchyItemsMsg:
+		// One lazy node expansion; stale replies are dropped inside.
+		m.typehier.Apply(msg)
+		return m, nil
 	case ilsp.DefinitionCandidatesMsg:
 		// lsp.definition with several targets (#279): pick, don't guess. The
 		// list reuses the references rows; Enter navigates via DefinitionMsg —
@@ -4490,6 +4506,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.callhier.IsOpen() {
 			// The call-hierarchy overlay owns the keyboard the same way (#173).
 			return m, m.callhier.Update(msg)
+		}
+		if m.typehier.IsOpen() {
+			// The type-hierarchy overlay owns the keyboard the same way (#1454).
+			return m, m.typehier.Update(msg)
 		}
 		if m.palette.IsOpen() {
 			cmd := m.palette.Update(msg)
@@ -7683,6 +7703,8 @@ func (m Model) render() string {
 		result = overlay.Center(base, m.undoTree.View(), m.width, m.height)
 	case m.callhier.IsOpen():
 		result = overlay.Center(base, m.callhier.View(), m.width, m.height)
+	case m.typehier.IsOpen():
+		result = overlay.Center(base, m.typehier.View(), m.width, m.height)
 	case m.palette.IsOpen():
 		v := m.palette.View()
 		if m.palette.Anchored() {
