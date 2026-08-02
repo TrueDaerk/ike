@@ -363,8 +363,12 @@ with the history it indexed.
 ## Command completion popup (#740)
 
 JetBrains-style completion at the shell prompt (`complete.go`). The command
-line is read straight off the emulator — `LineText` of the cursor row, left
-of the cursor; the prompt is stripped heuristically (`$ `, `% `, `> `, `# `,
+line is read straight off the emulator — the cursor row's soft-wrap chain is
+walked back to its first row and joined (#1431), then cut left of the cursor,
+so a command longer than the pane width keeps its head and current word after
+wrapping instead of the continuation row's tail opening the popup on garbage;
+the prompt (only ever on the chain's first row) is stripped heuristically
+(`$ `, `% `, `> `, `# `,
 `❯ `), command separators (`|`, `;`, `&&`, `||`) start a fresh command — so
 the shell keeps owning line editing and history. Sources per word: PATH
 executables while the first word is typed, make targets after `make`
