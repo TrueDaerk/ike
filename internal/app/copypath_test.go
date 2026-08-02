@@ -9,6 +9,18 @@ import (
 	"ike/internal/registry"
 )
 
+// TestCopyPathCommandsRegistered guards #1439: the three copy-path commands
+// must be registry commands, or the context-menu entries render permanently
+// disabled and the palette never lists them.
+func TestCopyPathCommandsRegistered(t *testing.T) {
+	m := newSized()
+	for _, id := range []string{"file.copyPath", "file.copyRelPath", "file.copyReference"} {
+		if _, ok := m.reg.Command(id); !ok {
+			t.Fatalf("%s must be a registry command", id)
+		}
+	}
+}
+
 // TestCopyPathForms guards #1173: absolute, project-relative and
 // reference (relpath:line) forms for the focused editor's file.
 func TestCopyPathForms(t *testing.T) {

@@ -63,6 +63,9 @@ bring their own.
 | Go to Tab 9 | `editor.tab.select9` | `alt+9` | — | everywhere |
 | Pin/Unpin Tab | `editor.tab.togglePin` | — | — | everywhere |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
+| Copy Path | `file.copyPath` | — | — | everywhere |
+| Copy Reference | `file.copyReference` | — | — | everywhere |
+| Copy Relative Path | `file.copyRelPath` | — | — | everywhere |
 | Show Local History | `file.localHistory` | — | — | everywhere |
 | Move File | `file.move` | `f6` | — | everywhere |
 | Open in Browser | `file.openInBrowser` | — | — | everywhere |
