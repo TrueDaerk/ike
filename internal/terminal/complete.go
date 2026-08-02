@@ -27,12 +27,17 @@ const maxCompItems = 8
 // completion is the popup state: full replacement words for the current
 // prefix, the selected index, and whether the popup was opened by
 // auto-suggest (auto closes on an empty word; ctrl+space shows everything).
+// focused (#1432) gates enter-accept: an auto-suggest popup was never asked
+// for, so enter keeps meaning "run the typed line" and passes through to the
+// shell until the user engages the popup — via up/down, or by opening it
+// explicitly with ctrl+space. Tab accepts regardless of focus.
 type completion struct {
-	open  bool
-	items []string
-	sel   int
-	word  string
-	auto  bool
+	open    bool
+	items   []string
+	sel     int
+	word    string
+	auto    bool
+	focused bool
 }
 
 // SetAutoSuggest toggles the while-typing trigger (terminal.autosuggest);
@@ -75,12 +80,24 @@ func (m *Model) completionKey(msg string) bool {
 		m.comp = completion{}
 		return true
 	case "up":
+		m.comp.focused = true
 		m.comp.sel = (m.comp.sel + len(m.comp.items) - 1) % len(m.comp.items)
 		return true
 	case "down":
+		m.comp.focused = true
 		m.comp.sel = (m.comp.sel + 1) % len(m.comp.items)
 		return true
-	case "enter", "tab":
+	case "enter":
+		// Unfocused (#1432): the popup opened uninvited while typing, so
+		// enter still means "run the typed line" — close and let the raw
+		// route deliver the key to the shell.
+		if !m.comp.focused {
+			m.comp = completion{}
+			return false
+		}
+		m.acceptCompletion()
+		return true
+	case "tab":
 		m.acceptCompletion()
 		return true
 	}
@@ -147,7 +164,11 @@ func (m *Model) refreshCompletion(auto bool) {
 	if m.comp.open && m.comp.sel < len(items) && sameItems(m.comp.items, items) {
 		sel = m.comp.sel
 	}
-	m.comp = completion{open: true, items: items, sel: sel, word: word, auto: auto}
+	// ctrl+space (auto=false) counts as engaging the popup, so enter accepts
+	// right away; an auto refresh keeps whatever focus the user established
+	// with up/down (#1432).
+	focused := !auto || (m.comp.open && m.comp.focused)
+	m.comp = completion{open: true, items: items, sel: sel, word: word, auto: auto, focused: focused}
 }
 
 func sameItems(a, b []string) bool {

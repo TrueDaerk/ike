@@ -385,6 +385,128 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 	}
 }
 
+// TestEnterFocusRule (#1432): an auto-suggest popup opens unfocused — enter
+// passes through to the shell and runs the typed line; up/down focus it, and
+// only then does enter accept. Tab accepts regardless of focus, esc closes
+// regardless of focus, and a ctrl+space popup opens focused.
+func TestEnterFocusRule(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	openAuto := func() {
+		for _, r := range "ec" {
+			m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		}
+		waitFor(t, "echo of ec", func() bool {
+			_, word := parseCmdline(m.lineBeforeCursor())
+			return word == "ec"
+		})
+		m.OnOutput()
+		if !m.comp.open {
+			t.Fatal("auto-suggest must open the popup")
+		}
+	}
+	promptX, _ := m.sess.CursorPosition()
+	clearLine := func() {
+		m.comp = completion{}
+		m.pendingSuggest = false
+		m.sess.SendKey(keyFor('\x15')) // ctrl+u clears the shell line
+		waitFor(t, "cleared line", func() bool {
+			x, _ := m.sess.CursorPosition()
+			return x == promptX
+		})
+	}
+
+	// Auto popup starts unfocused: enter is not consumed and closes the popup.
+	openAuto()
+	if m.comp.focused {
+		t.Fatal("an auto-suggest popup must open unfocused")
+	}
+	if m.completionKey("enter") {
+		t.Fatal("enter on an unfocused popup must reach the shell")
+	}
+	if m.comp.open {
+		t.Fatal("enter must close the unfocused popup")
+	}
+	waitFor(t, "line unchanged", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ec" // no candidate inserted
+	})
+	clearLine()
+
+	// down focuses; enter then accepts the selection.
+	openAuto()
+	if !m.completionKey("down") || !m.comp.focused {
+		t.Fatal("down must focus the popup")
+	}
+	if !m.completionKey("enter") {
+		t.Fatal("enter on a focused popup must accept")
+	}
+	if m.comp.open {
+		t.Fatal("accepting must close the popup")
+	}
+	waitFor(t, "candidate inserted", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word != "ec" && strings.HasPrefix(strings.ToLower(word), "ec")
+	})
+	clearLine()
+
+	// Tab accepts even unfocused.
+	openAuto()
+	if !m.completionKey("tab") {
+		t.Fatal("tab must accept regardless of focus")
+	}
+	waitFor(t, "candidate inserted by tab", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word != "ec" && strings.HasPrefix(strings.ToLower(word), "ec")
+	})
+	clearLine()
+
+	// Esc closes a focused popup without accepting.
+	openAuto()
+	m.completionKey("down")
+	if !m.completionKey("esc") || m.comp.open {
+		t.Fatal("esc must close the focused popup")
+	}
+	clearLine()
+
+	// ctrl+space opens focused: enter accepts right away.
+	openAuto()
+	m.completionKey("esc")
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open || !m.comp.focused {
+		t.Fatal("ctrl+space must open the popup focused")
+	}
+	if !m.completionKey("enter") {
+		t.Fatal("enter after ctrl+space must accept right away")
+	}
+}
+
+// TestAutoRefreshKeepsFocus (#1432): typing on with a focused popup keeps the
+// focus across the auto refresh, so enter still accepts.
+func TestAutoRefreshKeepsFocus(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	m.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	waitFor(t, "echo of e", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "e"
+	})
+	m.OnOutput()
+	if !m.comp.open {
+		t.Fatal("auto popup must open")
+	}
+	m.completionKey("down")
+	m.Update(tea.KeyPressMsg{Code: 'c', Text: "c"})
+	waitFor(t, "echo of ec", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "ec"
+	})
+	m.OnOutput()
+	if !m.comp.open || !m.comp.focused {
+		t.Fatalf("auto refresh must keep focus, got open=%v focused=%v", m.comp.open, m.comp.focused)
+	}
+}
+
 // startNarrowShModel spawns a /bin/sh model narrow enough that a short typed
 // command soft-wraps, for the wrapped-line tests (#1431).
 func startNarrowShModel(t *testing.T, c *collector, dir string) *Model {
