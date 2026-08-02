@@ -83,6 +83,18 @@ func (m *Manager) TypeHierarchySupported(path string) bool {
 	return ok && srv.cl.Caps().TypeHierarchy
 }
 
+// DocVersion reports the manager-owned sync version of path's document — the
+// inheritance-mark batch stamps its reply with the version it ran against, so
+// a reply that raced an edit is recognisably stale (#1453).
+func (m *Manager) DocVersion(path string) (int, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if doc, ok := m.docs[path]; ok {
+		return doc.version, true
+	}
+	return 0, false
+}
+
 // maxInheritanceSymbols caps the per-file mark batch so one giant file never
 // floods the server with implementation requests (cf. maxWorkspaceSymbols).
 const maxInheritanceSymbols = 150

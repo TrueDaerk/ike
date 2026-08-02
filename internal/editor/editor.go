@@ -353,6 +353,10 @@ type Model struct {
 	// keyed by 0-based line like diagByLine; recomputed by the app on save,
 	// external change, and vcs refresh, so positions may briefly lag an edit.
 	gitMarks map[int]vcs.LineMark
+	// inheritMarks are the gutter inheritance arrows (#1453), keyed by 0-based
+	// line: ↑ implements/overrides, ↓ has implementations. Pushed by the LSP
+	// bridge per document, so positions may briefly lag an edit like gitMarks.
+	inheritMarks map[int]int
 	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
 	// per-session like the caret set; markLines is the last observed line
 	// count for the edit-shift delta (the bpLines pattern). The gm* hooks
@@ -1067,6 +1071,13 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ilsp.InlayHintsMsg:
 		if msg.Path == m.path {
 			m.setInlayHints(msg.Hints)
+		}
+		return m, nil
+	case ilsp.InheritanceMarksMsg:
+		// Gutter inheritance arrows (#1453); the bridge already drops replies
+		// that raced an edit, so a path match is the whole staleness check.
+		if msg.Path == m.path {
+			m.setInheritanceMarks(msg.Marks)
 		}
 		return m, nil
 	case vcs.MarksMsg:

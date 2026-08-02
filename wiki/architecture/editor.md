@@ -53,7 +53,12 @@ detection via the language registry's `lang.TestSpec` regex seam, cached per
 document version in a per-view pointer store like the line cache, so the scan
 runs at most once per edit, never per frame). Sign precedence: debugger paused
 `▶` > breakpoint `●` > bookmark `⚑` (#1151, accent tone — vim marks, see
-"Vim marks & bookmarks") > test `▶` > diagnostic/git colouring. A plain gutter
+"Vim marks & bookmarks") > test `▶` > inheritance `↑`/`↓` (#1453, info tone —
+LSP-pushed arrows on symbols that implement/override a super declaration or
+have implementations; `inheritmarks.go`, per-line map like `gitMarks`, gated by
+the `editor.marks.inheritance` toggle which also stops the probe traffic) >
+diagnostic/git colouring. A single-cell sign column means a line that is both
+a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
 line runs that test (see /architecture/run-configurations.md).
 

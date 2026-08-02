@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"context"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -166,6 +167,85 @@ func typeHierEntry(mgr *manager.Manager, path string, item protocol.TypeHierarch
 		Line:   ref.Line,
 		Col:    ref.Col,
 	}
+}
+
+// inheritanceDebounce delays the gutter-mark batch after an edit burst: the
+// batch is N implementation probes (#1453), so it waits out typing far longer
+// than the 40ms change coalescing.
+const inheritanceDebounce = 750 * time.Millisecond
+
+// inheritanceMarksEnabled reads the editor.marks.inheritance toggle; unset
+// means enabled, matching the config default.
+func (b *bridge) inheritanceMarksEnabled() bool {
+	v, ok := b.configGet("editor.marks.inheritance")
+	return !ok || v != "false"
+}
+
+// scheduleInheritanceMarks (re)arms the debounced gutter-mark batch for path
+// (#1453). The fired request is coalesced like requestInlayHints: at most one
+// batch runs per path; a re-schedule during a run marks a pending re-request.
+// Errors stay silent — a passive decoration, not a user action.
+func (b *bridge) scheduleInheritanceMarks(path string) {
+	if b.manager() == nil || !b.inheritanceMarksEnabled() {
+		return
+	}
+	b.mu.Lock()
+	if b.inheritTimer == nil {
+		b.inheritTimer = map[string]*time.Timer{}
+	}
+	if t := b.inheritTimer[path]; t != nil {
+		t.Reset(inheritanceDebounce)
+		b.mu.Unlock()
+		return
+	}
+	b.inheritTimer[path] = time.AfterFunc(inheritanceDebounce, func() {
+		b.mu.Lock()
+		delete(b.inheritTimer, path)
+		b.mu.Unlock()
+		b.requestInheritanceMarks(path)
+	})
+	b.mu.Unlock()
+}
+
+// requestInheritanceMarks runs the coalesced mark batch now. A reply that
+// raced an edit (document version moved while the batch ran) is dropped — the
+// re-scheduled request delivers against the new text.
+func (b *bridge) requestInheritanceMarks(path string) {
+	mgr := b.manager()
+	if mgr == nil || !b.inheritanceMarksEnabled() {
+		return
+	}
+	b.mu.Lock()
+	if b.inheritInFlight == nil {
+		b.inheritInFlight = map[string]bool{}
+		b.inheritPending = map[string]bool{}
+	}
+	if b.inheritInFlight[path] {
+		b.inheritPending[path] = true
+		b.mu.Unlock()
+		return
+	}
+	b.inheritInFlight[path] = true
+	b.mu.Unlock()
+
+	go func() {
+		for {
+			version, _ := mgr.DocVersion(path)
+			marks, err := mgr.InheritanceMarks(context.Background(), path)
+			if now, _ := mgr.DocVersion(path); err == nil && now == version && b.h != nil {
+				b.h.Send(ilsp.InheritanceMarksMsg{Path: path, Version: version, Marks: marks})
+			}
+			b.mu.Lock()
+			if b.inheritPending[path] {
+				b.inheritPending[path] = false
+				b.mu.Unlock()
+				continue
+			}
+			b.inheritInFlight[path] = false
+			b.mu.Unlock()
+			return
+		}
+	}()
 }
 
 // typeItemsToRefs converts hierarchy items to picker references — their

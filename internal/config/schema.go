@@ -297,6 +297,9 @@ type Marks struct {
 	GitAdded    bool `toml:"git_added"`
 	GitChanged  bool `toml:"git_changed"`
 	GitDeleted  bool `toml:"git_deleted"`
+	// Inheritance gates the gutter ↑/↓ inheritance arrows (#1453) and the LSP
+	// probe traffic computing them.
+	Inheritance bool `toml:"inheritance"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the

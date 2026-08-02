@@ -171,6 +171,7 @@ func BasePages(themes []string) []Page {
 			{Key: "editor.marks.git_added", Type: Bool, Title: "Git added marks", Description: "Mark added lines in the gutter and scrollbar", Scope: config.UserScope},
 			{Key: "editor.marks.git_changed", Type: Bool, Title: "Git changed marks", Description: "Mark changed lines in the gutter and scrollbar", Scope: config.UserScope},
 			{Key: "editor.marks.git_deleted", Type: Bool, Title: "Git deleted marks", Description: "Mark deletions in the gutter and scrollbar", Scope: config.UserScope},
+			{Key: "editor.marks.inheritance", Type: Bool, Title: "Inheritance marks", Description: "Show ↑/↓ gutter arrows on symbols that implement/override a super declaration or have implementations; also gates the LSP probes computing them", Scope: config.UserScope},
 			{Key: "lsp.diagnostics_ignore", Type: List, Title: "Ignored diagnostics", Description: "Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here", Scope: config.ProjectScope},
 		}},
 		{Title: "Explorer", Description: "The project file tree: what it hides. Excluding an entry here hides it from the tree only; go-to-file and find-in-path still reach it.", Entries: []Entry{
