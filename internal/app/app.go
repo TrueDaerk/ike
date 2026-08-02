@@ -4130,6 +4130,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.SetSize(m.width, m.height)
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
 		return m, nil
+	case ilsp.ImplementationsMsg:
+		// lsp.implementations / lsp.goToSuper (#1452): one target navigates
+		// straight there, several open the picker with a wording that names
+		// the direction. Empty never arrives — the bridge toasts instead.
+		if len(msg.Refs) == 0 {
+			return m, nil
+		}
+		if len(msg.Refs) == 1 {
+			r := msg.Refs[0]
+			return m.openPathAt(r.Path, r.Line, r.Col)
+		}
+		m.refs.Set(msg.Refs)
+		if msg.Super {
+			m.refs.SetPlaceholder("Super declarations — pick a target…")
+		} else {
+			m.refs.SetPlaceholder("Implementations — pick a target…")
+		}
+		m.palette.SetSize(m.width, m.height)
+		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, refsPrefix)
+		return m, nil
 	case ilsp.ServerStatusMsg:
 		// Persistent server state stays on the status line; transient events
 		// (crash, restart, launch failure) surface as toasts (Roadmap 0130).
@@ -7277,6 +7297,8 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Peek Definition", Command: "lsp.peekDefinition"},
 		{Title: "Find Usages", Command: "lsp.references"},
 		{Title: "Find Usages (Panel)", Command: "lsp.referencesPanel"},
+		{Title: "Go to Super", Command: "lsp.goToSuper"},
+		{Title: "Go to Implementations", Command: "lsp.implementations"},
 		{Title: "Copy Reference", Command: "file.copyReference"},
 		{Title: "Open in Browser", Command: "file.openInBrowser"},
 		{Title: "Show History for Selection", Command: "vcs.historyForSelection"},
