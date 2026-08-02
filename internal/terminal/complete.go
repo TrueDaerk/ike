@@ -15,8 +15,9 @@ import (
 // complete.go is the JetBrains-style command completion popup (#740): while
 // the shell prompt is live (primary screen, no TUI app), typing auto-suggests
 // completions for the current word and ctrl+space opens the popup on demand.
-// The command line is read straight off the emulator's cursor row — the shell
-// keeps owning line editing; accepting a candidate just pastes the remainder.
+// The command line is read straight off the emulator's grid (soft-wrap chain
+// joined, #1431) — the shell keeps owning line editing; accepting a candidate
+// just pastes the remainder.
 // Sources: executables on PATH (first word), files/dirs relative to the
 // session's start directory, and make targets after `make`.
 
@@ -197,16 +198,32 @@ func (m *Model) acceptCompletion() {
 	}
 }
 
-// lineBeforeCursor returns the cursor row's text left of the cursor — the
-// live command line as far as completion is concerned.
+// lineBeforeCursor returns the logical command line's text left of the
+// cursor. A command longer than the pane width soft-wraps onto continuation
+// rows that carry neither the prompt nor the head of the command, so reading
+// only the cursor row handed parseCmdline a garbage tail (#1431); instead the
+// soft-wrap chain is walked back to the first row and the rows are joined —
+// full rows padded to the pane width so a genuine trailing space survives the
+// emulator's right-trim — before cutting at the cursor. The prompt only ever
+// sits on the first row of the chain, so prompt stripping stays correct.
 func (m *Model) lineBeforeCursor() string {
 	x, y := m.sess.CursorPosition()
-	line := m.sess.LineText(m.sess.ScrollbackLen() + y)
-	r := []rune(line)
+	cur := m.sess.ScrollbackLen() + y
+	first, _ := m.logicalLineSpan(cur)
+	w := m.sess.Width()
+	var text []rune
+	for l := first; l < cur; l++ {
+		seg := []rune(m.sess.LineText(l))
+		for len(seg) < w {
+			seg = append(seg, ' ')
+		}
+		text = append(text, seg...)
+	}
+	r := []rune(m.sess.LineText(cur))
 	if x > len(r) {
 		x = len(r)
 	}
-	return string(r[:x])
+	return string(append(text, r[:x]...))
 }
 
 // parseCmdline extracts the command head and the word under the cursor from

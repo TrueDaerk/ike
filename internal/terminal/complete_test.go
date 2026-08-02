@@ -385,6 +385,85 @@ func TestAcceptDirectoryClosesPopup(t *testing.T) {
 	}
 }
 
+// startNarrowShModel spawns a /bin/sh model narrow enough that a short typed
+// command soft-wraps, for the wrapped-line tests (#1431).
+func startNarrowShModel(t *testing.T, c *collector, dir string) *Model {
+	t.Helper()
+	m := New("terminal", "/bin/sh", dir, 30, 24, nil, c.send)
+	if m.sess == nil {
+		t.Fatalf("spawn failed: %s", m.err)
+	}
+	t.Cleanup(func() { m.Close() })
+	waitFor(t, "prompt", func() bool { return strings.Contains(plainView(m.sess), "$") })
+	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+	return &m
+}
+
+// TestWrappedLineAutoSuggestSilent (#1431): a command longer than the pane
+// width soft-wraps; the continuation row alone used to parse as a fresh short
+// command ("ls" here) and command candidates opened the popup on garbage. The
+// logical line is now joined across the wrap, so the true word (a nonsense
+// blob with no candidates) keeps auto-suggest silent, and the parse still
+// sees the real command head past the wrap.
+func TestWrappedLineAutoSuggestSilent(t *testing.T) {
+	c := &collector{}
+	m := startNarrowShModel(t, c, t.TempDir())
+	promptX, promptY := m.sess.CursorPosition()
+
+	// Fill the first row exactly so the tail "ls" lands on the next row.
+	word := strings.Repeat("q", 30-promptX-len("echo ")) + "ls"
+	for _, r := range "echo " + word {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		cmd, w := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && w == word
+	})
+	m.OnOutput()
+	if m.comp.open {
+		t.Fatalf("auto-suggest must stay silent on a wrapped line, got items %v", m.comp.items)
+	}
+}
+
+// TestWrappedLineCtrlSpaceCompletes (#1431): explicit ctrl+space on a wrapped
+// line completes against the word under the cursor of the *logical* line —
+// here a path prefix split by the wrap ("ta" ends the first row, "rg" opens
+// the continuation row), whose tail used to be mistaken for a fresh command
+// word.
+func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startNarrowShModel(t, c, dir)
+	promptX, promptY := m.sess.CursorPosition()
+
+	// "echo <filler> targ": "ta" fills the last two columns of the first row,
+	// "rg" wraps onto the continuation row mid-word.
+	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	for _, r := range "echo " + filler + " targ" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		cmd, w := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && w == "targ"
+	})
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("ctrl+space on a wrapped line = open=%v items=%v, want [target-file.txt]",
+			m.comp.open, m.comp.items)
+	}
+}
+
 // TestPopupInactiveWhileProgramRuns (#1340): the completion popup is a shell
 // feature. While a foreground program reads stdin its suggestions are wrong,
 // and its keys must reach the program — so typing never opens it, ctrl+space
