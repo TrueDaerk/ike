@@ -65,6 +65,7 @@ bring their own.
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
 | Show Local History | `file.localHistory` | — | — | everywhere |
 | Move File | `file.move` | `f6` | — | everywhere |
+| Open in Browser | `file.openInBrowser` | — | — | everywhere |
 | Open File… | `file.openPath` | — | — | everywhere |
 | Rename File | `file.rename` | `shift+f6` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
@@ -142,6 +143,7 @@ bring their own.
 | Usages | `usages.toggle` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |
 | Diff File Against HEAD | `vcs.diff` | — | — | everywhere |
+| Show History for Selection | `vcs.historyForSelection` | — | — | everywhere |
 | Toggle VCS Tool Window | `vcs.panel` | `cmd+9` | — | everywhere |
 | Revert File | `vcs.revertFile` | `cmd+alt+z` | — | everywhere |
 | Revert Hunk Under Caret | `vcs.revertHunk` | — | — | everywhere |
