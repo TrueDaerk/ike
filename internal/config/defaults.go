@@ -96,6 +96,7 @@ func defaults() *Config {
 				GitAdded:    true,
 				GitChanged:  true,
 				GitDeleted:  true,
+				Inheritance: true,
 			},
 		},
 		Explorer: Explorer{

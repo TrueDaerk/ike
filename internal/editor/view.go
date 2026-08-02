@@ -490,6 +490,11 @@ func (m Model) View() string {
 		} else if _, ok := tests[i]; ok {
 			sign = "▶"
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Success).Bold(true)
+		} else if kind, ok := m.inheritMarkAt(i); ok {
+			// Inheritance arrows (#1453) are informational glyphs: below every
+			// actionable marker, above the colour-only diagnostic/git tints.
+			sign = inheritSign(kind)
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Info)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok && m.gitVisible(mk) {

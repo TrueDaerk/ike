@@ -65,7 +65,7 @@ func inheritanceConnector(typeHierarchy bool, implLocs func() []protocol.Locatio
 
 // inheritanceBridge builds a bridge over the scripted connector with one open
 // Go document and returns it plus the sender channel.
-func inheritanceBridge(t *testing.T, conn manager.Connector) (*bridge, string, chan tea.Msg) {
+func inheritanceBridge(t *testing.T, conn manager.Connector, cfg ...host.Config) (*bridge, string, chan tea.Msg) {
 	t.Helper()
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
@@ -84,7 +84,11 @@ func inheritanceBridge(t *testing.T, conn manager.Connector) (*bridge, string, c
 		return ilsp.ServerSpec{}, false
 	}
 	msgs := make(chan tea.Msg, 16)
-	h := host.New(nil)
+	var hc host.Config
+	if len(cfg) > 0 {
+		hc = cfg[0]
+	}
+	h := host.New(hc)
 	h.SetSender(func(m tea.Msg) { msgs <- m })
 	b := &bridge{h: h, mgr: manager.New(resolve, conn, manager.Callbacks{})}
 	if err := b.mgr.Open(path, "go", content); err != nil {
@@ -223,6 +227,71 @@ func TestTypeHierarchyRootsAndFetch(t *testing.T) {
 	down := waitMsg[ilsp.TypeHierarchyItemsMsg](t, msgs)
 	if down.ReqID != 8 || down.Supertypes || len(down.Items) != 1 || down.Items[0].Name != "Sub" {
 		t.Fatalf("subtypes expansion = %#v", down)
+	}
+}
+
+// marksConnector dials an in-memory server for the gutter-mark batch: one
+// interface symbol whose implementation probe answers non-empty.
+func marksConnector() manager.Connector {
+	return func(spec ilsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
+		cr, sw := io.Pipe()
+		sr, cw := io.Pipe()
+		connCh := make(chan *jsonrpc.Conn, 1)
+		var srv *jsonrpc.Conn
+		srvConn := jsonrpc.NewConn(pipeRWC{Reader: sr, Writer: sw}, jsonrpc.Handler{
+			Request: func(id jsonrpc.ID, method string, params json.RawMessage) {
+				if srv == nil {
+					srv = <-connCh
+				}
+				switch method {
+				case "initialize":
+					_ = srv.Respond(id, protocol.InitializeResult{Capabilities: protocol.ServerCapabilities{
+						TextDocumentSync:       json.RawMessage(`1`),
+						DocumentSymbolProvider: json.RawMessage(`true`),
+						ImplementationProvider: json.RawMessage(`true`),
+					}}, nil)
+				case "textDocument/documentSymbol":
+					_ = srv.Respond(id, json.RawMessage(`[{"name":"Shape","kind":11,
+						"range":{"start":{"line":2,"character":0},"end":{"line":2,"character":20}},
+						"selectionRange":{"start":{"line":2,"character":5},"end":{"line":2,"character":10}}}]`), nil)
+				case "textDocument/implementation":
+					_ = srv.Respond(id, []protocol.Location{{URI: "file:///tmp/other.go"}}, nil)
+				default:
+					_ = srv.Respond(id, nil, nil)
+				}
+			},
+		})
+		connCh <- srvConn
+		conn := jsonrpc.NewConn(pipeRWC{Reader: cr, Writer: cw}, handler)
+		return client.New(conn), func() { conn.Close(); srvConn.Close() }, nil, nil
+	}
+}
+
+// TestRequestInheritanceMarksDelivers covers the passive batch (#1453): the
+// coalesced request delivers a version-stamped InheritanceMarksMsg.
+func TestRequestInheritanceMarksDelivers(t *testing.T) {
+	b, path, msgs := inheritanceBridge(t, marksConnector())
+	b.requestInheritanceMarks(path)
+	msg := waitMsg[ilsp.InheritanceMarksMsg](t, msgs)
+	if msg.Path != path || msg.Version != 1 {
+		t.Fatalf("msg = %#v", msg)
+	}
+	if len(msg.Marks) != 1 || msg.Marks[0].Line != 2 || msg.Marks[0].Kind != ilsp.InheritanceImplemented {
+		t.Fatalf("marks = %#v", msg.Marks)
+	}
+}
+
+// TestInheritanceMarksToggleGatesTraffic: the config switch off means no
+// request and no message.
+func TestInheritanceMarksToggleGatesTraffic(t *testing.T) {
+	b, path, msgs := inheritanceBridge(t, marksConnector(), host.MapConfig{"editor.marks.inheritance": "false"})
+	b.requestInheritanceMarks(path)
+	select {
+	case m := <-msgs:
+		if _, ok := m.(ilsp.InheritanceMarksMsg); ok {
+			t.Fatal("toggle off must suppress the batch")
+		}
+	case <-time.After(300 * time.Millisecond):
 	}
 }
 

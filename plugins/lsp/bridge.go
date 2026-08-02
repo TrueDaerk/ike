@@ -56,6 +56,11 @@ type bridge struct {
 	// hintInFlight/hintPending coalesce inlay-hint requests the same way (#171).
 	hintInFlight map[string]bool
 	hintPending  map[string]bool
+	// inheritTimer debounces the gutter inheritance-mark batch per path;
+	// inheritInFlight/inheritPending coalesce the running batches (#1453).
+	inheritTimer    map[string]*time.Timer
+	inheritInFlight map[string]bool
+	inheritPending  map[string]bool
 	// hlTimer debounces the occurrence-highlight request (#172): each cursor
 	// move re-arms it, so only the last position of a motion burst reaches
 	// the server.
@@ -255,10 +260,11 @@ func (b *bridge) fileOpened(h host.API, path string) {
 			b.autoInstall(l.ServerLang(), path)
 			return
 		}
-		// Initial semantic overlay (#9) and inlay hints (#171) for the fresh
-		// document.
+		// Initial semantic overlay (#9), inlay hints (#171) and gutter
+		// inheritance marks (#1453) for the fresh document.
 		b.requestSemanticTokens(path)
 		b.requestInlayHints(path)
+		b.requestInheritanceMarks(path)
 	}()
 }
 
@@ -1293,6 +1299,7 @@ func (b *bridge) flushChange(path string) {
 	b.maybeSignatureHelp(ev)
 	b.requestSemanticTokens(ev.Path)
 	b.requestInlayHints(ev.Path)
+	b.scheduleInheritanceMarks(ev.Path)
 	b.scheduleDocumentHighlight(ev.Path)
 }
 
