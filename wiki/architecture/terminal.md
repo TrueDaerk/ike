@@ -378,7 +378,7 @@ absolute paths too, dotfiles only on a `.` prefix, dirs keep a trailing `/`).
 Candidates match the typed
 word **case-insensitively** (#968, like every other typed search in the UI);
 an exact-prefix candidate strictly extends the typed word, so **accepting
-(enter/tab) pastes just the remainder** through the bracketed-paste path,
+pastes just the remainder** through the bracketed-paste path,
 while a candidate matching only case-insensitively erases the typed word
 with backspaces and pastes the canonical spelling (`mak` → `Makefile`).
 Accepting always **ends** the interaction, directories included (#1335) — the
@@ -391,7 +391,13 @@ accepted directory. `ctrl+space` opens the popup on demand
 key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via
 `terminal.autosuggest` (default on, applies live). up/down move, esc
-dismisses, any other key invalidates and passes through raw. The popup is
+dismisses, any other key invalidates and passes through raw.
+**Focus rule (#1432):** an auto-suggest popup opens *unfocused* — it was
+never asked for, so **enter passes through to the shell** and runs the typed
+line (the popup closes, nothing is inserted). up/down focus the popup; once
+focused, enter accepts the selection, and an auto refresh from typing on
+keeps the focus. `ctrl+space` opens the popup focused, so enter accepts
+right away. **Tab accepts in both states**, esc closes in both states. The popup is
 inactive on the alternate screen (vim/htop), in command sessions, while
 paging scrollback, and **whenever the shell is not at its prompt** (#1340);
 it renders as a bordered list composited over the grid at
