@@ -34,6 +34,11 @@ type pendingClose struct {
 // prompt opens and the close waits for the user's answer.
 func (m *Model) guardedCloseFocused() {
 	inst := m.activeWS().Panes.FocusedInstance()
+	// A merge view with unresolved conflicts or an unsaved result warns
+	// before it closes (#1478).
+	if m.guardMergeClose(inst) {
+		return
+	}
 	if inst != nil && inst.Kind() == pane.KindEditor {
 		idx := -1
 		if inst.TabCount() > 1 {

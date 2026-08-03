@@ -402,6 +402,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("vcs.revertHunk", "Revert Hunk Under Caret", RevertHunkMsg{}),
 			appCommand("vcs.undoRevert", "Undo Revert…", UndoRevertMsg{}),
 			appCommand("vcs.diff", "Diff File Against HEAD", DiffHeadMsg{}),
+			appCommand("vcs.mergeFile", "Resolve Conflicts in Merge View", MergeFileMsg{}),
+			appCommand("vcs.mergeApply", "Merge: Save Result and Stage", MergeApplyMsg{}),
 			appCommand("vcs.blameLine", "Toggle Inline Blame", ToggleBlameMsg{}),
 			appCommand("vcs.historyForSelection", "Show History for Selection", HistoryForSelectionMsg{}),
 			appCommand("vcs.panel", "Toggle VCS Tool Window", VCSPanelToggleMsg{}),

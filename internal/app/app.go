@@ -406,6 +406,9 @@ type Model struct {
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
 	closePending *pendingClose
+	// mergeClosePending is the merge-view key awaiting the unresolved-
+	// conflicts close guard (#1478); "" when no guard is open.
+	mergeClosePending string
 	// termClosePending is true while the busy-terminal close guard (#986)
 	// owns the keyboard.
 	termClosePending bool
@@ -3913,7 +3916,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case editor.ActionMsg:
-		// A registry command drives the focused editor through this message path.
+		// A registry command drives the focused editor through this message
+		// path. A focused merge view routes it into its result editor
+		// (#1478), so the merge accepts / write work from the palette.
+		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindMerge {
+			return m, inst.Update(msg)
+		}
 		if key := m.activeEditorKey(); key != "" {
 			cmd := m.activeWS().Panes.Get(key).Update(msg)
 			return m, cmd
@@ -4363,10 +4371,28 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "untracked file — there is no HEAD version to diff against")
 			return m, nil
 		}
+		// A conflicted row opens the three-way merge view instead (#1478).
+		if snap.Status(abs) == vcs.StatusConflicted {
+			return m, vcs.MergeStagesCmd(snap.Root, abs)
+		}
 		return m, vcs.HeadDiffCmd(snap.Root, abs)
 
 	case DiffHeadMsg:
 		return m.diffAgainstHead()
+
+	case MergeFileMsg:
+		return m.mergeFocusedFile()
+
+	case MergeApplyMsg:
+		return m.mergeApply()
+
+	case vcs.MergeStagesMsg:
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "merge: "+msg.Err.Error())
+			return m, nil
+		}
+		m.openMergePane(msg)
+		return m, nil
 
 	case vcs.HeadDiffMsg:
 		if msg.Err != nil {
@@ -4681,6 +4707,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The unsaved-changes guard on a close (#259): s / d / esc answer it.
 		if m.closePromptOpen() {
 			return m.updateClosePrompt(msg)
+		}
+		// The merge-view close guard (#1478): d / esc answer it.
+		if m.mergeClosePromptOpen() {
+			return m.updateMergeClosePrompt(msg)
 		}
 		// The busy-terminal close guard (#986): enter / esc answer it.
 		if m.termClosePromptOpen() {
@@ -5675,6 +5705,11 @@ func (m *Model) closePane(key string) {
 func (m *Model) guardedClosePane() {
 	inst := m.activeWS().Panes.FocusedInstance()
 	if inst == nil {
+		return
+	}
+	// A merge view with unresolved conflicts or an unsaved result warns
+	// before it closes (#1478).
+	if m.guardMergeClose(inst) {
 		return
 	}
 	if inst.Kind() == pane.KindEditor {

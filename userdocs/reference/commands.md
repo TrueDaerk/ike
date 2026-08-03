@@ -148,6 +148,8 @@ bring their own.
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |
 | Diff File Against HEAD | `vcs.diff` | — | — | everywhere |
 | Show History for Selection | `vcs.historyForSelection` | — | — | everywhere |
+| Merge: Save Result and Stage | `vcs.mergeApply` | — | — | everywhere |
+| Resolve Conflicts in Merge View | `vcs.mergeFile` | — | — | everywhere |
 | Toggle VCS Tool Window | `vcs.panel` | `cmd+9` | — | everywhere |
 | Revert File | `vcs.revertFile` | `cmd+alt+z` | — | everywhere |
 | Revert Hunk Under Caret | `vcs.revertHunk` | — | — | everywhere |

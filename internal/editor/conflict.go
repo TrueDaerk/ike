@@ -145,6 +145,10 @@ func (m Model) conflictAt(line int) (conflictBlock, bool) {
 	return conflictBlock{}, false
 }
 
+// ConflictCount returns the number of unresolved conflict blocks in the
+// buffer, for the merge view's header and close guard (#1478).
+func (m Model) ConflictCount() int { return len(m.conflicts()) }
+
 // ConflictAtCursor reports whether the cursor sits inside a conflict block —
 // the app's cheap query for showing the accept entries in the editor context
 // menu (#1020).

@@ -19,6 +19,7 @@ import (
 	"ike/internal/theme"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
+	"ike/internal/merge"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -71,6 +72,11 @@ const (
 	// bound to one image file, rendered via the Kitty graphics protocol with
 	// a metadata fallback.
 	KindImage
+	// KindMerge is the three-way merge view for a git-conflicted file
+	// (#1478): ours/theirs read-only around an editable result editor. It
+	// advertises the editor context so the full editor keymap (including the
+	// #1149 merge accepts) drives the result.
+	KindMerge
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -112,6 +118,7 @@ type Instance struct {
 	up   usages.Model
 	hp   httppane.Model
 	bp   breakpanel.Model
+	mg   merge.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -199,6 +206,10 @@ func (i *Instance) ContextID() string {
 		return ctxTerminal
 	case KindMarkdown, KindImage:
 		return ctxPreview
+	case KindMerge:
+		// The result editor owns the keys: resolve under the editor context
+		// so the full editor keymap (write, merge accepts, motions) applies.
+		return ctxEditor
 	case KindDiff:
 		return ctxDiff
 	case KindVCS:
@@ -282,6 +293,10 @@ func (i *Instance) Breakpoints() *breakpanel.Model { return &i.bp }
 // HTTP returns the underlying HTTP response viewer model (#1250). It is only
 // valid for an http instance; callers gate on Kind first.
 func (i *Instance) HTTP() *httppane.Model { return &i.hp }
+
+// Merge returns the underlying merge-view model. It is only valid for a
+// merge instance; callers gate on Kind first.
+func (i *Instance) Merge() *merge.Model { return &i.mg }
 
 // DiffEditor returns the diff pane's edit-mode editor, nil while browsing.
 func (i *Instance) DiffEditor() *editor.Model { return i.dfEdit }
@@ -672,6 +687,9 @@ func (i *Instance) SetSize(w, h int) {
 		i.w, i.h = w, h
 		i.df.SetSize(w, h)
 		i.sizeDiffEditor()
+	case KindMerge:
+		i.w, i.h = w, h
+		i.mg.SetSize(w, h)
 	case KindVCS:
 		i.vp.SetSize(w, h)
 	case KindDebug:
@@ -711,6 +729,9 @@ func (i *Instance) SetFocused(f bool) {
 		if i.dfEdit != nil {
 			i.dfEdit.SetFocused(f)
 		}
+	case KindMerge:
+		i.focused = f
+		i.mg.SetFocused(f)
 	case KindVCS:
 		i.vp.SetFocused(f)
 	case KindDebug:
@@ -764,6 +785,8 @@ func (i *Instance) View() string {
 			return i.df.RenderEditSplit(lines, i.dfEdit.ScrollTop(), i.h)
 		}
 		return i.df.View()
+	case KindMerge:
+		return i.mg.View()
 	case KindVCS:
 		return i.vp.View()
 	case KindDebug:
@@ -812,6 +835,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 			return cmd
 		}
 		cmd = i.df.Update(msg)
+	case KindMerge:
+		cmd = i.mg.Update(msg)
 	case KindVCS:
 		cmd = i.vp.Update(msg)
 	case KindDebug:
@@ -934,6 +959,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.iv.SetPalette(p)
 	case KindDiff:
 		i.df.SetPalette(p)
+	case KindMerge:
+		i.mg.SetPalette(p)
 	case KindVCS:
 		i.vp.SetPalette(p)
 	case KindDebug:
@@ -963,6 +990,8 @@ func (i *Instance) configure(cfg host.Config) {
 		}
 	case KindTerminal:
 		i.term.SetAutoSuggest(autosuggestOn(cfg))
+	case KindMerge:
+		i.mg.Editor().Configure(cfg)
 	}
 }
 
