@@ -395,6 +395,13 @@ key and recomputes on the next `OutputMsg` — the shell must echo the
 keystroke before the cursor row reads current — and is togglable via
 `terminal.autosuggest` (default on, applies live). up/down move, esc
 dismisses, any other key invalidates and passes through raw.
+Auto-suggest **stays silent while the command soft-wraps** (#1464) — an
+uninvited popup mid-wrap is noise, and if the wrap heuristic ever misses the
+chain the tail would complete as garbage; `ctrl+space` still completes with
+the chain joined. As a safety net, auto-suggest also stays quiet when the
+text left of the cursor carries **no recognizable prompt marker** although
+the row above holds content — then the cursor row may be a continuation row
+whose chain start could not be identified, and the "word" a wrapped tail.
 **Focus rule (#1432):** an auto-suggest popup opens *unfocused* — it was
 never asked for, so **enter passes through to the shell** and runs the typed
 line (the popup closes, nothing is inserted). An unfocused popup highlights

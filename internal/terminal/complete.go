@@ -148,8 +148,9 @@ func (m *Model) refreshCompletion(auto bool) {
 		m.comp = completion{}
 		return
 	}
-	cmd, word := parseCmdline(m.lineBeforeCursor())
-	if auto && word == "" {
+	before := m.lineBeforeCursor()
+	cmd, word := parseCmdline(before)
+	if auto && (word == "" || !m.autoSuggestSafe(before)) {
 		m.comp = completion{}
 		return
 	}
@@ -169,6 +170,31 @@ func (m *Model) refreshCompletion(auto bool) {
 	// with up/down (#1432).
 	focused := !auto || (m.comp.open && m.comp.focused)
 	m.comp = completion{open: true, items: items, sel: sel, word: word, auto: auto, focused: focused}
+}
+
+// autoSuggestSafe reports whether an uninvited (auto-suggest) popup may open
+// for the cursor line (#1464). Two cases stay silent; ctrl+space is unaffected
+// and still completes with the soft-wrap chain joined:
+//
+//   - The command soft-wraps (the cursor sits on a continuation row of a
+//     joined chain): #1431's acceptance criteria — no popup opens by itself
+//     while a command wraps.
+//   - The chain start could not be identified: the joined text carries no
+//     prompt marker although the row above holds content. Then the cursor row
+//     is likely a continuation row whose wrap the SoftWrapped heuristic missed
+//     (e.g. a line editor that wraps early and leaves the last column blank),
+//     and the "word" is a wrapped tail — PATH suggestions for it are garbage.
+func (m *Model) autoSuggestSafe(before string) bool {
+	_, y := m.sess.CursorPosition()
+	cur := m.sess.ScrollbackLen() + y
+	first, _ := m.logicalLineSpan(cur)
+	if first < cur {
+		return false
+	}
+	if !hasPromptMarker(before) && cur > 0 && m.sess.LineText(cur-1) != "" {
+		return false
+	}
+	return true
 }
 
 func sameItems(a, b []string) bool {
@@ -255,7 +281,7 @@ func (m *Model) lineBeforeCursor() string {
 // to the last "$ ", "% ", "> ", "# " or "❯ "); command separators (|, ;, &&,
 // ||) start a fresh command; a trailing space means a fresh empty word.
 func parseCmdline(before string) (cmd, word string) {
-	for _, p := range []string{"$ ", "% ", "> ", "# ", "❯ "} {
+	for _, p := range promptMarkers {
 		if i := strings.LastIndex(before, p); i >= 0 {
 			before = before[i+len(p):]
 		}
@@ -277,6 +303,21 @@ func parseCmdline(before string) (cmd, word string) {
 		cmd = word // still typing the command itself
 	}
 	return cmd, word
+}
+
+// promptMarkers are the heuristic prompt terminators parseCmdline strips; a
+// line containing none of them has no identifiable prompt (see
+// autoSuggestSafe).
+var promptMarkers = []string{"$ ", "% ", "> ", "# ", "❯ "}
+
+// hasPromptMarker reports whether any prompt marker occurs in before.
+func hasPromptMarker(before string) bool {
+	for _, p := range promptMarkers {
+		if strings.Contains(before, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // candidates resolves the completion source for (cmd, word): PATH commands
