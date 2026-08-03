@@ -48,20 +48,20 @@ func TestScrollXRevealsClippedTail(t *testing.T) {
 	}
 }
 
-func TestArrowKeysPanAndHomeResets(t *testing.T) {
+func TestShiftArrowKeysPanAndHomeResets(t *testing.T) {
 	m := New(nil)
 	m.SetSize(40, 20)
 	m.Set("wide", wide())
 
-	m.Update(keyPress("right"))
+	m.Update(keyPress("shift+right"))
 	if m.Left() != hScrollStep {
-		t.Errorf("left after right: %d, want %d", m.Left(), hScrollStep)
+		t.Errorf("left after shift+right: %d, want %d", m.Left(), hScrollStep)
 	}
-	m.Update(keyPress("left"))
+	m.Update(keyPress("shift+left"))
 	if m.Left() != 0 {
-		t.Errorf("left after left: %d, want 0", m.Left())
+		t.Errorf("left after shift+left: %d, want 0", m.Left())
 	}
-	m.Update(keyPress("right"))
+	m.Update(keyPress("shift+right"))
 	m.Update(keyPress("0"))
 	if m.Left() != 0 {
 		t.Errorf("left after 0: %d, want 0", m.Left())
@@ -76,19 +76,43 @@ func TestArrowKeysPanAndHomeResets(t *testing.T) {
 	}
 }
 
-func TestArrowKeysDoNotBrowseHistory(t *testing.T) {
+func TestArrowKeysBrowseHistory(t *testing.T) {
 	m := New(nil)
 	m.SetSize(40, 20)
 	m.Set("wide", wide())
 	m.SetHistory([]HistoryItem{{Resp: wide()}, {Resp: sample()}})
 
 	m.Update(keyPress("left"))
-	if i, _ := m.HistoryIndex(); i != 0 {
-		t.Errorf("history index after left arrow: %d, want 0", i)
-	}
-	m.Update(keyPress("h"))
 	if i, _ := m.HistoryIndex(); i != 1 {
-		t.Errorf("history index after h: %d, want 1", i)
+		t.Errorf("history index after left arrow: %d, want 1", i)
+	}
+	// Clamped at the oldest entry, like h (#1251).
+	m.Update(keyPress("left"))
+	if i, _ := m.HistoryIndex(); i != 1 {
+		t.Errorf("history index after left at the oldest entry: %d, want 1", i)
+	}
+	m.Update(keyPress("right"))
+	if i, _ := m.HistoryIndex(); i != 0 {
+		t.Errorf("history index after right arrow: %d, want 0", i)
+	}
+	m.Update(keyPress("right"))
+	if i, _ := m.HistoryIndex(); i != 0 {
+		t.Errorf("history index after right at the newest entry: %d, want 0", i)
+	}
+}
+
+func TestShiftArrowKeysDoNotBrowseHistory(t *testing.T) {
+	m := New(nil)
+	m.SetSize(40, 20)
+	m.Set("wide", wide())
+	m.SetHistory([]HistoryItem{{Resp: wide()}, {Resp: sample()}})
+
+	m.Update(keyPress("shift+right"))
+	if i, _ := m.HistoryIndex(); i != 0 {
+		t.Errorf("history index after shift+right: %d, want 0", i)
+	}
+	if m.Left() != hScrollStep {
+		t.Errorf("left after shift+right: %d, want %d", m.Left(), hScrollStep)
 	}
 }
 

@@ -382,17 +382,19 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.left = 0
 	case "G", "end":
 		m.top = m.maxTop()
-	case "h":
-		// Older stored response of the same request (#1251).
+	case "h", "left":
+		// Older stored response of the same request (#1251). The arrows join
+		// h/l (#1471): they are the keys a user reaches for first, and the
+		// footer advertises history as the arrow-shaped action.
 		m.showHistory(m.histIdx + 1)
-	case "l":
+	case "l", "right":
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
-	case "left":
-		// The arrows pan sideways (#1290); history stays on h/l so wide
-		// bodies are reachable with the keys a user reaches for first.
+	case "shift+left":
+		// Sideways panning of wide bodies (#1290) moved off the bare arrows
+		// when those took over history (#1471).
 		m.ScrollX(-hScrollStep)
-	case "right":
+	case "shift+right":
 		m.ScrollX(hScrollStep)
 	case "z":
 		// A fold command's second key (#1330); the viewer has no cursor, so
@@ -661,19 +663,22 @@ func (m *Model) footerText() string {
 	if m.query != "" {
 		return " /" + m.query + "  " + m.matchCount() + " · n/N next/prev · esc clear"
 	}
-	s := " j/k ←/→ scroll · g/G top/bottom · / search · y copy (Y headers)"
-	// The fold hint only appears when the body actually has ranges (#1330).
-	if len(m.folds) > 0 {
-		s += " · za/zM/zR fold"
-	}
-	// The history hint is permanent while a response is shown (#1267): it
-	// used to appear only once a second response existed, which is exactly
-	// when nobody was looking for it.
+	// The history hint is permanent while a response is shown (#1267) and
+	// leads the line (#1471): the tail is what a narrow pane clips first,
+	// and the hint used to appear only once a second response existed,
+	// which is exactly when nobody was looking for it.
+	s := ""
 	if len(m.hist) > 0 {
-		s += fmt.Sprintf(" · h/l history %d/%d", m.histIdx+1, len(m.hist))
+		s = fmt.Sprintf(" ←/→ history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
 			s += " (" + at.Local().Format("15:04:05") + ")"
 		}
+		s += " ·"
+	}
+	s += " j/k scroll · shift+←/→ pan · g/G top/bottom · / search · y copy (Y headers)"
+	// The fold hint only appears when the body actually has ranges (#1330).
+	if len(m.folds) > 0 {
+		s += " · za/zM/zR fold"
 	}
 	return s
 }

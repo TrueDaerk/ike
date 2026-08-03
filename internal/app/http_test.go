@@ -418,7 +418,7 @@ func TestHTTPPaneKeysInHelp(t *testing.T) {
 	}
 	found := false
 	for _, e := range g.Entries {
-		if e.Shortcut == "h / l" && strings.Contains(e.Title, "stored response") {
+		if e.Shortcut == "h / l  ← / →" && strings.Contains(e.Title, "stored response") {
 			found = true
 		}
 	}
@@ -439,7 +439,7 @@ func TestHTTPFooterAlwaysShowsHistory(t *testing.T) {
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
-	if view := m.activeWS().Panes.Get(pane.HTTPKey).View(); !strings.Contains(view, "h/l history 1/1") {
+	if view := m.activeWS().Panes.Get(pane.HTTPKey).View(); !strings.Contains(view, "←/→ history 1/1") {
 		t.Errorf("footer must advertise history from the first response:\n%s", view)
 	}
 }

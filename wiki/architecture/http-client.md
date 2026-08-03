@@ -180,13 +180,14 @@ config file paths, or disable detection entirely.
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
 - **Horizontal panning** (#1290): lines wider than the pane (minified JSON,
-  long header values) are not lost — `←`/`→` pan the view sideways by 8
-  columns, `0`/`^` return to column 0, `$` jumps to the right edge, and `g`
-  resets both axes. The horizontal wheel and shift+wheel pan too, matching the
-  editor (#230). The offset applies to every composed row, and columns stay
+  long header values) are not lost — `shift+←`/`shift+→` pan the view sideways
+  by 8 columns, `0`/`^` return to column 0, `$` jumps to the right edge, and
+  `g` resets both axes. The horizontal wheel and shift+wheel pan too, matching
+  the editor (#230). The offset applies to every composed row, and columns stay
   absolute so syntax highlight, search matches and mouse selection remain
-  aligned with the text; a clipped row ends in `…`. History browsing keeps
-  `h`/`l` only — the arrows now scroll.
+  aligned with the text; a clipped row ends in `…`. The bare arrows browse the
+  response history alongside `h`/`l` (#1471) — panning moved to the shifted
+  arrows to free them.
 - **Folding** (#1330, `internal/httppane/fold.go`): the body's fold ranges come
   from its own language (`highlight.FencedFolds`, resolved through the content
   type — the same Tree-sitter fold nodes an editor buffer uses) and are stored
@@ -338,16 +339,17 @@ newest first, pruned on append, all writes best effort — losing a history
 entry never fails a dispatch.
 
 After each dispatch the app appends the response and hands the stored list
-to the viewer: `h`/`l` (or arrow keys) browse older/newer responses of the
-current request, with the footer showing the position (`h/l history 2/5`)
+to the viewer: `h`/`l` or `←`/`→` (#1471) browse older/newer responses of the
+current request, with the footer showing the position (`←/→ history 2/5`)
 and the stored timestamp.
 
 **Discoverability** (#1267): the footer hint appears from the *first*
-response on (`h/l history 1/1`), not only once a second one exists; the
+response on (`←/→ history 1/1`), not only once a second one exists — and it
+leads the footer line, so a narrow pane clips the generic hints, not it; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l`, `j/k`, `←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+(`h/l ←/→`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 

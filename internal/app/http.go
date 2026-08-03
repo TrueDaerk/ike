@@ -233,9 +233,9 @@ func (m *Model) copyHTTPResponse(headers bool) tea.Cmd {
 // cheatsheet would otherwise never mention that responses can be browsed,
 // searched or copied at all.
 var httpPaneKeys = []struct{ Key, Title string }{
-	{"h / l", "Browse older / newer stored response"},
+	{"h / l  ← / →", "Browse older / newer stored response"},
 	{"j / k", "Scroll"},
-	{"← / →", "Pan sideways in wide lines"},
+	{"shift+← / shift+→", "Pan sideways in wide lines"},
 	{"0 / $", "Left edge / right edge"},
 	{"g / G", "Top / bottom"},
 	{"/", "Search in the response"},
@@ -259,10 +259,10 @@ func (m *Model) showHTTPHistory() {
 	m.layout()
 	idx, n := p.HistoryIndex()
 	if n <= 1 {
-		m.host.Notify(host.Info, "http: 1 stored response — h/l browse older/newer ones as they arrive")
+		m.host.Notify(host.Info, "http: 1 stored response — ←/→ browse older/newer ones as they arrive")
 		return
 	}
-	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d/%d stored responses — h/l browse", idx+1, n))
+	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d/%d stored responses — ←/→ browse", idx+1, n))
 }
 
 // paneKeysHelpGroup lists the focused pane's local keys for the cheatsheet
