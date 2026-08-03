@@ -75,15 +75,18 @@ func (r *Resolver) Feed(key Key, active Context) Result {
 }
 
 // Timeout resolves a held partial chord when its timer fires: if the pending
-// sequence is itself an exact binding it resolves, otherwise it is discarded.
+// sequence is itself an exact binding it resolves. A bare prefix (no exact
+// binding of its own) survives the timeout (#1482) — the resolver keeps
+// waiting, reporting Pending, so the which-key popup stays open until a
+// continuation key, a non-matching key (Feed restarts) or an explicit Reset
+// (mouse click) ends the sequence.
 func (r *Resolver) Timeout(active Context) Result {
-	pending := r.pending
-	r.pending = Chord{}
-	if pending.Len() == 0 {
+	if r.pending.Len() == 0 {
 		return Result{Status: NoMatch}
 	}
-	if b, ok := r.table.Lookup(pending, active); ok {
+	if b, ok := r.table.Lookup(r.pending, active); ok {
+		r.pending = Chord{}
 		return Result{Status: Resolved, Command: b.Command, Binding: b}
 	}
-	return Result{Status: NoMatch}
+	return Result{Status: Pending}
 }

@@ -2546,6 +2546,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tourCmd
 
 	case tea.MouseClickMsg:
+		// A click while a chord is pending interrupts the sequence (#1482):
+		// the surviving which-key popup closes and the click acts normally.
+		if m.keys.Pending() {
+			m.keys.Reset()
+			m.whichKey = nil
+		}
 		// The dedicated back/forward buttons (#816) resolve through the
 		// keymap as synthetic chords — rebindable like keys, default
 		// nav.back / nav.forward — regardless of the hovered pane. Unbound
@@ -4432,15 +4438,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case keymapTimeoutMsg:
-		// A held partial chord timed out: resolve it as an exact binding if one
-		// exists, else discard it (cmd+k alone is a bare prefix of the
-		// pane-split sequence family and simply times out). Either way
-		// the which-key overlay goes.
-		m.whichKey = nil
-		if res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status == keymap.Resolved {
+		// A held partial chord timed out: resolve it as an exact binding if
+		// one exists. A bare prefix (cmd+k alone, prefix of the pane-split
+		// sequence family) survives (#1482): the resolver keeps the chord and
+		// the which-key overlay stays until a continuation, a non-matching
+		// key, or a mouse click ends it.
+		switch res := m.keys.Timeout(keymap.Context(m.focusContext())); res.Status {
+		case keymap.Resolved:
+			m.whichKey = nil
 			if c, ok := m.reg.Command(res.Command); ok {
 				return m, m.dispatchCommand(res.Command, c)
 			}
+		case keymap.Pending:
+			return m, nil // popup stays; no timer re-arm needed
+		default:
+			m.whichKey = nil
 		}
 		return m, nil
 
@@ -7745,6 +7757,9 @@ func (m Model) compositeWhichKey(base string) string {
 	box := lipgloss.NewStyle().
 		Background(m.pal().Panel).
 		Foreground(m.pal().Foreground).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(m.pal().Border).
+		BorderBackground(m.pal().Panel).
 		Padding(0, 1).
 		Render(strings.Join(m.whichKey, "\n"))
 	w := lipgloss.Width(box)

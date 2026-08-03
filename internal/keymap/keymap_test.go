@@ -270,16 +270,20 @@ func TestMultiStepChordAndTimeout(t *testing.T) {
 		t.Fatalf("ctrl+k down = %+v, want pane.splitDown", res)
 	}
 	// Timeout path: ctrl+k then nothing → no exact binding since #750
-	// (vcs.commit removed), the held prefix is discarded.
+	// (vcs.commit removed), the bare prefix survives the timeout (#1482).
 	res = r.Feed(Key{Base: "k", Mods: ModCtrl}, Global)
 	if res.Status != Pending {
 		t.Fatalf("ctrl+k pending expected, got %v", res.Status)
 	}
 	res = r.Timeout(Global)
-	if res.Status != NoMatch {
-		t.Fatalf("timeout resolve = %+v, want NoMatch (bare cmd+k prefix)", res)
+	if res.Status != Pending {
+		t.Fatalf("timeout resolve = %+v, want Pending (bare cmd+k prefix survives)", res)
 	}
-	// The sequence family stays intact after the discarded prefix.
+	if !r.Pending() {
+		t.Fatalf("bare prefix must stay pending after the timeout")
+	}
+	// The sequence family stays intact after the surviving prefix: feeding
+	// ctrl+k again dead-ends the doubled sequence and restarts from the key.
 	if res := r.Feed(Key{Base: "k", Mods: ModCtrl}, Editor); res.Status != Pending {
 		t.Fatalf("ctrl+k after timeout: status=%v, want Pending", res.Status)
 	}
