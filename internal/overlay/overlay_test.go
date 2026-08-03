@@ -116,3 +116,23 @@ func TestPlaceClipsOffCanvasRows(t *testing.T) {
 		t.Fatalf("row 2 should start with X: %q", s)
 	}
 }
+
+// TestPlaceClipsOffCanvasColumns (#1463): a box anchored so it overhangs the
+// right canvas edge is hard-clipped to w columns — an overlong spliced row
+// wraps in the surrounding render and tears the box apart.
+func TestPlaceClipsOffCanvasColumns(t *testing.T) {
+	base := baseCanvas('.', 10, 3)
+	out := Place(base, "ABCDE\nFGHIJ", 7, 0, 10, 3)
+	lines := strings.Split(out, "\n")
+	if s := ansi.Strip(lines[0]); s != ".......ABC" {
+		t.Fatalf("row 0 = %q, want %q", s, ".......ABC")
+	}
+	if s := ansi.Strip(lines[1]); s != ".......FGH" {
+		t.Fatalf("row 1 = %q, want %q", s, ".......FGH")
+	}
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w != 10 {
+			t.Fatalf("row width = %d, want 10", w)
+		}
+	}
+}
