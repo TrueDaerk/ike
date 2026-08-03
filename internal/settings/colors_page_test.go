@@ -230,7 +230,7 @@ func TestColorsPageDetailClicksTakeACandidate(t *testing.T) {
 
 // TestInsertAfterPlacesThePage: the page sits behind Appearance, inside CORE.
 func TestInsertAfterPlacesThePage(t *testing.T) {
-	pages := InsertAfter(BasePages([]string{"default"}), "Appearance", Page{Title: "Syntax Colors"})
+	pages := InsertAfter(BasePages([]string{"default"}, nil, nil), "Appearance", Page{Title: "Syntax Colors"})
 	idx := -1
 	for i, p := range pages {
 		if p.Title == "Appearance" {
@@ -244,7 +244,7 @@ func TestInsertAfterPlacesThePage(t *testing.T) {
 		t.Fatal("a page inserted mid-section must not start a new one")
 	}
 	// An unknown anchor appends rather than dropping the page.
-	pages = InsertAfter(BasePages([]string{"default"}), "Nope", Page{Title: "X"})
+	pages = InsertAfter(BasePages([]string{"default"}, nil, nil), "Nope", Page{Title: "X"})
 	if pages[len(pages)-1].Title != "X" {
 		t.Fatal("an unknown anchor must append")
 	}

@@ -15,6 +15,11 @@ import (
 // "themes.select.*" palette commands.
 type SelectThemeMsg struct{ Name string }
 
+// SyncThemeMsg asks the root model to re-query the terminal background
+// (OSC 11) and re-evaluate the auto light/dark pair (#1480). Dispatched by
+// the "themes.syncTerminal" palette command.
+type SyncThemeMsg struct{}
+
 // themeProvider is the compile-in plugin that contributes the built-in color
 // schemes (Roadmap 0110) plus one palette command per scheme ("Theme:
 // tokyo-night", …). Third-party plugins add more the same way, via
@@ -37,6 +42,14 @@ func (themeProvider) Capabilities() plugin.Capabilities {
 			},
 		})
 	}
+	cmds = append(cmds, plugin.Command{
+		ID:    "themes.syncTerminal",
+		Title: "Theme: Sync with Terminal Background",
+		Scope: plugin.GlobalScope(),
+		Run: func(h host.API) tea.Cmd {
+			return h.Dispatch(SyncThemeMsg{})
+		},
+	})
 	return plugin.Capabilities{Themes: builtins, Commands: cmds}
 }
 
@@ -53,15 +66,40 @@ func themeNames(reg *registry.Registry) []string {
 	return names
 }
 
-// resolveTheme resolves [theme].name against the built-ins plus every
-// plugin-registered theme and returns the ready-to-render palette. An unknown
-// name falls back to the default theme with a non-fatal status warning rather
-// than crashing or blanking the IDE.
-func resolveTheme(reg *registry.Registry, cfg host.Config) (*theme.Palette, string) {
-	name := ""
-	if cfg != nil {
-		if v, ok := cfg.Get("theme.name"); ok {
-			name = v
+// themeNamesByDark lists the registered themes whose Dark flag matches, for
+// the auto-pair enums (#1480).
+func themeNamesByDark(reg *registry.Registry, dark bool) []string {
+	var names []string
+	for _, t := range reg.Themes() {
+		if t.Dark == dark {
+			names = append(names, t.Name)
+		}
+	}
+	return names
+}
+
+// resolveTheme resolves the active theme against the built-ins plus every
+// plugin-registered theme and returns the ready-to-render palette. With
+// [theme].auto on and a classified terminal background (#1480, OSC 11),
+// [theme].light / [theme].dark name the scheme; otherwise — auto off, or the
+// terminal never answered — [theme].name applies as before. An unknown name
+// falls back to the default theme with a non-fatal status warning rather than
+// crashing or blanking the IDE. termDark is nil while the background is
+// unknown.
+func resolveTheme(reg *registry.Registry, cfg host.Config, termDark *bool) (*theme.Palette, string) {
+	get := func(key string) string {
+		if cfg == nil {
+			return ""
+		}
+		v, _ := cfg.Get(key)
+		return v
+	}
+	name := get("theme.name")
+	if get("theme.auto") == "true" && termDark != nil {
+		if *termDark {
+			name = get("theme.dark")
+		} else {
+			name = get("theme.light")
 		}
 	}
 	sel, found := theme.Select(name, reg.Themes())
@@ -121,7 +159,21 @@ func (m *Model) selectTheme(name string) tea.Cmd {
 		return nil
 	}
 	m.host.Notify(host.Info, "theme: "+sel.Name)
+	// An explicit selection wins over auto sync (#1480): picking a theme
+	// while auto is on also turns auto off, so the choice sticks.
+	if v, _ := m.host.Config().Get("theme.auto"); v == "true" {
+		return config.ApplyAndReload(m.cfgOpts, []config.Mutation{
+			{Scope: config.UserScope, Key: "theme.name", Value: sel.Name},
+			{Scope: config.UserScope, Key: "theme.auto", Value: false},
+		})
+	}
 	return config.WriteAndReload(m.cfgOpts, config.UserScope, "theme.name", sel.Name)
+}
+
+// autoThemeEnabled reports whether [theme].auto is on in the live config.
+func (m *Model) autoThemeEnabled() bool {
+	v, _ := m.host.Config().Get("theme.auto")
+	return v == "true"
 }
 
 // reloadConfig applies a reloaded configuration (config.ConfigReloadedMsg):
@@ -141,7 +193,7 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// Theme: config is the single source of truth (#667 dropped the runtime
 	// override) — re-resolve and re-thread on every reload so a [theme].name
 	// change lands without a restart.
-	pal, warning := resolveTheme(m.reg, hcfg)
+	pal, warning := resolveTheme(m.reg, hcfg, m.termDark)
 	m.applyTheme(pal)
 	// Persist a config-driven show_hidden change like the runtime `.` toggle
 	// does (#642): Configure applies it live, but until now only the toggle and

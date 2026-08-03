@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-03 (theme: auto light/dark sync with terminal background, #1480)
+
+- `[theme].auto` (off by default) syncs the scheme with the terminal
+  background: OSC 11 via `tea.RequestBackgroundColor` in Init, the reply
+  classified by `theme.IsDarkColor` (relative luminance) picks
+  `[theme].light` / `[theme].dark`; no reply means `[theme].name` keeps
+  applying (no timeout, no hang). `themes.syncTerminal` re-queries on
+  demand; explicit theme selection also writes `theme.auto = false`.
+  Appearance page gained the switch plus light/dark enums partitioned by the
+  themes' `Dark` flag. Config `theme.dark` repurposed from a dead bool to
+  the pair's dark theme name.
+
 ## 2026-08-03 (editor: surround operations, #1475)
 
 - vim-surround style pair editing (`editor/surround.go`): `ys{motion}{pair}` /

@@ -31,7 +31,7 @@ func (f *fakeSub) Receive(msg tea.Msg) { f.msgs = append(f.msgs, msg) }
 func subModel(t *testing.T) *Model {
 	t.Helper()
 	restoreConfig(t)
-	m := New(BasePages([]string{"default"}), testOpts(t))
+	m := New(BasePages([]string{"default"}, nil, nil), testOpts(t))
 	m.SetSize(90, 28)
 	m.Open()
 	return m

@@ -11,7 +11,7 @@ import (
 // (via Flat) — a schema entry whose key nothing reads fails here.
 func TestNoDeadSchemaKeys(t *testing.T) {
 	flat := config.Get().Flat()
-	for _, page := range BasePages([]string{"default"}) {
+	for _, page := range BasePages([]string{"default"}, []string{"intellij-light"}, []string{"default"}) {
 		if len(page.Entries) == 0 {
 			t.Errorf("page %q has no entries", page.Title)
 		}
@@ -32,7 +32,7 @@ func TestNoDeadSchemaKeys(t *testing.T) {
 // TestCorePagesPresent guards the #92 catalog: Editor, Appearance and
 // Files & Session exist and cover their spec'd keys.
 func TestCorePagesPresent(t *testing.T) {
-	pages := BasePages([]string{"default", "tokyo-night"})
+	pages := BasePages([]string{"default", "tokyo-night"}, nil, nil)
 	byTitle := map[string][]Entry{}
 	for _, p := range pages {
 		byTitle[p.Title] = p.Entries
@@ -80,7 +80,7 @@ func TestCorePagesPresent(t *testing.T) {
 // in the Files category as positive-int entries (0 = guard disabled).
 func TestLargeFileThresholdsExposed(t *testing.T) {
 	found := map[string]bool{}
-	for _, p := range BasePages(nil) {
+	for _, p := range BasePages(nil, nil, nil) {
 		for _, e := range p.Entries {
 			if e.Key == "files.large_file_kb" || e.Key == "files.large_file_lines" {
 				if e.Type != Int || e.Min != 0 {

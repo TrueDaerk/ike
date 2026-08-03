@@ -112,7 +112,7 @@ func TestValueMarkersRender(t *testing.T) {
 // TestBasePagesCarryDescriptions: the detail column's no-selection state is
 // only useful when every built-in page explains itself.
 func TestBasePagesCarryDescriptions(t *testing.T) {
-	for _, p := range BasePages([]string{"default"}) {
+	for _, p := range BasePages([]string{"default"}, nil, nil) {
 		if p.Custom == nil && strings.TrimSpace(p.Description) == "" {
 			t.Errorf("page %q has no Description", p.Title)
 		}

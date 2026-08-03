@@ -308,4 +308,5 @@ bring their own.
 | Theme: solarized-light | `themes.select.solarized-light` | — | — | everywhere |
 | Theme: tokyo-night | `themes.select.tokyo-night` | — | — | everywhere |
 | Theme: zenburn | `themes.select.zenburn` | — | — | everywhere |
+| Theme: Sync with Terminal Background | `themes.syncTerminal` | — | — | everywhere |
 
