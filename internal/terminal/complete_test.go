@@ -587,6 +587,116 @@ func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
 	}
 }
 
+// TestWrappedLineAutoSuggestSilentWithCandidates (#1464): auto-suggest stays
+// silent while the command soft-wraps even when the joined word HAS
+// candidates — the earlier #1431 test only covered a word without matches.
+// ctrl+space (TestWrappedLineCtrlSpaceCompletes) stays the way to complete a
+// wrapped word.
+func TestWrappedLineAutoSuggestSilentWithCandidates(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startNarrowShModel(t, c, dir)
+	promptX, promptY := m.sess.CursorPosition()
+
+	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	for _, r := range "echo " + filler + " targ" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		cmd, w := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && w == "targ"
+	})
+	m.OnOutput()
+	if m.comp.open {
+		t.Fatalf("auto-suggest must stay silent on a wrapped line, got items %v", m.comp.items)
+	}
+}
+
+// TestWrappedCompletionAfterResize (#1464): the soft-wrap join must survive a
+// width resize (the session reflows) — ctrl+space on a command whose argument
+// wraps mid-word after the resize completes against the joined logical line,
+// path candidates for the real word instead of command candidates for the
+// tail.
+func TestWrappedCompletionAfterResize(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := New("terminal", "/bin/sh", dir, 80, 24, nil, c.send)
+	if m.sess == nil {
+		t.Fatalf("spawn failed: %s", m.err)
+	}
+	t.Cleanup(func() { m.Close() })
+	waitFor(t, "prompt", func() bool { return strings.Contains(plainView(m.sess), "$") })
+	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+
+	m.SetSize(30, 24)
+	waitFor(t, "resized", func() bool { return m.sess.Width() == 30 })
+	waitFor(t, "at prompt after resize", func() bool { return m.completionActive() })
+	promptX, promptY := m.sess.CursorPosition()
+
+	// "ta" fills the last columns of the prompt row, "rg" wraps mid-word.
+	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	for _, r := range "echo " + filler + " targ" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "cursor wrapped to the next row", func() bool {
+		_, y := m.sess.CursorPosition()
+		return y > promptY
+	})
+	waitFor(t, "echoed wrapped line", func() bool {
+		cmd, w := parseCmdline(m.lineBeforeCursor())
+		return cmd == "echo" && w == "targ"
+	})
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("ctrl+space after resize = open=%v items=%v, want [target-file.txt]",
+			m.comp.open, m.comp.items)
+	}
+}
+
+// TestAutoSuggestSuppressedWithoutPrompt (#1464): when the text left of the
+// cursor carries no recognizable prompt marker although the row above holds
+// content, the cursor row may be an unrecognized continuation row — the
+// safety net keeps auto-suggest quiet instead of completing against a wrapped
+// tail. ctrl+space still completes on demand.
+func TestAutoSuggestSuppressedWithoutPrompt(t *testing.T) {
+	c := &collector{}
+	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, []string{"PS1="}, c.send)
+	if m.sess == nil {
+		t.Fatalf("spawn failed: %s", m.err)
+	}
+	t.Cleanup(func() { m.Close() })
+	for _, r := range "echo hello\r" {
+		m.sess.SendKey(keyFor(r))
+	}
+	waitFor(t, "echo output", func() bool { return strings.Contains(plainView(m.sess), "hello") })
+	waitFor(t, "at prompt", func() bool { return m.completionActive() })
+
+	m.Update(tea.KeyPressMsg{Code: 'l', Text: "l"})
+	m.Update(tea.KeyPressMsg{Code: 's', Text: "s"})
+	waitFor(t, "echoed ls", func() bool {
+		_, w := parseCmdline(m.lineBeforeCursor())
+		return w == "ls"
+	})
+	m.OnOutput()
+	if m.comp.open {
+		t.Fatalf("auto-suggest must stay quiet without a prompt marker, got %v", m.comp.items)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open {
+		t.Fatal("ctrl+space must still complete without a prompt marker")
+	}
+}
+
 // TestPopupNearRightEdgeStaysIntact (#1463): a popup anchored at a word near
 // the right pane edge used to overflow the pane width, so the surrounding
 // render wrapped its rows and the box fell apart. The x origin is clamped so
