@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-07-29T12:00:00Z
+timestamp: 2026-08-03T12:00:00Z
 ---
 
 # Editor
@@ -222,7 +222,19 @@ line runs that test (see /architecture/run-configurations.md).
   whitespace wins on overlap) and **column rulers** (`editor.rulers = [80]`;
   a background tint on those display columns, padded past short lines). The
   palette toggles override the config per view; theme slots `Whitespace`,
-  `IndentGuide`, `Ruler` colour them. **Sticky scroll** (#168) pins the header lines of the
+  `IndentGuide`, `Ruler` colour them. **Control bytes & ANSI escapes** (#1469,
+  `editor/ansiescape.go`): a raw C0 control or DEL in the buffer (a log file
+  with colour escapes) never reaches the terminal — each renders as its
+  one-cell Unicode Control Pictures glyph (`␛` for ESC, dimmed with the
+  `Whitespace` slot), so one buffer rune stays one display cell and click
+  mapping, caret and selection stay aligned; tab keeps its expansion. SGR
+  sequences (`ESC [ … m`) are additionally *interpreted*, per line: the text
+  they govern renders with the mapped colour/attributes (basic/bright/256
+  palette indices and truecolor) through the normal styling pipeline — the
+  file's foreground replaces the syntax colour, the sequence's own runes
+  render dim, and cursor/selection/search overlays still win, so no SGR state
+  bleeds around the caret. Copy is untouched (the buffer keeps the original
+  bytes). **Sticky scroll** (#168) pins the header lines of the
   declarations enclosing the first visible line as the top rows of the pane
   (JetBrains-style): the scopes come from the same Tree-sitter parse that
   produces the highlight spans (`highlight.HighlightScoped`, node kinds per
