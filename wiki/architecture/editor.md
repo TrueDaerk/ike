@@ -348,8 +348,8 @@ read without comparing tones:
 Normal mode resolves an optional `"reg`, an optional count, an operator, and a
 motion / text object before committing. Secondary-key states (`awaitG`,
 `awaitFind`, `awaitReplace`, `awaitObject`, `awaitRecordReg`, `awaitPlayReg`,
-and the mark states `awaitMark` / `awaitMarkLine` / `awaitMarkExact`, #1151)
-park the handler between keys.
+the mark states `awaitMark` / `awaitMarkLine` / `awaitMarkExact` (#1151), and
+the surround states `awaitSurr*` (#1475)) park the handler between keys.
 Visual mode accumulates counts with the same 1–9/continuing-0 rule (#265), so
 `V3j` extends the selection three lines and `3G` jumps inside a selection;
 the count is consumed by its motion and Esc clears the pending state.
@@ -382,6 +382,18 @@ this way is GUI-style (vim's `keymodel=stopsel`, #326): releasing Shift and
 pressing an unshifted navigation key (arrows, `Home`/`End`, word/paragraph and
 page keys) drops the selection and just moves the caret, while vim motions and
 selections entered with `v`/`V`/`Ctrl+V` keep extending as in vim.
+
+Surround operations (#1475, `surround.go`, vim-surround style):
+`ys{motion}{pair}` wraps a motion or text object (`ysiw)`, `yse"`), `yss`
+wraps the line from its first non-blank, `S{pair}` wraps a visual selection,
+`cs{old}{new}` swaps the nearest enclosing pair and `ds{old}` removes it.
+Pairs are `()[]{}<>`, the quotes and backtick; the opening member of a bracket
+pair surrounds with inner padding (`( x )`), the closing member without
+(`(x)`), and on delete/change the opening member also strips that same-line
+padding — the vim-surround convention. `cs`/`ds` reuse `textobject.Pair`
+(nesting-aware, multi-line) and `textobject.Quote` to locate the delimiters.
+Each operation commits as one undo unit, records a `.`-dot that re-resolves
+the target at the new cursor, and fans out per caret via `fanMutate` (#145).
 
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
@@ -633,7 +645,8 @@ session recorder, one-shot operations commit via `fanMutate`. Fanned today:
 insert-mode typing / Enter (per-caret smart indent) / backspace / word- and
 line-kills / Tab / Shift+Tab (one dedent per line), `x`, `r`, operators
 `d c y` with motions and text objects, `dd cc yy` (merged to one caret per
-line first), `p`/`P`, `o`/`O`, `a A I s`, and completion accept (the popup
+line first), `p`/`P`, `o`/`O`, `a A I s`, the surround operations `ys`/`cs`/`ds`
+(#1475), and completion accept (the popup
 applies at every caret, JetBrains-style). A multi-caret yank/delete joins the
 per-caret spans with newlines in the register. Motions (`h j k l w b` …,
 arrows, `Home`/`End`) move every caret in parallel; each keeps its own

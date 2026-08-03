@@ -81,6 +81,13 @@ const (
 	awaitMarkExact // after a backtick; awaiting the mark to jump to (exact position)
 	awaitBracketF  // after ]; awaiting c for next-change (#1170)
 	awaitBracketB  // after [; awaiting c for previous-change (#1170)
+	// Surround states (#1475): ys{motion}{pair}, ds{pair}, cs{old}{new}.
+	awaitSurrMotion    // after ys; awaiting the motion, i/a, or s (yss)
+	awaitSurrObject    // after ys + i/a; awaiting the object char
+	awaitSurrAdd       // target resolved (or visual S); awaiting the pair char
+	awaitSurrDelete    // after ds; awaiting the pair to remove
+	awaitSurrChange    // after cs; awaiting the pair to replace
+	awaitSurrChangeNew // after cs{old}; awaiting the replacement pair
 )
 
 // Model is the editor pane.
@@ -119,6 +126,10 @@ type Model struct {
 	findCmd  motion.FindKind // find variant parked while awaiting its char
 	around   bool            // text object around (a) vs inner (i)
 	lastFind motion.Find     // last f/t/F/T for ; and ,
+	// Surround state parked between its await steps (#1475): the ys target
+	// resolver and the pair cs is replacing.
+	surrResolve surroundResolve
+	surrOld     rune
 
 	// Command line / search input.
 	cmdline    string

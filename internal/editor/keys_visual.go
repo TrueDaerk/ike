@@ -54,6 +54,15 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 
+	// A pending surround (after S, #1475) wraps the selection with the next key's pair.
+	if m.wait == awaitSurrAdd {
+		m.wait = awaitNone
+		if hasRune {
+			m.surroundVisual(r)
+		}
+		return m, nil
+	}
+
 	// A pending text-object selector (after i/a) sets the selection to the object.
 	if m.wait == awaitObject {
 		m.wait = awaitNone
@@ -158,6 +167,9 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.joinVisual(true)
 	case "r":
 		m.wait = awaitReplace
+	case "S":
+		// Surround the selection (#1475): the next key names the pair.
+		m.wait = awaitSurrAdd
 	case "p", "P":
 		m.visualPaste(0)
 	case "i":
