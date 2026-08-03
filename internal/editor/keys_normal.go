@@ -115,6 +115,83 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, m.jumpMark(r, exact)
 		}
 		return m, nil
+	case awaitSurrMotion:
+		// ys's span (#1475): a motion, i/a introducing a text object, or a
+		// second s for the whole line; anything else cancels.
+		m.wait = awaitNone
+		if s == "i" || s == "a" {
+			m.around = s == "a"
+			m.wait = awaitSurrObject
+			return m, nil
+		}
+		if s == "s" {
+			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+				return operator.LineTarget(pos.Line, pos.Line), true
+			}
+			m.wait = awaitSurrAdd
+			return m, nil
+		}
+		count := m.pending.EffectiveCount()
+		if _, ok := m.resolveMotion(s, r, count); ok {
+			sk, rk := s, r
+			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+				return mm.caretTarget(sk, rk, count, pos)
+			}
+			m.wait = awaitSurrAdd
+			return m, nil
+		}
+		m.pending.Reset()
+		return m, nil
+	case awaitSurrObject:
+		m.wait = awaitNone
+		if hasRune {
+			rk, around := r, m.around
+			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+				savedCur, savedAround := mm.cursor, mm.around
+				mm.cursor, mm.around = pos, around
+				res := mm.resolveTextObject(rk)
+				mm.cursor, mm.around = savedCur, savedAround
+				if !res.OK {
+					return operator.Target{}, false
+				}
+				return objectTarget(res), true
+			}
+			m.wait = awaitSurrAdd
+			return m, nil
+		}
+		m.pending.Reset()
+		return m, nil
+	case awaitSurrAdd:
+		m.wait = awaitNone
+		if hasRune && m.surrResolve != nil {
+			m.surroundAdd(m.surrResolve, r)
+		}
+		m.surrResolve = nil
+		m.pending.Reset()
+		return m, nil
+	case awaitSurrDelete:
+		m.wait = awaitNone
+		if hasRune {
+			m.surroundDelete(r)
+		}
+		m.pending.Reset()
+		return m, nil
+	case awaitSurrChange:
+		m.wait = awaitNone
+		if hasRune {
+			m.surrOld = r
+			m.wait = awaitSurrChangeNew
+		} else {
+			m.pending.Reset()
+		}
+		return m, nil
+	case awaitSurrChangeNew:
+		m.wait = awaitNone
+		if hasRune {
+			m.surroundChange(m.surrOld, r)
+		}
+		m.pending.Reset()
+		return m, nil
 	case awaitPlayReg:
 		// @'s register name (#58): @@ repeats the last replay; the count typed
 		// before @ (5@a) is still pending here.
@@ -165,6 +242,23 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		}
 		if m.pending.Operator == 0 {
 			m.pending.SetOperator(op)
+			return m, nil
+		}
+	}
+
+	// Surround intro (#1475): "s" after a pending y/d/c starts a vim-surround
+	// operation (ys{motion}{pair} / ds{pair} / cs{old}{new}) instead of
+	// cancelling the operator.
+	if m.pending.HasOperator() && s == "s" {
+		switch m.pending.Operator {
+		case 'y':
+			m.wait = awaitSurrMotion
+			return m, nil
+		case 'd':
+			m.wait = awaitSurrDelete
+			return m, nil
+		case 'c':
+			m.wait = awaitSurrChange
 			return m, nil
 		}
 	}

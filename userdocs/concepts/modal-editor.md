@@ -63,6 +63,15 @@ paragraph, `is` / `as` a sentence, `i(` / `a(` inside/around brackets (also
 for `{`), `i"` / `a"` a quoted string (also `'` and `` ` ``), and `it` / `at`
 an XML/HTML tag.
 
+**Surround** (vim-surround style): `ys{motion}{pair}` wraps a motion or text
+object — `ysiw)` turns `word` into `(word)` — and `yss` wraps the whole line.
+`cs{old}{new}` changes the nearest enclosing pair (`cs"'` turns `"x"` into
+`'x'`), `ds{old}` deletes it. In visual mode `S{pair}` wraps the selection.
+Pairs are the brackets, quotes and backtick; picking the *opening* bracket
+pads with a space (`( x )`), the *closing* one doesn't (`(x)`) — and `ds(` /
+`cs(` strip that padding again where `ds)` / `cs)` leave it. All of it
+dot-repeats and applies at every caret.
+
 **Single-key edits** skip the grammar for the things you do constantly: `x`
 deletes the character under the cursor, `D` / `C` / `Y` act on the rest of the
 line, `s` substitutes a character, `J` joins the next line onto this one, `p` /

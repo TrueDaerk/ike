@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-03 (editor: surround operations, #1475)
+
+- vim-surround style pair editing (`editor/surround.go`): `ys{motion}{pair}` /
+  `yss` / visual `S{pair}` add a pair, `cs{old}{new}` swaps the nearest
+  enclosing pair, `ds{old}` removes it — brackets, quotes and backtick, with
+  the opening-member-pads / closing-member-doesn't convention on add and the
+  inverse strip on delete/change. Reuses `textobject.Pair`/`Quote` for
+  delimiter location; one undo unit, dot-repeat re-resolves at the cursor,
+  multi-caret fan-out via `fanMutate`. New `awaitSurr*` secondary-key states.
+
 ## 2026-08-03 (editor: control bytes & SGR interpretation, #1469)
 
 - Raw C0 controls/DEL in a buffer render as one-cell Control Pictures glyphs
