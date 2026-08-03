@@ -103,3 +103,55 @@ func TestPythonDecoratorArguments(t *testing.T) {
 		t.Errorf("closing paren: still decorator-colored (%q)", got)
 	}
 }
+
+// TestPythonFStringInterpolation guards #1466: the expression inside an
+// f-string interpolation highlights as code (the old whole-node (string)
+// capture started before the interpolation and won the first-covering
+// lookup), the format spec / conversion get their own scope, and escaped
+// braces stay string.
+func TestPythonFStringInterpolation(t *testing.T) {
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	lines := []string{
+		`name = f"abc{x}def"`,
+		`pct = f"abc{x:.0f}def"`,
+		`call = f"{obj.method(arg, 1)!r} literal {{braces}}"`,
+	}
+	spans := highlight.Highlight("main.py", lines)
+	if len(spans) == 0 {
+		t.Fatal("expected spans for Python source, got none")
+	}
+	ix := highlight.NewIndex(spans)
+	cases := []struct {
+		name string
+		line int
+		word string
+		want string
+	}{
+		{"string prefix+quote", 0, `f"`, "string"},
+		{"literal before interpolation", 0, "abc", "string"},
+		{"open brace", 0, "{", "punctuation.special"},
+		{"interpolated identifier", 0, "x}", "variable"},
+		{"close brace", 0, "}", "punctuation.special"},
+		{"literal after interpolation", 0, "def", "string"},
+		{"format spec", 1, ":.0f", "punctuation.special"},
+		{"attribute object", 2, "obj", "variable"},
+		{"method call", 2, "method", "function.method"},
+		{"call argument", 2, "arg", "variable"},
+		{"number argument", 2, "1)", "number"},
+		{"conversion", 2, "!r", "punctuation.special"},
+		{"literal between", 2, " literal ", "string"},
+		{"escaped open braces", 2, "{{", "string"},
+		{"escaped literal", 2, "braces", "string"},
+		{"escaped close braces", 2, "}}", "string"},
+	}
+	for _, c := range cases {
+		col := strings.Index(lines[c.line], c.word)
+		if col < 0 {
+			t.Fatalf("%s: %q not in line %d", c.name, c.word, c.line)
+		}
+		if got := ix.CaptureAt(c.line, col); got != c.want {
+			t.Errorf("%s: CaptureAt(%d,%d) = %q, want %q", c.name, c.line, col, got, c.want)
+		}
+	}
+}

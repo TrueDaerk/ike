@@ -54,7 +54,10 @@ the *same* node fall back to query-pattern order. Two rules follow for every
 node whose children need their own colors** — capture the sigil/name parts
 instead (a whole-`(decorator)` capture painted the entire argument list
 monochrome, #928; same class of bug: markdown's `fenced_code_block`, CSS's
-`integer_value`+`unit`). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
+`integer_value`+`unit`, and whole-string captures over interpolating strings —
+Python f-strings and PHP encapsed strings/heredocs capture their
+delimiter/content parts so `{…}` expressions highlight as code, with the
+braces, format spec and conversion as `punctuation.special`, #1466). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
 its grammar, and parses — the engine knows no specific language.
 
 `HighlightScoped(path, lines)` is the same single parse returning the spans

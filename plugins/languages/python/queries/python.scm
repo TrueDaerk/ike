@@ -70,12 +70,27 @@
 ] @number
 
 (comment) @comment
-(string) @string
+
+; Strings decompose into their parts (#1466): a whole-node (string) span would
+; start before any f-string interpolation inside it and win the first-covering
+; lookup, painting the interpolated expression flat. With only the delimiters
+; and literal content captured, the expression inside {…} highlights through
+; the normal captures above.
+(string_start) @string
+(string_content) @string
+(string_end) @string
 (escape_sequence) @escape
 
+; Escaped braces {{ }} are literal text, not interpolation.
+(escape_interpolation) @string
+
+; Interpolation braces plus the conversion (!r) and format spec (:.0f), which
+; are formatting directives rather than expression code.
 (interpolation
   "{" @punctuation.special
-  "}" @punctuation.special) @embedded
+  "}" @punctuation.special)
+(type_conversion) @punctuation.special
+(format_specifier) @punctuation.special
 
 [
   "-"

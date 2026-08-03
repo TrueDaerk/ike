@@ -183,14 +183,38 @@
   name: (name) @property)
 
 ; Basic tokens
-[
-  (string)
-  (string_content)
-  (encapsed_string)
-  (heredoc)
-  (heredoc_body)
-  (nowdoc_body)
-] @string
+
+; Strings decompose into their parts (#1466): whole-node (encapsed_string) /
+; (heredoc_body) spans would start before any interpolation inside them and
+; win the first-covering lookup, painting `{$x}` and `$var` flat. With only
+; the delimiters and literal content captured, interpolated expressions
+; highlight through the normal captures above. Nowdocs never interpolate, so
+; the whole node stays one capture.
+(string) @string
+(string_content) @string
+(encapsed_string "\"" @string)
+(heredoc "<<<" @string)
+(heredoc "\"" @string)
+(heredoc_start) @string
+(heredoc_end) @string
+(nowdoc) @string
+(escape_sequence) @string.escape
+
+; Complex interpolation braces: "abc{$x}def" and heredoc bodies.
+(encapsed_string "{" @punctuation.special)
+(encapsed_string "}" @punctuation.special)
+(heredoc_body "{" @punctuation.special)
+(heredoc_body "}" @punctuation.special)
+
+; ${x} form (deprecated in 8.2, still parsed).
+(dynamic_variable_name "$" @punctuation.special)
+(dynamic_variable_name "{" @punctuation.special)
+(dynamic_variable_name "}" @punctuation.special)
+(dynamic_variable_name (name) @variable)
+
+; Unbraced array index in simple interpolation: "$arr[key]".
+(encapsed_string (subscript_expression (name) @property))
+(heredoc_body (subscript_expression (name) @property))
 (boolean) @constant.builtin
 (null) @constant.builtin
 (integer) @number
