@@ -179,6 +179,10 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			// backed sides so restore re-reads blobs instead of files (#508).
 			lr, rr := inst.Diff().Revs()
 			ids[key] = paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}
+		case pane.KindMerge:
+			// A merge view is session state (index stages move on): the slot
+			// restores as an empty editor pane (#1478).
+			ids[key] = paneIdentity{Kind: "editor"}
 		case pane.KindTerminal:
 			// Path carries the session's origin dir so the restored fresh
 			// shell spawns there (#96); the process itself never resurrects.

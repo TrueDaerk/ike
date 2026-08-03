@@ -80,6 +80,35 @@ missing clipboard utility) shows a notification instead of an empty diff. The
 pane routes through the single diff slot / `placeDiffLeaf` like every other
 diff-open (`internal/app/diff_clipboard.go`).
 
+## Three-way merge view (#1478)
+
+For git-conflicted files the engine grows a three-way half
+(`internal/diff/threeway.go`): `Compute3` aligns ours and theirs against the
+merge base (the classic diff3 walk over the two base-relative Myers scripts)
+and classifies every region as `Chunk3Same` / `Chunk3Ours` / `Chunk3Theirs` /
+`Chunk3Both` (identical change on both sides) / `Chunk3Conflict`; `Merge3`
+folds that into a merged text where only true conflicts remain, emitted as
+diff3-style marker blocks (`<<<<<<<`/`|||||||`/`=======`/`>>>>>>>`).
+
+The view (`internal/merge`, pane kind `KindMerge`, keys `merge`, `merge:N`)
+renders ours (left) and theirs (right) as read-only columns around an
+**editable result editor** in the middle, seeded via `Merge3` from the
+`:1`/`:2`/`:3` index stages (`vcs.MergeStagesCmd`; a missing `:1` stage —
+both-added — degrades to an empty base). Because the remaining conflicts are
+ordinary markers, the editor's inline conflict machinery (#1149) provides
+per-conflict accept ours/theirs/both and next/previous navigation unchanged
+(palette `merge.*` commands — the pane advertises the editor context, and
+`editor.ActionMsg` routes into the result editor when a merge pane has
+focus). The header and statusline show `unresolved/total`; the side columns
+follow the result editor's scroll offset.
+
+Entry points: `vcs.mergeFile` on the focused conflicted file, or `enter` on
+a conflicted VCS-panel row. `vcs.mergeApply` saves the result, stages the
+file and closes the view (blocked while conflicts remain); closing the pane
+with unresolved conflicts or an unsaved result opens a discard/cancel guard.
+The pane is session state: a saved layout records its slot as an anonymous
+editor pane.
+
 ## Pane placement
 
 Every diff-open (HEAD diff, commit diff, `diff.files`) routes its freshly

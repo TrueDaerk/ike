@@ -96,6 +96,8 @@ since the leader layer retired (#711):
 | `vcs.diff` | palette | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
 | `vcs.blameLine` | palette | Toggle the inline blame annotation. |
 | `vcs.historyForSelection` | palette / editor context menu | JetBrains "Show History for Selection" (#1430): `git log -L` over the visual selection's lines (caret line fallback) — modal picker of the commits that touched exactly that range (`internal/vcs/rangelog.go`, capped at 200 commits); enter expands one commit to the patch git computed for the tracked range. Git follows the range across edits and renames itself. |
+| `vcs.mergeFile` | palette | Three-way merge view for the focused conflicted file (#1478): fetches the `:1`/`:2`/`:3` index stages (`internal/vcs/merge.go`) and opens the merge pane (see [Diff Viewer](/architecture/diff-viewer.md)). `enter` on a conflicted VCS-panel row opens it too. |
+| `vcs.mergeApply` | palette | Save the focused merge view's result to the file, `git add` it and close the view; blocked with a toast while conflicts remain unresolved. |
 | `vcs.panel` | `cmd+9` | Toggle the VCS tool window (below). |
 | `tool.lazygit` | palette | Open/focus the preconfigured lazygit tool pane (when lazygit is on PATH; a [#741 custom tool](/architecture/tool-panes.md), not part of `internal/vcs`). |
 
@@ -122,7 +124,7 @@ focus-return semantics. It is a **read-only changes list** re-derived from
 every snapshot: status badge + path per row, VCS-colored via the shared
 status recipe (#1052), `j`/`k`/wheel/click navigation with the muted
 unfocused cursor (#1034), and `enter`/double-click opens the file's
-diff-vs-HEAD. No staging checkboxes, no commit message, no Log tab — that
+diff-vs-HEAD — or, on a conflicted row, the three-way merge view (#1478). No staging checkboxes, no commit message, no Log tab — that
 workflow lives in the lazygit tool pane.
 
 The panel never runs git itself — it emits request messages the root model

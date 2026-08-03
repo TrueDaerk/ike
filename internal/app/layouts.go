@@ -180,7 +180,7 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 			return k, paneIdentity{Kind: "tool", Tool: tool}, true
 		}
 		return k, paneIdentity{Kind: "terminal"}, true
-	case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff:
+	case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
 		// Content panes are anonymous editor slots: what files they held is
 		// session state, only the space they occupied is layout. Tool sessions
 		// hosted as tabs (#836) are the exception, like in saveLayout: a host
@@ -303,7 +303,7 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			continue
 		}
 		switch inst.Kind() {
-		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff:
+		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
 			st.content = append(st.content, key)
 		case pane.KindTerminal:
 			if tool := inst.Terminal().Tool(); tool != "" {
@@ -333,7 +333,7 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			if target != nil && target.Key() != key {
 				mergeEditorPane(reg, inst, target)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindDiff:
+		case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
 			reg.Close(key)
 		}
 	}

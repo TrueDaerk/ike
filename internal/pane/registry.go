@@ -13,6 +13,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
+	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/structpanel"
@@ -40,6 +41,9 @@ const imageKeyBase = "image"
 
 // diffKeyBase is the key of the first diff viewer; later ones append ":N".
 const diffKeyBase = "diff"
+
+// mergeKeyBase is the key of the first merge view; later ones append ":N".
+const mergeKeyBase = "merge"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
@@ -78,6 +82,7 @@ type Registry struct {
 	previews  int      // count of markdown previews ever allocated, for key minting
 	images    int      // count of image previews ever allocated, for key minting
 	diffs     int      // count of diff viewers ever allocated, for key minting
+	merges    int      // count of merge views ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -406,6 +411,26 @@ func (r *Registry) applyDiffConfig(inst *Instance) {
 			inst.df.SetContext(n)
 		}
 	}
+}
+
+// AddMerge creates a three-way merge view for the conflicted file at path
+// (#1478), returning the new instance's key ("merge", then "merge:N"). The
+// result editor loads the file (language, editorconfig, save path); contents
+// arrive afterwards via the merge model's SetContents.
+func (r *Registry) AddMerge(path string) string {
+	r.merges++
+	key := mergeKeyBase
+	if r.merges > 1 {
+		key = mergeKeyBase + ":" + strconv.Itoa(r.merges)
+	}
+	inst := &Instance{key: key, kind: KindMerge, cfg: r.cfg, pal: r.pal}
+	ed := newEditorModel(r.cfg, r.pal)
+	if err := ed.Load(path); err != nil {
+		ed.NewFile(path)
+	}
+	inst.mg = merge.New(key, path, &ed, r.pal)
+	r.put(inst)
+	return key
 }
 
 // AddVCS creates the singleton VCS tool window under VCSKey (Roadmap 0330)

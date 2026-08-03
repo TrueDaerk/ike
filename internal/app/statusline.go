@@ -333,6 +333,10 @@ func (m Model) statusLine() string {
 			}
 		case inst.Kind() == pane.KindMarkdown:
 			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
+		case inst.Kind() == pane.KindMerge:
+			mg := inst.Merge()
+			left += "MERGE │ " + filepath.Base(mg.Path()) + " │ " +
+				strconv.Itoa(mg.Unresolved()) + "/" + strconv.Itoa(mg.Total()) + " unresolved"
 		case inst.Kind() == pane.KindDiff:
 			l, r := inst.Diff().Titles()
 			left += "DIFF │ " + l + " ⇄ " + r
