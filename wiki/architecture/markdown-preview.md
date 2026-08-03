@@ -51,8 +51,9 @@ the pane interior width — a resize re-renders. The style config is picked off
 `theme.Palette.Dark` (glamour's stock dark/light styles) with heading and link
 colors mapped onto the palette's `Accent`/`Info` slots, so the preview follows
 the IDE theme, live on theme switch (`SetPalette` re-renders). Code blocks get
-glamour's chroma highlighting. Images degrade to their alt-text links —
-terminal image protocols are out of scope.
+glamour's chroma highlighting. Inline images degrade to their alt-text links
+— but image *files* opened from the explorer/editor render for real via the
+[image preview](./image-preview.md) (#1479).
 
 ## Scroll sync
 

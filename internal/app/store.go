@@ -171,6 +171,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindMarkdown:
 			// Path names the previewed source file; restore re-reads it (#62).
 			ids[key] = paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}
+		case pane.KindImage:
+			// Path names the previewed image; restore re-decodes it (#1479).
+			ids[key] = paneIdentity{Kind: "image", Path: inst.Image().Path()}
 		case pane.KindDiff:
 			// Path/Path2 name the compared files; Rev/Rev2 mark revision-
 			// backed sides so restore re-reads blobs instead of files (#508).

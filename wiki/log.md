@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-03 (preview: images via Kitty graphics protocol, #1479)
+
+- New `internal/imgview` pane (`KindImage`, keys `image`/`image:N`): PNG,
+  JPEG, GIF (first frame) and WebP render through the Kitty graphics
+  protocol's Unicode-placeholder flavour — transmit once as a virtual
+  placement, draw plain placeholder cells, terminal composites; repaint-safe
+  by construction. Lazy `a=q` capability probe (response via
+  `uv.KittyGraphicsEvent`), metadata-card fallback (name, format,
+  dimensions, size) on unsupported terminals and decode errors. The `images`
+  FileHandler routes explorer/editor opens to the preview; an end-of-Update
+  reconcile (`imageSyncCmd`) transmits on show/resize and deletes on
+  close/workspace-switch, so no ghost graphics. Layout persistence via
+  `{Kind: "image", Path}`. Added `golang.org/x/image` (WebP decode). New
+  Image Preview concept doc.
+
 ## 2026-08-03 (theme: auto light/dark sync with terminal background, #1480)
 
 - `[theme].auto` (off by default) syncs the scheme with the terminal
