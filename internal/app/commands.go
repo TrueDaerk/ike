@@ -272,6 +272,11 @@ type HistoryForSelectionMsg struct{}
 // browser-viewable types (markup, images, PDF) are opened.
 type OpenInBrowserMsg struct{}
 
+// CompareClipboardMsg runs diff.compareWithClipboard (#1477): open the diff
+// view comparing the active buffer — or the visual selection, when one is
+// active — against the clipboard contents.
+type CompareClipboardMsg struct{}
+
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
@@ -342,6 +347,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),
+			appCommand("diff.compareWithClipboard", "Compare with Clipboard", CompareClipboardMsg{}),
 			appCommand("file.localHistory", "Show Local History", LocalHistoryMsg{}),
 			appCommand("file.copyPath", "Copy Path", CopyPathMsg{Kind: copyAbs}),
 			appCommand("file.copyRelPath", "Copy Relative Path", CopyPathMsg{Kind: copyRel}),

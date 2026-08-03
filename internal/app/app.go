@@ -3340,6 +3340,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, '@')
 		return m, nil
 
+	case CompareClipboardMsg:
+		// diff.compareWithClipboard (palette, #1477): the active buffer — or
+		// the visual selection, when one is active — against the clipboard.
+		m.compareWithClipboard()
+		return m, nil
+
 	case diff.JumpMsg:
 		// enter on a hunk: open the diff's right-hand file with the cursor on
 		// the hunk's first line (JumpMsg lines are 1-based, openPathAt 0-based).

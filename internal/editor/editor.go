@@ -917,6 +917,21 @@ func (m Model) SelectionLines() (start, end int, ok bool) {
 	return start + 1, end + 1, true
 }
 
+// SelectionText returns the text of the active visual selection — whole
+// lines in visual-line mode, the inclusive charwise span otherwise; ok is
+// false outside visual mode. Used by selection-scoped consumers like
+// Compare with Clipboard (#1477).
+func (m *Model) SelectionText() (text string, ok bool) {
+	if !m.mode.IsVisual() {
+		return "", false
+	}
+	t := m.visualSelection()
+	if t.Linewise {
+		return strings.Join(m.buf.Lines()[t.Range.Start.Line:t.Range.End.Line+1], "\n"), true
+	}
+	return m.buf.Slice(t.Range), true
+}
+
 // SetCursor moves the cursor to a 0-based line/column, clamping to a valid
 // normal-mode position and scrolling it into view. Used for programmatic
 // placement (session restore, go-to-definition, usages picks, nav history);

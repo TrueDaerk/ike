@@ -37,6 +37,7 @@ bring their own.
 | Step Over | `debug.stepOver` | `f8` | — | everywhere |
 | Stop Debug Session | `debug.stop` | `cmd+f2` | — | everywhere |
 | Toggle Breakpoint | `debug.toggleBreakpoint` | `cmd+f8` | — | everywhere |
+| Compare with Clipboard | `diff.compareWithClipboard` | — | — | everywhere |
 | Diff Two Files… | `diff.files` | — | — | everywhere |
 | Next Change (Diff) | `diff.nextChange` | `f7` | — | everywhere |
 | Previous Change (Diff) | `diff.prevChange` | `shift+f7` | — | everywhere |
