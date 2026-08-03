@@ -407,7 +407,10 @@ right away. **Tab accepts in both states**, esc closes in both states. The popup
 inactive on the alternate screen (vim/htop), in command sessions, while
 paging scrollback, and **whenever the shell is not at its prompt** (#1340);
 it renders as a bordered list composited over the grid at
-the word's start column, below the cursor row when it fits, above otherwise.
+the word's start column, below the cursor row when it fits, above otherwise;
+an anchor near the right pane edge shifts the box left so it stays one intact
+box inside the pane (#1463) — `overlay.Place` also hard-clips composited rows
+to the canvas width, so an overhanging box can never wrap and tear apart.
 
 **Prompt gating (#1340).** Completion is a shell feature, so it only runs
 while the shell itself is the foreground job — `Session.AtPrompt()` compares

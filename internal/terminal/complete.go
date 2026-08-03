@@ -417,8 +417,12 @@ func (m Model) completionView(view string) string {
 			width = w
 		}
 	}
-	if width+2 > m.w {
-		width = m.w - 2
+	// The rendered box is width + 2 padding + 2 border columns wide.
+	if width+4 > m.w {
+		width = m.w - 4
+	}
+	if width < 1 {
+		return view // pane too narrow for any readable popup
 	}
 	var b strings.Builder
 	sel := lipgloss.NewStyle().Reverse(true)
@@ -443,7 +447,13 @@ func (m Model) completionView(view string) string {
 	}
 	box := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Render(b.String())
 	cx, cy := m.sess.CursorPosition()
+	// Anchor at the start of the word, but keep the whole box (width + border)
+	// inside the pane (#1463): an anchor near the right edge shifts left, else
+	// the overlaid rows exceed the pane width and the render wraps them apart.
 	x := cx - len([]rune(m.comp.word))
+	if x > m.w-width-4 {
+		x = m.w - width - 4
+	}
 	if x < 0 {
 		x = 0
 	}

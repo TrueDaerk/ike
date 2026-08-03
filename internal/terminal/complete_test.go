@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 )
 
@@ -583,6 +584,50 @@ func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
 	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
 		t.Fatalf("ctrl+space on a wrapped line = open=%v items=%v, want [target-file.txt]",
 			m.comp.open, m.comp.items)
+	}
+}
+
+// TestPopupNearRightEdgeStaysIntact (#1463): a popup anchored at a word near
+// the right pane edge used to overflow the pane width, so the surrounding
+// render wrapped its rows and the box fell apart. The x origin is clamped so
+// the whole box stays inside the pane, one intact row per entry.
+func TestPopupNearRightEdgeStaysIntact(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "target-file.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c := &collector{}
+	m := startNarrowShModel(t, c, dir)
+	promptX, promptY := m.sess.CursorPosition()
+
+	// "echo <filler> ta" puts the cursor on the last column without wrapping.
+	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta")-1)
+	for _, r := range "echo " + filler + " ta" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echoed line", func() bool {
+		_, w := parseCmdline(m.lineBeforeCursor())
+		return w == "ta"
+	})
+	if _, y := m.sess.CursorPosition(); y != promptY {
+		t.Fatalf("line must not wrap for this test, cursor moved to row %d", y)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if !m.comp.open || len(m.comp.items) != 1 || m.comp.items[0] != "target-file.txt" {
+		t.Fatalf("popup = open=%v items=%v, want [target-file.txt]", m.comp.open, m.comp.items)
+	}
+	m.SetFocused(true)
+	found := false
+	for _, line := range strings.Split(m.View(), "\n") {
+		if w := ansi.StringWidth(line); w > 30 {
+			t.Fatalf("view row wider than pane (%d > 30): %q", w, ansi.Strip(line))
+		}
+		if strings.Contains(ansi.Strip(line), "│ target-file.txt │") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("popup entry row must stay one intact bordered row")
 	}
 }
 

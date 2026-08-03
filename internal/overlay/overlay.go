@@ -41,7 +41,10 @@ func Place(base, top string, x, y, w, h int) string {
 		if row < 0 || row >= len(baseLines) {
 			continue
 		}
-		baseLines[row] = spliceLine(baseLines[row], tl, x, ansi.StringWidth(tl))
+		spliced := spliceLine(baseLines[row], tl, x, ansi.StringWidth(tl))
+		// Hard-clip the seamed row to the canvas: columns of top past w must
+		// not survive, or the surrounding render wraps the row (#1463).
+		baseLines[row] = ansi.Truncate(spliced, w, "")
 	}
 	return strings.Join(baseLines, "\n")
 }
