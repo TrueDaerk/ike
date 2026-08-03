@@ -148,14 +148,14 @@ highlighted, binary bodies collapsed to a notice.
 |---|---|
 | `j` / `k`, wheel | Scroll |
 | `g` / `G` | Top / bottom (`g` also resets the horizontal offset) |
-| ++left++ / ++right++ | Pan sideways by 8 columns (also shift+wheel) |
+| ++shift+left++ / ++shift+right++ | Pan sideways by 8 columns (also shift+wheel) |
 | `0` / `^` | Back to column 0 |
 | `$` | Jump to the right edge |
 | `/` | Search the whole view — status line, headers and body |
 | `n` / `N` | Next / previous match, wrapping |
 | `y` | Copy the selection, or the whole body when there is none |
 | `Y` | Copy the status line plus headers |
-| `h` / `l` | Older / newer response for this request |
+| `h` / `l`, ++left++ / ++right++ | Older / newer response for this request |
 | `x` | Cancel the request that is running |
 | `za` / `zc` / `zo` | Toggle / close / open the fold at the top of the view |
 | `zM` / `zR` | Collapse every fold / open them all |
@@ -183,8 +183,9 @@ the same from the palette.
 
 The last **5** responses per request are kept in the project under
 `.ike/http/`, keyed by file plus request name, so every request in a
-multi-request file has its own history. `h` and `l` walk it; the footer shows
-where you are (`h/l history 2/5`) and when the response was stored.
+multi-request file has its own history. `h`/`l` or ++left++/++right++ walk it;
+the footer shows where you are (`←/→ history 2/5`) and when the response was
+stored.
 **Browse HTTP Response History** in the palette focuses the viewer and reports
 how many are stored.
 
