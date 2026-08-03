@@ -20,6 +20,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/backup"
@@ -195,6 +196,14 @@ type Model struct {
 	// the OSC 11 reply (#1480); nil until (and unless) the terminal answers.
 	// Feeds resolveTheme's [theme].auto pair selection.
 	termDark *bool
+	// Kitty graphics support (#1479): nil until the probe is acknowledged;
+	// gfxQueried arms the probe once, when the first image pane opens.
+	// liveImages tracks the image ids currently transmitted to the terminal
+	// (shared by pointer across the value-model copies, like toolchainSeg)
+	// so the per-pass reconcile can delete what no visible pane owns.
+	kittyGfx   *bool
+	gfxQueried bool
+	liveImages map[int]bool
 	// toolchainSeg caches the status line's toolchain label per language ID
 	// (#101): resolving an interpreter stats the filesystem and scans PATH, too
 	// costly per frame. Shared by pointer across the value-model copies (like
@@ -733,6 +742,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		recent:         recent,
 		largeToasted:   map[string]bool{},
 		toolchainSeg:   map[string]string{},
+		liveImages:     map[int]bool{},
 		navHist:        &nav.History{},
 		compMRU:        mru.Load(mru.DefaultFile()),
 		bpts:           debug.Load(),
@@ -1110,6 +1120,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below restarting the configured tool (#741)
 		} else if ids[key].Kind == "markdown" {
 			continue // restored below re-reading the source file (#62)
+		} else if ids[key].Kind == "image" {
+			continue // restored below re-decoding the image file (#1479)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -1289,6 +1301,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if data, err := os.ReadFile(id.Path); err == nil {
 				inst.Preview().SetSourceImmediate(string(data))
 			}
+			continue
+		}
+		if id := ids[key]; id.Kind == "image" {
+			// An image preview restores by re-decoding the file (#1479); a
+			// vanished file restores as the pane's own decode-error fallback.
+			panes.AddImageKey(key, id.Path)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -2466,6 +2484,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// switch issues the documentSymbol refresh (deduplicated per path).
 	if sync := mm.structureSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
+	}
+	// Image panes reconcile their Kitty graphics placements here, once the
+	// pass settled (#1479): any message may have opened, closed or resized
+	// one, and the raw transmit/delete sequences must follow the layout.
+	if gfx := mm.imageSyncCmd(); gfx != nil {
+		cmd = tea.Batch(cmd, gfx)
 	}
 	// The breadcrumbs bar (#1153) claims or releases its editor row here,
 	// once the pass settled: symbol data arriving, tab/zen switches and the
@@ -3793,6 +3817,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, config.Reload(m.cfgOpts)
+
+	case OpenImageMsg:
+		m.openImagePreview(msg.Path)
+		return m, nil
+
+	case uv.KittyGraphicsEvent:
+		m.handleKittyGraphics(msg)
+		return m, nil
 
 	case SelectThemeMsg:
 		// Theme switch from the palette's "Theme: <name>" commands. The choice
@@ -8235,6 +8267,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			}
 		case pane.KindMarkdown:
 			title = "PREVIEW " + baseName(inst.Preview().Path())
+		case pane.KindImage:
+			title = "IMAGE " + baseName(inst.Image().Path())
 		case pane.KindDiff:
 			l, rr := inst.Diff().Titles()
 			title = "DIFF " + l + " ⇄ " + rr

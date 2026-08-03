@@ -18,6 +18,7 @@ import (
 	"ike/internal/terminal"
 	"ike/internal/theme"
 	"ike/internal/httppane"
+	"ike/internal/imgview"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -66,6 +67,10 @@ const (
 	// bottom-split panel listing every breakpoint in the project, under key
 	// "breakpoints".
 	KindBreakpoints
+	// KindImage is an image preview pane (#1479); any number may exist, each
+	// bound to one image file, rendered via the Kitty graphics protocol with
+	// a metadata fallback.
+	KindImage
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -98,6 +103,7 @@ type Instance struct {
 	exp  explorer.Model
 	term terminal.Model
 	md   preview.Model
+	iv   imgview.Model
 	df   diff.Model
 	vp   vcspanel.Model
 	dp   debugpanel.Model
@@ -191,7 +197,7 @@ func (i *Instance) ContextID() string {
 		return ctxEditor
 	case KindTerminal:
 		return ctxTerminal
-	case KindMarkdown:
+	case KindMarkdown, KindImage:
 		return ctxPreview
 	case KindDiff:
 		return ctxDiff
@@ -241,6 +247,9 @@ func (i *Instance) ReplaceTerminal(t terminal.Model) {
 // Preview returns the underlying markdown preview model. It is only valid for
 // a markdown instance; callers gate on Kind first.
 func (i *Instance) Preview() *preview.Model { return &i.md }
+
+// Image returns the wrapped image preview model (image panes only).
+func (i *Instance) Image() *imgview.Model { return &i.iv }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -657,6 +666,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.term.SetSize(w, h)
 	case KindMarkdown:
 		i.md.SetSize(w, h)
+	case KindImage:
+		i.iv.SetSize(w, h)
 	case KindDiff:
 		i.w, i.h = w, h
 		i.df.SetSize(w, h)
@@ -693,6 +704,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.term.SetFocused(f)
 	case KindMarkdown:
 		i.md.SetFocused(f)
+	case KindImage:
+		i.iv.SetFocused(f)
 	case KindDiff:
 		i.df.SetFocused(f)
 		if i.dfEdit != nil {
@@ -743,6 +756,8 @@ func (i *Instance) View() string {
 		return i.term.View()
 	case KindMarkdown:
 		return i.md.View()
+	case KindImage:
+		return i.iv.View()
 	case KindDiff:
 		if i.dfEdit != nil {
 			lines := strings.Split(i.dfEdit.View(), "\n")
@@ -915,6 +930,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		}
 	case KindMarkdown:
 		i.md.SetPalette(p)
+	case KindImage:
+		i.iv.SetPalette(p)
 	case KindDiff:
 		i.df.SetPalette(p)
 	case KindVCS:

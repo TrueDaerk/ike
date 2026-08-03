@@ -12,6 +12,7 @@ import (
 	"ike/internal/diff"
 	"ike/internal/host"
 	"ike/internal/httppane"
+	"ike/internal/imgview"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/structpanel"
@@ -33,6 +34,9 @@ const terminalKeyBase = "terminal"
 
 // previewKeyBase is the key of the first markdown preview; later ones append ":N".
 const previewKeyBase = "preview"
+
+// imageKeyBase is the key of the first image preview; later ones append ":N".
+const imageKeyBase = "image"
 
 // diffKeyBase is the key of the first diff viewer; later ones append ":N".
 const diffKeyBase = "diff"
@@ -72,6 +76,7 @@ type Registry struct {
 	editors   int      // count of editors ever allocated, for key minting
 	terminals int      // count of terminals ever allocated, for key minting
 	previews  int      // count of markdown previews ever allocated, for key minting
+	images    int      // count of image previews ever allocated, for key minting
 	diffs     int      // count of diff viewers ever allocated, for key minting
 }
 
@@ -340,6 +345,36 @@ func (r *Registry) AddMarkdownKey(key, path string) *Instance {
 	inst.md = preview.New(key, path, r.pal)
 	r.put(inst)
 	r.advancePastPreview(key)
+	return inst
+}
+
+// AddImagePreview creates an image preview instance bound to the file at
+// path, returning the new instance's key ("image", then "image:N") (#1479).
+func (r *Registry) AddImagePreview(path string) string {
+	r.images++
+	key := imageKeyBase
+	if r.images > 1 {
+		key = imageKeyBase + ":" + strconv.Itoa(r.images)
+	}
+	inst := &Instance{key: key, kind: KindImage, cfg: r.cfg, pal: r.pal}
+	inst.iv = imgview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddImageKey recreates an image preview under an exact key, used by layout
+// restore. The minting counter advances past the key.
+func (r *Registry) AddImageKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindImage, cfg: r.cfg, pal: r.pal}
+	inst.iv = imgview.New(key, path, r.pal)
+	r.put(inst)
+	if len(key) > len(imageKeyBase)+1 && key[:len(imageKeyBase)+1] == imageKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(imageKeyBase)+1:]); err == nil && v > r.images {
+			r.images = v
+		}
+	} else if r.images < 1 {
+		r.images = 1
+	}
 	return inst
 }
 
