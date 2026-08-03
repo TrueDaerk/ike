@@ -622,6 +622,12 @@ func (m *Model) View() string {
 		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(
 			fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince))))
 	}
+	if m.histIdx > 0 {
+		// An older history entry is on show (#1473): the footer hint alone is
+		// easy to miss while reading the body, so the header carries the
+		// marker where the eye actually rests.
+		b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("   " + m.historyMarker()))
+	}
 	b.WriteString("\n")
 
 	height := m.bodyHeight()
@@ -646,6 +652,16 @@ func (m *Model) View() string {
 	}
 	b.WriteString(lipgloss.NewStyle().Faint(true).Render(m.clip(m.footerText())))
 	return b.String()
+}
+
+// historyMarker labels an older history entry on show (#1473), e.g.
+// "⧗ history 2/5 (15:04:05)". Only meaningful while histIdx > 0.
+func (m *Model) historyMarker() string {
+	s := fmt.Sprintf("⧗ history %d/%d", m.histIdx+1, len(m.hist))
+	if at := m.hist[m.histIdx].At; !at.IsZero() {
+		s += " (" + at.Local().Format("15:04:05") + ")"
+	}
+	return s
 }
 
 // footerText renders the key hints plus the history position when older

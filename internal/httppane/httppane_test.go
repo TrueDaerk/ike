@@ -181,11 +181,22 @@ func TestHistoryBrowsing(t *testing.T) {
 	if !strings.Contains(m.View(), "1/3") {
 		t.Errorf("history position missing:\n%s", m.View())
 	}
+	if strings.Contains(m.View(), "⧗ history") {
+		t.Errorf("latest entry must not carry the header marker:\n%s", m.View())
+	}
 
 	// h steps to older entries, clamped at the oldest.
 	m.handleKey(keyPress("h"))
 	if !strings.Contains(m.View(), `"v": 2`) {
 		t.Error("h must show the older response")
+	}
+	// An older entry marks the header so the content is identifiable as
+	// historic at a glance (#1473), timestamp included.
+	if !strings.Contains(m.View(), "⧗ history 2/3") {
+		t.Errorf("header marker missing on older entry:\n%s", m.View())
+	}
+	if want := time.Date(2026, 7, 27, 11, 0, 0, 0, time.UTC).Local().Format("15:04:05"); !strings.Contains(m.View(), "⧗ history 2/3 ("+want+")") {
+		t.Errorf("header marker must carry the timestamp %s:\n%s", want, m.View())
 	}
 	m.handleKey(keyPress("h"))
 	m.handleKey(keyPress("h"))
