@@ -1,6 +1,7 @@
 package app
 
 import (
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -26,17 +27,17 @@ func themeReg() *registry.Registry {
 
 func TestResolveTheme(t *testing.T) {
 	// Named built-in resolves without warning.
-	pal, warn := resolveTheme(themeReg(), host.MapConfig{"theme.name": "tokyo-night"})
+	pal, warn := resolveTheme(themeReg(), host.MapConfig{"theme.name": "tokyo-night"}, nil)
 	if pal.Name != "tokyo-night" || warn != "" {
 		t.Errorf("got %q, warn %q", pal.Name, warn)
 	}
 	// Empty name is the default, no warning.
-	pal, warn = resolveTheme(themeReg(), host.MapConfig{})
+	pal, warn = resolveTheme(themeReg(), host.MapConfig{}, nil)
 	if pal.Name != theme.DefaultName || warn != "" {
 		t.Errorf("empty name: got %q, warn %q", pal.Name, warn)
 	}
 	// Unknown name falls back with a non-fatal warning.
-	pal, warn = resolveTheme(themeReg(), host.MapConfig{"theme.name": "bogus"})
+	pal, warn = resolveTheme(themeReg(), host.MapConfig{"theme.name": "bogus"}, nil)
 	if pal.Name != theme.DefaultName || warn == "" {
 		t.Errorf("unknown name: got %q, warn %q", pal.Name, warn)
 	}
@@ -46,7 +47,7 @@ func TestResolveTheme(t *testing.T) {
 func TestRegistryThemes(t *testing.T) {
 	r := themeReg()
 	r.Add(fakeThemePlugin{})
-	pal, warn := resolveTheme(r, host.MapConfig{"theme.name": "plugin-theme"})
+	pal, warn := resolveTheme(r, host.MapConfig{"theme.name": "plugin-theme"}, nil)
 	if pal.Name != "plugin-theme" || warn != "" {
 		t.Fatalf("got %q, warn %q", pal.Name, warn)
 	}
@@ -233,5 +234,111 @@ func TestReloadPersistsConfigShowHidden(t *testing.T) {
 	_ = tm
 	if _, err := os.Stat(sessionPath); err == nil {
 		t.Error("unrelated reload wrote session.json; expected no write")
+	}
+}
+
+// TestResolveThemeAuto (#1480): with theme.auto on and a classified terminal
+// background, the light/dark pair wins; without a classification (or with
+// auto off) theme.name applies.
+func TestResolveThemeAuto(t *testing.T) {
+	dark, light := true, false
+	cfg := host.MapConfig{
+		"theme.name":  "tokyo-night",
+		"theme.auto":  "true",
+		"theme.light": "intellij-light",
+		"theme.dark":  "gruvbox",
+	}
+	pal, warn := resolveTheme(themeReg(), cfg, &dark)
+	if pal.Name != "gruvbox" || warn != "" {
+		t.Errorf("dark background: got %q, warn %q", pal.Name, warn)
+	}
+	pal, warn = resolveTheme(themeReg(), cfg, &light)
+	if pal.Name != "intellij-light" || warn != "" {
+		t.Errorf("light background: got %q, warn %q", pal.Name, warn)
+	}
+	// Terminal never answered: theme.name stays in effect.
+	pal, _ = resolveTheme(themeReg(), cfg, nil)
+	if pal.Name != "tokyo-night" {
+		t.Errorf("unknown background: got %q", pal.Name)
+	}
+	// Auto off: theme.name wins even with a classification.
+	cfg["theme.auto"] = "false"
+	pal, _ = resolveTheme(themeReg(), cfg, &dark)
+	if pal.Name != "tokyo-night" {
+		t.Errorf("auto off: got %q", pal.Name)
+	}
+	// Unknown pair member falls back with a warning, like theme.name.
+	cfg["theme.auto"] = "true"
+	cfg["theme.dark"] = "bogus"
+	pal, warn = resolveTheme(themeReg(), cfg, &dark)
+	if pal.Name != theme.DefaultName || warn == "" {
+		t.Errorf("unknown pair member: got %q, warn %q", pal.Name, warn)
+	}
+}
+
+// TestThemeNamesByDark: the auto-pair enums partition the registry by the
+// themes' Dark flag.
+func TestThemeNamesByDark(t *testing.T) {
+	lights := themeNamesByDark(themeReg(), false)
+	darks := themeNamesByDark(themeReg(), true)
+	if len(lights) == 0 || len(darks) == 0 {
+		t.Fatalf("partitions empty: %d light, %d dark", len(lights), len(darks))
+	}
+	seen := map[string]bool{}
+	for _, n := range append(lights, darks...) {
+		seen[n] = true
+	}
+	if !seen["intellij-light"] || !seen[theme.DefaultName] {
+		t.Errorf("expected members missing (%v / %v)", lights, darks)
+	}
+	for _, n := range lights {
+		if n == theme.DefaultName {
+			t.Errorf("default (dark) listed as light")
+		}
+	}
+}
+
+// TestBackgroundColorAppliesAutoTheme (#1480): the OSC 11 reply re-resolves
+// the auto pair, and an explicit selection turns auto off again.
+func TestBackgroundColorAppliesAutoTheme(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	if err := os.WriteFile(filepath.Join(dir, "settings.toml"),
+		[]byte("[theme]\nauto = true\nlight = \"intellij-light\"\ndark = \"gruvbox\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load(config.Discover(""))
+	config.Set(cfg)
+	defer config.Set(nil)
+	m := NewWith(themeReg(), host.FromConfig(cfg))
+
+	tm, _ := m.Update(tea.BackgroundColorMsg{Color: color.RGBA{R: 0xfa, G: 0xfa, B: 0xfa, A: 0xff}})
+	m = tm.(Model)
+	if m.pal().Name != "intellij-light" {
+		t.Fatalf("light background must pick theme.light, got %q", m.pal().Name)
+	}
+	tm, _ = m.Update(tea.BackgroundColorMsg{Color: color.RGBA{A: 0xff}})
+	m = tm.(Model)
+	if m.pal().Name != "gruvbox" {
+		t.Fatalf("dark background must pick theme.dark, got %q", m.pal().Name)
+	}
+
+	// Explicit selection wins: it applies immediately and the returned write
+	// also turns theme.auto off.
+	tm, cmd := m.Update(SelectThemeMsg{Name: "nord"})
+	m = tm.(Model)
+	if m.pal().Name != "nord" {
+		t.Fatalf("explicit selection must apply, got %q", m.pal().Name)
+	}
+	if cmd == nil {
+		t.Fatal("selection must return the config write")
+	}
+	runUntilReload(t, cmd)
+	data, err := os.ReadFile(filepath.Join(dir, "settings.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s := string(data); !strings.Contains(s, "auto = false") || !strings.Contains(s, "nord") {
+		t.Fatalf("explicit selection must persist theme.name and disable auto, got %q", s)
 	}
 }

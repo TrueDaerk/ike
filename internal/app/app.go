@@ -191,6 +191,10 @@ type Model struct {
 	// verdict toasts any deficiencies (#720). Value state is fine: the
 	// reports and the verdict all flow through Update's model copies.
 	caps termCaps
+	// termDark is the terminal background's light/dark classification from
+	// the OSC 11 reply (#1480); nil until (and unless) the terminal answers.
+	// Feeds resolveTheme's [theme].auto pair selection.
+	termDark *bool
 	// toolchainSeg caches the status line's toolchain label per language ID
 	// (#101): resolving an interpreter stats the filesystem and scans PATH, too
 	// costly per frame. Shared by pointer across the value-model copies (like
@@ -666,7 +670,7 @@ func newWithHost(reg *registry.Registry, cfg host.Config, h *host.Host) Model {
 func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *workspace.Manager) Model {
 	h.SetConfig(cfg)
 	applyPluginConfig(reg, cfg)
-	themePal, themeWarning := resolveTheme(reg, cfg)
+	themePal, themeWarning := resolveTheme(reg, cfg, nil)
 	root, _ := os.Getwd()
 	// Missing-formatter install hints (#1402, the #1067 pattern) surface as
 	// warn toasts; re-wiring on a project switch keeps the live host.
@@ -790,7 +794,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
 	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
-	pages := settings.BasePages(themeNames(reg))
+	pages := settings.BasePages(themeNames(reg), themeNamesByDark(reg, false), themeNamesByDark(reg, true))
 	// The [theme.captures] editor (#1238) belongs with the theme picker.
 	pages = settings.InsertAfter(pages, "Appearance", settings.Page{
 		Title:  "Syntax Colors",
@@ -2397,6 +2401,9 @@ func (m Model) explorer() *explorer.Model {
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
+	// Query the terminal background (OSC 11, #1480) so [theme].auto can pick
+	// the light/dark pair; harmless where unsupported (no reply, no wait).
+	cmds = append(cmds, tea.RequestBackgroundColor)
 	// The TODO index's initial full scan (#61): Init runs after main.go wires
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.
@@ -2518,6 +2525,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case termCheckMsg:
 		return m, m.runTermCheck()
+
+	case tea.BackgroundColorMsg:
+		// The OSC 11 reply (#1480): classify the terminal background and,
+		// with [theme].auto on, re-resolve the light/dark pair. A terminal
+		// that never answers simply never sends this — no timeout needed,
+		// [theme].name stays in effect.
+		dark := theme.IsDarkColor(msg.Color)
+		m.termDark = &dark
+		if m.autoThemeEnabled() {
+			pal, warning := resolveTheme(m.reg, m.host.Config(), m.termDark)
+			m.applyTheme(pal)
+			if warning != "" {
+				m.host.Notify(host.Warn, warning)
+			}
+		}
+		return m, nil
+
+	case SyncThemeMsg:
+		// Re-query the background on demand (themes.syncTerminal); the reply
+		// re-enters above.
+		return m, tea.RequestBackgroundColor
 
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height

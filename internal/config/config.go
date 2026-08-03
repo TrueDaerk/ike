@@ -179,6 +179,8 @@ func (c *Config) Flat() map[string]string {
 	}
 
 	put("theme.name", c.Theme.Name)
+	put("theme.auto", c.Theme.Auto)
+	put("theme.light", c.Theme.Light)
 	put("theme.dark", c.Theme.Dark)
 
 	put("project.max_history", c.Project.MaxHistory)

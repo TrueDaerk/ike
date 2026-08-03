@@ -133,7 +133,7 @@ func TestOpenPythonEnvWizard(t *testing.T) {
 		return ""
 	}
 	tp.run = func(string, ...string) string { return "" }
-	m := New(append(BasePages([]string{"default"}), Page{Title: "Toolchain", Custom: tp}), testOpts(t))
+	m := New(append(BasePages([]string{"default"}, nil, nil), Page{Title: "Toolchain", Custom: tp}), testOpts(t))
 	m.SetSize(90, 30)
 	if !m.OpenPythonEnvWizard() {
 		t.Fatal("the toolchain page must be found")

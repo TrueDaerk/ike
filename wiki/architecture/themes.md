@@ -362,6 +362,26 @@ Config is the single source of truth: `reloadConfig` re-resolves and
 re-threads the palette on every reload, so both the palette pick and a manual
 `[theme].name` edit land the same way.
 
+## Auto light/dark sync (#1480)
+
+With `[theme].auto = true`, the theme follows the terminal background:
+`Init` sends `tea.RequestBackgroundColor` (an OSC 11 query) and the reply
+arrives as `tea.BackgroundColorMsg`, classified by `theme.IsDarkColor`
+(linearised Rec. 709 relative luminance, dark below 0.5) into
+`Model.termDark`. `resolveTheme` then picks `[theme].light` or
+`[theme].dark` instead of `[theme].name`; both pair members resolve with the
+same unknown-name fallback. A terminal that never answers simply never sends
+the message — no timeout, no hang — and `termDark` stays nil, so
+`[theme].name` keeps applying (startup renders it until the reply lands).
+`themes.syncTerminal` ("Theme: Sync with Terminal Background") re-queries on
+demand, e.g. after flipping the terminal's appearance. Explicit selection
+wins: `themes.select.*` / the settings picker applies the choice and also
+writes `theme.auto = false` in the same user-scope mutation batch. The
+Appearance page exposes the switch plus the pair enums, partitioned by each
+theme's `Dark` flag (`themeNamesByDark`). Auto is off by default
+(`light = "intellij-light"`, `dark = "default"`); `theme.dark` repurposes the
+key of a never-read pre-#1480 bool.
+
 ## Boundaries
 
 - Tree-sitter capture *classification* + the highlight pipeline stay in

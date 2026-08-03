@@ -77,7 +77,7 @@ func TestListEntryCommitsEmptyList(t *testing.T) {
 // TestExplorerPageInBaseCatalog: the Explorer page exists and carries the
 // exclude entry (#1139).
 func TestExplorerPageInBaseCatalog(t *testing.T) {
-	for _, p := range BasePages([]string{"default"}) {
+	for _, p := range BasePages([]string{"default"}, nil, nil) {
 		if p.Title != "Explorer" {
 			continue
 		}

@@ -382,7 +382,16 @@ type LSP struct {
 // Theme selects the active palette; its contents are owned by Roadmap 0110.
 type Theme struct {
 	Name string `toml:"name"`
-	Dark bool   `toml:"dark"`
+	// Auto syncs the theme with the terminal background (#1480, OSC 11): when
+	// on, the background's light/dark classification picks Light or Dark
+	// below. An explicit selection (themes.select.*, the settings picker)
+	// turns it off again. Off by default.
+	Auto bool `toml:"auto"`
+	// Light and Dark name the pair Auto chooses between. Dark repurposes the
+	// key of a never-read bool (pre-#1480); a leftover `dark = true` in an
+	// old settings file surfaces as a decode diagnostic, not a crash.
+	Light string `toml:"light"`
+	Dark  string `toml:"dark"`
 	// Captures overrides individual syntax-highlighting colours on top of the
 	// active theme (#1318): capture name ("keyword", "constant.builtin",
 	// "rainbow.0") -> colour token (name, #rrggbb, ANSI index). A slot map,

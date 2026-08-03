@@ -136,7 +136,11 @@ func defaults() *Config {
 		},
 		Theme: Theme{
 			Name: "default",
-			Dark: true,
+			Auto: false,
+			// The auto pair (#1480): matches the default dark scheme with the
+			// JetBrains-flavoured light one.
+			Light: "intellij-light",
+			Dark:  "default",
 			// A slot map like explorer.colors / keymap.bindings: seeded
 			// non-nil so layers merge into it key by key (#1318).
 			Captures: map[string]string{},

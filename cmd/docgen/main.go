@@ -277,7 +277,15 @@ Settings, or run `+"`settings.open`"+` from the palette.`))
 	for i, t := range themes {
 		names[i] = t.Name
 	}
-	pages := append(settings.BasePages(names), reg.SettingsPages()...)
+	light, dark := []string{}, []string{}
+	for _, t := range themes {
+		if t.Dark {
+			dark = append(dark, t.Name)
+		} else {
+			light = append(light, t.Name)
+		}
+	}
+	pages := append(settings.BasePages(names, light, dark), reg.SettingsPages()...)
 
 	section := ""
 	for _, p := range pages {
