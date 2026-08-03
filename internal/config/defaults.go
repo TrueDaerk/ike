@@ -81,6 +81,7 @@ func defaults() *Config {
 			Rulers:                 []int{},
 			StickyScroll:           true,
 			StickyScrollDepth:      4,
+			SmartPaste:             true,
 			MarkdownRendering:      true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,

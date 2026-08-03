@@ -244,6 +244,9 @@ type Editor struct {
 	// (#168); StickyScrollDepth caps how many nested headers are pinned.
 	StickyScroll      bool `toml:"sticky_scroll"`
 	StickyScrollDepth int  `toml:"sticky_scroll_depth"`
+	// SmartPaste re-indents a multi-line linewise paste to the target line's
+	// indentation, preserving relative structure (#1476).
+	SmartPaste bool `toml:"smart_paste"`
 	// MarkdownRendering enables the in-editor Markdown semi-preview (#881):
 	// bold/italic/strikethrough text attributes, marker concealment on
 	// non-cursor lines, and box-drawing pipe tables while the cursor is

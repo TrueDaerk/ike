@@ -44,6 +44,7 @@ Settings, or run `settings.open` from the palette.
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
 | Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rrggbb, rgb(), hsl()) with their own color |
 | Sticky scroll depth | `editor.sticky_scroll_depth` | integer (1–10) | `4` | user | Maximum number of nested header lines pinned at once |
+| Smart paste | `editor.smart_paste` | boolean | `true` | user | Re-indent multi-line pastes to the target line's indentation, preserving relative structure |
 | Case-insensitive search | `editor.search_ignore_case` | boolean | `false` | user | Match in-file / and ? searches ignoring case by default; a \C query prefix forces exact case. Off = smartcase: all-lowercase folds, any uppercase matches exactly |
 | Soft wrap | `editor.wrap` | boolean | `false` | user | Wrap long lines at the pane edge |
 | Show whitespace | `editor.show_whitespace` | enum: `none`, `trailing`, `all` | `none` | user | Render spaces and tabs visibly |
