@@ -117,8 +117,11 @@ multi-step state. Each `Feed(key, context)` returns:
 - **Pending** — the sequence is a prefix of a longer chord; the caller arms a
   `TimeoutDuration` (600ms) timer. A prefix wins over an equal-length exact match
   (so `cmd+k down` stays reachable); an exact binding on the bare prefix is
-  recovered on `Timeout` (none exists by default since #750 — `cmd+k` alone
-  simply times out and the sequence family is unaffected).
+  recovered on `Timeout`. A bare prefix without an exact binding **survives**
+  the timeout (#1482): `Timeout` keeps the pending chord and reports Pending,
+  so the which-key popup stays open until a continuation key, a non-matching
+  key (Feed restarts from it), or an explicit `Reset` (mouse click) ends the
+  sequence.
 - **Resolved** — a binding matched; `Command` carries the id.
 - **NoMatch** — nothing; the caller lets the key fall through. An aborted prefix
   restarts the sequence from the new key rather than stranding it.
@@ -140,9 +143,11 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 - A **Resolved** id that names a registered command runs it via `host.API`; an
   inert id falls through — unless the blocked ledger documents it, in which
   case the chord is consumed with an explanatory toast (#267). **Pending**
-  swallows the key and schedules a
-  `keymapTimeoutMsg`; on timeout the held chord resolves as an exact binding or is
-  discarded.
+  swallows the key, surfaces the which-key popup (bordered, bottom-centered
+  above the status line) and schedules a `keymapTimeoutMsg`; on timeout the
+  held chord resolves as an exact binding, or — as a bare prefix — stays
+  pending with the popup open (#1482). A mouse click while a chord is pending
+  resets the resolver and closes the popup; the click then acts normally.
 
 ## Terminal limits & fallback
 
