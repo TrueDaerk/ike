@@ -279,13 +279,21 @@ func (m *Model) paste(reg rune, after bool, count int, gp bool) {
 			m.caretsOnePerLine()
 		}
 		m.fanMutate(func(rec *history.Recorder, pos, _ buffer.Position) buffer.Position {
-			return operator.Paste(m.buf, rec, e, pos, after, count, gp)
+			// Smart paste (#1476) re-indents per caret, so every paste
+			// matches its own target line.
+			ee := e
+			ee.Text = m.smartPasteEntry(e, pos.Line)
+			return operator.Paste(m.buf, rec, ee, pos, after, count, gp)
 		})
 		m.dot = &dotCommand{run: func(mm *Model) { mm.paste(reg, after, count, gp) }}
 		return
 	}
+	// Smart paste (#1476): a linewise multi-line block re-indents to the
+	// target line before the insert, keeping the paste one undo unit.
+	ee := e
+	ee.Text = m.smartPasteEntry(e, m.cursor.Line)
 	m.mutate(func(rec *history.Recorder) buffer.Position {
-		return operator.Paste(m.buf, rec, e, m.cursor, after, count, gp)
+		return operator.Paste(m.buf, rec, ee, m.cursor, after, count, gp)
 	})
 	m.dot = &dotCommand{run: func(mm *Model) { mm.paste(reg, after, count, gp) }}
 }
@@ -775,7 +783,9 @@ func (m *Model) clipboardPaste() {
 		return
 	}
 	if m.insert.active {
-		m.insertText(e.Text)
+		// Smart paste (#1476): continuation lines re-indent to the target;
+		// the splice stays part of the open insert's undo unit.
+		m.insertText(m.smartPasteInsertText(e.Text))
 		return
 	}
 	m.paste('+', false, 1, false)

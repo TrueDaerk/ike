@@ -120,6 +120,19 @@ line runs that test (see /architecture/run-configurations.md).
   deletes or changes: a stray `dw` must not clobber what the user has on
   their clipboard. `p`/`P` keep reading the internal register unchanged —
   external content still comes in through `Cmd+V` / bracketed paste.
+  **Smart paste (#1476, `internal/editor/smartpaste.go`).** A linewise
+  multi-line `p`/`P` (any register, dot-repeat, multi-caret — the target
+  indent resolves per caret) strips the block's common leading indentation
+  (measured in display columns, so tabs and spaces mix) and re-applies the
+  target line's indentation, preserving relative structure; the relative
+  indent is re-emitted in the buffer's indent style (`editor.use_spaces` /
+  `editor.tab_width`, i.e. editorconfig-aware). A blank target line takes
+  the indentation of the nearest non-blank line above; blank block lines
+  stay empty. The transform runs on the register text before the insert, so
+  the paste stays one undo unit. A `Cmd+V` mid-insert re-indents only the
+  continuation lines (the first line splices at the cursor). Single-line
+  pastes, charwise pastes and terminal bracketed paste (`PasteText`) stay
+  verbatim; `editor.smart_paste = false` turns the transform off.
   **Clipboard failures surface (#1255).** Every `"+` write used to be
   `_ = clip.Write(text)`, so a clipboard utility that was missing, sandboxed
   or failing produced the same "copied 3 lines" toast as a working one — the

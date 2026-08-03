@@ -424,6 +424,7 @@ type Model struct {
 	showInlayHints     bool
 	stickyScroll       bool
 	stickyDepth        int
+	smartPaste         bool
 
 	// View options (#64). softWrap/wsMode/indentGuides follow the [editor]
 	// config until their palette toggle flips them; the *Set flags mark a
@@ -484,6 +485,7 @@ func New() Model {
 		showInlayHints:     false,
 		stickyScroll:       true,
 		stickyDepth:        4,
+		smartPaste:         true,
 		hlTheme:            highlight.NewTheme(nil, nil),
 		cmdHistIdx:         -1,
 		visualStart:        -1,
@@ -610,6 +612,7 @@ func (m *Model) applyConfig() {
 	}
 	m.applyMarkToggles()
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
+	m.smartPaste = boolOr(m.cfg, "editor.smart_paste", m.smartPaste)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
 	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
