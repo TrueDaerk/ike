@@ -663,6 +663,15 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.caretAddAll()
+	case "caret_add_above", "caret_add_below":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		dir := 1
+		if action == "caret_add_above" {
+			dir = -1
+		}
+		m.caretCloneVertical(dir)
 	case "fold_toggle":
 		m.foldToggle()
 	case "fold_close":

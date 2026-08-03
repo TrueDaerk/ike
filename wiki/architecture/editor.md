@@ -608,6 +608,12 @@ re-clamps them into the mutated buffer like the cursor.
   caret.
 - `editor.caret.addAll` (`ctrl+shift+g`): a caret on every
   occurrence at once.
+- `editor.caret.addAbove` / `addBelow` (`alt+shift+up` / `alt+shift+down`,
+  #1481): each press clones a caret one line above the top-most / below the
+  bottom-most caret, growing a caret column for same-column edits in
+  line-based files. The clone keeps the extreme caret's `desiredCol`: on a
+  shorter line it clamps to the line end, but the next clone continues at the
+  original column. Buffer edges are a no-op.
 - `alt+click` toggles a secondary caret at the clicked cell; a plain click
   collapses back to a single cursor.
 - Visual block `I`/`A` converts the rectangle into carets — `I` at the block's

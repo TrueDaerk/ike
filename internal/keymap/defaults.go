@@ -215,6 +215,11 @@ var jetbrainsRows = []row{
 	// select-all-occurrences chord (the JetBrains original needs alt).
 	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},
 	{"ctrl+shift+g", "editor.caret.addAll", "Add carets at all occurrences", Editor, "Multi-caret (#145)"},
+	// Caret column cloning (#1481): the JetBrains clone-caret gesture. Arrows
+	// carry the alt+shift modifiers in the legacy CSI encoding, so delivery is
+	// broad despite the fragile alt class; the palette stays the fallback.
+	{"alt+shift+up", "editor.caret.addAbove", "Clone caret above", Editor, "Multi-caret (#1481)"},
+	{"alt+shift+down", "editor.caret.addBelow", "Clone caret below", Editor, "Multi-caret (#1481)"},
 	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.

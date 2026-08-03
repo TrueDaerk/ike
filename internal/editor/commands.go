@@ -63,6 +63,8 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
 			action("editor.caret.addNext", "Add Caret at Next Occurrence", "caret_add_next", ""),
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
+			action("editor.caret.addAbove", "Clone Caret Above", "caret_add_above", ""),
+			action("editor.caret.addBelow", "Clone Caret Below", "caret_add_below", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 			// View options (#64): per-view display toggles. They flip the
