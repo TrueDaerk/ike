@@ -341,7 +341,10 @@ entry never fails a dispatch.
 After each dispatch the app appends the response and hands the stored list
 to the viewer: `h`/`l` or `←`/`→` (#1471) browse older/newer responses of the
 current request, with the footer showing the position (`←/→ history 2/5`)
-and the stored timestamp.
+and the stored timestamp. While an *older* entry is shown (index > 0) the
+pane header additionally carries a warning-colored `⧗ history 2/5 (15:04:05)`
+marker (#1473), so historic content is identifiable where the eye rests
+while reading — the footer hint alone was easy to miss.
 
 **Discoverability** (#1267): the footer hint appears from the *first*
 response on (`←/→ history 1/1`), not only once a second one exists — and it

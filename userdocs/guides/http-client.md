@@ -185,7 +185,9 @@ The last **5** responses per request are kept in the project under
 `.ike/http/`, keyed by file plus request name, so every request in a
 multi-request file has its own history. `h`/`l` or ++left++/++right++ walk it;
 the footer shows where you are (`←/→ history 2/5`) and when the response was
-stored.
+stored. While an older entry is shown, the pane header also carries a
+`⧗ history 2/5 (15:04:05)` marker so you can't mistake it for the latest
+response.
 **Browse HTTP Response History** in the palette focuses the viewer and reports
 how many are stored.
 
