@@ -1,5 +1,14 @@
 # Log
 
+## 2026-08-03 (editor: control bytes & SGR interpretation, #1469)
+
+- Raw C0 controls/DEL in a buffer render as one-cell Control Pictures glyphs
+  (`␛` for ESC) instead of leaking to the terminal — one rune stays one
+  display cell, so click mapping, caret and selection stay aligned. SGR
+  sequences are interpreted per line (`editor/ansiescape.go`): governed text
+  takes the file's own colour/attributes through the normal styling pipeline,
+  the sequence runes render dim, overlays still win. Copy keeps the bytes.
+
 ## 2026-08-02 (theme: inheritance analysis & navigation, 0480 #1448)
 
 - Work stream 0480 (#1448–#1455): IntelliJ-style inheritance features on two

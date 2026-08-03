@@ -758,6 +758,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	}
 	wsStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
 	guideStyle := lipgloss.NewStyle().Foreground(m.theme().IndentGuide)
+	// Control bytes (#1469): render as one-cell ␛-style glyphs so nothing
+	// reaches the terminal raw; SGR sequences additionally colour the text
+	// they govern (see ansiescape.go).
+	ctrlStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
+	var sgrSpans []sgrSpan
+	if hasCtrlRune(runes) {
+		sgrSpans = parseSGRSpans(runes)
+	}
 	rulerBG := m.theme().Ruler
 	isRuler := func(cell int) bool {
 		for _, r := range m.rulers {
@@ -831,6 +839,12 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			case r == ' ' && m.guideAt(col, indentEnd, abs):
 				cell = "│"
 				overlay = &guideStyle
+			case isCtrlRune(r):
+				// Control byte (#1469): a one-cell placeholder glyph, never
+				// the raw byte — one buffer rune stays one display cell, so
+				// click mapping and caret rendering stay aligned.
+				cell = ctrlGlyph(r)
+				overlay = &ctrlStyle
 			default:
 				cell = string(r)
 			}
@@ -875,6 +889,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// Whitespace glyphs / indent guides (#64) replace the syntax
 				// colour; cursor/selection/search already won above.
 				st, styled = *overlay, true
+			}
+			if sp, ok := sgrSpanAt(sgrSpans, col); ok {
+				// SGR interpretation (#1469): the sequence's own runes dim
+				// like the ␛ glyph; the text it governs takes the file's own
+				// colour/attributes in place of the syntax colour.
+				if sp.Seq {
+					st, styled = ctrlStyle, true
+				} else if overlay == nil {
+					st, styled = sp.apply(st), true
+				}
 			}
 			if isRuler(abs) {
 				// Ruler tint (#64): a background stripe under everything the
