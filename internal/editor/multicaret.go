@@ -530,6 +530,37 @@ func (m *Model) caretAddAll() {
 	}
 }
 
+// caretCloneVertical implements editor.caret.addAbove/addBelow (#1481): each
+// invocation adds a secondary caret one line above the top-most (dir < 0) or
+// below the bottom-most (dir > 0) caret, so repeated presses grow a caret
+// column. The clone keeps the extreme caret's remembered column: on a shorter
+// line the caret clamps to the line end but desiredCol survives, so the next
+// clone continues at the original column. Buffer edges are a no-op.
+func (m *Model) caretCloneVertical(dir int) {
+	extLine, extCol := m.cursor.Line, m.desiredCol
+	for _, c := range m.carets {
+		if (dir > 0 && c.pos.Line > extLine) || (dir < 0 && c.pos.Line < extLine) {
+			extLine, extCol = c.pos.Line, c.desiredCol
+		}
+	}
+	line := extLine + dir
+	if line < 0 || line > m.buf.LineCount()-1 {
+		return
+	}
+	p := m.buf.ClampCursor(buffer.Position{Line: line, Col: extCol})
+	if p.Equal(m.cursor) {
+		return
+	}
+	for _, c := range m.carets {
+		if c.pos.Equal(p) {
+			return
+		}
+	}
+	m.carets = append(m.carets, caret{pos: p, desiredCol: extCol})
+	m.sortCarets()
+	m.emit(EventCursorMove)
+}
+
 // blockCarets converts the visual-block rectangle into carets — one per line
 // — and enters insert mode: I at the block's left edge (skipping lines
 // shorter than it, vim-style), A one past its right edge, clamped to each

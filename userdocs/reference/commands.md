@@ -162,7 +162,9 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Clone Caret Above | `editor.caret.addAbove` | `alt+shift+up` | — | `editor` pane |
 | Add Carets at All Occurrences | `editor.caret.addAll` | `ctrl+shift+g` | — | `editor` pane |
+| Clone Caret Below | `editor.caret.addBelow` | `alt+shift+down` | — | `editor` pane |
 | Add Caret at Next Occurrence | `editor.caret.addNext` | `ctrl+g` | — | `editor` pane |
 | Toggle Block Comment | `editor.commentBlock` | `cmd+shift+7` | — | `editor` pane |
 | Toggle Line Comment | `editor.commentLine` | `cmd+7` | — | `editor` pane |

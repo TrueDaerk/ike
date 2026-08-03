@@ -317,3 +317,72 @@ func TestCaretCommandLineCollapses(t *testing.T) {
 		t.Fatalf("command line must collapse carets")
 	}
 }
+
+func TestCaretCloneBelowGrowsColumn(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbravo\ncharlie")
+	m.cursor = buffer.Position{Line: 0, Col: 2}
+	m.desiredCol = 2
+	m, _ = m.runAction("caret_add_below")
+	m, _ = m.runAction("caret_add_below")
+	want := []buffer.Position{{Line: 1, Col: 2}, {Line: 2, Col: 2}}
+	got := m.Carets()
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("carets at %v, want %v", got, want)
+	}
+	// The primary caret never moves.
+	if m.cursor != (buffer.Position{Line: 0, Col: 2}) {
+		t.Fatalf("primary moved to %v", m.cursor)
+	}
+	// Bottom edge: a further clone is a no-op.
+	m, _ = m.runAction("caret_add_below")
+	if got := m.Carets(); len(got) != 2 {
+		t.Fatalf("edge clone added a caret: %v", got)
+	}
+}
+
+func TestCaretCloneAboveGrowsColumn(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbravo\ncharlie")
+	m.cursor = buffer.Position{Line: 2, Col: 3}
+	m.desiredCol = 3
+	m, _ = m.runAction("caret_add_above")
+	m, _ = m.runAction("caret_add_above")
+	want := []buffer.Position{{Line: 0, Col: 3}, {Line: 1, Col: 3}}
+	got := m.Carets()
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("carets at %v, want %v", got, want)
+	}
+	// Top edge no-op.
+	m, _ = m.runAction("caret_add_above")
+	if got := m.Carets(); len(got) != 2 {
+		t.Fatalf("edge clone added a caret: %v", got)
+	}
+}
+
+func TestCaretCloneShortLineKeepsColumn(t *testing.T) {
+	// The middle line is shorter than the clone column: the caret clamps to
+	// the line end, but desiredCol survives so the next clone lands back on
+	// the original column.
+	m, _ := loaded(t, "longline\nab\nlongline")
+	m.cursor = buffer.Position{Line: 0, Col: 6}
+	m.desiredCol = 6
+	m, _ = m.runAction("caret_add_below")
+	m, _ = m.runAction("caret_add_below")
+	want := []buffer.Position{{Line: 1, Col: 1}, {Line: 2, Col: 6}}
+	got := m.Carets()
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("carets at %v, want %v", got, want)
+	}
+}
+
+func TestCaretCloneTypedColumnEdit(t *testing.T) {
+	m, _ := loaded(t, "a1\nb2\nc3")
+	m.cursor = buffer.Position{Line: 0, Col: 1}
+	m.desiredCol = 1
+	m, _ = m.runAction("caret_add_below")
+	m, _ = m.runAction("caret_add_below")
+	m = send(m, keys("i")...)
+	m = typeKeys(m, "-")
+	if got := m.Text(); got != "a-1\nb-2\nc-3" {
+		t.Fatalf("column edit drifted: %q", got)
+	}
+}

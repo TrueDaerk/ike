@@ -125,6 +125,8 @@ Active when an editor pane has focus.
 | Add caret at next occurrence | `ctrl+g` | `ctrl+g` | `editor.caret.addNext` |
 | Add carets at all occurrences | `ctrl+shift+g` | `ctrl+shift+g` | `editor.caret.addAll` |
 | Call hierarchy | `ctrl+alt+h` | `ctrl+alt+h` | `lsp.callHierarchy` |
+| Clone caret above | `alt+shift+up` | `alt+shift+up` | `editor.caret.addAbove` |
+| Clone caret below | `alt+shift+down` | `alt+shift+down` | `editor.caret.addBelow` |
 | Comment block | `cmd+shift+7` | `ctrl+shift+7` | `editor.commentBlock` |
 | Comment line | `cmd+7` | `ctrl+7` | `editor.commentLine` |
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |

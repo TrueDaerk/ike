@@ -109,6 +109,8 @@ var actionMap = map[string]string{
 	"EditorLineEnd":         "editor.lineEnd",
 	"SelectNextOccurrence":  "editor.caret.addNext",
 	"SelectAllOccurrences":  "editor.caret.addAll",
+	"EditorCloneCaretAbove": "editor.caret.addAbove",
+	"EditorCloneCaretBelow": "editor.caret.addBelow",
 
 	// Find & replace.
 	"Find":          "editor.find",
