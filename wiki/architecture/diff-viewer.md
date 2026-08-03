@@ -66,6 +66,20 @@ then places the diff pane and focuses it. Dismissing the picker mid-flow
 disarms the state so a later `@` open is a plain file open. Unreadable files
 diff as empty text.
 
+## diff.compareWithClipboard command
+
+`diff.compareWithClipboard` (palette, #1477) compares the active buffer
+against the system clipboard: clipboard on the left (read-only), the live
+buffer text (unsaved edits included) on the right. An active visual selection
+narrows the right side to the selected text (`editor.Model.SelectionText` —
+whole lines in visual-line mode, the inclusive charwise span otherwise); the
+right title gains a `(selection)` suffix and the file link (jump/edit) is
+dropped. A whole-buffer compare of a file-backed editor keeps the path, so
+enter-jump and `e`-editing work like the HEAD diff. An empty clipboard (or a
+missing clipboard utility) shows a notification instead of an empty diff. The
+pane routes through the single diff slot / `placeDiffLeaf` like every other
+diff-open (`internal/app/diff_clipboard.go`).
+
 ## Pane placement
 
 Every diff-open (HEAD diff, commit diff, `diff.files`) routes its freshly
