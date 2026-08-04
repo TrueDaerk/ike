@@ -24,7 +24,14 @@ state the root model owns into one swappable unit:
   seam. Parked workspaces stay fully alive — PTY readers, run processes and
   debug bridges never depended on being rendered. `Workspace.Aux` carries
   app-owned live extras across the park (the debug session state and, since
-  #1407, the popup terminal).
+  #1407, the popup terminal). Parked terminal sessions run in a cheaper
+  ingest mode (#1522, `Session.SetParked`): output still lands in the grid
+  and the (upstream-capped) scrollback, but no `OutputMsg` is sent — each
+  one is a full program Update pass for a grid nobody renders — and the
+  feed loop folds the available spool backlog into batched emulator passes
+  (`parkedBatchMax`). Un-parking on resume delivers the one owed repaint
+  per session. `performSwitch` flips the flag for terminal panes, editor
+  terminal tabs and the popup via `setWorkspaceTerminalsParked`.
 
 ## Root-model integration
 

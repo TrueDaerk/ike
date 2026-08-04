@@ -213,6 +213,9 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 	if m.activeWS().Panes == srcPanes {
 		t.Fatal("the new project must get its own pane registry")
 	}
+	if !srcPanes.Get(termKey).Terminal().Parked() {
+		t.Fatal("a parked workspace's terminal must carry the parked flag (#1522)")
+	}
 	for _, key := range m.activeWS().Panes.Keys() {
 		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindTerminal {
 			t.Fatal("the src terminal must stay parked, not follow into dst")
@@ -230,6 +233,9 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 	inst := m.activeWS().Panes.Get(termKey)
 	if inst == nil || inst.Kind() != pane.KindTerminal || inst.Terminal() != sess {
 		t.Fatal("the resumed workspace must hold the same live terminal session")
+	}
+	if inst.Terminal().Parked() {
+		t.Fatal("a resumed workspace's terminal must drop the parked flag (#1522)")
 	}
 	if !inst.Terminal().Running() {
 		t.Fatal("the resumed session must still be running")

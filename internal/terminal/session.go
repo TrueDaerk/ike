@@ -105,6 +105,12 @@ type Session struct {
 	mouseModes map[ansi.Mode]struct{}
 
 	notifyPending atomic.Bool
+	// parked marks a session whose workspace sits in the background set
+	// (#1522): nobody renders it, so output notifications are suppressed
+	// (notifyMissed remembers that a repaint is owed for un-park) and the
+	// feed loop batches spool chunks into fewer emulator passes.
+	parked       atomic.Bool
+	notifyMissed atomic.Bool
 
 	// version counts grid mutations (feed writes, resizes, clears); the View
 	// render cache is keyed by it (#803), so an unchanged grid never pays a
@@ -345,13 +351,28 @@ func (s *Session) feedLoop() {
 		if !ok {
 			return
 		}
+		var extra [][]byte
+		if s.parked.Load() {
+			// Parked (#1522): nobody watches, so interactivity doesn't
+			// matter — fold the whole available backlog into one emulator
+			// pass (one lock, one version tick) instead of waking per chunk.
+			extra = s.out.drain(parkedBatchMax - len(chunk))
+		}
 		s.gridMu.Lock()
 		_, _ = s.em.Write(chunk)
+		for _, c := range extra {
+			_, _ = s.em.Write(c)
+		}
 		s.gridMu.Unlock()
 		s.version.Add(1)
 		s.notify()
 	}
 }
+
+// parkedBatchMax bounds one parked feed pass (#1522): large enough to fold a
+// firehose burst into few passes, small enough that un-parking never waits on
+// a monster write behind gridMu.
+const parkedBatchMax = 256 * 1024
 
 // writeLoop pumps the emulator's host-bound bytes (key encodings from
 // SendKey, terminal query replies like DA1/DSR) into the PTY. It keeps
@@ -389,9 +410,32 @@ func (s *Session) waitExit() {
 	}
 }
 
-// notify schedules one OutputMsg per quiet interval.
+// SetParked flags the session as belonging to a parked background workspace
+// (#1522). While parked, output produces no OutputMsg — every send is a full
+// program Update pass for a grid nobody renders — and the feed loop coalesces
+// harder. Un-parking delivers the one repaint owed for everything that
+// arrived meanwhile.
+func (s *Session) SetParked(parked bool) {
+	s.parked.Store(parked)
+	if !parked && s.notifyMissed.Swap(false) {
+		s.notify()
+	}
+}
+
+// Parked reports whether the session currently carries the parked flag.
+func (s *Session) Parked() bool { return s.parked.Load() }
+
+// notify schedules one OutputMsg per quiet interval; a parked session only
+// records that output happened (#1522).
 func (s *Session) notify() {
-	if s.send == nil || !s.notifyPending.CompareAndSwap(false, true) {
+	if s.send == nil {
+		return
+	}
+	if s.parked.Load() {
+		s.notifyMissed.Store(true)
+		return
+	}
+	if !s.notifyPending.CompareAndSwap(false, true) {
 		return
 	}
 	time.AfterFunc(notifyQuiet, func() {

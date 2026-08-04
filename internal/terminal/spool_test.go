@@ -168,3 +168,26 @@ func TestSpoolCloseUnblocksBlockedPut(t *testing.T) {
 		t.Fatal("close must unblock a blocked put")
 	}
 }
+
+// TestSpoolDrainBatchesWithinBudget guards #1522: drain returns the buffered
+// chunks up to the byte budget without blocking, in order, and leaves the
+// remainder for take.
+func TestSpoolDrainBatchesWithinBudget(t *testing.T) {
+	sp := newSpool()
+	sp.put([]byte("aa"))
+	sp.put([]byte("bb"))
+	sp.put([]byte("cccc"))
+	got := sp.drain(4)
+	if len(got) != 2 || string(got[0]) != "aa" || string(got[1]) != "bb" {
+		t.Fatalf("drain(4) = %q, want [aa bb]", got)
+	}
+	if sp.drain(3) != nil {
+		t.Fatal("a chunk over the budget must stay buffered")
+	}
+	if c, ok := sp.take(); !ok || string(c) != "cccc" {
+		t.Fatalf("take after drain = %q/%v, want cccc", c, ok)
+	}
+	if sp.drain(1024) != nil {
+		t.Fatal("an empty spool drains nothing")
+	}
+}

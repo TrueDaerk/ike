@@ -173,6 +173,10 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// (#1521): its servers stop after project.background_lsp_timeout in the
 	// background, unless it resumes first.
 	idleCmd := armWorkspaceIdle(parkedRoot)
+	// Its terminals stop requesting repaints and batch their PTY ingest
+	// (#1522) — output-heavy background jobs must not cost an Update pass
+	// per quiet interval for grids nobody renders.
+	setWorkspaceTerminalsParked(m.ws.Peek(parkedRoot), true)
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -197,6 +201,19 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// never produced events. Reconcile every resumed buffer against disk:
 	// clean buffers reload in place, dirty ones arm the conflict guard.
 	reconcile := sized.reconcileEditors()
+	// A resumed workspace's terminals go live again (#1522): the parked flag
+	// drops and each session with pending output delivers its one owed
+	// repaint. The resumed popup moved into the model (Aux is consumed), so
+	// it un-parks through the model's own reference; a first visit has no
+	// terminals and both calls no-op.
+	setWorkspaceTerminalsParked(sized.activeWS(), false)
+	for _, inst := range sized.popup.instances() {
+		for i := 0; i < inst.TabCount(); i++ {
+			if t := inst.TabTerminal(i); t != nil {
+				t.SetParked(false)
+			}
+		}
+	}
 	// Same catch-up for the explorer tree (#1520): the auto-refresh poll would
 	// get there eventually (and not at all with explorer.auto_refresh off), so
 	// re-stat the loaded tree once right now. A first visit's explorer is
