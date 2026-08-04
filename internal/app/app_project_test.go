@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -613,5 +614,51 @@ func TestQuitAggregatesBackgroundDirty(t *testing.T) {
 	m = out.(Model)
 	if m.closePromptOpen() || m.ws.Peek(root) == nil {
 		t.Fatal("esc must cancel the quit with everything untouched")
+	}
+}
+
+// TestSwitchBackReconcilesParkedBuffers pins #1515: while a workspace is
+// parked its watcher is stopped, so external edits (e.g. a coding agent doing
+// atomic-rename saves) produce no events. Resuming the workspace must catch
+// the buffers up: clean ones reload from disk.
+func TestSwitchBackReconcilesParkedBuffers(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	file := filepath.Join(src, "watched.txt")
+	if err := os.WriteFile(file, []byte("original\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(src)
+	invalidateCwd()
+	t.Cleanup(invalidateCwd)
+	m := switchModel(t)
+	tm, _ := m.Update(explorer.OpenFileMsg{Path: file})
+	m = tm.(Model)
+
+	// Park src by switching away, then replace the file's content externally
+	// (write temp + rename — the coding-agent save pattern).
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	tmp := file + ".tmp"
+	if err := os.WriteFile(tmp, []byte("replaced while parked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, file); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ = m.Update(project.SwitchProjectMsg{Root: src})
+	m = out.(Model)
+	ed := m.editorForPath(file)
+	if ed == nil {
+		t.Fatal("the parked editor must resume with the workspace")
+	}
+	if got := ed.Text(); !strings.Contains(got, "replaced while parked") {
+		t.Fatalf("resumed buffer must reload the external change, got %q", got)
 	}
 }
