@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -80,17 +81,28 @@ type debugOut struct {
 
 // Messages carrying async session activity back into Update.
 type (
-	// debugEventMsg is one raw adapter event.
-	debugEventMsg struct{ ev dap.Event }
+	// debugEventMsg is one raw adapter event, tagged with its owning session
+	// (#1523) so an event from a parked workspace's still-running debuggee is
+	// never applied to the active workspace's session state. A nil sess is
+	// the launch handshake window and reads as the active session.
+	debugEventMsg struct {
+		sess *dap.Session
+		ev   dap.Event
+	}
 	// debugStoppedMsg carries the fetched stop context (thread + frames).
+	// sess guards against the fetch goroutine outliving a project switch or
+	// session restart (#1523): a mismatch is dropped.
 	debugStoppedMsg struct {
+		sess     *dap.Session
 		threadID int
 		frames   []dap.StackFrame
 	}
 	// debugErrMsg surfaces an async session error.
 	debugErrMsg struct{ err error }
-	// debugEndedMsg reports session termination (exit code when known).
+	// debugEndedMsg reports session termination (exit code when known); sess
+	// guards like debugStoppedMsg.
 	debugEndedMsg struct {
+		sess     *dap.Session
 		exitCode int
 		hasCode  bool
 	}
@@ -275,7 +287,23 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	}
 
 	send := m.host.Send
-	onEvent := func(ev dap.Event) { send(debugEventMsg{ev: ev}) }
+	// Events are tagged with their owning session (#1523) so Update can route
+	// one from a parked workspace's debuggee away from the active session's
+	// state. The session pointer only exists after Connect/Start below, while
+	// the reader goroutine (and thus onEvent) starts inside them — hence the
+	// guarded holder; the handshake's own events may still carry nil, which
+	// the handler treats as the active session (the launch that is m.dbg by
+	// the time the message is processed).
+	var (
+		evMu   sync.Mutex
+		evSess *dap.Session
+	)
+	onEvent := func(ev dap.Event) {
+		evMu.Lock()
+		s := evSess
+		evMu.Unlock()
+		send(debugEventMsg{sess: s, ev: ev})
+	}
 	// An in-process adapter (PHP's DBGp bridge, 0360) wins over an argv spawn;
 	// past construction both session kinds behave identically.
 	var sess *dap.Session
@@ -301,6 +329,9 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 			return
 		}
 	}
+	evMu.Lock()
+	evSess = sess
+	evMu.Unlock()
 	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
 	m.dbgLaunching = false
 	// A still-open pane pair from the previous session starts clean (#689):
@@ -343,16 +374,23 @@ func withAdapterStderr(err error, sess *dap.Session) error {
 }
 
 // handleDebugEvent routes one adapter event.
-func (m *Model) handleDebugEvent(ev dap.Event) {
+func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 	dbg := m.dbg
-	if dbg == nil {
-		// Trailing output after the session finished (the adapter flushes the
-		// debuggee's last writes past `terminated`) still reaches the
-		// transcript (#637) — and the still-open finished panel (#689).
+	if dbg == nil || (evSess != nil && evSess != dbg.sess) {
+		// Not the active session's event. A parked workspace's debuggee owns
+		// it (#1523): route it there. Otherwise it is trailing output after
+		// the session finished (the adapter flushes the debuggee's last
+		// writes past `terminated`), which still reaches the transcript
+		// (#637) — and the still-open finished panel (#689). A mismatch
+		// while another session runs (dbg != nil) only logs: feeding the new
+		// session's terminal would interleave two programs' output.
+		if m.applyParkedDebugEvent(evSess, ev) {
+			return
+		}
 		if ev.Name == "output" {
 			if o := ev.Output(); o.Category != "telemetry" {
 				logDebugOutput(o.Category == "stderr", o.Output)
-				if inst := m.debugTermInstance(); inst != nil && inst.Terminal().IsPipe() {
+				if inst := m.debugTermInstance(); dbg == nil && inst != nil && inst.Terminal().IsPipe() {
 					inst.Terminal().FeedText(o.Output)
 				}
 			}
@@ -398,7 +436,7 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 				send(debugErrMsg{err: err})
 				return
 			}
-			send(debugStoppedMsg{threadID: threadID, frames: frames})
+			send(debugStoppedMsg{sess: sess, threadID: threadID, frames: frames})
 		}()
 	case "continued":
 		// A spontaneous resume (another client, a conditional breakpoint the
@@ -434,9 +472,9 @@ func (m *Model) handleDebugEvent(ev dap.Event) {
 		}
 	case "exited":
 		x := ev.Exited()
-		go func() { send(debugEndedMsg{exitCode: x.ExitCode, hasCode: true}) }()
+		go func() { send(debugEndedMsg{sess: sess, exitCode: x.ExitCode, hasCode: true}) }()
 	case "terminated":
-		go func() { send(debugEndedMsg{}) }()
+		go func() { send(debugEndedMsg{sess: sess}) }()
 	case "ike.filterDetach":
 		// The listener rejected a request on the hostname filter (#938):
 		// surface it — a filter false-negative must be distinguishable from
@@ -539,7 +577,9 @@ func (m Model) updateDebugMapPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // navigate to (nil when there is nothing to show).
 func (m *Model) applyDebugStop(msg debugStoppedMsg) *dap.StackFrame {
 	dbg := m.dbg
-	if dbg == nil {
+	if dbg == nil || (msg.sess != nil && msg.sess != dbg.sess) {
+		// The fetch goroutine outlived a switch or restart (#1523): the stop
+		// belongs to a session that is no longer the active one.
 		return nil
 	}
 	dbg.threadID = msg.threadID
@@ -720,6 +760,47 @@ func (m *Model) ensureDebugTerminal() {
 	m.flushDebugOutput()
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// applyParkedDebugEvent routes an adapter event whose session belongs to a
+// parked background workspace (#1523). Output reaches the owning workspace's
+// transcript and its parked debuggee terminal (or its capped pendingOut
+// buffer when none is open) — never the active workspace's panes. All other
+// events are consumed without effect: state is not applied while parked (the
+// 0370 contract), and the paused/finished reality surfaces on re-attach.
+// Reports false when no parked workspace owns sess.
+func (m *Model) applyParkedDebugEvent(sess *dap.Session, ev dap.Event) bool {
+	if sess == nil {
+		return false
+	}
+	for _, root := range m.ws.Background() {
+		w := m.ws.Peek(root)
+		if w == nil {
+			continue
+		}
+		extras, ok := w.Aux.(wsExtras)
+		if !ok || extras.dbg == nil || extras.dbg.sess != sess {
+			continue
+		}
+		if ev.Name != "output" {
+			return true
+		}
+		o := ev.Output()
+		if o.Category == "telemetry" {
+			return true
+		}
+		stderr := o.Category == "stderr"
+		logDebugOutputAt(root, stderr, o.Output)
+		if inst := w.Panes.Get(extras.dbgTermKey); inst != nil &&
+			inst.Kind() == pane.KindTerminal && inst.Terminal().IsPipe() {
+			inst.Terminal().FeedText(o.Output)
+		} else {
+			extras.dbg.pendingOut = appendPendingOut(extras.dbg.pendingOut,
+				debugOut{stderr: stderr, text: o.Output})
+		}
+		return true
+	}
+	return false
 }
 
 // flushDebugOutput drains the pre-pane output buffer into the debuggee
@@ -928,7 +1009,10 @@ func (m *Model) stopDebugSession(notify bool) {
 // finishDebugSession handles adapter-reported termination.
 func (m *Model) finishDebugSession(msg debugEndedMsg) {
 	dbg := m.dbg
-	if dbg == nil {
+	if dbg == nil || (msg.sess != nil && msg.sess != dbg.sess) {
+		// A parked or replaced session ended (#1523): the active session's
+		// state is not the one that finished. The parked side needs no
+		// bookkeeping here — its dead session surfaces on re-attach.
 		return
 	}
 	m.clearPausedMarker()

@@ -3254,8 +3254,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case debugEventMsg:
-		// Raw adapter events (initialized, stopped, output, terminated, …).
-		m.handleDebugEvent(msg.ev)
+		// Raw adapter events (initialized, stopped, output, terminated, …),
+		// routed by owning session (#1523): a parked workspace's events never
+		// touch the active session's state.
+		m.handleDebugEvent(msg.sess, msg.ev)
 		return m, nil
 
 	case debugStoppedMsg:
