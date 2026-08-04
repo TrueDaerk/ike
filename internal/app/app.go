@@ -3177,6 +3177,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showHTTPHistory()
 		return m, nil
 
+	case HTTPShowResponseMsg:
+		// http.showResponse (palette, #1492): show the stored responses of
+		// the request under the cursor without dispatching it.
+		m.showStoredHTTPResponse()
+		return m, nil
+
 	case HTTPCopyBodyMsg:
 		// http.copyBody (palette, #1266): the shown body to the clipboard.
 		return m, m.copyHTTPResponse(false)

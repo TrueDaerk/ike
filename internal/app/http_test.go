@@ -393,6 +393,111 @@ func TestHTTPResponseHistoryCommand(t *testing.T) {
 	}
 }
 
+// TestHTTPShowResponseLoadsStoredHistory covers http.showResponse (#1492):
+// with the cursor on a request that was dispatched before, the command loads
+// its stored responses into the viewer without dispatching anything.
+func TestHTTPShowResponseLoadsStoredHistory(t *testing.T) {
+	m := httpApp(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "req.http")
+	src := "### first\nGET http://localhost/a\n\n### second\nGET http://localhost/b\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Seed stored responses for "first" as past dispatches would have.
+	for i := 0; i < 2; i++ {
+		resp := sampleResponse("first")
+		resp.Body = []byte(`{"n":` + strconv.Itoa(i) + `}`)
+		out, _ := m.Update(HTTPResponseMsg{Source: path, Request: "first", Resp: resp})
+		m = out.(Model)
+	}
+	// The pane now shows a later dispatch of another request.
+	out, _ := m.Update(HTTPResponseMsg{Source: path, Request: "second", Resp: sampleResponse("second")})
+	m = out.(Model)
+	if got := m.httpPanel().Request(); got != "second" {
+		t.Fatalf("precondition: pane shows %q, want second", got)
+	}
+
+	// Cursor sits on line 1 (block "first") — the command must switch the
+	// viewer to first's stored history without a dispatch.
+	out, _ = m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+	out, cmd := m.Update(HTTPShowResponseMsg{})
+	m = out.(Model)
+	if cmd != nil {
+		if _, ok := cmd().(HTTPResponseMsg); ok {
+			t.Fatal("http.showResponse must not dispatch")
+		}
+	}
+	if got := m.httpPanel().Request(); got != "first" {
+		t.Errorf("pane request: %q, want first", got)
+	}
+	if idx, n := m.httpPanel().HistoryIndex(); idx != 0 || n != 2 {
+		t.Errorf("history state: %d/%d, want 0/2", idx, n)
+	}
+	if m.activeWS().Panes.Focused() != pane.HTTPKey {
+		t.Errorf("the command must focus the response pane, focused=%q", m.activeWS().Panes.Focused())
+	}
+}
+
+// TestHTTPShowResponseOpensViewer: the command opens the pane when it is not
+// part of the layout yet — stored responses are viewable right after a
+// restart, before any dispatch (#1492).
+func TestHTTPShowResponseOpensViewer(t *testing.T) {
+	m := httpApp(t)
+	path := filepath.Join(t.TempDir(), "req.http")
+	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := httphistory.New(httpHistoryDir())
+	store.Append(path, "one", httphistory.FromResponse(sampleResponse("one"), time.Now()))
+
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+	out, _ = m.Update(HTTPShowResponseMsg{})
+	m = out.(Model)
+	if !m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Fatal("the command must open the viewer for stored responses")
+	}
+	if got := m.httpPanel().Request(); got != "one" {
+		t.Errorf("pane request: %q, want one", got)
+	}
+}
+
+// TestHTTPShowResponseWithoutHistoryNotifies: no stored responses means a
+// notice, not a dispatch and not an empty pane (#1492).
+func TestHTTPShowResponseWithoutHistoryNotifies(t *testing.T) {
+	m := httpApp(t)
+	path := filepath.Join(t.TempDir(), "req.http")
+	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+	out, _ = m.Update(HTTPShowResponseMsg{})
+	m = out.(Model)
+	if m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Error("no stored responses must not open the viewer")
+	}
+}
+
+// TestHTTPShowResponseGatesOnFileType mirrors http.run's gate (#1492).
+func TestHTTPShowResponseGatesOnFileType(t *testing.T) {
+	m := httpApp(t)
+	path := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+	out, _ = m.Update(HTTPShowResponseMsg{})
+	m = out.(Model)
+	if m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Error("a non-.http file must not open the viewer")
+	}
+}
+
 // TestHTTPResponseHistoryWithoutPane must not panic or open anything.
 func TestHTTPResponseHistoryWithoutPane(t *testing.T) {
 	m := httpApp(t)
