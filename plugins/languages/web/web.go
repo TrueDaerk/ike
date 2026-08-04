@@ -78,6 +78,10 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"package.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "vscode-langservers-extracted"},
+			// The server only advertises documentFormattingProvider when
+			// initializationOptions carries provideFormatter: true (#1507);
+			// without it, Reformat File has no provider for HTML at all.
+			Settings: map[string]any{"provideFormatter": true},
 		},
 		BlockComment: [2]string{"<!--", "-->"},
 		IndentAfter:  []string{">"},
@@ -94,6 +98,9 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"package.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "vscode-langservers-extracted"},
+			// Same mechanism as HTML/JSON (#1507): formatting is only
+			// advertised when provideFormatter: true is passed at initialize.
+			Settings: map[string]any{"provideFormatter": true},
 		},
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{"},
