@@ -256,7 +256,16 @@ central path: each rule is the ignore-rule condition grammar plus a trailing
 first match wins and `off` drops the diagnostic. Codeless diagnostics are
 never remapped — pyright, gopls and friends publish syntax errors without a
 `code`, so syntax errors always stay errors. Rule edits re-apply live from
-the same raw cache. Exact-code rules additionally pass through **natively**
+the same raw cache. The condition grammar carries one pseudo-condition,
+`partial` (#1510, `internal/lsp/partial.go`), matching only diagnostics whose
+message classifies as a **union-partial** type mismatch — the first quoted
+segment (inferred type) and the last (expected type) are split into top-level
+union members, and the expected members must be a strict subset of the
+inferred ones (`str | None` where `str` is expected), gated on the message
+reading as an assignability complaint. Message phrasing is server-specific
+(pyright is the tested one), so `partial` rules should carry `source=`; being
+message-based they never qualify as native overrides and always apply
+client-side. The keyword works in ignore rules too — the grammar is shared. Exact-code rules additionally pass through **natively**
 at server initialize: a `ServerSpec` may declare `SeverityOverridesPath`
 (pyright: `["python","analysis","diagnosticSeverityOverrides"]`), and
 `resolveSpec` folds `NativeSeverityOverrides` — the rules whose sole
