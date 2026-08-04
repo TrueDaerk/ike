@@ -73,6 +73,22 @@ func logDebugOutput(stderr bool, text string) {
 	appendDebugSessionLog(text)
 }
 
+// logDebugOutputAt is logDebugOutput for a parked workspace's debuggee
+// (#1523): the transcript lands under the owning project's root, not the
+// active one's. With IKE_CONFIG_DIR set both resolve to the same redirected
+// file, matching debugSessionLogFile.
+func logDebugOutputAt(root string, stderr bool, text string) {
+	if os.Getenv("IKE_CONFIG_DIR") != "" || root == "" {
+		logDebugOutput(stderr, text)
+		return
+	}
+	text = debugpanel.StripANSI(text)
+	if stderr {
+		text = prefixLines(text, "[stderr] ")
+	}
+	appendDebugSessionLogTo(filepath.Join(root, ".ike", "debug-session.log"), text)
+}
+
 // logDebugSessionStart writes a delimiter line so consecutive sessions stay
 // distinguishable in the transcript (#637).
 func logDebugSessionStart(name string) {
@@ -81,7 +97,12 @@ func logDebugSessionStart(name string) {
 
 // appendDebugSessionLog appends text to debug-session.log, best-effort.
 func appendDebugSessionLog(text string) {
-	path := debugSessionLogFile()
+	appendDebugSessionLogTo(debugSessionLogFile(), text)
+}
+
+// appendDebugSessionLogTo appends text to the given transcript file,
+// best-effort.
+func appendDebugSessionLogTo(path, text string) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}

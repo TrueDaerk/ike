@@ -57,7 +57,14 @@ layout as before. Consequences:
   exit is simply ignored until the workspace resumes.
 - **Background events are not applied**: a debug stop or terminal exit in a
   parked workspace waits until re-attach (the pane then shows its final
-  state); nothing is torn down.
+  state); nothing is torn down. Debug adapter events carry their owning
+  `*dap.Session` (#1523), so a parked debuggee's events never touch the
+  active workspace's session state: output routes into the owning
+  workspace's transcript (`<root>/.ike/debug-session.log`) and its parked
+  debuggee terminal — or its `pendingOut` buffer, capped at
+  `maxPendingOut` chunks — while state events (`stopped`, `terminated`,
+  …) are consumed without effect. The async stop/ended follow-up
+  messages are session-guarded the same way.
 
 ## Background LSP idle shutdown (#1521)
 
