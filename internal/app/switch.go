@@ -171,6 +171,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
 	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
+	// The notification history is session state, not workspace state (#1514):
+	// it rides across the switch (entries carry their project root, so the
+	// history view can label foreign ones), as does the unseen counter.
+	fresh.history = m.history
+	fresh.notifUnseen = m.notifUnseen
 	// The incoming project's settings layer just applied (0380): surface its
 	// load diagnostics like any reload (#793).
 	fresh.notifyConfigDiags(diags)

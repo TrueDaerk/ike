@@ -12,6 +12,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
+	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/watch"
 )
@@ -309,5 +310,52 @@ func TestToastNeverCoversStatusLine(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(lines, "\n"), "hello toast") {
 		t.Fatal("toast missing from frame")
+	}
+}
+
+// TestHistorySurvivesProjectSwitch pins #1514: the notification history ring
+// rides across a seamless project switch, entries keep the root they were
+// emitted in, and the history view labels foreign-project entries.
+func TestHistorySurvivesProjectSwitch(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Chdir(src)
+	invalidateCwd()
+	// performSwitch invalidates the cwd cache on chdir, but t.Chdir's cleanup
+	// restore does not — drop the cache so later tests read their true cwd.
+	t.Cleanup(invalidateCwd)
+	m := switchModel(t)
+	m, _ = notify(m, host.Info, "emitted in src")
+	if len(m.history) != 1 {
+		t.Fatalf("history = %d want 1", len(m.history))
+	}
+	if got := m.history[0].root; !sameDir(t, got, src) {
+		t.Fatalf("entry root = %q, want src", got)
+	}
+	unseen := m.notifUnseen
+
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	if len(m.history) != 1 || m.history[0].text != "emitted in src" {
+		t.Fatalf("history must survive the switch, got %+v", m.history)
+	}
+	if m.notifUnseen != unseen {
+		t.Fatalf("unseen counter = %d want %d", m.notifUnseen, unseen)
+	}
+	view := m.historyView()
+	if !strings.Contains(view, "[src]") {
+		t.Fatalf("foreign entry should carry its project label, view:\n%s", view)
+	}
+
+	// A notification in the new project stays unlabeled.
+	m, _ = notify(m, host.Info, "emitted in dst")
+	view = m.historyView()
+	if strings.Contains(view, "[dst]") {
+		t.Fatalf("current-project entries must stay unlabeled, view:\n%s", view)
 	}
 }

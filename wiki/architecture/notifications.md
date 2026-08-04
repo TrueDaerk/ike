@@ -46,6 +46,12 @@ Every notification (toast-worthy or not) is recorded in a **ring of the newest
 command (palette) opens the ring in the floating shell: newest first,
 severity-colored, `HH:MM:SS` timestamps.
 
+The ring is session state, not workspace state (#1514): it survives a seamless
+project switch (the root model carries `history` and the unseen counter into
+the rebuilt model). Each entry records the project root it was emitted in;
+the view labels entries from other projects with a dimmed `[project]` suffix,
+while current-project entries stay unlabeled.
+
 The status line shows an unseen-count segment (`● N`, #101): entries recorded
 since the history view was last opened; opening it resets the counter. See
 [Status Line Segments](/architecture/status-line.md).
