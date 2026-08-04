@@ -200,6 +200,15 @@ no-op, undo history survives), a dirty buffer whose file provably changed
 (disk hash differs) is marked stale so the next save runs the conflict
 guard; a deleted file leaves the buffer untouched — it is the only copy.
 
+**Explorer resync on resume (#1520).** The same catch-up covers the tree:
+`performSwitch` sends the resumed explorer one `explorer.ResyncMsg`, which
+re-scans every expanded, loaded directory from the root (the auto-refresh
+poll would get there eventually, and not at all with
+`explorer.auto_refresh = "false"`). Expansion survives because scan results
+merge over existing children; the selection stays on its entry via the
+per-merge stability snap in `applyScan`. Git status needs no extra step —
+`StartWatcher` sends a `vcsInvalidateMsg` on every switch.
+
 **Settings scope (0380, #795).** The config reload inside `performSwitch`
 runs after the chdir, so the incoming project's `.ike/settings.toml` layer
 applies and the outgoing project's overrides drop in the same step — theme,
