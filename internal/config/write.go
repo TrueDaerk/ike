@@ -39,6 +39,7 @@ func DefaultScope(key string) Scope {
 	case strings.HasPrefix(key, "project."),
 		strings.HasPrefix(key, "lsp.servers."),
 		key == "lsp.diagnostics_ignore",
+		key == "lsp.diagnostics_severity",
 		strings.HasPrefix(key, "lang."),
 		strings.HasPrefix(key, "format."),
 		strings.HasPrefix(key, "toolchain."):

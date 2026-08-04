@@ -377,6 +377,14 @@ type LSP struct {
 	// token is shorthand for code=. All present conditions must match
 	// (case-insensitive, * wildcards). Conventionally project-scoped.
 	DiagnosticsIgnore []string `toml:"diagnostics_ignore"`
+	// DiagnosticsSeverity remaps published diagnostic severities per rule
+	// (#1503): each entry is the diagnostics_ignore condition grammar plus a
+	// trailing severity keyword — `[source=<glob>] [code=<glob>] [msg=<glob>]
+	// <error|warning|info|hint|off>` — first match wins, `off` drops the
+	// diagnostic. Codeless diagnostics (syntax errors) are never remapped.
+	// Exact-code rules additionally pass through natively to servers that
+	// support per-rule overrides (pyright's diagnosticSeverityOverrides).
+	DiagnosticsSeverity []string `toml:"diagnostics_severity"`
 	// Onboarded records that the first-start server-install dialog (#301) has
 	// had its say (answered or skipped); it is never shown again once set.
 	Onboarded bool `toml:"onboarded"`

@@ -32,6 +32,25 @@ func (m *Model) compileDiagIgnore() bool {
 	return true
 }
 
+// compileDiagSeverity refreshes the compiled severity remap rules (#1503)
+// from the live config and reports whether the rules changed.
+func (m *Model) compileDiagSeverity() bool {
+	raw := config.Get().LSP.DiagnosticsSeverity
+	if slices.Equal(raw, m.diagSeverityRaw) {
+		return false
+	}
+	m.diagSeverityRaw = slices.Clone(raw)
+	m.diagSeverity = ilsp.CompileSeverityRules(raw)
+	return true
+}
+
+// filterDiags runs one raw set through the ignore filter (#1259) and the
+// severity remap (#1503), in that order — the one shaping pass every consumer
+// sees.
+func (m *Model) filterDiags(diags []ilsp.Diagnostic) []ilsp.Diagnostic {
+	return m.diagSeverity.Apply(m.diagIgnore.Filter(diags))
+}
+
 // applyDiagnostics is the single entry point for a published diagnostic set:
 // cache the raw set, filter it and fan it out to the Problems store and the
 // path's editor views. An empty raw set drops the cache entry.
@@ -44,7 +63,7 @@ func (m *Model) applyDiagnostics(path string, diags []ilsp.Diagnostic) tea.Cmd {
 	} else {
 		m.rawDiags[path] = diags
 	}
-	filtered := m.diagIgnore.Filter(diags)
+	filtered := m.filterDiags(diags)
 	m.probStore.Set(path, filtered)
 	return m.routeToEditor(path, ilsp.DiagnosticsMsg{Path: path, Diagnostics: filtered})
 }
@@ -54,7 +73,7 @@ func (m *Model) applyDiagnostics(path string, diags []ilsp.Diagnostic) tea.Cmd {
 func (m *Model) refilterDiagnostics() []tea.Cmd {
 	var cmds []tea.Cmd
 	for path, raw := range m.rawDiags {
-		filtered := m.diagIgnore.Filter(raw)
+		filtered := m.filterDiags(raw)
 		m.probStore.Set(path, filtered)
 		if cmd := m.routeToEditor(path, ilsp.DiagnosticsMsg{Path: path, Diagnostics: filtered}); cmd != nil {
 			cmds = append(cmds, cmd)

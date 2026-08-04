@@ -14,6 +14,14 @@ type ServerSpec struct {
 	Env         []string
 	RootMarkers []string
 	Settings    map[string]any // forwarded as initializationOptions
+	// SeverityOverridesPath, when set, names the nested settings path this
+	// server reads native per-rule severity overrides from (#1503) — e.g.
+	// pyright: ["python","analysis","diagnosticSeverityOverrides"]. The LSP
+	// plugin folds the exact-code lsp.diagnostics_severity rules into
+	// Settings under this path (pyright vocabulary: error / warning /
+	// information / none), so the server stops escalating at the source;
+	// the client-side remap still covers everything else.
+	SeverityOverridesPath []string
 	// Install is the recipe that installs the server binary when it is
 	// missing (0180, #131): a plain argv shelled out as-is, e.g.
 	// ["go", "install", "golang.org/x/tools/gopls@latest"]. Empty means the

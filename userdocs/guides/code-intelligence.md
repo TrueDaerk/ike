@@ -81,6 +81,18 @@ a popup.
 Diagnostics are shown three ways at once: underlined in the text, as marks in
 the scrollbar, and collected in the Problems window.
 
+Too strict? `lsp.diagnostics_severity` remaps what a rule counts as: each
+entry names a diagnostic rule and the severity you want — for example
+`reportArgumentType warning` turns pyright's argument-type errors into
+warnings, and `reportUnusedImport off` hides that rule entirely. The full
+form takes the same `source=` / `code=` / `msg=` glob conditions as the
+ignore rules, with the severity keyword (`error`, `warning`, `info`, `hint`,
+`off`) last; the first matching rule wins. Real syntax errors always stay
+errors. For pyright the exact-rule entries are also handed to the server
+itself (its native `diagnosticSeverityOverrides`), for every other server IKE
+remaps what the server publishes — either way the editor and the Problems
+window agree, and edits to the rules apply immediately.
+
 ## On save
 
 Two settings, both off by default, both applying to **manual** saves only —

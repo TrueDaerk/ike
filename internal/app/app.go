@@ -367,6 +367,10 @@ type Model struct {
 	rawDiags      map[string][]ilsp.Diagnostic
 	diagIgnore    ilsp.IgnoreRules
 	diagIgnoreRaw []string
+	// diagSeverity/diagSeverityRaw are the compiled lsp.diagnostics_severity
+	// remap rules (#1503), applied after the ignore filter on the same path.
+	diagSeverity    ilsp.SeverityRules
+	diagSeverityRaw []string
 	// structReturnFocus is the same dance for the Structure tool window
 	// (#1025); structReqPath is the last path a documentSymbol refresh was
 	// issued for (the request dedup), and structForce marks a save-triggered
@@ -790,7 +794,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.finder.SetDisplayPath(displayPath)
 	m.probStore = problems.NewStore()
 	m.rawDiags = map[string][]ilsp.Diagnostic{}
-	m.compileDiagIgnore() // seed the ignore rules (#1259)
+	m.compileDiagIgnore()   // seed the ignore rules (#1259)
+	m.compileDiagSeverity() // seed the severity remap rules (#1503)
 	m.todoSearch = search.New(func(msg tea.Msg) { h.Send(todoindex.ScanMsg{Inner: msg}) })
 	m.todo = todoindex.New(m.todoSearch, ".", todoPatterns(cfg))
 	m.todo.SetPalette(themePal)
@@ -3871,9 +3876,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.notifyConfigDiags(diags)
 		m.settings.NoteReloadDiags(diags) // inline in the panel too (#891)
 		m.palette.Refresh()
-		// Diagnostic ignore rules (#1259) apply live: a rule change re-filters
-		// every cached raw set into the Problems store and the open editors.
-		if m.compileDiagIgnore() {
+		// Diagnostic ignore (#1259) and severity remap (#1503) rules apply
+		// live: a rule change re-filters every cached raw set into the
+		// Problems store and the open editors. Both compiles must run — no
+		// short-circuit — so one changing never skips recompiling the other.
+		changedIgnore := m.compileDiagIgnore()
+		if m.compileDiagSeverity() || changedIgnore {
 			if cmds := m.refilterDiagnostics(); len(cmds) > 0 {
 				return m, tea.Batch(cmds...)
 			}
