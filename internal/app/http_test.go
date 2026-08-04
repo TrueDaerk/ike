@@ -331,6 +331,65 @@ func TestHTTPPaneMouseSelectionCopies(t *testing.T) {
 	}
 }
 
+// TestHTTPPaneCmdCCopiesSelection pins the cmd+c path of #1266 against #1498:
+// on macOS the chord arrives as "super+c"; with a mouse selection in the
+// response pane it must land on the system clipboard through the full app
+// dispatch (keymap fall-through, pane handleKey, CopyMsg, clipboardWrite).
+func TestHTTPPaneCmdCCopiesSelection(t *testing.T) {
+	m := httpApp(t)
+	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
+	m = out.(Model)
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+
+	r, ok := m.lay.Panes[pane.HTTPKey]
+	if !ok {
+		t.Fatal("the response pane must be laid out")
+	}
+	p := m.httpPanel()
+	bodyRow := -1
+	for i := 0; i < p.Rows(); i++ {
+		if p.RowText(i) == "{" {
+			bodyRow = i
+		}
+	}
+	if bodyRow < 0 {
+		t.Fatal("no body row found")
+	}
+	x := r.X + paneContentX + 1
+	y := r.Y + paneContentY + bodyRow + 1
+	m = step(m, press(x, y))
+	m = step(m, motion(x+4, y+1))
+	m = step(m, release(x+4, y+1))
+	if !p.HasSelection() {
+		t.Fatal("the drag must select in the response pane")
+	}
+
+	clipped := ""
+	prev := clipboardWrite
+	clipboardWrite = func(s string) { clipped = s }
+	defer func() { clipboardWrite = prev }()
+
+	key := tea.KeyPressMsg{Code: 'c', Mod: tea.ModSuper}
+	if got := key.String(); got != "super+c" {
+		t.Fatalf("key encodes as %q, want super+c", got)
+	}
+	out, cmd := m.Update(key)
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("cmd+c must emit a copy command")
+	}
+	msg, ok := cmd().(httppane.CopyMsg)
+	if !ok {
+		t.Fatalf("copy message type: %T", cmd())
+	}
+	out, _ = m.Update(msg)
+	_ = out.(Model)
+	if clipped == "" || clipped != msg.Text {
+		t.Errorf("clipboard got %q, want %q", clipped, msg.Text)
+	}
+}
+
 // TestHTTPCopyBodyCommand covers the palette entry (#1266).
 func TestHTTPCopyBodyCommand(t *testing.T) {
 	m := httpApp(t)
