@@ -186,6 +186,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// past every failure point) and announce the switch.
 	sizedTM, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	sized := sizedTM.(Model)
+	// While this workspace was parked its watcher was stopped (#1515), so
+	// files edited externally in that window (a coding agent, git operations)
+	// never produced events. Reconcile every resumed buffer against disk:
+	// clean buffers reload in place, dirty ones arm the conflict guard.
+	reconcile := sized.reconcileEditors()
 	// Hold the background set to project.max_workspaces (#780): idle LRU
 	// workspaces drop silently, a busy one asks first.
 	capCmd := sized.enforceWorkspaceCap()
@@ -193,7 +198,32 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 		fresh.Init(),
 		sizeCmd,
 		capCmd,
+		reconcile,
 		project.RecordOpenCmd(config.Discover("."), root, time.Now()),
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)
+}
+
+// reconcileEditors sends every editor tab a ReconcileMsg (#1515): the
+// buffer-vs-disk catch-up for changes that happened while the workspace was
+// parked without a watcher. Same pane/tab walk as saveAllDirty.
+func (m *Model) reconcileEditors() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			if ed := inst.TabEditor(i); ed != nil && ed.HasFile() {
+				if cmd := inst.UpdateTab(i, editor.ReconcileMsg{}); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+			}
+		}
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }

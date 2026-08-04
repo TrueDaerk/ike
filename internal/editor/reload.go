@@ -50,6 +50,39 @@ func (m Model) handleExternalChange(msg watch.EventMsg) (Model, tea.Cmd) {
 	return m.reloadFromDisk()
 }
 
+// ReconcileMsg asks an editor to compare its buffer against the file on disk
+// (#1515): while a workspace is parked in the background (#777) the watcher is
+// stopped, so external changes made in that window never arrive as events.
+// The project switch sends this to every resumed tab.
+type ReconcileMsg struct{}
+
+// handleReconcile re-checks the open file against disk without a watcher
+// event. A clean buffer whose file changed reloads in place (reloadFromDisk
+// already no-ops on identical content, so undo history is never lost on a
+// false alarm). A dirty buffer is marked stale only when the disk content
+// provably differs from what was loaded (diskHash); without a hash (large
+// files) it is left alone — a false conflict prompt is worse than a missed
+// one, and the next save still writes atomically over whatever is there.
+func (m Model) handleReconcile() (Model, tea.Cmd) {
+	if !m.HasFile() {
+		return m, nil
+	}
+	data, err := os.ReadFile(m.path)
+	if err != nil {
+		return m, nil // deleted while parked: keep the buffer as the only copy
+	}
+	if m.dirty {
+		if m.diskHash != "" && undostore.Hash(data) != m.diskHash {
+			m.stale = true // guard the next save with the conflict prompt
+		}
+		return m, nil
+	}
+	if !m.autoReload() {
+		return m, nil
+	}
+	return m.reloadFromDisk()
+}
+
 // autoReload reads files.auto_reload: "clean" (the default) reloads clean
 // buffers in place, "never" leaves stale content until the file is reopened.
 func (m Model) autoReload() bool {

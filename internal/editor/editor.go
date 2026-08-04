@@ -1137,6 +1137,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		// External change of the open file (Roadmap 0140): reload.go decides
 		// whether to reload in place (clean buffer) or leave it alone.
 		return m.handleExternalChange(msg)
+	case ReconcileMsg:
+		// Watcherless catch-up after a parked workspace resumes (#1515).
+		return m.handleReconcile()
 	case SyncMsg:
 		// Another view of this shared document changed it (#142).
 		return m.applySync(msg)

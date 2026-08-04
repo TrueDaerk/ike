@@ -195,3 +195,73 @@ func TestExternalChangeEmitsChangeEvent(t *testing.T) {
 		t.Fatalf("EventChange must carry the reloaded text, got %q", change.Text)
 	}
 }
+
+// --- ReconcileMsg (#1515): watcherless catch-up after a parked workspace resumes ---
+
+func reconcile(m Model) Model {
+	m, _ = m.Update(ReconcileMsg{})
+	return m
+}
+
+func TestReconcileReloadsCleanChangedBuffer(t *testing.T) {
+	m, path := loaded(t, "one\ntwo\n")
+	if err := os.WriteFile(path, []byte("changed while parked\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = reconcile(m)
+	if !strings.Contains(m.buf.String(), "changed while parked") {
+		t.Fatalf("clean buffer must reload on reconcile: %q", m.buf.String())
+	}
+}
+
+func TestReconcileUnchangedIsNoop(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\n")
+	m = send(m, key('i'), key('X'), special(tea.KeyEscape), key('u')) // build undo history
+	before := m.buf.String()
+	m = reconcile(m)
+	if m.buf.String() != before {
+		t.Fatalf("unchanged disk must not alter the buffer: %q", m.buf.String())
+	}
+	if m.stale {
+		t.Fatal("unchanged disk must not mark the buffer stale")
+	}
+}
+
+func TestReconcileMarksDirtyChangedBufferStale(t *testing.T) {
+	m, path := loaded(t, "one\ntwo\n")
+	m = send(m, key('i'), key('X'), special(tea.KeyEscape))
+	if !m.Dirty() {
+		t.Fatal("test setup: buffer should be dirty")
+	}
+	if err := os.WriteFile(path, []byte("external\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = reconcile(m)
+	if strings.Contains(m.buf.String(), "external") {
+		t.Fatal("dirty buffer must never be reloaded")
+	}
+	if !m.stale {
+		t.Fatal("dirty buffer with a changed file must arm the conflict guard")
+	}
+}
+
+func TestReconcileDirtyUnchangedFileNotStale(t *testing.T) {
+	m, _ := loaded(t, "one\ntwo\n")
+	m = send(m, key('i'), key('X'), special(tea.KeyEscape))
+	m = reconcile(m)
+	if m.stale {
+		t.Fatal("dirty buffer whose file is untouched must not become stale")
+	}
+}
+
+func TestReconcileMissingFileKeepsBuffer(t *testing.T) {
+	m, path := loaded(t, "one\ntwo\n")
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	before := m.buf.String()
+	m = reconcile(m)
+	if m.buf.String() != before {
+		t.Fatal("missing file: the buffer is the only copy and must survive")
+	}
+}

@@ -191,6 +191,15 @@ subsystem (it must not import editor/explorer), the root model routes:
    `SwitchedMsg` toasts; the recorded write triggers a config reload so the
    picker's in-memory history is already current.
 
+**Buffer reconciliation on resume (#1515).** While a workspace is parked its
+watcher is stopped, so external edits in that window (a coding agent's
+atomic-rename saves, git operations) never arrive as events. `performSwitch`
+therefore sends every resumed editor tab an `editor.ReconcileMsg`: a clean
+buffer whose file changed on disk reloads in place (identical content is a
+no-op, undo history survives), a dirty buffer whose file provably changed
+(disk hash differs) is marked stale so the next save runs the conflict
+guard; a deleted file leaves the buffer untouched — it is the only copy.
+
 **Settings scope (0380, #795).** The config reload inside `performSwitch`
 runs after the chdir, so the incoming project's `.ike/settings.toml` layer
 applies and the outgoing project's overrides drop in the same step — theme,
