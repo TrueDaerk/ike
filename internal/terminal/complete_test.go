@@ -534,7 +534,7 @@ func TestWrappedLineAutoSuggestSilent(t *testing.T) {
 	promptX, promptY := m.sess.CursorPosition()
 
 	// Fill the first row exactly so the tail "ls" lands on the next row.
-	word := strings.Repeat("q", 30-promptX-len("echo ")) + "ls"
+	word := strings.Repeat("q", m.gridW()-promptX-len("echo ")) + "ls"
 	for _, r := range "echo " + word {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
@@ -568,7 +568,7 @@ func TestWrappedLineCtrlSpaceCompletes(t *testing.T) {
 
 	// "echo <filler> targ": "ta" fills the last two columns of the first row,
 	// "rg" wraps onto the continuation row mid-word.
-	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo ")-len(" ta"))
 	for _, r := range "echo " + filler + " targ" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
@@ -601,7 +601,7 @@ func TestWrappedLineAutoSuggestSilentWithCandidates(t *testing.T) {
 	m := startNarrowShModel(t, c, dir)
 	promptX, promptY := m.sess.CursorPosition()
 
-	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo ")-len(" ta"))
 	for _, r := range "echo " + filler + " targ" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
@@ -639,12 +639,12 @@ func TestWrappedCompletionAfterResize(t *testing.T) {
 	waitFor(t, "at prompt", func() bool { return m.completionActive() })
 
 	m.SetSize(30, 24)
-	waitFor(t, "resized", func() bool { return m.sess.Width() == 30 })
+	waitFor(t, "resized", func() bool { return m.sess.Width() == m.gridW() })
 	waitFor(t, "at prompt after resize", func() bool { return m.completionActive() })
 	promptX, promptY := m.sess.CursorPosition()
 
 	// "ta" fills the last columns of the prompt row, "rg" wraps mid-word.
-	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta"))
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo ")-len(" ta"))
 	for _, r := range "echo " + filler + " targ" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
@@ -711,7 +711,7 @@ func TestPopupNearRightEdgeStaysIntact(t *testing.T) {
 	promptX, promptY := m.sess.CursorPosition()
 
 	// "echo <filler> ta" puts the cursor on the last column without wrapping.
-	filler := strings.Repeat("q", 30-promptX-len("echo ")-len(" ta")-1)
+	filler := strings.Repeat("q", m.gridW()-promptX-len("echo ")-len(" ta")-1)
 	for _, r := range "echo " + filler + " ta" {
 		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}

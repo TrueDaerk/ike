@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // waitCond polls until the fed bytes have drained through the spool and cond
@@ -143,5 +145,52 @@ func TestScrollbarRendered(t *testing.T) {
 	waitCond(t, "line rendered", func() bool { return strings.Contains(none.View(), "short") })
 	if strings.Contains(none.View(), "│") {
 		t.Error("no scrollback should render no scrollbar")
+	}
+}
+
+// TestScrollbarNeverCoversContent (#1500): the child grid is one column
+// narrower than the pane — the rightmost column is the reserved scrollbar
+// gutter — so a full-width line keeps its last character visible while the
+// bar renders.
+func TestScrollbarNeverCoversContent(t *testing.T) {
+	m := sbTerm(t, 50, 40, 10)
+	if got := m.sess.Width(); got != m.gridW() || got != 39 {
+		t.Fatalf("grid width = %d, want reserved gutter width %d", got, m.gridW())
+	}
+
+	// A line filling the whole grid ends in "E"; with the bar on show the
+	// row must still carry it, followed by the bar cell in the gutter.
+	full := strings.Repeat("x", m.gridW()-1) + "E"
+	m.FeedText(full + "\n")
+	waitCond(t, "full-width line rendered", func() bool {
+		return strings.Contains(m.View(), "E")
+	})
+	found := false
+	for _, line := range strings.Split(m.View(), "\n") {
+		plain := ansi.Strip(line)
+		if strings.Contains(plain, "xxxE") {
+			found = true
+			if !strings.HasSuffix(plain, "E│") && !strings.HasSuffix(plain, "E ") {
+				t.Errorf("bar must sit after the last character, row: %q", plain)
+			}
+		}
+	}
+	if !found {
+		t.Error("full-width line's last character is hidden")
+	}
+}
+
+// TestSetSizeReservesGutter (#1500): resizing the pane keeps the PTY one
+// column narrower; a one-column pane keeps its single column.
+func TestSetSizeReservesGutter(t *testing.T) {
+	m := NewPipe("sb-gutter", 40, 10, nil)
+	m.SetSize(30, 10)
+	waitCond(t, "resized", func() bool { return m.sess.Width() == 29 })
+	if m.gridW() != 29 {
+		t.Errorf("gridW = %d, want 29", m.gridW())
+	}
+	m.SetSize(1, 10)
+	if m.gridW() != 1 {
+		t.Errorf("gridW at width 1 = %d, want 1", m.gridW())
 	}
 }

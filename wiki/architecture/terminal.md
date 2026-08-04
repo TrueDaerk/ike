@@ -283,6 +283,14 @@ proportionally into the scrollback. The wheel keeps its existing routing
 carry the bar. Pipe sessions (#1370) track DEC mouse modes like PTY sessions
 so the gating applies to them too.
 
+**Reserved gutter column** (#1500): the child grid — PTY, command and pipe
+sessions alike — is sized one column narrower than the pane (`Model.gridW`,
+pane width minus one; a one-column pane keeps its width). The bar renders in
+that reserved rightmost column, so it never covers content, and its
+appearing/disappearing never resizes the child (no reflow churn, no
+`SIGWINCH` on every alt-screen switch). Panes without a visible bar simply
+leave the gutter blank.
+
 ## Theme ANSI palette (#1363)
 
 The emulator stores a cell's colour exactly as the program set it, so a shell

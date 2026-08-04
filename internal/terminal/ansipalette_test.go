@@ -130,8 +130,10 @@ func TestSessionPaletteRemapsHistory(t *testing.T) {
 	for _, r := range "printf '\\033[31mred\\033[0m\\n'\r" {
 		s.SendKey(keyFor(r))
 	}
+	// Wait for the remapped truecolor sequence itself: plain "red" also
+	// appears in the echoed command line, which races ahead of the output.
 	waitFor(t, "the coloured output", func() bool {
-		return strings.Contains(plainView(s), "red")
+		return strings.Contains(s.View(), "38;2;")
 	})
 	view := s.View()
 	if strings.Contains(view, "\x1b[31m") {

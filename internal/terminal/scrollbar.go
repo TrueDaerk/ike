@@ -80,10 +80,11 @@ func (m *Model) ScrollbarDrag(y int) {
 	m.scroll = sb - scrollbar.Drag(y, m.sbGrab, track, total, m.h, sb-m.scroll)
 }
 
-// overlayScrollbar draws the bar over the rightmost cell of the rendered
-// view. Each affected row is clipped/padded to the pane width minus one, then
-// the track or thumb cell is appended; rows are padded up to the track so the
-// bar reads full-height even over a short render.
+// overlayScrollbar draws the bar in the pane's rightmost column — the
+// reserved gutter (#1500): the child grid is one column narrower (gridW), so
+// the bar never covers content. Each affected row is clipped/padded to the
+// grid width, then the track or thumb cell is appended; rows are padded up to
+// the track so the bar reads full-height even over a short render.
 func (m Model) overlayScrollbar(view string) string {
 	track, _, start, length, ok := m.scrollbarGeometry()
 	if !ok {
