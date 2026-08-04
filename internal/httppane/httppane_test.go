@@ -462,3 +462,117 @@ func TestCancelKeyEmitsCancelMsg(t *testing.T) {
 		t.Fatalf("message type: %T", cmd())
 	}
 }
+
+// bigSample returns a response whose pretty-printed body overflows a small
+// viewport in both directions, so scroll offsets are meaningful.
+func bigSample(v int) *httpclient.Response {
+	var b strings.Builder
+	b.WriteString(`{"v":` + string(rune('0'+v)) + `,"wide":"`)
+	b.WriteString(strings.Repeat("x", 200))
+	b.WriteString(`"`)
+	for i := 0; i < 40; i++ {
+		b.WriteString(`,"k` + string(rune('a'+i%26)) + string(rune('0'+i/26)) + `":` + string(rune('0'+i%10)))
+	}
+	b.WriteString(`}`)
+	r := sample()
+	r.Body = []byte(b.String())
+	return r
+}
+
+// TestHistoryStepResetsScrollByDefault pins the pre-#1493 behavior: without
+// the toggle, stepping through history returns to the top-left corner.
+func TestHistoryStepResetsScrollByDefault(t *testing.T) {
+	m := New(nil)
+	m.SetSize(40, 10)
+	m.Set("r", bigSample(2))
+	m.SetHistory([]HistoryItem{{Resp: bigSample(2)}, {Resp: bigSample(1)}})
+
+	m.Scroll(5)
+	m.ScrollX(16)
+	m.handleKey(keyPress("h"))
+	if m.top != 0 || m.Left() != 0 {
+		t.Errorf("default step must reset scroll, got top=%d left=%d", m.top, m.Left())
+	}
+}
+
+// TestKeepScrollPreservesPositionAcrossHistory covers the #1493 toggle: with
+// keep-scroll on, h/l keep the viewport offsets, clamped to the shown entry.
+func TestKeepScrollPreservesPositionAcrossHistory(t *testing.T) {
+	m := New(nil)
+	m.SetSize(40, 10)
+	m.Set("r", bigSample(2))
+	m.SetHistory([]HistoryItem{{Resp: bigSample(2)}, {Resp: bigSample(1)}})
+
+	m.handleKey(keyPress("s"))
+	if !m.KeepScroll() {
+		t.Fatal("s must enable keep-scroll")
+	}
+	m.Scroll(5)
+	m.ScrollX(16)
+	m.handleKey(keyPress("h"))
+	if m.top != 5 || m.Left() != 16 {
+		t.Errorf("keep-scroll step lost the position, got top=%d left=%d", m.top, m.Left())
+	}
+	m.handleKey(keyPress("l"))
+	if m.top != 5 || m.Left() != 16 {
+		t.Errorf("stepping back lost the position, got top=%d left=%d", m.top, m.Left())
+	}
+
+	// A shorter historic entry clamps instead of overshooting.
+	short := sample()
+	m.Set("r", bigSample(2))
+	m.SetHistory([]HistoryItem{{Resp: bigSample(2)}, {Resp: short}})
+	m.Scroll(1000)
+	m.handleKey(keyPress("h"))
+	if m.top > m.maxTop() {
+		t.Errorf("kept offset must clamp, got top=%d max=%d", m.top, m.maxTop())
+	}
+
+	// s again turns it off; the next step resets like before.
+	m.handleKey(keyPress("s"))
+	if m.KeepScroll() {
+		t.Fatal("s must toggle keep-scroll off")
+	}
+	m.handleKey(keyPress("l"))
+	if m.top != 0 {
+		t.Errorf("disabled toggle must reset scroll, got top=%d", m.top)
+	}
+}
+
+// TestKeepScrollIsPerRequest: enabling the toggle for one request must not
+// change another's behavior (#1493).
+func TestKeepScrollIsPerRequest(t *testing.T) {
+	m := New(nil)
+	m.SetSize(40, 10)
+	m.Set("a", bigSample(1))
+	m.handleKey(keyPress("s"))
+	if !m.KeepScroll() {
+		t.Fatal("keep-scroll must be on for request a")
+	}
+
+	m.Set("b", bigSample(2))
+	if m.KeepScroll() {
+		t.Error("request b must default to off")
+	}
+
+	m.Set("a", bigSample(1))
+	if !m.KeepScroll() {
+		t.Error("request a must remember its toggle")
+	}
+}
+
+// TestKeepScrollFooter: the footer hints the key once history is browsable
+// and anchors the active state (#1493).
+func TestKeepScrollFooter(t *testing.T) {
+	m := New(nil)
+	m.SetSize(120, 20)
+	m.Set("r", sample())
+	m.SetHistory([]HistoryItem{{Resp: sample()}, {Resp: sample()}})
+	if !strings.Contains(m.footerText(), "s keep pos") {
+		t.Errorf("footer hint missing: %q", m.footerText())
+	}
+	m.handleKey(keyPress("s"))
+	if !strings.Contains(m.footerText(), "⚓ keep pos") {
+		t.Errorf("footer anchor missing: %q", m.footerText())
+	}
+}

@@ -64,6 +64,12 @@ type Model struct {
 	hist    []HistoryItem
 	histIdx int
 
+	// keepScroll marks requests whose scroll position survives history
+	// stepping (#1493): comparing the same section across responses means
+	// stepping without losing the spot. Keyed by request label so enabling
+	// it for one request never changes another's behavior; default off.
+	keepScroll map[string]bool
+
 	rows []row
 	// bodyIx indexes the highlight spans of the body lines only.
 	bodyIx highlight.Index
@@ -390,6 +396,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "l", "right":
 		// Newer stored response.
 		m.showHistory(m.histIdx - 1)
+	case "s":
+		// Keep the scroll position while stepping through history (#1493),
+		// per request; the footer anchor marks the active state.
+		m.ToggleKeepScroll()
 	case "shift+left":
 		// Sideways panning of wide bodies (#1290) moved off the bare arrows
 		// when those took over history (#1471).
@@ -529,13 +539,34 @@ func (m *Model) matchState(rowIx, col int) int {
 }
 
 // showHistory switches the viewer to history entry i, clamped to the range.
+// With keep-scroll enabled for the request (#1493) the viewport offsets
+// survive the switch, clamped to the new response's extents.
 func (m *Model) showHistory(i int) {
 	if i < 0 || i >= len(m.hist) || i == m.histIdx {
 		return
 	}
+	top, left := m.top, m.left
 	m.histIdx = i
 	m.compose(m.hist[i].Resp)
+	if m.KeepScroll() {
+		m.top = min(top, m.maxTop())
+		m.left = min(left, m.maxLeft())
+	}
 }
+
+// ToggleKeepScroll flips the keep-scroll flag of the current request (#1493)
+// and reports the new state.
+func (m *Model) ToggleKeepScroll() bool {
+	if m.keepScroll == nil {
+		m.keepScroll = map[string]bool{}
+	}
+	m.keepScroll[m.request] = !m.keepScroll[m.request]
+	return m.keepScroll[m.request]
+}
+
+// KeepScroll reports whether the current request keeps its scroll position
+// while stepping through history (#1493).
+func (m *Model) KeepScroll() bool { return m.keepScroll[m.request] }
 
 // Scroll moves the viewport by delta lines (mouse wheel + keys).
 func (m *Model) Scroll(delta int) {
@@ -688,6 +719,13 @@ func (m *Model) footerText() string {
 		s = fmt.Sprintf(" ←/→ history %d/%d", m.histIdx+1, len(m.hist))
 		if at := m.hist[m.histIdx].At; !at.IsZero() {
 			s += " (" + at.Local().Format("15:04:05") + ")"
+		}
+		// The keep-scroll toggle (#1493): the anchor marks it active, the
+		// key hint appears once there is history to step through.
+		if m.KeepScroll() {
+			s += " ⚓ keep pos"
+		} else if len(m.hist) > 1 {
+			s += " · s keep pos"
 		}
 		s += " ·"
 	}

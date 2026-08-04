@@ -346,13 +346,22 @@ pane header additionally carries a warning-colored `⧗ history 2/5 (15:04:05)`
 marker (#1473), so historic content is identifiable where the eye rests
 while reading — the footer hint alone was easy to miss.
 
+**Keep scroll position** (#1493): stepping through history normally resets
+the viewport to the top-left corner; comparing the same section across two
+responses means scrolling back after every step. `s` toggles keep-scroll for
+the *current request* (per request, never global — `Model.keepScroll` is
+keyed by request label; default off): while on, `h`/`l`/`←`/`→` preserve the
+vertical and horizontal offsets, clamped to the shown entry's extents. The
+footer marks the active state with `⚓ keep pos`; while off, the `s keep pos`
+key hint appears once a second stored response exists.
+
 **Discoverability** (#1267): the footer hint appears from the *first*
 response on (`←/→ history 1/1`), not only once a second one exists — and it
 leads the footer line, so a narrow pane clips the generic hints, not it; the
 palette carries `http.responseHistory` ("Browse HTTP Response History"),
 which focuses the viewer and reports how many responses are stored; and the
 help overlay gains an `http response pane` group listing the pane-local keys
-(`h/l ←/→`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
+(`h/l ←/→`, `s`, `j/k`, `shift+←/→`, `0/$`, `g/G`, `/`, `n/N`, `y`, `Y`, `esc`) — they belong to no
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
