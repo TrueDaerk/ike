@@ -242,8 +242,9 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 	if ed == nil {
 		return m, nil
 	}
-	ed.PasteText(text)
-	return m, nil
+	// The reparse command keeps highlighting current (#1491): this path skips
+	// the editor Update loop, which normally schedules it after an edit.
+	return m, ed.PasteText(text)
 }
 
 // applyCoalescedInput replays a folded mouse burst in a single Update pass: the

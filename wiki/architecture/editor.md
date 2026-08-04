@@ -98,7 +98,10 @@ line runs that test (see /architecture/run-configurations.md).
   inserts the whole block as a single edit and one undo unit — visual mode
   replaces the selection, mid-insert it splices in, normal mode pastes after the
   cursor like `p` — without touching the yank registers or system clipboard
-  (#603). A focused terminal pane gets the block through its own
+  (#603). Because this route bypasses the editor `Update` loop's
+  `maybeReparse`, `PasteText` returns the reparse command itself when the
+  buffer changed, so highlighting refreshes immediately instead of waiting
+  for the next keystroke (#1491). A focused terminal pane gets the block through its own
   bracketed-paste path; a modal overlay owning the keyboard takes it through
   the **overlay paste router** (`internal/app/overlaypaste.go`, #1273) instead
   — see [command palette](./command-palette.md).

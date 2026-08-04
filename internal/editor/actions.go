@@ -796,8 +796,19 @@ func (m *Model) clipboardPaste() {
 // without disturbing the yank registers or the system clipboard. Visual mode
 // replaces the selection; mid-insert it splices into the open insert; normal
 // mode pastes after the cursor like `p`. The change emits through mutate, so LSP
-// sync and highlighting see one edit.
-func (m *Model) PasteText(text string) {
+// sync and highlighting see one edit. The returned command is the reparse the
+// paste needs (#1491): this path bypasses the Update loop's maybeReparse, so
+// without it the highlighting would stay stale until the next keystroke.
+func (m *Model) PasteText(text string) tea.Cmd {
+	before := m.docVersion
+	m.pasteText(text)
+	if m.docVersion == before {
+		return nil
+	}
+	return m.Reparse()
+}
+
+func (m *Model) pasteText(text string) {
 	if text == "" {
 		return
 	}

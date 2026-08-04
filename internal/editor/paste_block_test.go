@@ -1,6 +1,10 @@
 package editor
 
-import "testing"
+import (
+	"testing"
+
+	"ike/internal/lang"
+)
 
 // TestPasteTextInsertModeBlock verifies a bracketed paste in insert mode splices
 // the whole block at the cursor in one edit (#603).
@@ -54,5 +58,30 @@ func TestPasteTextEmptyNoop(t *testing.T) {
 	m.PasteText("")
 	if line(m, 0) != "abc" || m.Dirty() {
 		t.Fatalf("empty paste mutated: %q dirty=%v", line(m, 0), m.Dirty())
+	}
+}
+
+// TestPasteTextSchedulesReparse guards #1491: a bracketed paste bypasses the
+// Update loop's maybeReparse, so PasteText itself must return the parse
+// command that refreshes highlighting — otherwise the pasted region renders
+// stale until the next keystroke.
+func TestPasteTextSchedulesReparse(t *testing.T) {
+	lang.Register(lang.Language{ID: "pbtest", Extensions: []string{"pbtest"}, Grammar: struct{}{}})
+	m := loadedExt(t, "pbtest", "abc\n")
+	if cmd := m.PasteText("XYZ"); cmd == nil {
+		t.Fatal("a paste that changed a highlighted buffer must schedule a reparse")
+	}
+	// An empty paste leaves the buffer untouched — no parse to schedule.
+	if cmd := m.PasteText(""); cmd != nil {
+		t.Fatal("an unchanged buffer must not schedule a reparse")
+	}
+}
+
+// TestPasteTextNoReparseWithoutGrammar: a paste into a plain-text buffer
+// returns no command — there is nothing to highlight (#1491).
+func TestPasteTextNoReparseWithoutGrammar(t *testing.T) {
+	m, _ := loaded(t, "abc\n")
+	if cmd := m.PasteText("XYZ"); cmd != nil {
+		t.Fatal("no grammar means no parse command")
 	}
 }
