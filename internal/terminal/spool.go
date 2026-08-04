@@ -66,6 +66,27 @@ func (sp *spool) take() (chunk []byte, ok bool) {
 	return chunk, true
 }
 
+// drain returns every immediately available chunk up to maxBytes total,
+// without blocking — the parked feed loop's batch companion to take (#1522).
+// Returns nil when nothing is buffered or maxBytes is already spent.
+func (sp *spool) drain(maxBytes int) [][]byte {
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	var out [][]byte
+	taken := 0
+	for len(sp.chunks) > 0 && taken+len(sp.chunks[0]) <= maxBytes {
+		c := sp.chunks[0]
+		sp.chunks = sp.chunks[1:]
+		sp.size -= len(c)
+		taken += len(c)
+		out = append(out, c)
+	}
+	if out != nil {
+		sp.hasRoom.Signal()
+	}
+	return out
+}
+
 // discard drops every buffered chunk and reports how many bytes were dropped
 // (#989): after an interrupt the backlog is stale output produced before the
 // abort — replaying it makes the process look alive after it is gone. Writers

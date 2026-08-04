@@ -76,6 +76,42 @@ func workspaceBusy(w *workspace.Workspace) bool {
 	return false
 }
 
+// setWorkspaceTerminalsParked flips the parked flag (#1522) on every terminal
+// session a workspace holds — terminal panes, editor terminal tabs, and the
+// parked popup terminal riding in Aux. Parked sessions keep ingesting PTY
+// output into their grid but stop requesting repaints and batch their feed;
+// un-parking delivers the one owed repaint per session.
+func setWorkspaceTerminalsParked(w *workspace.Workspace, parked bool) {
+	if w == nil || w.Panes == nil {
+		return
+	}
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil {
+			continue
+		}
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			inst.Terminal().SetParked(parked)
+		case pane.KindEditor:
+			for i := 0; i < inst.TabCount(); i++ {
+				if t := inst.TabTerminal(i); t != nil {
+					t.SetParked(parked)
+				}
+			}
+		}
+	}
+	if extras, ok := w.Aux.(wsExtras); ok {
+		for _, inst := range extras.popup.instances() {
+			for i := 0; i < inst.TabCount(); i++ {
+				if t := inst.TabTerminal(i); t != nil {
+					t.SetParked(parked)
+				}
+			}
+		}
+	}
+}
+
 // teardownWorkspace releases a dropped workspace's live resources: every
 // terminal session (panes and tabs) closes and a parked debug session
 // disconnects. Buffers need no teardown — dropping the registry is enough.

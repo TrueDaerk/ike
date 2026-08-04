@@ -276,6 +276,17 @@ func (m Model) Size() (w, h int) { return m.w, m.h }
 // Running reports whether the shell is alive.
 func (m Model) Running() bool { return m.sess != nil && m.sess.Running() }
 
+// SetParked forwards the parked flag (#1522) to the live session; a no-op for
+// a failed spawn.
+func (m Model) SetParked(parked bool) {
+	if m.sess != nil {
+		m.sess.SetParked(parked)
+	}
+}
+
+// Parked reports the session's parked flag (#1522); false for a failed spawn.
+func (m Model) Parked() bool { return m.sess != nil && m.sess.Parked() }
+
 // ScrollbackLen reports the history length (0 for a failed spawn).
 func (m Model) ScrollbackLen() int {
 	if m.sess == nil {

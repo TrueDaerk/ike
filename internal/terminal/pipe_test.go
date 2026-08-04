@@ -113,3 +113,45 @@ func TestPipeFinishDoesNotBlockOnSend(t *testing.T) {
 		t.Fatal("FinishPipe never sent the repaint message")
 	}
 }
+
+// TestParkedSessionSuppressesOutputMsgs guards #1522: a parked session keeps
+// ingesting into its grid but sends no OutputMsg — every send is a full
+// program Update pass for a grid nobody renders — and un-parking delivers
+// exactly the owed repaint.
+func TestParkedSessionSuppressesOutputMsgs(t *testing.T) {
+	msgs := make(chan tea.Msg, 64)
+	m := NewPipe("parked-test", 40, 6, func(msg tea.Msg) { msgs <- msg })
+	t.Cleanup(m.Close)
+	m.SetParked(true)
+	m.FeedText("quiet ingest\n")
+	waitView(t, &m, "quiet ingest") // the grid still ingests while parked
+	select {
+	case msg := <-msgs:
+		t.Fatalf("parked session sent %T", msg)
+	case <-time.After(60 * time.Millisecond):
+	}
+	m.SetParked(false)
+	select {
+	case msg := <-msgs:
+		if _, ok := msg.(OutputMsg); !ok {
+			t.Fatalf("owed repaint = %T, want OutputMsg", msg)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("un-parking must deliver the owed repaint")
+	}
+}
+
+// TestParkedWithoutOutputOwesNoRepaint: un-parking a session that stayed
+// silent must not synthesize an OutputMsg.
+func TestParkedWithoutOutputOwesNoRepaint(t *testing.T) {
+	msgs := make(chan tea.Msg, 8)
+	m := NewPipe("parked-idle", 40, 6, func(msg tea.Msg) { msgs <- msg })
+	t.Cleanup(m.Close)
+	m.SetParked(true)
+	m.SetParked(false)
+	select {
+	case msg := <-msgs:
+		t.Fatalf("idle un-park sent %T", msg)
+	case <-time.After(60 * time.Millisecond):
+	}
+}
