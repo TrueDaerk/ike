@@ -33,6 +33,14 @@ func TestJSONRegistered(t *testing.T) {
 	if j.Server == nil || j.Server.Command != "vscode-json-language-server" {
 		t.Errorf("json server = %+v, want vscode-json-language-server", j.Server)
 	}
+	// #1505: the server only advertises documentFormattingProvider when the
+	// initializationOptions carry provideFormatter: true — without it,
+	// Reformat File has no provider for JSON.
+	if j.Server != nil {
+		if v, ok := j.Server.Settings["provideFormatter"].(bool); !ok || !v {
+			t.Errorf("json server settings = %v, want provideFormatter: true", j.Server.Settings)
+		}
+	}
 	n, _ := lang.ByID("ndjson")
 	if n.Server != nil {
 		t.Errorf("ndjson must not have a server, got %+v", n.Server)
