@@ -137,30 +137,49 @@ var actionMap = map[string]string{
 
 	// Code insight (LSP).
 	"GotoDeclaration":      "lsp.definition",
+	"GotoImplementation":   "lsp.implementations",
+	"GotoSuperMethod":      "lsp.goToSuper",
+	"QuickImplementations": "lsp.peekDefinition",
 	"FindUsages":           "lsp.references",
+	"ShowUsages":           "lsp.referencesPanel",
 	"RenameElement":        "lsp.rename",
 	"ReformatCode":         "lsp.format",
 	"ShowIntentionActions": "lsp.codeAction",
 	"QuickJavaDoc":         "lsp.hover",
 	"QuickDocumentation":   "lsp.hover",
 	"ParameterInfo":        "lsp.parameterInfo",
+	"ShowErrorDescription": "lsp.diagnosticInfo",
 	"GotoNextError":        "lsp.nextDiagnostic",
 	"GotoPreviousError":    "lsp.prevDiagnostic",
+	"FileStructurePopup":   "lsp.documentSymbols",
 	"CallHierarchy":        "lsp.callHierarchy",
+	"TypeHierarchy":        "lsp.typeHierarchy",
 
-	// Refactors on files.
-	"Move": "file.move",
+	// Refactors on files. RenameElement is deliberately kept on lsp.rename
+	// (JetBrains uses one action for symbol and file renames), so file.rename
+	// has no import source.
+	"Move":       "file.move",
+	"NewElement": "explorer.newFile",
+	"NewFile":    "explorer.newFile",
 
 	// Tool windows & views.
-	"ActivateProjectToolWindow":  "explorer.toggle",
-	"ActivateTerminalToolWindow": "terminal.toggle",
-	"ActivateTODOToolWindow":     "todo.list",
-	"SelectInProjectView":        "explorer.reveal",
-	"ShowSettings":               "settings.open",
-	"ToggleDistractionFreeMode":  "view.zenMode",
-	"SplitVertically":            "editor.splitViewRight",
-	"SplitHorizontally":          "editor.splitViewDown",
-	"NewScratchFile":             "scratch.new",
+	"ActivateProjectToolWindow":        "explorer.toggle",
+	"ActivateTerminalToolWindow":       "terminal.toggle",
+	"ActivateTODOToolWindow":           "todo.list",
+	"ActivateProblemsViewToolWindow":   "problems.toggle",
+	"ActivateStructureToolWindow":      "structure.toggle",
+	"ActivateVersionControlToolWindow": "vcs.panel",
+	"SelectInProjectView":              "explorer.reveal",
+	"ShowBookmarks":                    "nav.bookmarks",
+	"ShowSettings":                     "settings.open",
+	"ToggleDistractionFreeMode":        "view.zenMode",
+	"HideAllWindows":                   "window.hideAllTools",
+	"RestoreDefaultLayout":             "window.restoreLayout",
+	"MaximizeEditorInSplit":            "pane.maximize",
+	"SplitVertically":                  "editor.splitViewRight",
+	"SplitHorizontally":                "editor.splitViewDown",
+	"NewScratchFile":                   "scratch.new",
+	"CloseProject":                     "project.close",
 
 	// Diff viewer.
 	"NextDiff":     "diff.nextChange",
@@ -185,6 +204,7 @@ var actionMap = map[string]string{
 	"StepInto":             "debug.stepInto",
 	"StepOut":              "debug.stepOut",
 	"Resume":               "debug.continue",
+	"ViewBreakpoints":      "debug.breakpoints",
 }
 
 // jbKeyName maps JetBrains keystroke key tokens (java.awt.event.KeyEvent VK_

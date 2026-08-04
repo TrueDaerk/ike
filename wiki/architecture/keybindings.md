@@ -342,6 +342,10 @@ first-keystroke="meta pressed S"/></action></keymap>`) into
   `FindInPath`→`project.findInPath`, `ReformatCode`→`lsp.format`, run/debug,
   VCS, tabs, tool windows, …), covering every default-set command with a
   plausible JetBrains counterpart. Unmapped ids land in `Result.Unmapped`.
+  That coverage contract is enforced by `TestActionMapCoversDefaults`
+  (`coverage_test.go`): every default-set command must be an `actionMap`
+  value or excused in its `noCounterpart` list — a new default command
+  fails the test until the import knows about it (#1496).
 - **Semantics** — `Plan` yields `Bind` (chord→command overrides) and `Unbind`:
   preset-default chords of imported commands the export did not keep are
   written `= ""`, so the imported chord *replaces* the default rather than
