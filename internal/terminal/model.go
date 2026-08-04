@@ -89,7 +89,7 @@ func (p vpos) before(q vpos) bool {
 // rather than crashing the layout.
 func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
 	m := Model{w: w, h: h, send: send, env: extraEnv, autoSuggest: true}
-	sess, err := StartSession(key, shell, dir, w, h, extraEnv, send)
+	sess, err := StartSession(key, shell, dir, m.gridW(), h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
 		return m
@@ -102,7 +102,7 @@ func New(key, shell, dir string, w, h int, extraEnv []string, send func(tea.Msg)
 // #574): the run-in-terminal seam. A failed spawn renders the error like New.
 func NewCommand(key string, argv []string, dir string, w, h int, extraEnv []string, send func(tea.Msg)) Model {
 	m := Model{w: w, h: h, send: send, env: extraEnv}
-	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, send)
+	sess, err := StartCommandSession(key, argv, dir, m.gridW(), h, extraEnv, send)
 	if err != nil {
 		m.err = err.Error()
 		return m
@@ -117,7 +117,7 @@ func NewCommand(key string, argv []string, dir string, w, h int, extraEnv []stri
 // scrollback and search.
 func NewPipe(key string, w, h int, send func(tea.Msg)) Model {
 	m := Model{w: w, h: h, send: send}
-	m.sess = NewPipeSession(key, w, h, send)
+	m.sess = NewPipeSession(key, m.gridW(), h, send)
 	return m
 }
 
@@ -157,7 +157,7 @@ func (m *Model) StartCommand(key string, argv []string, dir string, extraEnv []s
 	m.occupied = false
 	m.err = ""
 	m.env = extraEnv
-	w, h := m.w, m.h
+	w, h := m.gridW(), m.h
 	sess, err := StartCommandSession(key, argv, dir, w, h, extraEnv, m.send)
 	if err != nil {
 		m.sess = nil
@@ -247,12 +247,23 @@ func (m *Model) SetPalette(p *theme.Palette) {
 	}
 }
 
-// SetSize resizes the grid and the PTY.
+// SetSize resizes the grid and the PTY. The PTY is one column narrower than
+// the pane (gridW): the rightmost column is the scrollbar gutter (#1500), so
+// the bar never covers content and its appearance never reflows the child.
 func (m *Model) SetSize(w, h int) {
 	m.w, m.h = w, h
 	if m.sess != nil {
-		m.sess.Resize(w, h)
+		m.sess.Resize(m.gridW(), h)
 	}
+}
+
+// gridW is the child grid's width: the pane width minus the reserved
+// scrollbar gutter column (#1500). Panes too narrow to split keep full width.
+func (m Model) gridW() int {
+	if m.w >= 2 {
+		return m.w - 1
+	}
+	return m.w
 }
 
 // SetFocused records focus; the cursor cell renders only while focused.
@@ -690,7 +701,7 @@ func (m Model) SelectionText() string {
 // virtualAt maps a pane-local cell to virtual coordinates, honouring the
 // current scrollback offset and clamping to the grid.
 func (m Model) virtualAt(x, y int) vpos {
-	x = clamp(x, 0, m.w-1)
+	x = clamp(x, 0, m.gridW()-1)
 	y = clamp(y, 0, m.h-1)
 	sb := 0
 	if m.sess != nil {
@@ -1048,7 +1059,7 @@ func (m Model) highlightSelection(rows []string, firstVirtual int) {
 		if v < start.line || v > end.line {
 			continue
 		}
-		from, to := 0, m.w
+		from, to := 0, m.gridW()
 		if v == start.line {
 			from = start.col
 		}
