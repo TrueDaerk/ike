@@ -443,6 +443,16 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 	case "cmd+w":
 		m.requestPopupTabClose()
 		return true, m, nil
+	case "cmd+f":
+		// cmd+f opens the scrollback search (#1504) on the focused split
+		// side, like the pane-terminal reserved cmd+f. Under an alt-screen
+		// or mouse-reporting child the chord stays with the child.
+		if inst := m.popupFocused(); inst != nil {
+			if term := inst.ActiveTerminal(); term != nil && term.StartSearch() {
+				return true, m, nil
+			}
+		}
+		return false, m, nil
 	}
 	// The spatial focus keys (default ctrl+left/right, #228 overrides apply)
 	// move the keyboard between the split sides (#1427); unsplit they stay

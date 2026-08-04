@@ -192,3 +192,54 @@ func TestSearchViewFieldAndCounter(t *testing.T) {
 		t.Fatal("search keys must not be forwarded to the shell")
 	}
 }
+
+// TestStartSearchFromLiveView guards the cmd+f entry point (#1504): the
+// explicit chord opens the search from the live view (no prior scrollback
+// entry needed), typing jumps to a match, and esc returns to the live view.
+func TestStartSearchFromLiveView(t *testing.T) {
+	m := searchModel(t)
+	m.scroll = 0
+	if !m.StartSearch() {
+		t.Fatal("StartSearch must open from the live view")
+	}
+	if !m.Searching() {
+		t.Fatal("search field must be open after StartSearch")
+	}
+	typeQuery(m, "17")
+	if m.scroll == 0 {
+		t.Fatal("a match above the live view must scroll into scrollback")
+	}
+	press(m, tea.KeyEscape, "")
+	if m.Searching() {
+		t.Fatal("esc must close the search")
+	}
+	if m.scroll != 0 {
+		t.Fatalf("esc must return to the live view, scroll = %d", m.scroll)
+	}
+}
+
+// TestStartSearchIdempotentAndGuarded: a second StartSearch while the field
+// is open stays handled without resetting the query, and alt-screen /
+// mouse-reporting children keep the chord (StartSearch reports false).
+func TestStartSearchIdempotentAndGuarded(t *testing.T) {
+	m := searchModel(t)
+	if !m.StartSearch() {
+		t.Fatal("StartSearch must open while scrolled")
+	}
+	typeQuery(m, "42")
+	if !m.StartSearch() {
+		t.Fatal("StartSearch on an open field must stay handled")
+	}
+	if m.search.query != "42" {
+		t.Fatalf("reopen must not reset the query, got %q", m.search.query)
+	}
+	press(m, tea.KeyEscape, "")
+
+	for _, r := range "printf '\\033[?1049h'\r" {
+		m.sess.SendKey(keyFor(r))
+	}
+	waitFor(t, "alt screen", func() bool { return m.sess.AltScreen() })
+	if m.StartSearch() {
+		t.Fatal("StartSearch must report false under an alt-screen child")
+	}
+}

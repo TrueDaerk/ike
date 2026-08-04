@@ -1916,6 +1916,17 @@ func (m Model) terminalReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		// global binding (editor.closeTab).
 		m.requestTerminalClose()
 		return true, m, nil
+	case "cmd+f":
+		// cmd+f opens the scrollback search (#1504) — the muscle-memory
+		// entry point to the same inline search `/` starts from scrollback
+		// (#1169), working from the live view too. Under an alt-screen or
+		// mouse-reporting child (vim, lazygit) the chord stays with the
+		// child, which owns its own find; outside terminals cmd+f keeps
+		// its global binding (editor.find).
+		if term := m.activeWS().Panes.FocusedInstance().ActiveTerminal(); term != nil && term.StartSearch() {
+			return true, m, nil
+		}
+		return false, m, nil
 	}
 	return false, m, nil
 }
