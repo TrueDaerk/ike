@@ -249,7 +249,23 @@ still surface, and a user-set `lsp.diagnostics_ignore` replaces the defaults
 wholesale. The editor's `lsp.ignoreDiagnostic` command (palette, "Ignore
 Diagnostic Under Caret") appends the caret diagnostic's rule
 (source+code, or exact message when the server sent no code) to the project
-config. The app routes each filtered set (by
+config. After the ignore filter, the **severity remap** (#1503,
+`internal/lsp/severity.go`, `lsp.diagnostics_severity`) applies on the same
+central path: each rule is the ignore-rule condition grammar plus a trailing
+`error`/`warning`/`info`/`hint`/`off` keyword (`reportArgumentType warning`);
+first match wins and `off` drops the diagnostic. Codeless diagnostics are
+never remapped — pyright, gopls and friends publish syntax errors without a
+`code`, so syntax errors always stay errors. Rule edits re-apply live from
+the same raw cache. Exact-code rules additionally pass through **natively**
+at server initialize: a `ServerSpec` may declare `SeverityOverridesPath`
+(pyright: `["python","analysis","diagnosticSeverityOverrides"]`), and
+`resolveSpec` folds `NativeSeverityOverrides` — the rules whose sole
+condition is an exact code, translated to the server vocabulary
+(`error`/`warning`/`information`/`none`; `hint` stays client-side) — into the
+spec's settings beneath the plugin baseline and the user's
+`[lsp.servers.<id>]` overlay, so the server stops escalating at the source
+(after its next restart; the client remap covers the interim). The app
+routes each filtered set (by
 file path) to the editor leaf that owns it;
 the editor caches diagnostics, opens the completion / hover popup, and the app
 composites those popups at the cursor cell with `overlay.Place`. Go-to-definition

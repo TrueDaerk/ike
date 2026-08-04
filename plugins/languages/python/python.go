@@ -32,6 +32,9 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"pyproject.toml", "setup.py", "setup.cfg", ".git"},
 			Install:     []string{"npm", "install", "-g", "pyright"},
+			// Pyright applies per-rule severity overrides natively (#1503);
+			// exact-code lsp.diagnostics_severity rules land here.
+			SeverityOverridesPath: []string{"python", "analysis", "diagnosticSeverityOverrides"},
 		},
 		Toolchain:   toolchain{},
 		LineComment: "#",

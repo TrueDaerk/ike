@@ -173,6 +173,7 @@ func (c *Config) Flat() map[string]string {
 	put("lsp.log_level", c.LSP.LogLevel)
 	put("lsp.onboarded", c.LSP.Onboarded)
 	put("lsp.diagnostics_ignore", strings.Join(c.LSP.DiagnosticsIgnore, ","))
+	put("lsp.diagnostics_severity", strings.Join(c.LSP.DiagnosticsSeverity, ","))
 	for srv, kv := range c.LSP.Servers {
 		for k, v := range kv {
 			put("lsp.servers."+srv+"."+k, v)

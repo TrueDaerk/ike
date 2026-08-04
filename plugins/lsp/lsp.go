@@ -255,6 +255,19 @@ func resolveSpec(langID string) (ilsp.ServerSpec, bool) {
 	if l, ok := lang.ByID(langID); ok && l.Server != nil {
 		spec = *l.Server
 	}
+	// Native severity pass-through (#1503): a server that reads per-rule
+	// overrides from its settings (pyright) gets the exact-code
+	// lsp.diagnostics_severity rules folded in under its declared path —
+	// before the user overlay, so explicit [lsp.servers.<id>] settings win.
+	if len(spec.SeverityOverridesPath) > 0 {
+		if ov := ilsp.NativeSeverityOverrides(c.LSP.DiagnosticsSeverity); ov != nil {
+			nested := any(ov)
+			for i := len(spec.SeverityOverridesPath) - 1; i >= 0; i-- {
+				nested = map[string]any{spec.SeverityOverridesPath[i]: nested}
+			}
+			spec.Settings = lang.MergeSettings(nested.(map[string]any), spec.Settings)
+		}
+	}
 	if ov, ok := ilsp.Overlay(c.LSP.Servers, langID); ok {
 		spec = mergeSpec(spec, ov)
 	}
