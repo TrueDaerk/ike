@@ -852,3 +852,18 @@ func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
 		t.Fatalf("cmd+t must add a tab, %d -> %d", tabs, got)
 	}
 }
+
+// TestReservedCmdFOpensScrollbackSearch guards #1504: cmd+f inside a focused
+// terminal opens the scrollback search directly — no prior scrollback entry
+// via shift+pgup needed.
+func TestReservedCmdFOpensScrollbackSearch(t *testing.T) {
+	m, key := openTestTerminal(t)
+	handled, out, _ := m.terminalReservedKey("cmd+f")
+	if !handled {
+		t.Fatal("cmd+f must be reserved while a terminal is focused (#1504)")
+	}
+	m = out.(Model)
+	if term := m.activeWS().Panes.Get(key).Terminal(); !term.Searching() {
+		t.Fatal("cmd+f must open the scrollback search")
+	}
+}

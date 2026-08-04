@@ -59,7 +59,10 @@ at a time, with a position marker on the bottom line. Any key you type snaps
 back to the live view.
 
 The exception is `/`, which opens **scrollback search** — useful for finding
-that error you scrolled past.
+that error you scrolled past. ++cmd+f++ opens the same search directly, no
+scrolling first — including from the live view; ++esc++ closes it and returns
+you where you were. Full-screen apps like vim keep the chord for their own
+find.
 
 ## Clickable file references
 

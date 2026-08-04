@@ -257,6 +257,7 @@ reserved set (`terminalReservedKey` in internal/app) is exactly:
 | `cmd+t` | new terminal tab (#729/#983, iTerm-style): a terminal tab hosted by an editor pane gets a sibling tab in the same pane (#573); a dedicated single-session terminal pane **converts into a tab host in place** (the same conversion a tab drop performs, #836) — its live shell becomes the first tab, the fresh one the second, with the regular tab bar on top. Outside terminals `cmd+t` has no global binding anymore (its former `vcs.updateProject` was removed in #750) |
 | `cmd+d` | split right (#982, iTerm-style): a fresh terminal pane opens to the right of the focused terminal's pane and takes focus — the same for dedicated terminal panes and editor-hosted terminal tabs. Outside terminals `cmd+d` keeps its global binding (`editor.duplicateLine`) |
 | `cmd+w` | close the terminal (#986): an idle shell gets an EOF (ctrl+d) — it exits and the regular exit path closes the pane/tab; a **busy** terminal (foreground process group ≠ shell, or a still-running command session — `Session.Busy`) raises a centered guard first: enter closes, esc cancels. `ctrl+w` stays with the shell (delete word); outside terminals `cmd+w` keeps its global binding (`editor.closeTab`) |
+| `cmd+f` | open the scrollback search (#1504) — the muscle-memory entry point to the same inline search `/` starts from scrollback (#1169), working from the live view too (`Model.StartSearch`; esc then returns to the live view). Under an alt-screen or mouse-reporting child the chord stays with the child (vim/lazygit own their find); outside terminals `cmd+f` keeps its global binding (`editor.find`). The popup terminal reserves it too, on the focused split side |
 | `ctrl+arrows` | spatial focus moves out of the terminal (#228) — the same `keymap.bindings.focus_*` overrides apply; a disabled direction stays with the shell |
 | `cmd+c` | copy an active mouse selection (#227) — without one the key stays with the shell |
 | `cmd+v` | paste the system clipboard through the bracketed-paste path (#727) — under the Kitty protocol the host delivers cmd+v as a key, so the app performs the paste itself; the debuggee terminal pane (#1370) is an ordinary terminal pane and needs no special casing |
@@ -365,6 +366,12 @@ input (`ls /tmp`) and always passes through — enter scrollback first
 (`shift+pgup` or the wheel), then search. Alt-screen or mouse-reporting
 children (vim, lazygit) own their own `/` and are never captured
 (`searchCaptures` checks the same #96/#226 routing state the wheel uses).
+`cmd+f` (#1504) is the second entry point, reserved app-side
+(`terminalReservedKey` / `popupReservedKey`): an explicit chord carries
+intent, so `Model.StartSearch` opens the same field from the live view too —
+esc then restores `prevScroll` (0, the live view). The alt-screen/mouse
+guard applies identically; there `StartSearch` reports false and the chord
+stays with the child.
 `terminal.clear` and a command-session restart drop an open search along
 with the history it indexed.
 

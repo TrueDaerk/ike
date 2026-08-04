@@ -48,6 +48,23 @@ type termSearch struct {
 // Searching reports whether the scrollback search field is open.
 func (m Model) Searching() bool { return m.search != nil }
 
+// StartSearch opens the scrollback search from the app-side cmd+f entry point
+// (#1504). Unlike `/` (which only captures while scrolled — the live shell
+// needs the key for paths), an explicit chord carries intent, so it opens
+// from the live view too; esc then returns to the live view (prevScroll 0).
+// It reports false — leaving the chord with the child — under an alt-screen
+// or mouse-reporting child (vim, lazygit own their find), and true without
+// reopening when the field is already up.
+func (m *Model) StartSearch() bool {
+	if m.sess == nil || m.sess.AltScreen() || m.sess.WantsMouse() {
+		return false
+	}
+	if m.search == nil {
+		m.startSearch()
+	}
+	return true
+}
+
 // searchCaptures reports whether `/` opens the search in the current state:
 // only a plain shell scrolled into scrollback — never the live view (the
 // shell needs `/` for paths) and never an alt-screen or mouse-reporting child
