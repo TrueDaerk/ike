@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/host"
 )
@@ -230,5 +231,50 @@ func TestScrollbarThumbDrag(t *testing.T) {
 	}
 	if m.offset != 0 {
 		t.Fatalf("track press must jump, offset = %d", m.offset)
+	}
+}
+
+// TestClickBelowHiddenEntryHitsRenderedRow guards #1513: with hidden entries
+// present but filtered out (e.g. a .git directory while show-hidden is off), a
+// click on any rendered row must select exactly that row. The rendered view and
+// the hit-tested m.rows slice share appendVisible as the single visibility
+// gate, so a divergence would shift every click below the hidden entry.
+func TestClickBelowHiddenEntryHitsRenderedRow(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".git", "objects"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{
+		filepath.Join(".git", "config"), ".hidden", "aaa.txt", "bbb.txt", "ccc.txt",
+	} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := New(root)
+	m.applyScan(scanCmd(root)().(ScanDoneMsg))
+	m.SetSize(40, 12)
+
+	view := ansi.Strip(m.View())
+	if strings.Contains(view, ".git") || strings.Contains(view, ".hidden") {
+		t.Fatalf("hidden entries rendered with show-hidden off:\n%s", view)
+	}
+	lines := strings.Split(view, "\n")
+
+	// Click every rendered file row (dirs toggle on the caret, so files give
+	// the pure select path) and require the selection to be the clicked row —
+	// both against m.rows and against the actually rendered line.
+	for y := 0; y+m.offset < len(m.rows); y++ {
+		want := m.rows[m.offset+y]
+		if want.isDir {
+			continue
+		}
+		mc, _ := m.MouseClick(3, y)
+		if got := mc.rows[mc.cursor].path; got != want.path {
+			t.Fatalf("click on y=%d selected %q, want rendered row %q", y, got, want.path)
+		}
+		if y >= len(lines) || !strings.Contains(lines[y], want.name) {
+			t.Fatalf("rendered line %d does not show %q:\n%s", y, want.name, view)
+		}
 	}
 }
