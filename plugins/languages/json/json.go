@@ -40,6 +40,10 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"package.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "vscode-langservers-extracted"},
+			// The server only advertises documentFormattingProvider when
+			// initializationOptions carries provideFormatter: true (#1505);
+			// without it, Reformat File has no provider for JSON at all.
+			Settings: map[string]any{"provideFormatter": true},
 		},
 		IndentAfter: []string{"{", "["},
 		// Typing assistance (#1326): a JSON member reads "key": value, so the
