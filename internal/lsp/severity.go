@@ -13,11 +13,16 @@ import "strings"
 // Rule grammar (one string per rule): the ignore-rule conditions plus a
 // trailing severity keyword —
 //
-//	[source=<glob>] [code=<glob>] [msg=<glob>] <error|warning|info|hint|off>
+//	[source=<glob>] [code=<glob>] [partial] [msg=<glob>] <error|warning|info|hint|off>
 //
 // A bare token without `=` is shorthand for code=<token>; `msg=` consumes the
 // rest of the rule up to the final severity word. The first matching rule
 // wins. `off` drops the diagnostic entirely (equivalent to an ignore rule).
+// The `partial` keyword (#1510) restricts a rule to union-partial type
+// mismatches (see partial.go) — e.g.
+// `source=pyright reportArgumentType partial warning` demotes only the
+// "str | None" passed where "str" is expected flavor, while a full mismatch
+// stays an error.
 //
 // Syntax errors always stay errors: a diagnostic without a code is not a
 // rule-based insight (pyright, gopls and friends publish their syntax errors
@@ -128,6 +133,9 @@ func (rs SeverityRules) remap(d Diagnostic) (to int, hit bool) {
 		if r.cond.msg != "" && !globMatch(r.cond.msg, d.Message) {
 			continue
 		}
+		if r.cond.partial && !partialTypeMatch(d.Message) {
+			continue
+		}
 		return r.to, true
 	}
 	return 0, false
@@ -154,7 +162,7 @@ func NativeSeverityOverrides(raw []string) map[string]any {
 	var out map[string]any
 	for _, s := range raw {
 		r, ok := parseSeverityRule(s)
-		if !ok || r.cond.source != "" || r.cond.msg != "" ||
+		if !ok || r.cond.source != "" || r.cond.msg != "" || r.cond.partial ||
 			r.cond.code == "" || strings.Contains(r.cond.code, "*") {
 			continue
 		}

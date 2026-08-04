@@ -10,17 +10,21 @@ import "strings"
 //
 // Rule grammar (one string per rule):
 //
-//	[source=<glob>] [code=<glob>] [msg=<glob>]
+//	[source=<glob>] [code=<glob>] [partial] [msg=<glob>]
 //
 // Conditions are separated by spaces; `msg=` must come last and consumes the
 // rest of the rule (messages contain spaces). A bare token without `=` is
-// shorthand for code=<token>. All present conditions must match (AND); a rule
-// with no condition matches nothing. Globs are case-insensitive with `*`
-// matching any run of characters.
+// shorthand for code=<token>, except the keyword `partial` (#1510): a
+// pseudo-condition matching only diagnostics whose message classifies as a
+// union-partial type mismatch (see partial.go) — combine with `source=`,
+// since the phrasing it parses is server-specific. All present conditions
+// must match (AND); a rule with no condition matches nothing. Globs are
+// case-insensitive with `*` matching any run of characters.
 
 // IgnoreRule is one compiled suppression rule.
 type IgnoreRule struct {
 	source, code, msg string // "" = condition absent
+	partial           bool   // #1510: require a union-partial type mismatch
 }
 
 // IgnoreRules is a compiled rule set; the zero value matches nothing.
@@ -61,11 +65,13 @@ func parseIgnoreRule(s string) (IgnoreRule, bool) {
 			r.source = strings.TrimPrefix(token, "source=")
 		case strings.HasPrefix(token, "code="):
 			r.code = strings.TrimPrefix(token, "code=")
+		case strings.EqualFold(token, "partial"):
+			r.partial = true // #1510: pseudo-condition, not a code
 		default:
 			r.code = token // bare token: code shorthand
 		}
 	}
-	return r, r.source != "" || r.code != "" || r.msg != ""
+	return r, r.source != "" || r.code != "" || r.msg != "" || r.partial
 }
 
 // Match reports whether any rule suppresses d.
@@ -78,6 +84,9 @@ func (rs IgnoreRules) Match(d Diagnostic) bool {
 			continue
 		}
 		if r.msg != "" && !globMatch(r.msg, d.Message) {
+			continue
+		}
+		if r.partial && !partialTypeMatch(d.Message) {
 			continue
 		}
 		return true

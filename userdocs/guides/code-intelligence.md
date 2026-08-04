@@ -93,6 +93,15 @@ itself (its native `diagnosticSeverityOverrides`), for every other server IKE
 remaps what the server publishes — either way the editor and the Problems
 window agree, and edits to the rules apply immediately.
 
+One more knob for type checkers: the `partial` keyword restricts a rule to
+**union-partial** type mismatches — an argument inferred as `str | None`
+passed where `str` is expected is usually the realistic branch being fine,
+unlike a completely wrong type. So
+`source=pyright reportArgumentType partial warning` demotes only those,
+while a genuine mismatch (`int` where `str` is expected) stays an error.
+Pair `partial` with `source=` — it parses the server's message phrasing,
+which differs between servers (pyright is the tested one).
+
 ## On save
 
 Two settings, both off by default, both applying to **manual** saves only —
