@@ -31,3 +31,20 @@ func TestWebLanguagesRegistered(t *testing.T) {
 		}
 	}
 }
+
+// TestWebFormatterEnabled guards #1507: the extracted VS Code html/css
+// servers only advertise documentFormattingProvider when the
+// initializationOptions carry provideFormatter: true — without it,
+// Reformat File has no provider for HTML/CSS.
+func TestWebFormatterEnabled(t *testing.T) {
+	for _, id := range []string{"html", "css"} {
+		l, ok := lang.ByID(id)
+		if !ok || l.Server == nil {
+			t.Errorf("%s: no language/server registered", id)
+			continue
+		}
+		if v, ok := l.Server.Settings["provideFormatter"].(bool); !ok || !v {
+			t.Errorf("%s server settings = %v, want provideFormatter: true", id, l.Server.Settings)
+		}
+	}
+}
