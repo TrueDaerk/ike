@@ -4377,6 +4377,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.vcs.tickArmed = false
 		return m, m.startVCSRefresh()
 
+	case workspaceIdleMsg:
+		// A parked workspace may have sat past the background LSP timeout
+		// (#1521): stop its servers if it is in fact still parked and idle.
+		return m.handleWorkspaceIdle(msg)
+
 	case vcs.SnapshotMsg:
 		return m, m.applyVCSSnapshot(msg)
 

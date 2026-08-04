@@ -217,6 +217,14 @@ func (Plugin) Capabilities() plugin.Capabilities {
 					return shared().workspaceClosed(root)
 				},
 			},
+			{
+				ID:    "lsp.wsidle",
+				Event: plugin.EventWorkspaceIdle,
+				Notify: func(h host.API, payload any) tea.Cmd {
+					root, _ := payload.(string)
+					return shared().workspaceIdle(root)
+				},
+			},
 		},
 	}
 }

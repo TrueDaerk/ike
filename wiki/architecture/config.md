@@ -101,7 +101,10 @@ Sections and their default-bearing slots (`schema.go`):
   `max_history`, `restore_last`, and `max_workspaces` (0370 M4, #780: how
   many live background workspaces seamless switching keeps, default 3;
   exceeding it evicts the least-recently-used one, confirming first when
-  unsaved buffers or running processes would die), plus `directory` (#1348,
+  unsaved buffers or running processes would die), plus
+  `background_lsp_timeout` (#1521: how long a parked workspace keeps its
+  language servers, Go duration string, default `5m`, `"off"` disables —
+  see [Workspace](/architecture/workspace.md)), plus `directory` (#1348,
   default `~/IkeProjects`: the default parent for projects IKE creates
   itself, resolved and created on demand by `project.ProjectsDir` /
   `EnsureDirectory`). The entry semantics —
