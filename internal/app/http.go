@@ -42,6 +42,10 @@ type HTTPCopyHeadersMsg struct{}
 // report how many stored responses the current request has (#1267).
 type HTTPResponseHistoryMsg struct{}
 
+// HTTPShowResponseMsg runs http.showResponse: show the stored responses of
+// the request under the cursor without dispatching it (#1492).
+type HTTPShowResponseMsg struct{}
+
 // HTTPResponseMsg delivers one finished dispatch back into the update loop.
 type HTTPResponseMsg struct {
 	Source  string // .http file the request came from (history keying, #1251)
@@ -263,6 +267,54 @@ func (m *Model) showHTTPHistory() {
 		return
 	}
 	m.host.Notify(host.Info, fmt.Sprintf("http: showing %d/%d stored responses — ←/→ browse", idx+1, n))
+}
+
+// showStoredHTTPResponse runs http.showResponse (#1492): it loads the stored
+// responses of the request block under the cursor from .ike/http/ and shows
+// them in the viewer without dispatching anything — the way to look at what
+// request A answered while the pane still shows request B. The h/l browsing
+// then works exactly as after a dispatch (#1251).
+func (m *Model) showStoredHTTPResponse() {
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() {
+		m.host.Notify(host.Info, "http: focus a file tab first")
+		return
+	}
+	if !isHTTPPath(ed.Path()) {
+		m.host.Notify(host.Info, "http: not an .http file")
+		return
+	}
+	f := httpfile.Parse(ed.Text())
+	line, _ := ed.CursorPos()
+	req, ok := f.RequestAt(line + 1)
+	if !ok {
+		m.host.Notify(host.Info, "http: no request under the cursor")
+		return
+	}
+	key := req.Key()
+	entries := httphistory.New(httpHistoryDir()).List(ed.Path(), key)
+	if len(entries) == 0 {
+		m.host.Notify(host.Info, "http: no stored responses for "+key+" — dispatch it once with http.run")
+		return
+	}
+	if m.httpPanel() == nil {
+		m.openHTTPPanel()
+	}
+	p := m.httpPanel()
+	if p == nil {
+		// Same failure mode as fillHTTPPanel (#1271): never pretend silently.
+		m.host.Notify(host.Error, "http: stored responses exist but the viewer cannot open — "+key)
+		return
+	}
+	items := make([]httppane.HistoryItem, 0, len(entries))
+	for _, e := range entries {
+		items = append(items, httppane.HistoryItem{Resp: e.Response(key), At: e.Time})
+	}
+	p.Set(key, items[0].Resp)
+	p.SetHistory(items)
+	m.setFocus(pane.HTTPKey)
+	m.layout()
+	m.host.Notify(host.Info, fmt.Sprintf("http: %d stored response(s) for %s — ←/→ browse", len(items), key))
 }
 
 // paneKeysHelpGroup lists the focused pane's local keys for the cheatsheet

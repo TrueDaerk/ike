@@ -356,6 +356,15 @@ help overlay gains an `http response pane` group listing the pane-local keys
 registry command, so nothing else would document them. `help.SetExtra` takes
 several groups for that.
 
+**Viewing without dispatching** (#1492): `http.showResponse` ("Show Stored
+HTTP Response", palette) loads the stored responses of the request block
+under the cursor into the viewer without sending anything — the way to look
+at what request A answered while the pane still shows request B, or right
+after a restart before any dispatch. It gates like `http.run` (focused
+`.http` file, request under the cursor), opens the pane when needed, shows
+the newest stored entry and hands the full list over for the same `←`/`→`
+browsing; no stored responses yield a notice instead of an empty pane.
+
 **On-disk format** (#1267): a text body (valid UTF-8, no NUL) is stored as a
 plain JSON string under `bodyText`, so `.ike/http/*.json` reads and diffs in
 the editor; only a binary body falls back to the base64 `body` field. The
