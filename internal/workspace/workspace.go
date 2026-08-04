@@ -6,6 +6,8 @@
 package workspace
 
 import (
+	"time"
+
 	"ike/internal/layout"
 	"ike/internal/pane"
 )
@@ -28,6 +30,11 @@ type Workspace struct {
 	// live (#777) — the debug session state, notably. The workspace package
 	// never inspects it.
 	Aux any
+	// ParkedAt is when this workspace last entered the background set (set
+	// by Park, zero while active). The background LSP idle shutdown (#1521)
+	// compares it at timer expiry: a workspace resumed and re-parked since
+	// the timer was armed reads as freshly parked and is skipped.
+	ParkedAt time.Time
 }
 
 // New builds a workspace over an existing pane registry.
@@ -70,6 +77,7 @@ func (m *Manager) Park() {
 	if m.bg == nil {
 		m.bg = map[string]*Workspace{}
 	}
+	w.ParkedAt = time.Now()
 	m.touch(w.Root)
 	m.bg[w.Root] = w
 }
@@ -83,6 +91,7 @@ func (m *Manager) Resume(root string) *Workspace {
 	}
 	delete(m.bg, root)
 	m.remove(root)
+	w.ParkedAt = time.Time{}
 	m.active = w
 	return w
 }

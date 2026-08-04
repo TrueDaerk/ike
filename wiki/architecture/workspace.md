@@ -59,6 +59,26 @@ layout as before. Consequences:
   parked workspace waits until re-attach (the pane then shows its final
   state); nothing is torn down.
 
+## Background LSP idle shutdown (#1521)
+
+Language servers are the dominant per-workspace memory block and hold no
+user-visible live state, so a parked workspace does not keep them forever:
+`Park` stamps `Workspace.ParkedAt`, and `performSwitch` arms a one-shot
+timer (`armWorkspaceIdle`, `internal/app/workspace_idle.go`) for
+`project.background_lsp_timeout` (Go duration string; default `5m`;
+`"off"`/`"0"`/`"false"` disables). Expiry re-validates instead of relying
+on cancellation: the workspace must still be parked and its *current* park
+must be at least a full timeout old — a resume-and-re-park moves
+`ParkedAt`, so the stale timer falls through and the newer park's timer
+takes over. A confirmed idle expiry fires `plugin.EventWorkspaceIdle`
+(payload: root); the LSP bridge subscribes (`lsp.wsidle`) and releases its
+per-path state under that root plus the manager's documents and servers via
+`CloseRoot` — unlike `EventWorkspaceClosed` it leaves the global debounce
+timers armed, since they belong to the active workspace. Respawn needs no
+machinery: on resume, `Init` re-announces every open file
+(`EventFileOpened`), and the first document event restarts the server
+lazily.
+
 ## Cap & eviction (#780)
 
 `project.max_workspaces` (default 3, floor 1) bounds the background set.

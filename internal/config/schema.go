@@ -427,6 +427,12 @@ type Project struct {
 	// least-recently-used one (with a confirm when unsaved buffers or
 	// running processes would die). <=0 selects the default (3).
 	MaxWorkspaces int `toml:"max_workspaces"`
+	// BackgroundLSPTimeout is how long a parked background workspace keeps
+	// its language servers alive (#1521): past it they stop via the LSP
+	// manager's CloseRoot and respawn lazily on resume. A Go duration string
+	// ("5m", "90s"); empty selects the default (5m), "off"/"0" disables the
+	// shutdown (servers run for as long as the workspace stays parked).
+	BackgroundLSPTimeout string `toml:"background_lsp_timeout"`
 	// Directory is the default parent for projects IKE creates itself —
 	// today the clone target of project.clone (#1349), mirroring JetBrains'
 	// ~/IdeaProjects. A leading `~` is expanded; empty selects the built-in

@@ -1560,12 +1560,6 @@ func (b *bridge) onStatus(lang, text string, kind ilsp.ServerStatusKind) {
 // blocking server work stays off the Update goroutine (see restart).
 func (b *bridge) workspaceClosed(root string) tea.Cmd {
 	b.mu.Lock()
-	for path, t := range b.changeTimer {
-		if pathUnder(path, root) {
-			t.Stop()
-			delete(b.changeTimer, path)
-		}
-	}
 	// The single-shot debounce timers reference paths under the closed root
 	// (#1001): cancel them too, or they fire once against dead managers.
 	for _, t := range []*time.Timer{b.hlTimer, b.resolveTimer, b.compTimer, b.diagTimer} {
@@ -1574,6 +1568,31 @@ func (b *bridge) workspaceClosed(root string) tea.Cmd {
 		}
 	}
 	b.hlTimer, b.resolveTimer, b.compTimer, b.diagTimer = nil, nil, nil, nil
+	b.mu.Unlock()
+	return b.closeRootState(root)
+}
+
+// workspaceIdle stops a parked root's servers after the background idle
+// timeout (#1521). Same per-path release as workspaceClosed, but the global
+// single-shot debounce timers stay armed: they belong to the active
+// workspace, and — unlike eviction — the manager keeps running for the lazy
+// respawn on resume, so a stray fire meets a live manager either way.
+func (b *bridge) workspaceIdle(root string) tea.Cmd {
+	return b.closeRootState(root)
+}
+
+// closeRootState drops every per-path bridge state under root and returns the
+// cmd that closes the root in the manager (documents closed, servers
+// stopped). Shared by eviction/close (#825) and the background idle shutdown
+// (#1521).
+func (b *bridge) closeRootState(root string) tea.Cmd {
+	b.mu.Lock()
+	for path, t := range b.changeTimer {
+		if pathUnder(path, root) {
+			t.Stop()
+			delete(b.changeTimer, path)
+		}
+	}
 	prunePaths(b.pendingChange, root)
 	prunePaths(b.diags, root)
 	prunePaths(b.sigActive, root)

@@ -42,6 +42,7 @@ var hookEvents = map[string]plugin.Event{
 	"buffer_closed":    plugin.EventBufferClosed,
 	"command_executed": plugin.EventCommandExecuted, // payload: command id (#679)
 	"workspace_closed": plugin.EventWorkspaceClosed, // payload: workspace root (#825)
+	"workspace_idle":   plugin.EventWorkspaceIdle,   // payload: workspace root (#1521)
 }
 
 // adapt builds the plugin face for a module from its declared capabilities.

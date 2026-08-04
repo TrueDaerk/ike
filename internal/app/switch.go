@@ -167,7 +167,12 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// comes back when this project resumes. The fresh model starts with a zero
 	// popup of its own.
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen, dbgTermKey: m.dbgTermKey, popup: m.popup}
+	parkedRoot := m.activeWS().Root
 	m.ws.Park()
+	// Arm the background LSP idle shutdown for the workspace just parked
+	// (#1521): its servers stop after project.background_lsp_timeout in the
+	// background, unless it resumes first.
+	idleCmd := armWorkspaceIdle(parkedRoot)
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -209,6 +214,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 		capCmd,
 		reconcile,
 		resync,
+		idleCmd,
 		project.RecordOpenCmd(config.Discover("."), root, time.Now()),
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)

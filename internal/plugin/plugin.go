@@ -138,6 +138,13 @@ const (
 	// a FileChange; the LSP bridge forwards it to the servers as
 	// workspace/didChangeWatchedFiles.
 	EventExternalFileChange
+	// EventWorkspaceIdle fires when a parked background workspace sat unused
+	// past project.background_lsp_timeout (#1521). The payload is the
+	// workspace's absolute root (string). Unlike EventWorkspaceClosed the
+	// workspace stays parked and will resume later: subscribers release what
+	// lazily respawns (the LSP bridge stops the root's servers via
+	// CloseRoot), not user-visible state.
+	EventWorkspaceIdle
 )
 
 // FileChangeKind classifies an EventExternalFileChange payload.
