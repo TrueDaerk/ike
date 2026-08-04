@@ -1,6 +1,7 @@
 package app
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -35,11 +36,14 @@ type toast struct {
 	text string
 }
 
-// histEntry is one recorded notification in the history ring.
+// histEntry is one recorded notification in the history ring. root is the
+// project root the notification was emitted in (#1514): the ring survives a
+// seamless project switch, so the view labels entries from other projects.
 type histEntry struct {
 	at   time.Time
 	sev  host.Severity
 	text string
+	root string
 }
 
 // toastExpireMsg removes the identified toast when its timeout elapses.
@@ -55,9 +59,10 @@ func (m *Model) drainNotifications() tea.Cmd {
 	}
 	timeout := m.toastTimeout()
 	floor := m.minSeverity()
+	root := m.projectRootTag()
 	var ticks []tea.Cmd
 	for _, n := range pending {
-		m.history = append([]histEntry{{at: time.Now(), sev: n.Severity, text: n.Text}}, m.history...)
+		m.history = append([]histEntry{{at: time.Now(), sev: n.Severity, text: n.Text, root: root}}, m.history...)
 		if len(m.history) > historyCap {
 			m.history = m.history[:historyCap]
 		}
@@ -124,11 +129,15 @@ func (m Model) minSeverity() host.Severity {
 }
 
 // historyView renders the history ring for the floating shell: newest first,
-// severity-colored, timestamped.
+// severity-colored, timestamped. An entry emitted in another project (#1514:
+// the ring survives project switches) carries a dimmed [project] label so its
+// context is clear; entries from the current project stay unlabeled.
 func (m Model) historyView() string {
 	if len(m.history) == 0 {
 		return "no notifications yet"
 	}
+	cur := m.projectRootTag()
+	dim := lipgloss.NewStyle().Foreground(m.pal().InlayHint)
 	var b strings.Builder
 	for i, e := range m.history {
 		if i > 0 {
@@ -136,8 +145,22 @@ func (m Model) historyView() string {
 		}
 		line := e.at.Format("15:04:05") + " " + toastIcon(e.sev) + " " + e.text
 		b.WriteString(lipgloss.NewStyle().Foreground(m.toastColor(e.sev)).Render(line))
+		if e.root != "" && e.root != cur {
+			b.WriteString(dim.Render("  [" + filepath.Base(e.root) + "]"))
+		}
 	}
 	return b.String()
+}
+
+// projectRootTag is the absolute project root recorded on history entries
+// (#1514) and compared against by the history view. It reads the active
+// workspace's root (captured at build time), so it stays stable regardless
+// of the cwd cache state.
+func (m Model) projectRootTag() string {
+	if ws := m.activeWS(); ws != nil {
+		return ws.Root
+	}
+	return ""
 }
 
 // toastColor maps a severity to its palette color.
