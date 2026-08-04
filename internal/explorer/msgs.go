@@ -14,6 +14,14 @@ type CollapseAllMsg struct{}
 // RefreshMsg invalidates and re-scans the selected subtree (explorer.refresh).
 type RefreshMsg struct{}
 
+// ResyncMsg re-scans the whole loaded tree from the root: the one-shot
+// catch-up a workspace resume sends (#1520), because the watcher was stopped
+// while the workspace was parked (#777) and external changes produced no
+// events. Unlike the user-facing RefreshMsg it starts at the root regardless
+// of the selection and keeps the multi-select — nothing here is a user
+// gesture.
+type ResyncMsg struct{}
+
 // RevealMsg moves the cursor to the currently open file (explorer.reveal).
 type RevealMsg struct{}
 
@@ -84,6 +92,7 @@ type HiddenToggledMsg struct{ ShowHidden bool }
 func (ToggleHiddenMsg) explorerMsg() {}
 func (CollapseAllMsg) explorerMsg()  {}
 func (RefreshMsg) explorerMsg()      {}
+func (ResyncMsg) explorerMsg()       {}
 func (RevealMsg) explorerMsg()       {}
 func (NewFileMsg) explorerMsg()      {}
 func (NewDirMsg) explorerMsg()       {}

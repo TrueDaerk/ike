@@ -245,3 +245,55 @@ func TestToggleEmitsPersist(t *testing.T) {
 		t.Fatal("HiddenToggledMsg.ShowHidden = false after enabling")
 	}
 }
+
+// TestResyncRescansLoadedTreeFromRoot guards #1520: a workspace resume sends
+// ResyncMsg because the watcher was stopped while parked — the whole loaded
+// tree must re-stat once, from the root and independent of the selection,
+// with expansion and selection surviving the merge. Auto-refresh is off here
+// (mounted disables it), which is exactly the configuration where the poll
+// would never catch up.
+func TestResyncRescansLoadedTreeFromRoot(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "sub")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"a.txt", filepath.Join("sub", "x.txt")} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m := mounted(t, root, 40, 15)
+	for i, n := range m.rows {
+		if n.name == "sub" {
+			m.cursor = i
+		}
+	}
+	m, cmd := m.Update(ExpandOrOpenMsg{})
+	m, _ = pumpScans(m, cmd)
+	// Select a file deep in the tree — the resync must not depend on it.
+	for i, n := range m.rows {
+		if n.name == "x.txt" {
+			m.cursor = i
+		}
+	}
+	// External changes while "parked": no watcher, no events.
+	for _, f := range []string{"new.txt", filepath.Join("sub", "deep.txt")} {
+		if err := os.WriteFile(filepath.Join(root, f), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	m, cmd = m.Update(ResyncMsg{})
+	m, _ = pumpScans(m, cmd)
+
+	names := map[string]bool{}
+	for _, n := range m.rows {
+		names[n.name] = true
+	}
+	if !names["new.txt"] || !names["deep.txt"] {
+		t.Fatalf("resync missed external files, rows = %v", names)
+	}
+	if got := m.rows[m.cursor].name; got != "x.txt" {
+		t.Fatalf("selection moved to %q, want x.txt", got)
+	}
+}

@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/editor"
+	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/project"
@@ -191,6 +192,14 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// never produced events. Reconcile every resumed buffer against disk:
 	// clean buffers reload in place, dirty ones arm the conflict guard.
 	reconcile := sized.reconcileEditors()
+	// Same catch-up for the explorer tree (#1520): the auto-refresh poll would
+	// get there eventually (and not at all with explorer.auto_refresh off), so
+	// re-stat the loaded tree once right now. A first visit's explorer is
+	// freshly scanned anyway; its Update ignores the resync until loaded.
+	var resync tea.Cmd
+	if inst := sized.activeWS().Panes.Get(pane.ExplorerKey); inst != nil {
+		resync = inst.Update(explorer.ResyncMsg{})
+	}
 	// Hold the background set to project.max_workspaces (#780): idle LRU
 	// workspaces drop silently, a busy one asks first.
 	capCmd := sized.enforceWorkspaceCap()
@@ -199,6 +208,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 		sizeCmd,
 		capCmd,
 		reconcile,
+		resync,
 		project.RecordOpenCmd(config.Discover("."), root, time.Now()),
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)

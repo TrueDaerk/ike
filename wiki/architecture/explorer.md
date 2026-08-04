@@ -58,6 +58,15 @@ external deletes fold away cleanly. The loop starts on the first `ScanDoneMsg`
 `Restore`, whose synchronous load means no scan message would ever arrive, and
 started by `Init`. `explorer.auto_refresh = "false"` disables it.
 
+**Resync (#1520).** `ResyncMsg` re-scans every expanded, loaded directory from
+the root (`rescanSubtree(root)`) — the one-shot catch-up a workspace resume
+sends, since the watcher is stopped while a workspace is parked and the poll
+may be disabled. Unlike the user-facing `RefreshMsg` it ignores the selection
+(no subtree narrowing) and keeps the multi-select. Every scan merge
+additionally stability-snaps the cursor onto its entry (`applyScan` arms
+`pendingSel` unless a deliberate snap is pending), so multi-directory rescans
+cannot walk the selection off its entry one merge at a time.
+
 The visible tree is flattened into `rows` (rebuilt on every expand/collapse) for
 cursor navigation; each node carries its `depth` for indentation.
 

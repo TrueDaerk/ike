@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -660,5 +661,81 @@ func TestSwitchBackReconcilesParkedBuffers(t *testing.T) {
 	}
 	if got := ed.Text(); !strings.Contains(got, "replaced while parked") {
 		t.Fatalf("resumed buffer must reload the external change, got %q", got)
+	}
+}
+
+// scanResults executes the command tree cmd and collects every
+// explorer.ScanDoneMsg it produces. Each leaf command runs in its own
+// goroutine with a short timeout, so sleeping commands (the explorer's
+// auto-refresh poll tick, timers) are simply left behind instead of stalling
+// the test.
+func scanResults(t *testing.T, cmd tea.Cmd) []explorer.ScanDoneMsg {
+	t.Helper()
+	var scans []explorer.ScanDoneMsg
+	pending := []tea.Cmd{cmd}
+	for len(pending) > 0 {
+		c := pending[0]
+		pending = pending[1:]
+		if c == nil {
+			continue
+		}
+		ch := make(chan tea.Msg, 1)
+		go func(c tea.Cmd) { ch <- c() }(c)
+		var msg tea.Msg
+		select {
+		case msg = <-ch:
+		case <-time.After(500 * time.Millisecond):
+			continue // a sleeper (poll tick, debounce timer): not scan material
+		}
+		switch v := msg.(type) {
+		case tea.BatchMsg:
+			pending = append(pending, v...)
+		case explorer.ScanDoneMsg:
+			scans = append(scans, v)
+		}
+	}
+	return scans
+}
+
+// TestSwitchBackResyncsExplorer guards #1520: while a workspace is parked its
+// watcher is stopped, so files created externally in that window produce no
+// events. Switching back must resync the explorer tree once — even with the
+// auto-refresh poll unavailable — so the resumed tree shows the new file.
+func TestSwitchBackResyncsExplorer(t *testing.T) {
+	base := t.TempDir()
+	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
+	for _, d := range []string{src, dst} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(src, "seed.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(src)
+	m := switchModel(t)
+	// Load the explorer tree so the parked workspace holds a stale snapshot.
+	for _, sd := range scanResults(t, m.explorer().Init()) {
+		out, _ := m.Update(sd)
+		m = out.(Model)
+	}
+	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
+	m = out.(Model)
+	// External change while parked: no watcher, no events.
+	if err := os.WriteFile(filepath.Join(src, "parked.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, cmd := m.Update(project.SwitchProjectMsg{Root: src})
+	m = out.(Model)
+	scans := scanResults(t, cmd)
+	if len(scans) == 0 {
+		t.Fatal("switching back must dispatch the explorer resync scan (#1520)")
+	}
+	for _, sd := range scans {
+		out, _ = m.Update(sd)
+		m = out.(Model)
+	}
+	if view := m.explorer().View(); !strings.Contains(view, "parked.txt") {
+		t.Fatalf("resumed explorer misses the externally created file:\n%s", view)
 	}
 }

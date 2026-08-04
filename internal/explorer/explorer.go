@@ -303,6 +303,18 @@ func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
 	}
 	m.err = nil
 	n.modTime = msg.ModTime
+	// A merge can insert or drop rows above the cursor; keep the selection on
+	// its entry across the rebuild (stability snap, #1140/#1520) unless a
+	// deliberate snap (file op, reveal) is already pending. Without this a
+	// multi-directory rescan (resync, poll burst) walks the cursor off its
+	// entry one merge at a time. A vanished entry falls back to the clamped
+	// index, as before.
+	if m.pendingSel == "" {
+		if cur := m.current(); cur != nil {
+			m.pendingSel = cur.path
+			m.followSel = false
+		}
+	}
 	m.setChildren(n, msg.Entries)
 	m.rebuild()
 	return m.continueReveal()
@@ -631,6 +643,12 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RefreshMsg:
 		m.clearSel() // a manual refresh collapses the multi-select (#1044)
 		return m, m.refresh()
+	case ResyncMsg:
+		// Workspace resume catch-up (#1520): rescan every expanded, loaded
+		// directory from the root. Existing children stay visible until each
+		// scan result merges over them, so expansion survives; the selection
+		// stays on its entry via applyScan's per-merge stability snap.
+		return m, m.rescanSubtree(m.root)
 	case RevealMsg:
 		return m, m.reveal()
 	case NewFileMsg:
