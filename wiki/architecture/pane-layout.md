@@ -283,7 +283,10 @@ named, user-scoped snapshots of the split tree.
   `IKE_CONFIG_DIR` like every other state file) — layouts are cross-project
   preference, unlike the per-project `layout.json`. Schema: named
   `persistedLayout` snapshots plus a `default` marker.
-- **Commands:** `window.saveLayout` prompts for a name in the floating shell
+- **Commands:** `window.saveLayout` first opens a **pane-selection mini-map**
+  (#1568) — a miniature rendering of the split tree in the floating shell;
+  hjkl/arrows move spatially between panes (the `focusTarget` scoring), space
+  toggles, `a`/`n` select all/none, enter continues to the name prompt
   (save-as pattern; an existing name asks for a confirming second enter).
   `window.layouts` opens a locked palette picker — enter applies,
   shift+delete deletes in place (#1113's aux convention), the default row
@@ -306,6 +309,19 @@ named, user-scoped snapshots of the split tree.
   terminal slots reuse live shells in order, then spawn fresh ones; per-project
   panels (problems, usages, VCS, debug, structure) restore empty exactly as
   they do on project restore.
+- **Selective layouts (#1568):** deselecting panes in the save step stores
+  only the selected ones. The deselected leaves are pruned from the snapshot
+  tree and the **largest deselected region** survives as a single flexible
+  placeholder leaf (`flex`, kind-only identity `{Kind: "flex"}` — the key
+  never collides with a registry key). With everything selected the snapshot
+  is the full tree, exactly as before. On **apply**, the pinned slots resolve
+  as usual, but nothing merges: every live pane the slots did not consume
+  keeps its own pane and the whole group **grafts into the placeholder
+  position preserving its pre-apply relative arrangement** (the live tree
+  cloned, consumed leaves collapsed away). With nothing left over the region
+  becomes one scratch editor. At **startup** (default-layout materialization)
+  a placeholder has no live panes to graft and materializes as one scratch
+  editor slot.
 - **Tool tabs in snapshots (#1277):** a tab host (#836) whose tabs are exactly
   one tool session and no file-backed editors snapshots as a dedicated
   `tool` slot; any other editor-kind pane hosting tool tabs keeps the tool
