@@ -250,15 +250,38 @@ func (m *Model) acceptCompletion() {
 		if rest == "" {
 			return
 		}
-		m.sess.SendText(rest)
+		m.sess.SendText(escapeShellWord(rest))
 	case hasFoldPrefix(item, word):
 		// Case-correcting accept (#968): erase the word as it is on the line
 		// now, not the snapshot's length.
 		for range []rune(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.SendText(item)
+		m.sess.SendText(escapeShellWord(item))
 	}
+}
+
+// shellSpecials are the word-breaking and metacharacters a shell's own tab
+// completion backslash-escapes when they occur in a filename (#1539). A
+// leading "-" is not among them — shells leave it as-is too.
+const shellSpecials = " \t'\"\\$`&|;()<>*?[]~#!{}"
+
+// escapeShellWord backslash-escapes shell-special characters in s so the
+// inserted completion lands on the command line as a single word (#1539):
+// accepting `My Documents/` types `My\ Documents/`, one argument, the way
+// the shell's own tab completion would.
+func escapeShellWord(s string) string {
+	if !strings.ContainsAny(s, shellSpecials) {
+		return s
+	}
+	var b strings.Builder
+	for _, r := range s {
+		if strings.ContainsRune(shellSpecials, r) {
+			b.WriteByte('\\')
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // lineBeforeCursor returns the logical command line's text left of the
