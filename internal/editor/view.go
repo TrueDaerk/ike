@@ -324,24 +324,41 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 	if line > m.buf.LineCount()-1 {
 		line = m.buf.LineCount() - 1
 	}
-	col := x - m.view.GutterWidth(m.buf.LineCount()) + colBase
-	if m.softWrap && col < colBase {
-		col = colBase // a gutter click snaps to the clicked segment's start
+	off := x - m.view.GutterWidth(m.buf.LineCount())
+	if off < 0 {
+		off = 0 // a gutter click snaps to the row's first visible column
 	}
-	if col < 0 {
-		col = 0
-	}
-	if m.concealOn(line) {
-		// Concealed line (#881): the click landed on display cells that skip
-		// hidden marker columns — map back through the conceal ranges so the
-		// cursor lands on the character that was actually clicked.
-		col = m.concealClickCol(line, colBase, col-colBase)
-	}
-	p := buffer.Position{Line: line, Col: col}
+	p := buffer.Position{Line: line, Col: m.displayClickCol(line, colBase, off)}
 	if m.mode == Insert || m.mode == Replace {
 		return m.buf.Clamp(p)
 	}
 	return m.buf.ClampCursor(p)
+}
+
+// displayClickCol is the mouse map's inverse for a row's display cells: the
+// clicked offset counts cells from buffer column from, where a tab occupies
+// tabWidth cells (View expands it) and concealed columns emit nothing (#881),
+// so the buffer column is the one whose display prefix covers the offset. A
+// click inside a tab's cells lands on the tab itself; offsets past the line
+// end map 1:1 (everything there is one-cell padding).
+func (m Model) displayClickCol(line, from, offset int) int {
+	runes := []rune(m.buf.Line(line))
+	concealing := m.concealOn(line)
+	col := from
+	for ; col < len(runes); col++ {
+		if concealing && m.concealedAt(line, col) {
+			continue
+		}
+		cells := 1
+		if runes[col] == '\t' {
+			cells = m.tabWidth
+		}
+		if offset < cells {
+			return col
+		}
+		offset -= cells
+	}
+	return col + offset
 }
 
 // ScrollBy moves the viewport by delta lines (positive down, negative up)

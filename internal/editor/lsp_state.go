@@ -1192,10 +1192,7 @@ func (m Model) HoverTarget(x, y int) (buffer.Position, bool) {
 	if line < 0 || line >= m.buf.LineCount() {
 		return zero, false
 	}
-	col := x - gw + colBase
-	if m.concealOn(line) {
-		col = m.concealClickCol(line, colBase, col-colBase)
-	}
+	col := m.displayClickCol(line, colBase, x-gw)
 	if col < 0 || col >= len([]rune(m.buf.Line(line))) {
 		return zero, false // past the end of the line (or an empty line)
 	}

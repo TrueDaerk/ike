@@ -345,6 +345,26 @@ func TestMouseClickPositionsCursor(t *testing.T) {
 	}
 }
 
+// TestMouseClickTabLine: a tab renders tabWidth display cells wide, so clicks
+// on a tab-indented line must map display cells back through the tab (#1529)
+// instead of counting one cell per rune.
+func TestMouseClickTabLine(t *testing.T) {
+	m, _ := loaded(t, "\thello\n")
+	advance := clickClock(&m)
+	gw := m.view.GutterWidth(m.buf.LineCount())
+	for _, tc := range []struct{ x, want int }{
+		{0, 0}, {3, 0}, // inside the tab's cells → the tab itself
+		{4, 1}, // first cell after the tab → 'h'
+		{8, 5}, // last cell → 'o'
+	} {
+		m.MouseClick(gw+tc.x, 0)
+		if m.cursor.Col != tc.want {
+			t.Errorf("click x=%d → col %d, want %d", tc.x, m.cursor.Col, tc.want)
+		}
+		advance(time.Second) // keep each click a plain single click
+	}
+}
+
 // clickClock installs a fake clock and returns an advance func for
 // multi-click tests (#975).
 func clickClock(m *Model) func(time.Duration) {

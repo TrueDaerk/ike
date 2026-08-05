@@ -505,7 +505,12 @@ not the vim left-motion here); a selection entered from insert/replace mode
 point so typing continues seamlessly.
 
 Mouse: clicking the editor focuses it and `MouseClick` maps the cell — through
-the gutter width and scroll offsets — to the cursor. Consecutive clicks on the
+the gutter width and scroll offsets — to the cursor. The horizontal mapping is
+display-cell aware (`displayClickCol`, shared with the mouse-idle hover
+target): a tab occupies `tabWidth` cells (a click inside them lands on the
+tab itself) and concealed markdown marker columns emit nothing (#881), so
+clicks on tab-indented or concealed lines land on the character actually
+under the pointer (#1529). Consecutive clicks on the
 same cell within 400ms escalate click → word → line (#975): a double-click
 selects the word under the pointer (vim `iw` word classes via
 `textobject.Word`) as a charwise visual selection, a triple-click the whole
@@ -1104,7 +1109,7 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   `@conceal`; the `SpansMsg` handler splits those spans out of the style index
   into per-line column ranges, and `renderSpan` skips those cells so the line
   reads like rendered text. The cursor line always shows raw source. Mouse
-  clicks map back through the hidden ranges (`concealClickCol`), so the cursor
+  clicks map back through the hidden ranges (`displayClickCol`), so the cursor
   lands on the character that was clicked; buffer-column motions and
   selections are untouched by design.
 - **Pipe tables** (cursor outside the block): detected from the buffer text (a

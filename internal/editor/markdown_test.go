@@ -104,7 +104,7 @@ func TestConcealClickMapping(t *testing.T) {
 	for _, tc := range []struct{ offset, want int }{
 		{0, 2}, {3, 5}, {4, 8}, {5, 9},
 	} {
-		if got := m.concealClickCol(0, 0, tc.offset); got != tc.want {
+		if got := m.displayClickCol(0, 0, tc.offset); got != tc.want {
 			t.Errorf("offset %d → col %d, want %d", tc.offset, got, tc.want)
 		}
 	}
