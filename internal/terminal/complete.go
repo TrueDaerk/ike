@@ -233,15 +233,28 @@ func (m *Model) acceptCompletion() {
 		return
 	}
 	item := c.items[c.sel]
+	// The popup's word is a snapshot from its last refresh. A keystroke whose
+	// echo landed on the grid after that snapshot (fast type-then-tab, #1538)
+	// leaves it stale, and a remainder computed from the snapshot double-types
+	// the in-between keys (`mkdi` + tab inserted `ir` → `mkdiir`). Complete
+	// against the word actually on the line instead — read the same way the
+	// refresh reads it. A word that moved *away* from the candidate (or was
+	// erased entirely) drops the accept rather than insert stale text.
+	_, word := parseCmdline(m.lineBeforeCursor())
+	if word == "" && c.word != "" {
+		return
+	}
 	switch {
-	case strings.HasPrefix(item, c.word):
-		rest := strings.TrimPrefix(item, c.word)
+	case strings.HasPrefix(item, word):
+		rest := strings.TrimPrefix(item, word)
 		if rest == "" {
 			return
 		}
 		m.sess.SendText(rest)
-	default:
-		for range []rune(c.word) {
+	case hasFoldPrefix(item, word):
+		// Case-correcting accept (#968): erase the word as it is on the line
+		// now, not the snapshot's length.
+		for range []rune(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
 		m.sess.SendText(item)
