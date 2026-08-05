@@ -156,8 +156,10 @@ func (m *Model) refreshCompletion(auto bool) {
 	}
 	// Candidates resolve against the live cwd (#770), so file and make-target
 	// suggestions follow a `cd` instead of the session's start directory.
-	items := candidates(cmd, word, m.sess.Cwd(), os.Getenv("PATH"))
-	if len(items) == 0 || (len(items) == 1 && items[0] == word) {
+	// Matching runs on the unescaped word (#1552): the line holds `My\ Doc`,
+	// the filesystem holds `My Documents`.
+	items := candidates(unescapeShellWord(cmd), unescapeShellWord(word), m.sess.Cwd(), os.Getenv("PATH"))
+	if len(items) == 0 || (len(items) == 1 && items[0] == unescapeShellWord(word)) {
 		m.comp = completion{}
 		return
 	}
@@ -244,14 +246,23 @@ func (m *Model) acceptCompletion() {
 	if word == "" && c.word != "" {
 		return
 	}
+	// Candidates are unescaped filesystem names while the parsed word keeps
+	// the line's backslashes (#1552): match on the unescaped form, erase by
+	// the escaped (on-screen) length.
+	uword := unescapeShellWord(word)
 	switch {
-	case strings.HasPrefix(item, word):
-		rest := strings.TrimPrefix(item, word)
+	case strings.HasPrefix(item, uword):
+		rest := strings.TrimPrefix(item, uword)
 		if rest == "" {
 			return
 		}
+		// A dangling escape (`My\` mid-escape) would double up with the
+		// escaped remainder — erase the lone backslash first.
+		if hasDanglingEscape(word) {
+			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
+		}
 		m.sess.SendText(escapeShellWord(rest))
-	case hasFoldPrefix(item, word):
+	case hasFoldPrefix(item, uword):
 		// Case-correcting accept (#968): erase the word as it is on the line
 		// now, not the snapshot's length.
 		for range []rune(word) {
@@ -314,21 +325,53 @@ func (m *Model) lineBeforeCursor() string {
 
 // parseCmdline extracts the command head and the word under the cursor from
 // the text left of the cursor. The prompt is stripped heuristically (text up
-// to the last "$ ", "% ", "> ", "# " or "❯ "); command separators (|, ;, &&,
-// ||) start a fresh command; a trailing space means a fresh empty word.
+// to the last "$ ", "% ", "> ", "# " or "❯ "); unescaped command separators
+// (|, ;, &) start a fresh command; an unescaped trailing space means a fresh
+// empty word. Words are tokenized backslash-aware (#1552): `\<char>` belongs
+// to the word — `My\ Doc` is one word, not two — and the escapes are kept
+// verbatim, so the returned strings mirror the line's on-screen text (the
+// accept path erases and anchors by that width; unescapeShellWord recovers
+// the filesystem form for candidate matching).
 func parseCmdline(before string) (cmd, word string) {
 	for _, p := range promptMarkers {
 		if i := strings.LastIndex(before, p); i >= 0 {
 			before = before[i+len(p):]
 		}
 	}
-	for _, sep := range []string{"&&", "||", "|", ";"} {
-		if i := strings.LastIndex(before, sep); i >= 0 {
-			before = before[i+len(sep):]
+	var fields []string
+	var cur []rune
+	esc := false
+	endsSpace := true
+	flush := func() {
+		if len(cur) > 0 {
+			fields = append(fields, string(cur))
+			cur = cur[:0]
 		}
 	}
-	fields := strings.Fields(before)
-	endsSpace := before == "" || strings.HasSuffix(before, " ")
+	for _, r := range before {
+		if esc {
+			cur = append(cur, r)
+			esc = false
+			continue
+		}
+		switch r {
+		case '\\':
+			esc = true
+			cur = append(cur, r)
+			endsSpace = false
+		case ' ', '\t':
+			flush()
+			endsSpace = true
+		case '|', ';', '&':
+			cur = cur[:0]
+			fields = fields[:0]
+			endsSpace = true
+		default:
+			cur = append(cur, r)
+			endsSpace = false
+		}
+	}
+	flush()
 	if len(fields) > 0 {
 		cmd = fields[0]
 	}
@@ -339,6 +382,27 @@ func parseCmdline(before string) (cmd, word string) {
 		cmd = word // still typing the command itself
 	}
 	return cmd, word
+}
+
+// unescapeShellWord strips the backslash escapes of a parseCmdline word,
+// recovering the filesystem form (`My\ Doc` → `My Doc`) for candidate
+// matching. A trailing lone backslash escapes a character yet to be typed
+// and drops out.
+func unescapeShellWord(s string) string {
+	if !strings.ContainsRune(s, '\\') {
+		return s
+	}
+	var b strings.Builder
+	esc := false
+	for _, r := range s {
+		if !esc && r == '\\' {
+			esc = true
+			continue
+		}
+		esc = false
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // promptMarkers are the heuristic prompt terminators parseCmdline strips; a
@@ -354,6 +418,16 @@ func hasPromptMarker(before string) bool {
 		}
 	}
 	return false
+}
+
+// hasDanglingEscape reports whether s ends in an unconsumed backslash — an
+// escape whose character has not been typed yet.
+func hasDanglingEscape(s string) bool {
+	esc := false
+	for _, r := range s {
+		esc = !esc && r == '\\'
+	}
+	return esc
 }
 
 // candidates resolves the completion source for (cmd, word): PATH commands
