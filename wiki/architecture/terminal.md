@@ -268,6 +268,22 @@ grid per step, position marker on the bottom line, any typed key snaps back
 to live — except `/`, which opens the scrollback search, #1169 below). A dead session (shell exited) falls back to normal key handling so
 `ctrl+w` can close the pane.
 
+## Scrollback bound (#1545)
+
+`terminal.scrollback_lines` (default 10000, clamped to ≥100) bounds each
+session's scrollback buffer — the dominant per-pane memory cost (a wide styled
+line costs tens of KB upstream), multiplied by parked background workspaces
+whose sessions keep ingesting PTY output while invisible. The value lives as a
+process-wide default in the terminal package
+(`terminal.SetDefaultScrollbackLines`, set at startup and on every config
+reload) so **every** creation path — registry panes, terminal tabs, popup
+terminal, run sessions, debug pipe sessions — applies it via
+`vt.SetScrollbackSize` right after the emulator is built, without threading
+config through each call site. A live config reload additionally re-bounds the
+active workspace's running sessions (`Instance.configure` →
+`Model.SetScrollbackLines`): lowering trims history forward; raising cannot
+resurrect already-trimmed lines.
+
 ## Scrollback scrollbar (#1368)
 
 `scrollbar.go` overlays the shared track/thumb bar (`internal/scrollbar`,

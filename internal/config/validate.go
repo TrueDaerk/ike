@@ -145,6 +145,7 @@ func validate(c *Config) []Diagnostic {
 	clampMin("backup.debounce_ms", &c.Backup.DebounceMs, 100)
 	clampMin("backup.max_age_days", &c.Backup.MaxAgeDays, 1)
 	clampMin("notifications.timeout_seconds", &c.Notifications.TimeoutSeconds, 1)
+	clampMin("terminal.scrollback_lines", &c.Terminal.ScrollbackLines, 100)
 	if !severities[c.Notifications.MinSeverity] {
 		diags = append(diags, Diagnostic{Field: "notifications.min_severity", Message: fmt.Sprintf("unknown severity %q, using \"info\"", c.Notifications.MinSeverity)})
 		c.Notifications.MinSeverity = "info"

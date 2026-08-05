@@ -117,6 +117,7 @@ Settings, or run `settings.open` from the palette.
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Command auto-suggest | `terminal.autosuggest` | boolean | `true` | user | Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way |
+| Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
 
 ### Run
 

@@ -192,6 +192,7 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 		w:    w, h: h,
 		argv: []string{},
 	}
+	applyDefaultScrollback(s.em)
 	s.mouseModes = make(map[ansi.Mode]struct{})
 	// Mouse-mode tracking mirrors the PTY path: fed output flipping a DEC
 	// mouse mode gates the scrollback scrollbar (#1368) here too.
@@ -249,6 +250,38 @@ func (s *Session) PipeDone() bool {
 	return s.pipeDone
 }
 
+// defaultScrollback is the process-wide scrollback bound applied to every new
+// session (terminal.scrollback_lines, #1545) — set once from config and again
+// on reload, so all creation paths (registry panes, popup terminals, runs,
+// debug pipes) pick it up without threading config here. 0 (never set) leaves
+// the emulator's built-in default.
+var defaultScrollback atomic.Int64
+
+// SetDefaultScrollbackLines records the scrollback bound for sessions created
+// from now on; n <= 0 is ignored (keeps the current value).
+func SetDefaultScrollbackLines(n int) {
+	if n > 0 {
+		defaultScrollback.Store(int64(n))
+	}
+}
+
+// applyDefaultScrollback bounds a freshly created emulator to the configured
+// scrollback size (#1545).
+func applyDefaultScrollback(em *vt.SafeEmulator) {
+	if n := defaultScrollback.Load(); n > 0 {
+		em.SetScrollbackSize(int(n))
+	}
+}
+
+// SetScrollbackSize re-bounds the live session's scrollback (#1545): a config
+// reload applies the new limit forward. Lowering trims excess history on the
+// next append; raising cannot restore lines already trimmed.
+func (s *Session) SetScrollbackSize(n int) {
+	if n > 0 {
+		s.em.SetScrollbackSize(n)
+	}
+}
+
 // startSession is the shared spawn path; isCommand marks a program session.
 // sessSeq makes every session routing key globally unique (#777): pane keys
 // restart per registry ("terminal", "terminal:2"), so two workspaces would
@@ -287,6 +320,7 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 	if isCommand {
 		s.argv = append([]string(nil), argv...)
 	}
+	applyDefaultScrollback(s.em)
 	s.mouseModes = make(map[ansi.Mode]struct{})
 	// OSC 0/2 titles (the shell's running-command reporting) feed the pane
 	// title; the callbacks run on the read loop, so they only store.

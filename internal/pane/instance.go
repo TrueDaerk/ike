@@ -1,6 +1,7 @@
 package pane
 
 import (
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -990,6 +991,7 @@ func (i *Instance) configure(cfg host.Config) {
 		}
 	case KindTerminal:
 		i.term.SetAutoSuggest(autosuggestOn(cfg))
+		i.term.SetScrollbackLines(scrollbackLines(cfg))
 	case KindMerge:
 		i.mg.Editor().Configure(cfg)
 	}
@@ -1003,4 +1005,21 @@ func autosuggestOn(cfg host.Config) bool {
 	}
 	v, ok := cfg.Get("terminal.autosuggest")
 	return !ok || v != "false"
+}
+
+// scrollbackLines reads terminal.scrollback_lines (#1545); 0 when absent or
+// malformed, which the terminal setters treat as "leave unchanged".
+func scrollbackLines(cfg host.Config) int {
+	if cfg == nil {
+		return 0
+	}
+	v, ok := cfg.Get("terminal.scrollback_lines")
+	if !ok {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0
+	}
+	return n
 }

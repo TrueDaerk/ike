@@ -205,6 +205,7 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 		}},
 		{Title: "Terminal", Description: "The integrated terminal and what it offers while you type at the shell prompt.", Entries: []Entry{
 			{Key: "terminal.autosuggest", Type: Bool, Title: "Command auto-suggest", Description: "Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way", Scope: config.UserScope},
+			{Key: "terminal.scrollback_lines", Type: Int, Title: "Scrollback lines", Description: "Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it", Scope: config.UserScope, Min: 100, Max: 1000000},
 		}},
 		{Title: "Run", Description: "Where a run configuration opens its output.", Entries: []Entry{
 			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},

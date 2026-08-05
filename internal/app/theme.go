@@ -7,6 +7,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/terminal"
 	"ike/internal/theme"
 )
 
@@ -184,6 +185,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 		return
 	}
 	config.Set(cfg)
+	// New sessions anywhere (panes, popup terminal, runs, debug pipes) pick up
+	// the scrollback bound (#1545); Reconfigure below re-bounds live ones.
+	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
 	hcfg := host.FromConfig(cfg)
 	m.host.SetConfig(hcfg)
 	// Re-resolve plugin toggles (#133): the palette/menu/help read the

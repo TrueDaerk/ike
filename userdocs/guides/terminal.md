@@ -101,6 +101,12 @@ While you type at the prompt, a completion popup offers commands, paths and
 `make` targets. ++ctrl+space++ opens it on demand; set `terminal.autosuggest` to `false` to
 stop it appearing by itself.
 
+`terminal.scrollback_lines` bounds how much history each terminal keeps
+(default 10000 lines). Scrollback is the main memory cost of terminal panes —
+lower it if you run many terminals or keep several workspaces open in the
+background. Changes apply to new sessions; lowering also trims running ones as
+they produce output.
+
 ## Terminals and your session
 
 Terminal panes are part of the layout and come back when you reopen a
