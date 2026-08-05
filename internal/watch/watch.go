@@ -440,6 +440,14 @@ func (s *Service) flush() {
 			delete(batch, path)
 		}
 	}
+	// Expired epochs are dead weight — the suppression window is long past —
+	// so each flush sweeps them out (#1562); without this the map grew one
+	// entry per path ever saved for the session's lifetime.
+	for path, at := range s.epochs {
+		if now.Sub(at) >= suppressWindow {
+			delete(s.epochs, path)
+		}
+	}
 	s.mu.Unlock()
 	if send == nil {
 		return
