@@ -502,3 +502,37 @@ func TestStartSmallRootNoTruncation(t *testing.T) {
 		}
 	}
 }
+
+// TestUntrackPrunesEpoch (#1562): Untrack drops the save epoch with the poll
+// stamp, so the maps never outgrow the open-file set.
+func TestUntrackPrunesEpoch(t *testing.T) {
+	s := New(nil)
+	path := filepath.Join(t.TempDir(), "a.txt")
+	s.Track(path)
+	s.MarkSaved(path)
+	if !s.SavedRecently(path) {
+		t.Fatal("MarkSaved must register the epoch")
+	}
+	s.Untrack(path)
+	s.mu.Lock()
+	nTracked, nEpochs := len(s.tracked), len(s.epochs)
+	s.mu.Unlock()
+	if nTracked != 0 || nEpochs != 0 {
+		t.Fatalf("after Untrack: tracked=%d epochs=%d, want 0/0", nTracked, nEpochs)
+	}
+}
+
+// TestFlushSweepsExpiredEpochs (#1562): each debounce flush removes epochs
+// past the suppression window.
+func TestFlushSweepsExpiredEpochs(t *testing.T) {
+	s := New(nil)
+	s.MarkSaved(filepath.Join(t.TempDir(), "old.txt"))
+	s.now = func() time.Time { return time.Now().Add(suppressWindow + time.Second) }
+	s.flush()
+	s.mu.Lock()
+	n := len(s.epochs)
+	s.mu.Unlock()
+	if n != 0 {
+		t.Fatalf("expired epochs after flush = %d, want 0", n)
+	}
+}

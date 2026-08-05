@@ -174,7 +174,32 @@ func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
 	// settled (or deliberately dropped) the unsaved changes, so a leftover
 	// snapshot would resurface them as a crash-recovery prompt next launch.
 	m.backupDropWorkspace(w)
+	// Its editor paths stop poll-watching (#1562): the last-view-close
+	// untrack (#1541) never fires for panes torn down whole, so their stamps
+	// and save epochs would sit in the active model's watcher — re-stat'ed
+	// every poll — for the rest of the session. Collected before teardown
+	// cuts the registry loose; paths still open elsewhere stay tracked
+	// (checked after teardown, so w itself no longer counts as open).
+	var paths []string
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() {
+				paths = append(paths, ed.Path())
+			}
+		}
+	}
 	teardownWorkspace(w)
+	if m.watcher != nil {
+		for _, path := range paths {
+			if !m.pathOpenAnywhere(path) {
+				m.watcher.Untrack(path)
+			}
+		}
+	}
 	return tea.Batch(append(m.fireHooks(plugin.EventWorkspaceClosed, root), imgCmd)...)
 }
 

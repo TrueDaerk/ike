@@ -95,6 +95,12 @@ model routes file kinds to the editor leaf owning the path
   mounts), open buffers are `Track`ed and `Poll()` compares mtime+size,
   hashing on suspicion (an mtime-only touch never reports), behind the same
   message shape.
+- **Bounded state (#1562):** `Untrack` prunes the path's save epoch with its
+  poll stamp, each debounce flush sweeps epochs past the suppression window,
+  and closing/evicting a background workspace walks its editor paths through
+  `Untrack` (paths still open elsewhere stay tracked) — the last-view-close
+  untrack (#1541) never fires for panes torn down whole, so both maps would
+  otherwise grow for the session's lifetime.
 - **Config:** `files.watch = true|false` (default true). `main.go` starts the
   watcher after wiring `Send`; a project switch (Roadmap 0090) calls
   `StartWatcher` again, which restarts on the new root.

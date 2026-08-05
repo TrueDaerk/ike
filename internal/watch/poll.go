@@ -21,11 +21,15 @@ func (s *Service) Track(path string) {
 	s.mu.Unlock()
 }
 
-// Untrack removes path from poll comparison.
+// Untrack removes path from poll comparison, pruning its save epoch with it
+// (#1562): a closed file's epoch can never suppress anything again — the
+// window is milliseconds — so keeping it only grew the map per path ever
+// saved.
 func (s *Service) Untrack(path string) {
 	abs := absPath(path)
 	s.mu.Lock()
 	delete(s.tracked, abs)
+	delete(s.epochs, abs)
 	s.mu.Unlock()
 }
 
