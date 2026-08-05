@@ -322,6 +322,27 @@ func (b *bridge) externalFileChange(h host.API, fc plugin.FileChange) {
 func (b *bridge) fileClosed(path string) {
 	// Drop any queued change so a debounced sync never lands after didClose (#595).
 	b.cancelChange(path)
+	// Release the per-path bridge state (#1543): request coalescing flags,
+	// the inheritance-mark debounce, the cached diagnostics and — when the
+	// closed file owns it — the last raw completion reply. None of it is
+	// useful once the file has no view, and nothing else prunes it.
+	b.mu.Lock()
+	delete(b.diags, path)
+	delete(b.sigActive, path)
+	delete(b.semInFlight, path)
+	delete(b.semPending, path)
+	delete(b.hintInFlight, path)
+	delete(b.hintPending, path)
+	delete(b.inheritInFlight, path)
+	delete(b.inheritPending, path)
+	if t := b.inheritTimer[path]; t != nil {
+		t.Stop()
+		delete(b.inheritTimer, path)
+	}
+	if b.compPath == path {
+		b.compItems, b.compPath, b.compResolved = nil, "", nil
+	}
+	b.mu.Unlock()
 	if mgr := b.manager(); mgr != nil {
 		go func() { _ = mgr.Close(path) }()
 	}
@@ -1483,7 +1504,14 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	if b.diags == nil {
 		b.diags = map[string][]protocol.Diagnostic{}
 	}
-	b.diags[path] = p.Diagnostics
+	// An empty publish retracts the path — drop the key instead of caching an
+	// empty slice (#1543): servers publish for paths far outside any root
+	// (GOMODCACHE, node_modules), and dead keys would pile up session-long.
+	if len(p.Diagnostics) == 0 {
+		delete(b.diags, path)
+	} else {
+		b.diags[path] = p.Diagnostics
+	}
 	b.mu.Unlock()
 	if b.h == nil {
 		return
@@ -1593,6 +1621,12 @@ func (b *bridge) closeRootState(root string) tea.Cmd {
 			delete(b.changeTimer, path)
 		}
 	}
+	for path, t := range b.inheritTimer {
+		if pathUnder(path, root) {
+			t.Stop()
+			delete(b.inheritTimer, path)
+		}
+	}
 	prunePaths(b.pendingChange, root)
 	prunePaths(b.diags, root)
 	prunePaths(b.sigActive, root)
@@ -1600,8 +1634,13 @@ func (b *bridge) closeRootState(root string) tea.Cmd {
 	prunePaths(b.semPending, root)
 	prunePaths(b.hintInFlight, root)
 	prunePaths(b.hintPending, root)
+	prunePaths(b.inheritInFlight, root)
+	prunePaths(b.inheritPending, root)
 	prunePaths(b.pendingDiags, root)
 	prunePaths(b.saveChains, root)
+	if pathUnder(b.compPath, root) {
+		b.compItems, b.compPath, b.compResolved = nil, "", nil
+	}
 	mgr := b.mgr
 	b.mu.Unlock()
 	if mgr == nil {

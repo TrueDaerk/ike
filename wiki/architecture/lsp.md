@@ -848,7 +848,16 @@ Stopping or disabling a language also flushes its **unopened** publishes
 non-empty diagnostics for and emits empty publishes on StopLang/Shutdown/
 disable, so project-wide findings from workspace-diagnostic servers leave
 the Problems store instead of surviving as stale entries; deleted files drop
-out via the explorer's delete flow.
+out via the explorer's delete flow. Closing a document retracts its
+published set the same way (#1543) — `Close` emits an empty publish and
+drops the path from the published tracking — and `CloseRoot` flushes every
+published path under the root plus, once a language has no live server
+anywhere, its out-of-root publishes (module caches) that no root-scoped
+prune can reach. Downstream, an empty publish deletes the path's key in the
+bridge's code-action diagnostics cache, the app's raw-diagnostics cache and
+the Problems store; closing a file's last view additionally releases the
+bridge's per-path request-coalescing state and the cached raw completion
+reply it owns.
 A server that dies **during the handshake** gets the same treatment (#1062):
 `startupError` folds the stderr line into the launch failure, so the toast
 reads e.g. `taplo: the LSP is not part of this build …` instead of

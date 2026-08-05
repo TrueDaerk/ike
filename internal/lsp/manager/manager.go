@@ -307,14 +307,35 @@ func (m *Manager) Save(path string) error {
 	})
 }
 
-// Close sends didClose and forgets the document, including its fragments.
+// Close sends didClose and forgets the document, including its fragments. The
+// document's published diagnostics are retracted downstream (#1543): an empty
+// publish flows through the normal callback so the Problems store and every
+// diagnostics cache drop the path instead of holding it session-long.
 func (m *Manager) Close(path string) error {
 	m.closeFragmentsFor(path)
-	srv, _, ok := m.docServer(path)
+	srv, doc, ok := m.docServer(path)
 	m.mu.Lock()
 	delete(m.docs, path)
+	published := m.hostDiags[path] != nil
 	delete(m.hostDiags, path)
+	for lang, paths := range m.published {
+		if paths[path] {
+			published = true
+			delete(paths, path)
+			if len(paths) == 0 {
+				delete(m.published, lang)
+			}
+		}
+	}
 	m.mu.Unlock()
+	if published {
+		var lines []string
+		version := 0
+		if doc != nil {
+			lines, version = doc.lines, doc.version
+		}
+		m.publishEmpty(path, lines, version)
+	}
 	if !ok {
 		return nil
 	}
@@ -1105,6 +1126,33 @@ func (m *Manager) CloseRoot(root string) {
 		if srv.stop != nil {
 			srv.stop()
 		}
+	}
+	// Retract what the closed root leaves behind (#1543): published paths
+	// under root, and — once a language has no live server anywhere — every
+	// path its servers ever published, unopened out-of-root ones included
+	// (GOMODCACHE, node_modules), which no root-scoped prune can reach. The
+	// empty publishes flow through the normal callback so the Problems store
+	// and the downstream caches drop them.
+	m.mu.Lock()
+	langAlive := map[string]bool{}
+	for _, srv := range m.servers {
+		langAlive[srv.lang] = true
+	}
+	var flush []string
+	for lang, paths := range m.published {
+		for p := range paths {
+			if !langAlive[lang] || underRoot(p, root) {
+				delete(paths, p)
+				flush = append(flush, p)
+			}
+		}
+		if len(paths) == 0 {
+			delete(m.published, lang)
+		}
+	}
+	m.mu.Unlock()
+	for _, p := range flush {
+		m.publishEmpty(p, nil, 0)
 	}
 }
 
