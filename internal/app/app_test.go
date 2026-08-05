@@ -1173,3 +1173,31 @@ func TestHomeIsIsolated(t *testing.T) {
 		t.Fatalf("tests resolve home to %q, want a path under the temp store %q", home, testStoreRoot)
 	}
 }
+
+// TestQuitFiresAppQuitHooks (#1546): quitting runs every EventAppQuit hook's
+// cmd synchronously before returning the exit command — the seam the LSP
+// bridge uses to shut its servers down through the spec's handshake instead
+// of a dropped pipe.
+func TestQuitFiresAppQuitHooks(t *testing.T) {
+	reg := registry.New()
+	ran := false
+	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{
+		Hooks: []plugin.Hook{{
+			ID: "p.quit", Event: plugin.EventAppQuit,
+			Notify: func(h host.API, payload any) tea.Cmd {
+				return func() tea.Msg { ran = true; return nil }
+			},
+		}},
+	}})
+	m := NewWith(reg, host.MapConfig{})
+	_, cmd := m.quit()
+	if !ran {
+		t.Fatal("EventAppQuit hook cmd must run synchronously inside quit")
+	}
+	if cmd == nil {
+		t.Fatal("quit must return the exit command")
+	}
+	if _, ok := cmd().(tea.QuitMsg); !ok {
+		t.Fatalf("expected QuitMsg, got %T", cmd())
+	}
+}

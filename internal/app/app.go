@@ -1494,20 +1494,45 @@ func (m Model) quit() (tea.Model, tea.Cmd) {
 		// tidily instead of leaving the shells to die with the process.
 		inst.CloseTerminalTabs()
 	}
-	// Parked workspaces carry their popup terminals in Aux (#1407): end those
-	// sessions too, not only the active model's.
-	for _, root := range m.ws.Background() {
-		w := m.ws.Peek(root)
-		if w == nil {
+	m.backupCleanShutdown()
+	// End everything that would otherwise outlive the process (#1546). The
+	// active workspace's pane and tab terminal sessions close like a parked
+	// workspace's would; the active debug session gets Disconnect — the only
+	// call carrying terminateDebuggee — before Close, because adapters start
+	// detached (setsid) and would survive IKE as orphans otherwise, debuggee
+	// included. Parked workspaces run the full teardown (terminals, popup
+	// tabs, debug session, DBGp listener).
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil {
 			continue
 		}
-		if extras, ok := w.Aux.(wsExtras); ok {
-			for _, inst := range extras.popup.instances() {
-				inst.CloseTerminalTabs()
-			}
+		switch inst.Kind() {
+		case pane.KindTerminal:
+			inst.Terminal().Close()
+		case pane.KindEditor:
+			inst.CloseTerminalTabs()
 		}
 	}
-	m.backupCleanShutdown()
+	if m.dbg != nil && m.dbg.sess != nil {
+		sess := m.dbg.sess
+		_ = sess.Disconnect()
+		sess.Close()
+	}
+	// teardownWorkspace also ends the parked popup terminals riding in Aux
+	// (#1407) and disconnects a parked debug session.
+	for _, root := range m.ws.Background() {
+		teardownWorkspace(m.ws.Peek(root))
+	}
+	// Language servers shut down through the spec's handshake via the quit
+	// hooks (#1546). Their cmds run synchronously here — blocking the Update
+	// goroutine is fine while quitting, and it guarantees the process does
+	// not vanish under the shutdown handshake.
+	for _, cmd := range m.fireHooks(plugin.EventAppQuit, nil) {
+		if cmd != nil {
+			cmd()
+		}
+	}
 	return m, tea.Quit
 }
 
