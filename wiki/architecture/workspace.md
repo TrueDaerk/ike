@@ -203,4 +203,12 @@ Everything not per-project (theme, registry, host, config options, overlay
 models) stays on the root model. Per-project state that is *derived* (config
 project layer, watcher root, LSP clients) is re-resolved on switch and is
 not part of the unit — see the epic spec (#775) for the M2/M3 ownership
-audit.
+audit. The switch also severs the parking workspace from the old model's
+services (#1549): `detachWorkspaceServices` nils every editor's emitter and
+breakpoint/mark/history/MRU hooks, so a parked workspace does not pin the
+stopped watcher, the dead nav history or stale store pointers (and a save
+while parked cannot write into stores nobody reads); resuming re-wires the
+fresh model's services through `wireEditorEmitters`. Running scans stop at
+the same point: `performSwitch` cancels the find-in-path and todo-index
+`search.Service` scans, so no rg child keeps walking the old tree into the
+shared `host.Send`.

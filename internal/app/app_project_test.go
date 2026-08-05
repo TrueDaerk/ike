@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/palette"
@@ -743,5 +744,42 @@ func TestSwitchBackResyncsExplorer(t *testing.T) {
 	}
 	if view := m.explorer().View(); !strings.Contains(view, "parked.txt") {
 		t.Fatalf("resumed explorer misses the externally created file:\n%s", view)
+	}
+}
+
+// TestDetachWorkspaceServicesDropsEmitters (#1549): parking a workspace cuts
+// its editors loose from the old model's services — the emitter stops
+// receiving events, so a parked workspace no longer pins the stopped watcher,
+// the dead nav history and the stale stores the emitter closures reference.
+func TestDetachWorkspaceServicesDropsEmitters(t *testing.T) {
+	m := newSized()
+	w := m.activeWS()
+	events := 0
+	var edKey string
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		edKey = key
+		for _, ed := range inst.Editors() {
+			ed.SetEmitter(editor.EmitterFunc(func(editor.Event) { events++ }))
+		}
+	}
+	if edKey == "" {
+		t.Fatal("no editor pane in the default layout")
+	}
+	inst := w.Panes.Get(edKey)
+	inst.UpdateTab(0, tea.KeyPressMsg{Code: 'i', Text: "i"})
+	inst.UpdateTab(0, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	if events == 0 {
+		t.Fatal("precondition: the installed emitter must receive edit events")
+	}
+
+	before := events
+	detachWorkspaceServices(w)
+	inst.UpdateTab(0, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	if events != before {
+		t.Fatalf("detached editor still emitted (%d -> %d events)", before, events)
 	}
 }
