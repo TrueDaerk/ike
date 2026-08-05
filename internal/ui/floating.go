@@ -335,6 +335,16 @@ func (f *Floating) View() string {
 	return box.Render(inner)
 }
 
+// ContentOrigin returns the offset of the content area's top-left cell inside
+// the rendered box: border + padding + the heading rows. Hosts use it to map
+// a screen click into content-local coordinates (#1570).
+func (f *Floating) ContentOrigin() (x, y int) {
+	return borderH/2 + padH, borderV/2 + padV + titleRows
+}
+
+// ScrollOffset returns how many content rows are scrolled off the top.
+func (f *Floating) ScrollOffset() int { return f.scroll.vp.YOffset() }
+
 // hint renders the dismiss-key hint, e.g. "esc/?/q", in a stable order.
 func (f *Floating) hint() string {
 	keys := f.cfg.DismissKeys

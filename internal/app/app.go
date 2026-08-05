@@ -6496,6 +6496,11 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			bx, by := (m.width-w)/2, (m.height-h)/2
 			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
 				m.floatDrag = &floatResizeDrag{kind: "shell", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
+			} else if top == m.shell && m.layoutSelectOpen() {
+				// The save-layout mini-map (#1570): a click on a cell focuses
+				// and toggles that pane.
+				ox, oy := m.shell.ContentOrigin()
+				m.layoutSelectClick(msg.X-bx-ox, msg.Y-by-oy+m.shell.ScrollOffset())
 			}
 		}
 		return m, nil

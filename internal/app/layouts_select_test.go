@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -119,6 +120,70 @@ func TestSaveLayoutSelectionEscCancels(t *testing.T) {
 	}
 	if len(loadUserLayouts().Layouts) != 0 {
 		t.Fatal("nothing must be saved on cancel")
+	}
+}
+
+func TestLayoutSelectClickTogglesPane(t *testing.T) {
+	m := sized(t, 100, 40)
+	m = step(m, SaveLayoutPromptMsg{})
+	if !m.layoutSelectOpen() {
+		t.Fatal("selection must be open")
+	}
+	// Render once so the click maps against the on-screen geometry.
+	_ = m.layoutSelectBody(80)
+	ls := m.layoutSelect
+	lay := layout.Compute(m.activeWS().Tree, layout.Rect{W: ls.mapW, H: ls.mapH})
+	r := lay.Panes[pane.ExplorerKey]
+	cx, cy := r.X+r.W/2, ls.canvasTop+r.Y+r.H/2
+	m.layoutSelectClick(cx, cy)
+	if ls.sel[pane.ExplorerKey] {
+		t.Fatal("click must deselect the explorer cell")
+	}
+	if ls.focus != pane.ExplorerKey {
+		t.Fatal("click must focus the hit pane")
+	}
+	m.layoutSelectClick(cx, cy)
+	if !ls.sel[pane.ExplorerKey] {
+		t.Fatal("second click must re-select")
+	}
+	// A click outside the canvas is a no-op.
+	m.layoutSelectClick(-1, 0)
+	m.layoutSelectClick(0, ls.canvasTop+ls.mapH+2)
+	if !ls.sel[pane.ExplorerKey] || ls.focus != pane.ExplorerKey {
+		t.Fatal("out-of-canvas clicks must change nothing")
+	}
+}
+
+func TestLayoutSelectBodyMarksSelectionAndFillsWidth(t *testing.T) {
+	m := sized(t, 100, 40)
+	m = step(m, SaveLayoutPromptMsg{})
+	body := m.layoutSelectBody(72)
+	if m.layoutSelect.mapW != 72 {
+		t.Fatalf("mini-map must fill the width budget, got %d", m.layoutSelect.mapW)
+	}
+	if !strings.Contains(body, "✓") {
+		t.Fatal("selected cells must carry the ✓ marker")
+	}
+	if !strings.Contains(body, "\x1b[") {
+		t.Fatal("selection must be styled (ANSI expected)")
+	}
+	// Deselect all: no ✓ remains.
+	m = step(m, tea.KeyPressMsg{Text: "n", Code: 'n'})
+	if strings.Contains(m.layoutSelectBody(72), "✓") {
+		t.Fatal("deselected cells must not carry the ✓ marker")
+	}
+}
+
+func TestLayoutSelectLabelUsesToolName(t *testing.T) {
+	m, termKey := openTestTerminal(t)
+	if got := m.layoutSelectLabel(termKey); got != "TERMINAL" {
+		t.Fatalf("plain shell must label TERMINAL, got %q", got)
+	}
+	reg := m.activeWS().Panes
+	toolKey := reg.AddTool("lazygit", []string{"true"}, ".", nil, m.host.Send)
+	t.Cleanup(func() { reg.Get(toolKey).Terminal().Close() })
+	if got := m.layoutSelectLabel(toolKey); got != "LAZYGIT" {
+		t.Fatalf("tool pane must label with its tool name, got %q", got)
 	}
 }
 

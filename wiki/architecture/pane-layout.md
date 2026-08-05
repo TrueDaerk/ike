@@ -284,10 +284,17 @@ named, user-scoped snapshots of the split tree.
   preference, unlike the per-project `layout.json`. Schema: named
   `persistedLayout` snapshots plus a `default` marker.
 - **Commands:** `window.saveLayout` first opens a **pane-selection mini-map**
-  (#1568) — a miniature rendering of the split tree in the floating shell;
-  hjkl/arrows move spatially between panes (the `focusTarget` scoring), space
-  toggles, `a`/`n` select all/none, enter continues to the name prompt
-  (save-as pattern; an existing name asks for a confirming second enter).
+  (#1568) — a miniature rendering of the split tree filling the floating
+  shell's content width (a custom `ui.Content` receives the width budget,
+  #1570); hjkl/arrows move spatially between panes (the `focusTarget`
+  scoring), space or a **left click on a cell** toggles, `a`/`n` select
+  all/none, enter continues to the name prompt (save-as pattern; an existing
+  name asks for a confirming second enter). Selection reads by **color**:
+  pinned cells fill with the theme's selection colors plus a ✓, deselected
+  ones render dim, the highlighted cell has an accent double border. A
+  configured tool pane (#741) labels with its tool name instead of TERMINAL.
+  Click mapping goes through `Floating.ContentOrigin`/`ScrollOffset` and
+  `layout.Layout.PaneAt` over the geometry of the last render.
   `window.layouts` opens a locked palette picker — enter applies,
   shift+delete deletes in place (#1113's aux convention), the default row
   carries a `default` chip. `window.setDefaultLayout` opens the same picker
