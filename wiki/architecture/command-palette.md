@@ -219,7 +219,11 @@ extension (`recent_mode.go`): a locked mode implementing
 `SideTitle`/`SideResults` gets the two-column layout. `tab` toggles the
 column focus (plain `left`/`right` switch too while the query is empty;
 with text they stay cursor keys), `up`/`down` navigate the focused column,
-and `enter` on a project emits `project.PickedMsg` — the normal validated
+and the accent `❯` selection marker follows that focus (#1532): only the
+focused column shows it in the accent color, the other column's selected
+row keeps a dimmed marker and its background band — so it is always clear
+whether `enter` opens a project or a file.
+`enter` on a project emits `project.PickedMsg` — the normal validated
 path into the seamless workspace switch (#777), so terminals and runs keep
 running. The query fuzzy-filters both columns at once. Anchored palettes
 and search everywhere never show the column.
