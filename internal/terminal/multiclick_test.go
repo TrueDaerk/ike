@@ -3,6 +3,7 @@ package terminal
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // startNarrowSh spawns a 20-column /bin/sh so ordinary output soft-wraps.
@@ -200,18 +201,27 @@ func TestReflowShrinkRewraps(t *testing.T) {
 	})
 
 	s.Resize(20, 24)
-	waitFor(t, "shrink applied", func() bool { return s.Width() == 20 })
 	m.w = 20
 
 	// The 30-char line rewrapped: full head row, continuation row, then the
-	// untouched marker line.
-	sb := s.ScrollbackLen()
+	// untouched marker line. The emulator applies the reflow asynchronously
+	// after Resize returns (#1553) — Width() flips to 20 before the content
+	// rewraps — so the row scan polls until the rewrapped rows appear.
+	find := func() int {
+		sb := s.ScrollbackLen()
+		for i := 0; i < sb+24; i++ {
+			if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] &&
+				strings.HasPrefix(s.LineText(i+2), "zzz-end-marker") {
+				return i
+			}
+		}
+		return -1
+	}
 	v := -1
-	for i := 0; i < sb+24; i++ {
-		if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] &&
-			strings.HasPrefix(s.LineText(i+2), "zzz-end-marker") {
-			v = i
-			break
+	deadline := time.Now().Add(5 * time.Second)
+	for v < 0 && time.Now().Before(deadline) {
+		if v = find(); v < 0 {
+			time.Sleep(20 * time.Millisecond)
 		}
 	}
 	if v < 0 {
@@ -298,18 +308,18 @@ func TestReflowScrollbackRewraps(t *testing.T) {
 	})
 
 	s.Resize(20, 24)
-	waitFor(t, "shrink applied", func() bool { return s.Width() == 20 })
-
+	// The reflow lands asynchronously after Resize (#1553) — poll for the
+	// rewrapped rows instead of scanning once.
 	v := -1
-	for i := 0; i < s.ScrollbackLen(); i++ {
-		if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] {
-			v = i
-			break
+	waitFor(t, "rewrapped line in scrollback", func() bool {
+		for i := 0; i < s.ScrollbackLen(); i++ {
+			if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] {
+				v = i
+				return true
+			}
 		}
-	}
-	if v < 0 {
-		t.Fatal("rewrapped line not found in scrollback")
-	}
+		return false
+	})
 	if !s.SoftWrapped(v) {
 		t.Fatal("the rewrapped scrollback head row must read as soft-wrapped")
 	}
