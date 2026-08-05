@@ -76,3 +76,67 @@ func TestDiagnosticsCoalesceIntoOneBatch(t *testing.T) {
 func pathN(i int) string {
 	return "/proj/.venv/lib/pkg/mod" + string(rune('a'+i%26)) + string(rune('0'+i/26)) + ".py"
 }
+
+// TestDiagsCacheDropsRetractedPaths (#1543): an empty publish removes the
+// path's key from the code-action diagnostics cache — servers publish for
+// paths far outside any root (module caches), and empty-set keys would pile
+// up for the whole session.
+func TestDiagsCacheDropsRetractedPaths(t *testing.T) {
+	b := &bridge{}
+	b.onDiagnostics("/x/a.go", protocol.PublishDiagnosticsParams{
+		Diagnostics: []protocol.Diagnostic{{Message: "boom"}},
+	}, nil, "")
+	if len(b.diags) != 1 {
+		t.Fatalf("cache = %d paths, want 1", len(b.diags))
+	}
+	b.onDiagnostics("/x/a.go", protocol.PublishDiagnosticsParams{}, nil, "")
+	if len(b.diags) != 0 {
+		t.Fatalf("empty publish must drop the key, cache = %v", b.diags)
+	}
+	// Never-seen path with an empty publish never creates a key.
+	b.onDiagnostics("/x/b.go", protocol.PublishDiagnosticsParams{}, nil, "")
+	if len(b.diags) != 0 {
+		t.Fatalf("empty publish for an unknown path must not create a key, cache = %v", b.diags)
+	}
+}
+
+// TestFileClosedDropsPerPathState (#1543): closing a file's last view releases
+// every per-path bridge map entry and the completion cache it owns.
+func TestFileClosedDropsPerPathState(t *testing.T) {
+	const p = "/x/a.go"
+	b := &bridge{
+		diags:           map[string][]protocol.Diagnostic{p: {{Message: "boom"}}},
+		sigActive:       map[string]bool{p: true},
+		semInFlight:     map[string]bool{p: true},
+		semPending:      map[string]bool{p: true},
+		hintInFlight:    map[string]bool{p: true},
+		hintPending:     map[string]bool{p: true},
+		inheritInFlight: map[string]bool{p: true},
+		inheritPending:  map[string]bool{p: true},
+		inheritTimer:    map[string]*time.Timer{p: time.AfterFunc(time.Hour, func() {})},
+		compItems:       []protocol.CompletionItem{{Label: "x"}},
+		compPath:        p,
+		compResolved:    map[int]bool{0: true},
+	}
+	b.fileClosed(p)
+	for name, n := range map[string]int{
+		"diags":           len(b.diags),
+		"sigActive":       len(b.sigActive),
+		"semInFlight":     len(b.semInFlight),
+		"semPending":      len(b.semPending),
+		"hintInFlight":    len(b.hintInFlight),
+		"hintPending":     len(b.hintPending),
+		"inheritInFlight": len(b.inheritInFlight),
+		"inheritPending":  len(b.inheritPending),
+		"inheritTimer":    len(b.inheritTimer),
+		"compItems":       len(b.compItems),
+		"compResolved":    len(b.compResolved),
+	} {
+		if n != 0 {
+			t.Errorf("%s not released on fileClosed: %d entries", name, n)
+		}
+	}
+	if b.compPath != "" {
+		t.Errorf("compPath not cleared: %q", b.compPath)
+	}
+}

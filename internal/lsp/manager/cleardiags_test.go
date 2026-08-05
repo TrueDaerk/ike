@@ -258,3 +258,54 @@ func TestStopLangFlushesUnopenedPublishes(t *testing.T) {
 	waitCleared(t, rec, path, "StopLang open doc")
 	waitCleared(t, rec, unopened, "StopLang unopened path")
 }
+
+// TestCloseRetractsDiagnostics (#1543): closing a document emits an empty
+// publish so the Problems store and the diagnostics caches drop the path
+// instead of keeping its last set session-long.
+func TestCloseRetractsDiagnostics(t *testing.T) {
+	rec := newDiagRecorder()
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	dir := t.TempDir()
+	unopened := filepath.Join(dir, "unopened.go")
+	m := New(resolver(spec), workspaceDiagConnector(protocol.PathToURI(unopened)), Callbacks{
+		Diagnostics: rec.record,
+	})
+	defer m.Shutdown()
+
+	path := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(path, []byte("package main"), 0o644)
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPublish(t, rec, path)
+
+	_ = m.Close(path)
+	waitCleared(t, rec, path, "Close")
+}
+
+// TestCloseRootFlushesPublishes (#1543): tearing down a workspace root
+// retracts the diagnostics of its documents, and — once the language has no
+// live server anywhere — the paths published outside every root (module
+// caches), which no root-scoped prune can reach.
+func TestCloseRootFlushesPublishes(t *testing.T) {
+	rec := newDiagRecorder()
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	outside := filepath.Join(t.TempDir(), "gomodcache", "dep.go")
+	m := New(resolver(spec), workspaceDiagConnector(protocol.PathToURI(outside)), Callbacks{
+		Diagnostics: rec.record,
+	})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(path, []byte("package main"), 0o644)
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+	waitForPublish(t, rec, path)
+	waitForPublish(t, rec, outside)
+
+	m.CloseRoot(dir)
+	waitCleared(t, rec, path, "CloseRoot open doc")
+	waitCleared(t, rec, outside, "CloseRoot out-of-root publish")
+}
