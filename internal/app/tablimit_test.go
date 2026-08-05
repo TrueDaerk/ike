@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/backup"
 	"ike/internal/config"
 	"ike/internal/pane"
 )
@@ -199,4 +200,34 @@ func openApp2(t *testing.T, m Model, paths ...string) Model {
 		m = tm.(Model)
 	}
 	return m
+}
+
+// TestTabLimitEvictionDropsBackup (#1550): the LRU tab eviction performs the
+// same close bookkeeping as a manual tab close — the crash snapshot drops
+// (and the undo history persists) instead of the evicted tab silently losing
+// both.
+func TestTabLimitEvictionDropsBackup(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "a\n")
+	b := writeTemp(t, dir, "b.txt", "b\n")
+	c := writeTemp(t, dir, "c.txt", "c\n")
+	d := writeTemp(t, dir, "d.txt", "d\n")
+	m := newSized()
+	withTabLimit(t, 3)
+	m = openApp2(t, m, a, b, c)
+	// A snapshot exists for the tab about to be evicted (a is the LRU).
+	if err := m.backupSvc.Snapshot(backup.Doc{Key: a, Path: a, Text: "edits"}); err != nil {
+		t.Fatal(err)
+	}
+	m = openApp2(t, m, d) // pushes past the limit, evicting a
+
+	snaps, err := m.backupSvc.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range snaps {
+		if s.Path == a {
+			t.Fatalf("evicted tab's snapshot must drop, still listed: %+v", snaps)
+		}
+	}
 }

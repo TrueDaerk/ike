@@ -170,6 +170,10 @@ func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
 	// (#1547) — normally already released at park time, so this catches the
 	// paths that close a workspace without a prior switch.
 	imgCmd := m.releaseWorkspaceImages(w)
+	// Its crash snapshots leave the disk (#1550): a discard-close already
+	// settled (or deliberately dropped) the unsaved changes, so a leftover
+	// snapshot would resurface them as a crash-recovery prompt next launch.
+	m.backupDropWorkspace(w)
 	teardownWorkspace(w)
 	return tea.Batch(append(m.fireHooks(plugin.EventWorkspaceClosed, root), imgCmd)...)
 }
