@@ -163,3 +163,54 @@ func TestMissingStoreIsQuiet(t *testing.T) {
 		t.Fatal("dirless store recorded entries")
 	}
 }
+
+// TestRecordPrunesOtherFiles (#1548): a save prunes every file's list, so a
+// path not touched anymore ages out of the index — key dropped, blob
+// garbage-collected — instead of accumulating forever.
+func TestRecordPrunesOtherFiles(t *testing.T) {
+	dir := t.TempDir()
+	base := time.Now()
+	clock := base
+	s := &Store{Dir: dir, now: func() time.Time { return clock }}
+
+	staleContent := []byte("stale content")
+	s.Record("/proj/stale.go", staleContent)
+	if len(s.List("/proj/stale.go")) != 1 {
+		t.Fatal("precondition: stale.go must hold one entry")
+	}
+
+	// 31 days later a different file is saved: stale.go's entry is past
+	// MaxAge and must leave the index, and its now-unreferenced blob the
+	// object store.
+	clock = base.Add(31 * 24 * time.Hour)
+	s.Record("/proj/active.go", []byte("active content"))
+
+	if got := s.List("/proj/stale.go"); len(got) != 0 {
+		t.Fatalf("stale.go must have aged out, still holds %d entries", len(got))
+	}
+	idx := s.load()
+	if _, ok := idx.Files[key("/proj/stale.go")]; ok {
+		t.Fatal("stale.go's emptied key must leave the index")
+	}
+	if _, err := s.Read(Hash(staleContent)); err == nil {
+		t.Fatal("the aged-out entry's blob must be garbage-collected")
+	}
+	if len(s.List("/proj/active.go")) != 1 {
+		t.Fatal("the recorded file's own entry must survive")
+	}
+}
+
+// TestRecordSkipsGCWhenNothingPruned (#1548): a save that drops no entries
+// does not sweep the objects directory — the blob of a foreign, still
+// referenced entry survives untouched (and the sweep cost is not paid).
+func TestRecordSkipsGCWhenNothingPruned(t *testing.T) {
+	dir := t.TempDir()
+	s := New(dir)
+	s.Record("/proj/a.go", []byte("one"))
+	s.Record("/proj/b.go", []byte("two"))
+	for _, want := range []string{"one", "two"} {
+		if data, err := s.Read(Hash([]byte(want))); err != nil || string(data) != want {
+			t.Fatalf("blob %q must survive un-pruned saves: %v", want, err)
+		}
+	}
+}

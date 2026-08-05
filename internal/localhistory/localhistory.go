@@ -12,8 +12,10 @@
 // Content addressing dedupes: saving identical content twice in a row stores
 // no new entry, and the same content shared across files (or across time)
 // stores one blob. Pruning keeps at most MaxPerFile entries per file (default
-// 50) and drops entries older than MaxAge (default 30 days); blobs no entry
-// references anymore are garbage-collected on the next Record.
+// 50) and drops entries older than MaxAge (default 30 days); every Record
+// prunes every file's list (#1548), so untouched paths age out too and empty
+// keys leave the index. Blobs no entry references anymore are
+// garbage-collected on the Record that dropped their last reference.
 package localhistory
 
 import (
@@ -76,9 +78,13 @@ func key(path string) string {
 
 // Record stores content as the newest snapshot of path. A content identical
 // to the file's newest snapshot is a no-op (consecutive-save dedupe). The
-// call prunes the file's list to the count/age caps and garbage-collects
-// unreferenced blobs. Errors are swallowed: failing to snapshot must never
-// disrupt the save that triggered it.
+// call prunes every file's list to the count/age caps (#1548) — not only the
+// recorded path's, or other paths' entries would never age out and the index
+// would accumulate one key per path ever saved, with their blobs referenced
+// (so uncollectable) forever. The object garbage collection scans the objects
+// directory only when pruning actually dropped entries, instead of ReadDir-ing
+// the whole store on every save. Errors are swallowed: failing to snapshot
+// must never disrupt the save that triggered it.
 func (s *Store) Record(path string, content []byte) {
 	if s == nil || s.Dir == "" || path == "" {
 		return
@@ -93,9 +99,20 @@ func (s *Store) Record(path string, content []byte) {
 	if err := s.writeObject(h, content); err != nil {
 		return
 	}
-	entries = append(entries, Entry{Time: s.timeNow(), Hash: h})
-	idx.Files[k] = s.prune(entries)
-	s.collectGarbage(idx)
+	idx.Files[k] = append(entries, Entry{Time: s.timeNow(), Hash: h})
+	dropped := 0
+	for fk, ents := range idx.Files {
+		pruned := s.prune(ents)
+		dropped += len(ents) - len(pruned)
+		if len(pruned) == 0 {
+			delete(idx.Files, fk)
+		} else {
+			idx.Files[fk] = pruned
+		}
+	}
+	if dropped > 0 {
+		s.collectGarbage(idx)
+	}
 	s.save(idx)
 }
 
