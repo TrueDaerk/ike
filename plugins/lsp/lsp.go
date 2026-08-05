@@ -225,6 +225,22 @@ func (Plugin) Capabilities() plugin.Capabilities {
 					return shared().workspaceIdle(root)
 				},
 			},
+			{
+				// App exit (#1546): shut every server down through the spec's
+				// shutdown/exit handshake. The cmd is sequenced before the
+				// program-exit command, so servers are not left to notice a
+				// dropped pipe (and their diagnostics daemons to linger).
+				ID:    "lsp.quit",
+				Event: plugin.EventAppQuit,
+				Notify: func(h host.API, payload any) tea.Cmd {
+					return func() tea.Msg {
+						if mgr := shared().manager(); mgr != nil {
+							mgr.Shutdown()
+						}
+						return nil
+					}
+				},
+			},
 		},
 	}
 }

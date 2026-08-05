@@ -138,6 +138,12 @@ const (
 	// a FileChange; the LSP bridge forwards it to the servers as
 	// workspace/didChangeWatchedFiles.
 	EventExternalFileChange
+	// EventAppQuit fires once when IKE is quitting (#1546); the returned cmds
+	// run synchronously before the program-exit command. The payload is nil.
+	// Subscribers end what would otherwise outlive the process — the LSP
+	// bridge shuts every server down (the spec's shutdown/exit handshake
+	// instead of a dropped pipe).
+	EventAppQuit
 	// EventWorkspaceIdle fires when a parked background workspace sat unused
 	// past project.background_lsp_timeout (#1521). The payload is the
 	// workspace's absolute root (string). Unlike EventWorkspaceClosed the

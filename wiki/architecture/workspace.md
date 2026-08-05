@@ -171,6 +171,17 @@ Tearing down a workspace with live state asks first
 - **LRU eviction** keeps its own #780 guard (busy workspaces prompt, never
   evict silently).
 
+Once the quit is confirmed, `quit()` (`internal/app/app.go`) tears live
+resources down instead of letting them die with the process (#1546): the
+active workspace's pane and tab terminal sessions close, the active debug
+session gets `Disconnect` (the only `terminateDebuggee: true` call — DAP
+adapters start detached via setsid and would survive IKE as orphans,
+debuggee included) followed by `Close`, parked workspaces run the full
+`teardownWorkspace` (terminals, popup tabs, debug session, DBGp listener),
+and the `EventAppQuit` plugin hooks run synchronously before the exit
+command — the LSP bridge uses that seam to `Shutdown()` every server
+through the spec's shutdown/exit handshake.
+
 ## Working-directory invariant (#779)
 
 **The process cwd always equals the active workspace's root.** Everything
