@@ -28,6 +28,10 @@ echo $PATH | tr ':' '\n' | grep -q "$HOME/.local/bin" || \
   echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc
 ```
 
+On macOS and Linux, `make install-desktop` additionally installs IKE as a
+clickable desktop application wrapping Ghostty — see
+[Desktop launcher](desktop-launcher.md).
+
 ## Per-platform notes
 
 === "Linux"

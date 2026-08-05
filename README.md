@@ -71,6 +71,26 @@ ike +42 main.go                   # vim-style line prefix
 git log | ike -                   # pipe stdin into a scratch buffer
 ```
 
+### Desktop launcher (macOS & Linux)
+
+IKE can install as a first-class desktop application wrapping
+[Ghostty](https://ghostty.org/) (user-installed prerequisite):
+
+```sh
+make install          # the ike binary first
+make install-desktop  # Ike.app (macOS) or ike.desktop + icons (Linux)
+```
+
+Clicking the **Ike** icon opens a dedicated Ghostty window with IKE-specific
+settings (`~/.config/ghostty/ike.conf`, loaded exclusively — your normal
+Ghostty config is untouched and vice versa), running `ike` as the sole
+process; quitting IKE closes the window. The config ships with
+`keybind = clear` plus the minimal re-adds (font zoom, quit, the macOS
+Option-key fixes below), so chords reach IKE without any manual terminal
+setup. Known macOS limitation: the *running* window shows the Ghostty Dock
+icon — the Ike icon applies to the launcher tile. If you don't want the
+desktop integration, the manual setup below works as before.
+
 ### Platform notes
 
 > [!IMPORTANT]

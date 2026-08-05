@@ -1,0 +1,32 @@
+#!/bin/sh
+# ike-gui — open IKE as a desktop application (#1567): a dedicated Ghostty
+# window with IKE-specific settings, running ike as the sole process. The
+# config is loaded exclusively (--config-default-files=false), so the user's
+# normal Ghostty setup never interferes. Installed by scripts/install-desktop.sh.
+set -eu
+
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/ike.conf"
+if [ ! -f "$CONF" ]; then
+  echo "ike-gui: $CONF not found — run 'make install-desktop' first" >&2
+  exit 1
+fi
+
+case "$(uname -s)" in
+  Darwin)
+    exec open -na /Applications/Ghostty.app --args \
+      --config-default-files=false --config-file="$CONF" ;;
+  *)
+    if command -v ghostty >/dev/null 2>&1; then
+      exec ghostty --config-default-files=false --config-file="$CONF"
+    fi
+    # Ghostty missing: fall back to another terminal running ike directly
+    # (no dedicated config — chords may be shadowed; see README).
+    for term in "${TERMINAL:-}" kitty wezterm foot; do
+      [ -n "$term" ] || continue
+      if command -v "$term" >/dev/null 2>&1; then
+        exec "$term" -e ike
+      fi
+    done
+    echo "ike-gui: no supported terminal found (ghostty, kitty, wezterm, foot)" >&2
+    exit 1 ;;
+esac

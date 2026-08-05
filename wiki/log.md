@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-05 (deploy: desktop launcher, #1567)
+
+- IKE installs as a desktop application on macOS and Linux
+  (`make install-desktop` → `scripts/install-desktop.sh`): a dedicated
+  Ghostty config (`deploy/ghostty/ike.conf`, loaded exclusively via
+  `--config-default-files=false`) plus the `ike-gui` launcher, wrapped by
+  `Ike.app` (macOS) or `ike.desktop` + hicolor icons (Linux). Icon artefacts
+  are generated from `deploy/icon/gen` (pure Go source render; `make icons`
+  rebuilds the .icns/PNG sets on macOS). Docs: README "Desktop launcher",
+  userdocs getting-started/desktop-launcher.md.
+
 ## 2026-08-05 (editor: app-wide shared register store, #1540)
 
 - One `register.Store` for every editor across panes, tabs and workspaces
