@@ -191,6 +191,12 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// (#1522) — output-heavy background jobs must not cost an Update pass
 	// per quiet interval for grids nobody renders.
 	setWorkspaceTerminalsParked(m.ws.Peek(parkedRoot), true)
+	// The parked debug session's output events batch the same way (#1557):
+	// a chatty background debuggee must not cost the active workspace one
+	// Update+render pass per DAP output event.
+	if m.dbg != nil && m.dbg.coal != nil {
+		m.dbg.coal.SetParked(true)
+	}
 	// Its image panes' Kitty placements leave the terminal (#1547): the fresh
 	// model starts with an empty liveImages, so nothing else would ever emit
 	// the deletes and every parked PNG stayed resident in the host terminal's
@@ -227,6 +233,11 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// it un-parks through the model's own reference; a first visit has no
 	// terminals and both calls no-op.
 	setWorkspaceTerminalsParked(sized.activeWS(), false)
+	// The resumed debug session goes back to per-event delivery (#1557);
+	// un-parking flushes any batch still buffered.
+	if sized.dbg != nil && sized.dbg.coal != nil {
+		sized.dbg.coal.SetParked(false)
+	}
 	for _, inst := range sized.popup.instances() {
 		for i := 0; i < inst.TabCount(); i++ {
 			if t := inst.TabTerminal(i); t != nil {
