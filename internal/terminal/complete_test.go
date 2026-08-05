@@ -837,3 +837,74 @@ func TestAcceptTypesInsteadOfPaste(t *testing.T) {
 		return cmd == "echo" && word == "hi"
 	})
 }
+
+// TestAcceptStaleSnapshotUsesLiveWord (#1538): a keystroke that echoed after
+// the popup's last refresh leaves the snapshot word stale; accepting must
+// compute the remainder from the line as it is now, not double-type the
+// in-between keys (`mkdi` + tab used to insert `ir` → `mkdiir`).
+func TestAcceptStaleSnapshotUsesLiveWord(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "mkdi" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of mkdi", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "mkdi"
+	})
+	// Popup snapshot predates the last keystroke: computed at "mkd".
+	m.comp = completion{open: true, items: []string{"mkdir"}, sel: 0, word: "mkd"}
+	m.acceptCompletion()
+	waitFor(t, "line completes to mkdir", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "mkdir"
+	})
+}
+
+// TestAcceptStaleSnapshotCaseCorrect (#1538): the case-correcting accept
+// (#968) erases the live word's length, not the snapshot's — a stale snapshot
+// backspaced too few characters and left typed keys behind the candidate.
+func TestAcceptStaleSnapshotCaseCorrect(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "makef" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of makef", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "makef"
+	})
+	// Snapshot at "mak"; the live word "makef" matches "Makefile" only
+	// case-insensitively, so the accept takes the erase-and-retype path and
+	// must backspace 5 characters, not the snapshot's 3.
+	m.comp = completion{open: true, items: []string{"Makefile"}, sel: 0, word: "mak"}
+	m.acceptCompletion()
+	waitFor(t, "case-corrected full word", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "Makefile"
+	})
+}
+
+// TestAcceptDivergedWordDropsAccept (#1538): the line moved away from the
+// candidate between refresh and tab — accepting must insert nothing rather
+// than stale text.
+func TestAcceptDivergedWordDropsAccept(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "mx" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of mx", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "mx"
+	})
+	m.comp = completion{open: true, items: []string{"mkdir"}, sel: 0, word: "m"}
+	m.acceptCompletion()
+	// Any text the accept had sent would land before this probe keystroke, so
+	// the word settling at exactly "mxz" proves nothing stale was inserted.
+	m.Update(tea.KeyPressMsg{Code: 'z', Text: "z"})
+	waitFor(t, "line unchanged plus probe", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "mxz"
+	})
+}
