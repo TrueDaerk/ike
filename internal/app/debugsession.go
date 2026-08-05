@@ -26,6 +26,7 @@ import (
 	"ike/internal/settings"
 	"ike/internal/terminal"
 	"ike/internal/ui"
+	"ike/internal/workspace"
 )
 
 // debugsession.go orchestrates one live DAP session (0350, #579): debug.start
@@ -782,6 +783,16 @@ func (m *Model) applyParkedDebugEvent(sess *dap.Session, ev dap.Event) bool {
 		if !ok || extras.dbg == nil || extras.dbg.sess != sess {
 			continue
 		}
+		if ev.Name == "exited" || ev.Name == "terminated" {
+			// The parked debuggee ended (#1544). Swallowing this kept the dead
+			// session parked forever: workspaceBusy stayed true (the workspace
+			// never silently evictable, prompted on every switch), the
+			// close/quit guards reported a phantom session, and the dead
+			// *dap.Session pinned its transport until resume. Finish the
+			// parked session like the active path would.
+			m.finishParkedDebugSession(w, root, extras, ev)
+			return true
+		}
 		if ev.Name != "output" {
 			return true
 		}
@@ -801,6 +812,51 @@ func (m *Model) applyParkedDebugEvent(sess *dap.Session, ev dap.Event) bool {
 		return true
 	}
 	return false
+}
+
+// finishParkedDebugSession ends a debug session whose debuggee exited while
+// its workspace was parked (#1544): the paused-line marker leaves the parked
+// editors, the parked pane pair flips to the finished state (#689) so the
+// outcome is visible on resume, extras.dbg clears — the workspace is no
+// longer "busy", so silent LRU eviction and truthful close/quit activity
+// reports work again — and the dead session's transport is released.
+func (m *Model) finishParkedDebugSession(w *workspace.Workspace, root string, extras wsExtras, ev dap.Event) {
+	dbg := extras.dbg
+	exitCode, hasCode := 0, false
+	if ev.Name == "exited" {
+		exitCode, hasCode = ev.Exited().ExitCode, true
+	}
+	if dbg.pausedPath != "" {
+		for _, key := range w.Panes.Keys() {
+			inst := w.Panes.Get(key)
+			if inst == nil || inst.Kind() != pane.KindEditor {
+				continue
+			}
+			for _, ed := range inst.Editors() {
+				if ed.HasFile() && ed.Path() == dbg.pausedPath {
+					ed.ClearPausedLine()
+				}
+			}
+		}
+	}
+	if w.Panes.Has(pane.DebugKey) {
+		if p := w.Panes.Get(pane.DebugKey).Debug(); p != nil {
+			p.SetFinished(exitCode, hasCode)
+		}
+	}
+	if inst := w.Panes.Get(extras.dbgTermKey); inst != nil &&
+		inst.Kind() == pane.KindTerminal && inst.Terminal().IsPipe() {
+		inst.Terminal().FinishPipe(exitCode, hasCode)
+	}
+	extras.dbg = nil
+	extras.dbgLaunching = false
+	w.Aux = extras
+	go dbg.sess.Close()
+	note := "debug: " + dbg.cfgName + " finished"
+	if hasCode {
+		note += " (exit code " + strconv.Itoa(exitCode) + ")"
+	}
+	m.host.Notify(host.Info, note+" — background workspace "+project.CompactPath(root))
 }
 
 // flushDebugOutput drains the pre-pane output buffer into the debuggee
