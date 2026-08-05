@@ -7,7 +7,7 @@ import (
 	"ike/internal/terminal"
 )
 
-func newReg() *Registry { return NewRegistry(host.MapConfig{}) }
+func newReg() *Registry { return NewRegistry(host.MapConfig{}, nil) }
 
 // TestKeyAllocation verifies the explorer keeps the stable key and editors get
 // monotonic, never-reused keys.

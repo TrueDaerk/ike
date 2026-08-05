@@ -15,7 +15,7 @@ import (
 // i.e. the cache could serve a stale frame.
 func TestInstanceViewCacheNeverStale(t *testing.T) {
 	setup := func() (*Instance, *editor.Model) {
-		i := newInstance("editor", KindEditor, nil, nil)
+		i := newInstance("editor", KindEditor, nil, nil, nil)
 		ed := i.tabs[0].Editor()
 		ed.RestoreText(strings.Repeat("some line of code here = value(x, y)\n", 40))
 		ed.SetSize(60, 20)
@@ -70,7 +70,7 @@ func TestInstanceViewCacheNeverStale(t *testing.T) {
 // TestInstanceViewCacheHits verifies the cache actually short-circuits when
 // nothing changed (an untouched pane during another pane's scroll).
 func TestInstanceViewCacheHits(t *testing.T) {
-	i := newInstance("editor", KindEditor, nil, nil)
+	i := newInstance("editor", KindEditor, nil, nil, nil)
 	ed := i.tabs[0].Editor()
 	ed.RestoreText("alpha\nbeta\ngamma\n")
 	ed.SetSize(40, 10)

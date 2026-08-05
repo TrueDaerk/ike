@@ -86,10 +86,19 @@ line runs that test (see /architecture/run-configurations.md).
   `editor.text_width`) on the editor side.
 - **register** — unnamed `"`, named `"a`-`"z` (uppercase appends), yank `"0`,
   small-delete `"-`, the numbered ring `"1`-`"9`, and a system-clipboard seam
-  (`"+`/`"*`, injected via `SetClipboard`). `internal/clipboard` provides the
-  real implementation (pbcopy/pbpaste on macOS, wl-copy/xclip/xsel on
-  Linux/BSD), wired in by the pane registry when an editor is created; without
-  a utility on PATH the registers fall back to the built-in no-op clipboard.
+  (`"+`/`"*`, injected via `SetClipboard`). One `register.Store` is shared
+  **app-wide** (#1540, vim's global-register semantics): the workspace manager
+  owns it — surviving the model rebuild a project switch does — and it is
+  threaded via `pane.NewRegistry` → `newEditorModel` → `SetRegisters` into
+  every editor in every pane, tab and workspace (plus the diff-pane inline
+  editor and, idempotently, `installEmitter`), so yanks/deletes and the
+  paste-from-history ring are one pool; `editor.New` keeps a private store for
+  standalone use, replaced when a shared one is injected (`SetRegisters` runs
+  before `Configure`/`SetClipboard` so both apply to the shared store).
+  `internal/clipboard` provides the real clipboard implementation
+  (pbcopy/pbpaste on macOS, wl-copy/xclip/xsel on Linux/BSD), wired in by the
+  pane registry when an editor is created; without a utility on PATH the
+  registers fall back to the built-in no-op clipboard.
   `Cmd+C/X/V` (keymap commands `editor.copy/cut/paste`) yank / delete the
   visual selection — or the current line without one — through `"+`, and paste
   from it (mid-insert the paste joins the open insert session's undo unit).
@@ -1050,8 +1059,9 @@ Two editor panes showing the same file are two **views of one document**
 
 - Opening a path another pane already shows makes the new pane a second view
   via `ShareDocumentWith`: `*buffer.Buffer` and `*history.History` are aliased
-  (one text, one undo stack), while cursor, scroll, mode, and registers stay
-  per pane. Session restore deduplicates the same way.
+  (one text, one undo stack), while cursor, scroll, and mode stay per pane
+  (registers are app-wide anyway, #1540). Session restore deduplicates the
+  same way.
 - After an edit, undo, save, or reload in one view, the emitter adapter (which
   knows its pane key) broadcasts `editor.SyncMsg{Path, FromKey, Dirty, Stale,
   Large, EOL, Enc, MixedEOL}` through `host.Send`; the root model routes it to every *other* pane

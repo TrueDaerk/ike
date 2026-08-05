@@ -7,7 +7,7 @@ import (
 )
 
 func TestManagerHoldsActiveWorkspace(t *testing.T) {
-	panes := pane.NewRegistry(nil)
+	panes := pane.NewRegistry(nil, nil)
 	ws := New("/proj/a", panes)
 	m := NewManager(ws)
 	if m.Active() != ws {
@@ -16,7 +16,7 @@ func TestManagerHoldsActiveWorkspace(t *testing.T) {
 	if m.Active().Panes != panes || m.Active().Root != "/proj/a" {
 		t.Fatalf("workspace fields lost: %+v", m.Active())
 	}
-	other := New("/proj/b", pane.NewRegistry(nil))
+	other := New("/proj/b", pane.NewRegistry(nil, nil))
 	m.SetActive(other)
 	if m.Active() != other {
 		t.Fatal("SetActive must swap the active workspace")
@@ -26,7 +26,7 @@ func TestManagerHoldsActiveWorkspace(t *testing.T) {
 func TestWorkspaceStateIsSharedAcrossModelCopies(t *testing.T) {
 	// The root model is copied by value on every bubbletea Update; the
 	// workspace is the pointer seam that keeps panes/tree/focus one unit.
-	m := NewManager(New("", pane.NewRegistry(nil)))
+	m := NewManager(New("", pane.NewRegistry(nil, nil)))
 	copy := m // the Manager pointer itself is what Model embeds
 	copy.Active().ReturnFocus = "editor:1"
 	if m.Active().ReturnFocus != "editor:1" {
@@ -35,8 +35,8 @@ func TestWorkspaceStateIsSharedAcrossModelCopies(t *testing.T) {
 }
 
 func TestParkResumeRoundTrip(t *testing.T) {
-	a := New("/proj/a", pane.NewRegistry(nil))
-	b := New("/proj/b", pane.NewRegistry(nil))
+	a := New("/proj/a", pane.NewRegistry(nil, nil))
+	b := New("/proj/b", pane.NewRegistry(nil, nil))
 	m := NewManager(a)
 	m.Park()
 	if m.Active() != nil {
@@ -61,7 +61,7 @@ func TestParkResumeRoundTrip(t *testing.T) {
 }
 
 func TestParkWithoutRootDrops(t *testing.T) {
-	m := NewManager(New("", pane.NewRegistry(nil)))
+	m := NewManager(New("", pane.NewRegistry(nil, nil)))
 	m.Park()
 	if len(m.Background()) != 0 {
 		t.Fatal("a rootless workspace cannot be parked")
@@ -69,11 +69,11 @@ func TestParkWithoutRootDrops(t *testing.T) {
 }
 
 func TestBackgroundLRUOrderAndDrop(t *testing.T) {
-	m := NewManager(New("/a", pane.NewRegistry(nil)))
+	m := NewManager(New("/a", pane.NewRegistry(nil, nil)))
 	m.Park()
-	m.SetActive(New("/b", pane.NewRegistry(nil)))
+	m.SetActive(New("/b", pane.NewRegistry(nil, nil)))
 	m.Park()
-	m.SetActive(New("/a", pane.NewRegistry(nil))) // fresh /a again
+	m.SetActive(New("/a", pane.NewRegistry(nil, nil))) // fresh /a again
 	m.Park()
 	if got := m.Background(); len(got) != 2 || got[0] != "/b" || got[1] != "/a" {
 		t.Fatalf("LRU order = %v, want [/b /a]", got)
@@ -83,5 +83,29 @@ func TestBackgroundLRUOrderAndDrop(t *testing.T) {
 	}
 	if w := m.Drop("/b"); w != nil {
 		t.Fatal("double Drop must return nil")
+	}
+}
+
+// TestManagerSharedRegisters (#1540): the manager owns the app-wide register
+// store, so it survives park/resume and model rebuilds; SetRegisters adopts a
+// caller-allocated store and ignores nil.
+func TestManagerSharedRegisters(t *testing.T) {
+	m := NewManager(New("/a", pane.NewRegistry(nil, nil)))
+	regs := m.Registers()
+	if regs == nil {
+		t.Fatal("Registers must allocate on first use")
+	}
+	m.Park()
+	m.SetActive(New("/b", pane.NewRegistry(nil, nil)))
+	if m.Registers() != regs {
+		t.Fatal("store must survive a workspace switch")
+	}
+	m.Resume("/a")
+	if m.Registers() != regs {
+		t.Fatal("store must survive a resume")
+	}
+	m.SetRegisters(nil)
+	if m.Registers() != regs {
+		t.Fatal("SetRegisters(nil) must be ignored")
 	}
 }

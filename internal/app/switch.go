@@ -307,6 +307,10 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 			ed.SetMarkHooks(nil, nil, nil)
 			ed.SetHistories(nil)
 			ed.SetCompletionMRU(nil)
+			// Registers deliberately stay: the store is manager-owned and
+			// app-wide (#1540) — the parked editors keep pointing at the same
+			// store the fresh model uses, which is exactly the cross-workspace
+			// sharing the feature is about, and it pins no per-model service.
 		}
 	}
 }
