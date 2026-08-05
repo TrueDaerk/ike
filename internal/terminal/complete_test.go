@@ -908,3 +908,66 @@ func TestAcceptDivergedWordDropsAccept(t *testing.T) {
 		return word == "mxz"
 	})
 }
+
+// TestEscapeShellWord (#1539): shell-special characters in inserted
+// completions are backslash-escaped; plain words and a leading dash pass
+// through untouched.
+func TestEscapeShellWord(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"plain.txt", "plain.txt"},
+		{"My Documents/", `My\ Documents/`},
+		{"a'b", `a\'b`},
+		{`a"b`, `a\"b`},
+		{`back\slash`, `back\\slash`},
+		{"pri$ce", `pri\$ce`},
+		{"a&b|c;d", `a\&b\|c\;d`},
+		{"glob*?.txt", `glob\*\?.txt`},
+		{"br[ack]ets", `br\[ack\]ets`},
+		{"-flagfile", "-flagfile"},
+		{"hash#bang!", `hash\#bang\!`},
+		{"cur{ly}~", `cur\{ly\}\~`},
+	}
+	for _, tc := range cases {
+		if got := escapeShellWord(tc.in); got != tc.want {
+			t.Errorf("escapeShellWord(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestAcceptEscapesSpecialChars (#1539): accepting a candidate containing a
+// space types it backslash-escaped so the shell sees a single argument.
+func TestAcceptEscapesSpecialChars(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "ls My" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of My", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "My"
+	})
+	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: "My"}
+	m.acceptCompletion()
+	waitFor(t, "escaped remainder on the line", func() bool {
+		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
+	})
+}
+
+// TestAcceptCaseCorrectEscapes (#1539): the erase-and-retype path (#968)
+// escapes the full retyped candidate too.
+func TestAcceptCaseCorrectEscapes(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range "ls my" {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of my", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == "my"
+	})
+	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: "my"}
+	m.acceptCompletion()
+	waitFor(t, "escaped case-corrected word", func() bool {
+		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
+	})
+}
