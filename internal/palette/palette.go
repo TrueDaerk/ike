@@ -607,9 +607,11 @@ func (p *Palette) View() string {
 
 	prompt := dim.Render(p.promptGlyph()) + " " + p.queryView(inner-2)
 	sep := dim.Render(strings.Repeat("─", inner))
-	rows := p.list(inner)
+	rows := p.list(inner, true)
 	// A SideMode open (#778) renders the left column (e.g. Recent Projects)
-	// beside the main list, separated by a dim rule.
+	// beside the main list, separated by a dim rule. The accent selection
+	// marker follows the column focus (#1532): the unfocused column keeps its
+	// selection visible, but dimmed.
 	if len(p.sideItems) > 0 {
 		sideW := sideWidth(inner)
 		mainW := inner - sideW - 3
@@ -617,7 +619,7 @@ func (p *Palette) View() string {
 			mainW = 10
 		}
 		side := p.sideView(sideW)
-		main := p.list(mainW)
+		main := p.list(mainW, !p.sideFocus)
 		h := lipgloss.Height(side)
 		if mh := lipgloss.Height(main); mh > h {
 			h = mh
@@ -667,8 +669,10 @@ func (p *Palette) queryView(width int) string {
 }
 
 // list renders the visible result rows with selection and match highlighting, or
-// a dim "no results" line when the query matched nothing.
-func (p *Palette) list(width int) string {
+// a dim "no results" line when the query matched nothing. focused says whether
+// this column holds the keyboard focus (#1532) — false dims the selection
+// marker (a two-column layout with the side column focused).
+func (p *Palette) list(width int, focused bool) string {
 	if len(p.items) == 0 {
 		return lipgloss.NewStyle().Foreground(p.theme().Border).Render("no results")
 	}
@@ -678,7 +682,7 @@ func (p *Palette) list(width int) string {
 	}
 	var rows []string
 	for i := p.top; i < end; i++ {
-		rows = append(rows, p.row(p.items[i], i == p.selected, width))
+		rows = append(rows, p.row(p.items[i], i == p.selected, focused, width))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, rows...)
 }
@@ -701,9 +705,23 @@ func (p *Palette) sideView(width int) string {
 		end = max
 	}
 	for i := 0; i < end; i++ {
-		lines = append(lines, p.sideRow(p.sideItems[i], p.sideFocus && i == p.sideSel, width))
+		lines = append(lines, p.sideRow(p.sideItems[i], i == p.sideSel, p.sideFocus, width))
 	}
 	return lipgloss.JoinVertical(lipgloss.Left, lines...)
+}
+
+// rowMarker renders the two-cell selection marker (#1532): the accent "❯" on
+// the focused column's selected row, a dimmed one on the unfocused column's —
+// so with two columns it is always unambiguous which row enter activates.
+func (p *Palette) rowMarker(selected, focused bool) string {
+	if !selected {
+		return "  "
+	}
+	style := lipgloss.NewStyle().Foreground(p.theme().Border)
+	if focused {
+		style = lipgloss.NewStyle().Foreground(p.accentColor())
+	}
+	return style.Render("❯ ")
 }
 
 // auxGlyphW is the right-pinned aux affordance's width (glyph + one space).
@@ -730,12 +748,10 @@ const minRowTitleW = 8
 // optional Badge (#820, dim accent), the right-aligned Time column (#1114)
 // and the right-pinned "✕" for rows with an Aux action, truncated to the
 // column width. The narrow side column drops the time before the name.
-func (p *Palette) sideRow(it Item, selected bool, width int) string {
+// focused dims the selection marker when the column lacks the focus (#1532).
+func (p *Palette) sideRow(it Item, selected, focused bool, width int) string {
 	const markerW = 2
-	marker := "  "
-	if selected {
-		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
-	}
+	marker := p.rowMarker(selected, focused)
 	badge, badgeW := p.badgeView(it)
 	timeStr, timeW := p.timeView(it)
 	auxW := 0
@@ -805,13 +821,11 @@ func (p *Palette) timeView(it Item) (string, int) {
 // Detail chip (key binding / path), the right-aligned Time (#1114) with
 // timeSepW of separation, and the "✕" aux zone. The title is truncated first
 // so the right column is never dropped; when even the title would fall below
-// minRowTitleW the Time column drops instead.
-func (p *Palette) row(it Item, selected bool, width int) string {
+// minRowTitleW the Time column drops instead. focused dims the selection
+// marker when another column holds the focus (#1532).
+func (p *Palette) row(it Item, selected, focused bool, width int) string {
 	const markerW = 2
-	marker := "  "
-	if selected {
-		marker = lipgloss.NewStyle().Foreground(p.accentColor()).Render("❯ ")
-	}
+	marker := p.rowMarker(selected, focused)
 
 	detail, detailW := "", 0
 	if it.Detail != "" {

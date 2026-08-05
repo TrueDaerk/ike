@@ -626,14 +626,14 @@ func TestRowsNeverWrap(t *testing.T) {
 	p := New(Config{})
 	long := strings.Repeat("wiki/architecture/highlighting-", 8) + ".md"
 	for _, selected := range []bool{false, true} {
-		row := p.row(Item{Title: long, Detail: "cmd+shift+a"}, selected, 60)
+		row := p.row(Item{Title: long, Detail: "cmd+shift+a"}, selected, true, 60)
 		if h := lipgloss.Height(row); h != 1 {
 			t.Fatalf("selected=%v: row height = %d, want 1:\n%s", selected, h, row)
 		}
 		if w := lipgloss.Width(row); w > 60 {
 			t.Fatalf("selected=%v: row width = %d, want <= 60", selected, w)
 		}
-		side := p.sideRow(Item{Title: long}, selected, 60)
+		side := p.sideRow(Item{Title: long}, selected, true, 60)
 		if h := lipgloss.Height(side); h != 1 {
 			t.Fatalf("selected=%v: sideRow height = %d, want 1", selected, h)
 		}
@@ -646,7 +646,7 @@ func TestRowsNeverWrap(t *testing.T) {
 func TestRowTimeColumnRightAligned(t *testing.T) {
 	p := New(Config{})
 	it := Item{Title: "name", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
-	line := ansi.Strip(p.row(it, false, 40))
+	line := ansi.Strip(p.row(it, false, true, 40))
 	if !strings.HasSuffix(line, "5m ago ✕") {
 		t.Fatalf("time must sit right-aligned before the ✕, got %q", line)
 	}
@@ -663,7 +663,7 @@ func TestRowTimeColumnRightAligned(t *testing.T) {
 func TestRowNarrowTruncatesTitleKeepsTime(t *testing.T) {
 	p := New(Config{})
 	it := Item{Title: "averyverylongfilename.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
-	line := ansi.Strip(p.row(it, false, 24))
+	line := ansi.Strip(p.row(it, false, true, 24))
 	if !strings.HasSuffix(line, "5m ago ✕") {
 		t.Fatalf("time and ✕ must survive narrow widths, got %q", line)
 	}
@@ -677,7 +677,7 @@ func TestRowNarrowTruncatesTitleKeepsTime(t *testing.T) {
 func TestRowVeryNarrowDropsTime(t *testing.T) {
 	p := New(Config{})
 	it := Item{Title: "somefilename.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
-	line := ansi.Strip(p.row(it, false, 18))
+	line := ansi.Strip(p.row(it, false, true, 18))
 	if strings.Contains(line, "ago") {
 		t.Fatalf("the time must drop below the minimum width, got %q", line)
 	}
@@ -699,7 +699,7 @@ func TestSideRowLongTitleKeepsAux(t *testing.T) {
 		AuxGlyph: "⏏",
 	}
 	for _, w := range []int{18, 26, 34} {
-		line := ansi.Strip(p.sideRow(it, false, w))
+		line := ansi.Strip(p.sideRow(it, false, true, w))
 		if got := ansi.StringWidth(line); got != w {
 			t.Fatalf("width %d: row spans %d cells, got %q", w, got, line)
 		}
@@ -732,7 +732,7 @@ func TestHighlightMeasuresDisplayCells(t *testing.T) {
 	}
 
 	it := Item{Title: "非常に長い日本語のプロジェクト名", Time: "2h ago", Badge: "●", Aux: RunCommandMsg{ID: "x"}, AuxGlyph: "⏏"}
-	line := ansi.Strip(p.sideRow(it, false, 26))
+	line := ansi.Strip(p.sideRow(it, false, true, 26))
 	if got := ansi.StringWidth(line); got != 26 {
 		t.Fatalf("wide-rune row spans %d cells, want 26: %q", got, line)
 	}
@@ -750,7 +750,7 @@ func TestHighlightMeasuresDisplayCells(t *testing.T) {
 func TestRowWideRunesKeepRightColumn(t *testing.T) {
 	p := New(Config{})
 	it := Item{Title: "非常に長い日本語のファイル名です.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
-	line := ansi.Strip(p.row(it, false, 30))
+	line := ansi.Strip(p.row(it, false, true, 30))
 	if got := ansi.StringWidth(line); got > 30 {
 		t.Fatalf("row spans %d cells, want <= 30: %q", got, line)
 	}
@@ -759,16 +759,93 @@ func TestRowWideRunesKeepRightColumn(t *testing.T) {
 	}
 }
 
+// TestRowMarkerFollowsFocus guards #1532: the accent "❯" belongs to the
+// focused column only — the unfocused column's selected row keeps a marker,
+// but dimmed (border color), so the two are never identical.
+func TestRowMarkerFollowsFocus(t *testing.T) {
+	p := New(Config{})
+	focused := p.rowMarker(true, true)
+	unfocused := p.rowMarker(true, false)
+	if ansi.Strip(focused) != "❯ " || ansi.Strip(unfocused) != "❯ " {
+		t.Fatalf("selected rows must keep the marker glyph, got %q / %q",
+			ansi.Strip(focused), ansi.Strip(unfocused))
+	}
+	if focused == unfocused {
+		t.Fatal("focused and unfocused markers must differ in styling")
+	}
+	if p.rowMarker(false, true) != "  " || p.rowMarker(false, false) != "  " {
+		t.Fatal("unselected rows must render no marker")
+	}
+}
+
+// TestRowRendersDimMarkerWhenUnfocused (#1532): row and sideRow thread the
+// focus through to the marker; the rest of the line is unaffected.
+func TestRowRendersDimMarkerWhenUnfocused(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "name", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
+	for name, render := range map[string]func(bool) string{
+		"row":     func(f bool) string { return p.row(it, true, f, 40) },
+		"sideRow": func(f bool) string { return p.sideRow(it, true, f, 30) },
+	} {
+		focused, unfocused := render(true), render(false)
+		if focused == unfocused {
+			t.Fatalf("%s: focused and unfocused selected rows must differ", name)
+		}
+		if ansi.Strip(focused) != ansi.Strip(unfocused) {
+			t.Fatalf("%s: focus must only restyle the marker, got %q vs %q",
+				name, ansi.Strip(focused), ansi.Strip(unfocused))
+		}
+	}
+}
+
+// TestSideColumnKeepsSelectionWhenUnfocused (#1532): the side column's
+// selected row stays visible (dim marker + background band) while the main
+// list holds the focus — previously it showed no selection at all.
+func TestSideColumnKeepsSelectionWhenUnfocused(t *testing.T) {
+	m := sideRecentMode()
+	p := New(Config{}, m, fileMode("a.go", "b.go"))
+	p.SetSize(120, 40)
+	p.OpenLocked(Context{Root: "."}, RecentPrefix)
+	if p.sideFocus {
+		t.Fatal("precondition: focus starts on the files column")
+	}
+	side := p.sideView(24)
+	if !strings.Contains(ansi.Strip(side), "❯") {
+		t.Fatalf("unfocused side column must keep a (dim) selection marker:\n%s", side)
+	}
+	dim := p.rowMarker(true, false)
+	if !strings.Contains(side, dim) {
+		t.Fatal("unfocused side column's marker must use the dim style")
+	}
+	accent := p.rowMarker(true, true)
+	if strings.Contains(side, accent) {
+		t.Fatal("unfocused side column must not show the accent marker")
+	}
+
+	// Focus flip: the accent marker moves into the side column, the main
+	// list's selected row falls back to the dim marker.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if !p.sideFocus {
+		t.Fatal("tab must focus the side column")
+	}
+	if side = p.sideView(24); !strings.Contains(side, accent) {
+		t.Fatal("focused side column must show the accent marker")
+	}
+	if main := p.list(40, !p.sideFocus); !strings.Contains(main, dim) || strings.Contains(main, accent) {
+		t.Fatalf("main list must dim its marker while the side column holds the focus:\n%s", main)
+	}
+}
+
 // TestSideRowTimeColumn (#1114): the side column applies the same layout —
 // right-aligned time before the "✕", dropped when the column is too narrow.
 func TestSideRowTimeColumn(t *testing.T) {
 	p := New(Config{})
 	it := Item{Title: "proj", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}
-	line := ansi.Strip(p.sideRow(it, false, 30))
+	line := ansi.Strip(p.sideRow(it, false, true, 30))
 	if !strings.HasSuffix(line, "2h ago ✕ ") {
 		t.Fatalf("side time must sit right-aligned before the ✕, got %q", line)
 	}
-	narrow := ansi.Strip(p.sideRow(Item{Title: "longprojectname", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}, false, 16))
+	narrow := ansi.Strip(p.sideRow(Item{Title: "longprojectname", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}, false, true, 16))
 	if strings.Contains(narrow, "ago") {
 		t.Fatalf("side time must drop in a too-narrow column, got %q", narrow)
 	}
