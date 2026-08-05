@@ -1308,20 +1308,29 @@ func (m Model) GutterWidth() int { return m.view.GutterWidth(m.buf.LineCount()) 
 // and not derivable from the cursor alone).
 func (m Model) ScrollOffset() (top, left int) { return m.view.Top, m.view.Left }
 
+// bottomOverscroll is how many empty rows may show below the last line when
+// scrolling past the end (#1535): a small comfort zone so the last line is
+// not pinned flush to the pane's bottom edge, sized to match jumpEdgeMargin.
+const bottomOverscroll = 5
+
 // SetScroll restores the viewport framing saved by ScrollOffset, clamping into
 // the current buffer. Unlike a cursor move it does not re-derive Top from the
 // cursor, so the file reopens scrolled exactly as it was left. Apply it after the
 // editor has been sized.
 func (m *Model) SetScroll(top, left int) {
-	// No overscroll past the end: the last line stops at the bottom of the
-	// viewport instead of scrolling up to an almost-empty screen. Soft wrap
-	// and collapsed folds keep the looser lineCount-1 clamp — wrap renders
-	// more rows than lines (the tight clamp could hide a wrapped tail) and
-	// folds render fewer (reaching the end can need a deeper Top).
+	// Bounded overscroll past the end (#1134, #1535): scrolling stops with
+	// bottomOverscroll empty rows below the last line instead of an
+	// almost-empty screen, and never past the point where only the last line
+	// remains. Soft wrap and collapsed folds keep the looser lineCount-1
+	// clamp — wrap renders more rows than lines (the tight clamp could hide
+	// a wrapped tail) and folds render fewer (reaching the end can need a
+	// deeper Top).
 	max := m.buf.LineCount() - 1
 	if h := m.view.Height(); !m.softWrap && !m.hasFolds() && h > 0 {
-		if max = m.buf.LineCount() - h; max < 0 {
-			max = 0
+		if max = m.buf.LineCount() - h; max <= 0 {
+			max = 0 // the buffer fits the pane: no scrolling at all
+		} else if max += bottomOverscroll; max > m.buf.LineCount()-1 {
+			max = m.buf.LineCount() - 1
 		}
 	}
 	if top > max {
