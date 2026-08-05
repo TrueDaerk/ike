@@ -197,3 +197,39 @@ func TestSniffImage(t *testing.T) {
 		}
 	}
 }
+
+// TestReleaseWorkspaceImagesDeletesAndResets (#1547): parking or tearing down
+// a workspace deletes its panes' Kitty placements and resets the transmission
+// state, so nothing stays resident in the host terminal's graphics memory and
+// the resume's reconcile pass transmits again.
+func TestReleaseWorkspaceImagesDeletesAndResets(t *testing.T) {
+	m := newSized()
+	path := writeTestPNG(t)
+	tm, _ := m.Update(OpenImageMsg{Path: path})
+	m = tm.(Model)
+	key := imageKeys(m)[0]
+	iv := m.activeWS().Panes.Get(key).Image()
+	id := iv.ID()
+	tm, _ = m.Update(uv.KittyGraphicsEvent{Options: kitty.Options{ID: imgview.QueryID}, Payload: []byte("OK")})
+	m = tm.(Model)
+	if !iv.Transmitted() || !m.liveImages[id] {
+		t.Fatal("precondition: the pane must be transmitted and tracked")
+	}
+
+	cmd := m.releaseWorkspaceImages(m.activeWS())
+	raw := rawStrings(cmd)
+	if !strings.Contains(raw, "a=d") || !strings.Contains(raw, "i="+itoa(id)) {
+		t.Fatalf("release must delete the placement, got %q", raw)
+	}
+	if iv.Transmitted() {
+		t.Fatal("release must reset the transmission state")
+	}
+	if m.liveImages[id] {
+		t.Fatal("release must drop the id from the live set")
+	}
+
+	// The next reconcile pass (the resume) transmits again.
+	if raw := rawStrings(m.imageSyncCmd()); !strings.Contains(raw, "a=T") {
+		t.Fatalf("post-release sync must retransmit, got %.120q", raw)
+	}
+}

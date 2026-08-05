@@ -132,6 +132,11 @@ func (m *Model) SyncSeqs() []string {
 // Transmitted reports whether the terminal currently holds a placement.
 func (m *Model) Transmitted() bool { return m.sentCols > 0 }
 
+// Reset forgets the applied transmission state (#1547): the app deleted the
+// pane's placement (workspace parked or torn down), so the next reconcile
+// pass must transmit again instead of assuming the terminal still holds it.
+func (m *Model) Reset() { m.sentCols, m.sentRows = 0, 0 }
+
 // View renders the pane interior: the placeholder grid (centered) on a
 // supporting terminal, the metadata summary otherwise.
 func (m *Model) View() string {

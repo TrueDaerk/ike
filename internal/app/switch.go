@@ -177,6 +177,12 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	// (#1522) — output-heavy background jobs must not cost an Update pass
 	// per quiet interval for grids nobody renders.
 	setWorkspaceTerminalsParked(m.ws.Peek(parkedRoot), true)
+	// Its image panes' Kitty placements leave the terminal (#1547): the fresh
+	// model starts with an empty liveImages, so nothing else would ever emit
+	// the deletes and every parked PNG stayed resident in the host terminal's
+	// graphics memory for the process lifetime. The reset transmission state
+	// makes the resume retransmit.
+	imgCmd := m.releaseWorkspaceImages(m.ws.Peek(parkedRoot))
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -228,6 +234,7 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,
+		imgCmd,
 		capCmd,
 		reconcile,
 		resync,
