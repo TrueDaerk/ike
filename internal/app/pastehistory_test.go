@@ -70,6 +70,26 @@ func TestPasteFromHistoryRoundTrip(t *testing.T) {
 	}
 }
 
+// TestPasteHistorySharedAcrossPanes (#1540): registers are app-wide, so a
+// copy in one editor pane is offered by every other editor's history.
+func TestPasteHistorySharedAcrossPanes(t *testing.T) {
+	dir := t.TempDir()
+	a := writeTemp(t, dir, "a.txt", "one\n")
+	m := openApp(t, a)
+	m = dispatch(t, m, editor.ActionMsg{Action: "copy"})
+
+	key2 := m.activeWS().Panes.AddEditor()
+	ed2 := m.activeWS().Panes.Get(key2).Editor()
+	if h := ed2.RegisterHistory(); len(h) != 1 || !strings.HasPrefix(h[0].Text, "one") {
+		t.Fatalf("a fresh pane must see the shared history, got %v", h)
+	}
+	// A tab added later shares too.
+	ed3 := m.activeWS().Panes.Get(key2).AddTab()
+	if h := ed3.RegisterHistory(); len(h) != 1 {
+		t.Fatalf("a fresh tab must see the shared history, got %v", h)
+	}
+}
+
 func TestPasteFromHistoryEmptyIsToastNoPalette(t *testing.T) {
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")

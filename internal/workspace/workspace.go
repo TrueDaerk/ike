@@ -8,6 +8,7 @@ package workspace
 import (
 	"time"
 
+	"ike/internal/editor/register"
 	"ike/internal/layout"
 	"ike/internal/pane"
 )
@@ -51,11 +52,35 @@ type Manager struct {
 	active *Workspace
 	bg     map[string]*Workspace // parked workspaces, keyed by Root
 	order  []string              // LRU order over bg: least-recently-used first
+	// regs is the app-wide register store (#1540): yanks, deletes and the
+	// paste-from-history ring shared by every editor in every workspace. It
+	// lives on the manager because a project switch rebuilds the root model
+	// but carries the manager — model-owned state would reset the registers
+	// on every switch.
+	regs *register.Store
 }
 
 // NewManager builds a manager with the given active workspace.
 func NewManager(active *Workspace) *Manager {
 	return &Manager{active: active, bg: map[string]*Workspace{}}
+}
+
+// Registers returns the manager-owned shared register store (#1540),
+// allocating it on first use.
+func (m *Manager) Registers() *register.Store {
+	if m.regs == nil {
+		m.regs = register.New()
+	}
+	return m.regs
+}
+
+// SetRegisters adopts an existing store as the shared one (#1540) — the first
+// root model allocates the store before the manager exists and hands it over
+// here; nil is ignored.
+func (m *Manager) SetRegisters(s *register.Store) {
+	if s != nil {
+		m.regs = s
+	}
 }
 
 // Active returns the current workspace (never nil for a managed model).

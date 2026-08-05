@@ -10,6 +10,7 @@ import (
 	"ike/internal/breakpanel"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
+	"ike/internal/editor/register"
 	"ike/internal/host"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
@@ -72,7 +73,11 @@ const BreakpointsKey = "breakpoints"
 // that are never reused within a session, so the layout tree, the registry, and
 // persistence never disagree on identity.
 type Registry struct {
-	cfg       host.Config
+	cfg host.Config
+	// regs is the app-wide shared register store handed to every editor
+	// created through the registry (#1540); nil (tests) keeps editors on
+	// their private stores.
+	regs      *register.Store
 	pal       *theme.Palette
 	instances map[string]*Instance
 	order     []string // insertion order, for stable iteration
@@ -86,9 +91,10 @@ type Registry struct {
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
-// against cfg.
-func NewRegistry(cfg host.Config) *Registry {
-	return &Registry{cfg: cfg, instances: map[string]*Instance{}}
+// against cfg. regs is the app-wide shared register store threaded into every
+// editor the registry creates (#1540); nil keeps editors on private stores.
+func NewRegistry(cfg host.Config, regs *register.Store) *Registry {
+	return &Registry{cfg: cfg, regs: regs, instances: map[string]*Instance{}}
 }
 
 // SetPalette records the active theme palette and threads it into every
@@ -124,7 +130,7 @@ func (r *Registry) AddExplorer() string {
 	if _, ok := r.instances[ExplorerKey]; ok {
 		return ExplorerKey
 	}
-	r.put(newInstance(ExplorerKey, KindExplorer, r.cfg, r.pal))
+	r.put(newInstance(ExplorerKey, KindExplorer, r.cfg, r.pal, r.regs))
 	return ExplorerKey
 }
 
@@ -132,7 +138,7 @@ func (r *Registry) AddExplorer() string {
 // and returns that key.
 func (r *Registry) AddEditor() string {
 	key := r.mintEditorKey()
-	r.put(newInstance(key, KindEditor, r.cfg, r.pal))
+	r.put(newInstance(key, KindEditor, r.cfg, r.pal, r.regs))
 	return key
 }
 
@@ -142,7 +148,7 @@ func (r *Registry) AddEditor() string {
 // A terminal-shaped key (a terminal/tool pane converted into a tab host,
 // #836) advances the terminal counter instead.
 func (r *Registry) AddEditorKey(key string) *Instance {
-	inst := newInstance(key, KindEditor, r.cfg, r.pal)
+	inst := newInstance(key, KindEditor, r.cfg, r.pal, r.regs)
 	r.put(inst)
 	if len(key) >= len(terminalKeyBase) && key[:len(terminalKeyBase)] == terminalKeyBase {
 		r.advancePastTerminal(key)
@@ -424,7 +430,7 @@ func (r *Registry) AddMerge(path string) string {
 		key = mergeKeyBase + ":" + strconv.Itoa(r.merges)
 	}
 	inst := &Instance{key: key, kind: KindMerge, cfg: r.cfg, pal: r.pal}
-	ed := newEditorModel(r.cfg, r.pal)
+	ed := newEditorModel(r.cfg, r.pal, r.regs)
 	if err := ed.Load(path); err != nil {
 		ed.NewFile(path)
 	}

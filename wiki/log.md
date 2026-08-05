@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-05 (editor: app-wide shared register store, #1540)
+
+- One `register.Store` for every editor across panes, tabs and workspaces
+  (vim's global-register semantics): yanks/deletes, named registers, the
+  numbered ring and the paste-from-history picker (cmd+shift+V) now share one
+  pool — copy in workspace A, paste from history in workspace B. The
+  workspace manager owns the store (a project switch rebuilds the model but
+  carries the manager); it threads through `pane.NewRegistry` into every
+  editor via `editor.SetRegisters`, with `editor.New` keeping a private store
+  for standalone/test use.
+
 ## 2026-08-05 (terminal: configurable scrollback bound, #1545)
 
 - New `terminal.scrollback_lines` setting (default 10000, min 100): bounds

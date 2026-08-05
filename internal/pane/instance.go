@@ -11,6 +11,7 @@ import (
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
+	"ike/internal/editor/register"
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/preview"
@@ -137,6 +138,9 @@ type Instance struct {
 	useSeq  int // monotonic activation counter stamping tab recency (#742)
 	cfg     host.Config
 	pal     *theme.Palette
+	// regs is the app-wide shared register store threaded into every editor
+	// tab (#1540); nil leaves each editor its private store.
+	regs *register.Store
 	w, h    int
 	focused bool
 
@@ -454,7 +458,7 @@ func (i *Instance) AddTab() *editor.Model {
 	if i.kind != KindEditor {
 		return nil
 	}
-	ed := newEditorModel(i.cfg, i.pal)
+	ed := newEditorModel(i.cfg, i.pal, i.regs)
 	ed.SetSize(i.w, i.h)
 	i.tabs = append(i.tabs, newEditorTab(&ed))
 	i.activate(len(i.tabs) - 1)
@@ -904,15 +908,15 @@ func (i *Instance) Init() tea.Cmd {
 // newInstance builds an instance of the given kind, configuring it against cfg.
 // The explorer is rooted at the working directory; editors start with a single
 // tab holding an empty scratch buffer.
-func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette) *Instance {
-	i := &Instance{key: key, kind: kind, cfg: cfg, pal: pal}
+func newInstance(key string, kind Kind, cfg host.Config, pal *theme.Palette, regs *register.Store) *Instance {
+	i := &Instance{key: key, kind: kind, cfg: cfg, pal: pal, regs: regs}
 	switch kind {
 	case KindExplorer:
 		i.exp = explorer.New(".")
 		i.exp.SetPalette(pal)
 		i.exp.Configure(cfg)
 	case KindEditor:
-		ed := newEditorModel(cfg, pal)
+		ed := newEditorModel(cfg, pal, regs)
 		i.tabs = []*Tab{newEditorTab(&ed)}
 	}
 	return i
@@ -934,8 +938,12 @@ func NewDetachedTerminalHost(key string, term terminal.Model, cfg host.Config, p
 func (i *Instance) SetPalette(p *theme.Palette) { i.setPalette(p) }
 
 // newEditorModel constructs one tab's editor model configured against cfg.
-func newEditorModel(cfg host.Config, pal *theme.Palette) editor.Model {
+// regs is the app-wide shared register store (#1540); it is installed before
+// Configure/SetClipboard so both apply to the shared store, and nil keeps the
+// editor's private store.
+func newEditorModel(cfg host.Config, pal *theme.Palette, regs *register.Store) editor.Model {
 	ed := editor.New()
+	ed.SetRegisters(regs)
 	ed.SetPalette(pal)
 	ed.Configure(cfg)
 	if c := clipboard.System(); c != nil {

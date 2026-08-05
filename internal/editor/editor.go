@@ -1028,6 +1028,17 @@ func (m Model) ScrollTop() int { return m.view.Top }
 // SetClipboard wires the system-clipboard implementation for the "+ register.
 func (m *Model) SetClipboard(c register.Clipboard) { m.regs.SetClipboard(c) }
 
+// SetRegisters replaces the editor's register store with a shared one (#1540):
+// the app threads one store into every editor so named registers, the delete
+// ring and the paste-from-history ring span panes, tabs and workspaces, vim
+// style. Call it before Configure/SetClipboard so those apply to the shared
+// store. nil keeps the private store from New (standalone editors, tests).
+func (m *Model) SetRegisters(s *register.Store) {
+	if s != nil {
+		m.regs = s
+	}
+}
+
 // Init implements tea.Model.
 func (m Model) Init() tea.Cmd { return nil }
 

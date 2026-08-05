@@ -37,6 +37,7 @@ import (
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
+	"ike/internal/editor/register"
 	"ike/internal/explorer"
 	"ike/internal/finder"
 	"ike/internal/format"
@@ -535,6 +536,11 @@ type Model struct {
 	// buckets for the editor's search/ex lines and find-in-path, shared by
 	// every editor and the finder overlay.
 	qhist *histories.Store
+	// regs is the app-wide register store (#1540): one ring of yanks/deletes
+	// and one set of named registers for every editor in every workspace,
+	// vim style. Owned by the workspace manager so a project switch (which
+	// rebuilds the model) keeps it.
+	regs *register.Store
 	// diffPick tracks diff.files' two-step file picking (#60): 0 idle, 1
 	// picking the left (old) file, 2 the right (new). diffLeft holds the
 	// first pick while the second is chosen.
@@ -708,6 +714,15 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	if mgr != nil {
 		resumed = mgr.Resume(root)
 	}
+	// One register store for every editor in every workspace (#1540): the
+	// manager owns it so it survives the model rebuild a project switch does;
+	// on first start the fresh store is adopted by the manager below.
+	var regs *register.Store
+	if mgr != nil {
+		regs = mgr.Registers()
+	} else {
+		regs = register.New()
+	}
 	var panes *pane.Registry
 	edKey := ""
 	if resumed != nil {
@@ -719,7 +734,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 			}
 		}
 	} else {
-		panes = pane.NewRegistry(cfg)
+		panes = pane.NewRegistry(cfg, regs)
 		panes.SetPalette(themePal)
 		panes.AddExplorer()
 		edKey = panes.AddEditor()
@@ -738,6 +753,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
 	wsMgr := wsManager(mgr, resumed, root, panes)   // hoisted: the palette's recent-projects sources read it (#820)
+	wsMgr.SetRegisters(regs)                        // first start: the manager adopts the store (#1540); a switch hands back its own
 	m := Model{
 		cmdUsage:       cmdUsage,
 		fileUsage:      fileUsage,
@@ -771,6 +787,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		bookmarks:      bookmarks,
 		gmarks:         &marks.Store{},
 		qhist:          &histories.Store{},
+		regs:           regs,
 		paletteKey:     paletteToggleKey(cfg),
 		splitZone:      splitZone(cfg),
 		focusKeys:      focusKeys(cfg),
@@ -1091,6 +1108,7 @@ func (m *Model) installEmitter(key string) {
 			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
 			ed.SetCompletionMRU(m.compMRU)
+			ed.SetRegisters(m.regs) // app-wide registers (#1540); idempotent
 		}
 	}
 }
@@ -1165,7 +1183,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// editor per non-explorer leaf, each rebuilding its remembered tab list
 	// (#160). Files missing on disk are skipped; a pane whose every file
 	// vanished restores as a single scratch tab, like before tabs existed.
-	panes := pane.NewRegistry(cfg)
+	panes := pane.NewRegistry(cfg, m.regs)
 	panes.AddExplorer()
 	first := map[string]*editor.Model{} // path → first restored view, for sharing
 	restoreTab := func(ed *editor.Model, path string) bool {
@@ -3492,6 +3510,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		ed := editor.New()
+		ed.SetRegisters(m.regs) // app-wide registers (#1540)
 		ed.SetPalette(m.themePal)
 		ed.Configure(m.host.Config())
 		if c := clipboard.System(); c != nil {
