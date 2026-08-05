@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 	"time"
 )
@@ -274,5 +275,85 @@ func TestCloseReleasesQueuedFrames(t *testing.T) {
 			t.Fatal("sendBuf still populated after Close")
 		}
 		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// TestNotifyCoalescedReplacesQueuedFrame (#1542): while the writer is stalled,
+// notifications with the same key replace the queued payload in place instead
+// of growing the queue; distinct keys queue separately.
+func TestNotifyCoalescedReplacesQueuedFrame(t *testing.T) {
+	cli, _ := newPipePair() // the server end is never read from
+	conn := NewConn(cli, Handler{})
+	defer conn.Close()
+	// First frame stalls in writeFrame (io.Pipe blocks until read); everything
+	// after it stays in sendBuf where coalescing can observe it.
+	if err := conn.Notify("stall", nil); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		if err := conn.NotifyCoalesced("didChange:a", "textDocument/didChange", map[string]any{"n": i}); err != nil {
+			t.Fatalf("NotifyCoalesced %d err = %v", i, err)
+		}
+	}
+	if err := conn.NotifyCoalesced("didChange:b", "textDocument/didChange", map[string]any{"other": true}); err != nil {
+		t.Fatal(err)
+	}
+	waitQueue := func(cond func(n int) bool) int {
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			conn.sendMu.Lock()
+			n := len(conn.sendBuf)
+			conn.sendMu.Unlock()
+			if cond(n) || time.Now().After(deadline) {
+				return n
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
+	// At most: the stall frame may still be in sendBuf or already handed to the
+	// writer, so the queue holds 2 or 3 frames — never ~101.
+	if n := waitQueue(func(n int) bool { return n <= 3 }); n > 3 {
+		t.Fatalf("queue holds %d frames, coalescing must keep it at the key count", n)
+	}
+	conn.sendMu.Lock()
+	var last []byte
+	for _, f := range conn.sendBuf {
+		if f.key == "didChange:a" {
+			last = f.data
+		}
+	}
+	conn.sendMu.Unlock()
+	if last == nil || !strings.Contains(string(last), `"n":99`) {
+		t.Fatalf("coalesced frame must carry the newest payload, got %s", last)
+	}
+}
+
+// TestQueueOverflowTearsDownConn (#1542): a queue outgrowing maxSendBytes
+// terminates the connection with ErrQueueFull instead of buffering forever.
+func TestQueueOverflowTearsDownConn(t *testing.T) {
+	old := maxSendBytes
+	maxSendBytes = 4096
+	defer func() { maxSendBytes = old }()
+
+	cli, _ := newPipePair() // the server end is never read from
+	conn := NewConn(cli, Handler{})
+	defer conn.Close()
+	payload := strings.Repeat("x", 512)
+	var last error
+	for i := 0; i < 64; i++ {
+		if last = conn.Notify("textDocument/didChange", map[string]any{"text": payload, "n": i}); last != nil {
+			break
+		}
+	}
+	if last != ErrQueueFull && last != ErrClosed {
+		t.Fatalf("overflow must fail the enqueue, got %v", last)
+	}
+	select {
+	case <-conn.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("overflow must terminate the connection")
+	}
+	if err := conn.Err(); err != ErrQueueFull {
+		t.Fatalf("Err = %v, want ErrQueueFull", err)
 	}
 }

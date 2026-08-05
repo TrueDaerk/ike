@@ -12,6 +12,19 @@ import (
 // ErrClosed is returned by Call/Notify after the connection has shut down.
 var ErrClosed = errors.New("jsonrpc: connection closed")
 
+// ErrQueueFull terminates a connection whose outbound queue outgrew
+// maxSendBytes (#1542): the server has stalled its stdin for long enough that
+// buffering more would grow without bound, so the connection is torn down and
+// the error surfaces through Err/Done like any other server failure.
+var ErrQueueFull = errors.New("jsonrpc: outbound queue overflow, server not reading stdin")
+
+// maxSendBytes bounds the outbound queue (#1542). Generous — full-sync
+// didChange frames are whole documents and a restart re-opens every document —
+// but finite: a server that stops draining stdin (deadlock, SIGSTOP) hits the
+// cap and the connection reports unhealthy instead of buffering forever. A var
+// so tests can lower it.
+var maxSendBytes = 32 << 20
+
 // Handler receives server-initiated traffic. Notify handles notifications
 // (no reply); Request handles server→client requests and must eventually be
 // answered via Conn.Respond. Both run on the read-loop goroutine and must not
@@ -36,24 +49,36 @@ type Conn struct {
 	rwc     io.ReadWriteCloser
 	handler Handler
 
-	sendMu     sync.Mutex // guards sendBuf/sendClosed and the cond
-	sendCond   *sync.Cond // signalled when sendBuf gains work or the writer must stop
-	sendBuf    [][]byte   // unbounded outbound queue drained by writeLoop
-	sendClosed bool       // writer stops once true and the queue is empty
+	sendMu     sync.Mutex  // guards sendBuf/sendBytes/sendClosed and the cond
+	sendCond   *sync.Cond  // signalled when sendBuf gains work or the writer must stop
+	sendBuf    []sendFrame // outbound queue drained by writeLoop, bounded by maxSendBytes
+	sendBytes  int         // total payload bytes queued in sendBuf
+	sendClosed bool        // writer stops once true and the queue is empty
 
 	mu      sync.Mutex // guards nextID, pending, closed
 	nextID  int64
 	pending map[int64]chan result
 	closed  bool
 
-	done chan struct{} // closed when the read loop exits
-	err  error         // first read-loop error (set once)
+	done     chan struct{} // closed when the read loop exits
+	err      error         // first read-loop error (set once)
+	shutOnce sync.Once     // shutdown runs once — read loop or queue overflow, whoever is first
 }
 
 // result is a settled response delivered to a waiting Call.
 type result struct {
 	raw json.RawMessage
 	err *Error
+}
+
+// sendFrame is one queued outbound payload. A non-empty key marks the frame
+// coalescable (#1542): enqueueing another frame with the same key replaces
+// this one's payload in place instead of growing the queue — used for
+// full-sync didChange notifications, where only the newest whole-document
+// payload per URI matters.
+type sendFrame struct {
+	key  string
+	data []byte
 }
 
 // NewConn starts a connection over rwc, dispatching server traffic to handler,
@@ -127,6 +152,16 @@ func (c *Conn) Call(ctx context.Context, method string, params any) (json.RawMes
 
 // Notify sends a notification (a request with no id, no reply).
 func (c *Conn) Notify(method string, params any) error {
+	return c.NotifyCoalesced("", method, params)
+}
+
+// NotifyCoalesced sends a notification whose queued payload may be superseded
+// (#1542): while an earlier notification with the same non-empty key still
+// sits in the outbound queue, the new payload replaces it in place instead of
+// growing the queue. Only valid for notifications where the newest payload
+// fully subsumes the older one — full-sync didChange per document URI. An
+// empty key never coalesces.
+func (c *Conn) NotifyCoalesced(key, method string, params any) error {
 	raw, err := marshalParams(params)
 	if err != nil {
 		return err
@@ -137,7 +172,7 @@ func (c *Conn) Notify(method string, params any) error {
 		return ErrClosed
 	}
 	c.mu.Unlock()
-	return c.write(&message{JSONRPC: version, Method: method, Params: raw})
+	return c.writeKeyed(&message{JSONRPC: version, Method: method, Params: raw}, key)
 }
 
 // Respond replies to a server→client request. Pass exactly one of result/errObj.
@@ -182,7 +217,15 @@ func (c *Conn) Close() error {
 // write marshals one message and hands the framed payload to the writer
 // goroutine. It never touches the stream, so it never blocks on the server
 // draining stdin — the enqueue is a slice append under a short-held mutex.
-func (c *Conn) write(msg *message) error {
+func (c *Conn) write(msg *message) error { return c.writeKeyed(msg, "") }
+
+// writeKeyed is write with an optional coalescing key (#1542): a queued frame
+// with the same non-empty key gets its payload replaced in place — its queue
+// position is kept, so ordering against other messages never changes and the
+// server simply sees the newest payload earlier. The queue is bounded: growth
+// past maxSendBytes tears the connection down (the server stopped reading
+// stdin) instead of buffering without limit.
+func (c *Conn) writeKeyed(msg *message, key string) error {
 	data, err := json.Marshal(msg)
 	if err != nil {
 		return err
@@ -192,10 +235,41 @@ func (c *Conn) write(msg *message) error {
 		c.sendMu.Unlock()
 		return ErrClosed
 	}
-	c.sendBuf = append(c.sendBuf, data)
+	replaced := false
+	if key != "" {
+		for i := range c.sendBuf {
+			if c.sendBuf[i].key == key {
+				c.sendBytes += len(data) - len(c.sendBuf[i].data)
+				c.sendBuf[i].data = data
+				replaced = true
+				break
+			}
+		}
+	}
+	if !replaced {
+		c.sendBuf = append(c.sendBuf, sendFrame{key: key, data: data})
+		c.sendBytes += len(data)
+	}
+	overflow := c.sendBytes > maxSendBytes
 	c.sendMu.Unlock()
+	if overflow {
+		c.overflow()
+		return ErrQueueFull
+	}
 	c.sendCond.Signal()
 	return nil
+}
+
+// overflow tears the connection down after the outbound queue outgrew its cap
+// (#1542): shutdown pins ErrQueueFull as the terminating error (so Err reports
+// the real cause), and closing the stream unblocks the read loop and the
+// stalled writer.
+func (c *Conn) overflow() {
+	c.shutdown(ErrQueueFull)
+	c.mu.Lock()
+	c.closed = true
+	c.mu.Unlock()
+	_ = c.rwc.Close()
 }
 
 // writeLoop is the sole writer to the stream. It drains the outbound queue in
@@ -214,10 +288,11 @@ func (c *Conn) writeLoop() {
 		}
 		batch := c.sendBuf
 		c.sendBuf = nil
+		c.sendBytes = 0
 		c.sendMu.Unlock()
 
-		for _, data := range batch {
-			if err := writeFrame(c.rwc, data); err != nil {
+		for _, f := range batch {
+			if err := writeFrame(c.rwc, f.data); err != nil {
 				// The stream is gone; drop the rest. The read loop's shutdown
 				// surfaces the terminating error and fails pending calls.
 				c.stopWriter()
@@ -236,6 +311,7 @@ func (c *Conn) stopWriter() {
 	c.sendMu.Lock()
 	c.sendClosed = true
 	c.sendBuf = nil
+	c.sendBytes = 0
 	c.sendMu.Unlock()
 	c.sendCond.Broadcast()
 }
@@ -283,8 +359,14 @@ func (c *Conn) dispatch(msg *message) {
 	}
 }
 
-// shutdown records the terminating error, fails pending calls, and signals Done.
+// shutdown records the terminating error, fails pending calls, and signals
+// Done. Idempotent: the read loop and a queue overflow (#1542) may both reach
+// it; only the first caller's error is recorded.
 func (c *Conn) shutdown(err error) {
+	c.shutOnce.Do(func() { c.shutdownOnce(err) })
+}
+
+func (c *Conn) shutdownOnce(err error) {
 	c.mu.Lock()
 	if c.err == nil {
 		if err == nil || errors.Is(err, io.EOF) {

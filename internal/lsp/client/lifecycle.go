@@ -63,7 +63,7 @@ func (c *Client) Initialize(ctx context.Context, p InitParams) (protocol.Initial
 		queued := c.pending
 		c.pending = nil
 		for _, n := range queued {
-			_ = c.conn.Notify(n.method, n.params)
+			_ = c.conn.NotifyCoalesced(n.key, n.method, n.params)
 		}
 		c.handshook = true
 		c.mu.Unlock()
