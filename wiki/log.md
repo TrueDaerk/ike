@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-05 (terminal: configurable scrollback bound, #1545)
+
+- New `terminal.scrollback_lines` setting (default 10000, min 100): bounds
+  each terminal session's scrollback — the dominant per-pane memory cost,
+  multiplied by parked workspaces. Held as a process-wide default in the
+  terminal package (`SetDefaultScrollbackLines`, set at startup and on config
+  reload) so every session creation path applies it; a reload also re-bounds
+  the active workspace's live sessions (lowering trims forward, raising
+  cannot restore trimmed history).
+
 ## 2026-08-03 (preview: images via Kitty graphics protocol, #1479)
 
 - New `internal/imgview` pane (`KindImage`, keys `image`/`image:N`): PNG,

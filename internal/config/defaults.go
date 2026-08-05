@@ -185,7 +185,8 @@ func defaults() *Config {
 			MaxAgeDays: 7,
 		},
 		Terminal: Terminal{
-			Autosuggest: true,
+			Autosuggest:     true,
+			ScrollbackLines: 10000,
 		},
 		Lang:  map[string]map[string]string{},
 		Tools: Tools{Custom: defaultTools()},

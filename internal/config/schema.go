@@ -141,10 +141,13 @@ type Marketplace struct {
 
 // Terminal holds integrated-terminal behaviour (Roadmap 0170). Autosuggest
 // is the completion popup's while-typing trigger (#740); ctrl+space stays
-// available when it is off.
+// available when it is off. ScrollbackLines bounds each terminal session's
+// scrollback buffer (#1545) — the dominant memory cost per terminal pane,
+// multiplied by parked background workspaces that keep ingesting output.
 type Terminal struct {
-	Shell       string `toml:"shell"`
-	Autosuggest bool   `toml:"autosuggest"`
+	Shell           string `toml:"shell"`
+	Autosuggest     bool   `toml:"autosuggest"`
+	ScrollbackLines int    `toml:"scrollback_lines"`
 }
 
 // UI holds chrome toggles (Roadmap 0160). MenuBar shows the top menu row.

@@ -323,6 +323,21 @@ func TestBackupDefaults(t *testing.T) {
 	}
 }
 
+func TestTerminalScrollbackClampAndDefault(t *testing.T) {
+	c, _ := Load(Options{})
+	if c.Terminal.ScrollbackLines != 10000 {
+		t.Errorf("default scrollback_lines should be 10000, got %d", c.Terminal.ScrollbackLines)
+	}
+	proj := writeProject(t, "[terminal]\nscrollback_lines = 5\n")
+	c, diags := Load(Options{ProjectRoot: proj})
+	if c.Terminal.ScrollbackLines != 100 {
+		t.Errorf("scrollback_lines should clamp to 100, got %d", c.Terminal.ScrollbackLines)
+	}
+	if len(diags) != 1 {
+		t.Errorf("expected one clamp diagnostic, got %v", diags)
+	}
+}
+
 func TestBackupClampAndOverride(t *testing.T) {
 	proj := writeProject(t, "[backup]\nenable = false\ndebounce_ms = 5\nmax_age_days = 0\n")
 	c, diags := Load(Options{ProjectRoot: proj})

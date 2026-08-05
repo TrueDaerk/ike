@@ -618,6 +618,7 @@ func (d *dragState) engaged() bool {
 func New() Model {
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
+	terminal.SetDefaultScrollbackLines(cfg.Terminal.ScrollbackLines)
 	m := NewWith(registry.Global(), host.FromConfig(cfg))
 	m.notifyConfigDiags(append(diags, associationDiags()...))
 	return m

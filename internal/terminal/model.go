@@ -178,6 +178,15 @@ func (m *Model) Restart() {
 	m.StartCommand(m.sess.key, m.sess.Argv(), m.sess.Dir(), m.env)
 }
 
+// SetScrollbackLines re-bounds the live session's scrollback (#1545), the
+// config-reload path; n <= 0 and dead sessions are no-ops. New sessions get
+// the process-wide default at creation instead.
+func (m *Model) SetScrollbackLines(n int) {
+	if m.sess != nil {
+		m.sess.SetScrollbackSize(n)
+	}
+}
+
 // Occupied reports whether the user has sent any input to the session; a run
 // never takes over an occupied terminal (#574).
 func (m Model) Occupied() bool { return m.occupied }
