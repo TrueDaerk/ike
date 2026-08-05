@@ -14,6 +14,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/ui"
+	"ike/internal/workspace"
 )
 
 // switch.go is the root-model side of project switching (Roadmap 0090, #3).
@@ -158,6 +159,19 @@ func (m Model) performSwitch(root string) (tea.Model, tea.Cmd) {
 	}
 	invalidateCwd() // the render hot path caches the working directory (#608)
 	m.watcher.Stop()
+	// Stop the old root's scans (#1549): a running find-in-path keeps its
+	// goroutine and rg child walking the old tree, sending results into the
+	// shared host.Send — the todo-index scan likewise. Cancel also bumps the
+	// scan generation, so in-flight result messages are dropped on arrival.
+	m.searcher.Cancel()
+	m.todoSearch.Cancel()
+	// Cut the parking editors loose from the old model's services (#1549):
+	// their emitter/hook closures pin the stopped watcher (with its tracked
+	// map and sha256 stamps), the dead nav history and the old mru/marks/
+	// histories stores — and a save while parked (the busy-close guard's `s`)
+	// would write into stores nobody reads. All setters are nil-safe; the
+	// resume re-wires fresh services through buildModel's wireEditorEmitters.
+	detachWorkspaceServices(m.activeWS())
 
 	// Park the live workspace under its root; the debug session rides along
 	// in Aux (its bridge goroutines keep running while parked, though events
@@ -266,4 +280,33 @@ func (m *Model) reconcileEditors() tea.Cmd {
 		return nil
 	}
 	return tea.Batch(cmds...)
+}
+
+// detachWorkspaceServices strips the parking workspace's editors of every
+// closure over the old model's services (#1549): emitter (watcher + nav
+// history), breakpoint and mark hooks (their stores), query histories and the
+// completion MRU. Without this a parked workspace pins the stopped watcher,
+// a dead nav history and stale store pointers for as long as it stays parked,
+// and a save while parked writes into stores nobody reads. Every setter is
+// nil-safe; resuming re-wires the fresh model's services through
+// wireEditorEmitters.
+func detachWorkspaceServices(w *workspace.Workspace) {
+	if w == nil || w.Panes == nil {
+		return
+	}
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			ed.SetEmitter(nil)
+			ed.SetBreakpointSource(nil)
+			ed.SetBreakpointDisabledSource(nil)
+			ed.SetBreakpointAdjuster(nil)
+			ed.SetMarkHooks(nil, nil, nil)
+			ed.SetHistories(nil)
+			ed.SetCompletionMRU(nil)
+		}
+	}
 }
