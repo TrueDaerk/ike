@@ -39,9 +39,14 @@ Pruning runs at record time with two caps, both overridable on the `Store`:
   dropped first.
 - **Age:** snapshots older than 30 days drop out (`DefaultMaxAge`).
 
-Blobs no index entry references anymore are garbage-collected on the next
-record. `Record` swallows I/O errors — failing to snapshot must never disrupt
-the save that triggered it; a missing or malformed index reads as empty.
+Every record prunes **every** file's list (#1548), not only the saved
+path's, so untouched paths age out too and emptied keys leave the index —
+otherwise the index accumulated one key per path ever saved, with their
+blobs referenced forever. Blobs no index entry references anymore are
+garbage-collected on the record that dropped their last reference; a record
+that prunes nothing skips the objects-directory sweep entirely. `Record`
+swallows I/O errors — failing to snapshot must never disrupt the save that
+triggered it; a missing or malformed index reads as empty.
 
 ## Save hook (`internal/app/localhistory.go`)
 
