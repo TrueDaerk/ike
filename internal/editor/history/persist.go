@@ -97,6 +97,9 @@ func (h *History) RestoreSnapshot(s Snapshot) {
 		}
 	}
 	h.savedSeq = h.current
+	// A snapshot is installed without per-push pruning; re-apply the node and
+	// byte bounds once so an oversized restore cannot exceed them (#1537).
+	h.prune()
 }
 
 // install links one restored change into the tree maps.
@@ -104,6 +107,7 @@ func (h *History) install(c Change) {
 	cc := c
 	h.nodes[cc.seq] = &cc
 	h.children[cc.parent] = append(h.children[cc.parent], cc.seq)
+	h.bytes += cost(&cc)
 }
 
 func toRecord(c Change) ChangeRecord {

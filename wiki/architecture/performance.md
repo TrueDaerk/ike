@@ -56,6 +56,33 @@ Off by default; `diag.Start` in `cmd/ike/main.go` wires them:
 - `SIGUSR1` writes `ike-<pid>-<time>-goroutines.txt` and `-heap.pprof` to
   `IKE_PPROF_DIR` (default: the OS temp dir) — the no-listener option for a
   session that is already misbehaving.
+- Palette commands (#1537), always available: **Memory Statistics**
+  (`diag.memoryStats`) scavenges (`debug.FreeOSMemory`) and toasts a one-line
+  `runtime.ReadMemStats` summary — `HeapInuse` growing means a real leak,
+  a large freed-not-returned share (`HeapIdle−HeapReleased`) is runtime-held
+  memory that macOS keeps counted against the footprint until pressure.
+  **Write Heap Dump** (`diag.heapDump`) writes the same profile pair as
+  `SIGUSR1` and toasts the path.
+
+## Memory bounds in long sessions (#1537)
+
+Growth caps and give-backs so hours of use stay bounded:
+
+- **Undo history byte budget**: 32 MiB of retained edit text per buffer on
+  top of the 1000-node cap (`internal/editor/history`) — whole-buffer
+  changes hold ~2× the document each, so the node cap alone allowed
+  gigabytes.
+- **Crashed LSP servers are stopped for real** (`watchExit` → `srv.stop()`):
+  the read loop can end while the child lives (closed stdout, bad framing);
+  the orphan used to keep its process, goroutines, stderr ring and log
+  handle for the session. Queued outbound frames are also dropped once a
+  connection's stream is gone (`jsonrpc.stopWriter`).
+- **Closed buffers untrack from the poll watcher** and drop their per-path
+  toasts, so a session's every-file-ever-opened set stops accumulating
+  stamps and per-poll stats.
+- **Workspace teardown scavenges** (`debug.FreeOSMemory`, async): the
+  largest frees this process makes go back to the OS instead of lingering
+  as `MADV_FREE` pages in the macOS footprint.
 
 Long-session triage: dump goroutines at minute 1 and after an hour idle with
 ~10 mixed panes; a growing count names the leaking loop, a flat count with

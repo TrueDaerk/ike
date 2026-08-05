@@ -172,7 +172,10 @@ line runs that test (see /architecture/run-configurations.md).
   restores the selected state (the overlay stays open and refreshes, esc
   closes). A per-buffer cap (1000 nodes) prunes oldest leaf branches first; a
   purely linear history over the cap drops its oldest level, vim's
-  `undolevels`. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
+  `undolevels`. A per-buffer **byte budget** (32 MiB of retained edit text,
+  #1537) prunes in the same order — whole-buffer changes (reformat-on-save,
+  `:%s`) retain roughly twice the document each, so the node cap alone is no
+  byte bound; the newest state always survives, even oversized. `u`/`ctrl+r` take a count (`3u` undoes three changes, stopping
   early when the history runs out, #231). `.` repeat lives in the editor
   (`dotCommand`). The history pins a **save checkpoint** (`MarkSaved`/`AtSaved`,
   #251): saving pins the current state, and undo/redo clear the dirty flag when

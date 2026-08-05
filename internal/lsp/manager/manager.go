@@ -1266,6 +1266,14 @@ func (m *Manager) watchExit(srv *server) {
 	if deliberate {
 		return
 	}
+	// The connection died but the process may well be alive (a server that
+	// closed stdout, or one bad Content-Length header, ends the read loop
+	// without the child exiting). Stop it for real, or the orphan keeps its
+	// process, watch goroutine, stderr ring and log handle for the rest of
+	// the session — and restart below spawns a second one on top (#1537).
+	// stop is idempotent enough: Conn.Close on a dead conn is a no-op error
+	// and Process.Stop on an exited child just reaps it.
+	go srv.stop()
 	// Name the concrete error when the stderr tail yields one (#990) — both
 	// in the toast and as a log marker, so neither reader has to fish the
 	// message out of a raw dump.

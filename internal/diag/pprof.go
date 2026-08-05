@@ -38,34 +38,41 @@ func Start(warn func(string)) {
 	signal.Notify(sig, syscall.SIGUSR1)
 	go func() {
 		for range sig {
-			if err := dump(); err != nil {
+			if _, err := Dump(); err != nil {
 				warn("pprof dump: " + err.Error())
 			}
 		}
 	}()
 }
 
-// dump writes goroutine + heap profiles to IKE_PPROF_DIR (default temp dir).
-func dump() error {
+// Dump writes a goroutine dump plus a heap profile to IKE_PPROF_DIR (default:
+// the OS temp dir) and returns the common file-name prefix of the pair. It
+// backs both the SIGUSR1 handler and the diag.heapDump palette command
+// (#1537), so a bloated live session can be profiled without a restart.
+func Dump() (prefix string, err error) {
 	dir := os.Getenv("IKE_PPROF_DIR")
 	if dir == "" {
 		dir = os.TempDir()
 	}
 	stamp := fmt.Sprintf("ike-%d-%s", os.Getpid(), time.Now().Format("150405"))
-	g, err := os.Create(filepath.Join(dir, stamp+"-goroutines.txt"))
+	prefix = filepath.Join(dir, stamp)
+	g, err := os.Create(prefix + "-goroutines.txt")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer g.Close()
 	if err := pprof.Lookup("goroutine").WriteTo(g, 1); err != nil {
-		return err
+		return "", err
 	}
 	fmt.Fprintf(g, "\ntotal goroutines: %d\n", runtime.NumGoroutine())
-	h, err := os.Create(filepath.Join(dir, stamp+"-heap.pprof"))
+	h, err := os.Create(prefix + "-heap.pprof")
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer h.Close()
 	runtime.GC()
-	return pprof.Lookup("heap").WriteTo(h, 0)
+	if err := pprof.Lookup("heap").WriteTo(h, 0); err != nil {
+		return "", err
+	}
+	return prefix, nil
 }

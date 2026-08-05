@@ -249,3 +249,30 @@ func TestIDMarshalRoundTrip(t *testing.T) {
 		}
 	}
 }
+
+func TestCloseReleasesQueuedFrames(t *testing.T) {
+	cli, _ := newPipePair() // the server end is never read from
+	conn := NewConn(cli, Handler{})
+	// Stall the writer on the first frame, then queue more behind it.
+	for i := 0; i < 50; i++ {
+		if err := conn.Notify("textDocument/didChange", map[string]any{"n": i}); err != nil {
+			t.Fatalf("Notify %d err = %v", i, err)
+		}
+	}
+	_ = conn.Close()
+	// Queued frames are undeliverable once the stream is gone; keeping them
+	// pins megabytes of full-sync payloads for as long as the Conn lives (#1537).
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		conn.sendMu.Lock()
+		empty := conn.sendBuf == nil
+		conn.sendMu.Unlock()
+		if empty {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("sendBuf still populated after Close")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}

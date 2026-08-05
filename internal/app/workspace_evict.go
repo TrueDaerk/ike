@@ -1,6 +1,8 @@
 package app
 
 import (
+	"runtime/debug"
+
 	"ike/internal/config"
 	"ike/internal/pane"
 	"ike/internal/plugin"
@@ -148,6 +150,12 @@ func teardownWorkspace(w *workspace.Workspace) {
 	w.Panes = nil
 	w.Tree = nil
 	w.ReturnFocus = ""
+	// A workspace teardown frees the largest chunks this process ever lets go
+	// of (buffers, scrollbacks, undo trees). Hand the pages back to the OS —
+	// on macOS freed-but-retained pages otherwise stay counted against the
+	// process footprint until memory pressure (#1537). Async: FreeOSMemory
+	// forces a full GC and can take tens of milliseconds.
+	go debug.FreeOSMemory()
 }
 
 // closeWorkspace tears w down and fires the workspace-closed hooks (#825), so

@@ -39,6 +39,14 @@ type Change struct {
 // pruned (and, on a purely linear history, the oldest undo levels drop).
 const maxNodes = 1000
 
+// maxBytes bounds the tree per buffer in retained edit text (#1537). The node
+// cap alone is no byte bound: a whole-buffer change (reformat-on-save, :%s,
+// paste over select-all) stores roughly twice the document — forwards plus
+// inverses — so 1000 such nodes on a megabyte file is gigabytes. Past the
+// budget the same pruning order applies; the newest state is always kept, so
+// one oversized change still undoes once.
+const maxBytes = 32 << 20
+
 // History is the undo store: a tree of Changes keyed by seq, with the current
 // buffer state identified by the seq it sits at (0 = root).
 type History struct {
@@ -47,6 +55,7 @@ type History struct {
 	active   map[int]int     // parent seq -> child redo follows (last visited)
 	current  int             // seq of the state the buffer is at
 	seq      int             // highest seq ever handed out
+	bytes    int             // total edit text retained, for the maxBytes budget
 
 	// savedSeq is the seq of the current state when the buffer was last
 	// written: 0 marks the initial (freshly loaded) state, -1 marks a
@@ -77,6 +86,19 @@ func (h *History) Reset() {
 	h.active = nil
 	h.current = 0
 	h.savedSeq = 0
+	h.bytes = 0
+}
+
+// cost is a change's contribution to the byte budget: the edit text it pins.
+func cost(c *Change) int {
+	n := 0
+	for _, e := range c.Forwards {
+		n += len(e.Text)
+	}
+	for _, e := range c.Inverses {
+		n += len(e.Text)
+	}
+	return n
 }
 
 // CurrentSeq identifies the current state (0 = the root/loaded state).
@@ -109,6 +131,7 @@ func (h *History) Push(c Change) {
 	h.children[c.parent] = append(h.children[c.parent], c.seq)
 	h.active[c.parent] = c.seq
 	h.current = c.seq
+	h.bytes += cost(&c)
 	h.prune()
 }
 
@@ -255,11 +278,12 @@ func (h *History) JumpTo(b *buffer.Buffer, seq int) (cursor buffer.Position, ok 
 	return lastUndone.CursorBefore, true
 }
 
-// prune keeps the tree under maxNodes: oldest leaf branches go first; on a
-// purely linear history the oldest undo level drops (its state becomes the
-// new root, like vim's 'undolevels').
+// prune keeps the tree under maxNodes and maxBytes: oldest leaf branches go
+// first; on a purely linear history the oldest undo level drops (its state
+// becomes the new root, like vim's 'undolevels'). The byte budget never prunes
+// the last remaining change: a single change larger than the budget stays.
 func (h *History) prune() {
-	for len(h.nodes) > maxNodes {
+	for len(h.nodes) > maxNodes || (h.bytes > maxBytes && len(h.nodes) > 1) {
 		if h.removeOldestLeaf() {
 			continue
 		}
@@ -306,6 +330,7 @@ func (h *History) removeLeaf(seq int) {
 		delete(h.active, parent)
 	}
 	delete(h.active, seq)
+	h.bytes -= cost(h.nodes[seq])
 	delete(h.nodes, seq)
 }
 
@@ -338,6 +363,7 @@ func (h *History) dropOldestLevel() bool {
 	}
 	delete(h.active, c)
 	delete(h.children, c)
+	h.bytes -= cost(h.nodes[c])
 	delete(h.nodes, c)
 	switch h.savedSeq {
 	case c:

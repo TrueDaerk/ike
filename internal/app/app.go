@@ -3071,6 +3071,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// view of the focused editor's document.
 		return m.splitView(msg.Zone)
 
+	case MemoryStatsMsg:
+		// diag.memoryStats (#1537): scavenge, then toast the heap summary.
+		return m.showMemoryStats()
+
+	case HeapDumpMsg:
+		// diag.heapDump (#1537): write goroutine + heap profiles.
+		return m.writeHeapDump()
+
 	case NewScratchMsg:
 		// scratch.new.<lang> (#351): create under the scratch store, open
 		// through the standard funnel.
@@ -5254,8 +5262,15 @@ func (m *Model) drainClosedFileViews() tea.Cmd {
 			continue
 		}
 		// The last view is gone: drop the breadcrumbs symbol cache (#1153)
-		// with it, so a re-open starts from a fresh documentSymbol request.
+		// with it, so a re-open starts from a fresh documentSymbol request,
+		// and stop poll-watching the file — otherwise every file ever opened
+		// keeps its stamp (mtime, size, content hash) and gets re-stat'ed on
+		// every poll for the rest of the session (#1537).
 		delete(m.docSymbols, path)
+		delete(m.largeToasted, path)
+		if m.watcher != nil {
+			m.watcher.Untrack(path)
+		}
 		cmds = append(cmds, m.fireHooks(plugin.EventBufferClosed, path)...)
 	}
 	if len(cmds) == 0 {

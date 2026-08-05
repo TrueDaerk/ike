@@ -413,7 +413,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
-		), append(scratchCommands(), toolCommands()...)...),
+		), append(append(scratchCommands(), toolCommands()...), memoryCommands()...)...),
 	}
 }
 
