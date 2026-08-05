@@ -89,3 +89,65 @@ func TestParkedOutputCapped(t *testing.T) {
 		t.Fatalf("parked buffer = %d chunks, want cap %d", len(parkedDbg.pendingOut), maxPendingOut)
 	}
 }
+
+// TestParkedDebuggeeExitFinishesSession guards #1544: a terminated/exited
+// event of a parked workspace's debuggee ends the parked session — extras.dbg
+// clears (the workspace is no longer "busy" and can be silently evicted, the
+// activity guards stop reporting a phantom session) instead of the dead
+// session parking forever.
+func TestParkedDebuggeeExitFinishesSession(t *testing.T) {
+	root := t.TempDir()
+	m := NewWith(registry.New(), host.MapConfig{})
+
+	parkedSess := &dap.Session{}
+	parkedDbg := &debugState{sess: parkedSess, root: root, cfgName: "app"}
+	active := m.ws.Active()
+	m.ws.SetActive(workspace.New(root, active.Panes))
+	m.ws.Active().Aux = wsExtras{dbg: parkedDbg, dbgLaunching: true}
+	m.ws.Park()
+	m.ws.SetActive(active)
+
+	parked := m.ws.Peek(root)
+	if !workspaceBusy(parked) {
+		t.Fatal("precondition: a parked debug session must report busy")
+	}
+
+	body, _ := json.Marshal(map[string]int{"exitCode": 3})
+	m.handleDebugEvent(parkedSess, dap.Event{Name: "exited", Body: body})
+
+	extras, ok := parked.Aux.(wsExtras)
+	if !ok {
+		t.Fatalf("parked Aux lost its wsExtras: %T", parked.Aux)
+	}
+	if extras.dbg != nil || extras.dbgLaunching {
+		t.Fatal("parked debuggee exit must clear extras.dbg and dbgLaunching")
+	}
+	if workspaceBusy(parked) {
+		t.Fatal("workspace must not stay busy after its debuggee exited")
+	}
+}
+
+// TestParkedDebuggeeTerminatedFinishesSession is the terminated-event variant
+// of #1544 (adapters emit either or both).
+func TestParkedDebuggeeTerminatedFinishesSession(t *testing.T) {
+	root := t.TempDir()
+	m := NewWith(registry.New(), host.MapConfig{})
+
+	parkedSess := &dap.Session{}
+	active := m.ws.Active()
+	m.ws.SetActive(workspace.New(root, active.Panes))
+	m.ws.Active().Aux = wsExtras{dbg: &debugState{sess: parkedSess, root: root, cfgName: "app"}}
+	m.ws.Park()
+	m.ws.SetActive(active)
+
+	m.handleDebugEvent(parkedSess, dap.Event{Name: "terminated"})
+
+	parked := m.ws.Peek(root)
+	extras := parked.Aux.(wsExtras)
+	if extras.dbg != nil {
+		t.Fatal("terminated must clear the parked session")
+	}
+	if workspaceBusy(parked) {
+		t.Fatal("workspace must not stay busy after terminated")
+	}
+}

@@ -69,9 +69,14 @@ layout as before. Consequences:
   active workspace's session state: output routes into the owning
   workspace's transcript (`<root>/.ike/debug-session.log`) and its parked
   debuggee terminal — or its `pendingOut` buffer, capped at
-  `maxPendingOut` chunks — while state events (`stopped`, `terminated`,
-  …) are consumed without effect. The async stop/ended follow-up
-  messages are session-guarded the same way.
+  `maxPendingOut` chunks — while state events (`stopped`, `continued`, …)
+  are consumed without effect. The async stop/ended follow-up messages
+  are session-guarded the same way. The exception is `terminated`/`exited`
+  (#1544): a parked debuggee that ends finishes its session in place —
+  the parked pane pair flips to the finished state, `extras.dbg` clears
+  so the workspace stops counting as busy (silent LRU eviction works
+  again, the close/quit guards stop reporting a phantom session), and the
+  dead session's transport is released instead of parking until resume.
 
 ## Background LSP idle shutdown (#1521)
 
