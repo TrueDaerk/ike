@@ -35,7 +35,10 @@ type Client struct {
 }
 
 // pendingNote is a notification held back while the handshake is in flight.
+// A non-empty key marks it coalescable (#1542) exactly like the conn's queue:
+// a later note with the same key replaces the params in place.
 type pendingNote struct {
+	key    string
 	method string
 	params any
 }
@@ -86,14 +89,35 @@ func (c *Client) Respond(id jsonrpc.ID, res any, errObj *jsonrpc.Error) error {
 // handshake fails the connection is torn down anyway and the manager re-opens
 // documents on the respawned server.
 func (c *Client) notify(method string, params any) error {
+	return c.notifyCoalesced("", method, params)
+}
+
+// notifyCoalesced is notify with an optional coalescing key (#1542): both in
+// the pre-handshake queue and in the conn's outbound queue, a still-queued
+// notification with the same non-empty key gets its payload replaced instead
+// of the queue growing — used for full-sync didChange, where only the newest
+// whole-document payload per URI matters.
+func (c *Client) notifyCoalesced(key, method string, params any) error {
 	c.mu.Lock()
 	if !c.handshook {
-		c.pending = append(c.pending, pendingNote{method: method, params: params})
+		replaced := false
+		if key != "" {
+			for i := range c.pending {
+				if c.pending[i].key == key {
+					c.pending[i].params = params
+					replaced = true
+					break
+				}
+			}
+		}
+		if !replaced {
+			c.pending = append(c.pending, pendingNote{key: key, method: method, params: params})
+		}
 		c.mu.Unlock()
 		return nil
 	}
 	c.mu.Unlock()
-	return c.conn.Notify(method, params)
+	return c.conn.NotifyCoalesced(key, method, params)
 }
 
 // call issues a request once the handshake has completed (#937): no client
@@ -113,8 +137,18 @@ func (c *Client) call(ctx context.Context, method string, params any) (json.RawM
 func (c *Client) DidOpen(p protocol.DidOpenTextDocumentParams) error {
 	return c.notify("textDocument/didOpen", p)
 }
+// DidChange sends a document change. A full-sync change (a single event
+// without a range carrying the whole document) coalesces per URI (#1542):
+// while an earlier full-sync didChange for the same document still sits in a
+// queue, only the newest payload is kept — a stalled server catches up with
+// one frame per document instead of one per keystroke. Incremental changes
+// are deltas and never coalesce.
 func (c *Client) DidChange(p protocol.DidChangeTextDocumentParams) error {
-	return c.notify("textDocument/didChange", p)
+	key := ""
+	if len(p.ContentChanges) == 1 && p.ContentChanges[0].Range == nil {
+		key = "textDocument/didChange:" + p.TextDocument.URI
+	}
+	return c.notifyCoalesced(key, "textDocument/didChange", p)
 }
 func (c *Client) DidSave(p protocol.DidSaveTextDocumentParams) error {
 	return c.notify("textDocument/didSave", p)

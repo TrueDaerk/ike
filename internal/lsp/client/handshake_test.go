@@ -119,3 +119,52 @@ func TestHandshakeHoldsBackEarlyTraffic(t *testing.T) {
 		t.Fatalf("hover: %v", err)
 	}
 }
+
+// TestPendingQueueCoalescesFullSyncDidChange (#1542): full-sync didChange
+// notifications queued during the handshake coalesce per URI — only the
+// newest whole-document payload is kept — while incremental changes (range
+// deltas) and other URIs queue individually.
+func TestPendingQueueCoalescesFullSyncDidChange(t *testing.T) {
+	cr, _ := io.Pipe()
+	_, cw := io.Pipe()
+	conn := jsonrpc.NewConn(rwc{Reader: cr, Writer: cw}, jsonrpc.Handler{})
+	c := New(conn)
+	t.Cleanup(func() { conn.Close() })
+
+	full := func(uri, text string, version int) protocol.DidChangeTextDocumentParams {
+		return protocol.DidChangeTextDocumentParams{
+			TextDocument:   protocol.VersionedTextDocumentIdentifier{URI: uri, Version: version},
+			ContentChanges: []protocol.TextDocumentContentChangeEvent{{Text: text}},
+		}
+	}
+	for i := 0; i < 50; i++ {
+		if err := c.DidChange(full("file:///a.go", fmt.Sprintf("v%d", i), i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.DidChange(full("file:///b.go", "other", 1)); err != nil {
+		t.Fatal(err)
+	}
+	rng := &protocol.Range{}
+	incr := protocol.DidChangeTextDocumentParams{
+		TextDocument:   protocol.VersionedTextDocumentIdentifier{URI: "file:///a.go", Version: 51},
+		ContentChanges: []protocol.TextDocumentContentChangeEvent{{Range: rng, Text: "x"}},
+	}
+	if err := c.DidChange(incr); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.DidChange(incr); err != nil {
+		t.Fatal(err)
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// 1 coalesced full-sync for a.go + 1 for b.go + 2 incremental = 4.
+	if len(c.pending) != 4 {
+		t.Fatalf("pending holds %d notes, want 4 (coalesced)", len(c.pending))
+	}
+	got := c.pending[0].params.(protocol.DidChangeTextDocumentParams)
+	if got.ContentChanges[0].Text != "v49" {
+		t.Fatalf("coalesced note carries %q, want the newest payload v49", got.ContentChanges[0].Text)
+	}
+}

@@ -31,12 +31,17 @@ internal/lsp/
              serializes as an explicit JSON null (#991): vscode-jsonrpc-based
              servers (Intelephense) die on a response with neither.
              Outbound writes are async too (#594): callers marshal on their own
-             goroutine and enqueue the framed payload onto an unbounded queue
-             drained by a single dedicated writer goroutine. A caller therefore
-             never blocks on the server draining its stdin — critical because the
-             bubbletea Update goroutine sends didChange from here per keystroke,
-             and a busy server (indexing a large workspace) that stalls its stdin
-             would otherwise freeze the whole event loop.
+             goroutine and enqueue the framed payload onto a queue drained by a
+             single dedicated writer goroutine. A caller therefore never blocks
+             on the server draining its stdin — critical because the bubbletea
+             Update goroutine sends didChange from here per keystroke, and a
+             busy server (indexing a large workspace) that stalls its stdin
+             would otherwise freeze the whole event loop. The queue is bounded
+             (#1542): full-sync didChange frames coalesce per URI (a queued
+             frame's payload is replaced in place, so only the newest whole
+             document is buffered per file), and a queue outgrowing 32 MiB
+             tears the connection down with ErrQueueFull — surfacing through
+             Done/Err like a crash — instead of buffering without limit.
   transport/ spawn a server over stdio (cmd/args/env/cwd), capture stderr,
              watch for exit. Pure Go — no CGo — so the client cross-compiles.
   protocol/  LSP wire types + the SINGLE position-encoding boundary (convert.go):
