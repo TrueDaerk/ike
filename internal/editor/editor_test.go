@@ -634,9 +634,32 @@ func TestScrollByMovesViewportNotCursor(t *testing.T) {
 	if m.view.Top != 0 {
 		t.Fatalf("Top = %d want 0", m.view.Top)
 	}
-	m.ScrollBy(1000) // clamps so the last line stays at the bottom — no overscroll
-	if want := m.buf.LineCount() - m.view.Height(); m.view.Top != want {
+	// Clamps to bottomOverscroll empty rows below the last line (#1535) —
+	// never to an almost-empty screen.
+	m.ScrollBy(1000)
+	if want := m.buf.LineCount() - m.view.Height() + bottomOverscroll; m.view.Top != want {
 		t.Fatalf("Top = %d want %d (max)", m.view.Top, want)
+	}
+}
+
+// TestScrollByBottomOverscrollEdgeCases (#1535): a buffer that fits the pane
+// does not scroll at all, and a barely-overflowing one caps at lineCount-1 —
+// the overscroll never leaves fewer rows on screen than the pre-#1134 clamp.
+func TestScrollByBottomOverscrollEdgeCases(t *testing.T) {
+	// 8 lines in a 10-row pane: fits, no scrolling.
+	m, _ := loaded(t, strings.Repeat("x\n", 8))
+	m.SetSize(80, 10)
+	m.ScrollBy(1000)
+	if m.view.Top != 0 {
+		t.Fatalf("fitting buffer: Top = %d want 0", m.view.Top)
+	}
+	// 12 lines in a 4-row pane: base max 8 + overscroll 5 = 13 exceeds
+	// lineCount-1 = 11, so the cap bites and the last line stays on screen.
+	m, _ = loaded(t, strings.Repeat("x\n", 12))
+	m.SetSize(80, 4)
+	m.ScrollBy(1000)
+	if m.view.Top != 11 {
+		t.Fatalf("cap at lineCount-1: Top = %d want 11", m.view.Top)
 	}
 }
 
@@ -1931,9 +1954,10 @@ func TestJumpToFramesTargetNearTop(t *testing.T) {
 	if m.view.Top != 0 {
 		t.Fatalf("Top=%d want 0 for a near-start jump", m.view.Top)
 	}
-	// End-of-buffer jump clamps sanely — no overscroll past the last line.
+	// End-of-buffer jump clamps sanely — at most bottomOverscroll empty rows
+	// below the last line (#1535), never an almost-empty screen.
 	m.JumpTo(199, 0)
-	if want := m.buf.LineCount() - m.view.Height(); m.view.Top != want || m.cursor.Line != 199 {
+	if want := m.buf.LineCount() - m.view.Height() + bottomOverscroll; m.view.Top != want || m.cursor.Line != 199 {
 		t.Fatalf("Top=%d cursor=%d want %d/199", m.view.Top, m.cursor.Line, want)
 	}
 }
