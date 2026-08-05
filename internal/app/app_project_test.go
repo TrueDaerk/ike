@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/backup"
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
@@ -781,5 +782,52 @@ func TestDetachWorkspaceServicesDropsEmitters(t *testing.T) {
 	inst.UpdateTab(0, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	if events != before {
 		t.Fatalf("detached editor still emitted (%d -> %d events)", before, events)
+	}
+}
+
+// TestDiscardCloseDropsParkedBackups (#1550): "close, discard" on a busy
+// background workspace also removes its crash snapshots — otherwise the
+// discarded edits reappeared as a crash-recovery prompt at the next launch,
+// the exact case backupDropOnCloseTab guards for manual tab closes.
+func TestDiscardCloseDropsParkedBackups(t *testing.T) {
+	m, root, path := busyCloseFixture(t)
+	if err := m.backupSvc.Snapshot(backup.Doc{Key: path, Path: path, Text: "discarded edits"}); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
+	m = out.(Model)
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'd', Text: "d"})
+	m = out.(Model)
+	if m.ws.Peek(root) != nil {
+		t.Fatal("d must close the busy workspace")
+	}
+	snaps, err := m.backupSvc.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range snaps {
+		if s.Path == path {
+			t.Fatalf("discard-close must drop the workspace's snapshots, still listed: %+v", snaps)
+		}
+	}
+}
+
+// TestCleanQuitDropsParkedBackups (#1550): backupCleanShutdown covers parked
+// workspaces' editors, not only the active workspace's.
+func TestCleanQuitDropsParkedBackups(t *testing.T) {
+	m, _, path := busyCloseFixture(t)
+	if err := m.backupSvc.Snapshot(backup.Doc{Key: path, Path: path, Text: "edits"}); err != nil {
+		t.Fatal(err)
+	}
+	m.backupCleanShutdown()
+	snaps, err := m.backupSvc.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range snaps {
+		if s.Path == path {
+			t.Fatalf("clean shutdown must drop parked snapshots, still listed: %+v", snaps)
+		}
 	}
 }

@@ -71,8 +71,14 @@ func (m *Model) SetNodes(nodes []history.NodeInfo) {
 	}
 }
 
-// Close hides the overlay.
-func (m *Model) Close() { m.open = false }
+// Close hides the overlay and releases the row snapshot (#1550) — up to a
+// thousand rows of tree state nobody reads while the overlay is closed; Open
+// rebuilds them via SetNodes.
+func (m *Model) Close() {
+	m.open = false
+	m.rows = nil
+	m.cursor, m.top = 0, 0
+}
 
 // IsOpen reports whether the overlay is shown.
 func (m *Model) IsOpen() bool { return m.open }

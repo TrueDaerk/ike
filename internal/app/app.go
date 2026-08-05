@@ -5162,6 +5162,13 @@ func (m *Model) enforceTabLimit(inst *pane.Instance) {
 		}
 		if ed := inst.TabEditor(idx); ed != nil {
 			m.rememberClosedTab(ed)
+			// The LRU eviction is a tab close like any other (#1550): the
+			// undo history persists (the tab is non-dirty by selection, so
+			// PersistUndo writes) and the crash snapshot drops — the manual
+			// close path (closeTab) does both, and skipping them here
+			// silently lost the evicted tab's persistable undo.
+			ed.PersistUndo()
+			m.backupDropOnCloseTab(ed, inst.Key())
 			if ed.HasFile() {
 				m.noteClosedFileView(ed.Path())
 			}

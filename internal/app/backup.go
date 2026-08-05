@@ -11,6 +11,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/pane"
+	"ike/internal/workspace"
 )
 
 // backup.go is the crash-recovery write side (Roadmap 0210, #167). The change
@@ -191,18 +192,65 @@ func (m *Model) backupDropOnCloseTab(ed *editor.Model, paneKey string) {
 
 // backupCleanShutdown removes this session's snapshots on a clean quit, so a
 // leftover at startup always means a crash. Snapshots skipped at the restore
-// prompt belong to no open pane and stay for the next launch.
+// prompt belong to no open pane and stay for the next launch. Parked
+// workspaces' editors are covered too (#1550) — the quit guard already
+// settled their unsaved changes, so their snapshots must not resurface as a
+// crash-recovery prompt at the next launch.
 func (m *Model) backupCleanShutdown() {
 	if m.backupSvc == nil {
 		return
 	}
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
+	m.backupRemoveWorkspace(m.activeWS())
+	for _, root := range m.ws.Background() {
+		m.backupRemoveWorkspace(m.ws.Peek(root))
+	}
+}
+
+// backupRemoveWorkspace removes the crash snapshots of every editor one
+// workspace holds, cancelling their pending backup marks.
+func (m *Model) backupRemoveWorkspace(w *workspace.Workspace) {
+	if m.backupSvc == nil || w == nil || w.Panes == nil {
+		return
+	}
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
 		for _, ed := range inst.Editors() {
-			_ = m.backupSvc.Remove(backupKey(ed, key))
+			bk := backupKey(ed, key)
+			if m.backupDeb != nil {
+				m.backupDeb.Cancel(bk)
+			}
+			_ = m.backupSvc.Remove(bk)
+		}
+	}
+}
+
+// backupDropWorkspace removes a closing workspace's crash snapshots (#1550):
+// after "evict, discard unsaved changes" or "close, discard" the discarded
+// edits' snapshots stayed on disk and reappeared as a crash-recovery prompt
+// at the next launch — the exact case backupDropOnCloseTab guards for manual
+// tab closes. A document also shown in the active workspace keeps its
+// snapshot (the surviving view still owns it).
+func (m *Model) backupDropWorkspace(w *workspace.Workspace) {
+	if m.backupSvc == nil || w == nil || w.Panes == nil {
+		return
+	}
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() && len(m.editorViewsForPath(ed.Path())) > 0 {
+				continue
+			}
+			bk := backupKey(ed, key)
+			if m.backupDeb != nil {
+				m.backupDeb.Cancel(bk)
+			}
+			_ = m.backupSvc.Remove(bk)
 		}
 	}
 }

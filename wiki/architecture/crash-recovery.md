@@ -66,8 +66,12 @@ The package splits **timing** from **I/O**, and neither holds editor state:
 A snapshot's life is tied to the dirty flag:
 
 - **Created / refreshed** while a buffer is dirty, debounced after the last edit.
-- **Removed** on save, on close-with-discard, and on clean shutdown (the quit
-  path already walks open buffers).
+- **Removed** on save, on close-with-discard, and on clean shutdown. The
+  walks cover every workspace (#1550): the quit path removes parked
+  workspaces' snapshots too, a workspace close/eviction drops its editors'
+  snapshots (unless a view in the active workspace still shows the
+  document), and the tab-limit LRU eviction performs the same drop (plus
+  `PersistUndo`) as a manual tab close.
 - **Leftover on startup ⇒ the previous session died**: the restore flow lists
   them at launch and prompts per file, then age-based GC prunes the rest.
 
