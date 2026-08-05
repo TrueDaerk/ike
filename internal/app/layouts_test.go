@@ -120,6 +120,8 @@ func TestSnapshotLayoutStripsToKinds(t *testing.T) {
 func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
+	// The pane selection (#1568) precedes the prompt; enter keeps all panes.
+	m = step(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.layoutSavePromptOpen() {
 		t.Fatal("prompt must be open")
 	}
@@ -133,6 +135,7 @@ func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
 	}
 	// Saving the same name again requires a confirming second enter.
 	m = step(m, SaveLayoutPromptMsg{})
+	m = step(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = typeText(m, "dev")
 	m = step(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.layoutSavePromptOpen() || m.layoutSaveErr == "" {

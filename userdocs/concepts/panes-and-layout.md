@@ -86,7 +86,12 @@ splits and their ratios come back the way you left them.
 
 Beyond that you can name arrangements:
 
-- **Save Window Layout…** stores the current arrangement under a name.
+- **Save Window Layout…** stores the current arrangement under a name. Before
+  naming it you pick the panes the layout should pin on a small map of the
+  current arrangement — arrows or ++h++/++j++/++k++/++l++ move, ++space++
+  toggles, ++enter++ continues. Unchecked panes are not stored: when you later
+  apply the layout, whatever is open in panes the layout does not pin spreads
+  over the remaining space, keeping its current arrangement.
 - **Window Layouts…** opens a picker to apply one.
 - **Set Default Window Layout…** marks one as the layout new projects start from.
 - ++shift+f12++ restores the default layout when a session has drifted.

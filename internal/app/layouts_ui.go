@@ -150,6 +150,7 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 		m.layoutSaveInput = ""
 		m.layoutSavePos = 0
 		m.layoutSaveErr = ""
+		m.layoutSaveSel = nil
 		m.shell.Close()
 	}
 	switch {
@@ -168,7 +169,7 @@ func (m Model) updateLayoutSavePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			m.renderLayoutSavePrompt()
 			return m, nil
 		}
-		snap, ok := snapshotLayout(m.activeWS().Tree, m.activeWS().Panes)
+		snap, ok := snapshotLayoutSelected(m.activeWS().Tree, m.activeWS().Panes, m.layoutSaveSel)
 		if !ok {
 			closePrompt()
 			m.host.Notify(host.Warn, "cannot snapshot the current layout")

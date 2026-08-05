@@ -85,6 +85,13 @@ func layoutNames() (names []string, def string) {
 	return names, s.Default
 }
 
+// flexKey is the leaf key of the flexible placeholder region in a selective
+// layout (#1568). It never collides with a registry key: the registry only
+// mints the known singleton keys and "editor"/"terminal"/… bases. A snapshot
+// stores it with the kind-only identity {Kind: "flex"}; apply grafts every
+// live pane the layout's slots did not consume into its place.
+const flexKey = "flex"
+
 // snapshotLayout strips the live workspace down to a saveable layout: the
 // split tree with canonically re-keyed leaves and a kind-only identity per
 // leaf. Content panes (editors, markdown previews, diff viewers, tab hosts)
@@ -108,6 +115,63 @@ func snapshotLayout(tree layout.Node, reg *pane.Registry) (persistedLayout, bool
 	return persistedLayout{Tree: data, Panes: st.ids}, true
 }
 
+// snapshotLayoutSelected is snapshotLayout restricted to the selected leaves
+// (#1568): deselected panes are pruned from the tree, and the largest
+// deselected region survives as the flexible placeholder leaf so apply knows
+// where the unsaved panes should flow. With every leaf selected (or sel nil)
+// it degrades to the full snapshot — no placeholder, unchanged semantics.
+func snapshotLayoutSelected(tree layout.Node, reg *pane.Registry, sel map[string]bool) (persistedLayout, bool) {
+	if tree == nil {
+		return persistedLayout{}, false
+	}
+	leaves := layout.Leaves(tree)
+	selected := 0
+	for _, key := range leaves {
+		if sel == nil || sel[key] {
+			selected++
+		}
+	}
+	if selected == len(leaves) {
+		return snapshotLayout(tree, reg)
+	}
+	if selected == 0 {
+		return persistedLayout{}, false // a layout of nothing but flex is useless
+	}
+	pruned := layout.Clone(tree)
+	// The largest deselected region hosts the placeholder — that's where the
+	// user left the most flexible space; its siblings collapse away.
+	lay := layout.Compute(pruned, layout.Rect{W: 1000, H: 1000})
+	host, best := "", -1
+	for _, key := range leaves {
+		if sel[key] {
+			continue
+		}
+		r := lay.Panes[key]
+		if a := r.W * r.H; a > best {
+			best, host = a, key
+		}
+	}
+	for _, key := range leaves {
+		if sel[key] || key == host {
+			continue
+		}
+		if p, ok := layout.Close(pruned, key); ok {
+			pruned = p
+		}
+	}
+	pruned, _ = layout.Replace(pruned, host, flexKey)
+	st := &snapState{reg: reg, ids: map[string]paneIdentity{}}
+	normalized, ok := st.rebuild(pruned)
+	if !ok {
+		return persistedLayout{}, false
+	}
+	data, err := layout.Encode(normalized)
+	if err != nil {
+		return persistedLayout{}, false
+	}
+	return persistedLayout{Tree: data, Panes: st.ids}, true
+}
+
 // snapState carries the canonical key minting through the snapshot walk.
 type snapState struct {
 	reg       *pane.Registry
@@ -121,6 +185,15 @@ type snapState struct {
 func (st *snapState) rebuild(n layout.Node) (layout.Node, bool) {
 	switch v := n.(type) {
 	case *layout.Leaf:
+		if v.Pane == flexKey {
+			// The flexible placeholder (#1568) has no live instance behind
+			// it; it carries a kind-only identity like every other leaf.
+			if st.ids[flexKey].Kind == "flex" {
+				return nil, false // two placeholders: malformed
+			}
+			st.ids[flexKey] = paneIdentity{Kind: "flex"}
+			return &layout.Leaf{Pane: flexKey}, true
+		}
 		key, id, ok := st.leafIdentity(v.Pane)
 		if !ok {
 			return nil, false
@@ -296,6 +369,19 @@ func (m *Model) applyDefaultLayout() {
 func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) bool {
 	ws := m.activeWS()
 	reg := ws.Panes
+	hasFlex := false
+	for _, id := range ids {
+		if id.Kind == "flex" {
+			hasFlex = true
+		}
+	}
+	// A selective layout (#1568) grafts the unconsumed live panes — in their
+	// current relative arrangement — into the placeholder, so the clone of the
+	// pre-apply tree is that arrangement's source of truth.
+	var liveClone layout.Node
+	if hasFlex {
+		liveClone = layout.Clone(ws.Tree)
+	}
 	st := &applyState{tools: map[string][]string{}, used: map[string]bool{}}
 	for _, key := range reg.Keys() {
 		inst := reg.Get(key)
@@ -318,55 +404,61 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 		m.host.Notify(host.Warn, "layout is malformed — nothing applied")
 		return false
 	}
-	// Surplus content panes: editor panes merge their tabs into the last
-	// editor-kind slot (files are sacred, splits are not); markdown/diff
-	// viewers close (their content rebuilds from disk on demand). With no
-	// editor slot in the layout the surplus panes just stay registered.
-	target := lastEditorSlot(reg, st.slots)
-	for _, key := range st.content {
-		inst := reg.Get(key)
-		if inst == nil {
-			continue
-		}
-		switch inst.Kind() {
-		case pane.KindEditor:
-			if target != nil && target.Key() != key {
-				mergeEditorPane(reg, inst, target)
+	if hasFlex {
+		// A selective layout (#1568) never merges: everything the slots did
+		// not consume keeps its pane and flows into the placeholder region.
+		newTree = m.graftFlex(newTree, liveClone, st)
+	} else {
+		// Surplus content panes: editor panes merge their tabs into the last
+		// editor-kind slot (files are sacred, splits are not); markdown/diff
+		// viewers close (their content rebuilds from disk on demand). With no
+		// editor slot in the layout the surplus panes just stay registered.
+		target := lastEditorSlot(reg, st.slots)
+		for _, key := range st.content {
+			inst := reg.Get(key)
+			if inst == nil {
+				continue
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
-			reg.Close(key)
-		}
-	}
-	// Surplus running shells and tool panes must stay reachable (#1275):
-	// they merge as live terminal tabs into the last terminal slot — which
-	// becomes a tab host (#836) — or, when the layout has no terminal slot,
-	// into the last editor slot. Sessions never restart. Only a layout with
-	// neither slot kind leaves them registered but leafless.
-	surplus := append([]string{}, st.shells...)
-	toolNames := make([]string, 0, len(st.tools))
-	for name := range st.tools {
-		toolNames = append(toolNames, name)
-	}
-	sort.Strings(toolNames)
-	for _, name := range toolNames {
-		surplus = append(surplus, st.tools[name]...)
-	}
-	if len(surplus) > 0 {
-		dst := lastTerminalSlot(reg, st.slots)
-		if dst != nil {
-			dst.ConvertToTabHost()
-		} else {
-			dst = target
-		}
-		if dst != nil {
-			for _, key := range surplus {
-				inst := reg.Get(key)
-				if inst == nil {
-					continue
+			switch inst.Kind() {
+			case pane.KindEditor:
+				if target != nil && target.Key() != key {
+					mergeEditorPane(reg, inst, target)
 				}
-				if tm, ok := inst.DetachTerminal(); ok {
-					reg.Close(key)
-					dst.AddTerminalTab(tm)
+			case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
+				reg.Close(key)
+			}
+		}
+		// Surplus running shells and tool panes must stay reachable (#1275):
+		// they merge as live terminal tabs into the last terminal slot — which
+		// becomes a tab host (#836) — or, when the layout has no terminal slot,
+		// into the last editor slot. Sessions never restart. Only a layout with
+		// neither slot kind leaves them registered but leafless.
+		surplus := append([]string{}, st.shells...)
+		toolNames := make([]string, 0, len(st.tools))
+		for name := range st.tools {
+			toolNames = append(toolNames, name)
+		}
+		sort.Strings(toolNames)
+		for _, name := range toolNames {
+			surplus = append(surplus, st.tools[name]...)
+		}
+		if len(surplus) > 0 {
+			dst := lastTerminalSlot(reg, st.slots)
+			if dst != nil {
+				dst.ConvertToTabHost()
+			} else {
+				dst = target
+			}
+			if dst != nil {
+				for _, key := range surplus {
+					inst := reg.Get(key)
+					if inst == nil {
+						continue
+					}
+					if tm, ok := inst.DetachTerminal(); ok {
+						reg.Close(key)
+						dst.AddTerminalTab(tm)
+					}
 				}
 			}
 		}
@@ -384,6 +476,63 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 	m.layout()
 	saveLayout(ws.Tree, ws.Panes)
 	return true
+}
+
+// graftFlex resolves the flexible placeholder of a selective layout (#1568):
+// every live pane the slot walk did not consume keeps its pane, and the whole
+// group replaces the placeholder leaf preserving the panes' pre-apply relative
+// arrangement (the live tree with the consumed leaves collapsed away). With
+// nothing left over the region becomes one scratch editor. st.slots is
+// rewritten so the focus/merge helpers see real keys instead of the marker.
+func (m *Model) graftFlex(newTree, liveClone layout.Node, st *applyState) layout.Node {
+	reg := m.activeWS().Panes
+	consumed := map[string]bool{}
+	slots := st.slots[:0]
+	for _, key := range st.slots {
+		if key == flexKey {
+			continue
+		}
+		consumed[key] = true
+		slots = append(slots, key)
+	}
+	sub := liveClone
+	for _, key := range layout.Leaves(liveClone) {
+		if consumed[key] || reg.Get(key) == nil {
+			if p, ok := layout.Close(sub, key); ok {
+				sub = p
+			}
+		}
+	}
+	var leftovers []string
+	for _, key := range layout.Leaves(sub) {
+		if !consumed[key] && reg.Get(key) != nil {
+			leftovers = append(leftovers, key)
+		}
+	}
+	if len(leftovers) == 0 {
+		// Every live pane found a slot (or the sole surviving leaf was a
+		// consumed one Close could not prune): fresh scratch space.
+		sub = &layout.Leaf{Pane: reg.AddEditor()}
+		leftovers = []string{sub.(*layout.Leaf).Pane}
+	}
+	st.slots = append(slots, leftovers...)
+	return replaceFlexLeaf(newTree, sub)
+}
+
+// replaceFlexLeaf swaps the placeholder leaf for the grafted subtree in place.
+func replaceFlexLeaf(n, sub layout.Node) layout.Node {
+	switch t := n.(type) {
+	case *layout.Leaf:
+		if t.Pane == flexKey {
+			return sub
+		}
+		return n
+	case *layout.Split:
+		t.A = replaceFlexLeaf(t.A, sub)
+		t.B = replaceFlexLeaf(t.B, sub)
+		return t
+	}
+	return n
 }
 
 // resolveNode clones the snapshot tree, resolving every leaf to a live
@@ -424,6 +573,14 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return key, true
 	}
 	switch id.Kind {
+	case "flex":
+		// The flexible placeholder (#1568) resolves after the walk: graftFlex
+		// swaps the marker leaf for the unconsumed live panes.
+		if st.used[flexKey] {
+			return "", false // two placeholders: malformed store file
+		}
+		st.used[flexKey] = true
+		return flexKey, true
 	case "explorer":
 		return singleton(reg.AddExplorer)
 	case "vcs":

@@ -326,6 +326,11 @@ type Model struct {
 	layoutSavePos   int
 	layoutSaveErr   string
 	layoutsPicker   *layoutsMode
+	// layoutSelect is the open pane-selection mini-map preceding the name
+	// prompt (#1568); layoutSaveSel carries its confirmed selection into the
+	// prompt's save (nil = full snapshot).
+	layoutSelect  *layoutSelectState
+	layoutSaveSel map[string]bool
 	// movePending is the file whose move target the palette's directory picker
 	// is currently asking for (file.move, #175); "" when no move is pending.
 	movePending string
@@ -1136,6 +1141,29 @@ func (m *Model) restoreLayout(cfg host.Config) {
 // shared with the default-layout path (#1175): kind-only identities restore
 // as empty editors / fresh shells / restarted tools / empty panels.
 func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity, cfg host.Config) {
+	// A selective layout's flexible placeholder (#1568) has no live panes to
+	// graft at startup: it materializes as one scratch editor slot, keyed past
+	// the layout's own editor keys so nothing collides.
+	for _, key := range layout.Leaves(tree) {
+		if ids[key].Kind != "flex" {
+			continue
+		}
+		next := 1
+		for _, k := range layout.Leaves(tree) {
+			if k == "editor" && next < 2 {
+				next = 2
+			} else if n, err := strconv.Atoi(strings.TrimPrefix(k, "editor:")); err == nil && k != key && n >= next {
+				next = n + 1
+			}
+		}
+		fresh := "editor"
+		if next > 1 {
+			fresh = "editor:" + strconv.Itoa(next)
+		}
+		tree, _ = layout.Replace(tree, key, fresh)
+		delete(ids, key)
+		ids[fresh] = paneIdentity{Kind: "editor"}
+	}
 	leaves := layout.Leaves(tree)
 	explorers := 0
 	for _, key := range leaves {
@@ -3076,8 +3104,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case SaveLayoutPromptMsg:
-		// window.saveLayout (palette, #1175): name the current layout snapshot.
-		m.startLayoutSavePrompt()
+		// window.saveLayout (palette, #1175): pick the panes the layout pins
+		// (#1568), then name the snapshot.
+		m.startLayoutSelect()
 		return m, nil
 
 	case ShowLayoutsMsg:
@@ -4892,6 +4921,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {
 			return m.updateSaveAsPrompt(msg)
+		}
+		// The save-layout pane-selection mini-map (#1568) owns the keyboard
+		// the same way: hjkl/arrows move, space toggles, enter continues.
+		if m.layoutSelectOpen() {
+			return m.updateLayoutSelect(msg)
 		}
 		// The save-layout name prompt (#1175) mirrors it.
 		if m.layoutSavePromptOpen() {
