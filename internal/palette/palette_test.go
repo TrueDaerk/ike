@@ -686,6 +686,79 @@ func TestRowVeryNarrowDropsTime(t *testing.T) {
 	}
 }
 
+// TestSideRowLongTitleKeepsAux guards #1531: an over-wide project name in the
+// side column truncates with an ellipsis while the badge, time and aux glyph
+// stay intact — the row must span exactly the column width, never beyond.
+func TestSideRowLongTitleKeepsAux(t *testing.T) {
+	p := New(Config{})
+	it := Item{
+		Title:    "averyveryverylongprojectname-exceeding-column",
+		Time:     "2h ago",
+		Badge:    "●",
+		Aux:      RunCommandMsg{ID: "close-ws"},
+		AuxGlyph: "⏏",
+	}
+	for _, w := range []int{18, 26, 34} {
+		line := ansi.Strip(p.sideRow(it, false, w))
+		if got := ansi.StringWidth(line); got != w {
+			t.Fatalf("width %d: row spans %d cells, got %q", w, got, line)
+		}
+		if !strings.Contains(line, "…") {
+			t.Fatalf("width %d: title must truncate with an ellipsis, got %q", w, line)
+		}
+		if !strings.HasSuffix(line, "⏏ ") {
+			t.Fatalf("width %d: aux glyph must survive truncation, got %q", w, line)
+		}
+		if !strings.Contains(line, "●") {
+			t.Fatalf("width %d: badge must survive truncation, got %q", w, line)
+		}
+	}
+}
+
+// TestHighlightMeasuresDisplayCells guards #1531: highlight truncates and
+// measures in display cells, so wide runes (CJK) do not overflow the row and
+// push the right column out.
+func TestHighlightMeasuresDisplayCells(t *testing.T) {
+	p := New(Config{})
+	styled, w := highlight("非常に長い日本語のプロジェクト名", nil, p.accentColor(), 10)
+	if got := ansi.StringWidth(ansi.Strip(styled)); got != w {
+		t.Fatalf("reported width %d != rendered width %d", w, got)
+	}
+	if w > 10 {
+		t.Fatalf("width = %d, want <= 10", w)
+	}
+	if !strings.HasSuffix(styled, "…") {
+		t.Fatalf("wide-rune title must truncate with an ellipsis, got %q", styled)
+	}
+
+	it := Item{Title: "非常に長い日本語のプロジェクト名", Time: "2h ago", Badge: "●", Aux: RunCommandMsg{ID: "x"}, AuxGlyph: "⏏"}
+	line := ansi.Strip(p.sideRow(it, false, 26))
+	if got := ansi.StringWidth(line); got != 26 {
+		t.Fatalf("wide-rune row spans %d cells, want 26: %q", got, line)
+	}
+	if !strings.HasSuffix(line, "⏏ ") {
+		t.Fatalf("aux glyph must survive a wide-rune title, got %q", line)
+	}
+	if !strings.Contains(line, "2h ago") {
+		t.Fatalf("time must survive a wide-rune title, got %q", line)
+	}
+}
+
+// TestRowWideRunesKeepRightColumn guards #1531 for the main list: row() uses
+// the same highlight, so a wide-rune title must not push the detail chip,
+// time or aux zone past the row width.
+func TestRowWideRunesKeepRightColumn(t *testing.T) {
+	p := New(Config{})
+	it := Item{Title: "非常に長い日本語のファイル名です.go", Time: "5m ago", Aux: RunCommandMsg{ID: "x"}}
+	line := ansi.Strip(p.row(it, false, 30))
+	if got := ansi.StringWidth(line); got > 30 {
+		t.Fatalf("row spans %d cells, want <= 30: %q", got, line)
+	}
+	if !strings.HasSuffix(line, "5m ago ✕") {
+		t.Fatalf("time and ✕ must survive a wide-rune title, got %q", line)
+	}
+}
+
 // TestSideRowTimeColumn (#1114): the side column applies the same layout —
 // right-aligned time before the "✕", dropped when the column is too narrow.
 func TestSideRowTimeColumn(t *testing.T) {
