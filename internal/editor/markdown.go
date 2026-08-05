@@ -69,25 +69,6 @@ func (m Model) concealedAt(line, col int) bool {
 	return false
 }
 
-// concealClickCol is the mouse map's inverse for a concealed line (#881): the
-// clicked offset counts display cells, which skip concealed columns, so the
-// buffer column is the one whose unconcealed-prefix length matches. Columns at
-// or past the line end map 1:1 (nothing left to conceal).
-func (m Model) concealClickCol(line, from, offset int) int {
-	runes := len([]rune(m.buf.Line(line)))
-	col := from
-	for ; col < runes; col++ {
-		if m.concealedAt(line, col) {
-			continue
-		}
-		if offset == 0 {
-			return col
-		}
-		offset--
-	}
-	return col + offset
-}
-
 // --- pipe tables -----------------------------------------------------------
 
 // mdTableBlock is one detected pipe table: the inclusive source line range and
