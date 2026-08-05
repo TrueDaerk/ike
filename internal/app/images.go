@@ -13,6 +13,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	"ike/internal/workspace"
 )
 
 // OpenImageMsg asks the root model to open an image file in an image preview
@@ -78,8 +79,9 @@ func (m *Model) openImagePreview(path string) {
 
 // imageSyncCmd reconciles the terminal's Kitty graphics state with the image
 // panes after every Update pass (#1479): transmit on first show and after a
-// resize, delete when a pane closed or the workspace switched away — so no
-// ghost graphics outlive their pane. On a terminal whose support is still
+// resize, delete when a pane closed — so no ghost graphics outlive their
+// pane. A workspace switch or teardown releases its placements separately
+// via releaseWorkspaceImages (#1547). On a terminal whose support is still
 // unknown it emits the capability probe once (first image pane); without
 // support it does nothing and the panes render their metadata fallback.
 func (m *Model) imageSyncCmd() tea.Cmd {
@@ -113,6 +115,38 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 	if hasImages && m.kittyGfx == nil && !m.gfxQueried {
 		m.gfxQueried = true
 		raw = append(raw, imgview.Query())
+	}
+	if len(raw) == 0 {
+		return nil
+	}
+	return tea.Raw(strings.Join(raw, ""))
+}
+
+// releaseWorkspaceImages deletes the Kitty placements of every image pane a
+// workspace holds and resets their transmission state (#1547), returning the
+// cmd emitting the delete sequences (nil when nothing is resident). Called
+// when a workspace parks (project switch) or is torn down: liveImages is
+// re-initialized empty in buildModel, so without the explicit deletes the
+// placements — a full PNG each in the host terminal's graphics memory —
+// survived for the process lifetime. The reset makes the resume's reconcile
+// pass transmit again.
+func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
+	if w == nil || w.Panes == nil {
+		return nil
+	}
+	var raw []string
+	for _, key := range w.Panes.Keys() {
+		inst := w.Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindImage {
+			continue
+		}
+		iv := inst.Image()
+		if !iv.Transmitted() {
+			continue
+		}
+		raw = append(raw, imgview.Delete(iv.ID()))
+		iv.Reset()
+		delete(m.liveImages, iv.ID())
 	}
 	if len(raw) == 0 {
 		return nil

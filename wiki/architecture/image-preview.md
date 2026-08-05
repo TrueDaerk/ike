@@ -58,9 +58,13 @@ structure/breadcrumb hooks): it walks the active workspace's image panes and
 diffs desired placements against `Model.liveImages` (a pointer-shared map
 like `toolchainSeg`). First show transmits; a pane resize deletes and
 retransmits at the new grid (`SyncSeqs` is idempotent while the geometry is
-unchanged); a closed pane — or a workspace switch away — emits `a=d,d=I` for
-its id, freeing the terminal-side data. All sequences leave through one
-`tea.Raw`, bypassing the renderer.
+unchanged); a closed pane emits `a=d,d=I` for its id, freeing the
+terminal-side data. All sequences leave through one `tea.Raw`, bypassing the
+renderer. A workspace switch or teardown releases its placements separately
+(#1547): `releaseWorkspaceImages` emits the deletes and resets each pane's
+transmission state — `liveImages` is re-initialized empty in `buildModel`,
+so the per-pass diff could never reach a parked workspace's ids — and the
+reset makes the resume's reconcile pass transmit again.
 
 ## Boundaries
 

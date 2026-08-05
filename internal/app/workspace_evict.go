@@ -166,8 +166,12 @@ func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
 		return nil
 	}
 	root := w.Root
+	// Kitty placements a torn-down workspace still holds leave the terminal
+	// (#1547) — normally already released at park time, so this catches the
+	// paths that close a workspace without a prior switch.
+	imgCmd := m.releaseWorkspaceImages(w)
 	teardownWorkspace(w)
-	return tea.Batch(m.fireHooks(plugin.EventWorkspaceClosed, root)...)
+	return tea.Batch(append(m.fireHooks(plugin.EventWorkspaceClosed, root), imgCmd)...)
 }
 
 // enforceWorkspaceCap evicts least-recently-used background workspaces past
