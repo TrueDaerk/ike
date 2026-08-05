@@ -227,10 +227,15 @@ func (c *Conn) writeLoop() {
 	}
 }
 
-// stopWriter wakes writeLoop and tells it to drain-and-exit. Idempotent.
+// stopWriter wakes writeLoop and tells it to exit. Idempotent. The stream is
+// gone by the time this runs, so queued frames are undeliverable — dropping
+// them here also releases what could be megabytes of full-sync didChange
+// payloads that would otherwise stay pinned as long as the Conn is referenced
+// (#1537).
 func (c *Conn) stopWriter() {
 	c.sendMu.Lock()
 	c.sendClosed = true
+	c.sendBuf = nil
 	c.sendMu.Unlock()
 	c.sendCond.Broadcast()
 }

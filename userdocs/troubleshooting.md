@@ -161,6 +161,12 @@ notifications suppressed by `notifications.min_severity`.
 serves `net/http/pprof`, and `SIGUSR1` writes goroutine and heap dumps to
 `IKE_PPROF_DIR`.
 
+**Memory**, when the process footprint looks bloated: **Memory Statistics**
+in the palette prints a heap summary (a growing "in use" number is a real
+leak; a large "freed-not-returned" share is memory macOS keeps counted
+against the process until it needs it), and **Write Heap Dump** writes a
+`pprof` heap profile to attach to an issue.
+
 ## Reporting it
 
 If it really is a bug,

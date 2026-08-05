@@ -174,3 +174,42 @@ func TestCrashAndDisableStatusNameTheError(t *testing.T) {
 		}
 	}
 }
+
+// TestCrashStopsDeadServer: a crashed server's stop must run (#1537) — the
+// read loop can end while the child process is still alive (closed stdout,
+// bad framing), and without the stop the orphan keeps its process, watch
+// goroutine, stderr ring and log handle for the rest of the session.
+func TestCrashStopsDeadServer(t *testing.T) {
+	var connects, stops int32
+	inner := crashOnceConnector(&connects)
+	connector := func(spec lsp.ServerSpec, root string, handler jsonrpc.Handler) (*client.Client, func(), func() string, error) {
+		cl, stop, stderr, err := inner(spec, root, handler)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		wrapped := func() {
+			atomic.AddInt32(&stops, 1)
+			stop()
+		}
+		return cl, wrapped, stderr, nil
+	}
+	spec := lsp.ServerSpec{Language: "go", Command: "fake", RootMarkers: []string{"go.mod"}}
+	m := New(resolver(spec), connector, Callbacks{})
+	defer m.Shutdown()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "main.go")
+	_ = os.WriteFile(path, []byte("package main"), 0o644)
+	if err := m.Open(path, "go", "package main"); err != nil {
+		t.Fatal(err)
+	}
+
+	deadline := time.After(5 * time.Second)
+	for atomic.LoadInt32(&stops) == 0 {
+		select {
+		case <-deadline:
+			t.Fatal("crashed server's stop was never called")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+}
