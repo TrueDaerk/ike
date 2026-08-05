@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ike
+Comment=Terminal IDE
+Exec=ike-gui
+Icon=ike
+Terminal=false
+Categories=Development;IDE;
+StartupWMClass=ike

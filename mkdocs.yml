@@ -69,6 +69,7 @@ nav:
       - Overview: getting-started/index.md
       - Installation: getting-started/installation.md
       - Terminal setup: getting-started/terminal-setup.md
+      - Desktop launcher: getting-started/desktop-launcher.md
       - Your first project: getting-started/first-project.md
       - Command line: getting-started/command-line.md
   - Concepts:
