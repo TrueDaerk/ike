@@ -26,11 +26,40 @@ func TestParseCmdline(t *testing.T) {
 		{"$ cat a | gr", "gr", "gr"},
 		{"$ sleep 1; ls do", "ls", "do"},
 		{"no prompt at all ls x", "no", "x"},
+		{`$ ls My\ Doc`, "ls", `My\ Doc`},
+		{`$ cat My\ Documents/fi`, "cat", `My\ Documents/fi`},
+		{`$ ls My\ Doc `, "ls", ""},
+		{`$ ls My\`, "ls", `My\`},
+		{`$ My\ tool ar`, `My\ tool`, "ar"},
+		{`$ echo a\;b`, "echo", `a\;b`},
 	}
 	for _, tc := range cases {
 		cmd, word := parseCmdline(tc.before)
 		if cmd != tc.cmd || word != tc.word {
 			t.Errorf("parseCmdline(%q) = (%q, %q), want (%q, %q)", tc.before, cmd, word, tc.cmd, tc.word)
+		}
+	}
+}
+
+func TestUnescapeShellWord(t *testing.T) {
+	cases := map[string]string{
+		`My\ Doc`:   "My Doc",
+		"plain":     "plain",
+		`a\;b`:      "a;b",
+		`tail\`:     "tail",
+		`double\\x`: `double\x`,
+	}
+	for in, want := range cases {
+		if got := unescapeShellWord(in); got != want {
+			t.Errorf("unescapeShellWord(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestHasDanglingEscape(t *testing.T) {
+	for in, want := range map[string]bool{`My\`: true, `My\ Doc`: false, `x\\`: false, "plain": false} {
+		if got := hasDanglingEscape(in); got != want {
+			t.Errorf("hasDanglingEscape(%q) = %v, want %v", in, got, want)
 		}
 	}
 }
@@ -949,6 +978,26 @@ func TestAcceptEscapesSpecialChars(t *testing.T) {
 	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: "My"}
 	m.acceptCompletion()
 	waitFor(t, "escaped remainder on the line", func() bool {
+		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
+	})
+}
+
+// TestAcceptContinuesEscapedWord (#1552): a word already escaped on the line
+// (`My\ Doc`) parses as one word, matches the unescaped candidate, and the
+// accepted remainder extends it.
+func TestAcceptContinuesEscapedWord(t *testing.T) {
+	c := &collector{}
+	m := startShModel(t, c)
+	for _, r := range `ls My\ Doc` {
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+	waitFor(t, "echo of escaped word", func() bool {
+		_, word := parseCmdline(m.lineBeforeCursor())
+		return word == `My\ Doc`
+	})
+	m.comp = completion{open: true, items: []string{"My Documents/"}, sel: 0, word: `My\ Doc`}
+	m.acceptCompletion()
+	waitFor(t, "remainder extends escaped word", func() bool {
 		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
 	})
 }
