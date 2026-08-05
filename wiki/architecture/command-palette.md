@@ -207,7 +207,9 @@ separation from the title/detail, one before the `✕`). At narrow widths the
 **title truncates first** (ellipsis) so the time and the `✕` zone stay
 intact; when the title would fall below `minRowTitleW` (8 cells) the time
 column drops entirely so the name stays readable. `sideRow` (the Recent
-Projects column) applies the same rules, so both pickers match.
+Projects column) applies the same rules, so both pickers match. Title
+truncation measures **display cells**, not runes (#1531), so wide runes
+(CJK, emoji) cannot overflow the row and push the right column out.
 
 ### Recent Projects column (#778)
 

@@ -746,12 +746,22 @@ func (p *Palette) sideRow(it Item, selected bool, width int) string {
 	if timeW > 0 {
 		rightW += timeW + 1 // one space between the time and the "✕ "
 	}
-	titleMax := width - markerW - badgeW - rightW
+	// A populated right column costs one extra separating cell (#1531) —
+	// without it the row overflows and clipRow eats the aux glyph.
+	sep := 0
+	if rightW > 0 {
+		sep = 1
+	}
+	titleMax := width - markerW - badgeW - rightW - sep
 	if timeW > 0 && titleMax < minRowTitleW {
 		// Too narrow for both (#1114): the time drops, the name stays.
 		timeStr, timeW = "", 0
 		rightW = auxW
-		titleMax = width - markerW - badgeW - rightW
+		sep = 0
+		if rightW > 0 {
+			sep = 1
+		}
+		titleMax = width - markerW - badgeW - rightW - sep
 	}
 	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
 	line := marker + title + badge
@@ -869,13 +879,29 @@ func clipRow(line string, width int, selected bool, bg color.Color) string {
 // highlight renders title with the matched rune spans emphasised in the accent
 // colour, truncated to at most maxW display cells (with an ellipsis). It returns
 // the styled string and its display width. Spans index runes of the full title;
-// indices past the truncation point are dropped.
+// indices past the truncation point are dropped. Widths are measured in
+// display cells, not runes (#1531) — wide runes (CJK, emoji) occupy two.
 func highlight(title string, spans []int, accent color.Color, maxW int) (string, int) {
+	if maxW < 1 {
+		maxW = 1
+	}
 	runes := []rune(title)
+	widths := make([]int, len(runes))
+	total := 0
+	for i, r := range runes {
+		widths[i] = ansi.StringWidth(string(r))
+		total += widths[i]
+	}
 	truncated := false
-	if maxW >= 1 && len(runes) > maxW {
-		runes = runes[:maxW-1]
+	if total > maxW {
 		truncated = true
+		budget := maxW - 1 // room for the trailing "…"
+		n, w := 0, 0
+		for n < len(runes) && w+widths[n] <= budget {
+			w += widths[n]
+			n++
+		}
+		runes, total = runes[:n], w+1 // the "…" cell
 	}
 	hit := make(map[int]bool, len(spans))
 	for _, s := range spans {
@@ -890,12 +916,10 @@ func highlight(title string, spans []int, accent color.Color, maxW int) (string,
 			b.WriteRune(r)
 		}
 	}
-	w := len(runes)
 	if truncated {
 		b.WriteString("…")
-		w++
 	}
-	return b.String(), w
+	return b.String(), total
 }
 
 // boxWidth is the outer width of the palette box. Anchored, it tracks the host
