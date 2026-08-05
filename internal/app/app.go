@@ -3341,6 +3341,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleDebugEvent(msg.sess, msg.ev)
 		return m, nil
 
+	case debugEventBatchMsg:
+		// A parked session's coalesced output window (#1557): all events apply
+		// in one Update pass instead of one pass each.
+		for _, ev := range msg.evs {
+			m.handleDebugEvent(msg.sess, ev)
+		}
+		return m, nil
+
 	case debugStoppedMsg:
 		// The stop context arrived: jump to the top frame, mark its line,
 		// and feed the tool window (#580).

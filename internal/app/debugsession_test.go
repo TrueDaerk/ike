@@ -490,3 +490,97 @@ func TestEnvMapToSliceSkipsNulls(t *testing.T) {
 		t.Fatal("empty map must yield nil")
 	}
 }
+
+// TestDebugEventCoalescerPassThrough (#1557): unparked, every event delivers
+// individually and immediately.
+func TestDebugEventCoalescerPassThrough(t *testing.T) {
+	var mu sync.Mutex
+	var got []tea.Msg
+	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
+	c.onEvent(dap.Event{Name: "output"})
+	c.onEvent(dap.Event{Name: "stopped"})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("unparked events = %d msgs, want 2", len(got))
+	}
+	for i, name := range []string{"output", "stopped"} {
+		ev, ok := got[i].(debugEventMsg)
+		if !ok || ev.ev.Name != name {
+			t.Fatalf("msg %d = %#v, want debugEventMsg %s", i, got[i], name)
+		}
+	}
+}
+
+// TestDebugEventCoalescerBatchesParkedOutput (#1557): parked output events
+// buffer and arrive as one debugEventBatchMsg per quiet window.
+func TestDebugEventCoalescerBatchesParkedOutput(t *testing.T) {
+	var mu sync.Mutex
+	var got []tea.Msg
+	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
+	c.SetParked(true)
+	for i := 0; i < 5; i++ {
+		c.onEvent(dap.Event{Name: "output"})
+	}
+	mu.Lock()
+	if len(got) != 0 {
+		mu.Unlock()
+		t.Fatalf("parked output delivered immediately: %d msgs", len(got))
+	}
+	mu.Unlock()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		mu.Lock()
+		n := len(got)
+		mu.Unlock()
+		if n > 0 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("parked window = %d msgs, want 1 batch", len(got))
+	}
+	batch, ok := got[0].(debugEventBatchMsg)
+	if !ok || len(batch.evs) != 5 {
+		t.Fatalf("batch = %#v, want 5 coalesced output events", got[0])
+	}
+}
+
+// TestDebugEventCoalescerStateFlushesFirst (#1557): a state event while parked
+// flushes buffered output ahead of itself, and un-parking flushes too.
+func TestDebugEventCoalescerStateFlushesFirst(t *testing.T) {
+	var mu sync.Mutex
+	var got []tea.Msg
+	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
+	c.SetParked(true)
+	c.onEvent(dap.Event{Name: "output"})
+	c.onEvent(dap.Event{Name: "terminated"})
+	mu.Lock()
+	if len(got) != 2 {
+		mu.Unlock()
+		t.Fatalf("state event delivery = %d msgs, want batch + event", len(got))
+	}
+	if b, ok := got[0].(debugEventBatchMsg); !ok || len(b.evs) != 1 || b.evs[0].Name != "output" {
+		mu.Unlock()
+		t.Fatalf("first msg = %#v, want output batch", got[0])
+	}
+	if ev, ok := got[1].(debugEventMsg); !ok || ev.ev.Name != "terminated" {
+		mu.Unlock()
+		t.Fatalf("second msg = %#v, want terminated event", got[1])
+	}
+	got = nil
+	mu.Unlock()
+	c.onEvent(dap.Event{Name: "output"})
+	c.SetParked(false)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 1 {
+		t.Fatalf("unpark flush = %d msgs, want 1 batch", len(got))
+	}
+	if b, ok := got[0].(debugEventBatchMsg); !ok || len(b.evs) != 1 {
+		t.Fatalf("unpark msg = %#v, want 1-event batch", got[0])
+	}
+}

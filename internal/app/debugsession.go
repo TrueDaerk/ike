@@ -42,6 +42,12 @@ type debugState struct {
 	cfgName string
 	root    string
 
+	// coal sits between the adapter's read loop and host.Send (#1557): while
+	// the owning workspace is parked, output events coalesce into batches so a
+	// chatty background debuggee does not cost the active workspace one full
+	// Update+render pass per event.
+	coal *debugEventCoalescer
+
 	threadID   int
 	paused     bool
 	frames     []dap.StackFrame
@@ -98,6 +104,12 @@ type (
 		threadID int
 		frames   []dap.StackFrame
 	}
+	// debugEventBatchMsg delivers coalesced parked-session output events in
+	// one Update pass (#1557); the events apply in arrival order.
+	debugEventBatchMsg struct {
+		sess *dap.Session
+		evs  []dap.Event
+	}
 	// debugErrMsg surfaces an async session error.
 	debugErrMsg struct{ err error }
 	// debugEndedMsg reports session termination (exit code when known); sess
@@ -135,6 +147,88 @@ type (
 		sess *dap.Session
 	}
 )
+
+// debugParkedQuiet is the coalescing window for a parked debuggee's output
+// events (#1557): long enough to fold a print-loop burst into few batches,
+// short enough that the transcript and parked terminal stay near-live.
+const debugParkedQuiet = 50 * time.Millisecond
+
+// debugEventCoalescer relays adapter events to host.Send, batching a parked
+// session's output (#1557). Unparked (the common case) every event passes
+// straight through as its own debugEventMsg. Parked, output events buffer and
+// flush as one debugEventBatchMsg per quiet window — the SetParked idea from
+// the terminal's #1522 batching — while any other event (stopped, terminated,
+// #1544's exited) flushes the buffer and delivers individually, keeping
+// arrival order. The mutex is held across sends so the batch/single order can
+// never invert between the read loop and the flush timer.
+//
+// It also carries the owning session pointer for event tagging (#1523): the
+// session only exists after Connect/Start, while the read loop starts inside
+// them, so the field starts nil (read as "the launching session") and is set
+// right after construction.
+type debugEventCoalescer struct {
+	send func(tea.Msg)
+
+	mu      sync.Mutex
+	sess    *dap.Session
+	parked  bool
+	pending []dap.Event
+	armed   bool
+}
+
+// setSession installs the session pointer once Connect/Start returned it.
+func (c *debugEventCoalescer) setSession(s *dap.Session) {
+	c.mu.Lock()
+	c.sess = s
+	c.mu.Unlock()
+}
+
+// SetParked flips the parked flag; un-parking flushes whatever buffered.
+func (c *debugEventCoalescer) SetParked(parked bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.parked = parked
+	if !parked {
+		c.flushLocked()
+	}
+}
+
+// onEvent is the adapter read loop's callback.
+func (c *debugEventCoalescer) onEvent(ev dap.Event) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.parked && ev.Name == "output" {
+		c.pending = append(c.pending, ev)
+		if len(c.pending) > maxPendingOut {
+			c.pending = c.pending[len(c.pending)-maxPendingOut:]
+		}
+		if !c.armed {
+			c.armed = true
+			time.AfterFunc(debugParkedQuiet, c.flushTimer)
+		}
+		return
+	}
+	c.flushLocked() // keep buffered output ahead of the state event
+	c.send(debugEventMsg{sess: c.sess, ev: ev})
+}
+
+// flushTimer delivers the window's batch.
+func (c *debugEventCoalescer) flushTimer() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.armed = false
+	c.flushLocked()
+}
+
+// flushLocked sends the pending batch; the caller holds c.mu.
+func (c *debugEventCoalescer) flushLocked() {
+	if len(c.pending) == 0 {
+		return
+	}
+	evs := c.pending
+	c.pending = nil
+	c.send(debugEventBatchMsg{sess: c.sess, evs: evs})
+}
 
 // startDebug is the debug.start handler: it resolves the active file's run
 // configuration and launches it under the language's DAP adapter.
@@ -290,21 +384,13 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 	send := m.host.Send
 	// Events are tagged with their owning session (#1523) so Update can route
 	// one from a parked workspace's debuggee away from the active session's
-	// state. The session pointer only exists after Connect/Start below, while
-	// the reader goroutine (and thus onEvent) starts inside them — hence the
-	// guarded holder; the handshake's own events may still carry nil, which
-	// the handler treats as the active session (the launch that is m.dbg by
-	// the time the message is processed).
-	var (
-		evMu   sync.Mutex
-		evSess *dap.Session
-	)
-	onEvent := func(ev dap.Event) {
-		evMu.Lock()
-		s := evSess
-		evMu.Unlock()
-		send(debugEventMsg{sess: s, ev: ev})
-	}
+	// state; the coalescer additionally batches parked output (#1557). The
+	// session pointer only exists after Connect/Start below, while the reader
+	// goroutine (and thus onEvent) starts inside them — the handshake's own
+	// events may still carry nil, which the handler treats as the active
+	// session (the launch that is m.dbg by the time the message is processed).
+	coal := &debugEventCoalescer{send: send}
+	onEvent := coal.onEvent
 	// An in-process adapter (PHP's DBGp bridge, 0360) wins over an argv spawn;
 	// past construction both session kinds behave identically.
 	var sess *dap.Session
@@ -330,10 +416,8 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 			return
 		}
 	}
-	evMu.Lock()
-	evSess = sess
-	evMu.Unlock()
-	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root}
+	coal.setSession(sess)
+	m.dbg = &debugState{sess: sess, cfgName: cfg.Name, root: root, coal: coal}
 	m.dbgLaunching = false
 	// A still-open pane pair from the previous session starts clean (#689):
 	// the panel drops its finished marker, and the debuggee terminal pane's

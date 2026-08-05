@@ -71,7 +71,14 @@ layout as before. Consequences:
   debuggee terminal — or its `pendingOut` buffer, capped at
   `maxPendingOut` chunks — while state events (`stopped`, `continued`, …)
   are consumed without effect. The async stop/ended follow-up messages
-  are session-guarded the same way. The exception is `terminated`/`exited`
+  are session-guarded the same way. A parked session's output events also
+  coalesce before `host.Send` (#1557, `debugEventCoalescer` in
+  `internal/app/debugsession.go`): while parked they buffer and deliver as
+  one `debugEventBatchMsg` per quiet window (`debugParkedQuiet`), so a
+  chatty background debuggee costs one active-workspace Update pass per
+  window instead of per event — the debug-side analogue of the terminal's
+  `SetParked` batching; state events flush the buffer ahead of themselves
+  and deliver individually. The exception is `terminated`/`exited`
   (#1544): a parked debuggee that ends finishes its session in place —
   the parked pane pair flips to the finished state, `extras.dbg` clears
   so the workspace stops counting as busy (silent LRU eviction works
