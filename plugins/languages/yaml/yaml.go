@@ -18,6 +18,7 @@ package langyaml
 import (
 	_ "embed"
 
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -43,5 +44,8 @@ func init() {
 		// its key line (nested k8s/CI paths stay visible while scrolling).
 		ScopeNodes: []string{"block_mapping_pair"},
 		FoldNodes:  []string{"block_mapping_pair", "block_sequence", "block_scalar", "flow_mapping", "flow_sequence"},
+		// Base64 decoding (#1620): values in a Kubernetes Secret's data:
+		// block conceal as the decoded text when the payload is printable.
+		Spans: escapes.Base64YAMLSpans,
 	})
 }

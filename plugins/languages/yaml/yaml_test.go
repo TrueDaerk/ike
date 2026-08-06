@@ -43,3 +43,19 @@ func TestYAMLIndent(t *testing.T) {
 		t.Error("\"-\" must not auto-indent: sequence items continue at their own level")
 	}
 }
+
+// TestYAMLBase64Spans (#1620): values in a Kubernetes Secret data: block
+// decode when printable; other documents stay raw.
+func TestYAMLBase64Spans(t *testing.T) {
+	l, ok := lang.ByID("yaml")
+	if !ok || l.Spans == nil {
+		t.Fatal("yaml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"kind: Secret", "data:", "  user: YWRtaW4="})
+	if len(spans) != 1 || spans[0].Replace != "admin" {
+		t.Errorf("spans = %+v, want the Secret value decoded to admin", spans)
+	}
+	if spans := l.Spans([]string{"kind: Deployment", "data:", "  user: YWRtaW4="}); len(spans) != 0 {
+		t.Errorf("non-Secret document decoded: %+v", spans)
+	}
+}

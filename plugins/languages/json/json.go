@@ -22,6 +22,7 @@ import (
 	_ "embed"
 
 	"ike/internal/epochtime"
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -52,9 +53,10 @@ func init() {
 		SpaceAfter: []rune{':'},
 		// Foldable regions (#144): multi-line objects and arrays.
 		FoldNodes: []string{"object", "array"},
-		// Inline epoch decoding (#1618): a numeric timestamp in a value
-		// position conceals as its UTC form.
-		Spans: epochSpans,
+		// Inline epoch decoding (#1618) and unicode-escape decoding (#1620):
+		// a numeric timestamp in a value position conceals as its UTC form,
+		// a \uXXXX escape in a string as the escaped character.
+		Spans: jsonSpans,
 	})
 
 	register.Language(lang.Language{
@@ -63,14 +65,14 @@ func init() {
 		Grammar:    g,
 		FoldNodes:  []string{"object", "array"},
 		SpaceAfter: []rune{':'},
-		Spans:      epochSpans,
+		Spans:      jsonSpans,
 	})
 }
 
-// epochSpans is the lang.Language.Spans hook (#1618): Unix epoch timestamps in
-// JSON value positions become conceal-with-stand-in spans rendering the
-// decoded UTC form. The JSON context keeps keys and digits inside prose
-// strings out of it.
-func epochSpans(lines []string) []lang.Span {
-	return epochtime.Spans(lines, epochtime.JSONValue)
+// jsonSpans is the lang.Language.Spans hook: Unix epoch timestamps in JSON
+// value positions (#1618) and \uXXXX escapes in strings (#1620) become
+// conceal-with-stand-in spans rendering the decoded form. The JSON context
+// keeps keys and digits inside prose strings out of the epoch detection.
+func jsonSpans(lines []string) []lang.Span {
+	return append(epochtime.Spans(lines, epochtime.JSONValue), escapes.UnicodeSpans(lines)...)
 }

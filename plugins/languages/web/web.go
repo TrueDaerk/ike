@@ -25,9 +25,16 @@ package langweb
 import (
 	_ "embed"
 
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
+
+// htmlEntitySpans is the HTML lang.Language.Spans hook (#1620): character
+// references conceal as the decoded text, by the full HTML entity table.
+func htmlEntitySpans(lines []string) []lang.Span {
+	return escapes.EntitySpans(lines, escapes.EntityHTML)
+}
 
 //go:embed queries/typescript.scm
 var tsQuery string
@@ -66,6 +73,9 @@ func init() {
 			"object", "array", "interface_declaration", "enum_declaration",
 			"switch_statement", "jsx_element", "comment",
 		},
+		// Unicode-escape decoding (#1620): \uXXXX (surrogate pairs combined)
+		// in string literals conceals as the escaped character.
+		Spans: escapes.UnicodeSpans,
 	})
 
 	register.Language(lang.Language{
@@ -86,6 +96,9 @@ func init() {
 		BlockComment: [2]string{"<!--", "-->"},
 		IndentAfter:  []string{">"},
 		FoldNodes:    []string{"element", "script_element", "style_element", "comment"},
+		// Entity decoding (#1620): &amp;, &#x2026; and friends conceal as the
+		// decoded character — the full HTML named-entity table applies.
+		Spans: htmlEntitySpans,
 	})
 
 	register.Language(lang.Language{

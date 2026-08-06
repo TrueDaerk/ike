@@ -613,6 +613,12 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleLogRendering()
 	case "toggle_timestamp_decoding":
 		m.toggleTimestampDecoding()
+	case "toggle_unicode_escape_decoding":
+		m.toggleUnicodeEscapeDecoding()
+	case "toggle_entity_decoding":
+		m.toggleEntityDecoding()
+	case "toggle_base64_decoding":
+		m.toggleBase64Decoding()
 	case "decode_jwt":
 		return m, m.showJWT()
 	case "find":

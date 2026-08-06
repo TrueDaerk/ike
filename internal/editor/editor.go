@@ -322,15 +322,25 @@ type Model struct {
 	// whose marker chrome reveals while the caret is anywhere inside the span,
 	// not only on a marker itself.
 	concealExt map[int][]concealRange
-	// stamps holds the decoded epoch-timestamp stand-ins (#1618) split out of
-	// the same parse: its own conceal channel so tsDecode
-	// (editor.timestamp_decoding / view.toggleTimestampDecoding) gates it
-	// apart from the markdown and log rendering layers.
-	stamps   map[int][]concealRange
+	// decodes holds the decode-family stand-ins split out of the same parse,
+	// keyed by capture: decoded epoch timestamps (#1618) and the #1620 escape
+	// families (unicode escapes, HTML/XML entities, base64 Secret values).
+	// Per-family conceal channels, so each toggle (tsDecode, uniDecode,
+	// entDecode, b64Decode — see decodeOn) gates its family apart from the
+	// markdown and log rendering layers and from the other families.
+	decodes  map[string]map[int][]concealRange
 	tsDecode bool
 	// tsDecodeSet marks a per-view toggle override, like mdRenderSet.
 	tsDecodeSet bool
-	mdRender    bool
+	// The #1620 escape-family toggles, each with its own override flag:
+	// unicode escapes, HTML/XML entities, base64 Secret values.
+	uniDecode    bool
+	uniDecodeSet bool
+	entDecode    bool
+	entDecodeSet bool
+	b64Decode    bool
+	b64DecodeSet bool
+	mdRender     bool
 	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
 	// applyConfig refresh stops tracking editor.markdown_rendering once the
 	// view toggled.
@@ -530,6 +540,9 @@ func New() Model {
 		svTable:            &svState{},
 		logRender:          true,
 		tsDecode:           true,
+		uniDecode:          true,
+		entDecode:          true,
+		b64Decode:          true,
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
@@ -657,6 +670,15 @@ func (m *Model) applyConfig() {
 	if !m.tsDecodeSet {
 		m.tsDecode = boolOr(m.cfg, "editor.timestamp_decoding", m.tsDecode)
 	}
+	if !m.uniDecodeSet {
+		m.uniDecode = boolOr(m.cfg, "editor.unicode_escape_decoding", m.uniDecode)
+	}
+	if !m.entDecodeSet {
+		m.entDecode = boolOr(m.cfg, "editor.entity_decoding", m.entDecode)
+	}
+	if !m.b64DecodeSet {
+		m.b64Decode = boolOr(m.cfg, "editor.base64_decoding", m.b64Decode)
+	}
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
@@ -739,7 +761,7 @@ func (m *Model) Load(path string) error {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
-	m.stamps = nil
+	m.decodes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -792,7 +814,7 @@ func (m *Model) NewFile(path string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
-	m.stamps = nil
+	m.decodes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -826,7 +848,7 @@ func (m *Model) RestoreText(text string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
-	m.stamps = nil
+	m.decodes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -880,7 +902,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.resolveEditorconfig()
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
-	m.stamps = nil
+	m.decodes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -1104,11 +1126,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Conceal spans (#881) feed the markdown rendering layer, not the
 			// style index — a marker cell styles raw on the cursor line but
 			// disappears elsewhere.
-			style, conceal, extents, stamps := concealSplit(msg.Spans)
+			style, conceal, extents, decodes := concealSplit(msg.Spans)
 			m.hlIndex = highlight.NewIndex(style)
 			m.conceal = conceal
 			m.concealExt = extents
-			m.stamps = stamps
+			m.decodes = decodes
 			m.scopes = msg.Scopes
 			m.folds = msg.Folds
 			m.reconcileFolds()
