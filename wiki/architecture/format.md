@@ -4,7 +4,7 @@ title: Formatter Registry
 description: The neutral reformat layer — providers (config override, external command, LSP, built-in) registered per language, one resolution chain behind lsp.format/lsp.formatRange and format-on-save, edits applied as one undo unit.
 resource: internal/format
 tags: [architecture, format, reformat, registry, lsp, plugins]
-timestamp: 2026-07-30T00:00:00Z
+timestamp: 2026-08-06T00:00:00Z
 ---
 
 # Formatter Registry
@@ -160,6 +160,26 @@ elements stay on one line (`<name>value</name>`), self-closing tags stay
 self-closing, nothing beyond whitespace is rewritten. Range formatting
 narrows to the element subtrees overlapping the selection. Registered at the
 built-in tier; `[format.xml] builtin = false` disables it.
+
+## Built-in .http formatter (#1602)
+
+The HTTP plugin ships a reformatter for `.http`/`.rest` request files
+(`plugins/languages/http/format.go`): it folds a request line's query
+parameters onto the indented `?`/`&` continuation lines the parser already
+accepts (#1269) — first `? key = value`, then `& key = value` per further
+parameter, indented one level in the buffer's indent style — and merges
+already-folded spellings into the same canonical one-parameter-per-line
+shape. Keys and values are re-emitted **byte-identical**: the formatter never
+percent-encodes or decodes anything (#1601 is why that matters). The rest of
+the block normalizes conservatively: single spaces on the request line,
+`Name: value` header spacing, exactly one blank line before the body; bodies,
+comments and `###` separators pass through verbatim. Anything the parser
+would reject (malformed request lines, invalid headers) and shapes whose fold
+would not round-trip byte-identically (a bare trailing `?`, empty `&&`
+fragments, comments interleaved with query continuations) stay untouched, and
+a reparse guard aborts the whole reformat if the output would parse to
+different requests than the input. Whole-file only (no range support);
+registered at the built-in tier, `[format.http] builtin = false` disables it.
 
 ## Format-on-save
 

@@ -111,6 +111,14 @@ var tokenRE = regexp.MustCompile("^[!#$%&'*+\\-.^_`|~0-9A-Za-z]+$")
 // protoRE matches an HTTP-version on the request line.
 var protoRE = regexp.MustCompile(`^HTTP/\d(?:\.\d)?$`)
 
+// ValidToken reports whether s is an RFC 9110 token — the rule this parser
+// applies to methods and header names. Exposed for the .http reformatter
+// (#1602), which must accept exactly what the parser accepts.
+func ValidToken(s string) bool { return tokenRE.MatchString(s) }
+
+// ValidProto reports whether s is an HTTP-version the request line accepts.
+func ValidProto(s string) bool { return protoRE.MatchString(s) }
+
 const separator = "###"
 
 // Parse splits src into request blocks and parses each one. Malformed
