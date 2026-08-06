@@ -1,5 +1,13 @@
 # Log
 
+## 2026-08-06 (deploy: desktop launch uses interactive login shell, #1581)
+
+- `ike-gui`'s re-exec (#1579) now runs `$SHELL -i -l -c` instead of plain
+  `-l`: rc files (`.zshrc`/`.bashrc`) commonly hold PATH entries like
+  `~/.local/bin`, which a non-interactive login shell skips — so tools
+  installed there (e.g. `claude`) were still not found in desktop
+  launches while working from a terminal.
+
 ## 2026-08-06 (deploy: desktop launch loads login-shell env, #1579)
 
 - `ike-gui` re-execs itself through the user's login shell (`$SHELL -l`,
