@@ -51,7 +51,11 @@ terminal itself must own (`super+` on macOS, `ctrl+` mirrors on Linux):
 | `super+q` / `ctrl+shift+q` | quit the window |
 | `super+plus` / `minus` / `zero` (and `ctrl+` mirrors) | font zoom in / out / reset |
 | `super+,` / `super+shift+,` (and `ctrl+` mirrors) | open / reload the Ghostty config |
-| `alt+backspace`, `alt+left`, `alt+right`, `alt+delete` | macOS Option-key escape sequences (word editing) |
+| `alt+backspace` | macOS Option+Backspace escape sequence (delete word back) |
+
+Option+Arrows and Option+Forward-Delete need no re-binding: Ghostty
+delivers them with a real alt modifier, so IKE's own word navigation and
+word deletion match directly.
 
 Copy and paste are deliberately **not** bound — IKE handles the clipboard
 itself.

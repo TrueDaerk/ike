@@ -49,6 +49,16 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		})
 	case key.Code == tea.KeyBackspace, key.Code == 'h' && key.Mod == tea.ModCtrl:
 		m.insertBackspace()
+	// Forward word kill (#1583) mirrors the alt+backspace kill above:
+	// alt+delete is the macOS convention, ctrl+delete the everywhere-
+	// deliverable fallback, alt+d the readline sequence terminals synthesize
+	// for Option+Forward-Delete (ESC d).
+	case key.Code == tea.KeyDelete && key.Mod&^tea.ModShift == tea.ModAlt,
+		key.Code == tea.KeyDelete && key.Mod&^tea.ModShift == tea.ModCtrl,
+		key.Code == 'd' && key.Mod == tea.ModAlt:
+		m.insertKillForward(func(pos buffer.Position) buffer.Position {
+			return motion.WordForward(m.buf, pos, 1).Pos
+		})
 	case key.Code == tea.KeyDelete && key.Mod&^tea.ModShift == 0:
 		m.insertForwardDelete()
 	// An active snippet session (#846) owns tab/shift+tab: jump between the
@@ -348,6 +358,31 @@ func (m *Model) insertKillBack(startFor func(pos buffer.Position) buffer.Positio
 		return
 	}
 	m.insert.typed = "" // multi-caret kills clear the "." text, like a cross-line kill
+	m.dirtyFromInsert()
+}
+
+// insertKillForward fans a forward kill across every caret: endFor resolves,
+// per caret, the position the kill reaches forward to (next word start). The
+// caret stays put and the recorded "." text is left alone, like
+// insertForwardDelete — the deletion happens ahead of anything typed this
+// session.
+func (m *Model) insertKillForward(endFor func(pos buffer.Position) buffer.Position) {
+	if m.insert.rec == nil {
+		m.insert.rec = m.newRecorder()
+	}
+	edited := false
+	m.fanApply(func(pos, _ buffer.Position) buffer.Position {
+		end := m.buf.Clamp(endFor(pos))
+		if !pos.Before(end) {
+			return pos
+		}
+		m.insert.rec.Apply(buffer.Delete(buffer.Range{Start: pos, End: end}))
+		edited = true
+		return pos
+	})
+	if !edited {
+		return
+	}
 	m.dirtyFromInsert()
 }
 
