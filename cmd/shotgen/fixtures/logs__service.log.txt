@@ -1,0 +1,11 @@
+2026-03-14 09:12:03,118 [main] INFO  com.acme.revenue.Boot - starting revenue-service 2.4.1 (profile=prod)
+2026-03-14 09:12:03,904 [main] INFO  com.acme.revenue.db.Pool - pool ready size=16 idle=16 timeout=30s
+2026-03-14 09:12:04,441 [ingest-1] DEBUG com.acme.revenue.Ingest - polled batch=512 lag=84ms offset=99182734
+2026-03-14 09:12:05,002 [ingest-2] WARN  com.acme.revenue.Ingest - slow consumer partition=7 lag=1.9s threshold=1s
+2026-03-14 09:12:05,617 [rollup] INFO  com.acme.revenue.Rollup - rollup done regions=3 rows=41274 took=612ms
+2026-03-14 09:12:06,330 [http-8] ERROR com.acme.revenue.api.Orders - order rejected id=ord-8814 reason="stock reserved elsewhere" retry=false
+2026-03-14 09:12:06,331 [http-8] ERROR com.acme.revenue.api.Orders - java.lang.IllegalStateException: reservation expired
+time=2026-03-14T09:12:07.004Z level=info msg="report published" region=EMEA revenue=1204880.55 currency=EUR
+time=2026-03-14T09:12:07.221Z level=warn msg="cache miss ratio high" ratio=0.42 window=5m
+<ESC>[32m==> build ok<ESC>[0m  <ESC>[1;33mwarnings: 2<ESC>[0m  <ESC>[31mfailures: 0<ESC>[0m
+2026-03-14 09:12:08,010 [main] INFO  com.acme.revenue.Boot - listening on 0.0.0.0:8080

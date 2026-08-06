@@ -28,6 +28,8 @@ commits ahead, commits behind. It disappears outside a repository.
 **In the gutter**, added and changed lines recolour their line number, and a
 removal marks the line below it. Diagnostics win the cell when both apply.
 
+![Modified files marked in the tree, changed lines in the gutter, the branch in the status line](../screenshots/features/vcs-gutter.png)
+
 Everything is recomputed as the repository changes. Git runs asynchronously,
 never blocking the editor, and only files that are actually modified cost a
 subprocess.
@@ -57,6 +59,8 @@ diffs any two files against each other. Inside a diff pane:
 | ++f7++ / ++shift+f7++ | Next / previous change |
 | `n` / `N` | The same, vim-style |
 | ++enter++ | Jump the editor to that change |
+
+![The diff viewer side by side with the editor](../screenshots/features/diff-viewer.png)
 
 The diff is line-level with intra-line refinement, so a one-character change
 highlights the character rather than the whole line. Side-by-side and unified

@@ -82,6 +82,7 @@ nav:
       - Overview: guides/index.md
       - Getting around: guides/navigation.md
       - Search and replace: guides/search.md
+      - How files are rendered: guides/file-rendering.md
       - Code intelligence: guides/code-intelligence.md
       - The integrated terminal: guides/terminal.md
       - Git: guides/git.md

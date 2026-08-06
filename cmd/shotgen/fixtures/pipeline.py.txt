@@ -1,0 +1,32 @@
+"""Nightly revenue rollup: read the raw events, aggregate, write the report."""
+
+from dataclasses import dataclass
+from datetime import date
+from typing import Iterable
+
+
+@dataclass(frozen=True)
+class Event:
+    region: str
+    amount: float
+    day: date
+
+
+def rollup(events: Iterable[Event]) -> dict[str, float]:
+    """Sum the revenue per region, skipping refunds."""
+    totals: dict[str, float] = {}
+    for event in events:
+        if event.amount < 0:
+            continue
+        totals[event.region] = totals.get(event.region, 0.0) + event.amount
+    return totals
+
+
+def report(totals: dict[str, float], *, top: int = 3) -> str:
+    ranked = sorted(totals.items(), key=lambda kv: kv[1], reverse=True)
+    lines = [f"{region:<12} {amount:>12,.2f}" for region, amount in ranked[:top]]
+    return "\n".join(lines) or "no revenue"
+
+
+if __name__ == "__main__":
+    print(report(rollup(load_events("events.jsonl"))))
