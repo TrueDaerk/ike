@@ -118,6 +118,12 @@ func appendSpans(out []lang.Span, li int, line string, ctx Context) []lang.Span 
 	return out
 }
 
+// Decode renders an isolated digit run as its UTC form, applying the same
+// range guard as the inline detection. It exists for callers that already know
+// a number is a timestamp and only want the rendering — the JWT registered
+// claims (#1619) — so they need no second copy of the epoch heuristics.
+func Decode(digits string) (string, bool) { return decode(digits) }
+
 // decode turns a digit run into its UTC rendering. Seconds are 9–10 digits,
 // milliseconds 12–13; a leading zero disqualifies the run (no timestamp is
 // ever written that way, but zero-padded ids are).

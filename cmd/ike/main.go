@@ -34,6 +34,7 @@ import (
 	_ "ike/plugins/languages/ansible"
 	_ "ike/plugins/languages/csv"
 	_ "ike/plugins/languages/dockerfile"
+	_ "ike/plugins/languages/env"
 	_ "ike/plugins/languages/go"
 	_ "ike/plugins/languages/http"
 	_ "ike/plugins/languages/ini"

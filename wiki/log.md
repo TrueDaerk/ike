@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-06 (editor: JWT detection and decoding, #1619)
+
+- `internal/jwt` detects JSON Web Tokens structurally — three non-empty
+  base64url segments whose first two decode to JSON objects — and emits one
+  `jwt.signature` span per token so the meaningless signature renders faint.
+  The `.http` producer scans every line, the new dotenv language
+  (`plugins/languages/env`: `.env`, `.env.local`, `*.env`) scans its values.
+- `editor.decodeJWT` ("Decode JWT at Caret") opens the token's header and
+  payload as pretty-printed JSON in the hover popup, anchored at the token,
+  with the registered time claims (`exp`/`iat`/`nbf`/`auth_time`/`updated_at`)
+  annotated as UTC dates through `epochtime.Decode` (#1618) — a soft
+  dependency: implausible values stay raw numbers.
+
 ## 2026-08-06 (editor: inline decoding of epoch timestamps, #1618)
 
 - `internal/epochtime` detects Unix epoch numbers (seconds and milliseconds,

@@ -179,6 +179,7 @@ bring their own.
 | Toggle Line Comment | `editor.commentLine` | `cmd+7` | — | `editor` pane |
 | Copy | `editor.copy` | `cmd+c` | `y` | `editor` pane |
 | Cut | `editor.cut` | `cmd+x` | `d` | `editor` pane |
+| Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
 | Find in File | `editor.find` | `cmd+f` | `/` | `editor` pane |
 | Close Fold | `editor.fold.close` | — | `zc` | `editor` pane |

@@ -5,6 +5,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/highlight"
+	"ike/internal/jwt"
 )
 
 // highlight.go drives the Tree-sitter syntax layer (Roadmap 0100). Parsing is
@@ -66,6 +67,12 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 		return m.logStyle(capture)
 	}
 	st, ok := m.hlTheme.Style(capture)
+	// A JWT's signature segment (#1619) carries no meaning for a reader, so it
+	// renders faint unless a theme.captures.jwt.signature key says otherwise —
+	// which the Style lookup above already honoured.
+	if capture == jwt.Capture && !ok {
+		return lipgloss.NewStyle().Faint(true), true
+	}
 	// markup.* captures (#881) carry terminal text attributes, not colors:
 	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —
 	// composed over whatever color the theme resolves (usually none). Gated
