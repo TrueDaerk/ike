@@ -147,7 +147,7 @@ func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
 	}
 }
 
-func TestApplyLayoutMergesSurplusEditors(t *testing.T) {
+func TestApplyLayoutKeepsSurplusEditorsAsPanes(t *testing.T) {
 	dir := t.TempDir()
 	pa := filepath.Join(dir, "a.txt")
 	pb := filepath.Join(dir, "b.txt")
@@ -164,21 +164,69 @@ func TestApplyLayoutMergesSurplusEditors(t *testing.T) {
 
 	m = step(m, ApplyLayoutMsg{Name: "one"})
 
+	// The surplus editor grafts into the implicit flexible region (#1577):
+	// both files stay visible in their own panes, nothing merges into tabs.
 	leaves := layout.Leaves(m.activeWS().Tree)
-	if len(leaves) != 2 {
-		t.Fatalf("applied layout must have 2 leaves, got %v", leaves)
+	if len(leaves) != 3 {
+		t.Fatalf("surplus editor must keep its own pane (3 leaves), got %v", leaves)
 	}
-	var ed *pane.Instance
+	panesWithFile := map[string]int{}
 	for _, key := range leaves {
-		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-			ed = inst
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, p := range []string{pa, pb} {
+			if inst.TabForPath(p) >= 0 {
+				panesWithFile[p]++
+			}
 		}
 	}
-	if ed == nil {
-		t.Fatal("no editor slot after apply")
+	if panesWithFile[pa] != 1 || panesWithFile[pb] != 1 {
+		t.Fatalf("each file must sit in its own pane, got %v", panesWithFile)
 	}
-	if ed.TabForPath(pa) < 0 || ed.TabForPath(pb) < 0 {
-		t.Fatalf("both files must survive the merge; tabs = %d", ed.TabCount())
+}
+
+// TestApplyLayoutPreservesLeftoverArrangement checks that the leftover panes
+// graft in their pre-apply relative arrangement (#1577): a stacked pair stays
+// stacked instead of flattening into a row of siblings.
+func TestApplyLayoutPreservesLeftoverArrangement(t *testing.T) {
+	dir := t.TempDir()
+	paths := map[string]string{}
+	for _, name := range []string{"a", "b", "c"} {
+		p := filepath.Join(dir, name+".txt")
+		if err := os.WriteFile(p, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		paths[name] = p
+	}
+	m := sized(t, 100, 40)
+	m = step(m, explorer.OpenFileMsg{Path: paths["a"]})
+	m = step(m, SplitFocusedMsg{Zone: layout.ZoneRight})
+	m = step(m, explorer.OpenFileMsg{Path: paths["b"]})
+	m = step(m, SplitFocusedMsg{Zone: layout.ZoneBottom}) // c below b
+	m = step(m, explorer.OpenFileMsg{Path: paths["c"]})
+	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"one": twoPaneSnapshot(t)}})
+
+	m = step(m, ApplyLayoutMsg{Name: "one"})
+
+	rects := layout.Compute(m.activeWS().Tree, layout.Rect{W: 100, H: 40}).Panes
+	rectFor := func(name string) layout.Rect {
+		for _, key := range layout.Leaves(m.activeWS().Tree) {
+			inst := m.activeWS().Panes.Get(key)
+			if inst != nil && inst.Kind() == pane.KindEditor && inst.TabForPath(paths[name]) >= 0 {
+				return rects[key]
+			}
+		}
+		t.Fatalf("no pane shows %s", name)
+		return layout.Rect{}
+	}
+	rb, rc := rectFor("b"), rectFor("c")
+	if rb.Y+rb.H > rc.Y {
+		t.Fatalf("b must stay stacked above c, got b=%+v c=%+v", rb, rc)
+	}
+	if rb.X != rc.X {
+		t.Fatalf("stacked pair must keep its column, got b=%+v c=%+v", rb, rc)
 	}
 }
 
@@ -204,28 +252,31 @@ func editorTerminalTabs(m Model) []*terminal.Model {
 	return out
 }
 
-func TestApplyLayoutMergesOrphanShellIntoEditor(t *testing.T) {
+func TestApplyLayoutKeepsOrphanShellAsPane(t *testing.T) {
 	m, termKey := openTestTerminal(t)
 	sessKey := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"plain": twoPaneSnapshot(t)}})
 	m = step(m, ApplyLayoutMsg{Name: "plain"})
 	leaves := leafSet(m)
-	if leaves[termKey] {
-		t.Fatal("terminal leaf must be gone")
-	}
-	if m.activeWS().Panes.Has(termKey) {
-		t.Fatal("orphan terminal pane must fold into a tab, not linger unreachable (#1275)")
-	}
 	if !leaves[pane.ExplorerKey] {
 		t.Fatal("explorer must be in the applied layout")
 	}
-	tabs := editorTerminalTabs(m)
-	if len(tabs) != 1 {
-		t.Fatalf("shell must survive as one terminal tab, got %d", len(tabs))
+	// The shell has no slot in the layout: it grafts into the implicit
+	// flexible region as its own pane (#1577) — reachable (#1275), no tab.
+	if !leaves[termKey] {
+		t.Fatalf("shell must keep its own pane, leaves = %v", leaves)
 	}
-	t.Cleanup(tabs[0].Close)
-	if !tabs[0].Running() || tabs[0].SessionKey() != sessKey {
-		t.Fatal("merged tab must host the original live session")
+	inst := m.activeWS().Panes.Get(termKey)
+	if inst == nil || inst.Kind() != pane.KindTerminal {
+		t.Fatal("shell pane must stay a terminal pane")
+	}
+	tm := inst.Terminal()
+	t.Cleanup(tm.Close)
+	if !tm.Running() || tm.SessionKey() != sessKey {
+		t.Fatal("grafted pane must host the original live session")
+	}
+	if tabs := editorTerminalTabs(m); len(tabs) != 0 {
+		t.Fatalf("no editor pane may swallow the shell as a tab, got %d", len(tabs))
 	}
 }
 
@@ -247,7 +298,7 @@ func termSlotSnapshot(t *testing.T) persistedLayout {
 	}}
 }
 
-func TestApplyLayoutMergesSurplusShellIntoTerminalSlot(t *testing.T) {
+func TestApplyLayoutKeepsSurplusShellAsPane(t *testing.T) {
 	m, key1 := openTestTerminal(t)
 	m = step(m, TerminalNewMsg{})
 	key2 := m.activeWS().Panes.Focused()
@@ -264,15 +315,17 @@ func TestApplyLayoutMergesSurplusShellIntoTerminalSlot(t *testing.T) {
 	if !leaves[key1] {
 		t.Fatal("first shell must fill the layout's terminal slot")
 	}
-	if m.activeWS().Panes.Has(key2) {
-		t.Fatal("surplus shell pane must fold into the slot, not linger unreachable (#1275)")
+	// The second shell has no slot: it keeps its own pane in the implicit
+	// flexible region (#1577); the slot never converts to a tab host.
+	if !leaves[key2] {
+		t.Fatalf("surplus shell must keep its own pane, leaves = %v", leaves)
 	}
-	slot := m.activeWS().Panes.Get(key1)
-	tabs := terminalTabs(slot)
-	if slot.Kind() != pane.KindEditor || len(tabs) != 2 {
-		t.Fatalf("slot must convert to a tab host with both shells, got kind=%v tabs=%d", slot.Kind(), len(tabs))
-	}
-	for _, tm := range tabs {
+	for _, key := range []string{key1, key2} {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindTerminal {
+			t.Fatalf("%q must stay a terminal pane", key)
+		}
+		tm := inst.Terminal()
 		t.Cleanup(tm.Close)
 		if !tm.Running() {
 			t.Fatal("both shell sessions must keep running")
@@ -316,17 +369,18 @@ func TestRestoreDefaultLayoutBuiltIn(t *testing.T) {
 	m, termKey := openTestTerminal(t) // no saved layouts, no default
 	m = step(m, RestoreDefaultLayoutMsg{})
 	leaves := leafSet(m)
-	if len(leaves) != 2 || !leaves[pane.ExplorerKey] {
-		t.Fatalf("built-in default must be explorer+editor, got %v", leaves)
+	if !leaves[pane.ExplorerKey] {
+		t.Fatalf("built-in default must contain the explorer, got %v", leaves)
 	}
-	if m.activeWS().Panes.Has(termKey) {
-		t.Fatal("orphan terminal pane must fold into a tab, not linger unreachable (#1275)")
+	// The shell keeps its own pane in the implicit flexible region (#1577).
+	if len(leaves) != 3 || !leaves[termKey] {
+		t.Fatalf("shell must survive the restore as its own pane, got %v", leaves)
 	}
-	tabs := editorTerminalTabs(m)
-	if len(tabs) != 1 || !tabs[0].Running() {
-		t.Fatalf("shell must survive the restore as a live terminal tab, got %d", len(tabs))
+	inst := m.activeWS().Panes.Get(termKey)
+	if inst == nil || inst.Kind() != pane.KindTerminal || !inst.Terminal().Running() {
+		t.Fatal("shell session must keep running in its pane")
 	}
-	t.Cleanup(tabs[0].Close)
+	t.Cleanup(inst.Terminal().Close)
 }
 
 func TestLayoutsModeResults(t *testing.T) {

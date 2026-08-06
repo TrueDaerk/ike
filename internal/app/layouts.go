@@ -326,12 +326,15 @@ type applyState struct {
 
 // applyLayoutByName re-shapes the ACTIVE workspace to the named saved layout
 // (#1175). Open files never close: the session's content panes re-slot into
-// the layout's editor slots in order, surplus panes merge their tabs into the
-// last slot. Singleton tool panels absent from the layout lose their leaf but
-// stay registered (the toolhide precedent, #791) — their toggles resurface
-// them. Running terminals are never killed by applying a layout: shells and
-// TUI tools that don't fit a slot merge as live tabs into a remaining
-// terminal or editor slot (#1275). Parked workspaces (#777) are untouched.
+// the layout's editor slots in order. Singleton tool panels absent from the
+// layout lose their leaf but stay registered (the toolhide precedent, #791) —
+// their toggles resurface them. Running terminals are never killed by
+// applying a layout, and no leftover pane collapses into a tab (#1577):
+// content panes and terminals the slots did not consume keep their own panes
+// and graft into the flexible region — the explicit placeholder of a
+// selective layout (#1568), or an implicit one at the last editor slot —
+// preserving their current relative arrangement. Parked workspaces (#777)
+// are untouched.
 func (m *Model) applyLayoutByName(name string) {
 	tree, ids, ok := namedLayout(name)
 	if !ok {
@@ -375,13 +378,11 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 			hasFlex = true
 		}
 	}
-	// A selective layout (#1568) grafts the unconsumed live panes — in their
-	// current relative arrangement — into the placeholder, so the clone of the
-	// pre-apply tree is that arrangement's source of truth.
-	var liveClone layout.Node
-	if hasFlex {
-		liveClone = layout.Clone(ws.Tree)
-	}
+	// Unconsumed live panes graft — in their current relative arrangement —
+	// into the flexible region (explicit placeholder or implicit host slot,
+	// #1577), so the clone of the pre-apply tree is that arrangement's source
+	// of truth.
+	liveClone := layout.Clone(ws.Tree)
 	st := &applyState{tools: map[string][]string{}, used: map[string]bool{}}
 	for _, key := range reg.Keys() {
 		inst := reg.Get(key)
@@ -409,59 +410,11 @@ func (m *Model) applySnapshot(tree layout.Node, ids map[string]paneIdentity) boo
 		// not consume keeps its pane and flows into the placeholder region.
 		newTree = m.graftFlex(newTree, liveClone, st)
 	} else {
-		// Surplus content panes: editor panes merge their tabs into the last
-		// editor-kind slot (files are sacred, splits are not); markdown/diff
-		// viewers close (their content rebuilds from disk on demand). With no
-		// editor slot in the layout the surplus panes just stay registered.
-		target := lastEditorSlot(reg, st.slots)
-		for _, key := range st.content {
-			inst := reg.Get(key)
-			if inst == nil {
-				continue
-			}
-			switch inst.Kind() {
-			case pane.KindEditor:
-				if target != nil && target.Key() != key {
-					mergeEditorPane(reg, inst, target)
-				}
-			case pane.KindMarkdown, pane.KindImage, pane.KindDiff, pane.KindMerge:
-				reg.Close(key)
-			}
-		}
-		// Surplus running shells and tool panes must stay reachable (#1275):
-		// they merge as live terminal tabs into the last terminal slot — which
-		// becomes a tab host (#836) — or, when the layout has no terminal slot,
-		// into the last editor slot. Sessions never restart. Only a layout with
-		// neither slot kind leaves them registered but leafless.
-		surplus := append([]string{}, st.shells...)
-		toolNames := make([]string, 0, len(st.tools))
-		for name := range st.tools {
-			toolNames = append(toolNames, name)
-		}
-		sort.Strings(toolNames)
-		for _, name := range toolNames {
-			surplus = append(surplus, st.tools[name]...)
-		}
-		if len(surplus) > 0 {
-			dst := lastTerminalSlot(reg, st.slots)
-			if dst != nil {
-				dst.ConvertToTabHost()
-			} else {
-				dst = target
-			}
-			if dst != nil {
-				for _, key := range surplus {
-					inst := reg.Get(key)
-					if inst == nil {
-						continue
-					}
-					if tm, ok := inst.DetachTerminal(); ok {
-						reg.Close(key)
-						dst.AddTerminalTab(tm)
-					}
-				}
-			}
-		}
+		// A full layout gets an implicit flexible region (#1577): leftover
+		// content panes and terminals keep their own panes and graft next to
+		// the host slot instead of collapsing into tabs (#1275's reachability
+		// guarantee, without the tab-merge).
+		newTree = m.graftImplicit(newTree, liveClone, st)
 	}
 	// The old hide-all snapshot and zoom describe the old tree.
 	m.toolHide = nil
@@ -521,18 +474,124 @@ func (m *Model) graftFlex(newTree, liveClone layout.Node, st *applyState) layout
 
 // replaceFlexLeaf swaps the placeholder leaf for the grafted subtree in place.
 func replaceFlexLeaf(n, sub layout.Node) layout.Node {
+	return replaceLeaf(n, flexKey, sub)
+}
+
+// replaceLeaf swaps the named leaf for the grafted subtree in place.
+func replaceLeaf(n layout.Node, key string, sub layout.Node) layout.Node {
 	switch t := n.(type) {
 	case *layout.Leaf:
-		if t.Pane == flexKey {
+		if t.Pane == key {
 			return sub
 		}
 		return n
 	case *layout.Split:
-		t.A = replaceFlexLeaf(t.A, sub)
-		t.B = replaceFlexLeaf(t.B, sub)
+		t.A = replaceLeaf(t.A, key, sub)
+		t.B = replaceLeaf(t.B, key, sub)
 		return t
 	}
 	return n
+}
+
+// graftImplicit is the full-layout counterpart of graftFlex (#1577): a layout
+// without a placeholder gets an implicit flexible region at the host slot
+// (the last editor slot, with terminal-slot fallbacks). Every live content
+// pane or terminal the slot walk did not consume keeps its own pane; the
+// group replaces the host leaf — host pane included — preserving the panes'
+// pre-apply relative arrangement. Nothing collapses into tabs and no tool
+// pane becomes a tab host. Singleton panels absent from the layout keep the
+// toolhide semantics (#791): registered but leafless, resurfaced by their
+// toggles.
+func (m *Model) graftImplicit(newTree, liveClone layout.Node, st *applyState) layout.Node {
+	reg := m.activeWS().Panes
+	host := implicitHostSlot(reg, st.slots)
+	if host == "" {
+		return newTree
+	}
+	consumed := map[string]bool{}
+	for _, key := range st.slots {
+		consumed[key] = true
+	}
+	graftable := func(key string) bool {
+		inst := reg.Get(key)
+		if inst == nil {
+			return false
+		}
+		switch inst.Kind() {
+		case pane.KindEditor, pane.KindMarkdown, pane.KindImage, pane.KindDiff,
+			pane.KindMerge, pane.KindTerminal:
+			return true
+		}
+		return false
+	}
+	sub := liveClone
+	for _, key := range layout.Leaves(liveClone) {
+		if key == host {
+			continue
+		}
+		if consumed[key] || !graftable(key) {
+			if p, ok := layout.Close(sub, key); ok {
+				sub = p
+			}
+		}
+	}
+	hostInSub := false
+	var leftovers []string
+	for _, key := range layout.Leaves(sub) {
+		if key == host {
+			hostInSub = true
+			continue
+		}
+		if !consumed[key] && graftable(key) {
+			leftovers = append(leftovers, key)
+		}
+	}
+	if len(leftovers) == 0 {
+		return newTree // every live pane found a slot: the layout stands as saved
+	}
+	if !hostInSub {
+		// The host slot resolved to a fresh instance with no pre-apply leaf:
+		// it takes half the region, the leftovers keep their arrangement in
+		// the other half, split along the region's longer axis.
+		lay := layout.Compute(newTree, layout.Rect{W: m.width, H: m.height})
+		orient := layout.Vertical
+		if r := lay.Panes[host]; r.W >= 2*r.H {
+			orient = layout.Horizontal
+		}
+		sub = &layout.Split{Orient: orient, Ratio: 0.5, A: &layout.Leaf{Pane: host}, B: sub}
+	}
+	st.slots = append(st.slots, leftovers...)
+	return replaceLeaf(newTree, host, sub)
+}
+
+// implicitHostSlot picks the leaf hosting the implicit flexible region of a
+// full layout: the last editor-kind slot, then the last plain shell slot,
+// then the last terminal slot of any kind, then the last leaf outright — the
+// leftovers split next to it, they never become its tabs.
+func implicitHostSlot(reg *pane.Registry, slots []string) string {
+	last := func(match func(*pane.Instance) bool) string {
+		for i := len(slots) - 1; i >= 0; i-- {
+			if inst := reg.Get(slots[i]); inst != nil && match(inst) {
+				return slots[i]
+			}
+		}
+		return ""
+	}
+	if key := last(func(i *pane.Instance) bool { return i.Kind() == pane.KindEditor }); key != "" {
+		return key
+	}
+	if key := last(func(i *pane.Instance) bool {
+		return i.Kind() == pane.KindTerminal && i.Terminal().Tool() == ""
+	}); key != "" {
+		return key
+	}
+	if key := last(func(i *pane.Instance) bool { return i.Kind() == pane.KindTerminal }); key != "" {
+		return key
+	}
+	if len(slots) > 0 {
+		return slots[len(slots)-1]
+	}
+	return ""
 }
 
 // resolveNode clones the snapshot tree, resolving every leaf to a live
@@ -680,17 +739,6 @@ func (m *Model) spawnShellPane() string {
 	return m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
 }
 
-// lastEditorSlot returns the last resolved slot holding an editor-kind
-// instance — the merge target for surplus content panes — or nil.
-func lastEditorSlot(reg *pane.Registry, slots []string) *pane.Instance {
-	for i := len(slots) - 1; i >= 0; i-- {
-		if inst := reg.Get(slots[i]); inst != nil && inst.Kind() == pane.KindEditor {
-			return inst
-		}
-	}
-	return nil
-}
-
 // editorPaneTools returns the tool names hosted as terminal tabs of an
 // editor-kind pane and the count of its file-backed editor tabs (#1277).
 // Plain terminal tabs stay session-local, like in saveLayout.
@@ -709,56 +757,3 @@ func editorPaneTools(inst *pane.Instance) (tools []string, files int) {
 	return tools, files
 }
 
-// lastTerminalSlot returns the last resolved slot holding a terminal-kind
-// instance — the preferred host for surplus running shells (#1275) — or nil.
-func lastTerminalSlot(reg *pane.Registry, slots []string) *pane.Instance {
-	for i := len(slots) - 1; i >= 0; i-- {
-		if inst := reg.Get(slots[i]); inst != nil && inst.Kind() == pane.KindTerminal {
-			return inst
-		}
-	}
-	return nil
-}
-
-// mergeEditorPane moves every tab of src into target, then closes src.
-// Terminal tabs move live (detach, re-attach — the session never restarts);
-// editor tabs re-share their document into a fresh tab on the target, which
-// carries text, dirtiness and undo history over (#142's sharing seam). A
-// pristine empty pane has nothing worth moving.
-func mergeEditorPane(reg *pane.Registry, src, target *pane.Instance) {
-	if !src.IsEmptyEditor() {
-		// Terminal tabs first: detaching shifts indices, so always take the
-		// first remaining one until none are left.
-		for {
-			moved := false
-			for i := 0; i < src.TabCount(); i++ {
-				if src.TabTerminal(i) == nil {
-					continue
-				}
-				if tm, ok := src.DetachTerminalTab(i); ok {
-					target.AddTerminalTab(tm)
-					moved = true
-				}
-				break
-			}
-			if !moved {
-				break
-			}
-		}
-		for i := 0; i < src.TabCount(); i++ {
-			ed := src.TabEditor(i)
-			if ed == nil {
-				continue
-			}
-			dst := target.Editor()
-			if dst == nil || !target.IsEmptyEditor() {
-				dst = target.AddTab()
-			}
-			dst.ShareDocumentWith(ed)
-			if src.TabPinned(i) {
-				target.SetTabPinned(target.ActiveTab(), true)
-			}
-		}
-	}
-	reg.Close(src.Key())
-}
