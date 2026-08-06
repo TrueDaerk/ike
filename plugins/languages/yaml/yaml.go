@@ -18,6 +18,7 @@ package langyaml
 import (
 	_ "embed"
 
+	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
@@ -46,6 +47,15 @@ func init() {
 		FoldNodes:  []string{"block_mapping_pair", "block_sequence", "block_scalar", "flow_mapping", "flow_sequence"},
 		// Base64 decoding (#1620): values in a Kubernetes Secret's data:
 		// block conceal as the decoded text when the payload is printable.
-		Spans: escapes.Base64YAMLSpans,
+		// Cron hints (#1624): a `cron:`/`schedule:` value — the CI workflow
+		// case — and any quoted scalar of cron shape carry their English
+		// reading after the expression.
+		Spans: yamlSpans,
 	})
+}
+
+// yamlSpans is the lang.Language.Spans hook: base64 Secret values decode
+// (#1620) and cron expressions gain their schedule hint (#1624).
+func yamlSpans(lines []string) []lang.Span {
+	return append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
 }

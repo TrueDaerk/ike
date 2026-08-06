@@ -3,6 +3,7 @@ package langjson
 import (
 	"testing"
 
+	"ike/internal/cronhint"
 	"ike/internal/lang"
 )
 
@@ -100,5 +101,17 @@ func TestJSONUnicodeEscapeSpans(t *testing.T) {
 	}
 	if spans[0].StartCol != 11 || spans[0].EndCol != 17 {
 		t.Errorf("range = [%d,%d), want [11,17)", spans[0].StartCol, spans[0].EndCol)
+	}
+}
+
+// TestJSONCronSpans (#1624): a quoted cron expression in a JSON config
+// carries its schedule hint.
+func TestJSONCronSpans(t *testing.T) {
+	spans := jsonSpans([]string{`{"schedule": "*/5 * * * *"}`})
+	if len(spans) != 1 {
+		t.Fatalf("spans = %+v, want one cron hint", spans)
+	}
+	if want := "*/5 * * * *" + cronhint.Gap + "every 5 min"; spans[0].Replace != want {
+		t.Errorf("hint = %q, want %q", spans[0].Replace, want)
 	}
 }

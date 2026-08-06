@@ -88,6 +88,7 @@ func defaults() *Config {
 			UnicodeEscapeDecoding:  true,
 			EntityDecoding:         true,
 			Base64Decoding:         true,
+			CronHints:              true,
 			SecretMasking:          true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,

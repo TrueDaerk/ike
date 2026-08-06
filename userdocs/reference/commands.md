@@ -219,6 +219,7 @@ bring their own.
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
 | Toggle Base64 Decoding | `view.toggleBase64Decoding` | — | — | `editor` pane |
 | Toggle Color Preview | `view.toggleColorPreview` | — | — | `editor` pane |
+| Toggle Cron Hints | `view.toggleCronHints` | — | — | `editor` pane |
 | Toggle Entity Decoding | `view.toggleEntityDecoding` | — | — | `editor` pane |
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
