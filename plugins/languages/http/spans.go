@@ -5,6 +5,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"ike/internal/epochtime"
 	"ike/internal/httpfile"
 	"ike/internal/lang"
 )
@@ -74,6 +75,16 @@ func querySpans(lines []string) []lang.Span {
 				lph := placeholderRanges(lr, 0, len(lr))
 				out = appendPercentSpans(out, j, lr, 0, len(lr), lph)
 				out = appendQuerySpans(out, j, lr, 0, len(lr), lph)
+			}
+		}
+		// Epoch timestamps in an inline body (#1618). The body is JSON far
+		// more often than not, and the JSON-value context is strict enough to
+		// stay silent on anything else: a bare number only decodes where JSON
+		// would put a value, so a form-urlencoded or plain-text body is left
+		// untouched.
+		if r.BodyStart > 0 && r.BodyFile == "" {
+			for j := r.BodyStart - 1; j < r.BodyEnd && j < len(lines); j++ {
+				out = append(out, epochtime.LineSpans(j, lines[j], epochtime.JSONValue)...)
 			}
 		}
 	}

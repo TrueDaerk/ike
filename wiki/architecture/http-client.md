@@ -152,6 +152,12 @@ config file paths, or disable detection entirely.
   the caret sits inside a sequence — or a selection crosses it — does that
   spot show the raw encoding, styled as `escape`. Placeholder regions are
   skipped so their own captures survive.
+- **Epoch timestamps in bodies** (#1618): the same producer scans inline
+  request bodies with `internal/epochtime` in its JSON-value context, so a
+  numeric `"ts": 1722945600` reads as `2024-08-06 12:00:00Z` and shows the
+  raw number under the caret. Query-parameter values stay raw — a bare id in
+  a URL is too easily mistaken for a timestamp. The response viewer has no
+  caret and therefore no reveal, so it shows response bodies unchanged.
 - **Completion** (#1268): the `http` plugin registers a completion source
   with the local engine (roadmap 0410, `complete.RegisterSource`), so `.http`
   files complete without a language server. It is position-aware, mirroring

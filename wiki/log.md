@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-06 (editor: inline decoding of epoch timestamps, #1618)
+
+- `internal/epochtime` detects Unix epoch numbers (seconds and milliseconds,
+  2001–2100) and emits conceal-with-stand-in spans (#1585) rendering the UTC
+  form; the raw digits reappear under the caret (#1594). Two heuristics keep
+  ordinary numbers raw: the plausible range, plus a context — JSON value
+  positions for the JSON languages and `.http` request bodies, a delimiter
+  rule for log lines. Its own conceal channel (`stamps`) means the toggle
+  (`editor.timestamp_decoding` / `view.toggleTimestampDecoding`) is
+  independent of the markdown and log rendering layers.
+
 ## 2026-08-06 (deploy: Ike.app runs natively on Apple Silicon, #1614)
 
 - `deploy/Info.plist` declares `LSArchitecturePriority` (arm64, x86_64):

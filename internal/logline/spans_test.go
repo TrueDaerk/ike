@@ -1,6 +1,11 @@
 package logline
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"ike/internal/lang"
+)
 
 func findSpan(t *testing.T, spans []spanLike, capture string) (int, int) {
 	t.Helper()
@@ -106,4 +111,44 @@ func TestSpansPlainLineEmpty(t *testing.T) {
 	if spans := flat([]string{"nothing to see here"}); len(spans) != 0 {
 		t.Errorf("plain line must yield no spans: %+v", spans)
 	}
+}
+
+// TestSpansEpochTimestamps (#1618): a plausible epoch number anywhere on a log
+// line becomes a conceal-with-stand-in span; implausible numbers and the
+// already-readable header timestamp are left raw.
+func TestSpansEpochTimestamps(t *testing.T) {
+	line := "2024-08-06 12:00:00 INFO expires=1722945600 tries=3 port=8080"
+	spans := lineSpans(0, line)
+	var stamps []lang.Span
+	for _, s := range spans {
+		if s.Replace != "" {
+			stamps = append(stamps, s)
+		}
+	}
+	if len(stamps) != 1 {
+		t.Fatalf("got %d stand-in spans, want 1: %+v", len(stamps), stamps)
+	}
+	if stamps[0].Replace != "2024-08-06 12:00:00Z" {
+		t.Errorf("stand-in = %q, want the decoded UTC form", stamps[0].Replace)
+	}
+	if col := strings.Index(line, "1722945600"); stamps[0].StartCol != col {
+		t.Errorf("stand-in starts at col %d, want %d", stamps[0].StartCol, col)
+	}
+}
+
+// TestSpansEpochRemapsThroughANSI: an epoch number on an ANSI-coloured line
+// maps back onto the raw columns, like the header spans do.
+func TestSpansEpochRemapsThroughANSI(t *testing.T) {
+	raw := "\x1b[31mERROR\x1b[0m at 1722945600"
+	spans := lineSpans(0, raw)
+	for _, s := range spans {
+		if s.Replace == "" {
+			continue
+		}
+		if got := []rune(raw)[s.StartCol:s.EndCol]; string(got) != "1722945600" {
+			t.Errorf("stand-in covers %q, want the raw digits", string(got))
+		}
+		return
+	}
+	t.Fatal("no timestamp stand-in produced for the coloured line")
 }

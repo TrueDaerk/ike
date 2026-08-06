@@ -84,6 +84,7 @@ func defaults() *Config {
 			MarkdownRendering:      true,
 			CSVRendering:           true,
 			LogRendering:           true,
+			TimestampDecoding:      true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,

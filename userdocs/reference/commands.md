@@ -219,6 +219,7 @@ bring their own.
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
 | Toggle Markdown Rendering | `view.toggleMarkdownRendering` | — | — | `editor` pane |
+| Toggle Timestamp Decoding | `view.toggleTimestampDecoding` | — | — | `editor` pane |
 | Toggle Whitespace Rendering | `view.toggleWhitespace` | — | — | `editor` pane |
 | Toggle Soft Wrap | `view.toggleWrap` | — | — | `editor` pane |
 

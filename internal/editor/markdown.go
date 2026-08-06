@@ -6,6 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/epochtime"
 	"ike/internal/highlight"
 )
 
@@ -44,8 +45,10 @@ type concealRange struct {
 // line, selection) still styles by its capture. Extents are the enclosing
 // inline spans (emphasis, code span, link): a caret anywhere inside one
 // reveals the conceal ranges it contains, so the whole span reads raw while
-// edited (see lineConcealRanges).
-func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, extents map[int][]concealRange) {
+// edited (see lineConcealRanges). Decoded epoch timestamps (#1618) split into
+// a fourth channel, stamps: they ride the same stand-in mechanic but toggle
+// on their own switch, independent of the markdown and log layers.
+func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, extents, stamps map[int][]concealRange) {
 	add := func(m *map[int][]concealRange, s highlight.Span) {
 		if *m == nil {
 			*m = make(map[int][]concealRange)
@@ -62,17 +65,20 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, exte
 		case s.Capture == "conceal.extent":
 			add(&extents, s)
 			continue
+		case s.Capture == epochtime.Capture && s.Replace != "":
+			add(&stamps, s)
 		case s.Replace != "":
 			add(&conceal, s)
 		}
 		style = append(style, s)
 	}
-	return style, conceal, extents
+	return style, conceal, extents, stamps
 }
 
 // lineConcealRanges returns the conceal ranges applying to line right now:
 // the parse-produced ranges (markdown marker chrome #881, decoded stand-ins
-// #1585 — gated by the markdown-rendering toggle) plus the dynamic sv
+// #1585 — gated by the markdown-rendering toggle), the decoded epoch
+// timestamps (#1618, gated by editor.timestamp_decoding) plus the dynamic sv
 // separator ranges (#1589, gated by editor.csv_rendering), with every range
 // the caret sits inside — or a selection intersects — dropped, so exactly
 // that spot shows raw source while the rest of the line stays rendered
@@ -82,8 +88,11 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	if m.parseConcealOn() {
 		ranges = m.conceal[line]
 	}
-	if sv := m.svConcealRanges(line); len(sv) > 0 {
+	if ts := m.stamps[line]; m.tsDecode && len(ts) > 0 {
 		// Never alias m.conceal's backing array when combining.
+		ranges = append(append([]concealRange(nil), ranges...), ts...)
+	}
+	if sv := m.svConcealRanges(line); len(sv) > 0 {
 		ranges = append(append([]concealRange(nil), ranges...), sv...)
 	}
 	if len(ranges) == 0 {
