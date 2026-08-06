@@ -19,7 +19,7 @@ type fileColors struct {
 	JS      string // ts, tsx, js, jsx, mjs, cjs, mts, cts
 	HTML    string // html, htm, xhtml
 	CSS     string // css, scss, less
-	Shell   string // sh, bash, zsh + shell rc filenames
+	Shell   string // sh, bash, zsh + shell rc filenames, crontab files (#1624)
 	SQL     string // sql
 	XML     string // xml + dialects (xsd, svg, plist, csproj, …)
 	Make    string // mk + Makefile/makefile/GNUmakefile
@@ -44,18 +44,21 @@ type fileColors struct {
 // covers. The lists mirror the registrations in plugins/languages/* — the
 // cmd/ike audit test fails when a plugin registers something missing here.
 var fileGroups = map[string][]string{
-	"go":     {"go", "go.mod", "go.work"},
-	"lock":   {"lock", "go.sum"},
-	"md":     {"md", "markdown"},
-	"toml":   {"toml"},
-	"json":   {"json", "jsonc", "ndjson", "jsonl"},
-	"yaml":   {"yaml", "yml"},
-	"py":     {"py", "pyi"},
-	"php":    {"php", "phtml"},
-	"js":     {"ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"},
-	"html":   {"html", "htm", "xhtml"},
-	"css":    {"css", "scss", "less"},
-	"shell":  {"sh", "bash", "zsh", ".bashrc", ".zshrc", ".bash_profile", ".profile", ".zprofile"},
+	"go":   {"go", "go.mod", "go.work"},
+	"lock": {"lock", "go.sum"},
+	"md":   {"md", "markdown"},
+	"toml": {"toml"},
+	"json": {"json", "jsonc", "ndjson", "jsonl"},
+	"yaml": {"yaml", "yml"},
+	"py":   {"py", "pyi"},
+	"php":  {"php", "phtml"},
+	"js":   {"ts", "tsx", "js", "jsx", "mjs", "cjs", "mts", "cts"},
+	"html": {"html", "htm", "xhtml"},
+	"css":  {"css", "scss", "less"},
+	// crontab (#1624) joins the shell family: a crontab is a table of shell
+	// commands, and its tint should read as one.
+	"shell": {"sh", "bash", "zsh", ".bashrc", ".zshrc", ".bash_profile", ".profile", ".zprofile",
+		"cron", "crontab", ".crontab"},
 	"sql":    {"sql"},
 	"xml":    {"xml", "xsd", "xsl", "xslt", "svg", "plist", "wsdl", "csproj", "vbproj", "fsproj", "props", "targets"},
 	"make":   {"mk", "Makefile", "makefile", "GNUmakefile"},

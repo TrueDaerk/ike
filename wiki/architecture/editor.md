@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-06T22:00:00Z
+timestamp: 2026-08-06T23:30:00Z
 ---
 
 # Editor
@@ -1374,6 +1374,42 @@ family has its own capture, conceal channel and toggle:
 families switch independently of each other and of the markdown/log layers.
 All toggles default on and stick per view like the #64 toggles.
 
+## Cron schedule hints (#1624)
+
+A cron expression draws with its English reading appended — `*/5 * * * *`
+renders as `*/5 * * * *  every 5 min`, `0 3 * * 1` as `0 3 * * 1  Mon 03:00` —
+display-only, toggled by `editor.cron_hints` (default on, Settings → Editor)
+or per view by `view.toggleCronHints`. Parsing, rendering and context
+detection live in `internal/cronhint`:
+
+- **Stand-in spans**: the span covers the raw expression and its `Replace`
+  repeats the expression with `cronhint.Gap` (two spaces) and the hint
+  appended, so the hint reads as an annotation *after* the expression rather
+  than replacing it. `concealSplit` routes the `cron.hint` capture into the
+  `decodes` channel map like the decode families, so `decodeOn` gates it on
+  `cronHints` alone, and the #1594 positional reveal applies unchanged: a
+  caret inside the expression (or a selection across it) drops the hint and
+  the bare expression is what is edited.
+- **Dialect**: the standard five fields (minute hour day-of-month month
+  day-of-week) with an optional *leading* seconds field (the Quartz/Spring
+  six-field form), ranges, steps, lists, names (`MON`, `JAN`), `?`, and the
+  crontab `@daily`/`@reboot`/… shorthands. The extensions that need a
+  calendar — `L`, `W`, `#` — and Quartz' seventh (year) field are rejected
+  outright: no hint beats a wrong one. systemd's `OnCalendar=` is a different
+  dialect and is not handled.
+- **Rendering**: compact and deterministic — `every 5 min`, `hourly :05,:35`,
+  `daily 09:00,17:00`, `Mon-Fri 04:30`, `Jan day 1 00:00`, `every 2 h`. Cron
+  ORs day-of-month against day-of-week when both are restricted, which the
+  rendering says out loud (`day 15 or Tue 03:30`); long time lists truncate
+  with a `,+n` count so a hint never grows past a glance.
+- **Contexts**: crontab lines (the leading five fields of a line that is
+  neither a comment nor a `NAME=value` assignment, plus the `@` shorthands),
+  CI YAML `cron:`/`schedule:` values (GitHub Actions, GitLab CI — the key
+  names the value a schedule, so quoted and plain scalars both count), and
+  quoted scalars in YAML, JSON and TOML. The quoted-scalar path additionally
+  requires a cron-specific character or a field name, so a quoted list of
+  numbers (`"1 2 3 4 5"`) is never mistaken for a schedule.
+
 ## Secret masking (#1623)
 
 Values in a `.env` file whose key names a credential render as `••••`
@@ -1508,7 +1544,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
-(#1621), `timestamp_decoding` (#1618), `color_preview`
+(#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624), `color_preview`
 (#790) and `search_ignore_case` (#1111, default off — in-file search folds
 case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,

@@ -16,6 +16,7 @@ package editor
 // rendering layers. The detection heuristics live in internal/escapes.
 
 import (
+	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/secret"
@@ -33,6 +34,10 @@ func (m Model) decodeOn(capture string) bool {
 		return m.entDecode
 	case escapes.Base64Capture:
 		return m.b64Decode
+	case cronhint.Capture:
+		// Not a decode either (#1624): "on" means the cron expression draws
+		// with its English schedule appended.
+		return m.cronHints
 	case secret.Capture:
 		// Not a decode but the same stand-in mechanic (#1623): "on" means the
 		// mask shows and the value hides, gated by editor.secret_masking.
@@ -58,4 +63,10 @@ func (m *Model) toggleEntityDecoding() {
 func (m *Model) toggleBase64Decoding() {
 	m.b64Decode = !m.b64Decode
 	m.b64DecodeSet = true
+}
+
+// toggleCronHints flips the inline cron schedule hints (#1624) for this view.
+func (m *Model) toggleCronHints() {
+	m.cronHints = !m.cronHints
+	m.cronHintsSet = true
 }

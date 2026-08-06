@@ -9,6 +9,7 @@ package langtoml
 import (
 	_ "embed"
 
+	"ike/internal/cronhint"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -33,5 +34,8 @@ func init() {
 		// their pairs scroll; tables, arrays and inline tables fold.
 		ScopeNodes: []string{"table", "table_array_element"},
 		FoldNodes:  []string{"table", "table_array_element", "array", "inline_table"},
+		// Cron hints (#1624): a quoted cron expression — a scheduler entry in
+		// a tool's TOML config — carries its English reading.
+		Spans: cronhint.QuotedSpans,
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/highlight"
@@ -51,6 +52,7 @@ var decodeCaptures = []string{
 	escapes.UnicodeCapture,
 	escapes.EntityCapture,
 	escapes.Base64Capture,
+	cronhint.Capture,
 	secret.Capture,
 }
 

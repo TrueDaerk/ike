@@ -282,6 +282,11 @@ type Editor struct {
 	// when the payload is printable text (#1620); the raw value reappears
 	// under the caret.
 	Base64Decoding bool `toml:"base64_decoding"`
+	// CronHints renders a cron expression's English reading after it
+	// (#1624) — "*/5 * * * *  every 5 min" — in crontab files, CI YAML
+	// `cron:` values and quoted expressions in config formats; the bare
+	// expression reappears under the caret.
+	CronHints bool `toml:"cron_hints"`
 	// SecretMasking renders the value of a secret-suspect key in a dotenv
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.

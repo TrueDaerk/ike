@@ -21,6 +21,7 @@ package langjson
 import (
 	_ "embed"
 
+	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/lang"
@@ -71,8 +72,10 @@ func init() {
 
 // jsonSpans is the lang.Language.Spans hook: Unix epoch timestamps in JSON
 // value positions (#1618) and \uXXXX escapes in strings (#1620) become
-// conceal-with-stand-in spans rendering the decoded form. The JSON context
-// keeps keys and digits inside prose strings out of the epoch detection.
+// conceal-with-stand-in spans rendering the decoded form, and a quoted cron
+// expression gains its schedule hint (#1624). The JSON context keeps keys and
+// digits inside prose strings out of the epoch detection.
 func jsonSpans(lines []string) []lang.Span {
-	return append(epochtime.Spans(lines, epochtime.JSONValue), escapes.UnicodeSpans(lines)...)
+	out := append(epochtime.Spans(lines, epochtime.JSONValue), escapes.UnicodeSpans(lines)...)
+	return append(out, cronhint.QuotedSpans(lines)...)
 }

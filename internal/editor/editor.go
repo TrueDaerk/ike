@@ -340,6 +340,10 @@ type Model struct {
 	entDecodeSet bool
 	b64Decode    bool
 	b64DecodeSet bool
+	// Cron hints (#1624) ride the same channel: the expression draws with
+	// its English schedule appended.
+	cronHints    bool
+	cronHintsSet bool
 	// Secret masking (#1623): the dotenv value stand-ins, on by default, with
 	// its own override flag like the decode families. See secrets.go.
 	secretMask    bool
@@ -556,6 +560,7 @@ func New() Model {
 		uniDecode:          true,
 		entDecode:          true,
 		b64Decode:          true,
+		cronHints:          true,
 		secretMask:         true,
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
@@ -692,6 +697,9 @@ func (m *Model) applyConfig() {
 	}
 	if !m.b64DecodeSet {
 		m.b64Decode = boolOr(m.cfg, "editor.base64_decoding", m.b64Decode)
+	}
+	if !m.cronHintsSet {
+		m.cronHints = boolOr(m.cfg, "editor.cron_hints", m.cronHints)
 	}
 	if !m.secretMaskSet {
 		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)

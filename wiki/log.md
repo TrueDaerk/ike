@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-06 (editor: human-readable cron hints, #1624)
+
+- `internal/cronhint` parses standard cron (five fields plus an optional
+  leading seconds field: ranges, steps, lists, `MON`/`JAN` names, `?`, the
+  `@daily`-style shorthands) and renders it compactly in English — `every
+  5 min`, `Mon-Fri 04:30`, `hourly :05,:35`. Extensions needing a calendar
+  (`L`, `W`, `#`) and Quartz' year field are rejected rather than guessed.
+- The hint rides the #1585 stand-in mechanic on its own conceal channel
+  (`cron.hint`): the span covers the expression and repeats it with the hint
+  appended, so the reading sits *after* the expression and disappears under
+  the caret (#1594). Gated by `editor.cron_hints` /
+  `view.toggleCronHints`.
+- Contexts: the new grammar-free `crontab` language (`*.cron`, `*.crontab`,
+  `crontab`), CI YAML `cron:`/`schedule:` values, and quoted expressions in
+  YAML, JSON and TOML — the quoted path guarded by a cron-shape test so a
+  quoted number list never turns into a schedule.
+
 ## 2026-08-06 (lang: dotenv secret masking and duplicate keys, #1623)
 
 - `internal/secret` decides from a key's name alone whether its value is a
