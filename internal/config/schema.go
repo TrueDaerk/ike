@@ -256,6 +256,10 @@ type Editor struct {
 	// non-cursor lines, and box-drawing pipe tables while the cursor is
 	// outside the table.
 	MarkdownRendering bool `toml:"markdown_rendering"`
+	// CSVRendering enables the table-like rendering of separator-delimited
+	// files (#1589): rainbow columns, concealed separators with display-only
+	// alignment padding on non-caret lines, and the pinned header row.
+	CSVRendering bool `toml:"csv_rendering"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme.
 	RainbowBrackets bool `toml:"rainbow_brackets"`

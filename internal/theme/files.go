@@ -25,6 +25,10 @@ type fileColors struct {
 	Make    string // mk + Makefile/makefile/GNUmakefile
 	Docker  string // dockerfile + Dockerfile/Containerfile
 	HTTP    string // http, rest
+	// CSV covers the separator-delimited data files (csv, tsv, psv, #1589).
+	// Empty falls back to the SQL color — the tabular-data family — so the
+	// 28 built-in themes need no per-theme entry; a theme may still set it.
+	CSV string
 }
 
 // fileGroups maps each fileColors group to the extension and filename keys it
@@ -48,18 +52,22 @@ var fileGroups = map[string][]string{
 	"make":   {"mk", "Makefile", "makefile", "GNUmakefile"},
 	"docker": {"dockerfile", "Dockerfile", "Containerfile"},
 	"http":   {"http", "rest"},
+	"csv":    {"csv", "tsv", "psv"},
 }
 
 // filesTable expands a fileColors spec into the flat extension/filename →
 // color map the explorer consumes. Keys without a dot or wildcard are exact
 // filenames (Makefile, Dockerfile, go.mod) the explorer matches by full name.
 func filesTable(c fileColors) map[string]string {
+	if c.CSV == "" {
+		c.CSV = c.SQL // tabular-data family default (#1589)
+	}
 	groups := map[string]string{
 		"go": c.Go, "lock": c.Lock, "md": c.Md, "toml": c.Toml,
 		"json": c.JSON, "yaml": c.YAML, "py": c.Py, "php": c.PHP,
 		"js": c.JS, "html": c.HTML, "css": c.CSS, "shell": c.Shell,
 		"sql": c.SQL, "xml": c.XML, "make": c.Make, "docker": c.Docker,
-		"http": c.HTTP,
+		"http": c.HTTP, "csv": c.CSV,
 	}
 	t := map[string]string{"dir": c.Dir, "default": c.Default}
 	for g, color := range groups {

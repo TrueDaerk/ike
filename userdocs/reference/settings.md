@@ -41,6 +41,7 @@ Settings, or run `settings.open` from the palette.
 | Text width | `editor.text_width` | integer (0–500) | `80` | user | Hard-wrap column the gq reflow operator targets (0 = vim's default 79) |
 | Sticky scroll | `editor.sticky_scroll` | boolean | `true` | user | Pin enclosing function/class header lines at the top while scrolling |
 | Markdown rendering | `editor.markdown_rendering` | boolean | `true` | user | Render Markdown inline styles, conceal markers and draw pipe tables with box characters on lines the cursor is not on |
+| CSV table rendering | `editor.csv_rendering` | boolean | `true` | user | Render csv/tsv files table-like on lines the caret is not on: rainbow columns, concealed separators, aligned fields and a pinned header row |
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
 | Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rrggbb, rgb(), hsl()) with their own color |
 | Sticky scroll depth | `editor.sticky_scroll_depth` | integer (1–10) | `4` | user | Maximum number of nested header lines pinned at once |

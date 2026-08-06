@@ -147,6 +147,7 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "editor.text_width", Type: Int, Title: "Text width", Description: "Hard-wrap column the gq reflow operator targets (0 = vim's default 79)", Scope: config.UserScope, Min: 0, Max: 500},
 			{Key: "editor.sticky_scroll", Type: Bool, Title: "Sticky scroll", Description: "Pin enclosing function/class header lines at the top while scrolling", Scope: config.UserScope},
 			{Key: "editor.markdown_rendering", Type: Bool, Title: "Markdown rendering", Description: "Render Markdown inline styles, conceal markers and draw pipe tables with box characters on lines the cursor is not on", Scope: config.UserScope},
+			{Key: "editor.csv_rendering", Type: Bool, Title: "CSV table rendering", Description: "Render csv/tsv files table-like on lines the caret is not on: rainbow columns, concealed separators, aligned fields and a pinned header row", Scope: config.UserScope},
 			{Key: "editor.rainbow_brackets", Type: Bool, Title: "Rainbow brackets", Description: "Color bracket pairs by nesting depth (theme-derived cycle)", Scope: config.UserScope},
 			{Key: "editor.color_preview", Type: Bool, Title: "Color preview", Description: "Tint color literals (#rrggbb, rgb(), hsl()) with their own color", Scope: config.UserScope},
 			{Key: "editor.sticky_scroll_depth", Type: Int, Title: "Sticky scroll depth", Description: "Maximum number of nested header lines pinned at once", Scope: config.UserScope, Min: 1, Max: 10},

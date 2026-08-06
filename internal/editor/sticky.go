@@ -18,7 +18,16 @@ package editor
 // reference line into one more scope. The loop grows k until it stabilises;
 // it always terminates because k only grows and is capped.
 func (m Model) stickyLines() []int {
-	if !m.stickyScroll || m.view.Top <= 0 || len(m.scopes) == 0 {
+	if !m.stickyScroll || m.view.Top <= 0 {
+		return nil
+	}
+	// Separator-delimited files pin their title row (#1589): the first line
+	// stays visible while the body scrolls, riding the ordinary sticky
+	// machinery (rendering, click remap, unhideCursor).
+	if m.svActive() && m.view.Height() > 1 && m.buf.LineCount() > 0 {
+		return []int{0}
+	}
+	if len(m.scopes) == 0 {
 		return nil
 	}
 	max := m.stickyDepth

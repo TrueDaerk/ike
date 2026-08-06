@@ -82,6 +82,7 @@ func defaults() *Config {
 			StickyScrollDepth:      4,
 			SmartPaste:             true,
 			MarkdownRendering:      true,
+			CSVRendering:           true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,

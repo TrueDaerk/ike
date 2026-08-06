@@ -516,4 +516,6 @@ grammar styles more specifically (placeholders). A span with a non-empty
 instead of the source runes on lines the caret is not on (see
 `/architecture/editor.md`, conceal). The same cheapness rule as `Regions`
 applies; a language with `Spans` but no grammar still schedules parses
-(`highlight.Supported` accepts either).
+(`highlight.Supported` accepts either) — the csv/tsv/psv languages
+(`plugins/languages/csv`, #1589) are exactly that: grammar-free, their whole
+structure (rainbow column captures) Go-computed.
