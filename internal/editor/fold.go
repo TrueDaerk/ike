@@ -22,13 +22,17 @@ import (
 	"ike/internal/highlight"
 )
 
-// hasFolds reports whether this view has any collapsed fold, the fast gate
-// the render/motion/scroll paths check before doing fold-aware work.
-func (m Model) hasFolds() bool { return len(m.folded) > 0 }
+// hasFolds reports whether this view hides any line — a collapsed fold, or a
+// collapsed log repeat run (#1650) — the fast gate the render/motion/scroll
+// paths check before doing fold-aware work.
+func (m Model) hasFolds() bool { return len(m.folded) > 0 || m.hasLogRuns() }
 
 // lineHidden reports whether line is inside a collapsed fold body (the header
-// line itself stays visible).
+// line itself stays visible) or folded away inside a log repeat run.
 func (m Model) lineHidden(line int) bool {
+	if m.logRunHidden(line) {
+		return true
+	}
 	for h, e := range m.folded {
 		if line > h && line <= e {
 			return true
@@ -41,6 +45,17 @@ func (m Model) lineHidden(line int) bool {
 func (m Model) foldedAt(line int) (int, bool) {
 	e, ok := m.folded[line]
 	return e, ok
+}
+
+// collapsedRow reports whether line renders as exactly one row because it
+// heads a collapsed fold or a collapsed log repeat run (#1650) — the soft-wrap
+// paths must not slice such a line into wrap segments.
+func (m Model) collapsedRow(line int) bool {
+	if _, ok := m.foldedAt(line); ok {
+		return true
+	}
+	_, ok := m.logRunAt(line)
+	return ok
 }
 
 // visibleStep returns the next visible line from line in direction dir (+1

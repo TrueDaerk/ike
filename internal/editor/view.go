@@ -545,6 +545,12 @@ func (m Model) View() string {
 			out = append(out, gutter+m.renderFoldHeader(i, end, textWidth, cursorStyle, selStyle))
 			continue
 		}
+		// A run of identical log lines (#1650) collapses the same way, into
+		// its first line plus a dimmed ×N marker.
+		if end, ok := m.logRunAt(i); ok {
+			out = append(out, gutter+m.renderLogRunHeader(i, end, textWidth, cursorStyle, selStyle))
+			continue
+		}
 		if m.softWrap {
 			// Soft wrap (#64): one row per wrap segment; continuation rows
 			// carry a wrap marker in the gutter instead of a line number.
