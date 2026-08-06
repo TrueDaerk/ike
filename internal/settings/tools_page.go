@@ -21,10 +21,11 @@ import (
 // pipeline, so the tool.<name> palette commands re-shape live.
 
 // toolFieldCount is the number of form fields: name, command, args, cwd,
-// placement, multiple (#835).
-const toolFieldCount = 6
+// multiple (#835). Placement was retired in #1588 — the split direction now
+// adapts to the host pane's shape.
+const toolFieldCount = 5
 
-var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple"}
+var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "multiple"}
 
 // ToolsPage implements PageModel. The add/edit form runs as a SubPanel
 // (#883, tools_form.go) pushed through host.
@@ -169,10 +170,9 @@ func (t *ToolsPage) updateSuggest(key tea.KeyPressMsg) tea.Cmd {
 func (t *ToolsPage) addSuggestion(e toolcatalog.Entry) tea.Cmd {
 	entries := append([]config.ToolEntry(nil), t.entries()...)
 	entries = append(entries, config.ToolEntry{
-		Name:      e.Name,
-		Command:   e.Command,
-		Args:      e.Args,
-		Placement: e.Placement,
+		Name:    e.Name,
+		Command: e.Command,
+		Args:    e.Args,
 	})
 	sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
 	t.suggesting = false
@@ -214,9 +214,6 @@ func (t *ToolsPage) writeEntries(entries []config.ToolEntry) tea.Cmd {
 		if e.Cwd != "" {
 			m["cwd"] = e.Cwd
 		}
-		if e.Placement != "" {
-			m["placement"] = e.Placement
-		}
 		if e.Multiple {
 			m["multiple"] = true
 		}
@@ -246,11 +243,11 @@ func (t *ToolsPage) View(w, h int) string {
 		return t.viewSuggestions(w, h)
 	}
 	pal := t.theme()
-	head := " name · command · placement   (custom TUI tool panes, #741)"
+	head := " name · command   (custom TUI tool panes, #741)"
 	entries := t.entries()
 	var list []string
 	for i, e := range entries {
-		line := " " + pad(e.Name, 18) + pad(e.Command+argSuffix(e.Args), 34) + placementLabel(e.Placement)
+		line := " " + pad(e.Name, 18) + pad(e.Command+argSuffix(e.Args), 34)
 		if e.Multiple {
 			line += " · multi"
 		}
@@ -326,14 +323,6 @@ func argSuffix(args []string) string {
 		return ""
 	}
 	return " " + strings.Join(args, " ")
-}
-
-// placementLabel names the split zone, defaulting like the open path does.
-func placementLabel(p string) string {
-	if p == "" {
-		return "bottom"
-	}
-	return p
 }
 
 // Click implements the optional PageClicker seam: a press on a row selects

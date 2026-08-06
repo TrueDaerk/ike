@@ -53,11 +53,6 @@ func TestCatalogEntriesAreWellFormed(t *testing.T) {
 				t.Errorf("entry %s has an empty recipe", e.Name)
 			}
 		}
-		switch e.Placement {
-		case "", "bottom", "right":
-		default:
-			t.Errorf("entry %s has invalid placement %q", e.Name, e.Placement)
-		}
 	}
 	for _, want := range []string{"lazygit", "lazydocker", "sqlit"} {
 		if !seen[want] {

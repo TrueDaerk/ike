@@ -208,7 +208,7 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "terminal.scrollback_lines", Type: Int, Title: "Scrollback lines", Description: "Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it", Scope: config.UserScope, Min: 100, Max: 1000000},
 		}},
 		{Title: "Run", Description: "Where a run configuration opens its output.", Entries: []Entry{
-			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},
+			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new terminal pane split off the editor", Scope: config.UserScope, Options: []string{"in_pane", "new_terminal"}},
 		}},
 		{Title: "Debug", Description: "Debugger transport settings. PHP debugging listens for incoming Xdebug connections; the hostname filter keeps foreign sessions out.", Entries: []Entry{
 			{Key: "debug.php.port", Type: Int, Title: "PHP listen port", Description: "DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)", Scope: config.UserScope, Min: 1, Max: 65535},

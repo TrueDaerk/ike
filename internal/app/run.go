@@ -163,7 +163,7 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 		return
 	}
 	key := m.activeWS().Panes.AddCommandTerminal(argv, cfg.Name, dir, env, m.host.Send)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

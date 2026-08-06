@@ -92,7 +92,6 @@ a tool pane at whatever you prefer:
 [[tools.custom]]
 name = "lazygit"
 command = "lazygit"
-placement = "bottom"
 ```
 
 **Set Up Tool Panes** from the palette walks through this interactively. See

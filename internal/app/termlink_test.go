@@ -15,10 +15,11 @@ import (
 )
 
 // openWideTerminal opens a terminal pane in an extra-wide model so a long
-// absolute t.TempDir reference renders unwrapped on one row.
+// absolute t.TempDir reference renders unwrapped on one row — wide enough
+// that even the adaptive right split (#1588) leaves ample columns.
 func openWideTerminal(t *testing.T) (Model, string) {
 	t.Helper()
-	m := sized(t, 220, 50)
+	m := sized(t, 400, 50)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
 	key := m.activeWS().Panes.Focused()

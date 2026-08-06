@@ -145,7 +145,7 @@ func (m Model) leafVisible(key string) bool {
 }
 
 // openHTTPPanel splits the active editor (fallback: focused leaf) at the
-// bottom with the singleton response viewer.
+// adaptive placement (auxZone, #1588) with the singleton response viewer.
 func (m *Model) openHTTPPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -156,7 +156,7 @@ func (m *Model) openHTTPPanel() {
 	}
 	existed := m.activeWS().Panes.Has(pane.HTTPKey)
 	key := m.activeWS().Panes.AddHTTP()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		if !existed {
 			// Only a freshly created instance is discarded — a hidden one

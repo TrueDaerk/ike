@@ -22,8 +22,10 @@ name = "lazygit"        # display name; command id becomes tool.lazygit
 command = "lazygit"     # program to exec
 args = []               # optional arguments
 cwd = ""                # working directory; empty = project root
-placement = "bottom"    # "bottom" (default) or "right" split
 ```
+
+A `placement` key is still decoded but deprecated and ignored (#1588): the
+split direction adapts to the host pane's shape (`Model.auxZone`, below).
 
 Defined in `internal/config/schema.go` (`Tools`/`ToolEntry`). Entries missing
 `name` or `command` are skipped.
@@ -38,7 +40,7 @@ user-defined `[[tools.custom]]` list overrides the default wholesale.
 
 Editable from the UI via **Settings → Tools** (#755,
 `internal/settings/tools_page.go`): `a` adds, enter edits, `d` deletes; the
-form validates name/command presence, duplicate names and the placement enum.
+form validates name/command presence and duplicate names.
 Writes go through the write-back layer at user scope (the whole list, the
 `project.history` pattern) and reload through the normal pipeline, so the
 `tool.<name>` commands re-shape live.
@@ -80,9 +82,11 @@ set live. The id is `tool.<slug>` (lower-case, non-alphanumerics collapse to
 dashes: "My Tool" → `tool.my-tool`); like any command it is bindable and
 palette-reachable.
 
-Invoking mirrors `terminal.toggle`: no pane → spawn split below the active
-editor (or right, per `placement`); pane exists unfocused → focus it
-(remembering where focus was); focused → return focus.
+Invoking mirrors `terminal.toggle`: no pane → spawn split off the active
+editor at the adaptive placement (`Model.auxZone`, #1588 — below by default,
+to the right when the host is wider than 120 cells and wider than tall); pane
+exists unfocused → focus it (remembering where focus was); focused → return
+focus.
 
 ### Instances (#835)
 

@@ -18,7 +18,6 @@ type Entry struct {
 	Name        string
 	Command     string
 	Args        []string
-	Placement   string
 	Description string
 	// Requires is a binary that must be on PATH for the entry to be offered
 	// at all (lazydocker without Docker is noise); "" offers unconditionally.
@@ -43,7 +42,6 @@ var catalog = []Entry{
 	{
 		Name:        "lazygit",
 		Command:     "lazygit",
-		Placement:   "bottom",
 		Description: "Git workflow TUI (staging, commits, branches, log)",
 		Recipes: [][]string{
 			{"brew", "install", "lazygit"},
@@ -53,7 +51,6 @@ var catalog = []Entry{
 	{
 		Name:        "lazydocker",
 		Command:     "lazydocker",
-		Placement:   "bottom",
 		Description: "Docker containers, images and logs TUI",
 		Requires:    "docker",
 		Recipes: [][]string{
@@ -64,7 +61,6 @@ var catalog = []Entry{
 	{
 		Name:        "sqlit",
 		Command:     "sqlit",
-		Placement:   "bottom",
 		Description: "SQL database client TUI (Maxteabag/sqlit)",
 		Recipes: [][]string{
 			{"pipx", "install", "sqlit-tui"},
@@ -74,7 +70,6 @@ var catalog = []Entry{
 	{
 		Name:        "k9s",
 		Command:     "k9s",
-		Placement:   "bottom",
 		Description: "Kubernetes cluster TUI",
 		Requires:    "kubectl",
 		Recipes: [][]string{
@@ -85,7 +80,6 @@ var catalog = []Entry{
 	{
 		Name:        "htop",
 		Command:     "htop",
-		Placement:   "bottom",
 		Description: "Interactive process viewer",
 		Recipes: [][]string{
 			{"brew", "install", "htop"},
@@ -94,7 +88,6 @@ var catalog = []Entry{
 	{
 		Name:        "btop",
 		Command:     "btop",
-		Placement:   "bottom",
 		Description: "Resource monitor (CPU, memory, network, disks)",
 		Recipes: [][]string{
 			{"brew", "install", "btop"},

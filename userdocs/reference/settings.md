@@ -123,7 +123,7 @@ Settings, or run `settings.open` from the palette.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Run placement | `run.placement` | enum: `in_pane`, `new_terminal` | `in_pane` | user | Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new bottom terminal |
+| Run placement | `run.placement` | enum: `in_pane`, `new_terminal` | `in_pane` | user | Where a run opens when no unused terminal exists: a terminal tab in the editor pane, or a new terminal pane split off the editor |
 
 ### Debug
 

@@ -287,7 +287,8 @@ instead of running it under the adapter's `/dev/null` stdin.
 
 `internal/breakpanel` + `pane.KindBreakpoints` (singleton key `breakpoints`,
 Problems-panel pattern) is the Breakpoints tool window — JetBrains'
-cmd+shift+F8 dialog as a bottom-split pane, reachable via `debug.breakpoints`
+cmd+shift+F8 dialog as an adaptive split of the active editor (`auxZone`,
+#1588), reachable via `debug.breakpoints`
 (palette, Run menu, cmd+shift+f8). It lists every breakpoint grouped by file
 with a source-line preview and is a **pure consumer** of the store: enter (or
 double-click) jumps through the standard open funnel, space (or a click on
@@ -312,9 +313,9 @@ restores from saved layouts seeded from the persisted store (identity kind
 pattern) is the frames/variables panel; the debuggee's output lives in a
 **real terminal pane** directly to its right (#1370). On session start (first
 stop, first output, or a `runInTerminal` request) the pair opens without
-stealing focus: the panel bottom-splits the active editor
-(`layout.SplitLeaf`, `ZoneBottom`) and the debuggee terminal splits the panel
-(`ZoneRight`). Both are ordinary panes: independently resizable, movable and
+stealing focus: the panel splits the active editor at the adaptive placement
+(`layout.SplitLeaf` with `auxZone`, #1588 — below, or right of a wide
+landscape host) and the debuggee terminal splits the panel (`ZoneRight`). Both are ordinary panes: independently resizable, movable and
 closable through the normal windowing system.
 
 **Debuggee terminal pane** (#1370): a `KindTerminal` instance marked

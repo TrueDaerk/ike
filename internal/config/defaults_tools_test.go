@@ -32,7 +32,7 @@ func TestLazygitPreconfiguredWhenOnPath(t *testing.T) {
 		t.Fatalf("default tools = %+v, want the lazygit example entry", c.Tools.Custom)
 	}
 	e := c.Tools.Custom[0]
-	if e.Name != "lazygit" || e.Command != "lazygit" || e.Placement != "bottom" {
+	if e.Name != "lazygit" || e.Command != "lazygit" {
 		t.Fatalf("lazygit default entry = %+v", e)
 	}
 }

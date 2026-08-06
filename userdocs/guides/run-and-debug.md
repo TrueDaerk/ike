@@ -24,7 +24,7 @@ rather than opening a new one each time. When there is nothing reusable,
 | Value | Where the run opens |
 |---|---|
 | `in_pane` (default) | A terminal tab in the focused editor pane |
-| `new_terminal` | A new terminal pane at the bottom |
+| `new_terminal` | A new terminal pane, split off the editor (below, or to the right of a wide landscape pane) |
 
 The pane stays open when the command exits — the output is the point.
 

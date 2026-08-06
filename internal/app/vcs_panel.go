@@ -43,7 +43,8 @@ func (m *Model) toggleVCSPanel() {
 }
 
 // openVCSPanel splits the active editor (fallback: focused leaf) at the
-// bottom with the singleton panel, seeded from the current snapshot.
+// adaptive placement (auxZone, #1588) with the singleton panel, seeded from
+// the current snapshot.
 func (m *Model) openVCSPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -53,7 +54,7 @@ func (m *Model) openVCSPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddVCS()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

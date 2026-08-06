@@ -55,7 +55,8 @@ func (m Model) breakpointsPanel() *breakpanel.Model {
 }
 
 // openBreakpointsPanel splits the active editor (fallback: focused leaf) at
-// the bottom with the singleton panel, seeded from the live breakpoint store.
+// the adaptive placement (auxZone, #1588) with the singleton panel, seeded
+// from the live breakpoint store.
 func (m *Model) openBreakpointsPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -65,7 +66,7 @@ func (m *Model) openBreakpointsPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddBreakpoints()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

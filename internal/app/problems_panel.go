@@ -48,7 +48,8 @@ func (m Model) problemsPanel() *problems.Model {
 }
 
 // openProblemsPanel splits the active editor (fallback: focused leaf) at the
-// bottom with the singleton panel, seeded from the live diagnostics store.
+// adaptive placement (auxZone, #1588) with the singleton panel, seeded from
+// the live diagnostics store.
 func (m *Model) openProblemsPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -58,7 +59,7 @@ func (m *Model) openProblemsPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddProblems()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

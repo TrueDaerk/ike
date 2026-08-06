@@ -2301,9 +2301,9 @@ func terminalEnv() []string {
 }
 
 // openTerminal opens a fresh terminal pane rooted in the working directory
-// (the project root), split below the active editor — the conventional
-// JetBrains placement — falling back to the focused leaf when no editor
-// exists.
+// (the project root), split off the active editor — below by default, to the
+// right on wide landscape hosts (auxZone, #1588) — falling back to the
+// focused leaf when no editor exists.
 func (m *Model) openTerminal() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -2317,7 +2317,7 @@ func (m *Model) openTerminal() {
 		shell = v
 	}
 	key := m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return
@@ -6306,6 +6306,23 @@ func paneInterior(outer, chrome int) int {
 		return v
 	}
 	return 1
+}
+
+// auxSplitRightMinW is the host width (outer cells) above which an
+// auto-placed auxiliary pane opens to the right instead of below (#1588).
+const auxSplitRightMinW = 120
+
+// auxZone picks the split direction for an auto-placed auxiliary pane
+// (terminal, debug view, tool panes, http response, bottom panels): a host
+// wider than auxSplitRightMinW cells that is also wider than it is tall
+// splits to the right; everything else keeps the conventional bottom split
+// (#1588). Cells are roughly twice as tall as wide, so width > height is
+// already biased toward landscape hosts — matching the intent.
+func (m *Model) auxZone(target string) layout.Zone {
+	if r, ok := m.lay.Panes[target]; ok && r.W > auxSplitRightMinW && r.W > r.H {
+		return layout.ZoneRight
+	}
+	return layout.ZoneBottom
 }
 
 // handleMouse runs the drag state machine: press hit-tests the layout to start a

@@ -540,8 +540,10 @@ reality-probe caveat).
 ## Commands (#97)
 
 - **`terminal.toggle`** (default `alt+f12`, fragile like every alt+F-key):
-  the JetBrains state machine — no terminal → open one below the active
-  editor; one exists unfocused → focus it (remembering where focus was);
+  the JetBrains state machine — no terminal → open one split off the active
+  editor at the adaptive placement (`auxZone`, #1588 — below, or right of a
+  wide landscape host); one exists unfocused → focus it (remembering where
+  focus was);
   focused → return focus to the remembered pane (falling back to the active
   editor, then the explorer). Inside a focused terminal the reserved-set
   handler catches `alt+f12` before the raw pass-through. Custom tool panes

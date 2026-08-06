@@ -77,11 +77,12 @@ type Tools struct {
 
 // ToolEntry is one configured TUI tool. Name is the display/command suffix
 // ("lazygit" → command id "tool.lazygit"); Command is the program to run with
-// Args; Cwd is the working directory (empty: the project root). Placement
-// decides where the pane splits open: "bottom" (default) or "right".
-// Multiple opts the tool into concurrent instances (#835): a "tool.<name>.new"
-// command spawns additional panes; false (default) keeps the strict
-// single-instance toggle.
+// Args; Cwd is the working directory (empty: the project root). Placement is
+// deprecated and ignored since #1588 — the split direction adapts to the host
+// pane's shape; the field is only kept so existing configs decode without an
+// unknown-key warning. Multiple opts the tool into concurrent instances
+// (#835): a "tool.<name>.new" command spawns additional panes; false
+// (default) keeps the strict single-instance toggle.
 type ToolEntry struct {
 	Name      string   `toml:"name"`
 	Command   string   `toml:"command"`

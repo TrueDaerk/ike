@@ -49,7 +49,7 @@ func (m Model) usagesPanel() *usages.Model {
 }
 
 // openUsagesPanel splits the active editor (fallback: focused leaf) at the
-// bottom with the singleton panel.
+// adaptive placement (auxZone, #1588) with the singleton panel.
 func (m *Model) openUsagesPanel() {
 	target := m.activeEditorKey()
 	if target == "" {
@@ -59,7 +59,7 @@ func (m *Model) openUsagesPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddUsages()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return
