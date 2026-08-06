@@ -132,3 +132,36 @@ func TestMergeSettings(t *testing.T) {
 		t.Errorf("top-level merge wrong: %v", got)
 	}
 }
+
+// TestTemplateSuffixFallback: a template suffix (#1595) falls back to the
+// inner extension — environment.yml.j2 resolves as the .yml language — while
+// base names, chained suffixes and suffix-less names behave sensibly.
+func TestTemplateSuffixFallback(t *testing.T) {
+	Register(Language{
+		ID:         "tsflang",
+		Extensions: []string{"tsf"},
+		Filenames:  []string{"Tsffile"},
+	})
+	for _, path := range []string{
+		"environment.tsf.j2", "a/b.tsf.jinja", "c.tsf.jinja2",
+		"d.tsf.tmpl", "e.tsf.tpl", "f.tsf.gotmpl", "g.tsf.J2",
+		"h.tsf.j2.j2",     // chained suffixes strip one by one
+		"some/Tsffile.j2", // the inner name may match by base name too
+	} {
+		if l, ok := ByPath(path); !ok || l.ID != "tsflang" {
+			t.Errorf("ByPath(%q) = %+v, %v, want tsflang", path, l, ok)
+		}
+	}
+	// No inner extension, or an unknown one: plain text.
+	if _, ok := ByPath("motd.j2"); ok {
+		t.Error("ByPath(motd.j2) should not resolve")
+	}
+	if _, ok := ByPath("x.unknownext.j2"); ok {
+		t.Error("ByPath(x.unknownext.j2) should not resolve")
+	}
+	// A language claiming a template suffix outright keeps the last word.
+	Register(Language{ID: "tsfowner", Extensions: []string{"tpl"}})
+	if l, ok := ByPath("y.tsf.tpl"); !ok || l.ID != "tsfowner" {
+		t.Errorf("ByPath(y.tsf.tpl) = %+v, %v, want tsfowner", l, ok)
+	}
+}

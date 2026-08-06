@@ -41,7 +41,7 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, then extension
+func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, extension, then template-suffix fallback (#1595)
 func ByAssociation(path string) (Language, bool) // user-configured [files.associations] match (#1365)
 func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
 func AssociatePath(path, id string)         // record a content-sniffed language for one path
@@ -95,6 +95,18 @@ matches (fail soft: built-in detection, else plain text);
 `InvalidAssociations` lists such entries and the root model toasts them as
 config warnings on load/reload. The **File Associations** settings page
 (`internal/settings/associations_page.go`) edits the map at user scope.
+
+### Template suffix fallback (#1595)
+
+Template files carry a template suffix over the real type — Ansible/Jinja2's
+`environment.yml.j2` is YAML with markers. When every direct lookup fails and
+the path's extension is a known template suffix (`.j2`, `.jinja`, `.jinja2`,
+`.tmpl`, `.tpl`, `.gotmpl`), `ByPath` strips it and resolves the remaining
+name again — the inner extension (`nginx.conf.j2` → ini) or even an inner
+base name (`Dockerfile.j2`) keeps the last word, chained suffixes strip one
+by one, and a name with no inner extension (`motd.j2`) stays plain text. A
+language claiming a template suffix outright still wins, because the direct
+extension lookup runs first.
 
 ### Context sniffers (#897)
 
@@ -518,4 +530,7 @@ sits inside the range (see `/architecture/editor.md`, conceal). The same cheapne
 applies; a language with `Spans` but no grammar still schedules parses
 (`highlight.Supported` accepts either) — the csv/tsv/psv languages
 (`plugins/languages/csv`, #1589) are exactly that: grammar-free, their whole
-structure (rainbow column captures) Go-computed.
+structure (rainbow column captures) Go-computed. The ini-style config
+language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
+and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
+comments as Go-computed spans, with no grammar and no server.

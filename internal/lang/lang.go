@@ -258,10 +258,23 @@ func ByExt(ext string) (Language, bool) {
 	return Language{}, false
 }
 
+// templateSuffixes are the outer extensions marking a file as a template over
+// its real type (#1595): Jinja2's .j2/.jinja/.jinja2 (Ansible templates) and
+// the Go-template .tmpl/.tpl/.gotmpl. When every direct lookup fails and the
+// path carries one, ByPath strips it and resolves the remaining name —
+// environment.yml.j2 highlights as YAML, nginx.conf.j2 as ini. A file with no
+// inner extension (motd.j2) stays plain text.
+var templateSuffixes = map[string]bool{
+	"j2": true, "jinja": true, "jinja2": true,
+	"tmpl": true, "tpl": true, "gotmpl": true,
+}
+
 // ByPath returns the language for a file path: a user-configured association
 // (#1365, explicit intent beats detection) wins, then a sniffed per-path
 // association (#893), then an exact base name match (e.g. "Dockerfile"), then
-// the extension.
+// the extension. A path whose extension is a known template suffix (#1595)
+// resolves as the name with that suffix stripped — the inner extension keeps
+// the last word, so a language claiming a template suffix outright still wins.
 func ByPath(path string) (Language, bool) {
 	if l, ok := ByAssociation(path); ok {
 		return l, true
@@ -279,7 +292,14 @@ func ByPath(path string) (Language, bool) {
 		return l, true
 	}
 	mu.RUnlock()
-	return ByExt(filepath.Ext(path))
+	ext := filepath.Ext(path)
+	if l, ok := ByExt(ext); ok {
+		return l, true
+	}
+	if templateSuffixes[strings.ToLower(strings.TrimPrefix(ext, "."))] {
+		return ByPath(strings.TrimSuffix(path, ext))
+	}
+	return Language{}, false
 }
 
 // Comments returns the comment syntax for path's language. ok is false when no
