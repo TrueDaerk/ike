@@ -58,10 +58,18 @@ returns the first whose `Available` answers true:
    (#1403 SQL, #1404 XML)
 
 `ResolveRange` is the reformat-selection variant: a range-less winner falls
-through to the next range-capable provider; when none of the available
-providers does ranges the caller reports "only Reformat File is available"
-instead of silently formatting the whole file. No provider at all is a clear
+through to the next range-capable provider. No provider at all is a clear
 "no formatter for `<language>`" toast, never a silent no-op.
+
+The plain reformat command is **context-sensitive** (#1603, JetBrains'
+Reformat Code semantics): with an active visual selection `lsp.format`
+formats only the selected range via `ResolveRange`; without one it formats
+the whole file. When a selection exists but no available provider does
+ranges, the command widens to the whole file with a notice ("no range
+formatter … — reformatting the whole file") — never silently. The explicit
+`lsp.formatRange` command keeps its stricter contract: no selection is a
+"select a range first" hint, and no range-capable provider reports "only
+Reformat File is available" instead of widening.
 
 ## Command flow
 

@@ -51,34 +51,45 @@ func (m *Model) handleReformat(ranged bool) tea.Cmd {
 		Root:     root,
 	}
 
-	if !ranged {
-		prov, ok := format.Resolve(langID, path)
-		if !ok {
-			m.host.Notify(host.Warn, "no formatter for "+langName)
-			return nil
-		}
-		return m.runReformat(prov, req, func(ctx context.Context) (format.Result, error) {
-			return prov.Format(ctx, req)
-		})
-	}
-
-	start, end, ok := ed.SelectionSpan()
-	if !ok {
+	start, end, sel := ed.SelectionSpan()
+	if ranged && !sel {
 		m.host.Notify(host.Info, "select a range first (visual mode), or use Reformat File")
 		return nil
 	}
-	prov, ok, wholeFileOnly := format.ResolveRange(langID, path)
-	if wholeFileOnly {
-		m.host.Notify(host.Info, "no range formatter for "+langName+" — only Reformat File is available")
-		return nil
+
+	if sel {
+		// Reformat Selected (#1603): the plain reformat command is
+		// context-sensitive — an active visual selection formats only the
+		// selected range, JetBrains' Reformat Code semantics.
+		prov, ok, wholeFileOnly := format.ResolveRange(langID, path)
+		if ok {
+			s, e := format.Pos{Line: start.Line, Col: start.Col}, format.Pos{Line: end.Line, Col: end.Col}
+			return m.runReformat(prov, req, func(ctx context.Context) (format.Result, error) {
+				return prov.FormatRange(ctx, req, s, e)
+			})
+		}
+		if !wholeFileOnly {
+			m.host.Notify(host.Warn, "no formatter for "+langName)
+			return nil
+		}
+		if ranged {
+			// The explicit Reformat Selection command keeps its contract:
+			// never silently widen to the whole file.
+			m.host.Notify(host.Info, "no range formatter for "+langName+" — only Reformat File is available")
+			return nil
+		}
+		// The context-sensitive keybind falls back to the whole file — with a
+		// notice, so the widened scope is never silent (#1603).
+		m.host.Notify(host.Info, "no range formatter for "+langName+" — reformatting the whole file")
 	}
+
+	prov, ok := format.Resolve(langID, path)
 	if !ok {
 		m.host.Notify(host.Warn, "no formatter for "+langName)
 		return nil
 	}
-	s, e := format.Pos{Line: start.Line, Col: start.Col}, format.Pos{Line: end.Line, Col: end.Col}
 	return m.runReformat(prov, req, func(ctx context.Context) (format.Result, error) {
-		return prov.FormatRange(ctx, req, s, e)
+		return prov.Format(ctx, req)
 	})
 }
 

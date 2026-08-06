@@ -192,6 +192,90 @@ func TestReformatSelectionRunsRangeProvider(t *testing.T) {
 	}
 }
 
+// runCmd executes a command, unpacking nested batches — a toast alongside
+// the reformat run wraps them into one tea.BatchMsg.
+func runCmd(c tea.Cmd) {
+	if c == nil {
+		return
+	}
+	if batch, ok := c().(tea.BatchMsg); ok {
+		for _, inner := range batch {
+			runCmd(inner)
+		}
+	}
+}
+
+// TestReformatFileWithSelectionFormatsRange: the plain reformat command is
+// context-sensitive (#1603) — an active visual selection routes to the
+// range-capable provider instead of the whole file.
+func TestReformatFileWithSelectionFormatsRange(t *testing.T) {
+	m, _, msgs := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
+	wholeFile := false
+	var gotStart, gotEnd format.Pos
+	format.Register(format.Provider{
+		Name: "built-in", Tier: format.TierBuiltin,
+		Format: func(ctx context.Context, req format.Request) (format.Result, error) {
+			wholeFile = true
+			return format.Result{}, nil
+		},
+		FormatRange: func(ctx context.Context, req format.Request, start, end format.Pos) (format.Result, error) {
+			gotStart, gotEnd = start, end
+			return format.Result{Edits: []format.Edit{{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 6, Text: "SELECT"}}}, nil
+		},
+	})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"}) // line-wise selection on line 0
+
+	_, cmd := m.Update(format.FileRequestMsg{})
+	if cmd == nil {
+		t.Fatal("range provider must run")
+	}
+	_ = cmd()
+
+	awaitMsg(t, msgs, func(msg tea.Msg) bool { _, ok := msg.(ilsp.FormatEditsMsg); return ok })
+	if wholeFile {
+		t.Fatal("an active selection must not format the whole file")
+	}
+	if gotStart != (format.Pos{Line: 0, Col: 0}) || gotEnd != (format.Pos{Line: 1, Col: 0}) {
+		t.Fatalf("selection span must reach the provider, got %v..%v", gotStart, gotEnd)
+	}
+}
+
+// TestReformatFileWithSelectionFallsBackToWholeFile: selection active but no
+// range-capable provider — the context-sensitive command widens to the whole
+// file with a notice instead of doing nothing (#1603).
+func TestReformatFileWithSelectionFallsBackToWholeFile(t *testing.T) {
+	m, _, msgs := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
+	called := false
+	format.Register(format.Provider{
+		Name: "built-in", Tier: format.TierBuiltin,
+		Format: func(ctx context.Context, req format.Request) (format.Result, error) {
+			called = true
+			return format.TextResult("SELECT 1\nSELECT 2\n"), nil
+		},
+	})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'v', Text: "v"})
+
+	out, cmd := m.Update(format.FileRequestMsg{})
+	m = out.(Model)
+	if cmd == nil {
+		t.Fatal("fallback must run the whole-file provider")
+	}
+	runCmd(cmd)
+	awaitMsg(t, msgs, func(msg tea.Msg) bool { _, ok := msg.(ilsp.FormatEditsMsg); return ok })
+	if !called {
+		t.Fatal("whole-file provider must run as the fallback")
+	}
+	found := false
+	for _, n := range m.toasts {
+		if n.text == "no range formatter for this file type — reformatting the whole file" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the widened scope must be announced")
+	}
+}
+
 // TestReformatWithoutSelectionExplains: reformat-selection without a visual
 // selection tells the user what to do.
 func TestReformatWithoutSelectionExplains(t *testing.T) {
