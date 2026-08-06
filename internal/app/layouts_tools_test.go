@@ -108,6 +108,54 @@ func TestSnapshotToolTabHostAsToolSlot(t *testing.T) {
 	}
 }
 
+// TestApplyLayoutNeverGraftsShellIntoToolPane pins the #1577 report: a saved
+// layout whose only terminal-kind slot is a tool pane must not swallow a
+// surplus plain shell as a tab (converting the tool into a tab host) — the
+// shell keeps its own pane in the implicit flexible region.
+func TestApplyLayoutNeverGraftsShellIntoToolPane(t *testing.T) {
+	withTools(t, sleepTool("alpha"))
+	m := sized(t, 120, 40)
+	m = step(m, ToolOpenMsg{Name: "alpha"})
+	m = step(m, TerminalNewMsg{})
+	shellKey := m.activeWS().Panes.Focused()
+	shellInst := m.activeWS().Panes.Get(shellKey)
+	if shellInst == nil || shellInst.Kind() != pane.KindTerminal || shellInst.Terminal().Tool() != "" {
+		t.Fatalf("expected a plain shell pane, got %q", shellKey)
+	}
+	t.Cleanup(shellInst.Terminal().Close)
+
+	tree := &layout.Split{Orient: layout.Horizontal, Ratio: 0.25,
+		A: &layout.Leaf{Pane: "explorer"},
+		B: &layout.Split{Orient: layout.Vertical, Ratio: 0.7,
+			A: &layout.Leaf{Pane: "editor"}, B: &layout.Leaf{Pane: "terminal"}}}
+	data, err := layout.Encode(tree)
+	if err != nil {
+		t.Fatal(err)
+	}
+	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": {
+		Tree: data,
+		Panes: map[string]paneIdentity{
+			"explorer": {Kind: "explorer"},
+			"editor":   {Kind: "editor"},
+			"terminal": {Kind: "tool", Tool: "alpha"},
+		},
+	}}})
+
+	m = step(m, ApplyLayoutMsg{Name: "dev"})
+
+	tool := m.toolPane("alpha")
+	if tool == nil {
+		t.Fatal("tool pane must survive the apply as a dedicated tool pane")
+	}
+	t.Cleanup(tool.Terminal().Close)
+	if tool.Kind() != pane.KindTerminal || tool.TabCount() > 1 {
+		t.Fatalf("tool pane must not become a tab host, got kind=%v tabs=%d", tool.Kind(), tool.TabCount())
+	}
+	if !leafSet(m)[shellKey] {
+		t.Fatal("surplus shell must keep its own pane in the implicit flexible region")
+	}
+}
+
 func TestApplyLayoutRestartsToolTabsInFreshEditor(t *testing.T) {
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 120, 40) // explorer + one editor

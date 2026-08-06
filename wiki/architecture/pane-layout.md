@@ -303,19 +303,23 @@ named, user-scoped snapshots of the split tree.
   the built-in explorer+editor pair when none is designated.
 - **Apply** re-shapes the **active workspace only** (parked workspaces, #777,
   are untouched) and never closes files: live content panes re-slot into the
-  layout's editor slots in order; surplus editor panes merge their tabs into
-  the last slot (terminal tabs move live via detach/re-attach, editor tabs
-  re-share their document, #142, so dirtiness and undo survive); surplus
-  markdown/diff viewers close; extra slots become scratch editors. Singleton
-  tool panels absent from the layout lose their leaf but **stay registered**
-  (the hide-all-tools precedent) — their toggles resurface them. Running
-  terminals are never killed: shells and TUI tool panes that don't fit a slot
-  merge as **live terminal tabs** into the last terminal slot — which converts
-  to a tab host, #836 — or, with no terminal slot in the layout, into the last
-  editor slot (#1275), so a running process always stays reachable. Plain
-  terminal slots reuse live shells in order, then spawn fresh ones; per-project
-  panels (problems, usages, VCS, debug, structure) restore empty exactly as
-  they do on project restore.
+  layout's editor slots in order; extra slots become scratch editors.
+  Singleton tool panels absent from the layout lose their leaf but **stay
+  registered** (the hide-all-tools precedent) — their toggles resurface them.
+  Running terminals are never killed, and **no leftover pane collapses into a
+  tab** (#1577): content panes and terminals the slots did not consume keep
+  their own panes and graft into the layout's flexible region — the explicit
+  placeholder of a selective layout, or an **implicit** one at the host slot
+  of a full layout (`graftImplicit`: last editor slot, falling back to the
+  last plain shell slot, then any terminal slot, then the last leaf). The
+  host slot's pane joins the leftovers in their **pre-apply relative
+  arrangement**; a fresh host instance instead splits the region 50/50 along
+  its longer axis. A tool pane is never a merge target and is never converted
+  to a tab host by an apply (the pre-#1577 behavior merged surplus shells as
+  tabs into the last terminal slot, tool panes included). Plain terminal
+  slots reuse live shells in order, then spawn fresh ones; per-project panels
+  (problems, usages, VCS, debug, structure) restore empty exactly as they do
+  on project restore.
 - **Selective layouts (#1568):** deselecting panes in the save step stores
   only the selected ones. The deselected leaves are pruned from the snapshot
   tree and the **largest deselected region** survives as a single flexible

@@ -97,6 +97,12 @@ Beyond that you can name arrangements:
 - **Set Default Window Layout…** marks one as the layout new projects start from.
 - ++shift+f12++ restores the default layout when a session has drifted.
 
+Applying a layout never folds your open panes into tabs: editors and running
+terminals that have no slot in the layout keep their own panes and move into
+the flexible space — next to the layout's editor area when the layout pins
+every pane — preserving how they were arranged. Tool panes such as lazygit
+never absorb other terminals.
+
 Named layouts are user-scoped, so they follow you across projects. A saved
 layout that no longer makes sense — a pane type that is gone, a window that
 shrank — degrades rather than failing; you never lose a pane to a stale
