@@ -316,9 +316,18 @@ type Model struct {
 	// toggle gating all of it; mdTables caches the detected pipe tables per
 	// document version (pointer, shared across the value copies like
 	// lineCache).
-	conceal  map[int][]concealRange
-	mdRender bool
-	mdTables *mdTableState
+	conceal map[int][]concealRange
+	// concealExt holds the enclosing-span extents (@conceal.extent, #1599):
+	// per-line column ranges of the inline spans (emphasis, code span, link)
+	// whose marker chrome reveals while the caret is anywhere inside the span,
+	// not only on a marker itself.
+	concealExt map[int][]concealRange
+	mdRender   bool
+	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
+	// applyConfig refresh stops tracking editor.markdown_rendering once the
+	// view toggled.
+	mdRenderSet bool
+	mdTables    *mdTableState
 	// Separator-delimited table rendering (#1589, svtable.go). svRender is
 	// the editor.csv_rendering toggle; svTable caches the visible-row column
 	// layout (pointer, shared across the value copies like mdTables).
@@ -623,7 +632,9 @@ func (m *Model) applyConfig() {
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
 	m.smartPaste = boolOr(m.cfg, "editor.smart_paste", m.smartPaste)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
-	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
+	if !m.mdRenderSet {
+		m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
+	}
 	m.svRender = boolOr(m.cfg, "editor.csv_rendering", m.svRender)
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
@@ -1068,9 +1079,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Conceal spans (#881) feed the markdown rendering layer, not the
 			// style index — a marker cell styles raw on the cursor line but
 			// disappears elsewhere.
-			style, conceal := concealSplit(msg.Spans)
+			style, conceal, extents := concealSplit(msg.Spans)
 			m.hlIndex = highlight.NewIndex(style)
 			m.conceal = conceal
+			m.concealExt = extents
 			m.scopes = msg.Scopes
 			m.folds = msg.Folds
 			m.reconcileFolds()

@@ -96,6 +96,11 @@ func TestMarkdownConcealAndMarkupCaptures(t *testing.T) {
 	if !has("label", 25) { // docs
 		t.Error("link text lost its label capture")
 	}
+	// Span extents (#1599): the enclosing inline spans carry @conceal.extent,
+	// the editor's caret-inside-span reveal ranges.
+	if !has("conceal.extent", 2) || !has("conceal.extent", 15) || !has("conceal.extent", 25) {
+		t.Error("inline spans not captured as conceal.extent")
+	}
 }
 
 // TestMarkdownFencedCodeInjection is the dynamic fence injection (#880): a

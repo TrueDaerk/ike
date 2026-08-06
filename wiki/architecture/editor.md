@@ -1118,7 +1118,10 @@ explicitly out of scope — this mode is the cheap 90%.
 ## Markdown rich rendering (#881)
 
 Vim-conceal-style semi-preview for Markdown, display-only (`markdown.go`) and
-toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
+toggled by `editor.markdown_rendering` (default on, in Settings → Editor) or
+per view by the `view.toggleMarkdownRendering` palette command (#1599, a
+sticky override like the #64 view toggles; it also gates the `markup.*` text
+attributes in `styleAt`):
 
 - **Inline attributes** (all lines): the inline grammar's `markup.*` captures
   render as terminal text attributes — `**bold**` bold, `*italic*` italic,
@@ -1134,6 +1137,14 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   vim's concealcursor granularity). Mouse clicks map back through the hidden
   ranges (`displayClickCol`), so the cursor lands on the character that was
   clicked; buffer-column motions and selections are untouched by design.
+- **Span-extent reveal** (#1599): the query additionally captures the
+  enclosing inline spans (emphasis, code span, links) as `@conceal.extent`;
+  `concealSplit` routes them into a third channel (`concealExt`), and a caret
+  anywhere *inside* such a span — not only on a marker — reveals the conceal
+  ranges the span contains, so `` `code` `` shows both backticks while
+  edited. Extent spans never reach the style index (`NewIndex` drops them —
+  indexed, the node would shadow everything inside it under
+  first-covering-wins).
 - **Stand-in conceals** (#1585): a span carrying a `Replace` string (produced
   by a language's Go span hook, e.g. `.http` percent-encodings — `%20`
   decodes to a space, `%C3%A4` to `ä` across all six source columns) conceals
@@ -1142,17 +1153,28 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   decoded stand-in even when it decodes to a space (#1594). The same
   positional reveal applies, and `displayClickCol` / `DisplayOffset` account
   for the collapsed width.
-- **Pipe tables** (cursor outside the block): detected from the buffer text (a
-  pipe row above a `|---|` delimiter row — equivalent to the grammar's
-  `pipe_table`, but it also works in `CGO_ENABLED=0` builds), re-rendered with
-  box-drawing characters, cells padded/aligned per the delimiter row's `:`
-  colons. **Row-preserving**: the delimiter row becomes the `├─┼─┤` separator
-  and no border rows are added, so line↔row mapping and the gutter stay 1:1.
-  The cursor entering the block flips it back to raw pipe source. Under soft
-  wrap tables stay raw (wrap segments slice raw buffer text; a sliced
-  box-drawing row would tear); with horizontal scroll the rendered row is
-  sliced by the same column window as any other line (ANSI-aware, since the
-  rows carry styling).
+- **Pipe tables**: detected from the buffer text (a pipe row above a `|---|`
+  delimiter row — equivalent to the grammar's `pipe_table`, but it also works
+  in `CGO_ENABLED=0` builds), re-rendered with box-drawing characters, cells
+  padded/aligned per the delimiter row's `:` colons. **Row-preserving**: the
+  delimiter row becomes the `├─┼─┤` separator and no border rows are added,
+  so line↔row mapping and the gutter stay 1:1. Under soft wrap tables stay
+  raw (wrap segments slice raw buffer text; a sliced box-drawing row would
+  tear); with horizontal scroll the rendered row is sliced by the same column
+  window as any other line (ANSI-aware, since the rows carry styling).
+- **Per-cell table reveal** (#1599): the cursor entering the block no longer
+  flips it raw — the frame stays box-drawn and only the cursor's cell shows
+  raw source (`tableCursorRows` re-renders the block with that cell
+  untrimmed, left-anchored and cursor-styled, columns growing to fit). The
+  cursor on table chrome — a pipe, the delimiter row, the indent, past the
+  last cell — reveals its whole row raw instead (reaching the cell edge
+  de-conceals the borders). Secondary carets or a selection touching the
+  block still render it fully raw (their styling only renders through the raw
+  cell loop). Clicks and overlay anchors map between display and source
+  columns through the cell layout (`tableClickCol` / `tableDisplayCol`, keyed
+  on the block's stored column widths): border clicks land on the pipe they
+  draw, cell clicks inside the cell's source segment — exact in the
+  raw-revealed cell, approximate in rendered cells.
 - **Cell inline rendering** (#945): cell content renders its inline markdown
   inside the box-drawing rows — the per-line conceal/style pipeline cannot
   follow text into the re-laid-out cells, so `renderCellInline` is a small

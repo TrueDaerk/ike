@@ -12,10 +12,10 @@ import (
 // markdown.go is the Markdown rich-rendering layer (#881), vim-conceal style:
 // inline emphasis renders with terminal text attributes, marker chrome
 // (**, *, `, link []() parts) is hidden, and pipe tables re-render with
-// box-drawing characters while the cursor is outside the table block. The
-// buffer never changes — this is display only; a concealed range shows raw
-// source exactly while the caret sits inside it (or a selection crosses it,
-// #1594), so editing stays exact.
+// box-drawing characters. The buffer never changes — this is display only; a
+// concealed range shows raw source exactly while the caret sits inside it (or
+// a selection crosses it, #1594) or inside its enclosing inline span (#1599),
+// and a table reveals only the caret's cell (#1599), so editing stays exact.
 //
 // The conceal data rides the ordinary highlight pipeline: the markdown inline
 // query captures the chrome as @conceal, and the SpansMsg handler splits those
@@ -36,31 +36,38 @@ type concealRange struct {
 	standIn    bool
 }
 
-// concealSplit separates conceal spans — the @conceal capture (#881) and any
-// span carrying a Replace stand-in (#1585) — from the style spans of a parse
-// result. The conceal ranges are per-line, in span order (producers emit them
-// left-to-right per line). A Replace span keeps its style span too: the raw
-// source (cursor line, selection) still styles by its capture.
-func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[int][]concealRange) {
-	add := func(s highlight.Span) {
-		if conceal == nil {
-			conceal = make(map[int][]concealRange)
+// concealSplit separates conceal spans — the @conceal capture (#881), the
+// @conceal.extent span extents (#1599) and any span carrying a Replace
+// stand-in (#1585) — from the style spans of a parse result. The conceal
+// ranges are per-line, in span order (producers emit them left-to-right per
+// line). A Replace span keeps its style span too: the raw source (cursor
+// line, selection) still styles by its capture. Extents are the enclosing
+// inline spans (emphasis, code span, link): a caret anywhere inside one
+// reveals the conceal ranges it contains, so the whole span reads raw while
+// edited (see lineConcealRanges).
+func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, extents map[int][]concealRange) {
+	add := func(m *map[int][]concealRange, s highlight.Span) {
+		if *m == nil {
+			*m = make(map[int][]concealRange)
 		}
-		conceal[s.Line] = append(conceal[s.Line], concealRange{
+		(*m)[s.Line] = append((*m)[s.Line], concealRange{
 			start: s.StartCol, end: s.EndCol, repl: s.Replace, standIn: s.Replace != "",
 		})
 	}
 	for _, s := range spans {
-		if s.Capture == "conceal" {
-			add(s)
+		switch {
+		case s.Capture == "conceal":
+			add(&conceal, s)
 			continue
-		}
-		if s.Replace != "" {
-			add(s)
+		case s.Capture == "conceal.extent":
+			add(&extents, s)
+			continue
+		case s.Replace != "":
+			add(&conceal, s)
 		}
 		style = append(style, s)
 	}
-	return style, conceal
+	return style, conceal, extents
 }
 
 // lineConcealRanges returns the conceal ranges applying to line right now:
@@ -87,7 +94,7 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 		cursorCol, cursorOn = m.cursor.Col, true
 	}
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len([]rune(m.buf.Line(line))))
-	revealed := func(r concealRange) bool {
+	inRange := func(r concealRange) bool {
 		if cursorOn && cursorCol >= r.start && cursorCol < r.end {
 			return true
 		}
@@ -98,6 +105,28 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 		}
 		// The selection range is inclusive; the conceal range half-open.
 		return hasSel && r.start <= selEnd && r.end > selStart
+	}
+	// Span extents (#1599): a caret anywhere inside an inline span — not only
+	// on a marker — reveals the markers that span contains, so the whole span
+	// reads raw while edited.
+	var hot []concealRange
+	if m.mdRender {
+		for _, e := range m.concealExt[line] {
+			if inRange(e) {
+				hot = append(hot, e)
+			}
+		}
+	}
+	revealed := func(r concealRange) bool {
+		if inRange(r) {
+			return true
+		}
+		for _, e := range hot {
+			if r.start >= e.start && r.end <= e.end {
+				return true
+			}
+		}
+		return false
 	}
 	anyRevealed := false
 	for _, r := range ranges {
@@ -119,6 +148,15 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	return out
 }
 
+// toggleMarkdownRendering flips markdown rich rendering for this view
+// (view.toggleMarkdownRendering, #1599): conceal, inline attributes and table
+// drawing all key on mdRender, so one flag switches the whole layer between
+// rendered and raw source. The override sticks like the #64 view toggles.
+func (m *Model) toggleMarkdownRendering() {
+	m.mdRender = !m.mdRender
+	m.mdRenderSet = true
+}
+
 // rangeAt returns the conceal range covering the rune column, if any.
 func rangeAt(ranges []concealRange, col int) (concealRange, bool) {
 	for _, r := range ranges {
@@ -134,10 +172,48 @@ func rangeAt(ranges []concealRange, col int) (concealRange, bool) {
 // mdTableBlock is one detected pipe table: the inclusive source line range and
 // one pre-rendered display row per source line (same count — the delimiter row
 // renders as the ├─┼─┤ separator, so line↔row mapping stays trivial and the
-// gutter never reflows).
+// gutter never reflows). widths are the per-column content widths the rows
+// were laid out with (each column's display region is width+2, plus one-cell
+// borders) — the display↔source column mapping (#1599) keys on them.
 type mdTableBlock struct {
 	start, end int
 	rows       []string
+	widths     []int
+}
+
+// cellSeg is one cell's source segment on a pipe row: the [from, to) rune
+// columns between the enclosing pipes, the pipes themselves excluded.
+type cellSeg struct{ from, to int }
+
+// rowCellSegs parses a pipe row into its cell segments, honoring \| escapes.
+// A trailing all-space segment after the closing pipe is not a cell
+// (splitCells trims it the same way). nil when the line is no pipe row.
+func rowCellSegs(line string) []cellSeg {
+	runes := []rune(line)
+	i := 0
+	for i < len(runes) && (runes[i] == ' ' || runes[i] == '\t') {
+		i++
+	}
+	if i >= len(runes) || runes[i] != '|' {
+		return nil
+	}
+	var segs []cellSeg
+	start, esc := i+1, false
+	for j := i + 1; j < len(runes); j++ {
+		switch {
+		case esc:
+			esc = false
+		case runes[j] == '\\':
+			esc = true
+		case runes[j] == '|':
+			segs = append(segs, cellSeg{from: start, to: j})
+			start = j + 1
+		}
+	}
+	if start < len(runes) && strings.TrimSpace(string(runes[start:])) != "" {
+		segs = append(segs, cellSeg{from: start, to: len(runes)})
+	}
+	return segs
 }
 
 // mdTableState caches detected tables per document version. A pointer field on
@@ -150,27 +226,101 @@ type mdTableState struct {
 
 // mdTableRow returns the pre-rendered display row for line when table
 // rendering applies: markdown document, toggle on, no soft wrap (a box-drawn
-// row sliced by raw-text wrap segments would tear), and the cursor outside the
-// block — entering it flips the whole block back to raw pipe source.
+// row sliced by raw-text wrap segments would tear). With the cursor inside
+// the block the frame stays box-drawn and only the cursor's cell reveals raw
+// (#1599, tableRowsAt); secondary carets or a selection inside the block
+// still flip it fully raw.
 func (m Model) mdTableRow(line int) (string, bool) {
-	if !m.mdRender || m.softWrap || m.mdTables == nil {
+	rows, rawLine, b, ok := m.tableRowsAt(line)
+	if !ok || line == rawLine {
 		return "", false
 	}
-	for _, b := range m.tableBlocks() {
-		if line < b.start || line > b.end {
+	return rows[line-b.start], true
+}
+
+// tableRowsAt resolves the box-drawn display of the table block containing
+// line: the display rows, the block (carrying the widths the rows were laid
+// out with), and rawLine — the one block line showing raw pipe source (-1
+// when none; the cursor on table chrome or the delimiter row reveals its
+// whole row). ok=false when line is in no block or the block renders fully
+// raw: rendering off, soft wrap, secondary carets or a selection inside the
+// block (their styling only renders through the raw cell loop).
+func (m Model) tableRowsAt(line int) (rows []string, rawLine int, b mdTableBlock, ok bool) {
+	if !m.mdRender || m.softWrap || m.mdTables == nil {
+		return nil, 0, mdTableBlock{}, false
+	}
+	for _, blk := range m.tableBlocks() {
+		if line < blk.start || line > blk.end {
 			continue
 		}
-		if m.focused && m.cursor.Line >= b.start && m.cursor.Line <= b.end {
-			return "", false
-		}
 		for _, c := range m.carets {
-			if c.pos.Line >= b.start && c.pos.Line <= b.end {
-				return "", false
+			if c.pos.Line >= blk.start && c.pos.Line <= blk.end {
+				return nil, 0, mdTableBlock{}, false
 			}
 		}
-		return b.rows[line-b.start], true
+		if s, e, sel := m.selectionSpansLines(); sel && s <= blk.end && e >= blk.start {
+			return nil, 0, mdTableBlock{}, false
+		}
+		if m.focused && m.cursor.Line >= blk.start && m.cursor.Line <= blk.end {
+			return m.tableCursorRows(blk)
+		}
+		return blk.rows, -1, blk, true
 	}
-	return "", false
+	return nil, 0, mdTableBlock{}, false
+}
+
+// selectionSpansLines returns the inclusive line range of the active visual
+// selection (or the :s///c confirm highlight), ok=false when none is active.
+func (m Model) selectionSpansLines() (start, end int, ok bool) {
+	if sc := m.subConfirm; sc != nil {
+		return sc.curLine, sc.curLine, true
+	}
+	if !m.mode.IsVisual() {
+		return 0, 0, false
+	}
+	start, end = m.anchor.Line, m.cursor.Line
+	if start > end {
+		start, end = end, start
+	}
+	return start, end, true
+}
+
+// tableCursorRows renders blk with the cursor inside it (#1599): the frame
+// stays box-drawn and only the cursor's cell shows raw source, re-laid-out so
+// the column grows to fit the raw text. The cursor on the delimiter row or on
+// table chrome (a pipe, the indent before the first pipe, past the last cell)
+// reveals its whole row as raw source instead — reaching the cell edge
+// de-conceals the borders.
+func (m Model) tableCursorRows(blk mdTableBlock) (rows []string, rawLine int, b mdTableBlock, ok bool) {
+	row := m.cursor.Line - blk.start
+	if row == 1 {
+		return blk.rows, m.cursor.Line, blk, true
+	}
+	cell, segs := m.rawCellAt(m.cursor.Line)
+	if cell < 0 {
+		return blk.rows, m.cursor.Line, blk, true
+	}
+	raw := &mdRawCell{
+		row: row, cell: cell, seg: segs[cell],
+		text:      []rune(m.buf.Line(m.cursor.Line)),
+		cursorCol: m.cursor.Col, style: m.cursorStyle(),
+	}
+	nb := renderTableWith(m.buf.Lines(), blk.start, blk.end, m.cellStyles(), raw)
+	return nb.rows, -1, nb, true
+}
+
+// rawCellAt returns the index of the cell revealed raw on line — the cell the
+// cursor sits in (#1599) — or -1, plus the line's cell segments.
+func (m Model) rawCellAt(line int) (int, []cellSeg) {
+	segs := rowCellSegs(m.buf.Line(line))
+	if m.focused && line == m.cursor.Line {
+		for i, s := range segs {
+			if m.cursor.Col >= s.from && m.cursor.Col < s.to {
+				return i, segs
+			}
+		}
+	}
+	return -1, segs
 }
 
 // tableBlocks returns the document's pipe tables, recomputing only when the
@@ -296,8 +446,8 @@ const (
 // small self-contained renderer instead — like table detection it works
 // without the CGo grammar: `code`, **bold**/__bold__, *italic*/_italic_,
 // ~~strike~~ and [text](url) / ![alt](url), nesting via recursion, unmatched
-// markers literal. The cursor entering the block flips the whole table to raw
-// source, so there is no cursor-line exception to honour here.
+// markers literal. The cursor's own cell renders raw via mdRawCell (#1599),
+// so there is no cursor exception to honour here.
 
 // renderCellInline renders one cell's inline markdown to a styled string.
 func renderCellInline(text string, st mdCellStyles) string {
@@ -456,6 +606,28 @@ func isAlnumRune(r rune) bool {
 	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
 }
 
+// mdRawCell marks one cell to render as raw source (#1599): the
+// block-relative row and cell index, the cell's source segment and row runes,
+// and the cursor cell to style — the raw cell renders untrimmed and
+// left-anchored, so source columns map 1:1 onto its display region.
+type mdRawCell struct {
+	row, cell int
+	seg       cellSeg
+	text      []rune
+	cursorCol int
+	style     lipgloss.Style
+}
+
+// display renders the raw source segment with the cursor cell styled.
+func (rc *mdRawCell) display() string {
+	r := rc.text[rc.seg.from:rc.seg.to]
+	c := rc.cursorCol - rc.seg.from
+	if c < 0 || c >= len(r) {
+		return string(r)
+	}
+	return string(r[:c]) + rc.style.Render(string(r[c])) + string(r[c+1:])
+}
+
 // renderTable pre-renders the block's display rows: cells padded to the
 // column's max display width, aligned per the delimiter row, pipes replaced by
 // │ and the delimiter row by ├─┼─┤. Cell content renders its inline markdown
@@ -463,12 +635,23 @@ func isAlnumRune(r rune) bool {
 // — so widths and alignment size by what is displayed, and the rows carry the
 // styling (borders faint) ready for the ANSI-aware window in renderTableRow.
 func renderTable(lines []string, start, end int, st mdCellStyles) mdTableBlock {
+	return renderTableWith(lines, start, end, st, nil)
+}
+
+// renderTableWith is renderTable with an optional raw-revealed cell (#1599):
+// that cell renders its raw source (untrimmed, left-anchored, cursor styled)
+// instead of its inline-rendered form, and the widths grow to fit it.
+func renderTableWith(lines []string, start, end int, st mdCellStyles, raw *mdRawCell) mdTableBlock {
 	rows := make([][]string, 0, end-start+1)
 	cols := 0
 	for i := start; i <= end; i++ {
 		cells := splitCells(lines[i])
 		if i != start+1 { // the delimiter row stays raw
 			for ci := range cells {
+				if raw != nil && i-start == raw.row && ci == raw.cell {
+					cells[ci] = raw.display()
+					continue
+				}
 				cells[ci] = renderCellInline(cells[ci], st)
 			}
 		}
@@ -503,7 +686,7 @@ func renderTable(lines []string, start, end int, st mdCellStyles) mdTableBlock {
 
 	border := lipgloss.NewStyle().Faint(true)
 	pipe := border.Render("│")
-	b := mdTableBlock{start: start, end: end}
+	b := mdTableBlock{start: start, end: end, widths: widths}
 	for ri, cells := range rows {
 		if ri == 1 {
 			var s strings.Builder
@@ -536,12 +719,121 @@ func renderTable(lines []string, start, end int, st mdCellStyles) mdTableBlock {
 			case alignCenter:
 				left, right = pad/2, pad-pad/2
 			}
+			if raw != nil && ri == raw.row && ci == raw.cell {
+				// The raw-revealed cell stays left-anchored so its source
+				// columns map 1:1 onto the display region (#1599).
+				left, right = 0, pad
+			}
 			s.WriteString(" " + strings.Repeat(" ", left) + cell + strings.Repeat(" ", right) + " ")
 		}
 		s.WriteString(pipe)
 		b.rows = append(b.rows, s.String())
 	}
 	return b
+}
+
+// --- display↔source column mapping on box-drawn rows (#1599) ---------------
+
+// tableCellStart returns the display column of cell ci's first padding cell
+// (right after its left border) in a layout with the given widths: borders
+// are one cell, each column's region is width+2.
+func tableCellStart(widths []int, ci int) int {
+	pos := 1
+	for k := 0; k < ci && k < len(widths); k++ {
+		pos += widths[k] + 3
+	}
+	return pos
+}
+
+// tableClickCol maps a click on a box-drawn table row to a source column: a
+// border click lands on the pipe it draws, a cell click lands inside the
+// cell's source segment — exact in the raw-revealed cursor cell, approximate
+// (relative to the trimmed content) in rendered cells whose inline chrome is
+// concealed. disp counts display cells from the line start; ok=false when the
+// line does not currently render box-drawn.
+func (m Model) tableClickCol(line, disp int) (int, bool) {
+	_, rawLine, b, ok := m.tableRowsAt(line)
+	if !ok || line == rawLine {
+		return 0, false
+	}
+	rawCell, segs := m.rawCellAt(line)
+	if len(segs) == 0 {
+		return 0, false
+	}
+	runes := []rune(m.buf.Line(line))
+	for ci := range b.widths {
+		start := tableCellStart(b.widths, ci)
+		si := ci
+		if si >= len(segs) {
+			si = len(segs) - 1
+		}
+		s := segs[si]
+		if disp < start { // the border before this cell
+			if s.from > 0 {
+				return s.from - 1, true
+			}
+			return s.from, true
+		}
+		if disp < start+b.widths[ci]+2 || ci == len(b.widths)-1 {
+			from := s.from
+			if si != rawCell { // rendered cells display trimmed content
+				for from < s.to && (runes[from] == ' ' || runes[from] == '\t') {
+					from++
+				}
+			}
+			col := from + disp - start - 1
+			if col >= s.to {
+				col = s.to - 1
+			}
+			if col < s.from {
+				col = s.from
+			}
+			return col, true
+		}
+	}
+	return len(runes), true
+}
+
+// tableDisplayCol maps a buffer column on a box-drawn table row to its
+// display column from the line start — DisplayOffset's table branch,
+// tableClickCol's inverse (same exact/approximate split).
+func (m Model) tableDisplayCol(line, col int) (int, bool) {
+	_, rawLine, b, ok := m.tableRowsAt(line)
+	if !ok || line == rawLine {
+		return 0, false
+	}
+	rawCell, segs := m.rawCellAt(line)
+	if len(segs) == 0 {
+		return 0, false
+	}
+	runes := []rune(m.buf.Line(line))
+	for ci := range b.widths {
+		if ci >= len(segs) {
+			break
+		}
+		s := segs[ci]
+		start := tableCellStart(b.widths, ci)
+		if col < s.from { // on or before the pipe left of this cell
+			return start - 1, true
+		}
+		if col < s.to || ci == len(b.widths)-1 || ci == len(segs)-1 {
+			from := s.from
+			if ci != rawCell {
+				for from < s.to && (runes[from] == ' ' || runes[from] == '\t') {
+					from++
+				}
+			}
+			d := start + 1 + col - from
+			if d < start+1 {
+				d = start + 1
+			}
+			if last := start + b.widths[ci] + 1; d > last {
+				d = last
+			}
+			return d, true
+		}
+	}
+	return 0, false
 }
 
 // renderTableRow emits the [from, to) column window of a pre-rendered table

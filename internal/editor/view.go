@@ -344,6 +344,11 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 // stand-in lands on the range start; offsets past the line end map 1:1
 // (everything there is one-cell padding).
 func (m Model) displayClickCol(line, from, offset int) int {
+	// A box-drawn table row (#881) maps through the cell layout instead
+	// (#1599): the click lands in the pointed-at cell, borders on their pipe.
+	if col, ok := m.tableClickCol(line, from+offset); ok {
+		return col
+	}
 	runes := []rune(m.buf.Line(line))
 	conceals := m.lineConcealRanges(line)
 	col := from
@@ -1051,6 +1056,10 @@ func (m Model) DisplayOffset(line, col int) int {
 		// segment; DisplayRow supplies the matching row.
 		segs := m.wrapSegs(line)
 		from = segs[viewport.SegmentIndex(segs, col)]
+	}
+	// A box-drawn table row (#881) maps through the cell layout (#1599).
+	if d, ok := m.tableDisplayCol(line, col); ok {
+		return d - from
 	}
 	conceals := m.lineConcealRanges(line)
 	disp := 0
