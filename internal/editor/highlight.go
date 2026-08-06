@@ -8,6 +8,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/jwt"
 	"ike/internal/secret"
+	"ike/internal/yamlanchor"
 )
 
 // highlight.go drives the Tree-sitter syntax layer (Roadmap 0100). Parsing is
@@ -76,6 +77,12 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// the theme's error colour and an underline unless a capture override
 	// names its own colour.
 	if capture == bracket.Unmatched {
+		return m.unmatchedBracketStyle(st, ok), true
+	}
+	// A YAML alias without a matching anchor (#1629) is broken the same way an
+	// unmatched bracket is: error colour plus underline, override-able via a
+	// theme.captures.anchor.unresolved key.
+	if capture == yamlanchor.Unresolved {
 		return m.unmatchedBracketStyle(st, ok), true
 	}
 	// A JWT's signature segment (#1619) carries no meaning for a reader, so it

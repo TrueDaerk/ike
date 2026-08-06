@@ -375,8 +375,17 @@ func (b *bridge) hover(h host.API) tea.Cmd {
 // false) and the mouse-idle flow (hovered cell, mouse true) share. A mouse
 // reply carries its request position so the editor can drop it when stale.
 func (b *bridge) requestHover(h host.API, path string, line, col int, mouse bool) {
+	if path == "" {
+		return
+	}
+	// Local hover providers (#1629, YAML anchor resolved-value previews) are
+	// consulted first and work with no server at all.
+	if text, ok := ilsp.LocalHoverAt(path, line, col, b.docLines(path)); ok {
+		h.Send(ilsp.HoverMsg{Path: path, Contents: text, Mouse: mouse, Line: line, Col: col})
+		return
+	}
 	mgr := b.manager()
-	if path == "" || mgr == nil {
+	if mgr == nil {
 		return
 	}
 	go func() {
@@ -424,7 +433,7 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	if msg, ok := ilsp.LocalDefinitionAt(path, line, col, b.lineText(path, line)); ok {
+	if msg, ok := ilsp.LocalDefinitionAt(path, line, col, b.docLines(path)); ok {
 		if peek {
 			h.Send(ilsp.PeekDefinitionMsg{Path: msg.Path, Line: msg.Line, Col: msg.Col})
 		} else {
@@ -478,23 +487,28 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 	return nil
 }
 
-// lineText returns line's text for the local-definition providers (#922):
-// from the synced document when a manager tracks the file, else from disk.
-func (b *bridge) lineText(path string, line int) string {
+// docLines returns the document's lines for the local providers (#922,
+// #1629): from the synced document when a manager tracks the file, else from
+// disk. Nil when neither has the file.
+func (b *bridge) docLines(path string) []string {
 	if mgr := b.manager(); mgr != nil {
-		if lines, ok := mgr.DocLines(path); ok && line < len(lines) {
-			return lines[line]
+		if lines, ok := mgr.DocLines(path); ok {
+			return lines
 		}
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return ""
+		return nil
 	}
-	lines := strings.Split(string(data), "\n")
-	if line >= len(lines) {
-		return ""
+	return strings.Split(string(data), "\n")
+}
+
+// lineText returns line's text (for the usages-pane symbol extraction).
+func (b *bridge) lineText(path string, line int) string {
+	if lines := b.docLines(path); line < len(lines) {
+		return lines[line]
 	}
-	return lines[line]
+	return ""
 }
 
 // atDefinition reports whether the editor position (line, col) sits inside
@@ -534,8 +548,16 @@ func definitionNotice(supported bool) string {
 func (b *bridge) references(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
-	mgr := b.manager()
-	if path == "" || mgr == nil {
+	if path == "" {
+		return nil
+	}
+	// Local references providers (#1629, YAML anchor aliases) are consulted
+	// first and work with no server at all.
+	if refs, ok := ilsp.LocalReferencesAt(path, line, col, b.docLines(path)); ok {
+		h.Send(ilsp.ReferencesMsg{Refs: refs})
+		return nil
+	}
+	if b.manager() == nil {
 		return nil
 	}
 	go b.findReferences(h, path, line, col, true)
@@ -565,13 +587,46 @@ func (b *bridge) findReferences(h host.API, path string, line, col int, includeD
 func (b *bridge) referencesPanel(h host.API) tea.Cmd {
 	b.ensure(h)
 	path, line, col := b.cur()
-	mgr := b.manager()
-	if path == "" || mgr == nil {
+	if path == "" {
 		return nil
 	}
 	symbol := identAt(b.lineText(path, line), col)
+	// Local providers claim the panel request too (#1629); the Refresh
+	// continuation re-runs the whole resolution, so an edit that removes the
+	// local target falls back to the server on refresh.
+	if b.localUsages(h, symbol, path, line, col) {
+		return nil
+	}
+	if b.manager() == nil {
+		return nil
+	}
 	go b.findUsages(h, symbol, path, line, col)
 	return nil
+}
+
+// localUsages delivers a locally-claimed references list into the Usages pane
+// (#1629), with a Refresh that re-resolves local-first like the original
+// request. Reports whether a provider claimed.
+func (b *bridge) localUsages(h host.API, symbol, path string, line, col int) bool {
+	refs, ok := ilsp.LocalReferencesAt(path, line, col, b.docLines(path))
+	if !ok {
+		return false
+	}
+	h.Send(ilsp.UsagesMsg{
+		Symbol: symbol,
+		Path:   path,
+		Line:   line,
+		Col:    col,
+		Refs:   refs,
+		Refresh: func() tea.Msg {
+			if b.localUsages(h, symbol, path, line, col) {
+				return nil
+			}
+			go b.findUsages(h, symbol, path, line, col)
+			return nil
+		},
+	})
+	return true
 }
 
 // findUsages is the panel-target find-references core (#1155): request,

@@ -566,7 +566,13 @@ schedule hints) — which the `yaml`, `json` and `toml` producers share for the
 of `internal/numhint` (#1627) ride the same seam in every config format —
 `json`, `yaml`, `toml`, `ini` and `dotenv` all append them, JSON through
 `SpansExcept` so an epoch stand-in keeps its digits (see
-`/architecture/editor.md`, number-readability hints).
+`/architecture/editor.md`, number-readability hints). The `yaml` producer also
+appends the anchor/alias pair coloring of `internal/yamlanchor` (#1629): every
+`&name` and its `*name` aliases share one name-hashed rainbow slot, an alias
+no anchor defines carries `anchor.unresolved` (rendered as an error, see
+`/architecture/highlighting.md`, YAML anchor pairing), and the same scanner
+backs the plugin's local goto/usages/hover providers
+(`plugins/languages/yaml/anchors.go`, see `/architecture/lsp.md`).
 
 The third Go-computed seam is `Lint func(lines []string) []lang.Note` (#1623):
 mistakes a language server would report, for languages that have none. A

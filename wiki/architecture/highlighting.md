@@ -235,6 +235,24 @@ unmatched ones included. Cost is one linear scan of the buffer per async
 parse; the render path is untouched (spans flow through the existing
 per-version cache, 0400).
 
+## YAML anchor pairing (#1629)
+
+YAML anchors and aliases take the palette a third way: **keyed on the name**,
+the `internal/idcolor` content-hash trick. `internal/yamlanchor` — a leaf
+package like `internal/bracket` — scans the buffer line-based (no parser):
+`&name`/`*name` count only at a node-start position (after `:`, `-`, `,`,
+`[`, `{`, `?` or line start — exactly where YAML reserves the indicators),
+never inside comments, quoted scalars or block-scalar bodies. Each alias
+resolves to the nearest **preceding** same-name anchor of its **document**
+(`---` resets, redefinition shadows — the YAML rule), and `Spans` emits
+`rainbow.<hash(name) mod 6>` for every mark, so an anchor and all its aliases
+colour alike across the file. An alias no anchor defines emits
+`anchor.unresolved` instead: the editor renders it like an unmatched bracket —
+error colour, underlined — override-able via `theme.captures.anchor.unresolved`.
+The producer rides the `yaml` plugin's `Spans` hook, so it is always on where
+YAML highlights at all; the same scan backs goto-anchor, find-usages and the
+resolved-value hover (see [lsp.md](./lsp.md), local providers).
+
 ## Depth-coloured indent guides (#1628)
 
 Indent guides (#64) take the same palette, one slot per indent level, which is

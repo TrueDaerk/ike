@@ -106,11 +106,14 @@ func indexFor(dir string) *InventoryIndex {
 // hostsDefinition is the LocalDefinition provider (#922): on an ansible file
 // it resolves the name under the cursor through the inventory index. It only
 // claims on a positive hit, so everything else still reaches the server.
-func hostsDefinition(path string, line, col int, lineText string) (ilsp.DefinitionMsg, bool) {
+func hostsDefinition(path string, line, col int, lines []string) (ilsp.DefinitionMsg, bool) {
 	if l, ok := lang.ByPath(path); !ok || l.ID != "ansible" {
 		return ilsp.DefinitionMsg{}, false
 	}
-	name, ok := hostsRefAt(lineText, col)
+	if line < 0 || line >= len(lines) {
+		return ilsp.DefinitionMsg{}, false
+	}
+	name, ok := hostsRefAt(lines[line], col)
 	if !ok {
 		return ilsp.DefinitionMsg{}, false
 	}

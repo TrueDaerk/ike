@@ -22,6 +22,7 @@ import (
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/numhint"
+	"ike/internal/yamlanchor"
 	"ike/plugins/languages/register"
 )
 
@@ -59,9 +60,11 @@ func init() {
 }
 
 // yamlSpans is the lang.Language.Spans hook: base64 Secret values decode
-// (#1620), cron expressions gain their schedule hint (#1624) and numeric
-// literals their readability hints (#1627).
+// (#1620), cron expressions gain their schedule hint (#1624), numeric
+// literals their readability hints (#1627), and anchors/aliases their
+// name-hashed pair coloring — unresolved aliases the error capture (#1629).
 func yamlSpans(lines []string) []lang.Span {
 	out := append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
-	return append(out, numhint.Spans(lines)...)
+	out = append(out, numhint.Spans(lines)...)
+	return append(out, yamlanchor.Spans(lines)...)
 }
