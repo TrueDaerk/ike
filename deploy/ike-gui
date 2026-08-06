@@ -8,8 +8,11 @@ set -eu
 # A Dock/desktop launch carries the minimal launchd/session environment —
 # the shell profile never ran, so PATH lacks Homebrew, ~/.local/bin, etc.
 # and everything ike spawns (LSP servers, formatters, toolchains) would be
-# missing (#1579). Re-exec once through the user's login shell so the
-# profile environment is loaded and inherited by Ghostty -> ike. `open`
+# missing (#1579). Re-exec once through the user's interactive login shell
+# so the full profile environment is loaded and inherited by Ghostty ->
+# ike. Interactive (-i) because rc files (.zshrc/.bashrc) commonly hold
+# PATH entries like ~/.local/bin that a plain login shell skips (#1581) —
+# the same technique editors use to resolve the shell environment. `open`
 # forwards the caller's environment to the launched app, so this covers
 # macOS too.
 if [ -z "${IKE_GUI_LOGIN:-}" ]; then
@@ -30,7 +33,7 @@ if [ -z "${IKE_GUI_LOGIN:-}" ]; then
     *) self="$(command -v -- "$self" 2>/dev/null || printf '%s' "$self")" ;;
   esac
   if [ -n "$login_shell" ] && [ -x "$login_shell" ]; then
-    exec "$login_shell" -l -c "exec '$self'"
+    exec "$login_shell" -i -l -c "exec '$self'"
   fi
   # No usable login shell found: continue with the environment we have.
 fi
