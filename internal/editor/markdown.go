@@ -79,7 +79,7 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal, exte
 // (#1594, vim's concealcursor granularity).
 func (m Model) lineConcealRanges(line int) []concealRange {
 	var ranges []concealRange
-	if m.mdRender {
+	if m.parseConcealOn() {
 		ranges = m.conceal[line]
 	}
 	if sv := m.svConcealRanges(line); len(sv) > 0 {

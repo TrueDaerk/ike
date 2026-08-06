@@ -38,6 +38,7 @@ import (
 	_ "ike/plugins/languages/http"
 	_ "ike/plugins/languages/ini"
 	_ "ike/plugins/languages/json"
+	_ "ike/plugins/languages/log"
 	_ "ike/plugins/languages/make"
 	_ "ike/plugins/languages/markdown"
 	_ "ike/plugins/languages/php"

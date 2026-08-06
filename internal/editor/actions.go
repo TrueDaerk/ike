@@ -609,6 +609,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleIndentGuides()
 	case "toggle_markdown_rendering":
 		m.toggleMarkdownRendering()
+	case "toggle_log_rendering":
+		m.toggleLogRendering()
 	case "find":
 		if m.insert.active {
 			m.commitInsert()

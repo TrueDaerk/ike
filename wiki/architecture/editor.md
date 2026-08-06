@@ -1222,6 +1222,45 @@ by `editor.csv_rendering` (default on, Settings → Editor):
 
 The buffer never changes — alignment is virtual padding only.
 
+## Log-file rendering (#1621)
+
+`.log` buffers render readable, display-only, toggled by
+`editor.log_rendering` (default on, Settings → Editor) or per view by the
+`view.toggleLogRendering` palette command (an override that sticks like
+`mdRenderSet`). The log language plugin (`plugins/languages/log`, no grammar)
+emits everything through the Go span seam (#1585); the parsing lives in
+`internal/logline`, the editor-side style resolution in `logrender.go`:
+
+- **Line parser** (`logline.Parse`): recognizes the header of the common
+  layouts — logback/log4j (`2024-01-02 10:11:12,345 [main] INFO logger -
+  msg`), slog/zap text and logfmt (`time=… level=… msg=…`), syslog (`Jan  2
+  10:11:12 host proc: …`) — by classifying the leading whitespace tokens;
+  the first unrecognized token ends the header, so stack-trace frames and
+  plain lines fall through unstyled (graceful fallback).
+- **Severity colors**: the level token captures as `log.error` / `log.warn`
+  / `log.info` / `log.debug`; `styleAt` routes `log.*` / `ansi.*` captures
+  through `logStyle`, which prefers an explicit `theme.captures.log.*`
+  override and otherwise draws from the palette — `Error`/`Warning` for the
+  two loud buckets, terminal *faint* for `log.time` and `log.debug`.
+  Debug/trace lines additionally get a whole-line `log.debug` span emitted
+  last, so the header spans win where they overlap and the message dims.
+- **Dimmed timestamps**: `log.time`, faint, so message text stands out.
+- **Rainbow threads/loggers**: thread and logger names capture as
+  `log.rainbow.<fnv(name)%6>` — the #1589 palette mechanic keyed on the
+  *name hash* instead of the column index, so one thread keeps one color on
+  every line and interleaved threads separate visually.
+- **ANSI escapes** (`logline.ScanSGR`): every CSI sequence conceals via the
+  ordinary parse-produced conceal pipeline (#881's `@conceal` capture, the
+  positional caret/selection reveal of #1594 included — the gate in
+  `lineConcealRanges` keys on `logRender` for log buffers instead of
+  `mdRender`). SGR sequences additionally drive a running style; the text
+  between them carries an `ansi.<spec>` capture (`fg1.bold`, `fg#0080ff`)
+  that `logStyle` resolves against the theme's terminal palette (#1363) for
+  indexes 0–15, 256-color indexes and truecolor literals directly.
+
+Toggling off shows plain raw source — no styling, escape bytes visible. The
+buffer never changes.
+
 ## Inline color preview (#790)
 
 Recognized color literals — `#rrggbb`, `#rgb`, `rgb()/rgba()`, `hsl()/hsla()`
@@ -1311,7 +1350,8 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `trim_trailing_whitespace`, `insert_final_newline`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
-`indent_guides`, `rulers`, `markdown_rendering` (#881), `color_preview`
+`indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
+(#1621), `color_preview`
 (#790) and `search_ignore_case` (#1111, default off — in-file search folds
 case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,

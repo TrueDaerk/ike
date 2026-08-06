@@ -33,6 +33,10 @@ type fileColors struct {
 	// back to the Toml color — the config-file family — so the built-in
 	// themes need no per-theme entry; a theme may still set it.
 	INI string
+	// Log covers log files (#1621). Empty falls back to the Lock color — the
+	// generated-output family — so the built-in themes need no per-theme
+	// entry; a theme may still set it.
+	Log string
 }
 
 // fileGroups maps each fileColors group to the extension and filename keys it
@@ -58,6 +62,7 @@ var fileGroups = map[string][]string{
 	"http":   {"http", "rest"},
 	"csv":    {"csv", "tsv", "psv"},
 	"ini":    {"ini", "conf"},
+	"log":    {"log"},
 }
 
 // filesTable expands a fileColors spec into the flat extension/filename →
@@ -70,12 +75,15 @@ func filesTable(c fileColors) map[string]string {
 	if c.INI == "" {
 		c.INI = c.Toml // config-file family default (#1595)
 	}
+	if c.Log == "" {
+		c.Log = c.Lock // generated-output family default (#1621)
+	}
 	groups := map[string]string{
 		"go": c.Go, "lock": c.Lock, "md": c.Md, "toml": c.Toml,
 		"json": c.JSON, "yaml": c.YAML, "py": c.Py, "php": c.PHP,
 		"js": c.JS, "html": c.HTML, "css": c.CSS, "shell": c.Shell,
 		"sql": c.SQL, "xml": c.XML, "make": c.Make, "docker": c.Docker,
-		"http": c.HTTP, "csv": c.CSV, "ini": c.INI,
+		"http": c.HTTP, "csv": c.CSV, "ini": c.INI, "log": c.Log,
 	}
 	t := map[string]string{"dir": c.Dir, "default": c.Default}
 	for g, color := range groups {

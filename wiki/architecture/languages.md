@@ -533,4 +533,7 @@ applies; a language with `Spans` but no grammar still schedules parses
 structure (rainbow column captures) Go-computed. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
 and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
-comments as Go-computed spans, with no grammar and no server.
+comments as Go-computed spans, with no grammar and no server. The log
+language (`plugins/languages/log`, #1621) too: severity, timestamp, rainbow
+thread/logger and ANSI-escape spans, all computed in `internal/logline` (see
+`/architecture/editor.md`, log-file rendering).

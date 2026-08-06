@@ -83,6 +83,7 @@ func defaults() *Config {
 			SmartPaste:             true,
 			MarkdownRendering:      true,
 			CSVRendering:           true,
+			LogRendering:           true,
 			ColorPreview:           true,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,

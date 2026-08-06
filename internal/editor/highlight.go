@@ -57,6 +57,14 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	if capture == "" {
 		return lipgloss.Style{}, false
 	}
+	// Log-layer captures (#1621) resolve through the palette-aware table in
+	// logrender.go and honor the log-rendering toggle: off means raw text.
+	if logCapture(capture) {
+		if !m.logRender {
+			return lipgloss.Style{}, false
+		}
+		return m.logStyle(capture)
+	}
 	st, ok := m.hlTheme.Style(capture)
 	// markup.* captures (#881) carry terminal text attributes, not colors:
 	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —

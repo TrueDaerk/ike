@@ -134,6 +134,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.smart_paste", c.Editor.SmartPaste)
 	put("editor.markdown_rendering", c.Editor.MarkdownRendering)
 	put("editor.csv_rendering", c.Editor.CSVRendering)
+	put("editor.log_rendering", c.Editor.LogRendering)
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.rainbow_brackets", c.Editor.RainbowBrackets)
 	put("editor.search_ignore_case", c.Editor.SearchIgnoreCase)
