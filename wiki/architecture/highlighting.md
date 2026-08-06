@@ -39,6 +39,7 @@ internal/highlight/
   parse_stub.go   //go:build !cgo — a no-op so CGO_ENABLED=0 still builds.
   fragment*.go    embedded-fragment detection via injection queries (shared with LSP).
   injection.go    layers fragment spans (parsed with the fragment's grammar) over host spans.
+  regex.go        built-in regex mini-grammar for fragment.regex injections (#1631).
 ```
 
 A language's grammar is an opaque `lang.Grammar` built by `highlight.NewGrammar`
@@ -134,6 +135,29 @@ Region detectors run before the grammar's own injection query and replace it
 (`fragmentsFor`); injected spans stack under the host's `Spans` hook exactly
 like query-detected fragments, so YAML's base64 decoding and cron hints keep
 working inside a workflow.
+
+One injection target is **not a language**: `@fragment.regex` (#1631) routes to
+a built-in regex mini-grammar (`regex.go`, pure Go) instead of a registered
+grammar — `overlayFragments` special-cases the `regex` id before the registry
+lookup. Context detection lives in the hosts' injection queries, gated by
+tree-sitter text predicates (`#match?`/`#eq?`, evaluated by the go-tree-sitter
+binding): **Go** injects the first argument of
+`regexp.Compile/MustCompile(POSIX)`, **Python** the first string argument of
+the `re` module's matchers (`re.compile`, `re.match`, `re.sub`, …), and
+**TypeScript/JS** every `/…/` literal plus the first string argument of
+`new RegExp(…)` / `RegExp(…)`. The tokenizer emits captures for character
+classes (`regex.class` — `[…]` bodies, `\d`-style shorthands, `\p{…}`, the `.`
+wildcard), escapes (`regex.escape`), quantifiers (`regex.quantifier`, including
+`{m,n}` counts and lazy suffixes), anchors (`regex.anchor` — `^ $ \b \A …`),
+alternation (`regex.alternation`), group names (`regex.group.name`), inline
+flags (`regex.flags`) and `(?#…)` comments (`regex.comment`); literal runs emit
+no span, so the host string colour shows through. All the captures derive from
+the active palette via `regexSources` in `theme.go` (same mechanism as the
+diff captures, overridable per `theme.captures.regex.*`). Group parens pair by
+colour: open and close of the same group share a rainbow-bracket slot keyed by
+nesting depth (`rainbow.N`), falling back to the flat `regex.group` capture
+when rainbow brackets are disabled. On the LSP side a `regex` fragment resolves
+no server and is skipped silently, so the virtual-document seam is unaffected.
 
 Since #880 the query can also name the language **dynamically**: a pattern
 capturing `@fragment.language` (a tag node, e.g. a markdown fence info string)

@@ -118,3 +118,65 @@ func TestTemplateInjectionComposes(t *testing.T) {
 		t.Errorf("const: got capture %q, want keyword", got)
 	}
 }
+
+// Regex injections (#1631): /…/ literals and RegExp construction inject the
+// built-in regex mini-grammar.
+
+func TestFragmentsRegexLiteral(t *testing.T) {
+	lines := []string{
+		`const re = /^[a-z]+$/gi;`,
+	}
+	frags := highlight.Fragments("typescript", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d fragments, want 1: %+v", len(frags), frags)
+	}
+	f := frags[0]
+	if f.Lang != "regex" {
+		t.Errorf("Lang = %q, want regex", f.Lang)
+	}
+	if got := strings.Join(f.Lines, "\n"); got != `^[a-z]+$` {
+		t.Errorf("content = %q, want ^[a-z]+$", got)
+	}
+	if want := len(`const re = /`); f.StartCol != want {
+		t.Errorf("StartCol = %d, want %d", f.StartCol, want)
+	}
+}
+
+func TestFragmentsNewRegExp(t *testing.T) {
+	lines := []string{
+		`const re = new RegExp("a|b", "g");`,
+	}
+	frags := highlight.Fragments("typescript", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d fragments, want 1: %+v", len(frags), frags)
+	}
+	if frags[0].Lang != "regex" {
+		t.Errorf("Lang = %q, want regex", frags[0].Lang)
+	}
+	if got := strings.Join(frags[0].Lines, "\n"); got != `a|b` {
+		t.Errorf("content = %q, want a|b", got)
+	}
+}
+
+func TestFragmentsBareRegExpCall(t *testing.T) {
+	lines := []string{
+		`const re = RegExp("x+");`,
+	}
+	frags := highlight.Fragments("typescript", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d fragments, want 1: %+v", len(frags), frags)
+	}
+	if frags[0].Lang != "regex" {
+		t.Errorf("Lang = %q, want regex", frags[0].Lang)
+	}
+}
+
+func TestFragmentsPlainStringNotRegex(t *testing.T) {
+	lines := []string{
+		`const s = "a|b";`,
+		`const t = other("x+");`,
+	}
+	if frags := highlight.Fragments("typescript", lines); len(frags) != 0 {
+		t.Fatalf("plain strings produced fragments: %+v", frags)
+	}
+}

@@ -27,6 +27,13 @@ func overlayFragments(l lang.Language, lines []string, host []Span) ([]Span, []F
 	var injected []Span
 	var folds []Fold
 	for _, f := range frags {
+		// The built-in regex mini-grammar (#1631) is an injection target
+		// without a registered language: fragment.regex captures route here
+		// instead of through a Tree-sitter grammar.
+		if f.Lang == "regex" {
+			injected = append(injected, offsetSpans(RegexSpans(f.Lines), f)...)
+			continue
+		}
 		el, ok := lang.ByID(f.Lang)
 		if !ok || el.Grammar == nil {
 			continue
