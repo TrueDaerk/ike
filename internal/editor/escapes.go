@@ -18,6 +18,7 @@ package editor
 import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
+	"ike/internal/secret"
 )
 
 // decodeOn reports whether the decode family named by capture is switched on
@@ -32,6 +33,10 @@ func (m Model) decodeOn(capture string) bool {
 		return m.entDecode
 	case escapes.Base64Capture:
 		return m.b64Decode
+	case secret.Capture:
+		// Not a decode but the same stand-in mechanic (#1623): "on" means the
+		// mask shows and the value hides, gated by editor.secret_masking.
+		return m.secretMask
 	}
 	return false
 }

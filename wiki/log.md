@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-06 (lang: dotenv secret masking and duplicate keys, #1623)
+
+- `internal/secret` decides from a key's name alone whether its value is a
+  credential (`*_SECRET`, `PASSWORD`, `*_TOKEN`, `*_KEY`, `CREDENTIALS`, …,
+  with `PUBLIC_KEY`/`API_KEY_ID`/`TOKEN_URL` cleared again). The dotenv
+  producer emits such values as fixed-width `••••` stand-ins (#1585) on their
+  own conceal channel, revealed positionally under the caret (#1594) and
+  gated by `editor.secret_masking` / `view.toggleSecretMasking`.
+- New registry seam `lang.Language.Lint func(lines []string) []lang.Note`:
+  Go-computed diagnostics for languages without a server, produced by the
+  highlight pass and merged into the gutter tint and inline underline through
+  a channel a `DiagnosticsMsg` cannot clobber. First user: dotenv flags every
+  duplicate key except the last, which is the assignment loaders keep.
+
 ## 2026-08-06 (editor: JWT detection and decoding, #1619)
 
 - `internal/jwt` detects JSON Web Tokens structurally — three non-empty

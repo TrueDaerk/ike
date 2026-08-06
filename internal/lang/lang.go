@@ -129,7 +129,37 @@ type Language struct {
 	// placeholders). Like Regions, it runs on every highlight pass and must
 	// be cheap. Nil — the normal case — means the language has none.
 	Spans func(lines []string) []Span
+
+	// Lint optionally produces Go-computed notes for a buffer of this
+	// language (#1623): mistakes a language server would report, for
+	// languages that have none. Dotenv's duplicate keys are the first case —
+	// an earlier `KEY=` silently loses to a later one in most loaders, which
+	// is invisible without a mark. It rides the highlight pass like Spans, so
+	// it must be cheap; nil — the normal case — means the language has no
+	// linter. See Note.
+	Lint func(lines []string) []Note
 }
+
+// Note is one Go-computed diagnostic (#1623): the half-open rune-column range
+// [StartCol, EndCol) on Line, with an LSP severity (1 error, 2 warning,
+// 3 information, 4 hint) and the message explaining it. The editor merges
+// notes into the same gutter tint and inline underline that language-server
+// diagnostics use, so a linted language marks problems without a server.
+type Note struct {
+	Line     int
+	StartCol int
+	EndCol   int
+	Severity int
+	Message  string
+}
+
+// Note severities, mirroring the LSP numbering used by internal/lsp.
+const (
+	NoteError = 1
+	NoteWarn  = 2
+	NoteInfo  = 3
+	NoteHint  = 4
+)
 
 // Span is one Go-produced highlight run (#1585), the registry-level twin of
 // highlight.Span: the half-open rune-column range [StartCol, EndCol) on Line

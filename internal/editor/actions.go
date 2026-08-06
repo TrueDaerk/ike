@@ -619,6 +619,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleEntityDecoding()
 	case "toggle_base64_decoding":
 		m.toggleBase64Decoding()
+	case "toggle_secret_masking":
+		m.toggleSecretMasking()
 	case "toggle_color_preview":
 		m.toggleColorPreview()
 	case "decode_jwt":

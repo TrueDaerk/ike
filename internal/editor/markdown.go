@@ -9,6 +9,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/highlight"
+	"ike/internal/secret"
 )
 
 // markdown.go is the Markdown rich-rendering layer (#881), vim-conceal style:
@@ -41,13 +42,16 @@ type concealRange struct {
 // decodeCaptures are the capture names of the decode conceal families that
 // ride their own channels, each gated by its own toggle: decoded epoch
 // timestamps (#1618) and the #1620 escape families (unicode escapes, HTML/XML
-// entities, base64 Secret values). The slice order is the per-line combine
-// order in lineConcealRanges — fixed, so rendering is deterministic.
+// entities, base64 Secret values), plus the secret masking family (#1623),
+// which conceals rather than decodes but rides the same channel. The slice
+// order is the per-line combine order in lineConcealRanges — fixed, so
+// rendering is deterministic.
 var decodeCaptures = []string{
 	epochtime.Capture,
 	escapes.UnicodeCapture,
 	escapes.EntityCapture,
 	escapes.Base64Capture,
+	secret.Capture,
 }
 
 func isDecodeCapture(capture string) bool {

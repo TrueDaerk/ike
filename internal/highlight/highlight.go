@@ -25,7 +25,19 @@ func Lang(path string) string {
 // schedules a parse when it will produce spans.
 func Supported(path string) bool {
 	l, ok := lang.ByPath(path)
-	return ok && (l.Grammar != nil || l.Spans != nil)
+	return ok && (l.Grammar != nil || l.Spans != nil || l.Lint != nil)
+}
+
+// Lint runs the language's Go-computed linter (#1623) over lines and returns
+// its notes; nil when the path has no language or the language registers no
+// Lint. It rides the same schedule as the parse — the editor calls both in one
+// command — so a linted language needs no separate pipeline.
+func Lint(path string, lines []string) []lang.Note {
+	l, ok := lang.ByPath(path)
+	if !ok || l.Lint == nil {
+		return nil
+	}
+	return l.Lint(lines)
 }
 
 // Highlight parses lines with the grammar for path and returns the spans,

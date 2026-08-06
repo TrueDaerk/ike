@@ -9,6 +9,8 @@
 // per-line index and the theme) is pure Go and compiles in either mode.
 package highlight
 
+import "ike/internal/lang"
+
 // Span is one highlighted run on a single line: the half-open rune-column range
 // [StartCol, EndCol) carries the Tree-sitter capture name (e.g. "keyword",
 // "string", "function") that the theme resolves to a colour. Multi-line grammar
@@ -40,6 +42,9 @@ type SpansMsg struct {
 	// pre-order; nil when the language registers no FoldNodes (and no
 	// ScopeNodes to fall back on).
 	Folds []Fold
+	// Notes are the Go-computed lint notes (#1623) produced by the same pass;
+	// nil when the language registers no Lint.
+	Notes []lang.Note
 }
 
 // Index is a per-line lookup over a span set, built once when the editor caches
