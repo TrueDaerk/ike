@@ -422,12 +422,13 @@ func (m *Model) resolveMotion(s string, r rune, count int) (motion.Result, bool)
 	// Word navigation with Option/Alt+Left/Right (#303): word-wise within the
 	// current line, '.' counts as a stop point. Paragraph jumps with
 	// Alt+Up/Down. Ctrl variants are the everywhere-deliverable fallback.
-	// Shift+arrows are selection keys, handled before motion resolution in
-	// normal and visual mode; the shifted chords resolve here only for
-	// insert-mode movement.
-	case "alt+right", "ctrl+right", "alt+shift+right", "ctrl+shift+right":
+	// alt+b/alt+f are the readline sequences terminals synthesize for
+	// Option+Arrows (ESC b / ESC f, #1583). Shift+arrows are selection keys,
+	// handled before motion resolution in normal and visual mode; the shifted
+	// chords resolve here only for insert-mode movement.
+	case "alt+right", "ctrl+right", "alt+shift+right", "ctrl+shift+right", "alt+f":
 		return motion.WordForwardInLine(m.buf, m.cursor, count), true
-	case "alt+left", "ctrl+left", "alt+shift+left", "ctrl+shift+left":
+	case "alt+left", "ctrl+left", "alt+shift+left", "ctrl+shift+left", "alt+b":
 		return motion.WordBackwardInLine(m.buf, m.cursor, count), true
 	case "alt+down", "ctrl+down":
 		return motion.ParagraphForward(m.buf, m.cursor, count), true

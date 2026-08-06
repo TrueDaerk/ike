@@ -399,9 +399,14 @@ for `d`/`c`. The `g` prefix stays available while an operator is pending, so
 word motions clamped to the current line (#303) — `.` inside identifiers counts
 as a stop point (`config.editor.tabWidth` yields sub-word stops), and past the
 first/last word the caret lands on the line start/end instead of crossing
-lines; cross-line word motion stays on vim `w`/`b`/`e`. `Alt+↑/↓` (and
+lines; cross-line word motion stays on vim `w`/`b`/`e`. `Alt+b`/`Alt+f` are
+aliases for the same in-line word motions (#1583) — terminals that keep
+macOS Option as a composition key synthesize Option+Arrows as the readline
+sequences `ESC b`/`ESC f`, which decode to those chords. `Alt+↑/↓` (and
 `Ctrl+↑/↓`) are paragraph jumps — all of these work in normal, visual and
-insert. `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
+insert. In insert mode `alt+delete` (with `ctrl+delete` and readline
+`alt+d` as fallbacks) kills forward to the next word start, mirroring the
+`alt+backspace` word kill (#1583). `Shift+arrows` (plus `Shift+Home/End`) are selection keys: in normal
 mode they enter charwise visual mode anchored at the cursor and move; in visual
 mode they extend the selection like their plain counterparts.
 `Shift+Alt/Option+←/→` (and `Shift+Ctrl+←/→`) extend the selection by the same

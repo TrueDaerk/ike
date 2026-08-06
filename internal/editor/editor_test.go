@@ -1652,6 +1652,77 @@ func TestInsertWordAndLineKill(t *testing.T) {
 	})
 }
 
+// TestInsertForwardWordKill (#1583): alt+delete / ctrl+delete / alt+d in
+// insert mode delete forward to the next word start; the caret stays put and
+// the whole insert stays one undo unit.
+func TestInsertForwardWordKill(t *testing.T) {
+	mk := func(k tea.KeyPressMsg) func(*testing.T) {
+		return func(t *testing.T) {
+			m, _ := loaded(t, "alpha bravo charlie\n")
+			m = typeKeys(m, "i") // insert at col 0
+			m = send(m, k)
+			if line(m, 0) != "bravo charlie" {
+				t.Fatalf("word kill=%q want %q", line(m, 0), "bravo charlie")
+			}
+			m = send(m, k)
+			if line(m, 0) != "charlie" {
+				t.Fatalf("second word kill=%q want %q", line(m, 0), "charlie")
+			}
+			if m.cursor.Col != 0 {
+				t.Fatalf("caret moved to col %d", m.cursor.Col)
+			}
+			// The whole insert (both kills) undoes as one unit.
+			m = send(m, special(tea.KeyEsc))
+			m = typeKeys(m, "u")
+			if line(m, 0) != "alpha bravo charlie" {
+				t.Fatalf("undo=%q", line(m, 0))
+			}
+		}
+	}
+	t.Run("alt+delete", mk(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt}))
+	t.Run("ctrl+delete", mk(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModCtrl}))
+	t.Run("alt+d", mk(tea.KeyPressMsg{Code: 'd', Mod: tea.ModAlt}))
+
+	// At the line end the kill crosses into the next line, mirroring the
+	// cross-line backward kill.
+	t.Run("cross-line", func(t *testing.T) {
+		m, _ := loaded(t, "one two\nthree\n")
+		m = typeKeys(m, "A") // insert at end of line 0
+		m = send(m, tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModAlt})
+		if m.buf.LineCount() != 1 || line(m, 0) != "one twothree" {
+			t.Fatalf("cross-line kill=%q", m.buf.Lines())
+		}
+	})
+}
+
+// TestReadlineWordMotionAliases (#1583): alt+b / alt+f are the readline
+// sequences terminals synthesize for Option+Arrows (ESC b / ESC f); they move
+// word-wise within the line like alt+left / alt+right.
+func TestReadlineWordMotionAliases(t *testing.T) {
+	m, _ := loaded(t, "alpha bravo charlie\n")
+	m = send(m, tea.KeyPressMsg{Code: 'f', Mod: tea.ModAlt})
+	if m.cursor.Col != 6 {
+		t.Fatalf("alt+f col=%d want 6", m.cursor.Col)
+	}
+	m = send(m, tea.KeyPressMsg{Code: 'f', Mod: tea.ModAlt})
+	if m.cursor.Col != 12 {
+		t.Fatalf("second alt+f col=%d want 12", m.cursor.Col)
+	}
+	m = send(m, tea.KeyPressMsg{Code: 'b', Mod: tea.ModAlt})
+	if m.cursor.Col != 6 {
+		t.Fatalf("alt+b col=%d want 6", m.cursor.Col)
+	}
+	// The aliases also move mid-insert, like the arrow chords.
+	m = typeKeys(m, "i")
+	m = send(m, tea.KeyPressMsg{Code: 'f', Mod: tea.ModAlt})
+	if m.cursor.Col != 12 {
+		t.Fatalf("insert alt+f col=%d want 12", m.cursor.Col)
+	}
+	if line(m, 0) != "alpha bravo charlie" {
+		t.Fatalf("buffer changed: %q", line(m, 0))
+	}
+}
+
 // TestInsertKillLine (#955): cmd+backspace in insert mode is IntelliJ's Delete
 // Line — the whole current line vanishes, including the preceding line break;
 // the cursor lands at the end of the previous line. On line 0 the following
