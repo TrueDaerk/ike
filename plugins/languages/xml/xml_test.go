@@ -58,3 +58,16 @@ func TestXMLRegistered(t *testing.T) {
 		t.Errorf("block comment = %v, want <!-- -->", block)
 	}
 }
+
+// TestXMLEntitySpans (#1620): only the five predefined entities (plus
+// numeric references) decode — HTML-only names stay raw.
+func TestXMLEntitySpans(t *testing.T) {
+	l, ok := lang.ByID("xml")
+	if !ok || l.Spans == nil {
+		t.Fatal("xml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{`<a>&amp; &auml; &#x2026;</a>`})
+	if len(spans) != 2 || spans[0].Replace != "&" || spans[1].Replace != "\u2026" {
+		t.Errorf("spans = %+v, want &amp; and &#x2026; decoded, &auml; raw", spans)
+	}
+}

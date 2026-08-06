@@ -12,6 +12,7 @@ package langxml
 import (
 	_ "embed"
 
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -36,5 +37,15 @@ func init() {
 		// element body scrolls; elements, CDATA and comments collapse.
 		ScopeNodes: []string{"element"},
 		FoldNodes:  []string{"element", "CDSect", "Comment", "doctypedecl"},
+		// Entity decoding (#1620): only XML's five predefined entities plus
+		// numeric references — other names are document-defined, guessing the
+		// HTML table for them would lie.
+		Spans: entitySpans,
 	})
+}
+
+// entitySpans is the lang.Language.Spans hook (#1620): character references
+// conceal as the decoded text.
+func entitySpans(lines []string) []lang.Span {
+	return escapes.EntitySpans(lines, escapes.EntityXML)
 }

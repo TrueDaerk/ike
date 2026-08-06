@@ -48,3 +48,22 @@ func TestWebFormatterEnabled(t *testing.T) {
 		}
 	}
 }
+
+// TestWebEscapeSpans (#1620): typescript decodes unicode escapes in string
+// literals, html decodes character references by the full entity table.
+func TestWebEscapeSpans(t *testing.T) {
+	ts, ok := lang.ByID("typescript")
+	if !ok || ts.Spans == nil {
+		t.Fatal("typescript: no Spans producer registered")
+	}
+	if spans := ts.Spans([]string{`const s = "\u00e4"`}); len(spans) != 1 || spans[0].Replace != "\u00e4" {
+		t.Errorf("typescript spans = %+v, want one decoding to \u00e4", spans)
+	}
+	h, ok := lang.ByID("html")
+	if !ok || h.Spans == nil {
+		t.Fatal("html: no Spans producer registered")
+	}
+	if spans := h.Spans([]string{`M&auml;rz &#x2026;`}); len(spans) != 2 || spans[0].Replace != "\u00e4" || spans[1].Replace != "\u2026" {
+		t.Errorf("html spans = %+v, want \u00e4 and the ellipsis", spans)
+	}
+}

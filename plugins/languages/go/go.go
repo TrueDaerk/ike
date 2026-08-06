@@ -7,6 +7,7 @@ package langgo
 import (
 	_ "embed"
 
+	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -72,6 +73,9 @@ func init() {
 		// New .go files start with their package clause, named after the
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",
+		// Unicode-escape decoding (#1620): \uXXXX / \UXXXXXXXX in string and
+		// rune literals conceal as the escaped character.
+		Spans: escapes.UnicodeSpans,
 		// Test runner (#1150): gutter run markers on Test/Benchmark/Fuzz
 		// declarations in _test.go files; a single test runs with cwd = the
 		// file's directory, so plain `go test` targets its package.

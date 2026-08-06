@@ -1275,10 +1275,11 @@ in `timestamps.go`:
   milliseconds). Rendering, the positional caret/selection reveal (#1594) and
   the click/offset remapping are the shared stand-in path: the raw digits are
   always one motion away, and the buffer never changes.
-- **Own conceal channel**: `concealSplit` routes `timestamp` stand-ins into a
-  fourth channel (`stamps`) instead of `conceal`, so `tsDecode` gates them
+- **Own conceal channel**: `concealSplit` routes `timestamp` stand-ins into
+  the decode-family channel map (`decodes`, keyed by capture — shared with the
+  #1620 escape families) instead of `conceal`, so `tsDecode` gates them
   independently of the markdown (#1599) and log (#1621) rendering toggles,
-  which gate the other channels.
+  which gate the other channels, and of the other decode families.
 - **Range heuristic**: only 9–10 digit seconds and 12–13 digit milliseconds
   between 2001-01-01 and 2100-01-01 decode; a leading zero disqualifies a run.
   Ports, byte counts, ids and years are left alone.
@@ -1333,6 +1334,45 @@ the editor half in `jwt.go`:
 - **Producers**: the `.http` span producer scans every line of the buffer (a
   token shows up in a header, a body, a `@variable` and a pasted response
   alike), the dotenv producer scans every value.
+
+## Escaped-text decoding (#1620)
+
+The #1585 percent-decoding generalized to other escape families: escaped text
+renders decoded in place, display-only, via the shared stand-in mechanic
+(#1585) with the positional caret/selection reveal (#1594) — the raw bytes
+reappear under the caret and edits always operate on the raw source.
+Detection lives in `internal/escapes`, the editor half in `escapes.go`; each
+family has its own capture, conceal channel and toggle:
+
+- **Unicode escapes** (`escape.unicode`, `editor.unicode_escape_decoding` /
+  `view.toggleUnicodeEscapeDecoding`): `\uXXXX` — UTF-16 surrogate pairs
+  combine into one span — and Go's `\UXXXXXXXX`, decoded only inside a
+  single-line `"`/`'` literal (that is where JSON, JS/TS and Go put them; the
+  scanner walks the quote state and consumes escapes pairwise, so `\\u0041`
+  stays raw). A truncated escape, a lone surrogate, a value beyond the
+  Unicode range or a non-graphic code point stays raw. Producers: `json`,
+  `ndjson`, `go`, `typescript`.
+- **HTML/XML entities** (`escape.entity`, `editor.entity_decoding` /
+  `view.toggleEntityDecoding`): `&name;`, `&#123;`, `&#x1F600;`. The `html`
+  producer decodes by the full HTML named-entity table (stdlib
+  `html.UnescapeString`, prefix-only matches like `&notit;` rejected); the
+  `xml` producer decodes only the five predefined entities plus numeric
+  references — other names are document-defined in XML, guessing the HTML
+  table would lie. Non-graphic code points (ZWJ, controls) stay raw: an
+  invisible stand-in would hide that the reference exists.
+- **Base64 values** (`escape.base64`, `editor.base64_decoding` /
+  `view.toggleBase64Decoding`): decoded inline only where base64 is the
+  *convention*, not on every base64-looking string — the `data:` block of a
+  YAML document declaring `kind: Secret` (per `---`-separated document), and
+  only when the payload decodes to printable single-line UTF-8 (one trailing
+  newline forgiven — `echo secret | base64` leaves it). Binary secrets stay
+  raw; `stringData:` holds plaintext and is never touched.
+
+`concealSplit` routes all decode-family stand-ins (these three plus #1618's
+`timestamp`) into a per-capture channel map (`decodes`), and
+`lineConcealRanges` gates each family on its own toggle (`decodeOn`) — so the
+families switch independently of each other and of the markdown/log layers.
+All toggles default on and stick per view like the #64 toggles.
 
 ## Inline color preview (#790)
 

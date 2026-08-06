@@ -75,7 +75,7 @@ func TestEpochSpans(t *testing.T) {
 			t.Fatalf("%s: no Spans producer registered", id)
 		}
 	}
-	spans := epochSpans([]string{
+	spans := jsonSpans([]string{
 		`{"created_at": 1722945600, "id": 42, "1722945600": "key"}`,
 		`  "note": "written at 1722945600"`,
 	})
@@ -88,5 +88,17 @@ func TestEpochSpans(t *testing.T) {
 	}
 	if s.Replace != "2024-08-06 12:00:00Z" {
 		t.Errorf("stand-in = %q, want the decoded UTC form", s.Replace)
+	}
+}
+
+// TestJSONUnicodeEscapeSpans (#1620): the shared span hook also decodes
+// \uXXXX escapes inside strings.
+func TestJSONUnicodeEscapeSpans(t *testing.T) {
+	spans := jsonSpans([]string{`{"name": "M\u00e4rz"}`})
+	if len(spans) != 1 || spans[0].Replace != "\u00e4" {
+		t.Fatalf("spans = %+v, want one span decoding to \u00e4", spans)
+	}
+	if spans[0].StartCol != 11 || spans[0].EndCol != 17 {
+		t.Errorf("range = [%d,%d), want [11,17)", spans[0].StartCol, spans[0].EndCol)
 	}
 }

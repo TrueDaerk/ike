@@ -268,6 +268,20 @@ type Editor struct {
 	// milliseconds) as their UTC form (#1618) in JSON values, log lines and
 	// .http request bodies; the raw number reappears under the caret.
 	TimestampDecoding bool `toml:"timestamp_decoding"`
+	// UnicodeEscapeDecoding renders \uXXXX escapes (surrogate pairs combined,
+	// Go's \UXXXXXXXX included) inside string literals as the escaped
+	// character (#1620); the raw escape reappears under the caret.
+	UnicodeEscapeDecoding bool `toml:"unicode_escape_decoding"`
+	// EntityDecoding renders HTML/XML character references (&amp;, &#x2026;)
+	// decoded (#1620) — the full named table in HTML, only the five
+	// predefined entities in XML; the raw reference reappears under the
+	// caret.
+	EntityDecoding bool `toml:"entity_decoding"`
+	// Base64Decoding renders base64 values decoded where base64 is the
+	// convention — the data: block of a Kubernetes Secret in YAML — and only
+	// when the payload is printable text (#1620); the raw value reappears
+	// under the caret.
+	Base64Decoding bool `toml:"base64_decoding"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme.
 	RainbowBrackets bool `toml:"rainbow_brackets"`

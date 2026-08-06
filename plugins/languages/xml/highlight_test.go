@@ -68,8 +68,11 @@ func TestXMLEntitiesAndCDATA(t *testing.T) {
 		`</doc>`,
 	}
 	ix := highlight.NewIndex(highlight.Highlight("/p/doc.xml", lines))
-	if got := ix.CaptureAt(1, 7); got != "constant.builtin" { // &amp;
-		t.Errorf("&amp;: got capture %q, want constant.builtin", got)
+	// Since #1620 the entity-decoding span producer overlays predefined
+	// entities as escape.entity (it wins over the grammar's constant.builtin)
+	// so the revealed raw reference styles like the other decoded escapes.
+	if got := ix.CaptureAt(1, 7); got != "escape.entity" { // &amp;
+		t.Errorf("&amp;: got capture %q, want escape.entity", got)
 	}
 	if got := ix.CaptureAt(1, 15); got != "constant" { // &custom;
 		t.Errorf("&custom;: got capture %q, want constant", got)
