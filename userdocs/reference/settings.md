@@ -53,7 +53,7 @@ Settings, or run `settings.open` from the palette.
 | Digit grouping | `editor.digit_grouping` | boolean | `true` | user | Show plain integers of five digits or more grouped (1000000 as "1_000_000"); the raw digits reappear under the caret; toggle per view via Toggle Digit Grouping |
 | Radix hints | `editor.radix_hints` | boolean | `true` | user | Append a hex literal's decimal reading ("0x1F4  = 500") and a permission/flag value's octal or hex one ("420  = 0o644"); the bare literal reappears under the caret; toggle per view via Toggle Radix Hints |
 | Log rendering | `editor.log_rendering` | boolean | `true` | user | Render .log files readable: severity levels colored, timestamps dimmed, thread/logger names rainbow-colored, and ANSI escapes drawn as their styles with the escape bytes concealed (revealed under the caret); toggle per view via Toggle Log Rendering |
-| Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
+| Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle); brackets left without a partner render underlined in the error color |
 | Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rgb/#rrggbb/#rrggbbaa, rgb(), hsl()) with their own color |
 | Identifier colors | `editor.id_colors` | boolean | `true` | user | Color UUIDs and long hex hashes (git SHAs, request/trace IDs) by hashing the identifier into the rainbow palette, so every occurrence of the same identifier shares one color; active in logs, JSON and .http files and response bodies, toggle per view via Toggle Identifier Colors |
 | Identifier color minimum length | `editor.id_color_min_length` | integer (6–64) | `7` | user | Shortest bare hex run that counts as an identifier (7 = abbreviated git SHA) |
@@ -63,6 +63,7 @@ Settings, or run `settings.open` from the palette.
 | Soft wrap | `editor.wrap` | boolean | `false` | user | Wrap long lines at the pane edge |
 | Show whitespace | `editor.show_whitespace` | enum: `none`, `trailing`, `all` | `none` | user | Render spaces and tabs visibly |
 | Indent guides | `editor.indent_guides` | boolean | `false` | user | Draw vertical lines at each indentation level |
+| Rainbow indent guides | `editor.rainbow_indent_guides` | boolean | `true` | user | Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn |
 | Breadcrumbs | `editor.breadcrumbs` | boolean | `true` | user | Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable |
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
 | Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables) |

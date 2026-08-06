@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-07T00:30:00Z
+timestamp: 2026-08-07T12:00:00Z
 ---
 
 # Editor
@@ -247,7 +247,9 @@ line runs that test (see /architecture/run-configurations.md).
   tabs, `trailing` marks only the line-end run), **indent guides**
   (`editor.indent_guides` or `view.toggleIndentGuides`; `│` on whitespace
   cells at each `tab_width` stop inside the leading indent — visible
-  whitespace wins on overlap) and **column rulers** (`editor.rulers = [80]`;
+  whitespace wins on overlap; each guide is coloured by its depth from the
+  rainbow palette unless `editor.rainbow_indent_guides` is off, see
+  [Highlighting](./highlighting.md)) and **column rulers** (`editor.rulers = [80]`;
   a background tint on those display columns, padded past short lines). The
   palette toggles override the config per view; theme slots `Whitespace`,
   `IndentGuide`, `Ruler` colour them. **Control bytes & ANSI escapes** (#1469,

@@ -792,7 +792,9 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}
 	}
 	wsStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
-	guideStyle := lipgloss.NewStyle().Foreground(m.theme().IndentGuide)
+	// Indent guides (#64) carry one style per depth slot when depth coloring
+	// is on (#1628), a single flat style otherwise; guideSlot picks the entry.
+	guideStyles := m.guideStyles()
 	// Control bytes (#1469): render as one-cell ␛-style glyphs so nothing
 	// reaches the terminal raw; SGR sequences additionally colour the text
 	// they govern (see ansiescape.go).
@@ -883,14 +885,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 					overlay = &wsStyle
 				} else if m.guideAt(col, indentEnd, abs) {
 					cell = "│" + strings.Repeat(" ", cells-1)
-					overlay = &guideStyle
+					overlay = &guideStyles[guideSlot(abs, m.tabWidth, len(guideStyles))]
 				}
 			case r == ' ' && m.wsVisible(col, trailStart):
 				cell = "·"
 				overlay = &wsStyle
 			case r == ' ' && m.guideAt(col, indentEnd, abs):
 				cell = "│"
-				overlay = &guideStyle
+				overlay = &guideStyles[guideSlot(abs, m.tabWidth, len(guideStyles))]
 			case isCtrlRune(r):
 				// Control byte (#1469): a one-cell placeholder glyph, never
 				// the raw byte — one buffer rune stays one display cell, so

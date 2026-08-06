@@ -84,44 +84,12 @@ func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string)
 		end := cap.Node.EndPosition()
 		appendSpans(&spans, conv, name, start, end)
 	}
-	// Rainbow brackets (#789): bracket tokens colored by nesting depth, one
-	// extra walk over the tree already parsed. The rainbow spans go FIRST —
-	// CaptureAt is first-covering-wins, and grammars usually capture the
-	// same tokens as punctuation.
-	if RainbowEnabled() {
-		var rain []Span
-		collectBrackets(tree.RootNode(), 0, func(n *ts.Node, depth int) {
-			appendSpans(&rain, conv, rainbowCapture(depth), n.StartPosition(), n.EndPosition())
-		})
-		if len(rain) > 0 {
-			spans = append(rain, spans...)
-		}
-	}
+	// Rainbow brackets (#789) used to be a second walk over this tree. They
+	// are computed from the spans instead now (#1628): brackets.go pairs them
+	// in pure Go, using the string/comment captures above as its mask, so
+	// bracket depth, indent-guide depth and unmatched-bracket detection all
+	// come from one tracker.
 	return spans, scopes, folds
-}
-
-// collectBrackets walks ALL children (bracket tokens are anonymous nodes, so
-// NamedChild would skip them) tracking the bracket nesting depth: an opener
-// emits at the current depth and deepens everything up to its closer, which
-// emits at the opener's depth again. Unbalanced trees (mid-edit) clamp at the
-// inherited depth instead of going negative.
-func collectBrackets(n *ts.Node, depth int, emit func(*ts.Node, int)) {
-	local := depth
-	for i := uint(0); i < n.ChildCount(); i++ {
-		c := n.Child(i)
-		switch c.Kind() {
-		case "(", "[", "{":
-			emit(c, local)
-			local++
-		case ")", "]", "}":
-			if local--; local < 0 {
-				local = 0
-			}
-			emit(c, local)
-		default:
-			collectBrackets(c, local, emit)
-		}
-	}
 }
 
 // collectScopes walks the tree depth-first and appends every multi-line node

@@ -216,9 +216,10 @@ reads them follows along.
 
 A theme you like except for one colour does not have to be forked. The
 **Syntax Colors** page (right behind Appearance) lists every syntax capture
-the active theme defines — plus the six `rainbow.N` bracket slots — with a
-swatch in the colour that actually resolves, the capture name and the token in
-use. `(derived)` marks a slot with no token of its own.
+the active theme defines — plus the six `rainbow.N` bracket slots and
+`bracket.unmatched`, the colour a bracket with no partner is underlined in —
+with a swatch in the colour that actually resolves, the capture name and the
+token in use. `(derived)` marks a slot with no token of its own.
 
 | Key | What it does |
 |---|---|

@@ -77,6 +77,7 @@ func defaults() *Config {
 			Editorconfig:           true,
 			ShowWhitespace:         "none",
 			IndentGuides:           false,
+			RainbowIndentGuides:    true,
 			Rulers:                 []int{},
 			StickyScroll:           true,
 			StickyScrollDepth:      4,

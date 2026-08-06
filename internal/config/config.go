@@ -124,6 +124,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.editorconfig", c.Editor.Editorconfig)
 	put("editor.show_whitespace", c.Editor.ShowWhitespace)
 	put("editor.indent_guides", c.Editor.IndentGuides)
+	put("editor.rainbow_indent_guides", c.Editor.RainbowIndentGuides)
 	rulers := make([]string, len(c.Editor.Rulers))
 	for i, r := range c.Editor.Rulers {
 		rulers[i] = strconv.Itoa(r)

@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/bracket"
 	"ike/internal/config"
 	"ike/internal/highlight"
 	"ike/internal/theme"
@@ -15,7 +16,8 @@ import (
 // colors_page.go is the syntax-colour editor (#1238): the settings surface for
 // the `[theme.captures]` overrides wired up in #1318. A single highlight colour
 // can be retuned without leaving the editor — the list shows the *effective*
-// colour of every capture the active theme defines (plus the rainbow slots),
+// colour of every capture the active theme defines (plus the rainbow slots
+// and the unmatched-bracket colour),
 // marks the ones a config layer overrides, and writes `theme.captures.<name>`
 // at user scope so the change survives a theme switch.
 //
@@ -105,6 +107,9 @@ func (c *ColorsPage) names() []string {
 	for i := 0; i < rainbowSlots; i++ {
 		seen["rainbow."+strconv.Itoa(i)] = true
 	}
+	// The unmatched-bracket colour (#1628) has no palette entry of its own —
+	// it falls back to the theme's error slot — but must stay editable.
+	seen[bracket.Unmatched] = true
 	const prefix = "theme.captures."
 	for k := range config.Get().Flat() {
 		if name, ok := strings.CutPrefix(k, prefix); ok && name != "" {

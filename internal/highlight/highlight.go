@@ -73,6 +73,15 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 		// objects do.
 		folds = append(folds, injected...)
 	}
+	// Rainbow brackets (#789, #1628): bracket depth comes from the pure-Go
+	// pair tracker, masked by the string/comment captures the grammar just
+	// produced. The spans go before the grammar's — CaptureAt is
+	// first-covering-wins, and grammars capture the same tokens as
+	// punctuation — but after the Go-produced spans below, so a language that
+	// styles a cell itself (a csv column) keeps its colour.
+	if b := bracketSpans(l, lines, spans); len(b) > 0 {
+		spans = append(b, spans...)
+	}
 	if l.Spans != nil {
 		// Go-produced spans (#1585) are prepended so they win over the
 		// grammar's coarser captures (the whole url node is one @string) —
@@ -100,7 +109,14 @@ func HighlightFenced(tag string, lines []string) []Span {
 	if !ok || l.Grammar == nil {
 		return nil
 	}
-	return parse(l.Grammar, lines)
+	spans := parse(l.Grammar, lines)
+	// Fenced text is read like buffer text, so it gets the same bracket
+	// colouring (#1628) — a JSON body in the HTTP response pane nests exactly
+	// as it would in a buffer.
+	if b := bracketSpans(l, lines, spans); len(b) > 0 {
+		spans = append(b, spans...)
+	}
+	return spans
 }
 
 // FencedFolds parses lines tagged with a fence info string and returns their
