@@ -26,6 +26,20 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
   concept doc in the same change (see [wiki/process/wiki-format.md](wiki/process/wiki-format.md)
   for the OKF format rules).
 
+## Model / effort labels on issues
+
+Every work-item issue should carry two labels telling automation (e.g. `issue_runner.py`)
+which Claude model and reasoning effort to use:
+
+- **`model:opus`** — simple to medium tasks (mechanical changes, small features, doc work).
+- **`model:fable`** — complex tasks that need a lot of reasoning (architecture, tricky bugs,
+  cross-cutting changes).
+- **`effort:low` / `effort:medium` / `effort:high`** — reasoning effort; `high` is the maximum
+  allowed.
+
+When creating a new issue, add one `model:*` and one `effort:*` label. If they are missing,
+runners default to **fable / medium**.
+
 ## Change workflow
 
 Every change follows the same loop (details in
