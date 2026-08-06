@@ -72,6 +72,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("view.toggleWrap", "Toggle Soft Wrap", "toggle_wrap", ""),
 			action("view.toggleWhitespace", "Toggle Whitespace Rendering", "toggle_whitespace", ""),
 			action("view.toggleIndentGuides", "Toggle Indent Guides", "toggle_indent_guides", ""),
+			// Markdown rich rendering (#1599): per-view toggle over the
+			// editor.markdown_rendering config default, like the #64 toggles.
+			action("view.toggleMarkdownRendering", "Toggle Markdown Rendering", "toggle_markdown_rendering", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),

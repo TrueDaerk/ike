@@ -60,14 +60,18 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	st, ok := m.hlTheme.Style(capture)
 	// markup.* captures (#881) carry terminal text attributes, not colors:
 	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —
-	// composed over whatever color the theme resolves (usually none).
-	switch capture {
-	case "markup.bold":
-		return st.Bold(true), true
-	case "markup.italic":
-		return st.Italic(true), true
-	case "markup.strikethrough":
-		return st.Strikethrough(true), true
+	// composed over whatever color the theme resolves (usually none). Gated
+	// by the markdown-rendering toggle (#1599) like the conceal layer, so
+	// toggling off shows plain raw source.
+	if m.mdRender {
+		switch capture {
+		case "markup.bold":
+			return st.Bold(true), true
+		case "markup.italic":
+			return st.Italic(true), true
+		case "markup.strikethrough":
+			return st.Strikethrough(true), true
+		}
 	}
 	return st, ok
 }

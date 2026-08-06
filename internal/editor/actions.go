@@ -607,6 +607,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleWhitespace()
 	case "toggle_indent_guides":
 		m.toggleIndentGuides()
+	case "toggle_markdown_rendering":
+		m.toggleMarkdownRendering()
 	case "find":
 		if m.insert.active {
 			m.commitInsert()

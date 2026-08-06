@@ -156,18 +156,61 @@ func TestTableRendersBoxDrawing(t *testing.T) {
 	}
 }
 
-// TestTableRawWhenCursorInside: entering the block flips it to raw source.
-func TestTableRawWhenCursorInside(t *testing.T) {
+// TestTableCursorRowRawOnChrome (#1599): the cursor on the delimiter row (or
+// any table chrome) reveals only that row as raw source; the rest of the
+// block stays box-drawn.
+func TestTableCursorRowRawOnChrome(t *testing.T) {
 	m, _ := mdLoaded(t, tableDoc)
-	// Cursor on the delimiter row: line 3 then renders plain (no cursor cell
-	// styling breaking the substring).
 	m.cursor = buffer.Position{Line: 2}
 	view := plainView(m)
+	if !strings.Contains(view, ":---") {
+		t.Errorf("cursor row must show raw source, view:\n%s", view)
+	}
+	if !strings.Contains(view, "│") {
+		t.Errorf("other table rows must stay box-drawn, view:\n%s", view)
+	}
+	if strings.Contains(view, "| apple") {
+		t.Errorf("non-cursor rows must not render raw, view:\n%s", view)
+	}
+}
+
+// TestTableCursorCellRaw (#1599): the cursor inside a cell reveals only that
+// cell raw — the frame stays box-drawn, the other cells stay rendered, and
+// the cursor on a pipe reveals the whole row instead.
+func TestTableCursorCellRaw(t *testing.T) {
+	m, _ := mdLoaded(t, tableDoc)
+	// Line 3 is "| apple | 3 |"; col 2 sits inside the first cell.
+	m.cursor = buffer.Position{Line: 3, Col: 2}
+	view := plainView(m)
+	if !strings.Contains(view, "│") {
+		t.Errorf("frame must stay box-drawn with the cursor mid-cell, view:\n%s", view)
+	}
+	if !strings.Contains(view, "apple") {
+		t.Errorf("cursor cell must show its raw source, view:\n%s", view)
+	}
+	if strings.Contains(view, "| apple") {
+		t.Errorf("the row's pipes must stay rendered mid-cell, view:\n%s", view)
+	}
+	// Col 0 is the leading pipe — table chrome: the whole row reveals raw.
+	m.cursor = buffer.Position{Line: 3, Col: 0}
+	if view := plainView(m); !strings.Contains(view, "| apple | 3 |") {
+		t.Errorf("cursor on a pipe must reveal the raw row, view:\n%s", view)
+	}
+}
+
+// TestTableFullyRawWithSelection (#1599): a selection touching the block
+// still flips it fully raw — selection styling only renders on raw lines.
+func TestTableFullyRawWithSelection(t *testing.T) {
+	m, _ := mdLoaded(t, tableDoc)
+	m.cursor = buffer.Position{Line: 1, Col: 2}
+	m.enterVisual(Visual)
+	m.cursor = buffer.Position{Line: 3, Col: 2}
+	view := plainView(m)
 	if strings.Contains(view, "│") {
-		t.Error("box drawing shown while cursor is inside the table")
+		t.Errorf("box drawing shown while a selection crosses the table, view:\n%s", view)
 	}
 	if !strings.Contains(view, "| apple | 3 |") {
-		t.Error("raw table source missing with cursor inside")
+		t.Errorf("raw table source missing under selection, view:\n%s", view)
 	}
 }
 
@@ -265,6 +308,85 @@ func TestTableCellInlineStyling(t *testing.T) {
 	// The italic attribute survives into the row render.
 	if !strings.Contains(m.View(), "\x1b[3m") {
 		t.Error("italic cell lost its text attribute")
+	}
+}
+
+// extentSpans is concealSpans plus the enclosing-span extent (#1599), the
+// shape the grammar's @conceal.extent capture delivers for "**bold** x".
+func extentSpans(line int) []highlight.Span {
+	return append(concealSpans(line),
+		highlight.Span{Line: line, StartCol: 0, EndCol: 8, Capture: "conceal.extent"})
+}
+
+// TestConcealExtentReveal (#1599): the caret anywhere inside an inline span —
+// not only on a marker — reveals the span's markers; outside it everything
+// conceals, and the extent span never leaks into the style index.
+func TestConcealExtentReveal(t *testing.T) {
+	m, path := mdLoaded(t, "**bold** x\nplain\n")
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: extentSpans(0)})
+	m = mm
+	// Cursor mid-word (col 4) — inside the extent: both markers show raw.
+	m.cursor = buffer.Position{Line: 0, Col: 4}
+	if view := plainView(m); !strings.Contains(view, "**bold** x") {
+		t.Errorf("caret inside the span must reveal its markers, view:\n%s", view)
+	}
+	// Cursor past the span (col 8, the space) — everything conceals.
+	m.cursor = buffer.Position{Line: 0, Col: 8}
+	if view := plainView(m); strings.Contains(view, "**") {
+		t.Errorf("caret outside the span must conceal the markers, view:\n%s", view)
+	}
+	if got := m.hlIndex.CaptureAt(0, 4); got == "conceal.extent" {
+		t.Error("extent span leaked into the style index")
+	}
+}
+
+// TestToggleMarkdownRendering (#1599): the view toggle flips rendering off
+// (raw markers, no markup attributes, raw tables) and back on, and sticks
+// across the per-Update config refresh.
+func TestToggleMarkdownRendering(t *testing.T) {
+	m, path := mdLoaded(t, "**bold** x\nplain\n")
+	m.cursor = buffer.Position{Line: 1}
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: concealSpans(0)})
+	m = mm
+	mm, _ = m.Update(ActionMsg{Action: "toggle_markdown_rendering"})
+	m = mm
+	if view := plainView(m); !strings.Contains(view, "**bold**") {
+		t.Errorf("toggle off must show raw markers, view:\n%s", view)
+	}
+	if st, _ := m.styleAt(0, 3); st.GetBold() {
+		t.Error("toggle off must drop the markup.bold attribute")
+	}
+	if !m.mdRenderSet {
+		t.Error("toggle must set the sticky per-view override")
+	}
+	mm, _ = m.Update(ActionMsg{Action: "toggle_markdown_rendering"})
+	m = mm
+	if view := plainView(m); strings.Contains(view, "**") {
+		t.Errorf("toggle back on must conceal again, view:\n%s", view)
+	}
+}
+
+// TestTableClickMapping (#1599): clicks on a box-drawn table row land in the
+// pointed-at cell, border clicks on the pipe they draw.
+func TestTableClickMapping(t *testing.T) {
+	m, _ := mdLoaded(t, tableDoc)
+	m.cursor = buffer.Position{Line: 0}
+	// Line 3 is "| apple | 3 |", rendered "│ apple │     3 │" (Name width 5,
+	// Qty width 3... widths come from the header row). Display col 0 is the
+	// left border → the leading pipe (col 0); col 2 is the 'a' → col 2.
+	if col, ok := m.tableClickCol(3, 0); !ok || col != 0 {
+		t.Errorf("border click → col %d ok=%v, want 0", col, ok)
+	}
+	if col, ok := m.tableClickCol(3, 2); !ok || col != 2 {
+		t.Errorf("cell click → col %d ok=%v, want 2", col, ok)
+	}
+	// tableDisplayCol is the inverse for the same cell.
+	if d, ok := m.tableDisplayCol(3, 2); !ok || d != 2 {
+		t.Errorf("display col %d ok=%v, want 2", d, ok)
+	}
+	// A raw line (outside any block) maps through neither.
+	if _, ok := m.tableClickCol(0, 0); ok {
+		t.Error("non-table line must not table-map")
 	}
 }
 

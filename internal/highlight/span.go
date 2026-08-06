@@ -49,9 +49,16 @@ type Index struct {
 }
 
 // NewIndex groups spans by line for O(spans-on-line) column lookup.
+// "conceal.extent" spans (#1599) are dropped: they are a data channel for the
+// editor's conceal layer (the enclosing inline spans whose markers reveal
+// under the caret), never a style — indexed, an extent node would shadow the
+// styles of everything inside it under first-covering-wins.
 func NewIndex(spans []Span) Index {
 	byLine := make(map[int][]Span, len(spans))
 	for _, s := range spans {
+		if s.Capture == "conceal.extent" {
+			continue
+		}
 		byLine[s.Line] = append(byLine[s.Line], s)
 	}
 	return Index{byLine: byLine}

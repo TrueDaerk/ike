@@ -105,3 +105,17 @@
     "["
     "]"
   ] @conceal)
+
+; --- span extents (#1599): the enclosing inline spans. The editor splits
+; these out as reveal extents — a caret anywhere inside the span (not only on
+; a marker) shows the span's marker chrome raw while it is edited.
+
+[
+  (code_span)
+  (emphasis)
+  (strong_emphasis)
+  (strikethrough)
+  (inline_link)
+  (image)
+  (shortcut_link)
+] @conceal.extent
