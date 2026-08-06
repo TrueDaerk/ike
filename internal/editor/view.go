@@ -576,6 +576,10 @@ func (m Model) View() string {
 			// Inline blame (0320, #468): the annotation splices into the
 			// cursor line's right padding when it fits.
 			row = m.blameAnnotate(row, i, textWidth)
+		} else {
+			// A log line's elapsed-time hint (#1651) uses the same padding,
+			// so blame keeps the cursor line to itself.
+			row = m.logDeltaAnnotate(row, i, textWidth)
 		}
 		out = append(out, gutter+row)
 	}

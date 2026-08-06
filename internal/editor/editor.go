@@ -378,6 +378,9 @@ type Model struct {
 	// logRunCache caches the collapsed repeat runs (#1650, logfold.go) per
 	// document version (pointer, shared across the value copies like svTable).
 	logRunCache *logRunState
+	// logDeltaCache caches the inter-line elapsed times (#1651, logdelta.go)
+	// per document version, the same way.
+	logDeltaCache *logDeltaState
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
 	// colorPreviewSet marks a per-view view.toggleColorPreview override
@@ -583,6 +586,7 @@ func New() Model {
 		svTable:            &svState{},
 		logRender:          true,
 		logRunCache:        &logRunState{},
+		logDeltaCache:      &logDeltaState{},
 		tsDecode:           true,
 		uniDecode:          true,
 		entDecode:          true,

@@ -40,13 +40,17 @@ type logRunState struct {
 	end  map[int]int
 }
 
-// logFoldActive reports whether repeat collapsing applies to this buffer right
-// now: a log buffer with log rendering on, and code insight not disabled by
-// the large-file guard (#149) — scanning a multi-megabyte log per version is
-// exactly the work that guard exists to avoid.
-func (m Model) logFoldActive() bool {
+// logInsight reports whether the whole-buffer log analyses apply right now:
+// a log buffer with log rendering on, and insight not disabled by the
+// large-file guard (#149) — scanning a multi-megabyte log per version is
+// exactly the work that guard exists to avoid. Shared with the inter-line
+// deltas of #1651 (logdelta.go).
+func (m Model) logInsight() bool {
 	return m.logRender && m.logBuffer() && !m.largeFile
 }
+
+// logFoldActive reports whether repeat collapsing applies to this buffer.
+func (m Model) logFoldActive() bool { return m.logInsight() }
 
 // logRuns returns the repeat runs of the current document version, recomputing
 // them when the version moved. Runs are a whole-buffer property (a run may
