@@ -5,6 +5,36 @@
 # normal Ghostty setup never interferes. Installed by scripts/install-desktop.sh.
 set -eu
 
+# A Dock/desktop launch carries the minimal launchd/session environment —
+# the shell profile never ran, so PATH lacks Homebrew, ~/.local/bin, etc.
+# and everything ike spawns (LSP servers, formatters, toolchains) would be
+# missing (#1579). Re-exec once through the user's login shell so the
+# profile environment is loaded and inherited by Ghostty -> ike. `open`
+# forwards the caller's environment to the launched app, so this covers
+# macOS too.
+if [ -z "${IKE_GUI_LOGIN:-}" ]; then
+  IKE_GUI_LOGIN=1
+  export IKE_GUI_LOGIN
+  login_shell="${SHELL:-}"
+  if [ -z "$login_shell" ]; then
+    case "$(uname -s)" in
+      Darwin) login_shell="$(dscl . -read "/Users/${USER:-$(id -un)}" UserShell 2>/dev/null | awk '{print $2}')" ;;
+      *) login_shell="$(getent passwd "${USER:-$(id -un)}" 2>/dev/null | cut -d: -f7)" ;;
+    esac
+  fi
+  # Single-quoted path (not "$0"/"$@") keeps the command portable across
+  # shells (fish has no "$@" in -c strings); ike-gui takes no arguments.
+  self="$0"
+  case "$self" in
+    */*) ;;
+    *) self="$(command -v -- "$self" 2>/dev/null || printf '%s' "$self")" ;;
+  esac
+  if [ -n "$login_shell" ] && [ -x "$login_shell" ]; then
+    exec "$login_shell" -l -c "exec '$self'"
+  fi
+  # No usable login shell found: continue with the environment we have.
+fi
+
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}/ghostty/ike.conf"
 if [ ! -f "$CONF" ]; then
   echo "ike-gui: $CONF not found — run 'make install-desktop' first" >&2
