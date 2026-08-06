@@ -1,5 +1,12 @@
 # Log
 
+## 2026-08-06 (editor: reformat keybind formats the selection when one exists, #1603)
+
+- `lsp.format` is context-sensitive: an active visual selection reformats
+  only the selected range (JetBrains Reformat Code semantics); with a
+  selection but no range-capable provider it widens to the whole file with
+  a notice. `lsp.formatRange` keeps its strict contract.
+
 ## 2026-08-06 (format: built-in .http reformatter folds query params, #1602)
 
 - The HTTP plugin ships a built-in formatter (`plugins/languages/http/format.go`):

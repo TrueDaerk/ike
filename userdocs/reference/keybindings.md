@@ -155,7 +155,7 @@ Active when an editor pane has focus.
 | Quick documentation | `ctrl+q` | `ctrl+q` | `lsp.hover` |
 | Redo | `cmd+shift+z` | `ctrl+shift+z` | `editor.redo` |
 | Redo | `ctrl+shift+z` | `ctrl+shift+z` | `editor.redo` |
-| Reformat file | `cmd+alt+l` | `ctrl+alt+l` | `lsp.format` |
+| Reformat file or selection | `cmd+alt+l` | `ctrl+alt+l` | `lsp.format` |
 | Rename symbol | `shift+f6` | `shift+f6` | `lsp.rename` |
 | Replace in file | `cmd+r` | `ctrl+r` | `editor.replace` |
 | Run HTTP request | `cmd+enter` | `ctrl+enter` | `http.run` |

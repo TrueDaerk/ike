@@ -140,11 +140,12 @@ var jetbrainsRows = []row{
 	// both delivered (shift+fN carries its modifier in the CSI parameter).
 	{"f2", "lsp.nextDiagnostic", "Next diagnostic", Editor, "LSP (#369)"},
 	{"shift+f2", "lsp.prevDiagnostic", "Previous diagnostic", Editor, "LSP (#369)"},
-	// JetBrains reformat-code. The L is layout-safe on QWERTZ; the selection
-	// variant keys off the active visual selection inside lsp.formatRange.
+	// JetBrains reformat-code. The L is layout-safe on QWERTZ. The command is
+	// context-sensitive (#1603): an active visual selection reformats only the
+	// selected range, no selection reformats the whole file.
 	// The id predates the formatter registry (0470): the command now resolves
 	// config override → external tool → LSP → built-in, not only LSP.
-	{"cmd+alt+l", "lsp.format", "Reformat file", Editor, "Format (0470)"},
+	{"cmd+alt+l", "lsp.format", "Reformat file or selection", Editor, "Format (0470)"},
 	// JetBrains intention actions. Alt+enter delivery depends on the
 	// terminal's option-as-meta setting, hence fragile; 0081 owns the final
 	// reachability call.
