@@ -231,8 +231,9 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   same `focusKeys` map pane terminals use) move the keyboard between sides,
   and a mouse press claims focus for its side. Only the focused side renders
   the focus border. `cmd+shift+i` toggles **input broadcast**: while on, typed
-  keys and pastes mirror to both sides' active shells and a `⇉` marker
-  prefixes both title rows. A side's last shell exit collapses the split back
+  keys and pastes mirror to both sides' active shells, a `⇉` marker prefixes
+  both title rows, and both sides render the focus border (#1592) — the
+  shared-input state is visible at a glance. A side's last shell exit collapses the split back
   to a single box (the right side is promoted when the primary empties) and
   resets broadcast. Every whole-popup walk (theme, quit, teardown, busy
   guards) iterates `popupTerm.instances()` instead of touching `inst` alone.
