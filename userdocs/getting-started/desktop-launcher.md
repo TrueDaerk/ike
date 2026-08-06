@@ -36,7 +36,11 @@ make install-desktop  # installs the launcher for your platform
    toolchains) as a terminal launch.
 3. **The platform shell:**
     - macOS: `/Applications/Ike.app` — appears in Launchpad, Spotlight and
-      the Dock with the Ike icon.
+      the Dock with the Ike icon. Its `Info.plist` declares
+      `LSArchitecturePriority` (arm64 first): without it, macOS runs a
+      script-based bundle under Rosetta, and an architecture-conditional
+      shell profile (like Homebrew's arm64 branch) would build the wrong
+      `PATH` for everything IKE spawns.
     - Linux: `~/.local/share/applications/ike.desktop` plus hicolor icons.
       The config sets `class = ike`, matching the entry's `StartupWMClass`,
       so the dock shows the Ike icon at runtime too.
