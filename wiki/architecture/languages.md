@@ -538,10 +538,32 @@ of every JSON Web Token for the `.http` and dotenv producers (see
 `/architecture/editor.md`, JWT decoding). The dotenv language
 (`plugins/languages/env`, #1619) is another grammar-free one: `.env` and its
 dotted variants (`.env.local`, `.env.production`, …) plus `*.env`, styling
-`export KEY=value` pairs and `#` comments. The ini-style config
+`export KEY=value` pairs and `#` comments. It also masks the values of
+secret-suspect keys (#1623, see `/architecture/editor.md`, secret masking):
+`internal/secret.Suspect` answers "does this key name a credential" from the
+key text alone — `*_SECRET`, `PASSWORD`, `*_TOKEN`, `*_KEY`, `CREDENTIALS`,
+`DSN`, … with `PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL` and friends cleared
+again — and the producer emits the value as a stand-in span carrying
+`secret.Mask`. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
 and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
 comments as Go-computed spans, with no grammar and no server. The log
 language (`plugins/languages/log`, #1621) too: severity, timestamp, rainbow
 thread/logger and ANSI-escape spans, all computed in `internal/logline` (see
 `/architecture/editor.md`, log-file rendering).
+
+The third Go-computed seam is `Lint func(lines []string) []lang.Note` (#1623):
+mistakes a language server would report, for languages that have none. A
+`Note` is a rune-column range on a line plus an LSP severity (`lang.NoteError`
+… `lang.NoteHint`) and a message. `highlight.Lint(path, lines)` runs it, the
+editor's parse command calls it in the same off-loop pass as the parse, and
+the notes ride `highlight.SpansMsg.Notes` under the same document-version
+guard. In the editor they land in a channel of their own — a later
+`DiagnosticsMsg` from a server cannot clobber them — and merge into the gutter
+tint and inline underline that server diagnostics use
+(`Model.worstSeverityOnLine`, `Model.diagSeverityAt`, `Model.NoteAt`). Like
+`Spans` and `Regions`, `Lint` runs on every highlight pass and must be cheap.
+The dotenv duplicate-key check (`plugins/languages/env/lint.go`) is its first
+user: a key assigned twice is silently reduced to one assignment by every
+loader — in practice the last — so every earlier occurrence is flagged as a
+warning naming the line that wins.

@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/highlight"
 	"ike/internal/jwt"
+	"ike/internal/secret"
 )
 
 // highlight.go drives the Tree-sitter syntax layer (Roadmap 0100). Parsing is
@@ -41,7 +42,10 @@ func (m *Model) parseCmd() tea.Cmd {
 	lines := m.buf.Lines()
 	return func() tea.Msg {
 		spans, scopes, folds := highlight.HighlightScoped(path, lines)
-		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes, Folds: folds}
+		// The Go-computed linter (#1623) rides the same off-loop pass as the
+		// parse: same snapshot, same version guard, no second schedule.
+		notes := highlight.Lint(path, lines)
+		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
 	}
 }
 
@@ -72,6 +76,13 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// which the Style lookup above already honoured.
 	if capture == jwt.Capture && !ok {
 		return lipgloss.NewStyle().Faint(true), true
+	}
+	// A masked secret (#1623) is a value like any other: without a
+	// theme.captures.secret.value key it styles as the language's string
+	// colour, so the mask sits where the value sat and the revealed value
+	// under the caret reads normally.
+	if capture == secret.Capture && !ok {
+		return m.hlTheme.Style("string")
 	}
 	// markup.* captures (#881) carry terminal text attributes, not colors:
 	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —

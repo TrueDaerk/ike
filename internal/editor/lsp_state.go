@@ -14,6 +14,7 @@ import (
 	"ike/internal/editor/buffer"
 	"ike/internal/fuzzy"
 	"ike/internal/highlight"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/snippet"
@@ -103,14 +104,65 @@ func (m *Model) setDiagnostics(diags []ilsp.Diagnostic) {
 	}
 }
 
+// setNotes replaces the Go-computed lint notes (#1623) and indexes them by
+// line, the linter's counterpart to setDiagnostics. Notes ride the highlight
+// pass, so an empty slice legitimately clears the previous set.
+func (m *Model) setNotes(notes []lang.Note) {
+	if len(notes) == 0 {
+		m.notes = nil
+		return
+	}
+	m.notes = make(map[int][]lang.Note, len(notes))
+	for _, n := range notes {
+		m.notes[n.Line] = append(m.notes[n.Line], n)
+	}
+}
+
+// noteSeverity normalises a note's severity the way the diagnostic paths do:
+// unspecified counts as an error.
+func noteSeverity(n lang.Note) int {
+	if n.Severity == 0 {
+		return 1
+	}
+	return n.Severity
+}
+
+// NoteAt returns the lint note covering (line, col), most severe first, and
+// whether one exists — the message shown for a marked cell.
+func (m Model) NoteAt(line, col int) (lang.Note, bool) {
+	var best lang.Note
+	found := false
+	for _, n := range m.notes[line] {
+		if col < n.StartCol || col >= n.EndCol || !m.sevVisible(n.Severity) {
+			continue
+		}
+		if !found || noteSeverity(n) < noteSeverity(best) {
+			best, found = n, true
+		}
+	}
+	return best, found
+}
+
 // worstSeverityOnLine returns the most severe diagnostic severity on a line
 // (lower number = more severe) and whether any exists, for gutter colouring.
+// Lint notes (#1623) count like diagnostics: a language without a server still
+// tints its gutter.
 func (m Model) worstSeverityOnLine(line int) (int, bool) {
 	ds := m.diagByLine[line]
-	if len(ds) == 0 {
+	ns := m.notes[line]
+	if len(ds) == 0 && len(ns) == 0 {
 		return 0, false
 	}
 	worst, found := 5, false
+	for _, n := range ns {
+		if !m.sevVisible(n.Severity) {
+			continue
+		}
+		found = true
+		if sev := noteSeverity(n); sev < worst {
+			worst = sev
+		}
+	}
 	for _, d := range ds {
 		if !m.sevVisible(d.Severity) { // decoration toggle (#1259)
 			continue
@@ -131,9 +183,12 @@ func (m Model) worstSeverityOnLine(line int) (int, bool) {
 }
 
 // diagSeverityAt returns the diagnostic severity covering a specific cell (for
-// inline underlining) and whether one exists.
+// inline underlining) and whether one exists — lint notes (#1623) included.
 func (m Model) diagSeverityAt(line, col int) (int, bool) {
 	worst, found := 5, false
+	if n, ok := m.NoteAt(line, col); ok {
+		worst, found = noteSeverity(n), true
+	}
 	for _, d := range m.diagByLine[line] {
 		if !diagCovers(d, line, col) || !m.sevVisible(d.Severity) {
 			continue

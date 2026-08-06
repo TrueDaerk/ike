@@ -340,7 +340,11 @@ type Model struct {
 	entDecodeSet bool
 	b64Decode    bool
 	b64DecodeSet bool
-	mdRender     bool
+	// Secret masking (#1623): the dotenv value stand-ins, on by default, with
+	// its own override flag like the decode families. See secrets.go.
+	secretMask    bool
+	secretMaskSet bool
+	mdRender      bool
 	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
 	// applyConfig refresh stops tracking editor.markdown_rendering once the
 	// view toggled.
@@ -396,6 +400,12 @@ type Model struct {
 	// popup, and the hover popup. See lsp_state.go.
 	diags      []ilsp.Diagnostic
 	diagByLine map[int][]ilsp.Diagnostic
+	// notes are the Go-computed lint notes of the language (#1623) — dotenv's
+	// duplicate keys — indexed by line and produced by the highlight pass, not
+	// by a server. They are a channel of their own so a later DiagnosticsMsg
+	// cannot clobber them; the gutter tint and the inline underline read both
+	// (see worstSeverityOnLine, diagSeverityAt).
+	notes map[int][]lang.Note
 	// diagsEpoch bumps on every diagnostics replacement, marksEpoch on every
 	// git-marks replacement; sbcache memoizes the scrollbar stripes against
 	// both (#1097, #1131).
@@ -546,6 +556,7 @@ func New() Model {
 		uniDecode:          true,
 		entDecode:          true,
 		b64Decode:          true,
+		secretMask:         true,
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
@@ -682,6 +693,9 @@ func (m *Model) applyConfig() {
 	if !m.b64DecodeSet {
 		m.b64Decode = boolOr(m.cfg, "editor.base64_decoding", m.b64Decode)
 	}
+	if !m.secretMaskSet {
+		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)
+	}
 	if !m.colorPreviewSet {
 		m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	}
@@ -767,6 +781,7 @@ func (m *Model) Load(path string) error {
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
 	m.decodes = nil
+	m.notes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -820,6 +835,7 @@ func (m *Model) NewFile(path string) {
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
 	m.decodes = nil
+	m.notes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -854,6 +870,7 @@ func (m *Model) RestoreText(text string) {
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
 	m.decodes = nil
+	m.notes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -908,6 +925,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
 	m.decodes = nil
+	m.notes = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -1136,6 +1154,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			m.conceal = conceal
 			m.concealExt = extents
 			m.decodes = decodes
+			m.setNotes(msg.Notes)
 			m.scopes = msg.Scopes
 			m.folds = msg.Folds
 			m.reconcileFolds()

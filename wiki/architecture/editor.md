@@ -1374,6 +1374,34 @@ family has its own capture, conceal channel and toggle:
 families switch independently of each other and of the markdown/log layers.
 All toggles default on and stick per view like the #64 toggles.
 
+## Secret masking (#1623)
+
+Values in a `.env` file whose key names a credential render as `••••`
+(`secret.value`, `editor.secret_masking` / `view.toggleSecretMasking`). The
+key alone decides — `internal/secret.Suspect` matches `*_SECRET`, `PASSWORD`,
+`*_TOKEN`, `*_KEY`, `CREDENTIALS`, `DSN` and friends, and clears keys that
+only look like one (`PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL`, `AUTHOR`) — so
+the value is never inspected to decide whether to hide it. The mask is fixed
+width: sizing it to the value would leak the value's length.
+
+It is not a decode, but it rides the identical mechanic: the dotenv producer
+emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
+channel in `decodes`, gated by `decodeOn` like the escape families. So the
+positional reveal of #1594 applies unchanged — put the caret inside a value
+(or select across the line) and the raw secret is there to read and edit;
+move away and it masks again. The buffer is never altered, and a masked value
+copies, saves and diffs as itself. Masking is on by default; the toggle is
+per view and sticks like the other view toggles.
+
+Duplicate keys in the same file are marked in the gutter and underlined
+inline: the dotenv language registers a `lang.Lint` (see
+`/architecture/languages.md`) that flags every assignment of a key except the
+last, since that is the one loaders keep. The notes ride the highlight pass in
+`highlight.SpansMsg.Notes`, live in their own channel (`Model.notes`) so
+language-server diagnostics cannot clobber them, and merge into the same
+severity lookups the LSP diagnostics use — including the decoration toggles,
+so hiding warnings hides these too.
+
 ## Inline color preview (#790, #1622)
 
 Recognized color literals — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`,

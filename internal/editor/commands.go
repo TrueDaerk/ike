@@ -87,6 +87,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("view.toggleUnicodeEscapeDecoding", "Toggle Unicode Escape Decoding", "toggle_unicode_escape_decoding", ""),
 			action("view.toggleEntityDecoding", "Toggle Entity Decoding", "toggle_entity_decoding", ""),
 			action("view.toggleBase64Decoding", "Toggle Base64 Decoding", "toggle_base64_decoding", ""),
+			// Secret masking (#1623): dotenv values whose key names a secret
+			// render as ••••; per-view toggle over editor.secret_masking.
+			action("view.toggleSecretMasking", "Toggle Secret Masking", "toggle_secret_masking", ""),
 			// Inline color preview (#790/#1622): per-view toggle over the
 			// editor.color_preview config default.
 			action("view.toggleColorPreview", "Toggle Color Preview", "toggle_color_preview", ""),

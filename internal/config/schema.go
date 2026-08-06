@@ -282,6 +282,10 @@ type Editor struct {
 	// when the payload is printable text (#1620); the raw value reappears
 	// under the caret.
 	Base64Decoding bool `toml:"base64_decoding"`
+	// SecretMasking renders the value of a secret-suspect key in a dotenv
+	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
+	// and friends show as ••••; the raw value reappears under the caret.
+	SecretMasking bool `toml:"secret_masking"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme.
 	RainbowBrackets bool `toml:"rainbow_brackets"`

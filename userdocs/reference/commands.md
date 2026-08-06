@@ -223,6 +223,7 @@ bring their own.
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
 | Toggle Markdown Rendering | `view.toggleMarkdownRendering` | — | — | `editor` pane |
+| Toggle Secret Masking | `view.toggleSecretMasking` | — | — | `editor` pane |
 | Toggle Timestamp Decoding | `view.toggleTimestampDecoding` | — | — | `editor` pane |
 | Toggle Unicode Escape Decoding | `view.toggleUnicodeEscapeDecoding` | — | — | `editor` pane |
 | Toggle Whitespace Rendering | `view.toggleWhitespace` | — | — | `editor` pane |

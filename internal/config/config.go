@@ -139,6 +139,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.unicode_escape_decoding", c.Editor.UnicodeEscapeDecoding)
 	put("editor.entity_decoding", c.Editor.EntityDecoding)
 	put("editor.base64_decoding", c.Editor.Base64Decoding)
+	put("editor.secret_masking", c.Editor.SecretMasking)
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.rainbow_brackets", c.Editor.RainbowBrackets)
 	put("editor.search_ignore_case", c.Editor.SearchIgnoreCase)

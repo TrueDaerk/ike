@@ -24,7 +24,10 @@ func init() {
 			".env", ".env.local", ".env.example", ".env.sample", ".env.template",
 			".env.development", ".env.production", ".env.test", ".env.staging",
 		},
-		Spans:       envSpans,
+		Spans: envSpans,
+		// Duplicate keys (#1623): the earlier assignment loses silently in
+		// most loaders, so it is marked. See lint.go.
+		Lint:        envLint,
 		LineComment: "#",
 	})
 }
@@ -44,6 +47,9 @@ func envSpans(lines []string) []lang.Span {
 			out = append(out, lang.Span{Line: li, StartCol: start, EndCol: end, Capture: "comment"})
 			continue
 		}
+		// Masking spans come first: overlapping spans resolve first-covering-
+		// wins, so the mask must precede the value's own string span (#1623).
+		out = append(out, maskSpans(li, runes, start, end)...)
 		out = append(out, pairSpans(li, runes, start, end)...)
 		// JWTs anywhere on the line (#1619): the signature segment dims. The
 		// scan is structural — three base64url segments, the first two decoding
@@ -53,38 +59,72 @@ func envSpans(lines []string) []lang.Span {
 	return out
 }
 
-// pairSpans styles one `KEY=value` line: an optional `export` prefix as a
-// keyword, the key as property, the `=` as punctuation, the value as string.
-// A line without `=` styles whole as property.
-func pairSpans(li int, runes []rune, start, end int) []lang.Span {
-	var out []lang.Span
+// entry is one parsed assignment line, in rune columns. It is the single
+// structural read of a line: the span producer, the secret masker (#1623) and
+// the duplicate-key linter all work from it, so what counts as "the key" can
+// never drift between them.
+type entry struct {
+	exportStart, exportEnd int    // the `export` prefix; equal when absent
+	keyStart, keyEnd       int    // the key, whitespace-trimmed
+	sep                    int    // column of `=`, or -1 on a line without one
+	valStart, valEnd       int    // the value, leading whitespace skipped; equal when empty
+	key                    string // the key text, for the secret and duplicate tables
+}
+
+// parseEntry reads the assignment structure out of the content range
+// [start, end) of a line. A line without `=` yields sep == -1 and the whole
+// range as the key.
+func parseEntry(runes []rune, start, end int) entry {
+	e := entry{exportStart: start, exportEnd: start, sep: -1}
 	if kw := exportEnd(runes, start, end); kw > start {
-		out = append(out, lang.Span{Line: li, StartCol: start, EndCol: kw, Capture: "keyword"})
+		e.exportEnd = kw
 		for kw < end && isSpace(runes[kw]) {
 			kw++
 		}
 		start = kw
 	}
-	sep := -1
 	for i := start; i < end; i++ {
 		if runes[i] == '=' {
-			sep = i
+			e.sep = i
 			break
 		}
 	}
-	if sep < 0 {
-		return append(out, lang.Span{Line: li, StartCol: start, EndCol: end, Capture: "property"})
+	keyEnd := end
+	if e.sep >= 0 {
+		keyEnd = trimEnd(runes, start, e.sep)
 	}
-	if ke := trimEnd(runes, start, sep); ke > start {
-		out = append(out, lang.Span{Line: li, StartCol: start, EndCol: ke, Capture: "property"})
+	e.keyStart, e.keyEnd = start, keyEnd
+	e.key = string(runes[start:keyEnd])
+	if e.sep < 0 {
+		e.valStart, e.valEnd = end, end
+		return e
 	}
-	out = append(out, lang.Span{Line: li, StartCol: sep, EndCol: sep + 1, Capture: "punctuation"})
-	vs := sep + 1
+	vs := e.sep + 1
 	for vs < end && isSpace(runes[vs]) {
 		vs++
 	}
-	if vs < end {
-		out = append(out, lang.Span{Line: li, StartCol: vs, EndCol: end, Capture: "string"})
+	e.valStart, e.valEnd = vs, end
+	return e
+}
+
+// pairSpans styles one `KEY=value` line: an optional `export` prefix as a
+// keyword, the key as property, the `=` as punctuation, the value as string.
+// A line without `=` styles whole as property.
+func pairSpans(li int, runes []rune, start, end int) []lang.Span {
+	var out []lang.Span
+	e := parseEntry(runes, start, end)
+	if e.exportEnd > e.exportStart {
+		out = append(out, lang.Span{Line: li, StartCol: e.exportStart, EndCol: e.exportEnd, Capture: "keyword"})
+	}
+	if e.keyEnd > e.keyStart {
+		out = append(out, lang.Span{Line: li, StartCol: e.keyStart, EndCol: e.keyEnd, Capture: "property"})
+	}
+	if e.sep < 0 {
+		return out
+	}
+	out = append(out, lang.Span{Line: li, StartCol: e.sep, EndCol: e.sep + 1, Capture: "punctuation"})
+	if e.valEnd > e.valStart {
+		out = append(out, lang.Span{Line: li, StartCol: e.valStart, EndCol: e.valEnd, Capture: "string"})
 	}
 	return out
 }
