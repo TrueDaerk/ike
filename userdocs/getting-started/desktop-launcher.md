@@ -49,7 +49,7 @@ terminal itself must own (`super+` on macOS, `ctrl+` mirrors on Linux):
 | Binding | Action |
 |---|---|
 | `super+q` / `ctrl+shift+q` | quit the window |
-| `super+plus` / `minus` / `zero` (and `ctrl+` mirrors) | font zoom in / out / reset |
+| `super+plus` / `super+-` / `super+zero` (and `ctrl+` mirrors) | font zoom in / out / reset |
 | `super+,` / `super+shift+,` (and `ctrl+` mirrors) | open / reload the Ghostty config |
 | `alt+backspace` | macOS Option+Backspace escape sequence (delete word back) |
 
@@ -59,6 +59,10 @@ word deletion match directly.
 
 Copy and paste are deliberately **not** bound — IKE handles the clipboard
 itself.
+
+The runtime font zoom is per-instance and not persisted — each launch
+starts from `ike.conf`. To keep a size across launches, set `font-size =`
+in the config (`super+,` opens it, `super+shift+,` reloads it live).
 
 ## Known limitations
 
