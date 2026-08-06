@@ -149,6 +149,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.id_colors", c.Editor.IDColors)
 	put("editor.id_color_min_length", c.Editor.IDColorMinLength)
+	put("editor.diff_word_highlight", c.Editor.DiffWordHighlight)
 	put("editor.rainbow_brackets", c.Editor.RainbowBrackets)
 	put("editor.search_ignore_case", c.Editor.SearchIgnoreCase)
 	put("editor.breadcrumbs", c.Editor.Breadcrumbs)

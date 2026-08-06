@@ -1263,6 +1263,42 @@ emits everything through the Go span seam (#1585); the parsing lives in
 Toggling off shows plain raw source — no styling, escape bytes visible. The
 buffer never changes.
 
+## Unified-diff rendering (#1630)
+
+`.diff`/`.patch` buffers render with the affordances the diff views already
+have. The diff language plugin (`plugins/languages/diff`, no grammar — the
+format is line oriented and stateful, so all structure is Go-computed in
+`internal/unidiff` via the `Spans` and `Folds` seams):
+
+- **Line coloring**: added lines capture as `diff.plus`, removed as
+  `diff.minus`, `@@` hunk headers as `diff.delta`, file headers (`diff
+  --git`, `---`, `+++`) as `diff.header`, and the git extension headers
+  (`index`, `old/new mode`, `rename from/to`, `similarity index`, `Binary
+  files`, …) plus the `\ No newline at end of file` marker as `diff.meta`.
+  The captures derive from existing palette captures in
+  `highlight.NewThemeKeys` (string green for added, `variable.builtin` red
+  for removed, function for hunk headers, keyword for file headers, comment
+  for meta — the rainbow-brackets derivation pattern), overridable per slot
+  via `theme.captures.diff.*`.
+- **Exact classification**: the parser consumes each hunk body by the `@@`
+  header's line counts — the rule of the format — so a removed line whose
+  content starts with `-- ` is never mistaken for a `---` file header, and
+  prose between file sections (a format-patch commit message) stays plain.
+- **Word-level emphasis**: each run of consecutive removed lines pairs with
+  the added run that immediately follows; every i-th pair is refined
+  rune-level by the diff views' own Myers refinement (`diff.Refine`,
+  `maxRefineRunes` cap included). The changed ranges carry
+  `diff.plus.emph` / `diff.minus.emph` — the dotted-prefix fallback keeps
+  the line's foreground and `styleAt` layers the palette's `DiffChanged`
+  background underneath, so a `.diff` buffer reads like the diff panes.
+  Toggled by `editor.diff_word_highlight` (default on); a config flip
+  re-parses open editors like the rainbow-brackets toggle does.
+- **Folding**: every hunk folds behind its `@@` header and every file
+  section behind its `diff` header via the Go fold seam
+  (`lang.Language.Folds`, see
+  [highlighting](/architecture/highlighting.md)) — `za`/`zc`/`zM`/`zR`
+  work as in any buffer.
+
 ## Inline epoch-timestamp decoding (#1618)
 
 Numeric Unix timestamps render as their UTC form in place, display-only,

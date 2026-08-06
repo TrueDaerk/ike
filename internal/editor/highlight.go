@@ -8,6 +8,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/jwt"
 	"ike/internal/secret"
+	"ike/internal/unidiff"
 	"ike/internal/yamlanchor"
 )
 
@@ -97,6 +98,13 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// under the caret reads normally.
 	if capture == secret.Capture && !ok {
 		return m.hlTheme.Style("string")
+	}
+	// The word-level changed range of a paired removed/added diff line
+	// (#1630) takes the diff viewer's changed-range background under the
+	// line's own foreground (resolved above via the dotted-prefix fallback),
+	// so a .diff buffer reads like the diff panes.
+	if capture == unidiff.PlusEmph || capture == unidiff.MinusEmph {
+		return st.Background(m.theme().DiffChanged), true
 	}
 	// markup.* captures (#881) carry terminal text attributes, not colors:
 	// **bold** renders bold, *italic* italic, ~~strike~~ struck through —

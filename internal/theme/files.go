@@ -38,6 +38,10 @@ type fileColors struct {
 	// generated-output family — so the built-in themes need no per-theme
 	// entry; a theme may still set it.
 	Log string
+	// Diff covers unified diff files (diff, patch, #1630). Empty falls back
+	// to the Log color — the generated-output family — so the built-in
+	// themes need no per-theme entry; a theme may still set it.
+	Diff string
 }
 
 // fileGroups maps each fileColors group to the extension and filename keys it
@@ -68,7 +72,8 @@ var fileGroups = map[string][]string{
 	// dotenv (#1619) joins the config family: same tint as ini/toml.
 	"ini": {"ini", "conf", "env", ".env", ".env.local", ".env.example", ".env.sample",
 		".env.template", ".env.development", ".env.production", ".env.test", ".env.staging"},
-	"log": {"log"},
+	"log":  {"log"},
+	"diff": {"diff", "patch"},
 }
 
 // filesTable expands a fileColors spec into the flat extension/filename →
@@ -84,12 +89,16 @@ func filesTable(c fileColors) map[string]string {
 	if c.Log == "" {
 		c.Log = c.Lock // generated-output family default (#1621)
 	}
+	if c.Diff == "" {
+		c.Diff = c.Log // generated-output family default (#1630)
+	}
 	groups := map[string]string{
 		"go": c.Go, "lock": c.Lock, "md": c.Md, "toml": c.Toml,
 		"json": c.JSON, "yaml": c.YAML, "py": c.Py, "php": c.PHP,
 		"js": c.JS, "html": c.HTML, "css": c.CSS, "shell": c.Shell,
 		"sql": c.SQL, "xml": c.XML, "make": c.Make, "docker": c.Docker,
 		"http": c.HTTP, "csv": c.CSV, "ini": c.INI, "log": c.Log,
+		"diff": c.Diff,
 	}
 	t := map[string]string{"dir": c.Dir, "default": c.Default}
 	for g, color := range groups {

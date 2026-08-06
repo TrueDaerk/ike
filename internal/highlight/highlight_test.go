@@ -143,3 +143,31 @@ func TestThemeOverrideBeyondTheDefaults(t *testing.T) {
 		t.Fatal("prefix fallback must still resolve the head capture")
 	}
 }
+
+// TestDiffThemeDerivation (#1630): the unified-diff captures derive from
+// existing palette captures, the emphasis variants resolve through the
+// dotted-prefix fallback, and a config override wins for its slot.
+func TestDiffThemeDerivation(t *testing.T) {
+	th := NewTheme(nil, nil)
+	for capture := range diffSources {
+		if _, ok := th.Style(capture); !ok {
+			t.Errorf("%s must resolve from the default palette", capture)
+		}
+	}
+	plus, _ := th.Style("diff.plus")
+	emph, ok := th.Style("diff.plus.emph")
+	if !ok || emph.GetForeground() != plus.GetForeground() {
+		t.Error("diff.plus.emph must fall back to the diff.plus color")
+	}
+	th2 := NewTheme(nil, func(key string) (string, bool) {
+		if key == "theme.captures.diff.minus" {
+			return "#123456", true
+		}
+		return "", false
+	})
+	got, ok := th2.Style("diff.minus")
+	want, _ := NewTheme(map[string]string{"diff.minus": "#123456"}, nil).Style("diff.minus")
+	if !ok || got.GetForeground() != want.GetForeground() {
+		t.Error("theme.captures.diff.minus override must win")
+	}
+}

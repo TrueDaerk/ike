@@ -98,6 +98,7 @@ func defaults() *Config {
 			ColorPreview:           true,
 			IDColors:               true,
 			IDColorMinLength:       7,
+			DiffWordHighlight:      true,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,
 			Breadcrumbs:            true,

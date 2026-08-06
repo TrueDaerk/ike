@@ -78,6 +78,7 @@ import (
 	"ike/internal/typehier"
 	"ike/internal/ui"
 	"ike/internal/undotree"
+	"ike/internal/unidiff"
 	"ike/internal/vcs"
 	"ike/internal/vcspanel"
 	"ike/internal/wasm"
@@ -799,12 +800,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		focusKeys:      focusKeys(cfg),
 		keys:           buildKeymap(cfg, bindings),
 	}
-	m.floats = ui.NewStack(m.shell)           // z-ordered floating stack (#1237)
-	m.floats.SetSizeStore(winSizes)           // resizable modal shell (#774)
-	m.palette.SetSizeStore(winSizes)          // resizable palette box (#774)
-	m.floats.SetMaxWidth(popupMaxWidth())     // centered-popup width cap (#932)
-	highlight.SetRainbow(rainbowConfigured()) // rainbow brackets (#789)
-	applyIDColorConfig()                      // identifier colors (#1626)
+	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
+	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
+	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)
+	m.floats.SetMaxWidth(popupMaxWidth())           // centered-popup width cap (#932)
+	highlight.SetRainbow(rainbowConfigured())       // rainbow brackets (#789)
+	unidiff.SetWordHighlight(diffWordsConfigured()) // word-level diff emphasis (#1630)
+	applyIDColorConfig()                            // identifier colors (#1626)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -3985,15 +3987,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// so the change lands without waiting for the next edit.
 		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
 			highlight.SetRainbow(!before)
-			var cmds []tea.Cmd
-			for _, key := range m.activeWS().Panes.Keys() {
-				if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
-					for _, ed := range inst.Editors() {
-						cmds = append(cmds, ed.Reparse())
-					}
-				}
-			}
-			return m, tea.Batch(cmds...)
+			return m, tea.Batch(m.reparseOpenEditors()...)
+		}
+		// Word-level diff emphasis (#1630): same deal — a toggle flip
+		// re-parses so open .diff buffers update without waiting for an edit.
+		if before := unidiff.WordHighlightEnabled(); before != diffWordsConfigured() {
+			unidiff.SetWordHighlight(!before)
+			return m, tea.Batch(m.reparseOpenEditors()...)
 		}
 		return m, nil
 
@@ -6200,6 +6200,28 @@ func popupMaxWidth() int {
 		return c.UI.PopupMaxWidth
 	}
 	return 110
+}
+
+// reparseOpenEditors schedules a fresh parse of every open editor, so a
+// highlight-affecting toggle flip lands without waiting for the next edit.
+func (m *Model) reparseOpenEditors() []tea.Cmd {
+	var cmds []tea.Cmd
+	for _, key := range m.activeWS().Panes.Keys() {
+		if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
+			for _, ed := range inst.Editors() {
+				cmds = append(cmds, ed.Reparse())
+			}
+		}
+	}
+	return cmds
+}
+
+// diffWordsConfigured reads editor.diff_word_highlight (#1630, default on).
+func diffWordsConfigured() bool {
+	if c := config.Get(); c != nil {
+		return c.Editor.DiffWordHighlight
+	}
+	return true
 }
 
 // rainbowConfigured reads editor.rainbow_brackets (#789, default on).

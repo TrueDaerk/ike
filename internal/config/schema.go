@@ -313,6 +313,11 @@ type Editor struct {
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.
 	SecretMasking bool `toml:"secret_masking"`
+	// DiffWordHighlight emphasizes the word-level changed range inside
+	// paired removed/added lines of .diff/.patch buffers (#1630) with the
+	// diff viewer's changed-range background; off keeps whole-line coloring
+	// only.
+	DiffWordHighlight bool `toml:"diff_word_highlight"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme; brackets left without a
 	// partner render as errors (#1628).
