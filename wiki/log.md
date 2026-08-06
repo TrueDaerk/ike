@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-06 (editor: color-hash UUIDs and hashes, #1626)
+
+- `internal/idcolor` detects UUIDs (`8-4-4-4-12`) and standalone hex runs of
+  at least `editor.id_color_min_length` characters (default 7, the
+  abbreviated git SHA; all-digit runs and `#rrggbb` color literals excluded)
+  and hashes each identifier (FNV-1a, case-folded) onto a slot of the shared
+  rainbow palette — every occurrence of one identifier gets one color, across
+  lines, panes and files.
+- Active in the formats where an opaque id is the point: log buffers (#1621),
+  JSON/NDJSON, `.http` files, and `.http` response bodies (`internal/httppane`
+  reads the package globals `internal/app` pushes from the config). The color
+  replaces the syntax foreground only, so backgrounds and the color swatch of
+  #790 are untouched.
+- Toggles: `editor.id_colors` (default on) plus the per-view
+  `view.toggleIdentifierColors` action, sticky like the #64 view toggles.
+
 ## 2026-08-06 (editor: human-readable cron hints, #1624)
 
 - `internal/cronhint` parses standard cron (five fields plus an optional

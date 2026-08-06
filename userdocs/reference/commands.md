@@ -221,6 +221,7 @@ bring their own.
 | Toggle Color Preview | `view.toggleColorPreview` | — | — | `editor` pane |
 | Toggle Cron Hints | `view.toggleCronHints` | — | — | `editor` pane |
 | Toggle Entity Decoding | `view.toggleEntityDecoding` | — | — | `editor` pane |
+| Toggle Identifier Colors | `view.toggleIdentifierColors` | — | — | `editor` pane |
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
 | Toggle Markdown Rendering | `view.toggleMarkdownRendering` | — | — | `editor` pane |

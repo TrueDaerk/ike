@@ -91,6 +91,8 @@ func defaults() *Config {
 			CronHints:              true,
 			SecretMasking:          true,
 			ColorPreview:           true,
+			IDColors:               true,
+			IDColorMinLength:       7,
 			RainbowBrackets:        true,
 			SearchIgnoreCase:       false,
 			Breadcrumbs:            true,

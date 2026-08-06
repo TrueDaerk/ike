@@ -726,6 +726,9 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	conceals := m.lineConcealRanges(line)
 	// Inline color preview (#790): literal cells tint with their own color.
 	swatches := m.lineColorSwatches(line)
+	// Identifier colors (#1626): UUIDs and hex hashes take a foreground from
+	// the rainbow palette keyed on the identifier's own hash.
+	ids := m.lineIDColors(line)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Merge-conflict tint (#1149): the line's role in a conflict block, and
@@ -975,6 +978,17 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// colour; cursor/selection/search already won above.
 				st = st.Background(m.occurrenceColor(kind))
 				styled = true
+			}
+			for _, id := range ids {
+				// Identifier colors (#1626): the hash-keyed rainbow color
+				// replaces the syntax foreground, leaving the backgrounds
+				// (ruler, conflict, occurrence) below it intact.
+				if col >= id.Start && col < id.End {
+					if idst, ok := m.idColorStyle(id); ok {
+						st, styled = st.Foreground(idst.GetForeground()), true
+					}
+					break
+				}
 			}
 			for _, sw := range swatches {
 				// Color preview (#790): the literal's own color replaces the

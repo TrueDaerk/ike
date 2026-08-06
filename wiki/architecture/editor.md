@@ -1469,6 +1469,48 @@ channel in a terminal cell).
 Cursor/selection/search win the cell as usual; the diagnostic underline
 composes on top.
 
+## Identifier color hashing (#1626)
+
+UUIDs and long hex hashes — git SHAs, request/trace/correlation IDs — render
+in a color derived from **the identifier's own hash**, so every occurrence of
+the same identifier shares one color. In a log or a JSON payload it becomes
+visible at a glance which lines belong to the same request, without reading a
+hex digit. It is the #1589 palette mechanic keyed on content instead of column
+index, the same trick the log thread/logger names use.
+
+- **Detection** (`internal/idcolor`, `Scan`): the canonical UUID form
+  `8-4-4-4-12` first (its groups are then excluded from the hex pass), then
+  bare hex runs. A run only counts when it is **standalone** — neither
+  neighbour a letter or digit, so the tail of `0xdeadbeef` or of a base64 blob
+  never matches — reaches the **minimum length** (`editor.id_color_min_length`,
+  default 7, the abbreviated git SHA, floor 6) and carries at least one hex
+  letter, because an all-digit run is a number, not an identifier. A leading
+  `#` excludes the run: that is a color literal the inline color preview (#790)
+  owns.
+- **Color assignment** (`idcolor.Slot`): FNV-1a over the case-folded
+  identifier, modulo the rainbow cycle length, so `3F2A…` and `3f2a…` share a
+  slot and the mapping is stable across lines, panes, files and runs. The slot
+  renders through the shared rainbow palette (`idcolor.Capture` →
+  `rainbow.<N>`), so a `theme.captures.rainbow.N` override moves identifier
+  colors along with bracket colors.
+- **Scope** (`idcolors.go`, `idColorLangs`): the formats where an opaque
+  identifier is the point — `log` (#1621), `json`/`ndjson` and `http`.
+  Everywhere else a hex run is far more often a literal. Detection runs per
+  rendered line inside the line-cached render path, so only visible lines are
+  ever scanned.
+- **Rendering**: the hashed color replaces the syntax **foreground** only, so
+  the backgrounds below it (ruler, conflict, occurrence) stay intact; the
+  color swatch (#790), diagnostics, cursor, selection and search still win
+  their cells.
+- **`.http` response bodies**: `internal/httppane` colors identifiers in the
+  body rows through the same package. That pane has no config of its own, so
+  it reads the `idcolor` package globals, which `applyIDColorConfig` in
+  `internal/app` pushes from `editor.id_colors` /
+  `editor.id_color_min_length` at startup and on every config reload.
+- **Toggles**: the `editor.id_colors` config default (default on, Settings →
+  Editor) plus the per-view `view.toggleIdentifierColors` palette action,
+  which sticks like the #64 view toggles.
+
 ## Live templates / snippets (#1152)
 
 `snippet_expand.go` + `internal/snippets`: user-defined **live templates**
@@ -1545,7 +1587,8 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624), `color_preview`
-(#790) and `search_ignore_case` (#1111, default off — in-file search folds
+(#790), `id_colors` / `id_color_min_length` (#1626)
+and `search_ignore_case` (#1111, default off — in-file search folds
 case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,
 `view.toggleIndentGuides`) marks a per-view override that the per-event config
