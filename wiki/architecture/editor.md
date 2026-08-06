@@ -1275,9 +1275,24 @@ emits everything through the Go span seam (#1585); the parsing lives in
   between them carries an `ansi.<spec>` capture (`fg1.bold`, `fg#0080ff`)
   that `logStyle` resolves against the theme's terminal palette (#1363) for
   indexes 0–15, 256-color indexes and truecolor literals directly.
+- **Repeat collapsing** (#1650, `logfold.go`): a polling service repeats the
+  same line for pages, so a run of consecutive identical lines folds into its
+  first line plus a dimmed `×N` marker (N counts the whole run). "Identical"
+  is `logline.RepeatKey` equality — every timestamp the parser recognizes (the
+  header stamp and the `time`/`ts`/`timestamp`/`datetime`/`date` pair values
+  anywhere on the line) is blanked before comparing, so only the stamps moving
+  still counts as a repeat; blank lines never fold. The runs are computed
+  whole-buffer, cached per document version and path (`logRunCache`, a pointer
+  field like `svTable`), and skipped for large files (#149) whose insight is
+  already off. Hidden lines ride the fold machinery: `lineHidden` reports them
+  and `hasFolds` gates on them, so motions, scrolling, the mouse map and the
+  render loop treat a run exactly like a closed fold. Unlike a fold it has no
+  open/close command — it reveals *positionally*, like the conceal layer
+  (#1594): while the cursor is anywhere inside the run, every line renders raw
+  and the marker disappears; moving out collapses it again.
 
-Toggling off shows plain raw source — no styling, escape bytes visible. The
-buffer never changes.
+Toggling off shows plain raw source — no styling, escape bytes visible, every
+repeat expanded. The buffer never changes.
 
 ## Unified-diff rendering (#1630)
 

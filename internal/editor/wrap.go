@@ -20,13 +20,13 @@ func (m Model) wrapSegs(line int) []int {
 }
 
 // wrapRows reports how many screen rows line occupies under soft wrap: 0 when
-// hidden inside a collapsed fold, 1 for a collapsed fold's header (it renders
-// as a single row), else its wrap-segment count.
+// hidden inside a collapsed fold or repeat run, 1 for a collapsed header (it
+// renders as a single row), else its wrap-segment count.
 func (m Model) wrapRows(line int) int {
 	if m.lineHidden(line) {
 		return 0
 	}
-	if _, ok := m.foldedAt(line); ok {
+	if m.collapsedRow(line) {
 		return 1
 	}
 	return len(m.wrapSegs(line))
@@ -90,7 +90,7 @@ func (m Model) wrapClickAt(y int) (line, segStart int) {
 	for line < lc {
 		rows := m.wrapRows(line)
 		if n < rows {
-			if _, folded := m.foldedAt(line); !folded {
+			if !m.collapsedRow(line) {
 				segs := m.wrapSegs(line)
 				return line, segs[n]
 			}
@@ -125,7 +125,7 @@ func (m Model) DisplayRow(line, col int) int {
 		}
 	}
 	if m.softWrap {
-		if _, folded := m.foldedAt(line); !folded {
+		if !m.collapsedRow(line) {
 			row += viewport.SegmentIndex(m.wrapSegs(line), col)
 		}
 	}

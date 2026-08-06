@@ -89,6 +89,12 @@ With the caret on the coloured line, its escape bytes are back:
 
 ![The caret revealing the ANSI escape bytes on one line](../screenshots/features/log-escape-reveal.png)
 
+Polling services write the same line over and over. A run of consecutive
+identical lines collapses into the first one with a dimmed `×N` marker counting
+the run — lines only differing in their timestamps count as repeats. Move the
+caret onto the collapsed line and the whole run comes back, the same positional
+reveal the escapes use.
+
 Toggle it per view with **Toggle Log Rendering**.
 
 ## Turning it off
