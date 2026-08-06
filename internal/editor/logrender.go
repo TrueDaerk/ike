@@ -15,10 +15,12 @@ import (
 // logrender.go is the editor half of the log-file rendering (#1621): the log
 // language plugin emits captures the ordinary highlight pipeline carries —
 // log.time / log.error / log.warn / log.info / log.debug for header fields,
-// log.rainbow.N for thread/logger names, ansi.<spec> for SGR-styled runs and
+// log.rainbow.N for thread/logger names, log.key / log.message for the logfmt
+// pairs past the header (#1633), ansi.<spec> for SGR-styled runs and
 // conceal for the escape bytes — and this file resolves them into styles the
 // theme table does not know: severities from the palette's semantic colors,
-// timestamps and debug lines as terminal faint, ANSI colors from the theme's
+// timestamps, keys and debug lines as terminal faint, the message bold,
+// ANSI colors from the theme's
 // terminal palette (#1363). A `theme.captures.log.*` config key still wins,
 // because styleAt consults the capture table first. Everything is gated by
 // logRender (editor.log_rendering / view.toggleLogRendering), which also
@@ -66,8 +68,10 @@ func (m Model) logStyle(capture string) (lipgloss.Style, bool) {
 		return lipgloss.NewStyle().Foreground(pal.Error), true
 	case "log.warn":
 		return lipgloss.NewStyle().Foreground(pal.Warning), true
-	case "log.time", "log.debug":
+	case "log.time", "log.debug", "log.key":
 		return lipgloss.NewStyle().Faint(true), true
+	case "log.message":
+		return lipgloss.NewStyle().Bold(true), true
 	}
 	if n, ok := strings.CutPrefix(capture, "log.rainbow."); ok {
 		return m.hlTheme.Style("rainbow." + n)

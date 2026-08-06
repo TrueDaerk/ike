@@ -106,6 +106,22 @@ func TestLogConcealRevealsUnderCaret(t *testing.T) {
 	}
 }
 
+// TestLogfmtPairStyles (#1633): logfmt keys render faint like timestamps, the
+// message value bold.
+func TestLogfmtPairStyles(t *testing.T) {
+	m := logLoaded(t, logDoc)
+	for _, capture := range []string{"log.key", "log.time"} {
+		st, ok := m.logStyle(capture)
+		if !ok || !st.GetFaint() {
+			t.Errorf("%s style = ok=%v faint=%v", capture, ok, st.GetFaint())
+		}
+	}
+	st, ok := m.logStyle("log.message")
+	if !ok || !st.GetBold() {
+		t.Errorf("log.message style = ok=%v bold=%v", ok, st.GetBold())
+	}
+}
+
 // TestLogANSIStyleResolvesPalette: an ansi.* capture resolves indexed colors
 // against the theme's terminal palette and carries the attributes.
 func TestLogANSIStyleResolvesPalette(t *testing.T) {
