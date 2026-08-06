@@ -132,7 +132,11 @@ Parsing runs **off the event loop**. The editor owns a monotonic `docVersion`
 returns a `tea.Cmd` that runs the CGo parse on a goroutine and yields a
 `highlight.SpansMsg{Path, Version, Spans, Scopes, Folds}`. The app routes it back to the editor
 leaf owning the path; the editor caches the spans **only if the version still
-matches** (a newer edit drops stale results). `renderLine` then looks up the
+matches** (a newer edit drops stale results). Before delivery,
+`HighlightScoped` overlays any Go-computed spans the language registers
+(`lang.Language.Spans`, #1585 — see `/architecture/languages.md`) by
+prepending them, so they beat the grammar's coarser captures the way
+injected-fragment spans do. `renderLine` then looks up the
 capture per rune cell and wraps it in the themed style — in the default branch,
 so the cursor and the visual selection still win on overlap, and a diagnostic
 underline composes on top.

@@ -23,17 +23,35 @@ import (
 // — equivalent to the grammar's pipe_table extent, but it also works in
 // CGO_ENABLED=0 builds and needs no extra parse channel.
 
-// concealSplit separates @conceal spans from the style spans of a parse
-// result. The conceal ranges are per-line [start, end) rune columns, in span
-// order (the query emits them left-to-right per line).
-func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[int][][2]int) {
+// concealRange is one concealed [start, end) rune-column range on a line. An
+// empty repl hides the range outright (markdown marker chrome, #881); a
+// non-empty repl renders as a one-glyph stand-in for the source runes (#1585,
+// "%20" displays as " ") — underlined so it reads as a decoded stand-in, not
+// buffer content.
+type concealRange struct {
+	start, end int
+	repl       string
+}
+
+// concealSplit separates conceal spans — the @conceal capture (#881) and any
+// span carrying a Replace stand-in (#1585) — from the style spans of a parse
+// result. The conceal ranges are per-line, in span order (producers emit them
+// left-to-right per line). A Replace span keeps its style span too: the raw
+// source (cursor line, selection) still styles by its capture.
+func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[int][]concealRange) {
+	add := func(s highlight.Span) {
+		if conceal == nil {
+			conceal = make(map[int][]concealRange)
+		}
+		conceal[s.Line] = append(conceal[s.Line], concealRange{start: s.StartCol, end: s.EndCol, repl: s.Replace})
+	}
 	for _, s := range spans {
 		if s.Capture == "conceal" {
-			if conceal == nil {
-				conceal = make(map[int][][2]int)
-			}
-			conceal[s.Line] = append(conceal[s.Line], [2]int{s.StartCol, s.EndCol})
+			add(s)
 			continue
+		}
+		if s.Replace != "" {
+			add(s)
 		}
 		style = append(style, s)
 	}
@@ -42,8 +60,8 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[i
 
 // concealOn reports whether concealment applies to line right now: the toggle
 // is on, the line has conceal ranges, and neither the cursor (of a focused
-// view) nor any secondary caret sits on it — those lines always show raw
-// source.
+// view) nor any secondary caret sits on it, nor is any of it selected — those
+// lines always show raw source so editing and inspection stay exact.
 func (m Model) concealOn(line int) bool {
 	if !m.mdRender || len(m.conceal[line]) == 0 {
 		return false
@@ -56,17 +74,26 @@ func (m Model) concealOn(line int) bool {
 			return false
 		}
 	}
+	if _, _, ok := m.selectionOnLine(line, len([]rune(m.buf.Line(line)))); ok {
+		return false
+	}
 	return true
 }
 
 // concealedAt reports whether the rune column on line falls in a conceal range.
 func (m Model) concealedAt(line, col int) bool {
+	_, ok := m.concealRangeAt(line, col)
+	return ok
+}
+
+// concealRangeAt returns the conceal range covering the rune column, if any.
+func (m Model) concealRangeAt(line, col int) (concealRange, bool) {
 	for _, r := range m.conceal[line] {
-		if col >= r[0] && col < r[1] {
-			return true
+		if col >= r.start && col < r.end {
+			return r, true
 		}
 	}
-	return false
+	return concealRange{}, false
 }
 
 // --- pipe tables -----------------------------------------------------------

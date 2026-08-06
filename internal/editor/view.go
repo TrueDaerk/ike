@@ -337,17 +337,28 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 
 // displayClickCol is the mouse map's inverse for a row's display cells: the
 // clicked offset counts cells from buffer column from, where a tab occupies
-// tabWidth cells (View expands it) and concealed columns emit nothing (#881),
-// so the buffer column is the one whose display prefix covers the offset. A
-// click inside a tab's cells lands on the tab itself; offsets past the line
-// end map 1:1 (everything there is one-cell padding).
+// tabWidth cells (View expands it), concealed columns emit nothing (#881),
+// and a stand-in range renders its replacement's cells at the range start
+// (#1585) — so the buffer column is the one whose display prefix covers the
+// offset. A click inside a tab's cells lands on the tab itself, one inside a
+// stand-in lands on the range start; offsets past the line end map 1:1
+// (everything there is one-cell padding).
 func (m Model) displayClickCol(line, from, offset int) int {
 	runes := []rune(m.buf.Line(line))
 	concealing := m.concealOn(line)
 	col := from
 	for ; col < len(runes); col++ {
-		if concealing && m.concealedAt(line, col) {
-			continue
+		if concealing {
+			if cr, ok := m.concealRangeAt(line, col); ok {
+				if cr.repl != "" && col == cr.start {
+					if cells := lipgloss.Width(cr.repl); offset < cells {
+						return col
+					} else {
+						offset -= cells
+					}
+				}
+				continue
+			}
 		}
 		cells := 1
 		if runes[col] == '\t' {
@@ -815,16 +826,28 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursorHere := isCursorLine && col == m.cursor.Col
 		caretHere := m.focused && m.caretOnLine(line, col)
 		selected := hasSel && col >= selStart && col <= selEnd
-		if concealing && col < len(runes) && m.concealedAt(line, col) {
-			// Concealed marker cell (#881): emit nothing, display columns
-			// close up; contentCells still advances so ruler/guide positions
-			// keep tracking buffer cells.
-			if runes[col] == '\t' {
-				contentCells += m.tabWidth
-			} else {
-				contentCells++
+		if concealing && col < len(runes) {
+			if cr, ok := m.concealRangeAt(line, col); ok {
+				// Concealed cell: marker chrome (#881) emits nothing; a
+				// stand-in range (#1585) emits its replacement once, at the
+				// range start, styled by the range's own capture plus an
+				// underline so it reads as a decoded stand-in. Display
+				// columns close up either way; contentCells still advances
+				// so ruler/guide positions keep tracking buffer cells.
+				if cr.repl != "" && col == cr.start {
+					if w := lipgloss.Width(cr.repl); disp+w <= width {
+						st, _ := m.styleAt(line, col)
+						b.WriteString(st.Underline(true).Render(cr.repl))
+						disp += w
+					}
+				}
+				if runes[col] == '\t' {
+					contentCells += m.tabWidth
+				} else {
+					contentCells++
+				}
+				continue
 			}
-			continue
 		}
 		if col >= len(runes) && !cursorHere && !caretHere && !selected {
 			// Nothing meaningful left on this line; flush hints anchored at or
@@ -1013,8 +1036,9 @@ func (m Model) guideAt(col, indentEnd, abs int) bool {
 
 // DisplayOffset converts a buffer column on a line to its display-cell offset
 // from the left edge of the text area, accounting for horizontal scroll, tab
-// expansion, and injected inlay hints (#171) — so overlays anchored at a
-// buffer cell align with what renderLine actually drew.
+// expansion, concealed columns (#881/#1585) and injected inlay hints (#171) —
+// so overlays anchored at a buffer cell align with what renderLine actually
+// drew.
 func (m Model) DisplayOffset(line, col int) int {
 	runes := []rune(m.buf.Line(line))
 	from := m.view.Left
@@ -1024,8 +1048,19 @@ func (m Model) DisplayOffset(line, col int) int {
 		segs := m.wrapSegs(line)
 		from = segs[viewport.SegmentIndex(segs, col)]
 	}
+	concealing := m.concealOn(line)
 	disp := 0
 	for c := from; c < col; c++ {
+		if concealing {
+			if cr, ok := m.concealRangeAt(line, c); ok {
+				// A concealed column emits nothing; a stand-in range emits
+				// its replacement's cells once, at the range start.
+				if cr.repl != "" && c == cr.start {
+					disp += lipgloss.Width(cr.repl)
+				}
+				continue
+			}
+		}
 		if c < len(runes) && runes[c] == '\t' {
 			disp += m.tabWidth
 		} else {

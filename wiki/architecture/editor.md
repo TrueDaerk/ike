@@ -1128,10 +1128,19 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   the marker chrome (`**`, `*`, `` ` ``, link `[]()` + destination) as
   `@conceal`; the `SpansMsg` handler splits those spans out of the style index
   into per-line column ranges, and `renderSpan` skips those cells so the line
-  reads like rendered text. The cursor line always shows raw source. Mouse
-  clicks map back through the hidden ranges (`displayClickCol`), so the cursor
-  lands on the character that was clicked; buffer-column motions and
-  selections are untouched by design.
+  reads like rendered text. The cursor line — and any line a visual selection
+  touches (#1585) — always shows raw source. Mouse clicks map back through
+  the hidden ranges (`displayClickCol`), so the cursor lands on the character
+  that was clicked; buffer-column motions and selections are untouched by
+  design.
+- **Stand-in conceals** (#1585): a span carrying a `Replace` string (produced
+  by a language's Go span hook, e.g. `.http` percent-encodings — `%20`
+  decodes to a space, `%C3%A4` to `ä` across all six source columns) conceals
+  its range behind the replacement glyph, rendered underlined in the range's
+  own capture style so it reads as a decoded stand-in. The same
+  raw-on-cursor/selection rules apply, and `displayClickCol` /
+  `DisplayOffset` account for the collapsed width (the latter now walks
+  conceal ranges in general, fixing overlay anchors on concealed lines).
 - **Pipe tables** (cursor outside the block): detected from the buffer text (a
   pipe row above a `|---|` delimiter row — equivalent to the grammar's
   `pipe_table`, but it also works in `CGO_ENABLED=0` builds), re-rendered with

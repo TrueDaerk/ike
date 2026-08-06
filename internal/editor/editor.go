@@ -309,12 +309,14 @@ type Model struct {
 	docVersion int
 	hlVersion  int
 	hlIndex    highlight.Index
-	// Markdown rich rendering (#881). conceal holds the per-line marker-chrome
-	// column ranges split out of the same parse as hlIndex (@conceal captures);
-	// mdRender is the editor.markdown_rendering toggle; mdTables caches the
-	// detected pipe tables per document version (pointer, shared across the
-	// value copies like lineCache).
-	conceal  map[int][][2]int
+	// Rich inline rendering. conceal holds the per-line concealed column
+	// ranges split out of the same parse as hlIndex — markdown marker chrome
+	// (@conceal captures, #881) and stand-in replacements like decoded
+	// percent-encodings (#1585); mdRender is the editor.markdown_rendering
+	// toggle gating all of it; mdTables caches the detected pipe tables per
+	// document version (pointer, shared across the value copies like
+	// lineCache).
+	conceal  map[int][]concealRange
 	mdRender bool
 	mdTables *mdTableState
 	// colorPreview is the inline color-swatch toggle (#790,

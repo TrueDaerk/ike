@@ -51,8 +51,9 @@ func TestHighlighting(t *testing.T) {
 }
 
 // TestFoldedQueryHighlighting: indented "?"/"&" continuation lines (#1269)
-// are part of the request target for the grammar too, so they highlight as
-// the URL does — not as a broken header.
+// are part of the request target — since #1585 they carry the query-param
+// captures (separators as punctuation, keys as property), not a broken
+// header.
 func TestFoldedQueryHighlighting(t *testing.T) {
 	lines := []string{
 		"GET https://example.net:9210/_cat/indices",
@@ -62,8 +63,11 @@ func TestFoldedQueryHighlighting(t *testing.T) {
 	}
 	ix := highlight.NewIndex(highlight.Highlight("req.http", lines))
 	for _, ln := range []int{1, 2} {
-		if got := ix.CaptureAt(ln, 4); got != "string" {
-			t.Errorf("folded query line %d: got capture %q, want string", ln, got)
+		if got := ix.CaptureAt(ln, 4); got != "punctuation" {
+			t.Errorf("folded query line %d separator: got capture %q, want punctuation", ln, got)
+		}
+		if got := ix.CaptureAt(ln, 6); got != "property" {
+			t.Errorf("folded query line %d key: got capture %q, want property", ln, got)
 		}
 	}
 	if got := ix.CaptureAt(3, 0); got != "constant" {
