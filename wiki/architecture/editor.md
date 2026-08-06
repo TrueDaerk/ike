@@ -1374,20 +1374,36 @@ family has its own capture, conceal channel and toggle:
 families switch independently of each other and of the markdown/log layers.
 All toggles default on and stick per view like the #64 toggles.
 
-## Inline color preview (#790)
+## Inline color preview (#790, #1622)
 
-Recognized color literals — `#rrggbb`, `#rgb`, `rgb()/rgba()`, `hsl()/hsla()`
-— render with the literal's own color as the **cell background** and a
-black/white contrast foreground picked by luminance (`colorswatch.go`).
+Recognized color literals — `#rgb`, `#rgba`, `#rrggbb`, `#rrggbbaa`,
+`rgb()/rgba()`, `hsl()/hsla()` — render with the literal's own color as the
+**cell background** and a black/white contrast foreground picked by luminance
+(`colorswatch.go`).
 The tint approach (instead of extra `██` swatch cells) is deliberate: it adds
 no display columns, so motions, mouse clicks, soft wrap and the #881 conceal
 mapping stay untouched. Detection is a per-line regex scan inside the
 line-cached render path — only visible lines are ever scanned, so large files
-cost nothing. Invalid values (out-of-range channels, wrong arity, 4/5/8-digit
+cost nothing. Invalid values (out-of-range channels, wrong arity, 5/7-digit
 hex) yield no swatch. Alpha components parse but do not tint (no alpha
-channel in a terminal cell). Toggle: `editor.color_preview` (default on,
-Settings → Editor). Cursor/selection/search win the cell as usual; the
-diagnostic underline composes on top.
+channel in a terminal cell).
+
+- **Scope per language** (#1622): `colorPolicy` resolves the buffer language
+  through `lang.ByPath`. The **CSS family** (`css`, and the `scss`/`less`
+  extensions it covers) tints *every* literal — there a hex triple is never
+  anything else. **Every other language** — config formats (TOML/YAML/JSON)
+  and code alike — tints only literals in a **value position**: the literal
+  must be delimited by a line edge, whitespace, a quote, or one of
+  `: = , ( [ { < | -` on the left and the matching closers on the right. So
+  `accent = "#ff8800"` and `accent: #ff8800` light up, while the fragment of
+  `https://example.com/p#ff8800` or a `abc#ff8800` suffix stays plain.
+- **Toggles**: the `editor.color_preview` config default (default on,
+  Settings → Editor) plus the per-view `view.toggleColorPreview` palette
+  action, which sticks like the #64 view toggles (`applyConfig` stops tracking
+  the config value once toggled).
+
+Cursor/selection/search win the cell as usual; the diagnostic underline
+composes on top.
 
 ## Live templates / snippets (#1152)
 

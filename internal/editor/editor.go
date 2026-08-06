@@ -358,7 +358,10 @@ type Model struct {
 	logRenderSet bool
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
-	colorPreview bool
+	// colorPreviewSet marks a per-view view.toggleColorPreview override
+	// (#1622), like mdRenderSet.
+	colorPreview    bool
+	colorPreviewSet bool
 	// scopes are the sticky-scroll scopes (#168) delivered by the same parse
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
@@ -679,7 +682,9 @@ func (m *Model) applyConfig() {
 	if !m.b64DecodeSet {
 		m.b64Decode = boolOr(m.cfg, "editor.base64_decoding", m.b64Decode)
 	}
-	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
+	if !m.colorPreviewSet {
+		m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
+	}
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
 			m.stickyDepth = n

@@ -6,17 +6,27 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"ike/internal/lang"
 )
 
-// colorswatch.go is the inline color preview (#790): recognized color
-// literals — #rrggbb, #rgb, rgb()/rgba(), hsl()/hsla() — render with the
-// literal's own color as the cell background and a black/white contrast
-// foreground picked by luminance. The tint approach (rather than extra ██
-// swatch cells) is deliberate: it adds no display columns, so motions, mouse
-// clicks, soft wrap and the #881 conceal mapping are untouched, and the color
-// is visible at the width of the literal itself. Detection runs per rendered
-// line inside the (line-cached) render path — only visible lines are ever
-// scanned, so large files cost nothing extra. Toggle: editor.color_preview.
+// colorswatch.go is the inline color preview (#790, extended in #1622):
+// recognized color literals — #rgb, #rgba, #rrggbb, #rrggbbaa, rgb()/rgba(),
+// hsl()/hsla() — render with the literal's own color as the cell background
+// and a black/white contrast foreground picked by luminance. The tint
+// approach (rather than extra ██ swatch cells) is deliberate: it adds no
+// display columns, so motions, mouse clicks, soft wrap and the #881 conceal
+// mapping are untouched, and the color is visible at the width of the literal
+// itself. Detection runs per rendered line inside the (line-cached) render
+// path — only visible lines are ever scanned, so large files cost nothing
+// extra.
+//
+// Scope is language-keyed (#1622): in the CSS family every literal tints,
+// everywhere else (config formats like TOML/YAML/JSON, and code) a literal
+// only tints in a *value position* — delimited by whitespace, quotes or one
+// of : = , ( [ { — so a URL fragment or a commit hash suffix never lights up.
+// Toggles: editor.color_preview config default plus the per-view
+// view.toggleColorPreview action.
 
 // colorSpan is one detected literal: [Start, End) rune columns and its color.
 type colorSpan struct {
@@ -24,23 +34,48 @@ type colorSpan struct {
 	R, G, B    uint8
 }
 
+// colorPolicy decides which detected literals actually tint (#1622).
+type colorPolicy int
+
+const (
+	// colorAll tints every literal — the CSS family, where a color literal is
+	// never anything else.
+	colorAll colorPolicy = iota
+	// colorValue tints only literals in a value position: the default for
+	// config formats and code, where `#deadbe` may be a fragment or a hash.
+	colorValue
+)
+
 var (
-	hexColorRe  = regexp.MustCompile(`#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b`)
+	// 8 and 4 digit forms carry an alpha channel: parsed, then dropped (a
+	// terminal cell has no alpha). Longest alternative first so #rrggbbaa
+	// never matches as #rrggbb.
+	hexColorRe  = regexp.MustCompile(`#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})\b`)
 	funcColorRe = regexp.MustCompile(`(?i)\b(rgba?|hsla?)\(([^)]*)\)`)
 )
 
-// parseColorLiterals scans one line for color literals. Invalid values (out
-// of range, wrong arity) yield no span — better a missed swatch than a wrong
-// color.
-func parseColorLiterals(line string) []colorSpan {
+// valueLead / valueTrail are the delimiters that make a literal a value under
+// colorValue: line edges count too.
+const (
+	valueLead  = " \t:=,([{'\"<|-"
+	valueTrail = " \t,;)]}'\">|"
+)
+
+// parseColorLiterals scans one line for color literals under the given
+// policy. Invalid values (out of range, wrong arity) yield no span — better a
+// missed swatch than a wrong color.
+func parseColorLiterals(line string, policy colorPolicy) []colorSpan {
 	var out []colorSpan
 	for _, loc := range hexColorRe.FindAllStringIndex(line, -1) {
+		if !inValuePosition(line, loc[0], loc[1], policy) {
+			continue
+		}
 		hex := line[loc[0]+1 : loc[1]]
 		var r, g, b uint8
 		switch len(hex) {
-		case 6:
+		case 6, 8: // trailing aa of the 8-digit form is the ignored alpha
 			r, g, b = hexByte(hex[0:2]), hexByte(hex[2:4]), hexByte(hex[4:6])
-		case 3:
+		case 3, 4: // trailing a of the 4-digit form is the ignored alpha
 			r, g, b = hexNibble(hex[0]), hexNibble(hex[1]), hexNibble(hex[2])
 		}
 		out = append(out, colorSpan{
@@ -50,6 +85,9 @@ func parseColorLiterals(line string) []colorSpan {
 		})
 	}
 	for _, loc := range funcColorRe.FindAllStringSubmatchIndex(line, -1) {
+		if !inValuePosition(line, loc[0], loc[1], policy) {
+			continue
+		}
 		fn := strings.ToLower(line[loc[2]:loc[3]])
 		args := line[loc[4]:loc[5]]
 		var r, g, b uint8
@@ -70,6 +108,22 @@ func parseColorLiterals(line string) []colorSpan {
 		})
 	}
 	return out
+}
+
+// inValuePosition reports whether the byte range [start, end) may tint under
+// the policy: colorAll always, colorValue only when both neighbours are
+// delimiters (or the line edge).
+func inValuePosition(line string, start, end int, policy colorPolicy) bool {
+	if policy == colorAll {
+		return true
+	}
+	if start > 0 && !strings.ContainsRune(valueLead, rune(line[start-1])) {
+		return false
+	}
+	if end < len(line) && !strings.ContainsRune(valueTrail, rune(line[end])) {
+		return false
+	}
+	return true
 }
 
 func hexByte(s string) uint8 {
@@ -189,14 +243,37 @@ func abs(f float64) float64 {
 
 func mod2(f float64) float64 { return f - 2*float64(int(f/2)) }
 
+// toggleColorPreview flips the inline color preview for this view
+// (view.toggleColorPreview, #1622). The override sticks like the #64 view
+// toggles: applyConfig stops tracking editor.color_preview once toggled.
+func (m *Model) toggleColorPreview() {
+	m.colorPreview = !m.colorPreview
+	m.colorPreviewSet = true
+}
+
 // lineColorSwatches returns the color spans for one line when the preview is
 // enabled; nil otherwise.
 func (m Model) lineColorSwatches(line int) []colorSpan {
 	if !m.colorPreview {
 		return nil
 	}
-	return parseColorLiterals(m.buf.Line(line))
+	return parseColorLiterals(m.buf.Line(line), m.colorPolicy())
 }
+
+// colorPolicy is the per-language scope (#1622): the CSS family tints every
+// literal, every other language (config formats included) only value
+// positions.
+func (m Model) colorPolicy() colorPolicy {
+	if l, ok := lang.ByPath(m.path); ok && cssFamily[l.ID] {
+		return colorAll
+	}
+	return colorValue
+}
+
+// cssFamily are the languages where a color literal is always a color. The
+// registry folds scss/less into the "css" language (#1622 keeps the extra IDs
+// so a plugin registering them separately still gets the CSS scope).
+var cssFamily = map[string]bool{"css": true, "scss": true, "sass": true, "less": true}
 
 // swatchStyle is the tint for a literal cell: the literal's color as
 // background with a black/white foreground picked by luminance, so the text
