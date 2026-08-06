@@ -7,3 +7,17 @@
 ; expressions keep their TypeScript highlighting.
 (template_string (string_fragment) @fragment.html.guess)
 (template_string (string_fragment) @fragment.sql.guess)
+
+; Regex contexts (#1631): /…/ literals always, plus the first string argument
+; of new RegExp(…) and the bare RegExp(…) call. fragment.regex is not a
+; registered language — the highlighter routes it to its built-in regex
+; mini-grammar.
+(regex pattern: (regex_pattern) @fragment.regex)
+(new_expression
+  constructor: (identifier) @_regexp_ctor
+  arguments: (arguments . (string (string_fragment) @fragment.regex))
+  (#eq? @_regexp_ctor "RegExp"))
+(call_expression
+  function: (identifier) @_regexp_call
+  arguments: (arguments . (string (string_fragment) @fragment.regex))
+  (#eq? @_regexp_call "RegExp"))

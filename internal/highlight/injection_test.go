@@ -1,6 +1,10 @@
 package highlight
 
-import "testing"
+import (
+	"testing"
+
+	"ike/internal/lang"
+)
 
 func TestOffsetSpans(t *testing.T) {
 	f := Fragment{Lang: "sql", StartLine: 2, StartCol: 5, EndLine: 3, EndCol: 4}
@@ -33,6 +37,35 @@ func TestInjectedSpanPrecedence(t *testing.T) {
 	}
 	if got := ix.CaptureAt(0, 4); got != "string" {
 		t.Errorf("outside fragment: got %q, want string", got)
+	}
+}
+
+// A "regex" fragment routes through the built-in mini-grammar (#1631) instead
+// of a registered language: the injected spans land in host coordinates ahead
+// of the host spans, so regex tokens win inside the string.
+func TestOverlayRegexFragment(t *testing.T) {
+	host := lang.Language{
+		ID: "regexhost",
+		Regions: func(lines []string) []lang.Region {
+			// The regex body sits at cols 5..12 of `x = "[a-z]+$" // y`.
+			return []lang.Region{{Lang: "regex", StartLine: 0, StartCol: 5, EndLine: 0, EndCol: 13}}
+		},
+	}
+	lines := []string{`x = "[a-z]+$" // y`}
+	hostSpans := []Span{{Line: 0, StartCol: 4, EndCol: 13, Capture: "string"}}
+	spans, _ := overlayFragments(host, lines, hostSpans)
+	ix := NewIndex(spans)
+	if got := ix.CaptureAt(0, 5); got != "regex.class" {
+		t.Errorf("class = %q, want regex.class", got)
+	}
+	if got := ix.CaptureAt(0, 10); got != "regex.quantifier" {
+		t.Errorf("quantifier = %q, want regex.quantifier", got)
+	}
+	if got := ix.CaptureAt(0, 11); got != "regex.anchor" {
+		t.Errorf("anchor = %q, want regex.anchor", got)
+	}
+	if got := ix.CaptureAt(0, 4); got != "string" {
+		t.Errorf("opening quote = %q, want string", got)
 	}
 }
 

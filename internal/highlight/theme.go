@@ -82,22 +82,24 @@ func NewThemeKeys(defaults map[string]string, get func(key string) (string, bool
 			colors[key] = c
 		}
 	}
-	// Diff-format captures (#1630) derive the same way: .diff/.patch
-	// coloring follows the active palette without every theme declaring the
-	// slots. An explicit theme table entry or a theme.captures.diff.* config
-	// key overrides a slot.
-	for key, src := range diffSources {
-		if get != nil {
-			if v, ok := get("theme.captures." + key); ok && v != "" {
-				colors[key] = v
+	// Diff-format captures (#1630) and regex mini-grammar captures (#1631)
+	// derive the same way: their coloring follows the active palette without
+	// every theme declaring the slots. An explicit theme table entry or a
+	// theme.captures.* config key overrides a slot.
+	for _, table := range []map[string]string{diffSources, regexSources} {
+		for key, src := range table {
+			if get != nil {
+				if v, ok := get("theme.captures." + key); ok && v != "" {
+					colors[key] = v
+					continue
+				}
+			}
+			if _, exists := colors[key]; exists {
 				continue
 			}
-		}
-		if _, exists := colors[key]; exists {
-			continue
-		}
-		if c, ok := colors[src]; ok {
-			colors[key] = c
+			if c, ok := colors[src]; ok {
+				colors[key] = c
+			}
 		}
 	}
 	return Theme{colors: colors, cache: make(map[string]styleHit)}
@@ -116,6 +118,24 @@ var diffSources = map[string]string{
 	"diff.delta":  "function",
 	"diff.header": "keyword",
 	"diff.meta":   "comment",
+}
+
+// regexSources maps each regex mini-grammar capture (#1631) to the existing
+// theme capture it derives from: character classes read as types, escapes as
+// escapes, quantifiers and alternation as keywords, anchors as functions,
+// group names and inline flags as attributes. "regex.group" is the flat
+// group-paren colour used when rainbow brackets are disabled — enabled, group
+// pairs colour by depth through the rainbow.N slots instead.
+var regexSources = map[string]string{
+	"regex.class":       "type",
+	"regex.escape":      "escape",
+	"regex.quantifier":  "keyword",
+	"regex.alternation": "keyword",
+	"regex.anchor":      "function",
+	"regex.group":       "function",
+	"regex.group.name":  "attribute",
+	"regex.flags":       "attribute",
+	"regex.comment":     "comment",
 }
 
 // Style returns the style for a capture and whether a colour was found. Lookup
