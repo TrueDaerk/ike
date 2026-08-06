@@ -530,7 +530,10 @@ sits inside the range (see `/architecture/editor.md`, conceal). The same cheapne
 applies; a language with `Spans` but no grammar still schedules parses
 (`highlight.Supported` accepts either) — the csv/tsv/psv languages
 (`plugins/languages/csv`, #1589) are exactly that: grammar-free, their whole
-structure (rainbow column captures) Go-computed. The ini-style config
+structure (rainbow column captures) Go-computed. Producers also share
+detectors through the seam: `internal/epochtime` (#1618) turns Unix epoch
+numbers into decoded-UTC stand-ins for the JSON languages, the log language
+and `.http` bodies alike. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
 and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
 comments as Go-computed spans, with no grammar and no server. The log

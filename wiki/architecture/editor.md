@@ -1261,6 +1261,44 @@ emits everything through the Go span seam (#1585); the parsing lives in
 Toggling off shows plain raw source — no styling, escape bytes visible. The
 buffer never changes.
 
+## Inline epoch-timestamp decoding (#1618)
+
+Numeric Unix timestamps render as their UTC form in place, display-only,
+toggled by `editor.timestamp_decoding` (default on, Settings → Editor) or per
+view by the `view.toggleTimestampDecoding` palette command (a sticky override
+like `mdRenderSet`). Detection lives in `internal/epochtime`, the editor half
+in `timestamps.go`:
+
+- **Stand-in spans**: `epochtime.Spans` emits one conceal-with-stand-in span
+  (#1585) per detected number — capture `timestamp`, `Replace` the decoded
+  `2024-08-06 12:00:00Z` (a `.123` fraction is appended when the value carries
+  milliseconds). Rendering, the positional caret/selection reveal (#1594) and
+  the click/offset remapping are the shared stand-in path: the raw digits are
+  always one motion away, and the buffer never changes.
+- **Own conceal channel**: `concealSplit` routes `timestamp` stand-ins into a
+  fourth channel (`stamps`) instead of `conceal`, so `tsDecode` gates them
+  independently of the markdown (#1599) and log (#1621) rendering toggles,
+  which gate the other channels.
+- **Range heuristic**: only 9–10 digit seconds and 12–13 digit milliseconds
+  between 2001-01-01 and 2100-01-01 decode; a leading zero disqualifies a run.
+  Ports, byte counts, ids and years are left alone.
+- **Context heuristic**: the caller picks the strictness. `epochtime.JSONValue`
+  accepts a run only in a JSON value position — after `:`, `[` or `,` and
+  before `,`, `]`, `}` or the line end, quoted runs included — so object keys
+  and digits inside prose strings never match. `epochtime.Loose` accepts any
+  run whose neighbours are plain delimiters. Both reject a run glued to a
+  character that makes it part of a larger token (letters, `_`, `.`, `-`, `:`,
+  `/`, `%`, `+`); the one exception is a leading `:` under `JSONValue`, JSON's
+  member separator.
+- **Producers**: the JSON languages (`json`, `ndjson`) scan whole buffers in
+  the JSON context, the log language scans every line in the loose context
+  (mapped back through ANSI escapes like the header spans), and the `.http`
+  producer scans inline request bodies in the JSON context — its request-line
+  query values deliberately stay raw. The HTTP *response* viewer
+  (`internal/httppane`) has no caret, hence no positional reveal, so it is not
+  part of this layer; a response saved to a `.json` file decodes like any
+  other buffer.
+
 ## Inline color preview (#790)
 
 Recognized color literals — `#rrggbb`, `#rgb`, `rgb()/rgba()`, `hsl()/hsla()`
@@ -1351,7 +1389,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
-(#1621), `color_preview`
+(#1621), `timestamp_decoding` (#1618), `color_preview`
 (#790) and `search_ignore_case` (#1111, default off — in-file search folds
 case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are
 special-cased: a palette toggle (`view.toggleWrap`, `view.toggleWhitespace`,

@@ -78,6 +78,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Log rich rendering (#1621): per-view toggle over the
 			// editor.log_rendering config default.
 			action("view.toggleLogRendering", "Toggle Log Rendering", "toggle_log_rendering", ""),
+			// Inline epoch-timestamp decoding (#1618): per-view toggle over
+			// the editor.timestamp_decoding config default.
+			action("view.toggleTimestampDecoding", "Toggle Timestamp Decoding", "toggle_timestamp_decoding", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),

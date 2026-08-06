@@ -611,6 +611,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleMarkdownRendering()
 	case "toggle_log_rendering":
 		m.toggleLogRendering()
+	case "toggle_timestamp_decoding":
+		m.toggleTimestampDecoding()
 	case "find":
 		if m.insert.active {
 			m.commitInsert()

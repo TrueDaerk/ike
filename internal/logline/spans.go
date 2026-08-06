@@ -12,6 +12,7 @@ import (
 	"hash/fnv"
 	"strconv"
 
+	"ike/internal/epochtime"
 	"ike/internal/highlight"
 	"ike/internal/lang"
 )
@@ -56,6 +57,21 @@ func lineSpans(li int, raw string) []lang.Span {
 		if spec := r.Style.Spec(); spec != "" {
 			out = append(out, lang.Span{Line: li, StartCol: r.Start, EndCol: r.End, Capture: "ansi." + spec})
 		}
+	}
+	// Epoch timestamps (#1618): log lines carry raw numeric timestamps all
+	// over — the header field, a JSON payload tail, an "expires=…" pair — so
+	// the loose context applies, with epochtime's range guard doing the
+	// filtering. Scanned over the visible text and mapped back like the
+	// header spans, so an ANSI-coloured line decodes too.
+	for _, e := range epochtime.Scan(visible, epochtime.Loose) {
+		start, end := e.Start, e.End
+		if vmap != nil {
+			start, end = vmap[e.Start], vmap[e.End-1]+1
+		}
+		out = append(out, lang.Span{
+			Line: li, StartCol: start, EndCol: end,
+			Capture: epochtime.Capture, Replace: e.Text,
+		})
 	}
 	if p.Level == LevelDebug {
 		// Debug/trace lines dim as a whole; the earlier header spans keep

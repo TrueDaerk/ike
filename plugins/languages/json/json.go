@@ -21,6 +21,7 @@ package langjson
 import (
 	_ "embed"
 
+	"ike/internal/epochtime"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -51,6 +52,9 @@ func init() {
 		SpaceAfter: []rune{':'},
 		// Foldable regions (#144): multi-line objects and arrays.
 		FoldNodes: []string{"object", "array"},
+		// Inline epoch decoding (#1618): a numeric timestamp in a value
+		// position conceals as its UTC form.
+		Spans: epochSpans,
 	})
 
 	register.Language(lang.Language{
@@ -59,5 +63,14 @@ func init() {
 		Grammar:    g,
 		FoldNodes:  []string{"object", "array"},
 		SpaceAfter: []rune{':'},
+		Spans:      epochSpans,
 	})
+}
+
+// epochSpans is the lang.Language.Spans hook (#1618): Unix epoch timestamps in
+// JSON value positions become conceal-with-stand-in spans rendering the
+// decoded UTC form. The JSON context keeps keys and digits inside prose
+// strings out of it.
+func epochSpans(lines []string) []lang.Span {
+	return epochtime.Spans(lines, epochtime.JSONValue)
 }

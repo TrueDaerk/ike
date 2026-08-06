@@ -185,3 +185,35 @@ func TestQuerySpansFormBody(t *testing.T) {
 		}
 	}
 }
+
+// TestBodyEpochSpans (#1618): a numeric timestamp in a JSON request body
+// becomes a conceal-with-stand-in span rendering its UTC form, while a plain
+// number and the request line's own digits stay untouched.
+func TestBodyEpochSpans(t *testing.T) {
+	lines := []string{
+		"POST https://api.example.com/events?limit=1722945600",
+		"Content-Type: application/json",
+		"",
+		`{"ts": 1722945600, "count": 42}`,
+	}
+	spans := querySpans(lines)
+	s, ok := spanAt(spans, 3, 8)
+	if !ok || s.Replace != "2024-08-06 12:00:00Z" {
+		t.Fatalf("body timestamp span = %+v, want the decoded UTC stand-in", s)
+	}
+	if s.StartCol != 7 || s.EndCol != 17 {
+		t.Errorf("span covers [%d,%d), want the digits [7,17)", s.StartCol, s.EndCol)
+	}
+	for _, col := range []int{25, 26} { // the "42" value
+		if s, ok := spanAt(spans, 3, col); ok && s.Replace != "" {
+			t.Errorf("plain number at col %d concealed as %q", col, s.Replace)
+		}
+	}
+	// Query-parameter values are not a timestamp context (#1618): the request
+	// line keeps its #1585 captures only.
+	for _, s := range spans {
+		if s.Line == 0 && s.Replace != "" {
+			t.Errorf("request line span %+v must not carry a stand-in", s)
+		}
+	}
+}

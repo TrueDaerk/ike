@@ -322,7 +322,15 @@ type Model struct {
 	// whose marker chrome reveals while the caret is anywhere inside the span,
 	// not only on a marker itself.
 	concealExt map[int][]concealRange
-	mdRender   bool
+	// stamps holds the decoded epoch-timestamp stand-ins (#1618) split out of
+	// the same parse: its own conceal channel so tsDecode
+	// (editor.timestamp_decoding / view.toggleTimestampDecoding) gates it
+	// apart from the markdown and log rendering layers.
+	stamps   map[int][]concealRange
+	tsDecode bool
+	// tsDecodeSet marks a per-view toggle override, like mdRenderSet.
+	tsDecodeSet bool
+	mdRender    bool
 	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
 	// applyConfig refresh stops tracking editor.markdown_rendering once the
 	// view toggled.
@@ -521,6 +529,7 @@ func New() Model {
 		svRender:           true,
 		svTable:            &svState{},
 		logRender:          true,
+		tsDecode:           true,
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
@@ -645,6 +654,9 @@ func (m *Model) applyConfig() {
 	if !m.logRenderSet {
 		m.logRender = boolOr(m.cfg, "editor.log_rendering", m.logRender)
 	}
+	if !m.tsDecodeSet {
+		m.tsDecode = boolOr(m.cfg, "editor.timestamp_decoding", m.tsDecode)
+	}
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
@@ -727,6 +739,7 @@ func (m *Model) Load(path string) error {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
+	m.stamps = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -779,6 +792,7 @@ func (m *Model) NewFile(path string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
+	m.stamps = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -812,6 +826,7 @@ func (m *Model) RestoreText(text string) {
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
+	m.stamps = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -865,6 +880,7 @@ func (m *Model) SetPath(path string) tea.Cmd {
 	m.resolveEditorconfig()
 	m.hlIndex = highlight.Index{}
 	m.conceal = nil
+	m.stamps = nil
 	m.scopes = nil
 	m.resetFolds()
 	m.semIndex = highlight.Index{}
@@ -1088,10 +1104,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Conceal spans (#881) feed the markdown rendering layer, not the
 			// style index — a marker cell styles raw on the cursor line but
 			// disappears elsewhere.
-			style, conceal, extents := concealSplit(msg.Spans)
+			style, conceal, extents, stamps := concealSplit(msg.Spans)
 			m.hlIndex = highlight.NewIndex(style)
 			m.conceal = conceal
 			m.concealExt = extents
+			m.stamps = stamps
 			m.scopes = msg.Scopes
 			m.folds = msg.Folds
 			m.reconcileFolds()

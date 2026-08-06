@@ -65,3 +65,28 @@ func TestSpaceAfterColon(t *testing.T) {
 		}
 	}
 }
+
+// TestEpochSpans (#1618): both JSON languages register the timestamp span
+// producer, and it decodes value-position epoch numbers only.
+func TestEpochSpans(t *testing.T) {
+	for _, id := range []string{"json", "ndjson"} {
+		l, ok := lang.ByID(id)
+		if !ok || l.Spans == nil {
+			t.Fatalf("%s: no Spans producer registered", id)
+		}
+	}
+	spans := epochSpans([]string{
+		`{"created_at": 1722945600, "id": 42, "1722945600": "key"}`,
+		`  "note": "written at 1722945600"`,
+	})
+	if len(spans) != 1 {
+		t.Fatalf("got %d spans, want 1: %+v", len(spans), spans)
+	}
+	s := spans[0]
+	if s.Line != 0 || s.StartCol != 15 || s.EndCol != 25 {
+		t.Errorf("span = line %d cols [%d,%d), want line 0 cols [15,25)", s.Line, s.StartCol, s.EndCol)
+	}
+	if s.Replace != "2024-08-06 12:00:00Z" {
+		t.Errorf("stand-in = %q, want the decoded UTC form", s.Replace)
+	}
+}
