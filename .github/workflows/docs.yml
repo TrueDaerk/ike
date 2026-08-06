@@ -62,3 +62,7 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          # The Pages queue occasionally backs up well past the action's
+          # 10-minute default (#1606); a slow deploy beats a red main.
+          timeout: 1800000
