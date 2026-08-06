@@ -344,6 +344,10 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 // stand-in lands on the range start; offsets past the line end map 1:1
 // (everything there is one-cell padding).
 func (m Model) displayClickCol(line, from, offset int) int {
+	// Aligned sv table rows (#1589) map through their padded column layout.
+	if col, ok := m.svClickCol(line, from+offset); ok {
+		return col
+	}
 	runes := []rune(m.buf.Line(line))
 	concealing := m.concealOn(line)
 	col := from
@@ -714,6 +718,12 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	if row, ok := m.mdTableRow(line); ok {
 		return m.renderTableRow(row, from, to, width)
 	}
+	// Separator-delimited table rows (#1589): aligned rainbow columns with
+	// concealed separators, pre-styled like a markdown table row; the caret
+	// line and selected lines fall through to the raw cell loop.
+	if row, ok := m.svRow(line); ok {
+		return m.renderTableRow(row, from, to, width)
+	}
 	runes := []rune(m.buf.Line(line))
 	left := from
 	// Marker concealment (#881): on lines the cursor is not on, cells inside
@@ -1040,6 +1050,14 @@ func (m Model) guideAt(col, indentEnd, abs int) bool {
 // so overlays anchored at a buffer cell align with what renderLine actually
 // drew.
 func (m Model) DisplayOffset(line, col int) int {
+	// Aligned sv table rows (#1589) count cells through their padded column
+	// layout; the horizontal scroll applies in display cells there.
+	if disp, ok := m.svDisplayOffset(line, col); ok {
+		if disp -= m.view.Left; disp < 0 {
+			disp = 0
+		}
+		return disp
+	}
 	runes := []rune(m.buf.Line(line))
 	from := m.view.Left
 	if m.softWrap {

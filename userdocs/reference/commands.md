@@ -119,6 +119,7 @@ bring their own.
 | Open Scratch File… | `scratch.list` | — | — | everywhere |
 | New Scratch File… | `scratch.new` | `cmd+shift+n` | — | everywhere |
 | New Scratch File: CSS | `scratch.new.css` | — | — | everywhere |
+| New Scratch File: CSV | `scratch.new.csv` | — | — | everywhere |
 | New Scratch File: Dockerfile | `scratch.new.dockerfile` | — | — | everywhere |
 | New Scratch File: GO | `scratch.new.go` | — | — | everywhere |
 | New Scratch File: Html | `scratch.new.html` | — | — | everywhere |
@@ -128,11 +129,13 @@ bring their own.
 | New Scratch File: Markdown | `scratch.new.markdown` | — | — | everywhere |
 | New Scratch File: Ndjson | `scratch.new.ndjson` | — | — | everywhere |
 | New Scratch File: PHP | `scratch.new.php` | — | — | everywhere |
+| New Scratch File: PSV | `scratch.new.psv` | — | — | everywhere |
 | New Scratch File: Python | `scratch.new.python` | — | — | everywhere |
 | New Scratch File: Shell | `scratch.new.shell` | — | — | everywhere |
 | New Scratch File: SQL | `scratch.new.sql` | — | — | everywhere |
 | New Scratch File: Plain Text | `scratch.new.text` | — | — | everywhere |
 | New Scratch File: Toml | `scratch.new.toml` | — | — | everywhere |
+| New Scratch File: TSV | `scratch.new.tsv` | — | — | everywhere |
 | New Scratch File: Typescript | `scratch.new.typescript` | — | — | everywhere |
 | New Scratch File: XML | `scratch.new.xml` | — | — | everywhere |
 | New Scratch File: Yaml | `scratch.new.yaml` | — | — | everywhere |

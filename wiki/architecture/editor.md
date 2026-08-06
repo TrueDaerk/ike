@@ -1162,6 +1162,39 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   `![alt](url)` show just the text, `\`-escapes and unmatched markers stay
   literal. Column widths and alignment size by the concealed display width.
 
+## Separator-delimited table rendering (#1589)
+
+Csv/tsv/psv buffers render table-like, display-only (`svtable.go`), toggled
+by `editor.csv_rendering` (default on, Settings → Editor):
+
+- **Rainbow columns**: the csv language plugin (`plugins/languages/csv`, no
+  grammar) emits one span per field through the Go span seam
+  (`lang.Language.Spans`, #1585) with the theme-derived `rainbow.<col%6>`
+  captures of #789, plus `punctuation` on the separators — so raw lines (the
+  caret line, selections, toggle off) are already rainbow-csv colored.
+- **Aligned rows** (lines the caret is not on, no selection, no soft wrap):
+  `svRow` pre-renders the row with each field padded to the column's width
+  and the separator concealed behind the two-cell gap, sliced by
+  `renderTableRow` like a markdown table row. Widths come from `svLayout`:
+  the widest field per column across the *visible* rows plus the header row —
+  viewport-bound, so large files never measure beyond the screen. The layout
+  hash folds into the line cache's validity check (`svCacheState` in
+  `syncEpoch`): a vertical scroll can change widths without an epoch bump;
+  non-sv buffers hash to zero and keep their scroll cache reuse.
+- **Pinned header**: `stickyLines` returns line 0 for sv buffers once the
+  view scrolls (gated by `editor.sticky_scroll` like code headers), so the
+  title row rides the existing sticky rendering, click remap and
+  `unhideCursor` plumbing.
+- **Mouse and overlays**: `svClickCol` / `svDisplayOffset` map display cells
+  through the padded layout (padding clicks land on the concealed
+  separator); `displayClickCol` and `DisplayOffset` branch to them first.
+- **Quoting**: field splitting (`internal/sv`, shared with the plugin so both
+  sides split identically) honors `"…"` regions — a quoted separator is
+  literal, `""` escapes a quote. The csv separator is sniffed (`,` vs `;`)
+  over the first lines; tsv and psv are fixed.
+
+The buffer never changes — alignment is virtual padding only.
+
 ## Inline color preview (#790)
 
 Recognized color literals — `#rrggbb`, `#rgb`, `rgb()/rgba()`, `hsl()/hsla()`

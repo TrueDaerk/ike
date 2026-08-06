@@ -32,6 +32,7 @@ const lineCacheCap = 4096
 type lineCacheStore struct {
 	epoch   uint64
 	caret   uint64
+	sv      uint64 // sv table layout hash (#1589); 0 for non-sv buffers
 	entries map[lineKey]string
 }
 
@@ -47,10 +48,14 @@ func (m *Model) syncEpoch() {
 		m.lineCache = newLineCache()
 	}
 	caret := m.caretState()
+	// The sv table layout (#1589) folds in separately: a vertical scroll can
+	// change the visible-row column widths — and so every rendered row —
+	// without bumping the epoch.
+	svHash := m.svCacheState()
 	if m.lineCache.epoch != m.renderEpoch || m.lineCache.caret != caret ||
-		len(m.lineCache.entries) > lineCacheCap {
+		m.lineCache.sv != svHash || len(m.lineCache.entries) > lineCacheCap {
 		clear(m.lineCache.entries)
-		m.lineCache.epoch, m.lineCache.caret = m.renderEpoch, caret
+		m.lineCache.epoch, m.lineCache.caret, m.lineCache.sv = m.renderEpoch, caret, svHash
 	}
 }
 

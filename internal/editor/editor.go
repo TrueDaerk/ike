@@ -319,6 +319,11 @@ type Model struct {
 	conceal  map[int][]concealRange
 	mdRender bool
 	mdTables *mdTableState
+	// Separator-delimited table rendering (#1589, svtable.go). svRender is
+	// the editor.csv_rendering toggle; svTable caches the visible-row column
+	// layout (pointer, shared across the value copies like mdTables).
+	svRender bool
+	svTable  *svState
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
 	colorPreview bool
@@ -499,6 +504,8 @@ func New() Model {
 		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
+		svRender:           true,
+		svTable:            &svState{},
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
@@ -617,6 +624,7 @@ func (m *Model) applyConfig() {
 	m.smartPaste = boolOr(m.cfg, "editor.smart_paste", m.smartPaste)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
 	m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
+	m.svRender = boolOr(m.cfg, "editor.csv_rendering", m.svRender)
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {
