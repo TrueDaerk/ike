@@ -1,8 +1,8 @@
-// Command gen renders IKE's application icon source (#1567):
-// deploy/icon/ike-1024.png — a dark rounded square with a terminal-prompt
-// glyph (chevron + underscore). Pure stdlib, deterministic; the installer's
-// platform icon sets (.icns, hicolor PNGs) derive from this file via
-// `make icons` (macOS: sips + iconutil).
+// Command gen renders IKE's application icon source (#1608):
+// deploy/icon/ike-1024.png — a black egg-shaped mark centered on a white
+// rounded tile. Pure stdlib, deterministic; the installer's platform icon
+// sets (.icns, hicolor PNGs) derive from this file via `make icons`
+// (macOS: sips + iconutil).
 package main
 
 import (
@@ -10,6 +10,7 @@ import (
 	"image/color"
 	"image/png"
 	"log"
+	"math"
 	"os"
 )
 
@@ -20,9 +21,8 @@ const (
 )
 
 var (
-	bg      = color.NRGBA{R: 0x24, G: 0x27, B: 0x3A, A: 0xFF} // dark slate
-	chevron = color.NRGBA{R: 0x8A, G: 0xAD, B: 0xF4, A: 0xFF} // blue
-	cursor  = color.NRGBA{R: 0xA6, G: 0xDA, B: 0x95, A: 0xFF} // green
+	bg  = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF} // white tile
+	egg = color.NRGBA{R: 0x00, G: 0x00, B: 0x00, A: 0xFF} // black mark
 )
 
 func main() {
@@ -46,22 +46,36 @@ func render() *image.NRGBA {
 	)
 	for y := 0; y < world; y++ {
 		for x := 0; x < world; x++ {
-			if inRoundedRect(x, y, margin, world-margin, radius) {
+			if !inRoundedRect(x, y, margin, world-margin, radius) {
+				continue
+			}
+			if inEgg(x, y) {
+				img.SetNRGBA(x, y, egg)
+			} else {
 				img.SetNRGBA(x, y, bg)
 			}
 		}
 	}
-	// Prompt glyph: a chevron `>` on the left, a cursor underscore to its
-	// right, both sized relative to the tile.
-	stroke := world * 9 / 100
-	cx, cy := world*32/100, world*50/100
-	arm := world * 17 / 100
-	drawBar(img, cx-arm, cy-arm, cx, cy, stroke, chevron) // upper arm
-	drawBar(img, cx-arm, cy+arm, cx, cy, stroke, chevron) // lower arm
-	ux0, ux1 := world*44/100, world*72/100                // underscore span
-	uy := world * 62 / 100                                // underscore baseline
-	fillRect(img, ux0, uy, ux1, uy+stroke, cursor)        // cursor block
 	return img
+}
+
+// inEgg reports whether (x, y) lies inside the egg mark: a vertical oval
+// whose half-width shrinks toward the top, so the blunt end sits at the
+// bottom and the narrow end at the top.
+func inEgg(x, y int) bool {
+	const (
+		cx, cy = world * 50 / 100, world * 50 / 100 // egg center
+		b      = world * 30 / 100                   // vertical half-axis
+		a      = world * 21 / 100                   // horizontal half-axis
+		taper  = 0.18                               // top/bottom asymmetry
+	)
+	t := (float64(y) - cy) / b // -1 at the top tip, +1 at the bottom
+	if t < -1 || t > 1 {
+		return false
+	}
+	halfW := a * math.Sqrt(1-t*t) * (1 + taper*t)
+	dx := float64(x) - cx
+	return dx*dx <= halfW*halfW
 }
 
 // inRoundedRect reports whether (x, y) lies inside the square spanning
@@ -86,27 +100,6 @@ func inRoundedRect(x, y, lo, hi, r int) bool {
 	}
 	dx, dy := x-cx, y-cy
 	return dx*dx+dy*dy <= r*r
-}
-
-// drawBar fills a thick line from (x0, y0) to (x1, y1) by stamping squares
-// along it — crude, but supersampling smooths the result.
-func drawBar(img *image.NRGBA, x0, y0, x1, y1, w int, c color.NRGBA) {
-	steps := max(abs(x1-x0), abs(y1-y0))
-	for i := 0; i <= steps; i++ {
-		x := x0 + (x1-x0)*i/steps
-		y := y0 + (y1-y0)*i/steps
-		fillRect(img, x-w/2, y-w/2, x+w/2, y+w/2, c)
-	}
-}
-
-// fillRect fills [x0, x1) x [y0, y1) clipped to the image.
-func fillRect(img *image.NRGBA, x0, y0, x1, y1 int, c color.NRGBA) {
-	b := img.Bounds()
-	for y := max(y0, b.Min.Y); y < min(y1, b.Max.Y); y++ {
-		for x := max(x0, b.Min.X); x < min(x1, b.Max.X); x++ {
-			img.SetNRGBA(x, y, c)
-		}
-	}
 }
 
 // downsample box-filters the supersampled image to the final size.
@@ -134,11 +127,4 @@ func downsample(src *image.NRGBA) *image.NRGBA {
 		}
 	}
 	return dst
-}
-
-func abs(v int) int {
-	if v < 0 {
-		return -v
-	}
-	return v
 }
