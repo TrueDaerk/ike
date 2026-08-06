@@ -218,4 +218,7 @@ a modern GUI where vim has no opinion:
 | `editor.format_on_save` | `false` | Runs the language server's formatter on manual saves |
 | `editor.text_width` | `80` | The column `gq` reflows text to (0 falls back to 79) |
 
-The [settings reference](../reference/settings.md) has the full list.
+The [settings reference](../reference/settings.md) has the full list, and
+[How files are rendered](../guides/file-rendering.md) covers the display layers
+on top of the buffer — highlighting, Markdown, CSV and log rendering, and the
+conceal that reveals itself wherever the caret is.

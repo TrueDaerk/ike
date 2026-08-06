@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-07 (docs: generated feature screenshots, #1634)
+
+- The user docs carry feature screenshots (`docs/screenshots/features`, linked
+  from `userdocs/`): syntax highlighting in three languages, the Markdown / CSV
+  / log rendering layers each against their raw counterpart plus a
+  caret-reveal shot, the `.http` file, the diff viewer and the VCS gutter. All
+  of them use `monokai-pro`.
+- They are generated, not captured: `make shots` (`cmd/shotgen`) unpacks an
+  embedded demo project into a temp tree, drives the real root model headlessly
+  — window size, `window.hideAllTools`, an open, then palette commands and keys
+  — and paints `Model.View().Content` into a PNG. Background messages reach the
+  model through `Model.SetSender`, which is what makes the git-status snapshot
+  land in the VCS shots.
+- `internal/shotpng` is the painter: the frame replays through the VT emulator
+  (`charmbracelet/x/vt`) into a cell grid, each cell drawn with its colours and
+  attributes. Box-drawing and block characters are painted as rectangles
+  instead of font glyphs, so borders have no seams; fonts resolve to Menlo /
+  DejaVu Sans Mono with the embedded Go Mono as the always-available fallback.
+- New user-docs page: **How files are rendered**
+  (`userdocs/guides/file-rendering.md`) — highlighting, the rendering layers,
+  and the positional conceal reveal, which had no narrative page before.
+- Concept doc: [Documentation Screenshots](/architecture/screenshots.md).
+
 ## 2026-08-07 (editor: YAML anchor/alias pairing, preview & navigation, #1629)
 
 - `internal/yamlanchor`: a pure-Go line scanner pairs `&name` anchors with

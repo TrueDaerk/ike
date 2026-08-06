@@ -197,4 +197,6 @@ environment from scratch.
 
 - [Search](search.md) — find usages is semantic; find-in-path is textual, and
   sometimes that is what you want.
+- [How files are rendered](file-rendering.md) — the Tree-sitter highlighting
+  underneath, and the Markdown / CSV / log rendering layers.
 - [Settings reference](../reference/settings.md) — the full `[lsp]` section.

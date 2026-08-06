@@ -51,3 +51,4 @@ Component-level concepts for the IKE codebase.
 * [Usages Tool Window](/architecture/usages.md) - singleton bottom-split pane holding the latest find-references result persistently: grouped by file, line:col + preview rows, enter/double-click jumps, 'r' re-runs the search; filled by lsp.referencesPanel while lsp.references keeps the quick palette (#1155)
 * [VCS / Git Integration](/architecture/vcs.md) - async git status snapshot behind explorer coloring, branch segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame; workflow delegated to tool panes (lazygit) since #750 (Epics 0320/0330)
 * [Versioning](/architecture/versioning.md) - the release number, the build stamp, --version, and what SemVer covers
+* [Documentation Screenshots](/architecture/screenshots.md) - feature screenshots for the user docs generated from the app: cmd/shotgen drives a headless model, internal/shotpng paints the frame to PNG (#1634)

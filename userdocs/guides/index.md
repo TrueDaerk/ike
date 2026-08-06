@@ -6,6 +6,9 @@ Task-oriented pages, one per feature area.
   back/forward, marks, pinned files, structure, Problems and the TODO index.
 - **[Search and replace](search.md)** — in-file search, find and replace in
   path, the ripgrep backend, and how it differs from finding files by name.
+- **[How files are rendered](file-rendering.md)** — Tree-sitter highlighting,
+  and the Markdown / CSV / log rendering layers with their conceal that reveals
+  itself under the caret.
 - **[Code intelligence](code-intelligence.md)** — language servers: which one
   per language, how they get installed, what they give you, and what to do
   when a feature is silent.

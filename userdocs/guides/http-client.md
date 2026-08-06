@@ -80,6 +80,12 @@ request with a message naming it — an empty body is never sent silently.
 Because the directive only counts when it *is* the whole body, a lone `<` in
 an XML payload keeps its literal meaning.
 
+In the editor, a request file looks like this — request blocks separated by
+`###`, placeholders highlighted, and the JSON body highlighted as JSON rather
+than as text:
+
+![An .http file in the editor](../screenshots/features/http-file.png)
+
 ## Running one
 
 Put the cursor anywhere in a request block and press ++cmd+enter++
