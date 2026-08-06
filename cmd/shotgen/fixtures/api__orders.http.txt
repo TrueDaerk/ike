@@ -1,0 +1,25 @@
+@base = http://localhost:8080
+@token = dev-token-9f2c
+
+### list open orders
+GET {{base}}/orders?status=open&limit=25
+Authorization: Bearer {{token}}
+Accept: application/json
+
+### create an order
+POST {{base}}/orders
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "customer": "acme-gmbh",
+  "items": [
+    { "sku": "IKE-100", "quantity": 2 },
+    { "sku": "IKE-220", "quantity": 1 }
+  ],
+  "note": "ship together"
+}
+
+### cancel one
+DELETE {{base}}/orders/ord-8814
+Authorization: Bearer {{token}}

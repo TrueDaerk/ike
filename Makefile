@@ -7,6 +7,7 @@
 #   make uninstall
 #   make clean
 #   make docs      # regenerate userdocs/reference from the source
+#   make shots     # regenerate the feature screenshots in docs/screenshots
 #   make version   # print the version the next build will carry
 #   make install-desktop  # desktop launcher: Ike.app (macOS) / ike.desktop (Linux)
 #   make icons     # regenerate deploy/icon from the Go source (macOS tools)
@@ -24,7 +25,7 @@ DIRTY   := $(shell git diff --quiet 2>/dev/null || echo true)
 VERPKG  := ike/internal/version
 LDFLAGS := -X $(VERPKG).Commit=$(COMMIT) -X $(VERPKG).Dirty=$(DIRTY)
 
-.PHONY: all build install uninstall clean test docs version install-desktop icons
+.PHONY: all build install uninstall clean test docs shots version install-desktop icons
 
 all: build
 
@@ -48,6 +49,12 @@ test:
 # output differs from a fresh run, so commit the result.
 docs:
 	$(GO) run ./cmd/docgen
+
+# Regenerate the feature screenshots the user docs embed (#1634). Unlike the
+# reference pages these are not CI-checked: rendering depends on the machine's
+# fonts, so a shot is refreshed deliberately, when the UI it shows changed.
+shots:
+	$(GO) run ./cmd/shotgen
 
 # Print what `ike --version` will report for a build from this tree.
 version: build

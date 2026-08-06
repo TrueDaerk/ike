@@ -11,3 +11,4 @@
 # Built binaries (make / go build)
 /ike
 /docgen
+/shotgen

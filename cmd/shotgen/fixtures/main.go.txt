@@ -1,0 +1,41 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"time"
+)
+
+// Order is one customer order as the checkout service sees it.
+type Order struct {
+	ID       string
+	Customer string
+	Total    float64
+	Placed   time.Time
+}
+
+// ErrEmptyCart is returned when checkout runs on a cart with no items.
+var ErrEmptyCart = errors.New("checkout: empty cart")
+
+// Checkout turns a cart into an order. The cart is priced first, so a pricing
+// failure never reserves stock.
+func Checkout(ctx context.Context, cart []Item) (*Order, error) {
+	if len(cart) == 0 {
+		return nil, ErrEmptyCart
+	}
+	total := 0.0
+	for _, item := range cart {
+		total += item.Price * float64(item.Quantity)
+	}
+	order := &Order{
+		ID:       fmt.Sprintf("ord-%d", time.Now().UnixNano()),
+		Customer: ctx.Value(customerKey).(string),
+		Total:    total,
+		Placed:   time.Now(),
+	}
+	if err := reserve(ctx, cart); err != nil {
+		return nil, fmt.Errorf("reserving stock: %w", err)
+	}
+	return order, nil
+}

@@ -1,0 +1,33 @@
+import { fetchRegions, type Region } from "./api";
+
+export interface Panel {
+  title: string;
+  value: number;
+  delta?: number;
+}
+
+const FORMAT = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "EUR",
+});
+
+export async function buildPanels(quarter: string): Promise<Panel[]> {
+  const regions: Region[] = await fetchRegions(quarter);
+  return regions
+    .filter((region) => region.active)
+    .map((region) => ({
+      title: region.name,
+      value: region.revenue,
+      delta: region.revenue - region.previous,
+    }))
+    .sort((a, b) => b.value - a.value);
+}
+
+export function render(panels: Panel[]): string {
+  return panels
+    .map(({ title, value, delta = 0 }) => {
+      const arrow = delta >= 0 ? "up" : "down";
+      return `${title}: ${FORMAT.format(value)} (${arrow} ${Math.abs(delta)})`;
+    })
+    .join("\n");
+}
