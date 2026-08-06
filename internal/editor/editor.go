@@ -345,6 +345,16 @@ type Model struct {
 	// its English schedule appended.
 	cronHints    bool
 	cronHintsSet bool
+	// The number-readability families (#1627), one toggle each: byte sizes,
+	// durations, digit grouping and the radix hints.
+	sizeHints     bool
+	sizeHintsSet  bool
+	durHints      bool
+	durHintsSet   bool
+	digitGroup    bool
+	digitGroupSet bool
+	radixHints    bool
+	radixHintsSet bool
 	// Secret masking (#1623): the dotenv value stand-ins, on by default, with
 	// its own override flag like the decode families. See secrets.go.
 	secretMask    bool
@@ -569,6 +579,10 @@ func New() Model {
 		entDecode:          true,
 		b64Decode:          true,
 		cronHints:          true,
+		sizeHints:          true,
+		durHints:           true,
+		digitGroup:         true,
+		radixHints:         true,
 		secretMask:         true,
 		colorPreview:       true,
 		idColors:           true,
@@ -710,6 +724,18 @@ func (m *Model) applyConfig() {
 	}
 	if !m.cronHintsSet {
 		m.cronHints = boolOr(m.cfg, "editor.cron_hints", m.cronHints)
+	}
+	if !m.sizeHintsSet {
+		m.sizeHints = boolOr(m.cfg, "editor.byte_size_hints", m.sizeHints)
+	}
+	if !m.durHintsSet {
+		m.durHints = boolOr(m.cfg, "editor.duration_hints", m.durHints)
+	}
+	if !m.digitGroupSet {
+		m.digitGroup = boolOr(m.cfg, "editor.digit_grouping", m.digitGroup)
+	}
+	if !m.radixHintsSet {
+		m.radixHints = boolOr(m.cfg, "editor.radix_hints", m.radixHints)
 	}
 	if !m.secretMaskSet {
 		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)

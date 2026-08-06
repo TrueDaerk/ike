@@ -90,6 +90,13 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Cron hints (#1624): per-view toggle over the editor.cron_hints
 			// config default.
 			action("view.toggleCronHints", "Toggle Cron Hints", "toggle_cron_hints", ""),
+			// Number-readability hints (#1627): per-view toggles over the
+			// editor.byte_size_hints / duration_hints / digit_grouping /
+			// radix_hints config defaults.
+			action("view.toggleByteSizeHints", "Toggle Byte Size Hints", "toggle_byte_size_hints", ""),
+			action("view.toggleDurationHints", "Toggle Duration Hints", "toggle_duration_hints", ""),
+			action("view.toggleDigitGrouping", "Toggle Digit Grouping", "toggle_digit_grouping", ""),
+			action("view.toggleRadixHints", "Toggle Radix Hints", "toggle_radix_hints", ""),
 			// Secret masking (#1623): dotenv values whose key names a secret
 			// render as ••••; per-view toggle over editor.secret_masking.
 			action("view.toggleSecretMasking", "Toggle Secret Masking", "toggle_secret_masking", ""),

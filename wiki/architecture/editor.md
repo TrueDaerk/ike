@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-06T23:30:00Z
+timestamp: 2026-08-07T00:30:00Z
 ---
 
 # Editor
@@ -1410,6 +1410,68 @@ detection live in `internal/cronhint`:
   requires a cron-specific character or a field name, so a quoted list of
   numbers (`"1 2 3 4 5"`) is never mistaken for a schedule.
 
+## Number-readability hints (#1627)
+
+Large numeric literals in config files draw as the thing they mean —
+`10485760` as `10 MiB`, `86400000` as `24h`, `1000000` as `1_000_000`,
+`0x1F4` as `0x1F4  = 500` — display-only, on the #1585 stand-in channel, so
+the raw literal reappears under the caret (#1594) and edits operate on the
+buffer bytes. Four families, four captures, four toggles, all default on:
+
+| Family | Capture | Toggle | Config key |
+| --- | --- | --- | --- |
+| Byte sizes | `number.size` | `view.toggleByteSizeHints` | `editor.byte_size_hints` |
+| Durations | `number.duration` | `view.toggleDurationHints` | `editor.duration_hints` |
+| Digit grouping | `number.group` | `view.toggleDigitGrouping` | `editor.digit_grouping` |
+| Radix | `number.radix` | `view.toggleRadixHints` | `editor.radix_hints` |
+
+Detection and formatting live in `internal/numhint`, a leaf package over
+`lang.Span`; `concealSplit` routes each capture into its own `m.decodes`
+channel and `decodeOn` gates it, exactly like the decode families (#1620).
+
+- **Context heuristics** come from the key a value hangs off, since config
+  formats carry no types. Byte counts: `*size*`, `*byte(s)*`, `*memory*`,
+  `*capacity*`, `*buffer*`, `*payload*`, `*storage*`. Durations: the timeout
+  family (`*timeout*`, `*interval*`, `*delay*`, `*duration*`, `*backoff*`,
+  `*period*`, `*latency*`) counted in milliseconds and the TTL family
+  (`*ttl*`, `*expires*`, `*expiry*`, `*lifetime*`, `*lease*`, `*max_age*`)
+  in seconds, unless the key's **last word** spells the unit out (`*_ms`,
+  `*_seconds`, `*_us`, `flushMs`, `FLUSH_MS` — split on both separators and
+  camel-case boundaries, so `params` is not a millisecond key). Radix:
+  `*mode*`, `*perm*`, `*umask*` read octal, `*mask*`, `*flag(s)*` read hex.
+  Weak quantifiers (`limit`, `max`, `quota`) name no family on their own — a
+  rate limit is not a byte count, and `max_body_limit_bytes` already matches
+  on `bytes`.
+- **Shape heuristics** cover the unkeyed cases: a value that is a multiple
+  of 1024 is a byte size wherever it appears, a `0x` literal always has a
+  decimal reading, and a plain integer of five digits or more always reads
+  better grouped. Family order is fixed — radix key, size key, duration key,
+  size shape, grouping — so a literal never carries two hints; the duration
+  key wins over the size shape because `86400000` happens to be a multiple
+  of 1024.
+- **Formatting** is deterministic and conservative. Sizes use binary units
+  (`4 KiB`, `1.5 GiB`, exact multiples whole, everything else to one
+  decimal, nothing below 1 KiB — decimal kB/MB are never offered, since it
+  is the power-of-two shape that makes such numbers round at all).
+  Durations use at most two components (`24h`, `1h30m`, `1s500ms`,
+  `2d12h`), and the day unit only past 48h — one day still reads `24h`, so
+  neighbouring timeouts stay comparable. A duration whose largest unit *is*
+  the key's base unit gets no hint (`500` in a `*_ms` key says nothing new).
+  Grouping starts at five digits (four-digit numbers are years, ports and
+  status codes) and skips zero-padded runs. Radix hints are appended after
+  the literal with `numhint.Gap`, and are skipped where both bases render
+  the same digits (`0x9`, `mode: 7`) or the run is hash-length.
+- **Guards**: tokens glue on `.`, `-`, `+`, `/`, `%` and letters, so
+  versions, ISO dates, floats, paths, percentages and `30s`-style suffixed
+  values never parse as bare integers; full-line and trailing comments are
+  cut; a token followed by `:`/`=` is a key, not a value. A run that decodes
+  as a plausible Unix timestamp is left to the epoch family (#1618) for the
+  duration and grouping families, and in JSON — the one producer that
+  decodes epochs — `numhint.SpansExcept` drops any hint colliding with a
+  timestamp stand-in outright.
+- **Contexts**: the config formats, where keys carry the intent — JSON/ndjson,
+  YAML, TOML, ini/conf and dotenv.
+
 ## Secret masking (#1623)
 
 Values in a `.env` file whose key names a credential render as `••••`
@@ -1586,7 +1648,9 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `line_numbers`, `relative_line_numbers`, `scroll_off`, `sticky_scroll`,
 `sticky_scroll_depth`, `wrap`, `show_whitespace` (`none|trailing|all`),
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
-(#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624), `color_preview`
+(#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
+`byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
+`color_preview`
 (#790), `id_colors` / `id_color_min_length` (#1626)
 and `search_ignore_case` (#1111, default off — in-file search folds
 case unless a `\C` marker forces exact) take effect live. The view-option keys (#64) are

@@ -621,6 +621,14 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleBase64Decoding()
 	case "toggle_cron_hints":
 		m.toggleCronHints()
+	case "toggle_byte_size_hints":
+		m.toggleByteSizeHints()
+	case "toggle_duration_hints":
+		m.toggleDurationHints()
+	case "toggle_digit_grouping":
+		m.toggleDigitGrouping()
+	case "toggle_radix_hints":
+		m.toggleRadixHints()
 	case "toggle_secret_masking":
 		m.toggleSecretMasking()
 	case "toggle_color_preview":

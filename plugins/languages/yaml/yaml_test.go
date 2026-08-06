@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 // TestYAMLRegistered guards #879: .yaml/.yml resolve to the yaml language with
@@ -77,5 +78,18 @@ func TestYAMLCronSpans(t *testing.T) {
 	}
 	if spans[0].Capture != cronhint.Capture {
 		t.Errorf("capture = %q, want %q", spans[0].Capture, cronhint.Capture)
+	}
+}
+
+// TestYAMLNumberHints (#1627): a byte-size key in a manifest carries its
+// binary-size hint.
+func TestYAMLNumberHints(t *testing.T) {
+	l, ok := lang.ByID("yaml")
+	if !ok || l.Spans == nil {
+		t.Fatal("yaml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"limits:", "  max_body_size: 10485760"})
+	if len(spans) != 1 || spans[0].Capture != numhint.SizeCapture || spans[0].Replace != "10 MiB" {
+		t.Errorf("spans = %+v, want one 10 MiB size hint", spans)
 	}
 }

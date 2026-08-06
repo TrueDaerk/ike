@@ -287,6 +287,22 @@ type Editor struct {
 	// `cron:` values and quoted expressions in config formats; the bare
 	// expression reappears under the caret.
 	CronHints bool `toml:"cron_hints"`
+	// ByteSizeHints renders a byte count as a binary size (#1627) —
+	// `10485760` as `10 MiB` — where the key names a byte count or the
+	// value is a multiple of 1024; the raw number reappears under the caret.
+	ByteSizeHints bool `toml:"byte_size_hints"`
+	// DurationHints renders a millisecond/second count as a duration
+	// (#1627) — `86400000` as `24h` — where the key names a timeout, a TTL
+	// or an interval; the raw number reappears under the caret.
+	DurationHints bool `toml:"duration_hints"`
+	// DigitGrouping renders a plain integer of five digits or more grouped
+	// (#1627) — `1000000` as `1_000_000`; the raw digits reappear under the
+	// caret.
+	DigitGrouping bool `toml:"digit_grouping"`
+	// RadixHints appends a hex literal's decimal reading (#1627) —
+	// `0x1F4  = 500` — and a permission/flag value's octal or hex one
+	// (`420  = 0o644`); the bare literal reappears under the caret.
+	RadixHints bool `toml:"radix_hints"`
 	// SecretMasking renders the value of a secret-suspect key in a dotenv
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.
