@@ -48,7 +48,11 @@ Authorization: Bearer {{$env TOKEN}}
   and only the first `=` separates (so `? filter = a=b` survives). Folding
   starts right after the request line and ends at the first header line,
   blank line or `###`; comments in between are ignored. Placeholders inside
-  folded params resolve like anywhere else in the target.
+  folded params resolve like anywhere else in the target. The built-in
+  `.http` reformatter (#1602, see [format](/architecture/format.md))
+  produces exactly this spelling: `lsp.format` folds a request line's query
+  onto one `? key = value` / `& key = value` continuation line per
+  parameter, byte-identical values, never re-encoding.
 - **Headers:** `Name: value` lines up to the first empty line; order and
   repetitions are preserved.
 - **Body:** everything after the empty line until the next `###` or EOF,

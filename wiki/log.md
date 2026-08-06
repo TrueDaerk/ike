@@ -1,5 +1,13 @@
 # Log
 
+## 2026-08-06 (format: built-in .http reformatter folds query params, #1602)
+
+- The HTTP plugin ships a built-in formatter (`plugins/languages/http/format.go`):
+  query parameters fold onto the indented `?`/`&` continuation lines the
+  parser accepts (#1269), one per line, values byte-identical (no
+  re-encoding, see #1601); headers/blank-before-body normalize
+  conservatively; a reparse guard aborts any semantic change.
+
 ## 2026-08-06 (deploy: desktop launch uses interactive login shell, #1581)
 
 - `ike-gui`'s re-exec (#1579) now runs `$SHELL -i -l -c` instead of plain
