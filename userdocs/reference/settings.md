@@ -51,6 +51,8 @@ Settings, or run `settings.open` from the palette.
 | Log rendering | `editor.log_rendering` | boolean | `true` | user | Render .log files readable: severity levels colored, timestamps dimmed, thread/logger names rainbow-colored, and ANSI escapes drawn as their styles with the escape bytes concealed (revealed under the caret); toggle per view via Toggle Log Rendering |
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
 | Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rgb/#rrggbb/#rrggbbaa, rgb(), hsl()) with their own color |
+| Identifier colors | `editor.id_colors` | boolean | `true` | user | Color UUIDs and long hex hashes (git SHAs, request/trace IDs) by hashing the identifier into the rainbow palette, so every occurrence of the same identifier shares one color; active in logs, JSON and .http files and response bodies, toggle per view via Toggle Identifier Colors |
+| Identifier color minimum length | `editor.id_color_min_length` | integer (6–64) | `7` | user | Shortest bare hex run that counts as an identifier (7 = abbreviated git SHA) |
 | Sticky scroll depth | `editor.sticky_scroll_depth` | integer (1–10) | `4` | user | Maximum number of nested header lines pinned at once |
 | Smart paste | `editor.smart_paste` | boolean | `true` | user | Re-indent multi-line pastes to the target line's indentation, preserving relative structure |
 | Case-insensitive search | `editor.search_ignore_case` | boolean | `false` | user | Match in-file / and ? searches ignoring case by default; a \C query prefix forces exact case. Off = smartcase: all-lowercase folds, any uppercase matches exactly |

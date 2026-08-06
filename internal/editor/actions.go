@@ -625,6 +625,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleSecretMasking()
 	case "toggle_color_preview":
 		m.toggleColorPreview()
+	case "toggle_identifier_colors":
+		m.toggleIDColors()
 	case "decode_jwt":
 		return m, m.showJWT()
 	case "find":

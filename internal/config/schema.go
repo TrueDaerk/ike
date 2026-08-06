@@ -302,6 +302,14 @@ type Editor struct {
 	// ColorPreview tints recognized color literals (#rrggbb, rgb(), hsl())
 	// with their own color (#790).
 	ColorPreview bool `toml:"color_preview"`
+	// IDColors colors UUIDs and long hex hashes (git SHAs, request/trace
+	// IDs) by hashing the identifier into the rainbow palette (#1626), so
+	// every occurrence of the same identifier shares one color. Active in
+	// logs, JSON/NDJSON, .http files and .http response bodies.
+	IDColors bool `toml:"id_colors"`
+	// IDColorMinLength is the minimum length of a bare hex run that counts
+	// as an identifier (#1626); the default 7 is the abbreviated git SHA.
+	IDColorMinLength int `toml:"id_color_min_length"`
 	// Breadcrumbs renders a one-line symbol-path bar under an editor pane's
 	// tab/title row (#1153): the documentSymbol chain enclosing the cursor,
 	// clickable per segment. On by default (the JetBrains default); the row

@@ -208,6 +208,13 @@ config file paths, or disable detection entirely.
   collapsed to a notice, truncated bodies flagged. Scrolls with j/k/g/G and
   the mouse wheel; the pane persists across restarts as an empty singleton
   slot like the Usages panel.
+- **Identifier colors** (#1626): UUIDs and long hex hashes in the **body**
+  rows take a color hashed from the identifier itself (`internal/idcolor`,
+  drawn from the shared rainbow palette), so the trace id of this response
+  matches the same id in a log buffer. The color replaces the syntax color of
+  those columns; match, selection and fold styling are unaffected. The pane
+  has no config of its own, so the gate is the `idcolor` package global that
+  `internal/app` pushes from `editor.id_colors` / `editor.id_color_min_length`.
 - **Horizontal panning** (#1290): lines wider than the pane (minified JSON,
   long header values) are not lost — `shift+←`/`shift+→` pan the view sideways
   by 8 columns, `0`/`^` return to column 0, `$` jumps to the right edge, and

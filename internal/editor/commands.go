@@ -96,6 +96,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Inline color preview (#790/#1622): per-view toggle over the
 			// editor.color_preview config default.
 			action("view.toggleColorPreview", "Toggle Color Preview", "toggle_color_preview", ""),
+			// Identifier colors (#1626): UUIDs and hex hashes colored by their
+			// own hash; per-view toggle over the editor.id_colors default.
+			action("view.toggleIdentifierColors", "Toggle Identifier Colors", "toggle_identifier_colors", ""),
 			// JWT decoding (#1619): the caret's token opens as decoded header
 			// and payload JSON in the hover popup.
 			action("editor.decodeJWT", "Decode JWT at Caret", "decode_jwt", ""),

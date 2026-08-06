@@ -23,6 +23,7 @@ import (
 	"ike/internal/editor/search"
 	"ike/internal/highlight"
 	"ike/internal/httpclient"
+	"ike/internal/idcolor"
 	"ike/internal/theme"
 )
 
@@ -822,8 +823,19 @@ func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
 			return plain, "value"
 		}
 	case kindBody:
+		// Identifier colors (#1626): UUIDs and hex hashes in the response
+		// body take a rainbow color keyed on the identifier's own hash, so
+		// the trace ID of this response matches the one in the log pane. The
+		// gate is the idcolor package global (editor.id_colors) — this pane
+		// has no config of its own.
+		ids := m.bodyIDs(r.text)
 		return func(col int) (lipgloss.Style, string) {
 			capture := m.bodyIx.CaptureAt(r.body, col)
+			if id, ok := idAt(ids, col); ok {
+				if st, ok := m.hl.Style(idcolor.Capture(id.Slot)); ok {
+					return st, idcolor.Capture(id.Slot)
+				}
+			}
 			if st, ok := m.hl.Style(capture); ok {
 				return st, capture
 			}
@@ -831,6 +843,25 @@ func (m *Model) baseStyle(pal *theme.Palette, r row) styleFn {
 		}
 	}
 	return func(int) (lipgloss.Style, string) { return plain, "" }
+}
+
+// bodyIDs scans one body row for identifiers (#1626); nil while the feature
+// is off. Only the rows the pane actually draws are scanned.
+func (m *Model) bodyIDs(text string) []idcolor.Span {
+	if !idcolor.Enabled() {
+		return nil
+	}
+	return idcolor.Scan(text, idcolor.MinLength())
+}
+
+// idAt returns the identifier span covering a column.
+func idAt(spans []idcolor.Span, col int) (idcolor.Span, bool) {
+	for _, s := range spans {
+		if col >= s.Start && col < s.End {
+			return s, true
+		}
+	}
+	return idcolor.Span{}, false
 }
 
 // paintRow renders text with base styling per column and the search-match

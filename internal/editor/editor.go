@@ -25,6 +25,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/histories"
 	"ike/internal/host"
+	"ike/internal/idcolor"
 	"ike/internal/lang"
 	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
@@ -370,6 +371,13 @@ type Model struct {
 	// (#1622), like mdRenderSet.
 	colorPreview    bool
 	colorPreviewSet bool
+	// Identifier color hashing (#1626, idcolors.go). idColors is the
+	// editor.id_colors toggle, idColorMin the minimum hex-run length
+	// (editor.id_color_min_length); idColorsSet marks a per-view
+	// view.toggleIdentifierColors override, like mdRenderSet.
+	idColors    bool
+	idColorsSet bool
+	idColorMin  int
 	// scopes are the sticky-scroll scopes (#168) delivered by the same parse
 	// as hlIndex: pre-ordered multi-line declarations whose header line pins
 	// at the top of the view while the cursor is inside their body.
@@ -563,6 +571,8 @@ func New() Model {
 		cronHints:          true,
 		secretMask:         true,
 		colorPreview:       true,
+		idColors:           true,
+		idColorMin:         idcolor.DefaultMinLength,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
 			vcs.LineAdded:   true,
@@ -706,6 +716,12 @@ func (m *Model) applyConfig() {
 	}
 	if !m.colorPreviewSet {
 		m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
+	}
+	if !m.idColorsSet {
+		m.idColors = boolOr(m.cfg, "editor.id_colors", m.idColors)
+	}
+	if v, ok := m.cfg.Get("editor.id_color_min_length"); ok {
+		m.idColorMin = idcolor.Clamp(atoi(v, m.idColorMin))
 	}
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {

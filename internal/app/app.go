@@ -46,6 +46,7 @@ import (
 	"ike/internal/histories"
 	"ike/internal/host"
 	"ike/internal/httppane"
+	"ike/internal/idcolor"
 	"ike/internal/keymap"
 	"ike/internal/lang"
 	"ike/internal/largefile"
@@ -803,6 +804,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.palette.SetSizeStore(winSizes)          // resizable palette box (#774)
 	m.floats.SetMaxWidth(popupMaxWidth())     // centered-popup width cap (#932)
 	highlight.SetRainbow(rainbowConfigured()) // rainbow brackets (#789)
+	applyIDColorConfig()                      // identifier colors (#1626)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -3978,6 +3980,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Batch(cmds...)
 			}
 		}
+		applyIDColorConfig() // identifier colors (#1626): no re-parse needed
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor
 		// so the change lands without waiting for the next edit.
 		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
@@ -6205,6 +6208,19 @@ func rainbowConfigured() bool {
 		return c.Editor.RainbowBrackets
 	}
 	return true
+}
+
+// applyIDColorConfig pushes editor.id_colors / editor.id_color_min_length
+// (#1626) into the idcolor package globals. The editor keeps its own per-view
+// toggle; the globals serve the consumers without config plumbing of their
+// own — today the .http response pane.
+func applyIDColorConfig() {
+	c := config.Get()
+	if c == nil {
+		return
+	}
+	idcolor.SetEnabled(c.Editor.IDColors)
+	idcolor.SetMinLength(c.Editor.IDColorMinLength)
 }
 
 // settingsSize bounds the floating settings panel: most of the terminal, but
