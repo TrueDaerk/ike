@@ -29,7 +29,10 @@ make install-desktop  # installs the launcher for your platform
    does not inherit your shell's `PATH`. Edit it freely; reinstalling asks
    before overwriting.
 2. **`ike-gui`** (in `~/.local/bin`) — the launcher script. Run it from a
-   shell to open the IKE window without the desktop icon.
+   shell to open the IKE window without the desktop icon. Before launching
+   the terminal it re-execs through your login shell (`$SHELL -l`), so a
+   Dock/desktop launch gets the same profile environment (`PATH` for LSP
+   servers, formatters, toolchains) as a terminal launch.
 3. **The platform shell:**
     - macOS: `/Applications/Ike.app` — appears in Launchpad, Spotlight and
       the Dock with the Ike icon.

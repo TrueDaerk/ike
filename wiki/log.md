@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-06 (deploy: desktop launch loads login-shell env, #1579)
+
+- `ike-gui` re-execs itself through the user's login shell (`$SHELL -l`,
+  resolved via dscl/getent when unset, guarded by `IKE_GUI_LOGIN`) before
+  launching Ghostty. A Dock/desktop launch previously carried launchd's
+  minimal environment (`PATH=/usr/bin:/bin:…`), so LSP servers, formatters
+  and toolchains from Homebrew or `~/.local/bin` were not found — the
+  user's setup appeared ignored. `open -na Ghostty.app` forwards the
+  caller's environment, so the loaded profile reaches ike on macOS too.
+
 ## 2026-08-05 (deploy: desktop launcher, #1567)
 
 - IKE installs as a desktop application on macOS and Linux
