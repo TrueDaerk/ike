@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-07-28T16:00:00Z
+timestamp: 2026-08-06T22:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -158,6 +158,12 @@ config file paths, or disable detection entirely.
   raw number under the caret. Query-parameter values stay raw — a bare id in
   a URL is too easily mistaken for a timestamp. The response viewer has no
   caret and therefore no reveal, so it shows response bodies unchanged.
+- **JWTs** (#1619): the producer scans every line with `internal/jwt` and dims
+  the signature segment of each token (capture `jwt.signature`), so an
+  `Authorization: Bearer eyJ…` header reads as its claims rather than as one
+  long blob. `editor.decodeJWT` opens the decoded header and payload — with
+  `exp`/`iat`/`nbf` as UTC dates — in a popup at the token (see
+  `/architecture/editor.md`, JWT decoding).
 - **Completion** (#1268): the `http` plugin registers a completion source
   with the local engine (roadmap 0410, `complete.RegisterSource`), so `.http`
   files complete without a language server. It is position-aware, mirroring

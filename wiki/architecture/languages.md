@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-07-28T14:00:00Z
+timestamp: 2026-08-06T22:00:00Z
 ---
 
 # Language Registry
@@ -533,7 +533,12 @@ applies; a language with `Spans` but no grammar still schedules parses
 structure (rainbow column captures) Go-computed. Producers also share
 detectors through the seam: `internal/epochtime` (#1618) turns Unix epoch
 numbers into decoded-UTC stand-ins for the JSON languages, the log language
-and `.http` bodies alike. The ini-style config
+and `.http` bodies alike, and `internal/jwt` (#1619) dims the signature segment
+of every JSON Web Token for the `.http` and dotenv producers (see
+`/architecture/editor.md`, JWT decoding). The dotenv language
+(`plugins/languages/env`, #1619) is another grammar-free one: `.env` and its
+dotted variants (`.env.local`, `.env.production`, …) plus `*.env`, styling
+`export KEY=value` pairs and `#` comments. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
 and `.conf`: `[section]` headers, `key = value` pairs and full-line `#`/`;`
 comments as Go-computed spans, with no grammar and no server. The log

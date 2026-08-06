@@ -1,9 +1,11 @@
 package langhttp
 
 import (
+	"encoding/base64"
 	"strings"
 	"testing"
 
+	"ike/internal/jwt"
 	"ike/internal/lang"
 )
 
@@ -215,5 +217,33 @@ func TestBodyEpochSpans(t *testing.T) {
 		if s.Line == 0 && s.Replace != "" {
 			t.Errorf("request line span %+v must not carry a stand-in", s)
 		}
+	}
+}
+
+// TestQuerySpansJWTSignature: a JWT anywhere in the buffer — an Authorization
+// header, a body, a variable line — gets its signature segment dimmed (#1619),
+// while the readable header and payload segments keep the grammar's styling.
+func TestQuerySpansJWTSignature(t *testing.T) {
+	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	tok := enc(`{"alg":"HS256","typ":"JWT"}`) + "." + enc(`{"sub":"1","exp":1722949200}`) + ".s1gn4tur3"
+	lines := []string{
+		"@auth = " + tok,
+		"GET https://api.example.com/me",
+		"Authorization: Bearer " + tok,
+		"Accept: application/json",
+	}
+	spans := querySpans(lines)
+	for _, li := range []int{0, 2} {
+		sigCol := strings.LastIndex(lines[li], ".s1gn4tur3") + 1
+		if got := captureAt(spans, li, sigCol); got != jwt.Capture {
+			t.Errorf("line %d signature capture = %q, want %q", li, got, jwt.Capture)
+		}
+		payloadCol := strings.Index(lines[li], tok) + 5
+		if got := captureAt(spans, li, payloadCol); got == jwt.Capture {
+			t.Errorf("line %d: the header segment must not be dimmed", li)
+		}
+	}
+	if got := captureAt(spans, 3, strings.Index(lines[3], "application")); got == jwt.Capture {
+		t.Error("a plain header value must not be taken for a JWT")
 	}
 }

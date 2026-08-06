@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/epochtime"
 	"ike/internal/httpfile"
+	"ike/internal/jwt"
 	"ike/internal/lang"
 )
 
@@ -26,7 +27,12 @@ import (
 // querySpans is the lang.Language.Spans hook (#1585).
 func querySpans(lines []string) []lang.Span {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
-	var out []lang.Span
+	// JWTs (#1619) are scanned over the whole buffer, not per request region:
+	// they show up in an Authorization header, in a body, in a @token variable
+	// and in a pasted response block alike. Detection is structural — three
+	// base64url segments whose first two decode to JSON — so scanning
+	// everything cannot mis-dim ordinary text.
+	out := jwt.Spans(lines)
 	for _, r := range f.Requests {
 		li := r.Line - 1
 		if li < 0 || li >= len(lines) {

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-03T12:00:00Z
+timestamp: 2026-08-06T22:00:00Z
 ---
 
 # Editor
@@ -1298,6 +1298,41 @@ in `timestamps.go`:
   (`internal/httppane`) has no caret, hence no positional reveal, so it is not
   part of this layer; a response saved to a `.json` file decodes like any
   other buffer.
+
+## JWT decoding (#1619)
+
+JSON Web Tokens — the `eyJ…` blobs that fill `.http` `Authorization:` headers
+and `.env` files — are detected by `internal/jwt` and handled in two halves,
+the editor half in `jwt.go`:
+
+- **Dimmed signature** (passive): a span producer calls `jwt.LineSpans`, which
+  emits one span per token over the *signature segment only*, capture
+  `jwt.signature`. `styleAt` resolves it terminal *faint* when no
+  `theme.captures.jwt.signature` key names it, so the meaningless third segment
+  stops competing with the claims. This is a color, not a stand-in: no toggle,
+  no conceal, the bytes always read as they stand.
+- **Decode popup** (active): `editor.decodeJWT` ("Decode JWT at Caret", palette
+  only) opens the token's header and payload as pretty-printed JSON in the
+  hover popup (fenced blocks, so the #379 hover renderer syntax-highlights
+  them), anchored at the token's first column and dismissed by the next key
+  like any hover. Decoding on demand rather than concealing the token with its
+  payload is deliberate: a JWT is far too long to stand in for inline, and the
+  decoded form is multi-line JSON, not a single value. A caret that is not
+  inside a token falls back to the line's first one — the caret usually sits at
+  the start of the header line, not in the blob.
+- **Registered claims**: `exp`, `iat`, `nbf`, `auth_time` and `updated_at`
+  carry their UTC date as a trailing `// 2024-08-06 12:00:00Z` comment,
+  rendered through `epochtime.Decode` (#1618). The dependency is soft: a value
+  outside the plausible epoch range keeps its raw number.
+- **Structural detection**: a run of base64url characters must split into
+  exactly three non-empty dot-separated segments whose first two decode to JSON
+  *objects*. Version strings, hashes and dotted hostnames therefore never
+  match, and a malformed or truncated token is simply not a token. Trailing
+  sentence punctuation is trimmed off the run; padded segments (`=`) decode
+  too.
+- **Producers**: the `.http` span producer scans every line of the buffer (a
+  token shows up in a header, a body, a `@variable` and a pasted response
+  alike), the dotenv producer scans every value.
 
 ## Inline color preview (#790)
 

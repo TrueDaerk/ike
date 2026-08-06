@@ -29,7 +29,8 @@ type fileColors struct {
 	// Empty falls back to the SQL color — the tabular-data family — so the
 	// 28 built-in themes need no per-theme entry; a theme may still set it.
 	CSV string
-	// INI covers the ini-style config files (ini, conf, #1595). Empty falls
+	// INI covers the ini-style config files (ini, conf, #1595) and the dotenv
+	// files (.env and friends, #1619) — the same config family. Empty falls
 	// back to the Toml color — the config-file family — so the built-in
 	// themes need no per-theme entry; a theme may still set it.
 	INI string
@@ -61,8 +62,10 @@ var fileGroups = map[string][]string{
 	"docker": {"dockerfile", "Dockerfile", "Containerfile"},
 	"http":   {"http", "rest"},
 	"csv":    {"csv", "tsv", "psv"},
-	"ini":    {"ini", "conf"},
-	"log":    {"log"},
+	// dotenv (#1619) joins the config family: same tint as ini/toml.
+	"ini": {"ini", "conf", "env", ".env", ".env.local", ".env.example", ".env.sample",
+		".env.template", ".env.development", ".env.production", ".env.test", ".env.staging"},
+	"log": {"log"},
 }
 
 // filesTable expands a fileColors spec into the flat extension/filename →

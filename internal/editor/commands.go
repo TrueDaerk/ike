@@ -81,6 +81,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Inline epoch-timestamp decoding (#1618): per-view toggle over
 			// the editor.timestamp_decoding config default.
 			action("view.toggleTimestampDecoding", "Toggle Timestamp Decoding", "toggle_timestamp_decoding", ""),
+			// JWT decoding (#1619): the caret's token opens as decoded header
+			// and payload JSON in the hover popup.
+			action("editor.decodeJWT", "Decode JWT at Caret", "decode_jwt", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),
