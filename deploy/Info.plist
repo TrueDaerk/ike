@@ -18,5 +18,16 @@
 	<string>ike</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
+	<!-- LaunchServices runs a bundle whose executable is a shell script under
+	     Rosetta (arch → i386, proc_translated → 1); the translated preference
+	     is inherited down to the login shell ike-gui re-execs through, so an
+	     arch-conditional profile (e.g. Homebrew's arm64 branch) takes the
+	     Intel path and /opt/homebrew/bin never reaches PATH (#1614). Prefer
+	     the native slice; Intel Macs fall through to x86_64. -->
+	<key>LSArchitecturePriority</key>
+	<array>
+		<string>arm64</string>
+		<string>x86_64</string>
+	</array>
 </dict>
 </plist>

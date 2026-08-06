@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-06 (deploy: Ike.app runs natively on Apple Silicon, #1614)
+
+- `deploy/Info.plist` declares `LSArchitecturePriority` (arm64, x86_64):
+  LaunchServices runs a bundle whose executable is a shell script under
+  Rosetta, and the translated preference is inherited down to the login
+  shell `ike-gui` re-execs through (#1579/#1581). An arch-conditional
+  profile — e.g. Homebrew's `arm64` branch — then took the Intel path, so
+  `/opt/homebrew/bin` never reached `PATH` and tool panes failed with
+  `exec: "lazygit": executable file not found in $PATH`. With the native
+  priority the profile sees the real architecture; Intel Macs fall
+  through to x86_64.
+
 ## 2026-08-06 (editor: reformat keybind formats the selection when one exists, #1603)
 
 - `lsp.format` is context-sensitive: an active visual selection reformats
