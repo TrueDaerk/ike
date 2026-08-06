@@ -53,20 +53,26 @@ terminal itself must own (`super+` on macOS, `ctrl+` mirrors on Linux):
 | Binding | Action |
 |---|---|
 | `super+q` / `ctrl+shift+q` | quit the window |
-| `super+plus` / `super+-` / `super+zero` (and `ctrl+` mirrors) | font zoom in / out / reset |
-| `super+,` / `super+shift+,` (and `ctrl+` mirrors) | open / reload the Ghostty config |
+| `ctrl+plus` / `ctrl+-` / `ctrl+zero` | font zoom in / out / reset |
+| `ctrl+,` / `ctrl+shift+,` | open / reload the Ghostty config |
+| `cmd+c` (performable) / `cmd+v` | copy terminal selection / paste from clipboard |
+| `super+z` | sent as the `ctrl+z` byte so IKE sees undo |
 | `alt+backspace` | macOS Option+Backspace escape sequence (delete word back) |
+
+The `super+` variants of font zoom and config open/reload are deliberately
+absent: Cmd chords stay with the IDE (IKE owns `super+,` internally, and
+`cmd+-`/`cmd++` remain free for IDE bindings).
 
 Option+Arrows and Option+Forward-Delete need no re-binding: Ghostty
 delivers them with a real alt modifier, so IKE's own word navigation and
 word deletion match directly.
 
-Copy and paste are deliberately **not** bound — IKE handles the clipboard
-itself.
+`cmd+c` uses Ghostty's `performable:` prefix: with no terminal selection
+the chord falls through to IKE, so IDE-side copy keeps working.
 
 The runtime font zoom is per-instance and not persisted — each launch
-starts from `ike.conf`. To keep a size across launches, set `font-size =`
-in the config (`super+,` opens it, `super+shift+,` reloads it live).
+starts from `ike.conf`, which ships with `font-size = 12`. Edit that value
+to change the default size.
 
 ## Known limitations
 
