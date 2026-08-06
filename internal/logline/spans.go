@@ -2,7 +2,8 @@
 // and ScanSGR: timestamps capture as log.time (dimmed), the severity token as
 // log.error/warn/info/debug, thread/logger names as log.rainbow.N — the slot
 // keyed on the name's hash, so one thread keeps one color across the whole
-// file (#1589's palette mechanic) — escape bytes as conceal, and SGR-styled
+// file (#1589's palette mechanic) — logfmt keys past the header as log.key
+// with their message value as log.message (#1633), escape bytes as conceal, and SGR-styled
 // stretches as ansi.<spec>. Emission order matters: the span index returns
 // the first covering span, so header captures win over an enclosing ANSI run,
 // which wins over the whole-line dim of a debug line.
@@ -11,6 +12,7 @@ package logline
 import (
 	"hash/fnv"
 	"strconv"
+	"strings"
 
 	"ike/internal/epochtime"
 	"ike/internal/highlight"
@@ -32,10 +34,12 @@ func lineSpans(li int, raw string) []lang.Span {
 	p := Parse(visible)
 
 	var out []lang.Span
+	seen := map[Range]bool{}
 	span := func(r Range, capture string) {
 		if r.Empty() || capture == "" {
 			return
 		}
+		seen[r] = true
 		start, end := r.Start, r.End
 		if vmap != nil {
 			// Map visible rune columns back onto the raw line; an escape
@@ -52,6 +56,19 @@ func lineSpans(li int, raw string) []lang.Span {
 	vis := []rune(visible)
 	for _, n := range p.Names {
 		span(n, rainbowCapture(string(vis[n.Start:n.End])))
+	}
+	// Logfmt pairs past the header (#1633): keys dim, the message value gains
+	// emphasis, secondary timestamps dim like the leading one. Header ranges
+	// already emitted keep their capture — the span index takes the first
+	// covering span, and re-emitting them would only add noise.
+	if pairs := ScanPairs(visible); Logfmt(pairs) {
+		for _, pr := range pairs {
+			span(pr.Key, "log.key")
+			if seen[pr.Value] {
+				continue
+			}
+			span(pr.Value, pairCapture(pr))
+		}
 	}
 	for _, r := range runs {
 		if spec := r.Style.Spec(); spec != "" {
@@ -105,6 +122,26 @@ func visibleText(raw string, escapes []Escape) (string, []int) {
 		vmap = append(vmap, i)
 	}
 	return string(vis), vmap
+}
+
+// pairCapture is the capture for a pair's *value*. Plain values stay in the
+// default foreground — the dimmed keys already carry the structure — so the
+// message and the loud severities are what the eye lands on.
+func pairCapture(p Pair) string {
+	switch p.Kind {
+	case KindTime:
+		return "log.time"
+	case KindMessage:
+		return "log.message"
+	case KindLevel:
+		return levelCapture(levels[strings.ToLower(p.Text)])
+	case KindName:
+		if p.Text == "" {
+			return ""
+		}
+		return rainbowCapture(p.Text)
+	}
+	return ""
 }
 
 func levelCapture(lv Level) string {

@@ -137,18 +137,19 @@ func Parse(line string) Line {
 
 // applyPair folds one logfmt key=value pair into the line. It reports false
 // when the key ends the header (msg and unknown keys — everything after is
-// message payload).
+// message payload). The key roles come from pairKinds, shared with the
+// whole-line pair scan in pairs.go.
 func (p *Line) applyPair(key, val string, vr Range) bool {
-	switch key {
-	case "time", "ts", "timestamp", "datetime", "date":
+	switch pairKinds[key] {
+	case KindTime:
 		if p.Timestamp.Empty() {
 			p.Timestamp = vr
 		}
-	case "level", "lvl", "severity", "sev":
+	case KindLevel:
 		if lv, ok := levels[strings.ToLower(val)]; ok && p.Level == LevelNone {
 			p.Level, p.LevelRange = lv, vr
 		}
-	case "logger", "thread", "caller", "name", "module", "component", "source":
+	case KindName:
 		p.Names = append(p.Names, vr)
 	default:
 		return false

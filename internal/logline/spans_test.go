@@ -113,6 +113,99 @@ func TestSpansPlainLineEmpty(t *testing.T) {
 	}
 }
 
+// TestSpansLogfmtPairs (#1633): on the docker+logrus line every key dims, the
+// msg value gains the message capture, the secondary time= value dims like the
+// leading stamp, and plain values stay unstyled.
+func TestSpansLogfmtPairs(t *testing.T) {
+	line := `2026-08-06T19:06:13.303770698Z time="2026-08-06T19:06:13Z" level=info msg="Session done" Failed=0 notify=no`
+	spans := flat([]string{line})
+	runes := []rune(line)
+	text := func(s spanLike) string { return string(runes[s.start:s.end]) }
+
+	var keys, times, msgs, infos []string
+	for _, s := range spans {
+		switch s.capture {
+		case "log.key":
+			keys = append(keys, text(s))
+		case "log.time":
+			times = append(times, text(s))
+		case "log.message":
+			msgs = append(msgs, text(s))
+		case "log.info":
+			infos = append(infos, text(s))
+		}
+	}
+	wantKeys := []string{"time=", "level=", "msg=", "Failed=", "notify="}
+	if len(keys) != len(wantKeys) {
+		t.Fatalf("log.key spans = %+v, want %v", keys, wantKeys)
+	}
+	for i, w := range wantKeys {
+		if keys[i] != w {
+			t.Errorf("log.key %d = %q, want %q", i, keys[i], w)
+		}
+	}
+	if len(times) != 2 || times[0] != "2026-08-06T19:06:13.303770698Z" || times[1] != "2026-08-06T19:06:13Z" {
+		t.Errorf("log.time spans = %+v, want the leading and the time= stamp", times)
+	}
+	if len(msgs) != 1 || msgs[0] != "Session done" {
+		t.Errorf("log.message spans = %+v", msgs)
+	}
+	// level=info keeps its single severity span — the header emitted it, the
+	// pair pass must not duplicate it.
+	if len(infos) != 1 || infos[0] != "info" {
+		t.Errorf("log.info spans = %+v", infos)
+	}
+	for _, s := range spans {
+		if s.capture == "log.key" || s.capture == "conceal" {
+			continue
+		}
+		if txt := text(s); txt == "0" || txt == "no" {
+			t.Errorf("plain value %q styled as %q", txt, s.capture)
+		}
+	}
+}
+
+// TestSpansLogfmtNamePairRainbow: a logger= pair past the header still colors
+// through the rainbow mechanic, once.
+func TestSpansLogfmtNamePairRainbow(t *testing.T) {
+	spans := flat([]string{`msg="up" logger=db.pool retries=0`})
+	var got int
+	for _, s := range spans {
+		if s.capture == rainbowCapture("db.pool") {
+			got++
+		}
+	}
+	if got != 1 {
+		t.Errorf("rainbow spans for logger value = %d, want 1", got)
+	}
+}
+
+// TestSpansLogfmtFallback: a prose line carrying a single unknown pair is left
+// alone — no key dimming, no message emphasis.
+func TestSpansLogfmtFallback(t *testing.T) {
+	if spans := flat([]string{"solving for x=42 today"}); len(spans) != 0 {
+		t.Errorf("prose line styled: %+v", spans)
+	}
+}
+
+// TestSpansLogfmtThroughANSI: pair ranges are scanned on the visible text and
+// map back onto the raw columns like the header spans do.
+func TestSpansLogfmtThroughANSI(t *testing.T) {
+	raw := "\x1b[31mlevel=error\x1b[0m msg=\"boom\""
+	spans := flat([]string{raw})
+	runes := []rune(raw)
+	for _, s := range spans {
+		if s.capture != "log.message" {
+			continue
+		}
+		if got := string(runes[s.start:s.end]); got != "boom" {
+			t.Errorf("log.message covers %q, want the raw message", got)
+		}
+		return
+	}
+	t.Fatal("no log.message span on the coloured line")
+}
+
 // TestSpansEpochTimestamps (#1618): a plausible epoch number anywhere on a log
 // line becomes a conceal-with-stand-in span; implausible numbers and the
 // already-readable header timestamp are left raw.

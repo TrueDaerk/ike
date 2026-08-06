@@ -1247,6 +1247,22 @@ emits everything through the Go span seam (#1585); the parsing lives in
   Debug/trace lines additionally get a whole-line `log.debug` span emitted
   last, so the header spans win where they overlap and the message dims.
 - **Dimmed timestamps**: `log.time`, faint, so message text stands out.
+- **Logfmt pairs** (#1633, `logline.ScanPairs`): `Parse` stops at the first
+  key it does not know — everything after is message payload — but logrus and
+  slog text output keep emitting pairs past that point. A second pass scans
+  the *whole* line for `key=value`, quote aware (`msg="Session done"` stays
+  one pair, `\"` does not close it), and classifies each key: every key plus
+  its `=` captures as `log.key` (faint, so the structure recedes),
+  `msg`/`message` values as `log.message` (bold), `time`/`ts`/`timestamp`/
+  `datetime`/`date` values as `log.time` (a docker/containerd line's
+  duplicate stamp dims like the leading one), `level`/`lvl`/`severity`/`sev`
+  as the matching severity capture and `logger`/`thread`/`caller`/`name`/
+  `module`/`component`/`source` through the rainbow mechanic. Plain values
+  keep the default foreground — the dimmed keys carry the structure. Ranges
+  the header already emitted are not re-emitted.
+- **Logfmt fallback**: pair styling only applies when `logline.Logfmt` holds —
+  at least two pairs, or one recognized key. A lone `x=42` inside a prose
+  sentence renders unchanged.
 - **Rainbow threads/loggers**: thread and logger names capture as
   `log.rainbow.<fnv(name)%6>` — the #1589 palette mechanic keyed on the
   *name hash* instead of the column index, so one thread keeps one color on
