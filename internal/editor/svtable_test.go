@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/editor/mode"
 	"ike/internal/lang"
 )
 
@@ -30,39 +31,57 @@ func csvLoaded(t *testing.T, content string) Model {
 
 const csvDoc = "name,qty\napple,3\npear,12\n"
 
-// TestSVTableAlignsColumns guards the core #1589 behavior: off-caret rows
-// render aligned with the separator concealed; the caret line stays raw.
+// TestSVTableAlignsColumns guards the core #1589 behavior under the #1594
+// reveal rules: every row renders aligned with the separator concealed —
+// including the caret line, as long as the caret is not on a separator.
 func TestSVTableAlignsColumns(t *testing.T) {
 	m := csvLoaded(t, csvDoc)
-	m.cursor = buffer.Position{Line: 2}
+	m.cursor = buffer.Position{Line: 2} // col 0: on a field, not a separator
 
 	view := plainView(m)
 	// widths: col0 = max(name, apple, pear) = 5, gap 2.
-	if !strings.Contains(view, "name   qty") {
-		t.Errorf("header not aligned:\n%s", view)
+	for _, want := range []string{"name   qty", "apple  3", "pear   12"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("aligned row %q missing:\n%s", want, view)
+		}
 	}
-	if !strings.Contains(view, "apple  3") {
-		t.Errorf("row not aligned:\n%s", view)
-	}
-	if !strings.Contains(view, "pear,12") {
-		t.Errorf("caret line must stay raw:\n%s", view)
-	}
-	if strings.Contains(view, "apple,3") {
-		t.Error("off-caret separator still visible")
+	if strings.Contains(view, ",") {
+		t.Errorf("separator visible although no caret is on one:\n%s", view)
 	}
 }
 
-// TestSVSelectionRevealsRaw: a selection touching a row shows raw source.
-func TestSVSelectionRevealsRaw(t *testing.T) {
-	m := csvLoaded(t, csvDoc)
-	m.cursor = buffer.Position{Line: 2}
-	if _, ok := m.svRow(1); !ok {
-		t.Fatal("row 1 should render aligned before selecting")
+// TestSVCaretOnSeparatorRevealsIt: only the separator under the caret shows
+// raw; the rest of the line keeps its concealed alignment (#1594).
+func TestSVCaretOnSeparatorRevealsIt(t *testing.T) {
+	m := csvLoaded(t, "a,bb,c\nx,yy,z\n")
+	m.cursor = buffer.Position{Line: 0, Col: 1} // the first separator
+
+	view := plainView(m)
+	if !strings.Contains(view, "a,bb") {
+		t.Errorf("caret separator not revealed:\n%s", view)
 	}
-	m.MouseClick(m.view.GutterWidth(m.buf.LineCount()), 1) // anchor on line 1
-	m.MouseDrag(m.view.GutterWidth(m.buf.LineCount())+3, 1)
-	if _, ok := m.svRow(1); ok {
-		t.Fatal("selected row must render raw")
+	if strings.Contains(view, "bb,c") {
+		t.Errorf("second separator must stay concealed:\n%s", view)
+	}
+	if !strings.Contains(view, "x  yy") {
+		t.Errorf("other lines must stay aligned:\n%s", view)
+	}
+}
+
+// TestSVSelectionRevealsCrossedSeparator: a selection crossing a separator
+// reveals it; separators outside the selection stay concealed.
+func TestSVSelectionRevealsCrossedSeparator(t *testing.T) {
+	m := csvLoaded(t, "a,bb,c\nx,yy,z\n")
+	m.cursor = buffer.Position{Line: 0, Col: 2}
+	m.mode = mode.Visual
+	m.anchor = buffer.Position{Line: 0, Col: 0} // selection [0,2] crosses col 1
+
+	view := plainView(m)
+	if !strings.Contains(view, "a,bb") {
+		t.Errorf("selected separator not revealed:\n%s", view)
+	}
+	if strings.Contains(view, "bb,c") {
+		t.Errorf("unselected separator must stay concealed:\n%s", view)
 	}
 }
 

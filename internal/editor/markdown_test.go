@@ -67,15 +67,26 @@ func TestConcealHidesMarkersOffCursorLine(t *testing.T) {
 	}
 }
 
-// TestConcealCursorLineAlwaysRaw: the cursor line shows raw source so editing
-// stays exact.
-func TestConcealCursorLineAlwaysRaw(t *testing.T) {
+// TestConcealCaretPositionRaw (#1594): only the marker the caret sits in
+// shows raw; the line's other markers stay concealed, and a caret elsewhere
+// on the line conceals everything.
+func TestConcealCaretPositionRaw(t *testing.T) {
 	m, path := mdLoaded(t, "**bold** x\nplain\n")
 	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: concealSpans(0)})
 	m = mm
-	// Cursor sits on line 0 (default).
-	if view := plainView(m); !strings.Contains(view, "**") {
-		t.Error("cursor line must show raw markers")
+	// Cursor at col 0 — inside the leading marker [0,2): it shows raw, the
+	// trailing marker [6,8) stays hidden.
+	view := plainView(m)
+	if !strings.Contains(view, "**bold") {
+		t.Errorf("caret marker must show raw, view:\n%s", view)
+	}
+	if strings.Contains(view, "bold**") {
+		t.Errorf("other marker must stay concealed, view:\n%s", view)
+	}
+	// Cursor mid-word — outside both ranges: everything conceals.
+	m.cursor = buffer.Position{Line: 0, Col: 4}
+	if view := plainView(m); strings.Contains(view, "**") {
+		t.Errorf("caret outside the ranges must conceal all markers, view:\n%s", view)
 	}
 }
 

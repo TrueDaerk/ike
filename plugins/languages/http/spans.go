@@ -38,8 +38,15 @@ func querySpans(lines []string) []lang.Span {
 		}
 		ph := placeholderRanges(runes, tStart, tEnd)
 		out = appendPercentSpans(out, li, runes, tStart, tEnd, ph)
-		if q := indexFrom(runes, tStart, tEnd, '?'); q >= 0 {
-			out = appendQuerySpans(out, li, runes, q, tEnd, ph)
+		qPos := indexFrom(runes, tStart, tEnd, '?')
+		if qPos >= 0 {
+			out = appendQuerySpans(out, li, runes, qPos, tEnd, ph)
+		}
+		// The path portion gets its own capture (#1594), distinct from the
+		// grammar's url string covering scheme and authority. Emitted after
+		// the percent/query spans so those win inside the path.
+		if ps, pe := pathBounds(runes, tStart, tEnd, qPos); ps >= 0 {
+			out = appendExcluding(out, li, ps, pe, "label", ph)
 		}
 		// Folded query continuation lines (#1269): indented lines starting
 		// with "?" or "&" extend the target until the first header, blank
@@ -70,6 +77,47 @@ func querySpans(lines []string) []lang.Span {
 			}
 		}
 	}
+	return out
+}
+
+// pathBounds locates the path portion of a request target in [from, to): the
+// first "/" after the "scheme://authority" prefix — or the target start for
+// origin-form targets ("/api/users") — through the query (qPos, -1 for
+// none). start -1 when the target has no path portion.
+func pathBounds(runes []rune, from, to, qPos int) (start, end int) {
+	end = to
+	if qPos >= 0 {
+		end = qPos
+	}
+	start = -1
+	for i := from; i+2 < end; i++ {
+		if runes[i] == ':' && runes[i+1] == '/' && runes[i+2] == '/' {
+			start = indexFrom(runes, i+3, end, '/')
+			return start, end
+		}
+	}
+	if from < end && runes[from] == '/' {
+		return from, end
+	}
+	return -1, end
+}
+
+// appendExcluding emits capture spans over [from, to), split around the
+// placeholder ranges so their own captures survive.
+func appendExcluding(out []lang.Span, line, from, to int, capture string, ph [][2]int) []lang.Span {
+	start := from
+	flush := func(end int) {
+		if start < end {
+			out = append(out, lang.Span{Line: line, StartCol: start, EndCol: end, Capture: capture})
+		}
+	}
+	for i := from; i < to; i++ {
+		if inRanges(ph, i) {
+			flush(i)
+			start = i + 1
+		}
+	}
+	flush(to)
 	return out
 }
 
@@ -151,8 +199,9 @@ func inRanges(ranges [][2]int, col int) bool {
 
 // appendQuerySpans overlays the query-parameter structure of [from, to):
 // "?", "&" and the first "=" of each parameter as punctuation, keys as
-// property, values as string. Tokens split around placeholder ranges;
-// whitespace (folded lines allow "? a = 1") stays unstyled.
+// property, values as constant (#1594 — distinct from the url string).
+// Tokens split around placeholder ranges; whitespace (folded lines allow
+// "? a = 1") stays unstyled.
 func appendQuerySpans(out []lang.Span, line int, runes []rune, from, to int, ph [][2]int) []lang.Span {
 	if to > len(runes) {
 		to = len(runes)
@@ -161,7 +210,9 @@ func appendQuerySpans(out []lang.Span, line int, runes []rune, from, to int, ph 
 	tokStart := -1
 	tokCapture := func() string {
 		if inValue {
-			return "string"
+			// Distinct from the url's own @string capture (#1594), so
+			// values read apart from the surrounding url.
+			return "constant"
 		}
 		return "property"
 	}

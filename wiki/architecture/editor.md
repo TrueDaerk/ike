@@ -1124,23 +1124,24 @@ toggled by `editor.markdown_rendering` (default on, in Settings → Editor):
   render as terminal text attributes — `**bold**` bold, `*italic*` italic,
   `~~strike~~` struck through — composed in `styleAt` over whatever color the
   theme resolves.
-- **Concealment** (lines the cursor/carets are *not* on): the query captures
-  the marker chrome (`**`, `*`, `` ` ``, link `[]()` + destination) as
-  `@conceal`; the `SpansMsg` handler splits those spans out of the style index
-  into per-line column ranges, and `renderSpan` skips those cells so the line
-  reads like rendered text. The cursor line — and any line a visual selection
-  touches (#1585) — always shows raw source. Mouse clicks map back through
-  the hidden ranges (`displayClickCol`), so the cursor lands on the character
-  that was clicked; buffer-column motions and selections are untouched by
-  design.
+- **Concealment** (positional, #1594): the query captures the marker chrome
+  (`**`, `*`, `` ` ``, link `[]()` + destination) as `@conceal`; the
+  `SpansMsg` handler splits those spans out of the style index into per-line
+  column ranges, and `renderSpan` skips those cells so the line reads like
+  rendered text. A range shows its raw source only while the caret sits
+  *inside* it — or a selection intersects it — with the rest of the line
+  staying rendered (`lineConcealRanges` filters revealed ranges;
+  vim's concealcursor granularity). Mouse clicks map back through the hidden
+  ranges (`displayClickCol`), so the cursor lands on the character that was
+  clicked; buffer-column motions and selections are untouched by design.
 - **Stand-in conceals** (#1585): a span carrying a `Replace` string (produced
   by a language's Go span hook, e.g. `.http` percent-encodings — `%20`
   decodes to a space, `%C3%A4` to `ä` across all six source columns) conceals
-  its range behind the replacement glyph, rendered underlined in the range's
-  own capture style so it reads as a decoded stand-in. The same
-  raw-on-cursor/selection rules apply, and `displayClickCol` /
-  `DisplayOffset` account for the collapsed width (the latter now walks
-  conceal ranges in general, fixing overlay anchors on concealed lines).
+  its range behind the replacement glyph, rendered in the range's own capture
+  style with a subtle background tint (`SelectionMuted`) so it reads as a
+  decoded stand-in even when it decodes to a space (#1594). The same
+  positional reveal applies, and `displayClickCol` / `DisplayOffset` account
+  for the collapsed width.
 - **Pipe tables** (cursor outside the block): detected from the buffer text (a
   pipe row above a `|---|` delimiter row — equivalent to the grammar's
   `pipe_table`, but it also works in `CGO_ENABLED=0` builds), re-rendered with
@@ -1172,22 +1173,26 @@ by `editor.csv_rendering` (default on, Settings → Editor):
   (`lang.Language.Spans`, #1585) with the theme-derived `rainbow.<col%6>`
   captures of #789, plus `punctuation` on the separators — so raw lines (the
   caret line, selections, toggle off) are already rainbow-csv colored.
-- **Aligned rows** (lines the caret is not on, no selection, no soft wrap):
-  `svRow` pre-renders the row with each field padded to the column's width
-  and the separator concealed behind the two-cell gap, sliced by
-  `renderTableRow` like a markdown table row. Widths come from `svLayout`:
-  the widest field per column across the *visible* rows plus the header row —
-  viewport-bound, so large files never measure beyond the screen. The layout
-  hash folds into the line cache's validity check (`svCacheState` in
-  `syncEpoch`): a vertical scroll can change widths without an epoch bump;
-  non-sv buffers hash to zero and keep their scroll cache reuse.
+- **Aligned rows** (no soft wrap): each separator becomes a *dynamic*
+  conceal range (`svConcealRanges`, #1594) whose stand-in is the column's
+  alignment padding — the column width minus the field's own length plus the
+  two-cell gap — so rows render aligned through the ordinary cell loop, and
+  cursor, selection and search styling all work on aligned rows. Only the
+  separator the caret sits on — or a selection crosses — reverts to its raw
+  character (the shared positional reveal in `lineConcealRanges`). Widths
+  come from `svLayout`: the widest field per column across the *visible*
+  rows plus the header row — viewport-bound, so large files never measure
+  beyond the screen. The layout hash folds into the line cache's validity
+  check (`svCacheState` in `syncEpoch`): a vertical scroll can change widths
+  without an epoch bump; non-sv buffers hash to zero and keep their scroll
+  cache reuse.
 - **Pinned header**: `stickyLines` returns line 0 for sv buffers once the
   view scrolls (gated by `editor.sticky_scroll` like code headers), so the
   title row rides the existing sticky rendering, click remap and
   `unhideCursor` plumbing.
-- **Mouse and overlays**: `svClickCol` / `svDisplayOffset` map display cells
-  through the padded layout (padding clicks land on the concealed
-  separator); `displayClickCol` and `DisplayOffset` branch to them first.
+- **Mouse and overlays**: the generic conceal mapping in `displayClickCol` /
+  `DisplayOffset` handles the padding stand-ins — a click in the padding
+  lands on the concealed separator.
 - **Quoting**: field splitting (`internal/sv`, shared with the plugin so both
   sides split identically) honors `"…"` regions — a quoted separator is
   literal, `""` escapes a quote. The csv separator is sniffed (`,` vs `;`)

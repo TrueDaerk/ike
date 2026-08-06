@@ -344,25 +344,19 @@ func (m *Model) clickPosition(x, y int) buffer.Position {
 // stand-in lands on the range start; offsets past the line end map 1:1
 // (everything there is one-cell padding).
 func (m Model) displayClickCol(line, from, offset int) int {
-	// Aligned sv table rows (#1589) map through their padded column layout.
-	if col, ok := m.svClickCol(line, from+offset); ok {
-		return col
-	}
 	runes := []rune(m.buf.Line(line))
-	concealing := m.concealOn(line)
+	conceals := m.lineConcealRanges(line)
 	col := from
 	for ; col < len(runes); col++ {
-		if concealing {
-			if cr, ok := m.concealRangeAt(line, col); ok {
-				if cr.repl != "" && col == cr.start {
-					if cells := lipgloss.Width(cr.repl); offset < cells {
-						return col
-					} else {
-						offset -= cells
-					}
+		if cr, ok := rangeAt(conceals, col); ok {
+			if cr.repl != "" && col == cr.start {
+				if cells := lipgloss.Width(cr.repl); offset < cells {
+					return col
+				} else {
+					offset -= cells
 				}
-				continue
 			}
+			continue
 		}
 		cells := 1
 		if runes[col] == '\t' {
@@ -718,18 +712,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	if row, ok := m.mdTableRow(line); ok {
 		return m.renderTableRow(row, from, to, width)
 	}
-	// Separator-delimited table rows (#1589): aligned rainbow columns with
-	// concealed separators, pre-styled like a markdown table row; the caret
-	// line and selected lines fall through to the raw cell loop.
-	if row, ok := m.svRow(line); ok {
-		return m.renderTableRow(row, from, to, width)
-	}
 	runes := []rune(m.buf.Line(line))
 	left := from
-	// Marker concealment (#881): on lines the cursor is not on, cells inside
-	// a conceal range are skipped entirely so the line reads like rendered
-	// text. The cursor line always shows raw source.
-	concealing := m.concealOn(line)
+	// Concealment (#881/#1585/#1589): cells inside a conceal range are
+	// skipped (or replaced by their stand-in) so the line reads like
+	// rendered text. lineConcealRanges already dropped the ranges the caret
+	// sits in or a selection crosses — those cells render raw (#1594).
+	conceals := m.lineConcealRanges(line)
 	// Inline color preview (#790): literal cells tint with their own color.
 	swatches := m.lineColorSwatches(line)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
@@ -836,18 +825,23 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursorHere := isCursorLine && col == m.cursor.Col
 		caretHere := m.focused && m.caretOnLine(line, col)
 		selected := hasSel && col >= selStart && col <= selEnd
-		if concealing && col < len(runes) {
-			if cr, ok := m.concealRangeAt(line, col); ok {
+		if col < len(runes) {
+			if cr, ok := rangeAt(conceals, col); ok {
 				// Concealed cell: marker chrome (#881) emits nothing; a
-				// stand-in range (#1585) emits its replacement once, at the
-				// range start, styled by the range's own capture plus an
-				// underline so it reads as a decoded stand-in. Display
+				// replacement range emits its stand-in once, at the range
+				// start, styled by the range's own capture. A decoded
+				// stand-in (#1585) additionally carries a background tint so
+				// it reads as a stand-in, not buffer content — the sv
+				// alignment padding (#1589) stays plain spacing. Display
 				// columns close up either way; contentCells still advances
 				// so ruler/guide positions keep tracking buffer cells.
 				if cr.repl != "" && col == cr.start {
 					if w := lipgloss.Width(cr.repl); disp+w <= width {
 						st, _ := m.styleAt(line, col)
-						b.WriteString(st.Underline(true).Render(cr.repl))
+						if cr.standIn {
+							st = st.Background(m.theme().SelectionMuted)
+						}
+						b.WriteString(st.Render(cr.repl))
 						disp += w
 					}
 				}
@@ -1050,14 +1044,6 @@ func (m Model) guideAt(col, indentEnd, abs int) bool {
 // so overlays anchored at a buffer cell align with what renderLine actually
 // drew.
 func (m Model) DisplayOffset(line, col int) int {
-	// Aligned sv table rows (#1589) count cells through their padded column
-	// layout; the horizontal scroll applies in display cells there.
-	if disp, ok := m.svDisplayOffset(line, col); ok {
-		if disp -= m.view.Left; disp < 0 {
-			disp = 0
-		}
-		return disp
-	}
 	runes := []rune(m.buf.Line(line))
 	from := m.view.Left
 	if m.softWrap {
@@ -1066,18 +1052,16 @@ func (m Model) DisplayOffset(line, col int) int {
 		segs := m.wrapSegs(line)
 		from = segs[viewport.SegmentIndex(segs, col)]
 	}
-	concealing := m.concealOn(line)
+	conceals := m.lineConcealRanges(line)
 	disp := 0
 	for c := from; c < col; c++ {
-		if concealing {
-			if cr, ok := m.concealRangeAt(line, c); ok {
-				// A concealed column emits nothing; a stand-in range emits
-				// its replacement's cells once, at the range start.
-				if cr.repl != "" && c == cr.start {
-					disp += lipgloss.Width(cr.repl)
-				}
-				continue
+		if cr, ok := rangeAt(conceals, c); ok {
+			// A concealed column emits nothing; a replacement range emits
+			// its stand-in's cells once, at the range start.
+			if cr.repl != "" && c == cr.start {
+				disp += lipgloss.Width(cr.repl)
 			}
+			continue
 		}
 		if c < len(runes) && runes[c] == '\t' {
 			disp += m.tabWidth
