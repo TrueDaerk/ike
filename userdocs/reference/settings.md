@@ -48,7 +48,7 @@ Settings, or run `settings.open` from the palette.
 | Base64 decoding | `editor.base64_decoding` | boolean | `true` | user | Show base64 values decoded where base64 is the convention (Kubernetes Secret data: blocks in YAML) and the payload is printable text; the raw value reappears under the caret; toggle per view via Toggle Base64 Decoding |
 | Log rendering | `editor.log_rendering` | boolean | `true` | user | Render .log files readable: severity levels colored, timestamps dimmed, thread/logger names rainbow-colored, and ANSI escapes drawn as their styles with the escape bytes concealed (revealed under the caret); toggle per view via Toggle Log Rendering |
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
-| Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rrggbb, rgb(), hsl()) with their own color |
+| Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rgb/#rrggbb/#rrggbbaa, rgb(), hsl()) with their own color |
 | Sticky scroll depth | `editor.sticky_scroll_depth` | integer (1–10) | `4` | user | Maximum number of nested header lines pinned at once |
 | Smart paste | `editor.smart_paste` | boolean | `true` | user | Re-indent multi-line pastes to the target line's indentation, preserving relative structure |
 | Case-insensitive search | `editor.search_ignore_case` | boolean | `false` | user | Match in-file / and ? searches ignoring case by default; a \C query prefix forces exact case. Off = smartcase: all-lowercase folds, any uppercase matches exactly |

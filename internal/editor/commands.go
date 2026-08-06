@@ -87,6 +87,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("view.toggleUnicodeEscapeDecoding", "Toggle Unicode Escape Decoding", "toggle_unicode_escape_decoding", ""),
 			action("view.toggleEntityDecoding", "Toggle Entity Decoding", "toggle_entity_decoding", ""),
 			action("view.toggleBase64Decoding", "Toggle Base64 Decoding", "toggle_base64_decoding", ""),
+			// Inline color preview (#790/#1622): per-view toggle over the
+			// editor.color_preview config default.
+			action("view.toggleColorPreview", "Toggle Color Preview", "toggle_color_preview", ""),
 			// JWT decoding (#1619): the caret's token opens as decoded header
 			// and payload JSON in the hover popup.
 			action("editor.decodeJWT", "Decode JWT at Caret", "decode_jwt", ""),
