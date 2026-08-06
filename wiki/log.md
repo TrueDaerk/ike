@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-07 (editor: YAML anchor/alias pairing, preview & navigation, #1629)
+
+- `internal/yamlanchor`: a pure-Go line scanner pairs `&name` anchors with
+  their `*name` aliases — node-start positions only, comments/quoted
+  scalars/block-scalar bodies skipped, `---` document boundaries respected,
+  aliases resolved to the nearest preceding same-name anchor.
+- Paired coloring: every mark of a name shares one hash-keyed rainbow slot
+  (the #1626 content-hash trick on the #1589 palette); an alias without an
+  anchor renders as an error — underlined, `theme.captures.anchor.unresolved`
+  overrides.
+- The local navigation seam (#922) widened into a family: providers now get
+  the full document lines, and hover + references registries sit beside the
+  definition one. YAML registers all three: goto-definition jumps alias →
+  anchor, find-usages lists a name's marks (palette list and Usages pane),
+  hover on an alias previews the resolved value as a highlighted yaml fence
+  with `<<:` merge keys spliced recursively.
+
 ## 2026-08-07 (editor: rainbow brackets & depth-coloured indent guides, #1628)
 
 - Bracket pairing moved out of the Tree-sitter walk into `internal/bracket`, a

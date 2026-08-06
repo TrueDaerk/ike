@@ -86,6 +86,21 @@ server resolves (Ansible inventory hosts/groups) claims the jump and skips
 the server round-trip — it works with no server installed. Providers claim
 narrowly; a pass falls through to the server exactly as before.
 
+The seam widened with #1629 into a **local provider family**: every provider
+now receives the full document lines (the bridge's synced copy, disk when no
+server tracks the file — same-file targets like a YAML anchor cannot be found
+from one line), and `ilsp.RegisterLocalHover` / `ilsp.RegisterLocalReferences`
+sit beside the definition registry with the same first-claim-wins contract.
+`lsp.hover` (key and mouse-idle flows alike), `lsp.references` and
+`lsp.referencesPanel` consult them before the server; a panel claim carries a
+Refresh continuation that re-resolves local-first. First user: YAML
+anchors/aliases (`plugins/languages/yaml/anchors.go`, scanner in
+`internal/yamlanchor`) — goto-definition on `*name` jumps to `&name`,
+find-usages on either lists every mark of the name with line previews, and
+hover on an alias shows the anchored node's value as a highlighted `yaml`
+fence, dedented, `<<:` merge keys spliced in recursively (cycle-guarded,
+capped at 16 lines).
+
 **Peek definition** (#1154, `lsp.peekDefinition` — palette + the editor
 context menu next to Go to Definition): the same resolution as
 `lsp.definition` (local providers, server request, the #279 multi-target

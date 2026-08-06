@@ -64,7 +64,7 @@ func ansibleProject(t *testing.T) (string, string) {
 func TestHostsDefinition(t *testing.T) {
 	root, playbook := ansibleProject(t)
 
-	msg, ok := ilsp.LocalDefinitionAt(playbook, 0, 12, "- hosts: webservers")
+	msg, ok := ilsp.LocalDefinitionAt(playbook, 0, 12, []string{"- hosts: webservers"})
 	if !ok {
 		t.Fatal("hosts: value not claimed")
 	}
@@ -73,11 +73,11 @@ func TestHostsDefinition(t *testing.T) {
 		t.Errorf("definition = %s:%d, want %s:1", msg.Path, msg.Line, wantPath)
 	}
 
-	if _, ok := ilsp.LocalDefinitionAt(playbook, 0, 12, "- hosts: unknownhost"); ok {
+	if _, ok := ilsp.LocalDefinitionAt(playbook, 0, 12, []string{"- hosts: unknownhost"}); ok {
 		t.Error("unknown name must pass to the server")
 	}
 	plain := filepath.Join(root, "plain.yml")
-	if _, ok := ilsp.LocalDefinitionAt(plain, 0, 12, "- hosts: webservers"); ok {
+	if _, ok := ilsp.LocalDefinitionAt(plain, 0, 12, []string{"- hosts: webservers"}); ok {
 		t.Error("non-ansible file must pass to the server")
 	}
 }
