@@ -3,10 +3,15 @@
 package langyaml
 
 import (
+	"strings"
 	"testing"
 
 	"ike/internal/highlight"
 	"ike/internal/lang"
+
+	// The injection test needs the shell grammar registered (#894): run:
+	// scripts resolve through lang.ByID("shell") at overlay time.
+	_ "ike/plugins/languages/shell"
 )
 
 // TestYAMLGrammar guards the cgo wiring: the grammar is non-nil under cgo.
@@ -51,5 +56,50 @@ func TestYAMLHighlighting(t *testing.T) {
 	}
 	if got := ix.CaptureAt(4, 9); got != "string" { // "run"
 		t.Errorf("quoted value: got capture %q, want string", got)
+	}
+}
+
+// TestYAMLShellInjection (#1625): a CI workflow's run: script highlights with
+// the shell grammar, composing with host YAML highlighting and the Spans
+// hook (cron hints #1624) — the three layers stack without conflicts.
+func TestYAMLShellInjection(t *testing.T) {
+	lines := []string{
+		`on:`,
+		`  schedule:`,
+		`    - cron: '0 3 * * *'`,
+		`jobs:`,
+		`  build:`,
+		`    steps:`,
+		`      - run: |`,
+		`          echo building`,
+		`      - run: make test`,
+	}
+	spans := highlight.Highlight("ci.yaml", lines)
+	ix := highlight.NewIndex(spans)
+	// Host YAML still highlights outside the fragments.
+	if got := ix.CaptureAt(3, 0); got != "property" { // jobs key
+		t.Errorf("yaml key: got capture %q, want property", got)
+	}
+	// Inside the block scalar the shell grammar takes over: echo is a command.
+	col := strings.Index(lines[7], "echo")
+	if got := ix.CaptureAt(7, col); got != "function" {
+		t.Errorf("block-scalar command: got capture %q, want function", got)
+	}
+	// The inline run: value injects too.
+	col = strings.Index(lines[8], "make")
+	if got := ix.CaptureAt(8, col); got != "function" {
+		t.Errorf("inline command: got capture %q, want function", got)
+	}
+	// The Spans hook still layers on top: the cron expression carries its
+	// human-readable hint (#1624) alongside the injection.
+	hinted := false
+	for _, s := range spans {
+		if s.Line == 2 && s.Replace != "" {
+			hinted = true
+			break
+		}
+	}
+	if !hinted {
+		t.Error("cron hint span missing when shell injection is active")
 	}
 }

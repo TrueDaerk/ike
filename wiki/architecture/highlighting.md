@@ -96,16 +96,36 @@ shifted into host coordinates (`injection.go`). Injected spans are prepended to
 the host span set, so inside a fragment they win over the host's enclosing
 `string` capture in `Index.CaptureAt`, while gaps between injected tokens fall
 back to the host colour. Hosts shipping an `injections.scm` today: **Python**
-(SQL strings, guess-gated), **PHP** (#995: single/double-quoted strings,
-heredoc and nowdoc bodies, guess-gated), **Go** (#995: raw and interpreted
-string literals, guess-gated), **Markdown** (block injections, see below) and
-**HTML** (script/style). The `.guess` suffix defers to the Go-side content
-heuristic (SQL keyword leaders in `fragment.go`), so plain strings never
-become fragments. Fragments re-highlight with every reparse, exactly
+(SQL and HTML strings, guess-gated), **PHP** (#995: single/double-quoted
+strings, heredoc and nowdoc bodies, guess-gated), **Go** (#995: raw and
+interpreted string literals, guess-gated), **TypeScript** (#1625: HTML and SQL
+in template literals, guess-gated), **Markdown** (block injections, see below)
+and **HTML** (script/style). The `.guess` suffix defers to the Go-side content
+heuristic in `fragment.go` — SQL keyword leaders, HTML tag shape (must open
+with a tag and, unless it is a doctype/comment, contain a closing or
+self-closing marker) — so plain strings never become fragments. Guessed
+captures sharing a capture name and a parent node are judged **together** over
+their joined text (#1625): a template literal's chunks around `${…}`
+substitutions are separate `string_fragment` nodes, and no single chunk of
+`` `<ul>${items}</ul>` `` looks like HTML on its own; on a hit each chunk
+injects while the substitution expressions keep their host highlighting.
+Fragments re-highlight with every reparse, exactly
 like top-level edits (the whole buffer reparses per change, off the event
 loop). One level deep: fragments inside fragments are not re-injected.
 Fragment languages without a registered grammar degrade to plain host
 highlighting.
+
+Hosts can also mark fragments **without a query** through the registry's
+Go-level region detector (`lang.Language.Regions`, #1303) — the seam for
+decisions no injection query can express. **YAML** uses it for CI pipelines
+(#1625): in a buffer containing a `steps:` line, the value of every `run:` key
+— a block scalar's indented lines, or the (quote-stripped, comment-cut) inline
+scalar — becomes a `shell` fragment, so GitHub-Actions/CircleCI step scripts
+highlight with the shell grammar. Arbitrary YAML with a `run:` key stays plain.
+Region detectors run before the grammar's own injection query and replace it
+(`fragmentsFor`); injected spans stack under the host's `Spans` hook exactly
+like query-detected fragments, so YAML's base64 decoding and cron hints keep
+working inside a workflow.
 
 Since #880 the query can also name the language **dynamically**: a pattern
 capturing `@fragment.language` (a tag node, e.g. a markdown fence info string)

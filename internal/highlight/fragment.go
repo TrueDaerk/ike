@@ -27,7 +27,9 @@ type Fragment struct {
 //
 //	@fragment.<lang>        the captured node is always a <lang> fragment
 //	@fragment.<lang>.guess  the captured node is a <lang> fragment only when a
-//	                        content heuristic agrees (currently: sql)
+//	                        content heuristic agrees (currently: sql, html);
+//	                        same-named captures of one match are judged
+//	                        together over their joined text (#1625)
 //	@fragment.language +    dynamic pair within one pattern (#880): the language
 //	@fragment.content       is the captured tag text (markdown fence info
 //	                        strings — resolved as id first, then extension)
@@ -118,6 +120,8 @@ func guessFragment(langID, content string) bool {
 	switch langID {
 	case "sql":
 		return looksLikeSQL(content)
+	case "html":
+		return looksLikeHTML(content)
 	}
 	return false
 }
@@ -142,4 +146,24 @@ func looksLikeSQL(content string) bool {
 		}
 	}
 	return false
+}
+
+// looksLikeHTML reports whether content plausibly is an HTML document or
+// snippet (#1625). It must open with a tag, and — unless that opener is a
+// doctype/comment (`<!…`) — a closing (`</`) or self-closing (`/>`) marker
+// must appear later, so incidental angle-bracket strings like "<nil>" or
+// "a < b > c" never become fragments.
+func looksLikeHTML(content string) bool {
+	head := strings.TrimSpace(content)
+	if len(head) < 3 || head[0] != '<' {
+		return false
+	}
+	if head[1] == '!' {
+		return true
+	}
+	c := head[1]
+	if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z') {
+		return false
+	}
+	return strings.Contains(head, "</") || strings.Contains(head, "/>")
 }

@@ -39,6 +39,9 @@ func htmlEntitySpans(lines []string) []lang.Span {
 //go:embed queries/typescript.scm
 var tsQuery string
 
+//go:embed queries/ts_injections.scm
+var tsInjections string
+
 //go:embed queries/html.scm
 var htmlQuery string
 

@@ -17,6 +17,21 @@ import (
 // and highlight paths (off the Update goroutine), never per-keystroke render.
 // Iteration is match-based (not capture-based) so a dynamic pair's language
 // tag and content node arrive together.
+// guessKey identifies a group of .guess captures: same capture name under the
+// same parent node (#1625).
+type guessKey struct {
+	name   string
+	parent uintptr
+}
+
+// guessGroup collects one guessKey's captured nodes; the content heuristic
+// runs once over the joined parts.
+type guessGroup struct {
+	langID string
+	nodes  []ts.Node
+	parts  []string
+}
+
 func detectFragments(g lang.Grammar, lines []string) []Fragment {
 	gi, ok := g.(*grammarImpl)
 	if !ok {
@@ -60,6 +75,15 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 		})
 	}
 
+	// Guessed captures group per capture name and parent node: a template
+	// literal's text chunks around ${…} substitutions are separate
+	// string_fragment nodes under one template_string (#1625), and the
+	// heuristic must judge the joined text — no single chunk of
+	// `<ul>${items}</ul>` looks like HTML on its own. On a hit every node of
+	// the group becomes a fragment. Grouping by parent (not by match) is
+	// deliberate: tree-sitter reports each chunk as its own match.
+	var guesses []*guessGroup
+	groupIx := map[guessKey]*guessGroup{}
 	var frags []Fragment
 	matches := cursor.Matches(query, tree.RootNode(), src)
 	for {
@@ -82,11 +106,22 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 				if !ok {
 					continue
 				}
-				content := string(src[cap.Node.StartByte():cap.Node.EndByte()])
-				if guess && !guessFragment(langID, content) {
+				if !guess {
+					frags = appendFrag(frags, langID, &cap.Node)
 					continue
 				}
-				frags = appendFrag(frags, langID, &cap.Node)
+				key := guessKey{name: name}
+				if p := cap.Node.Parent(); p != nil {
+					key.parent = p.Id()
+				}
+				g := groupIx[key]
+				if g == nil {
+					g = &guessGroup{langID: langID}
+					groupIx[key] = g
+					guesses = append(guesses, g)
+				}
+				g.nodes = append(g.nodes, cap.Node)
+				g.parts = append(g.parts, string(src[cap.Node.StartByte():cap.Node.EndByte()]))
 			}
 		}
 		if langTag != "" && len(contents) > 0 {
@@ -95,6 +130,14 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 					frags = appendFrag(frags, id, &contents[i])
 				}
 			}
+		}
+	}
+	for _, g := range guesses {
+		if !guessFragment(g.langID, strings.Join(g.parts, "\n")) {
+			continue
+		}
+		for i := range g.nodes {
+			frags = appendFrag(frags, g.langID, &g.nodes[i])
 		}
 	}
 	return frags
