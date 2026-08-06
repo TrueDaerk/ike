@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-07 (editor: rainbow brackets & depth-coloured indent guides, #1628)
+
+- Bracket pairing moved out of the Tree-sitter walk into `internal/bracket`, a
+  pure-Go leaf package: a stack-based scan returns every bracket with the
+  nesting depth it sits at (both halves of a pair share one depth) and whether
+  it found a partner at all. A closer matches the innermost open bracket of
+  its own kind, so one typo marks one bracket instead of cascading.
+- Unmatched brackets — a stray closer, an opener never closed — render in the
+  theme's error colour, underlined (`bracket.unmatched`, overridable via
+  `theme.captures.bracket.unmatched`).
+- Strings and comments are skipped by the grammar's own `string`/`comment`
+  captures where a parse exists, and by line-local quote/comment heuristics
+  where it does not. Prose languages (markdown, text, log, csv/tsv) are not
+  scanned at all: `(see below` in a paragraph is not a mistake.
+- Indent guides are coloured by depth from the same rainbow palette, mixed
+  toward the flat guide colour so the indentation stays chrome — the payoff is
+  YAML and Python, where nesting has no brackets to colour. New toggle
+  `editor.rainbow_indent_guides` (default on), independent of
+  `editor.rainbow_brackets` and of `editor.indent_guides` itself.
+- Wiki: [Highlighting](/architecture/highlighting.md) gained the pairing,
+  prose-exclusion and indent-guide sections; [Editor](/architecture/editor.md)
+  notes the coloured guides in its view options.
+
 ## 2026-08-07 (editor: number-readability hints, #1627)
 
 - `internal/numhint` turns numeric literals in config files into what they

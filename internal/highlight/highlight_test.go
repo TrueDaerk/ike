@@ -88,12 +88,12 @@ func TestThemePaletteDefaults(t *testing.T) {
 func TestRainbowThemeDerivation(t *testing.T) {
 	th := NewTheme(nil, nil)
 	for i := 0; i < RainbowColors; i++ {
-		if _, ok := th.Style(rainbowCapture(i)); !ok {
+		if _, ok := th.Style(RainbowCapture(i)); !ok {
 			t.Errorf("rainbow slot %d must resolve from the default palette", i)
 		}
 	}
 	// Depth cycles: depth N and N+RainbowColors share a capture.
-	if rainbowCapture(1) != rainbowCapture(1+RainbowColors) {
+	if RainbowCapture(1) != RainbowCapture(1+RainbowColors) {
 		t.Error("rainbow capture must cycle")
 	}
 	// A config override wins for its slot.

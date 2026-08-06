@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Syntax Highlighting
-description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine.
+description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
-tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo]
-timestamp: 2026-07-28T15:00:00Z
+tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
+timestamp: 2026-08-07T12:00:00Z
 ---
 
 # Syntax Highlighting
@@ -176,21 +176,77 @@ fixtures and asserting capture output, and the editor's render integration is
 tested by feeding `SpansMsg` into `editor.Model.Update` and checking the rendered
 ANSI.
 
-## Rainbow brackets (#789)
+Pairing, depth and the string/comment edge cases are pure-Go unit tests in
+`internal/bracket` — no grammar needed. `highlight/brackets_test.go` covers
+the capture mapping, the grammar mask, the heuristic fallback and the prose
+exclusion; `editor/guides_test.go` covers the guide palette, the slot cycle
+and the unmatched-bracket style.
 
-Bracket tokens (`()[]{}`) are colored by nesting depth: the parse walk in
-`parse_cgo.go` (`collectBrackets`) visits **all** children (bracket tokens
-are anonymous nodes) tracking depth — an opener emits at the current depth
-and deepens until its closer; unbalanced mid-edit trees clamp instead of
-going negative. Depth `N` maps to capture `rainbow.<N mod 6>`
-(`RainbowColors`). The rainbow spans are prepended: `Index.CaptureAt` is
-first-covering-wins, so they beat the grammar's own punctuation captures.
+## Rainbow brackets & bracket pairing (#789, #1628)
+
+Bracket pairing lives in **`internal/bracket`** — a leaf package, pure Go, no
+Tree-sitter: `Scan(lines, Syntax)` walks the buffer with a stack and returns
+one `Mark{Line, Col, Depth, Open, Unmatched}` per `(`, `[`, `{`, `)`, `]`,
+`}`. Both halves of a pair carry the **same** depth, so they colour alike, and
+the stack is buffer-wide (a brace opened on line 1 still deepens line 400).
+A closer matches the innermost open bracket **of its own kind**, so a single
+typo does not cascade: in `{ ( }` the `}` still closes its `{` and only the
+`(` comes back `Unmatched`. Openers left on the stack at the end, and closers
+that find nothing open, are `Unmatched` too.
+
+Brackets inside strings and comments must not pair. `Syntax` offers two ways
+to skip them:
+
+- **`Skip`** — an exact mask. `highlight/brackets.go` builds one from the
+  spans the grammar just produced (captures under `string`, `comment`,
+  `char`), so the grammar decides what a string is: Python docstrings, Go raw
+  strings, nested comments and all.
+- **The heuristics** (`LineComment`, `BlockComment`, `Quotes`) — used when no
+  parse produced spans. Quotes are line-local: an opening quote with no
+  partner on the same line is an ordinary rune, so `don't` and a Rust lifetime
+  do not swallow the rest of the line.
+
+`bracketSpans` turns marks into spans: depth `N` maps to capture
+`rainbow.<N mod 6>` (`RainbowColors`, `RainbowCapture`), an unmatched bracket
+to `bracket.unmatched`. They are prepended (`Index.CaptureAt` is
+first-covering-wins, so they beat the grammar's punctuation captures) but stay
+*behind* the Go-produced spans of #1585, so a language that colours a cell
+itself — csv columns — keeps its colour. `HighlightFenced` scans too, so a
+JSON body in the HTTP response pane nests like a buffer.
+
+**Prose is not scanned** (`proseLangs`: markdown, plain text, log, csv/tsv).
+A `(see below` in a paragraph is not a mistake, and marking it as one would
+clutter the very files that want the least chrome — so those languages get
+neither depth colours nor unmatched marks.
 
 Colors derive from the active palette (`rainbowSources`: keyword, string,
 function, number, type, constant), so light and dark themes both stay
-legible; `theme.captures.rainbow.N` config keys override single slots.
+legible; `theme.captures.rainbow.N` config keys override single slots. The
+same palette serves [identifier colors](./editor.md) (#1626) and the
+depth-coloured indent guides below. An unmatched bracket renders in the
+theme's `Error` slot **underlined** (`editor/guides.go`,
+`unmatchedBracketStyle`); `theme.captures.bracket.unmatched` overrides the
+colour and keeps the underline.
+
 Toggle: `editor.rainbow_brackets` (settings Editor page, **default on**) —
 gated by an atomic read in the background parse, and a config-reload flip
-re-parses every open editor immediately. Cost is one extra walk over the
-already-parsed tree per async parse; the render path is untouched (spans
-flow through the existing per-version cache, 0400).
+re-parses every open editor immediately. Off means no bracket spans at all,
+unmatched ones included. Cost is one linear scan of the buffer per async
+parse; the render path is untouched (spans flow through the existing
+per-version cache, 0400).
+
+## Depth-coloured indent guides (#1628)
+
+Indent guides (#64) take the same palette, one slot per indent level, which is
+what makes nesting readable where there are no brackets to colour at all —
+YAML, Python. `editor/guides.go` builds the styles: `guideStyles` returns one
+style per rainbow slot, each mixed toward the theme's `IndentGuide` colour
+(`guideTintFrac`, 0.55) so the indentation stays chrome rather than shouting
+over the code; `guideSlot(abs, tabWidth, slots)` maps a guide cell to its slot
+(the first stop is level 1 → slot 0, the depth its brackets would take).
+
+Toggle: `editor.rainbow_indent_guides` (**default on**), independent of both
+`editor.rainbow_brackets` and `editor.indent_guides` — the guides themselves
+stay off until `editor.indent_guides` (or `view.toggleIndentGuides`) draws
+them, and turning depth colouring off returns every guide to the flat theme
+colour. Visible whitespace still wins over a guide cell on overlap.

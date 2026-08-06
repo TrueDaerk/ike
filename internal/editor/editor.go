@@ -508,11 +508,15 @@ type Model struct {
 	softWrap     bool
 	wsMode       whitespaceMode
 	indentGuides bool
-	rulers       []int
-	wrapSet      bool
-	wsSet        bool
-	guidesSet    bool
-	rulersRaw    string
+	// rainbowGuides colors the guides by depth (#1628, guides.go); it follows
+	// editor.rainbow_indent_guides and has no per-view toggle of its own —
+	// the guides themselves are what a reader turns on and off.
+	rainbowGuides bool
+	rulers        []int
+	wrapSet       bool
+	wsSet         bool
+	guidesSet     bool
+	rulersRaw     string
 
 	// Per-source, per-severity decoration toggles (#1259): sevShow[1..4] gates
 	// LSP marks by severity, gitShow gates git change marks by kind, across the
@@ -571,6 +575,7 @@ func New() Model {
 		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
+		rainbowGuides:      true,
 		svRender:           true,
 		svTable:            &svState{},
 		logRender:          true,
@@ -695,6 +700,7 @@ func (m *Model) applyConfig() {
 	if !m.guidesSet {
 		m.indentGuides = boolOr(m.cfg, "editor.indent_guides", m.indentGuides)
 	}
+	m.rainbowGuides = boolOr(m.cfg, "editor.rainbow_indent_guides", m.rainbowGuides)
 	if v, ok := m.cfg.Get("editor.rulers"); ok && v != m.rulersRaw {
 		m.rulersRaw = v
 		m.rulers = parseRulers(v)

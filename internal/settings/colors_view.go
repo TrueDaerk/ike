@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/bracket"
 	"ike/internal/config"
 	"ike/internal/highlight"
 	"ike/internal/theme"
@@ -198,6 +199,9 @@ func (c *ColorsPage) pickerLines(name string, w int, clip, dim lipgloss.Style) [
 func captureBlurb(name string) string {
 	if strings.HasPrefix(name, "rainbow.") {
 		return "One depth slot of the rainbow bracket cycle; derived from another capture unless set."
+	}
+	if name == bracket.Unmatched {
+		return "A bracket with no partner; the theme's error colour, underlined, unless set."
 	}
 	head, _, _ := strings.Cut(name, ".")
 	if blurb, ok := captureBlurbs[head]; ok {

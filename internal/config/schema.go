@@ -243,6 +243,12 @@ type Editor struct {
 	ShowWhitespace string `toml:"show_whitespace"`
 	IndentGuides   bool   `toml:"indent_guides"`
 	Rulers         []int  `toml:"rulers"`
+	// RainbowIndentGuides colors each indent guide by its depth (#1628) with
+	// the rainbow palette bracket pairs use, mixed toward the plain guide
+	// colour so the indentation stays chrome. It is what makes nesting
+	// readable where there are no brackets to color — YAML, Python. Only in
+	// effect while IndentGuides draws the guides at all.
+	RainbowIndentGuides bool `toml:"rainbow_indent_guides"`
 	// StickyScroll pins the enclosing declaration lines (function/class
 	// headers) at the top of the editor while scrolling inside their body
 	// (#168); StickyScrollDepth caps how many nested headers are pinned.
@@ -308,7 +314,8 @@ type Editor struct {
 	// and friends show as ••••; the raw value reappears under the caret.
 	SecretMasking bool `toml:"secret_masking"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
-	// cycling palette derived from the active theme.
+	// cycling palette derived from the active theme; brackets left without a
+	// partner render as errors (#1628).
 	RainbowBrackets bool `toml:"rainbow_brackets"`
 	// SearchIgnoreCase makes the in-file "/" "?" search case-insensitive by
 	// default (#1111): queries fold case without an explicit \c marker, and a

@@ -6,9 +6,10 @@ import (
 )
 
 // rainbow.go — rainbow brackets (#789): bracket tokens colored by nesting
-// depth with a cycling palette derived from the active theme. Depth comes
-// from the same Tree-sitter parse the highlighter already runs (the walk in
-// parse_cgo.go), so the feature costs one extra tree walk, no extra parse.
+// depth with a cycling palette derived from the active theme. Depth comes from
+// the pure-Go pair tracker in brackets.go (#1628), which reads the parse's own
+// string/comment captures as its mask — no extra parse, and the same palette
+// serves depth-colored indent guides and hashed identifier colors (#1626).
 
 // RainbowColors is the palette cycle length: depth N renders with capture
 // "rainbow.<N mod RainbowColors>".
@@ -33,7 +34,8 @@ func SetRainbow(on bool) { rainbowOff.Store(!on) }
 // RainbowEnabled reports whether bracket depth coloring is active.
 func RainbowEnabled() bool { return !rainbowOff.Load() }
 
-// rainbowCapture is the capture name for a nesting depth.
-func rainbowCapture(depth int) string {
+// RainbowCapture is the theme capture name for a nesting depth: depth N and
+// depth N+RainbowColors share a slot, so the palette cycles.
+func RainbowCapture(depth int) string {
 	return fmt.Sprintf("rainbow.%d", depth%RainbowColors)
 }

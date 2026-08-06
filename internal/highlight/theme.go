@@ -68,7 +68,7 @@ func NewThemeKeys(defaults map[string]string, get func(key string) (string, bool
 	// capture colour of the active palette unless the theme (or a
 	// theme.captures.rainbow.N config key) sets it explicitly.
 	for i, src := range rainbowSources {
-		key := rainbowCapture(i)
+		key := RainbowCapture(i)
 		if get != nil {
 			if v, ok := get("theme.captures." + key); ok && v != "" {
 				colors[key] = v

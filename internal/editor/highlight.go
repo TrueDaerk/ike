@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"ike/internal/bracket"
 	"ike/internal/highlight"
 	"ike/internal/jwt"
 	"ike/internal/secret"
@@ -71,6 +72,12 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 		return m.logStyle(capture)
 	}
 	st, ok := m.hlTheme.Style(capture)
+	// An unmatched bracket (#1628) is an error, not a nesting level: it takes
+	// the theme's error colour and an underline unless a capture override
+	// names its own colour.
+	if capture == bracket.Unmatched {
+		return m.unmatchedBracketStyle(st, ok), true
+	}
 	// A JWT's signature segment (#1619) carries no meaning for a reader, so it
 	// renders faint unless a theme.captures.jwt.signature key says otherwise —
 	// which the Style lookup above already honoured.
