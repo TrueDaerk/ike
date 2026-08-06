@@ -37,7 +37,7 @@ func newToolForm(page *ToolsPage, host SubPanelHost, idx int) *toolForm {
 		if e.Multiple {
 			multiple = "true"
 		}
-		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple}
+		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, multiple}
 	}
 	return f
 }
@@ -128,12 +128,11 @@ func (f *toolForm) save() tea.Cmd {
 		return nil
 	}
 	entry := config.ToolEntry{
-		Name:      strings.TrimSpace(f.form[0]),
-		Command:   strings.TrimSpace(f.form[1]),
-		Args:      strings.Fields(f.form[2]),
-		Cwd:       strings.TrimSpace(f.form[3]),
-		Placement: f.form[4],
-		Multiple:  f.form[5] == "true",
+		Name:     strings.TrimSpace(f.form[0]),
+		Command:  strings.TrimSpace(f.form[1]),
+		Args:     strings.Fields(f.form[2]),
+		Cwd:      strings.TrimSpace(f.form[3]),
+		Multiple: f.form[4] == "true",
 	}
 	entries := append([]config.ToolEntry(nil), f.page.entries()...)
 	if f.idx >= 0 && f.idx < len(entries) {
@@ -156,11 +155,6 @@ func (f *toolForm) validate() string {
 		return "command is required"
 	}
 	switch f.form[4] {
-	case "", "bottom", "right":
-	default:
-		return "placement must be bottom or right"
-	}
-	switch f.form[5] {
 	case "", "true", "false":
 	default:
 		return "multiple must be true or false"

@@ -169,10 +169,9 @@ func (m Model) toolSetupConfirm() (tea.Model, tea.Cmd) {
 		}
 		for _, e := range picked {
 			entries = append(entries, config.ToolEntry{
-				Name:      e.Name,
-				Command:   e.Command,
-				Args:      e.Args,
-				Placement: e.Placement,
+				Name:    e.Name,
+				Command: e.Command,
+				Args:    e.Args,
 			})
 		}
 		sort.SliceStable(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
@@ -200,9 +199,6 @@ func toolEntriesRaw(entries []config.ToolEntry) []map[string]any {
 		}
 		if e.Cwd != "" {
 			r["cwd"] = e.Cwd
-		}
-		if e.Placement != "" {
-			r["placement"] = e.Placement
 		}
 		raw[i] = r
 	}

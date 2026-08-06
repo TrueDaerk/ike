@@ -54,7 +54,6 @@ func suggestEntry(name string) toolcatalog.Entry {
 	return toolcatalog.Entry{
 		Name:        name,
 		Command:     name + "-bin",
-		Placement:   "bottom",
 		Description: "Suggested tool",
 		Recipes:     [][]string{{"fakebrew", "install", name}},
 	}
@@ -72,8 +71,7 @@ func TestToolsPageSuggestionsListAndAdd(t *testing.T) {
 	}
 	apply(t, p.Update(key("enter")))
 	got := config.Get().Tools.Custom
-	if len(got) != 1 || got[0].Name != "sugtool" || got[0].Command != "sugtool-bin" ||
-		got[0].Placement != "bottom" {
+	if len(got) != 1 || got[0].Name != "sugtool" || got[0].Command != "sugtool-bin" {
 		t.Fatalf("entries after add = %+v", got)
 	}
 	if p.Capturing() {

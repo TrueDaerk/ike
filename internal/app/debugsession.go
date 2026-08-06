@@ -756,9 +756,10 @@ func (m Model) debugPanelEditing() bool {
 }
 
 // openDebugPanel opens the debug pane pair (#1370): the frames/variables
-// panel bottom-splits the active editor (fallback: focused leaf), and the
-// debuggee terminal pane opens directly to its right — without stealing
-// focus; the stop already moved the caret to the paused line.
+// panel splits the active editor (fallback: focused leaf) at the adaptive
+// placement (auxZone, #1588), and the debuggee terminal pane opens directly
+// to its right — without stealing focus; the stop already moved the caret to
+// the paused line.
 func (m *Model) openDebugPanel() {
 	if m.activeWS().Panes.Has(pane.DebugKey) {
 		// The panel already exists — restored from a saved layout, or left
@@ -776,7 +777,7 @@ func (m *Model) openDebugPanel() {
 		return
 	}
 	key := m.activeWS().Panes.AddDebug()
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, layout.ZoneBottom)
+	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, key, m.auxZone(target))
 	if !ok {
 		m.activeWS().Panes.Close(key)
 		return

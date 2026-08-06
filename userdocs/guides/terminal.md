@@ -125,8 +125,12 @@ one and it gets a `tool.<name>` palette command with toggle-focus semantics.
 [[tools.custom]]
 name = "lazygit"
 command = "lazygit"
-placement = "bottom"
 ```
+
+Like every auxiliary pane (terminal, HTTP response, debug view, …), a tool
+pane opens below the active editor — or to its right when that editor is
+wide (over 120 cells) and wider than it is tall, so a big landscape pane is
+not squashed vertically.
 
 If `lazygit` is on your `PATH`, that entry exists already — it is the
 preconfigured example, and the answer to "where is the Git workflow" (see the

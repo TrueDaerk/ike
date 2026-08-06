@@ -45,7 +45,8 @@ No new LSP traffic originates in the pane.
 `internal/problems.Model` follows the VCS tool-window pattern
 (`internal/vcspanel`): a value-type model embedded in a `pane.Instance`
 (`pane.KindProblems`, singleton key `"problems"`, context id `"problems"`),
-opened as a bottom split of the active editor by the `vcs.panel`-style toggle
+opened as an adaptive split of the active editor (`auxZone`, #1588 — below,
+or right of a wide landscape host) by the `vcs.panel`-style toggle
 state machine in `internal/app/problems_panel.go` (open → focus → return
 focus).
 

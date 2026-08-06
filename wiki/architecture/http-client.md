@@ -172,7 +172,8 @@ config file paths, or disable detection entirely.
   the cursor, parse errors, unresolved placeholders and transport failures
   all surface as notifications — nothing broken is ever sent.
 - **Response viewer** (`internal/httppane`, pane kind `KindHTTP`, singleton
-  key `http`): a read-only bottom-split pane opened on the first response
+  key `http`): a read-only pane opened as an adaptive split of the active
+  editor (`auxZone`, #1588) on the first response
   and **reused** for every later dispatch. It shows status line + duration,
   sorted headers, warnings, and the body — JSON pretty-printed, JSON/XML/
   HTML/CSS/JS highlighted through the fenced-highlight path, binary bodies

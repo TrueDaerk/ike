@@ -137,9 +137,9 @@ func (m Model) toolLocations(name string) []toolLoc {
 }
 
 // openTool is the tool.<name> state machine (#741), mirroring
-// terminal.toggle: no instance → spawn one at the configured placement;
-// instance exists but is not focused → focus it; focused → return focus to
-// the remembered pane. fresh (tool.<name>.new, #835) skips the toggle and
+// terminal.toggle: no instance → spawn one at the adaptive placement
+// (auxZone, #1588); instance exists but is not focused → focus it; focused →
+// return focus to the remembered pane. fresh (tool.<name>.new, #835) skips the toggle and
 // spawns another instance — only honored for entries with multiple = true,
 // so a stale binding cannot break a single-instance tool.
 func (m *Model) openTool(name string, fresh bool) {
@@ -163,10 +163,7 @@ func (m *Model) openTool(name string, fresh bool) {
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}
-	zone := layout.ZoneBottom
-	if entry.Placement == "right" {
-		zone = layout.ZoneRight
-	}
+	zone := m.auxZone(target)
 	dir := entry.Cwd
 	if dir == "" {
 		dir = "."

@@ -86,7 +86,7 @@ func TestToolsPageAddAllFields(t *testing.T) {
 	f.Update(key("tab"))
 	typeText(f, "./data")
 	f.Update(key("tab"))
-	typeText(f, "right")
+	typeText(f, "true")
 	apply(t, f.Update(key("enter")))
 	got := config.Get().Tools.Custom
 	if len(got) != 1 {
@@ -94,12 +94,12 @@ func TestToolsPageAddAllFields(t *testing.T) {
 	}
 	e := got[0]
 	if e.Command != "sqlit" || len(e.Args) != 2 || e.Args[0] != "--db" ||
-		e.Cwd != "./data" || e.Placement != "right" {
+		e.Cwd != "./data" || !e.Multiple {
 		t.Fatalf("entry = %+v", e)
 	}
 }
 
-// TestToolsPageMultipleField (#835): the sixth form field sets Multiple,
+// TestToolsPageMultipleField (#835): the last form field sets Multiple,
 // round-trips through edit, and rejects non-boolean input.
 func TestToolsPageMultipleField(t *testing.T) {
 	p, h := toolsPage(t)
@@ -108,7 +108,7 @@ func TestToolsPageMultipleField(t *testing.T) {
 	typeText(f, "claude")
 	f.Update(key("tab"))
 	typeText(f, "claude")
-	for i := 0; i < 4; i++ { // args, cwd, placement → multiple
+	for i := 0; i < 3; i++ { // args, cwd → multiple
 		f.Update(key("tab"))
 	}
 	typeText(f, "maybe")
@@ -128,7 +128,7 @@ func TestToolsPageMultipleField(t *testing.T) {
 	// Edit seeds "true" back into the form.
 	p.sel = 0
 	p.Update(key("enter"))
-	if f2 := form(t, h); f2.form[5] != "true" {
+	if f2 := form(t, h); f2.form[4] != "true" {
 		t.Fatalf("edit must seed multiple, form=%v", f2.form)
 	}
 }
@@ -203,24 +203,6 @@ func TestToolsPageValidation(t *testing.T) {
 	if !strings.Contains(f.note, "exists") {
 		t.Fatalf("note = %q", f.note)
 	}
-
-	// Bad placement.
-	f.Update(key("esc"))
-	p.Update(key("a"))
-	f = form(t, h)
-	typeText(f, "fresh")
-	f.Update(key("tab"))
-	typeText(f, "cmd")
-	for i := 0; i < 3; i++ {
-		f.Update(key("tab"))
-	}
-	typeText(f, "top")
-	if cmd := f.Update(key("enter")); cmd != nil {
-		t.Fatal("bad placement must not save")
-	}
-	if !strings.Contains(f.note, "placement") {
-		t.Fatalf("note = %q", f.note)
-	}
 }
 
 func TestToolsPageEditingOwnNameIsNotADuplicate(t *testing.T) {
@@ -285,7 +267,7 @@ func TestToolsPageViewListsEntriesAndHints(t *testing.T) {
 	}
 	addTool(t, p, h, "lazygit", "lazygit")
 	v = p.View(100, 20)
-	if !strings.Contains(v, "lazygit") || !strings.Contains(v, "bottom") {
-		t.Fatalf("view must list the entry with its placement:\n%s", v)
+	if !strings.Contains(v, "lazygit") {
+		t.Fatalf("view must list the entry:\n%s", v)
 	}
 }

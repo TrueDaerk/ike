@@ -42,7 +42,8 @@ with its found-nothing state rather than toasting.
 `internal/usages.Model` follows the Problems pane blueprint
 ([Problems](./problems.md), #1024): a value-type model embedded in a
 `pane.Instance` (`pane.KindUsages`, singleton key `"usages"`, context id
-`"usages"`), opened as a bottom split of the active editor. The
+`"usages"`), opened as an adaptive split of the active editor (`auxZone`,
+#1588 — below, or right of a wide landscape host). The
 `usages.toggle` palette command (no default chord — the budget is full) runs
 the shared toggle state machine: open → focus → return focus.
 

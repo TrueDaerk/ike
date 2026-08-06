@@ -119,7 +119,8 @@ tests and future consumers, but the app no longer wires workflow UIs to it.
 
 `vcs.panel` (`cmd+9`, JetBrains' Version Control window chord) toggles the
 persistent tool window (`internal/vcspanel`, pane kind `KindVCS`, singleton
-key `vcs`): a bottom split below the active editor with terminal-style
+key `vcs`): an adaptive split of the active editor (`auxZone`, #1588 —
+below, or right of a wide landscape host) with terminal-style
 focus-return semantics. It is a **read-only changes list** re-derived from
 every snapshot: status badge + path per row, VCS-colored via the shared
 status recipe (#1052), `j`/`k`/wheel/click navigation with the muted

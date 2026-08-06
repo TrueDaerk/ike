@@ -53,7 +53,6 @@ func stubEntry(name string) toolcatalog.Entry {
 	return toolcatalog.Entry{
 		Name:        name,
 		Command:     name + "-bin",
-		Placement:   "bottom",
 		Description: "Stub tool",
 		Recipes:     [][]string{{"fakebrew", "install", name}},
 	}
@@ -141,7 +140,7 @@ func TestToolSetupConfirmWritesConfigAndInstalls(t *testing.T) {
 	m = drainCmd(m, cmd)
 
 	s := userSettings(t)
-	for _, want := range []string{"insttool", "misstool", "insttool-bin", "placement = \"bottom\""} {
+	for _, want := range []string{"insttool", "misstool", "insttool-bin"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("settings missing %q:\n%s", want, s)
 		}

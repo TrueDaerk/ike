@@ -139,7 +139,8 @@ requests.
 
 ## The response pane
 
-The first response opens a read-only pane at the bottom, and every later
+The first response opens a read-only pane split off the editor (below, or to
+the right of a wide landscape pane), and every later
 response reuses it. It shows the status line and duration, the headers,
 any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
 highlighted, binary bodies collapsed to a notice.

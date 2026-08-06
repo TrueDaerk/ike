@@ -48,9 +48,8 @@ func defaultTools() []ToolEntry {
 		return nil
 	}
 	return []ToolEntry{{
-		Name:      "lazygit",
-		Command:   "lazygit",
-		Placement: "bottom",
+		Name:    "lazygit",
+		Command: "lazygit",
 	}}
 }
 
