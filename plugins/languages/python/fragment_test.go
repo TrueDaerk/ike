@@ -73,3 +73,42 @@ func TestFragmentsPlainStringIgnored(t *testing.T) {
 		t.Fatalf("plain string produced fragments: %+v", frags)
 	}
 }
+
+// TestFragmentsHTMLTripleQuoted (#1625): a triple-quoted HTML template
+// becomes an html fragment via the tag-shape heuristic.
+func TestFragmentsHTMLTripleQuoted(t *testing.T) {
+	lines := []string{
+		`page = """`,
+		`<html>`,
+		`  <body><p>hi</p></body>`,
+		`</html>`,
+		`"""`,
+	}
+	frags := highlight.Fragments("python", lines)
+	if len(frags) != 1 {
+		t.Fatalf("Fragments = %d fragments, want 1: %+v", len(frags), frags)
+	}
+	f := frags[0]
+	if f.Lang != "html" {
+		t.Errorf("Lang = %q, want html", f.Lang)
+	}
+	if f.StartLine != 0 || f.EndLine != 4 {
+		t.Errorf("lines = %d..%d, want 0..4", f.StartLine, f.EndLine)
+	}
+	want := "\n<html>\n  <body><p>hi</p></body>\n</html>\n"
+	if got := strings.Join(f.Lines, "\n"); got != want {
+		t.Errorf("content = %q, want %q", got, want)
+	}
+}
+
+// TestFragmentsAngleBracketStringIgnored: incidental angle brackets don't
+// pass the HTML heuristic.
+func TestFragmentsAngleBracketStringIgnored(t *testing.T) {
+	lines := []string{
+		`a = "<nil>"`,
+		`b = "x < y > z"`,
+	}
+	if frags := highlight.Fragments("python", lines); len(frags) != 0 {
+		t.Fatalf("angle-bracket strings produced fragments: %+v", frags)
+	}
+}

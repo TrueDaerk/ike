@@ -189,7 +189,9 @@ importable; matches `Dockerfile`/`Containerfile` by exact base name plus the
 `.dockerfile` extension), and `yaml` (#879, tree-sitter-grammars/tree-sitter-yaml;
 multi-line mapping pairs are sticky-scroll scopes, and `IndentAfter` is limited
 to `":"` + block-scalar introducers so sibling keys never get auto-indented
-wrongly — YAML is indentation-sensitive), and `shell` (#894, official
+wrongly — YAML is indentation-sensitive; a Go-level region detector (#1625)
+turns `run:` values in CI-looking buffers — those with a `steps:` line — into
+shell fragments, see [highlighting](./highlighting.md)), and `shell` (#894, official
 tree-sitter-bash — covers sh/zsh for highlighting; matches `.sh`/`.bash`/`.zsh`,
 the rc-file base names `.bashrc` `.zshrc` `.bash_profile` `.profile`
 `.zprofile`, and extensionless scripts via interpreters `sh` `bash` `zsh`
@@ -199,7 +201,9 @@ front matter as YAML/TOML; see [highlighting](./highlighting.md)), and the
 web languages (#925): `typescript` highlights via the **TSX grammar** — the
 permissive superset that parses plain JS, JSX and TS annotations alike, so
 the single language id (and with it the single vtsls instance per project)
-stays intact; the one casualty is legacy `<T>x` type assertions. `html` uses
+stays intact; the one casualty is legacy `<T>x` type assertions; its
+injection query (#1625) marks template-literal chunks as HTML/SQL fragments
+when the content heuristic agrees. `html` uses
 the official grammar with `<script>`/`<style>` injections into
 typescript/css; `css` uses the official grammar (scss/less parse best-effort
 — error-tolerant spans still color the shared subset).
@@ -514,7 +518,9 @@ injection query and clamps or drops ranges outside the buffer, so a detector
 may report optimistically. `lang.RegionAt(langID, lines, line)` answers the
 same question for one line — the editor uses it to indent an embedded body by
 the embedded language. The detector runs on every highlight pass, so it must
-stay cheap.
+stay cheap. Second user: YAML's CI `run:` detector (#1625,
+`plugins/languages/yaml/regions.go`) — the gate (a `steps:` line somewhere in
+the buffer) is a buffer-level decision no injection query can express.
 
 A sibling seam, `Spans func(lines []string) []lang.Span` (#1585), produces
 Go-computed highlight spans for structure the grammar does not expose: the

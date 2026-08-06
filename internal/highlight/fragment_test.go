@@ -115,3 +115,39 @@ func TestRegionsOutsideTheBufferAreDropped(t *testing.T) {
 		t.Fatalf("fragments = %+v, want one clamped to the buffer", got)
 	}
 }
+
+func TestLooksLikeHTML(t *testing.T) {
+	cases := []struct {
+		content string
+		want    bool
+	}{
+		{"<!DOCTYPE html><html></html>", true},
+		{"<!doctype html>", true},
+		{"<!-- comment -->", true},
+		{"<div class=\"x\">hi</div>", true},
+		{"  \n\t<ul>\n  <li>a</li>\n</ul>", true},
+		{"<br/>", true},
+		{"<nil>", false},     // no closing marker
+		{"<br>", false},      // lone void tag, no closing marker
+		{"a < b > c", false}, // does not open with a tag
+		{"</div>", false},    // closing tag first is not a document
+		{"<3 you", false},    // tag name must be a letter
+		{"SELECT * FROM users", false},
+		{"", false},
+		{"  ", false},
+	}
+	for _, c := range cases {
+		if got := looksLikeHTML(c.content); got != c.want {
+			t.Errorf("looksLikeHTML(%q) = %v, want %v", c.content, got, c.want)
+		}
+	}
+}
+
+func TestGuessFragmentHTML(t *testing.T) {
+	if !guessFragment("html", "<p>hi</p>") {
+		t.Error("guessFragment(html) rejected an HTML snippet")
+	}
+	if guessFragment("html", "plain text") {
+		t.Error("guessFragment(html) accepted plain text")
+	}
+}

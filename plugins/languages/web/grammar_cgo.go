@@ -21,8 +21,10 @@ import (
 // casualty: legacy angle-bracket type assertions (`<T>x` instead of `x as T`)
 // misparse, which upstream accepts for the same reason in .tsx.
 // The !cgo stubs return nil.
+// The injection query (#1625) marks template-literal chunks as HTML/SQL
+// fragments when the Go-side content heuristic agrees.
 func tsGrammar() lang.Grammar {
-	return highlight.NewGrammar(ts.NewLanguage(tstsx.LanguageTSX()), tsQuery)
+	return highlight.NewGrammarInjections(ts.NewLanguage(tstsx.LanguageTSX()), tsQuery, tsInjections)
 }
 
 // htmlGrammar carries the injection query: <script> and <style> bodies parse

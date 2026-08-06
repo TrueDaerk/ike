@@ -51,6 +51,9 @@ func init() {
 		// case — and any quoted scalar of cron shape carry their English
 		// reading after the expression.
 		Spans: yamlSpans,
+		// Shell in CI `run:` blocks (#1625): step scripts highlight with the
+		// shell grammar; see regions.go for the gate and extent rules.
+		Regions: shellRegions,
 	})
 }
 
