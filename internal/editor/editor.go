@@ -333,6 +333,11 @@ type Model struct {
 	// layout (pointer, shared across the value copies like mdTables).
 	svRender bool
 	svTable  *svState
+	// Log rendering (#1621, logrender.go). logRender is the
+	// editor.log_rendering toggle; logRenderSet marks a per-view
+	// view.toggleLogRendering override, like mdRenderSet.
+	logRender    bool
+	logRenderSet bool
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
 	colorPreview bool
@@ -515,6 +520,7 @@ func New() Model {
 		mdTables:           &mdTableState{},
 		svRender:           true,
 		svTable:            &svState{},
+		logRender:          true,
 		colorPreview:       true,
 		sevShow:            [5]bool{false, true, true, true, true},
 		gitShow: map[vcs.LineMark]bool{
@@ -636,6 +642,9 @@ func (m *Model) applyConfig() {
 		m.mdRender = boolOr(m.cfg, "editor.markdown_rendering", m.mdRender)
 	}
 	m.svRender = boolOr(m.cfg, "editor.csv_rendering", m.svRender)
+	if !m.logRenderSet {
+		m.logRender = boolOr(m.cfg, "editor.log_rendering", m.logRender)
+	}
 	m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
 	if v, ok := m.cfg.Get("editor.sticky_scroll_depth"); ok {
 		if n := atoi(v, m.stickyDepth); n > 0 {

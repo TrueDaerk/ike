@@ -217,6 +217,7 @@ bring their own.
 | Next Change (Editor) | `vcs.nextChange` | — | `]c` | `editor` pane |
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
+| Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
 | Toggle Markdown Rendering | `view.toggleMarkdownRendering` | — | — | `editor` pane |
 | Toggle Whitespace Rendering | `view.toggleWhitespace` | — | — | `editor` pane |
 | Toggle Soft Wrap | `view.toggleWrap` | — | — | `editor` pane |

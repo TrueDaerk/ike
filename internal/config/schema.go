@@ -260,6 +260,10 @@ type Editor struct {
 	// files (#1589): rainbow columns, concealed separators with display-only
 	// alignment padding on non-caret lines, and the pinned header row.
 	CSVRendering bool `toml:"csv_rendering"`
+	// LogRendering enables the log-file rendering (#1621): severity colors,
+	// dimmed timestamps, rainbow thread/logger names and ANSI escapes drawn
+	// as their styles with the escape bytes concealed.
+	LogRendering bool `toml:"log_rendering"`
 	// RainbowBrackets colors bracket pairs by nesting depth (#789) with a
 	// cycling palette derived from the active theme.
 	RainbowBrackets bool `toml:"rainbow_brackets"`

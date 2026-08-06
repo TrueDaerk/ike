@@ -42,6 +42,7 @@ Settings, or run `settings.open` from the palette.
 | Sticky scroll | `editor.sticky_scroll` | boolean | `true` | user | Pin enclosing function/class header lines at the top while scrolling |
 | Markdown rendering | `editor.markdown_rendering` | boolean | `true` | user | Render Markdown inline styles, conceal markers (revealed while the caret is inside the span) and draw pipe tables with box characters, only the caret's cell showing raw source; toggle per view via Toggle Markdown Rendering |
 | CSV table rendering | `editor.csv_rendering` | boolean | `true` | user | Render csv/tsv files table-like: rainbow columns, aligned fields, a pinned header row, and separators concealed except under the caret |
+| Log rendering | `editor.log_rendering` | boolean | `true` | user | Render .log files readable: severity levels colored, timestamps dimmed, thread/logger names rainbow-colored, and ANSI escapes drawn as their styles with the escape bytes concealed (revealed under the caret); toggle per view via Toggle Log Rendering |
 | Rainbow brackets | `editor.rainbow_brackets` | boolean | `true` | user | Color bracket pairs by nesting depth (theme-derived cycle) |
 | Color preview | `editor.color_preview` | boolean | `true` | user | Tint color literals (#rrggbb, rgb(), hsl()) with their own color |
 | Sticky scroll depth | `editor.sticky_scroll_depth` | integer (1–10) | `4` | user | Maximum number of nested header lines pinned at once |

@@ -103,6 +103,7 @@ var dimTextSlots = map[string]bool{
 	"capture:punctuation": true,
 	"file:lock":           true,
 	"file:go.sum":         true, // shares the lock tint (#1366)
+	"file:log":            true, // shares the lock tint (#1621)
 }
 
 // contrastTier is the threshold set one theme is audited against. Themes may

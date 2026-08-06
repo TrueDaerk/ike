@@ -75,6 +75,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Markdown rich rendering (#1599): per-view toggle over the
 			// editor.markdown_rendering config default, like the #64 toggles.
 			action("view.toggleMarkdownRendering", "Toggle Markdown Rendering", "toggle_markdown_rendering", ""),
+			// Log rich rendering (#1621): per-view toggle over the
+			// editor.log_rendering config default.
+			action("view.toggleLogRendering", "Toggle Log Rendering", "toggle_log_rendering", ""),
 			// Code folding (#144): the vim z-commands, reachable from the
 			// palette and rebindable through the keymap layer.
 			action("editor.fold.toggle", "Toggle Fold", "fold_toggle", "za"),
