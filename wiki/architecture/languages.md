@@ -503,3 +503,17 @@ may report optimistically. `lang.RegionAt(langID, lines, line)` answers the
 same question for one line — the editor uses it to indent an embedded body by
 the embedded language. The detector runs on every highlight pass, so it must
 stay cheap.
+
+A sibling seam, `Spans func(lines []string) []lang.Span` (#1585), produces
+Go-computed highlight spans for structure the grammar does not expose: the
+`.http` grammar captures a request target as one opaque url node, so the
+plugin overlays query-parameter key/value/separator spans and
+percent-encoding conceals itself (`plugins/languages/http/spans.go`).
+`highlight.HighlightScoped` prepends the produced spans over the grammar's,
+so they win where both cover a cell — a producer must skip regions the
+grammar styles more specifically (placeholders). A span with a non-empty
+`Replace` is a conceal-with-stand-in: the editor renders the replacement
+instead of the source runes on lines the caret is not on (see
+`/architecture/editor.md`, conceal). The same cheapness rule as `Regions`
+applies; a language with `Spans` but no grammar still schedules parses
+(`highlight.Supported` accepts either).

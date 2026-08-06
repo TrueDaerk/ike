@@ -20,11 +20,12 @@ func Lang(path string) string {
 	return ""
 }
 
-// Supported reports whether a path has a language with a highlighting grammar, so
-// the editor only schedules a parse when it will produce spans.
+// Supported reports whether a path has a language that can produce spans — a
+// Tree-sitter grammar or a Go span producer (#1585) — so the editor only
+// schedules a parse when it will produce spans.
 func Supported(path string) bool {
 	l, ok := lang.ByPath(path)
-	return ok && l.Grammar != nil
+	return ok && (l.Grammar != nil || l.Spans != nil)
 }
 
 // Highlight parses lines with the grammar for path and returns the spans,
@@ -45,14 +46,37 @@ func Highlight(path string, lines []string) []Span {
 // with sticky scopes is foldable; both nil means the feature is simply inert.
 func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 	l, ok := lang.ByPath(path)
-	if !ok || l.Grammar == nil {
+	if !ok || (l.Grammar == nil && l.Spans == nil) {
 		return nil, nil, nil
 	}
-	spans, scopes, folds := parseScoped(l.Grammar, l.ScopeNodes, foldKinds(l), lines)
-	spans, injected := overlayFragments(l, lines, spans)
-	// An embedded region folds by its own language's rules (#1329): a .http
-	// request body that is JSON collapses like a JSON buffer's objects do.
-	return spans, scopes, append(folds, injected...)
+	var spans []Span
+	var scopes []Scope
+	var folds []Fold
+	if l.Grammar != nil {
+		spans, scopes, folds = parseScoped(l.Grammar, l.ScopeNodes, foldKinds(l), lines)
+		var injected []Fold
+		spans, injected = overlayFragments(l, lines, spans)
+		// An embedded region folds by its own language's rules (#1329): a
+		// .http request body that is JSON collapses like a JSON buffer's
+		// objects do.
+		folds = append(folds, injected...)
+	}
+	if l.Spans != nil {
+		// Go-produced spans (#1585) are prepended so they win over the
+		// grammar's coarser captures (the whole url node is one @string) —
+		// the same trick overlayFragments uses for injected fragments.
+		spans = append(langSpans(l.Spans(lines)), spans...)
+	}
+	return spans, scopes, folds
+}
+
+// langSpans converts registry-level Go spans (#1585) to highlight spans.
+func langSpans(in []lang.Span) []Span {
+	out := make([]Span, len(in))
+	for i, s := range in {
+		out[i] = Span{Line: s.Line, StartCol: s.StartCol, EndCol: s.EndCol, Capture: s.Capture, Replace: s.Replace}
+	}
+	return out
 }
 
 // HighlightFenced parses lines tagged with a markdown fence info string (as in

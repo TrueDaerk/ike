@@ -18,6 +18,12 @@ type Span struct {
 	StartCol int
 	EndCol   int
 	Capture  string
+	// Replace marks the span as a conceal-with-stand-in (#1585): on lines
+	// the caret is not on the editor renders Replace instead of the source
+	// runes (a "%20" range displays as " "). Empty — the normal case — means
+	// the span is a plain style run; the Capture "conceal" alone (markdown
+	// marker chrome, #881) hides the range without a stand-in.
+	Replace string
 }
 
 // SpansMsg delivers a freshly parsed span set for one document back into the

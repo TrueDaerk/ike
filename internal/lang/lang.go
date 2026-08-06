@@ -118,6 +118,32 @@ type Language struct {
 	// (#1150) — gutter run markers and run.testAtCursor. Nil means the
 	// language has no test runner. See test.go.
 	Test *TestSpec
+
+	// Spans optionally produces Go-computed highlight spans for a buffer of
+	// this language (#1585). It exists for structure a Tree-sitter grammar
+	// does not expose — the .http grammar captures a request target as one
+	// opaque url node, so query-parameter key/value/separator spans and
+	// percent-encoding conceals are computed here instead. The spans are
+	// overlaid *over* the grammar's (they win where both cover a cell), so a
+	// producer must skip regions the grammar styles more specifically (e.g.
+	// placeholders). Like Regions, it runs on every highlight pass and must
+	// be cheap. Nil — the normal case — means the language has none.
+	Spans func(lines []string) []Span
+}
+
+// Span is one Go-produced highlight run (#1585), the registry-level twin of
+// highlight.Span: the half-open rune-column range [StartCol, EndCol) on Line
+// carries a capture name the theme resolves. A non-empty Replace marks the
+// range as a conceal-with-stand-in: the editor renders Replace (styled as a
+// decoded stand-in) instead of the source runes on lines the caret is not on
+// — e.g. "%20" displays as " ". Capture still styles the raw source when it
+// is shown.
+type Span struct {
+	Line     int
+	StartCol int
+	EndCol   int
+	Capture  string
+	Replace  string
 }
 
 // Region is one embedded-language range inside a host buffer, in editor

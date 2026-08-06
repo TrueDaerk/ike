@@ -26,6 +26,10 @@ func init() {
 		// A request body is highlighted and indented as its Content-Type's
 		// language (#1303/#1304); see regions.go.
 		Regions: bodyRegions,
+		// Query-parameter structure and percent-encoding conceals are
+		// Go-computed and overlaid over the grammar's url capture (#1585);
+		// see spans.go.
+		Spans: querySpans,
 		// Whole-request folding (#1329): a "section" spans a ### separator
 		// through the end of its request, so a long file of requests collapses
 		// to its separator lines. The body's own structure folds too — those
