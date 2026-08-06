@@ -82,18 +82,25 @@ func eggColor(x, y int) color.NRGBA {
 	}
 }
 
-// inEyes reports whether (x, y) lies inside one of the two vertical oval
-// eyes in the beige section; the right eye sits slightly lower.
+// inEyes reports whether (x, y) lies inside one of the two oval eyes in
+// the beige section. The eyes follow the head's tilt: their baseline runs
+// parallel to the slanted divider (rising to the right) and each ellipse
+// is rotated by the same angle, so they read as the eyes of a tilted face.
 func inEyes(x, y int) bool {
 	const (
 		rx, ry = world * 16 / 1000, world * 30 / 1000 // eye half-axes
+		slope  = -0.06                                // divider slope (screen y grows down)
+		eyeCy  = world * 42 / 100                     // baseline height at the face center
 	)
-	for _, e := range [2]struct{ cx, cy float64 }{
-		{world * 44 / 100, world * 41 / 100},
-		{world * 56 / 100, world * 43 / 100},
-	} {
-		dx, dy := (float64(x)-e.cx)/rx, (float64(y)-e.cy)/ry
-		if dx*dx+dy*dy <= 1 {
+	sin, cos := math.Sincos(math.Atan(slope))
+	for _, ex := range [2]float64{world * 44 / 100, world * 56 / 100} {
+		ey := eyeCy + slope*(ex-world*50/100.0)
+		dx, dy := float64(x)-ex, float64(y)-ey
+		// Rotate into the eye's frame so the long axis stands
+		// perpendicular to the tilted baseline.
+		u := (dx*cos + dy*sin) / rx
+		v := (-dx*sin + dy*cos) / ry
+		if u*u+v*v <= 1 {
 			return true
 		}
 	}
