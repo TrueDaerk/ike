@@ -11,10 +11,11 @@ import (
 
 // markdown.go is the Markdown rich-rendering layer (#881), vim-conceal style:
 // inline emphasis renders with terminal text attributes, marker chrome
-// (**, *, `, link []() parts) is hidden on lines the cursor is not on, and
-// pipe tables re-render with box-drawing characters while the cursor is
-// outside the table block. The buffer never changes — this is display only;
-// the cursor line always shows raw source so editing stays exact.
+// (**, *, `, link []() parts) is hidden, and pipe tables re-render with
+// box-drawing characters while the cursor is outside the table block. The
+// buffer never changes — this is display only; a concealed range shows raw
+// source exactly while the caret sits inside it (or a selection crosses it,
+// #1594), so editing stays exact.
 //
 // The conceal data rides the ordinary highlight pipeline: the markdown inline
 // query captures the chrome as @conceal, and the SpansMsg handler splits those
@@ -25,12 +26,14 @@ import (
 
 // concealRange is one concealed [start, end) rune-column range on a line. An
 // empty repl hides the range outright (markdown marker chrome, #881); a
-// non-empty repl renders as a one-glyph stand-in for the source runes (#1585,
-// "%20" displays as " ") — underlined so it reads as a decoded stand-in, not
-// buffer content.
+// non-empty repl renders as a stand-in for the source runes. standIn marks a
+// decoded value ("%20" displays as " ", #1585) — tinted so it reads as a
+// stand-in, not buffer content; the sv separator padding (#1589) is plain
+// spacing and renders untinted.
 type concealRange struct {
 	start, end int
 	repl       string
+	standIn    bool
 }
 
 // concealSplit separates conceal spans — the @conceal capture (#881) and any
@@ -43,7 +46,9 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[i
 		if conceal == nil {
 			conceal = make(map[int][]concealRange)
 		}
-		conceal[s.Line] = append(conceal[s.Line], concealRange{start: s.StartCol, end: s.EndCol, repl: s.Replace})
+		conceal[s.Line] = append(conceal[s.Line], concealRange{
+			start: s.StartCol, end: s.EndCol, repl: s.Replace, standIn: s.Replace != "",
+		})
 	}
 	for _, s := range spans {
 		if s.Capture == "conceal" {
@@ -58,37 +63,65 @@ func concealSplit(spans []highlight.Span) (style []highlight.Span, conceal map[i
 	return style, conceal
 }
 
-// concealOn reports whether concealment applies to line right now: the toggle
-// is on, the line has conceal ranges, and neither the cursor (of a focused
-// view) nor any secondary caret sits on it, nor is any of it selected — those
-// lines always show raw source so editing and inspection stay exact.
-func (m Model) concealOn(line int) bool {
-	if !m.mdRender || len(m.conceal[line]) == 0 {
-		return false
+// lineConcealRanges returns the conceal ranges applying to line right now:
+// the parse-produced ranges (markdown marker chrome #881, decoded stand-ins
+// #1585 — gated by the markdown-rendering toggle) plus the dynamic sv
+// separator ranges (#1589, gated by editor.csv_rendering), with every range
+// the caret sits inside — or a selection intersects — dropped, so exactly
+// that spot shows raw source while the rest of the line stays rendered
+// (#1594, vim's concealcursor granularity).
+func (m Model) lineConcealRanges(line int) []concealRange {
+	var ranges []concealRange
+	if m.mdRender {
+		ranges = m.conceal[line]
 	}
+	if sv := m.svConcealRanges(line); len(sv) > 0 {
+		// Never alias m.conceal's backing array when combining.
+		ranges = append(append([]concealRange(nil), ranges...), sv...)
+	}
+	if len(ranges) == 0 {
+		return nil
+	}
+	cursorCol, cursorOn := -1, false
 	if m.focused && line == m.cursor.Line {
-		return false
+		cursorCol, cursorOn = m.cursor.Col, true
 	}
-	for _, c := range m.carets {
-		if c.pos.Line == line {
-			return false
+	selStart, selEnd, hasSel := m.selectionOnLine(line, len([]rune(m.buf.Line(line))))
+	revealed := func(r concealRange) bool {
+		if cursorOn && cursorCol >= r.start && cursorCol < r.end {
+			return true
+		}
+		for _, c := range m.carets {
+			if c.pos.Line == line && c.pos.Col >= r.start && c.pos.Col < r.end {
+				return true
+			}
+		}
+		// The selection range is inclusive; the conceal range half-open.
+		return hasSel && r.start <= selEnd && r.end > selStart
+	}
+	anyRevealed := false
+	for _, r := range ranges {
+		if revealed(r) {
+			anyRevealed = true
+			break
 		}
 	}
-	if _, _, ok := m.selectionOnLine(line, len([]rune(m.buf.Line(line)))); ok {
-		return false
+	if !anyRevealed {
+		return ranges
 	}
-	return true
+	// Build a fresh slice — ranges may alias the cached m.conceal entry.
+	out := make([]concealRange, 0, len(ranges)-1)
+	for _, r := range ranges {
+		if !revealed(r) {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
-// concealedAt reports whether the rune column on line falls in a conceal range.
-func (m Model) concealedAt(line, col int) bool {
-	_, ok := m.concealRangeAt(line, col)
-	return ok
-}
-
-// concealRangeAt returns the conceal range covering the rune column, if any.
-func (m Model) concealRangeAt(line, col int) (concealRange, bool) {
-	for _, r := range m.conceal[line] {
+// rangeAt returns the conceal range covering the rune column, if any.
+func rangeAt(ranges []concealRange, col int) (concealRange, bool) {
+	for _, r := range ranges {
 		if col >= r.start && col < r.end {
 			return r, true
 		}

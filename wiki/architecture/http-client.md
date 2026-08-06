@@ -136,16 +136,18 @@ config file paths, or disable detection entirely.
   extensions `.http`/`.rest`) uses the vendored rest-nvim/tree-sitter-http
   grammar — request line (method, target, version), header names/values,
   comments, `###` separators, placeholders.
-- **Query-parameter highlighting** (#1585, `spans.go`): the grammar captures
-  the whole target as one url node, so a Go span producer
-  (`lang.Language.Spans`) overlays keys (`property`), values (`string`) and
-  the `?`/`&`/`=` separators (`punctuation`) — on the request line, on
+- **Query-parameter highlighting** (#1585/#1594, `spans.go`): the grammar
+  captures the whole target as one url node, so a Go span producer
+  (`lang.Language.Spans`) overlays the url path (`label`), keys
+  (`property`), values (`constant` — distinct from the url's own `string`)
+  and the `?`/`&`/`=` separators (`punctuation`) — on the request line, on
   folded `?`/`&` continuation lines (#1269) and in
   `application/x-www-form-urlencoded` bodies. Percent-encoded sequences
   conceal as their decoded character (multi-byte encodings like `%C3%A4` →
-  `ä` span all their triples) on lines the caret is not on; the caret line
-  and selections show the raw encoding, styled as `escape`. Placeholder
-  regions are skipped so their own captures survive.
+  `ä` span all their triples), background-tinted as stand-ins; only while
+  the caret sits inside a sequence — or a selection crosses it — does that
+  spot show the raw encoding, styled as `escape`. Placeholder regions are
+  skipped so their own captures survive.
 - **Completion** (#1268): the `http` plugin registers a completion source
   with the local engine (roadmap 0410, `complete.RegisterSource`), so `.http`
   files complete without a language server. It is position-aware, mirroring

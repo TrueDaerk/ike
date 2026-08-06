@@ -1,7 +1,6 @@
 package editor
 
 import (
-	"fmt"
 	"strings"
 
 	"ike/internal/highlight"
@@ -9,13 +8,16 @@ import (
 )
 
 // svtable.go is the table-like rendering of separator-delimited files
-// (#1589), display-only like the markdown layer (#881): on lines the caret
-// is not on, fields render padded to shared column widths with the separator
-// concealed behind the spacing, colored by the theme-derived rainbow.N slots
-// the csv language plugin already assigns (plugins/languages/csv). The
-// caret line — and any selected line — shows raw source, so editing stays
-// exact; the buffer never changes. Column widths are measured over the
-// *visible* rows plus the header row, keeping the cost viewport-bound.
+// (#1589), display-only: every separator becomes a dynamic conceal range
+// (#1594) whose stand-in is the alignment padding — fields line up at shared
+// column widths, colored by the theme-derived rainbow.N spans the csv
+// language plugin already assigns (plugins/languages/csv). Because the rows
+// render through the ordinary cell loop (not a pre-rendered bypass), cursor,
+// selection and search styling all work on aligned rows; only the one
+// separator the caret sits on — or a selection crosses — reverts to its raw
+// character (lineConcealRanges). The buffer never changes. Column widths are
+// measured over the *visible* rows plus the header row, keeping the cost
+// viewport-bound.
 //
 // The first line additionally pins at the top of the viewport while
 // scrolling (stickyLines), riding the sticky-scroll machinery (#168).
@@ -110,110 +112,28 @@ func (m Model) svCacheState() uint64 {
 	return h
 }
 
-// svRawLine reports whether line must show raw source: the caret sits on it
-// or a selection touches it — the same inspection rules as conceal (#1585).
-func (m Model) svRawLine(line int) bool {
-	if m.focused && line == m.cursor.Line {
-		return true
-	}
-	for _, c := range m.carets {
-		if c.pos.Line == line {
-			return true
-		}
-	}
-	_, _, sel := m.selectionOnLine(line, len([]rune(m.buf.Line(line))))
-	return sel
-}
-
-// svRow returns the pre-styled aligned display row for line when the table
-// rendering applies and the line is not held raw; renderSpanUncached slices
-// it by display cells like a markdown table row.
-func (m Model) svRow(line int) (string, bool) {
-	if !m.svActive() || line >= m.buf.LineCount() || m.svRawLine(line) {
-		return "", false
-	}
-	st := m.svLayout()
-	runes := []rune(m.buf.Line(line))
-	fields := sv.Fields(m.buf.Line(line), st.sep)
-	var b strings.Builder
-	for i, f := range fields {
-		text := string(runes[f.Start:f.End])
-		if style, ok := m.hlTheme.Style(fmt.Sprintf("rainbow.%d", i%highlight.RainbowColors)); ok {
-			text = style.Render(text)
-		}
-		b.WriteString(text)
-		if i+1 < len(fields) {
-			pad := svColGap
-			if i < len(st.widths) {
-				pad += st.widths[i] - (f.End - f.Start)
-			}
-			b.WriteString(strings.Repeat(" ", pad))
-		}
-	}
-	return b.String(), true
-}
-
-// svClickCol maps a display-cell offset on an aligned row back to a buffer
-// column: within a field's text the mapping is 1:1, a click in the padding
-// (the concealed separator and gap) lands on the separator, i.e. the field's
-// end. ok is false when the line renders raw and the ordinary mapping
-// applies.
-func (m Model) svClickCol(line, offset int) (int, bool) {
-	if _, ok := m.svRow(line); !ok {
-		return 0, false
+// svConcealRanges builds the dynamic conceal ranges for line (#1594): each
+// separator conceals behind its column's alignment padding — the column's
+// width minus the field's own length, plus the fixed gap — so the ordinary
+// cell loop renders the row aligned. Ranges are plain spacing (standIn
+// false), never tinted like decoded stand-ins. lineConcealRanges applies the
+// caret/selection reveal on top.
+func (m Model) svConcealRanges(line int) []concealRange {
+	if !m.svActive() || line >= m.buf.LineCount() {
+		return nil
 	}
 	st := m.svLayout()
 	fields := sv.Fields(m.buf.Line(line), st.sep)
-	for i, f := range fields {
-		flen := f.End - f.Start
-		if i+1 == len(fields) {
-			if offset < flen {
-				return f.Start + offset, true
-			}
-			return f.End + (offset - flen), true
-		}
-		colw := flen
-		if i < len(st.widths) && st.widths[i] > colw {
-			colw = st.widths[i]
-		}
-		if offset < flen {
-			return f.Start + offset, true
-		}
-		if offset < colw+svColGap {
-			return f.End, true // the concealed separator
-		}
-		offset -= colw + svColGap
+	if len(fields) < 2 {
+		return nil
 	}
-	return 0, false
-}
-
-// svDisplayOffset converts a buffer column on an aligned row to its display
-// cell: prior fields occupy their padded width plus the gap; the separator
-// column itself sits at its field's rendered end. ok is false when the line
-// renders raw.
-func (m Model) svDisplayOffset(line, col int) (int, bool) {
-	if _, ok := m.svRow(line); !ok {
-		return 0, false
-	}
-	st := m.svLayout()
-	disp := 0
-	for i, f := range sv.Fields(m.buf.Line(line), st.sep) {
-		flen := f.End - f.Start
-		if col <= f.End {
-			off := col - f.Start
-			if off < 0 {
-				off = 0
-			}
-			if off > flen {
-				off = flen
-			}
-			return disp + off, true
+	out := make([]concealRange, 0, len(fields)-1)
+	for i, f := range fields[:len(fields)-1] {
+		pad := svColGap
+		if flen := f.End - f.Start; i < len(st.widths) && st.widths[i] > flen {
+			pad += st.widths[i] - flen
 		}
-		colw := flen
-		if i < len(st.widths) && st.widths[i] > colw {
-			colw = st.widths[i]
-		}
-		disp += colw + svColGap
+		out = append(out, concealRange{start: f.End, end: f.End + 1, repl: strings.Repeat(" ", pad)})
 	}
-	return disp, true
+	return out
 }

@@ -36,10 +36,10 @@ func TestQuerySpansRequestLine(t *testing.T) {
 	}{
 		{"?", "punctuation"},
 		{"&", "punctuation"},
-		{"q=", "property"},   // key start
-		{"term", "string"},   // value
+		{"q=", "property"},    // key start
+		{"term", "constant"},  // value — distinct from the url string (#1594)
 		{"limit", "property"}, // second key
-		{"10 ", "string"},    // second value
+		{"10 ", "constant"},   // second value
 	} {
 		if got := captureAt(spans, 0, col(tc.sub)); got != tc.want {
 			t.Errorf("capture at %q = %q, want %q", tc.sub, got, tc.want)
@@ -48,9 +48,26 @@ func TestQuerySpansRequestLine(t *testing.T) {
 	if got := captureAt(spans, 0, col("=")); got != "punctuation" {
 		t.Errorf("capture at '=' = %q, want punctuation", got)
 	}
-	// The path before '?' carries no query span.
-	if got := captureAt(spans, 0, col("search")); got != "" {
-		t.Errorf("path segment got capture %q, want none", got)
+	// The path gets its own capture (#1594); the authority keeps the
+	// grammar's url styling (no overlay span).
+	if got := captureAt(spans, 0, col("/search")); got != "label" {
+		t.Errorf("path segment = %q, want label", got)
+	}
+	if got := captureAt(spans, 0, col("api.example.com")); got != "" {
+		t.Errorf("authority got capture %q, want none", got)
+	}
+}
+
+// TestQuerySpansOriginFormPath: a target without scheme ("/api/users") is all
+// path up to the query.
+func TestQuerySpansOriginFormPath(t *testing.T) {
+	line := "GET /api/users?id=1"
+	spans := querySpans([]string{line})
+	if got := captureAt(spans, 0, strings.Index(line, "/api")); got != "label" {
+		t.Errorf("origin-form path = %q, want label", got)
+	}
+	if got := captureAt(spans, 0, strings.Index(line, "id")); got != "property" {
+		t.Errorf("query key = %q, want property", got)
 	}
 }
 
@@ -73,7 +90,7 @@ func TestQuerySpansFoldedLines(t *testing.T) {
 	if got := captureAt(spans, 2, strings.Index(lines[2], "limit")); got != "property" {
 		t.Errorf("folded spaced key capture = %q", got)
 	}
-	if got := captureAt(spans, 2, strings.Index(lines[2], "10")); got != "string" {
+	if got := captureAt(spans, 2, strings.Index(lines[2], "10")); got != "constant" {
 		t.Errorf("folded spaced value capture = %q", got)
 	}
 	// The header line after the fold gets nothing.

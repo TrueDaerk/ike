@@ -513,8 +513,8 @@ percent-encoding conceals itself (`plugins/languages/http/spans.go`).
 so they win where both cover a cell — a producer must skip regions the
 grammar styles more specifically (placeholders). A span with a non-empty
 `Replace` is a conceal-with-stand-in: the editor renders the replacement
-instead of the source runes on lines the caret is not on (see
-`/architecture/editor.md`, conceal). The same cheapness rule as `Regions`
+instead of the source runes, revealing the raw text only while the caret
+sits inside the range (see `/architecture/editor.md`, conceal). The same cheapness rule as `Regions`
 applies; a language with `Spans` but no grammar still schedules parses
 (`highlight.Supported` accepts either) — the csv/tsv/psv languages
 (`plugins/languages/csv`, #1589) are exactly that: grammar-free, their whole

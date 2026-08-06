@@ -43,14 +43,21 @@ func TestConcealReplaceRendersStandIn(t *testing.T) {
 	}
 }
 
-// TestConcealReplaceCursorLineRaw: the caret line always shows the encoded
-// source so editing stays exact.
-func TestConcealReplaceCursorLineRaw(t *testing.T) {
+// TestConcealReplaceCaretPositionRaw (#1594): the encoded source shows only
+// while the caret sits inside the range — elsewhere on the same line the
+// stand-in stays.
+func TestConcealReplaceCaretPositionRaw(t *testing.T) {
 	m, path := mdLoaded(t, "a %20 b\nplain\n")
 	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: replaceSpan(0)})
 	m = mm
+	// Caret at col 0 — outside the [2,5) range: still concealed.
+	if view := plainView(m); strings.Contains(view, "%20") {
+		t.Error("caret outside the range must keep the stand-in")
+	}
+	// Caret inside the range: raw encoded source.
+	m.cursor = buffer.Position{Line: 0, Col: 3}
 	if view := plainView(m); !strings.Contains(view, "%20") {
-		t.Error("cursor line must show the raw encoded sequence")
+		t.Error("caret inside the range must show the raw encoded sequence")
 	}
 }
 

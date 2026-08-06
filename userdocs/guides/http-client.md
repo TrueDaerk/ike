@@ -43,13 +43,14 @@ A query may be folded onto indented continuation lines starting with `?` or
 ignored, several parameters can share a line, and a parameter without `=`
 stays a valueless flag (`? pretty`).
 
-The editor makes long queries scannable: parameter keys and values get their
-own colors and `?`, `&`, `=` render as dimmed separators — on the request
-line, on folded query lines and in `application/x-www-form-urlencoded`
-bodies. Percent-encoded characters display as the character they encode
-(`%20` shows as a space, `%C3%A4` as `ä`), underlined so you can tell a
-decoded stand-in from real text. The line your caret is on — or any line you
-select — always shows the raw encoding, so editing stays exact; the file
+The editor makes long queries scannable: the URL path, parameter keys and
+parameter values each get their own color and `?`, `&`, `=` render as dimmed
+separators — on the request line, on folded query lines and in
+`application/x-www-form-urlencoded` bodies. Percent-encoded characters
+display as the character they encode (`%20` shows as a space, `%C3%A4` as
+`ä`), with a subtle background tint so you can tell a decoded stand-in from
+real text. Move the caret into a sequence — or select across it — and
+exactly that spot shows the raw encoding, so editing stays exact; the file
 itself is never changed.
 
 ### Placeholders
