@@ -574,6 +574,20 @@ no anchor defines carries `anchor.unresolved` (rendered as an error, see
 backs the plugin's local goto/usages/hover providers
 (`plugins/languages/yaml/anchors.go`, see `/architecture/lsp.md`).
 
+The unified-diff language (`plugins/languages/diff`, #1630) is grammar-free
+too — deliberately: whether `--- x` is a removed line or a file header depends
+on the enclosing hunk's `@@` counts, state a line-oriented Go pass
+(`internal/unidiff`) classifies exactly. It emits line coloring, git extension
+headers and word-level emphasis between paired removed/added lines through
+the span seam (see `/architecture/editor.md`, unified-diff rendering), and is
+the first user of the fourth Go-computed seam, `Folds func(lines []string)
+[]lang.FoldRange` (#1630): pre-order fold ranges for languages whose foldable
+structure no grammar provides — hunks fold at their `@@` headers, file
+sections at their `diff` headers. `highlight.HighlightScoped` appends the
+produced ranges to the parse's folds (and `highlight.Supported` accepts a
+language with only `Folds`), so the editor's fold machinery needs no new
+plumbing.
+
 The third Go-computed seam is `Lint func(lines []string) []lang.Note` (#1623):
 mistakes a language server would report, for languages that have none. A
 `Note` is a rune-column range on a line plus an LSP severity (`lang.NoteError`

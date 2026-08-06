@@ -194,6 +194,12 @@ func hunksOf(rows []Row) []Hunk {
 	return hunks
 }
 
+// Refine runs a rune-level diff over a changed line pair and returns the
+// changed spans on each side — refine exported for consumers outside the
+// row model (#1630): the unified-diff language pairs adjacent -/+ lines and
+// emphasizes their changed ranges with the same algorithm the diff views use.
+func Refine(left, right string) (ls, rs []Span) { return refine(left, right) }
+
 // refine runs a rune-level diff over a changed line pair and returns the
 // changed spans on each side. Oversized lines skip refinement (whole-line
 // emphasis reads better than quadratic work).

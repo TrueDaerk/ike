@@ -82,7 +82,40 @@ func NewThemeKeys(defaults map[string]string, get func(key string) (string, bool
 			colors[key] = c
 		}
 	}
+	// Diff-format captures (#1630) derive the same way: .diff/.patch
+	// coloring follows the active palette without every theme declaring the
+	// slots. An explicit theme table entry or a theme.captures.diff.* config
+	// key overrides a slot.
+	for key, src := range diffSources {
+		if get != nil {
+			if v, ok := get("theme.captures." + key); ok && v != "" {
+				colors[key] = v
+				continue
+			}
+		}
+		if _, exists := colors[key]; exists {
+			continue
+		}
+		if c, ok := colors[src]; ok {
+			colors[key] = c
+		}
+	}
 	return Theme{colors: colors, cache: make(map[string]styleHit)}
+}
+
+// diffSources maps each unified-diff capture (#1630) to an existing theme
+// capture it derives from, mirroring rainbowSources: added lines take the
+// string green, removed lines the variable.builtin red, @@ hunk headers the
+// function color, file headers the keyword color, and git meta lines (index,
+// mode, rename …) read as comments. The word-level emphasis captures
+// diff.plus.emph / diff.minus.emph resolve through the dotted-prefix fallback
+// to their line's color; the editor adds the changed-range background.
+var diffSources = map[string]string{
+	"diff.plus":   "string",
+	"diff.minus":  "variable.builtin",
+	"diff.delta":  "function",
+	"diff.header": "keyword",
+	"diff.meta":   "comment",
 }
 
 // Style returns the style for a capture and whether a colour was found. Lookup

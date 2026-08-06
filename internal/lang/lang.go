@@ -130,6 +130,15 @@ type Language struct {
 	// be cheap. Nil — the normal case — means the language has none.
 	Spans func(lines []string) []Span
 
+	// Folds optionally produces Go-computed fold ranges for a buffer of this
+	// language (#1630). It exists for foldable structure no Tree-sitter
+	// grammar provides — the unified diff format has no grammar at all, yet
+	// its hunks fold at their @@ headers. Like Spans it rides every highlight
+	// pass and must be cheap; ranges must be emitted in pre-order (outer
+	// before inner). Nil — the normal case — means the language computes no
+	// folds of its own (FoldNodes still applies when a grammar exists).
+	Folds func(lines []string) []FoldRange
+
 	// Lint optionally produces Go-computed notes for a buffer of this
 	// language (#1623): mistakes a language server would report, for
 	// languages that have none. Dotenv's duplicate keys are the first case —
@@ -174,6 +183,14 @@ type Span struct {
 	EndCol   int
 	Capture  string
 	Replace  string
+}
+
+// FoldRange is one Go-computed foldable region (#1630), the registry-level
+// twin of highlight.Fold: buffer lines [HeaderLine+1, EndLine] can collapse
+// behind HeaderLine. Lines are 0-based and inclusive.
+type FoldRange struct {
+	HeaderLine int
+	EndLine    int
 }
 
 // Region is one embedded-language range inside a host buffer, in editor

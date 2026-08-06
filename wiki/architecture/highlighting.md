@@ -76,6 +76,14 @@ declaration and its body block) merged into one region. Folds travel in
 `SpansMsg.Folds`; the per-view collapse state lives in
 `internal/editor/fold.go` (see [editor](/architecture/editor.md)).
 
+**Grammar-less languages fold too** (#1630): a language may register
+`lang.Language.Folds`, a Go producer of `FoldRange{HeaderLine, EndLine}`
+values, and `HighlightScoped` appends them to the parse's folds — the seam
+exists for foldable structure no Tree-sitter grammar provides, first used by
+the unified-diff language whose hunks fold at their `@@` headers
+(`internal/unidiff`). Producers must emit pre-order (outer before inner),
+matching what the editor's containment lookups expect.
+
 **Embedded regions fold too** (#1329): every fragment is parsed with its own
 language's fold kinds and its ranges are shifted into host coordinates
 (`offsetFolds`), so a JSON body inside a `.http` request collapses exactly as it

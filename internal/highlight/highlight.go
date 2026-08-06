@@ -25,7 +25,7 @@ func Lang(path string) string {
 // schedules a parse when it will produce spans.
 func Supported(path string) bool {
 	l, ok := lang.ByPath(path)
-	return ok && (l.Grammar != nil || l.Spans != nil || l.Lint != nil)
+	return ok && (l.Grammar != nil || l.Spans != nil || l.Lint != nil || l.Folds != nil)
 }
 
 // Lint runs the language's Go-computed linter (#1623) over lines and returns
@@ -58,7 +58,7 @@ func Highlight(path string, lines []string) []Span {
 // with sticky scopes is foldable; both nil means the feature is simply inert.
 func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 	l, ok := lang.ByPath(path)
-	if !ok || (l.Grammar == nil && l.Spans == nil) {
+	if !ok || (l.Grammar == nil && l.Spans == nil && l.Folds == nil) {
 		return nil, nil, nil
 	}
 	var spans []Span
@@ -87,6 +87,14 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 		// grammar's coarser captures (the whole url node is one @string) —
 		// the same trick overlayFragments uses for injected fragments.
 		spans = append(langSpans(l.Spans(lines)), spans...)
+	}
+	// Go-produced folds (#1630) serve grammar-less structure — a unified
+	// diff's hunks fold at their @@ headers. The producer emits pre-order,
+	// matching what the editor's containment lookups expect.
+	if l.Folds != nil {
+		for _, f := range l.Folds(lines) {
+			folds = append(folds, Fold{HeaderLine: f.HeaderLine, EndLine: f.EndLine})
+		}
 	}
 	return spans, scopes, folds
 }
