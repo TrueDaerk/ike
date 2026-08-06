@@ -10,6 +10,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/highlight"
+	"ike/internal/numhint"
 	"ike/internal/secret"
 )
 
@@ -53,6 +54,10 @@ var decodeCaptures = []string{
 	escapes.EntityCapture,
 	escapes.Base64Capture,
 	cronhint.Capture,
+	numhint.SizeCapture,
+	numhint.DurationCapture,
+	numhint.GroupCapture,
+	numhint.RadixCapture,
 	secret.Capture,
 }
 

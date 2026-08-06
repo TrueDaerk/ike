@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 func captureAt(spans []lang.Span, line, col int) string {
@@ -84,5 +85,20 @@ func TestCommentSpans(t *testing.T) {
 	}
 	if got := captureAt(spans, 2, 15); got != "string" {
 		t.Errorf("hash inside value = %q, want string", got)
+	}
+}
+
+// TestININumberHints (#1627): an ini `key = value` pair carries the number
+// hints alongside its plain styling.
+func TestININumberHints(t *testing.T) {
+	spans := iniSpans([]string{"buffer_size = 65536"})
+	var hint *lang.Span
+	for i, s := range spans {
+		if s.Capture == numhint.SizeCapture {
+			hint = &spans[i]
+		}
+	}
+	if hint == nil || hint.Replace != "64 KiB" {
+		t.Errorf("spans = %+v, want a 64 KiB size hint", spans)
 	}
 }

@@ -19,6 +19,7 @@ import (
 	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
+	"ike/internal/numhint"
 	"ike/internal/secret"
 )
 
@@ -42,6 +43,14 @@ func (m Model) decodeOn(capture string) bool {
 		// Not a decode but the same stand-in mechanic (#1623): "on" means the
 		// mask shows and the value hides, gated by editor.secret_masking.
 		return m.secretMask
+	case numhint.SizeCapture:
+		return m.sizeHints
+	case numhint.DurationCapture:
+		return m.durHints
+	case numhint.GroupCapture:
+		return m.digitGroup
+	case numhint.RadixCapture:
+		return m.radixHints
 	}
 	return false
 }

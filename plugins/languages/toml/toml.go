@@ -11,6 +11,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
 
@@ -35,7 +36,15 @@ func init() {
 		ScopeNodes: []string{"table", "table_array_element"},
 		FoldNodes:  []string{"table", "table_array_element", "array", "inline_table"},
 		// Cron hints (#1624): a quoted cron expression — a scheduler entry in
-		// a tool's TOML config — carries its English reading.
-		Spans: cronhint.QuotedSpans,
+		// a tool's TOML config — carries its English reading. Number hints
+		// (#1627): byte sizes, durations, digit grouping and radix readings.
+		Spans: tomlSpans,
 	})
+}
+
+// tomlSpans is the lang.Language.Spans hook: quoted cron expressions gain
+// their schedule hint (#1624) and numeric literals their readability hints
+// (#1627).
+func tomlSpans(lines []string) []lang.Span {
+	return append(cronhint.QuotedSpans(lines), numhint.Spans(lines)...)
 }

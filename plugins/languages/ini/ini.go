@@ -9,6 +9,7 @@ package langini
 
 import (
 	"ike/internal/lang"
+	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
 
@@ -47,7 +48,9 @@ func iniSpans(lines []string) []lang.Span {
 			out = append(out, pairSpans(li, runes, start, end)...)
 		}
 	}
-	return out
+	// Number-readability hints (#1627): byte sizes, durations, digit grouping
+	// and radix readings over the `key = value` pairs.
+	return append(out, numhint.Spans(lines)...)
 }
 
 // pairSpans styles one `key = value` line: property key, punctuation

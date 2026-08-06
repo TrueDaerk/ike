@@ -1,5 +1,25 @@
 # Log
 
+## 2026-08-07 (editor: number-readability hints, #1627)
+
+- `internal/numhint` turns numeric literals in config files into what they
+  mean: byte sizes (`10485760` → `10 MiB`, binary units), durations
+  (`86400000` → `24h`, at most two components, days only past 48h), digit
+  grouping (`1000000` → `1_000_000`, from five digits up) and radix readings
+  (`0x1F4  = 500`, `mode: 420  = 0o644`).
+- Context comes from key names — `*size*`/`*bytes*`/`*memory*` for byte
+  counts, the timeout family (millis) and the TTL family (seconds) for
+  durations, with `*_ms`/`*_seconds`-style last words pinning the unit, and
+  `*mode*`/`*mask*` for radix — plus shape triggers (a multiple of 1024, a
+  `0x` literal, a five-digit run). Weak quantifiers (`limit`, `max`) name no
+  family alone: a rate limit is not a byte count.
+- Four stand-in families on the #1585 channel, each with its own toggle
+  (`editor.byte_size_hints`, `editor.duration_hints`, `editor.digit_grouping`,
+  `editor.radix_hints` and their `view.toggle*` actions), revealed under the
+  caret like every other family (#1594). Wired into JSON/ndjson, YAML, TOML,
+  ini and dotenv; JSON filters through `SpansExcept` so the epoch decoding
+  (#1618) keeps the digits it already claimed.
+
 ## 2026-08-06 (editor: color-hash UUIDs and hashes, #1626)
 
 - `internal/idcolor` detects UUIDs (`8-4-4-4-12`) and standalone hex runs of

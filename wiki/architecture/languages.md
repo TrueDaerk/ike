@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-06T23:30:00Z
+timestamp: 2026-08-07T00:30:00Z
 ---
 
 # Language Registry
@@ -562,7 +562,11 @@ the `crontab` base names, styling `#` comments, `NAME=value` environment
 assignments, the five schedule fields and the command, and carrying the
 schedule hints of `internal/cronhint` (see `/architecture/editor.md`, cron
 schedule hints) — which the `yaml`, `json` and `toml` producers share for the
-`cron:` values and quoted expressions in their own buffers.
+`cron:` values and quoted expressions in their own buffers. The number hints
+of `internal/numhint` (#1627) ride the same seam in every config format —
+`json`, `yaml`, `toml`, `ini` and `dotenv` all append them, JSON through
+`SpansExcept` so an epoch stand-in keeps its digits (see
+`/architecture/editor.md`, number-readability hints).
 
 The third Go-computed seam is `Lint func(lines []string) []lang.Note` (#1623):
 mistakes a language server would report, for languages that have none. A

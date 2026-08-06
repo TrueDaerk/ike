@@ -5,6 +5,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 // TestJSONRegistered guards #878: json and ndjson resolve by extension, json
@@ -113,5 +114,26 @@ func TestJSONCronSpans(t *testing.T) {
 	}
 	if want := "*/5 * * * *" + cronhint.Gap + "every 5 min"; spans[0].Replace != want {
 		t.Errorf("hint = %q, want %q", spans[0].Replace, want)
+	}
+}
+
+// TestJSONNumberHints (#1627): numeric literals carry their readability hints,
+// and a value the epoch family already claimed (#1618) keeps its timestamp
+// rather than growing a second stand-in over the same digits.
+func TestJSONNumberHints(t *testing.T) {
+	spans := jsonSpans([]string{`{"max_size": 10485760, "ttl_ms": 86400000}`})
+	var hints []string
+	for _, s := range spans {
+		if s.Capture == numhint.SizeCapture || s.Capture == numhint.DurationCapture {
+			hints = append(hints, s.Replace)
+		}
+	}
+	if len(hints) != 2 || hints[0] != "10 MiB" || hints[1] != "24h" {
+		t.Errorf("hints = %v, want [10 MiB 24h]", hints)
+	}
+	for _, s := range jsonSpans([]string{`{"created": 1722945600}`}) {
+		if s.Capture == numhint.SizeCapture || s.Capture == numhint.GroupCapture {
+			t.Errorf("a decoded timestamp must not also carry a number hint: %+v", s)
+		}
 	}
 }

@@ -11,6 +11,7 @@ package langenv
 import (
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
 
@@ -56,7 +57,9 @@ func envSpans(lines []string) []lang.Span {
 		// to JSON — so a plain value can never be mistaken for a token.
 		out = append(out, jwt.LineSpans(li, line)...)
 	}
-	return out
+	// Number-readability hints (#1627): byte sizes, durations, digit grouping
+	// and radix readings over the `KEY=value` pairs.
+	return append(out, numhint.Spans(lines)...)
 }
 
 // entry is one parsed assignment line, in rune columns. It is the single

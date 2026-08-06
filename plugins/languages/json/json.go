@@ -25,6 +25,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
 
@@ -72,10 +73,16 @@ func init() {
 
 // jsonSpans is the lang.Language.Spans hook: Unix epoch timestamps in JSON
 // value positions (#1618) and \uXXXX escapes in strings (#1620) become
-// conceal-with-stand-in spans rendering the decoded form, and a quoted cron
-// expression gains its schedule hint (#1624). The JSON context keeps keys and
-// digits inside prose strings out of the epoch detection.
+// conceal-with-stand-in spans rendering the decoded form, a quoted cron
+// expression gains its schedule hint (#1624), and numeric literals gain their
+// readability hints (#1627) — byte sizes, durations, digit grouping, radix.
+// The JSON context keeps keys and digits inside prose strings out of the epoch
+// detection.
 func jsonSpans(lines []string) []lang.Span {
-	out := append(epochtime.Spans(lines, epochtime.JSONValue), escapes.UnicodeSpans(lines)...)
-	return append(out, cronhint.QuotedSpans(lines)...)
+	stamps := epochtime.Spans(lines, epochtime.JSONValue)
+	out := append(stamps, escapes.UnicodeSpans(lines)...)
+	out = append(out, cronhint.QuotedSpans(lines)...)
+	// The number hints step aside where a timestamp already claimed the digits:
+	// two stand-ins over one literal would fight for the same cells.
+	return append(out, numhint.SpansExcept(lines, stamps)...)
 }

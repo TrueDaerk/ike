@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 // jwtToken builds a syntactically valid JWT for the span tests.
@@ -79,5 +80,19 @@ func TestRegisteredForDotEnvFiles(t *testing.T) {
 		if !ok || l.ID != "dotenv" {
 			t.Errorf("ByPath(%q) = %q, %v; want dotenv", path, l.ID, ok)
 		}
+	}
+}
+
+// TestEnvNumberHints (#1627): a dotenv byte-count key carries its size hint.
+func TestEnvNumberHints(t *testing.T) {
+	spans := envSpans([]string{"MAX_UPLOAD_BYTES=5242880"})
+	var hint *lang.Span
+	for i, s := range spans {
+		if s.Capture == numhint.SizeCapture {
+			hint = &spans[i]
+		}
+	}
+	if hint == nil || hint.Replace != "5 MiB" {
+		t.Errorf("spans = %+v, want a 5 MiB size hint", spans)
 	}
 }
