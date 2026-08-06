@@ -219,15 +219,17 @@ func (m Model) popupTermRect() (x, y, w, h int) {
 // renderPopupTerm renders the popup box: pane-style chrome (rounded border,
 // title row) whose title row is the tab bar once multiple tabs exist, exactly
 // like an editor pane hosting terminal tabs. While split (#1427) the two side
-// boxes join horizontally; only the focused side gets the focus border.
+// boxes join horizontally; only the focused side gets the focus border —
+// except under broadcast (#1592), where both sides render it because both
+// receive the typed input.
 func (m Model) renderPopupTerm() string {
 	_, h := m.popupSize()
 	wl, wr := m.popupSplitWidths()
 	if m.popup.split == nil {
 		return m.renderPopupSide(m.popup.inst, wl, h, true)
 	}
-	left := m.renderPopupSide(m.popup.inst, wl, h, !m.popup.focusRight)
-	right := m.renderPopupSide(m.popup.split, wr, h, m.popup.focusRight)
+	left := m.renderPopupSide(m.popup.inst, wl, h, !m.popup.focusRight || m.popup.broadcast)
+	right := m.renderPopupSide(m.popup.split, wr, h, m.popup.focusRight || m.popup.broadcast)
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, right)
 }
 

@@ -287,6 +287,28 @@ func TestPopupBroadcastToggle(t *testing.T) {
 	}
 }
 
+// TestPopupBroadcastBorders: while broadcast is on, both split sides render
+// the focus border (#1592) so the shared-input state is obvious at a glance;
+// toggling broadcast off restores the single focused border.
+func TestPopupBroadcastBorders(t *testing.T) {
+	m := splitTestPopup(t)
+	focus := fgSGR(m.pal().BorderFocus)
+	off := strings.Count(m.renderPopupTerm(), focus)
+	if off == 0 {
+		t.Fatal("the focused split side should render the focus border")
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	if on := strings.Count(m.renderPopupTerm(), focus); on != 2*off {
+		t.Fatalf("broadcast should focus-border both sides: off=%d on=%d", off, on)
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
+	m = out.(Model)
+	if got := strings.Count(m.renderPopupTerm(), focus); got != off {
+		t.Fatalf("toggling broadcast off should restore one focused border: off=%d got=%d", off, got)
+	}
+}
+
 // TestPopupSplitCollapse: a side's last shell exit collapses the split back to
 // a single box (#1427) — the surviving side keeps running, broadcast resets.
 func TestPopupSplitCollapse(t *testing.T) {
