@@ -40,6 +40,7 @@ var statusLeft = []statusSegment{
 	{id: "encoding", render: encodingSegment},
 	{id: "indent", render: indentSegment},
 	{id: "svcolumn", render: svColumnSegment},
+	{id: "docpath", render: docPathSegment},
 	{id: "diagnostics", render: diagSegment},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
@@ -205,6 +206,17 @@ func svColumnSegment(_ Model, ed *editor.Model) string {
 		return ""
 	}
 	return ed.SVColumnLabel()
+}
+
+// docPathSegment is the caret's path in a JSON or YAML buffer (#1660) —
+// `spec.containers[2].env[0].name`, truncated from the left because the tail
+// names where the caret actually is. Empty (hidden) at the document root and
+// for every buffer without a path scanner.
+func docPathSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	return ed.DocPathLabel()
 }
 
 // diagSegment is the focused buffer's diagnostic counts; hidden when clean.
@@ -459,7 +471,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // overflows (#471): cosmetic hints first, diagnostics/LSP last; mode, the
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
-	"hint", "eol", "encoding", "indent", "svcolumn", "toolchain", "todo",
+	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "toolchain", "todo",
 	"host", "notifications", "macro", "branch", "diagnostics", "lsp",
 }
 

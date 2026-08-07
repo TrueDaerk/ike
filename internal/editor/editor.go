@@ -384,6 +384,9 @@ type Model struct {
 	// layout (pointer, shared across the value copies like mdTables).
 	svRender bool
 	svTable  *svState
+	// docPathCache caches the caret's JSON/YAML path (#1660, docpath.go) per
+	// document version and caret position (pointer, shared like svTable).
+	docPathCache *docPathState
 	// Log rendering (#1621, logrender.go). logRender is the
 	// editor.log_rendering toggle; logRenderSet marks a per-view
 	// view.toggleLogRendering override, like mdRenderSet.
@@ -605,6 +608,7 @@ func New() Model {
 		rainbowGuides:      true,
 		svRender:           true,
 		svTable:            &svState{},
+		docPathCache:       &docPathState{},
 		logRender:          true,
 		logRunCache:        &logRunState{},
 		logDeltaCache:      &logDeltaState{},

@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-07 (editor: json/yaml path breadcrumb, #1660)
+
+- The status line's new `docpath` segment names the caret's position inside a
+  JSON or YAML buffer — `spec.template.containers[2].env[0].name`, sequence
+  indices included. It truncates **from the left** (`…env[0].name`) because the
+  tail is the interesting part, and hides itself at the document root and in
+  every buffer without a path scanner.
+- Three commands copy the *full* path: `editor.copyDocPath` (dotted,
+  `cmd+alt+shift+c`), `editor.copyDocPathJQ` (`.spec.containers[2].name`) and
+  `editor.copyDocPathYQ` (yq v4's spelling for keys that need quotes).
+- The derivation (`internal/docpath`) is structural, not a parse: a container
+  stack for JSON (strings and JSONC comments skipped), indentation columns for
+  YAML (block scalars, `#` comments and `---` boundaries honored, flow values
+  handed to the JSON scanner). No second parser, no document loaded.
+- A scan only ever reads up to the caret, so a buffer broken *below* it still
+  yields the nearest enclosing node. Anchors and aliases are reported as
+  written — `<<: *base` is the `<<` key, never the resolved target (#1629).
+- Cached per document version and caret position, and off in large-file mode
+  like every other whole-buffer analysis. See
+  [/architecture/editor.md](/architecture/editor.md) and
+  [/architecture/status-line.md](/architecture/status-line.md).
+
 ## 2026-08-07 (editor: increment/decrement and value toggling, #1658)
 
 - `Ctrl-a` / `Ctrl-x` in normal mode raise or lower the number under the

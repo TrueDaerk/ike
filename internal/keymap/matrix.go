@@ -67,6 +67,7 @@ var reachableAlternatives = map[string]string{
 	"editor.duplicateLine":     "vim yyp",
 	"editor.redo":              "vim ctrl+r",
 	"editor.commentBlock":      "palette",
+	"editor.copyDocPath":       "palette",
 	"editor.commentLine":       "palette",
 	"editor.lineStart":         "vim 0",
 	"editor.lineEnd":           "vim $",

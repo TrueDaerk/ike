@@ -116,6 +116,40 @@ func TestStatusLineSVColumnSegment(t *testing.T) {
 	}
 }
 
+// TestStatusLineDocPathSegment guards the JSON/YAML path segment (#1660): the
+// caret's path shows in a YAML buffer and the slot stays hidden elsewhere.
+func TestStatusLineDocPathSegment(t *testing.T) {
+	lang.Register(lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
+	dir := t.TempDir()
+	doc := filepath.Join(dir, "deploy.yaml")
+	body := "spec:\n  containers:\n    - name: web\n"
+	if err := os.WriteFile(doc, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	// Widen the bar so the overflow guard cannot drop the segment under test.
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.openPath(doc, false)
+	m = tm.(Model)
+	if ed := m.focusedEditor(); ed != nil {
+		ed.SetCursor(2, 8) // on the sequence item's key
+	}
+	if line := m.statusLine(); !strings.Contains(line, "spec.containers[0].name") {
+		t.Fatalf("doc path segment missing: %q", line)
+	}
+
+	plain := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(plain, []byte("spec: 1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ = m.openPath(plain, false)
+	m = tm.(Model)
+	if line := m.statusLine(); strings.Contains(line, "spec.containers") {
+		t.Fatalf("non-structured buffer must hide the path segment: %q", line)
+	}
+}
+
 // TestStatusLineSegmentsExtensible guards the slot model (#101): an appended
 // segment renders without touching statusLine(), and an empty render hides
 // the slot (no dangling divider).

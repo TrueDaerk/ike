@@ -92,6 +92,26 @@ I in this file", and ++enter++ on a node jumps to it.
 The breadcrumb row under the tab bar shows the same information compressed to
 one line — `file ▸ Type ▸ method` — and its segments are clickable.
 
+### In JSON and YAML
+
+A deep manifest or lockfile has no symbols, so the status line answers instead:
+it shows the path to whatever the caret is on — `spec.template.containers[2].env[0].name`
+— and truncates it from the left when it does not fit, keeping the end you are
+actually looking at. Sequence indices count from zero, the way `jq` and `yq`
+count them.
+
+++cmd+alt+shift+c++ copies that path in full. **Copy JSON/YAML Path as jq
+Expression** and **… as yq Expression** copy the same position as an expression
+the matching CLI tool takes, quoting keys where those tools need it:
+
+```
+.spec.containers[2].name
+.metadata.labels["app.kubernetes.io/name"]
+```
+
+The path is read from the document as written: a YAML alias (`*base`) or merge
+key (`<<`) is reported where it stands, never as the values it would pull in.
+
 ## By what is wrong
 
 | Keys | What it lists |

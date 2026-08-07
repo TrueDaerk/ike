@@ -71,6 +71,12 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.increment", "Increment Number", "increment", "ctrl+a"),
 			action("editor.decrement", "Decrement Number", "decrement", "ctrl+x"),
 			action("editor.toggleValue", "Toggle Value Under Caret", "toggle_value", "g!"),
+			// JSON/YAML path breadcrumb (#1660): the status line shows where
+			// the caret sits, these copy it — plain, or as an expression the
+			// matching CLI tool takes.
+			action("editor.copyDocPath", "Copy JSON/YAML Path", "copy_doc_path", ""),
+			action("editor.copyDocPathJQ", "Copy JSON/YAML Path as jq Expression", "copy_doc_path_jq", ""),
+			action("editor.copyDocPathYQ", "Copy JSON/YAML Path as yq Expression", "copy_doc_path_yq", ""),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 			// View options (#64): per-view display toggles. They flip the

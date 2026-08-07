@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, jetbrains, bubbletea]
-timestamp: 2026-07-30T12:00:00Z
+timestamp: 2026-08-07T13:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -480,12 +480,15 @@ regenerate); the final-gate test in `cmd/ike` fails the build if any row is
 | `debug.toggleBreakpoint` | `cmd+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
+| `editor.caret.addAbove` | `alt+shift+up` | fragile | `palette` | live via palette |
 | `editor.caret.addAll` | `ctrl+shift+g` | fragile | `palette` | live via palette |
+| `editor.caret.addBelow` | `alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.caret.addNext` | `ctrl+g` | delivered | `—` | live |
 | `editor.closeTab` | `cmd+w` | fragile | `palette` | live via palette |
 | `editor.commentBlock` | `cmd+shift+7` | fragile | `palette` | live via palette |
 | `editor.commentLine` | `cmd+7` | fragile | `palette` | live via palette |
 | `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
+| `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |

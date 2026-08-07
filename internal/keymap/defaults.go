@@ -70,6 +70,10 @@ var jetbrainsRows = []row{
 	{"ctrl+s", "editor.write", "Save", Editor, "Editor (06)"},
 	{"cmd+shift+s", "editor.saveAll", "Save all", Global, "Editor (06)"},
 	{"cmd+c", "editor.copy", "Copy", Editor, "Editor (06)"},
+	// JetBrains' Copy Reference chord, applied to the position *inside* a
+	// JSON/YAML document rather than to the file (#1660). The jq and yq
+	// flavours stay palette-only — one chord for the everyday form.
+	{"cmd+alt+shift+c", "editor.copyDocPath", "Copy JSON/YAML path", Editor, "Editor (#1660)"},
 	{"cmd+x", "editor.cut", "Cut", Editor, "Editor (06)"},
 	{"cmd+v", "editor.paste", "Paste", Editor, "Editor (06)"},
 	// Undo gets both chords (#1117): cmd+z matches JetBrains/macOS muscle
