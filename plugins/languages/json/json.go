@@ -25,6 +25,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
@@ -82,6 +83,8 @@ func jsonSpans(lines []string) []lang.Span {
 	stamps := epochtime.Spans(lines, epochtime.JSONValue)
 	out := append(stamps, escapes.UnicodeSpans(lines)...)
 	out = append(out, cronhint.QuotedSpans(lines)...)
+	// Network literals (#1653): a CIDR prefix or a punycode host in a value.
+	out = append(out, nethint.Spans(lines)...)
 	// The number hints step aside where a timestamp already claimed the digits:
 	// two stand-ins over one literal would fight for the same cells.
 	return append(out, numhint.SpansExcept(lines, stamps)...)

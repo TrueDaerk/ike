@@ -355,6 +355,12 @@ type Model struct {
 	digitGroupSet bool
 	radixHints    bool
 	radixHintsSet bool
+	// The network-literal families (#1653): a CIDR prefix draws with its
+	// range and host count, a punycode host with its decoded Unicode name.
+	cidrHints    bool
+	cidrHintsSet bool
+	idnHints     bool
+	idnHintsSet  bool
 	// Secret masking (#1623): the dotenv value stand-ins, on by default, with
 	// its own override flag like the decode families. See secrets.go.
 	secretMask    bool
@@ -605,6 +611,8 @@ func New() Model {
 		durHints:           true,
 		digitGroup:         true,
 		radixHints:         true,
+		cidrHints:          true,
+		idnHints:           true,
 		secretMask:         true,
 		colorPreview:       true,
 		idColors:           true,
@@ -759,6 +767,12 @@ func (m *Model) applyConfig() {
 	}
 	if !m.radixHintsSet {
 		m.radixHints = boolOr(m.cfg, "editor.radix_hints", m.radixHints)
+	}
+	if !m.cidrHintsSet {
+		m.cidrHints = boolOr(m.cfg, "editor.cidr_hints", m.cidrHints)
+	}
+	if !m.idnHintsSet {
+		m.idnHints = boolOr(m.cfg, "editor.idn_hints", m.idnHints)
 	}
 	if !m.secretMaskSet {
 		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)

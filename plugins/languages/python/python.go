@@ -9,6 +9,7 @@ import (
 	_ "embed"
 
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/plugins/languages/register"
 )
 
@@ -25,7 +26,7 @@ func init() {
 		// Shebang fallback (#893): extensionless scripts; python3.12-style
 		// version suffixes are stripped by the lookup.
 		Interpreters: []string{"python", "python3"},
-		Grammar:    grammar(),
+		Grammar:      grammar(),
 		Server: &lang.ServerSpec{
 			Language:    "python",
 			Command:     "pyright-langserver",
@@ -36,7 +37,10 @@ func init() {
 			// exact-code lsp.diagnostics_severity rules land here.
 			SeverityOverridesPath: []string{"python", "analysis", "diagnosticSeverityOverrides"},
 		},
-		Toolchain:   toolchain{},
+		Toolchain: toolchain{},
+		// Network literals (#1653) inside string literals: a CIDR prefix
+		// draws its range, a punycode host its decoded name.
+		Spans:       nethint.QuotedSpans,
 		LineComment: "#",
 		IndentAfter: []string{":", "(", "[", "{"},
 		// Sticky-scroll scopes (#168).

@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-07 (editor: network-literal hints, #1653)
+
+- A CIDR prefix now draws with its address range and size appended —
+  `10.0.0.0/8  10.0.0.0–10.255.255.255, 16,777,214 hosts` — and a punycode
+  hostname with its decoded Unicode form (`xn--mnchen-3ya.de  münchen.de`).
+- Counts follow the protocol: IPv4 subtracts network and broadcast except on
+  `/31` (2 hosts, RFC 3021) and `/32`; IPv6 counts addresses and leaves the
+  huge spans as a power of two (`::/0` → `2^128 addresses`).
+- A decoded name carrying the homograph shape — scripts mixed inside one
+  label, or a whole label of Latin look-alikes (`аррӏе.com`) — draws in the
+  warning colour, since that is a phishing tell and not a readability win.
+- Both ride the #1585 stand-in channel and reveal positionally (#1594).
+  Whole lines are scanned in YAML/JSON/TOML/ini/dotenv/`.http`, string
+  literals only in Go, JS/TS and Python. Decoding lives in `internal/nethint`;
+  gated by `editor.cidr_hints` / `editor.idn_hints` and the matching
+  `view.toggle*` actions, both default on. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-07 (editor: PEM/certificate inline summary, #1652)
 
 - A PEM block now collapses onto its `-----BEGIN …-----` line with a decoded

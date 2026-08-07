@@ -9,6 +9,7 @@ package langini
 
 import (
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
@@ -49,8 +50,11 @@ func iniSpans(lines []string) []lang.Span {
 		}
 	}
 	// Number-readability hints (#1627): byte sizes, durations, digit grouping
-	// and radix readings over the `key = value` pairs.
-	return append(out, numhint.Spans(lines)...)
+	// and radix readings over the `key = value` pairs. Network literals
+	// (#1653): CIDR prefixes and punycode hosts — an ini/conf file is where
+	// most allow-lists live.
+	out = append(out, numhint.Spans(lines)...)
+	return append(out, nethint.Spans(lines)...)
 }
 
 // pairSpans styles one `key = value` line: property key, punctuation

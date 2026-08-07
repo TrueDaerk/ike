@@ -315,6 +315,17 @@ type Editor struct {
 	// `0x1F4  = 500` — and a permission/flag value's octal or hex one
 	// (`420  = 0o644`); the bare literal reappears under the caret.
 	RadixHints bool `toml:"radix_hints"`
+	// CIDRHints renders a CIDR prefix's address range and size after it
+	// (#1653) — `10.0.0.0/8  10.0.0.0–10.255.255.255, 16,777,214 hosts` —
+	// in config formats, .http files and string literals in code; the bare
+	// literal reappears under the caret.
+	CIDRHints bool `toml:"cidr_hints"`
+	// IDNHints renders a punycode hostname's decoded Unicode form after it
+	// (#1653) — `xn--mnchen-3ya.de  münchen.de` — with a decoded name
+	// carrying the homograph shape (mixed scripts in one label, or a whole
+	// label of Latin look-alikes) drawn in the warning colour; the raw name
+	// reappears under the caret.
+	IDNHints bool `toml:"idn_hints"`
 	// SecretMasking renders the value of a secret-suspect key in a dotenv
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.

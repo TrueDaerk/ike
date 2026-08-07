@@ -100,6 +100,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("view.toggleDurationHints", "Toggle Duration Hints", "toggle_duration_hints", ""),
 			action("view.toggleDigitGrouping", "Toggle Digit Grouping", "toggle_digit_grouping", ""),
 			action("view.toggleRadixHints", "Toggle Radix Hints", "toggle_radix_hints", ""),
+			// Network-literal hints (#1653): per-view toggles over the
+			// editor.cidr_hints / idn_hints config defaults.
+			action("view.toggleCIDRHints", "Toggle CIDR Hints", "toggle_cidr_hints", ""),
+			action("view.toggleIDNHints", "Toggle IDN Hints", "toggle_idn_hints", ""),
 			// Secret masking (#1623): dotenv values whose key names a secret
 			// render as ••••; per-view toggle over editor.secret_masking.
 			action("view.toggleSecretMasking", "Toggle Secret Masking", "toggle_secret_masking", ""),

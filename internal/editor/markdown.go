@@ -10,6 +10,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/highlight"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/internal/secret"
 )
@@ -58,6 +59,9 @@ var decodeCaptures = []string{
 	numhint.DurationCapture,
 	numhint.GroupCapture,
 	numhint.RadixCapture,
+	nethint.CIDRCapture,
+	nethint.IDNCapture,
+	nethint.IDNMixedCapture,
 	secret.Capture,
 }
 

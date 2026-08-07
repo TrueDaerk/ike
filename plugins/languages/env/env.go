@@ -11,6 +11,7 @@ package langenv
 import (
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
@@ -59,7 +60,9 @@ func envSpans(lines []string) []lang.Span {
 	}
 	// Number-readability hints (#1627): byte sizes, durations, digit grouping
 	// and radix readings over the `KEY=value` pairs.
-	return append(out, numhint.Spans(lines)...)
+	out = append(out, numhint.Spans(lines)...)
+	// Network literals (#1653): CIDR prefixes and punycode hosts in values.
+	return append(out, nethint.Spans(lines)...)
 }
 
 // entry is one parsed assignment line, in rune columns. It is the single

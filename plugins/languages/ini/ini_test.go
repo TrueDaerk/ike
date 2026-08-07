@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 )
 
@@ -100,5 +101,24 @@ func TestININumberHints(t *testing.T) {
 	}
 	if hint == nil || hint.Replace != "64 KiB" {
 		t.Errorf("spans = %+v, want a 64 KiB size hint", spans)
+	}
+}
+
+// TestININetworkHints (#1653): a CIDR prefix in an ini value carries its
+// range and host count.
+func TestININetworkHints(t *testing.T) {
+	l, ok := lang.ByID("ini")
+	if !ok || l.Spans == nil {
+		t.Fatal("ini: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"allow = 172.16.0.0/12"})
+	var hint *lang.Span
+	for i, s := range spans {
+		if s.Capture == nethint.CIDRCapture {
+			hint = &spans[i]
+		}
+	}
+	if hint == nil || hint.Replace != "172.16.0.0/12"+nethint.Gap+"172.16.0.0–172.31.255.255, 1,048,574 hosts" {
+		t.Errorf("spans = %+v, want the CIDR hint", spans)
 	}
 }

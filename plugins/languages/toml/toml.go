@@ -11,6 +11,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/plugins/languages/register"
 )
@@ -46,5 +47,6 @@ func init() {
 // their schedule hint (#1624) and numeric literals their readability hints
 // (#1627).
 func tomlSpans(lines []string) []lang.Span {
-	return append(cronhint.QuotedSpans(lines), numhint.Spans(lines)...)
+	out := append(cronhint.QuotedSpans(lines), numhint.Spans(lines)...)
+	return append(out, nethint.Spans(lines)...)
 }

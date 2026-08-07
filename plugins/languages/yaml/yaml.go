@@ -21,6 +21,7 @@ import (
 	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/internal/yamlanchor"
 	"ike/plugins/languages/register"
@@ -66,5 +67,6 @@ func init() {
 func yamlSpans(lines []string) []lang.Span {
 	out := append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
 	out = append(out, numhint.Spans(lines)...)
+	out = append(out, nethint.Spans(lines)...)
 	return append(out, yamlanchor.Spans(lines)...)
 }

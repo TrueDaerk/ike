@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 )
 
@@ -94,5 +95,27 @@ func TestEnvNumberHints(t *testing.T) {
 	}
 	if hint == nil || hint.Replace != "5 MiB" {
 		t.Errorf("spans = %+v, want a 5 MiB size hint", spans)
+	}
+}
+
+// TestEnvNetworkHints (#1653): a punycode host in a dotenv value decodes to
+// its Unicode form, homographs taking the warning capture.
+func TestEnvNetworkHints(t *testing.T) {
+	l, ok := lang.ByID("dotenv")
+	if !ok || l.Spans == nil {
+		t.Fatal("dotenv: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"API_HOST=xn--80ak6aa92e.com"})
+	var hint *lang.Span
+	for i, s := range spans {
+		if s.Capture == nethint.IDNMixedCapture {
+			hint = &spans[i]
+		}
+	}
+	if hint == nil {
+		t.Fatalf("spans = %+v, want a homograph hint", spans)
+	}
+	if want := "xn--80ak6aa92e.com" + nethint.Gap + "аррӏе.com"; hint.Replace != want {
+		t.Errorf("hint = %q, want %q", hint.Replace, want)
 	}
 }

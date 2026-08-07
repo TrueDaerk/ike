@@ -5,6 +5,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 )
 
@@ -135,5 +136,24 @@ func TestJSONNumberHints(t *testing.T) {
 		if s.Capture == numhint.SizeCapture || s.Capture == numhint.GroupCapture {
 			t.Errorf("a decoded timestamp must not also carry a number hint: %+v", s)
 		}
+	}
+}
+
+// TestJSONNetworkHints (#1653): a CIDR prefix in a JSON value carries its
+// range and host count.
+func TestJSONNetworkHints(t *testing.T) {
+	l, ok := lang.ByID("json")
+	if !ok || l.Spans == nil {
+		t.Fatal("json: no Spans producer registered")
+	}
+	spans := l.Spans([]string{`{"cidr": "10.0.0.0/8"}`})
+	var hint *lang.Span
+	for i, s := range spans {
+		if s.Capture == nethint.CIDRCapture {
+			hint = &spans[i]
+		}
+	}
+	if hint == nil || hint.Replace != "10.0.0.0/8"+nethint.Gap+"10.0.0.0–10.255.255.255, 16,777,214 hosts" {
+		t.Errorf("spans = %+v, want the CIDR hint", spans)
 	}
 }

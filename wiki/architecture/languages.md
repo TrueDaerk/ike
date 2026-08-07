@@ -566,7 +566,12 @@ schedule hints) — which the `yaml`, `json` and `toml` producers share for the
 of `internal/numhint` (#1627) ride the same seam in every config format —
 `json`, `yaml`, `toml`, `ini` and `dotenv` all append them, JSON through
 `SpansExcept` so an epoch stand-in keeps its digits (see
-`/architecture/editor.md`, number-readability hints). The `yaml` producer also
+`/architecture/editor.md`, number-readability hints). The network-literal
+hints of `internal/nethint` (#1653) ride it too, in two shapes: `Spans` scans
+whole lines for the config formats and `.http`, `QuotedSpans` scans string
+literals only for `go`, the `javascript`/`typescript` pair and `python` —
+where a bare `10.0.0.0/8` would be arithmetic (see
+`/architecture/editor.md`, network-literal hints). The `yaml` producer also
 appends the anchor/alias pair coloring of `internal/yamlanchor` (#1629): every
 `&name` and its `*name` aliases share one name-hashed rainbow slot, an alias
 no anchor defines carries `anchor.unresolved` (rendered as an error, see

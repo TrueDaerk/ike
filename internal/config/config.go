@@ -146,6 +146,8 @@ func (c *Config) Flat() map[string]string {
 	put("editor.duration_hints", c.Editor.DurationHints)
 	put("editor.digit_grouping", c.Editor.DigitGrouping)
 	put("editor.radix_hints", c.Editor.RadixHints)
+	put("editor.cidr_hints", c.Editor.CIDRHints)
+	put("editor.idn_hints", c.Editor.IDNHints)
 	put("editor.secret_masking", c.Editor.SecretMasking)
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.id_colors", c.Editor.IDColors)

@@ -9,6 +9,7 @@ import (
 	"ike/internal/httpfile"
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 )
 
 // spans.go produces the Go-computed highlight spans for .http buffers
@@ -33,6 +34,11 @@ func querySpans(lines []string) []lang.Span {
 	// base64url segments whose first two decode to JSON — so scanning
 	// everything cannot mis-dim ordinary text.
 	out := jwt.Spans(lines)
+	// Network literals (#1653): a punycode authority in a request target and
+	// a CIDR prefix in a header or body value. Scanned over the whole buffer
+	// for the same reason JWTs are — a host shows up in a target, an
+	// X-Forwarded-For header and a body alike.
+	out = append(out, nethint.Spans(lines)...)
 	for _, r := range f.Requests {
 		li := r.Line - 1
 		if li < 0 || li >= len(lines) {

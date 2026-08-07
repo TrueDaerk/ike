@@ -19,6 +19,7 @@ import (
 	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/internal/secret"
 )
@@ -51,6 +52,12 @@ func (m Model) decodeOn(capture string) bool {
 		return m.digitGroup
 	case numhint.RadixCapture:
 		return m.radixHints
+	case nethint.CIDRCapture:
+		return m.cidrHints
+	case nethint.IDNCapture, nethint.IDNMixedCapture:
+		// One family in two colours (#1653): the homograph capture is the
+		// same decode, drawn in the warning colour, so it shares the toggle.
+		return m.idnHints
 	}
 	return false
 }

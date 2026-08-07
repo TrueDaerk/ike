@@ -6,6 +6,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 )
 
@@ -91,5 +92,30 @@ func TestYAMLNumberHints(t *testing.T) {
 	spans := l.Spans([]string{"limits:", "  max_body_size: 10485760"})
 	if len(spans) != 1 || spans[0].Capture != numhint.SizeCapture || spans[0].Replace != "10 MiB" {
 		t.Errorf("spans = %+v, want one 10 MiB size hint", spans)
+	}
+}
+
+// TestYAMLNetworkHints (#1653): a CIDR prefix in a YAML value carries its
+// range, a punycode host its decoded name.
+func TestYAMLNetworkHints(t *testing.T) {
+	l, ok := lang.ByID("yaml")
+	if !ok || l.Spans == nil {
+		t.Fatal("yaml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"podCIDR: 10.244.0.0/16", "host: xn--mnchen-3ya.de"})
+	var cidr, idn *lang.Span
+	for i, s := range spans {
+		switch s.Capture {
+		case nethint.CIDRCapture:
+			cidr = &spans[i]
+		case nethint.IDNCapture:
+			idn = &spans[i]
+		}
+	}
+	if cidr == nil || cidr.Replace != "10.244.0.0/16"+nethint.Gap+"10.244.0.0–10.244.255.255, 65,534 hosts" {
+		t.Errorf("spans = %+v, want the CIDR hint", spans)
+	}
+	if idn == nil || idn.Replace != "xn--mnchen-3ya.de"+nethint.Gap+"münchen.de" {
+		t.Errorf("spans = %+v, want the IDN hint", spans)
 	}
 }
