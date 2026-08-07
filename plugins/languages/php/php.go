@@ -5,6 +5,7 @@ package langphp
 import (
 	_ "embed"
 
+	"ike/internal/consthint"
 	"ike/internal/lang"
 	"ike/plugins/languages/register"
 )
@@ -21,7 +22,7 @@ func init() {
 		Extensions: []string{"php", "phtml"},
 		// Shebang fallback (#893): extensionless CLI scripts.
 		Interpreters: []string{"php"},
-		Grammar:    grammar(),
+		Grammar:      grammar(),
 		Server: &lang.ServerSpec{
 			Language:    "php",
 			Command:     "intelephense",
@@ -29,7 +30,11 @@ func init() {
 			RootMarkers: []string{"composer.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "intelephense"},
 		},
-		Toolchain:    toolchain{},
+		Toolchain: toolchain{},
+		// Constant conceals (#1701): `const` and `define()` declarations get
+		// unit readings derived from the constant's name, with pure literal
+		// arithmetic evaluated first.
+		Spans:        phpSpans,
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
@@ -52,3 +57,6 @@ func init() {
 		Template: "<?php\n\n",
 	})
 }
+
+// phpSpans is the lang.Language.Spans hook: the constant conceals (#1701).
+func phpSpans(lines []string) []lang.Span { return consthint.PHPSpans(lines) }

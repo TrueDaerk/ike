@@ -1753,6 +1753,50 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   token that follows a separator, so a query key, a header name, a logfmt key
   or a JSON member name — numeric or not — is never concealed.
 
+## Constant conceals in code (#1701)
+
+The number families extend into source code: a **constant assignment** in a
+Python, Go or PHP buffer reads by its name exactly like a config value reads
+by its key — `MAX_BYTES = 10 * 1024 * 1024` draws as `10 MiB`,
+`TIMEOUT_MS = 30 * 1000` as `30s` — with a pure literal-arithmetic right-hand
+side **evaluated first**. No new captures, toggles or settings: the spans
+carry the numhint/epochtime captures, so they ride the existing conceal
+channels, obey the same toggles, reveal under and next to the caret
+(#1594/#1686) and honour the `editor.number_hint_units` mapping (#1685) over
+the constant's name.
+
+Recognition and evaluation live in `internal/consthint`, a leaf package over
+`lang.Span`, `numhint` and `epochtime`, appended to the `Spans` hooks of the
+three language plugins. Each language keys on what marks a constant there:
+
+- **Python** — a CONST_CASE name (`MAX_BYTES`, `_BUFFER_SIZE`), optionally
+  annotated (`RETRIES: Final = 3`); lowercase assignments never conceal.
+- **Go** — the `const` keyword: single-line declarations and the lines of a
+  `const ( … )` block, with an optional type between name and `=`.
+- **PHP** — `const NAME = …` (with visibility/`final` modifiers and an
+  optional type) and `define('NAME', …)`.
+
+The **evaluator** (`consthint.Eval`) accepts number literals — decimal, `0x`,
+`0o`, `0b`, digit-separating underscores, the Go/PHP leading-zero octal — and
+the side-effect-free integer operators (`+ - * / % << >> & | ^`, parens,
+unary sign, Python's `//`, Go's `&^`) over `math/big`. Anything else — an
+identifier (`iota`, `self::BASE`), a call, a float, a string — fails the
+parse and the source stays raw, which is the safety rule. Semantics the
+languages disagree on are refused rather than guessed: division must be exact
+(Go truncates where Python floats), modulo/bitwise/shift operands must be
+non-negative, shift counts and intermediate magnitudes are capped, and the
+result must fit an uint64. Precedence is per-flavor — Go binds `<<`/`&` at
+the multiplicative level where Python and PHP use the C ladder, so `1<<4 + 1`
+is 17 in a Go buffer and 32 in a Python one.
+
+Rendering runs the numhint ladder over the computed value: the user's field
+mapping first (final, including `none`), the built-in key words second, the
+value's shape third (a 1024-multiple as bytes, anything else with its digits
+grouped — a computed expression is concealed even when small, `6 * 7` as
+`42`). A single prefixed literal (`0xCAFE`, `0755`) gains its decimal reading
+appended instead, the same rule the config scan applies to hex; a stand-in
+identical to the source (`10_000_000` regrouped) is dropped as noise.
+
 ## Network-literal hints (#1653)
 
 The two network literals nobody reads by eye draw with their meaning appended,

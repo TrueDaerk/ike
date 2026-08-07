@@ -304,6 +304,35 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 	return Hint{}, false
 }
 
+// LiteralHint is literalHint exported for the code-constant producer (#1701):
+// a constant assignment's single-literal right-hand side reads exactly like a
+// keyed config value — user mapping first, built-in key words second, the
+// value's shape third.
+func LiteralHint(li, start, end int, text, key string) (Hint, bool) {
+	return literalHint(li, start, end, text, key)
+}
+
+// KeyUnit returns the unit the built-in key heuristics read off a field name —
+// the reading literalHint applies when no user mapping covers the key —
+// exported for the code-constant producer (#1701), which renders computed
+// expression values and has no literal to hand literalHint. The order mirrors
+// literalHint: radix, byte size, duration.
+func KeyUnit(key string) (Unit, bool) {
+	switch radixOf(key) {
+	case radixOctal:
+		return Unit{Kind: UnitOctal}, true
+	case radixHex:
+		return Unit{Kind: UnitHex}, true
+	}
+	if sizeKey(key) {
+		return Unit{Kind: UnitBytes}, true
+	}
+	if base, ok := durationBase(key); ok {
+		return Unit{Kind: UnitDuration, Base: base}, true
+	}
+	return Unit{}, false
+}
+
 // mappedSpan renders a literal in the unit its field name is mapped to
 // (#1685). The mapping is the user's word on the field, so it is never
 // second-guessed: only that family is tried, and a value the unit says nothing

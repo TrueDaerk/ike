@@ -8,6 +8,7 @@ package langpython
 import (
 	_ "embed"
 
+	"ike/internal/consthint"
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/permhint"
@@ -60,8 +61,10 @@ func init() {
 }
 
 // pythonSpans is the lang.Language.Spans hook: the network-literal hints
-// (#1653) inside string literals plus the permission hints (#1656) inside the
-// argument lists of the mode APIs.
+// (#1653) inside string literals, the permission hints (#1656) inside the
+// argument lists of the mode APIs, and the constant conceals (#1701) on
+// CONST_CASE assignments.
 func pythonSpans(lines []string) []lang.Span {
-	return append(nethint.QuotedSpans(lines), permhint.PythonSpans(lines)...)
+	out := append(nethint.QuotedSpans(lines), permhint.PythonSpans(lines)...)
+	return append(out, consthint.PythonSpans(lines)...)
 }

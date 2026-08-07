@@ -6,6 +6,7 @@ import (
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/numhint"
 	"ike/internal/permhint"
 )
 
@@ -64,5 +65,25 @@ func TestGoPermissionSpans(t *testing.T) {
 	}
 	if want := "0o644" + permhint.Gap + "rw-r--r--"; spans[0].Replace != want {
 		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
+	}
+}
+
+// TestGoConstantSpans (#1701): a const declaration whose right-hand side is
+// pure literal arithmetic evaluates and conceals in the unit the constant's
+// name carries; an iota line stays raw.
+func TestGoConstantSpans(t *testing.T) {
+	l, ok := lang.ByID("go")
+	if !ok || l.Spans == nil {
+		t.Fatal("go: no Spans producer registered")
+	}
+	spans := l.Spans([]string{
+		"const maxUploadBytes = 10 << 20",
+		"const kindFirst = iota",
+	})
+	if len(spans) != 1 || spans[0].Capture != numhint.SizeCapture || spans[0].Line != 0 {
+		t.Fatalf("spans = %+v, want one byte-size conceal on line 0", spans)
+	}
+	if spans[0].Replace != "10 MiB" {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, "10 MiB")
 	}
 }

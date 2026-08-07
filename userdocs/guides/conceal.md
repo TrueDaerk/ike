@@ -159,6 +159,38 @@ stays bare rather than falling through to another family, and `none` silences
 every stand-in over that field — timestamp decoding included, which is exactly
 what `session_id` needed above.
 
+### Constants in code
+
+The same families reach into Python, Go and PHP source: a **constant
+assignment** reads by its name exactly like a config value reads by its key —
+including your `number_hint_units` mapping — and a right-hand side that is
+pure literal arithmetic is **evaluated first**:
+
+```python
+MAX_BYTES = 10 * 1024 * 1024      # draws as 10 MiB
+TIMEOUT_MS = 30 * 1000            # draws as 30s
+SECONDS_PER_DAY = 60 * 60 * 24    # draws as 86_400
+```
+
+What counts as a constant is what marks one in each language: a CONST_CASE
+name in Python (`MAX_BYTES`, annotated forms like `RETRIES: Final = 3`
+included — lowercase assignments never conceal), a `const` declaration in Go
+(single-line or inside a `const ( … )` block, any name case), and `const` or
+`define('NAME', …)` in PHP.
+
+The evaluator is deliberately strict: number literals and the side-effect-free
+integer operators only (`+ - * / % << >> & | ^`, parentheses, unary sign),
+computed with each language's own precedence and literal syntax. An
+expression containing an identifier (`iota`, `self::BASE`), a call, a float
+or a string stays raw, as does anything the languages disagree on — inexact
+division, negative remainders — or that overflows. A single `0x`/`0o`/`0b`
+literal gains its decimal reading appended instead (`0xCAFE  = 51_966`), the
+same way hex reads in config files.
+
+These conceals ride the same channels as the config hints: the same four
+settings and per-view toggles gate them, and the caret reveals the raw
+expression as everywhere else.
+
 ## Escaped text
 
 Three families decode escapes in place, each with its own switch:
