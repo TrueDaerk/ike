@@ -231,6 +231,7 @@ bring their own.
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |
 | Toggle Markdown Rendering | `view.toggleMarkdownRendering` | — | — | `editor` pane |
 | Toggle PEM Summary | `view.togglePemSummary` | — | — | `editor` pane |
+| Toggle Permission Hints | `view.togglePermissionHints` | — | — | `editor` pane |
 | Toggle Radix Hints | `view.toggleRadixHints` | — | — | `editor` pane |
 | Toggle Secret Masking | `view.toggleSecretMasking` | — | — | `editor` pane |
 | Toggle Timestamp Decoding | `view.toggleTimestampDecoding` | — | — | `editor` pane |

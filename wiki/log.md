@@ -1,5 +1,28 @@
 # Log
 
+## 2026-08-07 (editor: chmod octal permission hints, #1656)
+
+- An octal file mode now draws with its symbolic form appended —
+  `chmod 755 build.sh` renders as `755  rwxr-xr-x`, `0644` as `rw-r--r--` —
+  with the special bits decoded the way `ls` prints them: `4755` →
+  `rwsr-xr-x`, `2775` → `rwxrwsr-x`, `1777` → `rwxrwxrwt`, and the capital
+  `S`/`T` forms when the special bit has no execute bit under it.
+- The literal carries no syntax of its own, so the *carrying context* decides:
+  `chmod`/`install -m`/`mkdir -m` in shell, `COPY/ADD --chmod=` and `RUN`
+  lines in Dockerfiles, the mode arguments of `os.Chmod`/`os.WriteFile`/
+  `os.FileMode` in Go and `os.chmod`/`os.makedirs` in Python, and
+  `mode:`/`defaultMode:` keys in YAML and Ansible. A bare port or year is
+  never decoded.
+- Code and YAML additionally require the octal spelling (`0644`, `0o644`): a
+  YAML `mode: 644` is the decimal 644 Ansible really reads, so it keeps the
+  #1627 radix warning (`= 01204`) instead — `yamlSpans` feeds the permission
+  spans to `numhint.SpansExcept` so the two families never overlap.
+- Rides the #1585 stand-in channel and reveals positionally (#1594). Decoding
+  and context scan live in `internal/permhint`; gated by
+  `editor.permission_hints` / `view.togglePermissionHints`, default on. First
+  `Spans` hook for the `shell`, `dockerfile` and `ansible` languages. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-07 (editor: clickable URLs via OSC 8 hyperlinks, #1655)
 
 - URLs in buffers are real terminal links: every display cell of a bare

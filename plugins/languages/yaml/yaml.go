@@ -23,6 +23,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/permhint"
 	"ike/internal/yamlanchor"
 	"ike/plugins/languages/register"
 )
@@ -52,7 +53,8 @@ func init() {
 		// block conceal as the decoded text when the payload is printable.
 		// Cron hints (#1624): a `cron:`/`schedule:` value — the CI workflow
 		// case — and any quoted scalar of cron shape carry their English
-		// reading after the expression.
+		// reading after the expression. Permission hints (#1656): an octal
+		// `mode:`/`defaultMode:` value carries its symbolic rwx form.
 		Spans: yamlSpans,
 		// Shell in CI `run:` blocks (#1625): step scripts highlight with the
 		// shell grammar; see regions.go for the gate and extent rules.
@@ -61,12 +63,21 @@ func init() {
 }
 
 // yamlSpans is the lang.Language.Spans hook: base64 Secret values decode
-// (#1620), cron expressions gain their schedule hint (#1624), numeric
-// literals their readability hints (#1627), and anchors/aliases their
-// name-hashed pair coloring — unresolved aliases the error capture (#1629).
+// (#1620), cron expressions gain their schedule hint (#1624), octal file modes
+// their symbolic form (#1656), numeric literals their readability hints
+// (#1627), and anchors/aliases their name-hashed pair coloring — unresolved
+// aliases the error capture (#1629).
+//
+// The permission hints run before the number hints and take their columns:
+// both read a `mode:` key, and where a value is written as octal (`mode: 0644`)
+// the symbolic `rw-r--r--` is the reading, not the radix conversion. A decimal
+// `mode: 644` carries no permission hint by construction, so the number hints
+// keep it and still warn with `= 01204`.
 func yamlSpans(lines []string) []lang.Span {
 	out := append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
-	out = append(out, numhint.Spans(lines)...)
+	perms := permhint.YAMLSpans(lines)
+	out = append(out, perms...)
+	out = append(out, numhint.SpansExcept(lines, perms)...)
 	out = append(out, nethint.Spans(lines)...)
 	return append(out, yamlanchor.Spans(lines)...)
 }

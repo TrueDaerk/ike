@@ -6,6 +6,7 @@ import (
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/permhint"
 )
 
 // TestGoUnicodeEscapeSpans (#1620): the go language registers the
@@ -46,5 +47,22 @@ func TestGoNetworkHints(t *testing.T) {
 	}
 	if want := "10.0.0.0/24" + nethint.Gap + "10.0.0.0–10.0.0.255, 254 hosts"; hint.Replace != want {
 		t.Errorf("hint = %q, want %q", hint.Replace, want)
+	}
+}
+
+// TestGoPermissionSpans (#1656): an octal literal in the argument list of a
+// mode API carries its symbolic form; a decimal one is not a Go octal literal
+// and gets nothing.
+func TestGoPermissionSpans(t *testing.T) {
+	l, ok := lang.ByPath("/p/main.go")
+	if !ok || l.Spans == nil {
+		t.Fatal("go: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"\tos.WriteFile(path, data, 0o644)", "\tport := 8080"})
+	if len(spans) != 1 || spans[0].Capture != permhint.Capture || spans[0].Line != 0 {
+		t.Fatalf("spans = %+v, want one permission hint on line 0", spans)
+	}
+	if want := "0o644" + permhint.Gap + "rw-r--r--"; spans[0].Replace != want {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
 	}
 }

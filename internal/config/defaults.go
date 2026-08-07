@@ -95,6 +95,7 @@ func defaults() *Config {
 			DurationHints:          true,
 			DigitGrouping:          true,
 			RadixHints:             true,
+			PermissionHints:        true,
 			CIDRHints:              true,
 			IDNHints:               true,
 			SecretMasking:          true,

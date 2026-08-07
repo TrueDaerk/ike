@@ -12,6 +12,7 @@ import (
 	_ "embed"
 
 	"ike/internal/lang"
+	"ike/internal/permhint"
 	"ike/plugins/languages/register"
 )
 
@@ -41,6 +42,9 @@ func init() {
 				{Binary: "shellcheck", Purpose: "shell diagnostics", Install: "brew install shellcheck"},
 			},
 		},
+		// Permission hints (#1656): `chmod`'s mode operand and the `-m` value
+		// of `install`/`mkdir` draw their symbolic rwx form.
+		Spans:       permhint.ShellSpans,
 		LineComment: "#",
 		IndentAfter: []string{"then", "do", "{"},
 		// Sticky scopes + folding (#168, #144).

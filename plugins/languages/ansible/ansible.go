@@ -48,6 +48,9 @@ func init() {
 				{Binary: "ansible-lint", Purpose: "ansible lint diagnostics", Install: "pipx install ansible-lint"},
 			},
 		},
+		// Ansible playbooks are YAML: the same span hook applies, and the
+		// `mode:` permission hints (#1656) are worth most exactly here.
+		Spans:       yaml.Spans,
 		LineComment: "#",
 		IndentAfter: yaml.IndentAfter,
 		ScopeNodes:  yaml.ScopeNodes,

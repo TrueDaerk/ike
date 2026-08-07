@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/permhint"
 )
 
 // TestDockerfileRegistered guards #896: exact base names (Dockerfile,
@@ -39,5 +40,21 @@ func TestDockerfileRegistered(t *testing.T) {
 	line, _, ok := lang.Comments("/p/Dockerfile")
 	if !ok || line != "#" {
 		t.Errorf("line comment = %q/%v, want #", line, ok)
+	}
+}
+
+// TestDockerfilePermissionHints (#1656): the Spans hook is wired, so the
+// --chmod= flag of COPY carries its symbolic form.
+func TestDockerfilePermissionHints(t *testing.T) {
+	l, ok := lang.ByPath("/p/Dockerfile")
+	if !ok || l.Spans == nil {
+		t.Fatal("dockerfile: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"FROM alpine", "COPY --chmod=0755 entrypoint.sh /"})
+	if len(spans) != 1 || spans[0].Line != 1 {
+		t.Fatalf("spans = %+v, want one on line 1", spans)
+	}
+	if want := "0755" + permhint.Gap + "rwxr-xr-x"; spans[0].Replace != want {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
 	}
 }
