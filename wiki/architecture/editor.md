@@ -806,6 +806,31 @@ each over the shared resolver and each a single undo unit:
   many times, and the cursor lands on the range's last line at its first
   non-blank.
 
+### `:sort` (`sort.go`)
+
+`:[range]sort[!] [flags]` (short form `:sor`) reorders the range's lines. It is
+the one range command whose **default range is the whole buffer** instead of the
+current line, matching vim — sorting one line is never what was meant.
+
+- **Flags:** `u` drops duplicate lines, `n` compares the first decimal number in
+  the line (a directly preceding `-` is part of it; lines with no number sort
+  before every numbered line), `i` compares case-insensitively. They combine
+  (`:sort un`), and an unknown letter is an error that leaves the buffer alone.
+  `!` inverts the comparison. Vim's `r` flag and `/pat/` key are not supported.
+- **Stable:** lines whose keys compare equal keep their original order, and `!`
+  inverts the *comparator* rather than reversing the result, so stability holds
+  in both directions. Lines are decorated with their keys once before sorting,
+  so the comparator allocates nothing.
+- **`u` compares whole lines** (case-folded under `i`), not the sort key, and
+  only drops a line equal to the one before it — so under `n` two lines sharing
+  a number are both kept.
+- **One undo unit:** the range is rewritten as a *single* `buffer.Edit` spanning
+  `[start, end]`, so `u` reverts the whole sort and the deletion side of `u` is
+  part of the same edit. An already-sorted range is a no-op that records
+  nothing (the buffer never goes dirty) and reports *already sorted*; otherwise
+  the message is *sorted N lines[, M duplicates removed]*. The cursor lands on
+  the range's first line.
+
 ## Comment toggling (Roadmap 0120)
 
 `editor.commentLine` (cmd+7, alias `cmd+k cmd+c`) toggles the language's line
