@@ -65,6 +65,30 @@ func TestTimestampCaretRevealsRaw(t *testing.T) {
 	}
 }
 
+// TestTimestampAdjacentCaretRevealsRaw (#1686): the epoch number is a value
+// conceal, so the columns directly before ([3,13) starts at 3) and directly
+// after it reveal the raw digits as well — one column out, no further.
+func TestTimestampAdjacentCaretRevealsRaw(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		col  int
+		raw  bool
+	}{
+		{"directly before", 2, true},
+		{"directly after", 13, true},
+		{"two before", 1, false},
+		{"two after", 14, false},
+	} {
+		m := stamped(t)
+		m.cursor = buffer.Position{Line: 0, Col: tc.col}
+		view := plainView(m)
+		if got := strings.Contains(view, "1722945600"); got != tc.raw {
+			t.Errorf("caret %s (col %d): raw digits shown = %v, want %v, view:\n%s",
+				tc.name, tc.col, got, tc.raw, view)
+		}
+	}
+}
+
 // TestTimestampToggle: view.toggleTimestampDecoding switches the layer off —
 // and back on — for this view.
 func TestTimestampToggle(t *testing.T) {

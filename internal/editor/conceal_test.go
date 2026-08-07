@@ -61,6 +61,21 @@ func TestConcealReplaceCaretPositionRaw(t *testing.T) {
 	}
 }
 
+// TestConcealAdjacentCaretKeepsStandIn (#1686): the one-column widening is for
+// the value families only — a generic stand-in conceal keeps the strict
+// inside-only rule of #1594, so the caret next to it changes nothing.
+func TestConcealAdjacentCaretKeepsStandIn(t *testing.T) {
+	m, path := mdLoaded(t, "a %20 b\nplain\n")
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: replaceSpan(0)})
+	m = mm
+	for _, col := range []int{1, 5} {
+		m.cursor = buffer.Position{Line: 0, Col: col}
+		if view := plainView(m); strings.Contains(view, "%20") {
+			t.Errorf("caret at col %d is outside the range — the stand-in must stay", col)
+		}
+	}
+}
+
 // TestConcealSelectionRevealsRaw: a visual selection touching the line shows
 // raw source — the "selected for inspection" half of #1585.
 func TestConcealSelectionRevealsRaw(t *testing.T) {

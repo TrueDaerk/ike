@@ -36,11 +36,15 @@ import (
 // non-empty repl renders as a stand-in for the source runes. standIn marks a
 // decoded value ("%20" displays as " ", #1585) — tinted so it reads as a
 // stand-in, not buffer content; the sv separator padding (#1589) is plain
-// spacing and renders untinted.
+// spacing and renders untinted. adjacent widens the positional reveal (#1594)
+// by one column on each side, so a caret directly before or after the range
+// reveals it too (#1686) — set for the value families in
+// adjacentRevealCaptures.
 type concealRange struct {
 	start, end int
 	repl       string
 	standIn    bool
+	adjacent   bool
 }
 
 // decodeCaptures are the capture names of the decode conceal families that
@@ -69,6 +73,32 @@ var decodeCaptures = []string{
 
 func isDecodeCapture(capture string) bool {
 	for _, c := range decodeCaptures {
+		if c == capture {
+			return true
+		}
+	}
+	return false
+}
+
+// adjacentRevealCaptures are the decode families whose ranges also reveal when
+// the caret sits directly before or directly after them (#1686), not only
+// inside (#1594). These are the value conceals — decoded epoch numbers (#1618)
+// and the number-readability hints (#1627): appending or prepending digits
+// puts the caret next to the literal rather than in it, and typing against a
+// stand-in without seeing the real value is confusing. Marker chrome (#881),
+// masked secrets (#1623) and the sv separator padding (#1589) keep the strict
+// inside-only rule — widening those would flicker the whole line while moving
+// through it.
+var adjacentRevealCaptures = []string{
+	epochtime.Capture,
+	numhint.SizeCapture,
+	numhint.DurationCapture,
+	numhint.GroupCapture,
+	numhint.RadixCapture,
+}
+
+func isAdjacentRevealCapture(capture string) bool {
+	for _, c := range adjacentRevealCaptures {
 		if c == capture {
 			return true
 		}
@@ -137,7 +167,14 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	for _, c := range decodeCaptures {
 		if ds := m.decodes[c][line]; m.decodeOn(c) && len(ds) > 0 {
 			// Never alias m.conceal's backing array when combining.
+			base := len(ranges)
 			ranges = append(append([]concealRange(nil), ranges...), ds...)
+			if isAdjacentRevealCapture(c) {
+				// The copies above are ours to mark; m.decodes stays untouched.
+				for i := base; i < len(ranges); i++ {
+					ranges[i].adjacent = true
+				}
+			}
 		}
 	}
 	if sv := m.svConcealRanges(line); len(sv) > 0 {
@@ -152,11 +189,18 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	}
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len([]rune(m.buf.Line(line))))
 	inRange := func(r concealRange) bool {
-		if cursorOn && cursorCol >= r.start && cursorCol < r.end {
+		// Caret window: the range itself, widened by one column on each side
+		// for the value families (#1686) so appending/prepending digits shows
+		// the literal being typed against.
+		lo, hi := r.start, r.end
+		if r.adjacent {
+			lo, hi = r.start-1, r.end+1
+		}
+		if cursorOn && cursorCol >= lo && cursorCol < hi {
 			return true
 		}
 		for _, c := range m.carets {
-			if c.pos.Line == line && c.pos.Col >= r.start && c.pos.Col < r.end {
+			if c.pos.Line == line && c.pos.Col >= lo && c.pos.Col < hi {
 				return true
 			}
 		}

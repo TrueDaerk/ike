@@ -71,6 +71,58 @@ func TestNumberHintCaretReveals(t *testing.T) {
 	}
 }
 
+// numHintedTrailing is numHinted with text after the literal, so the column
+// directly after the range ([10, 18)) is a real buffer column.
+func numHintedTrailing(t *testing.T, capture, replace string) Model {
+	t.Helper()
+	m, path := mdLoaded(t, "max_size: 10485760 ok\nplain\n")
+	m.cursor = buffer.Position{Line: 1}
+	spans := []highlight.Span{{
+		Line: 0, StartCol: 10, EndCol: 18, Capture: capture, Replace: replace,
+	}}
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: spans})
+	return mm
+}
+
+// TestNumberHintAdjacentCaretReveals (#1686): the caret directly before or
+// directly after the literal reveals it too — that is where the caret sits
+// while digits are prepended or appended.
+func TestNumberHintAdjacentCaretReveals(t *testing.T) {
+	for _, f := range families {
+		for _, tc := range []struct {
+			name string
+			col  int
+		}{
+			{"directly before", 9},
+			{"directly after", 18},
+		} {
+			m := numHintedTrailing(t, f.capture, f.replace)
+			m.cursor = buffer.Position{Line: 0, Col: tc.col}
+			view := plainView(m)
+			if strings.Contains(view, f.replace) {
+				t.Errorf("%s: caret %s (col %d) must hide the hint", f.name, tc.name, tc.col)
+			}
+			if !strings.Contains(view, "10485760") {
+				t.Errorf("%s: caret %s must show the raw digits, view:\n%s", f.name, tc.name, view)
+			}
+		}
+	}
+}
+
+// TestNumberHintNonAdjacentCaretKeepsHint (#1686): the widening is exactly one
+// column — two columns out the hint is back.
+func TestNumberHintNonAdjacentCaretKeepsHint(t *testing.T) {
+	for _, f := range families {
+		for _, col := range []int{8, 19} {
+			m := numHintedTrailing(t, f.capture, f.replace)
+			m.cursor = buffer.Position{Line: 0, Col: col}
+			if view := plainView(m); !strings.Contains(view, f.replace) {
+				t.Errorf("%s: caret at col %d is not adjacent, hint must stay, view:\n%s", f.name, col, view)
+			}
+		}
+	}
+}
+
 // TestNumberHintToggles: each family switches on its own action, and the other
 // families' actions do not reach it.
 func TestNumberHintToggles(t *testing.T) {
