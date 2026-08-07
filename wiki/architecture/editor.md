@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-07T13:00:00Z
+timestamp: 2026-08-07T14:00:00Z
 ---
 
 # Editor
@@ -1470,7 +1470,11 @@ in `timestamps.go`:
   `2024-08-06 12:00:00Z` (a `.123` fraction is appended when the value carries
   milliseconds). Rendering, the positional caret/selection reveal (#1594) and
   the click/offset remapping are the shared stand-in path: the raw digits are
-  always one motion away, and the buffer never changes.
+  always one motion away, and the buffer never changes. The `timestamp`
+  capture derives from the palette's `number` colour (`decodeSources` in
+  `highlight/theme.go`, #1681) so decoded epochs highlight like the #1627
+  number-hint families; a theme table entry or `theme.captures.timestamp` key
+  overrides it.
 - **Own conceal channel**: `concealSplit` routes `timestamp` stand-ins into
   the decode-family channel map (`decodes`, keyed by capture — shared with the
   #1620 escape families) instead of `conceal`, so `tsDecode` gates them

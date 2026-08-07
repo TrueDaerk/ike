@@ -171,3 +171,29 @@ func TestDiffThemeDerivation(t *testing.T) {
 		t.Error("theme.captures.diff.minus override must win")
 	}
 }
+
+// TestDecodeThemeDerivation (#1681): the timestamp stand-in capture derives
+// from the palette's number colour, so decoded epochs highlight like the
+// number-hint families, and a config override still wins for its slot.
+func TestDecodeThemeDerivation(t *testing.T) {
+	th := NewTheme(nil, nil)
+	number, ok := th.Style("number")
+	if !ok {
+		t.Fatal("default palette must define the number capture")
+	}
+	ts, ok := th.Style("timestamp")
+	if !ok || ts.GetForeground() != number.GetForeground() {
+		t.Error("timestamp must derive from the number color")
+	}
+	th2 := NewTheme(nil, func(key string) (string, bool) {
+		if key == "theme.captures.timestamp" {
+			return "#123456", true
+		}
+		return "", false
+	})
+	got, ok := th2.Style("timestamp")
+	want, _ := NewTheme(map[string]string{"timestamp": "#123456"}, nil).Style("timestamp")
+	if !ok || got.GetForeground() != want.GetForeground() {
+		t.Error("theme.captures.timestamp override must win")
+	}
+}
