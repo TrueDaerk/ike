@@ -86,7 +86,7 @@ func NewThemeKeys(defaults map[string]string, get func(key string) (string, bool
 	// derive the same way: their coloring follows the active palette without
 	// every theme declaring the slots. An explicit theme table entry or a
 	// theme.captures.* config key overrides a slot.
-	for _, table := range []map[string]string{diffSources, regexSources} {
+	for _, table := range []map[string]string{diffSources, regexSources, decodeSources} {
 		for key, src := range table {
 			if get != nil {
 				if v, ok := get("theme.captures." + key); ok && v != "" {
@@ -136,6 +136,16 @@ var regexSources = map[string]string{
 	"regex.group.name":  "attribute",
 	"regex.flags":       "attribute",
 	"regex.comment":     "comment",
+}
+
+// decodeSources maps decode stand-in captures to the theme capture they derive
+// from. The epoch-timestamp stand-ins (#1618) predate the number-hint families
+// of #1627, whose dotted names (number.size, …) inherit the number colour via
+// the prefix fallback in Style; the dot-less "timestamp" capture needs an
+// explicit derivation so decoded timestamps read as the numbers they are
+// (#1681) instead of falling through to plain text.
+var decodeSources = map[string]string{
+	"timestamp": "number",
 }
 
 // Style returns the style for a capture and whether a colour was found. Lookup
