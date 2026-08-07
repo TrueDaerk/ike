@@ -59,6 +59,9 @@ diffs any two files against each other. Inside a diff pane:
 | ++f7++ / ++shift+f7++ | Next / previous change |
 | `n` / `N` | The same, vim-style |
 | ++enter++ | Jump the editor to that change |
+| `h` / `l`, ++left++ / ++right++ | Scroll sideways by one column |
+| ++shift+left++ / ++shift+right++ | Scroll sideways by half a column |
+| `0` / `$` | Jump to the first / last column |
 
 ![The diff viewer side by side with the editor](../screenshots/features/diff-viewer.png)
 
@@ -66,6 +69,11 @@ The diff is line-level with intra-line refinement, so a one-character change
 highlights the character rather than the whole line. Side-by-side and unified
 rendering are both available, and the pane persists in your layout like any
 other.
+
+Long lines are never wrapped — they are clipped at the edge of their column and
+you scroll sideways instead, with both sides moving together so the two
+versions of a line always stay on the same row. The horizontal wheel (or
+++shift++ + wheel) does the same as the keys above.
 
 ## The changes tool window
 

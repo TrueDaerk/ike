@@ -6706,11 +6706,20 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				inst.Preview().ScrollBy(lines)
 			}
 		case pane.KindDiff:
-			// The wheel scrolls the diff by visual rows (#60).
-			switch msg.Button {
-			case tea.MouseWheelUp:
+			// The wheel scrolls the diff by visual rows (#60); the horizontal
+			// wheel and shift+wheel shift both sides in lockstep (#1700).
+			switch {
+			case msg.Button == tea.MouseWheelLeft:
+				inst.Diff().ScrollXBy(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				inst.Diff().ScrollXBy(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				inst.Diff().ScrollXBy(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				inst.Diff().ScrollXBy(lines)
+			case msg.Button == tea.MouseWheelUp:
 				inst.Diff().ScrollBy(-lines)
-			case tea.MouseWheelDown:
+			case msg.Button == tea.MouseWheelDown:
 				inst.Diff().ScrollBy(lines)
 			}
 		case pane.KindVCS:
