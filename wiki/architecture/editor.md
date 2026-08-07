@@ -1290,6 +1290,27 @@ emits everything through the Go span seam (#1585); the parsing lives in
   open/close command — it reveals *positionally*, like the conceal layer
   (#1594): while the cursor is anywhere inside the run, every line renders raw
   and the marker disappears; moving out collapses it again.
+- **Inter-line deltas** (#1651, `logline/delta.go`, `logdelta.go`): the elapsed
+  time since the previous line renders as a dimmed `+30s` / `+2.1s` / `+450ms`
+  at the right edge, so a stall reads off the column instead of being computed
+  by eye. `logline.ParseStamp` reuses `Parse` to *locate* the stamp — so every
+  layout the renderer knows is covered, the `time=` pair values and numeric
+  epochs (#1618) included — and decodes only that text; ANSI-styled lines strip
+  first. A line whose stamp does not parse (stack-trace frame, wrapped message,
+  banner) shows no hint but does **not** reset the chain: the next stamped line
+  measures against the last real timestamp. Non-positive differences show
+  nothing either — second-resolution logs would otherwise carry a `+0ms` on
+  most rows — and a dated stamp is never subtracted from a time-only one, whose
+  base day is arbitrary (a time-only file crossing midnight does wrap forward).
+  A delta at or above `logline.GapThreshold` — ten times the file's *median*
+  cadence, floored at one second, so a millisecond trace and a per-minute
+  heartbeat stall at their own scales — renders in `Warning`, bold. The hint
+  splices into the row's right padding exactly like the inline blame
+  annotation, only when the text leaves room for it plus two columns of air, so
+  it never hides buffer content; blame keeps the cursor line to itself, and
+  soft-wrapped rows and collapsed run headers (which carry `×N`) show no hint.
+  The chain is whole-buffer, cached per document version and path
+  (`logDeltaCache`) and skipped for large files, like the repeat runs.
 
 Toggling off shows plain raw source — no styling, escape bytes visible, every
 repeat expanded. The buffer never changes.

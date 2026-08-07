@@ -124,30 +124,45 @@ func appendSpans(out []lang.Span, li int, line string, ctx Context) []lang.Span 
 // claims (#1619) — so they need no second copy of the epoch heuristics.
 func Decode(digits string) (string, bool) { return decode(digits) }
 
-// decode turns a digit run into its UTC rendering. Seconds are 9–10 digits,
-// milliseconds 12–13; a leading zero disqualifies the run (no timestamp is
-// ever written that way, but zero-padded ids are).
+// Time exposes the instant behind a digit run, for callers that need to
+// compute with it rather than display it — the log renderer's inter-line
+// deltas (#1651) parse a numeric header stamp through here. The same range and
+// digit-count guards apply as for Decode.
+func Time(digits string) (time.Time, bool) { return decodeTime(digits) }
+
+// decode turns a digit run into its UTC rendering.
 func decode(digits string) (string, bool) {
-	if len(digits) == 0 || digits[0] == '0' {
+	t, ok := decodeTime(digits)
+	if !ok {
 		return "", false
+	}
+	return format(t), true
+}
+
+// decodeTime turns a digit run into the instant it denotes. Seconds are 9–10
+// digits, milliseconds 12–13; a leading zero disqualifies the run (no
+// timestamp is ever written that way, but zero-padded ids are).
+func decodeTime(digits string) (time.Time, bool) {
+	if len(digits) == 0 || digits[0] == '0' {
+		return time.Time{}, false
 	}
 	n, err := strconv.ParseInt(digits, 10, 64)
 	if err != nil {
-		return "", false
+		return time.Time{}, false
 	}
 	switch len(digits) {
 	case 9, 10:
 		if n < minSeconds || n >= maxSeconds {
-			return "", false
+			return time.Time{}, false
 		}
-		return format(time.Unix(n, 0)), true
+		return time.Unix(n, 0), true
 	case 12, 13:
 		if n < minSeconds*1000 || n >= maxSeconds*1000 {
-			return "", false
+			return time.Time{}, false
 		}
-		return format(time.UnixMilli(n)), true
+		return time.UnixMilli(n), true
 	}
-	return "", false
+	return time.Time{}, false
 }
 
 // format renders the UTC form: "2024-08-06 12:00:00Z", with a millisecond

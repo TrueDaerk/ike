@@ -95,6 +95,15 @@ the run — lines only differing in their timestamps count as repeats. Move the
 caret onto the collapsed line and the whole run comes back, the same positional
 reveal the escapes use.
 
+At the right edge of each line sits the time elapsed since the previous one —
+`+450ms`, `+2.1s`, `+30s` — so stalls and slow operations are visible without
+comparing timestamps by eye. A gap that is large for *this* file (ten times its
+usual cadence) is drawn in the warning colour, so a hang stands out. Lines
+without a readable timestamp show no hint and do not break the chain: the next
+timestamped line still measures from the last real one, which is what makes a
+stack trace's total cost readable. The hint only appears where the line leaves
+room for it, so it never covers text.
+
 Toggle it per view with **Toggle Log Rendering**.
 
 ## Turning it off
