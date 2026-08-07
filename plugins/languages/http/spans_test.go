@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/jwt"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 )
 
 // spanAt returns the first span covering (line, col), like the editor's
@@ -245,5 +246,20 @@ func TestQuerySpansJWTSignature(t *testing.T) {
 	}
 	if got := captureAt(spans, 3, strings.Index(lines[3], "application")); got == jwt.Capture {
 		t.Error("a plain header value must not be taken for a JWT")
+	}
+}
+
+// TestHTTPNetworkHints (#1653): a punycode authority in a request target
+// decodes inline, and a homograph takes the warning capture.
+func TestHTTPNetworkHints(t *testing.T) {
+	lines := []string{"GET https://xn--80ak6aa92e.com/login HTTP/1.1", "X-Allow: 10.0.0.0/8", ""}
+	spans := querySpans(lines)
+	host, ok := spanAt(spans, 0, strings.Index(lines[0], "xn--"))
+	if !ok || host.Capture != nethint.IDNMixedCapture {
+		t.Errorf("host span = %+v, want the homograph capture", host)
+	}
+	cidr, ok := spanAt(spans, 1, strings.Index(lines[1], "10."))
+	if !ok || cidr.Capture != nethint.CIDRCapture {
+		t.Errorf("header span = %+v, want the CIDR capture", cidr)
 	}
 }

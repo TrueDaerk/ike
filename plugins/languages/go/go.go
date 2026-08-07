@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/plugins/languages/register"
 )
 
@@ -74,8 +75,10 @@ func init() {
 		// directory (#170). Override via `[lang.go] template`.
 		Template: "package ${PACKAGE}\n",
 		// Unicode-escape decoding (#1620): \uXXXX / \UXXXXXXXX in string and
-		// rune literals conceal as the escaped character.
-		Spans: escapes.UnicodeSpans,
+		// rune literals conceal as the escaped character. Network literals
+		// (#1653): a CIDR prefix or punycode host inside a string literal
+		// carries its reading.
+		Spans: goSpans,
 		// Test runner (#1150): gutter run markers on Test/Benchmark/Fuzz
 		// declarations in _test.go files; a single test runs with cwd = the
 		// file's directory, so plain `go test` targets its package.
@@ -131,4 +134,12 @@ func init() {
 		Filenames:      []string{"go.sum"},
 		ServerLanguage: "go",
 	})
+}
+
+// goSpans is the lang.Language.Spans hook: the unicode-escape stand-ins
+// (#1620) plus the network-literal hints (#1653). The network scan is
+// restricted to string literals — in source, a bare `10.0.0.0/8` would be
+// arithmetic, not a prefix.
+func goSpans(lines []string) []lang.Span {
+	return append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
 }

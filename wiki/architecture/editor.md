@@ -1562,6 +1562,64 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
 - **Contexts**: the config formats, where keys carry the intent — JSON/ndjson,
   YAML, TOML, ini/conf and dotenv.
 
+## Network-literal hints (#1653)
+
+The two network literals nobody reads by eye draw with their meaning appended,
+display-only on the #1585 stand-in channel, so the raw literal reappears under
+the caret (#1594) and edits operate on the buffer bytes:
+
+```
+10.0.0.0/8  10.0.0.0–10.255.255.255, 16,777,214 hosts
+xn--mnchen-3ya.de  münchen.de
+```
+
+Two families, three captures, two toggles, both default on:
+
+| Family | Capture | Toggle | Config key |
+| --- | --- | --- | --- |
+| CIDR prefixes | `net.cidr` | `view.toggleCIDRHints` | `editor.cidr_hints` |
+| Punycode hosts | `net.idn`, `net.idn.mixed` | `view.toggleIDNHints` | `editor.idn_hints` |
+
+Decoding, formatting and the context scan live in `internal/nethint`, a leaf
+package over `lang.Span` (`net/netip` plus `golang.org/x/net/idna`);
+`concealSplit` routes each capture into its own `m.decodes` channel and
+`decodeOn` gates it, exactly like the decode families (#1620). The two IDN
+captures share one toggle — the homograph capture is the same decode drawn in
+a different colour, not a family of its own.
+
+- **CIDR readings** come from `net/netip`, so what parses is what is hinted.
+  A prefix with host bits set (`10.0.0.1/8`, a common slip) describes the
+  network the address falls in, since that is what the notation means to the
+  parser reading it. Counts follow the protocol: IPv4 subtracts the network
+  and broadcast addresses, except on the point-to-point prefixes where there
+  are none to subtract — a `/31` carries **2 hosts** (RFC 3021) and a `/32`
+  one. IPv6 has neither, so its prefixes count *addresses*, and the ones too
+  large to read stay a power of two (`2001:db8::/32` → `2^96 addresses`,
+  `::/0` → `2^128 addresses`); below 2^20 the exact count is spelled out.
+- **Punycode decoding** turns every `xn--` label back into its Unicode form
+  (`xn--e1afmkfd.xn--p1ai` → `пример.рф`), keeping any `:port` suffix
+  unchanged. A decoded form that is not printable text is dropped rather than
+  rendered — no hint beats a wrong one.
+- **Homographs** take `net.idn.mixed`, which `styleAt` draws in the theme's
+  `Warning` colour unless a `theme.captures.net.idn.mixed` key names its own.
+  Two shapes qualify: a label **mixing scripts** (`аpple` — Cyrillic `а` and
+  Latin letters), and a non-Latin label spelled **entirely in Latin
+  look-alikes** (`аррӏе` — all Cyrillic, and precisely the point of it). The
+  script pairs ordinary names combine are not homographs: Japanese writes Han
+  with the kana, Korean Han with Hangul, Traditional Chinese Han with
+  Bopomofo. The look-alike table is small and hand-picked — the letters that
+  carry the attack, not the full Unicode confusables data.
+- **Contexts** split the way the other hint families split. Whole lines are
+  scanned where every line is data — YAML, JSON/ndjson, TOML, ini/conf,
+  dotenv and `.http` buffers; only **string literals** are scanned in source
+  files (Go, JavaScript/TypeScript, Python), because a bare `10.0.0.0/8` in
+  code is arithmetic, not a prefix.
+- **Guards** are positional. An address run must not start right after a `/`,
+  so a URL or filesystem path segment (`https://host/10.0.0.0/8`) is never
+  read as a prefix; the prefix length must end the literal, a trailing `.`
+  excepted so a prefix can end a sentence. Host runs stop at `/`, so a URL's
+  authority is scanned and its path is not.
+
 ## PEM / certificate summaries (#1652)
 
 A PEM block collapses onto its `-----BEGIN …-----` line with a decoded
@@ -1796,6 +1854,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
+`cidr_hints`/`idn_hints` (#1653),
 `pem_summary` (#1652),
 `color_preview`
 (#790), `id_colors` / `id_color_min_length` (#1626)

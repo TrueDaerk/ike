@@ -27,6 +27,7 @@ import (
 
 	"ike/internal/escapes"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/plugins/languages/register"
 )
 
@@ -77,8 +78,10 @@ func init() {
 			"switch_statement", "jsx_element", "comment",
 		},
 		// Unicode-escape decoding (#1620): \uXXXX (surrogate pairs combined)
-		// in string literals conceals as the escaped character.
-		Spans: escapes.UnicodeSpans,
+		// in string literals conceals as the escaped character. Network
+		// literals (#1653): a CIDR prefix or punycode host inside a string
+		// literal carries its reading.
+		Spans: scriptSpans,
 	})
 
 	register.Language(lang.Language{
@@ -124,4 +127,12 @@ func init() {
 		ScopeNodes: []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement"},
 		FoldNodes:  []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement", "block", "comment"},
 	})
+}
+
+// scriptSpans is the JavaScript/TypeScript lang.Language.Spans hook: the
+// unicode-escape stand-ins (#1620) plus the network-literal hints (#1653),
+// the latter restricted to string literals — a bare `10.0.0.0/8` in source is
+// arithmetic, not a prefix.
+func scriptSpans(lines []string) []lang.Span {
+	return append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
 }

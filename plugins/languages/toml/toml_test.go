@@ -5,6 +5,7 @@ import (
 
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/nethint"
 	"ike/internal/numhint"
 )
 
@@ -53,5 +54,21 @@ func TestTOMLNumberHints(t *testing.T) {
 	spans := l.Spans([]string{"request_timeout_ms = 90000"})
 	if len(spans) != 1 || spans[0].Capture != numhint.DurationCapture || spans[0].Replace != "1m30s" {
 		t.Errorf("spans = %+v, want one 1m30s duration hint", spans)
+	}
+}
+
+// TestTOMLNetworkHints (#1653): a CIDR prefix in a TOML value carries its
+// range and host count.
+func TestTOMLNetworkHints(t *testing.T) {
+	l, ok := lang.ByID("toml")
+	if !ok || l.Spans == nil {
+		t.Fatal("toml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{`allow = "192.168.0.0/24"`})
+	if len(spans) != 1 || spans[0].Capture != nethint.CIDRCapture {
+		t.Fatalf("spans = %+v, want one CIDR hint", spans)
+	}
+	if want := "192.168.0.0/24" + nethint.Gap + "192.168.0.0–192.168.0.255, 254 hosts"; spans[0].Replace != want {
+		t.Errorf("hint = %q, want %q", spans[0].Replace, want)
 	}
 }

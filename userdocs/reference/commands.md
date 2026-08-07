@@ -219,11 +219,13 @@ bring their own.
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
 | Toggle Base64 Decoding | `view.toggleBase64Decoding` | — | — | `editor` pane |
 | Toggle Byte Size Hints | `view.toggleByteSizeHints` | — | — | `editor` pane |
+| Toggle CIDR Hints | `view.toggleCIDRHints` | — | — | `editor` pane |
 | Toggle Color Preview | `view.toggleColorPreview` | — | — | `editor` pane |
 | Toggle Cron Hints | `view.toggleCronHints` | — | — | `editor` pane |
 | Toggle Digit Grouping | `view.toggleDigitGrouping` | — | — | `editor` pane |
 | Toggle Duration Hints | `view.toggleDurationHints` | — | — | `editor` pane |
 | Toggle Entity Decoding | `view.toggleEntityDecoding` | — | — | `editor` pane |
+| Toggle IDN Hints | `view.toggleIDNHints` | — | — | `editor` pane |
 | Toggle Identifier Colors | `view.toggleIdentifierColors` | — | — | `editor` pane |
 | Toggle Indent Guides | `view.toggleIndentGuides` | — | — | `editor` pane |
 | Toggle Log Rendering | `view.toggleLogRendering` | — | — | `editor` pane |

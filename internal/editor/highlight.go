@@ -7,6 +7,7 @@ import (
 	"ike/internal/bracket"
 	"ike/internal/highlight"
 	"ike/internal/jwt"
+	"ike/internal/nethint"
 	"ike/internal/secret"
 	"ike/internal/unidiff"
 	"ike/internal/yamlanchor"
@@ -98,6 +99,12 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// under the caret reads normally.
 	if capture == secret.Capture && !ok {
 		return m.hlTheme.Style("string")
+	}
+	// A punycode host whose decoded form carries the homograph shape (#1653)
+	// is a phishing tell, not a readability win: it takes the theme's warning
+	// colour unless a theme.captures.net.idn.mixed key names its own.
+	if capture == nethint.IDNMixedCapture && !ok {
+		return lipgloss.NewStyle().Foreground(m.theme().Warning), true
 	}
 	// The word-level changed range of a paired removed/added diff line
 	// (#1630) takes the diff viewer's changed-range background under the
