@@ -8,6 +8,7 @@ import (
 	"ike/internal/jwt"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/numhint"
 )
 
 // spanAt returns the first span covering (line, col), like the editor's
@@ -370,5 +371,31 @@ func TestJSONBodyValueHints(t *testing.T) {
 	// The epoch family still wins over the number hints on the same digits.
 	if s, ok := standIn(spans, 4, col(4, "1722945600")); !ok || s.Replace != "2024-08-06 12:00:00Z" {
 		t.Errorf("body timestamp stand-in = %+v, want the decoded UTC form", s)
+	}
+}
+
+// TestFieldUnitPrecedence (#1685): a header or body field whose name says the
+// unit keeps its own reading, even where the digits also decode as a Unix
+// timestamp, and a field mapped to none conceals nothing at all.
+func TestFieldUnitPrecedence(t *testing.T) {
+	lines := []string{
+		"POST https://api.example.com/upload",
+		"X-Payload-Bytes: 1722945600",
+		"",
+		`{"bytes": 1722945600}`,
+	}
+	spans := querySpans(lines)
+	for _, line := range []int{1, 3} {
+		s, ok := spanAt(spans, line, strings.Index(lines[line], "1722945600"))
+		if !ok || s.Capture != numhint.SizeCapture || s.Replace != "1.6 GiB" {
+			t.Errorf("line %d stand-in = %+v, %v; want the byte size to win", line, s, ok)
+		}
+	}
+	numhint.SetFieldUnits([]string{"*bytes=none"})
+	defer numhint.SetFieldUnits(nil)
+	for _, s := range querySpans(lines) {
+		if s.Replace != "" {
+			t.Errorf("field mapped to none still concealed: %+v", s)
+		}
 	}
 }

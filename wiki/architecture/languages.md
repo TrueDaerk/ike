@@ -569,8 +569,9 @@ of `internal/numhint` (#1627) ride the same seam in every value position
 (#1684) — `json`, `yaml`, `toml`, `ini` and `dotenv` append them per buffer,
 `.http` per collected value range (query parameters, folded query lines,
 header values, inline bodies) and the log language per line over the
-ANSI-stripped visible text, everywhere through `SpansExcept`/`Except` so an
-epoch stand-in keeps its digits (see
+ANSI-stripped visible text, everywhere through `SpansWith`/`Allowed` so an
+epoch stand-in keeps digits no field name claimed, and gives them up where one
+does (#1685) (see
 `/architecture/editor.md`, number-readability hints). The network-literal
 hints of `internal/nethint` (#1653) ride it too, in two shapes: `Spans` scans
 whole lines for the config formats and `.http`, `QuotedSpans` scans string

@@ -132,6 +132,32 @@ func appendSpans(out []lang.Span, li int, line string, ctx Context) []lang.Span 
 // claims (#1619) — so they need no second copy of the epoch heuristics.
 func Decode(digits string) (string, bool) { return decode(digits) }
 
+// DecodeSeconds renders a digit run as its UTC form, reading it as seconds
+// whatever its length. It exists for callers that already know the unit
+// because a field name pinned it (#1685: a field mapped to timestamp-s), so
+// the digit-count heuristic must not have the last word. The plausible-range
+// guard stays: a value outside 2001–2100 is still not a timestamp.
+func DecodeSeconds(digits string) (string, bool) { return decodeUnit(digits, time.Second) }
+
+// DecodeMillis is DecodeSeconds for a run counted in milliseconds (#1685).
+func DecodeMillis(digits string) (string, bool) { return decodeUnit(digits, time.Millisecond) }
+
+// decodeUnit renders a digit run counted in unit as its UTC form.
+func decodeUnit(digits string, unit time.Duration) (string, bool) {
+	if len(digits) == 0 || digits[0] == '0' {
+		return "", false
+	}
+	n, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil {
+		return "", false
+	}
+	per := int64(time.Second / unit)
+	if per <= 0 || n < minSeconds*per || n >= maxSeconds*per {
+		return "", false
+	}
+	return format(time.Unix(n/per, (n%per)*int64(unit))), true
+}
+
 // Time exposes the instant behind a digit run, for callers that need to
 // compute with it rather than display it — the log renderer's inter-line
 // deltas (#1651) parse a numeric header stamp through here. The same range and

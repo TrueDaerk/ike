@@ -1,0 +1,179 @@
+package numhint
+
+import (
+	"strings"
+	"sync/atomic"
+	"time"
+)
+
+// units.go is the user-configurable half of the field context (#1685). The
+// built-in heuristics in spans.go read a unit off the key's words, which is a
+// guess: `size` is not necessarily a byte count, and a `duration` is counted
+// in seconds as often as in milliseconds. The mapping here lets the user say
+// it outright — `retention=s`, `size=none`, `created_at=timestamp-s` — and
+// what the user says is final:
+//
+//   - A mapped field is rendered in its unit and nothing else. The value's
+//     shape is not consulted, and neither are the built-in key words.
+//   - A mapped field claims its columns even when the unit renders nothing
+//     for that particular value (a `bytes` field holding 512): no other
+//     family may put a stand-in there, so a byte count in the epoch range
+//     never draws as a date.
+//   - `none` maps a field to no conceal at all, which claims the columns the
+//     same way — the way to silence a field the heuristics get wrong.
+//
+// The mapping is a process-wide global because the span producers are
+// lang.Language.Spans hooks with no config plumbing of their own — the same
+// arrangement internal/idcolor uses. app pushes editor.number_hint_units into
+// it on every config load.
+
+// UnitKind names the reading a mapped field's values are given.
+type UnitKind int
+
+const (
+	// UnitOff disables every conceal family over the field's values.
+	UnitOff UnitKind = iota
+	// UnitBytes renders the value as a binary byte size.
+	UnitBytes
+	// UnitDuration renders the value as a duration counted in Unit.Base.
+	UnitDuration
+	// UnitTimestampSeconds / UnitTimestampMillis render the value as the UTC
+	// form of a Unix timestamp counted in that unit.
+	UnitTimestampSeconds
+	UnitTimestampMillis
+	// UnitOctal / UnitHex append the value's reading in that base.
+	UnitOctal
+	UnitHex
+	// UnitGroup renders the value with its digits grouped.
+	UnitGroup
+)
+
+// Unit is one field's configured reading: the family plus, for durations, the
+// base unit the value counts in.
+type Unit struct {
+	Kind UnitKind
+	Base time.Duration
+}
+
+// unitNames are the words a mapping entry's right-hand side may use, beyond
+// the duration unit words of unitWords (`ms`, `seconds`, `h`, …), which name
+// UnitDuration with that base.
+var unitNames = map[string]Unit{
+	"none":         {Kind: UnitOff},
+	"off":          {Kind: UnitOff},
+	"bytes":        {Kind: UnitBytes},
+	"byte":         {Kind: UnitBytes},
+	"size":         {Kind: UnitBytes},
+	"timestamp":    {Kind: UnitTimestampSeconds},
+	"timestamp-s":  {Kind: UnitTimestampSeconds},
+	"timestamp-ms": {Kind: UnitTimestampMillis},
+	"octal":        {Kind: UnitOctal},
+	"hex":          {Kind: UnitHex},
+	"group":        {Kind: UnitGroup},
+}
+
+// ParseUnit reads a mapping entry's unit word. Duration units are the same
+// words the key heuristics accept, so `ms`, `msec`, `seconds` and `h` all work
+// on the right-hand side too.
+func ParseUnit(name string) (Unit, bool) {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if u, ok := unitNames[n]; ok {
+		return u, true
+	}
+	if d, ok := unitWords[n]; ok {
+		return Unit{Kind: UnitDuration, Base: d}, true
+	}
+	return Unit{}, false
+}
+
+// rule maps one field-name pattern to a unit.
+type rule struct {
+	pattern string // lowercase, `*` wildcards
+	unit    Unit
+}
+
+// rules holds the installed mapping, installed holds the entries it was built
+// from so a config reload can tell whether anything actually changed. Atomic
+// pointers: config reloads run on the UI loop while span production may read
+// from a render elsewhere.
+var (
+	rules     atomic.Pointer[[]rule]
+	installed atomic.Pointer[string]
+)
+
+// SetFieldUnits installs the user's field-name mapping, each entry written
+// `pattern=unit` (`*_bytes=bytes`, `retention=s`, `session_id=none`).
+// Malformed entries and unknown units are skipped rather than failing the
+// whole mapping — a typo in one line must not silence the rest. Earlier
+// entries win, so a specific name can precede a wildcard covering it.
+//
+// It reports whether the mapping changed, which is what tells the app a config
+// reload has to re-parse the open editors: the spans are cached until then.
+func SetFieldUnits(entries []string) bool {
+	joined := strings.Join(entries, "\n")
+	if prev := installed.Load(); prev != nil && *prev == joined {
+		return false
+	}
+	installed.Store(&joined)
+	var out []rule
+	for _, e := range entries {
+		name, unit, ok := strings.Cut(e, "=")
+		if !ok {
+			continue
+		}
+		name = strings.ToLower(strings.TrimSpace(name))
+		u, ok := ParseUnit(unit)
+		if name == "" || !ok {
+			continue
+		}
+		out = append(out, rule{pattern: name, unit: u})
+	}
+	rules.Store(&out)
+	return true
+}
+
+// FieldUnit returns the unit a field name is mapped to. Matching is
+// case-insensitive over the whole name, with `*` matching any run of
+// characters; a camel-case name is additionally matched in its snake_case
+// form, so `max_body_size` covers `maxBodySize` too.
+func FieldUnit(key string) (Unit, bool) {
+	rs := rules.Load()
+	if rs == nil || len(*rs) == 0 || key == "" {
+		return Unit{}, false
+	}
+	lower := strings.ToLower(key)
+	snake := strings.Join(keyWords(key), "_")
+	for _, r := range *rs {
+		if globMatch(r.pattern, lower) || (snake != lower && globMatch(r.pattern, snake)) {
+			return r.unit, true
+		}
+	}
+	return Unit{}, false
+}
+
+// globMatch reports whether s matches pattern, where `*` stands for any run of
+// characters (including none) and every other character matches itself. Own
+// matcher rather than path.Match: `/` and `\` must be ordinary characters here
+// — a field name may hold either.
+func globMatch(pattern, s string) bool {
+	parts := strings.Split(pattern, "*")
+	if len(parts) == 1 {
+		return pattern == s
+	}
+	if !strings.HasPrefix(s, parts[0]) {
+		return false
+	}
+	s = s[len(parts[0]):]
+	last := parts[len(parts)-1]
+	for _, p := range parts[1 : len(parts)-1] {
+		i := strings.Index(s, p)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(p):]
+	}
+	if len(last) > len(s) {
+		return false
+	}
+	return strings.HasSuffix(s, last)
+}

@@ -315,6 +315,15 @@ type Editor struct {
 	// `0x1F4  = 500` — and a permission/flag value's octal or hex one
 	// (`420  = 0o644`); the bare literal reappears under the caret.
 	RadixHints bool `toml:"radix_hints"`
+	// NumberHintUnits maps field names to the unit their values are read in
+	// (#1685), overriding the key heuristics of the four hint families above.
+	// Each entry is `pattern=unit`, the pattern matched case-insensitively
+	// over the whole field name with `*` wildcards: `*_bytes=bytes`,
+	// `retention=s`, `created_at=timestamp-s`, `session_id=none`. A mapped
+	// field is read in that unit and no other — a value in a `bytes` field
+	// draws as a byte size even when its digits also read as a timestamp —
+	// and `none` silences every stand-in over the field's values.
+	NumberHintUnits []string `toml:"number_hint_units"`
 	// PermissionHints renders an octal file mode's symbolic form after it
 	// (#1656) — `0644  rw-r--r--`, `4755  rwsr-xr-x` — where the context
 	// carries a permission: `chmod`/`install -m`/`mkdir -m` in shell,

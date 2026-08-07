@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 func findSpan(t *testing.T, spans []spanLike, capture string) (int, int) {
@@ -282,5 +283,30 @@ func TestSpansNumberHints(t *testing.T) {
 		if s, ok := standIn(sub); ok {
 			t.Errorf("header field %q concealed as %q", sub, s.Replace)
 		}
+	}
+}
+
+// TestSpansFieldUnitPrecedence (#1685): a logfmt key that names the unit beats
+// the epoch reading of its value — a byte count in the timestamp range is
+// still a byte count — and a user mapping silences a field outright.
+func TestSpansFieldUnitPrecedence(t *testing.T) {
+	line := "2024-08-06 12:00:00 INFO upload bytes=1722945600"
+	standIn := func(spans []lang.Span, sub string) (lang.Span, bool) {
+		col := strings.Index(line, sub)
+		for _, s := range spans {
+			if s.Replace != "" && col >= s.StartCol && col < s.EndCol {
+				return s, true
+			}
+		}
+		return lang.Span{}, false
+	}
+	s, ok := standIn(lineSpans(0, line), "1722945600")
+	if !ok || s.Capture != numhint.SizeCapture || s.Replace != "1.6 GiB" {
+		t.Errorf("stand-in = %+v, %v; want the byte size to win over the timestamp", s, ok)
+	}
+	numhint.SetFieldUnits([]string{"bytes=none"})
+	defer numhint.SetFieldUnits(nil)
+	if s, ok := standIn(lineSpans(0, line), "1722945600"); ok {
+		t.Errorf("stand-in = %+v; want the field mapped to none silenced", s)
 	}
 }

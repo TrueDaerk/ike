@@ -57,6 +57,7 @@ import (
 	"ike/internal/marks"
 	"ike/internal/menu"
 	"ike/internal/nav"
+	"ike/internal/numhint"
 	"ike/internal/overlay"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -807,6 +808,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	highlight.SetRainbow(rainbowConfigured())       // rainbow brackets (#789)
 	unidiff.SetWordHighlight(diffWordsConfigured()) // word-level diff emphasis (#1630)
 	applyIDColorConfig()                            // identifier colors (#1626)
+	applyNumberHintUnits()                          // number-hint field units (#1685)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -3983,6 +3985,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		applyIDColorConfig() // identifier colors (#1626): no re-parse needed
+		// Number-hint field units (#1685): the mapping decides which family a
+		// literal gets, so a change only lands once the spans are produced
+		// again — re-parse every open editor when it moved.
+		if applyNumberHintUnits() {
+			return m, tea.Batch(m.reparseOpenEditors()...)
+		}
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor
 		// so the change lands without waiting for the next edit.
 		if before := highlight.RainbowEnabled(); before != rainbowConfigured() {
@@ -6254,6 +6262,18 @@ func applyIDColorConfig() {
 	}
 	idcolor.SetEnabled(c.Editor.IDColors)
 	idcolor.SetMinLength(c.Editor.IDColorMinLength)
+}
+
+// applyNumberHintUnits pushes editor.number_hint_units (#1685) into the
+// numhint package global, where the lang.Language.Spans hooks read it — those
+// have no config plumbing of their own. It reports whether the mapping
+// changed, so the caller can re-parse the open editors.
+func applyNumberHintUnits() bool {
+	c := config.Get()
+	if c == nil {
+		return false
+	}
+	return numhint.SetFieldUnits(c.Editor.NumberHintUnits)
 }
 
 // settingsSize bounds the floating settings panel: most of the terminal, but

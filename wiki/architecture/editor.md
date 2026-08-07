@@ -1687,8 +1687,45 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   cut; a token followed by `:`/`=` is a key, not a value. A run that decodes
   as a plausible Unix timestamp is left to the epoch family (#1618) for the
   duration and grouping families, and in every producer that decodes epochs
-  too, `numhint.SpansExcept` (or `numhint.Except`, its span-list form) drops
-  any hint colliding with a timestamp stand-in outright.
+  too, a hint the value's *shape* alone produced gives way to a colliding
+  timestamp stand-in.
+- **Field context beats the value pattern** (#1685). The other half of that
+  collision: where the *field name* names the unit, the field wins — a value
+  in a `bytes` key draws as a byte size even when its digits also read as a
+  timestamp, because a large enough byte count simply lands in that range.
+  `numhint.Hints` reports every literal as a `Hint` carrying `Claims`, set
+  when the field decided the reading (a built-in key word or a mapping entry
+  below) and independent of whether a stand-in was produced at all;
+  `numhint.Allowed` drops the other families' spans over a claimed literal.
+  Producers use `numhint.SpansWith(lines, stamps)`, which returns the hints
+  and the surviving stamps in one pass; `.http` and the log renderer scan
+  through `Hints`/`Allowed` directly because they map columns themselves.
+- **Field-unit mapping** (#1685) is the escape hatch from the heuristics,
+  which are ambiguous by nature: `size` is not necessarily bytes, a
+  `duration` is counted in seconds as often as in milliseconds.
+  `editor.number_hint_units` (Settings → Editor, a list, empty by default) maps
+  field names to units, each entry written `pattern=unit`:
+
+  ```toml
+  [editor]
+  number_hint_units = ["*_bytes=bytes", "retention=s", "created_at=timestamp-s", "session_id=none"]
+  ```
+
+  Patterns match case-insensitively over the whole field name with `*`
+  wildcards, and a camel-case name is matched in its snake_case form too, so
+  `max_body_size` covers `maxBodySize`. Units: `bytes`, any duration unit word
+  (`ns`, `us`, `ms`, `s`, `min`, `h`, `d`, plus the spelled-out forms),
+  `timestamp-s`, `timestamp-ms`, `octal`, `hex`, `group` and `none`. Earlier
+  entries win, so a specific name may precede a wildcard covering it, and a
+  malformed entry or unknown unit is skipped rather than failing the mapping.
+  A mapped field is read in that unit and **no other**: the shape triggers and
+  the built-in key words are not consulted, a value the unit says nothing
+  about (512 in a `bytes` field) stays bare rather than falling through, and
+  `none` silences every family over the field's values — including the epoch
+  decoding. The mapping is a process-wide global in `numhint` (the span
+  producers are `lang.Language.Spans` hooks with no config plumbing, as with
+  `internal/idcolor`); `applyNumberHintUnits` in `app` pushes it on every
+  config load and re-parses the open editors when it moved.
 - **Contexts** are every position the highlighting already recognises as a
   *value* (#1684), never a key: the config formats, where keys carry the
   intent — JSON/ndjson, YAML, TOML, ini/conf and dotenv — plus `.http` query
@@ -2138,6 +2175,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
+`number_hint_units` (#1685, app-level: pushed into `numhint` on config load),
 `cidr_hints`/`idn_hints` (#1653), `permission_hints` (#1656),
 `hyperlinks` (#1655),
 `pem_summary` (#1652),

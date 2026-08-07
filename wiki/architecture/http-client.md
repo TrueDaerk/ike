@@ -164,7 +164,9 @@ config file paths, or disable detection entirely.
   scanners only match a token *after* a separator, so a query key, a header
   name or a JSON member name is never concealed. Where a stand-in of another
   family (an epoch, a JWT, a percent escape, a network literal) already
-  claimed the columns, the number hints step aside. The response viewer has
+  claimed the columns, the number hints step aside — except where the field
+  name itself names the unit (#1685), which wins over the epoch reading of the
+  same digits and honours `editor.number_hint_units`. The response viewer has
   no caret and therefore no reveal, so it shows response bodies unchanged.
 - **JWTs** (#1619): the producer scans every line with `internal/jwt` and dims
   the signature segment of each token (capture `jwt.signature`), so an

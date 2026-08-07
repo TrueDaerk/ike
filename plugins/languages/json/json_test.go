@@ -157,3 +157,25 @@ func TestJSONNetworkHints(t *testing.T) {
 		t.Errorf("spans = %+v, want the CIDR hint", spans)
 	}
 }
+
+// TestJSONFieldUnitPrecedence (#1685): a member name that says the unit beats
+// the epoch reading of the same digits — a byte count is a byte count wherever
+// it happens to land — and a user mapping decides where nothing else does.
+func TestJSONFieldUnitPrecedence(t *testing.T) {
+	spans := jsonSpans([]string{`{"bytes": 1722945600}`})
+	if len(spans) != 1 {
+		t.Fatalf("spans = %+v, want exactly one stand-in", spans)
+	}
+	if spans[0].Capture != numhint.SizeCapture || spans[0].Replace != "1.6 GiB" {
+		t.Errorf("span = %s %q, want the byte size", spans[0].Capture, spans[0].Replace)
+	}
+	numhint.SetFieldUnits([]string{"trace=none", "retention=s"})
+	defer numhint.SetFieldUnits(nil)
+	if spans := jsonSpans([]string{`{"trace": 1722945600}`}); len(spans) != 0 {
+		t.Errorf("spans = %+v, want a field mapped to none silenced", spans)
+	}
+	spans = jsonSpans([]string{`{"retention": 86400}`})
+	if len(spans) != 1 || spans[0].Capture != numhint.DurationCapture || spans[0].Replace != "24h" {
+		t.Errorf("spans = %+v, want the mapped second reading", spans)
+	}
+}
