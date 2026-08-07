@@ -120,7 +120,12 @@ substitutions are separate `string_fragment` nodes, and no single chunk of
 injects while the substitution expressions keep their host highlighting.
 Fragments re-highlight with every reparse, exactly
 like top-level edits (the whole buffer reparses per change, off the event
-loop). One level deep: fragments inside fragments are not re-injected.
+loop). Injections resolve **recursively** (#1697): each fragment's own
+language runs its injection query in turn, so HTML injected into a Python
+f-string still highlights its `<script>` body as JavaScript and its `<style>`
+body as CSS — down to three nesting levels below the host
+(`maxInjectionDepth`), past which fragments keep their enclosing language's
+styling so pathological nesting cannot blow up a parse.
 Fragment languages without a registered grammar degrade to plain host
 highlighting.
 

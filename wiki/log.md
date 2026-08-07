@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-07 (highlight: injections resolve recursively, #1697)
+
+- **A fragment injects again.** `overlayFragments` re-runs injection
+  resolution on every fragment with the fragment's own language, so HTML
+  injected into a Python f-string highlights its `<script>` body as
+  JavaScript and its `<style>` body as CSS — the same result as a plain
+  `.html` buffer, previously one level deep only.
+- **Bounded at three levels** (`maxInjectionDepth`): deeper fragments keep
+  their enclosing language's styling, so pathological nesting cannot recurse
+  without limit. Nested fold ranges shift into host coordinates level by
+  level, like the spans.
+
 ## 2026-08-07 (search: one result row per matching line, #1121)
 
 - **A line is a row, not a match.** Find in Path (and every other
