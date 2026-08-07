@@ -91,7 +91,7 @@ func (Plugin) Capabilities() plugin.Capabilities {
 		SettingsPages: []settings.Page{
 			{
 				Title:       "Formatters",
-				Description: "External reformat commands per language: the effective command line, the config layer supplying it and whether the binary is installed.",
+				Description: "Reformat commands per language: the effective command line, the config layer supplying it and whether the binary is installed — editable per language (command, arguments, range support, install hint) plus the built-in switches.",
 				Custom:      settings.NewFormatPage(config.Discover(".")),
 			},
 		},

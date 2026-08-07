@@ -27,6 +27,9 @@ import (
 )
 
 func init() {
+	// Declares the `builtin` toggle for the Formatters settings page (#1662);
+	// the .http formatter reads no extra config keys.
+	format.RegisterBuiltin("http")
 	format.Register(format.Provider{
 		Name:      "built-in",
 		Languages: []string{"http"},

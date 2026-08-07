@@ -14,6 +14,9 @@ import (
 // `[format.xml] builtin = false` switches it off.
 
 func init() {
+	// Declares the `builtin` toggle for the Formatters settings page (#1662);
+	// XML's built-in reads no extra config keys.
+	format.RegisterBuiltin("xml")
 	format.Register(format.Provider{
 		Name:      "built-in",
 		Languages: []string{"xml"},

@@ -13,46 +13,92 @@ import (
 )
 
 // format_page.go is the Formatters settings page (Roadmap 0470, #1402): one
-// row per language with an external formatter — the plugin-declared default
-// and/or a `[format.<languageID>]` config override — showing the effective
-// command line, the config layer supplying it and whether the binary is on
-// PATH. Read-only: overrides are written in the config file (project or
-// user layer), like `[lsp.servers.*]`.
+// row per language with a formatter — the plugin-declared default and/or a
+// `[format.<languageID>]` config override — showing the effective command
+// line, the config layer supplying it and whether the binary is on PATH.
+// Since #1662 it is an interactive editor like the Language Servers page:
+// `e` toggles the language's external formatting, `b` its built-in formatter,
+// enter opens the override form (command / args / range_args / temp_file /
+// install plus the built-in's own keys), `r` drops the override back to the
+// plugin default, and `s` picks the layer the writes land in.
 
 // FormatPage implements PageModel.
 type FormatPage struct {
 	opts config.Options
 	pal  *theme.Palette
+	host SubPanelHost
 
 	sel   int
 	off   int
 	listH int
+
+	// scope is the layer every write of this page lands in (#1662). It starts
+	// on the conventional layer for `format.*` (project) and falls back to
+	// user when there is no project to write to; "s" cycles it.
+	scope  config.Scope
+	notice string
 }
 
 // NewFormatPage builds the page.
 func NewFormatPage(opts config.Options) *FormatPage {
-	return &FormatPage{opts: opts}
+	scope := config.DefaultScope("format.")
+	if scope == config.ProjectScope && opts.ProjectRoot == "" {
+		scope = config.UserScope
+	}
+	return &FormatPage{opts: opts, scope: scope}
 }
+
+// SetSubPanelHost implements the hostAware injection seam (#883).
+func (p *FormatPage) SetSubPanelHost(h SubPanelHost) { p.host = h }
 
 // SetPalette implements PageModel.
 func (p *FormatPage) SetPalette(pal *theme.Palette) { p.pal = pal }
 
-// Capturing implements PageModel: plain navigation only.
+// Capturing implements PageModel: the override editor is a sub-panel, so the
+// page itself never captures.
 func (p *FormatPage) Capturing() bool { return false }
 
-// formatRow is one language's effective external-formatter state.
-type formatRow struct {
-	lang    string
-	spec    format.External
-	layer   string // "project" / "user" / "plugin default"
-	found   bool
-	enabled bool
+// theme returns the active palette, defaulting when none was threaded in.
+func (p *FormatPage) theme() *theme.Palette {
+	if p.pal != nil {
+		return p.pal
+	}
+	return theme.DefaultPalette()
 }
 
-// rows collects the union of plugin defaults and configured overrides.
+// formatRow is one language's effective formatter state.
+type formatRow struct {
+	lang    string
+	spec    format.External // effective external spec (override over default)
+	def     format.External // the plugin default alone
+	layer   string          // "project" / "user" / "plugin default"
+	found   bool
+	enabled bool
+	// override reports that the language has any [format.<lang>] key set.
+	override bool
+	// builtin reports a registered built-in formatter, builtinOn its
+	// `builtin` switch; keys are the extra config keys it reads (#1662).
+	builtin   bool
+	builtinOn bool
+	keys      []format.ConfigKey
+}
+
+// formatOverlay returns the language's raw [format.<languageID>] config entry.
+func formatOverlay(id string) map[string]any {
+	if c := config.Get(); c != nil {
+		return c.Format[id]
+	}
+	return nil
+}
+
+// rows collects the union of plugin defaults, built-in formatters and
+// configured overrides.
 func (p *FormatPage) rows() []formatRow {
 	langs := map[string]bool{}
 	for _, id := range format.ExternalDefaultLangs() {
+		langs[id] = true
+	}
+	for _, id := range format.BuiltinLangs() {
 		langs[id] = true
 	}
 	cfg := config.Get()
@@ -68,18 +114,23 @@ func (p *FormatPage) rows() []formatRow {
 	sort.Strings(ids)
 	out := make([]formatRow, 0, len(ids))
 	for _, id := range ids {
-		row := formatRow{lang: id, layer: "plugin default", enabled: true}
+		row := formatRow{lang: id, layer: "plugin default", enabled: true, builtinOn: true}
 		if spec, ok := format.ExternalDefault(id); ok {
-			row.spec = spec
+			row.spec, row.def = spec, spec
 		}
+		row.keys, row.builtin = format.Builtin(id)
 		if cfg != nil {
 			if raw, ok := cfg.Format[id]; ok {
+				row.override = len(raw) > 0
 				if ov := format.ExternalFromConfig(raw); ov.Command != "" {
 					row.spec = ov
 					row.layer = p.layer(id)
 				}
 				if b, isBool := raw["enabled"].(bool); isBool {
 					row.enabled = b
+				}
+				if b, isBool := raw["builtin"].(bool); isBool {
+					row.builtinOn = b
 				}
 			}
 		}
@@ -89,10 +140,23 @@ func (p *FormatPage) rows() []formatRow {
 	return out
 }
 
+// current returns the selected row.
+func (p *FormatPage) current() (formatRow, bool) {
+	rows := p.rows()
+	if p.sel < 0 || p.sel >= len(rows) {
+		return formatRow{}, false
+	}
+	return rows[p.sel], true
+}
+
+// formatKeys are the language-table keys the page owns: the generic external
+// spec plus the two switches. A language's extra keys come on top (#1662).
+var formatKeys = []string{"command", "args", "range_args", "temp_file", "install", "enabled", "builtin"}
+
 // layer reports the config layer supplying the language's override.
 func (p *FormatPage) layer(id string) string {
 	strongest := "user"
-	for _, k := range []string{"command", "args", "range_args", "temp_file", "enabled"} {
+	for _, k := range formatKeys {
 		if config.Origin(p.opts, "format."+id+"."+k) == "project" {
 			return "project"
 		}
@@ -100,10 +164,66 @@ func (p *FormatPage) layer(id string) string {
 	return strongest
 }
 
+// scopeLabel names the layer writes land in.
+func (p *FormatPage) scopeLabel() string {
+	if p.scope == config.ProjectScope {
+		return "project"
+	}
+	return "user"
+}
+
+// write persists one [format.<lang>] key at the page's write scope.
+func (p *FormatPage) write(id, key string, value any) tea.Cmd {
+	p.notice = ""
+	return config.WriteAndReload(p.opts, p.scope, "format."+id+"."+key, value)
+}
+
+// reset removes the language's whole override — every key this page can
+// write, from every addressable layer, in one batch with a single reload, so
+// the row really falls back to the plugin default (#1662).
+func (p *FormatPage) reset(row formatRow) tea.Cmd {
+	keys := append(append([]string(nil), formatKeys...), extraKeyNames(row)...)
+	var muts []config.Mutation
+	for _, scope := range p.layers() {
+		for _, k := range keys {
+			muts = append(muts, config.Mutation{Scope: scope, Key: "format." + row.lang + "." + k, Remove: true})
+		}
+	}
+	if len(muts) == 0 {
+		p.notice = "no config layer to write to"
+		return nil
+	}
+	p.notice = ""
+	return config.ApplyAndReload(p.opts, muts)
+}
+
+// layers lists the addressable config layers — a scope without a file path
+// (no project root, no home directory) would only produce write errors.
+func (p *FormatPage) layers() []config.Scope {
+	var out []config.Scope
+	if p.opts.UserPath != "" {
+		out = append(out, config.UserScope)
+	}
+	if p.opts.ProjectRoot != "" {
+		out = append(out, config.ProjectScope)
+	}
+	return out
+}
+
+// extraKeyNames lists a row's language-specific config keys.
+func extraKeyNames(row formatRow) []string {
+	out := make([]string, 0, len(row.keys))
+	for _, k := range row.keys {
+		out = append(out, k.Key)
+	}
+	return out
+}
+
 // Update implements PageModel.
 func (p *FormatPage) Update(key tea.KeyPressMsg) tea.Cmd {
-	n := len(p.rows())
-	if listNav(key.String(), &p.sel, n, navPage) {
+	rows := p.rows()
+	row, hasRow := p.current()
+	if listNav(key.String(), &p.sel, len(rows), navPage) {
 		return nil
 	}
 	switch key.String() {
@@ -112,20 +232,86 @@ func (p *FormatPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			p.sel--
 		}
 	case "down", "j":
-		if p.sel < n-1 {
+		if p.sel < len(rows)-1 {
 			p.sel++
+		}
+	case "e":
+		if hasRow {
+			return p.write(row.lang, "enabled", !row.enabled)
+		}
+	case "b":
+		if hasRow {
+			if !row.builtin {
+				p.notice = row.lang + " has no built-in formatter"
+				return nil
+			}
+			return p.write(row.lang, "builtin", !row.builtinOn)
+		}
+	case "enter":
+		if hasRow && p.host != nil {
+			p.notice = ""
+			p.host.Push(newFormatForm(p, p.host, row))
+		}
+	case "r":
+		// Reset the language's override back to the plugin default ("r" means
+		// reset everywhere, #887).
+		if hasRow {
+			return p.reset(row)
+		}
+	case "s":
+		// The write layer, like the panel's own scope selector (0380, #794).
+		if p.scope == config.ProjectScope {
+			p.scope = config.UserScope
+		} else {
+			p.scope = config.ProjectScope
+		}
+		if p.scope == config.ProjectScope && p.opts.ProjectRoot == "" {
+			p.scope = config.UserScope
+			p.notice = "no project layer here — writes stay in the user config"
 		}
 	}
 	return nil
 }
 
+// formatHeadLines is the pinned header's height (mouse hit-testing, #674).
+const formatHeadLines = 1
+
+// Click implements the optional PageClicker seam (#674): a press on a row
+// selects it, a press on the selection opens its override form (enter
+// semantics, as on the tools and mapping pages).
+func (p *FormatPage) Click(_, y int) tea.Cmd {
+	idx := y - formatHeadLines
+	if idx < 0 || (p.listH > 0 && idx >= p.listH) {
+		return nil
+	}
+	idx += p.off
+	rows := p.rows()
+	if idx >= len(rows) {
+		return nil
+	}
+	if idx == p.sel {
+		if p.host != nil {
+			p.host.Push(newFormatForm(p, p.host, rows[idx]))
+		}
+		return nil
+	}
+	p.sel = idx
+	return nil
+}
+
+// Wheel implements the optional PageWheeler seam (#674): the list moves its
+// selection (it follows, like j/k).
+func (p *FormatPage) Wheel(delta int) {
+	if n := len(p.rows()); n > 0 {
+		p.sel = clamp(p.sel+delta, 0, n-1)
+	}
+}
+
 // View implements PageModel.
 func (p *FormatPage) View(width, height int) string {
-	pal := p.pal
-	if pal == nil {
-		pal = theme.DefaultPalette()
-	}
+	pal := p.theme()
 	dim := lipgloss.NewStyle().Foreground(pal.Border)
+	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	selStyle := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	offStyle := lipgloss.NewStyle().Foreground(pal.Border).Faint(true)
 	clip := lipgloss.NewStyle().MaxWidth(width)
@@ -152,6 +338,13 @@ func (p *FormatPage) View(width, height int) string {
 		if len(row.spec.RangeArgs) > 0 {
 			line += dim.Render(" · range")
 		}
+		if row.builtin {
+			builtin := " · built-in on"
+			if !row.builtinOn {
+				builtin = " · built-in off"
+			}
+			line += dim.Render(builtin)
+		}
 		if i == p.sel {
 			selStart = len(list)
 		}
@@ -168,13 +361,39 @@ func (p *FormatPage) View(width, height int) string {
 		}
 	}
 	if len(list) == 0 {
-		list = append(list, dim.Render(" no external formatters registered — configure one via [format.<language>]"))
+		list = append(list, dim.Render(" no formatters registered — configure one via [format.<language>]"))
 	}
-	head := dim.Render(" language · binary · effective command")
-	footer := wrapFooter([]footerLine{{
-		text:  " overrides live in [format.<language>] (project or user config): command, args, range_args, temp_file, enabled",
-		style: dim,
-	}}, width, 2)
-	p.listH = height - 1 - len(footer)
-	return head + "\n" + pinFooter(list, footer, selStart, selEnd, height-1, &p.off)
+	head := sec.Render(" language · binary · effective command · write layer: " + p.scopeLabel() + "  (s cycles)")
+	hint := " enter edit · e external on/off · b built-in on/off · r reset to the plugin default · ? keys"
+	lines := []footerLine{{text: hint, style: sec}}
+	if p.notice != "" {
+		lines = append([]footerLine{{text: " " + p.notice, style: lipgloss.NewStyle().Foreground(pal.Error)}}, lines...)
+	}
+	footer := wrapFooter(lines, width, 2)
+	p.listH = height - formatHeadLines - len(footer)
+	return head + "\n" + pinFooter(list, footer, selStart, selEnd, height-formatHeadLines, &p.off)
+}
+
+// KeyHelp implements KeyHelper (#887).
+func (p *FormatPage) KeyHelp() []string {
+	return []string{
+		"enter  edit the language's [format.*] override",
+		"e  external formatting on/off · b  built-in formatter on/off",
+		"r  reset the language back to the plugin default",
+		"s  write layer: project ↔ user",
+	}
+}
+
+// SearchItems implements Searchable (#886): one item per language row.
+func (p *FormatPage) SearchItems() []SearchItem {
+	var out []SearchItem
+	for i, row := range p.rows() {
+		i, row := i, row
+		out = append(out, SearchItem{
+			Label:    row.lang,
+			Keywords: "formatter reformat format " + row.lang + " " + row.spec.Command,
+			Activate: func() { p.sel = i },
+		})
+	}
+	return out
 }

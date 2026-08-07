@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-07 (settings: the Formatters page edits overrides, #1662)
+
+- **Settings → Formatters** is an editor now, not a report. `e` toggles a
+  language's external formatting, `b` its built-in formatter, `enter` opens the
+  full `[format.<languageID>]` form — `command` (tab completes a path), `args`,
+  `range_args`, `temp_file`, `install` plus the built-in's own keys — `r`
+  resets the language to the plugin default and `s` picks the write layer
+  (project ↔ user).
+- Saving writes **only what differs**: a field left at, or cleared back to, the
+  plugin default has its key removed, so an override file never freezes a
+  default. Validation runs before anything reaches disk, and the whole table is
+  one write-back batch with a single reload.
+- Language plugins declare their built-in formatter with
+  `format.RegisterBuiltin(langID, keys…)` — that marks the `builtin` switch as
+  applicable and declares the built-in's own config keys (SQL's `keywords`,
+  with its accepted values) so the settings form edits them generically. SQL,
+  XML and `.http` now have rows of their own.
+- Docs: the Formatters reference gained the key table and a table of the
+  shipped per-language defaults with their install hints. See
+  [/architecture/format.md](/architecture/format.md).
+
 ## 2026-08-07 (editor: json/yaml path breadcrumb, #1660)
 
 - The status line's new `docpath` segment names the caret's position inside a
