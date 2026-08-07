@@ -1,0 +1,16 @@
+{
+  "batch": "revenue-nightly",
+  "started_at": 1722945600,
+  "finished_at": 1722949215,
+  "checkpoint_ms": 1722949215480,
+  "window": {
+    "from": 1720483200,
+    "to": 1722945600
+  },
+  "orders": [
+    { "id": "ord-8814", "placed_at": 1722901337, "total": 2499 },
+    { "id": "ord-8815", "placed_at": 1722930411, "total": 1180 }
+  ],
+  "port": 8080,
+  "retries": 3
+}

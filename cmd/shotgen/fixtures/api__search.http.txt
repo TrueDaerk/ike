@@ -1,0 +1,12 @@
+@base = http://localhost:8080
+
+### search orders — the query travels percent-encoded
+GET {{base}}/orders/search?q=caf%C3%A9%20m%C3%BCnchen&sort=placed_at%3Adesc
+Accept: application/json
+
+### one customer, folded query, encoded path segment
+GET {{base}}/customers/acme%20gmbh/orders
+  ?status=open%2Cpending
+  &note=ship%20together
+  &since=1722945600
+Accept: application/json

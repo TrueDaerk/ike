@@ -9,6 +9,10 @@ Task-oriented pages, one per feature area.
 - **[How files are rendered](file-rendering.md)** — Tree-sitter highlighting,
   and the Markdown / CSV / log rendering layers with their conceal that reveals
   itself under the caret.
+- **[Conceal and decoded values](conceal.md)** — every family the editor draws
+  instead of the raw bytes: epoch timestamps, byte sizes and durations, escaped
+  text, cron and chmod readings, certificate summaries, masked secrets — and
+  the one rule they all follow.
 - **[Code intelligence](code-intelligence.md)** — language servers: which one
   per language, how they get installed, what they give you, and what to do
   when a feature is silent.

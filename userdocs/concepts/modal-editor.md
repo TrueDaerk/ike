@@ -229,5 +229,6 @@ a modern GUI where vim has no opinion:
 
 The [settings reference](../reference/settings.md) has the full list, and
 [How files are rendered](../guides/file-rendering.md) covers the display layers
-on top of the buffer — highlighting, Markdown, CSV and log rendering, and the
-conceal that reveals itself wherever the caret is.
+on top of the buffer — highlighting, Markdown, CSV and log rendering.
+[Conceal and decoded values](../guides/conceal.md) covers what the editor draws
+instead of the raw bytes, and how the caret brings them back.

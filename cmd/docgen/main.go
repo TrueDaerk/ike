@@ -300,7 +300,12 @@ Settings are TOML and merge across three layers — built-in defaults, then
 live. The **Scope** column is the layer the settings panel writes a change to.
 
 Everything here can also be edited interactively: open the menu bar and pick
-Settings, or run `+"`settings.open`"+` from the palette.`))
+Settings, or run `+"`settings.open`"+` from the palette.
+
+The `+"`editor.*`"+` keys that decode or hide what a value really says — timestamps,
+byte sizes, escapes, cron and chmod readings, certificate summaries, masked
+secrets — are documented together, with screenshots, in
+[Conceal and decoded values](../guides/conceal.md).`))
 
 	flat := config.Get().Flat()
 

@@ -19,7 +19,7 @@ func TestWriteFixturesLayout(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"main.go", "pipeline.py", "dashboard.ts", "README.md",
+		"main.go", "pipeline.py", "dashboard.ts", "README.md", "crontab",
 		filepath.Join("data", "revenue.csv"),
 		filepath.Join("logs", "service.log"),
 		filepath.Join("api", "orders.http"),
@@ -37,6 +37,31 @@ func TestWriteFixturesLayout(t *testing.T) {
 	}
 	if strings.Contains(string(log), escapePlaceholder) {
 		t.Error("an escape placeholder survived into the fixture")
+	}
+	// The escape-decoding shot needs the escapes written out, not the
+	// characters they name — an editor that "helpfully" normalises the
+	// fixture would leave the shot with nothing to decode (#1698).
+	labels, err := os.ReadFile(filepath.Join(root, "config", "labels.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(labels), `\u00fc`) {
+		t.Error("the label fixture must carry literal \\uXXXX escapes")
+	}
+}
+
+// TestShotFixturesExist guards the shot table against a typo in an open path:
+// a scenario whose file is missing renders an empty editor, and an empty
+// editor still produces a plausible-looking PNG.
+func TestShotFixturesExist(t *testing.T) {
+	root := t.TempDir()
+	if err := writeFixtures(root); err != nil {
+		t.Fatal(err)
+	}
+	for _, s := range shots {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(s.open))); err != nil {
+			t.Errorf("%s opens %q, which no fixture provides: %v", s.name, s.open, err)
+		}
 	}
 }
 
