@@ -116,6 +116,12 @@ box capped at ~110×32 cells above the workspace, laid out as the
 - **Focus clarity.** The focused column shows the vivid selection bar; the
   unfocused column keeps a dimmed (faint) selection background, so keyboard
   ownership is always visible (#383).
+- **Selection marker (#1689).** Both list columns prefix the selected row with
+  the `❯` chevron Search Everywhere / Recent Files use (#1532): accent-coloured
+  while the column has focus, the muted border colour while it does not. The
+  marker is two cells wide and unselected rows pay the same width in blanks
+  (`rowMarker` in `view.go`), so the label column never shifts as the selection
+  moves; the marker is taken out of the column's width, not added to it.
 - **Mouse (#127, #673).** Clicking a category selects that page; clicking a
   form entry selects it, and a second click on the selection activates it
   (enter semantics). The wheel scrolls the column under the pointer by moving
