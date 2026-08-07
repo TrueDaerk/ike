@@ -3,6 +3,7 @@ package app
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -145,6 +146,39 @@ func TestDiffF7StepsHunks(t *testing.T) {
 	press(tea.KeyPressMsg{Code: tea.KeyF7, Mod: tea.ModShift})
 	if got := m.activeWS().Panes.FocusedInstance().Diff().CurrentHunk(); got != 0 {
 		t.Fatalf("after shift+F7: hunk = %d, want 0", got)
+	}
+}
+
+// TestDiffArrowsScrollHorizontally guards #1700: the arrow keys reach the
+// focused diff pane and shift its shared horizontal offset — no global binding
+// steals them — and the mouse seam clamps the same way.
+func TestDiffArrowsScrollHorizontally(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	long := strings.Repeat("wxyz ", 60) + "\n"
+	left := filepath.Join(dir, "l.txt")
+	right := filepath.Join(dir, "r.txt")
+	os.WriteFile(left, []byte(long), 0o644)
+	os.WriteFile(right, []byte(long), 0o644)
+
+	m := newSized()
+	m.openDiffPane(left, right)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight})
+	if got := m.activeWS().Panes.FocusedInstance().Diff().HOffset(); got != 1 {
+		t.Fatalf("after right: offset = %d, want 1", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyLeft})
+	if got := m.activeWS().Panes.FocusedInstance().Diff().HOffset(); got != 0 {
+		t.Fatalf("after left: offset = %d, want 0", got)
+	}
+	// The horizontal wheel seam (#1700) uses the same clamped setter.
+	m.activeWS().Panes.FocusedInstance().Diff().ScrollXBy(-5)
+	if got := m.activeWS().Panes.FocusedInstance().Diff().HOffset(); got != 0 {
+		t.Fatalf("wheel-left at column 0 should clamp, got %d", got)
+	}
+	m.activeWS().Panes.FocusedInstance().Diff().ScrollXBy(4)
+	if got := m.activeWS().Panes.FocusedInstance().Diff().HOffset(); got != 4 {
+		t.Fatalf("wheel-right: offset = %d, want 4", got)
 	}
 }
 

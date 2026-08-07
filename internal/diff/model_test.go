@@ -5,13 +5,24 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"ike/internal/theme"
 )
 
 func key(s string) tea.KeyPressMsg {
 	switch s {
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft}
+	case "right":
+		return tea.KeyPressMsg{Code: tea.KeyRight}
+	case "shift+left":
+		return tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModShift}
+	case "shift+right":
+		return tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModShift}
 	}
 	r := []rune(s)[0]
 	k := tea.KeyPressMsg{Code: r, Text: s}
@@ -158,13 +169,148 @@ func TestEnterWithoutPathIsNoop(t *testing.T) {
 	}
 }
 
-func TestLongLinesWrap(t *testing.T) {
-	long := strings.Repeat("wxyz ", 30) // ~150 cells, wraps in a 40-cell pane
+// hscrollModel builds a two-row diff whose second row is far wider than the
+// pane, so the horizontal offset has room to move (#1700).
+func hscrollModel(t *testing.T) *Model {
+	t.Helper()
+	long := "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	m := testModel(t, "short\n"+long, "short\n"+long)
+	m.SetSize(40, 20)
+	return m
+}
+
+func TestLongLinesDoNotWrap(t *testing.T) {
+	long := strings.Repeat("wxyz ", 30) // ~150 cells, far wider than a 40-cell pane
 	m := testModel(t, long, long)
 	m.SetSize(40, 20)
 	v := plainView(m)
-	if !strings.Contains(v, "↪") {
-		t.Fatalf("wrapped rows should carry the continuation marker:\n%s", v)
+	if strings.Contains(v, "↪") {
+		t.Fatalf("the diff must not soft-wrap:\n%s", v)
+	}
+	// One row in, one visual line out — the rest of the pane is empty.
+	if len(m.lines) != 1 {
+		t.Fatalf("a long line should render as exactly one visual line, got %d", len(m.lines))
+	}
+	first := strings.SplitN(v, "\n", 2)[0]
+	if w := ansi.StringWidth(first); w > 40 {
+		t.Fatalf("row should clip at the pane edge, got width %d: %q", w, first)
+	}
+}
+
+func TestUnifiedLongLinesDoNotWrap(t *testing.T) {
+	long := strings.Repeat("wxyz ", 30)
+	m := testModel(t, long, long+"!")
+	m.SetSize(40, 20)
+	m.SetUnified(true)
+	// One changed pair: the removed line and the added line, nothing more.
+	if len(m.lines) != 2 {
+		t.Fatalf("unified changed pair should render as two visual lines, got %d", len(m.lines))
+	}
+}
+
+func TestHorizontalScrollMovesBothSidesInLockstep(t *testing.T) {
+	m := hscrollModel(t)
+	before := strings.Split(plainView(m), "\n")
+	m.Update(key("right"))
+	if m.HOffset() != 1 {
+		t.Fatalf("right should scroll one column, got offset %d", m.HOffset())
+	}
+	after := strings.Split(plainView(m), "\n")
+	if len(before) != len(after) {
+		t.Fatalf("horizontal scrolling must not change the row count: %d vs %d", len(before), len(after))
+	}
+	// Row alignment: the separator sits in the same column on every row.
+	sepCol := strings.Index(after[0], "│")
+	for i, l := range after[:2] {
+		if got := strings.Index(l, "│"); got != sepCol {
+			t.Fatalf("row %d separator moved to column %d, want %d: %q", i, got, sepCol, l)
+		}
+	}
+	// Both sides dropped the same first column.
+	left, right, _ := strings.Cut(after[1], "│")
+	if strings.Contains(left, "abc") || strings.Contains(right, "abc") {
+		t.Fatalf("both sides should have scrolled past the first column: %q", after[1])
+	}
+	if !strings.Contains(left, "bcd") || !strings.Contains(right, "bcd") {
+		t.Fatalf("both sides should start one column later: %q", after[1])
+	}
+}
+
+func TestHorizontalScrollKeysAndClamping(t *testing.T) {
+	m := hscrollModel(t)
+	m.Update(key("left"))
+	if m.HOffset() != 0 {
+		t.Fatalf("left at column 0 should clamp, got %d", m.HOffset())
+	}
+	m.Update(key("shift+right"))
+	if want := m.hStep(); m.HOffset() != want {
+		t.Fatalf("shift+right should page by %d, got %d", want, m.HOffset())
+	}
+	m.Update(key("shift+left"))
+	if m.HOffset() != 0 {
+		t.Fatalf("shift+left should page back to 0, got %d", m.HOffset())
+	}
+	m.Update(key("$"))
+	if want := m.maxHOff(); m.HOffset() != want || want == 0 {
+		t.Fatalf("$ should scroll to the widest line's end (%d), got %d", want, m.HOffset())
+	}
+	m.ScrollXBy(1000)
+	if want := m.maxHOff(); m.HOffset() != want {
+		t.Fatalf("horizontal scroll should clamp at %d, got %d", want, m.HOffset())
+	}
+	m.Update(key("0"))
+	if m.HOffset() != 0 {
+		t.Fatalf("0 should reset the horizontal offset, got %d", m.HOffset())
+	}
+}
+
+func TestHorizontalScrollNoopWithoutOverflow(t *testing.T) {
+	m := testModel(t, "a\nb", "a\nb")
+	m.ScrollXBy(10)
+	if m.HOffset() != 0 {
+		t.Fatalf("lines that fit leave no horizontal range, got %d", m.HOffset())
+	}
+}
+
+func TestHorizontalOffsetReclampsOnResize(t *testing.T) {
+	m := hscrollModel(t)
+	m.ScrollXBy(1000)
+	off := m.HOffset()
+	m.SetSize(200, 20) // now the widest line fits: no scroll range left
+	if m.HOffset() != 0 {
+		t.Fatalf("widening the pane should reset the offset (was %d), got %d", off, m.HOffset())
+	}
+}
+
+func TestHorizontalScrollUnified(t *testing.T) {
+	m := hscrollModel(t)
+	m.SetUnified(true)
+	m.Update(key("right"))
+	if m.HOffset() != 1 {
+		t.Fatalf("unified layout should scroll horizontally too, got %d", m.HOffset())
+	}
+	if v := plainView(m); strings.Contains(v, "abcde") {
+		t.Fatalf("unified row should have scrolled past the first column:\n%s", v)
+	}
+}
+
+func TestSpansSurviveHorizontalOffset(t *testing.T) {
+	// A changed pair differing only in a late rune: the intra-line emphasis
+	// must land on that rune after the view scrolled right.
+	pal := theme.DefaultPalette()
+	m := NewFiles("diff", "/tmp/left.txt", "/tmp/right.txt", pal)
+	m.SetSize(30, 10)
+	prefix := strings.Repeat("x", 40)
+	m.SetContents(prefix+"L"+prefix, prefix+"R"+prefix)
+	m.ScrollXBy(35)
+	want := lipgloss.NewStyle().Background(pal.DiffChanged).Render("R")
+	if !strings.Contains(m.View(), want) {
+		t.Fatalf("changed rune should stay emphasized at a horizontal offset:\n%q", m.View())
+	}
+	// Scrolled past the change, the emphasis is off-screen.
+	m.ScrollXBy(20)
+	if strings.Contains(m.View(), want) {
+		t.Fatalf("emphasis should scroll out of view:\n%q", m.View())
 	}
 }
 

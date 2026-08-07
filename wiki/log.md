@@ -1,5 +1,21 @@
 # Log
 
+## 2026-08-07 (diff: no soft-wrap, synced horizontal scrolling, #1700)
+
+- **The diff never wraps.** Every row is exactly one visual line now, clipped
+  at its column edge — soft-wrapping used to push one side down while the
+  other stayed put, breaking the line-by-line alignment the side-by-side view
+  exists for. The `↪` continuation marker is gone with it.
+- **One offset, both sides.** The model carries a single horizontal offset
+  both columns render from, so they move in lockstep and corresponding columns
+  stay aligned. `h`/`l`/`←`/`→` step a column, `shift+←`/`shift+→` half a
+  column, `0`/`$` jump to the ends; the horizontal wheel and `shift`+wheel do
+  the same. The render pass measures the widest displayed line and re-clamps
+  the offset, so a resize or a layout toggle can't leave the view past the end.
+- **Emphasis and syntax follow the offset.** Intra-line spans and tree-sitter
+  captures are indexed in absolute display columns, so both stay on the right
+  runes however far the view is scrolled.
+
 ## 2026-08-07 (docs: the conceal layer gets its own page, #1698)
 
 - **One page for every stand-in.** `userdocs/guides/conceal.md` documents the

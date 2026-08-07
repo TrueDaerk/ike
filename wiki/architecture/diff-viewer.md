@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-08-07T00:00:00Z
@@ -39,9 +39,15 @@ prompt via `ui.ModelContent` (the conflict-guard use case) since it is just a
 sized, palette-threaded `View() string` component.
 
 Rendering is side-by-side by default: two columns with per-side line-number
-gutters and a `│` separator, both sides wrapped to their column budget with
-`viewport.WrapSegments` (the editor's cell-budgeting; `↪` marks continuation
-rows, tabs display four cells wide). `u` toggles the unified single-column
+gutters and a `│` separator, tabs displayed four cells wide. Lines never
+soft-wrap (#1700): every row is exactly one visual line, clipped at its column
+edge, and the model carries one shared horizontal offset (`hoff`) both sides
+render from — so the columns move in lockstep and row alignment survives any
+line length. The render pass measures the widest displayed line (`hmax`) and
+the visible column budget (`hcol`) and re-clamps `hoff`, so a resize, a layout
+toggle, or new content can never leave the view scrolled past the end. Spans
+and syntax captures are indexed in absolute display columns, so intra-line
+emphasis and highlighting stay on the right runes at any offset. `u` toggles the unified single-column
 layout, where a changed pair renders as its removed line followed by its added
 line under a dual old/new gutter. Line backgrounds come from three new theme
 `ui` slots — `DiffAdded`, `DiffRemoved`, `DiffChanged` (intra-line emphasis) —
@@ -63,8 +69,12 @@ itself), the per-keystroke re-diffs skip the right-side parse and a single
 parse runs when edit mode ends. Language-less paths and CGo-free builds
 render diff colouring only.
 
-Keys (focused pane): `j`/`k`/arrows scroll by visual row, `ctrl+u`/`ctrl+d`
-and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls. `n`/`N`
+Keys (focused pane): `j`/`k`/`↑`/`↓` scroll by visual row, `ctrl+u`/`ctrl+d`
+and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls.
+`h`/`l`/`←`/`→` scroll horizontally by one column and `shift+←`/`shift+→` by
+half a column; `0` jumps back to column 0 and `$` to the widest line's end.
+The horizontal wheel and `shift`+wheel do the same through `ScrollXBy` — all
+of it moves both sides at once (#1700). `n`/`N`
 step through hunks (scrolling the hunk a third down the view); `enter`
 dispatches `diff.JumpMsg` and the root model opens the right-hand file with
 the cursor on the hunk's first line. The view is read-only; hunk-level "take
