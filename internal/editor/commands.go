@@ -90,6 +90,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// Cron hints (#1624): per-view toggle over the editor.cron_hints
 			// config default.
 			action("view.toggleCronHints", "Toggle Cron Hints", "toggle_cron_hints", ""),
+			// PEM summaries (#1652): per-view toggle over the
+			// editor.pem_summary config default.
+			action("view.togglePemSummary", "Toggle PEM Summary", "toggle_pem_summary", ""),
 			// Number-readability hints (#1627): per-view toggles over the
 			// editor.byte_size_hints / duration_hints / digit_grouping /
 			// radix_hints config defaults.

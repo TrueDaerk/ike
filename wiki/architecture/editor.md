@@ -1562,6 +1562,62 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
 - **Contexts**: the config formats, where keys carry the intent — JSON/ndjson,
   YAML, TOML, ini/conf and dotenv.
 
+## PEM / certificate summaries (#1652)
+
+A PEM block collapses onto its `-----BEGIN …-----` line with a decoded
+one-line summary appended, so a `.pem`/`.crt`/`.cer` file — or a certificate
+pasted into a YAML block scalar — reads as facts instead of forty lines of
+base64:
+
+```
+-----BEGIN CERTIFICATE-----  certificate  CN=example.com  expires in 12d  2026-07-08→2027-06-03  issuer=Example CA  RSA-2048  SAN=example.com, www.example.com
+```
+
+Toggled by `editor.pem_summary` (default on, Settings → Editor) or per view by
+`view.togglePemSummary`. Decoding lives in `internal/peminfo` (a leaf package
+over the standard library); the editor half is `pemsummary.go`.
+
+- **Mechanic**: the log repeat run's (#1650), not the conceal layer's — a
+  conceal range is per-line and a PEM block is not. The body lines ride the
+  fold machinery (`lineHidden`, `hasFolds`, `collapsedRow`), so they are hidden
+  for motions, scrolling, mouse mapping and the render loop alike, and the
+  block costs one row of scrolling. Like a repeat run and unlike a fold it has
+  no open/close command: it reveals **positionally** like every stand-in family
+  (#1594) — the cursor anywhere inside the block renders all of it raw, base64
+  included, and leaving collapses it again. The buffer is never altered.
+- **Severity**: an expired or not-yet-valid certificate draws its summary in
+  the theme's error color and bold; one expiring inside `peminfo.WarnWindow`
+  (30 days, the usual ACME renewal lead time) in the warning color; everything
+  else faint. A certificate comfortably inside its window carries no verdict
+  text at all — the dates already said so, and a summary that shouts on every
+  healthy block teaches the reader to ignore it.
+- **Decoding depth**, deliberately asymmetric: `CERTIFICATE` decodes fully
+  (subject CN, expiry verdict, validity window, issuer CN, key type, SANs —
+  capped at three names plus a `+n more` count). That order is also the one
+  that survives a narrow pane: the row truncates the summary from the right
+  rather than dropping it, so the CN and the verdict are the last to go, and
+  only a pane too narrow for `pemMinSummary` columns falls back to the bare
+  marker. `CERTIFICATE REQUEST` and `PUBLIC KEY` decode to their
+  subject/key facts; **private keys are never parsed** — they get a label
+  built from the PEM type text that was already on screen (`private key
+  (rsa)`, `private key (encrypted)`) and nothing else, because a summary that
+  renders a secret defeats the point of the file being opaque. Any other type
+  gets a plain label (`certificate revocation list`, `Diffie-Hellman
+  parameters`), and anything that fails to parse falls back to
+  `<label>  (unparseable)`: a wrong summary is worse than no summary.
+- **Detection** is structural and language-agnostic: the layer reads buffer
+  text rather than the span pipeline, because the blocks worth summarising are
+  as often pasted into YAML or a config file as they are alone in a `.pem`.
+  Marker lines are trimmed before matching, so an indented block decodes like
+  one at the margin; the label must hold only RFC 7468 characters, so prose
+  that resembles a marker is not claimed; and an **unterminated** block is
+  never claimed — without its END marker there is no telling where the base64
+  stops, and a second BEGIN ends the search rather than being swallowed.
+- **Cost**: the blocks are cached per document version and path (`pemCache`,
+  a pointer field like `logRunCache`), and the whole layer is gated by the
+  large-file guard (#149) — re-scanning a multi-megabyte buffer per version is
+  exactly what that guard exists to avoid.
+
 ## Secret masking (#1623)
 
 Values in a `.env` file whose key names a credential render as `••••`
@@ -1740,6 +1796,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
+`pem_summary` (#1652),
 `color_preview`
 (#790), `id_colors` / `id_color_min_length` (#1626)
 and `search_ignore_case` (#1111, default off — in-file search folds

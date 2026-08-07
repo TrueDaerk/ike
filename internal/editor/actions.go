@@ -621,6 +621,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleBase64Decoding()
 	case "toggle_cron_hints":
 		m.toggleCronHints()
+	case "toggle_pem_summary":
+		m.togglePemSummary()
 	case "toggle_byte_size_hints":
 		m.toggleByteSizeHints()
 	case "toggle_duration_hints":

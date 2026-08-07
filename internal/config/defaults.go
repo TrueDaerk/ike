@@ -90,6 +90,7 @@ func defaults() *Config {
 			EntityDecoding:         true,
 			Base64Decoding:         true,
 			CronHints:              true,
+			PemSummary:             true,
 			ByteSizeHints:          true,
 			DurationHints:          true,
 			DigitGrouping:          true,
