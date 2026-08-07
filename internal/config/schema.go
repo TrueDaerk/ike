@@ -293,6 +293,12 @@ type Editor struct {
 	// `cron:` values and quoted expressions in config formats; the bare
 	// expression reappears under the caret.
 	CronHints bool `toml:"cron_hints"`
+	// PemSummary collapses a PEM block onto its BEGIN marker plus a decoded
+	// one-line summary (#1652) — subject CN, validity window, issuer, key
+	// type, SANs for a certificate, a type label for everything else — with
+	// expired certificates in the error colour and soon-expiring ones in the
+	// warning colour; the raw base64 reappears with the cursor in the block.
+	PemSummary bool `toml:"pem_summary"`
 	// ByteSizeHints renders a byte count as a binary size (#1627) —
 	// `10485760` as `10 MiB` — where the key names a byte count or the
 	// value is a multiple of 1024; the raw number reappears under the caret.

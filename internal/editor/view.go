@@ -551,6 +551,12 @@ func (m Model) View() string {
 			out = append(out, gutter+m.renderLogRunHeader(i, end, textWidth, cursorStyle, selStyle))
 			continue
 		}
+		// A PEM block (#1652) collapses onto its BEGIN marker plus the decoded
+		// summary — CN, validity, issuer, key type — instead of a base64 wall.
+		if b, ok := m.pemBlockAt(i); ok {
+			out = append(out, gutter+m.renderPemHeader(i, b, textWidth, cursorStyle, selStyle))
+			continue
+		}
 		if m.softWrap {
 			// Soft wrap (#64): one row per wrap segment; continuation rows
 			// carry a wrap marker in the gutter instead of a line number.

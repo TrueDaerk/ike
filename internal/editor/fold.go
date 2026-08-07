@@ -22,15 +22,18 @@ import (
 	"ike/internal/highlight"
 )
 
-// hasFolds reports whether this view hides any line — a collapsed fold, or a
-// collapsed log repeat run (#1650) — the fast gate the render/motion/scroll
-// paths check before doing fold-aware work.
-func (m Model) hasFolds() bool { return len(m.folded) > 0 || m.hasLogRuns() }
+// hasFolds reports whether this view hides any line — a collapsed fold, a
+// collapsed log repeat run (#1650) or a summarised PEM block (#1652) — the
+// fast gate the render/motion/scroll paths check before doing fold-aware work.
+func (m Model) hasFolds() bool {
+	return len(m.folded) > 0 || m.hasLogRuns() || m.hasPemBlocks()
+}
 
 // lineHidden reports whether line is inside a collapsed fold body (the header
-// line itself stays visible) or folded away inside a log repeat run.
+// line itself stays visible), folded away inside a log repeat run, or inside a
+// collapsed PEM block.
 func (m Model) lineHidden(line int) bool {
-	if m.logRunHidden(line) {
+	if m.logRunHidden(line) || m.pemHidden(line) {
 		return true
 	}
 	for h, e := range m.folded {
@@ -48,13 +51,17 @@ func (m Model) foldedAt(line int) (int, bool) {
 }
 
 // collapsedRow reports whether line renders as exactly one row because it
-// heads a collapsed fold or a collapsed log repeat run (#1650) — the soft-wrap
-// paths must not slice such a line into wrap segments.
+// heads a collapsed fold, a collapsed log repeat run (#1650) or a summarised
+// PEM block (#1652) — the soft-wrap paths must not slice such a line into wrap
+// segments.
 func (m Model) collapsedRow(line int) bool {
 	if _, ok := m.foldedAt(line); ok {
 		return true
 	}
-	_, ok := m.logRunAt(line)
+	if _, ok := m.logRunAt(line); ok {
+		return true
+	}
+	_, ok := m.pemBlockAt(line)
 	return ok
 }
 

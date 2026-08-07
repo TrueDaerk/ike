@@ -381,6 +381,13 @@ type Model struct {
 	// logDeltaCache caches the inter-line elapsed times (#1651, logdelta.go)
 	// per document version, the same way.
 	logDeltaCache *logDeltaState
+	// PEM summaries (#1652, pemsummary.go). pemSummary is the
+	// editor.pem_summary toggle, pemSummarySet a per-view
+	// view.togglePemSummary override (like mdRenderSet); pemCache holds the
+	// blocks of one document version (pointer, shared like logRunCache).
+	pemSummary    bool
+	pemSummarySet bool
+	pemCache      *pemState
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
 	// colorPreviewSet marks a per-view view.toggleColorPreview override
@@ -587,6 +594,8 @@ func New() Model {
 		logRender:          true,
 		logRunCache:        &logRunState{},
 		logDeltaCache:      &logDeltaState{},
+		pemSummary:         true,
+		pemCache:           &pemState{},
 		tsDecode:           true,
 		uniDecode:          true,
 		entDecode:          true,
@@ -753,6 +762,9 @@ func (m *Model) applyConfig() {
 	}
 	if !m.secretMaskSet {
 		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)
+	}
+	if !m.pemSummarySet {
+		m.pemSummary = boolOr(m.cfg, "editor.pem_summary", m.pemSummary)
 	}
 	if !m.colorPreviewSet {
 		m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)

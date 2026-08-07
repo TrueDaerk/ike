@@ -141,6 +141,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.entity_decoding", c.Editor.EntityDecoding)
 	put("editor.base64_decoding", c.Editor.Base64Decoding)
 	put("editor.cron_hints", c.Editor.CronHints)
+	put("editor.pem_summary", c.Editor.PemSummary)
 	put("editor.byte_size_hints", c.Editor.ByteSizeHints)
 	put("editor.duration_hints", c.Editor.DurationHints)
 	put("editor.digit_grouping", c.Editor.DigitGrouping)

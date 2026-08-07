@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-07 (editor: PEM/certificate inline summary, #1652)
+
+- A PEM block now collapses onto its `-----BEGIN …-----` line with a decoded
+  one-line summary appended — for a certificate: subject CN, validity window,
+  expiry verdict, issuer CN, key type and SANs — instead of showing a wall of
+  base64. Expired or not-yet-valid certificates draw in the error colour, ones
+  expiring within 30 days in the warning colour.
+- Private keys are never parsed: they get a type label (`private key (rsa)`)
+  and nothing else. Unknown and unparseable blocks fall back to a plain label.
+- The mechanic is the log repeat run's (#1650), not the conceal layer's — the
+  body lines ride the fold machinery, and the block reveals positionally like
+  every stand-in family (#1594): the cursor inside it renders all of it raw.
+- Decoding lives in `internal/peminfo`; the editor half is
+  `internal/editor/pemsummary.go`. Gated by `editor.pem_summary` /
+  `view.togglePemSummary`, default on. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-07 (docs: generated feature screenshots, #1634)
 
 - The user docs carry feature screenshots (`docs/screenshots/features`, linked
