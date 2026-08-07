@@ -30,6 +30,10 @@ const (
 	// []string, so committing the raw comma string would fail the typed
 	// decode — commit splits it instead.
 	List
+	// IntList is List over a []int config field (#1663, editor.rulers): the
+	// same indexed multi-value editor, but every element must parse as a
+	// number and the commit writes a TOML integer array.
+	IntList
 )
 
 // Entry describes one setting.
@@ -74,6 +78,8 @@ func typeName(t EntryType) string {
 		return "chord"
 	case List:
 		return "list"
+	case IntList:
+		return "int list"
 	default:
 		return "string"
 	}
@@ -94,7 +100,7 @@ func marker(t EntryType) string {
 		return "▸"
 	case Chord:
 		return "⌨"
-	case List:
+	case List, IntList:
 		return "≡"
 	default: // String, Path
 		return "✎"
@@ -176,6 +182,7 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "editor.wrap", Type: Bool, Title: "Soft wrap", Description: "Wrap long lines at the pane edge", Scope: config.UserScope},
 			{Key: "editor.show_whitespace", Type: Enum, Title: "Show whitespace", Description: "Render spaces and tabs visibly", Scope: config.UserScope, Options: []string{"none", "trailing", "all"}},
 			{Key: "editor.indent_guides", Type: Bool, Title: "Indent guides", Description: "Draw vertical lines at each indentation level", Scope: config.UserScope},
+			{Key: "editor.rulers", Type: IntList, Title: "Rulers", Description: "Display columns tinted as vertical margin guides (80, 120); empty draws none. Columns below 1 are clamped to 1", Scope: config.UserScope},
 			{Key: "editor.rainbow_indent_guides", Type: Bool, Title: "Rainbow indent guides", Description: "Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn", Scope: config.UserScope},
 			{Key: "editor.breadcrumbs", Type: Bool, Title: "Breadcrumbs", Description: "Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable", Scope: config.UserScope},
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
@@ -199,8 +206,22 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "lsp.diagnostics_ignore", Type: List, Title: "Ignored diagnostics", Description: "Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here", Scope: config.ProjectScope},
 			{Key: "lsp.diagnostics_severity", Type: List, Title: "Diagnostic severity overrides", Description: "Remap rules applied everywhere (editor and Problems window): the ignore-rule conditions plus a trailing error/warning/info/hint/off — e.g. 'reportArgumentType warning'. First match wins, off drops the diagnostic; syntax errors (codeless diagnostics) always stay errors. The 'partial' keyword restricts a rule to union-partial type mismatches ('str | None' passed where 'str' is expected) — combine with source=, the parsed phrasing is server-specific. Exact-code rules also pass through to servers with native overrides (pyright)", Scope: config.ProjectScope},
 		}},
-		{Title: "Explorer", Description: "The project file tree: what it hides. Excluding an entry here hides it from the tree only; go-to-file and find-in-path still reach it.", Entries: []Entry{
+		{Title: "Explorer", Description: "The project file tree: what it shows, how it is sorted and what it hides. Excluding an entry here hides it from the tree only; go-to-file and find-in-path still reach it.", Entries: []Entry{
+			{Key: "explorer.show_hidden", Type: Bool, Title: "Show hidden files", Description: "List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way", Scope: config.UserScope},
+			{Key: "explorer.git_status", Type: Bool, Title: "Git status colors", Description: "Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children", Scope: config.UserScope},
+			{Key: "explorer.icons", Type: Bool, Title: "File type icons", Description: "Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed)", Scope: config.UserScope},
+			{Key: "explorer.auto_reveal", Type: Bool, Title: "Autoscroll from source", Description: "Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' \"autoscroll from source\")", Scope: config.UserScope},
+			{Key: "explorer.sort", Type: Enum, Title: "Sort order", Description: "How entries are ordered inside a directory; directories always come before files", Scope: config.UserScope, Options: []string{"name", "type", "size", "modified"}},
+			{Key: "explorer.tree_indent", Type: Int, Title: "Tree indent", Description: "Columns of indentation per nesting level in the tree", Scope: config.UserScope, Min: 0, Max: 8},
 			{Key: "explorer.exclude", Type: List, Title: "Excluded entries", Description: "Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them", Scope: config.UserScope},
+		}},
+		{Title: "Language Support", Description: "The LSP subsystem's global switches: whether language servers run at all, what they may install, and which requests fire on their own. Per-language server commands live on the Language Servers page.", Entries: []Entry{
+			{Key: "lsp.enabled", Type: Bool, Title: "Language servers", Description: "Run language servers at all; off disables completion, diagnostics, navigation and every other LSP-backed feature", Scope: config.UserScope},
+			{Key: "lsp.auto_install", Type: Bool, Title: "Auto-install servers", Description: "Install a missing language server automatically when a file of its language opens, instead of only offering it", Scope: config.UserScope},
+			{Key: "lsp.completion_auto", Type: Bool, Title: "Completion while typing", Description: "Open the completion popup on identifier characters; server trigger characters (\".\") and the manual ctrl+space request work either way", Scope: config.UserScope},
+			{Key: "lsp.signature_auto", Type: Bool, Title: "Signature help while typing", Description: "Open the signature-help popup on the server's trigger characters (\"(\", \",\"); the manual Parameter Info command works either way", Scope: config.UserScope},
+			{Key: "lsp.inlay_hints", Type: Bool, Title: "Inlay hints", Description: "Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead", Scope: config.UserScope},
+			{Key: "lsp.log_level", Type: Enum, Title: "Server log level", Description: "Verbosity of the language-server log the LSP: Show Server Log command opens", Scope: config.UserScope, Options: []string{"error", "warn", "info", "debug"}},
 		}},
 		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
 			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes},
@@ -211,9 +232,17 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
 		}},
+		{Title: "Command Palette", Description: "The command palette overlay: how many rows it shows, which mode a query without a prefix rune lands in, and what happens to commands belonging to another pane.", Entries: []Entry{
+			{Key: "palette.max_results", Type: Int, Title: "Result rows", Description: "Result rows shown at once; the list still scrolls past it", Scope: config.UserScope, Min: 1, Max: 100},
+			{Key: "palette.default_mode", Type: Enum, Title: "Default mode", Description: "Prefix assumed when the query starts with no mode rune: \":\" ranks it as a command, \"@\" as a file name", Scope: config.UserScope, Options: []string{":", "@"}},
+			{Key: "palette.off_context", Type: Enum, Title: "Off-context commands", Description: "How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them", Scope: config.UserScope, Options: []string{"rank", "hide"}},
+		}},
 		{Title: "Files & Session", Description: "Opening, watching and restoring files: which project comes back on start, how external changes are handled and when a file counts as too large for language features.", Entries: []Entry{
 			{Key: "project.restore_last", Type: Bool, Title: "Restore last project", Description: "Reopen the previous project's workspace on start", Scope: config.UserScope},
 			{Key: "project.directory", Type: String, Title: "Project directory", Description: "Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use", Scope: config.UserScope},
+			{Key: "project.max_history", Type: Int, Title: "Recent projects kept", Description: "How many entries the recent-projects list keeps; the oldest fall off", Scope: config.UserScope, Min: 0, Max: 200},
+			{Key: "project.max_workspaces", Type: Int, Title: "Background workspaces", Description: "Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3", Scope: config.UserScope, Min: 0, Max: 20},
+			{Key: "project.background_lsp_timeout", Type: String, Title: "Background LSP timeout", Description: "How long a parked background workspace keeps its language servers alive, as a Go duration (\"5m\", \"90s\"); past it they stop and respawn lazily on resume. Empty selects 5m, \"off\" keeps them running", Scope: config.UserScope},
 			{Key: "files.watch", Type: Bool, Title: "Watch files", Description: "Report external file changes (fsnotify on the project root)", Scope: config.UserScope},
 			{Key: "files.auto_reload", Type: Enum, Title: "Auto reload", Description: "Reload clean buffers when their file changes on disk", Scope: config.UserScope, Options: []string{"clean", "never"}},
 			{Key: "files.persistent_undo", Type: Bool, Title: "Persistent undo", Description: "Keep undo history across restarts while the file is unchanged", Scope: config.UserScope},
@@ -226,6 +255,7 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "backup.max_age_days", Type: Int, Title: "Snapshot max age", Description: "Days before leftover snapshots are pruned at startup (after the restore prompt)", Scope: config.UserScope, Min: 1, Max: 365},
 		}},
 		{Title: "Terminal", Description: "The integrated terminal and what it offers while you type at the shell prompt.", Entries: []Entry{
+			{Key: "terminal.shell", Type: Path, Title: "Shell", Description: "Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change", Scope: config.UserScope},
 			{Key: "terminal.autosuggest", Type: Bool, Title: "Command auto-suggest", Description: "Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way", Scope: config.UserScope},
 			{Key: "terminal.scrollback_lines", Type: Int, Title: "Scrollback lines", Description: "Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it", Scope: config.UserScope, Min: 100, Max: 1000000},
 		}},
@@ -239,6 +269,12 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 		{Title: "Notifications", Description: "Toasts and the notification history: how long they stay and which severities are worth interrupting for.", Entries: []Entry{
 			{Key: "notifications.timeout_seconds", Type: Int, Title: "Notification timeout", Description: "Seconds before info/warn toasts expire", Scope: config.UserScope, Min: 1, Max: 300},
 			{Key: "notifications.min_severity", Type: Enum, Title: "Notification severity floor", Description: "Below this severity notifications go to the history only", Scope: config.UserScope, Options: []string{"info", "warn", "error"}},
+		}},
+		{Title: "TODO Index", Description: "The project-wide comment-tag index behind the TODO tool window.", Entries: []Entry{
+			{Key: "todo.patterns", Type: List, Title: "Tag words", Description: "Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes", Scope: config.UserScope},
+		}},
+		{Title: "Marketplace Catalog", Description: "Where the plugin marketplace fetches its catalog from. The Marketplace page installs from whatever this URL serves.", Entries: []Entry{
+			{Key: "marketplace.catalog_url", Type: String, Title: "Catalog URL", Description: "HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled", Scope: config.UserScope},
 		}},
 	}
 }

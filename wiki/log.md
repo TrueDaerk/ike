@@ -1,5 +1,29 @@
 # Log
 
+## 2026-08-07 (settings: every file-configurable key has a UI surface, #1663)
+
+- An audit found 22 TOML leaf keys that only a text editor could reach. They
+  are schema entries now: the **Explorer** page grew hidden files, git-status
+  colours, icons, autoscroll-from-source, sort order and tree indent; new
+  **Language Support** (the six `lsp.*` scalars), **Command Palette**
+  (`max_results`, `default_mode`, `off_context`), **TODO Index**
+  (`todo.patterns`) and **Marketplace Catalog** (`marketplace.catalog_url`)
+  pages; **Files & Session** gained the recent-project / background-workspace
+  caps and the background LSP timeout; **Terminal** the shell override; and
+  **Editor** the rulers.
+- `editor.rulers` needed a type: **IntList** runs the existing indexed
+  multi-value editor over a `[]int` field, rejecting a non-numeric element in
+  the row instead of staging a value the typed decode would refuse.
+- A **Path** entry now also accepts a bare name that resolves on `PATH`
+  (`terminal.shell = "fish"`) — that is exactly how the terminal spawns it;
+  anything with a separator must still exist on disk.
+- The gap cannot silently come back: a reflection guard walks `config.Config`
+  and fails on any leaf key that is neither in the settings schema nor in one
+  of three excuse maps (dedicated custom page / internal state / a named,
+  reasoned gap), and a second test fails on a stale excuse. Two known gaps
+  remain listed: `explorer.colors` and `theme.terminal`, colour slot maps that
+  want a picker page like Syntax Colors.
+
 ## 2026-08-07 (settings: the Formatters page edits overrides, #1662)
 
 - **Settings → Formatters** is an editor now, not a report. `e` toggles a

@@ -136,3 +136,45 @@ func TestPathSuggestLinesCap(t *testing.T) {
 		t.Fatalf("tail = %q", lines[len(lines)-1])
 	}
 }
+
+// TestPathEntryAcceptsPATHName guards #1663: a Path value without a separator
+// commits when it resolves on PATH — terminal.shell = "fish" is exactly what
+// the terminal spawns — while a bare name that resolves nowhere is refused.
+func TestPathEntryAcceptsPATHName(t *testing.T) {
+	restoreConfig(t)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "ike-fake-shell")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+
+	pages := []Page{{Title: "Terminal", Entries: []Entry{
+		{Key: "terminal.shell", Type: Path, Title: "Shell", Description: "d", Scope: config.UserScope},
+	}}}
+	m := New(pages, testOpts(t))
+	m.Open()
+	m.SetSize(100, 30)
+	m.focus = formColumn
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*pathEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *pathEditor", m.editor)
+	}
+
+	ed.tf.Set("no-such-program-anywhere")
+	m.Update(key("enter"))
+	if ed.err == "" || m.Dirty() {
+		t.Fatalf("an unresolvable bare name must be refused: err=%q dirty=%v", ed.err, m.Dirty())
+	}
+
+	ed.tf.Set("ike-fake-shell")
+	m.Update(key("enter"))
+	if ed.err != "" {
+		t.Fatalf("a PATH-resolvable bare name must commit, got err=%q", ed.err)
+	}
+	apply(t, m.applyChanges())
+	if got := config.Get().Terminal.Shell; got != "ike-fake-shell" {
+		t.Fatalf("terminal.shell = %q, want the PATH name", got)
+	}
+}

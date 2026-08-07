@@ -2,6 +2,7 @@ package settings
 
 import (
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
@@ -63,7 +64,7 @@ func newEditor(m *Model, e Entry) Editor {
 		return &intEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 	case Chord:
 		return &chordEditor{m: m, e: e}
-	case List:
+	case List, IntList:
 		return newListEditor(m, e)
 	case Path:
 		ed := &pathEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
@@ -445,6 +446,21 @@ type pathEditor struct {
 	err     string
 }
 
+// resolvablePath reports whether a Path entry's value names something that
+// exists. A value with a separator must be a real file or directory; a bare
+// name (#1663: terminal.shell = "fish") is accepted when it resolves on PATH,
+// because that is exactly how the consumer spawns it.
+func resolvablePath(path string) bool {
+	if _, err := os.Stat(expandHome(path)); err == nil {
+		return true
+	}
+	if strings.ContainsRune(path, os.PathSeparator) {
+		return false
+	}
+	_, err := exec.LookPath(path)
+	return err == nil
+}
+
 func (p *pathEditor) Value() any      { return strings.TrimSpace(p.tf.text) }
 func (p *pathEditor) Capturing() bool { return true }
 func (p *pathEditor) Dirty() bool     { return p.tf.text != p.m.value(p.e.Key) }
@@ -469,11 +485,9 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case tea.KeyEnter:
 		path := strings.TrimSpace(p.tf.text)
-		if path != "" {
-			if _, err := os.Stat(expandHome(path)); err != nil {
-				p.err = "path does not exist"
-				return nil
-			}
+		if path != "" && !resolvablePath(path) {
+			p.err = "path does not exist"
+			return nil
 		}
 		p.err = ""
 		p.suggest.clear()
@@ -571,7 +585,9 @@ func (c *chordEditor) View(w, h int) []string {
 
 // listEditor is the indexed multi-value editor: one row per value with a
 // remove key, plus an add row — instead of a comma-joined string the user has
-// to re-type to change one element.
+// to re-type to change one element. An IntList entry (#1663) runs the same
+// editor over a []int config field: elements are rejected unless they parse as
+// numbers, and the commit writes a TOML integer array.
 type listEditor struct {
 	m       *Model
 	e       Entry
@@ -579,10 +595,13 @@ type listEditor struct {
 	idx     int // == len(items) selects the "+ add value…" row
 	editing bool
 	tf      textField
+	// numeric marks the IntList variant; err carries its rejection message.
+	numeric bool
+	err     string
 }
 
 func newListEditor(m *Model, e Entry) *listEditor {
-	return &listEditor{m: m, e: e, items: splitList(m.value(e.Key))}
+	return &listEditor{m: m, e: e, items: splitList(m.value(e.Key)), numeric: e.Type == IntList}
 }
 
 // splitList parses the flat rendering of a list value ("[a b]" from the typed
@@ -604,7 +623,12 @@ func splitList(v string) []string {
 	return out
 }
 
-func (l *listEditor) Value() any      { return append([]string{}, l.items...) }
+func (l *listEditor) Value() any {
+	if l.numeric {
+		return toInts(l.items)
+	}
+	return append([]string{}, l.items...)
+}
 func (l *listEditor) Capturing() bool { return l.editing }
 func (l *listEditor) Dirty() bool {
 	return strings.Join(l.items, ",") != strings.Join(splitList(l.m.value(l.e.Key)), ",")
@@ -617,8 +641,25 @@ func (l *listEditor) Paste(text string) bool {
 	return l.tf.Paste(text)
 }
 
-// write persists the current items as a TOML string array (#1139).
+// toInts converts the item strings to the TOML integer array an IntList entry
+// persists (#1663). Elements are validated on entry, so a stray unparseable one
+// is dropped rather than failing the whole write.
+func toInts(items []string) []int {
+	out := make([]int, 0, len(items))
+	for _, it := range items {
+		if n, err := strconv.Atoi(strings.TrimSpace(it)); err == nil {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// write persists the current items as a TOML string array (#1139), or as an
+// integer array for an IntList entry (#1663).
 func (l *listEditor) write() tea.Cmd {
+	if l.numeric {
+		return l.m.writeValue(l.e, toInts(l.items))
+	}
 	items := l.items
 	if items == nil {
 		items = []string{}
@@ -630,11 +671,20 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	if l.editing {
 		switch key.Code {
 		case tea.KeyEscape:
-			l.editing = false
+			l.editing, l.err = false, ""
 			return nil
 		case tea.KeyEnter:
-			l.editing = false
 			text := strings.TrimSpace(l.tf.text)
+			// An IntList element must be a number: reject in place instead of
+			// staging a value the typed decode would refuse (#1663).
+			if l.numeric && text != "" {
+				if _, err := strconv.Atoi(text); err != nil {
+					l.err = "not a number"
+					return nil
+				}
+			}
+			l.err = ""
+			l.editing = false
 			switch {
 			case text == "" && l.idx < len(l.items):
 				l.items = append(l.items[:l.idx], l.items[l.idx+1:]...)
@@ -724,6 +774,9 @@ func (l *listEditor) View(w, h int) []string {
 		add = "+  " + l.tf.View()
 	}
 	out = append(out, l.m.editorRow(w, l.idx == len(l.items), add, ""))
+	if l.err != "" && len(out) < h {
+		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Error).Render(" ✗ "+l.err)))
+	}
 	if len(out) < h {
 		out = append(out, clip.Render(dim.Render(" enter edit · d remove")))
 	}

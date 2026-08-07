@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-07-28T18:00:00Z
+timestamp: 2026-08-07T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -51,7 +51,8 @@ box capped at ~110×32 cells above the workspace, laid out as the
 `settings.open` (cmd+, / menu bar / palette).
 
 - **Schema-driven.** A `Page` is a titled list of `Entry` descriptors — config
-  key, control type (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`), write scope,
+  key, control type
+  (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`/`IntList`), write scope,
   title, description, enum options, int bounds. The form renders from the
   descriptor; there are no hand-built page UIs.
 - **Apply-on-change, single source of truth.** The panel never caches values:
@@ -64,13 +65,19 @@ box capped at ~110×32 cells above the workspace, laid out as the
   column (#383) and steps an int; ← mirrors it on those two types and
   otherwise returns to the category column (#533). List (#1139) commits a
   **TOML string array** (`[]string`), because the typed schema field is a
-  string slice and a raw comma string would fail the decode. Path inputs get shell-style
+  string slice and a raw comma string would fail the decode; **IntList**
+  (#1663, `editor.rulers`) is the same editor over a `[]int` field — an element
+  that does not parse as a number is refused in the row (`✗ not a number`,
+  nothing staged) and the commit writes a TOML integer array. Path inputs get shell-style
   **tab completion** (#541) via the shared `internal/pathcomplete` engine:
   matching entries render as a suggestion list under the row (final path
   component only, capped with a `+N more` tail), tab extends the input to the
   longest unambiguous prefix — a single directory match completes with its
   trailing separator so repeated tab descends; `~` notation is preserved and
-  matching falls back to case-insensitive (`~/dev` finds `~/Development`). The selected entry's
+  matching falls back to case-insensitive (`~/dev` finds `~/Development`). A
+  Path value without a separator commits when it resolves on `PATH` (#1663:
+  `terminal.shell = "fish"` is what the consumer spawns anyway); anything else
+  must exist on disk. The selected entry's
   description, key and validation error render in a **footer pinned to the
   bottom of the form column** — not inline under the row — so ↑↓ never shifts
   the other rows (#535); only the enum picker expands inline. The custom pages
@@ -154,23 +161,61 @@ any entry whose key the typed schema does not expose (no dead keys).
 
 - **Editor** — tab width, use spaces, auto indent, auto save (focus|off,
   #174), trim trailing whitespace, insert final newline, line numbers
-  (+relative), scroll offset, soft wrap, show whitespace: every key
-  `applyConfig` reads live.
+  (+relative), scroll offset, soft wrap, show whitespace, rulers (#1663):
+  every key `applyConfig` reads live.
 - **Diagnostics** (#1259) — the per-source, per-severity decoration toggles
   (`editor.marks.lsp_*`, `editor.marks.git_*`; user scope) and the
   project-scoped `lsp.diagnostics_ignore` rule list the editor's
   "Ignore Diagnostic Under Caret" command appends to.
+- **Explorer** — hidden files, git-status colours, file-type icons, autoscroll
+  from source, sort order, tree indent (#1663) and the `explorer.exclude`
+  glob list (#1139).
+- **Language Support** (#1663) — the LSP subsystem's global switches:
+  `lsp.enabled`, `lsp.auto_install`, `lsp.completion_auto`,
+  `lsp.signature_auto`, `lsp.inlay_hints`, `lsp.log_level`. The per-language
+  server commands stay on the plugin-contributed **Language Servers** page.
 - **Appearance** — theme (enum fed from the registry's theme list; writing
   `theme.name` hot-reloads, so selection previews immediately), menu bar
   on/off, command-palette chord.
 - **Syntax Colors** (#1238) — a custom page holding the `[theme.captures]`
   overrides; see below.
-- **Files & Session** — restore last project, `files.watch`, `files.auto_reload`
-  (clean|never, #81), `files.persistent_undo` (undo survives restarts, #148).
+- **Command Palette** (#1663) — result rows, default mode and the off-context
+  ranking (`palette.max_results`, `palette.default_mode`,
+  `palette.off_context`).
+- **Files & Session** — restore last project, project directory, recent-project
+  and background-workspace caps plus the background LSP timeout (#1663),
+  `files.watch`, `files.auto_reload` (clean|never, #81),
+  `files.persistent_undo` (undo survives restarts, #148).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
+- **Terminal** — the shell override (#1663), command auto-suggest, scrollback.
 - **Notifications** — toast timeout, severity floor.
+- **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
+  matches (see [TODO index](./todo-index.md)).
+- **Marketplace Catalog** (#1663) — `marketplace.catalog_url`, the index the
+  Marketplace page installs from.
+
+### No file-only keys (#1663)
+
+The catalog above is not maintained by hand-checking. A reflection guard
+(`coverage_test.go`) walks `config.Config` for TOML leaf keys — scalars,
+scalar arrays, and each map / table array as one container key — and fails on
+any key that is neither in `BasePages` nor listed in one of three excuse maps:
+
+- `pagedKeys` — the key's surface is a dedicated custom `PageModel`
+  (`lsp.servers`, `keymap.bindings`, `theme.captures`, `files.associations`,
+  `lang`, `plugins`, `format`, `tools.custom`, `debug.php.path_mappings`,
+  `snippets`),
+- `internalKeys` — state IKE writes about itself, deliberately invisible
+  (`lsp.onboarded`, `ui.onboarded`, `project.history`),
+- `uncoveredKeys` — a known gap with its reason. Today: `explorer.colors` and
+  `theme.terminal`, two colour slot maps that want a picker page like Syntax
+  Colors.
+
+A second test fails on a stale excuse — one naming a key the schema dropped, or
+one the schema now covers — so the maps cannot rot. Adding a config field
+therefore forces the choice: give it a settings surface, or say why not.
 
 ## Syntax Colors page (#1238)
 
