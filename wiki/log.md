@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-07 (editor: constant conceals in code, #1701)
+
+- **Constants read like config values.** A constant assignment in a Python,
+  Go or PHP buffer draws in the unit its *name* carries — the same key
+  heuristics and `editor.number_hint_units` mapping the config formats use
+  (#1627, #1685) — with a pure literal-arithmetic right-hand side evaluated
+  first: `MAX_BYTES = 10 * 1024 * 1024` conceals as `10 MiB`,
+  `SECONDS_PER_DAY = 60 * 60 * 24` as `86_400`.
+- **`internal/consthint` is new**: per-language recognition (CONST_CASE in
+  Python, `const` in Go, `const`/`define()` in PHP) plus a strict `math/big`
+  evaluator — literals and `+ - * / % << >> & | ^` only, per-flavor
+  precedence (Go binds `<<`/`&` tighter than Python/PHP), and everything the
+  languages disagree on (inexact division, negative remainders) or that
+  overflows is refused, so identifiers, calls, `iota` and floats stay raw.
+- **No new switches.** The spans reuse the numhint/epochtime captures, so the
+  existing toggles gate them and the caret reveals raw source as everywhere
+  else (#1594, #1686). `numhint.LiteralHint` and `numhint.KeyUnit` are the
+  new exports the producer renders through.
+
 ## 2026-08-07 (diff: no soft-wrap, synced horizontal scrolling, #1700)
 
 - **The diff never wraps.** Every row is exactly one visual line now, clipped
