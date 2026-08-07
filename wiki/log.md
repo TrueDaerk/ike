@@ -1,5 +1,23 @@
 # Log
 
+## 2026-08-07 (editor: ex `:sort` command family, #1657)
+
+- `:[range]sort[!] [flags]` (short `:sor`) reorders lines without leaving the
+  editor. Its default range is the **whole buffer**, not the current line —
+  `:'<,'>sort` sorts a selection, `:2,10sort` a span, and `:` from visual mode
+  still pre-fills the bounds.
+- Flags combine: `u` drops duplicate lines, `n` sorts on the first decimal
+  number in each line (a touching `-` is part of it; unnumbered lines come
+  first), `i` compares case-insensitively, `!` inverts the order. An unknown
+  flag letter is an error that leaves the buffer untouched.
+- The sort is stable — `!` inverts the comparator instead of reversing the
+  result, so equal lines keep their relative order either way. `u` compares
+  whole lines (case-folded under `i`), not the sort key.
+- The range is rewritten as one `buffer.Edit`, so a single `u` reverts the
+  whole sort; an already-sorted range records nothing and reports *already
+  sorted*. Lives in `internal/editor/sort.go`. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-07 (editor: chmod octal permission hints, #1656)
 
 - An octal file mode now draws with its symbolic form appended —

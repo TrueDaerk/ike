@@ -144,6 +144,7 @@ to open the file whose name is under the cursor.
 | `:e path` | Reload a file, or open a new unsaved buffer if it does not exist |
 | `:s/pat/repl/g` | Substitute over a range |
 | `:d` `:y` | Delete / yank the range's lines, optionally into a register (`:d a`) |
+| `:sort` `:sort!` | Sort the range's lines (with `!`, in reverse) |
 | `:>` `:<` | Indent / dedent the range — repeat the character for more levels (`:>>`) |
 | `:42` `:$` | Jump to a line |
 
@@ -159,6 +160,14 @@ previous line matching a pattern. Addresses take offsets like `.+2` or `$-1`.
 `:s` takes the usual flags: `g` for every match on a line, `i` / `I` to force
 case-insensitive or exact matching, `n` to only count matches, and `c` to
 confirm each one interactively. A bare `:s` repeats the last substitution.
+
+`:sort` is the one command whose default range is the **whole file** rather than
+the current line — `:'<,'>sort` sorts a selection, `:2,10sort` a span. Its flags
+combine freely: `u` drops duplicate lines, `n` sorts on the first number in each
+line (a leading `-` counts, and lines without a number come first), and `i`
+compares case-insensitively; `:sort!` reverses the order. The sort is stable, so
+lines that compare equal keep their relative order, and the whole reordering is
+a single undo step. `:sor` is the short form.
 
 ++tab++ completes paths on any command that takes one — `:e`, `:w`, `:wq`,
 `:x` and their long forms.

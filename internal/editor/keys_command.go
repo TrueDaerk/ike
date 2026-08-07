@@ -411,6 +411,8 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 		return m.exDelete(cmd), nil
 	case "y", "yank":
 		return m.exYank(cmd), nil
+	case "sor", "sort":
+		return m.exSort(cmd), nil
 	default:
 		switch {
 		case isRun(cmd.Name, '>'):
