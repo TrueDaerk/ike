@@ -1,0 +1,21 @@
+# revenue-service resource limits
+
+[server]
+port = 8080
+max_body_size = 10485760
+read_timeout = 30000
+idle_timeout = 120000
+
+[cache]
+capacity_bytes = 268435456
+entry_ttl = 86400
+sweep_interval = 900000
+
+[metrics]
+sample_buffer = 65536
+events_per_day = 1204880
+flush_ms = 2500
+
+[flags]
+enabled_mask = 0x1F4
+umask = 18

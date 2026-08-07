@@ -1,0 +1,9 @@
+# Field names the heuristics cannot read: is a retention counted in seconds
+# or in days, is a span bytes or rows, is an id a timestamp? The
+# editor.number_hint_units mapping answers that per field name.
+
+[retention]
+retention_raw = 604800
+retention_rollup = 7776000
+chunk_span = 4194304
+session_id = 1722945600

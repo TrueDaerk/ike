@@ -36,6 +36,12 @@ disk is untouched, and the hidden text comes back the moment you need it:
 markers reappear; move away and they are gone again. So you can still edit the
 markup, and you never edit blind.
 
+The same mechanic carries a whole family of *decoded* stand-ins — epoch
+timestamps drawn as dates, byte counts as `10 MiB`, `\uXXXX` escapes as the
+characters they name, an octal mode as `rw-r--r--`, a certificate as a one-line
+summary. [Conceal and decoded values](conceal.md) documents every one of them,
+with the settings that control them.
+
 ## Markdown
 
 `editor.markdown_rendering` styles inline spans, conceals the markers, and
@@ -118,11 +124,18 @@ current view only:
 | Logs | `editor.log_rendering` | Toggle Log Rendering |
 | Whitespace | `editor.show_whitespace` | Toggle Whitespace Rendering |
 
+Those are the three *markup* layers. The decoding families — timestamps,
+numbers, escapes, cron, file modes, certificates, secrets — have one switch
+each as well; they are listed in
+[Conceal and decoded values](conceal.md#the-settings).
+
 The [settings reference](../reference/settings.md) has the full list, including
 the highlighting limits that apply to very large files.
 
 ## Related
 
+- [Conceal and decoded values](conceal.md) — every conceal family in depth,
+  and the reveal rules they share
 - [The modal editor](../concepts/modal-editor.md) — moving the caret that
   drives the reveal
 - [Code intelligence](code-intelligence.md) — language servers on top of the

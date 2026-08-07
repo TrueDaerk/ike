@@ -1,0 +1,10 @@
+# revenue-service scheduled jobs
+MAILTO=ops@example.com
+
+*/5 * * * *    /srv/revenue/bin/poll-orders
+0 3 * * 1      /srv/revenue/bin/rebuild-rollups
+30 4 1 * *     /srv/revenue/bin/close-month
+0 9,17 * * 1-5 /srv/revenue/bin/send-digest
+*/30 * * * 6,0 /srv/revenue/bin/reconcile
+@daily         /srv/revenue/bin/vacuum
+@reboot        /srv/revenue/bin/warm-cache

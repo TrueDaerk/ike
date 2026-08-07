@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+install -d -m 0755 /srv/revenue /srv/revenue/bin
+install -m 0644 config/limits.toml /srv/revenue/limits.toml
+install -m 0600 config/.env /srv/revenue/.env
+
+chmod 755 /srv/revenue/bin/poll-orders
+chmod 4755 /srv/revenue/bin/rotate-keys
+chmod 1777 /srv/revenue/tmp
+chmod 640 /srv/revenue/logs/service.log
+chmod 4644 /srv/revenue/state/ledger

@@ -1,0 +1,11 @@
+{
+  "labels": {
+    "de": "Gr\u00fc\u00dfe aus M\u00fcnchen",
+    "fr": "Caf\u00e9 cr\u00e8me",
+    "es": "\u00bfCu\u00e1nto cuesta?",
+    "dk": "\u00c6r\u00f8 \u2013 \u00c5lborg"
+  },
+  "separator": "\u2014",
+  "symbols": "\u00b15 % \u00b7 \u00d8 1200 \u20ac",
+  "not_an_escape": "a literal backslash-u stays raw: \\u0041"
+}

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Revenue &amp; refunds</title>
+  </head>
+  <body>
+    <h1>Q3 &mdash; EMEA</h1>
+    <p>Revenue rose 12&#37;; refunds fell to &frac12; of a percent of orders.</p>
+    <p>Filter: <code>status=open &amp;&amp; total &gt; 1000 &amp;&amp; region &ne; APAC</code></p>
+    <p>Escalate to on-call &#x2192; ops&#64;example.com</p>
+    <p>Rate: 30 req/s &plusmn; 4 &mdash; see the &sect; on backpressure</p>
+  </body>
+</html>

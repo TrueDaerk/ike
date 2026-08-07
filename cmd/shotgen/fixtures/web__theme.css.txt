@@ -1,0 +1,18 @@
+:root {
+  --bg: #1f1d27;
+  --surface: #2b2833;
+  --text: #f5f4ee;
+  --muted: #8b869b;
+  --accent: #ff8800;
+  --accent-soft: rgba(255, 136, 0, 0.35);
+  --ok: #7fd962;
+  --warn: hsl(45, 95%, 58%);
+  --error: #ff4d5e;
+  --link: #6ec0ff;
+}
+
+.badge--refund {
+  color: #fff;
+  background: #ff4d5e;
+  border: 1px solid rgb(255, 77, 94);
+}

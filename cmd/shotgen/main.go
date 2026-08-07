@@ -1,6 +1,7 @@
 // Command shotgen regenerates the feature screenshots the user documentation
 // embeds (#1634): syntax highlighting, the rendering layers (Markdown, CSV,
-// logs) with their before/after pair, and the HTTP client.
+// logs) with their before/after pair, the HTTP client, and one shot per
+// conceal family (#1698).
 //
 // It drives the real root model headlessly — a throwaway project on a temp
 // config directory, a window size, a file open, a few keys — and paints the
@@ -33,15 +34,21 @@ import (
 	"ike/internal/shotpng"
 
 	// The language plugins register grammars and file associations; without
-	// them the fixtures would render as plain text.
+	// them the fixtures would render as plain text. The conceal shots (#1698)
+	// pull in the rest: a hint family only fires in the contexts its producer
+	// recognises, and the producer is the language.
+	_ "ike/plugins/languages/crontab"
 	_ "ike/plugins/languages/csv"
 	_ "ike/plugins/languages/diff"
+	_ "ike/plugins/languages/env"
 	_ "ike/plugins/languages/go"
 	_ "ike/plugins/languages/http"
 	_ "ike/plugins/languages/json"
 	_ "ike/plugins/languages/log"
 	_ "ike/plugins/languages/markdown"
 	_ "ike/plugins/languages/python"
+	_ "ike/plugins/languages/shell"
+	_ "ike/plugins/languages/toml"
 	_ "ike/plugins/languages/web"
 	_ "ike/plugins/languages/yaml"
 )
@@ -168,6 +175,123 @@ var shots = []shot{
 		desc: "An .http file: request blocks, placeholders and a JSON body in its own language",
 		open: "api/orders.http", cols: 100, rows: 28, hideTools: true,
 	},
+	// The conceal shots (#1698). Each family gets the file its producer
+	// recognises, and the pairs are a toggle apart: the "-raw" scenario runs
+	// the family's view toggle so the two frames differ in nothing else.
+	{
+		name: "conceal-timestamps-raw",
+		desc: "Epoch timestamps with decoding off — the numbers as they stand in the file",
+		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
+		commands: []string{"view.toggleTimestampDecoding"},
+	},
+	{
+		name: "conceal-timestamps",
+		desc: "The same JSON with epoch seconds and milliseconds drawn as UTC dates",
+		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
+	},
+	{
+		name: "conceal-reveal",
+		desc: "The caret inside a stand-in shows the raw digits; the rest of the file stays decoded",
+		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
+		// Line 3, column 18 — inside the "started_at" epoch.
+		keys: []string{"2", "j", "1", "8", "l"},
+	},
+	{
+		name: "conceal-reveal-adjacent",
+		desc: "The caret directly after a value stand-in reveals it too (#1686)",
+		open: "config/events.json", cols: 92, rows: 21, hideTools: true,
+		// Line 3, column 26 — the comma right behind the epoch.
+		keys: []string{"2", "j", "2", "6", "l"},
+	},
+	{
+		name: "conceal-numbers-raw",
+		desc: "Config numbers with all four number-readability families off",
+		open: "config/limits.toml", cols: 92, rows: 26, hideTools: true,
+		commands: []string{
+			"view.toggleByteSizeHints", "view.toggleDurationHints",
+			"view.toggleDigitGrouping", "view.toggleRadixHints",
+		},
+	},
+	{
+		name: "conceal-numbers",
+		desc: "The same file with byte sizes, durations, digit grouping and radix readings",
+		open: "config/limits.toml", cols: 92, rows: 26, hideTools: true,
+	},
+	{
+		name: "conceal-number-units-off",
+		desc: "Ambiguous field names read by the built-in heuristics alone",
+		open: "config/retention.toml", cols: 92, rows: 14, hideTools: true,
+	},
+	{
+		name: "conceal-number-units",
+		desc: "The same fields with editor.number_hint_units pinning each one's unit",
+		open: "config/retention.toml", cols: 92, rows: 14, hideTools: true,
+		settings: map[string]string{
+			"editor.number_hint_units": `["retention_*=s", "chunk_span=bytes", "session_id=none"]`,
+		},
+	},
+	{
+		name: "conceal-escapes-raw",
+		desc: "JSON \\uXXXX escapes with Unicode escape decoding off",
+		open: "config/labels.json", cols: 92, rows: 16, hideTools: true,
+		commands: []string{"view.toggleUnicodeEscapeDecoding"},
+	},
+	{
+		name: "conceal-escapes-unicode",
+		desc: "The same escapes decoded in place, surrogate pairs combined",
+		open: "config/labels.json", cols: 92, rows: 16, hideTools: true,
+	},
+	{
+		name: "conceal-escapes-entities",
+		desc: "HTML character references drawn as the characters they name",
+		open: "web/status.html", cols: 100, rows: 18, hideTools: true,
+	},
+	{
+		name: "conceal-escapes-base64",
+		desc: "The data: block of a Kubernetes Secret decoded; stringData is left alone",
+		open: "k8s/secret.yaml", cols: 92, rows: 23, hideTools: true,
+	},
+	{
+		name: "conceal-http-percent",
+		desc: "Percent-encoded .http query parameters drawn decoded",
+		open: "api/search.http", cols: 100, rows: 17, hideTools: true,
+	},
+	{
+		name: "conceal-cron",
+		desc: "Cron expressions with their English reading appended",
+		open: "crontab", cols: 92, rows: 15, hideTools: true,
+	},
+	{
+		name: "conceal-permissions",
+		desc: "Octal file modes with the symbolic form ls would print",
+		open: "scripts/install.sh", cols: 92, rows: 17, hideTools: true,
+	},
+	{
+		name: "conceal-pem",
+		desc: "A certificate collapsed onto its BEGIN marker plus a decoded summary",
+		open: "certs/server.pem", cols: 180, rows: 8, hideTools: true,
+	},
+	{
+		name: "conceal-pem-reveal",
+		desc: "The cursor inside the block brings the whole certificate back, base64 included",
+		open: "certs/server.pem", cols: 92, rows: 27, hideTools: true,
+		keys: []string{"j"},
+	},
+	{
+		name: "conceal-colors",
+		desc: "Color literals tinted with the color they name",
+		open: "web/theme.css", cols: 92, rows: 23, hideTools: true,
+	},
+	{
+		name: "conceal-secrets",
+		desc: "Dotenv values whose key names a credential, masked",
+		open: "config/.env", cols: 92, rows: 12, hideTools: true,
+	},
+	{
+		name: "conceal-network",
+		desc: "CIDR prefixes with their range and size, punycode hosts decoded, a homograph flagged",
+		open: "config/network.yaml", cols: 110, rows: 15, hideTools: true,
+	},
 	{
 		name: "diff-viewer",
 		desc: "The side-by-side diff of a working-copy file against HEAD",
@@ -213,6 +337,18 @@ func run(out, only, fontPath, fontName string, size float64) error {
 		return fmt.Errorf("loading the font: %w", err)
 	}
 
+	// Resolve the output directory against the *invocation's* working
+	// directory: the scenarios chdir into the temp project below, and a
+	// relative -out resolved after that would write the PNGs into the fixture
+	// tree the run deletes on the way out.
+	if err := os.MkdirAll(out, 0o755); err != nil {
+		return err
+	}
+	absOut, err := filepath.Abs(out)
+	if err != nil {
+		return err
+	}
+
 	work, err := os.MkdirTemp("", "ike-shotgen")
 	if err != nil {
 		return err
@@ -253,14 +389,6 @@ func run(out, only, fontPath, fontName string, size float64) error {
 			wanted[n] = true
 		}
 	}
-	if err := os.MkdirAll(out, 0o755); err != nil {
-		return err
-	}
-	absOut, err := filepath.Abs(out)
-	if err != nil {
-		return err
-	}
-
 	var names []string
 	dirty := false
 	for _, s := range shots {

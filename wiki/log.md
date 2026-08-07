@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-07 (docs: the conceal layer gets its own page, #1698)
+
+- **One page for every stand-in.** `userdocs/guides/conceal.md` documents the
+  whole conceal layer — the three guarantees it rests on (nothing is
+  rewritten, the caret reveals, everything has an off switch), then one
+  section per family: epoch timestamps, the four number-readability families
+  with the `editor.number_hint_units` mapping, the three escape families,
+  `.http` percent-decoding, cron, file modes, CIDR/punycode, PEM summaries and
+  secret masking. Colour swatches and the JWT popup get a section saying why
+  they are *not* conceals.
+- **Twenty generated shots**, all `monokai-pro`, most as a raw/decoded pair a
+  single view toggle apart. `cmd/shotgen` grew the fixtures each family's
+  producer needs (a crontab, an `install.sh`, a `kind: Secret` manifest, a
+  certificate, a `.env`, a CSS theme, escaped-JSON and ambiguous-field config
+  files) and the language imports that go with them.
+- **`-out` is resolved before the chdir.** A relative output directory used to
+  resolve against the temp fixture project the run deletes on the way out, so
+  a plain `make shots` wrote its PNGs nowhere.
+- The rendering guide, the modal-editor concept page, the HTTP client guide
+  and the generated settings preamble now link the new page instead of
+  restating it.
+
 ## 2026-08-07 (highlight: injections resolve recursively, #1697)
 
 - **A fragment injects again.** `overlayFragments` re-runs injection

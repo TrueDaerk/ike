@@ -4,16 +4,17 @@ title: Documentation Screenshots
 description: Feature screenshots for the user docs generated from the app itself — a headless model driven by cmd/shotgen, its frame painted to PNG by internal/shotpng.
 resource: cmd/shotgen/main.go
 tags: [docs, screenshots, tooling]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-07T12:00:00Z
 ---
 
 # Documentation Screenshots
 
 The user documentation embeds screenshots of features (#1634): syntax highlighting, the
-Markdown/CSV/log rendering layers with their raw counterpart, the diff viewer, the HTTP client.
-They are **generated**, not captured: `make shots` drives the real root model headlessly and paints
-the frame it renders into a PNG. A shot is therefore always a frame the current code produced, and
-refreshing the set after a UI change costs one command.
+Markdown/CSV/log rendering layers with their raw counterpart, the diff viewer, the HTTP client,
+and one shot per conceal family (#1698). They are **generated**, not captured: `make shots` drives
+the real root model headlessly and paints the frame it renders into a PNG. A shot is therefore
+always a frame the current code produced, and refreshing the set after a UI change costs one
+command.
 
 ## Two pieces
 
@@ -48,6 +49,17 @@ refreshing the set after a UI change costs one command.
 * **Not CI-checked.** Unlike `cmd/docgen`'s reference pages, the PNGs are not regenerated in CI —
   rendering depends on the machine's fonts. They are refreshed deliberately, when the UI they show
   changes.
+* **A fixture is a language's context, not just text** (#1698). Every conceal family only fires
+  where its producer recognises a value — an octal mode needs a `chmod` line, a cron hint needs a
+  crontab or a CI `schedule:` key, a base64 decode needs `kind: Secret`. So the conceal shots
+  brought both their own fixtures (a crontab, an `install.sh`, a Secret manifest, a `.pem`, a
+  `.env`, a CSS theme) and the language imports that make them more than plain text. Escapes are
+  written out in the fixture (`\u00fc`, not `ü`) — a normalised fixture leaves the shot nothing to
+  decode, which `TestWriteFixturesLayout` now guards, and `TestShotFixturesExist` catches a typo in
+  a scenario's `open` path before it renders as a plausible-looking empty editor.
+* **The output directory is resolved before the chdir** (#1698). Scenarios run inside the temp
+  project, so a relative `-out` resolved afterwards wrote the PNGs into the fixture tree the run
+  then deleted.
 
 ## Adding a shot
 

@@ -53,6 +53,13 @@ real text. Move the caret into a sequence — or select across it — and
 exactly that spot shows the raw encoding, so editing stays exact; the file
 itself is never changed.
 
+![Percent-encoded query parameters drawn decoded](../screenshots/features/conceal-http-percent.png)
+
+That is one of several decoding layers that meet in a `.http` file: epoch
+timestamps in query values and bodies, byte sizes and durations in header
+values, CIDR prefixes and punycode hosts. All of them, and their settings, are
+in [Conceal and decoded values](conceal.md).
+
 ### Placeholders
 
 `${NAME}` and `{{$env NAME}}` are read from the environment **when the
@@ -226,6 +233,8 @@ repository: **New Scratch File: Http** (`scratch.new.http`).
 
 ## Related
 
+- [Conceal and decoded values](conceal.md) — percent-decoding and the other
+  stand-ins a `.http` file draws
 - [Scratch files and snippets](scratch-and-snippets.md) — throwaway `.http` buffers
 - [Keybindings reference](../reference/keybindings.md) — every default binding
 - [Commands reference](../reference/commands.md) — every command id
