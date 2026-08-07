@@ -95,7 +95,7 @@ func TestFilterRailListsHitPages(t *testing.T) {
 	if len(pages) < 2 {
 		t.Skipf("query matched %d pages, need at least two", len(pages))
 	}
-	m.Click(2, 2+1+1) // header row + the second hit page
+	m.Click(2, bodyTop+1+1) // header row + the second hit page
 	if m.filter == "" {
 		t.Fatal("a rail click must stay inside the search")
 	}

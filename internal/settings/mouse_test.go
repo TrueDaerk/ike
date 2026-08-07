@@ -18,11 +18,11 @@ func mouseModel(t *testing.T) *Model {
 // the hovered row; leaving the body clears it.
 func TestHoverHighlightsRows(t *testing.T) {
 	m := mouseModel(t)
-	m.Hover(2, 3) // rail, second visible row
+	m.Hover(2, bodyTop+1) // rail, second visible row
 	if m.hoverCat != 1 {
 		t.Fatalf("hoverCat = %d, want 1", m.hoverCat)
 	}
-	m.Hover(1+catWidth+4, 3) // form, second row
+	m.Hover(1+catWidth+4, bodyTop+1) // form, second row
 	if m.hoverRow != 1 || m.hoverCat != -1 {
 		t.Fatalf("hover = cat %d row %d, want row 1", m.hoverCat, m.hoverRow)
 	}
@@ -42,7 +42,7 @@ func TestDetailColumnClickFocusesEditor(t *testing.T) {
 	if !g.side {
 		t.Skip("panel too narrow for the three-column grid")
 	}
-	m.Click(m.detailX()+1, 3)
+	m.Click(m.detailX()+1, bodyTop+1)
 	if m.focus != detailColumn {
 		t.Fatalf("focus = %v, want the detail column", m.focus)
 	}
@@ -101,7 +101,7 @@ func TestWheelScrollsViewportNotSelection(t *testing.T) {
 	m.SetSize(90, 10) // 6 body rows for 11+ categories
 	m.Open()
 	m.View()
-	m.Wheel(2, 3)
+	m.Wheel(2, bodyTop, 3)
 	if m.cat != 0 {
 		t.Fatalf("wheel must not move the selection, cat=%d", m.cat)
 	}
@@ -130,7 +130,7 @@ func TestSettingsRowsMapOneToOne(t *testing.T) {
 	m.sel = 0
 	m.activate() // opens the editor in the detail column
 	m.focus = formColumn
-	m.Click(formX()+1, 2+1)
+	m.Click(formX()+1, bodyTop+1)
 	if m.sel != 1 {
 		t.Fatalf("sel = %d, want the second row", m.sel)
 	}

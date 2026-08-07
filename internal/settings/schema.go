@@ -7,7 +7,10 @@
 // so the config stays the single source of truth.
 package settings
 
-import "ike/internal/config"
+import (
+	"ike/internal/config"
+	"ike/internal/theme"
+)
 
 // EntryType selects the control rendered for an entry.
 type EntryType int
@@ -45,6 +48,10 @@ type Entry struct {
 	Scope       config.Scope // write target layer (user / project)
 	Options     []string     // Enum: the allowed values, in cycle order
 	Min, Max    int          // Int: inclusive bounds; both zero = unbounded
+	// Preview renders an inline, already-styled preview for one enum option
+	// (#1664: the theme list's palette swatches); nil or an empty return
+	// means the option row has no preview.
+	Preview func(option string) string
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -129,10 +136,13 @@ func InsertAfter(pages []Page, after string, page Page) []Page {
 // BasePages returns the built-in core pages (#92). themes is the registry's
 // theme-name list for the Appearance enum (live preview: writing theme.name
 // hot-reloads through the normal pipeline); lightThemes/darkThemes are its
-// light/dark partitions for the auto-sync pair (#1480). Pages grow as
+// light/dark partitions for the auto-sync pair (#1480). extraThemes is the
+// registry's plugin-registered theme list, so the theme enums' palette
+// swatches (#1664) can resolve non-built-in names too. Pages grow as
 // features land; schema entries live next to their feature's config keys, and
 // every key must exist in the typed schema (guarded by the no-dead-keys test).
-func BasePages(themes, lightThemes, darkThemes []string) []Page {
+func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Theme) []Page {
+	swatch := themePreviewFn(extraThemes)
 	return []Page{
 		{Section: "CORE", Title: "Editor", Description: "How text is edited: indentation, saving, wrapping and the gutter. Language-specific overrides come from .editorconfig when it is enabled.", Entries: []Entry{
 			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
@@ -224,10 +234,10 @@ func BasePages(themes, lightThemes, darkThemes []string) []Page {
 			{Key: "lsp.log_level", Type: Enum, Title: "Server log level", Description: "Verbosity of the language-server log the LSP: Show Server Log command opens", Scope: config.UserScope, Options: []string{"error", "warn", "info", "debug"}},
 		}},
 		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
-			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes},
+			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch},
 			{Key: "theme.auto", Type: Bool, Title: "Sync with terminal", Description: "Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off", Scope: config.UserScope},
-			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes},
-			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes},
+			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes, Preview: swatch},
+			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes, Preview: swatch},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},

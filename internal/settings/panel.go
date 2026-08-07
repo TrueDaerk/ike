@@ -337,7 +337,6 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	if m.SubOpen() {
 		return m.clickSub(x, y)
 	}
-	const bodyTop = 2 // border row + title row
 	if m.filtering {
 		// A click ends filter typing (like enter) and then hit-tests normally.
 		m.filtering = false
@@ -346,7 +345,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		return cmd
 	}
 	row := y - bodyTop
-	if row < 0 || row >= m.height-4 {
+	if row < 0 || row >= m.height-chromeRows {
 		return nil
 	}
 	// Category column. A rail click while filtering clears the filter and
@@ -409,8 +408,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 
 // Wheel scrolls the column under the pointer by moving its selection (the
 // lists follow their selection, like every other overlay panel): the category
-// column when hovered, the form column otherwise. x is panel-local.
-func (m *Model) Wheel(x, delta int) {
+// column when hovered, the form column otherwise. x/y are panel-local; y
+// picks the stacked detail band apart from the list above it (#1664).
+func (m *Model) Wheel(x, y, delta int) {
 	if !m.open {
 		return
 	}
@@ -432,7 +432,7 @@ func (m *Model) Wheel(x, delta int) {
 		if m.filter != "" {
 			n = len(m.hitPages()) + 1 // the "pages with hits" header row
 		}
-		m.catOff = clamp(m.catOff+step, 0, maxOff(n, m.height-4))
+		m.catOff = clamp(m.catOff+step, 0, maxOff(n, m.height-chromeRows))
 		return
 	}
 	// Custom pages own their scrolling: forward through the optional
@@ -444,15 +444,17 @@ func (m *Model) Wheel(x, delta int) {
 		return
 	}
 	// The detail column scrolls its own editor (#1325): a long enum list is
-	// the one thing over there with more content than room.
-	if g := m.gridFor(); g.side && x >= m.detailX() {
+	// the one thing over there with more content than room. In the stacked
+	// fallback the band under the divider routes there too (#1664).
+	g := m.gridFor()
+	if (g.side && x >= m.detailX()) || (!g.side && y-bodyTop > g.listH) {
 		if w, ok := m.editor.(wheelEditor); ok {
 			w.Wheel(delta)
 		}
 		return
 	}
 	// Schema form: viewport scroll, decoupled from the selection (#885).
-	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), m.gridFor().listH))
+	m.formOff = clamp(m.formOff+delta, 0, maxOff(len(m.rows()), g.listH))
 }
 
 // maxOff is the largest sensible scroll offset for n lines in an h window.
@@ -905,6 +907,11 @@ func (m *Model) clickDetail(x, row int, g grid) tea.Cmd {
 	}
 	c, ok := m.editor.(clickEditor)
 	if !ok {
+		return nil
+	}
+	if m.detailBodyTop < 0 {
+		// The last frame drew the page/jump explanation, not an editor body
+		// (#1664): the press only focuses, there is no control to hit.
 		return nil
 	}
 	if dy -= m.detailBodyTop; dy < 0 {

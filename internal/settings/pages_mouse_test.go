@@ -38,7 +38,7 @@ func TestPanelForwardsMouseToCustomPage(t *testing.T) {
 	formX := 1 + catWidth + 3
 	// Click in the form column: forwarded with page-local coordinates
 	// ((0,0) = top-left of the page's render area, body top is row 2).
-	m.Click(formX+5, 2+4)
+	m.Click(formX+5, bodyTop+4)
 	if len(stub.clicks) != 1 || stub.clicks[0] != [2]int{5, 4} {
 		t.Fatalf("click must forward page-locally, got %v", stub.clicks)
 	}
@@ -46,20 +46,20 @@ func TestPanelForwardsMouseToCustomPage(t *testing.T) {
 		t.Fatal("a form-column click must focus the form column")
 	}
 	// Click in the category column: stays with the panel (selects a page).
-	m.Click(2, 2)
+	m.Click(2, bodyTop)
 	if len(stub.clicks) != 1 || m.cat != 0 {
 		t.Fatalf("category click must not forward, clicks=%v cat=%d", stub.clicks, m.cat)
 	}
 	m.cat = 2
 
 	// Wheel over the form column: forwarded as a delta.
-	m.Wheel(formX+5, 3)
+	m.Wheel(formX+5, bodyTop, 3)
 	if len(stub.wheels) != 1 || stub.wheels[0] != 3 {
 		t.Fatalf("wheel must forward the delta, got %v", stub.wheels)
 	}
 	// Wheel over the category column: stays with the panel and scrolls the
 	// viewport, never the selection (#885).
-	m.Wheel(2, -1)
+	m.Wheel(2, bodyTop, -1)
 	if len(stub.wheels) != 1 || m.cat != 2 {
 		t.Fatalf("category wheel must not forward nor move the selection, wheels=%v cat=%d", stub.wheels, m.cat)
 	}
@@ -70,8 +70,8 @@ func TestPanelForwardsMouseToCustomPage(t *testing.T) {
 	m2.SetSize(90, 20)
 	m2.Open()
 	m2.cat = 2
-	m2.Click(formX+5, 2+4)
-	m2.Wheel(formX+5, 3)
+	m2.Click(formX+5, bodyTop+4)
+	m2.Wheel(formX+5, bodyTop, 3)
 }
 
 func TestToolchainPageMouse(t *testing.T) {

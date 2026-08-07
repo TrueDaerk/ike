@@ -839,7 +839,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
 	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
-	pages := settings.BasePages(themeNames(reg), themeNamesByDark(reg, false), themeNamesByDark(reg, true))
+	pages := settings.BasePages(themeNames(reg), themeNamesByDark(reg, false), themeNamesByDark(reg, true), reg.Themes()...)
 	// The [theme.captures] editor (#1238) belongs with the theme picker.
 	pages = settings.InsertAfter(pages, "Appearance", settings.Page{
 		Title:  "Syntax Colors",
@@ -6545,9 +6545,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			// Hover affordance (#885), menu-bar parity.
 			m.settings.Hover(msg.X-bx, msg.Y-by)
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelUp:
-			m.settings.Wheel(msg.X-bx, -wheelLines*msg.ticks())
+			m.settings.Wheel(msg.X-bx, msg.Y-by, -wheelLines*msg.ticks())
 		case msg.action == mouseWheel && msg.Button == tea.MouseWheelDown:
-			m.settings.Wheel(msg.X-bx, wheelLines*msg.ticks())
+			m.settings.Wheel(msg.X-bx, msg.Y-by, wheelLines*msg.ticks())
 		}
 		return m, nil
 	}

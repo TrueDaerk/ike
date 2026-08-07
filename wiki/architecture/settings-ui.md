@@ -711,4 +711,42 @@ result can move the column edges. Detail-column prose word-wraps rather than
 clipping mid-sentence, and a filter jump row's detail says what enter does with
 the result instead of describing whatever page the cursor sits on.
 
-The epic is complete.
+The epic is complete; #1664 later polished focus visibility, detail-column mouse coverage and theme previews (see below).
+
+## Focus cue, finished detail mouse, reflow & theme swatches (#1664)
+
+Four usability gaps on the grid, closed in one pass.
+
+- **Column-header focus cue.** A header row renders between the title row and
+  the body: one caption per grid column (`Pages · Settings · Detail`), the
+  focused one marked `▸` in accent-bold, the inactive ones dimmed — the same
+  "one vivid, rest dimmed" language a focused pane's border speaks elsewhere.
+  On a custom page the right caption is the page title; in the stacked narrow
+  fallback the single right caption names whichever half owns the keys, and
+  the band's divider line turns accent while the detail band is focused. The
+  row shifts the body down one line: hit-testing shares the `bodyTop` /
+  `chromeRows` constants with the renderer, so click, hover and wheel stay
+  aligned by construction.
+- **Detail-column mouse, completed.** The #1325 seams left two holes. The
+  wheel now reaches the stacked band too — `Wheel` takes the pointer's y and
+  routes presses under the divider to the editor's `wheelEditor` seam instead
+  of scrolling the settings list. And a press in the detail column while the
+  rail is focused (the column then shows the page explanation, not an editor)
+  only focuses the column: `detailBodyTop` is `-1` on frames without an editor
+  body, so a stale offset can never operate a control that was not drawn.
+- **Reflow on terminal resize.** `tea.WindowSizeMsg` re-derives
+  `settingsSize()` and pushes it into the open panel, and the grid recomputes
+  from the new size on the next frame (down to and back out of the stacked
+  fallback). This already held — the issue's report did not reproduce — but it
+  is now guarded by regression tests at both layers (panel `SetSize` reflow,
+  app `WindowSizeMsg` while open).
+- **Theme palette swatches.** The theme enums (`theme.name`, `theme.light`,
+  `theme.dark`) carry an `Entry.Preview` — an optional per-option renderer any
+  enum may set. For themes it renders a five-cell block strip from the named
+  theme's **own resolved palette** (background, foreground, accent, keyword
+  and string colors, capture tokens falling back to UI slots), memoized per
+  name, right-aligned on each option row — so themes compare at a glance
+  without applying them one by one. Selection behavior is unchanged
+  (apply-on-select, auto-sync off); an unknown name renders no swatch rather
+  than previewing as the default theme. `BasePages` grew a variadic
+  `extraThemes ...theme.Theme` so plugin-registered themes resolve too.

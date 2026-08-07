@@ -497,11 +497,11 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	m.Open()
 
 	// Row 3 in the category column = second page ("Appearance", body top is 2).
-	if cmd := m.Click(2, 3); cmd != nil || m.cat != 1 {
+	if cmd := m.Click(2, bodyTop+1); cmd != nil || m.cat != 1 {
 		t.Fatalf("category click must switch to page 1, cat=%d", m.cat)
 	}
 	// Back to Editor-page equivalent (page 0).
-	m.Click(2, 2)
+	m.Click(2, bodyTop)
 	if m.cat != 0 {
 		t.Fatalf("category click must switch back, cat=%d", m.cat)
 	}
@@ -509,7 +509,7 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	// Click the second entry row in the settings column: rows map 1:1 to
 	// lines (#1295), so the second entry renders on body row 1.
 	formX := formX() + 1
-	if cmd := m.Click(formX, 2+1); cmd != nil {
+	if cmd := m.Click(formX, bodyTop+1); cmd != nil {
 		t.Fatal("first click must only select")
 	}
 	if m.sel != 1 || m.focus != formColumn {
@@ -517,7 +517,7 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	}
 	// Second click on the same row: row 1 is the Int entry (tab width),
 	// activation focuses its stepper in the detail column.
-	m.Click(formX, 2+1)
+	m.Click(formX, bodyTop+1)
 	if m.focus != detailColumn {
 		t.Fatal("second click must activate the entry")
 	}
@@ -525,8 +525,8 @@ func TestMouseClicksDriveThePanel(t *testing.T) {
 	// Row 0 is the bool: activating it focuses the toggle, and enter there
 	// returns the write command.
 	m.focus = formColumn
-	m.Click(formX, 2+0) // select row 0 (bool)
-	m.Click(formX, 2+0) // second click activates: the toggle stages
+	m.Click(formX, bodyTop+0) // select row 0 (bool)
+	m.Click(formX, bodyTop+0) // second click activates: the toggle stages
 	commit(t, m)
 	if config.Get().UI.MenuBar {
 		t.Fatal("bool click-activation must toggle the value")
@@ -659,14 +659,14 @@ func TestWheelScrollsColumns(t *testing.T) {
 
 	// Wheel scrolls viewports now, never selections (#885). The test pages
 	// fit their windows, so the offsets stay clamped at 0 and nothing jumps.
-	m.Wheel(2, 1)
+	m.Wheel(2, bodyTop, 1)
 	if m.cat != 0 {
 		t.Fatalf("category wheel must not move the selection, cat=%d", m.cat)
 	}
 	if m.catOff != 0 {
 		t.Fatalf("catOff must clamp with everything visible, off=%d", m.catOff)
 	}
-	m.Wheel(formX, 1)
+	m.Wheel(formX, bodyTop, 1)
 	if m.sel != 0 {
 		t.Fatalf("form wheel must not move the selection, sel=%d", m.sel)
 	}
@@ -676,7 +676,7 @@ func TestWheelScrollsColumns(t *testing.T) {
 
 	// Wheel is inert while the filter input is active.
 	m.filtering = true
-	m.Wheel(formX, 1)
+	m.Wheel(formX, bodyTop, 1)
 	if m.sel != 0 {
 		t.Fatal("wheel must be inert while filtering")
 	}

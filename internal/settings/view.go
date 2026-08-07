@@ -45,11 +45,19 @@ type grid struct {
 	listH int
 }
 
+// bodyTop is the body's first panel-local y: border row, title row and the
+// column-header row (#1664).
+const bodyTop = 3
+
+// chromeRows is the panel rows that are not body: two border rows, the title
+// row, the column-header row (#1664) and the hint row.
+const chromeRows = 5
+
 // gridFor resolves the column geometry for the panel's size. rightW is the
 // width available to everything right of the category rail.
 func (m *Model) gridFor() grid {
 	innerW := m.width - 2
-	innerH := m.height - 4
+	innerH := m.height - chromeRows
 	rightW := innerW - catWidth - sepWidth
 	if rightW >= minFormWidth+sepWidth+minDetailWidth {
 		// The settings column takes its nominal 44ch where there is room and
@@ -123,11 +131,12 @@ func (m *Model) View() string {
 		return ""
 	}
 	pal := m.theme()
-	innerW := m.width - 2 // content columns inside the border (v2 sizes outer)
-	inner := m.height - 4 // border rows + title row + hint row
+	innerW := m.width - 2          // content columns inside the border (v2 sizes outer)
+	inner := m.height - chromeRows // body rows under the column headers
 	sep := columnRule(inner)
 
 	m.syncEditor()
+	headers := m.renderColumnHeaders(innerW)
 	left := m.renderCategories(inner)
 	var body string
 	if page := m.customPage(); page != nil && m.filter == "" {
@@ -143,7 +152,13 @@ func (m *Model) View() string {
 		if g.side {
 			body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep, form, sep, detail)
 		} else {
-			div := lipgloss.NewStyle().Foreground(pal.Secondary).Render(strings.Repeat("─", g.formW))
+			// The stacked divider doubles as the detail band's focus cue
+			// (#1664): accent while the band owns the keys.
+			divStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
+			if m.focus == detailColumn {
+				divStyle = lipgloss.NewStyle().Foreground(pal.BorderFocus)
+			}
+			div := divStyle.Render(strings.Repeat("─", g.formW))
 			body = lipgloss.JoinHorizontal(lipgloss.Top, left, sep,
 				strings.Join([]string{form, div, detail}, "\n"))
 		}
@@ -168,7 +183,7 @@ func (m *Model) View() string {
 	title += m.renderFilter()
 	hint := m.renderHint(pal)
 
-	content := lipgloss.JoinVertical(lipgloss.Left, title, body, hint)
+	content := lipgloss.JoinVertical(lipgloss.Left, title, headers, body, hint)
 	box := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(pal.BorderFocus).
@@ -182,6 +197,42 @@ func (m *Model) View() string {
 		return m.renderSub(box)
 	}
 	return box
+}
+
+// renderColumnHeaders renders the column-header row (#1664): one caption per
+// grid column, the focused one marked ▸ and accent-bold, the inactive ones
+// dimmed — so which column owns the keyboard is readable at a glance, like a
+// focused pane's border elsewhere.
+func (m *Model) renderColumnHeaders(innerW int) string {
+	pal := m.theme()
+	active := lipgloss.NewStyle().Foreground(pal.BorderFocus).Bold(true)
+	inactive := lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true)
+	caption := func(label string, focused bool, w int) string {
+		text := "  " + label
+		style := inactive
+		if focused {
+			text, style = "▸ "+label, active
+		}
+		return lipgloss.NewStyle().MaxWidth(w).Width(w).Render(style.Render(text))
+	}
+
+	out := caption("Pages", m.focus == catColumn, catWidth) + strings.Repeat(" ", sepWidth)
+	rightW := innerW - catWidth - sepWidth
+	if page := m.customPage(); page != nil && m.filter == "" {
+		// A custom page spans the whole right side; its caption is the page.
+		return out + caption(m.pages[m.cat].Title, m.focus != catColumn, rightW)
+	}
+	g := m.gridFor()
+	if g.side {
+		return out + caption("Settings", m.focus == formColumn, g.formW) +
+			strings.Repeat(" ", sepWidth) + caption("Detail", m.focus == detailColumn, g.detailW)
+	}
+	// Stacked fallback: one caption names whichever half owns the keys.
+	label := "Settings"
+	if m.focus == detailColumn {
+		label = "Detail"
+	}
+	return out + caption(label, m.focus != catColumn, g.formW)
 }
 
 // renderHint renders the bottom hint row: three context keys, not a permanent
@@ -554,6 +605,10 @@ func (m *Model) renderDetailColumn(w, h int) string {
 		}
 		return out
 	}
+
+	// Until an editor body is drawn this frame there is nothing clickable in
+	// the column (#1664): -1 tells clickDetail the head spans everything.
+	m.detailBodyTop = -1
 
 	r, ok := m.current()
 	if ok && r.kind != rowEntry && m.focus != catColumn {
