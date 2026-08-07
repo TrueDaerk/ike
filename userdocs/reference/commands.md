@@ -180,6 +180,7 @@ bring their own.
 | Copy | `editor.copy` | `cmd+c` | `y` | `editor` pane |
 | Cut | `editor.cut` | `cmd+x` | `d` | `editor` pane |
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
+| Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
 | Find in File | `editor.find` | `cmd+f` | `/` | `editor` pane |
 | Close Fold | `editor.fold.close` | — | `zc` | `editor` pane |
@@ -187,6 +188,7 @@ bring their own.
 | Open Fold | `editor.fold.open` | — | `zo` | `editor` pane |
 | Open All Folds | `editor.fold.openAll` | — | `zR` | `editor` pane |
 | Toggle Fold | `editor.fold.toggle` | — | `za` | `editor` pane |
+| Increment Number | `editor.increment` | — | `ctrl+a` | `editor` pane |
 | Move to Line End | `editor.lineEnd` | `cmd+right` | `$` | `editor` pane |
 | Move to Line Start | `editor.lineStart` | `home` | `0` | `editor` pane |
 | Paste | `editor.paste` | `cmd+v` | `p` | `editor` pane |
@@ -194,6 +196,7 @@ bring their own.
 | Redo | `editor.redo` | `cmd+shift+z` | `ctrl+r` | `editor` pane |
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
+| Toggle Value Under Caret | `editor.toggleValue` | — | `g!` | `editor` pane |
 | Undo | `editor.undo` | `cmd+z` | `u` | `editor` pane |
 | Undo (Chronological) | `editor.undoChrono` | — | `g-` | `editor` pane |
 | Undo Tree | `editor.undoTree` | — | — | `editor` pane |

@@ -149,6 +149,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.permission_hints", c.Editor.PermissionHints)
 	put("editor.cidr_hints", c.Editor.CIDRHints)
 	put("editor.idn_hints", c.Editor.IDNHints)
+	put("editor.toggle_pairs", strings.Join(c.Editor.TogglePairs, ","))
 	put("editor.secret_masking", c.Editor.SecretMasking)
 	put("editor.hyperlinks", c.Editor.Hyperlinks)
 	put("editor.color_preview", c.Editor.ColorPreview)

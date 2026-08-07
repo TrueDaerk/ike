@@ -1,5 +1,27 @@
 # Log
 
+## 2026-08-07 (editor: increment/decrement and value toggling, #1658)
+
+- `Ctrl-a` / `Ctrl-x` in normal mode raise or lower the number under the
+  cursor (or the first one to its right on the line); the count is the step,
+  so `5<C-a>` adds five.
+- Literals keep their shape: a leading `-` is the sign, leading-zero width
+  survives (`007` → `008`), and hex keeps prefix, digit width and letter case
+  (`0x1f` → `0x20`, `0X00ff` → `0X0100`). Decimal arithmetic saturates at the
+  int64 bounds; hex wraps in 64 bits, like vim.
+- `g!` toggles the value under (or after) the cursor between the members of a
+  known pair — `true`/`false`, `on`/`off`, `yes`/`no`, `enabled`/`disabled`,
+  `==`/`!=`, `&&`/`||`, `<`/`>`. Whole tokens only (`<=` never toggles as
+  `<`), matched case-insensitively, and the replacement copies the original's
+  capitalization (`True` → `False`).
+- `editor.toggle_pairs` adds `a=b` entries, matched before the built-ins so a
+  member can be redefined.
+- All three fan out per caret as one undo unit and record a `.`-dot. They are
+  also `editor.increment` / `editor.decrement` / `editor.toggleValue`, so the
+  palette reaches them and the keymap layer can rebind them where a
+  multiplexer owns `Ctrl-a`. Lives in `internal/editor/increment.go`. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-07 (editor: ex `:sort` command family, #1657)
 
 - `:[range]sort[!] [flags]` (short `:sor`) reorders lines without leaving the

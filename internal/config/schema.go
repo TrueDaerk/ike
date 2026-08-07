@@ -333,6 +333,12 @@ type Editor struct {
 	// label of Latin look-alikes) drawn in the warning colour; the raw name
 	// reappears under the caret.
 	IDNHints bool `toml:"idn_hints"`
+	// TogglePairs extends the value pairs the Toggle Value command (g!)
+	// cycles (#1658). Each entry is `a=b`; matching is case-insensitive and
+	// the replacement copies the original's capitalization. Entries listed
+	// here are matched before the built-in pairs (true/false, on/off, yes/no,
+	// enabled/disabled, ==/!=, &&/||, </>), so a member can be redefined.
+	TogglePairs []string `toml:"toggle_pairs"`
 	// SecretMasking renders the value of a secret-suspect key in a dotenv
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.

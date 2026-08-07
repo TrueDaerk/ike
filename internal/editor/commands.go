@@ -65,6 +65,12 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.caret.addAll", "Add Carets at All Occurrences", "caret_add_all", ""),
 			action("editor.caret.addAbove", "Clone Caret Above", "caret_add_above", ""),
 			action("editor.caret.addBelow", "Clone Caret Below", "caret_add_below", ""),
+			// Increment / decrement / value toggle (#1658): the vim ctrl+a and
+			// ctrl+x keys plus g!, surfaced as commands so they are rebindable
+			// through the keymap layer and reachable from the palette.
+			action("editor.increment", "Increment Number", "increment", "ctrl+a"),
+			action("editor.decrement", "Decrement Number", "decrement", "ctrl+x"),
+			action("editor.toggleValue", "Toggle Value Under Caret", "toggle_value", "g!"),
 			action("editor.commentLine", "Toggle Line Comment", "comment_line", ""),
 			action("editor.commentBlock", "Toggle Block Comment", "comment_block", ""),
 			// View options (#64): per-view display toggles. They flip the

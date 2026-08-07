@@ -430,6 +430,25 @@ padding — the vim-surround convention. `cs`/`ds` reuse `textobject.Pair`
 Each operation commits as one undo unit, records a `.`-dot that re-resolves
 the target at the new cursor, and fans out per caret via `fanMutate` (#145).
 
+Increment / decrement / value toggle (#1658, `increment.go`): `Ctrl-a` and
+`Ctrl-x` in normal mode raise or lower the number under the cursor, or the
+first one to its right on the same line, with the count as the step
+(`5<C-a>`). A `-` directly in front of the digits is the sign, decimal
+arithmetic saturates at the int64 bounds, and the literal keeps its shape —
+leading-zero width (`007` → `008`), hex prefix, digit width and letter case
+(`0x1f` → `0x20`, `0X00ff` → `0X0100`); hex wraps in 64 bits like vim. `g!`
+toggles the value under (or after) the cursor between the members of a known
+pair: `true`/`false`, `on`/`off`, `yes`/`no`, `enabled`/`disabled`, `==`/`!=`,
+`&&`/`||`, `<`/`>`. Matching is case-insensitive over whole tokens — a word
+run or an operator run, so `<=` never toggles as `<` — and the replacement
+copies the original's capitalization (`True` → `False`, `TRUE` → `FALSE`).
+`editor.toggle_pairs` adds `a=b` entries, matched before the built-ins so a
+member can be redefined. All three commit through `fanMutate` (one undo unit,
+per caret) and record a `.`-dot; they are also registered as
+`editor.increment` / `editor.decrement` / `editor.toggleValue`, so the palette
+reaches them and the keymap layer can rebind them where `Ctrl-a` is taken by a
+terminal multiplexer.
+
 Insert/Replace edits flow through one open `history.Recorder` so a whole insert
 is a single undo unit; `Esc` commits it and records the `.`-repeat. Arrow keys,
 `Home`/`End` and the word/page keys move the caret mid-insert. Backward kills
@@ -688,7 +707,7 @@ insert-mode typing / Enter (per-caret smart indent) / backspace / word- and
 line-kills / Tab / Shift+Tab (one dedent per line), `x`, `r`, operators
 `d c y` with motions and text objects, `dd cc yy` (merged to one caret per
 line first), `p`/`P`, `o`/`O`, `a A I s`, the surround operations `ys`/`cs`/`ds`
-(#1475), and completion accept (the popup
+(#1475), `Ctrl-a`/`Ctrl-x`/`g!` (#1658), and completion accept (the popup
 applies at every caret, JetBrains-style). A multi-caret yank/delete joins the
 per-caret spans with newlines in the register. Motions (`h j k l w b` …,
 arrows, `Home`/`End`) move every caret in parallel; each keeps its own

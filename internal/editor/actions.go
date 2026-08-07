@@ -660,6 +660,24 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.duplicateLine()
+	case "increment", "decrement":
+		// ctrl+a / ctrl+x as commands (#1658): one step, since a palette or
+		// keymap invocation carries no vim count.
+		if m.insert.active {
+			m.commitInsert()
+		}
+		delta := int64(1)
+		if action == "decrement" {
+			delta = -1
+		}
+		m.adjustNumber(delta)
+		m.scroll()
+	case "toggle_value":
+		if m.insert.active {
+			m.commitInsert()
+		}
+		m.toggleValue()
+		m.scroll()
 	case "comment_line":
 		cmd := m.commentLine()
 		m.scroll()
