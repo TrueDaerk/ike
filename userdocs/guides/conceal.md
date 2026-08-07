@@ -26,7 +26,8 @@ reason concealing is safe rather than clever:
    concealed text without editing blind.
 3. **Every family has an off switch** — a setting for the default and a palette
    command that flips it for the current view only. The
-   [table at the bottom](#the-settings) lists all of them.
+   [table at the bottom](#the-settings) lists all of them, along with the file
+   patterns that decide [where they apply](#where-they-apply).
 
 Here is rule 2. A JSON file with its epoch timestamps decoded:
 
@@ -462,9 +463,59 @@ view stops following the config value.
 | PEM summaries | `editor.pem_summary` | Toggle PEM Summary |
 | Secret masking | `editor.secret_masking` | Toggle Secret Masking |
 | Colour swatches | `editor.color_preview` | Toggle Color Preview |
+| Where the families apply | `editor.conceal_include`, `editor.conceal_exclude`, `editor.conceal_file_rules` | — |
 
 Percent-decoding in `.http` files has no switch of its own — it is part of how
 the format is rendered.
+
+### Where they apply
+
+The switches above are global: on means on everywhere. The second dimension is
+*where*, and it is written as file patterns:
+
+```toml
+[editor]
+conceal_exclude = ["**/testdata/**", "*.min.js"]
+```
+
+`editor.conceal_include` restricts every family to the files it matches;
+`editor.conceal_exclude` switches them off in the files it matches. Both are
+lists of globs. A pattern without a separator matches the **base name** —
+`*.py`, `Makefile`, `*.{yml,yaml}` — which is the per-filetype case. A pattern
+with one matches the whole path, anchored at any segment boundary unless it
+starts with `/` or `**`, so `vendor/**`, `**/vendor/**` and `/etc/**` all mean
+what they read as. Matching ignores case.
+
+Precedence is **exclude > include > allow**: with neither list set everything
+conceals (the pre-existing behaviour), an include list makes everything else
+stop, and an exclude match wins over any include.
+
+`editor.conceal_file_rules` overrides both lists for a **single family**. Each
+entry is written `family=pattern`, the pattern prefixed `-` for an exclude and
+bare for an include, the family named by its setting key without the `editor.`
+prefix:
+
+```toml
+[editor]
+conceal_include    = ["*.yaml", "*.env"]     # conceal only in config files…
+conceal_file_rules = [
+  "secret_masking=-**/testdata/**",          # …but never mask the fixtures
+  "cron_hints=*.log",                        # …and read cron in logs anyway
+]
+```
+
+A family whose own rules decide a file is done there — that is what makes the
+entry an override rather than a second opinion. A family with nothing to say
+about the file falls through to the two global lists. Within either level,
+exclude still beats include.
+
+Two things this filter deliberately does not do. It never touches the toggles
+themselves, so a family reads as on in `Settings → Editor` even in a file
+where nothing draws — the pattern is a property of the file, not of the
+family. And a **per-view toggle beats it**: flip Toggle Secret Masking in an
+excluded buffer and the masks appear, because a pattern list states a default
+and you just said otherwise. Editing the lists takes effect immediately, in
+every open buffer, with no reload.
 
 All of these default to **on**. The full descriptions, including the
 highlighting limits that apply to very large files (where the insight layers

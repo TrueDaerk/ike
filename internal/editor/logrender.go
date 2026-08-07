@@ -40,9 +40,9 @@ func (m Model) logBuffer() bool { return highlight.Lang(m.path) == "log" }
 // bytes), for everything else the markdown toggle does (#1599).
 func (m Model) parseConcealOn() bool {
 	if m.logBuffer() {
-		return m.logRender
+		return m.logRenderOn()
 	}
-	return m.mdRender
+	return m.mdRenderOn()
 }
 
 // toggleLogRendering flips log rich rendering for this view

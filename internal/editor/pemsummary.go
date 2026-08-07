@@ -42,7 +42,7 @@ type pemState struct {
 }
 
 // pemActive reports whether the summary layer applies to this buffer.
-func (m Model) pemActive() bool { return m.pemSummary && !m.largeFile }
+func (m Model) pemActive() bool { return m.pemSummaryOn() && !m.largeFile }
 
 // pemBlocks returns the PEM blocks of the current document version,
 // recomputing them when the version moved. Blocks are a whole-buffer property

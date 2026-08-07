@@ -348,6 +348,25 @@ type Editor struct {
 	// here are matched before the built-in pairs (true/false, on/off, yes/no,
 	// enabled/disabled, ==/!=, &&/||, </>), so a member can be redefined.
 	TogglePairs []string `toml:"toggle_pairs"`
+	// ConcealInclude restricts every conceal family to the files matching one
+	// of these globs (#1704) — `*.py`, `Makefile`, `**/config/**`. Empty (the
+	// default) means no restriction. A pattern without a separator matches
+	// the file's base name, one with a separator the whole path, anchored at
+	// any segment boundary unless it starts with `/` or `**`; matching is
+	// case-insensitive.
+	ConcealInclude []string `toml:"conceal_include"`
+	// ConcealExclude switches every conceal family off in the files matching
+	// one of these globs (#1704). Exclude beats include, so a file matching
+	// both conceals nothing.
+	ConcealExclude []string `toml:"conceal_exclude"`
+	// ConcealFileRules overrides the two lists above for a single conceal
+	// family (#1704). Each entry is `family=pattern`, the pattern prefixed
+	// `-` (or `!`) for an exclude and bare (or `+`) for an include:
+	// `secret_masking=-testdata/**`, `cron_hints=*.log`. The family names are
+	// the editor.* toggle keys without their prefix. A family whose own rules
+	// decide a path never consults the global lists; one with nothing to say
+	// follows them.
+	ConcealFileRules []string `toml:"conceal_file_rules"`
 	// SecretMasking renders the value of a secret-suspect key in a dotenv
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.

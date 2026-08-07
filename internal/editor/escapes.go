@@ -16,6 +16,7 @@ package editor
 // rendering layers. The detection heuristics live in internal/escapes.
 
 import (
+	"ike/internal/concealfilter"
 	"ike/internal/cronhint"
 	"ike/internal/epochtime"
 	"ike/internal/escapes"
@@ -27,44 +28,57 @@ import (
 
 // decodeOn reports whether the decode family named by capture is switched on
 // for this view — the per-family gate lineConcealRanges applies to m.decodes.
+// The family's toggle decides first; the file-pattern filter (#1704) then has
+// to agree, unless this view toggled the family by hand (concealfile.go).
 func (m Model) decodeOn(capture string) bool {
+	family, on, set := m.decodeFamily(capture)
+	if family == "" {
+		return false
+	}
+	return m.concealGate(family, on, set)
+}
+
+// decodeFamily maps a stand-in capture onto its conceal family and that
+// family's toggle state (value, and whether a per-view toggle set it). An
+// unknown capture answers an empty family.
+func (m Model) decodeFamily(capture string) (family string, on, set bool) {
 	switch capture {
 	case epochtime.Capture:
-		return m.tsDecode
+		return concealfilter.TimestampDecoding, m.tsDecode, m.tsDecodeSet
 	case escapes.UnicodeCapture:
-		return m.uniDecode
+		return concealfilter.UnicodeEscapeDecoding, m.uniDecode, m.uniDecodeSet
 	case escapes.EntityCapture:
-		return m.entDecode
+		return concealfilter.EntityDecoding, m.entDecode, m.entDecodeSet
 	case escapes.Base64Capture:
-		return m.b64Decode
+		return concealfilter.Base64Decoding, m.b64Decode, m.b64DecodeSet
 	case cronhint.Capture:
 		// Not a decode either (#1624): "on" means the cron expression draws
 		// with its English schedule appended.
-		return m.cronHints
+		return concealfilter.CronHints, m.cronHints, m.cronHintsSet
 	case secret.Capture:
 		// Not a decode but the same stand-in mechanic (#1623): "on" means the
 		// mask shows and the value hides, gated by editor.secret_masking.
-		return m.secretMask
+		return concealfilter.SecretMasking, m.secretMask, m.secretMaskSet
 	case numhint.SizeCapture:
-		return m.sizeHints
+		return concealfilter.ByteSizeHints, m.sizeHints, m.sizeHintsSet
 	case numhint.DurationCapture:
-		return m.durHints
+		return concealfilter.DurationHints, m.durHints, m.durHintsSet
 	case numhint.GroupCapture:
-		return m.digitGroup
+		return concealfilter.DigitGrouping, m.digitGroup, m.digitGroupSet
 	case numhint.RadixCapture:
-		return m.radixHints
+		return concealfilter.RadixHints, m.radixHints, m.radixHintsSet
 	case permhint.Capture:
 		// Not a decode either (#1656): "on" means the octal file mode draws
 		// with its symbolic rwx form appended.
-		return m.permHints
+		return concealfilter.PermissionHints, m.permHints, m.permHintsSet
 	case nethint.CIDRCapture:
-		return m.cidrHints
+		return concealfilter.CIDRHints, m.cidrHints, m.cidrHintsSet
 	case nethint.IDNCapture, nethint.IDNMixedCapture:
 		// One family in two colours (#1653): the homograph capture is the
 		// same decode, drawn in the warning colour, so it shares the toggle.
-		return m.idnHints
+		return concealfilter.IDNHints, m.idnHints, m.idnHintsSet
 	}
-	return false
+	return "", false, false
 }
 
 // The per-view toggles (view.toggleUnicodeEscapeDecoding and friends). The

@@ -57,7 +57,7 @@ func (m Model) svLangID() string {
 // and soft wrap is off (a padded row sliced by raw-text wrap segments would
 // tear, like the markdown tables).
 func (m Model) svActive() bool {
-	return m.svRender && !m.softWrap && m.svLangID() != ""
+	return m.svRenderOn() && !m.softWrap && m.svLangID() != ""
 }
 
 // svLayout returns the current column layout, recomputing when the document

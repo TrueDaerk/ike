@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-07 (editor: per-file conceal filter, #1704)
+
+- **Conceal now has a *where*.** `editor.conceal_include` /
+  `editor.conceal_exclude` gate every conceal family by file glob, and
+  `editor.conceal_file_rules` (`family=pattern`, `-` prefix for an exclude)
+  overrides them for one family. Precedence is exclude > include > allow per
+  level, and a family whose own rules decide a path never consults the global
+  one, so masking can stay out of `**/testdata/**` while timestamps keep
+  decoding there.
+- **`internal/concealfilter` is new**, over a new `internal/pathglob` — the
+  LSP watched-files matcher of #1144 lifted out of `lsp/manager` so both
+  callers share one glob vocabulary. A separator-free pattern matches the base
+  name, one with a separator the whole path, anchored at any segment boundary
+  unless rooted or `**`-led; matching is case-insensitive.
+- **The filter gates reads, not toggles.** `Model.concealGate` composes the
+  two dimensions where a family is consumed (`decodeOn` for the thirteen
+  stand-in families, `mdRenderOn`/`svRenderOn`/`logRenderOn`/`pemSummaryOn`
+  for the layers), so the toggle fields keep meaning "this family is on" and a
+  per-view toggle still bypasses the filter. Edited patterns reach open
+  buffers on the next frame, with no reload.
+
 ## 2026-08-07 (editor: constant conceals in code, #1701)
 
 - **Constants read like config values.** A constant assignment in a Python,

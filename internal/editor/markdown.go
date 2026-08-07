@@ -211,7 +211,7 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	// on a marker — reveals the markers that span contains, so the whole span
 	// reads raw while edited.
 	var hot []concealRange
-	if m.mdRender {
+	if m.mdRenderOn() {
 		for _, e := range m.concealExt[line] {
 			if inRange(e) {
 				hot = append(hot, e)
@@ -347,7 +347,7 @@ func (m Model) mdTableRow(line int) (string, bool) {
 // raw: rendering off, soft wrap, secondary carets or a selection inside the
 // block (their styling only renders through the raw cell loop).
 func (m Model) tableRowsAt(line int) (rows []string, rawLine int, b mdTableBlock, ok bool) {
-	if !m.mdRender || m.softWrap || m.mdTables == nil {
+	if !m.mdRenderOn() || m.softWrap || m.mdTables == nil {
 		return nil, 0, mdTableBlock{}, false
 	}
 	for _, blk := range m.tableBlocks() {

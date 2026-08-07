@@ -84,7 +84,7 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// Log-layer captures (#1621) resolve through the palette-aware table in
 	// logrender.go and honor the log-rendering toggle: off means raw text.
 	if logCapture(capture) {
-		if !m.logRender {
+		if !m.logRenderOn() {
 			return lipgloss.Style{}, false
 		}
 		return m.logStyle(capture)
@@ -133,7 +133,7 @@ func (m Model) styleAt(line, col int) (lipgloss.Style, bool) {
 	// composed over whatever color the theme resolves (usually none). Gated
 	// by the markdown-rendering toggle (#1599) like the conceal layer, so
 	// toggling off shows plain raw source.
-	if m.mdRender {
+	if m.mdRenderOn() {
 		switch capture {
 		case "markup.bold":
 			return st.Bold(true), true
