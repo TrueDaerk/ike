@@ -98,6 +98,7 @@ func defaults() *Config {
 			CIDRHints:              true,
 			IDNHints:               true,
 			SecretMasking:          true,
+			Hyperlinks:             true,
 			ColorPreview:           true,
 			IDColors:               true,
 			IDColorMinLength:       7,

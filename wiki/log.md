@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-07 (editor: clickable URLs via OSC 8 hyperlinks, #1655)
+
+- URLs in buffers are real terminal links: every display cell of a bare
+  `http(s)://` URL — and of a Markdown link label, which carries its link
+  target — wraps in its own zero-width OSC 8 open/close pair, so supporting
+  terminals (Ghostty, iTerm2, kitty, WezTerm) open the browser on
+  cmd/ctrl+click while others ignore the sequences by spec. Width math,
+  cursor positioning and click mapping are untouched (the #1469 invariant),
+  and the per-cell pairs can never be stranded open by a row splice. New
+  `editor.hyperlinks` switch (default on) disables emission.
+
 ## 2026-08-07 (editor: invisible & deceptive Unicode, #1654)
 
 - The editor never renders a character as nothing anymore: zero-width

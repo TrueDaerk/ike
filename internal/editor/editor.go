@@ -365,7 +365,11 @@ type Model struct {
 	// its own override flag like the decode families. See secrets.go.
 	secretMask    bool
 	secretMaskSet bool
-	mdRender      bool
+	// hyperlinks wraps detected URLs in OSC 8 sequences so the terminal makes
+	// them clickable (#1655, hyperlink.go); editor.hyperlinks, no per-view
+	// toggle.
+	hyperlinks bool
+	mdRender   bool
 	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
 	// applyConfig refresh stops tracking editor.markdown_rendering once the
 	// view toggled.
@@ -614,6 +618,7 @@ func New() Model {
 		cidrHints:          true,
 		idnHints:           true,
 		secretMask:         true,
+		hyperlinks:         true,
 		colorPreview:       true,
 		idColors:           true,
 		idColorMin:         idcolor.DefaultMinLength,
@@ -777,6 +782,7 @@ func (m *Model) applyConfig() {
 	if !m.secretMaskSet {
 		m.secretMask = boolOr(m.cfg, "editor.secret_masking", m.secretMask)
 	}
+	m.hyperlinks = boolOr(m.cfg, "editor.hyperlinks", m.hyperlinks)
 	if !m.pemSummarySet {
 		m.pemSummary = boolOr(m.cfg, "editor.pem_summary", m.pemSummary)
 	}

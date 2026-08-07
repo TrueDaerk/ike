@@ -1674,6 +1674,46 @@ so server publishes and lint findings replace independently (see
 [/architecture/problems.md](/architecture/problems.md)). Large-file
 degradation (#149) skips the scan with the rest of the insight features.
 
+## Terminal hyperlinks (#1655)
+
+URLs in a buffer are real links (`hyperlink.go`): the render loop wraps every
+display cell of a detected URL in an OSC 8 open/close pair, so terminals that
+support the sequence (Ghostty, iTerm2, kitty, WezTerm) make the text
+clickable — cmd/ctrl+click opens the browser — and terminals without support
+ignore the zero-width sequences by spec, degrading silently. The
+`editor.hyperlinks` switch (default on) disables emission entirely.
+
+Detection is a per-line scan (`scanLinks`), riding the #614 line cache like
+every other per-span computation:
+
+- **Bare URLs** — `http(s)://` at a word boundary, extended over URL-safe
+  printable ASCII, with trailing prose punctuation trimmed (`.` `,` `;` `:`
+  `!` `?` quotes) and a trailing closer (`)`, `]`, `}`) kept only while it
+  has a matching opener inside the URL, so
+  `https://en.wikipedia.org/wiki/Go_(language)` survives but `(https://x)`
+  drops the parenthesis. The charset excludes control bytes and non-ASCII, so
+  a scanned URL can never smuggle a sequence terminator into the emitted
+  escape.
+- **Markdown link labels** — `[label](target)` attaches *target* to the label
+  cells (angle-bracket wrappers unwrapped, a `"title"` stripped), so the
+  rendered label is clickable even while #881 conceals the destination. Only
+  targets with a URI scheme (`http`, `https`, `mailto`, `file`) qualify —
+  OSC 8 needs an absolute URI, so relative paths add nothing. The scan is
+  textual, not grammar-driven, so it also works in READMEs viewed without a
+  parser.
+
+The emission shape is the #1469 lesson applied: the sequences are zero-width
+— one buffer rune stays one display cell — so width budgeting, cursor
+positioning, `DisplayOffset` and click mapping need no changes at all. Each
+cell carries its *own* complete open/close pair rather than one pair per run:
+a later splice of the rendered row (an overlay float truncating with
+`ansi.Cut`) can then only ever fall between complete pairs, never strand an
+unclosed open that would bleed the link over following text. A shared
+`id=ike-<line>-<start>` parameter tells the terminal the cells form one link,
+so hover-highlighting still spans the whole URL; downstream, ultraviolet
+parses the pairs into per-cell link state and re-emits them diffed, so the
+per-cell shape never reaches the wire verbatim.
+
 ## PEM / certificate summaries (#1652)
 
 A PEM block collapses onto its `-----BEGIN …-----` line with a decoded
@@ -1909,6 +1949,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
 `cidr_hints`/`idn_hints` (#1653),
+`hyperlinks` (#1655),
 `pem_summary` (#1652),
 `color_preview`
 (#790), `id_colors` / `id_color_min_length` (#1626)

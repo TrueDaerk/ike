@@ -330,6 +330,12 @@ type Editor struct {
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.
 	SecretMasking bool `toml:"secret_masking"`
+	// Hyperlinks wraps detected URLs — bare http(s) URLs and Markdown link
+	// labels, which carry their link target — in OSC 8 hyperlink sequences
+	// (#1655), so terminals that support them (Ghostty, iTerm2, kitty,
+	// WezTerm) make the text clickable; terminals without support ignore the
+	// zero-width sequences by spec.
+	Hyperlinks bool `toml:"hyperlinks"`
 	// DiffWordHighlight emphasizes the word-level changed range inside
 	// paired removed/added lines of .diff/.patch buffers (#1630) with the
 	// diff viewer's changed-range background; off keeps whole-line coloring
