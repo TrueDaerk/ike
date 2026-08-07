@@ -301,6 +301,36 @@ func (m *Model) renderChangeCount(pal *theme.Palette, x int) string {
 	return lipgloss.NewStyle().Foreground(pal.Warning).Bold(true).Render(text)
 }
 
+// markerWidth is the selection marker's width in cells: the glyph plus the
+// space separating it from the label. Unselected rows pay the same width as
+// blanks, so a moving selection never shifts the text column (#1689).
+const markerWidth = 2
+
+// rowMarker renders the two-cell selection marker used by every settings list
+// (#1689), mirroring Search Everywhere / Recent Files (#1532): the accent "❯"
+// on the focused column's selected row, a muted one on an unfocused column's,
+// blanks elsewhere. bg carries the row's own background so the marker sits on
+// the selection band instead of punching a hole in it.
+func rowMarker(pal *theme.Palette, selected, focused bool, bg lipgloss.Style) string {
+	if !selected {
+		return bg.Render("  ")
+	}
+	colour := pal.Border
+	if focused {
+		colour = pal.Accent
+	}
+	return bg.Foreground(colour).Bold(true).Render("❯ ")
+}
+
+// markerBG picks the marker's backdrop: the selection band on a selected row,
+// the plain background otherwise.
+func markerBG(selected bool, sel lipgloss.Style) lipgloss.Style {
+	if selected {
+		return sel
+	}
+	return lipgloss.NewStyle()
+}
+
 // hintSeg is one footer segment: its text and the action a click runs.
 type hintSeg struct{ text, action string }
 
@@ -350,10 +380,14 @@ func (m *Model) renderCategories(h int) string {
 	}
 	pal := m.theme()
 	base := lipgloss.NewStyle().Width(catWidth)
-	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
-	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	// The marker owns the first two cells, so the labels are that much
+	// narrower and the column still totals catWidth.
+	lbl := lipgloss.NewStyle().Width(catWidth - markerWidth)
+	sel := lbl.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	inactiveSel := lbl.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	selBG := lipgloss.NewStyle().Background(pal.Selection)
 	header := base.Foreground(pal.Secondary).Faint(true).Bold(true)
-	hover := base.Underline(true)
+	hover := lbl.Underline(true)
 
 	rows := m.railRows()
 	selRow := m.railRowOf(m.cat)
@@ -370,21 +404,23 @@ func (m *Model) renderCategories(h int) string {
 			continue
 		}
 		p := m.pages[r.page]
-		label := " " + p.Title
+		label := p.Title
 		if n := m.changedOnPage(r.page); n > 0 {
 			// The rail says which pages carry staged edits (#1296), so a
 			// batch spanning pages is visible from anywhere.
 			label += " ●" + strconv.Itoa(n)
 		}
+		selected := r.page == m.cat
+		mark := rowMarker(pal, selected, m.focus == catColumn, markerBG(selected, selBG))
 		switch {
-		case r.page == m.cat && m.focus == catColumn:
-			lines = append(lines, sel.Render(label))
-		case r.page == m.cat:
-			lines = append(lines, inactiveSel.Render(label))
+		case selected && m.focus == catColumn:
+			lines = append(lines, mark+sel.Render(label))
+		case selected:
+			lines = append(lines, mark+inactiveSel.Render(label))
 		case r.page == m.hoverCat:
-			lines = append(lines, hover.Render(label))
+			lines = append(lines, mark+hover.Render(label))
 		default:
-			lines = append(lines, base.Render(label))
+			lines = append(lines, mark+lbl.Render(label))
 		}
 	}
 	for len(lines) < h {
@@ -408,8 +444,10 @@ func (m *Model) renderCategories(h int) string {
 func (m *Model) renderHitPages(h int) string {
 	pal := m.theme()
 	base := lipgloss.NewStyle().Width(catWidth)
-	sel := base.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
-	inactiveSel := base.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	lbl := lipgloss.NewStyle().Width(catWidth - markerWidth)
+	sel := lbl.Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	inactiveSel := lbl.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
+	selBG := lipgloss.NewStyle().Background(pal.Selection)
 	dim := base.Foreground(pal.Secondary)
 
 	pages := m.hitPages()
@@ -418,14 +456,16 @@ func (m *Model) renderHitPages(h int) string {
 	m.catOff = clamp(m.catOff, 0, maxOff(len(pages), h-1))
 	for i := m.catOff; i < len(pages) && len(lines) < h; i++ {
 		p := pages[i]
-		label := " " + m.pages[p.page].Title + " " + strconv.Itoa(p.count)
+		label := m.pages[p.page].Title + " " + strconv.Itoa(p.count)
+		selected := i == m.hitSel
+		mark := rowMarker(pal, selected, m.focus == catColumn, markerBG(selected, selBG))
 		switch {
-		case i == m.hitSel && m.focus == catColumn:
-			lines = append(lines, sel.Render(label))
-		case i == m.hitSel:
-			lines = append(lines, inactiveSel.Render(label))
+		case selected && m.focus == catColumn:
+			lines = append(lines, mark+sel.Render(label))
+		case selected:
+			lines = append(lines, mark+inactiveSel.Render(label))
 		default:
-			lines = append(lines, base.Render(label))
+			lines = append(lines, mark+lbl.Render(label))
 		}
 	}
 	for len(lines) < h {
@@ -767,12 +807,14 @@ func highlightMatch(text, needle string, pal *theme.Palette) string {
 // space, and provenance is a detail, not a scanning cue.
 func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	pal := m.theme()
+	selBG := lipgloss.NewStyle().Background(pal.Selection)
 	if r.kind != rowEntry {
 		// A filter jump row (#886): a page or a custom-page item.
-		label := " → " + highlightMatch(r.label, m.filter, pal)
+		label := "→ " + highlightMatch(r.label, m.filter, pal)
 		if r.kind == rowPage {
 			label += "  (page)"
 		}
+		mark := rowMarker(pal, selected, m.focus == formColumn, markerBG(selected, selBG))
 		style := lipgloss.NewStyle().Foreground(pal.Info)
 		switch {
 		case selected && m.focus == formColumn:
@@ -782,23 +824,26 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 		case hovered:
 			style = style.Underline(true)
 		}
-		return style.Render(label)
+		return mark + style.Render(label)
 	}
 	e := r.entry
 
-	title := " " + e.Title
+	// The marker owns the row's first two cells (#1689); the rest of the row
+	// lays out in what is left, so the column still totals w.
+	avail := maxInt(w-markerWidth, 1)
+	title := e.Title
 	if m.filter != "" {
 		// Search mode marks what matched (#1297), so a hit list is readable
 		// without re-reading the query.
-		title = " " + m.pages[r.page].Title + " › " + highlightMatch(e.Title, m.filter, pal)
+		title = m.pages[r.page].Title + " › " + highlightMatch(e.Title, m.filter, pal)
 	}
 	right := affordanceValue(e, m.value(e.Key)) + " "
 	// The value yields before the title does: a long list still shows its
 	// marker, and the row never overflows the fixed column.
-	if over := lipgloss.Width(title) + lipgloss.Width(right) + 1 - w; over > 0 {
+	if over := lipgloss.Width(title) + lipgloss.Width(right) + 1 - avail; over > 0 {
 		right = ansi.Truncate(right, maxInt(lipgloss.Width(right)-over, 0), "…")
 	}
-	gap := w - lipgloss.Width(title) - lipgloss.Width(right)
+	gap := avail - lipgloss.Width(title) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
 	}
@@ -819,7 +864,8 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 	default:
 		style = style.Foreground(pal.Info) // overridden values stand out
 	}
-	return style.Render(line)
+	mark := rowMarker(pal, selected, m.focus != catColumn, markerBG(selected, selBG))
+	return mark + style.Render(line)
 }
 
 func maxInt(a, b int) int {
