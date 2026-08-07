@@ -48,7 +48,7 @@ func TestGridColumnWidths(t *testing.T) {
 	if g.side {
 		t.Fatalf("narrow panel must stack the detail band: %+v", g)
 	}
-	if g.listH+g.detailH+1 != 24-4 {
+	if g.listH+g.detailH+1 != 24-chromeRows {
 		t.Fatalf("stacked heights must fill the body: %+v", g)
 	}
 }

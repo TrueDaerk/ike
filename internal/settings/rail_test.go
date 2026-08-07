@@ -28,13 +28,13 @@ func TestRailSectionsRender(t *testing.T) {
 	}
 	// Clicking the CORE header row (body row 0) selects nothing new.
 	before := m.cat
-	m.Click(2, 2)
+	m.Click(2, bodyTop)
 	if m.cat != before {
 		t.Fatalf("header click must not select, cat=%d", m.cat)
 	}
 	// Clicking the Editor row (body row 1) selects page 0.
 	m.cat = 1
-	m.Click(2, 3)
+	m.Click(2, bodyTop+1)
 	if m.cat != 0 {
 		t.Fatalf("page click under a header must map correctly, cat=%d", m.cat)
 	}
@@ -103,7 +103,7 @@ func TestRailScrollIndicators(t *testing.T) {
 	if v := m.View(); !strings.Contains(v, "▼ more") {
 		t.Fatalf("overflowing rail must show the down indicator:\n%s", v)
 	}
-	m.Wheel(2, 3)
+	m.Wheel(2, bodyTop, 3)
 	if v := m.View(); !strings.Contains(v, "▲ more") {
 		t.Fatal("a scrolled rail must show the up indicator")
 	}

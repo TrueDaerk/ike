@@ -34,7 +34,7 @@ func detailPages() []Page {
 }
 
 // clickBody presses row bodyRow of the editor body in the detail column.
-func clickBody(m *Model, bodyRow int) { m.Click(m.detailX()+2, 2+m.detailBodyTop+bodyRow) }
+func clickBody(m *Model, bodyRow int) { m.Click(m.detailX()+2, bodyTop+m.detailBodyTop+bodyRow) }
 
 // TestDetailBoolClickPicks guards #1325: clicking a radio row of the boolean
 // editor selects it and stages the value.
@@ -69,7 +69,7 @@ func TestDetailEnumClickPicksOption(t *testing.T) {
 		t.Fatalf("editor = %T, want an enum editor", m.editor)
 	}
 	n.idx = 0
-	m.Wheel(m.detailX()+2, 1)
+	m.Wheel(m.detailX()+2, bodyTop, 1)
 	if n.idx != 1 {
 		t.Fatalf("the wheel must move the option selection: idx = %d", n.idx)
 	}
@@ -79,7 +79,7 @@ func TestDetailEnumClickPicksOption(t *testing.T) {
 func TestDetailIntClickSteps(t *testing.T) {
 	m := detailModel(t, 0, 1) // editor.tab_width, an Int
 	before := m.value("editor.tab_width")
-	m.Click(m.detailX()+1, 2+m.detailBodyTop) // the ‹ glyph
+	m.Click(m.detailX()+1, bodyTop+m.detailBodyTop) // the ‹ glyph
 	v, staged := m.change("editor.tab_width")
 	if !staged {
 		t.Fatal("clicking ‹ must step the value")
@@ -89,7 +89,7 @@ func TestDetailIntClickSteps(t *testing.T) {
 	}
 	down := v.shown
 	n := m.editor.(*intEditor)
-	m.Click(m.detailX()+widthOf(" ‹ "+n.tf.View()+" "), 2+m.detailBodyTop) // the › glyph
+	m.Click(m.detailX()+widthOf(" ‹ "+n.tf.View()+" "), bodyTop+m.detailBodyTop) // the › glyph
 	if v, _ := m.change("editor.tab_width"); v.shown == down {
 		t.Fatalf("clicking › must step back up, still %q", v.shown)
 	}
@@ -121,7 +121,7 @@ func TestDetailListClickSelectsThenEdits(t *testing.T) {
 // editor is not a control: pressing it focuses the column and nothing else.
 func TestDetailHeadClickOnlyFocuses(t *testing.T) {
 	m := detailModel(t, 0, 0)
-	m.Click(m.detailX()+2, 2) // the title line of the detail column
+	m.Click(m.detailX()+2, bodyTop) // the title line of the detail column
 	if m.focus != detailColumn {
 		t.Fatalf("focus = %v, want the detail column", m.focus)
 	}
@@ -144,7 +144,7 @@ func TestDetailClickInStackedBand(t *testing.T) {
 		t.Skip("panel wide enough for the three-column grid")
 	}
 	_ = m.View()
-	m.Click(formX()+2, 2+g.listH+1+m.detailBodyTop+1) // the "off" row of the band
+	m.Click(formX()+2, bodyTop+g.listH+1+m.detailBodyTop+1) // the "off" row of the band
 	if m.focus != detailColumn {
 		t.Fatalf("focus = %v, want the detail column", m.focus)
 	}

@@ -290,6 +290,13 @@ func (n *enumEditor) View(w, h int) []string {
 		if opts[i] == cur {
 			mark, tail = "●", "current"
 		}
+		if n.e.Preview != nil {
+			// The option's inline preview (#1664: theme palette swatches)
+			// replaces the tail text — the ● mark already says "current".
+			if sw := n.e.Preview(opts[i]); sw != "" {
+				tail = sw
+			}
+		}
 		out = append(out, n.m.editorRow(w, i == n.idx, mark+" "+opts[i], tail))
 	}
 	return out

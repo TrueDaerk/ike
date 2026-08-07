@@ -25,9 +25,8 @@ func (m *Model) Hover(x, y int) {
 		m.pageHover(-1, -1)
 		return
 	}
-	const bodyTop = 2
 	row := y - bodyTop
-	if row < 0 || row >= m.height-4 {
+	if row < 0 || row >= m.height-chromeRows {
 		m.pageHover(-1, -1)
 		return
 	}
