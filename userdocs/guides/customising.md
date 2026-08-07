@@ -207,7 +207,12 @@ washed-out projectors. Plugins can register more. The README shows a
 
 Switching live is easiest from the palette — type `:` and then `Theme`. The
 **Appearance** settings page lists them too, and previews as you move through
-the list.
+the list. Every row of that list is its own mini-preview: the theme's name is
+painted in that theme's background and foreground, and the strip of colour
+chips at the end of the row shows its background, foreground, accent, keyword
+and string colours — so themes compare at a glance without applying them one
+by one. The selected row is marked with the `❯` chevron and an underline
+rather than a colour band, so the preview stays visible under the cursor.
 
 Tool panes get the theme's colours in their environment, so a TUI program that
 reads them follows along.

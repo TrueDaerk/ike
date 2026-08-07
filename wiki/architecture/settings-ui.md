@@ -762,3 +762,26 @@ Four usability gaps on the grid, closed in one pass.
   (apply-on-select, auto-sync off); an unknown name renders no swatch rather
   than previewing as the default theme. `BasePages` grew a variadic
   `extraThemes ...theme.Theme` so plugin-registered themes resolve too.
+
+## Theme rows as mini-previews (#1688)
+
+The swatch strip showed a theme's colors; the row around it still spoke the
+*panel's* colors. `Entry.RowColors` — a second optional per-option hook, next
+to `Entry.Preview` — lets an enum paint each option row in that option's own
+colors. The theme enums set it to the named theme's resolved **background and
+foreground**, memoized per name like the swatches.
+
+- **Where the paint stops.** `Model.themedEditorRow` renders marker, `●`/`○`
+  and the theme name as one block filled with the option's background, padded
+  out to just before the swatch strip; the strip (#1664) is appended after a
+  blank, untouched, on the panel's own background. A row is therefore read as
+  *how the theme looks* followed by *what its palette holds*.
+- **Selection on top of arbitrary colors.** A background band would hide the
+  very colors being previewed, so the selected row is marked instead by the
+  panel-coloured `❯` chevron (#1689, in the marker column ahead of the themed
+  block) plus a bold, underlined label. The marker column is taken out of the
+  row width, so the option text never shifts as the selection moves.
+- **Unresolvable names** (a theme in the config that no longer exists) fall
+  back to the panel's colors but keep the themed layout, so the marker column
+  stays aligned down the whole list. Enums without `RowColors` render exactly
+  as before.
