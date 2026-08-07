@@ -4271,6 +4271,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#366: rename z -> match1 became match1atch1 with a second view
 		// open). The first view applies, the change-sync broadcast converges
 		// the others, mirroring replace.go's single-view rule.
+		var reparse tea.Cmd
 		if views := m.editorViewsForPath(msg.Path); len(views) > 0 {
 			edits := make([]editor.TextEdit, len(msg.Edits))
 			for i, e := range msg.Edits {
@@ -4281,6 +4282,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 			views[0].ApplyTextEdits(edits)
+			// The applying view bypasses its own Update loop, so its stale
+			// highlight/conceal caches must be dropped and a parse scheduled
+			// here (#1683); the change-sync broadcast already does the same
+			// for the other views.
+			reparse = views[0].ReparseEdits()
 		}
 		if msg.Applied != nil {
 			// The save chain's edit-applied signal (#1148): fires after the
@@ -4288,7 +4294,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// path anymore, so a chain never stalls on a closed buffer.
 			msg.Applied()
 		}
-		return m, nil
+		return m, reparse
 
 	case ilsp.SaveChainDoneMsg:
 		// Format/organize-imports on save finished (#1148): every view that

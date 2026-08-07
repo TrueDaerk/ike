@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"ike/internal/highlight"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
 )
@@ -31,6 +32,32 @@ func TestFormatEditsMsgRoutesToEditor(t *testing.T) {
 	}
 	if !ed.Dirty() {
 		t.Fatal("formatting should mark the buffer dirty (apply, not save)")
+	}
+}
+
+// TestFormatEditsMsgSchedulesReparse (#1683): applying formatter edits bypasses
+// the editor's Update loop, so its highlight/conceal caches went stale until
+// the next keystroke. The handler must return a parse command for the applying
+// view so the reformatted content is re-highlighted immediately.
+func TestFormatEditsMsgSchedulesReparse(t *testing.T) {
+	m := sized(t, 100, 40)
+	dir := t.TempDir()
+	file := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(file, []byte("func main(){\nx:=1\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ := m.openPath(file, false)
+	m = tm.(Model)
+
+	_, cmd := m.Update(ilsp.FormatEditsMsg{Path: file, Edits: []ilsp.FormatEdit{
+		{StartLine: 1, StartCol: 0, EndLine: 1, EndCol: 0, Text: "\t"},
+	}})
+	if cmd == nil {
+		t.Fatal("FormatEditsMsg must schedule a reparse of the edited buffer")
+	}
+	sp, ok := cmd().(highlight.SpansMsg)
+	if !ok || sp.Path != file {
+		t.Fatalf("reparse must yield a SpansMsg for %s, got %#v", file, sp)
 	}
 }
 

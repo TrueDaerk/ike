@@ -148,8 +148,7 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		if !ok {
 			return m, nil
 		}
-		m.restoreLocalHistory(path, entry, text)
-		return m, nil
+		return m, m.restoreLocalHistory(path, entry, text)
 	}
 	return m, nil
 }
@@ -205,15 +204,15 @@ func (m *Model) openLocalHistoryDiffPane(path string, entry localhistory.Entry, 
 // through the normal edit path — one history change, so a single undo brings
 // the pre-restore content back and the buffer marks dirty. The file on disk
 // is untouched until the user saves.
-func (m *Model) restoreLocalHistory(path string, entry localhistory.Entry, snapshot string) {
+func (m *Model) restoreLocalHistory(path string, entry localhistory.Entry, snapshot string) tea.Cmd {
 	ed := m.editorForPath(path)
 	if ed == nil {
 		m.host.Notify(host.Warn, "no open buffer for "+baseName(path))
-		return
+		return nil
 	}
 	if ed.Text() == snapshot {
 		m.host.Notify(host.Info, "buffer already matches this snapshot")
-		return
+		return nil
 	}
 	lines := strings.Split(ed.Text(), "\n")
 	last := lines[len(lines)-1]
@@ -224,4 +223,7 @@ func (m *Model) restoreLocalHistory(path string, entry localhistory.Entry, snaps
 	}})
 	m.host.Notify(host.Info, fmt.Sprintf("restored %s from %s — undo reverts, save writes it",
 		baseName(path), project.RelTime(entry.Time, time.Now())))
+	// The restore bypassed the editor's Update loop; drop its stale
+	// highlight/conceal caches and reparse the new content (#1683).
+	return ed.ReparseEdits()
 }
