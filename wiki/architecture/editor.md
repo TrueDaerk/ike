@@ -1620,6 +1620,60 @@ a different colour, not a family of its own.
   excepted so a prefix can end a sentence. Host runs stop at `/`, so a URL's
   authority is scanned and its path is not.
 
+## Invisible & deceptive Unicode (#1654)
+
+The classic trap — code that looks identical but does not compile, or a string
+comparison that fails — comes from characters the editor renders as nothing or
+as an ASCII look-alike. Two independent halves close it, both always on (a
+security rendering has no off switch), both language-agnostic, both inert on
+pure-ASCII buffers.
+
+**Placeholders** (`unihint.Placeholder`, hooked into `renderSpanUncached`'s
+rune switch next to the #1469 control glyphs): every invisible/format rune
+draws as a one-cell glyph in the theme's `Warning` colour, so nothing renders
+as nothing — and no zero-width rune reaches the terminal raw, which would
+desync the one-rune-one-cell mapping exactly like a raw control byte.
+
+| Runes | Glyph |
+| --- | --- |
+| NBSP `U+00A0`, narrow NBSP `U+202F` | `⍽` (distinct from the `·` space glyph) |
+| soft hyphen `U+00AD` | `-` |
+| zero-width space/joiner/non-joiner `U+200B–D`, word joiner `U+2060`, BOM `U+FEFF` | `∅` |
+| bidi controls `U+202A–E`, `U+2066–69`, LRM/RLM `U+200E/F`, ALM `U+061C` | `◊` |
+
+An interior BOM survives `textenc.Decode` (only a leading one is stripped), so
+it renders like the rest of the zero-width family.
+
+**Diagnostics** (`internal/unihint.Notes`, a leaf package over `lang.Note`):
+the highlight pass now runs for *every* buffer — `parseCmd` schedules even
+without a language, computing only the Unicode scan there — and its findings
+ride the #1623 note channel into the gutter tint, inline underline, hover and
+caret popups. Three finding classes:
+
+- **Invisible characters** — one note per run of identical runes (`× n` for a
+  stretch), warning severity for the zero-width family, info for NBSP and the
+  soft hyphen (common in legitimate prose). A ZWNJ/ZWJ sitting between two
+  non-ASCII runes is legitimate typography (Persian needs ZWNJ, emoji families
+  join with ZWJ) and downgrades to info.
+- **Bidi controls** — always a warning; these enable the Trojan-Source attack
+  class, and the message says so.
+- **Confusable identifiers** — an identifier-like token mixing ASCII letters
+  with Cyrillic/Greek ASCII look-alikes (`pаssword` with a Cyrillic а) flags
+  as a warning naming each offender with script and codepoint. The look-alike
+  table is `nethint.LatinLookAlike`, shared with the #1653 IDN homograph
+  check. Legitimate non-Latin text never lights up: pure-Cyrillic words —
+  even ones spelled entirely in look-alikes, unlike hostnames — ordinary
+  Russian or Greek prose, `Δt`, `straße` all stay silent, because only the
+  *mixed* token carries the attack in a buffer.
+
+Notes now also travel beyond the marks (#1654): `NoteDiagnostics` converts
+them to diagnostic values (source `lint`) so `lsp.next/prevDiagnostic` walks
+them, `DiagnosticCounts` counts them, the #739 popups list them, and the app
+feeds them to the Problems store on every `SpansMsg` — its own store channel,
+so server publishes and lint findings replace independently (see
+[/architecture/problems.md](/architecture/problems.md)). Large-file
+degradation (#149) skips the scan with the rest of the insight features.
+
 ## PEM / certificate summaries (#1652)
 
 A PEM block collapses onto its `-----BEGIN …-----` line with a decoded

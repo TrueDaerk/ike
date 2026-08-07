@@ -222,6 +222,11 @@ var latinLookAlikes = map[rune]bool{
 	'ϲ': true, 'ϳ': true, 'ϵ': true,
 }
 
+// LatinLookAlike reports whether r is one of the Cyrillic/Greek letters in the
+// table above — exported for the buffer-wide confusable scan (#1654), which
+// flags the same letters when they hide inside an otherwise-ASCII identifier.
+func LatinLookAlike(r rune) bool { return latinLookAlikes[r] }
+
 // confusableLabel reports whether a single-script non-Latin label is written
 // entirely in letters that look Latin — the whole-script homograph. Labels of
 // one letter are not enough to spell anything, so they do not count.

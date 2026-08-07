@@ -15,6 +15,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
 	"ike/internal/ui"
+	"ike/internal/unihint"
 )
 
 // ModeColor is the accent colour that identifies an input mode (#1323), shared
@@ -815,6 +816,12 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// reaches the terminal raw; SGR sequences additionally colour the text
 	// they govern (see ansiescape.go).
 	ctrlStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
+	// Invisible/deceptive Unicode (#1654): zero-width characters, NBSP, the
+	// soft hyphen and every bidi control render as a one-cell warn-coloured
+	// placeholder — the editor never draws a character as nothing, and a
+	// zero-width rune reaching the terminal raw would desync the
+	// one-rune-one-cell mapping exactly like a raw control byte (#1469).
+	invisStyle := lipgloss.NewStyle().Foreground(m.theme().Warning)
 	var sgrSpans []sgrSpan
 	if hasCtrlRune(runes) {
 		sgrSpans = parseSGRSpans(runes)
@@ -916,7 +923,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				cell = ctrlGlyph(r)
 				overlay = &ctrlStyle
 			default:
-				cell = string(r)
+				if g, ok := unihint.Placeholder(r); ok {
+					// Invisible/format rune (#1654): the one-cell placeholder,
+					// never the raw (zero-width) rune.
+					cell = g
+					overlay = &invisStyle
+				} else {
+					cell = string(r)
+				}
 			}
 		}
 		if disp+cells > width { // clamp a tab straddling the right edge

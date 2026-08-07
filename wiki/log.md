@@ -1,5 +1,26 @@
 # Log
 
+## 2026-08-07 (editor: invisible & deceptive Unicode, #1654)
+
+- The editor never renders a character as nothing anymore: zero-width
+  space/joiner/non-joiner, word joiner and an interior BOM draw as `∅`, NBSP
+  as `⍽` (distinct from the `·` space glyph), the soft hyphen as `-`, and
+  every bidi control (`U+202A–E`, `U+2066–69`, LRM/RLM, ALM — the
+  Trojan-Source class) as `◊` — one-cell placeholders in the warning colour,
+  hooked in next to the #1469 control glyphs.
+- The same characters produce diagnostics-style notes (gutter tint, underline,
+  hover/caret popups), plus a confusable check: an identifier mixing ASCII
+  letters with Cyrillic/Greek look-alikes (`pаssword`) warns, while pure
+  non-Latin text, `Δt` or `straße` never light up. The scan is
+  language-agnostic — the highlight pass now runs for every buffer — and free
+  on pure-ASCII lines.
+- Lint notes now travel the whole diagnostics flow: next/prev-diagnostic
+  walks them, the status-line counts them, and a new independent Problems
+  store channel lists them in the pane. Scan and placeholder table live in
+  `internal/unihint`; the look-alike table is shared with #1653. See
+  [/architecture/editor.md](/architecture/editor.md),
+  [/architecture/problems.md](/architecture/problems.md).
+
 ## 2026-08-07 (editor: network-literal hints, #1653)
 
 - A CIDR prefix now draws with its address range and size appended —

@@ -127,6 +127,42 @@ func noteSeverity(n lang.Note) int {
 	return n.Severity
 }
 
+// NoteDiagnostics converts Go-computed lint notes (#1623/#1654) to diagnostic
+// values, so notes travel every consumer built for diagnostics — the jump walk
+// and popups here, the Problems store at the app level. Source "lint" is the
+// attribution: there is no server behind these.
+func NoteDiagnostics(notes []lang.Note) []ilsp.Diagnostic {
+	if len(notes) == 0 {
+		return nil
+	}
+	out := make([]ilsp.Diagnostic, 0, len(notes))
+	for _, n := range notes {
+		out = append(out, ilsp.Diagnostic{
+			Range: buffer.Range{
+				Start: buffer.Position{Line: n.Line, Col: n.StartCol},
+				End:   buffer.Position{Line: n.Line, Col: n.EndCol},
+			},
+			Severity: noteSeverity(n),
+			Message:  n.Message,
+			Source:   "lint",
+		})
+	}
+	return out
+}
+
+// noteDiags flattens the per-line note index back to diagnostic values, for
+// the paths that walk or list the whole file's findings.
+func (m Model) noteDiags() []ilsp.Diagnostic {
+	if len(m.notes) == 0 {
+		return nil
+	}
+	var flat []lang.Note
+	for _, ns := range m.notes {
+		flat = append(flat, ns...)
+	}
+	return NoteDiagnostics(flat)
+}
+
 // NoteAt returns the lint note covering (line, col), most severe first, and
 // whether one exists — the message shown for a marked cell.
 func (m Model) NoteAt(line, col int) (lang.Note, bool) {
@@ -237,11 +273,14 @@ func diagCovers(d ilsp.Diagnostic, line, col int) bool {
 // dismisses like any hover popup: the next key (further navigation, cursor
 // motion, esc) drops it. Only the empty case stays a toast notice.
 func (m *Model) diagnosticJump(forward bool) tea.Cmd {
-	if len(m.diags) == 0 {
+	// Lint notes (#1623/#1654) join the walk: a buffer whose only findings
+	// are Go-computed still navigates them.
+	all := append(m.noteDiags(), m.diags...)
+	if len(all) == 0 {
 		return notice("no diagnostics in this file")
 	}
-	sorted := make([]ilsp.Diagnostic, len(m.diags))
-	copy(sorted, m.diags)
+	sorted := make([]ilsp.Diagnostic, len(all))
+	copy(sorted, all)
 	sort.SliceStable(sorted, func(i, j int) bool {
 		return sorted[i].Range.Start.Before(sorted[j].Range.Start)
 	})
@@ -290,7 +329,7 @@ func severityLabel(sev int) string {
 }
 
 // DiagnosticCounts returns the number of error- and warning-severity diagnostics,
-// for the status line.
+// for the status line. Lint notes (#1623/#1654) count like diagnostics.
 func (m Model) DiagnosticCounts() (errors, warnings int) {
 	for _, d := range m.diags {
 		switch d.Severity {
@@ -298,6 +337,16 @@ func (m Model) DiagnosticCounts() (errors, warnings int) {
 			errors++
 		case 2:
 			warnings++
+		}
+	}
+	for _, ns := range m.notes {
+		for _, n := range ns {
+			switch noteSeverity(n) {
+			case 1:
+				errors++
+			case 2:
+				warnings++
+			}
 		}
 	}
 	return errors, warnings
@@ -1311,6 +1360,12 @@ func (m Model) diagHoverLinesAt(pos buffer.Position) []hoverLine {
 			ds = append(ds, d)
 		}
 	}
+	// Lint notes (#1623/#1654) hover like diagnostics.
+	for _, d := range NoteDiagnostics(m.notes[pos.Line]) {
+		if diagCovers(d, pos.Line, pos.Col) {
+			ds = append(ds, d)
+		}
+	}
 	return m.diagLines(ds)
 }
 
@@ -1322,7 +1377,9 @@ func (m Model) diagHoverLinesAt(pos buffer.Position) []hoverLine {
 // the message. Multiple entries separate with a rule. It reports whether any
 // diagnostic exists on the line; without one no popup opens.
 func (m *Model) ShowDiagnostics() bool {
-	out := m.diagLines(m.diagByLine[m.cursor.Line])
+	// Lint notes (#1623/#1654) list like diagnostics.
+	ds := append(NoteDiagnostics(m.notes[m.cursor.Line]), m.diagByLine[m.cursor.Line]...)
+	out := m.diagLines(ds)
 	if len(out) == 0 {
 		return false
 	}
