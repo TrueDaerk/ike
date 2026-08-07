@@ -124,21 +124,13 @@ func (m Model) updateLocalHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd
 		m.lhPicker = false
 		m.shell.Close()
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &m.lhSel, len(m.lhEntries), m.setLocalHistoryContent) {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc", "q":
 		closePicker()
-		return m, nil
-	case "j", "down":
-		if m.lhSel < len(m.lhEntries)-1 {
-			m.lhSel++
-			m.setLocalHistoryContent()
-		}
-		return m, nil
-	case "k", "up":
-		if m.lhSel > 0 {
-			m.lhSel--
-			m.setLocalHistoryContent()
-		}
 		return m, nil
 	case "enter":
 		path, entry := m.lhPath, m.lhEntries[m.lhSel]

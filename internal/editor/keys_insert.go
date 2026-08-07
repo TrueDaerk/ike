@@ -128,6 +128,12 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 	case key.Code == tea.KeyUp, key.Code == 'p' && key.Mod == tea.ModCtrl:
 		m.completionMove(-1)
 		return true
+	case key.Code == tea.KeyPgDown:
+		m.completionPage(1)
+		return true
+	case key.Code == tea.KeyPgUp:
+		m.completionPage(-1)
+		return true
 	// Only a plain Tab accepts; Shift+Tab falls through to the line dedent.
 	case key.Code == tea.KeyEnter, key.Code == tea.KeyTab && key.Mod&tea.ModShift == 0:
 		m.completionAccept()

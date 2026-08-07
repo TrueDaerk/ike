@@ -19,6 +19,7 @@ import (
 	"ike/internal/overlay"
 	"ike/internal/scrollbar"
 	"ike/internal/theme"
+	"ike/internal/ui"
 	"ike/internal/vcs"
 	"ike/internal/watch"
 )
@@ -717,9 +718,9 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.clearSel()
 		switch key {
 		case "down", "j":
-			m.moveCursor(1)
+			m.stepCursor(1)
 		case "up", "k":
-			m.moveCursor(-1)
+			m.stepCursor(-1)
 		case "g":
 			if armedG {
 				m.moveCursor(-len(m.rows)) // gg: top
@@ -850,6 +851,17 @@ func (m *Model) selTargets() []delTarget {
 		}
 	}
 	return ts
+}
+
+// stepCursor moves the cursor by delta single steps with wrap-around (#1666):
+// down on the last row lands on the first, up on the first lands on the last.
+// Page jumps, gg/G and the wheel keep moveCursor's clamped semantics.
+func (m *Model) stepCursor(delta int) {
+	if len(m.rows) == 0 {
+		return
+	}
+	m.cursor = ui.StepIndex(m.cursor, delta, len(m.rows))
+	m.followCursor()
 }
 
 func (m *Model) moveCursor(delta int) {

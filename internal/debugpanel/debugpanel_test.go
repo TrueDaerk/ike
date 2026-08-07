@@ -38,7 +38,8 @@ func TestFrameNavigationAndSelect(t *testing.T) {
 	m.SetFrames(frames())
 	m.Update(key("j"))
 	m.Update(key("j"))
-	m.Update(key("j")) // clamped at the last frame
+	m.Update(key("j")) // wraps back to the first frame (#1666)
+	m.Update(key("end"))
 	cmd := m.Update(key("enter"))
 	if cmd == nil {
 		t.Fatal("enter on a frame must emit SelectFrameMsg")

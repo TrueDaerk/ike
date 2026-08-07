@@ -190,3 +190,80 @@ func TestRenderFlattensEmbeddedNewlines(t *testing.T) {
 		t.Fatalf("rows = %d, want 2:\n%s", len(rows), out)
 	}
 }
+
+// TestStepWrapsAtBothEnds guards #1666: single-step navigation wraps.
+func TestStepWrapsAtBothEnds(t *testing.T) {
+	var l List
+	l.Append(items()) // 3 items
+	l.Step(-1)
+	if l.Cursor() != 2 {
+		t.Fatalf("up on the first item = %d, want 2", l.Cursor())
+	}
+	l.Step(1)
+	if l.Cursor() != 0 {
+		t.Fatalf("down on the last item = %d, want 0", l.Cursor())
+	}
+	// A single-entry list stays put; an empty one never moves off 0.
+	var one List
+	one.Append(items()[:1])
+	one.Step(1)
+	one.Step(-1)
+	if one.Cursor() != 0 {
+		t.Fatalf("single-entry cursor = %d, want 0", one.Cursor())
+	}
+	var empty List
+	empty.Step(1)
+	if empty.Cursor() != 0 {
+		t.Fatalf("empty cursor = %d, want 0", empty.Cursor())
+	}
+}
+
+// TestPageJumpsOneRenderWindow guards #1666: pgup/pgdn move by the last
+// rendered height (headers counted) and clamp instead of wrapping.
+func TestPageJumpsOneRenderWindow(t *testing.T) {
+	var l List
+	var batch []Item
+	for i := 0; i < 30; i++ {
+		batch = append(batch, Item{Path: "a.go", Line: i + 1, Text: "x"})
+	}
+	l.Append(batch)
+	l.Render(40, 10, theme.DefaultPalette(), nil) // window = 10 rows, 1 is the header
+	l.Page(1)
+	// Rows: header at 0, item i at row i+1. Cursor row 1 + 10 = 11 -> item 10.
+	if l.Cursor() != 10 {
+		t.Fatalf("pgdn cursor = %d, want 10", l.Cursor())
+	}
+	l.Page(-1)
+	if l.Cursor() != 0 {
+		t.Fatalf("pgup cursor = %d, want 0", l.Cursor())
+	}
+	// Page jumps clamp — they must not wrap round to the other end.
+	l.Page(-1)
+	if l.Cursor() != 0 {
+		t.Fatalf("pgup on the first item must clamp, got %d", l.Cursor())
+	}
+	l.SetCursor(29)
+	l.Page(1)
+	if l.Cursor() != 29 {
+		t.Fatalf("pgdn on the last item must clamp, got %d", l.Cursor())
+	}
+}
+
+// TestHomeEndJumpToExtremes guards #1666.
+func TestHomeEndJumpToExtremes(t *testing.T) {
+	var l List
+	l.Append(items())
+	l.End()
+	if l.Cursor() != 2 {
+		t.Fatalf("End cursor = %d, want 2", l.Cursor())
+	}
+	l.Home()
+	if l.Cursor() != 0 {
+		t.Fatalf("Home cursor = %d, want 0", l.Cursor())
+	}
+	var empty List
+	empty.End()
+	if empty.Cursor() != 0 {
+		t.Fatalf("End on an empty list = %d, want 0", empty.Cursor())
+	}
+}

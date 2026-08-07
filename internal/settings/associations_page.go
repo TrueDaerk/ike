@@ -20,8 +20,9 @@ import (
 
 // AssocPage implements PageModel.
 type AssocPage struct {
-	opts config.Options
-	pal  *theme.Palette
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	pal     *theme.Palette
 
 	sel  int
 	off  int // list scroll offset
@@ -70,15 +71,11 @@ func (t *AssocPage) entries() []association {
 
 // Update implements PageModel.
 func (t *AssocPage) Update(key tea.KeyPressMsg) tea.Cmd {
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if listNav(key.String(), &t.sel, len(t.entries()), t.navPageSize()) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if t.sel > 0 {
-			t.sel--
-		}
-	case "down", "j":
-		if t.sel < len(t.entries())-1 {
-			t.sel++
-		}
 	case "a":
 		t.openForm(-1)
 	case "enter":
@@ -149,6 +146,7 @@ func (t *AssocPage) theme() *theme.Palette {
 
 // View implements PageModel.
 func (t *AssocPage) View(w, h int) string {
+	t.setRows(h)
 	pal := t.theme()
 	head := " pattern → language   (extra extensions/filenames for registered languages, #1365)"
 	entries := t.entries()

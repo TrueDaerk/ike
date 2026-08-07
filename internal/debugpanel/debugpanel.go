@@ -17,6 +17,7 @@ import (
 
 	"ike/internal/dap"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // SelectFrameMsg reports the user activating a stack frame: the app fetches
@@ -280,6 +281,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if m.editing {
 		return m.editKey(k)
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp. h/l are
+	// the column switch here, so only j/k come from the vim set.
+	if m.listNav(k.String()) {
+		return nil
+	}
 	switch k.String() {
 	case "tab", "l", "right":
 		if m.col < colVars {
@@ -289,10 +295,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if m.col > colFrames {
 			m.col--
 		}
-	case "j", "down":
-		m.move(1)
-	case "k", "up":
-		m.move(-1)
 	case "e":
 		m.startEdit()
 	case "enter", " ":
@@ -364,17 +366,23 @@ func (m *Model) editKey(k tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-// move shifts the focused column's selection by delta, clamped, and scrolls
-// the column so the selection stays visible.
-func (m *Model) move(delta int) {
-	switch m.col {
-	case colFrames:
-		m.frameSel = clamp(m.frameSel+delta, 0, len(m.frames)-1)
+// listNav routes a navigation key at the focused column and reports whether
+// it consumed it (#1666): steps wrap, page jumps clamp, and the column
+// scrolls so the selection stays visible.
+func (m *Model) listNav(key string) bool {
+	sel, rows := &m.varSel, len(m.flat())
+	if m.col == colFrames {
+		sel, rows = &m.frameSel, len(m.frames)
+	}
+	if !ui.ListNav(key, sel, rows, m.bodyHeight(), ui.NavArrows|ui.NavVim|ui.NavHomeEnd) {
+		return false
+	}
+	if m.col == colFrames {
 		m.frameTop = scrollToShow(m.frameTop, m.frameSel, m.bodyHeight(), len(m.frames))
-	default:
-		m.varSel = clamp(m.varSel+delta, 0, len(m.flat())-1)
+	} else {
 		m.varTop = scrollToShow(m.varTop, m.varSel, m.bodyHeight(), len(m.flat()))
 	}
+	return true
 }
 
 // bodyHeight is the number of list rows visible under the column title.

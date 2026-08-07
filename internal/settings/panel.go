@@ -692,45 +692,47 @@ func (m *Model) jumpToLetter(letter string) {
 	}
 }
 
-// moveNav applies pgup/pgdn/home/end to the focused column (#887).
+// moveNav applies pgup/pgdn/home/end to the focused column (#887). The page
+// size is the column's own visible height (#1666), not a fixed row count.
 func (m *Model) moveNav(key string) {
 	if m.focus == catColumn {
 		if m.filter != "" {
 			sel := m.hitSel
-			if listNav(key, &sel, len(m.hitPages()), navPage) {
+			if listNav(key, &sel, len(m.hitPages()), m.railHeight()) {
 				m.jumpToHitPage(sel)
 			}
 			return
 		}
-		if listNav(key, &m.cat, len(m.pages), navPage) {
+		if listNav(key, &m.cat, len(m.pages), m.railHeight()) {
 			m.sel = 0
 			m.followCat, m.followForm = true, true
 		}
 		return
 	}
-	if listNav(key, &m.sel, len(m.rows()), navPage) {
+	if listNav(key, &m.sel, len(m.rows()), m.gridFor().listH) {
 		m.followForm = true
 		m.syncHitSel()
 	}
 }
 
-// move shifts the focused column's selection.
+// move shifts the focused column's selection by one step, wrapping at both
+// ends (#1666).
 func (m *Model) move(dir int) {
 	m.notice, m.writeErr = "", ""
 	if m.focus == catColumn {
 		if m.filter != "" {
 			// In search mode the rail walks the pages with hits (#1297) and
 			// the match list follows it.
-			m.jumpToHitPage(clamp(m.hitSel+dir, 0, len(m.hitPages())-1))
+			m.jumpToHitPage(ui.StepIndex(m.hitSel, dir, len(m.hitPages())))
 			return
 		}
-		m.cat = clamp(m.cat+dir, 0, len(m.pages)-1)
+		m.cat = ui.StepIndex(m.cat, dir, len(m.pages))
 		m.sel = 0
 		m.followCat, m.followForm = true, true
 		return
 	}
 	if n := len(m.rows()); n > 0 {
-		m.sel = clamp(m.sel+dir, 0, n-1)
+		m.sel = ui.StepIndex(m.sel, dir, n)
 		m.followForm = true
 		m.syncHitSel()
 	}

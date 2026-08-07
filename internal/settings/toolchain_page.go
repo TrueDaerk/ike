@@ -38,6 +38,7 @@ type MsgReceiver interface {
 
 // ToolchainPage implements PageModel (and MsgReceiver).
 type ToolchainPage struct {
+	navRows // last rendered height, the pgup/pgdn page (#1666)
 	opts    config.Options
 	root    string
 	restart func() tea.Cmd // dispatches lsp.restart after an interpreter change
@@ -360,7 +361,7 @@ func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 	if t.pkgViewing {
 		return t.updatePkgView(key)
 	}
-	if listNav(key.String(), &t.sel, len(t.rows()), navPage) {
+	if listNav(key.String(), &t.sel, len(t.rows()), t.navPageSize()) {
 		t.skipHeader(key.String())
 		return nil
 	}
@@ -441,19 +442,14 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 	case "confirm":
 		return t.updatePkgConfirm(key)
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if listNav(key.String(), &t.pkgSel, len(t.pkgs), t.navPageSize()) {
+		t.followPkgSel()
+		return nil
+	}
 	switch key.String() {
 	case "esc", "i", "q":
 		t.pkgViewing = false
-	case "up", "k":
-		if t.pkgSel > 0 {
-			t.pkgSel--
-			t.followPkgSel()
-		}
-	case "down", "j":
-		if t.pkgSel < len(t.pkgs)-1 {
-			t.pkgSel++
-			t.followPkgSel()
-		}
 	case "+":
 		if t.pkgBusy == "" {
 			t.pkgMode, t.pkgInput.text, t.pkgState = "input", "", ""
@@ -597,17 +593,14 @@ func resolvedKey(p string) string {
 
 // updatePicker handles keys inside the candidate picker.
 func (t *ToolchainPage) updatePicker(key tea.KeyPressMsg) tea.Cmd {
+	// One past the last candidate is the "custom path…" row (#1666: steps
+	// wrap through it, page jumps clamp on it).
+	if listNav(key.String(), &t.pick, len(t.candidates)+1, t.navPageSize()) {
+		return nil
+	}
 	switch key.String() {
 	case "esc":
 		t.picking = false
-	case "up", "k":
-		if t.pick > 0 {
-			t.pick--
-		}
-	case "down", "j":
-		if t.pick < len(t.candidates) { // one past the end = "custom path…"
-			t.pick++
-		}
 	case "enter":
 		if t.pick >= len(t.candidates) {
 			t.picking, t.custom, t.inputField.text = false, true, ""
@@ -702,6 +695,7 @@ func (t *ToolchainPage) theme() *theme.Palette {
 // so moving the selection never shifts the rows; only the pickers and the
 // custom-path input still expand inline (explicit actions).
 func (t *ToolchainPage) View(w, h int) string {
+	t.setRows(h)
 	t.normalizeSel()
 	listW, detailW, side := splitGrid(w)
 	t.listW = 0

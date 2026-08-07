@@ -114,15 +114,11 @@ func (m Model) updateRecovery(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if rc == nil || len(rc.items) == 0 {
 		return m.closeRecovery()
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &rc.cursor, len(rc.items), nil) {
+		return m, nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if rc.cursor < len(rc.items)-1 {
-			rc.cursor++
-		}
-	case "k", "up":
-		if rc.cursor > 0 {
-			rc.cursor--
-		}
 	case "r":
 		it := rc.items[rc.cursor]
 		m.restoreSnapshot(it.snap)

@@ -1,5 +1,30 @@
 # Log
 
+## 2026-08-07 (ui: one navigation contract for every selection list, #1666)
+
+- Every selectable list now obeys the same two rules: **single steps wrap**
+  (down on the last entry lands on the first) and **page keys clamp**, jumping
+  by the list's own visible height rather than a hard-coded ten rows. `home`
+  /`end` go to the extremes wherever the keys are not already the query
+  cursor's.
+- The semantics live in one place, `internal/ui/listnav.go`: `StepIndex`,
+  `PageIndex`, `ClampIndex`, `ScrollToShow`, and a `ListNav` router whose
+  `NavKeys` bitmask lets a view opt into the arrow, emacs, vim and home/end
+  aliases it can spare. See [Selection-List
+  Navigation](/architecture/list-navigation.md).
+- Adopted across the board: palette (both columns) and Search Everywhere,
+  find-in-path, the `locations.List` component (Usages, Problems, TODO index),
+  the explorer tree, the undo tree, call/type hierarchy, Structure,
+  Breakpoints, the debugger's frame and variable columns, the VCS changes
+  list, the completion popup, every settings page (marketplace and the
+  toolchain/colour/venv pickers included), and the shell-hosted pickers (pins,
+  local history, VCS history, crash recovery, onboarding, theme and tool
+  setup).
+- The mouse wheel deliberately keeps clamped semantics everywhere — a flick
+  past the end must not teleport to the other end of the list.
+- `ui.Floating.ViewportRows()` is new: shell-hosted pickers take their page
+  size from the box they are drawn in.
+
 ## 2026-08-07 (settings: every file-configurable key has a UI surface, #1663)
 
 - An audit found 22 TOML leaf keys that only a text editor could reach. They

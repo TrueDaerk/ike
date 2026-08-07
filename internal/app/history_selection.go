@@ -154,22 +154,14 @@ func (m Model) updateHistoryPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.shell.Update(msg)
 		return m, nil
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &m.histSel, len(m.histResult.Entries), m.setHistoryListContent) {
+		return m, nil
+	}
 	switch msg.String() {
 	case "esc", "q":
 		m.histPicker = false
 		m.shell.Close()
-		return m, nil
-	case "j", "down":
-		if m.histSel < len(m.histResult.Entries)-1 {
-			m.histSel++
-			m.setHistoryListContent()
-		}
-		return m, nil
-	case "k", "up":
-		if m.histSel > 0 {
-			m.histSel--
-			m.setHistoryListContent()
-		}
 		return m, nil
 	case "enter", "l", "right":
 		m.histPatch = true

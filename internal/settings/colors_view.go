@@ -37,6 +37,7 @@ func swatchToken(token string) string {
 
 // View implements PageModel.
 func (c *ColorsPage) View(w, h int) string {
+	c.setRows(h)
 	listW, detailW, side := splitGrid(w)
 	c.listW = 0
 	list := c.renderList(listW, h)

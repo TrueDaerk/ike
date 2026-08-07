@@ -25,6 +25,55 @@ func TestListNavKeys(t *testing.T) {
 	}
 }
 
+// TestListNavWrapsStepsClampsPages guards #1666: single steps wrap around the
+// list, page jumps clamp — the semantics every selectable list shares.
+func TestListNavWrapsStepsClampsPages(t *testing.T) {
+	sel := 0
+	if !listNav("up", &sel, 5, 3) || sel != 4 {
+		t.Fatalf("up on the first row = %d, want 4", sel)
+	}
+	if !listNav("down", &sel, 5, 3) || sel != 0 {
+		t.Fatalf("down on the last row = %d, want 0", sel)
+	}
+	if !listNav("k", &sel, 5, 3) || sel != 4 {
+		t.Fatalf("k on the first row = %d, want 4", sel)
+	}
+	if !listNav("j", &sel, 5, 3) || sel != 0 {
+		t.Fatalf("j on the last row = %d, want 0", sel)
+	}
+	if !listNav("pgup", &sel, 5, 3) || sel != 0 {
+		t.Fatalf("pgup on the first row must clamp, got %d", sel)
+	}
+	// A settings page's single-letter keys are actions, so g/G stay free.
+	if listNav("g", &sel, 5, 3) || listNav("G", &sel, 5, 3) {
+		t.Fatal("g/G must stay available as page action keys")
+	}
+	// Empty and single-entry lists must not move or panic.
+	empty := 0
+	if listNav("down", &empty, 0, 3) || empty != 0 {
+		t.Fatalf("empty list consumed a key, sel = %d", empty)
+	}
+	one := 0
+	for _, k := range []string{"up", "down", "pgup", "pgdown", "home", "end"} {
+		if !listNav(k, &one, 1, 3) || one != 0 {
+			t.Fatalf("one-entry list after %q: sel = %d", k, one)
+		}
+	}
+}
+
+// TestNavPageSizeFollowsRenderedHeight guards #1666: a page's pgup/pgdn jump
+// is its last rendered height, not a fixed row count.
+func TestNavPageSizeFollowsRenderedHeight(t *testing.T) {
+	var n navRows
+	if n.navPageSize() != navPage {
+		t.Fatalf("unrendered page size = %d, want the %d fallback", n.navPageSize(), navPage)
+	}
+	n.setRows(24)
+	if n.navPageSize() != 24 {
+		t.Fatalf("page size = %d, want 24", n.navPageSize())
+	}
+}
+
 // TestSpaceTogglesBool guards #887: space flips a boolean row like enter.
 func TestSpaceTogglesBool(t *testing.T) {
 	m := mouseModel(t)

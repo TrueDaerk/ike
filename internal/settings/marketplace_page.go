@@ -49,9 +49,10 @@ type MarketActionMsg struct {
 
 // MarketplacePage implements PageModel (and MsgReceiver).
 type MarketplacePage struct {
-	engine MarketEngine
-	fetch  MarketFetcher
-	pal    *theme.Palette
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	engine  MarketEngine
+	fetch   MarketFetcher
+	pal     *theme.Palette
 
 	catalog   *market.Index
 	diags     []string
@@ -212,7 +213,7 @@ func (p *MarketplacePage) action(e market.Entry) string {
 // Update implements PageModel.
 func (p *MarketplacePage) Update(key tea.KeyPressMsg) tea.Cmd {
 	row, hasRow := p.current()
-	if listNav(key.String(), &p.sel, len(p.rows()), navPage) {
+	if listNav(key.String(), &p.sel, len(p.rows()), p.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
@@ -260,6 +261,7 @@ func (p *MarketplacePage) run(name, action string, do func(context.Context) erro
 
 // View implements PageModel.
 func (p *MarketplacePage) View(width, height int) string {
+	p.setRows(height)
 	pal := p.pal
 	if pal == nil {
 		pal = theme.DefaultPalette()

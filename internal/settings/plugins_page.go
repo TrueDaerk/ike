@@ -40,8 +40,9 @@ type PluginInfo struct {
 
 // PluginsPage implements PageModel.
 type PluginsPage struct {
-	opts config.Options
-	list func() []PluginInfo
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	list    func() []PluginInfo
 	// onToggle builds the write-back (and any follow-up, e.g. kicking the
 	// missing-server install when a language plugin turns on) for a toggle.
 	onToggle func(id string, enable bool) tea.Cmd
@@ -88,18 +89,10 @@ func (p *PluginsPage) current() (PluginInfo, bool) {
 // Update implements PageModel.
 func (p *PluginsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	row, hasRow := p.current()
-	if listNav(key.String(), &p.sel, len(p.rows()), navPage) {
+	if listNav(key.String(), &p.sel, len(p.rows()), p.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
-	case "up", "k":
-		if p.sel > 0 {
-			p.sel--
-		}
-	case "down", "j":
-		if p.sel < len(p.rows())-1 {
-			p.sel++
-		}
 	case "e", " ":
 		if hasRow && p.onToggle != nil {
 			return p.onToggle(row.ID, !row.Enabled)
@@ -191,6 +184,7 @@ func inspect(row PluginInfo) []string {
 
 // View implements PageModel.
 func (p *PluginsPage) View(width, height int) string {
+	p.setRows(height)
 	pal := p.pal
 	if pal == nil {
 		pal = theme.DefaultPalette()

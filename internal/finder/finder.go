@@ -330,23 +330,23 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case "down":
 		if m.list.Total() > 0 {
-			m.list.Move(1)
+			m.list.Step(1) // wraps to the first hit past the last (#1666)
 		} else {
 			m.history(-1) // toward older is up; down walks back to newer
 		}
 		return nil
 	case "up":
 		if m.list.Total() > 0 {
-			m.list.Move(-1)
+			m.list.Step(-1)
 		} else {
 			m.history(1)
 		}
 		return nil
 	case "pgdown":
-		m.list.Move(10)
+		m.list.Page(1) // one visible page, clamped at the ends (#1666)
 		return nil
 	case "pgup":
-		m.list.Move(-10)
+		m.list.Page(-1)
 		return nil
 	case "alt+c", "ctrl+c":
 		m.caseSensitive = !m.caseSensitive

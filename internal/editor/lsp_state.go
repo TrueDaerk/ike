@@ -19,6 +19,7 @@ import (
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/snippet"
 	"ike/internal/snippets"
+	"ike/internal/ui"
 	"ike/internal/vcs"
 )
 
@@ -619,7 +620,22 @@ func (m *Model) completionMove(delta int) {
 	if n == 0 {
 		return
 	}
-	m.comp.sel = ((m.comp.sel+delta)%n + n) % n
+	m.comp.sel = ui.StepIndex(m.comp.sel, delta, n)
+	m.requestCompletionResolve()
+}
+
+// completionMaxRows is the popup's visible row count — the window
+// CompletionView renders and the pgup/pgdn page size (#1666).
+const completionMaxRows = 8
+
+// completionPage jumps the popup selection by delta windows, clamped at both
+// ends (#1666) — unlike the single steps above, which wrap.
+func (m *Model) completionPage(delta int) {
+	n := len(m.filteredCompletion())
+	if n == 0 {
+		return
+	}
+	m.comp.sel = ui.PageIndex(m.comp.sel, delta, n, completionMaxRows)
 	m.requestCompletionResolve()
 }
 
@@ -833,7 +849,7 @@ func (m Model) CompletionView() string {
 	if len(items) == 0 {
 		return ""
 	}
-	const maxRows = 8
+	const maxRows = completionMaxRows
 	sel := m.comp.sel
 	if sel >= len(items) {
 		sel = 0

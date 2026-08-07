@@ -21,6 +21,10 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyUp}
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
 	}
 	return tea.KeyPressMsg{Code: rune(s[0]), Text: s}
 }
@@ -167,5 +171,40 @@ func TestViewEmptyStates(t *testing.T) {
 	m.Set("Foo", nil, nil)
 	if v := m.View(); !strings.Contains(v, "(no usages found)") {
 		t.Fatalf("found-nothing view:\n%s", v)
+	}
+}
+
+// TestNavigationWrapsAndPagesClamp guards #1666: single steps wrap around the
+// list, page jumps clamp at the ends.
+func TestNavigationWrapsAndPagesClamp(t *testing.T) {
+	m := filled() // 5 rows (2 file headers + 3 refs), cursor starts on row 1
+	m.Update(key("g"))
+	m.Update(key("k"))
+	if m.Cursor() != 4 {
+		t.Fatalf("up on the first row = %d, want 4 (wrap)", m.Cursor())
+	}
+	m.Update(key("j"))
+	if m.Cursor() != 0 {
+		t.Fatalf("down on the last row = %d, want 0 (wrap)", m.Cursor())
+	}
+	m.Update(key("pgup"))
+	if m.Cursor() != 0 {
+		t.Fatalf("pgup on the first row must clamp, got %d", m.Cursor())
+	}
+	m.Update(key("pgdown"))
+	if m.Cursor() != 4 {
+		t.Fatalf("pgdn must clamp at the last row, got %d", m.Cursor())
+	}
+}
+
+// TestNavigationOnEmptyPane guards #1666: no rows, no movement, no panic.
+func TestNavigationOnEmptyPane(t *testing.T) {
+	m := New(nil)
+	m.SetSize(80, 10)
+	for _, k := range []string{"j", "k", "pgup", "pgdown", "g", "G"} {
+		m.Update(key(k))
+	}
+	if m.Cursor() != 0 {
+		t.Fatalf("cursor = %d, want 0", m.Cursor())
 	}
 }

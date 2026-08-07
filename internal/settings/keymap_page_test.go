@@ -338,8 +338,9 @@ func TestKeymapDetailFooterPinnedAndScrolls(t *testing.T) {
 	if listCol(lines[3]) != before {
 		t.Fatalf("selection move shifted an unselected row:\n%q\n%q", before, listCol(lines[3]))
 	}
-	// Walking to the last binding scrolls the list so it stays visible.
-	for range rows {
+	// Walking to the last binding scrolls the list so it stays visible. Down
+	// wraps at the end since #1666, so walk exactly to the last row.
+	for i := 1; i < len(rows)-1; i++ {
 		k.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
 	last := rows[len(rows)-1]

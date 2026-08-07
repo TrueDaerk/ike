@@ -200,21 +200,13 @@ func (m Model) updatePinPicker(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.pinPicker = false
 		m.shell.Close()
 	}
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &m.pinSel, pinSlotCount, m.setPinPickerContent) {
+		return m, nil
+	}
 	switch key := msg.String(); key {
 	case "esc", "q":
 		closePicker()
-		return m, nil
-	case "j", "down":
-		if m.pinSel < pinSlotCount-1 {
-			m.pinSel++
-			m.setPinPickerContent()
-		}
-		return m, nil
-	case "k", "up":
-		if m.pinSel > 0 {
-			m.pinSel--
-			m.setPinPickerContent()
-		}
 		return m, nil
 	case "J", "shift+down":
 		if m.pinSel < pinSlotCount-1 {

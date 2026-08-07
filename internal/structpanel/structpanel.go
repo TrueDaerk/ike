@@ -17,6 +17,7 @@ import (
 
 	"ike/internal/lsp"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // NavigateMsg asks the root model to move the editor cursor to a symbol's
@@ -171,31 +172,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	switch key.String() {
-	case "j", "down":
-		if m.cursor < len(m.rows)-1 {
-			m.cursor++
-		}
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "home", "g":
-		m.cursor = 0
-	case "end", "G":
-		if len(m.rows) > 0 {
-			m.cursor = len(m.rows) - 1
-		}
-	case "pgup":
-		m.cursor = clampInt(m.cursor-m.bodyHeight(), 0, maxInt(0, len(m.rows)-1))
-	case "pgdown":
-		m.cursor = clampInt(m.cursor+m.bodyHeight(), 0, maxInt(0, len(m.rows)-1))
-	case "enter":
-		return m.navigate(m.cursor)
-	default:
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if ui.ListNav(key.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
+		m.scrollToCursor()
 		return nil
 	}
-	m.scrollToCursor()
+	if key.String() == "enter" {
+		return m.navigate(m.cursor)
+	}
 	return nil
 }
 

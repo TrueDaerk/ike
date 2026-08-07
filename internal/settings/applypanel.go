@@ -18,10 +18,11 @@ import (
 
 // applyPanel is the diff shown before a staged batch is written.
 type applyPanel struct {
-	m   *Model
-	pal *theme.Palette
-	sel int
-	off int
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	m       *Model
+	pal     *theme.Palette
+	sel     int
+	off     int
 	// closeAfter marks the panel as the answer to an esc-close attempt: once
 	// the batch is written or discarded, the settings panel closes too.
 	closeAfter bool
@@ -80,7 +81,7 @@ func (a *applyPanel) Buttons() []Button {
 }
 
 func (a *applyPanel) Update(key tea.KeyPressMsg) tea.Cmd {
-	listNav(key.String(), &a.sel, len(a.m.changes), navPage)
+	listNav(key.String(), &a.sel, len(a.m.changes), a.navPageSize())
 	return nil
 }
 
@@ -108,6 +109,7 @@ func (a *applyPanel) Click(x, y int) tea.Cmd {
 }
 
 func (a *applyPanel) View(w, h int) string {
+	a.setRows(h)
 	pal := a.pal
 	if pal == nil {
 		pal = theme.DefaultPalette()

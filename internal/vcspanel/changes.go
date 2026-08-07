@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 	"ike/internal/vcs"
 )
 
@@ -50,15 +51,11 @@ func (m *Model) rebuildChanges() {
 
 // updateChanges handles key presses on the list.
 func (m *Model) updateChanges(msg tea.KeyPressMsg) tea.Cmd {
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if ui.ListNav(msg.String(), &m.chCursor, len(m.chRows), m.changesListHeight(), ui.NavFull) {
+		return nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if m.chCursor < len(m.chRows)-1 {
-			m.chCursor++
-		}
-	case "k", "up":
-		if m.chCursor > 0 {
-			m.chCursor--
-		}
 	case "enter":
 		if m.chCursor < len(m.chRows) {
 			path := m.chRows[m.chCursor].Path
@@ -71,15 +68,15 @@ func (m *Model) updateChanges(msg tea.KeyPressMsg) tea.Cmd {
 // viewChanges renders the file list plus the footer hints.
 func (m *Model) viewChanges() string {
 	pal := m.theme()
-	listH := m.bodyHeight() - 1 // footer takes one row
-	if listH < 1 {
-		listH = 1
-	}
 	var b strings.Builder
-	b.WriteString(m.renderChangeRows(pal, listH))
+	b.WriteString(m.renderChangeRows(pal, m.changesListHeight()))
 	b.WriteString(m.changesFooter(pal))
 	return b.String()
 }
+
+// changesListHeight is the file list's visible row count — the footer takes
+// one row off the body. It is the pgup/pgdn page size (#1666).
+func (m *Model) changesListHeight() int { return max(1, m.bodyHeight()-1) }
 
 // renderChangeRows draws the file list scrolled around the cursor.
 func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {

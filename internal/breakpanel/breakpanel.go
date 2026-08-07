@@ -18,6 +18,7 @@ import (
 
 	"ike/internal/debug"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // OpenLocationMsg asks the root model to open Path (a store key, project-
@@ -163,19 +164,12 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
+		m.clampScroll()
+		return nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if m.cursor < len(m.rows)-1 {
-			m.cursor++
-		}
-	case "k", "up":
-		if m.cursor > 0 {
-			m.cursor--
-		}
-	case "g", "home":
-		m.cursor = 0
-	case "G", "end":
-		m.cursor = max(0, len(m.rows)-1)
 	case "enter":
 		return m.activate(m.cursor)
 	case "space":
