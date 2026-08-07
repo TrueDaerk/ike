@@ -133,3 +133,25 @@ func TestReplaceInPathCommandAndOverlay(t *testing.T) {
 		t.Fatal("replace-mode overlay missing from the frame")
 	}
 }
+
+// TestReplaceAppliesEveryRangeOfACollapsedRow guards #1121: a line matched
+// several times is a single results row, so its extra ranges must still be
+// rewritten.
+func TestReplaceAppliesEveryRangeOfACollapsedRow(t *testing.T) {
+	m := newSized()
+	path := filepath.Join(t.TempDir(), "multi.txt")
+	if err := os.WriteFile(path, []byte("needle and needle\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	row := itemAt(path, 1, "needle and needle", 0, 6)
+	row.More = []locations.Range{{Start: 11, End: 17}}
+	tm, _ := m.Update(replaceReq([]locations.Item{row}, "thread", search.Query{Pattern: "needle"}))
+	m = tm.(Model)
+	data, _ := os.ReadFile(path)
+	if string(data) != "thread and thread\n" {
+		t.Fatalf("both occurrences must be replaced, got %q", data)
+	}
+	if len(m.history) == 0 || !strings.Contains(m.history[len(m.history)-1].text, "2 replacements") {
+		t.Fatalf("summary must count occurrences, history=%+v", m.history)
+	}
+}

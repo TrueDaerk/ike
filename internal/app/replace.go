@@ -25,7 +25,7 @@ import (
 func (m *Model) applyReplace(msg finder.ReplaceRequestMsg) {
 	byFile := map[string][]locations.Item{}
 	var order []string
-	for _, it := range msg.Items {
+	for _, it := range flattenRanges(msg.Items) {
 		if _, seen := byFile[it.Path]; !seen {
 			order = append(order, it.Path)
 		}
@@ -53,6 +53,21 @@ func (m *Model) applyReplace(msg finder.ReplaceRequestMsg) {
 		summary += " (" + strconv.Itoa(skipped) + " stale matches skipped)"
 	}
 	m.host.Notify(host.Info, summary)
+}
+
+// flattenRanges expands each item into one item per match range: a line
+// matched several times is a single row in the results list (#1121), but
+// replacing must still rewrite every occurrence on it.
+func flattenRanges(items []locations.Item) []locations.Item {
+	out := make([]locations.Item, 0, len(items))
+	for _, it := range items {
+		for _, r := range it.Ranges() {
+			one := it
+			one.StartCol, one.EndCol, one.More = r.Start, r.End, nil
+			out = append(out, one)
+		}
+	}
+	return out
 }
 
 // dirtyEditorForPath returns a tab's editor holding path with unsaved edits,

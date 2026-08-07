@@ -89,7 +89,13 @@ the palette):
   same file (see [Editor § search](/architecture/editor.md)).
 - **Results:** the reusable `internal/locations` list — items grouped by
   file (headers show per-file counts), match ranges highlighted, cursor row
-  selected, scrolled into view; the status row shows live counts, `…` while
+  selected, scrolled into view; **one row per file:line**, so a line the
+  query hits several times is listed once with every occurrence highlighted
+  in it (#1121: `List.Append` folds consecutive same-line items together,
+  keeping the extra ranges in `Item.More`; `Item.Ranges()` returns them all,
+  ordered by column). Counts follow the rows — per matching line, not per
+  occurrence — in the per-file headers and the status row alike.
+  The status row shows live counts, `…` while
   streaming, `(truncated)` at the result bound, and scan errors. The
   component is consumer-agnostic: the Problems window (#33) and TODO index
   (#61) are its planned next hosts.
@@ -125,7 +131,9 @@ selected file's matches, `ctrl+a` everything; `ctrl+enter` navigates instead
 (alt variants remain as secondaries, #422).
 Applied matches leave the list; the overlay stays open.
 
-Application (`internal/app/replace.go`) routes per file:
+Application (`internal/app/replace.go`) first expands each row back into one
+match per range (`flattenRanges`) — a collapsed multi-match line (#1121) is a
+single row but still every occurrence to rewrite — then routes per file:
 
 - **Dirty open buffer:** matches become `editor.Replacement`s applied through
   the buffer as **one undo unit per file** (a single `u` reverts the batch);

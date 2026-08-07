@@ -1,5 +1,16 @@
 # Log
 
+## 2026-08-07 (search: one result row per matching line, #1121)
+
+- **A line is a row, not a match.** Find in Path (and every other
+  `internal/locations` consumer) lists a line once however often the query
+  hits it; the extra occurrences ride along as `Item.More` ranges and render
+  highlighted in that one row.
+- **Counts are per line.** The per-file header count and the status row
+  (`N matches in M files`) both count rows now. Replacing still touches every
+  occurrence — `internal/app/replace.go` expands the ranges back out first,
+  so its `N replacements` summary stays per occurrence.
+
 ## 2026-08-07 (editor: field names decide the number conceal unit, #1685)
 
 - **The field wins over the value pattern.** Where a field name names the unit,

@@ -267,3 +267,67 @@ func TestHomeEndJumpToExtremes(t *testing.T) {
 		t.Fatalf("End on an empty list = %d, want 0", empty.Cursor())
 	}
 }
+
+// TestAppendCollapsesSameLineMatches guards #1121: a line matched several
+// times is one row, carrying every match range.
+func TestAppendCollapsesSameLineMatches(t *testing.T) {
+	var l List
+	l.Append([]Item{
+		{Path: "a.go", Line: 3, StartCol: 0, EndCol: 3, Text: "foo bar foo"},
+		{Path: "a.go", Line: 3, StartCol: 8, EndCol: 11, Text: "foo bar foo"},
+		{Path: "a.go", Line: 4, StartCol: 0, EndCol: 3, Text: "foo again"},
+	})
+	if l.Total() != 2 {
+		t.Fatalf("total=%d, want 2 (one row per line)", l.Total())
+	}
+	it, _ := l.Current()
+	rs := it.Ranges()
+	if len(rs) != 2 || rs[0] != (Range{0, 3}) || rs[1] != (Range{8, 11}) {
+		t.Fatalf("collapsed row must keep both ranges, got %+v", rs)
+	}
+	// A repeated batch (streamed twice) must not grow the range set.
+	l.Append([]Item{{Path: "a.go", Line: 4, StartCol: 0, EndCol: 3, Text: "foo again"}})
+	if l.Total() != 2 {
+		t.Fatalf("duplicate match must not add a row, total=%d", l.Total())
+	}
+	l.End()
+	last, _ := l.Current()
+	if len(last.Ranges()) != 1 {
+		t.Fatalf("duplicate range must not be stored twice: %+v", last.Ranges())
+	}
+}
+
+// TestRenderHighlightsEveryRange guards #1121: the single row underlines all
+// occurrences, not just the first.
+func TestRenderHighlightsEveryRange(t *testing.T) {
+	var l List
+	l.Append([]Item{
+		{Path: "a.go", Line: 3, StartCol: 0, EndCol: 3, Text: "foo bar foo"},
+		{Path: "a.go", Line: 3, StartCol: 8, EndCol: 11, Text: "foo bar foo"},
+	})
+	out := l.Render(60, 10, theme.DefaultPalette(), nil)
+	if n := strings.Count(out, "3:"); n != 1 {
+		t.Fatalf("line must render once, got %d rows:\n%s", n, out)
+	}
+	if strings.Count(out, "\x1b[") < 2 {
+		t.Fatalf("both matches must render styled:\n%q", out)
+	}
+	// Stripped of styling the row still reads as the full line.
+	if !strings.Contains(stripANSI(out), "foo bar foo") {
+		t.Fatalf("row text mangled:\n%q", out)
+	}
+}
+
+func stripANSI(s string) string {
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] == '\x1b' {
+			for i < len(s) && s[i] != 'm' {
+				i++
+			}
+			continue
+		}
+		b.WriteByte(s[i])
+	}
+	return b.String()
+}
