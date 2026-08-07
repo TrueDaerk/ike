@@ -626,6 +626,12 @@ func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
 		m.undo(count)
 	case "ctrl+r":
 		m.redo(count)
+	case "ctrl+a":
+		// Increment the number under (or after) the cursor (#1658); the count
+		// is the step, so 5<C-a> adds five.
+		m.adjustNumber(int64(count))
+	case "ctrl+x":
+		m.adjustNumber(-int64(count))
 	case ".":
 		m.collapseCarets() // "." repeats the recorded change at the primary caret
 		m.repeatDot(count)
@@ -754,6 +760,11 @@ func (m Model) resolveAfterG(s string, r rune, hasRune bool) (Model, tea.Cmd) {
 	case "i":
 		// gi: insert at the position of the last insert (#1193).
 		m.gotoLastInsert()
+		m.pending.Reset()
+	case "!":
+		// g!: toggle the value under the cursor (#1658) — true/false, on/off,
+		// ==/!= and friends. Rebindable through editor.toggleValue.
+		m.toggleValue()
 		m.pending.Reset()
 	case "f":
 		// gf: open the file named under the cursor (#1193).

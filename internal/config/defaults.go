@@ -98,6 +98,7 @@ func defaults() *Config {
 			PermissionHints:        true,
 			CIDRHints:              true,
 			IDNHints:               true,
+			TogglePairs:            []string{}, // additions only; the built-in pairs live in the editor (#1658)
 			SecretMasking:          true,
 			Hyperlinks:             true,
 			ColorPreview:           true,
