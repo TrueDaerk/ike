@@ -39,6 +39,7 @@ var statusLeft = []statusSegment{
 	{id: "eol", render: eolSegment},
 	{id: "encoding", render: encodingSegment},
 	{id: "indent", render: indentSegment},
+	{id: "svcolumn", render: svColumnSegment},
 	{id: "diagnostics", render: diagSegment},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
@@ -193,6 +194,17 @@ func indentSegment(_ Model, ed *editor.Model) string {
 		return "Spaces: " + strconv.Itoa(width)
 	}
 	return "Tab: " + strconv.Itoa(width)
+}
+
+// svColumnSegment names the caret's column in a table-rendered csv/tsv/psv
+// buffer (#1659) — "column 3: qty", or "column 3" without a header row — so a
+// wide table stays readable once the header has scrolled off. Empty (hidden)
+// for every other buffer.
+func svColumnSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	return ed.SVColumnLabel()
 }
 
 // diagSegment is the focused buffer's diagnostic counts; hidden when clean.
@@ -447,7 +459,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // overflows (#471): cosmetic hints first, diagnostics/LSP last; mode, the
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
-	"hint", "eol", "encoding", "indent", "toolchain", "todo",
+	"hint", "eol", "encoding", "indent", "svcolumn", "toolchain", "todo",
 	"host", "notifications", "macro", "branch", "diagnostics", "lsp",
 }
 

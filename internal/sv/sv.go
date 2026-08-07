@@ -5,6 +5,11 @@
 // editor's table-rendering layer split identically.
 package sv
 
+import (
+	"strconv"
+	"strings"
+)
+
 // Langs maps the registered *sv language ids to their default separator; a
 // zero value means the separator is sniffed from the content (csv files in
 // locales with decimal commas conventionally use ';').
@@ -82,4 +87,54 @@ func Fields(line string, sep rune) []Field {
 	}
 	fields[len(fields)-1].End = len(runes)
 	return fields
+}
+
+// IndexAt returns the index of the field containing the rune column col on a
+// line split at sep. A column on a separator belongs to the field the
+// separator closes; a column past the line end belongs to the last field.
+func IndexAt(line string, sep rune, col int) int {
+	fields := Fields(line, sep)
+	for i, f := range fields {
+		if col <= f.End {
+			return i
+		}
+	}
+	return len(fields) - 1
+}
+
+// Unquote is a field's display name: surrounding whitespace and quotes
+// stripped, doubled `""` unescaped. Fields() keeps the quotes because display
+// is raw bytes; a name shown outside the buffer wants them gone. Whitespace is
+// trimmed on both sides of the quotes — a padded name is padding, not a name.
+func Unquote(field string) string {
+	field = strings.TrimSpace(field)
+	if len(field) >= 2 && field[0] == '"' && field[len(field)-1] == '"' {
+		field = strings.ReplaceAll(field[1:len(field)-1], `""`, `"`)
+	}
+	return strings.TrimSpace(field)
+}
+
+// Header returns the column names of line when it reads like a header row,
+// and false when it does not: a header names its columns, so every field must
+// be non-empty and non-numeric (a first data row of an unheadered file
+// typically carries a number, an empty cell, or both). Callers fall back to
+// the bare column index on false.
+func Header(line string, sep rune) ([]string, bool) {
+	if strings.TrimSpace(line) == "" {
+		return nil, false
+	}
+	runes := []rune(line)
+	fields := Fields(line, sep)
+	names := make([]string, 0, len(fields))
+	for _, f := range fields {
+		name := Unquote(string(runes[f.Start:f.End]))
+		if name == "" {
+			return nil, false
+		}
+		if _, err := strconv.ParseFloat(name, 64); err == nil {
+			return nil, false
+		}
+		names = append(names, name)
+	}
+	return names, true
 }

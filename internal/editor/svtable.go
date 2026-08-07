@@ -1,10 +1,13 @@
 package editor
 
 import (
+	"image/color"
+	"strconv"
 	"strings"
 
 	"ike/internal/highlight"
 	"ike/internal/sv"
+	"ike/internal/theme"
 )
 
 // svtable.go is the table-like rendering of separator-delimited files
@@ -21,6 +24,10 @@ import (
 //
 // The first line additionally pins at the top of the viewport while
 // scrolling (stickyLines), riding the sticky-scroll machinery (#168).
+//
+// The column the caret sits in is tinted over the whole visible height and
+// named in the status line (#1659), so a wide table stays readable once the
+// header row has scrolled away.
 
 // svColGap is the display spacing between padded columns; the concealed
 // separator reads as part of it.
@@ -136,4 +143,69 @@ func (m Model) svConcealRanges(line int) []concealRange {
 		out = append(out, concealRange{start: f.End, end: f.End + 1, repl: strings.Repeat(" ", pad)})
 	}
 	return out
+}
+
+// svColumnTintFrac is how much of the selection colour survives the mix toward
+// the editor surface: the column stripe marks a whole screen height, so it has
+// to stay well below a selection in strength. Deriving it from two palette
+// colours keeps it subtle on light and dark themes alike.
+const svColumnTintFrac = 0.45
+
+// svColumnTint is the background of the caret's column (#1659).
+func (m Model) svColumnTint() color.Color {
+	return theme.Mix(m.theme().SelectionMuted, m.theme().Surface, svColumnTintFrac)
+}
+
+// svCursorColumn is the zero-based index of the field the caret sits in, and
+// whether the buffer is table-rendered at all.
+func (m Model) svCursorColumn() (int, bool) {
+	if !m.svActive() || m.cursor.Line >= m.buf.LineCount() {
+		return 0, false
+	}
+	return sv.IndexAt(m.buf.Line(m.cursor.Line), m.svLayout().sep, m.cursor.Col), true
+}
+
+// svColumnRange is the rune-column range [start, end) that the caret's column
+// covers on line — the field plus the separator closing it, so the stripe
+// spans the alignment padding too and reads as one full-width column. It is
+// empty (ok false) when the line has no such column: rows are only tinted
+// where they actually have the field, which keeps the cost to one split of the
+// visible line. Unfocused panes show no stripe, like they show no caret.
+func (m Model) svColumnRange(line int) (start, end int, ok bool) {
+	if !m.focused {
+		return 0, 0, false
+	}
+	idx, ok := m.svCursorColumn()
+	if !ok || line >= m.buf.LineCount() {
+		return 0, 0, false
+	}
+	fields := sv.Fields(m.buf.Line(line), m.svLayout().sep)
+	if idx >= len(fields) {
+		return 0, 0, false
+	}
+	f := fields[idx]
+	end = f.End
+	if idx < len(fields)-1 {
+		end++ // the concealed separator carries this column's padding
+	}
+	if end <= f.Start {
+		return 0, 0, false
+	}
+	return f.Start, end, true
+}
+
+// SVColumnLabel is the status-line label for the caret's column in a
+// table-rendered buffer (#1659): "column 3: qty" when the first row reads like
+// a header, "column 3" when it does not (or has fewer fields). Empty for every
+// other buffer, which hides the segment.
+func (m Model) SVColumnLabel() string {
+	idx, ok := m.svCursorColumn()
+	if !ok {
+		return ""
+	}
+	label := "column " + strconv.Itoa(idx+1)
+	if names, ok := sv.Header(m.buf.Line(0), m.svLayout().sep); ok && idx < len(names) {
+		label += ": " + names[idx]
+	}
+	return label
 }
