@@ -152,12 +152,20 @@ config file paths, or disable detection entirely.
   the caret sits inside a sequence — or a selection crosses it — does that
   spot show the raw encoding, styled as `escape`. Placeholder regions are
   skipped so their own captures survive.
-- **Epoch timestamps in bodies** (#1618): the same producer scans inline
-  request bodies with `internal/epochtime` in its JSON-value context, so a
-  numeric `"ts": 1722945600` reads as `2024-08-06 12:00:00Z` and shows the
-  raw number under the caret. Query-parameter values stay raw — a bare id in
-  a URL is too easily mistaken for a timestamp. The response viewer has no
-  caret and therefore no reveal, so it shows response bodies unchanged.
+- **Value conceals** (#1618, #1627, #1684): the same producer collects every
+  stretch it already recognises as a *value* — a query string, a folded
+  query continuation line, a header value, an inline request body line — and
+  runs both `internal/epochtime` (in its `Value` context) and
+  `internal/numhint` over it. A numeric `"ts": 1722945600` reads as
+  `2024-08-06 12:00:00Z`, `?max_size=10485760` as `10 MiB`,
+  `Content-Length: 10485760` likewise, and the raw digits come back under the
+  caret. Two rules keep it honest: each range is scanned as its own text, so
+  a request line's trailing ` HTTP/1.1` never bounds a query value, and both
+  scanners only match a token *after* a separator, so a query key, a header
+  name or a JSON member name is never concealed. Where a stand-in of another
+  family (an epoch, a JWT, a percent escape, a network literal) already
+  claimed the columns, the number hints step aside. The response viewer has
+  no caret and therefore no reveal, so it shows response bodies unchanged.
 - **JWTs** (#1619): the producer scans every line with `internal/jwt` and dims
   the signature segment of each token (capture `jwt.signature`), so an
   `Authorization: Bearer eyJ…` header reads as its claims rather than as one

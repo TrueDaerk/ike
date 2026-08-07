@@ -10,6 +10,7 @@ import (
 	_ "embed"
 
 	"ike/internal/cronhint"
+	"ike/internal/epochtime"
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
@@ -44,9 +45,13 @@ func init() {
 }
 
 // tomlSpans is the lang.Language.Spans hook: quoted cron expressions gain
-// their schedule hint (#1624) and numeric literals their readability hints
-// (#1627).
+// their schedule hint (#1624), Unix epoch values their decoded UTC form
+// (#1684) and numeric literals their readability hints (#1627).
 func tomlSpans(lines []string) []lang.Span {
-	out := append(cronhint.QuotedSpans(lines), numhint.Spans(lines)...)
+	// The epochs take their columns out of the number hints, as in the JSON
+	// producer: two stand-ins over one literal would fight for the same cells.
+	stamps := epochtime.Spans(lines, epochtime.Value)
+	out := append(cronhint.QuotedSpans(lines), stamps...)
+	out = append(out, numhint.SpansExcept(lines, stamps)...)
 	return append(out, nethint.Spans(lines)...)
 }

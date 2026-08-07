@@ -17,6 +17,7 @@ import (
 	"ike/internal/epochtime"
 	"ike/internal/highlight"
 	"ike/internal/lang"
+	"ike/internal/numhint"
 )
 
 // Spans is the lang.Language.Spans producer for the log language.
@@ -80,7 +81,13 @@ func lineSpans(li int, raw string) []lang.Span {
 	// the loose context applies, with epochtime's range guard doing the
 	// filtering. Scanned over the visible text and mapped back like the
 	// header spans, so an ANSI-coloured line decodes too.
+	//
+	// taken collects the visible-column ranges a stand-in or a header capture
+	// already owns, so the number hints below stay off them (#1684).
+	taken := []Range{p.Timestamp, p.LevelRange}
+	taken = append(taken, p.Names...)
 	for _, e := range epochtime.Scan(visible, epochtime.Loose) {
+		taken = append(taken, Range{Start: e.Start, End: e.End})
 		start, end := e.Start, e.End
 		if vmap != nil {
 			start, end = vmap[e.Start], vmap[e.End-1]+1
@@ -90,6 +97,21 @@ func lineSpans(li int, raw string) []lang.Span {
 			Capture: epochtime.Capture, Replace: e.Text,
 		})
 	}
+	// Number-readability hints (#1627) on the payload (#1684): a log line's
+	// logfmt pairs and JSON tail are value positions like any config file's,
+	// so `bytes=1048576` reads as "1.0 MiB" and a bare six-digit count reads
+	// grouped. numhint's own scanner supplies the key/value structure — it
+	// only hints a token after a separator, so a logfmt key never conceals —
+	// and the header ranges and epoch stand-ins are excluded above.
+	for _, s := range numhint.LineSpans(li, visible) {
+		if overlapsRanges(taken, s.StartCol, s.EndCol) {
+			continue
+		}
+		if vmap != nil {
+			s.StartCol, s.EndCol = vmap[s.StartCol], vmap[s.EndCol-1]+1
+		}
+		out = append(out, s)
+	}
 	if p.Level == LevelDebug {
 		// Debug/trace lines dim as a whole; the earlier header spans keep
 		// their own styling where they overlap.
@@ -98,6 +120,16 @@ func lineSpans(li int, raw string) []lang.Span {
 		}
 	}
 	return out
+}
+
+// overlapsRanges reports whether [start, end) touches any of the ranges.
+func overlapsRanges(ranges []Range, start, end int) bool {
+	for _, r := range ranges {
+		if !r.Empty() && start < r.End && r.Start < end {
+			return true
+		}
+	}
+	return false
 }
 
 // visibleText strips the escape sequences out of raw and returns the visible

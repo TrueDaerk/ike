@@ -143,3 +143,31 @@ func TestYAMLPermissionHints(t *testing.T) {
 		t.Errorf("spans = %+v, want the radix hint to keep a decimal mode", spans)
 	}
 }
+
+// TestYAMLEpochValues (#1684): a Unix epoch in a YAML value decodes like a
+// JSON member's, the key never does, and the number hints stand aside.
+func TestYAMLEpochValues(t *testing.T) {
+	l, ok := lang.ByID("yaml")
+	if !ok || l.Spans == nil {
+		t.Fatal("yaml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"job:", "  created_at: 1722945600"})
+	var stamps []lang.Span
+	for _, s := range spans {
+		if s.Replace != "" {
+			stamps = append(stamps, s)
+		}
+	}
+	if len(stamps) != 1 || stamps[0].Replace != "2024-08-06 12:00:00Z" {
+		t.Fatalf("spans = %+v, want exactly one decoded UTC stand-in", stamps)
+	}
+	if stamps[0].StartCol != 14 || stamps[0].EndCol != 24 {
+		t.Errorf("stand-in covers [%d,%d), want the digits [14,24)", stamps[0].StartCol, stamps[0].EndCol)
+	}
+	// A numeric key is still a key.
+	for _, s := range l.Spans([]string{"1722945600: value"}) {
+		if s.Replace != "" {
+			t.Errorf("numeric key concealed as %q", s.Replace)
+		}
+	}
+}

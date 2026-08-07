@@ -8,6 +8,7 @@
 package langini
 
 import (
+	"ike/internal/epochtime"
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
@@ -49,11 +50,14 @@ func iniSpans(lines []string) []lang.Span {
 			out = append(out, pairSpans(li, runes, start, end)...)
 		}
 	}
-	// Number-readability hints (#1627): byte sizes, durations, digit grouping
-	// and radix readings over the `key = value` pairs. Network literals
-	// (#1653): CIDR prefixes and punycode hosts — an ini/conf file is where
-	// most allow-lists live.
-	out = append(out, numhint.Spans(lines)...)
+	// Epoch timestamps (#1684) and number-readability hints (#1627): byte
+	// sizes, durations, digit grouping and radix readings over the
+	// `key = value` pairs, with the epochs taking their columns out of the
+	// number hints. Network literals (#1653): CIDR prefixes and punycode
+	// hosts — an ini/conf file is where most allow-lists live.
+	stamps := epochtime.Spans(lines, epochtime.Value)
+	out = append(out, stamps...)
+	out = append(out, numhint.SpansExcept(lines, stamps)...)
 	return append(out, nethint.Spans(lines)...)
 }
 

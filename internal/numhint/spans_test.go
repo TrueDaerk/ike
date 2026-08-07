@@ -1,6 +1,10 @@
 package numhint
 
-import "testing"
+import (
+	"testing"
+
+	"ike/internal/lang"
+)
 
 // spans_test.go covers the context half of the number hints (#1627): which key
 // names which family, which shapes trigger on their own, and everything that
@@ -153,5 +157,31 @@ func TestSpanColumns(t *testing.T) {
 	}
 	if s := spans[0]; s.StartCol != 6 || s.EndCol != 14 {
 		t.Errorf("quoted span = %+v, want cols [6,14)", s)
+	}
+}
+
+// TestLineSpansIndexesTheGivenLine (#1684): producers that scan part of a
+// buffer, or a rewritten line, get their spans on the index they pass.
+func TestLineSpansIndexesTheGivenLine(t *testing.T) {
+	spans := LineSpans(7, "max_size = 10485760")
+	if len(spans) != 1 || spans[0].Line != 7 || spans[0].Replace != "10 MiB" {
+		t.Fatalf("LineSpans = %+v, want one 10 MiB hint on line 7", spans)
+	}
+}
+
+// TestExceptDropsOverlaps (#1684): a hint whose columns another family already
+// claimed is dropped, one merely on the same line is not.
+func TestExceptDropsOverlaps(t *testing.T) {
+	hints := LineSpans(0, "max_size = 10485760, ttl_ms = 90000")
+	if len(hints) != 2 {
+		t.Fatalf("line produced %d hints, want 2: %+v", len(hints), hints)
+	}
+	taken := []lang.Span{{Line: 0, StartCol: hints[0].StartCol, EndCol: hints[0].EndCol}}
+	kept := Except(append([]lang.Span(nil), hints...), taken)
+	if len(kept) != 1 || kept[0].StartCol != hints[1].StartCol {
+		t.Errorf("Except kept %+v, want only the second hint", kept)
+	}
+	if got := Except(append([]lang.Span(nil), hints...), nil); len(got) != 2 {
+		t.Errorf("Except with no taken spans kept %d, want 2", len(got))
 	}
 }

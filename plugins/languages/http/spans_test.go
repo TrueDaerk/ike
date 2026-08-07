@@ -212,12 +212,15 @@ func TestBodyEpochSpans(t *testing.T) {
 			t.Errorf("plain number at col %d concealed as %q", col, s.Replace)
 		}
 	}
-	// Query-parameter values are not a timestamp context (#1618): the request
-	// line keeps its #1585 captures only.
+	// Query-parameter values are a value position too (#1684).
+	found := false
 	for _, s := range spans {
-		if s.Line == 0 && s.Replace != "" {
-			t.Errorf("request line span %+v must not carry a stand-in", s)
+		if s.Line == 0 && s.StartCol == 42 && s.EndCol == 52 && s.Replace == "2024-08-06 12:00:00Z" {
+			found = true
 		}
+	}
+	if !found {
+		t.Errorf("query timestamp got no stand-in; spans = %+v", spans)
 	}
 }
 
@@ -261,5 +264,111 @@ func TestHTTPNetworkHints(t *testing.T) {
 	cidr, ok := spanAt(spans, 1, strings.Index(lines[1], "10."))
 	if !ok || cidr.Capture != nethint.CIDRCapture {
 		t.Errorf("header span = %+v, want the CIDR capture", cidr)
+	}
+}
+
+// standIn returns the stand-in span covering (line, col) — the conceal spans
+// are appended after the structural ones, so spanAt would find the structure.
+func standIn(spans []lang.Span, line, col int) (lang.Span, bool) {
+	for _, s := range spans {
+		if s.Line == line && s.Replace != "" && col >= s.StartCol && col < s.EndCol {
+			return s, true
+		}
+	}
+	return lang.Span{}, false
+}
+
+// TestQueryValueNumberHints (#1684): a query-parameter value carries its
+// number-readability hint, keyed off the parameter name, while the parameter
+// names and the request line's structure stay raw.
+func TestQueryValueNumberHints(t *testing.T) {
+	line := "GET https://api.example.com/search?max_size=10485760&timeout=90000&page=2 HTTP/1.1"
+	spans := querySpans([]string{line})
+	col := func(sub string) int { return strings.Index(line, sub) }
+
+	if s, ok := standIn(spans, 0, col("10485760")); !ok || s.Replace != "10 MiB" {
+		t.Errorf("size value stand-in = %+v, want 10 MiB", s)
+	}
+	if s, ok := standIn(spans, 0, col("90000")); !ok || s.Replace != "1m30s" {
+		t.Errorf("timeout value stand-in = %+v, want 1m30s", s)
+	}
+	// Parameter names are keys: never concealed, whatever they look like.
+	for _, key := range []string{"max_size", "timeout", "page"} {
+		if s, ok := standIn(spans, 0, col(key)); ok {
+			t.Errorf("query key %q concealed as %q", key, s.Replace)
+		}
+	}
+	// A short value has no reading to add, and the protocol version is not a
+	// value position at all.
+	if s, ok := standIn(spans, 0, col("HTTP/1.1")); ok {
+		t.Errorf("protocol version concealed as %q", s.Replace)
+	}
+}
+
+// TestFoldedQueryValueHints (#1684): the folded continuation lines of a target
+// (#1269) are query values like the request line's own.
+func TestFoldedQueryValueHints(t *testing.T) {
+	lines := []string{
+		"GET https://api.example.com/search",
+		"  ?q=term",
+		"  &max_bytes=1048576",
+		"",
+	}
+	if s, ok := standIn(querySpans(lines), 2, strings.Index(lines[2], "1048576")); !ok || s.Replace != "1 MiB" {
+		t.Errorf("folded query value stand-in = %+v, want 1 MiB", s)
+	}
+}
+
+// TestHeaderValueNumberHints (#1684): a header value is a value position, its
+// name is not.
+func TestHeaderValueNumberHints(t *testing.T) {
+	lines := []string{
+		"POST https://api.example.com/upload",
+		"Content-Length: 10485760",
+		"",
+		"x",
+	}
+	spans := querySpans(lines)
+	if s, ok := standIn(spans, 1, strings.Index(lines[1], "10485760")); !ok || s.Replace != "10 MiB" {
+		t.Errorf("header value stand-in = %+v, want 10 MiB", s)
+	}
+	if s, ok := standIn(spans, 1, 0); ok {
+		t.Errorf("header name concealed as %q", s.Replace)
+	}
+}
+
+// TestJSONBodyValueHints (#1684): numeric values of a JSON request body carry
+// their hints; a member name that happens to be numeric never does.
+func TestJSONBodyValueHints(t *testing.T) {
+	lines := []string{
+		"POST https://api.example.com/jobs",
+		"Content-Type: application/json",
+		"",
+		`{"max_size": 10485760, "timeout_ms": 90000, "count": 123456}`,
+		`{"10485760": "a numeric key", "ts": 1722945600}`,
+	}
+	spans := querySpans(lines)
+	col := func(li int, sub string) int { return strings.Index(lines[li], sub) }
+	for _, tc := range []struct{ sub, want string }{
+		{"10485760", "10 MiB"},
+		{"90000", "1m30s"},
+		{"123456", "123_456"},
+	} {
+		if s, ok := standIn(spans, 3, col(3, tc.sub)); !ok || s.Replace != tc.want {
+			t.Errorf("body value %s stand-in = %+v, want %q", tc.sub, s, tc.want)
+		}
+	}
+	// Keys are never concealed — not the names, not a numeric one.
+	for _, key := range []string{`"max_size"`, `"timeout_ms"`, `"count"`} {
+		if s, ok := standIn(spans, 3, col(3, key)+1); ok {
+			t.Errorf("body key %s concealed as %q", key, s.Replace)
+		}
+	}
+	if s, ok := standIn(spans, 4, col(4, "10485760")); ok {
+		t.Errorf("numeric body key concealed as %q", s.Replace)
+	}
+	// The epoch family still wins over the number hints on the same digits.
+	if s, ok := standIn(spans, 4, col(4, "1722945600")); !ok || s.Replace != "2024-08-06 12:00:00Z" {
+		t.Errorf("body timestamp stand-in = %+v, want the decoded UTC form", s)
 	}
 }

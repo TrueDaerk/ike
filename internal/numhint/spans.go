@@ -41,6 +41,29 @@ func Spans(lines []string) []lang.Span {
 	return out
 }
 
+// LineSpans is Spans for a producer that scans only part of a buffer, or that
+// has to feed a rewritten line (the log renderer's ANSI-stripped visible text,
+// #1684): it produces the hints for one line, reported at line index li.
+func LineSpans(li int, line string) []lang.Span {
+	return appendLine(nil, li, []rune(line))
+}
+
+// Except drops every span whose columns a taken span already covers. It is the
+// filter behind SpansExcept, exported for producers that build their hint list
+// line by line (#1684).
+func Except(spans, taken []lang.Span) []lang.Span {
+	if len(taken) == 0 {
+		return spans
+	}
+	kept := spans[:0]
+	for _, s := range spans {
+		if !overlapsAny(s, taken) {
+			kept = append(kept, s)
+		}
+	}
+	return kept
+}
+
 // SpansExcept is Spans for a producer that emits stand-ins of its own over the
 // same digits — the JSON epoch decoding (#1618) — dropping every hint whose
 // columns a taken span already covers. Two stand-ins over one literal would
@@ -48,17 +71,7 @@ func Spans(lines []string) []lang.Span {
 // 10-digit value in a JSON member is a timestamp far more often than it is a
 // gigabyte count.
 func SpansExcept(lines []string, taken []lang.Span) []lang.Span {
-	out := Spans(lines)
-	if len(taken) == 0 {
-		return out
-	}
-	kept := out[:0]
-	for _, s := range out {
-		if !overlapsAny(s, taken) {
-			kept = append(kept, s)
-		}
-	}
-	return kept
+	return Except(Spans(lines), taken)
 }
 
 func overlapsAny(s lang.Span, taken []lang.Span) bool {

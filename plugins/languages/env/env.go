@@ -9,6 +9,7 @@
 package langenv
 
 import (
+	"ike/internal/epochtime"
 	"ike/internal/jwt"
 	"ike/internal/lang"
 	"ike/internal/nethint"
@@ -58,9 +59,13 @@ func envSpans(lines []string) []lang.Span {
 		// to JSON — so a plain value can never be mistaken for a token.
 		out = append(out, jwt.LineSpans(li, line)...)
 	}
-	// Number-readability hints (#1627): byte sizes, durations, digit grouping
-	// and radix readings over the `KEY=value` pairs.
-	out = append(out, numhint.Spans(lines)...)
+	// Epoch timestamps (#1684) and number-readability hints (#1627): byte
+	// sizes, durations, digit grouping and radix readings over the
+	// `KEY=value` pairs, with the epochs taking their columns out of the
+	// number hints.
+	stamps := epochtime.Spans(lines, epochtime.Value)
+	out = append(out, stamps...)
+	out = append(out, numhint.SpansExcept(lines, stamps)...)
 	// Network literals (#1653): CIDR prefixes and punycode hosts in values.
 	return append(out, nethint.Spans(lines)...)
 }

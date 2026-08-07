@@ -17,9 +17,11 @@
 //   - Context: the caller picks how permissive the surrounding text must be.
 //     JSONValue accepts a digit run only in a JSON value position (after ":",
 //     "[" or "," and before ",", "]", "}" or the line end), so object keys and
-//     digits inside prose strings never match. Loose accepts any run whose
-//     neighbouring characters are plain delimiters, which is what unstructured
-//     log lines need.
+//     digits inside prose strings never match. Value widens that to the value
+//     positions the other formats write — "=" opens one and "&" closes one, so
+//     YAML, TOML, ini, dotenv and HTTP query parameters decode too (#1684).
+//     Loose accepts any run whose neighbouring characters are plain
+//     delimiters, which is what unstructured log lines need.
 //
 // Both contexts additionally reject a run glued to a character that makes it
 // part of something larger: a letter or "_" (identifiers), "." (floats, IPs,
@@ -54,6 +56,12 @@ const (
 	// It is the mode for unstructured text (log lines), where the range guard
 	// carries the whole burden.
 	Loose
+	// Value is JSONValue widened to the value positions the other formats
+	// write (#1684): "=" opens a value in YAML-adjacent config formats, in
+	// dotenv/ini/TOML and in an HTTP query string, and "&" closes one there.
+	// Keys stay out for the same reason they do in JSONValue — a run only
+	// matches after an opener, never before one.
+	Value
 )
 
 // Bounds of the plausible range, as seconds since the epoch: 2001-01-01 to
@@ -185,15 +193,17 @@ func accepted(runes []rune, i, j int, ctx Context) bool {
 		if ctx == Loose {
 			return true
 		}
-		return jsonValuePos(runes, i-1, j+1)
+		return valuePos(runes, i-1, j+1, ctx)
 	}
-	if ctx == JSONValue {
+	if ctx == JSONValue || ctx == Value {
 		// ":" glues in prose (a clock time) but is JSON's member separator,
-		// so a value may sit directly against it: {"ts":1722945600}.
+		// so a value may sit directly against it: {"ts":1722945600}. "=" is
+		// the same separator in the Value context's formats, and never glues
+		// a number into a larger token anywhere.
 		if (glues(prev) && prev != ':') || glues(next) {
 			return false
 		}
-		return jsonValuePos(runes, i, j)
+		return valuePos(runes, i, j, ctx)
 	}
 	if glues(prev) || glues(next) {
 		return false
@@ -214,20 +224,26 @@ func glues(r rune) bool {
 	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || isDigit(r)
 }
 
-// jsonValuePos reports whether [start, end) sits where JSON puts a value: the
-// nearest non-blank character before it opens a value (":" for a member, "["
-// or "," for an element) and the one after it closes one (",", "]", "}") or
-// the line ends.
-func jsonValuePos(runes []rune, start, end int) bool {
-	prev := prevSignificant(runes, start)
-	switch prev {
+// valuePos reports whether [start, end) sits where the context puts a value:
+// the nearest non-blank character before it opens a value (":" for a member,
+// "[" or "," for an element) and the one after it closes one (",", "]", "}")
+// or the line ends. The Value context adds the openers and closers the
+// non-JSON formats write — "=" before, "&" after (#1684).
+func valuePos(runes []rune, start, end int, ctx Context) bool {
+	switch prevSignificant(runes, start) {
 	case ':', '[', ',':
+	case '=':
+		if ctx != Value {
+			return false
+		}
 	default:
 		return false
 	}
-	switch nextSignificant(runes, end) {
+	switch next := nextSignificant(runes, end); next {
 	case ',', ']', '}', 0:
 		return true
+	case '&':
+		return ctx == Value
 	}
 	return false
 }
