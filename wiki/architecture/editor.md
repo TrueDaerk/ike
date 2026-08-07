@@ -1620,6 +1620,58 @@ a different colour, not a family of its own.
   excepted so a prefix can end a sentence. Host runs stop at `/`, so a URL's
   authority is scanned and its path is not.
 
+## Permission hints (#1656)
+
+An octal file mode draws with its symbolic form appended — the reading `ls`
+prints and nobody computes by eye:
+
+```
+chmod 755 build.sh            → 755  rwxr-xr-x
+os.WriteFile(p, b, 0o644)     → 0o644  rw-r--r--
+mode: '4755'                  → 4755  rwsr-xr-x
+mode: '1777'                  → 1777  rwxrwxrwt
+```
+
+One family, one capture (`perm.mode`), one toggle: `editor.permission_hints`
+(default on, Settings → Editor) or per view `view.togglePermissionHints`.
+Decoding and the context scan live in `internal/permhint`, a leaf package of
+plain Go over `lang.Span`; `concealSplit` routes the capture into its own
+`m.decodes` channel and `decodeOn` gates it, exactly like the decode families
+(#1620) and the other hint families (#1624, #1627, #1653). The stand-in shape
+is the shared one: the span covers the raw literal and `Replace` repeats it
+with `permhint.Gap` (two spaces) and the symbolic form appended, so #1594's
+positional reveal applies unchanged — a caret inside the literal (or a
+selection across it) drops the hint and the raw digits are what is edited.
+
+- **Decoding** accepts three or four octal digits, written bare (`755`), with
+  a leading zero (`0644`) or with the Go/Python `0o` prefix (`0o755`). The
+  fourth (leading) digit is the special-bit field: 4 setuid, 2 setgid,
+  1 sticky. Each replaces the execute character of its triad — `x` becomes
+  `s` (`t` for sticky), and with the execute bit clear the capital `S` (`T`),
+  which is what `ls` prints for a special bit set without an execute bit
+  under it (`4644` → `rwSr--r--`).
+- **Contexts carry the whole burden here.** Unlike a CIDR prefix (#1653) the
+  literal has no syntax of its own — a bare three-digit number is a port or a
+  year far more often than a mode — so only the things that *carry* a
+  permission produce a hint: `chmod`'s first operand and the `-m`/`--mode`
+  value of `install`/`mkdir` in shell; the `--chmod=` flag of `COPY`/`ADD`
+  plus the shell scan over `RUN` lines in Dockerfiles; the octal literals in
+  the argument list of a mode API in Go and Python (`os.Chmod`,
+  `os.WriteFile`, `os.MkdirAll`, `os.FileMode(…)`, `os.chmod`,
+  `os.makedirs(…, mode=0o755)`, `Path(…).chmod(…)`); and the
+  `mode:`/`defaultMode:`/`directory_mode:` keys in YAML and Ansible.
+- **Guards.** Shell modes are octal by definition, so a bare `755` decodes
+  there. The code and YAML contexts additionally require the literal to be
+  *written* as octal (a leading `0` or `0o`): in Go and Python a bare `644` is
+  decimal, and in YAML `mode: 644` is the decimal 644 Ansible really reads —
+  the classic footgun. That case is deliberately left to the radix hint of
+  #1627, which says `644  = 01204` and so states the problem rather than
+  papering over it; `yamlSpans` runs the permission hints first and feeds them
+  to `numhint.SpansExcept`, so the two families never claim the same columns.
+  In code, a run glued to an identifier (`x0644`) or sitting inside a quoted
+  string is not a literal, and a matched call consumes its whole argument
+  region, so a nested `os.Chmod(p, os.FileMode(0o755))` is annotated once.
+
 ## Invisible & deceptive Unicode (#1654)
 
 The classic trap — code that looks identical but does not compile, or a string
@@ -1948,7 +2000,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `indent_guides`, `rulers`, `markdown_rendering` (#881), `log_rendering`
 (#1621), `timestamp_decoding` (#1618), `cron_hints` (#1624),
 `byte_size_hints`/`duration_hints`/`digit_grouping`/`radix_hints` (#1627),
-`cidr_hints`/`idn_hints` (#1653),
+`cidr_hints`/`idn_hints` (#1653), `permission_hints` (#1656),
 `hyperlinks` (#1655),
 `pem_summary` (#1652),
 `color_preview`

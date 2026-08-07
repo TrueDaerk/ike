@@ -571,7 +571,13 @@ hints of `internal/nethint` (#1653) ride it too, in two shapes: `Spans` scans
 whole lines for the config formats and `.http`, `QuotedSpans` scans string
 literals only for `go`, the `javascript`/`typescript` pair and `python` —
 where a bare `10.0.0.0/8` would be arithmetic (see
-`/architecture/editor.md`, network-literal hints). The `yaml` producer also
+`/architecture/editor.md`, network-literal hints). The permission hints of
+`internal/permhint` (#1656) ride it with one producer per carrying context —
+`ShellSpans` for `shell`, `DockerfileSpans` for `dockerfile`, `GoSpans` and
+`PythonSpans` for the mode APIs in code, `YAMLSpans` for the `mode:` keys of
+`yaml` and `ansible`, which is what first gave `shell`, `dockerfile` and
+`ansible` a `Spans` hook at all (see `/architecture/editor.md`, permission
+hints). The `yaml` producer also
 appends the anchor/alias pair coloring of `internal/yamlanchor` (#1629): every
 `&name` and its `*name` aliases share one name-hashed rainbow slot, an alias
 no anchor defines carries `anchor.unresolved` (rendered as an error, see

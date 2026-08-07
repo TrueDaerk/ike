@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/permhint"
 )
 
 // TestAnsibleRegistered guards #897: the language registers with the Ansible
@@ -125,5 +126,22 @@ func TestSniffThroughRegistry(t *testing.T) {
 	}
 	if l, ok := lang.ByPath(plain); !ok || l.ID != "yaml" {
 		t.Errorf("plain .yml = %v/%v, want yaml", l.ID, ok)
+	}
+}
+
+// TestAnsiblePermissionHints (#1656): ansible playbooks are YAML, so they share
+// the yaml Spans hook — a `mode:` value carries its symbolic form, which is
+// where the hint earns its keep.
+func TestAnsiblePermissionHints(t *testing.T) {
+	l, ok := lang.ByID("ansible")
+	if !ok || l.Spans == nil {
+		t.Fatal("ansible: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"- copy:", "    dest: /etc/app.conf", "    mode: '0640'"})
+	if len(spans) != 1 || spans[0].Capture != permhint.Capture {
+		t.Fatalf("spans = %+v, want one permission hint", spans)
+	}
+	if want := "0640" + permhint.Gap + "rw-r-----"; spans[0].Replace != want {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/permhint"
 	"ike/plugins/languages/register"
 )
 
@@ -39,8 +40,10 @@ func init() {
 		},
 		Toolchain: toolchain{},
 		// Network literals (#1653) inside string literals: a CIDR prefix
-		// draws its range, a punycode host its decoded name.
-		Spans:       nethint.QuotedSpans,
+		// draws its range, a punycode host its decoded name. Permission
+		// literals (#1656): the octal mode argument of os.chmod and friends
+		// draws its symbolic form.
+		Spans:       pythonSpans,
 		LineComment: "#",
 		IndentAfter: []string{":", "(", "[", "{"},
 		// Sticky-scroll scopes (#168).
@@ -54,4 +57,11 @@ func init() {
 			"set", "tuple", "string",
 		},
 	})
+}
+
+// pythonSpans is the lang.Language.Spans hook: the network-literal hints
+// (#1653) inside string literals plus the permission hints (#1656) inside the
+// argument lists of the mode APIs.
+func pythonSpans(lines []string) []lang.Span {
+	return append(nethint.QuotedSpans(lines), permhint.PythonSpans(lines)...)
 }

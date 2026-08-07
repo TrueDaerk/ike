@@ -355,6 +355,10 @@ type Model struct {
 	digitGroupSet bool
 	radixHints    bool
 	radixHintsSet bool
+	// Permission hints (#1656): an octal file mode draws with its symbolic
+	// rwx form.
+	permHints    bool
+	permHintsSet bool
 	// The network-literal families (#1653): a CIDR prefix draws with its
 	// range and host count, a punycode host with its decoded Unicode name.
 	cidrHints    bool
@@ -615,6 +619,7 @@ func New() Model {
 		durHints:           true,
 		digitGroup:         true,
 		radixHints:         true,
+		permHints:          true,
 		cidrHints:          true,
 		idnHints:           true,
 		secretMask:         true,
@@ -772,6 +777,9 @@ func (m *Model) applyConfig() {
 	}
 	if !m.radixHintsSet {
 		m.radixHints = boolOr(m.cfg, "editor.radix_hints", m.radixHints)
+	}
+	if !m.permHintsSet {
+		m.permHints = boolOr(m.cfg, "editor.permission_hints", m.permHints)
 	}
 	if !m.cidrHintsSet {
 		m.cidrHints = boolOr(m.cfg, "editor.cidr_hints", m.cidrHints)

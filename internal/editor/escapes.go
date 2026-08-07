@@ -21,6 +21,7 @@ import (
 	"ike/internal/escapes"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/permhint"
 	"ike/internal/secret"
 )
 
@@ -52,6 +53,10 @@ func (m Model) decodeOn(capture string) bool {
 		return m.digitGroup
 	case numhint.RadixCapture:
 		return m.radixHints
+	case permhint.Capture:
+		// Not a decode either (#1656): "on" means the octal file mode draws
+		// with its symbolic rwx form appended.
+		return m.permHints
 	case nethint.CIDRCapture:
 		return m.cidrHints
 	case nethint.IDNCapture, nethint.IDNMixedCapture:

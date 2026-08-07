@@ -12,6 +12,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/permhint"
 	"ike/internal/secret"
 )
 
@@ -59,6 +60,7 @@ var decodeCaptures = []string{
 	numhint.DurationCapture,
 	numhint.GroupCapture,
 	numhint.RadixCapture,
+	permhint.Capture,
 	nethint.CIDRCapture,
 	nethint.IDNCapture,
 	nethint.IDNMixedCapture,

@@ -11,6 +11,7 @@ import (
 	_ "embed"
 
 	"ike/internal/lang"
+	"ike/internal/permhint"
 	"ike/plugins/languages/register"
 )
 
@@ -30,6 +31,9 @@ func init() {
 			RootMarkers: []string{".git"},
 			Install:     []string{"npm", "install", "-g", "dockerfile-language-server-nodejs"},
 		},
+		// Permission hints (#1656): the `--chmod=` flag of COPY/ADD and the
+		// `chmod` calls inside RUN lines draw their symbolic rwx form.
+		Spans:       permhint.DockerfileSpans,
 		LineComment: "#",
 	})
 }

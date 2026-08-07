@@ -631,6 +631,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleDigitGrouping()
 	case "toggle_radix_hints":
 		m.toggleRadixHints()
+	case "toggle_permission_hints":
+		m.togglePermissionHints()
 	case "toggle_cidr_hints":
 		m.toggleCIDRHints()
 	case "toggle_idn_hints":

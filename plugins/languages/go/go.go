@@ -10,6 +10,7 @@ import (
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/permhint"
 	"ike/plugins/languages/register"
 )
 
@@ -77,7 +78,8 @@ func init() {
 		// Unicode-escape decoding (#1620): \uXXXX / \UXXXXXXXX in string and
 		// rune literals conceal as the escaped character. Network literals
 		// (#1653): a CIDR prefix or punycode host inside a string literal
-		// carries its reading.
+		// carries its reading. Permission literals (#1656): the octal mode
+		// argument of os.Chmod and friends carries its symbolic form.
 		Spans: goSpans,
 		// Test runner (#1150): gutter run markers on Test/Benchmark/Fuzz
 		// declarations in _test.go files; a single test runs with cwd = the
@@ -137,9 +139,11 @@ func init() {
 }
 
 // goSpans is the lang.Language.Spans hook: the unicode-escape stand-ins
-// (#1620) plus the network-literal hints (#1653). The network scan is
-// restricted to string literals — in source, a bare `10.0.0.0/8` would be
-// arithmetic, not a prefix.
+// (#1620), the network-literal hints (#1653) and the permission hints (#1656).
+// The network scan is restricted to string literals — in source, a bare
+// `10.0.0.0/8` would be arithmetic, not a prefix — and the permission scan to
+// the argument lists of the mode APIs, where an octal literal is a file mode.
 func goSpans(lines []string) []lang.Span {
-	return append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
+	out := append(escapes.UnicodeSpans(lines), nethint.QuotedSpans(lines)...)
+	return append(out, permhint.GoSpans(lines)...)
 }

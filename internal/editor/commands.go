@@ -100,6 +100,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("view.toggleDurationHints", "Toggle Duration Hints", "toggle_duration_hints", ""),
 			action("view.toggleDigitGrouping", "Toggle Digit Grouping", "toggle_digit_grouping", ""),
 			action("view.toggleRadixHints", "Toggle Radix Hints", "toggle_radix_hints", ""),
+			// Permission hints (#1656): per-view toggle over the
+			// editor.permission_hints config default.
+			action("view.togglePermissionHints", "Toggle Permission Hints", "toggle_permission_hints", ""),
 			// Network-literal hints (#1653): per-view toggles over the
 			// editor.cidr_hints / idn_hints config defaults.
 			action("view.toggleCIDRHints", "Toggle CIDR Hints", "toggle_cidr_hints", ""),

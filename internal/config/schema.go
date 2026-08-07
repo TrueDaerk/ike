@@ -315,6 +315,13 @@ type Editor struct {
 	// `0x1F4  = 500` — and a permission/flag value's octal or hex one
 	// (`420  = 0o644`); the bare literal reappears under the caret.
 	RadixHints bool `toml:"radix_hints"`
+	// PermissionHints renders an octal file mode's symbolic form after it
+	// (#1656) — `0644  rw-r--r--`, `4755  rwsr-xr-x` — where the context
+	// carries a permission: `chmod`/`install -m`/`mkdir -m` in shell,
+	// `COPY --chmod=` in Dockerfiles, the mode arguments of `os.Chmod` and
+	// friends in Go and Python, and `mode:`/`defaultMode:` keys in YAML; the
+	// bare literal reappears under the caret.
+	PermissionHints bool `toml:"permission_hints"`
 	// CIDRHints renders a CIDR prefix's address range and size after it
 	// (#1653) — `10.0.0.0/8  10.0.0.0–10.255.255.255, 16,777,214 hosts` —
 	// in config formats, .http files and string literals in code; the bare

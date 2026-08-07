@@ -8,6 +8,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/permhint"
 )
 
 // TestYAMLRegistered guards #879: .yaml/.yml resolve to the yaml language with
@@ -117,5 +118,28 @@ func TestYAMLNetworkHints(t *testing.T) {
 	}
 	if idn == nil || idn.Replace != "xn--mnchen-3ya.de"+nethint.Gap+"münchen.de" {
 		t.Errorf("spans = %+v, want the IDN hint", spans)
+	}
+}
+
+// TestYAMLPermissionHints (#1656): an octal `mode:` value carries its symbolic
+// form, and the number hints step aside for it — where the value is decimal
+// they keep their radix warning instead.
+func TestYAMLPermissionHints(t *testing.T) {
+	l, ok := lang.ByID("yaml")
+	if !ok || l.Spans == nil {
+		t.Fatal("yaml: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"- name: config", "  file:", "    mode: '0644'"})
+	if len(spans) != 1 || spans[0].Capture != permhint.Capture {
+		t.Fatalf("spans = %+v, want one permission hint", spans)
+	}
+	if want := "0644" + permhint.Gap + "rw-r--r--"; spans[0].Replace != want {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
+	}
+	// The decimal form is the Ansible footgun: no permission hint, and the
+	// radix hint (#1627) still says what 644 really means.
+	spans = l.Spans([]string{"    mode: 644"})
+	if len(spans) != 1 || spans[0].Capture != numhint.RadixCapture {
+		t.Errorf("spans = %+v, want the radix hint to keep a decimal mode", spans)
 	}
 }

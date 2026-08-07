@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"ike/internal/lang"
+	"ike/internal/permhint"
 )
 
 // TestShellRegistered guards #894: extensions, rc-file base names and the
@@ -61,5 +62,21 @@ func TestShellRegistered(t *testing.T) {
 	indents, ok := lang.IndentAfter("/p/build.sh")
 	if !ok || len(indents) == 0 {
 		t.Error("shell declares no indent suffixes, want then/do/{")
+	}
+}
+
+// TestShellPermissionHints (#1656): the Spans hook is wired, so a chmod mode in
+// a script carries its symbolic form.
+func TestShellPermissionHints(t *testing.T) {
+	l, ok := lang.ByPath("/p/build.sh")
+	if !ok || l.Spans == nil {
+		t.Fatal("shell: no Spans producer registered")
+	}
+	spans := l.Spans([]string{"#!/bin/sh", "chmod 0755 dist/ike"})
+	if len(spans) != 1 || spans[0].Line != 1 {
+		t.Fatalf("spans = %+v, want one on line 1", spans)
+	}
+	if want := "0755" + permhint.Gap + "rwxr-xr-x"; spans[0].Replace != want {
+		t.Errorf("Replace = %q, want %q", spans[0].Replace, want)
 	}
 }
