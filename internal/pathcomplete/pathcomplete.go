@@ -39,11 +39,18 @@ type Result struct {
 
 // Complete returns the completion of input against the filesystem, offering
 // files and directories.
-func Complete(input string) Result { return complete(input, false) }
+func Complete(input string) Result { return complete("", input, false) }
+
+// CompleteFrom completes input like Complete, but resolves a relative input
+// against baseDir instead of the process working directory — the .http body
+// file directive's flavor (#1707), where paths are relative to the request
+// file. Absolute and ~ inputs ignore baseDir; the candidates keep the typed
+// relative notation.
+func CompleteFrom(baseDir, input string) Result { return complete(baseDir, input, false) }
 
 // Dirs returns the completion of input offering directories only — the
 // project picker's flavor.
-func Dirs(input string) Result { return complete(input, true) }
+func Dirs(input string) Result { return complete("", input, true) }
 
 // Expand resolves a leading "~" or "~/" against the home directory. It is
 // the single tilde-expansion helper; callers should not keep local copies.
@@ -56,15 +63,18 @@ func Expand(p string) string {
 	return p
 }
 
-func complete(input string, dirsOnly bool) Result {
+func complete(baseDir, input string, dirsOnly bool) Result {
 	res := Result{Completed: input}
-	if input == "" {
+	if input == "" && baseDir == "" {
 		return res
 	}
 	dir, base := split(input)
 	real := Expand(dir)
 	if real == "" {
 		real = "."
+	}
+	if baseDir != "" && !filepath.IsAbs(real) {
+		real = filepath.Join(baseDir, real)
 	}
 	entries, err := os.ReadDir(real)
 	if err != nil {

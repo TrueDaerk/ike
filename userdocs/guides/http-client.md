@@ -87,6 +87,34 @@ request with a message naming it — an empty body is never sent silently.
 Because the directive only counts when it *is* the whole body, a lone `<` in
 an XML payload keeps its literal meaning.
 
+### Multipart bodies, written by hand
+
+A `multipart/form-data` body is written the JetBrains way — boundary in the
+`Content-Type`, `--boundary` lines between the parts — and a part whose
+content is a single `< file` line embeds that file:
+
+```http
+POST https://example.com/import/
+     & tags = my_tag
+Content-Type: multipart/form-data; boundary=bound
+
+--bound
+Content-Disposition: form-data; name="import"; filename="import.csv"
+
+< leads.csv
+--bound
+Content-Disposition: form-data; name="note"
+
+inline text
+--bound--
+```
+
+IKE sends the structure with the CRLF line endings multipart servers expect
+and appends the closing `--bound--` if you leave it off. Part files resolve
+like the whole-body directive — relative to the `.http` file, `~` expands,
+placeholders work — and are embedded byte-for-byte, so binary uploads
+survive untouched. A missing file fails the request before anything is sent.
+
 In the editor, a request file looks like this — request blocks separated by
 `###`, placeholders highlighted, and the JSON body highlighted as JSON rather
 than as text:
@@ -129,8 +157,11 @@ download cannot freeze the UI.
   small closed set of values, those values: MIME types for
   `Content-Type`/`Accept`, schemes for `Authorization`, directives for
   `Cache-Control`, and so on;
-- **nothing** inside bodies, comments or `###` lines — deliberately, so a
-  JSON body does not offer you every word in the file.
+- **file paths** after `< ` (and `<@ `) on a body-file directive line —
+  whole-body or inside a multipart part — relative to the `.http` file;
+  accepting a directory and completing again descends into it;
+- **nothing** else inside bodies, comments or `###` lines — deliberately, so
+  a JSON body does not offer you every word in the file.
 
 Matching is a case-insensitive subsequence, not a prefix: `Cen` reaches
 `Content-Encoding`, `ctype` reaches `Content-Type`, `jso` reaches

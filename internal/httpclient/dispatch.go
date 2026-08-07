@@ -11,6 +11,7 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -74,31 +75,56 @@ type Options struct {
 }
 
 // requestBody returns the reader for a resolved request's body: the inline
-// text, or the contents of an external `< ./file` body (#1305). Relative paths
-// resolve against opts.BaseDir — the .http file's own directory, not the
-// process working directory — and a leading ~ expands. The file is read up
-// front rather than streamed so its length is known (no chunked encoding) and
-// so the `<@` form can substitute the file's own placeholders.
+// text, the contents of an external `< ./file` body (#1305), or — when the
+// Content-Type declares a multipart boundary — the hand-written multipart
+// structure normalised to CRLF with per-part `< file` directives embedded
+// (#1707). Bodies are assembled up front rather than streamed so their length
+// is known (no chunked encoding).
 func requestBody(resolved *httpfile.Request, opts Options, lookup func(string) (string, bool)) (io.Reader, error) {
-	if resolved.BodyFile == "" {
-		return strings.NewReader(resolved.Body), nil
+	if resolved.BodyFile != "" {
+		data, err := loadBodyFile(resolved.BodyFile, resolved.BodyFileSubstitute, opts, lookup)
+		if err != nil {
+			return nil, err
+		}
+		return bytes.NewReader(data), nil
 	}
-	path := pathcomplete.Expand(resolved.BodyFile)
+	if ct, ok := resolved.Header("Content-Type"); ok {
+		if boundary, ok := httpfile.MultipartBoundary(ct); ok {
+			data, err := httpfile.BuildMultipartBody(resolved.Body, boundary,
+				func(path string, substitute bool) ([]byte, error) {
+					return loadBodyFile(path, substitute, opts, lookup)
+				})
+			if err != nil {
+				return nil, err
+			}
+			return bytes.NewReader(data), nil
+		}
+	}
+	return strings.NewReader(resolved.Body), nil
+}
+
+// loadBodyFile reads one body file (#1305): relative paths resolve against
+// opts.BaseDir — the .http file's own directory, not the process working
+// directory — and a leading ~ expands. substitute (the `<@` spelling)
+// replaces the file's own placeholders; the plain `<` form returns the bytes
+// untouched, so binary content survives verbatim.
+func loadBodyFile(file string, substitute bool, opts Options, lookup func(string) (string, bool)) ([]byte, error) {
+	path := pathcomplete.Expand(file)
 	if !filepath.IsAbs(path) {
 		path = filepath.Join(opts.BaseDir, path)
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("body file %s: %v", resolved.BodyFile, err)
+		return nil, fmt.Errorf("body file %s: %v", file, err)
 	}
-	text := string(data)
-	if resolved.BodyFileSubstitute {
-		text, err = httpfile.Substitute(text, lookup)
+	if substitute {
+		text, err := httpfile.Substitute(string(data), lookup)
 		if err != nil {
-			return nil, fmt.Errorf("body file %s: %v", resolved.BodyFile, err)
+			return nil, fmt.Errorf("body file %s: %v", file, err)
 		}
+		data = []byte(text)
 	}
-	return strings.NewReader(text), nil
+	return data, nil
 }
 
 // Dispatch resolves placeholders in req, applies local configuration and

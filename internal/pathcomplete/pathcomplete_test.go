@@ -177,3 +177,38 @@ func TestCommonPrefixMixedCase(t *testing.T) {
 		t.Fatalf("commonPrefix single = %q", got)
 	}
 }
+
+// TestCompleteFrom guards #1707: a relative input resolves against the given
+// base directory (not the process working directory) while candidates keep
+// the typed relative notation; absolute inputs ignore the base.
+func TestCompleteFrom(t *testing.T) {
+	base := t.TempDir()
+	for _, f := range []string{"leads.csv", "letters.txt"} {
+		if err := os.WriteFile(filepath.Join(base, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(base, "lib"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	join := func(c []string) string { return strings.Join(c, ",") }
+
+	if got := join(CompleteFrom(base, "le").Candidates); got != "leads.csv,letters.txt" {
+		t.Fatalf("candidates = %q", got)
+	}
+	dot := "." + sep()
+	if got := join(CompleteFrom(base, dot+"l").Candidates); got != dot+"leads.csv,"+dot+"letters.txt,"+dot+"lib"+sep() {
+		t.Fatalf("./ candidates = %q", got)
+	}
+	if got := CompleteFrom(base, "").Candidates; len(got) != 3 {
+		t.Fatalf("empty input must list the base dir, got %v", got)
+	}
+
+	other := t.TempDir()
+	if err := os.WriteFile(filepath.Join(other, "abs.txt"), nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := join(CompleteFrom(base, filepath.Join(other, "ab")).Candidates); got != filepath.Join(other, "abs.txt") {
+		t.Fatalf("absolute candidates = %q", got)
+	}
+}

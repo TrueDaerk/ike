@@ -2,6 +2,8 @@ package langhttp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -268,5 +270,89 @@ func TestSourceClaimsHTTPBuffersExclusively(t *testing.T) {
 		if s.Exclusive(path) {
 			t.Errorf("%s must not be claimed", path)
 		}
+	}
+}
+
+// completeAtIn is completeAt with the buffer stored under a real directory,
+// so path completion (#1707) has a filesystem to look at.
+func completeAtIn(t *testing.T, dir, src string) []ilsp.CompletionItem {
+	t.Helper()
+	idx := strings.Index(src, "|")
+	if idx < 0 {
+		t.Fatal("source must mark the cursor with |")
+	}
+	clean := strings.Replace(src, "|", "", 1)
+	line := strings.Count(clean[:idx], "\n")
+	col := len([]rune(clean[strings.LastIndex(clean[:idx], "\n")+1 : idx]))
+
+	path := filepath.Join(dir, "req.http")
+	s := newHTTPSource()
+	s.Observe(host.EditorEvent{Kind: host.EditorChange, Path: path, Text: clean})
+	items, err := s.Complete(context.Background(), complete.Request{
+		Path: path, Line: line, Col: col,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return items
+}
+
+// bodyFileDir builds a fixture directory next to the request file.
+func bodyFileDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	for _, f := range []string{"leads.csv", "letters.txt", "other.bin"} {
+		if err := os.WriteFile(filepath.Join(dir, f), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dir
+}
+
+// TestCompleteBodyFilePath guards #1707: after `< ` in a request body the
+// popup offers files relative to the .http file — for the whole-body
+// directive (#1305) and for a multipart part include alike.
+func TestCompleteBodyFilePath(t *testing.T) {
+	dir := bodyFileDir(t)
+
+	// Whole-body directive.
+	items := completeAtIn(t, dir, "POST https://api.test/x\n\n< le|\n")
+	if !has(items, "leads.csv") || !has(items, "letters.txt") {
+		t.Fatalf("want leads.csv and letters.txt, got %v", labels(items))
+	}
+	if has(items, "other.bin") {
+		t.Fatalf("prefix must filter, got %v", labels(items))
+	}
+
+	// The `<@` substitute spelling completes too.
+	items = completeAtIn(t, dir, "POST https://api.test/x\n\n<@ le|\n")
+	if !has(items, "leads.csv") {
+		t.Fatalf("<@ must complete paths, got %v", labels(items))
+	}
+
+	// Multipart part include.
+	items = completeAtIn(t, dir,
+		"POST https://api.test/import/\n"+
+			"Content-Type: multipart/form-data; boundary=bound\n"+
+			"\n"+
+			"--bound\n"+
+			"Content-Disposition: form-data; name=\"import\"\n"+
+			"\n"+
+			"< |\n")
+	if !has(items, "leads.csv") || !has(items, "other.bin") {
+		t.Fatalf("empty path must list the directory, got %v", labels(items))
+	}
+}
+
+// TestCompleteBodyStaysQuiet: an ordinary body line still offers nothing —
+// only the file directive completes (#1302 exclusivity stays intact).
+func TestCompleteBodyStaysQuiet(t *testing.T) {
+	dir := bodyFileDir(t)
+	if items := completeAtIn(t, dir, "POST https://api.test/x\n\nle|\n"); len(items) != 0 {
+		t.Fatalf("plain body must complete nothing, got %v", labels(items))
+	}
+	// "<" without the following whitespace is not yet a directive.
+	if items := completeAtIn(t, dir, "POST https://api.test/x\n\n<le|\n"); len(items) != 0 {
+		t.Fatalf("'<' without space must complete nothing, got %v", labels(items))
 	}
 }
