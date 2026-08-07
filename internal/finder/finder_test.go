@@ -548,3 +548,50 @@ func TestSpaceAndPaste(t *testing.T) {
 		t.Fatalf("paste must insert wholesale, query = %q", m.query)
 	}
 }
+
+// matchAt is a match of "needle" at a given rune column of the shared text.
+func matchAt(path string, line, col int) search.Match {
+	return search.Match{Path: path, Line: line, Text: "needle and needle", StartCol: col, EndCol: col + 6}
+}
+
+// TestSameLineMatchesRenderOnce guards #1121: a line the query hits twice is
+// listed once, and the counts follow the rows (per line, not per occurrence).
+func TestSameLineMatchesRenderOnce(t *testing.T) {
+	m := opened(t)
+	typeText(m, "needle")
+	feed(m, matchAt("a.go", 4, 0), matchAt("a.go", 4, 11), matchAt("a.go", 9, 0))
+	if m.list.Total() != 2 {
+		t.Fatalf("total=%d, want 2 rows for 3 occurrences", m.list.Total())
+	}
+	v := m.View()
+	if n := strings.Count(v, "4:"); n != 1 {
+		t.Fatalf("line 4 rendered %d times:\n%s", n, v)
+	}
+	if !strings.Contains(v, "2 matches in 1 file") {
+		t.Fatalf("counts must follow the rows:\n%s", v)
+	}
+}
+
+// TestReplaceCoversEveryOccurrenceOnTheLine guards #1121: collapsing rows must
+// not drop occurrences from the replace request or the preview.
+func TestReplaceCoversEveryOccurrenceOnTheLine(t *testing.T) {
+	m := New(search.New(nil))
+	m.SetSize(100, 40)
+	m.OpenReplace(t.TempDir())
+	typeText(m, "needle")
+	feed(m, matchAt("a.go", 4, 0), matchAt("a.go", 4, 11))
+	m.Update(key("tab"))
+	typeText(m, "thread")
+
+	if v := m.View(); !strings.Contains(v, "+ thread and thread") {
+		t.Fatalf("preview must rewrite every occurrence:\n%s", v)
+	}
+	cmd := m.Update(key("enter"))
+	req := cmd().(ReplaceRequestMsg)
+	if len(req.Items) != 1 {
+		t.Fatalf("one row, one item: %+v", req.Items)
+	}
+	if rs := req.Items[0].Ranges(); len(rs) != 2 {
+		t.Fatalf("the item must carry both ranges, got %+v", rs)
+	}
+}

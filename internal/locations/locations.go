@@ -7,6 +7,7 @@
 package locations
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -17,15 +18,34 @@ import (
 	"ike/internal/ui"
 )
 
+// Range is one highlighted rune range within a line: 0-based, half-open.
+type Range struct {
+	Start int
+	End   int
+}
+
 // Item is one location: a line of Text in Path with an optional highlighted
 // rune range. Line is 1-based; StartCol/EndCol are 0-based rune offsets
 // (half-open); an empty range (StartCol == EndCol) renders without highlight.
+//
+// A line matched several times is one item, not one per occurrence (#1121):
+// the extra ranges live in More and render highlighted in the same row.
 type Item struct {
 	Path     string
 	Line     int
 	StartCol int
 	EndCol   int
 	Text     string
+	More     []Range
+}
+
+// Ranges returns every match range of the item, ordered by start column.
+func (it Item) Ranges() []Range {
+	out := make([]Range, 0, 1+len(it.More))
+	out = append(out, Range{Start: it.StartCol, End: it.EndCol})
+	out = append(out, it.More...)
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Start < out[j].Start })
+	return out
 }
 
 // group is one file's items, in arrival order.
@@ -51,14 +71,37 @@ func (l *List) Reset() { *l = List{viewH: l.viewH} }
 // Append adds a batch of items, grouping consecutive items of the same path
 // (both scanner backends emit file-contiguous matches; a path seen again
 // later starts a new group rather than re-sorting arrival order).
+//
+// Consecutive items on the same line of the same file collapse into one item
+// (#1121): the row count is per line, and the extra ranges ride along in More
+// so every occurrence still renders highlighted. Both backends emit a line's
+// matches contiguously, so comparing against the group's last item suffices.
 func (l *List) Append(items []Item) {
 	for _, it := range items {
 		if n := len(l.groups); n > 0 && l.groups[n-1].path == it.Path {
-			l.groups[n-1].items = append(l.groups[n-1].items, it)
+			g := &l.groups[n-1]
+			if last := &g.items[len(g.items)-1]; last.Line == it.Line {
+				mergeRanges(last, it)
+				continue
+			}
+			g.items = append(g.items, it)
 		} else {
 			l.groups = append(l.groups, group{path: it.Path, items: []Item{it}})
 		}
 		l.total++
+	}
+}
+
+// mergeRanges folds src's match ranges into dst, dropping ones already there.
+func mergeRanges(dst *Item, src Item) {
+	for _, r := range src.Ranges() {
+		dup := r == Range{Start: dst.StartCol, End: dst.EndCol}
+		for _, have := range dst.More {
+			dup = dup || have == r
+		}
+		if !dup {
+			dst.More = append(dst.More, r)
+		}
 	}
 }
 
@@ -327,8 +370,9 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 	return strings.Join(out, "\n")
 }
 
-// renderItem renders one "  12: text" row with the match range highlighted,
-// sliding the text window right when the match sits past the width budget.
+// renderItem renders one "  12: text" row with every match range on the line
+// highlighted (#1121), sliding the text window right when the first match sits
+// past the width budget.
 func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSel, lineNo lipgloss.Style) string {
 	no := strconv.Itoa(it.Line)
 	prefix := "  " + strings.Repeat(" ", max(0, 5-len(no))) + no + ": "
@@ -341,8 +385,13 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 	// #971) would render as a literal second row, so they flatten too.
 	flat := strings.NewReplacer("\t", " ", "\n", " ", "\r", "").Replace(it.Text)
 	runes := []rune(flat)
-	start, end := clampRange(it.StartCol, it.EndCol, len(runes))
-	// Slide the window so the match is visible; prepend an ellipsis when cut.
+	ranges := clampRanges(it.Ranges(), len(runes))
+	start := 0
+	if len(ranges) > 0 {
+		start = ranges[0].Start
+	}
+	// Slide the window so the first match is visible; prepend an ellipsis when
+	// cut.
 	off := 0
 	if start > budget-8 {
 		off = start - budget/2
@@ -354,17 +403,65 @@ func (l *List) renderItem(it Item, selected bool, width int, sel, match, matchSe
 		}
 	}
 	winEnd := min(len(runes), off+budget)
-	pre := string(runes[off:min(start, winEnd)])
-	mid := string(runes[min(start, winEnd):min(end, winEnd)])
-	post := string(runes[min(end, winEnd):winEnd])
-	if off > 0 && len(pre) > 0 {
-		pre = "…" + string([]rune(pre)[1:])
+
+	plain := func(s string) string {
+		if selected {
+			return sel.Render(s)
+		}
+		return s
+	}
+	hl := func(s string) string {
+		if selected {
+			return matchSel.Render(s)
+		}
+		return match.Render(s)
 	}
 
+	var b strings.Builder
 	if selected {
-		return ansiClip(sel.Render(prefix+pre)+matchSel.Render(mid)+sel.Render(post), width)
+		b.WriteString(sel.Render(prefix))
+	} else {
+		b.WriteString(lineNo.Render(prefix))
 	}
-	return ansiClip(lineNo.Render(prefix)+pre+match.Render(mid)+post, width)
+	pos, leading := off, true
+	writePlain := func(seg string) {
+		if leading && off > 0 {
+			seg = "…" + string([]rune(seg)[1:])
+		}
+		leading = false
+		b.WriteString(plain(seg))
+	}
+	for _, r := range ranges {
+		s, e := max(r.Start, pos), min(r.End, winEnd)
+		if s >= winEnd {
+			break
+		}
+		if e <= s {
+			continue // empty or already-covered range
+		}
+		if s > pos {
+			writePlain(string(runes[pos:s]))
+		}
+		leading = false
+		b.WriteString(hl(string(runes[s:e])))
+		pos = e
+	}
+	if pos < winEnd {
+		writePlain(string(runes[pos:winEnd]))
+	}
+	return ansiClip(b.String(), width)
+}
+
+// clampRanges sanitizes highlight ranges against the rune length and sorts
+// them by start, so the renderer can walk the line left to right.
+func clampRanges(rs []Range, n int) []Range {
+	out := make([]Range, 0, len(rs))
+	for _, r := range rs {
+		s, e := clampRange(r.Start, r.End, n)
+		out = append(out, Range{Start: s, End: e})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Start < out[j].Start })
+	return out
 }
 
 // clampRange sanitizes a highlight range against the rune length.

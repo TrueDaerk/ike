@@ -695,9 +695,16 @@ func (m *Model) previewRows(width int) []string {
 	if !ok {
 		return nil
 	}
-	after, valid := search.RewriteRange(it.Text, it.StartCol, it.EndCol, m.lastQuery, m.replace)
-	if !valid {
-		return nil
+	// Every occurrence on the line is part of the row (#1121), so the preview
+	// rewrites them all — right to left, so earlier columns stay valid.
+	after := it.Text
+	ranges := it.Ranges()
+	for i := len(ranges) - 1; i >= 0; i-- {
+		out, valid := search.RewriteRange(after, ranges[i].Start, ranges[i].End, m.lastQuery, m.replace)
+		if !valid {
+			return nil
+		}
+		after = out
 	}
 	pal := m.theme()
 	del := lipgloss.NewStyle().Foreground(pal.Error)
