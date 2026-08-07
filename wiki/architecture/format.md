@@ -83,7 +83,11 @@ effective options and the view — resolves the chain and runs the winner off
 the Update loop (time-boxed). Results return on the established path: an
 `ilsp.FormatEditsMsg` applied as **one undo-able edit** through exactly one
 view (`editor/textedit.go`, cursor clamped), plus a status toast naming the
-source (`reformat: gopls`, `reformat: built-in`). A provider error leaves the
+source (`reformat: gopls`, `reformat: built-in`). Because this apply bypasses
+the editor's own Update loop, the handler then drops the applying view's
+highlight/conceal caches and schedules a fresh parse
+(`editor.Model.ReparseEdits`, #1683) — the change-sync broadcast already does
+the same for other views of the document. A provider error leaves the
 buffer untouched and surfaces as an error toast — failure is visible, never
 destructive.
 

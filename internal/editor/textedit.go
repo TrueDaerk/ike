@@ -3,8 +3,11 @@ package editor
 import (
 	"sort"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
+	"ike/internal/highlight"
 )
 
 // textedit.go applies LSP-shaped text edits to the buffer (Roadmap 0100, #7:
@@ -63,4 +66,22 @@ func (m *Model) ApplyTextEdits(edits []TextEdit) int {
 	m.scroll()
 	m.emit(EventChange)
 	return len(sorted)
+}
+
+// ReparseEdits invalidates the decoration caches built from the pre-edit text
+// and schedules a fresh parse. App-driven edits (formatting results, a
+// local-history restore) call ApplyTextEdits outside the editor's Update loop,
+// so maybeReparse never observes the docVersion bump — without this the old
+// highlight and conceal spans keep rendering over the new text until the next
+// keystroke (#1683). Mirrors what applySync does for the other views of a
+// shared document.
+func (m *Model) ReparseEdits() tea.Cmd {
+	m.hlIndex = highlight.Index{}
+	m.conceal = nil
+	m.concealExt = nil
+	m.decodes = nil
+	m.semIndex = highlight.Index{}
+	m.occurrences = nil
+	m.inlayHints, m.hintsByLine = nil, nil
+	return m.parseCmd()
 }

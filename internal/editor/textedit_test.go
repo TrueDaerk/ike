@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/highlight"
 )
 
 func TestApplyTextEditsMultiLineAndOrder(t *testing.T) {
@@ -98,5 +100,50 @@ func TestVisualEventCarriesAnchor(t *testing.T) {
 	m = send(m, special(tea.KeyEscape), key('j'))
 	if last := got[len(got)-1]; last.Sel != SelNone {
 		t.Fatalf("normal-mode event should carry SelNone, got %+v", last)
+	}
+}
+
+// TestReparseEditsInvalidatesDecorations (#1683): a formatter (or local-history
+// restore) applies edits through ApplyTextEdits outside the editor's Update
+// loop, so the version-gated maybeReparse never fires. ReparseEdits must drop
+// the caches built from the pre-edit text and schedule a parse tagged with the
+// post-edit document version, so the fresh spans are accepted.
+func TestReparseEditsInvalidatesDecorations(t *testing.T) {
+	m, path := loaded(t, "a %20 b\nplain\n")
+	// Seed highlight + conceal caches for the current content.
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: []highlight.Span{
+		{Line: 0, StartCol: 2, EndCol: 5, Capture: "escape", Replace: " "},
+	}})
+	m = mm
+	if m.hlIndex.CaptureAt(0, 2) != "escape" || m.conceal == nil {
+		t.Fatal("precondition: caches must hold the seeded spans")
+	}
+
+	m.ApplyTextEdits([]TextEdit{{StartLine: 0, StartCol: 0, EndLine: 1, EndCol: 5, Text: "rewritten"}})
+	cmd := m.ReparseEdits()
+
+	if m.hlIndex.CaptureAt(0, 2) != "" {
+		t.Error("stale highlight index must be cleared")
+	}
+	if m.conceal != nil || m.concealExt != nil || m.decodes != nil {
+		t.Error("stale conceal caches must be cleared")
+	}
+	if cmd == nil {
+		t.Fatal("ReparseEdits must schedule a parse")
+	}
+	msg, ok := cmd().(highlight.SpansMsg)
+	if !ok {
+		t.Fatalf("parse must yield SpansMsg, got %T", cmd())
+	}
+	if msg.Version != m.docVersion {
+		t.Fatalf("parse version = %d, want current docVersion %d — a stale tag would be dropped", msg.Version, m.docVersion)
+	}
+	// The scheduled result is accepted: fresh spans for the new content land.
+	mm, _ = m.Update(highlight.SpansMsg{Path: path, Version: msg.Version, Spans: []highlight.Span{
+		{Line: 0, StartCol: 0, EndCol: 9, Capture: "keyword"},
+	}})
+	m = mm
+	if m.hlIndex.CaptureAt(0, 0) != "keyword" {
+		t.Error("post-edit spans must be accepted under the new version")
 	}
 }
