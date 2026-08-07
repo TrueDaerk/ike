@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"image/color"
 	"os"
 	"os/exec"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // editor.go is the typed-editor layer (0460, #1295). The wireframes' rule is
@@ -100,6 +102,39 @@ func (m *Model) editorRow(w int, selected bool, left, right string) string {
 		style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
 	}
 	return lipgloss.NewStyle().MaxWidth(w).Render(style.Render(line))
+}
+
+// themedEditorRow renders one enum option row in the option's own colors
+// (#1688): the two-cell selection marker in the panel's colors, then the label
+// block painted with the option's background/foreground — that block is the
+// mini-preview — and finally the already-styled tail (the palette swatch strip
+// of #1664) outside it, on the panel's own background.
+//
+// The selection stays readable on top of arbitrary theme colors because it is
+// carried by the panel-coloured chevron plus a bold, underlined label, never by
+// a background band that would hide the very colors being previewed.
+func (m *Model) themedEditorRow(w int, selected bool, left, right string, fg, bg color.Color) string {
+	pal := m.theme()
+	mark := rowMarker(pal, selected, m.focus == detailColumn, markerBG(selected, lipgloss.NewStyle().Background(pal.Selection)))
+
+	body := lipgloss.NewStyle().Foreground(fg).Background(bg)
+	if selected {
+		body = body.Bold(true).Underline(true)
+	}
+	avail := maxInt(w-markerWidth, 1)
+	tailW := lipgloss.Width(right)
+	if right != "" {
+		tailW++ // a blank keeps the strip off the themed block
+	}
+	textW := maxInt(avail-tailW, 1)
+	label := ansi.Truncate(" "+left, textW, "…")
+	label += strings.Repeat(" ", maxInt(textW-lipgloss.Width(label), 0))
+
+	line := mark + body.Render(label)
+	if right != "" {
+		line += " " + right
+	}
+	return lipgloss.NewStyle().MaxWidth(w).Render(line)
 }
 
 // --- bool ---
@@ -298,6 +333,18 @@ func (n *enumEditor) View(w, h int) []string {
 			if sw := n.e.Preview(opts[i]); sw != "" {
 				tail = sw
 			}
+		}
+		if n.e.RowColors != nil {
+			// #1688: the row up to the swatch strip is painted in the option's
+			// own colors. Options the callback cannot resolve fall back to the
+			// panel's colors but keep the themed layout, so the marker column
+			// stays aligned down the whole list.
+			fg, bg, ok := n.e.RowColors(opts[i])
+			if !ok {
+				fg, bg = pal.Foreground, pal.Background
+			}
+			out = append(out, n.m.themedEditorRow(w, i == n.idx, mark+" "+opts[i], tail, fg, bg))
+			continue
 		}
 		out = append(out, n.m.editorRow(w, i == n.idx, mark+" "+opts[i], tail))
 	}

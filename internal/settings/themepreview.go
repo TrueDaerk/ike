@@ -55,6 +55,37 @@ func themeSwatch(name string, extra []theme.Theme) string {
 	return out
 }
 
+// themeRowColorsFn builds the Entry.RowColors for the theme enums, memoized
+// per name for the same reason as themePreviewFn: every visible row asks for
+// its colors on every frame.
+func themeRowColorsFn(extra []theme.Theme) func(string) (color.Color, color.Color, bool) {
+	type pair struct {
+		fg, bg color.Color
+		ok     bool
+	}
+	cache := map[string]pair{}
+	return func(name string) (color.Color, color.Color, bool) {
+		p, hit := cache[name]
+		if !hit {
+			p.fg, p.bg, p.ok = themeRowColors(name, extra)
+			cache[name] = p
+		}
+		return p.fg, p.bg, p.ok
+	}
+}
+
+// themeRowColors resolves the foreground/background an option row is painted
+// in (#1688). An unknown name reports !ok, so it keeps the panel's own colors
+// instead of previewing as the default theme.
+func themeRowColors(name string, extra []theme.Theme) (color.Color, color.Color, bool) {
+	t, found := theme.Select(name, extra)
+	if !found {
+		return nil, nil, false
+	}
+	p := theme.NewPalette(t)
+	return p.Foreground, p.Background, true
+}
+
 // captureColor resolves a syntax capture's token from the palette's capture
 // map, falling back to a UI slot when the theme does not define it.
 func captureColor(p *theme.Palette, capture string, fallback color.Color) color.Color {

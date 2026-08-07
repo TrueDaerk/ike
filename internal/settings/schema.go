@@ -8,6 +8,8 @@
 package settings
 
 import (
+	"image/color"
+
 	"ike/internal/config"
 	"ike/internal/theme"
 )
@@ -52,6 +54,10 @@ type Entry struct {
 	// (#1664: the theme list's palette swatches); nil or an empty return
 	// means the option row has no preview.
 	Preview func(option string) string
+	// RowColors paints one enum option's row in that option's own colors
+	// (#1688: a theme row is a live mini-preview of the theme, up to the
+	// swatch strip). A false return leaves the row in the panel's colors.
+	RowColors func(option string) (fg, bg color.Color, ok bool)
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -143,6 +149,7 @@ func InsertAfter(pages []Page, after string, page Page) []Page {
 // every key must exist in the typed schema (guarded by the no-dead-keys test).
 func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Theme) []Page {
 	swatch := themePreviewFn(extraThemes)
+	rowColors := themeRowColorsFn(extraThemes)
 	return []Page{
 		{Section: "CORE", Title: "Editor", Description: "How text is edited: indentation, saving, wrapping and the gutter. Language-specific overrides come from .editorconfig when it is enabled.", Entries: []Entry{
 			{Key: "editor.tab_width", Type: Int, Title: "Tab width", Description: "Columns per indentation step", Scope: config.UserScope, Min: 1, Max: 16},
@@ -234,10 +241,10 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "lsp.log_level", Type: Enum, Title: "Server log level", Description: "Verbosity of the language-server log the LSP: Show Server Log command opens", Scope: config.UserScope, Options: []string{"error", "warn", "info", "debug"}},
 		}},
 		{Title: "Appearance", Description: "How IKE looks: the color scheme, the menu bar and the size of centered popups.", Entries: []Entry{
-			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch},
+			{Key: "theme.name", Type: Enum, Title: "Theme", Description: "Color scheme; applies immediately on selection (and turns off auto sync)", Scope: config.UserScope, Options: themes, Preview: swatch, RowColors: rowColors},
 			{Key: "theme.auto", Type: Bool, Title: "Sync with terminal", Description: "Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off", Scope: config.UserScope},
-			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes, Preview: swatch},
-			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes, Preview: swatch},
+			{Key: "theme.light", Type: Enum, Title: "Light theme", Description: "Theme used when auto sync sees a light terminal background", Scope: config.UserScope, Options: lightThemes, Preview: swatch, RowColors: rowColors},
+			{Key: "theme.dark", Type: Enum, Title: "Dark theme", Description: "Theme used when auto sync sees a dark terminal background", Scope: config.UserScope, Options: darkThemes, Preview: swatch, RowColors: rowColors},
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
