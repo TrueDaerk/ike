@@ -46,7 +46,7 @@ type logRunState struct {
 // exactly the work that guard exists to avoid. Shared with the inter-line
 // deltas of #1651 (logdelta.go).
 func (m Model) logInsight() bool {
-	return m.logRender && m.logBuffer() && !m.largeFile
+	return m.logRenderOn() && m.logBuffer() && !m.largeFile
 }
 
 // logFoldActive reports whether repeat collapsing applies to this buffer.

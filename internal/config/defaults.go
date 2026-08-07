@@ -100,6 +100,9 @@ func defaults() *Config {
 			CIDRHints:              true,
 			IDNHints:               true,
 			TogglePairs:            []string{}, // additions only; the built-in pairs live in the editor (#1658)
+			ConcealInclude:         []string{}, // no file filter: the per-family toggles alone decide (#1704)
+			ConcealExclude:         []string{},
+			ConcealFileRules:       []string{},
 			SecretMasking:          true,
 			Hyperlinks:             true,
 			ColorPreview:           true,

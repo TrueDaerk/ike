@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 
+	"ike/internal/concealfilter"
 	"ike/internal/theme"
 )
 
@@ -78,6 +79,16 @@ func validate(c *Config) []Diagnostic {
 			diags = append(diags, Diagnostic{Field: "editor.rulers", Message: fmt.Sprintf("ruler column %d below minimum 1, using 1", r)})
 			c.Editor.Rulers[i] = 1
 		}
+	}
+
+	// Per-family conceal rules (#1704): an entry naming no conceal family, or
+	// carrying no pattern, gates nothing. Left silent it reads as a rule that
+	// simply does not work, so report it and let the rest of the list stand.
+	for _, r := range concealfilter.Invalid(c.Editor.ConcealFileRules) {
+		diags = append(diags, Diagnostic{
+			Field:   "editor.conceal_file_rules",
+			Message: fmt.Sprintf("%q is not a \"family=pattern\" rule over a known conceal family — ignored", r),
+		})
 	}
 
 	// Per-capture colour overrides (#1318): lipgloss renders an unparseable

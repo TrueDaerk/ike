@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-07T14:00:00Z
+timestamp: 2026-08-07T16:00:00Z
 ---
 
 # Editor
@@ -2084,6 +2084,51 @@ last, since that is the one loaders keep. The notes ride the highlight pass in
 language-server diagnostics cannot clobber them, and merge into the same
 severity lookups the LSP diagnostics use — including the decoration toggles,
 so hiding warnings hides these too.
+
+## Per-file conceal filter (#1704)
+
+Every conceal family carries an on/off switch, but the switch says nothing
+about *where*. `internal/concealfilter` adds that dimension: file globs,
+matched against the buffer path, gating the families independently of their
+toggles. Masking belongs in a checked-in `.env.example` and not in a fixture
+whose point is the literal bytes, and that distinction is a property of the
+file, not of the family.
+
+Three settings feed it. `editor.conceal_include` and `editor.conceal_exclude`
+are the global level, covering every family; `editor.conceal_file_rules` is
+the per-family override, its entries written `family=pattern` with the pattern
+prefixed `-`/`!` for an exclude and bare/`+` for an include, the family named
+by its `editor.*` toggle key minus the prefix. Within a level precedence is
+**exclude > include > allow**. Across levels, a family whose own rules decide
+a path never consults the global one — that is what makes it an override
+rather than a second opinion. An entry naming no known family is dropped with
+a config diagnostic (`validate.go`) rather than silently doing nothing.
+
+Patterns match through `internal/pathglob` — the LSP watched-files matcher of
+#1144, lifted out of `lsp/manager` so both callers share one vocabulary
+(`**`, `*`, `?`, `{a,b}`, `[...]`). `concealfilter` adds the path convention
+on top: a pattern without a separator matches the base name (`*.py`,
+`Makefile`), one with a separator the whole path, anchored at any segment
+boundary unless it starts with `/` or `**`; matching is case-insensitive and
+backslashes normalize to `/`. A buffer with no path is always allowed — an
+include list names files that exist.
+
+The gate applies where a family is **read**, not where its toggle is resolved.
+`Model.concealGate(family, on, set)` composes the two dimensions;
+`decodeOn` (escapes.go) routes the thirteen stand-in families through it via
+`decodeFamily`, and the four layers read directly by their renderers get named
+accessors (`mdRenderOn`, `svRenderOn`, `logRenderOn`, `pemSummaryOn`). Keeping
+the toggle fields unfiltered is what makes the dimensions independent: neither
+can strand the other in a state it cannot come back from, and `Settings →
+Editor` keeps reading as the family's own state.
+
+Two consequences are deliberate. A **per-view toggle bypasses the filter** —
+that is the `set` flag in `concealGate` — because a pattern list states a
+default and an explicit toggle in this buffer says otherwise. And because
+`applyConfig` runs on every routed message, an edited pattern list or a
+changed buffer path takes effect on the next frame with no reload;
+`refreshConcealRules` memoizes the compiled filter on the joined raw values
+(the `rulersRaw` discipline) so the per-keystroke pass stays free.
 
 ## Inline color preview (#790, #1622)
 

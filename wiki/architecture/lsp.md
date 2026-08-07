@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-07-30T00:00:00Z
+timestamp: 2026-08-07T16:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -696,10 +696,11 @@ server. The watched-files path closes that gap.
   created+deleted cancels, deleted+created → changed), then flush as one
   `workspace/didChangeWatchedFiles` per interested server.
 - **Filtering**: with registered watchers, the globs (and their `kind` bits)
-  decide. The matcher (`globMatch`) supports `**`, `*` (never crossing `/`),
-  `?`, `{a,b}` alternation and `[...]` classes — enough for what real servers
-  register (`**/*.php`, `**/*.{ts,tsx}`); limits: byte-wise matching, no
-  escape character. Relative patterns resolve against the RelativePattern
+  decide. The matcher lives in `internal/pathglob` (shared since #1704 with
+  the editor's conceal file filter) and supports `**`, `*` (never crossing
+  `/`), `?`, `{a,b}` alternation and `[...]` classes — enough for what real
+  servers register (`**/*.php`, `**/*.{ts,tsx}`); limits: byte-wise matching,
+  no escape character. Relative patterns resolve against the RelativePattern
   base or the server root; absolute patterns match the full path. A server
   that never registers gets a **fallback**: events for files whose language
   (via the `internal/lang` registry) maps to that server and that lie under

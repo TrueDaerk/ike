@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/complete/mru"
+	"ike/internal/concealfilter"
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
 	"ike/internal/editor/mode"
@@ -373,7 +374,14 @@ type Model struct {
 	// them clickable (#1655, hyperlink.go); editor.hyperlinks, no per-view
 	// toggle.
 	hyperlinks bool
-	mdRender   bool
+	// Per-file conceal gating (#1704, concealfile.go): concealRules is the
+	// compiled editor.conceal_include / conceal_exclude / conceal_file_rules
+	// filter, concealRaw the joined config values it was compiled from, so the
+	// per-Update applyConfig pass recompiles only when the settings change
+	// (the same memo discipline as rulersRaw).
+	concealRules concealfilter.Rules
+	concealRaw   [3]string
+	mdRender     bool
 	// mdRenderSet marks a per-view toggle override (#1599), like wrapSet: the
 	// applyConfig refresh stops tracking editor.markdown_rendering once the
 	// view toggled.
@@ -745,6 +753,7 @@ func (m *Model) applyConfig() {
 		m.rulers = parseRulers(v)
 	}
 	m.applyMarkToggles()
+	m.refreshConcealRules() // the per-file conceal gate (#1704, concealfile.go)
 	m.stickyScroll = boolOr(m.cfg, "editor.sticky_scroll", m.stickyScroll)
 	m.smartPaste = boolOr(m.cfg, "editor.smart_paste", m.smartPaste)
 	m.searchIgnoreCase = boolOr(m.cfg, "editor.search_ignore_case", m.searchIgnoreCase)
