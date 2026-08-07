@@ -82,9 +82,11 @@ func yamlSpans(lines []string) []lang.Span {
 	// JSON member, so the same decoding applies. Emitted before the number
 	// hints and taken out of their columns, as in the JSON producer — a
 	// 10-digit value is a timestamp more often than a gigabyte count.
-	stamps := epochtime.Spans(lines, epochtime.Value)
+	// A key that names the unit wins the other way round (#1685) — a `bytes`
+	// key holding a value in the epoch range still reads as a byte size.
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
 	out = append(out, stamps...)
-	out = append(out, numhint.SpansExcept(lines, append(perms, stamps...))...)
+	out = append(out, numhint.Except(hints, perms)...)
 	out = append(out, nethint.Spans(lines)...)
 	return append(out, yamlanchor.Spans(lines)...)
 }

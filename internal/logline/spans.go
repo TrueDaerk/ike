@@ -86,16 +86,23 @@ func lineSpans(li int, raw string) []lang.Span {
 	// already owns, so the number hints below stay off them (#1684).
 	taken := []Range{p.Timestamp, p.LevelRange}
 	taken = append(taken, p.Names...)
+	// The number hints are scanned first so a key that names the unit can take
+	// the digits away from the epoch reading (#1685): `bytes=1722945600` is a
+	// byte count in a field that says so, not a date.
+	hints := numhint.LineHints(li, visible)
+	var stamps []lang.Span
 	for _, e := range epochtime.Scan(visible, epochtime.Loose) {
-		taken = append(taken, Range{Start: e.Start, End: e.End})
-		start, end := e.Start, e.End
-		if vmap != nil {
-			start, end = vmap[e.Start], vmap[e.End-1]+1
-		}
-		out = append(out, lang.Span{
-			Line: li, StartCol: start, EndCol: end,
+		stamps = append(stamps, lang.Span{
+			Line: li, StartCol: e.Start, EndCol: e.End,
 			Capture: epochtime.Capture, Replace: e.Text,
 		})
+	}
+	for _, s := range numhint.Allowed(stamps, hints) {
+		taken = append(taken, Range{Start: s.StartCol, End: s.EndCol})
+		if vmap != nil {
+			s.StartCol, s.EndCol = vmap[s.StartCol], vmap[s.EndCol-1]+1
+		}
+		out = append(out, s)
 	}
 	// Number-readability hints (#1627) on the payload (#1684): a log line's
 	// logfmt pairs and JSON tail are value positions like any config file's,
@@ -103,7 +110,7 @@ func lineSpans(li int, raw string) []lang.Span {
 	// grouped. numhint's own scanner supplies the key/value structure — it
 	// only hints a token after a separator, so a logfmt key never conceals —
 	// and the header ranges and epoch stand-ins are excluded above.
-	for _, s := range numhint.LineSpans(li, visible) {
+	for _, s := range numhint.HintSpans(hints) {
 		if overlapsRanges(taken, s.StartCol, s.EndCol) {
 			continue
 		}

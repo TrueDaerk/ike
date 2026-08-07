@@ -187,3 +187,44 @@ func TestValueContextKeepsJSONStrictness(t *testing.T) {
 		}
 	}
 }
+
+// TestDecodeUnit (#1685): a field name that pins the unit decodes runs the
+// digit-count heuristic rejects — an 11-digit millisecond stamp, a 9-digit
+// second one — while the plausible-range guard still holds.
+func TestDecodeUnit(t *testing.T) {
+	cases := []struct {
+		digits string
+		unit   string
+		want   string
+	}{
+		{"1722945600", "s", "2024-08-06 12:00:00Z"},
+		{"1722945600000", "ms", "2024-08-06 12:00:00Z"},
+		{"1722945600123", "ms", "2024-08-06 12:00:00.123Z"},
+		// The unit is the caller's, so the same run reads differently under
+		// each — and lands outside the plausible range under the wrong one.
+		{"1722945600", "ms", ""},
+		{"1722945600000", "s", ""},
+	}
+	for _, c := range cases {
+		decode := DecodeSeconds
+		if c.unit == "ms" {
+			decode = DecodeMillis
+		}
+		got, ok := decode(c.digits)
+		if c.want == "" {
+			if ok {
+				t.Errorf("decode(%q, %s) = %q, want no match", c.digits, c.unit, got)
+			}
+			continue
+		}
+		if !ok || got != c.want {
+			t.Errorf("decode(%q, %s) = %q, %v; want %q", c.digits, c.unit, got, ok, c.want)
+		}
+	}
+	// Out of the plausible range, and a zero-padded run: still not timestamps.
+	for _, digits := range []string{"1", "99999999999999", "01722945600"} {
+		if got, ok := DecodeSeconds(digits); ok {
+			t.Errorf("DecodeSeconds(%q) = %q, want no match", digits, got)
+		}
+	}
+}

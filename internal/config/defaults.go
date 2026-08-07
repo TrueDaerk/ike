@@ -95,6 +95,7 @@ func defaults() *Config {
 			DurationHints:          true,
 			DigitGrouping:          true,
 			RadixHints:             true,
+			NumberHintUnits:        []string{}, // no mapping: the key heuristics decide (#1685)
 			PermissionHints:        true,
 			CIDRHints:              true,
 			IDNHints:               true,

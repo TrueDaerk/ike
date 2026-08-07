@@ -138,14 +138,17 @@ func querySpans(lines []string) []lang.Span {
 	// concealed. The numbers run second and step aside where a stand-in of
 	// another family — an epoch, a JWT, a percent escape, a network literal —
 	// already claimed the same columns.
+	var stamps []lang.Span
+	var hints []numhint.Hint
 	for _, v := range values {
-		out = appendEpochSpans(out, lines, v)
+		stamps = appendEpochSpans(stamps, lines, v)
+		hints = append(hints, v.hints(lines)...)
 	}
+	// A value whose key names the unit keeps its own reading (#1685): the
+	// timestamp over the same digits gives way before anything is emitted.
+	out = append(out, numhint.Allowed(stamps, hints)...)
 	taken := standIns(out)
-	for _, v := range values {
-		out = append(out, numhint.Except(v.hints(lines), taken)...)
-	}
-	return out
+	return append(out, numhint.Except(numhint.HintSpans(hints), taken)...)
 }
 
 // valueRange is the rune-column stretch [From, To) of line Line that holds
@@ -170,17 +173,18 @@ func (v valueRange) text(lines []string) (string, bool) {
 	return string(runes[from:to]), true
 }
 
-// hints produces the number-readability spans for the range, mapped back onto
-// the line's own columns.
-func (v valueRange) hints(lines []string) []lang.Span {
+// hints produces the number-readability hints for the range, mapped back onto
+// the line's own columns. Hints rather than spans: the ones whose key named
+// the unit take the columns away from the epoch stand-ins (#1685).
+func (v valueRange) hints(lines []string) []numhint.Hint {
 	text, ok := v.text(lines)
 	if !ok {
 		return nil
 	}
-	out := numhint.LineSpans(v.Line, text)
+	out := numhint.LineHints(v.Line, text)
 	for i := range out {
-		out[i].StartCol += v.From
-		out[i].EndCol += v.From
+		out[i].Span.StartCol += v.From
+		out[i].Span.EndCol += v.From
 	}
 	return out
 }

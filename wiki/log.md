@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-07 (editor: field names decide the number conceal unit, #1685)
+
+- **The field wins over the value pattern.** Where a field name names the unit,
+  that unit applies even when the raw number also matches another pattern: a
+  value in a `bytes` key draws as a byte size rather than a UNIX timestamp —
+  a large enough byte count simply lands in the epoch range. Hints derived
+  from the value's *shape* alone still give way to a timestamp, as before.
+- **`editor.number_hint_units`** (new, a list, empty by default) maps field
+  names to units, because the heuristics are ambiguous — `size` is not
+  necessarily bytes, a `duration` is sometimes seconds:
+
+  ```toml
+  [editor]
+  number_hint_units = ["*_bytes=bytes", "retention=s", "created_at=timestamp-s", "session_id=none"]
+  ```
+
+  Patterns match case-insensitively over the whole field name with `*`
+  wildcards (camel case matched in its snake_case form too); units are `bytes`,
+  any duration unit word, `timestamp-s`, `timestamp-ms`, `octal`, `hex`,
+  `group` and `none`. Earlier entries win; malformed ones are skipped. A mapped
+  field is read in that unit and no other, and `none` turns every conceal off
+  for that field — the way out of a heuristic that reads a field wrong.
+- Built-in defaults are unchanged where nothing is mapped: the #1627 key words
+  and shape triggers decide exactly as before.
+- `numhint.Hints`/`Allowed`/`SpansWith` are new — a `Hint` carries a `Claims`
+  flag marking the literals whose field name decided the reading, and the
+  producers resolve the collision through it. `epochtime.DecodeSeconds` /
+  `DecodeMillis` decode with the unit pinned by the field rather than by the
+  digit count. See [Number-readability hints](/architecture/editor.md).
+
 ## 2026-08-07 (editor: value conceals in every value position, #1684)
 
 - The integer readability conceals — byte sizes, durations, digit grouping and

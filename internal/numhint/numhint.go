@@ -18,10 +18,16 @@
 // literal reappears under the caret (#1594), so the buffer bytes are always
 // one motion away and edits operate on the source.
 //
+// Which family a literal gets is decided by the field it hangs off first and
+// by the value's shape second (#1685): a field name that says the unit wins
+// over every pattern, including the epoch reading of the same digits, and the
+// user can map field names to units outright.
+//
 // It is a leaf package — pure Go over internal/lang's span type plus the epoch
 // guard of internal/epochtime — so every config-format producer (JSON, YAML,
 // TOML, ini, dotenv) can call it without a dependency cycle. The context
-// heuristics and the buffer scan live in spans.go; this file is formatting.
+// heuristics and the buffer scan live in spans.go, the user mapping in
+// units.go; this file is formatting.
 package numhint
 
 import (

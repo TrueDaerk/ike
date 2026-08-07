@@ -50,8 +50,9 @@ func init() {
 func tomlSpans(lines []string) []lang.Span {
 	// The epochs take their columns out of the number hints, as in the JSON
 	// producer: two stand-ins over one literal would fight for the same cells.
-	stamps := epochtime.Spans(lines, epochtime.Value)
+	// A key that names the unit wins the other way round (#1685).
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
 	out := append(cronhint.QuotedSpans(lines), stamps...)
-	out = append(out, numhint.SpansExcept(lines, stamps)...)
+	out = append(out, hints...)
 	return append(out, nethint.Spans(lines)...)
 }

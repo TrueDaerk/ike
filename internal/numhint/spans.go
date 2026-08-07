@@ -31,21 +31,89 @@ import (
 // (`.`, `-`, `/`, `%`, letters), so versions, dates, floats, paths and
 // percentages never turn into hints.
 
+// Hint is one literal's outcome. Span carries the stand-in when a family
+// applies; Claims marks the literals whose reading the field name decided
+// (#1685) — a mapped field or a built-in key word — and those claim their
+// columns whether or not a hint was produced: no other family may draw a
+// stand-in where the field already said what the number means.
+type Hint struct {
+	Span   lang.Span
+	Claims bool
+}
+
+// hinted reports whether the hint produced a stand-in of its own.
+func (h Hint) hinted() bool { return h.Span.Capture != "" }
+
 // Spans produces the hints for a config-style buffer, ready to append to a
 // language's lang.Language.Spans output.
-func Spans(lines []string) []lang.Span {
-	var out []lang.Span
+func Spans(lines []string) []lang.Span { return spansOf(Hints(lines)) }
+
+// LineSpans is Spans for a producer that scans only part of a buffer, or that
+// has to feed a rewritten line (the log renderer's ANSI-stripped visible text,
+// #1684): it produces the hints for one line, reported at line index li.
+func LineSpans(li int, line string) []lang.Span { return spansOf(LineHints(li, line)) }
+
+// Hints is Spans down one level, for producers that also have to honour the
+// field-name precedence (#1685): every literal is reported, including the ones
+// a mapped field silenced, so Allowed can drop the other families' stand-ins
+// over them.
+func Hints(lines []string) []Hint {
+	var out []Hint
 	for li, line := range lines {
 		out = appendLine(out, li, []rune(line))
 	}
 	return out
 }
 
-// LineSpans is Spans for a producer that scans only part of a buffer, or that
-// has to feed a rewritten line (the log renderer's ANSI-stripped visible text,
-// #1684): it produces the hints for one line, reported at line index li.
-func LineSpans(li int, line string) []lang.Span {
-	return appendLine(nil, li, []rune(line))
+// LineHints is Hints for a single line, reported at line index li.
+func LineHints(li int, line string) []Hint { return appendLine(nil, li, []rune(line)) }
+
+// HintSpans keeps the hints that produced a stand-in, for producers that scan
+// through Hints and emit the spans themselves (#1685).
+func HintSpans(hints []Hint) []lang.Span { return spansOf(hints) }
+
+// spansOf keeps the hints that produced a stand-in.
+func spansOf(hints []Hint) []lang.Span {
+	var out []lang.Span
+	for _, h := range hints {
+		if h.hinted() {
+			out = append(out, h.Span)
+		}
+	}
+	return out
+}
+
+// Allowed drops the spans of other families whose columns a field name claimed
+// (#1685). The field says what the number means, so a value in a `bytes` field
+// draws as a byte size even when its digits also read as a Unix timestamp, and
+// a field mapped to `none` shows the raw digits rather than any family's
+// stand-in.
+func Allowed(other []lang.Span, hints []Hint) []lang.Span {
+	if len(other) == 0 || len(hints) == 0 {
+		return other
+	}
+	var claims []lang.Span
+	for _, h := range hints {
+		if h.Claims {
+			claims = append(claims, h.Span)
+		}
+	}
+	if len(claims) == 0 {
+		return other
+	}
+	return Except(other, claims)
+}
+
+// SpansWith is the pairing every config-format producer needs: it returns the
+// number hints for lines together with the spans of the other family scanned
+// over the same buffer — the epoch stand-ins (#1618) — that survive them. A
+// field-pinned hint wins over the incoming span (#1685), the incoming span
+// wins over a hint the value's shape alone produced (#1627), and both are
+// dropped where a field is mapped to `none`.
+func SpansWith(lines []string, other []lang.Span) (hints, kept []lang.Span) {
+	hs := Hints(lines)
+	kept = Allowed(other, hs)
+	return Except(spansOf(hs), kept), kept
 }
 
 // Except drops every span whose columns a taken span already covers. It is the
@@ -84,7 +152,7 @@ func overlapsAny(s lang.Span, taken []lang.Span) bool {
 }
 
 // appendLine scans one line, tracking the key the current value hangs off.
-func appendLine(out []lang.Span, li int, runes []rune) []lang.Span {
+func appendLine(out []Hint, li int, runes []rune) []Hint {
 	runes = runes[:contentEnd(runes)]
 	if start := skipSpace(runes, 0); start >= len(runes) || isCommentStart(runes, start) {
 		return out
@@ -103,8 +171,8 @@ func appendLine(out []lang.Span, li int, runes []rune) []lang.Span {
 			}
 			text := string(runes[i+1 : j])
 			if !keyAhead(runes, j+1) {
-				if s, ok := literalSpan(li, i+1, j, text, key); ok {
-					out = append(out, s)
+				if h, ok := literalHint(li, i+1, j, text, key); ok {
+					out = append(out, h)
 				}
 			}
 			last, i = text, j+1
@@ -115,8 +183,8 @@ func appendLine(out []lang.Span, li int, runes []rune) []lang.Span {
 			}
 			text := string(runes[i:j])
 			if !keyAhead(runes, j) {
-				if s, ok := literalSpan(li, i, j, text, key); ok {
-					out = append(out, s)
+				if h, ok := literalHint(li, i, j, text, key); ok {
+					out = append(out, h)
 				}
 			}
 			last, i = text, j
@@ -134,67 +202,92 @@ func appendLine(out []lang.Span, li int, runes []rune) []lang.Span {
 	return out
 }
 
-// literalSpan builds the hint span for the token at rune columns [start, end)
-// of line li, given the key it hangs off. It reports false when the token is
-// not a numeric literal or no family applies. The family order is fixed —
-// radix, byte size, duration, grouping — so a literal never carries two hints
-// and rendering is deterministic.
-func literalSpan(li, start, end int, text, key string) (lang.Span, bool) {
+// literalHint builds the hint for the token at rune columns [start, end) of
+// line li, given the key it hangs off. It reports false when the token is not
+// a numeric literal or nothing about it is worth reporting. The family order
+// is fixed — radix, byte size, duration, grouping — so a literal never carries
+// two hints and rendering is deterministic.
+//
+// A key the user mapped to a unit (#1685) short-circuits all of it: that unit
+// is applied and the literal claims its columns either way.
+func literalHint(li, start, end int, text, key string) (Hint, bool) {
+	bare := lang.Span{Line: li, StartCol: start, EndCol: end}
 	span := func(capture, replace string) (lang.Span, bool) {
-		return lang.Span{
-			Line: li, StartCol: start, EndCol: end,
-			Capture: capture, Replace: replace,
-		}, true
+		s := bare
+		s.Capture, s.Replace = capture, replace
+		return s, true
+	}
+	shape := func(s lang.Span, ok bool) (Hint, bool) { return Hint{Span: s}, ok }
+	claim := func(s lang.Span, ok bool) (Hint, bool) {
+		if !ok {
+			return Hint{}, false
+		}
+		return Hint{Span: s, Claims: true}, true
+	}
+	if u, ok := FieldUnit(key); ok {
+		if !isDecimal(text) {
+			if _, hex := hexLiteral(text); !hex {
+				return Hint{}, false
+			}
+		}
+		s, ok := mappedSpan(span, text, u)
+		if !ok {
+			// The unit renders nothing for this value — a `bytes` field
+			// holding 512. The field still claimed the digits: no other
+			// family may read them as something else.
+			s = bare
+		}
+		return Hint{Span: s, Claims: true}, true
 	}
 	if hexDigits, ok := hexLiteral(text); ok {
 		dec, ok := DecimalOf(hexDigits)
 		if !ok {
-			return lang.Span{}, false
+			return Hint{}, false
 		}
-		return span(RadixCapture, text+Gap+"= "+dec)
+		return shape(span(RadixCapture, text+Gap+"= "+dec))
 	}
 	if !isDecimal(text) {
-		return lang.Span{}, false
+		return Hint{}, false
 	}
 	// A run that decodes as a plausible Unix timestamp (#1618) is one: a
 	// duration or a bare count in that range reads as nonsense ("19941d" for
 	// an expiry date), so those two families step aside. Byte sizes and radix
 	// readings still apply — a gigabyte count lands in the same range by
-	// arithmetic, not by meaning — and SpansExcept resolves the collision in
-	// the one producer that decodes epochs too.
+	// arithmetic, not by meaning — and they claim the digits (#1685), so the
+	// timestamp of the producer that decodes epochs too gives way.
 	_, isEpoch := epochtime.Decode(text)
 	v, err := strconv.ParseUint(text, 10, 64)
 	if err != nil {
 		// Past an uint64 the run is an identifier, but grouping still reads.
 		if g, ok := Group(text); ok {
-			return span(GroupCapture, g)
+			return shape(span(GroupCapture, g))
 		}
-		return lang.Span{}, false
+		return Hint{}, false
 	}
 	if isEpoch {
 		if sizeKey(key) {
 			if s, ok := FormatBytes(v); ok {
-				return span(SizeCapture, s)
+				return claim(span(SizeCapture, s))
 			}
 		}
 		if r := radixOf(key); r != radixNone {
-			return radixSpan(span, r, text, v)
+			return claim(radixSpan(span, r, text, v))
 		}
-		return lang.Span{}, false
+		return Hint{}, false
 	}
 	if r := radixOf(key); r != radixNone {
 		if s, ok := radixSpan(span, r, text, v); ok {
-			return s, true
+			return claim(s, true)
 		}
 	}
 	if sizeKey(key) {
 		if s, ok := FormatBytes(v); ok {
-			return span(SizeCapture, s)
+			return claim(span(SizeCapture, s))
 		}
 	}
 	if base, ok := durationBase(key); ok {
 		if s, ok := FormatDuration(v, base); ok {
-			return span(DurationCapture, s)
+			return claim(span(DurationCapture, s))
 		}
 	}
 	// The shape trigger comes after both key families: a duration in
@@ -202,11 +295,69 @@ func literalSpan(li, start, end int, text, key string) (lang.Span, bool) {
 	// key has to win when it names one.
 	if v >= sizeStepBytes && v%sizeStepBytes == 0 {
 		if s, ok := FormatBytes(v); ok {
-			return span(SizeCapture, s)
+			return shape(span(SizeCapture, s))
 		}
 	}
 	if g, ok := Group(text); ok {
-		return span(GroupCapture, g)
+		return shape(span(GroupCapture, g))
+	}
+	return Hint{}, false
+}
+
+// mappedSpan renders a literal in the unit its field name is mapped to
+// (#1685). The mapping is the user's word on the field, so it is never
+// second-guessed: only that family is tried, and a value the unit says nothing
+// about — 512 in a `bytes` field, a run past uint64 — gets no stand-in rather
+// than falling through to another family.
+func mappedSpan(span func(capture, replace string) (lang.Span, bool), text string, u Unit) (lang.Span, bool) {
+	if u.Kind == UnitOff {
+		return lang.Span{}, false
+	}
+	if hexDigits, ok := hexLiteral(text); ok {
+		// A hex literal has one reading whatever the field is mapped to: its
+		// decimal value. Rendering a hex literal as bytes or a date would hide
+		// the digits the mapping cannot be about.
+		if dec, ok := DecimalOf(hexDigits); ok {
+			return span(RadixCapture, text+Gap+"= "+dec)
+		}
+		return lang.Span{}, false
+	}
+	if u.Kind == UnitTimestampSeconds || u.Kind == UnitTimestampMillis {
+		decode := epochtime.DecodeSeconds
+		if u.Kind == UnitTimestampMillis {
+			decode = epochtime.DecodeMillis
+		}
+		if s, ok := decode(text); ok {
+			return span(epochtime.Capture, s)
+		}
+		return lang.Span{}, false
+	}
+	v, err := strconv.ParseUint(text, 10, 64)
+	if err != nil {
+		if u.Kind == UnitGroup {
+			if g, ok := Group(text); ok {
+				return span(GroupCapture, g)
+			}
+		}
+		return lang.Span{}, false
+	}
+	switch u.Kind {
+	case UnitBytes:
+		if s, ok := FormatBytes(v); ok {
+			return span(SizeCapture, s)
+		}
+	case UnitDuration:
+		if s, ok := FormatDuration(v, u.Base); ok {
+			return span(DurationCapture, s)
+		}
+	case UnitOctal:
+		return radixSpan(span, radixOctal, text, v)
+	case UnitHex:
+		return radixSpan(span, radixHex, text, v)
+	case UnitGroup:
+		if g, ok := Group(text); ok {
+			return span(GroupCapture, g)
+		}
 	}
 	return lang.Span{}, false
 }
