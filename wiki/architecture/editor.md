@@ -1261,10 +1261,30 @@ by `editor.csv_rendering` (default on, Settings → Editor):
 - **Mouse and overlays**: the generic conceal mapping in `displayClickCol` /
   `DisplayOffset` handles the padding stand-ins — a click in the padding
   lands on the concealed separator.
+- **Caret column** (#1659): the field the caret sits in (`sv.IndexAt`) is
+  tinted over the whole visible height — `svColumnRange` gives each rendered
+  line the rune range it contributes, the field plus the separator closing it
+  so the stripe covers the alignment padding and reads as one block. The tint
+  (`svColumnTint`) is the selection colour mixed toward the surface, so it is
+  subtler than a selection on light and dark themes alike, and it is the
+  *lowest* background layer: ruler, conflict and occurrence tints paint over
+  it, cursor/selection/search win outright. Cost is one split of each visible
+  line — rows without that column simply stay untinted, and an unfocused pane
+  shows no stripe, like it shows no caret.
+- **Column in the status line** (#1659): the `svcolumn` segment shows
+  `column <n>: <header>` from `Model.SVColumnLabel` — the name comes from the
+  first row via `sv.Header`, which accepts it as a header only when every
+  field is non-empty and non-numeric (`sv.Unquote` strips quotes and padding
+  for display). Without a header-ish first row, or for a column past its
+  field count, the label is the bare `column <n>`. The segment is empty — and
+  so hidden — for every non-table buffer, including `editor.csv_rendering`
+  off.
 - **Quoting**: field splitting (`internal/sv`, shared with the plugin so both
   sides split identically) honors `"…"` regions — a quoted separator is
   literal, `""` escapes a quote. The csv separator is sniffed (`,` vs `;`)
-  over the first lines; tsv and psv are fixed.
+  over the first lines; tsv and psv are fixed. Column highlight and header
+  naming go through the same parser, so an embedded separator never shifts a
+  column.
 
 The buffer never changes — alignment is virtual padding only.
 

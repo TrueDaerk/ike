@@ -85,6 +85,37 @@ func TestStatusLineToolchainSegment(t *testing.T) {
 	}
 }
 
+// TestStatusLineSVColumnSegment guards the csv column segment (#1659): the
+// caret's column shows with the header name from the first row, and the slot
+// stays hidden for ordinary files.
+func TestStatusLineSVColumnSegment(t *testing.T) {
+	lang.Register(lang.Language{ID: "csv", Extensions: []string{"csv"}})
+	dir := t.TempDir()
+	data := filepath.Join(dir, "data.csv")
+	if err := os.WriteFile(data, []byte("name,qty\napple,3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	// Widen the bar so the overflow guard cannot drop the segment under test.
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 400, Height: 30})
+	m = tm.(Model)
+	tm, _ = m.openPath(data, false)
+	m = tm.(Model)
+	if line := m.statusLine(); !strings.Contains(line, "column 1: name") {
+		t.Fatalf("csv column segment missing: %q", line)
+	}
+
+	plain := filepath.Join(dir, "notes.txt")
+	if err := os.WriteFile(plain, []byte("a,b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ = m.openPath(plain, false)
+	m = tm.(Model)
+	if line := m.statusLine(); strings.Contains(line, "column 1") {
+		t.Fatalf("non-csv buffer must hide the column segment: %q", line)
+	}
+}
+
 // TestStatusLineSegmentsExtensible guards the slot model (#101): an appended
 // segment renders without touching statusLine(), and an empty render hides
 // the slot (no dangling divider).

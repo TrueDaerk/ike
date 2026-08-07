@@ -1,6 +1,8 @@
 package editor
 
 import (
+	"fmt"
+	"image/color"
 	"os"
 	"path/filepath"
 	"strings"
@@ -147,6 +149,143 @@ func TestSVDisplayOffset(t *testing.T) {
 	}
 	if got := m.DisplayOffset(1, 0); got != 0 {
 		t.Errorf("DisplayOffset(1, 0) = %d, want 0", got)
+	}
+}
+
+// bgSGR is the SGR fragment a lipgloss background of c renders as.
+func bgSGR(c color.Color) string {
+	r, g, b, _ := c.RGBA()
+	return fmt.Sprintf("48;2;%d;%d;%d", r>>8, g>>8, b>>8)
+}
+
+// tintedText returns the visible characters of a rendered row whose style
+// carries sgr — the cells the tint actually painted.
+func tintedText(row, sgr string) string {
+	var b strings.Builder
+	for {
+		loc := ansiRE.FindStringIndex(row)
+		if loc == nil {
+			return b.String()
+		}
+		seq, rest := row[loc[0]:loc[1]], row[loc[1]:]
+		end := len(rest)
+		if next := ansiRE.FindStringIndex(rest); next != nil {
+			end = next[0]
+		}
+		if strings.Contains(seq, sgr) {
+			b.WriteString(rest[:end])
+		}
+		row = rest[end:]
+	}
+}
+
+// TestSVColumnStripeSpansVisibleRows: the caret's column is tinted on every
+// visible row, not just the caret's own (#1659) — including the alignment
+// padding, so the stripe is one uninterrupted block.
+func TestSVColumnStripeSpansVisibleRows(t *testing.T) {
+	m := csvLoaded(t, csvDoc)
+	m.cursor = buffer.Position{Line: 1, Col: 0} // "apple" — column 1
+	tint := bgSGR(m.svColumnTint())
+
+	rows := strings.Split(m.View(), "\n")
+	// Column 1 is 5 wide plus the 2-cell gap; the caret cell itself renders in
+	// the cursor colour, so row 1 shows the remaining cells only.
+	for i, want := range []string{"name   ", "pple  ", "pear   "} {
+		if got := tintedText(rows[i], tint); got != want {
+			t.Errorf("row %d tinted %q, want %q", i, got, want)
+		}
+	}
+}
+
+// TestSVColumnStripeFollowsCursor: moving into another field moves the stripe,
+// and the last column's stripe stops at the content (no trailing separator).
+func TestSVColumnStripeFollowsCursor(t *testing.T) {
+	m := csvLoaded(t, csvDoc)
+	m.cursor = buffer.Position{Line: 2, Col: 6} // "pear,12" → column 2
+	tint := bgSGR(m.svColumnTint())
+
+	rows := strings.Split(m.View(), "\n")
+	if got := tintedText(rows[0], tint); got != "qty" {
+		t.Errorf("header row tinted %q, want %q", got, "qty")
+	}
+	if got := tintedText(rows[1], tint); got != "3" {
+		t.Errorf("data row tinted %q, want %q", got, "3")
+	}
+	if got := tintedText(rows[2], tint); got != "1" {
+		// Column 2 of "pear,12": the caret sits on "2", so only "1" is left.
+		t.Errorf("caret row tinted %q, want %q", got, "2")
+	}
+}
+
+// TestSVColumnStripeQuotedField: the stripe uses the shared parser, so an
+// embedded separator does not shift the column (#1659).
+func TestSVColumnStripeQuotedField(t *testing.T) {
+	m := csvLoaded(t, "h1,h2\n\"a,b\",z\n")
+	m.cursor = buffer.Position{Line: 1, Col: 6} // "z" — column 2
+	tint := bgSGR(m.svColumnTint())
+
+	rows := strings.Split(m.View(), "\n")
+	if got := tintedText(rows[0], tint); got != "h2" {
+		t.Errorf("header row tinted %q, want %q", got, "h2")
+	}
+	if got := m.SVColumnLabel(); got != "column 2: h2" {
+		t.Errorf("label = %q", got)
+	}
+}
+
+// TestSVColumnStripeRawMode: raw rendering (toggle off) draws no stripe, and
+// the status label disappears with it.
+func TestSVColumnStripeRawMode(t *testing.T) {
+	m := csvLoaded(t, csvDoc)
+	m.cursor = buffer.Position{Line: 1, Col: 0}
+	m.svRender = false
+	if got := tintedText(m.View(), bgSGR(m.svColumnTint())); got != "" {
+		t.Errorf("raw mode tinted %q", got)
+	}
+	if got := m.SVColumnLabel(); got != "" {
+		t.Errorf("raw mode label = %q, want empty", got)
+	}
+}
+
+// TestSVColumnStripeUnfocused: an unfocused pane shows no caret, so it shows
+// no column stripe either.
+func TestSVColumnStripeUnfocused(t *testing.T) {
+	m := csvLoaded(t, csvDoc)
+	m.cursor = buffer.Position{Line: 1, Col: 0}
+	m.SetFocused(false)
+	if got := tintedText(m.View(), bgSGR(m.svColumnTint())); got != "" {
+		t.Errorf("unfocused pane tinted %q", got)
+	}
+}
+
+// TestSVColumnLabelHeaderFallback: without a header-ish first row the label is
+// the bare index; a caret past the header's field count too.
+func TestSVColumnLabelHeaderFallback(t *testing.T) {
+	m := csvLoaded(t, "1,2\n3,4\n")
+	m.cursor = buffer.Position{Line: 1, Col: 2}
+	if got := m.SVColumnLabel(); got != "column 2" {
+		t.Errorf("numeric first row label = %q, want %q", got, "column 2")
+	}
+
+	m = csvLoaded(t, "name,qty\napple,3,extra\n")
+	m.cursor = buffer.Position{Line: 1, Col: 8} // the third field
+	if got := m.SVColumnLabel(); got != "column 3" {
+		t.Errorf("beyond-header label = %q, want %q", got, "column 3")
+	}
+	m.cursor = buffer.Position{Line: 1, Col: 0}
+	if got := m.SVColumnLabel(); got != "column 1: name" {
+		t.Errorf("header label = %q", got)
+	}
+}
+
+// TestSVColumnStripeShortRow: a row without the caret's column is simply left
+// untinted — no per-line padding work on rows that do not have the field.
+func TestSVColumnStripeShortRow(t *testing.T) {
+	m := csvLoaded(t, "a,b,c\nx\ny,z,w\n")
+	m.cursor = buffer.Position{Line: 2, Col: 4} // column 3
+	rows := strings.Split(m.View(), "\n")
+	if got := tintedText(rows[1], bgSGR(m.svColumnTint())); got != "" {
+		t.Errorf("short row tinted %q, want empty", got)
 	}
 }
 

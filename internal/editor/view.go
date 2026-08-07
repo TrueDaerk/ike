@@ -751,6 +751,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// URLs and Markdown link labels. Each of their cells wraps in its own
 	// OSC 8 open/close pair below (see hyperlink.go).
 	links := m.lineLinks(runes)
+	// Caret column stripe (#1659): the rune range this line contributes to the
+	// table column the caret sits in, tinted below every other overlay.
+	svStart, svEnd, hasSVCol := m.svColumnRange(line)
+	svTint := color.Color(nil)
+	if hasSVCol {
+		svTint = m.svColumnTint()
+	}
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Merge-conflict tint (#1149): the line's role in a conflict block, and
@@ -876,8 +883,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				if cr.repl != "" && col == cr.start {
 					if w := lipgloss.Width(cr.repl); disp+w <= width {
 						st, _ := m.styleAt(line, col)
-						if cr.standIn {
+						switch {
+						case cr.standIn:
 							st = st.Background(m.theme().SelectionMuted)
+						case hasSVCol && col >= svStart && col < svEnd:
+							// The sv padding belongs to its column: tinting it
+							// keeps the stripe one uninterrupted block (#1659).
+							st = st.Background(svTint)
 						}
 						b.WriteString(st.Render(cr.repl))
 						disp += w
@@ -1003,6 +1015,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				} else if overlay == nil {
 					st, styled = sp.apply(st), true
 				}
+			}
+			if hasSVCol && col >= svStart && col < svEnd {
+				// Caret column stripe (#1659): the lowest background layer —
+				// ruler, conflict and occurrence tints all paint over it;
+				// cursor/selection/search already won above.
+				st = st.Background(svTint)
+				styled = true
 			}
 			if isRuler(abs) {
 				// Ruler tint (#64): a background stripe under everything the
