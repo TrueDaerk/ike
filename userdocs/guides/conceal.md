@@ -387,6 +387,26 @@ again: `PUBLIC_KEY_ID` above is untouched, as are `TOKEN_URL`, `AUTH_TYPE` and
 The mask is fixed width. Sizing it to the value would leak the value's length,
 which for a short password is most of the secret.
 
+House-style keys the built-in patterns never heard of go in
+`editor.secret_masking_keys`. Each entry is matched case-insensitively over the
+whole key name with `*` wildcards, and a `-` (or `!`) prefix exempts instead of
+masking:
+
+```toml
+[editor]
+secret_masking_keys = [
+  "MY_API_KEY",     # a key the built-in patterns miss
+  "*_LICENSE",      # …and every key ending in it
+  "db_pass*",
+  "-PUBLIC_TOKEN",  # a key the built-in patterns would mask, kept readable
+]
+```
+
+Earlier entries win, so a specific name can precede a wildcard covering it, and
+a key no entry matches falls through to the built-in patterns. The list only
+decides *which* keys are secrets — masking still needs `editor.secret_masking`
+on and the file to pass the [file filters](#where-they-apply).
+
 It is not a decode, but it rides the identical mechanic, so the positional
 reveal applies unchanged: put the caret inside a value and the raw secret is
 there to read and edit. A masked value copies, saves and diffs as itself. Note
@@ -462,6 +482,7 @@ view stops following the config value.
 | Punycode hostnames | `editor.idn_hints` | Toggle IDN Hints |
 | PEM summaries | `editor.pem_summary` | Toggle PEM Summary |
 | Secret masking | `editor.secret_masking` | Toggle Secret Masking |
+| Extra secret key patterns | `editor.secret_masking_keys` | — |
 | Colour swatches | `editor.color_preview` | Toggle Color Preview |
 | Where the families apply | `editor.conceal_include`, `editor.conceal_exclude`, `editor.conceal_file_rules` | — |
 

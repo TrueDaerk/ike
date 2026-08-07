@@ -93,3 +93,32 @@ func TestMaskSkipsEmptyAndKeylessLines(t *testing.T) {
 		}
 	}
 }
+
+// TestMaskCustomKeyPatterns: the user's own patterns (#1712) reach the dotenv
+// producer — a key the built-in tables never heard of masks, and a `-` entry
+// exempts one they would otherwise mask.
+func TestMaskCustomKeyPatterns(t *testing.T) {
+	secret.SetKeyPatterns([]string{"*_LICENSE", "-PUBLIC_TOKEN"})
+	t.Cleanup(func() { secret.SetKeyPatterns(nil) })
+
+	lines := []string{
+		"ACME_LICENSE=AAAA-BBBB-CCCC",
+		"PUBLIC_TOKEN=pk_live_visible",
+		"API_TOKEN=abc123",
+	}
+	spans := envSpans(lines)
+
+	s, ok := maskOn(spans, 0)
+	if !ok {
+		t.Fatal("a key matching a custom pattern must be masked")
+	}
+	if got := lines[0][s.StartCol:s.EndCol]; got != "AAAA-BBBB-CCCC" {
+		t.Errorf("mask covers %q, want the whole value", got)
+	}
+	if _, ok := maskOn(spans, 1); ok {
+		t.Error("an exempted key must stay readable")
+	}
+	if _, ok := maskOn(spans, 2); !ok {
+		t.Error("a key no custom pattern matches must still follow the built-ins")
+	}
+}

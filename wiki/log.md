@@ -1,5 +1,22 @@
 # Log
 
+## 2026-08-07 (editor: custom secret key patterns, #1712)
+
+- **Secret masking takes the user's own key patterns.** `editor.secret_masking_keys`
+  (List) extends the built-in tables of `internal/secret`: each entry matches
+  case-insensitively over the whole key name with `*` wildcards
+  (`MY_API_KEY`, `*_LICENSE`, `db_pass*`), and a `-` (or `!`) prefix exempts
+  instead, so `-PUBLIC_TOKEN` keeps a key the built-ins would mask readable.
+- **The configured list decides on its own.** `Suspect` consults it first,
+  earlier entries win, and only a key no entry matches reaches the built-in
+  strong/marker/suffix tables. Nothing else moves: the per-family toggle, the
+  conceal file filters (#1704) and the positional reveal apply to a
+  custom-matched key exactly as to a built-in one.
+- **Installed as a package global** (`secret.SetKeyPatterns`, the arrangement
+  `numhint` uses for its field units), because the producer is a
+  `lang.Language.Spans` hook with no config plumbing; `app` pushes it on every
+  config load and re-parses the open editors when the list actually moved.
+
 ## 2026-08-07 (editor: per-file conceal filter, #1704)
 
 - **Conceal now has a *where*.** `editor.conceal_include` /

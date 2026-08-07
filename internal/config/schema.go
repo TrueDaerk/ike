@@ -371,6 +371,14 @@ type Editor struct {
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.
 	SecretMasking bool `toml:"secret_masking"`
+	// SecretMaskingKeys extends the key patterns secret masking recognises
+	// (#1712). Each entry is a pattern matched case-insensitively over the
+	// whole key name with `*` wildcards — `MY_API_KEY`, `*_LICENSE`,
+	// `db_pass*` — masking every key it covers. A pattern prefixed `-` (or
+	// `!`) exempts instead, so a key the built-in patterns would mask stays
+	// readable: `-PUBLIC_TOKEN`. Earlier entries win, and a key no entry
+	// matches falls through to the built-in patterns.
+	SecretMaskingKeys []string `toml:"secret_masking_keys"`
 	// Hyperlinks wraps detected URLs — bare http(s) URLs and Markdown link
 	// labels, which carry their link target — in OSC 8 hyperlink sequences
 	// (#1655), so terminals that support them (Ghostty, iTerm2, kitty,

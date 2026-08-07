@@ -2067,6 +2067,21 @@ only look like one (`PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL`, `AUTHOR`) — so
 the value is never inspected to decide whether to hide it. The mask is fixed
 width: sizing it to the value would leak the value's length.
 
+The built-in tables are a guess about naming conventions, and a guess is wrong
+in both directions, so `editor.secret_masking_keys` (#1712) lets the user
+settle it: each entry is a pattern matched case-insensitively over the whole
+key with `*` wildcards (`MY_API_KEY`, `*_LICENSE`, `db_pass*`), a `-`/`!`
+prefix turning it into an exemption (`-PUBLIC_TOKEN`). The configured list is
+consulted first and decides on its own — earlier entries win, and only a key no
+entry matches reaches the built-in tables. It lives in a package global
+(`secret.SetKeyPatterns`, the arrangement `numhint` uses for its field units),
+because the producer is a `lang.Language.Spans` hook with no config plumbing of
+its own; `app` installs it on load and re-parses the open editors when the list
+moves, since which values carry a mask is decided when the spans are produced.
+Nothing else changes: the per-family toggle, the conceal file filters (#1704)
+and the positional reveal all apply to a custom-matched key exactly as they do
+to a built-in one.
+
 It is not a decode, but it rides the identical mechanic: the dotenv producer
 emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
 channel in `decodes`, gated by `decodeOn` like the escape families. So the
