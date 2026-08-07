@@ -10,6 +10,7 @@ import (
 	"ike/internal/jwt"
 	"ike/internal/lang"
 	"ike/internal/nethint"
+	"ike/internal/numhint"
 )
 
 // spans.go produces the Go-computed highlight spans for .http buffers
@@ -24,6 +25,14 @@ import (
 // key=value&… structure). Placeholder regions ({{…}} and ${…}) are skipped —
 // the grammar styles those more specifically, and concealing inside them
 // would hide the placeholder's own syntax.
+//
+// The value conceals (#1684) ride on the same structure. Everything the
+// producer already recognises as a *value* — a query parameter, a folded
+// query line, a header value, an inline body line — is collected as a
+// valueRange and handed to the epoch decoder (#1618) and the number hints
+// (#1627). Both scan the range's own text, so the request line's trailing
+// " HTTP/1.1" never bounds a query value, and both only match a token after a
+// separator, so keys, header names and JSON member names never conceal.
 
 // querySpans is the lang.Language.Spans hook (#1585).
 func querySpans(lines []string) []lang.Span {
@@ -39,6 +48,10 @@ func querySpans(lines []string) []lang.Span {
 	// for the same reason JWTs are — a host shows up in a target, an
 	// X-Forwarded-For header and a body alike.
 	out = append(out, nethint.Spans(lines)...)
+	// The value ranges collected along the way, for the number hints below
+	// (#1684). Every entry is a stretch of a line that holds values rather
+	// than structure: a query string, a header value, an inline body line.
+	var values []valueRange
 	for _, r := range f.Requests {
 		li := r.Line - 1
 		if li < 0 || li >= len(lines) {
@@ -54,6 +67,10 @@ func querySpans(lines []string) []lang.Span {
 		qPos := indexFrom(runes, tStart, tEnd, '?')
 		if qPos >= 0 {
 			out = appendQuerySpans(out, li, runes, qPos, tEnd, ph)
+			// Query parameters are value positions (#1684): the range stops
+			// at the target's end, so the trailing " HTTP/1.1" never counts as
+			// the character following a value.
+			values = append(values, valueRange{li, qPos, tEnd})
 		}
 		// The path portion gets its own capture (#1594), distinct from the
 		// grammar's url string covering scheme and authority. Emitted after
@@ -78,6 +95,21 @@ func querySpans(lines []string) []lang.Span {
 			out = appendPercentSpans(out, j, lr, from, len(lr), lph)
 			out = appendQuerySpans(out, j, lr, from, len(lr), lph)
 		}
+		// Header and folded-query lines are value positions too (#1684):
+		// "Content-Length: 1048576" reads as a byte size like any other keyed
+		// number, and a folded "&limit=100000" like a query parameter. The
+		// stretch runs from the line after the request line to the blank line
+		// opening the body, bounded by the request's own block.
+		last := r.BlockEnd - 1
+		if r.BodyStart > 0 {
+			last = r.BodyStart - 2
+		}
+		for j := li + 1; j <= last && j < len(lines); j++ {
+			if strings.TrimSpace(lines[j]) == "" || isCommentLine(lines[j]) {
+				continue
+			}
+			values = append(values, valueRange{j, 0, len([]rune(lines[j]))})
+		}
 		// A form-urlencoded body is the same key=value&… structure — the
 		// same pass applies (#1585). External bodies have no lines here.
 		if ct, ok := r.Header("Content-Type"); ok && r.BodyStart > 0 && r.BodyFile == "" &&
@@ -89,15 +121,94 @@ func querySpans(lines []string) []lang.Span {
 				out = appendQuerySpans(out, j, lr, 0, len(lr), lph)
 			}
 		}
-		// Epoch timestamps in an inline body (#1618). The body is JSON far
-		// more often than not, and the JSON-value context is strict enough to
-		// stay silent on anything else: a bare number only decodes where JSON
-		// would put a value, so a form-urlencoded or plain-text body is left
-		// untouched.
+		// An inline body is one long value position (#1618, #1684). It is JSON
+		// far more often than not, and the value context is strict enough to
+		// stay silent on anything else: a bare number only decodes where a
+		// format would put a value, so a plain-text body is left untouched.
+		// External bodies have no lines here.
 		if r.BodyStart > 0 && r.BodyFile == "" {
 			for j := r.BodyStart - 1; j < r.BodyEnd && j < len(lines); j++ {
-				out = append(out, epochtime.LineSpans(j, lines[j], epochtime.JSONValue)...)
+				values = append(values, valueRange{j, 0, len([]rune(lines[j]))})
 			}
+		}
+	}
+	// The epoch (#1618) and number (#1627) stand-ins over every value range
+	// collected above (#1684). Both scanners only ever match a token *after* a
+	// separator, so a query key, a header name or a JSON member name is never
+	// concealed. The numbers run second and step aside where a stand-in of
+	// another family — an epoch, a JWT, a percent escape, a network literal —
+	// already claimed the same columns.
+	for _, v := range values {
+		out = appendEpochSpans(out, lines, v)
+	}
+	taken := standIns(out)
+	for _, v := range values {
+		out = append(out, numhint.Except(v.hints(lines), taken)...)
+	}
+	return out
+}
+
+// valueRange is the rune-column stretch [From, To) of line Line that holds
+// values rather than structure (#1684).
+type valueRange struct {
+	Line, From, To int
+}
+
+// text returns the range's text, clipped to the line.
+func (v valueRange) text(lines []string) (string, bool) {
+	if v.Line < 0 || v.Line >= len(lines) {
+		return "", false
+	}
+	runes := []rune(lines[v.Line])
+	from, to := v.From, v.To
+	if to > len(runes) {
+		to = len(runes)
+	}
+	if from < 0 || from >= to {
+		return "", false
+	}
+	return string(runes[from:to]), true
+}
+
+// hints produces the number-readability spans for the range, mapped back onto
+// the line's own columns.
+func (v valueRange) hints(lines []string) []lang.Span {
+	text, ok := v.text(lines)
+	if !ok {
+		return nil
+	}
+	out := numhint.LineSpans(v.Line, text)
+	for i := range out {
+		out[i].StartCol += v.From
+		out[i].EndCol += v.From
+	}
+	return out
+}
+
+// appendEpochSpans decodes the Unix timestamps in a value range. Scanning the
+// range's own text rather than the whole line is what lets a query parameter
+// decode: the value ends where the target does, not at " HTTP/1.1".
+func appendEpochSpans(out []lang.Span, lines []string, v valueRange) []lang.Span {
+	text, ok := v.text(lines)
+	if !ok {
+		return out
+	}
+	for _, m := range epochtime.Scan(text, epochtime.Value) {
+		out = append(out, lang.Span{
+			Line: v.Line, StartCol: v.From + m.Start, EndCol: v.From + m.End,
+			Capture: epochtime.Capture, Replace: m.Text,
+		})
+	}
+	return out
+}
+
+// standIns keeps the spans carrying a stand-in — the ones that would fight a
+// number hint for the same cells.
+func standIns(spans []lang.Span) []lang.Span {
+	var out []lang.Span
+	for _, s := range spans {
+		if s.Replace != "" {
+			out = append(out, s)
 		}
 	}
 	return out

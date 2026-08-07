@@ -1500,16 +1500,22 @@ in `timestamps.go`:
 - **Context heuristic**: the caller picks the strictness. `epochtime.JSONValue`
   accepts a run only in a JSON value position — after `:`, `[` or `,` and
   before `,`, `]`, `}` or the line end, quoted runs included — so object keys
-  and digits inside prose strings never match. `epochtime.Loose` accepts any
-  run whose neighbours are plain delimiters. Both reject a run glued to a
-  character that makes it part of a larger token (letters, `_`, `.`, `-`, `:`,
-  `/`, `%`, `+`); the one exception is a leading `:` under `JSONValue`, JSON's
-  member separator.
+  and digits inside prose strings never match. `epochtime.Value` (#1684)
+  widens that to the value positions the other formats write: `=` opens one
+  and `&` closes one, so `KEY=1722945600`, `ttl = 1722945600`, a YAML
+  `created_at:` and a `?since=…` query parameter all decode, while a run
+  *before* a separator is still a key and never matches. `epochtime.Loose`
+  accepts any run whose neighbours are plain delimiters. All three reject a
+  run glued to a character that makes it part of a larger token (letters,
+  `_`, `.`, `-`, `:`, `/`, `%`, `+`); the one exception is a leading `:`
+  under `JSONValue`/`Value`, JSON's member separator.
 - **Producers**: the JSON languages (`json`, `ndjson`) scan whole buffers in
-  the JSON context, the log language scans every line in the loose context
-  (mapped back through ANSI escapes like the header spans), and the `.http`
-  producer scans inline request bodies in the JSON context — its request-line
-  query values deliberately stay raw. The HTTP *response* viewer
+  the JSON context, YAML, TOML, ini/conf and dotenv in the `Value` context,
+  the log language scans every line in the loose context (mapped back through
+  ANSI escapes like the header spans), and the `.http` producer scans its
+  collected value ranges — query parameters, folded query lines, header
+  values and inline bodies — in the `Value` context (#1684). The HTTP
+  *response* viewer
   (`internal/httppane`) has no caret, hence no positional reveal, so it is not
   part of this layer; a response saved to a `.json` file decodes like any
   other buffer.
@@ -1680,11 +1686,19 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   values never parse as bare integers; full-line and trailing comments are
   cut; a token followed by `:`/`=` is a key, not a value. A run that decodes
   as a plausible Unix timestamp is left to the epoch family (#1618) for the
-  duration and grouping families, and in JSON — the one producer that
-  decodes epochs — `numhint.SpansExcept` drops any hint colliding with a
-  timestamp stand-in outright.
-- **Contexts**: the config formats, where keys carry the intent — JSON/ndjson,
-  YAML, TOML, ini/conf and dotenv.
+  duration and grouping families, and in every producer that decodes epochs
+  too, `numhint.SpansExcept` (or `numhint.Except`, its span-list form) drops
+  any hint colliding with a timestamp stand-in outright.
+- **Contexts** are every position the highlighting already recognises as a
+  *value* (#1684), never a key: the config formats, where keys carry the
+  intent — JSON/ndjson, YAML, TOML, ini/conf and dotenv — plus `.http` query
+  parameters, folded query continuation lines, header values and inline
+  request bodies, and the payload of a log line (its logfmt pairs and JSON
+  tail, scanned over the ANSI-stripped visible text and mapped back, with the
+  parsed header ranges and epoch stand-ins excluded). Keys are safe by
+  construction rather than by a list: `numhint`'s scanner only ever hints a
+  token that follows a separator, so a query key, a header name, a logfmt key
+  or a JSON member name — numeric or not — is never concealed.
 
 ## Network-literal hints (#1653)
 

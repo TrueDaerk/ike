@@ -245,3 +245,42 @@ func TestSpansEpochRemapsThroughANSI(t *testing.T) {
 	}
 	t.Fatal("no timestamp stand-in produced for the coloured line")
 }
+
+// TestSpansNumberHints (#1684): the logfmt pairs and JSON tail of a log line
+// are value positions, so their numbers carry the #1627 readability hints —
+// while the keys, the header fields and the epoch stand-in stay off limits.
+func TestSpansNumberHints(t *testing.T) {
+	line := "2024-08-06 12:00:00 INFO [worker-1] upload done bytes=10485760 timeout_ms=90000 expires=1722945600"
+	spans := lineSpans(0, line)
+	standIn := func(sub string) (lang.Span, bool) {
+		col := strings.Index(line, sub)
+		for _, s := range spans {
+			if s.Replace != "" && col >= s.StartCol && col < s.EndCol {
+				return s, true
+			}
+		}
+		return lang.Span{}, false
+	}
+	for _, tc := range []struct{ sub, want string }{
+		{"10485760", "10 MiB"},
+		{"90000", "1m30s"},
+		// The epoch family keeps the digits it already claimed (#1618).
+		{"1722945600", "2024-08-06 12:00:00Z"},
+	} {
+		if s, ok := standIn(tc.sub); !ok || s.Replace != tc.want {
+			t.Errorf("stand-in at %q = %+v, want %q", tc.sub, s, tc.want)
+		}
+	}
+	for _, key := range []string{"bytes=", "timeout_ms=", "expires="} {
+		if s, ok := standIn(key); ok {
+			t.Errorf("logfmt key %q concealed as %q", key, s.Replace)
+		}
+	}
+	// The header fields keep their own captures: the readable timestamp must
+	// not be re-read as a grouped number, nor the thread name touched.
+	for _, sub := range []string{"2024-08-06", "12:00:00", "worker-1"} {
+		if s, ok := standIn(sub); ok {
+			t.Errorf("header field %q concealed as %q", sub, s.Replace)
+		}
+	}
+}

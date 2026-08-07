@@ -72,3 +72,17 @@ func TestTOMLNetworkHints(t *testing.T) {
 		t.Errorf("hint = %q, want %q", spans[0].Replace, want)
 	}
 }
+
+// TestTOMLEpochValues (#1684): a Unix epoch on the value side of a
+// `key = value` pair decodes.
+func TestTOMLEpochValues(t *testing.T) {
+	var stamps []lang.Span
+	for _, s := range tomlSpans([]string{"[build]", "started = 1722945600"}) {
+		if s.Replace != "" {
+			stamps = append(stamps, s)
+		}
+	}
+	if len(stamps) != 1 || stamps[0].Line != 1 || stamps[0].Replace != "2024-08-06 12:00:00Z" {
+		t.Fatalf("spans = %+v, want one decoded UTC stand-in on line 1", stamps)
+	}
+}

@@ -119,3 +119,21 @@ func TestEnvNetworkHints(t *testing.T) {
 		t.Errorf("hint = %q, want %q", hint.Replace, want)
 	}
 }
+
+// TestEnvEpochValues (#1684): a Unix epoch on the value side of a `KEY=value`
+// pair decodes; the key side never does.
+func TestEnvEpochValues(t *testing.T) {
+	spans := envSpans([]string{"CACHE_PURGED_AT=1722945600"})
+	var stamps []lang.Span
+	for _, s := range spans {
+		if s.Replace != "" {
+			stamps = append(stamps, s)
+		}
+	}
+	if len(stamps) != 1 || stamps[0].Replace != "2024-08-06 12:00:00Z" {
+		t.Fatalf("spans = %+v, want exactly one decoded UTC stand-in", stamps)
+	}
+	if stamps[0].StartCol != 16 {
+		t.Errorf("stand-in starts at col %d, want 16 (the digits)", stamps[0].StartCol)
+	}
+}

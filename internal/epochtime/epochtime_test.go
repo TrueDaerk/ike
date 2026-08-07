@@ -145,3 +145,45 @@ func allDigits(s string) bool {
 	}
 	return s != ""
 }
+
+// TestScanValueContext (#1684): the Value context widens JSONValue to the
+// value positions the other formats write — "=" opens one, "&" closes one —
+// while keys, prose and glued runs stay out exactly as before.
+func TestScanValueContext(t *testing.T) {
+	match := []string{
+		`EXPIRES=1722945600`,               // dotenv / ini
+		`ttl = 1722945600`,                 // TOML, spaces around the separator
+		`expires_at: 1722945600`,           // YAML
+		`?since=1722945600`,                // a query's first parameter
+		`?page=2&since=1722945600&size=10`, // a middle query parameter
+		`{"ts": 1722945600}`,               // still a JSON member
+	}
+	for _, line := range match {
+		if got := Scan(line, Value); len(got) != 1 {
+			t.Errorf("Scan(%q, Value) = %d matches, want 1", line, len(got))
+		}
+	}
+	skip := []string{
+		`1722945600=value`,          // the run is the key, not the value
+		`1722945600 = value`,        // same, with spaces
+		`total 1722945600 requests`, // prose, no value position
+		`?ts=1722945600x`,           // glued to a letter
+		`?ts=1722945600.5`,          // a float
+		`?d=2024-08-06T1722945600`,  // glued to a date
+	}
+	for _, line := range skip {
+		if got := Scan(line, Value); len(got) != 0 {
+			t.Errorf("Scan(%q, Value) = %v, want no match", line, got)
+		}
+	}
+}
+
+// TestValueContextKeepsJSONStrictness (#1684): widening the openers must not
+// make the "=" forms leak into the JSON context.
+func TestValueContextKeepsJSONStrictness(t *testing.T) {
+	for _, line := range []string{`EXPIRES=1722945600`, `?since=1722945600`} {
+		if got := Scan(line, JSONValue); len(got) != 0 {
+			t.Errorf("Scan(%q, JSONValue) = %v, want no match", line, got)
+		}
+	}
+}

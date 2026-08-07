@@ -19,6 +19,7 @@ import (
 	_ "embed"
 
 	"ike/internal/cronhint"
+	"ike/internal/epochtime"
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
@@ -77,7 +78,13 @@ func yamlSpans(lines []string) []lang.Span {
 	out := append(escapes.Base64YAMLSpans(lines), cronhint.YAMLSpans(lines)...)
 	perms := permhint.YAMLSpans(lines)
 	out = append(out, perms...)
-	out = append(out, numhint.SpansExcept(lines, perms)...)
+	// Epoch timestamps (#1684): a YAML `key: value` is a value position like a
+	// JSON member, so the same decoding applies. Emitted before the number
+	// hints and taken out of their columns, as in the JSON producer — a
+	// 10-digit value is a timestamp more often than a gigabyte count.
+	stamps := epochtime.Spans(lines, epochtime.Value)
+	out = append(out, stamps...)
+	out = append(out, numhint.SpansExcept(lines, append(perms, stamps...))...)
 	out = append(out, nethint.Spans(lines)...)
 	return append(out, yamlanchor.Spans(lines)...)
 }

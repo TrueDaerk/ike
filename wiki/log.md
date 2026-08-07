@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-07 (editor: value conceals in every value position, #1684)
+
+- The integer readability conceals — byte sizes, durations, digit grouping and
+  radix (#1627) plus epoch timestamps (#1618) — now apply everywhere the
+  highlighting already recognises a token as a **value**, not just in the
+  config formats.
+- New coverage: `.http` query parameters and folded query continuation lines,
+  `.http` header values, `.http` inline request bodies (numbers as well as the
+  timestamps they already decoded), YAML/TOML/ini/dotenv epoch values, and the
+  payload of a log line (its logfmt pairs and JSON tail).
+- **Keys are never concealed**, by construction rather than by a list:
+  `numhint`'s and `epochtime`'s scanners only match a token that *follows* a
+  separator, so a query key, a header name, a logfmt key or a JSON member name
+  stays raw even when it is itself numeric.
+- `epochtime.Value` is a new context: `JSONValue` widened by the openers and
+  closers the non-JSON formats write (`=` opens a value, `&` closes one).
+  `JSONValue` keeps its old strictness.
+- The `.http` producer now collects its value stretches as `valueRange`s and
+  scans each as its own text — so a request line's trailing ` HTTP/1.1` never
+  bounds a query value — then lets the number hints step aside wherever an
+  epoch, JWT, percent-escape or network stand-in already claimed the columns.
+- `numhint.LineSpans` and `numhint.Except` are new, for producers that scan
+  part of a buffer or a rewritten line (the log renderer's ANSI-stripped
+  visible text). See [Number-readability
+  hints](/architecture/editor.md) and [HTTP client](/architecture/http-client.md).
+
 ## 2026-08-07 (ui: one navigation contract for every selection list, #1666)
 
 - Every selectable list now obeys the same two rules: **single steps wrap**

@@ -539,7 +539,9 @@ applies; a language with `Spans` but no grammar still schedules parses
 structure (rainbow column captures) Go-computed. Producers also share
 detectors through the seam: `internal/epochtime` (#1618) turns Unix epoch
 numbers into decoded-UTC stand-ins for the JSON languages, the log language
-and `.http` bodies alike, and `internal/jwt` (#1619) dims the signature segment
+and `.http` alike — since #1684 also for YAML, TOML, ini and dotenv values
+and `.http` query parameters, through its `Value` context — and
+`internal/jwt` (#1619) dims the signature segment
 of every JSON Web Token for the `.http` and dotenv producers (see
 `/architecture/editor.md`, JWT decoding). The dotenv language
 (`plugins/languages/env`, #1619) is another grammar-free one: `.env` and its
@@ -563,9 +565,12 @@ assignments, the five schedule fields and the command, and carrying the
 schedule hints of `internal/cronhint` (see `/architecture/editor.md`, cron
 schedule hints) — which the `yaml`, `json` and `toml` producers share for the
 `cron:` values and quoted expressions in their own buffers. The number hints
-of `internal/numhint` (#1627) ride the same seam in every config format —
-`json`, `yaml`, `toml`, `ini` and `dotenv` all append them, JSON through
-`SpansExcept` so an epoch stand-in keeps its digits (see
+of `internal/numhint` (#1627) ride the same seam in every value position
+(#1684) — `json`, `yaml`, `toml`, `ini` and `dotenv` append them per buffer,
+`.http` per collected value range (query parameters, folded query lines,
+header values, inline bodies) and the log language per line over the
+ANSI-stripped visible text, everywhere through `SpansExcept`/`Except` so an
+epoch stand-in keeps its digits (see
 `/architecture/editor.md`, number-readability hints). The network-literal
 hints of `internal/nethint` (#1653) ride it too, in two shapes: `Spans` scans
 whole lines for the config formats and `.http`, `QuotedSpans` scans string
