@@ -149,6 +149,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.cidr_hints", c.Editor.CIDRHints)
 	put("editor.idn_hints", c.Editor.IDNHints)
 	put("editor.secret_masking", c.Editor.SecretMasking)
+	put("editor.hyperlinks", c.Editor.Hyperlinks)
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.id_colors", c.Editor.IDColors)
 	put("editor.id_color_min_length", c.Editor.IDColorMinLength)

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/search"
@@ -746,6 +747,10 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// Identifier colors (#1626): UUIDs and hex hashes take a foreground from
 	// the rainbow palette keyed on the identifier's own hash.
 	ids := m.lineIDColors(line)
+	// Terminal hyperlinks (#1655): the clickable ranges of this line — bare
+	// URLs and Markdown link labels. Each of their cells wraps in its own
+	// OSC 8 open/close pair below (see hyperlink.go).
+	links := m.lineLinks(runes)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
 	// Merge-conflict tint (#1149): the line's role in a conflict block, and
@@ -948,6 +953,21 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			}
 		}
 
+		// Terminal hyperlink (#1655): the cell's own OSC 8 open/close pair,
+		// zero display cells wide, so width math and click mapping stay
+		// untouched; the shared id keeps the terminal hover-highlighting the
+		// whole URL as one link even though every cell closes its own pair
+		// (a self-contained pair can never be split by a later row splice).
+		var link linkSpan
+		inLink := false
+		if col < len(runes) {
+			link, inLink = linkAt(links, col)
+		}
+		if inLink {
+			b.WriteString(ansi.SetHyperlink(link.url,
+				"id=ike-"+strconv.Itoa(line)+"-"+strconv.Itoa(link.start)))
+		}
+
 		switch {
 		case cursorHere && cells > 1:
 			// Cursor on a tab: highlight only the first cell (which may carry
@@ -1043,6 +1063,9 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			} else {
 				b.WriteString(cell)
 			}
+		}
+		if inLink {
+			b.WriteString(ansi.ResetHyperlink())
 		}
 		disp += cells
 		contentCells += cells
