@@ -459,3 +459,125 @@ func TestDispatchExternalBodyUnresolvedPlaceholder(t *testing.T) {
 		t.Fatal("an unresolved placeholder in the body file must abort")
 	}
 }
+
+// multipartServer parses the incoming request as multipart/form-data with the
+// standard library and captures the form values/files — a request that fails
+// to parse fails the exchange.
+func multipartServer(t *testing.T) (*httptest.Server, *map[string]string, *string) {
+	t.Helper()
+	got := map[string]string{}
+	var query string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		query = r.URL.RawQuery
+		mr, err := r.MultipartReader()
+		if err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		for {
+			p, err := mr.NextPart()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			data, _ := io.ReadAll(p)
+			got[p.FormName()] = string(data)
+		}
+		w.WriteHeader(200)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &got, &query
+}
+
+// TestDispatchMultipartInline guards #1707's baseline: a hand-written
+// multipart body (LF endings, no closing delimiter) — combined with a folded
+// query line — round-trips through a standard multipart parser.
+func TestDispatchMultipartInline(t *testing.T) {
+	srv, got, query := multipartServer(t)
+	req := parseOne(t, "POST "+srv.URL+"/import/\n"+
+		"     & tags = my_tag\n"+
+		"Content-Type: multipart/form-data; boundary=bound\n"+
+		"\n"+
+		"--bound\n"+
+		"Content-Disposition: form-data; name=\"note\"\n"+
+		"\n"+
+		"hello world\n")
+	resp, err := Dispatch(context.Background(), req, noConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, resp.Body)
+	}
+	if (*got)["note"] != "hello world" {
+		t.Fatalf("parts = %#v", *got)
+	}
+	if *query != "tags=my_tag" {
+		t.Fatalf("query = %q", *query)
+	}
+}
+
+// TestDispatchMultipartFilePart guards #1707: `< file` inside a part embeds
+// the file — resolved against the .http file's directory — byte-verbatim.
+func TestDispatchMultipartFilePart(t *testing.T) {
+	srv, got, _ := multipartServer(t)
+	dir := t.TempDir()
+	binary := "id,name\x00\xff\r\nraw"
+	writeFile(t, dir, "leads.csv", binary)
+
+	req := parseOne(t, "POST "+srv.URL+"/import/\n"+
+		"Content-Type: multipart/form-data; boundary=bound\n"+
+		"\n"+
+		"--bound\n"+
+		"Content-Disposition: form-data; name=\"import\"; filename=\"import.csv\"\n"+
+		"\n"+
+		"< leads.csv\n"+
+		"--bound\n"+
+		"Content-Disposition: form-data; name=\"tag\"\n"+
+		"\n"+
+		"inline\n")
+	opts := noConfig
+	opts.BaseDir = dir
+	resp, err := Dispatch(context.Background(), req, opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("status %d: %s", resp.StatusCode, resp.Body)
+	}
+	if (*got)["import"] != binary {
+		t.Fatalf("file part = %q, want %q", (*got)["import"], binary)
+	}
+	if (*got)["tag"] != "inline" {
+		t.Fatalf("inline part = %q", (*got)["tag"])
+	}
+}
+
+// TestDispatchMultipartMissingFile: a missing part file fails before anything
+// is sent.
+func TestDispatchMultipartMissingFile(t *testing.T) {
+	hit := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+	}))
+	t.Cleanup(srv.Close)
+	req := parseOne(t, "POST "+srv.URL+"/x\n"+
+		"Content-Type: multipart/form-data; boundary=bound\n"+
+		"\n"+
+		"--bound\n"+
+		"Content-Disposition: form-data; name=\"f\"\n"+
+		"\n"+
+		"< missing.bin\n")
+	opts := noConfig
+	opts.BaseDir = t.TempDir()
+	if _, err := Dispatch(context.Background(), req, opts); err == nil ||
+		!strings.Contains(err.Error(), "missing.bin") {
+		t.Fatalf("err = %v", err)
+	}
+	if hit {
+		t.Fatal("request must not reach the server")
+	}
+}

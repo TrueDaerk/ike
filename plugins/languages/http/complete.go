@@ -2,6 +2,8 @@ package langhttp
 
 import (
 	"context"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -10,6 +12,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
+	"ike/internal/pathcomplete"
 )
 
 // complete.go contributes completion inside .http request files (#1268,
@@ -94,6 +97,8 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 	case ctxHeaderValue:
 		name, value, _ := strings.Cut(before, ":")
 		return headerValueItems(name, value), nil
+	case ctxBodyFile:
+		return bodyFileItems(req.Path, before), nil
 	}
 	return nil, nil
 }
@@ -107,6 +112,7 @@ const (
 	ctxVersion
 	ctxHeaderName
 	ctxHeaderValue
+	ctxBodyFile
 )
 
 // classify decides what the cursor position can complete. The rules mirror
@@ -141,6 +147,12 @@ func classify(lines []string, at int, before string) ctxKind {
 		requestLine = i
 		if sawBlank {
 			// The blank sat between the request block and this line: body.
+			// The one thing a body line completes is the file path of a
+			// `< file` directive (#1707) — the whole-body form (#1305) or a
+			// multipart part's include.
+			if bodyFileRE.MatchString(before) {
+				return ctxBodyFile
+			}
 			return ctxNone
 		}
 		break
@@ -268,6 +280,31 @@ func headerValueItems(name, typed string) []ilsp.CompletionItem {
 		}
 		items = append(items, ilsp.CompletionItem{
 			Label: v, FilterText: v, InsertText: v, Detail: "value", SortText: v,
+		})
+	}
+	return items
+}
+
+// bodyFileRE matches the text before the cursor on a `< file` body line
+// (#1305/#1707): the directive marker (`<`, `<@`, `<@encoding`) followed by
+// whitespace — everything after it is the path being typed.
+var bodyFileRE = regexp.MustCompile(`^[ \t]*<(@[A-Za-z0-9_-]*)?[ \t]+(.*)$`)
+
+// bodyFileItems completes the path of a body file directive against the
+// filesystem, relative to the .http file's own directory — the same
+// resolution the dispatcher applies (#1305). Directories carry a trailing
+// separator so accepting one and completing again descends.
+func bodyFileItems(bufPath, before string) []ilsp.CompletionItem {
+	m := bodyFileRE.FindStringSubmatch(before)
+	if m == nil {
+		return nil
+	}
+	typed := m[2]
+	res := pathcomplete.CompleteFrom(filepath.Dir(bufPath), typed)
+	var items []ilsp.CompletionItem
+	for _, c := range res.Candidates {
+		items = append(items, ilsp.CompletionItem{
+			Label: c, FilterText: c, InsertText: c, Detail: "file", SortText: c,
 		})
 	}
 	return items

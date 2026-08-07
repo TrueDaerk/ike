@@ -76,6 +76,20 @@ Authorization: Bearer {{$env TOKEN}}
   is only recognised when it *is* the whole body, so a lone `<` inside an XML
   payload keeps its literal meaning, and the directive line is not
   Content-Type-highlighted (it is not payload).
+- **Hand-written multipart bodies** (#1707): when the `Content-Type` header
+  declares `multipart/...; boundary=...`, the dispatcher rebuilds the inline
+  body before sending (`httpfile.BuildMultipartBody`): hand-written lines —
+  `--boundary` delimiters, part headers, inline part content — are joined
+  with the **CRLF** line endings RFC 2046 demands (strict servers reject bare
+  LF), the closing `--boundary--` is appended when the author left it off,
+  and a part whose content is a lone `< file` / `<@ file` line embeds that
+  file as the part's content. Per-part paths resolve exactly like the
+  whole-body directive (`.http` file's directory, `~`, placeholders); file
+  bytes are inserted verbatim (binary-safe), and a missing file fails the
+  request before anything is sent. A body that never mentions the declared
+  boundary is sent unchanged — rewriting it could only do harm. The parser
+  itself keeps a multipart body inline (it is multi-line, so the whole-body
+  directive never fires); all part handling lives at dispatch.
 - **Comments:** lines starting with `#` or `//` outside a body. Inside a
   body nothing is stripped.
 
@@ -186,8 +200,12 @@ config file paths, or disable detection entirely.
     directives for `Cache-Control`, encodings for `Accept-Encoding`, and so
     on. The catalog covers the IANA request headers plus the common `X-`/
     `Sec-` ones; values are listed only for headers with a small closed set.
-  - **nothing** inside bodies, comments, `###` lines or folded query
-    continuation lines.
+  - **body**: a line forming a `< file` / `<@ file` directive (#1707) —
+    whole-body (#1305) or inside a multipart part — completes **file paths**
+    after the space, resolved against the `.http` file's own directory
+    (`pathcomplete.CompleteFrom`), directories with a trailing separator so
+    accepting one descends. Everything else in bodies, comments, `###` lines
+    and folded query continuation lines completes nothing.
 
   Matching is a case-insensitive **subsequence** (`internal/fuzzy`), not a
   prefix (#1292): `Cen` reaches `Content-Encoding`, `ctype` reaches
