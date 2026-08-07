@@ -106,8 +106,13 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		// Alt/Ctrl+arrows (word nav), PgUp/PgDn and Ctrl motions also work mid-insert.
 		if res, ok := m.resolveMotion(key.String(), 0, 1); ok {
 			m.fanMotionSecondaries(key.String(), 0, 1, true)
-			m.cursor = m.buf.Clamp(res.Pos)
-			m.desiredCol = m.cursor.Col
+			if res.Kind == motion.Linewise {
+				// Vertical motion keeps the remembered column (#1687).
+				m.cursor = m.buf.Clamp(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
+			} else {
+				m.cursor = m.buf.Clamp(res.Pos)
+				m.desiredCol = m.cursor.Col
+			}
 			m.emit(EventCursorMove)
 		}
 	}
@@ -148,16 +153,33 @@ func (m *Model) completionKey(key tea.KeyPressMsg) bool {
 // insertMove nudges the cursor in insert mode, allowing the one-past-end column
 // (so typing can continue at the line end) rather than the normal-mode clamp.
 // Secondary carets move in parallel (#145).
+//
+// A purely vertical step aims at the remembered column instead of the current
+// one and leaves it untouched (#1687): crossing a short line clamps the caret,
+// but the next longer line restores the goal column, like vim's curswant.
 func (m *Model) insertMove(dLine, dCol int) {
 	// Arrow motion emits a cursor-move event; a showing signature popup
 	// follows it via the bridge retrigger (#523) instead of being dismissed
 	// outright (#315) — the server answers null once the cursor leaves the
 	// call context.
-	p := buffer.Position{Line: m.cursor.Line + dLine, Col: m.cursor.Col + dCol}
-	m.cursor = m.buf.Clamp(p)
-	m.desiredCol = m.cursor.Col
-	m.moveCarets(true, func(pos buffer.Position, _ int) (buffer.Position, int) {
-		q := m.buf.Clamp(buffer.Position{Line: pos.Line + dLine, Col: pos.Col + dCol})
+	vertical := dLine != 0 && dCol == 0
+	col := m.cursor.Col + dCol
+	if vertical {
+		col = m.desiredCol
+	}
+	m.cursor = m.buf.Clamp(buffer.Position{Line: m.cursor.Line + dLine, Col: col})
+	if !vertical {
+		m.desiredCol = m.cursor.Col
+	}
+	m.moveCarets(true, func(pos buffer.Position, desired int) (buffer.Position, int) {
+		c := pos.Col + dCol
+		if vertical {
+			c = desired
+		}
+		q := m.buf.Clamp(buffer.Position{Line: pos.Line + dLine, Col: c})
+		if vertical {
+			return q, desired
+		}
 		return q, q.Col
 	})
 	m.emit(EventCursorMove)

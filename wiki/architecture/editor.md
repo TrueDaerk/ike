@@ -620,6 +620,20 @@ shows immediately, LSP hover content follows when a server answers.
 headers, and cells past the line text are not targets); idle tracking and
 scope guards live at the app layer — see [LSP](./lsp.md) for the full flow.
 
+## Goal column for vertical movement (#1687)
+
+`desiredCol` is the **goal column** (vim's `curswant`): the column vertical
+movement aims at, independent of where a short line forced the cursor to
+stop. Linewise motions — `j`/`k`, `Up`/`Down`, `PgUp`/`PgDn`, `Ctrl-f/b/d/u`,
+`G`/`gg`, and their insert-mode arrow equivalents — put the cursor at
+`desiredCol` on the target line and leave `desiredCol` alone; the buffer clamp
+does the rest. Crossing a short line therefore clamps the caret to that line's
+end, and the next long enough line restores the original column. Everything
+else — horizontal motions, `Home`/`End`, mouse clicks, jumps, and every edit
+(`moveTo`, `applyMutate`, `fanApply`) — resets `desiredCol` to the new cursor
+column. Secondary carets carry their own `desiredCol` and follow the same rule
+(see [Multi-caret editing](#multi-caret-editing-145)).
+
 ## Vim marks & bookmarks (#1151)
 
 `marks.go` implements the vim marks MVP. `m{a-z}` sets a **local mark** at the
