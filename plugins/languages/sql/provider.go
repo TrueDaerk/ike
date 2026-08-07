@@ -16,6 +16,14 @@ import (
 // command still overrides everything (TierOverride).
 
 func init() {
+	// The Formatters settings page edits `builtin` and `keywords` from this
+	// declaration (#1662) — it never learns about SQL itself.
+	format.RegisterBuiltin("sql", format.ConfigKey{
+		Key:     "keywords",
+		Values:  []string{"upper", "lower", "preserve"},
+		Default: "upper",
+		Help:    "keyword casing",
+	})
 	format.Register(format.Provider{
 		Name:      "built-in",
 		Languages: []string{"sql"},

@@ -230,6 +230,7 @@ func ResetForTest() {
 	mu.Unlock()
 	extMu.Lock()
 	externalDefaults = map[string][]External{}
+	builtins = map[string][]ConfigKey{}
 	hinted = map[string]bool{}
 	extMu.Unlock()
 }

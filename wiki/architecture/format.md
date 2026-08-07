@@ -4,7 +4,7 @@ title: Formatter Registry
 description: The neutral reformat layer — providers (config override, external command, LSP, built-in) registered per language, one resolution chain behind lsp.format/lsp.formatRange and format-on-save, edits applied as one undo unit.
 resource: internal/format
 tags: [architecture, format, reformat, registry, lsp, plugins]
-timestamp: 2026-08-06T00:00:00Z
+timestamp: 2026-08-07T00:00:00Z
 ---
 
 # Formatter Registry
@@ -126,10 +126,41 @@ Two registration paths:
 wired to a warn toast by the app) naming the install command, then the chain
 falls through to the next tier. `range_args` opts into reformat-selection
 (1-based inclusive line numbers); absent means the registry's usual range
-fallback. The **Formatters settings page**
-(`internal/settings/format_page.go`, registered by `plugins/format`) lists
-each language's effective command, the supplying layer (plugin default /
-user / project) and whether the binary was found.
+fallback.
+
+## Formatters settings page (#1402, #1662)
+
+`internal/settings/format_page.go` (registered by `plugins/format`) lists one
+row per language with a formatter — plugin default, built-in and/or
+`[format.<languageID>]` override — with the effective command, the supplying
+layer (plugin default / user / project), whether the binary was found and the
+built-in's switch state. Since #1662 it **writes** those overrides instead of
+only reporting them, reaching parity with the Language Servers page:
+
+- `e` toggles `enabled`, `b` toggles `builtin` (only where a built-in exists;
+  otherwise the row says so).
+- `enter` (or a press on the selected row) pushes `formatForm`
+  (`format_form.go`), a sub-panel over the whole table: `command` with path
+  completion through the shared `pathSuggest`, `args`, `range_args`,
+  `temp_file`, `install`, plus the keys the language's built-in declares.
+  The form seeds from the **effective** values, and saving writes only what
+  differs — a field equal to the plugin default, or emptied, has its key
+  *removed*, so an override file never freezes a default. Validation
+  (booleans, declared value sets, `range_args` without any command) happens
+  before anything reaches disk; the whole table is one `ApplyAndReload`
+  batch, one reload.
+- `r` resets the language: every key this page owns, removed from every
+  addressable layer, back to the plugin default.
+- `s` picks the write layer (project ↔ user), like the panel's own scope
+  selector (#794); it starts on the conventional layer for `format.*`
+  (project) and falls back to user when there is no project to write to.
+
+The page never learns about individual languages. A plugin that ships a
+built-in formatter declares it with `format.RegisterBuiltin(langID, keys…)`
+(`internal/format/settings.go`): that both marks the `builtin` switch as
+applicable and declares the built-in's own `[format.<lang>]` keys as
+`format.ConfigKey` values (key, accepted values, default, help) — SQL's
+`keywords`, for instance — which the form renders and validates generically.
 
 ## Built-in SQL formatter (#1403)
 
@@ -149,7 +180,9 @@ end-of-line comments remain trailing); statements separate with one blank
 line, `;` kept. Output is idempotent (golden-tested). Range formatting
 reformats exactly the statements overlapping the selection. The provider
 registers **above the LSP tier** — #1403 pins the built-in over sqls —
-and `[format.sql] builtin = false` restores the sqls path.
+and `[format.sql] builtin = false` restores the sqls path. Both keys are
+declared through `RegisterBuiltin("sql", ConfigKey{Key: "keywords", …})`, so
+the Formatters settings page edits them without knowing SQL exists.
 
 ## Built-in XML formatter (#1404)
 

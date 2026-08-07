@@ -163,10 +163,21 @@ Settings, or run `settings.open` from the palette.
 
 ### Formatters
 
-The **Formatters** page lists each language's external reformat command, the
-config layer supplying it and whether the binary is installed. Overrides live
-in the config file as a `[format.<languageID>]` table (project or user
-layer), mirroring `[lsp.servers.*]`:
+The **Formatters** page lists each language's reformat command, the config
+layer supplying it and whether the binary is installed — and it edits them:
+
+| Key | Action |
+| --- | --- |
+| `enter` | edit the language's override: `command` (tab completes a path), `args`, `range_args`, `temp_file`, `install`, plus the built-in's own keys |
+| `e` | external formatting on/off for the language (`enabled`) |
+| `b` | built-in formatter on/off (`builtin`), where the language ships one |
+| `r` | reset: remove the whole override, back to the plugin default |
+| `s` | the layer writes land in: project ↔ user |
+
+A field left at (or cleared back to) the plugin default is **not** written, so
+the config file only ever holds what actually differs. The same overrides can
+be written by hand as a `[format.<languageID>]` table, mirroring
+`[lsp.servers.*]`:
 
 ```toml
 [format.python]
@@ -188,10 +199,30 @@ editor's back). Available placeholders: `${FILE}`, `${TAB_WIDTH}`,
 another range-capable source or tells you only whole-file reformat is
 available.
 
-Languages with a built-in formatter (SQL, XML) accept two extra keys:
-`builtin = false` disables the built-in (falling back to the language
+Languages with a built-in formatter (SQL, XML, `.http`) accept two extra
+keys: `builtin = false` disables the built-in (falling back to the language
 server), and for SQL `keywords = "upper" | "lower" | "preserve"` controls
 keyword casing.
+
+#### Shipped defaults
+
+Without any override these are the formatters IKE reaches for. Chains try
+each tool in order and use the first one installed; nothing is installed for
+you — a missing binary raises the install hint once and the reformat falls
+through to the next source.
+
+| Language | Default formatter | Install hint |
+| --- | --- | --- |
+| Python | `ruff format`, else `black` (a project `.venv/` or `venv/` install wins over PATH) | `pip install ruff` / `pip install black` |
+| Markdown | `prettier`, else `mdformat` | `npm install -g prettier` / `pip install mdformat` |
+| Shell | `shfmt` (indent flag and dialect derived per buffer) | `brew install shfmt` |
+| Ansible | `prettier` (YAML parser), else `yamlfmt` | `npm install -g prettier` / `go install github.com/google/yamlfmt/cmd/yamlfmt@latest` |
+| SQL | built-in (`keywords` casing), above the `sqls` server | — |
+| XML | built-in pretty-printer | — |
+| `.http` | built-in request formatter | — |
+
+Every other language reformats through its language server when the server
+advertises formatting.
 
 ### Language Servers
 

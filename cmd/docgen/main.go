@@ -91,10 +91,21 @@ func main() {
 // the [format.<languageID>] overrides behind the Formatters page). Keyed by
 // the page title; pages not listed keep the generic interactive-editor note.
 var customPageProse = map[string]string{
-	"Formatters": "The **Formatters** page lists each language's external reformat command, the\n" +
-		"config layer supplying it and whether the binary is installed. Overrides live\n" +
-		"in the config file as a `[format.<languageID>]` table (project or user\n" +
-		"layer), mirroring `[lsp.servers.*]`:\n" +
+	"Formatters": "The **Formatters** page lists each language's reformat command, the config\n" +
+		"layer supplying it and whether the binary is installed — and it edits them:\n" +
+		"\n" +
+		"| Key | Action |\n" +
+		"| --- | --- |\n" +
+		"| `enter` | edit the language's override: `command` (tab completes a path), `args`, `range_args`, `temp_file`, `install`, plus the built-in's own keys |\n" +
+		"| `e` | external formatting on/off for the language (`enabled`) |\n" +
+		"| `b` | built-in formatter on/off (`builtin`), where the language ships one |\n" +
+		"| `r` | reset: remove the whole override, back to the plugin default |\n" +
+		"| `s` | the layer writes land in: project ↔ user |\n" +
+		"\n" +
+		"A field left at (or cleared back to) the plugin default is **not** written, so\n" +
+		"the config file only ever holds what actually differs. The same overrides can\n" +
+		"be written by hand as a `[format.<languageID>]` table, mirroring\n" +
+		"`[lsp.servers.*]`:\n" +
 		"\n" +
 		"```toml\n" +
 		"[format.python]\n" +
@@ -116,10 +127,30 @@ var customPageProse = map[string]string{
 		"another range-capable source or tells you only whole-file reformat is\n" +
 		"available.\n" +
 		"\n" +
-		"Languages with a built-in formatter (SQL, XML) accept two extra keys:\n" +
-		"`builtin = false` disables the built-in (falling back to the language\n" +
+		"Languages with a built-in formatter (SQL, XML, `.http`) accept two extra\n" +
+		"keys: `builtin = false` disables the built-in (falling back to the language\n" +
 		"server), and for SQL `keywords = \"upper\" | \"lower\" | \"preserve\"` controls\n" +
-		"keyword casing.",
+		"keyword casing.\n" +
+		"\n" +
+		"#### Shipped defaults\n" +
+		"\n" +
+		"Without any override these are the formatters IKE reaches for. Chains try\n" +
+		"each tool in order and use the first one installed; nothing is installed for\n" +
+		"you — a missing binary raises the install hint once and the reformat falls\n" +
+		"through to the next source.\n" +
+		"\n" +
+		"| Language | Default formatter | Install hint |\n" +
+		"| --- | --- | --- |\n" +
+		"| Python | `ruff format`, else `black` (a project `.venv/` or `venv/` install wins over PATH) | `pip install ruff` / `pip install black` |\n" +
+		"| Markdown | `prettier`, else `mdformat` | `npm install -g prettier` / `pip install mdformat` |\n" +
+		"| Shell | `shfmt` (indent flag and dialect derived per buffer) | `brew install shfmt` |\n" +
+		"| Ansible | `prettier` (YAML parser), else `yamlfmt` | `npm install -g prettier` / `go install github.com/google/yamlfmt/cmd/yamlfmt@latest` |\n" +
+		"| SQL | built-in (`keywords` casing), above the `sqls` server | — |\n" +
+		"| XML | built-in pretty-printer | — |\n" +
+		"| `.http` | built-in request formatter | — |\n" +
+		"\n" +
+		"Every other language reformats through its language server when the server\n" +
+		"advertises formatting.",
 }
 
 func fail(err error) {
