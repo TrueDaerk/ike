@@ -33,6 +33,7 @@ type CommandEntry struct {
 
 // KeymapPage implements PageModel.
 type KeymapPage struct {
+	navRows    // last rendered height, the pgup/pgdn page (#1666)
 	opts       config.Options
 	registered func(commandID string) bool
 	commands   func() []CommandEntry
@@ -233,18 +234,10 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if k.filtering {
 		return k.updateFilter(key)
 	}
-	if listNav(key.String(), &k.sel, len(k.rows()), navPage) {
+	if listNav(key.String(), &k.sel, len(k.rows()), k.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
-	case "up", "k":
-		if k.sel > 0 {
-			k.sel--
-		}
-	case "down", "j":
-		if k.sel < len(k.rows())-1 {
-			k.sel++
-		}
 	case "z":
 		k.toggleRange()
 		return nil
@@ -423,6 +416,7 @@ func (k *KeymapPage) theme() *theme.Palette {
 // the chord/command table in the settings column, the selected command's
 // detail — every binding, its provenance, its conflicts — in the third.
 func (k *KeymapPage) View(w, h int) string {
+	k.setRows(h)
 	listW, detailW, side := splitGrid(w)
 	list := k.renderList(listW, h)
 	if !side {

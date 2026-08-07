@@ -30,9 +30,10 @@ var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "m
 // ToolsPage implements PageModel. The add/edit form runs as a SubPanel
 // (#883, tools_form.go) pushed through host.
 type ToolsPage struct {
-	opts config.Options
-	pal  *theme.Palette
-	host SubPanelHost
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	pal     *theme.Palette
+	host    SubPanelHost
 
 	sel  int
 	off  int // list scroll offset
@@ -92,7 +93,7 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	if t.suggesting {
 		return t.updateSuggest(key)
 	}
-	if listNav(key.String(), &t.sel, len(t.entries())+1, navPage) {
+	if listNav(key.String(), &t.sel, len(t.entries())+1, t.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
@@ -143,15 +144,11 @@ func (t *ToolsPage) KeyHelp() []string {
 // the binary when missing), esc returns to the list.
 func (t *ToolsPage) updateSuggest(key tea.KeyPressMsg) tea.Cmd {
 	sugs := t.suggestions()
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if listNav(key.String(), &t.sugSel, len(sugs), t.navPageSize()) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if t.sugSel > 0 {
-			t.sugSel--
-		}
-	case "down", "j":
-		if t.sugSel < len(sugs)-1 {
-			t.sugSel++
-		}
 	case "enter":
 		if t.sugSel < 0 || t.sugSel >= len(sugs) {
 			return nil
@@ -239,6 +236,7 @@ func (t *ToolsPage) theme() *theme.Palette {
 
 // View implements PageModel.
 func (t *ToolsPage) View(w, h int) string {
+	t.setRows(h)
 	if t.suggesting {
 		return t.viewSuggestions(w, h)
 	}

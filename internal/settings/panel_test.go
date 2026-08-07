@@ -442,25 +442,24 @@ func TestScrollFollowsSelection(t *testing.T) {
 	m.Open()
 
 	// Category column: move to the last page; its label must be visible.
-	for i := 0; i < len(pages); i++ {
+	// Steps wrap since #1666, so walk exactly to the last row.
+	for i := 0; i < len(pages)-1; i++ {
 		m.Update(key("down"))
 	}
 	if v := m.View(); !strings.Contains(v, "Page L") {
 		t.Fatalf("category list must scroll to the selected page:\n%s", v)
 	}
 	// Form column: back to page 0 (12 entries), walk to the last entry.
-	for i := 0; i < len(pages); i++ {
-		m.Update(key("up"))
-	}
+	m.Update(key("home"))
 	m.Update(key("tab"))
-	for i := 0; i < len(entries); i++ {
+	for i := 0; i < len(entries)-1; i++ {
 		m.Update(key("down"))
 	}
 	if v := m.View(); !strings.Contains(v, "Entry L") {
 		t.Fatalf("form must scroll to the selected entry:\n%s", v)
 	}
 	// Scrolling back up must reveal the first entry again.
-	for i := 0; i < len(entries); i++ {
+	for i := 0; i < len(entries)-1; i++ {
 		m.Update(key("up"))
 	}
 	if v := m.View(); !strings.Contains(v, "Entry A") {

@@ -169,11 +169,12 @@ func (b *boolEditor) View(w, h int) []string {
 // enumEditor is the filterable option list. The current value is marked ●;
 // typing narrows the list instead of scrolling a long one (18 themes).
 type enumEditor struct {
-	m      *Model
-	e      Entry
-	idx    int
-	filter string
-	off    int
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	m       *Model
+	e       Entry
+	idx     int
+	filter  string
+	off     int
 }
 
 func newEnumEditor(m *Model, e Entry) *enumEditor {
@@ -236,7 +237,7 @@ func (n *enumEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 	// be untypeable).
 	switch key.String() {
 	case "up", "down", "pgup", "pgdown", "home", "end":
-		listNav(key.String(), &n.idx, len(opts), navPage)
+		listNav(key.String(), &n.idx, len(opts), n.navPageSize())
 		return nil
 	}
 	if key.Text != "" && key.Text != " " {
@@ -267,6 +268,7 @@ func (n *enumEditor) Wheel(delta int) {
 }
 
 func (n *enumEditor) View(w, h int) []string {
+	n.setRows(h)
 	pal := n.m.theme()
 	dim := lipgloss.NewStyle().Foreground(pal.Secondary)
 	clip := lipgloss.NewStyle().MaxWidth(w)
@@ -596,6 +598,7 @@ func (c *chordEditor) View(w, h int) []string {
 // editor over a []int config field: elements are rejected unless they parse as
 // numbers, and the commit writes a TOML integer array.
 type listEditor struct {
+	navRows // last rendered height, the pgup/pgdn page (#1666)
 	m       *Model
 	e       Entry
 	items   []string
@@ -727,7 +730,7 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	listNav(key.String(), &l.idx, len(l.items)+1, navPage)
+	listNav(key.String(), &l.idx, len(l.items)+1, l.navPageSize())
 	return nil
 }
 
@@ -760,6 +763,7 @@ func (l *listEditor) Wheel(delta int) {
 }
 
 func (l *listEditor) View(w, h int) []string {
+	l.setRows(h)
 	pal := l.m.theme()
 	clip := lipgloss.NewStyle().MaxWidth(w)
 	dim := lipgloss.NewStyle().Foreground(pal.Secondary)

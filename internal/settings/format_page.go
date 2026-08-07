@@ -24,9 +24,10 @@ import (
 
 // FormatPage implements PageModel.
 type FormatPage struct {
-	opts config.Options
-	pal  *theme.Palette
-	host SubPanelHost
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	pal     *theme.Palette
+	host    SubPanelHost
 
 	sel   int
 	off   int
@@ -223,18 +224,10 @@ func extraKeyNames(row formatRow) []string {
 func (p *FormatPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	rows := p.rows()
 	row, hasRow := p.current()
-	if listNav(key.String(), &p.sel, len(rows), navPage) {
+	if listNav(key.String(), &p.sel, len(rows), p.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
-	case "up", "k":
-		if p.sel > 0 {
-			p.sel--
-		}
-	case "down", "j":
-		if p.sel < len(rows)-1 {
-			p.sel++
-		}
 	case "e":
 		if hasRow {
 			return p.write(row.lang, "enabled", !row.enabled)
@@ -309,6 +302,7 @@ func (p *FormatPage) Wheel(delta int) {
 
 // View implements PageModel.
 func (p *FormatPage) View(width, height int) string {
+	p.setRows(height)
 	pal := p.theme()
 	dim := lipgloss.NewStyle().Foreground(pal.Border)
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)

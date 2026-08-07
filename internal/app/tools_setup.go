@@ -111,15 +111,11 @@ func (m Model) toolSetupBody() string {
 // esc skips; everything else is swallowed by the modal.
 func (m Model) updateToolSetup(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ts := m.toolSetup
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &ts.cursor, len(ts.rows), nil) {
+		return m, nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if ts.cursor < len(ts.rows)-1 {
-			ts.cursor++
-		}
-	case "k", "up":
-		if ts.cursor > 0 {
-			ts.cursor--
-		}
 	case "space", " ":
 		ts.rows[ts.cursor].checked = !ts.rows[ts.cursor].checked
 	case "a":

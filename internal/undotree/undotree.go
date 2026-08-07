@@ -16,6 +16,7 @@ import (
 
 	"ike/internal/editor/history"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // JumpMsg asks the root model to restore the focused editor's buffer to the
@@ -118,6 +119,20 @@ func layout(nodes []history.NodeInfo) []row {
 	return out
 }
 
+// listHeight is the row window the overlay renders — the pgup/pgdn page size
+// (#1666). It is derived from the terminal height, so it is known before the
+// first render.
+func (m *Model) listHeight() int {
+	h := m.height/2 - 6
+	if h < 4 {
+		h = 4
+	}
+	if h > len(m.rows) {
+		h = len(m.rows)
+	}
+	return h
+}
+
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	switch msg.String() {
@@ -125,31 +140,12 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		m.Close()
 	case "enter":
 		return m.jumpCurrent()
-	case "down", "j":
-		m.move(1)
-	case "up", "k":
-		m.move(-1)
-	case "pgdown":
-		m.move(10)
-	case "pgup":
-		m.move(-10)
-	case "g":
-		m.cursor = 0
-	case "G":
-		m.cursor = len(m.rows) - 1
+	default:
+		// Shared list semantics (#1666): steps wrap, page jumps clamp to a
+		// visible page.
+		ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.listHeight(), ui.NavFull)
 	}
 	return nil
-}
-
-// move shifts the selection by delta rows, clamped.
-func (m *Model) move(delta int) {
-	m.cursor += delta
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
-	if m.cursor >= len(m.rows) {
-		m.cursor = len(m.rows) - 1
-	}
 }
 
 // jumpCurrent dispatches the selected state. The overlay stays open — the
@@ -183,8 +179,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	return nil
 }
 
-// Wheel scrolls the selection by delta rows.
-func (m *Model) Wheel(delta int) { m.move(delta) }
+// Wheel scrolls the selection by delta rows, clamped — a wheel flick past the
+// end must not teleport to the other end of the list (#1666).
+func (m *Model) Wheel(delta int) { m.cursor = ui.ClampIndex(m.cursor+delta, len(m.rows)) }
 
 // theme returns the active palette, defaulting when none was threaded in.
 func (m *Model) theme() *theme.Palette {
@@ -212,13 +209,7 @@ func (m *Model) View() string {
 	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("Undo Tree")
 	rows := []string{title, ""}
 
-	listH := m.height/2 - 6
-	if listH < 4 {
-		listH = 4
-	}
-	if listH > len(m.rows) {
-		listH = len(m.rows)
-	}
+	listH := m.listHeight()
 	// Keep the selection in the window.
 	if m.cursor < m.top {
 		m.top = m.cursor

@@ -335,6 +335,7 @@ func (f *lspOverrideForm) View(w, h int) string {
 
 // uvPickerPanel picks a downloadable Python for `uv python install`.
 type uvPickerPanel struct {
+	navRows  // last rendered height, the pgup/pgdn page (#1666)
 	page     *ToolchainPage
 	host     SubPanelHost
 	versions []string
@@ -357,7 +358,7 @@ func (u *uvPickerPanel) Buttons() []Button {
 }
 
 func (u *uvPickerPanel) Update(key tea.KeyPressMsg) tea.Cmd {
-	listNav(key.String(), &u.pick, len(u.versions), navPage)
+	listNav(key.String(), &u.pick, len(u.versions), u.navPageSize())
 	return nil
 }
 
@@ -387,6 +388,7 @@ func (u *uvPickerPanel) install() tea.Cmd {
 }
 
 func (u *uvPickerPanel) View(w, h int) string {
+	u.setRows(h)
 	pal := u.page.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)

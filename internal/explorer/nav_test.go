@@ -74,7 +74,14 @@ func TestTreePageAndJumpMotions(t *testing.T) {
 	m = press(m, "G")
 	bottom := m.cursor
 	m = press(m, "g")
-	m = press(m, "j") // disarms; j is clamped at bottom
+	m = press(m, "j") // disarms; j wraps from the bottom to the top (#1666)
+	if m.cursor != 0 {
+		t.Fatalf("j on the last row must wrap to 0, cursor = %d", m.cursor)
+	}
+	m = press(m, "k") // …and back to the bottom
+	if m.cursor != bottom {
+		t.Fatalf("k on the first row must wrap to %d, cursor = %d", bottom, m.cursor)
+	}
 	m = press(m, "g")
 	if m.cursor != bottom {
 		t.Fatalf("disarmed g must not jump, cursor = %d", m.cursor)

@@ -31,8 +31,9 @@ const rainbowSlots = 6
 
 // ColorsPage implements PageModel.
 type ColorsPage struct {
-	opts config.Options
-	pal  *theme.Palette
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	pal     *theme.Palette
 
 	sel int
 	off int
@@ -189,7 +190,7 @@ func (c *ColorsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	case c.picking:
 		return c.updatePicker(key)
 	}
-	if listNav(key.String(), &c.sel, len(c.rows()), navPage) {
+	if listNav(key.String(), &c.sel, len(c.rows()), c.navPageSize()) {
 		c.notice, c.invalid = "", ""
 		return nil
 	}
@@ -260,13 +261,13 @@ func (c *ColorsPage) updatePicker(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	cands := c.candidates(name)
+	// One past the last candidate is the custom-token row (#1666).
+	if listNav(key.String(), &c.pick, len(cands)+1, c.navPageSize()) {
+		return nil
+	}
 	switch key.String() {
 	case "esc":
 		c.picking = false
-	case "up", "k":
-		c.pick = clamp(c.pick-1, 0, len(cands))
-	case "down", "j":
-		c.pick = clamp(c.pick+1, 0, len(cands)) // one past the end = custom token
 	case "enter":
 		if c.pick >= len(cands) {
 			c.picking, c.custom = false, true

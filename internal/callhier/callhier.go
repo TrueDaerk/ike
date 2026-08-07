@@ -16,6 +16,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // node is one tree row: an entry plus its lazily-fetched children. loaded
@@ -161,20 +162,23 @@ func (m *Model) current(rows []*node) *node {
 	return rows[m.cursor]
 }
 
-// move shifts the cursor by delta, clamped to the visible rows.
-func (m *Model) move(rows []*node, delta int) {
-	m.cursor += delta
-	if m.cursor >= len(rows) {
-		m.cursor = len(rows) - 1
+// listHeight is the render window's row count — the pgup/pgdn page size
+// (#1666). It mirrors the height renderRows lays out into.
+func (m *Model) listHeight() int {
+	h := m.height/2 - 5
+	if h < 4 {
+		h = 4
 	}
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
+	return h
 }
 
 // Update handles one key while the overlay is open.
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	rows := m.visible()
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if ui.ListNav(msg.String(), &m.cursor, len(rows), m.listHeight(), ui.NavFull) {
+		return nil
+	}
 	switch msg.String() {
 	case "esc", "q":
 		m.Close()
@@ -187,18 +191,6 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 				return ilsp.DefinitionMsg{Path: e.Path, Line: e.Line, Col: e.Col}
 			}
 		}
-		return nil
-	case "up", "k":
-		m.move(rows, -1)
-		return nil
-	case "down", "j":
-		m.move(rows, 1)
-		return nil
-	case "pgup":
-		m.move(rows, -10)
-		return nil
-	case "pgdown":
-		m.move(rows, 10)
 		return nil
 	case "right", "l", "space":
 		if n := m.current(rows); n != nil {
@@ -263,11 +255,7 @@ func (m *Model) View() string {
 	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(heading)
 	rows := []string{title, ""}
 
-	listH := m.height/2 - 5
-	if listH < 4 {
-		listH = 4
-	}
-	rows = append(rows, m.renderRows(innerW, listH, pal)...)
+	rows = append(rows, m.renderRows(innerW, m.listHeight(), pal)...)
 	rows = append(rows, "", lipgloss.NewStyle().Faint(true).Render(
 		"enter jumps · space expands · tab callers/callees · esc closes"))
 

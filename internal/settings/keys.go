@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // keys.go is the unified key layer (0420, #887): one shared list-navigation
@@ -17,35 +18,39 @@ import (
 
 // listNav applies the shared list-navigation keys to *sel over n rows —
 // up/down (k/j), pgup/pgdn, home/end — and reports whether it consumed the
-// key. page is the jump size for pgup/pgdn.
+// key. page is the jump size for pgup/pgdn. Since #1666 the semantics come
+// from ui.ListNav, shared with every other selectable list in the app: single
+// steps wrap around, page jumps clamp at the ends.
 func listNav(key string, sel *int, n, page int) bool {
-	if n <= 0 {
-		return false
-	}
 	if page < 1 {
-		page = 10
+		page = navPage
 	}
-	switch key {
-	case "up", "k":
-		*sel = clamp(*sel-1, 0, n-1)
-	case "down", "j":
-		*sel = clamp(*sel+1, 0, n-1)
-	case "pgup":
-		*sel = clamp(*sel-page, 0, n-1)
-	case "pgdown":
-		*sel = clamp(*sel+page, 0, n-1)
-	case "home":
-		*sel = 0
-	case "end":
-		*sel = n - 1
-	default:
-		return false
-	}
-	return true
+	return ui.ListNav(key, sel, n, page, ui.NavFull&^ui.NavVimExtremes)
 }
 
-// navPage is the shared pgup/pgdn jump size for settings lists.
+// navPage is the fallback pgup/pgdn jump size for a settings list whose page
+// has not been rendered yet, so its visible height is still unknown.
 const navPage = 10
+
+// navRows remembers a page's last rendered height so pgup/pgdn jump one
+// visible screen rather than the fixed navPage fallback (#1666). Pages embed
+// it, call setRows from View and pass navPageSize to listNav.
+// The field is deliberately not called "rows": several pages that embed this
+// have a rows() method, and a promoted field of the same name would read as a
+// shadow even though Go's depth rule resolves it to the method.
+type navRows struct{ viewH int }
+
+// setRows records the height View was asked to render into.
+func (n *navRows) setRows(h int) { n.viewH = h }
+
+// navPageSize is the pgup/pgdn jump size: the last rendered height, or the
+// navPage fallback before the first render.
+func (n navRows) navPageSize() int {
+	if n.viewH < 1 {
+		return navPage
+	}
+	return n.viewH
+}
 
 // --- chord capture sub-panel ---
 
@@ -138,6 +143,7 @@ type keyHelp struct {
 	lines []string
 	pal   *theme.Palette
 	off   int
+	navRows
 }
 
 func (k *keyHelp) Title() string   { return "Keys" }
@@ -145,17 +151,31 @@ func (k *keyHelp) Capturing() bool { return false }
 func (k *keyHelp) Buttons() []Button {
 	return []Button{{Label: "Close", Key: "enter", Do: func() tea.Cmd { k.host.Pop(); return nil }}}
 }
+
+// Update scrolls the cheatsheet. This is a text scroller, not a selection
+// list, so every key clamps — there is nothing to wrap around (#1666); the
+// page keys page it by a screenful like every other list.
 func (k *keyHelp) Update(key tea.KeyPressMsg) tea.Cmd {
+	page := k.navPageSize()
 	switch key.String() {
 	case "up", "k":
 		k.off = clamp(k.off-1, 0, len(k.lines))
 	case "down", "j":
 		k.off = clamp(k.off+1, 0, len(k.lines))
+	case "pgup":
+		k.off = clamp(k.off-page, 0, len(k.lines))
+	case "pgdown":
+		k.off = clamp(k.off+page, 0, len(k.lines))
+	case "home":
+		k.off = 0
+	case "end":
+		k.off = clamp(len(k.lines)-page, 0, len(k.lines))
 	}
 	return nil
 }
 func (k *keyHelp) Wheel(delta int) { k.off = clamp(k.off+delta, 0, len(k.lines)) }
 func (k *keyHelp) View(w, h int) string {
+	k.setRows(h)
 	pal := k.pal
 	if pal == nil {
 		pal = theme.DefaultPalette()

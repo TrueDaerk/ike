@@ -32,6 +32,14 @@ func key(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp}
+	case "pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "home":
+		return tea.KeyPressMsg{Code: tea.KeyHome}
+	case "end":
+		return tea.KeyPressMsg{Code: tea.KeyEnd}
 	}
 	panic("unknown key " + s)
 }
@@ -104,5 +112,37 @@ func TestViewMarksCurrentAndSaved(t *testing.T) {
 	}
 	if !strings.Contains(v, "4 states") {
 		t.Error("view should count the states")
+	}
+}
+
+// TestNavigationWrapsAndPagesClamp guards #1666: j/k wrap around the ends,
+// pgup/pgdn clamp there instead.
+func TestNavigationWrapsAndPagesClamp(t *testing.T) {
+	m := New()
+	m.SetSize(80, 24)
+	m.Open(nodesFixture()) // 4 rows, cursor starts on the current node (row 0)
+	m.Update(key("k"))
+	if m.cursor != 3 {
+		t.Fatalf("k on the first row = %d, want 3", m.cursor)
+	}
+	m.Update(key("j"))
+	if m.cursor != 0 {
+		t.Fatalf("j on the last row = %d, want 0", m.cursor)
+	}
+	m.Update(key("pgup"))
+	if m.cursor != 0 {
+		t.Fatalf("pgup on the first row must clamp, got %d", m.cursor)
+	}
+	m.Update(key("pgdown"))
+	if m.cursor != 3 {
+		t.Fatalf("pgdn must clamp at the last row, got %d", m.cursor)
+	}
+	m.Update(key("home"))
+	if m.cursor != 0 {
+		t.Fatalf("home = %d, want 0", m.cursor)
+	}
+	m.Update(key("end"))
+	if m.cursor != 3 {
+		t.Fatalf("end = %d, want 3", m.cursor)
 	}
 }

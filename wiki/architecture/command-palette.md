@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-07-27T14:00:00Z
+timestamp: 2026-08-07T18:00:00Z
 ---
 
 # Command Palette
@@ -369,7 +369,10 @@ discoverability, the project-switch command's appearance) is owned by roadmaps
 - **Presentation + routing only.** The palette dispatches `tea.Msg`s and executes
   nothing; owners (editor, explorer, projects) handle them.
 - **Dismissable and non-destructive.** `esc` closes with no side effects;
-  `↑`/`↓`/`ctrl+p`/`ctrl+n` navigate; `enter` activates.
+  `↑`/`↓`/`ctrl+p`/`ctrl+n` navigate — **wrapping** at both ends since #1666 —
+  and `pgup`/`pgdn` jump one visible result window, clamped; `enter` activates.
+  `home`/`end` stay with the query's text cursor. Both columns behave the same;
+  see [Selection-List Navigation](/architecture/list-navigation.md).
 
 ## Boundaries
 

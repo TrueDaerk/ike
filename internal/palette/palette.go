@@ -306,14 +306,16 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		if p.sideFocus {
 			switch {
 			case msg.Code == tea.KeyUp, msg.Code == 'p' && msg.Mod == tea.ModCtrl:
-				if p.sideSel > 0 {
-					p.sideSel--
-				}
+				p.moveSide(-1)
 				return nil
 			case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
-				if p.sideSel < len(p.sideItems)-1 {
-					p.sideSel++
-				}
+				p.moveSide(1)
+				return nil
+			case msg.Code == tea.KeyPgUp:
+				p.moveSidePage(-1)
+				return nil
+			case msg.Code == tea.KeyPgDown:
+				p.moveSidePage(1)
 				return nil
 			case msg.Code == tea.KeyEnter:
 				return p.activateSide()
@@ -340,6 +342,12 @@ func (p *Palette) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case msg.Code == tea.KeyDown, msg.Code == 'n' && msg.Mod == tea.ModCtrl:
 		p.move(1)
+		return nil
+	case msg.Code == tea.KeyPgUp:
+		p.movePage(-1)
+		return nil
+	case msg.Code == tea.KeyPgDown:
+		p.movePage(1)
 		return nil
 	case msg.Code == tea.KeyTab:
 		// Ask the active mode to extend the query (path completion, #542).
@@ -450,19 +458,42 @@ func (p *Palette) activateSide() tea.Cmd {
 	return func() tea.Msg { return msg }
 }
 
-// move changes the selection by delta, clamped, and scrolls the visible window.
+// move changes the selection by delta single steps, wrapping at both ends
+// (#1666), and scrolls the visible window.
 func (p *Palette) move(delta int) {
 	if len(p.items) == 0 {
 		return
 	}
-	p.selected += delta
-	if p.selected < 0 {
-		p.selected = 0
-	}
-	if p.selected >= len(p.items) {
-		p.selected = len(p.items) - 1
-	}
+	p.selected = ui.StepIndex(p.selected, delta, len(p.items))
 	p.scrollToSelected()
+}
+
+// movePage jumps the selection by delta result windows, clamped at the ends
+// (#1666) — page jumps do not wrap, the vim/fzf convention.
+func (p *Palette) movePage(delta int) {
+	if len(p.items) == 0 {
+		return
+	}
+	p.selected = ui.PageIndex(p.selected, delta, len(p.items), p.visibleRows())
+	p.scrollToSelected()
+}
+
+// moveSide steps the left column's selection with wrap-around (#1666).
+func (p *Palette) moveSide(delta int) {
+	if len(p.sideItems) == 0 {
+		return
+	}
+	p.sideSel = ui.StepIndex(p.sideSel, delta, len(p.sideItems))
+}
+
+// moveSidePage jumps the left column by delta windows, clamped. The side
+// column renders one heading line above its rows, so its page is one row
+// shorter than the main list's.
+func (p *Palette) moveSidePage(delta int) {
+	if len(p.sideItems) == 0 {
+		return
+	}
+	p.sideSel = ui.PageIndex(p.sideSel, delta, len(p.sideItems), p.visibleRows()-1)
 }
 
 // Click maps a left press at box-relative (x, y) onto the row layout (#820):

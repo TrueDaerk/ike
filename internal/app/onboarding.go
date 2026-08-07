@@ -131,15 +131,11 @@ func (m Model) onboardingBody() string {
 // everything else is swallowed so nothing leaks past the modal.
 func (m Model) updateOnboarding(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ob := m.onboarding
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &ob.cursor, len(ob.items), nil) {
+		return m, nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if ob.cursor < len(ob.items)-1 {
-			ob.cursor++
-		}
-	case "k", "up":
-		if ob.cursor > 0 {
-			ob.cursor--
-		}
 	case "space", " ":
 		id := ob.items[ob.cursor].ID
 		ob.checked[id] = !ob.checked[id]

@@ -41,6 +41,7 @@ type lspStatus struct {
 // LSPPage implements PageModel (and MsgReceiver). The restart closures come
 // from the LSP plugin; running lists the languages with a live server.
 type LSPPage struct {
+	navRows     // last rendered height, the pgup/pgdn page (#1666)
 	opts        config.Options
 	running     func() []string
 	restartAll  func() tea.Cmd
@@ -203,7 +204,7 @@ func (p *LSPPage) rowStatus(id string) (label, detail string) {
 // Update implements PageModel.
 func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	l, hasRow := p.current()
-	if listNav(key.String(), &p.sel, len(p.servers()), navPage) {
+	if listNav(key.String(), &p.sel, len(p.servers()), p.navPageSize()) {
 		return nil
 	}
 	switch key.String() {
@@ -353,6 +354,7 @@ func (p *LSPPage) theme() *theme.Palette {
 
 // View implements PageModel.
 func (p *LSPPage) View(w, h int) string {
+	p.setRows(h)
 	pal := p.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	master := "on"

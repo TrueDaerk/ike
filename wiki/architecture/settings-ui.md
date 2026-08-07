@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-08-07T12:00:00Z
+timestamp: 2026-08-07T18:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -446,7 +446,13 @@ restart moved to **R** selected / **ctrl+r** all; the marketplace refresh
 moved to **g**), **s** is reserved for the write scope everywhere (the LSP
 options JSON edit moved to **o**; the Tools suggestions gained a visible
 `+ Suggestions…` action row next to the `s` shortcut). Every list understands
-**pgup/pgdn/home/end** through the shared `listNav` helper. Schema `Chord`
+**pgup/pgdn/home/end** through the shared `listNav` helper, which since #1666
+delegates to the app-wide [`ui.ListNav`](/architecture/list-navigation.md):
+single steps (`↑`/`↓`, `j`/`k`) **wrap** at both ends, page keys **clamp** and
+jump by the page's own rendered height (pages embed `navRows` to record it;
+`navPage` = 10 is the pre-render fallback). `g`/`G` stay out of the shared set
+here — a page's single letters are actions (the marketplace refresh is `g`).
+Schema `Chord`
 entries capture through a shared sub-panel with keymap-page semantics —
 multi-step chords, enter confirms, backspace undoes a step — instead of
 grabbing the next keypress. **?** opens a key-help sub-panel listing the

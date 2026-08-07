@@ -20,8 +20,9 @@ var mapFieldNames = [mapFieldCount]string{"server", "local"}
 
 // DebugMapPage implements PageModel.
 type DebugMapPage struct {
-	opts config.Options
-	pal  *theme.Palette
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	opts    config.Options
+	pal     *theme.Palette
 
 	sel  int
 	off  int // list scroll offset
@@ -58,15 +59,11 @@ func (t *DebugMapPage) entries() []config.DebugPathMap {
 
 // Update implements PageModel.
 func (t *DebugMapPage) Update(key tea.KeyPressMsg) tea.Cmd {
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if listNav(key.String(), &t.sel, len(t.entries()), t.navPageSize()) {
+		return nil
+	}
 	switch key.String() {
-	case "up", "k":
-		if t.sel > 0 {
-			t.sel--
-		}
-	case "down", "j":
-		if t.sel < len(t.entries())-1 {
-			t.sel++
-		}
 	case "a":
 		t.openForm(-1)
 	case "enter":
@@ -147,6 +144,7 @@ func (t *DebugMapPage) theme() *theme.Palette {
 
 // View implements PageModel.
 func (t *DebugMapPage) View(w, h int) string {
+	t.setRows(h)
 	pal := t.theme()
 	head := " server path → local path   (PHP listen-mode docroot mappings, #823)"
 	entries := t.entries()

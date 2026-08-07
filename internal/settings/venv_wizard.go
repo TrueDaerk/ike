@@ -53,8 +53,9 @@ type wizToolRow struct {
 // venvWizard implements SubPanel (and CmdReceiver, SubPanelClicker,
 // SubPanelWheeler).
 type venvWizard struct {
-	page *ToolchainPage
-	host SubPanelHost
+	navRows // last rendered height, the pgup/pgdn page (#1666)
+	page    *ToolchainPage
+	host    SubPanelHost
 
 	step int
 
@@ -297,16 +298,11 @@ func (w *venvWizard) updatePick(key tea.KeyPressMsg) tea.Cmd {
 	switch key.String() {
 	case "esc":
 		w.back()
-	case "up", "k":
-		if *pick > 0 {
-			*pick--
-		}
-	case "down", "j":
-		if *pick < n-1 {
-			*pick++
-		}
 	case "enter":
 		return w.next()
+	default:
+		// Shared list semantics (#1666): steps wrap, page jumps clamp.
+		listNav(key.String(), pick, n, w.navPageSize())
 	}
 	return nil
 }
@@ -393,6 +389,7 @@ var spinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"
 
 // View implements SubPanel.
 func (w *venvWizard) View(width, height int) string {
+	w.setRows(height)
 	pal := w.theme()
 	sec := lipgloss.NewStyle().Foreground(pal.Secondary)
 	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)

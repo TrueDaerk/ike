@@ -15,6 +15,7 @@ Component-level concepts for the IKE codebase.
 * [Keybindings & Shortcuts](/architecture/keybindings.md) - chord/key model, JetBrains-like default set, context-scoped resolution with multi-step chords + timeout, conflict detection, platform normalisation, cheatsheet (Roadmap 0080)
 * [Workspace](/architecture/workspace.md) - per-project UI state unit (panes, split tree, focus) behind a Manager; the seamless project-switching seam (Roadmap 0370)
 * [Floating Shell](/architecture/floating-shell.md) - reusable centered overlay component hosting any content (modals, plugin popups, help)
+* [Selection-List Navigation](/architecture/list-navigation.md) - the cursor semantics every selectable list shares: wrapping single steps, clamping page keys sized to the visible list, viewport follow (#1666)
 * [Pane Layout & Drag](/architecture/pane-layout.md) - pure split-tree layout, mouse pane-edge resize & title-bar move, split/close ops, per-project persistence (Roadmap 0036/0037)
 * [Pane Registry & Multiple Editors](/architecture/pane-registry.md) - instance registry behind layout leaves, N editors, focused-leaf focus model, open-in-new-pane intent (Roadmap 0037)
 * [Editor Tabs](/architecture/editor-tabs.md) - per-pane ordered document list with one active tab: open appends/activates, close peels tabs before the pane, shared buffers across tabs (Roadmap 0190)

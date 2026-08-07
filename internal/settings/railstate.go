@@ -55,6 +55,10 @@ type railRow struct {
 	page   int
 }
 
+// railHeight is the category rail's visible row count — the panel body height
+// under the chrome. It is the rail's pgup/pgdn page size (#1666).
+func (m *Model) railHeight() int { return max(1, m.height-chromeRows) }
+
 // railRows interleaves section headers (#890) with the page rows.
 func (m *Model) railRows() []railRow {
 	var out []railRow

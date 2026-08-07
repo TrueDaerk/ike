@@ -362,13 +362,17 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	case "enter":
 		return m.openCurrent()
 	case "down", "j":
-		m.list.Move(1)
+		m.list.Step(1) // wraps past the last entry (#1666)
 	case "up", "k":
-		m.list.Move(-1)
+		m.list.Step(-1)
 	case "pgdown":
-		m.list.Move(10)
+		m.list.Page(1) // one visible page, clamped at the ends (#1666)
 	case "pgup":
-		m.list.Move(-10)
+		m.list.Page(-1)
+	case "home", "g":
+		m.list.Home()
+	case "end", "G":
+		m.list.End()
 	// ctrl doubles every alt binding: on macOS Option is a composition key,
 	// so alt chords never reach the terminal (#422); ctrl is the delivered
 	// primary, alt stays for terminals where it works.

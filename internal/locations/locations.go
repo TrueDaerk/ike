@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
+	"ike/internal/ui"
 )
 
 // Item is one location: a line of Text in Path with an optional highlighted
@@ -40,10 +41,12 @@ type List struct {
 	total  int
 	cursor int // index into the item sequence across groups
 	top    int // first visible *row* (headers + items) of the render window
+	viewH  int // rows of the last Render window — the page-jump size (#1666)
 }
 
-// Reset clears all items and state.
-func (l *List) Reset() { *l = List{} }
+// Reset clears all items and state, keeping the last render height so a page
+// jump before the first re-render still moves by a screenful.
+func (l *List) Reset() { *l = List{viewH: l.viewH} }
 
 // Append adds a batch of items, grouping consecutive items of the same path
 // (both scanner backends emit file-contiguous matches; a path seen again
@@ -133,8 +136,53 @@ func (l *List) Advance(delta int) (Item, bool) {
 	if l.total == 0 {
 		return Item{}, false
 	}
-	l.cursor = ((l.cursor+delta)%l.total + l.total) % l.total
+	l.cursor = ui.StepIndex(l.cursor, delta, l.total)
 	return l.Current()
+}
+
+// Step shifts the cursor by delta single steps with wrap-around (#1666) —
+// the up/down key primitive, as opposed to Move's clamped wheel semantics.
+func (l *List) Step(delta int) { l.cursor = ui.StepIndex(l.cursor, delta, l.total) }
+
+// Page shifts the cursor by delta windows of the last Render height, clamped
+// at both ends (#1666). Header rows count towards the jump — the cursor lands
+// on the item nearest the target render row — so one pgdn scrolls exactly one
+// screenful whatever the group layout. An unrendered list falls back to ten
+// items.
+func (l *List) Page(delta int) {
+	if l.total == 0 {
+		return
+	}
+	h := l.viewH
+	if h < 1 {
+		h = 10
+	}
+	l.cursor = l.itemNearRow(l.rowOfCursor() + delta*h)
+}
+
+// Home and End jump to the first/last item.
+func (l *List) Home() { l.cursor = 0 }
+func (l *List) End()  { l.cursor = max(0, l.total-1) }
+
+// itemNearRow returns the item whose render row is closest to target, so a
+// page jump that lands on a file header resolves to a real stop.
+func (l *List) itemNearRow(target int) int {
+	row, item, best, bestDist := 0, 0, 0, -1
+	for _, g := range l.groups {
+		row++ // header
+		for range g.items {
+			d := row - target
+			if d < 0 {
+				d = -d
+			}
+			if bestDist < 0 || d < bestDist {
+				best, bestDist = item, d
+			}
+			row++
+			item++
+		}
+	}
+	return best
 }
 
 // All returns every item in display order (replace-all consumes this).
@@ -241,20 +289,10 @@ func (l *List) Render(width, height int, pal *theme.Palette, displayPath func(st
 	if displayPath == nil {
 		displayPath = func(p string) string { return p }
 	}
-	// Scroll the window to keep the cursor row visible.
-	cur := l.rowOfCursor()
-	if cur < l.top {
-		l.top = cur
-	}
-	if cur >= l.top+height {
-		l.top = cur - height + 1
-	}
-	if max := l.rowCount() - height; l.top > max {
-		l.top = max
-	}
-	if l.top < 0 {
-		l.top = 0
-	}
+	// Scroll the window to keep the cursor row visible, and remember the
+	// window height as the page-jump size (#1666).
+	l.viewH = height
+	l.top = ui.ScrollToShow(l.top, l.rowOfCursor(), height, l.rowCount())
 
 	header := lipgloss.NewStyle().Bold(true).Foreground(pal.BorderFocus)
 	count := lipgloss.NewStyle().Faint(true)

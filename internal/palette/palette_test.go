@@ -3,6 +3,7 @@ package palette
 import (
 	"charm.land/lipgloss/v2"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -229,10 +230,15 @@ func TestNavigation(t *testing.T) {
 	if p.selected != 2 {
 		t.Fatalf("after two downs selection = %d, want 2", p.selected)
 	}
-	// Clamp at the bottom.
+	// Wrap-around at the bottom (#1666).
 	p.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	if p.selected != 0 {
+		t.Fatalf("down on the last entry should wrap to 0, got %d", p.selected)
+	}
+	// …and at the top.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if p.selected != 2 {
-		t.Fatalf("selection should clamp at 2, got %d", p.selected)
+		t.Fatalf("up on the first entry should wrap to 2, got %d", p.selected)
 	}
 	p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if p.selected != 1 {
@@ -848,5 +854,55 @@ func TestSideRowTimeColumn(t *testing.T) {
 	narrow := ansi.Strip(p.sideRow(Item{Title: "longprojectname", Time: "2h ago", Aux: RunCommandMsg{ID: "x"}}, false, true, 16))
 	if strings.Contains(narrow, "ago") {
 		t.Fatalf("side time must drop in a too-narrow column, got %q", narrow)
+	}
+}
+
+// TestPageNavigationClamps guards #1666: pgup/pgdn move the selection by one
+// visible result window and clamp at the ends instead of wrapping.
+func TestPageNavigationClamps(t *testing.T) {
+	var cmds []registry.OwnedCommand
+	for i := 0; i < 30; i++ {
+		cmds = append(cmds, owned("c"+strconv.Itoa(i), "Cmd "+strconv.Itoa(i), plugin.GlobalScope()))
+	}
+	p := New(Config{DefaultPrefix: ':', MaxResults: 5}, NewCommandMode(fakeSource{cmds: cmds}, nil, false), fileMode())
+	p.SetSize(80, 40)
+	p.Open(Context{ContextID: "editor"})
+	if len(p.items) != 30 {
+		t.Fatalf("items = %d, want 30", len(p.items))
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	if p.selected != 5 {
+		t.Fatalf("pgdn selection = %d, want 5 (one window of 5)", p.selected)
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if p.selected != 0 {
+		t.Fatalf("pgup selection = %d, want 0", p.selected)
+	}
+	// Clamping, not wrapping — the distinguishing property against the
+	// single-step keys.
+	p.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
+	if p.selected != 0 {
+		t.Fatalf("pgup on the first row must clamp, got %d", p.selected)
+	}
+	for i := 0; i < 10; i++ {
+		p.Update(tea.KeyPressMsg{Code: tea.KeyPgDown})
+	}
+	if p.selected != 29 {
+		t.Fatalf("pgdn past the end must clamp at 29, got %d", p.selected)
+	}
+}
+
+// TestSingleResultNavigationStaysPut guards #1666: wrap-around on a one-entry
+// list is a no-op, not an index error.
+func TestSingleResultNavigationStaysPut(t *testing.T) {
+	src := fakeSource{cmds: []registry.OwnedCommand{owned("a", "Alpha", plugin.GlobalScope())}}
+	p := New(Config{DefaultPrefix: ':'}, NewCommandMode(src, nil, false), fileMode())
+	p.SetSize(80, 24)
+	p.Open(Context{ContextID: "editor"})
+	for _, code := range []rune{tea.KeyDown, tea.KeyUp, tea.KeyPgDown, tea.KeyPgUp} {
+		p.Update(tea.KeyPressMsg{Code: code})
+		if p.selected != 0 {
+			t.Fatalf("selection = %d, want 0", p.selected)
+		}
 	}
 }

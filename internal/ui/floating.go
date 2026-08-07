@@ -345,6 +345,11 @@ func (f *Floating) ContentOrigin() (x, y int) {
 // ScrollOffset returns how many content rows are scrolled off the top.
 func (f *Floating) ScrollOffset() int { return f.scroll.vp.YOffset() }
 
+// ViewportRows is the number of content rows currently visible in the box —
+// the page size a hosted selection list should use for pgup/pgdn (#1666).
+// Zero before the first layout; callers fall back to their own default then.
+func (f *Floating) ViewportRows() int { return f.scroll.vp.Height() }
+
 // hint renders the dismiss-key hint, e.g. "esc/?/q", in a stable order.
 func (f *Floating) hint() string {
 	keys := f.cfg.DismissKeys

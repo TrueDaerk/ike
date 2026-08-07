@@ -143,17 +143,13 @@ func (m *Model) previewTheme(name string) {
 // the theme active before the dialog. Both continue the setup flow.
 func (m Model) updateThemePick(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	tp := m.themePick
+	// Shared list semantics (#1666): steps wrap, page jumps clamp.
+	if m.pickerNav(msg.String(), &tp.cursor, len(tp.names), func() {
+		m.previewTheme(tp.names[tp.cursor])
+	}) {
+		return m, nil
+	}
 	switch msg.String() {
-	case "j", "down":
-		if tp.cursor < len(tp.names)-1 {
-			tp.cursor++
-			m.previewTheme(tp.names[tp.cursor])
-		}
-	case "k", "up":
-		if tp.cursor > 0 {
-			tp.cursor--
-			m.previewTheme(tp.names[tp.cursor])
-		}
 	case "enter":
 		cmd := m.selectTheme(tp.names[tp.cursor])
 		m.themePick = nil
