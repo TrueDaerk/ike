@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, side-by-side or unified rendering with theme diff slots and per-side tree-sitter syntax highlighting, hunk navigation (n/N, enter jumps the editor), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-07-16T19:30:00Z
+timestamp: 2026-08-07T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -47,7 +47,21 @@ line under a dual old/new gutter. Line backgrounds come from three new theme
 `ui` slots — `DiffAdded`, `DiffRemoved`, `DiffChanged` (intra-line emphasis) —
 declared by every builtin and defaulted for sparse themes by tinting the
 theme's own `Success`/`Error`/`Warning` toward its `Surface` (`theme.Mix`).
-Syntax highlighting inside the diff is deferred polish.
+
+Syntax highlighting (#1699) rides on top: both sides parse independently with
+the language resolved from the compared file's path (the editor's
+`internal/lang` resolution) — the right side is (or mirrors) a real buffer,
+the left side is a virtual document (HEAD blob, snapshot, clipboard) parsed
+on its own from the text git handed over. Capture colours come from the
+palette's capture table (`highlight.NewTheme`, the HTTP pane's shape) and
+compose as *foreground* under the diff-state *backgrounds*, in both
+side-by-side and unified layouts — added/removed line backgrounds and the
+intra-line emphasis stay visible over the syntax colours. Sides re-parse when
+content is set (`SetContents`) or re-diffed (`Rediff`); while edit mode
+renders the right column through the embedded editor (which highlights live
+itself), the per-keystroke re-diffs skip the right-side parse and a single
+parse runs when edit mode ends. Language-less paths and CGo-free builds
+render diff colouring only.
 
 Keys (focused pane): `j`/`k`/arrows scroll by visual row, `ctrl+u`/`ctrl+d`
 and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls. `n`/`N`

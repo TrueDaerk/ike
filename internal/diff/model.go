@@ -18,6 +18,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor/viewport"
+	"ike/internal/highlight"
 	"ike/internal/theme"
 )
 
@@ -76,6 +77,17 @@ type Model struct {
 	// persisted so a restart can re-read the blobs (#508).
 	leftRev  string
 	rightRev string
+
+	// Syntax highlighting (#1699): each side parses independently with the
+	// compared file's language — the right side is (or mirrors) a real
+	// buffer, the left side is a virtual document (HEAD blob, snapshot)
+	// sharing the same path-resolved language. hl resolves capture names to
+	// foreground colours, composed under the diff-state backgrounds at
+	// render time; it is built lazily so a zero-value Model stays safe.
+	hl        *highlight.Theme
+	leftIx    highlight.Index
+	rightIx   highlight.Index
+	rightText string
 }
 
 // EditRequestMsg asks the root model to start edit mode on the diff pane Key
@@ -144,7 +156,51 @@ func (m *Model) SetFocused(f bool) { m.focused = f }
 // SetPalette re-themes and re-renders the view.
 func (m *Model) SetPalette(p *theme.Palette) {
 	m.pal = p
+	m.hl = nil // capture colours follow the palette; rebuild lazily
 	m.render()
+}
+
+// hlTheme returns the capture→style theme, built from the palette's capture
+// table on first use (the HTTP pane's shape — palette captures, no config
+// overlay).
+func (m *Model) hlTheme() *highlight.Theme {
+	if m.hl == nil {
+		var captures map[string]string
+		if m.pal != nil {
+			captures = m.pal.Captures
+		}
+		t := highlight.NewTheme(captures, nil)
+		m.hl = &t
+	}
+	return m.hl
+}
+
+// hlPath returns the path the syntax language resolves from: the right
+// (current) side when file-backed, else the left. "" disables highlighting.
+func (m Model) hlPath() string {
+	if m.rightPath != "" {
+		return m.rightPath
+	}
+	return m.leftPath
+}
+
+// rehighlight re-parses the requested sides (#1699). The two sides parse
+// independently — the left is a virtual document (HEAD blob, snapshot) with
+// no buffer behind it — but share the language resolved from the file path.
+// No path, no language support, or a CGo-free build leaves the indexes empty
+// and the rows render with diff colouring only.
+func (m *Model) rehighlight(left, right bool) {
+	path := m.hlPath()
+	if path == "" || !highlight.Supported(path) {
+		m.leftIx, m.rightIx = highlight.Index{}, highlight.Index{}
+		return
+	}
+	if left {
+		m.leftIx = highlight.NewIndex(highlight.Highlight(path, splitLines(m.leftText)))
+	}
+	if right {
+		m.rightIx = highlight.NewIndex(highlight.Highlight(path, splitLines(m.rightText)))
+	}
 }
 
 // SetSize records the interior size and re-renders: lines wrap to the column
@@ -161,11 +217,13 @@ func (m *Model) SetSize(w, h int) {
 // resets; the current hunk and every gap expansion clear.
 func (m *Model) SetContents(left, right string) {
 	m.leftText = left
+	m.rightText = right
 	m.res = Compute(left, right)
 	m.cur = -1
 	m.top = 0
 	m.gaps = computeGaps(m.res, m.ctx)
 	m.buildRightRow()
+	m.rehighlight(true, true)
 	m.render()
 }
 
@@ -179,6 +237,9 @@ func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, ri
 	m.leftRev, m.rightRev = leftRev, rightRev
 	m.editable = editable
 	m.editModeOn = false
+	// The path (and thus the language) may change; the following SetContents
+	// re-parses both sides against the new one.
+	m.leftIx, m.rightIx = highlight.Index{}, highlight.Index{}
 }
 
 // SetRevs records which revision backs each side ("" = a working-tree file),
@@ -196,8 +257,20 @@ func (m *Model) SetEditable(e bool) { m.editable = e }
 func (m Model) Editable() bool { return m.editable && m.rightPath != "" }
 
 // SetEditMode flips the pane-owned edit mode flag; while on, View is unused
-// (the pane composes RenderEditSplit) and the model only re-diffs.
-func (m *Model) SetEditMode(on bool) { m.editModeOn = on }
+// (the pane composes RenderEditSplit) and the model only re-diffs. Leaving
+// edit mode re-parses the right side once from the final buffer state — the
+// per-keystroke Rediffs skipped it while the embedded editor (with its own
+// live highlighting) rendered that column.
+func (m *Model) SetEditMode(on bool) {
+	if m.editModeOn == on {
+		return
+	}
+	m.editModeOn = on
+	if !on {
+		m.rehighlight(false, true)
+		m.render()
+	}
+}
 
 // EditMode reports whether the pane drives an embedded editor.
 func (m Model) EditMode() bool { return m.editModeOn }
@@ -205,12 +278,18 @@ func (m Model) EditMode() bool { return m.editModeOn }
 // Rediff recomputes the rows for new right-side content against the retained
 // left text (per keystroke in edit mode); scroll and hunk state stay.
 func (m *Model) Rediff(right string) {
+	m.rightText = right
 	m.res = Compute(m.leftText, right)
 	if m.cur >= len(m.res.Hunks) {
 		m.cur = len(m.res.Hunks) - 1
 	}
 	m.gaps = computeGaps(m.res, m.ctx)
 	m.buildRightRow()
+	if !m.editModeOn {
+		// In edit mode the right column is the embedded editor's own render;
+		// re-parsing it here per keystroke would be wasted work (#1699).
+		m.rehighlight(false, true)
+	}
 	m.render()
 }
 
@@ -342,6 +421,7 @@ func (m Model) EditSplitWidths() (left, right int) {
 // them the moment the deletion is undone.
 func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 	st := m.styles()
+	hl := m.hlTheme()
 	lw, _ := m.gutterWidths()
 	colL, colR := m.EditSplitWidths()
 	sep := st.gutter.Render(" │ ")
@@ -360,7 +440,8 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 				segs = nil // no left counterpart: gap cell
 			}
 			left = m.gutterCell(row.LeftNo, lw, 0, row.Kind != RowAdded, st) +
-				renderSegment(runes, segs, 0, colL, st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans))
+				renderSegment(runes, segs, 0, colL, st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans),
+					sideCaps(m.leftIx, row.LeftNo, row.Left), hl)
 		}
 		b.WriteString(left)
 		b.WriteString(sep)
@@ -596,6 +677,7 @@ func (st styles) base(kind Kind, right bool) lipgloss.Style {
 // side pads with gap rows so the pair stays aligned.
 func (m *Model) renderSideBySide(items []displayItem) {
 	st := m.styles()
+	hl := m.hlTheme()
 	lw, rw := m.gutterWidths()
 	avail := m.w - (lw + 1) - (rw + 1) - 3 // two gutters + " │ "
 	colL := max(1, avail/2)
@@ -620,13 +702,15 @@ func (m *Model) renderSideBySide(items []displayItem) {
 		if row.Kind == RowRemoved {
 			segsR = nil
 		}
+		capsL := sideCaps(m.leftIx, row.LeftNo, row.Left)
+		capsR := sideCaps(m.rightIx, row.RightNo, row.Right)
 		for v := 0; v < height; v++ {
 			var b strings.Builder
 			b.WriteString(m.gutterCell(row.LeftNo, lw, v, row.Kind != RowAdded, st))
-			b.WriteString(renderSegment(leftRunes, segsL, v, colL, st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans)))
+			b.WriteString(renderSegment(leftRunes, segsL, v, colL, st.base(row.Kind, false), st.span, expandSpans(row.Left, row.LeftSpans), capsL, hl))
 			b.WriteString(sep)
 			b.WriteString(m.gutterCell(row.RightNo, rw, v, row.Kind != RowRemoved, st))
-			b.WriteString(renderSegment(rightRunes, segsR, v, colR, st.base(row.Kind, true), st.span, expandSpans(row.Right, row.RightSpans)))
+			b.WriteString(renderSegment(rightRunes, segsR, v, colR, st.base(row.Kind, true), st.span, expandSpans(row.Right, row.RightSpans), capsR, hl))
 			m.lines = append(m.lines, b.String())
 		}
 	}
@@ -636,9 +720,10 @@ func (m *Model) renderSideBySide(items []displayItem) {
 // changed pair renders as its removed line followed by its added line.
 func (m *Model) renderUnified(items []displayItem) {
 	st := m.styles()
+	hl := m.hlTheme()
 	lw, rw := m.gutterWidths()
 	col := max(1, m.w-(lw+1)-(rw+1))
-	emit := func(text string, leftNo, rightNo int, base lipgloss.Style, spans []Span) {
+	emit := func(text string, leftNo, rightNo int, base lipgloss.Style, spans []Span, caps []string) {
 		runes := expand(text)
 		segs := viewport.WrapSegments(runes, col, 1)
 		espans := expandSpans(text, spans)
@@ -646,7 +731,7 @@ func (m *Model) renderUnified(items []displayItem) {
 			var b strings.Builder
 			b.WriteString(m.gutterCell(leftNo, lw, v, true, st))
 			b.WriteString(m.gutterCell(rightNo, rw, v, true, st))
-			b.WriteString(renderSegment(runes, segs, v, col, base, st.span, espans))
+			b.WriteString(renderSegment(runes, segs, v, col, base, st.span, espans, caps, hl))
 			m.lines = append(m.lines, b.String())
 		}
 	}
@@ -660,14 +745,14 @@ func (m *Model) renderUnified(items []displayItem) {
 		m.rowStarts[ri] = len(m.lines)
 		switch row.Kind {
 		case RowSame:
-			emit(row.Left, row.LeftNo, row.RightNo, st.same, nil)
+			emit(row.Left, row.LeftNo, row.RightNo, st.same, nil, sideCaps(m.rightIx, row.RightNo, row.Right))
 		case RowChanged:
-			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans)
-			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans)
+			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
+			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
 		case RowRemoved:
-			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans)
+			emit(row.Left, row.LeftNo, 0, st.removed, row.LeftSpans, sideCaps(m.leftIx, row.LeftNo, row.Left))
 		case RowAdded:
-			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans)
+			emit(row.Right, 0, row.RightNo, st.added, row.RightSpans, sideCaps(m.rightIx, row.RightNo, row.Right))
 		}
 	}
 }
@@ -702,9 +787,11 @@ func (m Model) gutterCell(no, width, visual int, present bool, st styles) string
 }
 
 // renderSegment paints visual row v of a wrapped line, padded to width cells:
-// base-styled text with span ranges emphasized. segs == nil renders a gap row
-// (blank, unstyled).
-func renderSegment(runes []rune, segs []int, v, width int, base, span lipgloss.Style, spans []Span) string {
+// base-styled text with span ranges emphasized and syntax captures as
+// foreground (#1699) — syntax colours the runes, the diff state colours the
+// background, and both survive inside an emphasized range. segs == nil
+// renders a gap row (blank, unstyled).
+func renderSegment(runes []rune, segs []int, v, width int, base, span lipgloss.Style, spans []Span, caps []string, hl *highlight.Theme) string {
 	if v >= len(segs) {
 		return strings.Repeat(" ", width)
 	}
@@ -714,13 +801,19 @@ func renderSegment(runes []rune, segs []int, v, width int, base, span lipgloss.S
 	col := start
 	for col < end {
 		emph := inSpan(spans, col)
+		cname := capAt(caps, col)
 		e := col + 1
-		for e < end && inSpan(spans, e) == emph {
+		for e < end && inSpan(spans, e) == emph && capAt(caps, e) == cname {
 			e++
 		}
 		st := base
 		if emph {
 			st = span
+		}
+		if cname != "" && hl != nil {
+			if cs, ok := hl.Style(cname); ok {
+				st = st.Foreground(cs.GetForeground())
+			}
 		}
 		b.WriteString(st.Render(string(runes[col:e])))
 		col = e
@@ -729,6 +822,36 @@ func renderSegment(runes []rune, segs []int, v, width int, base, span lipgloss.S
 		b.WriteString(base.Render(strings.Repeat(" ", pad)))
 	}
 	return b.String()
+}
+
+// capAt returns the capture covering display column col, "" past the line end.
+func capAt(caps []string, col int) string {
+	if col < 0 || col >= len(caps) {
+		return ""
+	}
+	return caps[col]
+}
+
+// sideCaps returns the syntax capture per tab-expanded display column of one
+// side's raw line, aligned with expand(raw); nil when that side is a gap or
+// its document produced no spans (#1699). lineNo is the 1-based line number
+// within that side's document.
+func sideCaps(ix highlight.Index, lineNo int, raw string) []string {
+	if lineNo <= 0 || ix.Empty() || raw == "" {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for i, r := range []rune(raw) {
+		c := ix.CaptureAt(lineNo-1, i)
+		n := 1
+		if r == '\t' {
+			n = tabWidth
+		}
+		for k := 0; k < n; k++ {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // inSpan reports whether rune column col lies inside any span.
