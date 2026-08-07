@@ -4051,7 +4051,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case highlight.SpansMsg:
 		// Async Tree-sitter parse results route to every editor leaf owning the
 		// path (background panes and shared-document views included); each pane
-		// filters by its own document version.
+		// filters by its own document version. The pass's Go-computed lint
+		// notes (#1623/#1654) also feed the Problems store — its own channel,
+		// so server publishes and lint findings replace independently — and an
+		// empty set legitimately clears the path.
+		m.probStore.SetNotes(msg.Path, editor.NoteDiagnostics(msg.Notes))
+		m.refreshProblemsPanel()
 		return m, m.routeToEditor(msg.Path, msg)
 
 	case editor.SyncMsg:

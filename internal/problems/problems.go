@@ -35,15 +35,23 @@ type OpenLocationMsg struct {
 // path's set wholesale on every publish, mirroring the editor's own cache.
 type Store struct {
 	byPath map[string][]ilsp.Diagnostic
+	// noteByPath holds the Go-computed lint findings (#1623/#1654) — the
+	// editor's highlight pass publishes them per parse. They live in their
+	// own map because the two flows replace independently: a server publish
+	// must not clobber the lint findings, nor the reverse.
+	noteByPath map[string][]ilsp.Diagnostic
 }
 
 // NewStore returns an empty store.
-func NewStore() *Store { return &Store{byPath: map[string][]ilsp.Diagnostic{}} }
+func NewStore() *Store {
+	return &Store{byPath: map[string][]ilsp.Diagnostic{}, noteByPath: map[string][]ilsp.Diagnostic{}}
+}
 
 // Drop removes path's entry — and, for a directory, every entry beneath it
 // (#1102): a deleted file's findings must not linger in the pane.
 func (s *Store) Drop(path string, isDir bool) {
 	delete(s.byPath, path)
+	delete(s.noteByPath, path)
 	if !isDir {
 		return
 	}
@@ -51,6 +59,11 @@ func (s *Store) Drop(path string, isDir bool) {
 	for p := range s.byPath {
 		if strings.HasPrefix(p, prefix) {
 			delete(s.byPath, p)
+		}
+	}
+	for p := range s.noteByPath {
+		if strings.HasPrefix(p, prefix) {
+			delete(s.noteByPath, p)
 		}
 	}
 }
@@ -65,21 +78,56 @@ func (s *Store) Set(path string, diags []ilsp.Diagnostic) {
 	s.byPath[path] = diags
 }
 
-// Get returns path's current diagnostic set (nil when clean).
-func (s *Store) Get(path string) []ilsp.Diagnostic { return s.byPath[path] }
+// SetNotes replaces path's Go-computed lint findings (#1623/#1654); an empty
+// set removes the entry, mirroring Set.
+func (s *Store) SetNotes(path string, diags []ilsp.Diagnostic) {
+	if len(diags) == 0 {
+		delete(s.noteByPath, path)
+		return
+	}
+	s.noteByPath[path] = diags
+}
 
-// Paths returns every path holding diagnostics, sorted lexicographically.
+// Get returns path's current findings (nil when clean): the server's set
+// first, then the lint findings.
+func (s *Store) Get(path string) []ilsp.Diagnostic {
+	ds := s.byPath[path]
+	ns := s.noteByPath[path]
+	if len(ns) == 0 {
+		return ds
+	}
+	if len(ds) == 0 {
+		return ns
+	}
+	out := make([]ilsp.Diagnostic, 0, len(ds)+len(ns))
+	return append(append(out, ds...), ns...)
+}
+
+// Paths returns every path holding findings, sorted lexicographically.
 func (s *Store) Paths() []string {
 	out := make([]string, 0, len(s.byPath))
 	for p := range s.byPath {
 		out = append(out, p)
 	}
+	for p := range s.noteByPath {
+		if _, dup := s.byPath[p]; !dup {
+			out = append(out, p)
+		}
+	}
 	sort.Strings(out)
 	return out
 }
 
-// Len reports how many files currently hold diagnostics.
-func (s *Store) Len() int { return len(s.byPath) }
+// Len reports how many files currently hold findings.
+func (s *Store) Len() int {
+	n := len(s.byPath)
+	for p := range s.noteByPath {
+		if _, dup := s.byPath[p]; !dup {
+			n++
+		}
+	}
+	return n
+}
 
 // row is one rendered line: a file header or one diagnostic under it.
 type row struct {

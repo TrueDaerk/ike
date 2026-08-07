@@ -234,3 +234,41 @@ func TestStoreDropRemovesSubtree(t *testing.T) {
 		t.Fatal("sibling with the dir-name prefix must survive")
 	}
 }
+
+// TestStoreNotesChannel (#1654): the Go-computed lint findings live in their
+// own channel — a server publish must not clobber them, nor the reverse — and
+// merge into Get/Paths/Len like any finding.
+func TestStoreNotesChannel(t *testing.T) {
+	s := NewStore()
+	s.SetNotes("/a.go", []ilsp.Diagnostic{diag(0, 0, 2, "zero-width space", "")})
+	if s.Len() != 1 || len(s.Get("/a.go")) != 1 {
+		t.Fatalf("notes-only path: Len = %d, Get = %d entries", s.Len(), len(s.Get("/a.go")))
+	}
+	// A server publish on the same path merges instead of replacing.
+	s.Set("/a.go", []ilsp.Diagnostic{diag(1, 0, 1, "type error", "")})
+	if got := s.Get("/a.go"); len(got) != 2 {
+		t.Fatalf("merged Get = %d entries, want 2", len(got))
+	}
+	if s.Len() != 1 || len(s.Paths()) != 1 {
+		t.Fatalf("one path with both channels: Len = %d, Paths = %v", s.Len(), s.Paths())
+	}
+	// Clearing one channel leaves the other.
+	s.SetNotes("/a.go", nil)
+	if got := s.Get("/a.go"); len(got) != 1 || got[0].Message != "type error" {
+		t.Fatalf("after clearing notes: %+v", got)
+	}
+	s.Set("/a.go", nil)
+	if s.Len() != 0 {
+		t.Fatalf("Len after clearing both = %d, want 0", s.Len())
+	}
+}
+
+// TestStoreDropRemovesNotes (#1654): Drop clears the notes channel too.
+func TestStoreDropRemovesNotes(t *testing.T) {
+	s := NewStore()
+	s.SetNotes("/dir/a.go", []ilsp.Diagnostic{diag(0, 0, 2, "n", "")})
+	s.Drop("/dir", true)
+	if s.Len() != 0 {
+		t.Fatalf("Len after subtree drop = %d, want 0", s.Len())
+	}
+}

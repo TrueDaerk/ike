@@ -77,11 +77,12 @@ func TestPasteTextSchedulesReparse(t *testing.T) {
 	}
 }
 
-// TestPasteTextNoReparseWithoutGrammar: a paste into a plain-text buffer
-// returns no command — there is nothing to highlight (#1491).
-func TestPasteTextNoReparseWithoutGrammar(t *testing.T) {
+// TestPasteTextReparseWithoutGrammar: a paste into a plain-text buffer still
+// schedules the pass — no grammar means no spans, but the Unicode hygiene scan
+// (#1654) is language-agnostic and must track every edit.
+func TestPasteTextReparseWithoutGrammar(t *testing.T) {
 	m, _ := loaded(t, "abc\n")
-	if cmd := m.PasteText("XYZ"); cmd != nil {
-		t.Fatal("no grammar means no parse command")
+	if cmd := m.PasteText("XYZ"); cmd == nil {
+		t.Fatal("plain buffers still schedule the language-agnostic pass (#1654)")
 	}
 }

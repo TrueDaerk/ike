@@ -7,9 +7,11 @@ import (
 	"ike/internal/bracket"
 	"ike/internal/highlight"
 	"ike/internal/jwt"
+	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/secret"
 	"ike/internal/unidiff"
+	"ike/internal/unihint"
 	"ike/internal/yamlanchor"
 )
 
@@ -34,21 +36,34 @@ func (m Model) maybeReparse(beforeVersion int, cmd tea.Cmd) (Model, tea.Cmd) {
 func (m *Model) Reparse() tea.Cmd { return m.parseCmd() }
 
 // parseCmd snapshots the buffer and version and returns a command that parses on
-// a goroutine, yielding a SpansMsg. It returns nil when the file has no grammar,
-// or when the document is flagged large (#149) — the CGo parse cost scales with
-// file size, so skipping it is the single biggest degradation win.
+// a goroutine, yielding a SpansMsg. It returns nil only when the document is
+// flagged large (#149) — the parse cost scales with file size, so skipping it is
+// the single biggest degradation win. Files without a language still get a pass:
+// the Unicode hygiene scan (#1654) is language-agnostic, and its ASCII fast path
+// keeps the cost of a plain buffer at one byte scan per line.
 func (m *Model) parseCmd() tea.Cmd {
-	if m.InsightOff() || !highlight.Supported(m.path) {
+	if m.InsightOff() {
 		return nil
 	}
+	supported := highlight.Supported(m.path)
 	path := m.path
 	version := m.docVersion
 	lines := m.buf.Lines()
 	return func() tea.Msg {
-		spans, scopes, folds := highlight.HighlightScoped(path, lines)
-		// The Go-computed linter (#1623) rides the same off-loop pass as the
-		// parse: same snapshot, same version guard, no second schedule.
-		notes := highlight.Lint(path, lines)
+		var spans []highlight.Span
+		var scopes []highlight.Scope
+		var folds []highlight.Fold
+		var notes []lang.Note
+		if supported {
+			spans, scopes, folds = highlight.HighlightScoped(path, lines)
+			// The Go-computed linter (#1623) rides the same off-loop pass as
+			// the parse: same snapshot, same version guard, no second schedule.
+			notes = highlight.Lint(path, lines)
+		}
+		// Invisible/deceptive Unicode findings (#1654) merge into the same
+		// note stream, so every buffer — with or without a language — marks
+		// zero-width characters, bidi controls and confusable identifiers.
+		notes = append(notes, unihint.Notes(lines)...)
 		return highlight.SpansMsg{Path: path, Version: version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
 	}
 }
