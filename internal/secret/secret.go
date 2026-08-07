@@ -86,10 +86,18 @@ var publicMarkers = []string{
 
 // Suspect reports whether key names a value that should render masked. An
 // empty key is never suspect.
+//
+// The user's own patterns (editor.secret_masking_keys, #1712) are consulted
+// first and decide on their own: a positive entry masks a key the tables below
+// never heard of, a negative one exempts a key they would otherwise mask. Only
+// a key no configured pattern matches reaches the built-ins.
 func Suspect(key string) bool {
 	up := strings.ToUpper(strings.TrimSpace(key))
 	if up == "" {
 		return false
+	}
+	if mask, matched := keyVerdict(up); matched {
+		return mask
 	}
 	for _, s := range strong {
 		if strings.Contains(up, s) {

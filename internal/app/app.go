@@ -67,6 +67,7 @@ import (
 	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/search"
+	"ike/internal/secret"
 	"ike/internal/settings"
 	"ike/internal/snippets"
 	"ike/internal/structpanel"
@@ -809,6 +810,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	unidiff.SetWordHighlight(diffWordsConfigured()) // word-level diff emphasis (#1630)
 	applyIDColorConfig()                            // identifier colors (#1626)
 	applyNumberHintUnits()                          // number-hint field units (#1685)
+	applySecretMaskingKeys()                        // custom secret key patterns (#1712)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
 	m.backupSvc = backupService()
@@ -3988,7 +3990,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Number-hint field units (#1685): the mapping decides which family a
 		// literal gets, so a change only lands once the spans are produced
 		// again — re-parse every open editor when it moved.
-		if applyNumberHintUnits() {
+		// Custom secret key patterns (#1712) install the same way and need
+		// the same re-parse; both are applied before the check so one
+		// changing never skips installing the other.
+		changedUnits := applyNumberHintUnits()
+		if applySecretMaskingKeys() || changedUnits {
 			return m, tea.Batch(m.reparseOpenEditors()...)
 		}
 		// Rainbow brackets (#789): a toggle flip re-parses every open editor
@@ -6274,6 +6280,18 @@ func applyNumberHintUnits() bool {
 		return false
 	}
 	return numhint.SetFieldUnits(c.Editor.NumberHintUnits)
+}
+
+// applySecretMaskingKeys pushes editor.secret_masking_keys (#1712) into the
+// secret package global, where the dotenv producer reads it — same deal as
+// applyNumberHintUnits, and it reports a change for the same reason: which
+// values carry a mask is decided when the spans are produced.
+func applySecretMaskingKeys() bool {
+	c := config.Get()
+	if c == nil {
+		return false
+	}
+	return secret.SetKeyPatterns(c.Editor.SecretMaskingKeys)
 }
 
 // settingsSize bounds the floating settings panel: most of the terminal, but

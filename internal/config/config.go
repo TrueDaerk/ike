@@ -155,6 +155,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.conceal_exclude", strings.Join(c.Editor.ConcealExclude, ","))
 	put("editor.conceal_file_rules", strings.Join(c.Editor.ConcealFileRules, ","))
 	put("editor.secret_masking", c.Editor.SecretMasking)
+	put("editor.secret_masking_keys", strings.Join(c.Editor.SecretMaskingKeys, ","))
 	put("editor.hyperlinks", c.Editor.Hyperlinks)
 	put("editor.color_preview", c.Editor.ColorPreview)
 	put("editor.id_colors", c.Editor.IDColors)
