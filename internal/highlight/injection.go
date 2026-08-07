@@ -10,16 +10,37 @@ import "ike/internal/lang"
 // (typically "string") — host colouring still shows through between injected
 // tokens.
 
+// maxInjectionDepth bounds recursive injection resolution (#1697): a buffer
+// supports up to this many nested injection levels below the host (Python →
+// HTML is level 1, the HTML's <script> JavaScript is level 2, an HTML template
+// literal inside that script is level 3). Deeper fragments keep their
+// enclosing language's styling, so pathological nesting cannot blow up a
+// parse.
+const maxInjectionDepth = 3
+
 // overlayFragments returns spans for lines parsed with the host language l's
 // grammar, prefixed with the spans of every embedded fragment parsed with its
 // own grammar. Fragments come from the host's injection query or, for hosts
 // registering one, its Go-level region detector (#1303). Hosts without either,
 // fragments without a registered grammar, and CGo-disabled builds all degrade
 // to the plain host spans.
+// Injections resolve recursively (#1697): each fragment's own language runs
+// its injection query in turn, so HTML injected into a Python string still
+// highlights its <script> and <style> bodies, down to maxInjectionDepth.
 // It also returns the fragments' foldable ranges in host coordinates (#1329):
 // a JSON body embedded in a .http request folds by JSON's own fold nodes, so
 // collapsing a large request body works exactly as it does in a .json buffer.
 func overlayFragments(l lang.Language, lines []string, host []Span) ([]Span, []Fold) {
+	return overlayFragmentsAt(l, lines, host, 1)
+}
+
+// overlayFragmentsAt is overlayFragments at nesting level depth: the host
+// buffer resolves its fragments at depth 1, a fragment's own fragments at
+// depth 2, and so on until maxInjectionDepth is exhausted.
+func overlayFragmentsAt(l lang.Language, lines []string, host []Span, depth int) ([]Span, []Fold) {
+	if depth > maxInjectionDepth {
+		return host, nil
+	}
 	frags := fragmentsFor(l, lines)
 	if len(frags) == 0 {
 		return host, nil
@@ -39,8 +60,10 @@ func overlayFragments(l lang.Language, lines []string, host []Span) ([]Span, []F
 			continue
 		}
 		spans, _, ff := parseScoped(el.Grammar, nil, foldKinds(el), f.Lines)
+		spans, nested := overlayFragmentsAt(el, f.Lines, spans, depth+1)
 		injected = append(injected, offsetSpans(spans, f)...)
 		folds = append(folds, offsetFolds(ff, f)...)
+		folds = append(folds, offsetFolds(nested, f)...)
 	}
 	if len(injected) == 0 {
 		return host, folds

@@ -69,6 +69,33 @@ func TestOverlayRegexFragment(t *testing.T) {
 	}
 }
 
+// Injection resolution is recursive but bounded (#1697): at the last allowed
+// level a fragment still injects, one past it the host spans come back
+// untouched — pathological nesting cannot recurse without limit.
+func TestOverlayFragmentsDepthLimit(t *testing.T) {
+	host := lang.Language{
+		ID: "depthhost",
+		Regions: func(lines []string) []lang.Region {
+			return []lang.Region{{Lang: "regex", StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 8}}
+		},
+	}
+	lines := []string{`[a-z]+$x`}
+	hostSpans := []Span{{Line: 0, StartCol: 0, EndCol: 8, Capture: "string"}}
+
+	spans, _ := overlayFragmentsAt(host, lines, hostSpans, maxInjectionDepth)
+	if len(spans) <= len(hostSpans) {
+		t.Errorf("at depth %d: no injected spans, got %+v", maxInjectionDepth, spans)
+	}
+
+	spans, folds := overlayFragmentsAt(host, lines, hostSpans, maxInjectionDepth+1)
+	if len(spans) != len(hostSpans) || spans[0] != hostSpans[0] {
+		t.Errorf("past depth %d: spans = %+v, want untouched host %+v", maxInjectionDepth, spans, hostSpans)
+	}
+	if folds != nil {
+		t.Errorf("past depth %d: folds = %+v, want nil", maxInjectionDepth, folds)
+	}
+}
+
 func TestOffsetFolds(t *testing.T) {
 	f := Fragment{Lang: "json", StartLine: 4, StartCol: 0, EndLine: 9}
 	got := offsetFolds([]Fold{{HeaderLine: 0, EndLine: 4}, {HeaderLine: 1, EndLine: 2}}, f)
