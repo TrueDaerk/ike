@@ -130,6 +130,7 @@ Active when an editor pane has focus.
 | Comment block | `cmd+shift+7` | `ctrl+shift+7` | `editor.commentBlock` |
 | Comment line | `cmd+7` | `ctrl+7` | `editor.commentLine` |
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |
+| Copy JSON/YAML path | `cmd+alt+shift+c` | `ctrl+alt+shift+c` | `editor.copyDocPath` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |

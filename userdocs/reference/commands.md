@@ -178,6 +178,9 @@ bring their own.
 | Toggle Block Comment | `editor.commentBlock` | `cmd+shift+7` | — | `editor` pane |
 | Toggle Line Comment | `editor.commentLine` | `cmd+7` | — | `editor` pane |
 | Copy | `editor.copy` | `cmd+c` | `y` | `editor` pane |
+| Copy JSON/YAML Path | `editor.copyDocPath` | `cmd+alt+shift+c` | — | `editor` pane |
+| Copy JSON/YAML Path as jq Expression | `editor.copyDocPathJQ` | — | — | `editor` pane |
+| Copy JSON/YAML Path as yq Expression | `editor.copyDocPathYQ` | — | — | `editor` pane |
 | Cut | `editor.cut` | `cmd+x` | `d` | `editor` pane |
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |

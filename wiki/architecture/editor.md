@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-07T12:00:00Z
+timestamp: 2026-08-07T13:00:00Z
 ---
 
 # Editor
@@ -1287,6 +1287,48 @@ by `editor.csv_rendering` (default on, Settings → Editor):
   column.
 
 The buffer never changes — alignment is virtual padding only.
+
+## JSON/YAML path breadcrumb (#1660)
+
+In a deep manifest, CI config or lockfile the structure panel answers "what is
+in this file" top-down; this answers "where am I" cursor-first, and makes the
+answer copyable. `internal/docpath` derives the path, `internal/editor/docpath.go`
+caches and renders it.
+
+- **Derivation** is structural, not a parse: no document is loaded, no value
+  unmarshalled, no second parser added. JSON runs a container stack over the
+  buffer (`{`/`[` push, `}`/`]` pop, a string in key position names its object
+  frame, a comma at array level advances its index) with strings and JSONC
+  comments skipped, so a brace inside `"a } b"` closes nothing. YAML is
+  indentation-driven: every line contributes its `- ` dashes and its `key:` at
+  the columns they sit at, and a column pops the frames it is no longer nested
+  inside — including the legal spelling where a sequence shares its parent
+  key's column. Block scalars (`|`, `>`), `#` comments and `---` document
+  boundaries are honored, and a flow value (`{a: 1}`, `[1, 2]`, also across
+  lines) hands off to the JSON scanner, since inside `{ }` YAML *is* that
+  grammar.
+- **Graceful degradation** falls out of the design: a scan only ever reads up
+  to the caret, so a buffer that is unfinished or broken below it still yields
+  the nearest enclosing node, and an unbalanced closer finds an empty stack.
+  Same for a caret in whitespace or on a blank line — the enclosing node stays.
+- **Anchors and aliases** are reported *as written*: `<<: *base` is the `<<`
+  key, an alias is never followed. A path that silently resolved one would name
+  a location the file does not contain; resolution is #1629's job.
+- **Status line**: the `docpath` segment (`Model.DocPathLabel`) shows
+  `spec.template.containers[2].env[0].name`, truncated **from the left** with a
+  leading `…` at 44 cells — the tail names where the caret actually is. Empty,
+  and so hidden, at the document root and in every buffer without a scanner
+  (see [Status Line Segments](/architecture/status-line.md)).
+- **Copy commands** take the full, untruncated path in three flavours:
+  `editor.copyDocPath` (dotted, `cmd+alt+shift+c`), `editor.copyDocPathJQ`
+  (`.spec.containers[2].name`, non-identifier keys bracket-quoted) and
+  `editor.copyDocPathYQ` (yq v4's spelling, `."my-key"`). They write the `+`
+  register with the #1255 clipboard-failure toast, like Cmd+C.
+- **Cost**: the scan reads from the first line to the caret, so it is cached
+  per document version *and* caret position (`docPathCache`, a pointer field
+  shared across the value copies like `svTable`, reset per view on a document
+  share) and the whole feature is off in large-file mode (`InsightOff`), like
+  every other whole-buffer analysis.
 
 ## Log-file rendering (#1621)
 

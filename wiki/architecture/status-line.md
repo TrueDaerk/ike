@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Status Line Segments
-description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, csv column, notification counter.
+description: Extensible left/right slot model behind the bottom status bar — mode, file, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, notification counter.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-08-07T13:00:00Z
 ---
 
 # Status Line Segments
@@ -30,6 +30,7 @@ segments.
 | `encoding` | on-disk character encoding (`UTF-8`, `UTF-16 LE`, …, #66) | no file |
 | `indent` | effective indent style + width, `Spaces: 2` / `Tab: 4`, including any `.editorconfig` override (#63) | no file |
 | `svcolumn` | caret's table column in a csv/tsv/psv buffer, `column 3: qty` — the name from a header-ish first row, bare `column 3` otherwise (#1659, see [Editor](/architecture/editor.md)) | not a table-rendered buffer |
+| `docpath` | caret's path in a JSON/YAML buffer, `spec.containers[2].env[0].name` — truncated from the left at 44 cells, since the tail is the interesting part (#1660, see [Editor](/architecture/editor.md)) | no path scanner for the buffer, or the caret is at the document root |
 | `diagnostics` | `NE NW` error/warning counts | buffer clean |
 | `host` | plugin-set persistent status (`SetStatus`) | unset |
 | `lsp` | focused buffer's language server state (#380) | no tracked state |
@@ -46,8 +47,8 @@ bar onto a second row and corrupt the layout. Overflow shrinks
 priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, eol,
-encoding, indent, svcolumn, toolchain, todo, host, notifications, macro, branch,
-diagnostics, lsp — mode, file and the cursor never drop), and only as a
+encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
+branch, diagnostics, lsp — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
 ## Mode badge (#1323)

@@ -678,6 +678,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		}
 		m.toggleValue()
 		m.scroll()
+	// JSON/YAML path at the caret (#1660), in the three copyable flavours.
+	case "copy_doc_path":
+		return m, m.copyDocPath(DocPathDotted)
+	case "copy_doc_path_jq":
+		return m, m.copyDocPath(DocPathJQ)
+	case "copy_doc_path_yq":
+		return m, m.copyDocPath(DocPathYQ)
 	case "comment_line":
 		cmd := m.commentLine()
 		m.scroll()
