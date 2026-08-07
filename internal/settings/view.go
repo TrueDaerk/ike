@@ -661,7 +661,7 @@ func (m *Model) renderPageDetail(w, h int, wrap func(string, lipgloss.Style) []s
 // ≡ a multi-value list, ✎ free text — so beginners do not have to guess and
 // power users read it peripherally.
 func affordanceValue(e Entry, val string) string {
-	if e.Type == List {
+	if e.Type == List || e.Type == IntList {
 		val = strings.Trim(val, "[]")
 		val = strings.Join(splitList(val), ", ")
 		if val == "" {

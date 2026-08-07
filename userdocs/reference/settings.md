@@ -70,6 +70,7 @@ Settings, or run `settings.open` from the palette.
 | Soft wrap | `editor.wrap` | boolean | `false` | user | Wrap long lines at the pane edge |
 | Show whitespace | `editor.show_whitespace` | enum: `none`, `trailing`, `all` | `none` | user | Render spaces and tabs visibly |
 | Indent guides | `editor.indent_guides` | boolean | `false` | user | Draw vertical lines at each indentation level |
+| Rulers | `editor.rulers` | list of integers | *(empty)* | user | Display columns tinted as vertical margin guides (80, 120); empty draws none. Columns below 1 are clamped to 1 |
 | Rainbow indent guides | `editor.rainbow_indent_guides` | boolean | `true` | user | Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn |
 | Breadcrumbs | `editor.breadcrumbs` | boolean | `true` | user | Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable |
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
@@ -100,7 +101,24 @@ Settings, or run `settings.open` from the palette.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
+| Show hidden files | `explorer.show_hidden` | boolean | `false` | user | List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way |
+| Git status colors | `explorer.git_status` | boolean | `true` | user | Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children |
+| File type icons | `explorer.icons` | boolean | `false` | user | Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed) |
+| Autoscroll from source | `explorer.auto_reveal` | boolean | `false` | user | Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' "autoscroll from source") |
+| Sort order | `explorer.sort` | enum: `name`, `type`, `size`, `modified` | `name` | user | How entries are ordered inside a directory; directories always come before files |
+| Tree indent | `explorer.tree_indent` | integer (0–8) | `2` | user | Columns of indentation per nesting level in the tree |
 | Excluded entries | `explorer.exclude` | list | `.git,.idea,.DS_Store` | user | Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them |
+
+### Language Support
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Language servers | `lsp.enabled` | boolean | `true` | user | Run language servers at all; off disables completion, diagnostics, navigation and every other LSP-backed feature |
+| Auto-install servers | `lsp.auto_install` | boolean | `true` | user | Install a missing language server automatically when a file of its language opens, instead of only offering it |
+| Completion while typing | `lsp.completion_auto` | boolean | `true` | user | Open the completion popup on identifier characters; server trigger characters (".") and the manual ctrl+space request work either way |
+| Signature help while typing | `lsp.signature_auto` | boolean | `true` | user | Open the signature-help popup on the server's trigger characters ("(", ","); the manual Parameter Info command works either way |
+| Inlay hints | `lsp.inlay_hints` | boolean | `false` | user | Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead |
+| Server log level | `lsp.log_level` | enum: `error`, `warn`, `info`, `debug` | `warn` | user | Verbosity of the language-server log the LSP: Show Server Log command opens |
 
 ### Appearance
 
@@ -114,12 +132,23 @@ Settings, or run `settings.open` from the palette.
 | Popup max width | `ui.popup_max_width` | integer | `110` | user | Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables |
 | Command palette key | `palette.toggle_key` | key chord | *(empty)* | user | Chord that opens the command palette |
 
+### Command Palette
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Result rows | `palette.max_results` | integer (1–100) | `12` | user | Result rows shown at once; the list still scrolls past it |
+| Default mode | `palette.default_mode` | enum: `:`, `@` | `:` | user | Prefix assumed when the query starts with no mode rune: ":" ranks it as a command, "@" as a file name |
+| Off-context commands | `palette.off_context` | enum: `rank`, `hide` | `rank` | user | How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them |
+
 ### Files & Session
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Restore last project | `project.restore_last` | boolean | `false` | user | Reopen the previous project's workspace on start |
 | Project directory | `project.directory` | string | `~/IkeProjects` | user | Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use |
+| Recent projects kept | `project.max_history` | integer (0–200) | `20` | user | How many entries the recent-projects list keeps; the oldest fall off |
+| Background workspaces | `project.max_workspaces` | integer (0–20) | `0` | user | Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3 |
+| Background LSP timeout | `project.background_lsp_timeout` | string | *(empty)* | user | How long a parked background workspace keeps its language servers alive, as a Go duration ("5m", "90s"); past it they stop and respawn lazily on resume. Empty selects 5m, "off" keeps them running |
 | Watch files | `files.watch` | boolean | `true` | user | Report external file changes (fsnotify on the project root) |
 | Auto reload | `files.auto_reload` | enum: `clean`, `never` | `clean` | user | Reload clean buffers when their file changes on disk |
 | Persistent undo | `files.persistent_undo` | boolean | `true` | user | Keep undo history across restarts while the file is unchanged |
@@ -138,6 +167,7 @@ Settings, or run `settings.open` from the palette.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
+| Shell | `terminal.shell` | path | *(empty)* | user | Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change |
 | Command auto-suggest | `terminal.autosuggest` | boolean | `true` | user | Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way |
 | Scrollback lines | `terminal.scrollback_lines` | integer (100–1000000) | `10000` | user | Lines of scrollback each terminal session keeps (#1545); the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it |
 
@@ -160,6 +190,18 @@ Settings, or run `settings.open` from the palette.
 |---|---|---|---|---|---|
 | Notification timeout | `notifications.timeout_seconds` | integer (1–300) | `4` | user | Seconds before info/warn toasts expire |
 | Notification severity floor | `notifications.min_severity` | enum: `info`, `warn`, `error` | `info` | user | Below this severity notifications go to the history only |
+
+### TODO Index
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Tag words | `todo.patterns` | list | `TODO,FIXME,HACK,XXX` | user | Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes |
+
+### Marketplace Catalog
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Catalog URL | `marketplace.catalog_url` | string | *(empty)* | user | HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled |
 
 ### Formatters
 

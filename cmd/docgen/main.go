@@ -377,6 +377,8 @@ func entryType(e settings.Entry) string {
 		return "key chord"
 	case settings.List:
 		return "list"
+	case settings.IntList:
+		return "list of integers"
 	}
 	return "unknown"
 }
