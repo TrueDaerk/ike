@@ -1197,6 +1197,19 @@ attributes in `styleAt`):
   vim's concealcursor granularity). Mouse clicks map back through the hidden
   ranges (`displayClickCol`), so the cursor lands on the character that was
   clicked; buffer-column motions and selections are untouched by design.
+- **Adjacent reveal** (#1686): the *value* families widen that window by one
+  column on each side, so a caret sitting directly before or directly after
+  the range reveals it too — appending or prepending digits puts the caret
+  next to the literal, not in it, and typing against a stand-in without seeing
+  the real value is confusing. The families are listed in
+  `adjacentRevealCaptures` (decoded epochs #1618, the four number-hint
+  captures #1627); `lineConcealRanges` marks the copies it combines with
+  `concealRange.adjacent` and `inRange` widens the caret window for those.
+  Everything else — marker chrome (#881), masked secrets (#1623), the sv
+  separator padding (#1589), the generic `Replace` conceals — keeps the strict
+  inside-only rule, since widening dense per-column ranges would flicker the
+  whole line while moving through it. Selection reveal is unchanged: a
+  selection has to intersect the range itself.
 - **Span-extent reveal** (#1599): the query additionally captures the
   enclosing inline spans (emphasis, code span, links) as `@conceal.extent`;
   `concealSplit` routes them into a third channel (`concealExt`), and a caret
@@ -1482,9 +1495,11 @@ in `timestamps.go`:
 - **Stand-in spans**: `epochtime.Spans` emits one conceal-with-stand-in span
   (#1585) per detected number — capture `timestamp`, `Replace` the decoded
   `2024-08-06 12:00:00Z` (a `.123` fraction is appended when the value carries
-  milliseconds). Rendering, the positional caret/selection reveal (#1594) and
-  the click/offset remapping are the shared stand-in path: the raw digits are
-  always one motion away, and the buffer never changes. The `timestamp`
+  milliseconds). Rendering, the positional caret/selection reveal (#1594 —
+  widened to the columns directly before and after the number by #1686, epochs
+  being a value family) and the click/offset remapping are the shared stand-in
+  path: the raw digits are always one motion away, and the buffer never
+  changes. The `timestamp`
   capture derives from the palette's `number` colour (`decodeSources` in
   `highlight/theme.go`, #1681) so decoded epochs highlight like the #1627
   number-hint families; a theme table entry or `theme.captures.timestamp` key
@@ -1635,8 +1650,9 @@ detection live in `internal/cronhint`:
 Large numeric literals in config files draw as the thing they mean —
 `10485760` as `10 MiB`, `86400000` as `24h`, `1000000` as `1_000_000`,
 `0x1F4` as `0x1F4  = 500` — display-only, on the #1585 stand-in channel, so
-the raw literal reappears under the caret (#1594) and edits operate on the
-buffer bytes. Four families, four captures, four toggles, all default on:
+the raw literal reappears under the caret (#1594) — or directly next to it
+(#1686, the adjacent reveal) — and edits operate on the buffer bytes. Four
+families, four captures, four toggles, all default on:
 
 | Family | Capture | Toggle | Config key |
 | --- | --- | --- | --- |
