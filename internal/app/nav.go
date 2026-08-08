@@ -13,6 +13,7 @@ import (
 
 	"ike/internal/host"
 	"ike/internal/nav"
+	"ike/internal/pane"
 )
 
 // NavBackMsg asks the root model to navigate to the previous history
@@ -31,6 +32,22 @@ func (m Model) currentNavPos() nav.Position {
 		return nav.Position{}
 	}
 	ed := m.activeWS().Panes.Get(key).Editor()
+	if ed == nil || !ed.HasFile() {
+		return nav.Position{}
+	}
+	line, col := ed.Cursor()
+	return nav.Position{Path: ed.Path(), Line: line - 1, Col: col - 1}
+}
+
+// navPosOfPane captures a specific pane's active editor as a history position
+// (zero when the tab holds no file — a terminal or scratch tab). The tab bar
+// records from here instead of currentNavPos: a tab click acts on the clicked
+// pane, which is not necessarily the focused one.
+func navPosOfPane(inst *pane.Instance) nav.Position {
+	if inst == nil {
+		return nav.Position{}
+	}
+	ed := inst.Editor()
 	if ed == nil || !ed.HasFile() {
 		return nav.Position{}
 	}

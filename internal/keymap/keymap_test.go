@@ -448,3 +448,49 @@ func TestParsePlusKey(t *testing.T) {
 		t.Errorf("FromKeyMsg(+) = %+v ok=%v, want base %q", k, ok, "+")
 	}
 }
+
+// TestFromMouseButton guards #816: only the two dedicated navigation buttons
+// map onto synthetic chords; every other button keeps its pane routing. The
+// probe and the app share this mapping, so a probe run reports on exactly the
+// translation the editor performs.
+func TestFromMouseButton(t *testing.T) {
+	for _, tc := range []struct {
+		btn  tea.MouseButton
+		base string
+	}{
+		{tea.MouseBackward, MouseBackBase},
+		{tea.MouseForward, MouseForwardBase},
+	} {
+		k, ok := FromMouseButton(tc.btn)
+		if !ok || k.String() != tc.base {
+			t.Fatalf("FromMouseButton(%v) = %q ok=%v, want %q", tc.btn, k.String(), ok, tc.base)
+		}
+		// The synthetic base round-trips through the chord parser, so a
+		// keymap.bindings override spelled in config resolves to it.
+		if parsed := MustParseChord(tc.base); len(parsed.Steps) != 1 || parsed.Steps[0] != k {
+			t.Fatalf("chord %q = %+v, want the single step %+v", tc.base, parsed.Steps, k)
+		}
+	}
+	for _, btn := range []tea.MouseButton{tea.MouseLeft, tea.MouseMiddle, tea.MouseRight, tea.MouseWheelUp, tea.MouseNone} {
+		if k, ok := FromMouseButton(btn); ok {
+			t.Fatalf("FromMouseButton(%v) = %+v, want no mapping", btn, k)
+		}
+	}
+}
+
+// TestMouseNavButtonsAreProbeTargets guards #816: the probe asks for the
+// mouse buttons like any other default chord, so "does this terminal report
+// buttons 4/5" has an answer instead of a silent no-op.
+func TestMouseNavButtonsAreProbeTargets(t *testing.T) {
+	want := map[string]bool{MouseBackBase: false, MouseForwardBase: false}
+	for _, target := range ProbeTargets() {
+		if _, ok := want[target]; ok {
+			want[target] = true
+		}
+	}
+	for base, found := range want {
+		if !found {
+			t.Fatalf("%q missing from the probe targets", base)
+		}
+	}
+}

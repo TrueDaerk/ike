@@ -36,6 +36,15 @@ func logSlowUpdate(msg tea.Msg, took time.Duration) {
 	logDiagnostic(fmt.Sprintf("slow update: %T took %s", msg, took.Round(time.Millisecond)))
 }
 
+// logMouseNavButton records that the terminal delivered one of the dedicated
+// mouse navigation buttons (#816). The buttons degrade silently where they are
+// not reported, which makes "my terminal sends nothing" and "the binding is
+// broken" look identical from the outside — this line separates the two: an
+// entry means the event arrived and the keymap had its say.
+func logMouseNavButton(base string) {
+	logDiagnostic("mouse: navigation button delivered as " + base)
+}
+
 // logDiagnostic appends a timestamped line to the state debug log.
 func logDiagnostic(text string) {
 	path := debugLogFile()
