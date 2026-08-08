@@ -86,6 +86,24 @@ func winSizeFile() string {
 	return filepath.Join(".ike", "winsize.json")
 }
 
+// globalWinSizeFile returns the path of the user-scoped floating-window size
+// store (#1714): the last size a window kind was resized to anywhere, used as
+// the fallback for projects that carry no delta of their own. It follows the
+// IKE_CONFIG_DIR redirection seam like every other state file but under its own
+// file name (the project store is winsize.json), and otherwise lives in
+// ~/.ike — NOT the project's .ike directory, because the fallback spans
+// projects.
+func globalWinSizeFile() string {
+	if d := os.Getenv("IKE_CONFIG_DIR"); d != "" {
+		return filepath.Join(d, "winsize-global.json")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".ike", "winsize-global.json")
+}
+
 // loadLayout reads the saved tree and identity table. It returns ok=false on any
 // missing, unreadable, or structurally malformed file so the caller falls back
 // to the default layout. Identity validation (explorer singleton, well-formed

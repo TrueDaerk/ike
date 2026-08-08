@@ -105,6 +105,35 @@ func TestResizeDeltaDeliveredChords(t *testing.T) {
 	if _, _, ok := ResizeDelta("super+left"); ok {
 		t.Error("bare super+left must not resize (line-nav chords stay free)")
 	}
+	// The keymap-canonical spelling of the same chord resizes too — the popup
+	// terminal parses the key before it reaches here (#1714).
+	if ddw, ddh, ok := ResizeDelta("cmd+shift+left"); !ok || ddw != -4 || ddh != 0 {
+		t.Errorf("cmd+shift+left = (%d,%d,%v), want (-4,0,true)", ddw, ddh, ok)
+	}
+}
+
+// TestWinSizesHasSet (#1714): Has distinguishes a stored zero delta from no
+// entry at all, and Set replaces (never accumulates) and persists.
+func TestWinSizesHasSet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "winsize.json")
+	s := LoadWinSizes(path)
+	if s.Has("k") {
+		t.Fatal("a fresh store must not claim an entry")
+	}
+	s.Set("k", 0, 0)
+	if !s.Has("k") {
+		t.Fatal("an explicit zero delta is still an entry")
+	}
+	s.Set("k", 5, 2)
+	s.Set("k", 7, 3)
+	if dw, dh := LoadWinSizes(path).Get("k"); dw != 7 || dh != 3 {
+		t.Fatalf("Set must replace and persist: got (%d,%d), want (7,3)", dw, dh)
+	}
+	var nilS *WinSizes
+	nilS.Set("k", 1, 1)
+	if nilS.Has("k") {
+		t.Fatal("nil WinSizes must stay inert")
+	}
 }
 
 // TestResizeZone covers the border-ring hit-test for mouse resizes (#933):

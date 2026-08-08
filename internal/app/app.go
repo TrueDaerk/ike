@@ -470,6 +470,7 @@ type Model struct {
 	cmdUsage    *palette.Usage       // most-used command ranking (#773)
 	fileUsage   *palette.Usage       // most-used file ranking in the ranked palettes (#1419)
 	winSizes    *ui.WinSizes         // persisted floating-window resize deltas (#774)
+	winSizesAll *ui.WinSizes         // user-scoped last-resize deltas, fallback for fresh projects (#1714)
 	floatDrag   *floatResizeDrag     // live mouse resize of a floating window (#933)
 	pins        *pinStore            // harpoon-style pinned file slots (#788)
 	toolHide    *toolHideSnapshot    // hide-all-tool-windows snapshot (#791)
@@ -761,12 +762,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	cmdUsage := palette.LoadUsage(usageFile())      // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
+	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
 	wsMgr := wsManager(mgr, resumed, root, panes)   // hoisted: the palette's recent-projects sources read it (#820)
 	wsMgr.SetRegisters(regs)                        // first start: the manager adopts the store (#1540); a switch hands back its own
 	m := Model{
 		cmdUsage:       cmdUsage,
 		fileUsage:      fileUsage,
 		winSizes:       winSizes,
+		winSizesAll:    winSizesAll,
 		pins:           loadPins(),                          // pinned file slots (#788)
 		lhStore:        localhistory.New(localHistoryDir()), // local history (#1023)
 		completeEngine: engine,
@@ -6451,8 +6454,7 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 		}
 	case "popupterm":
 		// The popup terminal (#1398) re-clamps in popupSize; the PTYs follow.
-		m.winSizes.Nudge(popupTermSizeKey, ddw, ddh)
-		m.applyPopupSize()
+		m.popupTermResize(ddw, ddh, false)
 	}
 }
 
@@ -6480,8 +6482,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case mouseRelease:
+			kind := m.floatDrag.kind
 			m.floatDrag = nil
-			m.winSizes.Flush()
+			if kind == "popupterm" {
+				// The popup delta also becomes the user-scoped fallback (#1714).
+				m.popupTermPersist()
+			} else {
+				m.winSizes.Flush()
+			}
 			return m, nil
 		case mousePress:
 			m.floatDrag = nil // stray press: drop the drag, fall through

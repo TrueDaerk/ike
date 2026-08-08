@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-08 (terminal: smaller popup default, global size fallback, #1714)
+
+- **The popup terminal opens smaller.** Its default fractions drop from
+  0.75 × 0.70 to 0.60 × 0.55; the floors (`popupTermMinW`/`popupTermMinH`) and
+  the `ui.popup_max_width` cap are untouched.
+- **The last resize follows you between projects.** A second, user-scoped
+  `ui.WinSizes` store (`~/.ike/winsize-global.json`, `globalWinSizeFile`)
+  mirrors every popup resize. `popupSize` resolves its delta as project delta →
+  global last delta → plain default, so a project that was never resized opens
+  at the size chosen elsewhere and a project with its own delta keeps winning.
+- **Deltas, not sizes, travel** — the inherited value re-clamps against the
+  live terminal exactly like a project-local one. `popupTermResize` seeds the
+  project store from the inherited delta before the first step, so a resize
+  never snaps the box back to the default first.
+- `WinSizes` grew `Has` (an entry exists, even a zero one) and `Set` (replace +
+  persist), and `ui.ResizeDelta` now also accepts the keymap-canonical
+  `cmd+shift+arrow` spelling — the popup parses the chord before matching it,
+  so the macOS primary resize chord never reached the box.
+
 ## 2026-08-07 (editor: custom secret key patterns, #1712)
 
 - **Secret masking takes the user's own key patterns.** `editor.secret_masking_keys`
