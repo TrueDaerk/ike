@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	ilsp "ike/internal/lsp"
+	"ike/internal/palette"
 )
 
 // nav_test.go covers the navigation-history flow (Roadmap 0220, #218):
@@ -200,5 +201,67 @@ func TestNavBackReturnsToOriginPane(t *testing.T) {
 	m = tm.(Model).atPosition(t, files[1], 0)
 	if m.activeEditorKey() != paneB {
 		t.Fatalf("forward must focus pane %s, got %s", paneB, m.activeEditorKey())
+	}
+}
+
+// TestNavBackAfterTabSwitch guards #816: switching tabs is a file jump like
+// any other, so Back returns to the file the switch left. Before this, only
+// the open funnel recorded and the tab bar — the most ordinary way to change
+// file — produced no history at all.
+func TestNavBackAfterTabSwitch(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	tm, _ := m.openPath(files[0], false)
+	m = tm.(Model)
+	tm, _ = m.openPath(files[1], false)
+	m = tm.(Model).atPosition(t, files[1], 0)
+
+	// Tab-step back to a.go: the departure from b.go is recorded.
+	tm, _ = m.Update(TabStepMsg{Delta: -1})
+	m = tm.(Model).atPosition(t, files[0], 0)
+	tm, _ = m.Update(NavBackMsg{})
+	m = tm.(Model).atPosition(t, files[1], 0)
+
+	// Forward re-traverses to a.go, the tab switch's destination.
+	tm, _ = m.Update(NavForwardMsg{})
+	tm.(Model).atPosition(t, files[0], 0)
+}
+
+// TestNavTabSwitchDuringHistoryNav guards the recording suppression: a
+// history jump that lands via the tab bar must not record its own arrival,
+// which would make Back oscillate between two files forever.
+func TestNavTabSwitchDuringHistoryNav(t *testing.T) {
+	_, files := navProject(t)
+	m := newSized()
+	tm, _ := m.openPath(files[0], false)
+	m = tm.(Model)
+	tm, _ = m.openPath(files[1], false)
+	m = tm.(Model)
+	tm, _ = m.openPath(files[2], false)
+	m = tm.(Model).atPosition(t, files[2], 0)
+
+	// Back twice walks c -> b -> a rather than bouncing c <-> b.
+	tm, _ = m.Update(NavBackMsg{})
+	m = tm.(Model).atPosition(t, files[1], 0)
+	tm, _ = m.Update(NavBackMsg{})
+	tm.(Model).atPosition(t, files[0], 0)
+}
+
+// TestMouseNavButtonUnderOverlay guards #816: with a modal overlay owning the
+// input, a navigation button press is swallowed — navigating the editor
+// hidden underneath would be invisible and would strand the overlay.
+func TestMouseNavButtonUnderOverlay(t *testing.T) {
+	m := newSized()
+	m.palette.SetSize(m.width, m.height)
+	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})
+	out, cmd := m.Update(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseBackward})
+	m = out.(Model)
+	if !m.palette.IsOpen() {
+		t.Fatal("the navigation button must not close the palette")
+	}
+	for _, msg := range cmdMsgs(cmd) {
+		if _, isBack := msg.(NavBackMsg); isBack {
+			t.Fatal("nav.back must not fire while an overlay owns the input")
+		}
 	}
 }

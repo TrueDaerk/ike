@@ -25,6 +25,19 @@ type model struct {
 func (m model) Init() tea.Cmd { return nil }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// The mouse navigation buttons (#816) are probe targets like any chord:
+	// they are only reachable when the terminal reports SGR extended buttons,
+	// which is exactly what the probe exists to establish — without this the
+	// mouse targets always reported "missing", regardless of the terminal.
+	if click, isClick := msg.(tea.MouseClickMsg); isClick {
+		if k, isNav := keymap.FromMouseButton(click.Button); isNav {
+			m.last = k.String()
+			if _, want := m.hit[m.last]; want {
+				m.hit[m.last] = m.last
+			}
+		}
+		return m, nil
+	}
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
 		return m, nil
@@ -54,7 +67,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() tea.View {
 	var b strings.Builder
-	b.WriteString("ike key probe — press each chord; ctrl+d finishes\n\n")
+	b.WriteString("ike key probe — press each chord (mouse-back/mouse-forward: click the button); ctrl+d finishes\n\n")
 	for _, t := range m.targets {
 		mark := "  ·  "
 		switch got := m.hit[t]; {
@@ -68,6 +81,9 @@ func (m model) View() tea.View {
 	b.WriteString("\nlast key: " + m.last + "\n")
 	v := tea.NewView(b.String())
 	v.KeyboardEnhancements.ReportEventTypes = true
+	// Mouse reporting on (same mode the editor uses), so the mouse-back /
+	// mouse-forward targets can be probed by clicking them (#816).
+	v.MouseMode = tea.MouseModeCellMotion
 	return v
 }
 

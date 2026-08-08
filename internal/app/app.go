@@ -2042,14 +2042,10 @@ func (m *Model) newTerminalSplitRight() {
 
 // mouseChordKey maps the dedicated mouse navigation buttons (#816) onto the
 // synthetic keymap bases the default table binds to nav.back / nav.forward.
+// The translation itself lives in keymap so the terminal probe exercises the
+// same mapping.
 func mouseChordKey(b tea.MouseButton) (keymap.Key, bool) {
-	switch b {
-	case tea.MouseBackward:
-		return keymap.Key{Base: "mouse-back"}, true
-	case tea.MouseForward:
-		return keymap.Key{Base: "mouse-forward"}, true
-	}
-	return keymap.Key{}, false
+	return keymap.FromMouseButton(b)
 }
 
 // terminalGlobalCommands are the commands whose chords a focused live
@@ -2708,6 +2704,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// nav.back / nav.forward — regardless of the hovered pane. Unbound
 		// presses are swallowed: no pane expects button 4/5.
 		if k, isNav := mouseChordKey(msg.Button); isNav {
+			// Leave a trace that the terminal DID deliver the button (#816):
+			// a silent no-op is otherwise indistinguishable from a terminal
+			// that never reports buttons 4/5. `cmd/keyprobe` answers the same
+			// question interactively.
+			logMouseNavButton(k.Base)
+			// A modal overlay owns the input; navigating the editor hidden
+			// underneath it would be invisible and would strand the overlay.
+			if m.overlayCapturesKeyboard() {
+				return m, nil
+			}
 			if cmd, handled := m.resolveKeymap(k); handled {
 				return m, cmd
 			}

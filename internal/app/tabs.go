@@ -136,7 +136,17 @@ func (m *Model) switchTab(inst *pane.Instance, idx int) {
 	if idx == inst.ActiveTab() {
 		return
 	}
+	// Switching tabs leaves one file for another — a navigation jump like any
+	// other (#816). Only the open funnel used to record (explorer, palette,
+	// go-to-definition), so the most ordinary way to change file, the tab bar
+	// and its next/prev chords, left no history at all and Back reported "no
+	// earlier position". Read from inst rather than the focused editor: a tab
+	// click can land on an unfocused pane.
+	from := navPosOfPane(inst)
 	m.activateTab(inst, idx)
+	if to := navPosOfPane(inst); from.Path != "" && from.Path != to.Path {
+		m.recordNavFrom(from)
+	}
 	if ed := inst.Editor(); ed != nil && ed.HasFile() {
 		m.explorer().SetActive(ed.Path())
 	}

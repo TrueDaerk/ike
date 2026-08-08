@@ -4,7 +4,7 @@ title: Navigation History (Back/Forward)
 description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-07-24T00:00:00Z
+timestamp: 2026-08-08T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -32,6 +32,13 @@ menu entries, and the palette.
   funnel, local ones emit the same jump event). Small motions (hjkl, w/b,
   paragraphs, page scrolls) never record, and an operator composed over a
   large motion (`dG`) is an edit, not a jump.
+- **Tab switches record too** (#816): activating another tab — the tab bar,
+  `editor.tab.next`/`prev`, `editor.tab.select1…9`, the wheel over the tab
+  bar — leaves one file for another and records the departure, so Back
+  returns to the tab just left. Recorded in `switchTab` from the *switching*
+  pane (a tab click can hit an unfocused pane) and only when the file
+  actually changes; the open funnel's own tab activation (`activateTab`)
+  stays out of it, so history navigation never records its own arrival.
 - **Back** returns to the departure point; **forward** re-traverses after a
   back. A fresh jump while back in history truncates the forward tail.
 - **Dedup**: consecutive entries on the same file+line collapse (keeping
@@ -46,7 +53,9 @@ menu entries, and the palette.
 internal/nav/        pure data structure: Position{Path,Line,Col} (0-based),
                      History{RecordJump, Back, Forward, CanBack, CanForward}
 internal/app/nav.go  integration: currentNavPos (active editor file+caret),
+                     navPosOfPane (a given pane's, for tab switches),
                      NavBackMsg/NavForwardMsg handling, navigateHistory
+internal/app/tabs.go switchTab records the departure on a tab change (#816)
 ```
 
 - Recording sits at the root model's open funnel: `openPath` records when
@@ -87,6 +96,26 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
 - `nav.back` / `nav.forward` are `appCommand`s (compile-in `app` plugin)
   dispatching `NavBackMsg` / `NavForwardMsg`; the Navigate menu was already
   wired to these ids.
+
+## Diagnosing the mouse buttons
+
+A press that does nothing has two very different causes, and the silent
+degrade hides which one it is (#816):
+
+- **The terminal never reports buttons 4/5.** Run `go run ./cmd/keyprobe`
+  and click the buttons: the probe enables the same mouse mode the editor
+  uses (`MouseModeCellMotion` + SGR extended coordinates) and lists
+  `mouse-back` / `mouse-forward` among its targets, so a terminal that stays
+  silent shows them as `missing`. The translation from button to chord is
+  `keymap.FromMouseButton`, shared by the probe and the app.
+- **The press arrived but did nothing.** Every delivered navigation button
+  leaves a `mouse: navigation button delivered as …` line in the per-project
+  `.ike/debug.log`. A line with no jump means the keymap or the history is
+  at fault, not the terminal.
+
+While a modal overlay owns the input (palette, settings, finder, …) the
+buttons are swallowed: navigating the editor hidden underneath would be
+invisible.
 
 ## Keybinding status
 

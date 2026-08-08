@@ -410,7 +410,10 @@ Multi-step chords take the worst class of their steps.
 **Probe** (`cmd/keyprobe`): run it in a target terminal, press the listed
 chords, finish with `ctrl+d`; it prints one `PROBE\t<chord>\t<state>` line
 per target (parsed by `keymap.ParseProbeReport`), recording collapse evidence
-(`got=<key>`) when a shifted chord arrives as its unshifted twin.
+(`got=<key>`) when a shifted chord arrives as its unshifted twin. The probe
+also enables mouse reporting (#816), so the `mouse-back` / `mouse-forward`
+targets are answered by clicking those buttons — a terminal that does not
+report SGR extended buttons 4/5 leaves them `missing`.
 
 Ground truth recorded 2026-07 (tmux 3.x on macOS, client announcing the Kitty
 protocol):
