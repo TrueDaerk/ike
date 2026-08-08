@@ -30,8 +30,8 @@ const popupPaneKey = "popup"
 // Popup box geometry: fraction of the screen the box takes by default, and
 // the floors a resize can never go below.
 const (
-	popupTermWFrac = 0.75
-	popupTermHFrac = 0.70
+	popupTermWFrac = 0.60
+	popupTermHFrac = 0.55
 	popupTermMinW  = 40
 	popupTermMinH  = 10
 )
@@ -162,8 +162,20 @@ func (m *Model) newPopupTerminalTab() {
 	m.applyPopupSize()
 }
 
+// popupTermDelta resolves the popup box's resize delta through the #1714
+// cascade: the project's own delta wins, the user-scoped last-resize delta is
+// the fallback for a project that was never resized, and no store at all means
+// the plain default fractions. Deltas — not absolute sizes — travel between
+// projects, so the box keeps re-clamping against the live terminal bounds.
+func (m Model) popupTermDelta() (dw, dh int) {
+	if m.winSizes.Has(popupTermSizeKey) {
+		return m.winSizes.Get(popupTermSizeKey)
+	}
+	return m.winSizesAll.Get(popupTermSizeKey)
+}
+
 // popupSize computes the popup's outer box size: screen fractions capped by
-// ui.popup_max_width, adjusted by the persisted resize delta, floored so the
+// ui.popup_max_width, adjusted by the resolved resize delta, floored so the
 // box never degenerates.
 func (m Model) popupSize() (w, h int) {
 	w = int(float64(m.width) * popupTermWFrac)
@@ -172,13 +184,44 @@ func (m Model) popupSize() (w, h int) {
 		w = cap
 	}
 	maxW, maxH := m.width-2, m.height-2
-	dw, dh := 0, 0
-	if m.winSizes != nil {
-		dw, dh = m.winSizes.Get(popupTermSizeKey)
-	}
+	dw, dh := m.popupTermDelta()
 	w = ui.ClampDelta(w, dw, popupTermMinW, maxW)
 	h = ui.ClampDelta(h, dh, popupTermMinH, maxH)
 	return w, h
+}
+
+// popupTermSeed copies the user-scoped delta into the project store when the
+// project carries none, so the first resize in a project that merely inherited
+// the fallback continues from the size on screen instead of jumping back to
+// the default (#1714).
+func (m *Model) popupTermSeed() {
+	if m.winSizes.Has(popupTermSizeKey) {
+		return
+	}
+	dw, dh := m.winSizesAll.Get(popupTermSizeKey)
+	m.winSizes.Set(popupTermSizeKey, dw, dh)
+}
+
+// popupTermResize applies one resize step to the popup box (chord #774 or
+// mouse drag #933) and re-sizes the hosted PTYs. persist=false is the mid-drag
+// step, where writing the stores per motion event would be waste — the drag's
+// release calls popupTermPersist instead.
+func (m *Model) popupTermResize(ddw, ddh int, persist bool) {
+	m.popupTermSeed()
+	m.winSizes.Nudge(popupTermSizeKey, ddw, ddh)
+	if persist {
+		m.popupTermPersist()
+	}
+	m.applyPopupSize()
+}
+
+// popupTermPersist writes the popup delta to the project store and mirrors it
+// into the user-scoped store, so the size just chosen becomes the fallback for
+// every project that has none of its own (#1714).
+func (m *Model) popupTermPersist() {
+	m.winSizes.Flush()
+	dw, dh := m.winSizes.Get(popupTermSizeKey)
+	m.winSizesAll.Set(popupTermSizeKey, dw, dh)
 }
 
 // popupSplitWidths returns the outer widths of the left and right boxes: the
@@ -466,8 +509,7 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 		}
 	}
 	if ddw, ddh, ok := ui.ResizeDelta(keys); ok {
-		m.winSizes.Adjust(popupTermSizeKey, ddw, ddh)
-		m.applyPopupSize()
+		m.popupTermResize(ddw, ddh, true)
 		return true, m, nil
 	}
 	return false, m, nil

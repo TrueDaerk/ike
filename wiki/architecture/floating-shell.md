@@ -178,6 +178,10 @@ host per shell.
   pane-style box via `overlay.Center` with its own funnel branch — see
   [Integrated Terminal](/architecture/terminal.md). It does reuse the shared
   size machinery: `ui.WinSizes` (key `popupterm`), `ResizeZone` and the
-  resize chords.
+  resize chords — plus a second, user-scoped `WinSizes` store that carries its
+  last chosen size into projects without a delta of their own (#1714, see the
+  terminal doc). `WinSizes.Has`/`Set` exist for that cascade: `Has` separates
+  "never resized here" from a stored zero delta, `Set` mirrors a delta instead
+  of accumulating it.
 - The plugin "open as modal" contract beyond the minimal additive
   `OpenModalRequest` seam is owned by the plugin roadmaps.

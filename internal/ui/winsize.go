@@ -19,15 +19,20 @@ import (
 //     terminal (#774), while terminals like Ghostty deliver cmd chords;
 //   - ctrl+shift — the primary everywhere else (CSI-parameter-encoded);
 //   - alt+shift — spare secondary where Option is not a composition key.
+//
+// Both spellings of the cmd chords are accepted: the raw tea key String form
+// (shift+super/shift+meta) most callers pass, and the keymap.Key canonical form
+// (cmd+shift) callers that normalize first produce — the popup terminal parses
+// the chord before it gets here (#1714).
 func ResizeDelta(key string) (ddw, ddh int, ok bool) {
 	switch key {
-	case "ctrl+shift+left", "shift+super+left", "shift+meta+left", "alt+shift+left":
+	case "ctrl+shift+left", "shift+super+left", "shift+meta+left", "cmd+shift+left", "alt+shift+left":
 		return -4, 0, true
-	case "ctrl+shift+right", "shift+super+right", "shift+meta+right", "alt+shift+right":
+	case "ctrl+shift+right", "shift+super+right", "shift+meta+right", "cmd+shift+right", "alt+shift+right":
 		return 4, 0, true
-	case "ctrl+shift+up", "shift+super+up", "shift+meta+up", "alt+shift+up":
+	case "ctrl+shift+up", "shift+super+up", "shift+meta+up", "cmd+shift+up", "alt+shift+up":
 		return 0, -1, true
-	case "ctrl+shift+down", "shift+super+down", "shift+meta+down", "alt+shift+down":
+	case "ctrl+shift+down", "shift+super+down", "shift+meta+down", "cmd+shift+down", "alt+shift+down":
 		return 0, 1, true
 	}
 	return 0, 0, false
@@ -68,6 +73,31 @@ func (s *WinSizes) Get(kind string) (dw, dh int) {
 	}
 	d := s.deltas[kind]
 	return d.W, d.H
+}
+
+// Has reports whether a window kind carries its own stored entry. It
+// distinguishes "never resized here" from "resized back to the default size"
+// (a zero delta), which is what a cross-store fallback needs (#1714).
+func (s *WinSizes) Has(kind string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.deltas[kind]
+	return ok
+}
+
+// Set replaces a window kind's delta outright and persists the store — used to
+// mirror a store's delta into another one (the global popup-terminal fallback,
+// #1714), where accumulating would drift the two apart.
+func (s *WinSizes) Set(kind string, dw, dh int) {
+	if s == nil || kind == "" {
+		return
+	}
+	if s.deltas == nil {
+		s.deltas = map[string]winDelta{}
+	}
+	s.deltas[kind] = winDelta{W: dw, H: dh}
+	s.Flush()
 }
 
 // Adjust adds a delta for a window kind and persists the store. Errors are

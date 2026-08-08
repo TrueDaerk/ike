@@ -198,6 +198,23 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   workspaces' popups included (#1407). Nothing
   resurrects across restarts; only the resize delta persists (`ui.WinSizes`
   key `popupterm`).
+- **Start size** (`popupSize`, #1714): the box defaults to 0.60 × 0.55 of the
+  screen, then takes a resize delta resolved through a three-step cascade —
+  the project's own `popupterm` delta in `.ike/winsize.json`, else the
+  user-scoped **last-resize** delta in `~/.ike/winsize-global.json`
+  (`globalWinSizeFile`, `IKE_CONFIG_DIR`-redirectable like every state file),
+  else none. So a size dragged in one project carries over to projects that
+  were never resized, while a project that has its own delta keeps it.
+  Both stores hold *deltas*, never absolute sizes, so the box keeps
+  re-clamping against `popupTermMinW`/`popupTermMinH`, the live terminal
+  bounds and the `ui.popup_max_width` cap (#932) whichever source it came
+  from. Every resize — the chords (#774) and the mouse drag (#933) — routes
+  through `popupTermResize`, which first seeds the project store from the
+  inherited global delta (so the first resize continues from the size on
+  screen instead of jumping back to the default), applies the step, and on
+  persist mirrors the project delta into the global store. `WinSizes.Has`
+  drives the cascade, so a delta resized back to zero still counts as the
+  project's own choice.
 - **Per-project** (#1407): the popup belongs to its project like pane
   terminals do (#777). A seamless switch parks it with the workspace
   (`wsExtras` in `Workspace.Aux`) — tabs, scrollback, running processes and
