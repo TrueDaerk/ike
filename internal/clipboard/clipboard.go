@@ -6,6 +6,7 @@
 package clipboard
 
 import (
+	"encoding/hex"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -78,5 +79,47 @@ func (c *Clipboard) Read() (string, error) {
 		return "", err
 	}
 	// PowerShell's Get-Clipboard appends a trailing CRLF; drop CRs uniformly.
-	return strings.ReplaceAll(string(out), "\r", ""), nil
+	text := strings.ReplaceAll(string(out), "\r", "")
+	if text == "" {
+		if url, ok := readURLFlavor(); ok {
+			return url, nil
+		}
+	}
+	return text, nil
+}
+
+// readURLFlavor recovers the pasteboard's raw `public.url` bytes on macOS.
+// A URL copied as a *link* (browser context menus, drag sources) can land on
+// the pasteboard as a bare URL flavor with no plain-text counterpart —
+// pbpaste prints nothing for those. Reading the flavor's raw bytes keeps the
+// URL byte-verbatim; asking the system to *convert* it to text instead would
+// re-serialize it through Foundation's URL type, whose lenient parser
+// percent-encodes the whole string again when it contains characters like
+// `[` (#1601: `[` → `%5B` and, worse, `%22` → `%2522`). Overridable seam for
+// tests.
+var readURLFlavor = func() (string, bool) {
+	if runtime.GOOS != "darwin" {
+		return "", false
+	}
+	// osascript renders the flavor as raw AppleScript data: «data url 68…».
+	out, err := exec.Command("osascript", "-e", "the clipboard as «class url »").Output()
+	if err != nil {
+		return "", false
+	}
+	return parseURLFlavorData(string(out))
+}
+
+// parseURLFlavorData decodes osascript's raw-data rendering of the
+// pasteboard's URL flavor, `«data url <hex bytes>»`, into the URL string.
+func parseURLFlavorData(out string) (string, bool) {
+	s := strings.TrimSpace(out)
+	const prefix, suffix = "«data url ", "»"
+	if !strings.HasPrefix(s, prefix) || !strings.HasSuffix(s, suffix) {
+		return "", false
+	}
+	raw, err := hex.DecodeString(s[len(prefix) : len(s)-len(suffix)])
+	if err != nil || len(raw) == 0 {
+		return "", false
+	}
+	return string(raw), true
 }

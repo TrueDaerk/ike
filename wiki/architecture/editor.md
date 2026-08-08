@@ -98,7 +98,12 @@ line runs that test (see /architecture/run-configurations.md).
   `internal/clipboard` provides the real clipboard implementation
   (pbcopy/pbpaste on macOS, wl-copy/xclip/xsel on Linux/BSD), wired in by the
   pane registry when an editor is created; without a utility on PATH the
-  registers fall back to the built-in no-op clipboard.
+  registers fall back to the built-in no-op clipboard. On macOS a read whose
+  plain-text flavor is empty falls back to the pasteboard's raw `public.url`
+  bytes (#1601): a URL copied as a *link* can carry only that flavor, which
+  pbpaste prints as nothing, and converting it to text via Foundation's URL
+  type would percent-encode the string a second time (`[` → `%5B`,
+  `%22` → `%2522`) — the raw flavor bytes stay verbatim.
   `Cmd+C/X/V` (keymap commands `editor.copy/cut/paste`) yank / delete the
   visual selection — or the current line without one — through `"+`, and paste
   from it (mid-insert the paste joins the open insert session's undo unit).
