@@ -1426,7 +1426,7 @@ emits everything through the Go span seam (#1585); the parsing lives in
   indexes 0–15, 256-color indexes and truecolor literals directly.
 - **Repeat collapsing** (#1650, `logfold.go`): a polling service repeats the
   same line for pages, so a run of consecutive identical lines folds into its
-  first line plus a dimmed `×N` marker (N counts the whole run). "Identical"
+  first line plus a `×N` badge (N counts the whole run). "Identical"
   is `logline.RepeatKey` equality — every timestamp the parser recognizes (the
   header stamp and the `time`/`ts`/`timestamp`/`datetime`/`date` pair values
   anywhere on the line) is blanked before comparing, so only the stamps moving
@@ -1439,6 +1439,21 @@ emits everything through the Go span seam (#1585); the parsing lives in
   open/close command — it reveals *positionally*, like the conceal layer
   (#1594): while the cursor is anywhere inside the run, every line renders raw
   and the marker disappears; moving out collapses it again.
+- **The `×N` badge** (#1734, `logRunMarkerStyle`): the marker draws in theme
+  colours rather than `Faint` — a dimmed tag glued to a line end reads as part
+  of the line and the "this row stands for N occurrences" fact was easy to miss
+  entirely. Emphasis scales with the run length: `Info` below `logRunMany`
+  (10), `Info` bold from there, `Warning` bold from `logRunLoud` (100) — a ×2 is
+  a detail, a ×500 means the buffer is almost entirely this one line. Both
+  colours are contrast-checked against every builtin theme's surfaces
+  (`theme/contrast_test.go`), so the badge holds up light and dark. Placement is
+  the shared annotation column (`annotWidth`, the delta hints' and blame's), so
+  the badges of a file line up into one scannable column; the
+  one-annotation-per-row rule is not at risk, since a collapsed header carries
+  no delta hint and blame only annotates the cursor line, which is never a
+  collapsed header. A line too long for the column falls back to appending the
+  badge after the text, budgeted like `renderFoldHeader`: the count is buffer
+  structure, not an optional hint, so unlike a delta it is never dropped.
 - **Inter-line deltas** (#1651, `logline/delta.go`, `logdelta.go`): the elapsed
   time since the previous line renders as a dimmed `+30s` / `+7s 300ms` /
   `+450ms` at the right edge, so a stall reads off the column instead of being

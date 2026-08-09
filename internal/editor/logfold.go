@@ -3,7 +3,7 @@ package editor
 // logfold.go collapses runs of consecutive identical log lines (#1650). A
 // polling service repeats the same line for pages — same message, only the
 // timestamp moves — so in log rendering mode a run folds into its first line
-// plus a dimmed `×N` marker and the rest of the run stops occupying rows.
+// plus a `×N` badge and the rest of the run stops occupying rows.
 //
 // "Identical" is logline.RepeatKey equality: the timestamps the #1621 parser
 // recognizes are blanked before comparing, so `time=` differences still count
@@ -22,8 +22,10 @@ package editor
 
 import (
 	"strconv"
+	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/logline"
 )
@@ -144,16 +146,58 @@ func (m Model) hasLogRuns() bool {
 	return m.logFoldActive() && len(m.logRuns().end) > 0
 }
 
-// renderLogRunHeader renders the first line of a collapsed repeat run with a
-// dimmed `×N` marker appended, N counting the whole run including this line —
-// the same budgeting as renderFoldHeader, so the row stays within the text
-// width.
-func (m Model) renderLogRunHeader(line, end, width int, cursorStyle, selStyle lipgloss.Style) string {
-	tag := " ×" + strconv.Itoa(end-line+1)
-	tw := lipgloss.Width(tag)
-	if tw >= width {
-		return m.renderLine(line, width, cursorStyle, selStyle)
+// Thresholds at which the `×N` badge gains weight (#1734). A ×2 is a detail;
+// a ×500 means the buffer is almost entirely this one line, and the marker
+// should say so at a glance.
+const (
+	logRunMany = 10  // bold from here on
+	logRunLoud = 100 // and the warning colour from here on
+)
+
+// logRunMarkerStyle is the badge style for a run of n lines: theme colours
+// rather than `Faint`, so the marker reads as a marker against ordinary log
+// text in light and dark themes alike, with emphasis scaling with n.
+func (m Model) logRunMarkerStyle(n int) lipgloss.Style {
+	switch {
+	case n >= logRunLoud:
+		return lipgloss.NewStyle().Foreground(m.theme().Warning).Bold(true)
+	case n >= logRunMany:
+		return lipgloss.NewStyle().Foreground(m.theme().Info).Bold(true)
 	}
-	body := m.renderLine(line, width-tw, cursorStyle, selStyle)
-	return body + lipgloss.NewStyle().Faint(true).Render(tag)
+	return lipgloss.NewStyle().Foreground(m.theme().Info)
+}
+
+// renderLogRunHeader renders the first line of a collapsed repeat run with its
+// `×N` badge, N counting the whole run including this line.
+//
+// The badge right-aligns into the shared annotation column (annotWidth, the
+// column the delta hints and inline blame use), so the markers of a file form
+// one scannable column instead of a ragged trail of line ends. There is no
+// conflict with the one-annotation-per-row rule: a collapsed header carries no
+// delta hint, and blame only annotates the cursor line, which never renders as
+// a collapsed header (the cursor inside a run reveals it).
+//
+// A line too long for the column falls back to appending the badge right after
+// the text, budgeted like renderFoldHeader: the count is buffer *structure*,
+// not an optional hint, so unlike a delta it is never dropped.
+func (m Model) renderLogRunHeader(line, end, width, annotWidth int, cursorStyle, selStyle lipgloss.Style) string {
+	n := end - line + 1
+	badge := " ×" + strconv.Itoa(n)
+	style := m.logRunMarkerStyle(n)
+	badgeW := ansi.StringWidth(badge)
+
+	row := m.renderLine(line, width, cursorStyle, selStyle)
+	content := strings.TrimRight(ansi.Strip(row), " ")
+	// Two spaces of air between the log line and the badge, as for the hints.
+	if ansi.StringWidth(content)+badgeW+2 <= annotWidth {
+		body := ansi.Truncate(row, annotWidth-badgeW, "")
+		if pad := annotWidth - badgeW - ansi.StringWidth(body); pad > 0 {
+			body += strings.Repeat(" ", pad)
+		}
+		return body + style.Render(badge)
+	}
+	if badgeW >= width {
+		return row
+	}
+	return m.renderLine(line, width-badgeW, cursorStyle, selStyle) + style.Render(badge)
 }
