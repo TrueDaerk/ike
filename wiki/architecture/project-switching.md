@@ -103,14 +103,19 @@ directory, and open the scaffolded result.
   chord budget is full, #711) dispatches `OpenNewProjectMsg`; reachable from
   the palette and File → *New Project…*.
 - **Wizard** (`internal/app/newproject_prompt.go`) — a three-step shell
-  dialog. Step 1 lists the **project types**: the registered languages whose
-  toolchain implements `lang.ProjectScaffolder`
+  dialog. Step 1 lists the **project types**: **Plain** first (#1721 — a
+  registry-independent entry, not a language), then the registered languages
+  whose toolchain implements `lang.ProjectScaffolder`
   ([Language Registry](./languages.md)). Step 2 lists that language's
   **toolchain options** (`lang.ProjectOptions`) — for Python the guided venv
   choice between uv and pip/venv; unavailable options render disabled with
   the reason, never hidden. Step 3 is the **directory name** with the
   resolved target shown; `enter` advances/creates, `esc` steps back (from the
   first step: closes).
+- **Plain** (#1721) skips step 2 in both directions: `enter` on the type goes
+  straight to the name, `esc` from the name returns to the type list. Its
+  create only makes the directory — no toolchain, no scaffolding — so the
+  wizard also works in a build where no language offers scaffolding.
 - **Target rules**: `project.Target` — the same resolution as a clone (single
   path segment under the project directory, created on demand, existing
   targets refused). `CloneTarget` is now a thin wrapper over it.

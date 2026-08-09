@@ -40,9 +40,9 @@ func openNewProject(t *testing.T, m Model, sc *wizardScaffolder) Model {
 	if !m.newProjectPromptOpen() {
 		t.Fatal("project.new must open the wizard")
 	}
-	for i, l := range m.newProj.langs {
-		if l.ID == "wizlang" {
-			m.newProj.langPick = i
+	for i, t := range m.newProj.types {
+		if t.langID == "wizlang" {
+			m.newProj.typePick = i
 			return m
 		}
 	}
@@ -115,6 +115,78 @@ func TestNewProjectWizardEndToEnd(t *testing.T) {
 	}
 	if !hasSwitchTo(cmd, dest) {
 		t.Fatalf("create must switch to %q", dest)
+	}
+}
+
+// TestNewProjectPlainSkipsToolchain walks the Plain type (#1721): it is the
+// first row, enter goes straight to the name step, and the create only makes
+// the directory before the IDE re-roots into it.
+func TestNewProjectPlainSkipsToolchain(t *testing.T) {
+	m := newSized()
+	dir := cloneProjectsDir(t)
+	tm, cmd := m.Update(project.OpenNewProjectMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	if !m.newProjectPromptOpen() {
+		t.Fatal("project.new must open the wizard")
+	}
+	if m.newProj.typePick != 0 || !m.newProj.types[0].plain() {
+		t.Fatalf("Plain must be the first, preselected type: %#v", m.newProj.types)
+	}
+	if !strings.Contains(plainView(m), "Plain") {
+		t.Fatalf("the wizard must offer Plain:\n%s", plainView(m))
+	}
+
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.newProj.step != newProjStepName {
+		t.Fatalf("step = %d, want name — Plain has no toolchain step", m.newProj.step)
+	}
+	m = typeInto(m, "bare")
+
+	tm, cmd = m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = tm.(Model)
+	if !m.newProj.running || cmd == nil {
+		t.Fatal("enter must start the create")
+	}
+	msg, ok := cmd().(newProjectDoneMsg)
+	if !ok || msg.Err != nil {
+		t.Fatalf("the Plain create must succeed, got %#v", msg)
+	}
+	dest := filepath.Join(dir, "bare")
+	if msg.Dest != dest {
+		t.Fatalf("Dest = %q, want %q", msg.Dest, dest)
+	}
+	entries, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatalf("the project directory must exist: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("a Plain project must stay empty, got %d entries", len(entries))
+	}
+
+	tm, cmd = m.Update(msg)
+	m = tm.(Model)
+	if m.newProjectPromptOpen() {
+		t.Fatal("a successful create must close the wizard")
+	}
+	if !hasSwitchTo(cmd, dest) {
+		t.Fatalf("create must switch to %q", dest)
+	}
+}
+
+// TestNewProjectPlainEscFromNameReturnsToTypes guards the skipped step on the
+// way back: esc from the name step must not land on the toolchain step.
+func TestNewProjectPlainEscFromNameReturnsToTypes(t *testing.T) {
+	m := newSized()
+	cloneProjectsDir(t)
+	tm, cmd := m.Update(project.OpenNewProjectMsg{})
+	m = drainCmd(tm.(Model), cmd)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if m.newProj.step != newProjStepName {
+		t.Fatalf("step = %d, want name", m.newProj.step)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if !m.newProjectPromptOpen() || m.newProj.step != newProjStepType {
+		t.Fatalf("esc must return to the type step, step=%d open=%v", m.newProj.step, m.newProjectPromptOpen())
 	}
 }
 
