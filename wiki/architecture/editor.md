@@ -1462,6 +1462,20 @@ emits everything through the Go span seam (#1585); the parsing lives in
   soft-wrapped rows and collapsed run headers (which carry `×N`) show no hint.
   The chain is whole-buffer, cached per document version and path
   (`logDeltaCache`) and skipped for large files, like the repeat runs.
+- **Selection span** (#1729, `logline.SpanDelta`, `Model.LogSpanLabel`): the
+  per-line hints only answer *how long since the previous line*; a whole
+  section — request to response, first to last line of a stall — reads off the
+  status line instead. With a visual selection active in a log buffer, the
+  `logspan` segment shows `Δ +2m30s`: the elapsed time between the **outermost
+  timestamped lines** of the selection, so unstamped lines in between (stack
+  frames, wrapped messages) are irrelevant. Comparability follows the per-line
+  chain — the first stamp's kind wins, a stamp of the other kind (dated vs
+  time-only) is skipped rather than subtracted, and a time-only selection
+  crossing midnight wraps forward. The segment hides outside visual mode, for a
+  single-line selection, with fewer than two comparable stamps, and for a
+  non-positive span (both ends inside the same second of a second-resolution
+  log). It needs no command of its own and drops with the other cosmetic
+  segments when the bar overflows.
 
 Toggling off shows plain raw source — no styling, escape bytes visible, every
 repeat expanded. The buffer never changes.
