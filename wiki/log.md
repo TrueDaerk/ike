@@ -1,5 +1,24 @@
 # Log
 
+## 2026-08-09 (editor: the collapsed-run ×N marker became a badge, #1734)
+
+- **The `×N` marker of a collapsed log repeat run (#1650) now draws in theme
+  colours instead of `Faint`.** Dimmed and glued to the end of a normally
+  styled line, it was nearly invisible — that a row stood for N occurrences was
+  easy to miss entirely.
+- **Emphasis scales with the run length**: `Info` below ×10, `Info` bold from
+  ×10, `Warning` bold from ×100. A ×2 is a detail; a ×500 means the buffer is
+  almost entirely this one line. Both colours are contrast-checked against
+  every builtin theme's surfaces, so the badge holds up light and dark.
+- **Placement moved to the shared annotation column** (the delta hints' of
+  #1651/#1730), so the badges of a file form one scannable column instead of a
+  ragged trail of line ends. No conflict with the one-annotation-per-row rule:
+  a collapsed header carries no delta hint, and blame only annotates the cursor
+  line, which never renders as a collapsed header. A line too long for the
+  column keeps the badge appended after its text — the count is structure, not
+  an optional hint, so unlike a delta it is never dropped. See
+  [/architecture/editor.md](/architecture/editor.md).
+
 ## 2026-08-09 (marksman: scope wiki/ as its own workspace, #1726)
 
 - **`wiki/.marksman.toml` added** so marksman roots the wiki at `wiki/`

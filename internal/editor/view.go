@@ -569,9 +569,9 @@ func (m Model) View() string {
 			continue
 		}
 		// A run of identical log lines (#1650) collapses the same way, into
-		// its first line plus a dimmed ×N marker.
+		// its first line plus a ×N badge in the annotation column (#1734).
 		if end, ok := m.logRunAt(i); ok {
-			out = append(out, gutter+m.renderLogRunHeader(i, end, textWidth, cursorStyle, selStyle))
+			out = append(out, gutter+m.renderLogRunHeader(i, end, textWidth, annotWidth, cursorStyle, selStyle))
 			continue
 		}
 		// A PEM block (#1652) collapses onto its BEGIN marker plus the decoded

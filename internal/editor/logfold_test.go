@@ -1,8 +1,12 @@
 package editor
 
 import (
+	"fmt"
+	"image/color"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor/buffer"
 )
@@ -41,8 +45,8 @@ func TestLogRepeatRunHidesFollowers(t *testing.T) {
 	}
 }
 
-// TestLogRepeatMarkerCountsRun: the header row carries a dimmed ×N marker
-// counting the whole run, and vertical motion steps over the folded lines.
+// TestLogRepeatMarkerCountsRun: the header row carries a ×N badge counting the
+// whole run, and vertical motion steps over the folded lines.
 func TestLogRepeatMarkerCountsRun(t *testing.T) {
 	m := logLoaded(t, repeatDoc)
 	m.cursor = buffer.Position{Line: 3}
@@ -53,6 +57,96 @@ func TestLogRepeatMarkerCountsRun(t *testing.T) {
 	m.cursor = buffer.Position{Line: 0}
 	if got := m.View(); strings.Contains(got, "×3") {
 		t.Errorf("a revealed run must drop its marker:\n%s", got)
+	}
+}
+
+// TestLogRepeatMarkerBadgeStyled: the marker draws in theme colours rather
+// than `Faint`, so it stands out from ordinary log text in light and dark
+// themes alike, and its emphasis scales with the run length (#1734).
+func TestLogRepeatMarkerBadgeStyled(t *testing.T) {
+	m := logLoaded(t, repeatDoc)
+	pal := m.theme()
+
+	for _, tc := range []struct {
+		n    int
+		fg   color.Color
+		bold bool
+	}{
+		{2, pal.Info, false},
+		{logRunMany, pal.Info, true},
+		{logRunMany + 5, pal.Info, true},
+		{logRunLoud, pal.Warning, true},
+		{500, pal.Warning, true},
+	} {
+		st := m.logRunMarkerStyle(tc.n)
+		if got := st.GetForeground(); got != tc.fg {
+			t.Errorf("×%d foreground = %v; want %v", tc.n, got, tc.fg)
+		}
+		if got := st.GetBold(); got != tc.bold {
+			t.Errorf("×%d bold = %v; want %v", tc.n, got, tc.bold)
+		}
+		if st.GetFaint() {
+			t.Errorf("×%d must not render faint — the marker is easy to miss that way", tc.n)
+		}
+	}
+
+	// The rendered row carries the colour, not a bare marker.
+	m.cursor = buffer.Position{Line: 3}
+	row := strings.Split(m.View(), "\n")[0]
+	if !strings.Contains(row, m.logRunMarkerStyle(3).Render(" ×3")) {
+		t.Errorf("the header row must carry the styled badge:\n%q", row)
+	}
+}
+
+// TestLogRepeatMarkerColumn: the badges right-align into the shared annotation
+// column, so runs of different lengths form a scannable column instead of a
+// ragged trail of line ends (#1734).
+func TestLogRepeatMarkerColumn(t *testing.T) {
+	var b strings.Builder
+	for i := 0; i < 3; i++ { // run of 3
+		fmt.Fprintf(&b, "10:11:%02d INFO poll\n", i)
+	}
+	for i := 0; i < 12; i++ { // run of 12 — a wider badge
+		fmt.Fprintf(&b, "10:12:%02d INFO retry\n", i)
+	}
+	b.WriteString("10:13:00 INFO done\n")
+
+	m := logLoaded(t, b.String())
+	m.cursor = buffer.Position{Line: 15}
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if len(rows) < 2 {
+		t.Fatalf("view has %d rows; want the two run headers", len(rows))
+	}
+	for i, want := range []string{"×3", "×12"} {
+		if !strings.Contains(rows[i], want) {
+			t.Fatalf("row %d must carry %s: %q", i, want, rows[i])
+		}
+	}
+	// Right-aligned: both badges end in the same column.
+	a := len(strings.TrimRight(rows[0], " "))
+	c := len(strings.TrimRight(rows[1], " "))
+	if a != c {
+		t.Errorf("badges end at columns %d and %d; want one shared column:\n%q\n%q", a, c, rows[0], rows[1])
+	}
+	// And detached from the text, not glued to the line end.
+	if i := strings.Index(rows[0], "×3"); i > 0 && rows[0][i-1] != ' ' {
+		t.Errorf("the badge must sit in its own column, not against the text: %q", rows[0])
+	}
+}
+
+// TestLogRepeatMarkerLongLineFallback: a line too long for the annotation
+// column keeps its badge appended after the text — the count is structure, not
+// an optional hint like a delta (#1734).
+func TestLogRepeatMarkerLongLineFallback(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	m := logLoaded(t, "10:11:10 INFO "+long+"\n10:11:12 INFO "+long+"\n10:11:20 INFO done\n")
+	m.cursor = buffer.Position{Line: 2}
+
+	if end, ok := m.logRunAt(0); !ok || end != 1 {
+		t.Fatalf("precondition: logRunAt(0) = %d, %v; want 1, true", end, ok)
+	}
+	if got := m.View(); !strings.Contains(got, "×2") {
+		t.Errorf("a full-width run header must still carry its count:\n%s", got)
 	}
 }
 
