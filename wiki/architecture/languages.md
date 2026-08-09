@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-07T00:30:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Language Registry
@@ -396,6 +396,25 @@ explicit value into `ServerSpec.Settings`, where it wins over detection (the
 manager's merge keeps spec settings on top); the settings **Toolchain page**
 writes the key and triggers `lsp.restart` so servers respawn against it. See
 [Settings UI](./settings-ui.md).
+
+A third optional extension makes the language a **project type** in the
+new-project wizard (#1718):
+
+```go
+type ProjectScaffolder interface {
+    ProjectOptions() []ProjectOption           // toolchain choices (cheap PATH probes)
+    ScaffoldProject(root, option string) error // populate a fresh directory
+}
+```
+
+`ProjectOption` carries a stable id, label, resolved detail (binary path) and
+availability + reason — unavailable options are listed disabled, never hidden.
+Registry entry points: `ProjectLanguages()` (the wizard's type list),
+`ProjectOptions(langID)` and `ScaffoldProject(langID, root, option)`.
+Implemented today: **python** (`uv init` + `uv sync`, or `python -m venv .venv`
+plus a `main.py` seed — the guided venv creation), **go** (`go mod init` +
+`main.go`), **php** (plain `index.php`). See
+[Project Switching](./project-switching.md) for the wizard flow.
 
 ## Why compile-in
 

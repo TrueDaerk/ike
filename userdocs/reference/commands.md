@@ -308,6 +308,7 @@ bring their own.
 |---|---|---|---|---|
 | Clone Repository… | `project.clone` | — | — | everywhere |
 | Close Project | `project.close` | `cmd+shift+w` | — | everywhere |
+| New Project… | `project.new` | — | — | everywhere |
 | Switch Project… | `project.switch` | `cmd+shift+p` | — | everywhere |
 
 ## themes

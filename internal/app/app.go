@@ -319,6 +319,9 @@ type Model struct {
 	cloneRunning    bool
 	cloneErr        string
 
+	// newProj is the open new-project wizard (#1718); nil when it is closed.
+	newProj *newProjState
+
 	renamePos int
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
 	// shell shows it; input/pos are the typed name and cursor, err the
@@ -3889,6 +3892,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The clone finished: switch to the fresh checkout or show the error.
 		return m.finishClone(msg)
 
+	case project.OpenNewProjectMsg:
+		// project.new (palette / File menu, #1718): the new-project wizard.
+		m.startNewProjectPrompt()
+		return m, nil
+
+	case newProjectDoneMsg:
+		// The scaffold finished: open the project or show the error.
+		return m.finishNewProject(msg)
+
 	case project.PickedMsg:
 		// Picker selection: validate off the Update loop; the result comes
 		// back as SwitchProjectMsg or SwitchFailedMsg.
@@ -4962,6 +4974,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// between the URL and the directory-name field.
 		if m.clonePromptOpen() {
 			return m.updateClonePrompt(msg)
+		}
+		// The new-project wizard (#1718) mirrors it, with three steps walked
+		// by enter/esc.
+		if m.newProjectPromptOpen() {
+			return m.updateNewProjectPrompt(msg)
 		}
 		// The untitled save-as prompt (#730) mirrors it.
 		if m.saveAsOpen() {
