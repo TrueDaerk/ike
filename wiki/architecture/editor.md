@@ -1456,7 +1456,9 @@ emits everything through the Go span seam (#1585); the parsing lives in
   heartbeat stall at their own scales — renders in `Warning`, bold. The hint
   splices into the row's right padding exactly like the inline blame
   annotation, only when the text leaves room for it plus two columns of air, so
-  it never hides buffer content; blame keeps the cursor line to itself, and
+  it never hides buffer content; while the scrollbar is visible both
+  annotations right-align one column short of it, since the bar overlays the
+  pane's rightmost cell (#1728). Blame keeps the cursor line to itself, and
   soft-wrapped rows and collapsed run headers (which carry `×N`) show no hint.
   The chain is whole-buffer, cached per document version and path
   (`logDeltaCache`) and skipped for large files, like the repeat runs.
