@@ -855,6 +855,26 @@ func TestDetectRoot(t *testing.T) {
 	}
 }
 
+// TestDetectRootNearestMarkerWins guards #1726: a marker in a nested directory
+// (wiki/.marksman.toml) beats a marker further up (.git at the repo root), so a
+// nested doc tree gets its own workspace and marksman resolves root-relative
+// links against it instead of the repository root.
+func TestDetectRootNearestMarkerWins(t *testing.T) {
+	repo := t.TempDir()
+	wiki := filepath.Join(repo, "wiki")
+	sub := filepath.Join(wiki, "architecture")
+	_ = os.MkdirAll(filepath.Join(repo, ".git"), 0o755)
+	_ = os.MkdirAll(sub, 0o755)
+	_ = os.WriteFile(filepath.Join(wiki, ".marksman.toml"), nil, 0o644)
+	markers := []string{".marksman.toml", ".git"}
+	if got := detectRoot(filepath.Join(sub, "editor.md"), markers); got != wiki {
+		t.Fatalf("nested marker: detectRoot = %q, want %q", got, wiki)
+	}
+	if got := detectRoot(filepath.Join(repo, "README.md"), markers); got != repo {
+		t.Fatalf("repo-level file: detectRoot = %q, want %q", got, repo)
+	}
+}
+
 // TestCompletionContext guards #850: a typed server trigger character reports
 // TriggerCharacter with the character; identifier runes and manual requests
 // report Invoked; a character outside the server's set is not a trigger.

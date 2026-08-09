@@ -1,5 +1,15 @@
 # Log
 
+## 2026-08-09 (marksman: scope wiki/ as its own workspace, #1726)
+
+- **`wiki/.marksman.toml` added** so marksman roots the wiki at `wiki/`
+  instead of the repository root. With the repo root as workspace,
+  root-relative links (`/architecture/index.md`) resolved against the repo
+  and every one in `wiki/index.md` flagged as "Link to non-existent
+  document"; `.gitignore`d targets are likewise invisible to marksman's link
+  index. Root detection already prefers the nearest marker
+  (`.marksman.toml` before `.git`), now guarded by a regression test.
+
 ## 2026-08-09 (directory settings get path completion, #1720)
 
 - **`project.directory` moved from `String` to `Path`**, so it opens the path
