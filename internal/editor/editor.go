@@ -1458,7 +1458,14 @@ func (m *Model) scroll() {
 		segs := m.wrapSegs(m.cursor.Line)
 		m.view.ScrollWrapped(m.cursor.Line, viewport.SegmentIndex(segs, m.cursor.Col), m.buf.LineCount(), m.wrapRows)
 	} else {
-		m.view.Scroll(m.cursor.Line, m.cursor.Col, m.buf.LineCount())
+		col := m.cursor.Col
+		if m.svActive() {
+			// Table-rendered sv buffers scroll horizontally in display space
+			// (#1724): track the caret by its expanded column so view.Left —
+			// a display-cell offset there — keeps it inside the window.
+			col = m.svDisplayCol(m.cursor.Line, col)
+		}
+		m.view.Scroll(m.cursor.Line, col, m.buf.LineCount())
 		m.foldScrollFix()
 	}
 	m.unhideCursor()
