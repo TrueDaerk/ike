@@ -137,3 +137,64 @@ func TestLogDeltasFollowEdits(t *testing.T) {
 		t.Errorf("logDeltaAt(1) = %q after the edit; want \"+5s\"", got)
 	}
 }
+
+// TestLogSpanLabel: a visual selection over the stall reports the elapsed time
+// between its first and last timestamped line (#1729).
+func TestLogSpanLabel(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 1}
+	m.cursor = buffer.Position{Line: 3}
+
+	if got := m.LogSpanLabel(); got != "Δ +31s" {
+		t.Errorf("LogSpanLabel() = %q; want %q", got, "Δ +31s")
+	}
+	// The whole file, backwards selection: anchor and cursor order must not
+	// matter.
+	m.anchor = buffer.Position{Line: 4}
+	m.cursor = buffer.Position{Line: 0}
+	if got := m.LogSpanLabel(); got != "Δ +33s" {
+		t.Errorf("reversed selection = %q; want %q", got, "Δ +33s")
+	}
+}
+
+// TestLogSpanLabelHidden: nothing to report outside visual mode, for a
+// single-line selection, and when the selection holds fewer than two
+// timestamped lines.
+func TestLogSpanLabelHidden(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.anchor = buffer.Position{Line: 0}
+	m.cursor = buffer.Position{Line: 4}
+	if got := m.LogSpanLabel(); got != "" {
+		t.Errorf("normal mode = %q; want no label", got)
+	}
+
+	m.mode = VisualLine
+	m.cursor = buffer.Position{Line: 0}
+	if got := m.LogSpanLabel(); got != "" {
+		t.Errorf("single-line selection = %q; want no label", got)
+	}
+
+	stackDoc := "10:11:10 ERROR boom\n\tat Foo.bar(Foo.java:42)\n\tat Foo.baz(Foo.java:7)\n"
+	m = logLoaded(t, stackDoc)
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 0}
+	m.cursor = buffer.Position{Line: 2}
+	if got := m.LogSpanLabel(); got != "" {
+		t.Errorf("one stamped line = %q; want no label", got)
+	}
+}
+
+// TestLogSpanLabelNonLog: the label is a log-buffer feature — a plain buffer
+// with timestamp-looking lines shows nothing.
+func TestLogSpanLabelNonLog(t *testing.T) {
+	m := New()
+	m.buf = buffer.New(strings.Split(strings.TrimRight(deltaDoc, "\n"), "\n"))
+	m.SetSize(60, 10)
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 0}
+	m.cursor = buffer.Position{Line: 4}
+	if got := m.LogSpanLabel(); got != "" {
+		t.Errorf("non-log buffer = %q; want no label", got)
+	}
+}

@@ -12,8 +12,10 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/editor"
+	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/logline"
 )
 
 // segToolchain is a test toolchain whose interpreter is a fixed path.
@@ -297,4 +299,30 @@ func TestStatusLineModeBadge(t *testing.T) {
 func modeSGR(m Model, md editor.Mode) string {
 	r, g, b, _ := editor.ModeColor(md, m.pal()).RGBA()
 	return fmt.Sprintf("48;2;%d;%d;%d", r>>8, g>>8, b>>8)
+}
+
+// TestStatusLineLogSpanSegment guards the selection-span segment (#1729): a
+// visual selection over a log buffer reports the elapsed time between its
+// first and last timestamped line, and the segment is hidden without one.
+func TestStatusLineLogSpanSegment(t *testing.T) {
+	lang.Register(lang.Language{ID: "log", Extensions: []string{"log"}, Spans: logline.Spans})
+	path := filepath.Join(t.TempDir(), "app.log")
+	content := "10:11:10 INFO request start\n\tat Foo.bar(Foo.java:42)\n10:13:40 INFO response sent\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := newSized()
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	m = out.(Model)
+	m.setFocus(m.activeEditorKey())
+
+	if line := m.statusLine(); strings.Contains(line, "Δ") {
+		t.Fatalf("no selection must show no span: %q", line)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Text: "V", Code: 'V', Mod: tea.ModShift})
+	m = drainKey(m, tea.KeyPressMsg{Text: "j", Code: 'j'})
+	m = drainKey(m, tea.KeyPressMsg{Text: "j", Code: 'j'})
+	if line := m.statusLine(); !strings.Contains(line, "Δ +2m30s") {
+		t.Fatalf("selection span missing from the bar: %q", line)
+	}
 }

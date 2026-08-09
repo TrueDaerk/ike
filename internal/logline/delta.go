@@ -198,6 +198,44 @@ func Deltas(lines []string) []Delta {
 	return out
 }
 
+// SpanDelta returns the elapsed time between the first and the last
+// timestamped line of a block — what a visual selection over a log measures
+// (#1729). Only the outermost stamps count: everything between them may be
+// stack frames, wrapped messages or banners without a timestamp.
+//
+// ok is false with fewer than two comparable stamps. Comparability follows the
+// per-line chain: the first stamp's kind wins, and a stamp of the other kind
+// (dated vs time-only, whose base day is arbitrary) is ignored rather than
+// subtracted. A time-only block crossing midnight wraps forward, like Deltas.
+func SpanDelta(lines []string) (time.Duration, bool) {
+	var first, last Stamp
+	var have int
+	for _, line := range lines {
+		s, ok := ParseStamp(line)
+		if !ok {
+			continue
+		}
+		if have == 0 {
+			first = s
+			have = 1
+			continue
+		}
+		if s.HasDate != first.HasDate {
+			continue
+		}
+		last = s
+		have = 2
+	}
+	if have < 2 {
+		return 0, false
+	}
+	d := last.Time.Sub(first.Time)
+	if d < 0 && !first.HasDate {
+		d += 24 * time.Hour
+	}
+	return d, true
+}
+
 // GapThreshold returns the duration at which a delta counts as a stall for a
 // file with these deltas: ten times the median cadence, never below a second.
 // An empty input yields the floor, so a file with a single delta only flags a

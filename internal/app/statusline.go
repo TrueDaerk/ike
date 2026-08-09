@@ -41,6 +41,7 @@ var statusLeft = []statusSegment{
 	{id: "indent", render: indentSegment},
 	{id: "svcolumn", render: svColumnSegment},
 	{id: "docpath", render: docPathSegment},
+	{id: "logspan", render: logSpanSegment},
 	{id: "diagnostics", render: diagSegment},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
 	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
@@ -217,6 +218,16 @@ func docPathSegment(_ Model, ed *editor.Model) string {
 		return ""
 	}
 	return ed.DocPathLabel()
+}
+
+// logSpanSegment is the elapsed time a visual selection covers in a log
+// buffer (#1729) — "Δ +2m30s", the first to the last timestamped line of the
+// selection. Empty (hidden) everywhere else.
+func logSpanSegment(_ Model, ed *editor.Model) string {
+	if ed == nil {
+		return ""
+	}
+	return ed.LogSpanLabel()
 }
 
 // diagSegment is the focused buffer's diagnostic counts; hidden when clean.
@@ -471,7 +482,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // overflows (#471): cosmetic hints first, diagnostics/LSP last; mode, the
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
-	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "toolchain", "todo",
+	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
 	"host", "notifications", "macro", "branch", "diagnostics", "lsp",
 }
 

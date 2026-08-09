@@ -66,6 +66,45 @@ func (m Model) logDeltaAt(line int) (string, bool, bool) {
 	return text, ds[line].Gap, true
 }
 
+// LogSpanLabel is the status-line label for the elapsed time a visual
+// selection covers in a log buffer (#1729) — "Δ +2m30s". The per-line hints
+// only answer "how long since the previous line"; measuring a whole section —
+// request to response, the first to the last line of a stall — otherwise means
+// reading two timestamps and subtracting by eye.
+//
+// Only the outermost timestamped lines of the selection count; unstamped ones
+// in between are irrelevant. Empty (which hides the segment) outside visual
+// mode, outside a log buffer, with fewer than two comparable stamps in the
+// selection, and for a non-positive span — a second-resolution log where both
+// ends land in the same second has nothing to report.
+func (m Model) LogSpanLabel() string {
+	if !m.logInsight() || !m.mode.IsVisual() {
+		return ""
+	}
+	start, end := m.anchor.Line, m.cursor.Line
+	if start > end {
+		start, end = end, start
+	}
+	if start < 0 {
+		start = 0
+	}
+	if n := m.buf.LineCount(); end >= n {
+		end = n - 1
+	}
+	if end <= start {
+		return ""
+	}
+	d, ok := logline.SpanDelta(m.buf.Lines()[start : end+1])
+	if !ok {
+		return ""
+	}
+	text := logline.FormatDelta(d)
+	if text == "" {
+		return ""
+	}
+	return "Δ " + text
+}
+
 // logDeltaAnnotate places a line's delta hint at the row's right edge. Rows
 // without a delta, or without room for one, render unchanged.
 //

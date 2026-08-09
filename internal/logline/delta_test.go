@@ -248,3 +248,80 @@ func TestDeltasOutOfOrder(t *testing.T) {
 		t.Errorf("line 2 = %+v; want 1s from the reset predecessor", ds[2])
 	}
 }
+
+// TestSpanDelta: the selection span measures the outermost stamps of a block,
+// ignoring everything unstamped in between.
+func TestSpanDelta(t *testing.T) {
+	d, ok := SpanDelta([]string{
+		"10:11:10 INFO request start",
+		"\tat com.example.Foo.bar(Foo.java:42)",
+		"continued message without a stamp",
+		"10:13:40 INFO response sent",
+	})
+	if !ok || d != 2*time.Minute+30*time.Second {
+		t.Errorf("SpanDelta = %v, %v; want 2m30s, true", d, ok)
+	}
+}
+
+// TestSpanDeltaTooFewStamps: fewer than two timestamped lines has nothing to
+// measure.
+func TestSpanDeltaTooFewStamps(t *testing.T) {
+	for _, lines := range [][]string{
+		nil,
+		{"no stamp here"},
+		{"10:11:10 INFO only one", "\tat Foo.bar(Foo.java:42)"},
+	} {
+		if d, ok := SpanDelta(lines); ok {
+			t.Errorf("SpanDelta(%q) = %v, true; want no span", lines, d)
+		}
+	}
+}
+
+// TestSpanDeltaMixedKinds: a dated stamp is never subtracted from a time-only
+// one — the base day of the dateless layout is arbitrary. The first stamp's
+// kind wins and the other kind is skipped.
+func TestSpanDeltaMixedKinds(t *testing.T) {
+	d, ok := SpanDelta([]string{
+		"10:11:10 INFO a",
+		"2024-01-02 11:00:00 INFO dated interloper",
+		"10:11:20 INFO b",
+	})
+	if !ok || d != 10*time.Second {
+		t.Errorf("SpanDelta = %v, %v; want 10s, true", d, ok)
+	}
+	if _, ok := SpanDelta([]string{
+		"10:11:10 INFO a",
+		"2024-01-02 11:00:00 INFO dated only",
+	}); ok {
+		t.Error("a dateless and a dated stamp are not comparable")
+	}
+}
+
+// TestSpanDeltaMidnight: a time-only block whose clock wraps past midnight
+// counts forward instead of reporting a negative span.
+func TestSpanDeltaMidnight(t *testing.T) {
+	d, ok := SpanDelta([]string{
+		"23:59:59 INFO a",
+		"00:00:04 INFO b",
+	})
+	if !ok || d != 5*time.Second {
+		t.Errorf("SpanDelta = %v, %v; want 5s, true", d, ok)
+	}
+}
+
+// TestSpanDeltaEpochAndSyslog: the span reuses ParseStamp, so every layout the
+// per-line chain knows works here too.
+func TestSpanDeltaEpochAndSyslog(t *testing.T) {
+	if d, ok := SpanDelta([]string{
+		"time=1704189072 level=info msg=a",
+		"time=1704189162 level=info msg=b",
+	}); !ok || d != 90*time.Second {
+		t.Errorf("epoch span = %v, %v; want 1m30s, true", d, ok)
+	}
+	if d, ok := SpanDelta([]string{
+		"Jan  2 10:11:12 host app: a",
+		"Jan  2 10:12:12 host app: b",
+	}); !ok || d != time.Minute {
+		t.Errorf("syslog span = %v, %v; want 1m, true", d, ok)
+	}
+}
