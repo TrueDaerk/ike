@@ -601,7 +601,11 @@ func (m Model) View() string {
 			continue
 		}
 		row := m.renderLine(i, textWidth, cursorStyle, selStyle)
-		if m.blameOn && i == m.cursor.Line {
+		if spanned, ok := m.logSpanAnnotate(row, i, annotWidth); ok {
+			// The span delta of a log selection (#1736) outranks both: it
+			// answers a question the user just asked, on the row they move.
+			row = spanned
+		} else if m.blameOn && i == m.cursor.Line {
 			// Inline blame (0320, #468): the annotation splices into the
 			// cursor line's right padding when it fits.
 			row = m.blameAnnotate(row, i, annotWidth)
