@@ -322,7 +322,7 @@ func TestStatusLineLogSpanSegment(t *testing.T) {
 	m = drainKey(m, tea.KeyPressMsg{Text: "V", Code: 'V', Mod: tea.ModShift})
 	m = drainKey(m, tea.KeyPressMsg{Text: "j", Code: 'j'})
 	m = drainKey(m, tea.KeyPressMsg{Text: "j", Code: 'j'})
-	if line := m.statusLine(); !strings.Contains(line, "Δ +2m30s") {
+	if line := m.statusLine(); !strings.Contains(line, "Δ +2m 30s") {
 		t.Fatalf("selection span missing from the bar: %q", line)
 	}
 }

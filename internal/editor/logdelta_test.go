@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"ike/internal/editor/buffer"
 )
 
@@ -23,7 +25,9 @@ func TestLogDeltaHints(t *testing.T) {
 	m := logLoaded(t, deltaDoc)
 	m.cursor = buffer.Position{Line: 0}
 
-	for l, want := range map[int]string{1: "+1s", 2: "+1s", 3: "+30s", 4: "+1s"} {
+	// The stall widens the column to three digits, so the one-second ticks pad
+	// to the same width (#1730).
+	for l, want := range map[int]string{1: "+ 1s", 2: "+ 1s", 3: "+30s", 4: "+ 1s"} {
 		if got, _, ok := m.logDeltaAt(l); !ok || got != want {
 			t.Errorf("logDeltaAt(%d) = %q, %v; want %q, true", l, got, ok, want)
 		}
@@ -31,8 +35,37 @@ func TestLogDeltaHints(t *testing.T) {
 	if _, _, ok := m.logDeltaAt(0); ok {
 		t.Error("the first line has nothing to measure against")
 	}
-	if got := m.View(); !strings.Contains(got, "+30s") || !strings.Contains(got, "+1s") {
+	if got := m.View(); !strings.Contains(got, "+30s") || !strings.Contains(got, "+ 1s") {
 		t.Errorf("view must render the delta hints:\n%s", got)
+	}
+}
+
+// TestLogDeltaHintsAligned: every hint of a buffer occupies the same columns,
+// so the mixed-unit chain reads as a column rather than a ragged trail (#1730).
+func TestLogDeltaHintsAligned(t *testing.T) {
+	m := logLoaded(t, "10:11:10,000 INFO a\n10:11:10,598 INFO b\n10:11:17,898 INFO c\n10:23:25,898 INFO d\n")
+
+	want := map[int]string{1: "+    598ms", 2: "+ 7s 300ms", 3: "+12m    8s"}
+	for l, w := range want {
+		got, _, ok := m.logDeltaAt(l)
+		if !ok || got != w {
+			t.Errorf("logDeltaAt(%d) = %q, %v; want %q, true", l, got, ok, w)
+		}
+	}
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	col := -1
+	for l, w := range want {
+		if l >= len(rows) {
+			t.Fatalf("view has %d rows; want the hint of line %d", len(rows), l)
+		}
+		i := strings.Index(rows[l], w)
+		if i < 0 {
+			t.Fatalf("hint %q missing from row %d: %q", w, l, rows[l])
+		}
+		if col >= 0 && i != col {
+			t.Errorf("hint %q starts at column %d; want %d — the hints must share a column", w, i, col)
+		}
+		col = i
 	}
 }
 
@@ -125,16 +158,16 @@ func TestLogDeltaFullTextBesideScrollbar(t *testing.T) {
 // a timestamp recomputes the chain.
 func TestLogDeltasFollowEdits(t *testing.T) {
 	m := logLoaded(t, deltaDoc)
-	if got, _, _ := m.logDeltaAt(1); got != "+1s" {
-		t.Fatalf("precondition: logDeltaAt(1) = %q; want \"+1s\"", got)
+	if got, _, _ := m.logDeltaAt(1); got != "+ 1s" {
+		t.Fatalf("precondition: logDeltaAt(1) = %q; want \"+ 1s\"", got)
 	}
 
 	lines := m.buf.Lines()
-	lines[1] = "10:11:15 INFO b"
+	lines[1], lines[2] = "10:11:15 INFO b", "10:11:16 INFO c"
 	m.buf.ReplaceAll(strings.Join(lines, "\n"))
 	m.docVersion++
-	if got, _, _ := m.logDeltaAt(1); got != "+5s" {
-		t.Errorf("logDeltaAt(1) = %q after the edit; want \"+5s\"", got)
+	if got, _, _ := m.logDeltaAt(1); got != "+ 5s" {
+		t.Errorf("logDeltaAt(1) = %q after the edit; want \"+ 5s\"", got)
 	}
 }
 

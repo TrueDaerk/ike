@@ -86,7 +86,8 @@ func TestParseStampUnrecognized(t *testing.T) {
 	}
 }
 
-// TestFormatDelta: the hint picks the coarsest form that still carries signal.
+// TestFormatDelta: the hint picks the coarsest unit that still carries signal
+// plus the next one down, dropping a zero remainder.
 func TestFormatDelta(t *testing.T) {
 	tests := []struct {
 		d    time.Duration
@@ -94,14 +95,15 @@ func TestFormatDelta(t *testing.T) {
 	}{
 		{450 * time.Millisecond, "+450ms"},
 		{time.Millisecond, "+1ms"},
-		{2100 * time.Millisecond, "+2.1s"},
+		{2100 * time.Millisecond, "+2s 100ms"},
 		{3 * time.Second, "+3s"},
 		{30 * time.Second, "+30s"},
-		{90 * time.Second, "+1m30s"},
+		{30*time.Second + 123*time.Millisecond, "+30s"},
+		{90 * time.Second, "+1m 30s"},
 		{2 * time.Minute, "+2m"},
-		{time.Hour + 5*time.Minute, "+1h5m"},
+		{time.Hour + 5*time.Minute, "+1h 5m"},
 		{2 * time.Hour, "+2h"},
-		{26 * time.Hour, "+1d2h"},
+		{26 * time.Hour, "+1d 2h"},
 		{0, ""},
 		{-time.Second, ""},
 	}
@@ -109,6 +111,60 @@ func TestFormatDelta(t *testing.T) {
 		if got := FormatDelta(tc.d); got != tc.want {
 			t.Errorf("FormatDelta(%v) = %q; want %q", tc.d, got, tc.want)
 		}
+	}
+}
+
+// TestDeltaLayout: the buffer-wide layout pads every hint to one width and
+// right-aligns both unit fields, so the column lines up (#1730).
+func TestDeltaLayout(t *testing.T) {
+	ds := []Delta{
+		{D: 7300 * time.Millisecond, OK: true},
+		{D: 598 * time.Millisecond, OK: true},
+		{D: 12*time.Minute + 8*time.Second, OK: true},
+		{D: time.Second, OK: false}, // no hint: must not widen the column
+	}
+	l := LayoutDeltas(ds)
+	if l.Hi != 3 || l.Lo != 5 {
+		t.Fatalf("LayoutDeltas = %+v; want {Hi:3 Lo:5}", l)
+	}
+	want := []string{
+		"+ 7s 300ms",
+		"+    598ms",
+		"+12m    8s",
+	}
+	for i, w := range want {
+		if got := l.Format(ds[i].D); got != w {
+			t.Errorf("Format(%v) = %q; want %q", ds[i].D, got, w)
+		}
+		if got := len(l.Format(ds[i].D)); got != l.Width() {
+			t.Errorf("Format(%v) width = %d; want %d", ds[i].D, got, l.Width())
+		}
+	}
+	if got := l.Format(0); got != "" {
+		t.Errorf("Format(0) = %q; want no hint", got)
+	}
+}
+
+// TestDeltaLayoutSingleField: a file whose deltas all land in one unit pair
+// spends no columns on the field nobody uses.
+func TestDeltaLayoutSingleField(t *testing.T) {
+	subSecond := LayoutDeltas([]Delta{
+		{D: 450 * time.Millisecond, OK: true},
+		{D: 5 * time.Millisecond, OK: true},
+	})
+	if got := subSecond.Format(5 * time.Millisecond); got != "+  5ms" {
+		t.Errorf("sub-second Format = %q; want %q", got, "+  5ms")
+	}
+	whole := LayoutDeltas([]Delta{
+		{D: 30 * time.Second, OK: true},
+		{D: 3 * time.Second, OK: true},
+	})
+	if got := whole.Format(3 * time.Second); got != "+ 3s" {
+		t.Errorf("whole-second Format = %q; want %q", got, "+ 3s")
+	}
+	// The zero layout — no deltas at all — falls back to the compact form.
+	if got := (DeltaLayout{}).Format(90 * time.Second); got != "+1m 30s" {
+		t.Errorf("zero layout Format = %q; want %q", got, "+1m 30s")
 	}
 }
 
