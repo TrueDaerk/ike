@@ -14,11 +14,14 @@ import (
 )
 
 // newproject_prompt.go drives "New Project" (#1718): a three-step shell
-// dialog — project type (the languages offering scaffolding, lang.
+// dialog — project type (Plain plus the languages offering scaffolding, lang.
 // ProjectLanguages), toolchain (the language's lang.ProjectOptions; for
 // Python the guided venv choice between uv and pip/venv), directory name.
 // The scaffold itself is one async tea.Cmd like the clone (#1349), and a
 // finished project opens through the regular switch transaction.
+//
+// Plain (#1721) is the registry-independent first type: no toolchain step, no
+// scaffolding — the create only makes the directory and opens it.
 
 // Wizard step indices; esc walks them backwards.
 const (
@@ -27,11 +30,31 @@ const (
 	newProjStepName
 )
 
+// newProjType is one row of the project-type step. A plain type carries no
+// language id and skips the toolchain step and the scaffolding entirely.
+type newProjType struct {
+	langID string // "" for Plain
+	label  string
+}
+
+// plain reports whether the type creates a bare directory (#1721).
+func (t newProjType) plain() bool { return t.langID == "" }
+
+// newProjTypes builds the type list: Plain first, then the scaffolding
+// languages in registry order.
+func newProjTypes() []newProjType {
+	types := []newProjType{{label: "Plain — empty directory"}}
+	for _, l := range lang.ProjectLanguages() {
+		types = append(types, newProjType{langID: l.ID, label: projTypeLabel(l.ID)})
+	}
+	return types
+}
+
 // newProjState is the open wizard; nil when it is closed.
 type newProjState struct {
 	step     int
-	langs    []lang.Language
-	langPick int
+	types    []newProjType
+	typePick int
 	opts     []lang.ProjectOption
 	optPick  int
 	name     string
@@ -48,15 +71,10 @@ type newProjectDoneMsg struct {
 	Err  error
 }
 
-// startNewProjectPrompt opens the wizard on the type step, or explains why it
-// cannot (no registered language offers scaffolding — a plugin-less build).
+// startNewProjectPrompt opens the wizard on the type step. Plain (#1721) is
+// always offered, so a plugin-less build still reaches the wizard.
 func (m *Model) startNewProjectPrompt() {
-	langs := lang.ProjectLanguages()
-	if len(langs) == 0 {
-		m.host.Notify(host.Error, "no installed language offers project scaffolding")
-		return
-	}
-	m.newProj = &newProjState{langs: langs}
+	m.newProj = &newProjState{types: newProjTypes()}
 	m.renderNewProjectPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -113,17 +131,17 @@ func (m *Model) renderNewProjectPrompt() {
 	case newProjStepType:
 		add("Project type")
 		add("")
-		for i, l := range s.langs {
+		for i, t := range s.types {
 			marker := "  ○ "
-			if i == s.langPick {
+			if i == s.typePick {
 				marker = "> ● "
 			}
-			add(marker + projTypeLabel(l.ID))
+			add(marker + t.label)
 		}
 		add("")
 		add("↑↓ select · enter next · esc cancel")
 	case newProjStepTool:
-		add("Toolchain for " + projTypeLabel(s.langs[s.langPick].ID))
+		add("Toolchain for " + projTypeLabel(s.types[s.typePick].langID))
 		add("")
 		for i, o := range s.opts {
 			marker := "  ○ "
@@ -173,6 +191,10 @@ func (m Model) updateNewProjectPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			return m, nil
 		}
 		s.step--
+		if s.step == newProjStepTool && s.types[s.typePick].plain() {
+			// Plain has no toolchain step — walk straight back to the types.
+			s.step = newProjStepType
+		}
 		s.err = ""
 		m.renderNewProjectPrompt()
 		return m, nil
@@ -183,7 +205,7 @@ func (m Model) updateNewProjectPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 	switch s.step {
 	case newProjStepType, newProjStepTool:
-		n, pick := len(s.langs), &s.langPick
+		n, pick := len(s.types), &s.typePick
 		if s.step == newProjStepTool {
 			n, pick = len(s.opts), &s.optPick
 		}
@@ -214,9 +236,15 @@ func (m Model) advanceNewProject() (tea.Model, tea.Cmd) {
 	s := m.newProj
 	switch s.step {
 	case newProjStepType:
-		s.opts = lang.ProjectOptions(s.langs[s.langPick].ID)
+		t := s.types[s.typePick]
+		if t.plain() {
+			s.opts, s.optPick = nil, 0
+			s.step = newProjStepName
+			break
+		}
+		s.opts = lang.ProjectOptions(t.langID)
 		if len(s.opts) == 0 {
-			s.err = projTypeLabel(s.langs[s.langPick].ID) + " offers no toolchain options"
+			s.err = projTypeLabel(t.langID) + " offers no toolchain options"
 			m.renderNewProjectPrompt()
 			return m, nil
 		}
@@ -256,16 +284,25 @@ func (m Model) startNewProjectCreate() (tea.Model, tea.Cmd) {
 	s.err = ""
 	s.running = true
 	m.renderNewProjectPrompt()
-	return m, createProjectCmd(s.langs[s.langPick].ID, s.opts[s.optPick].ID, dest)
+	t := s.types[s.typePick]
+	option := ""
+	if !t.plain() {
+		option = s.opts[s.optPick].ID
+	}
+	return m, createProjectCmd(t.langID, option, dest)
 }
 
 // createProjectCmd creates dest and runs the language's scaffolder in one
 // async tea.Cmd, so the UI keeps rendering while subprocesses (uv init,
-// python -m venv, go mod init) run.
+// python -m venv, go mod init) run. An empty langID is the Plain type
+// (#1721): the directory is all there is to create.
 func createProjectCmd(langID, option, dest string) tea.Cmd {
 	return func() tea.Msg {
 		if err := os.MkdirAll(dest, 0o755); err != nil {
 			return newProjectDoneMsg{Dest: dest, Err: err}
+		}
+		if langID == "" {
+			return newProjectDoneMsg{Dest: dest}
 		}
 		if err := lang.ScaffoldProject(langID, dest, option); err != nil {
 			// dest did not exist before this command (project.Target refused
