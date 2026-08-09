@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-08-09T00:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -93,6 +93,36 @@ open the result.
   and editable with the decisive git line. If the dialog was dismissed while
   the clone ran, the outcome only toasts — the IDE is never re-rooted under
   the user.
+
+## New Project (#1718)
+
+JetBrains' *New Project* wizard: pick a project type and toolchain, name the
+directory, and open the scaffolded result.
+
+- **`project.new`** ("New Project…", global scope, no default chord — the
+  chord budget is full, #711) dispatches `OpenNewProjectMsg`; reachable from
+  the palette and File → *New Project…*.
+- **Wizard** (`internal/app/newproject_prompt.go`) — a three-step shell
+  dialog. Step 1 lists the **project types**: the registered languages whose
+  toolchain implements `lang.ProjectScaffolder`
+  ([Language Registry](./languages.md)). Step 2 lists that language's
+  **toolchain options** (`lang.ProjectOptions`) — for Python the guided venv
+  choice between uv and pip/venv; unavailable options render disabled with
+  the reason, never hidden. Step 3 is the **directory name** with the
+  resolved target shown; `enter` advances/creates, `esc` steps back (from the
+  first step: closes).
+- **Target rules**: `project.Target` — the same resolution as a clone (single
+  path segment under the project directory, created on demand, existing
+  targets refused). `CloneTarget` is now a thin wrapper over it.
+- **The create** is one async `tea.Cmd`: make the directory, run the
+  language's `ScaffoldProject` (subprocesses like `uv init`/`uv sync`,
+  `python -m venv`, `go mod init` are fine there). A failed scaffold removes
+  the partial directory — the name can be retried — and keeps the wizard
+  open with the tool's reason.
+- **Outcome**: success closes the wizard, toasts and hands the path to
+  `SwitchTo` — the fresh project opens through the regular switch
+  transaction. If the wizard was dismissed while the scaffold ran, the
+  outcome only toasts.
 
 ## Close Project (#1355)
 

@@ -6,6 +6,7 @@ package menu
 func Defaults() []Menu {
 	return []Menu{
 		{Title: "File", Items: []Item{
+			{Title: "New Project…", Command: "project.new"},
 			{Title: "New Scratch File", Command: "scratch.new"},
 			{Title: "Open Scratch File…", Command: "scratch.list"},
 			{Title: "Open File…", Command: "file.openPath"},

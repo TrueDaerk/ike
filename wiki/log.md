@@ -1,5 +1,18 @@
 # Log
 
+## 2026-08-09 (new-project wizard, #1718)
+
+- **`project.new`** ("New Project…", palette + File menu) opens a three-step
+  shell wizard: project type → toolchain → directory name. Types come from
+  the language registry's new optional `Toolchain` extension
+  `lang.ProjectScaffolder` (`ProjectOptions` / `ScaffoldProject`); python
+  offers uv (`uv init` + `uv sync`) or pip/venv (`python -m venv .venv` +
+  `main.py`), go scaffolds `go mod init` + `main.go`, php a plain
+  `index.php`. The create runs as one async `tea.Cmd`; a failure removes the
+  partial directory and stays in the dialog, success opens the project via
+  the regular switch transaction. `project.CloneTarget` generalized to
+  `project.Target` (shared clone/new-project target rules).
+
 ## 2026-08-08 (terminal: smaller popup default, global size fallback, #1714)
 
 - **The popup terminal opens smaller.** Its default fractions drop from

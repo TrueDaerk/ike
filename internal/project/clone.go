@@ -16,17 +16,21 @@ import (
 // Dispatched by the project.clone command.
 type OpenCloneMsg struct{}
 
-// CloneTarget resolves the directory a clone named name would land in: the
-// project directory (created on demand) joined with name. It rejects an empty
-// name, a name that is not a single path segment, and a target that already
-// exists with content — so a clone never lands inside an unrelated checkout
+// CloneTarget resolves the directory a clone named name would land in — the
+// shared Target rules.
+func CloneTarget(name string) (string, error) { return Target(name) }
+
+// Target resolves the directory a new checkout or project named name would
+// land in: the project directory (created on demand) joined with name. It
+// rejects an empty name, a name that is not a single path segment, and a
+// target that already exists — so nothing lands inside an unrelated checkout
 // and never half-merges into an existing directory. An existing *empty*
 // directory is refused too: git clone requires a free path, and silently
 // removing a directory the user created is not this feature's call.
-func CloneTarget(name string) (string, error) {
+func Target(name string) (string, error) {
 	n := strings.TrimSpace(name)
 	if n == "" {
-		return "", fmt.Errorf("directory name is empty — enter a name for the clone")
+		return "", fmt.Errorf("directory name is empty — enter a name")
 	}
 	if n == "." || n == ".." {
 		return "", fmt.Errorf("%q is not a directory name", n)
