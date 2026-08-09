@@ -1494,9 +1494,9 @@ emits everything through the Go span seam (#1585); the parsing lives in
   below.
 - **Selection span** (#1729, `logline.SpanDelta`, `Model.LogSpanLabel`): the
   per-line hints only answer *how long since the previous line*; a whole
-  section — request to response, first to last line of a stall — reads off the
-  status line instead. With a visual selection active in a log buffer, the
-  `logspan` segment shows `Δ +2m 30s`: the elapsed time between the **outermost
+  section — request to response, first to last line of a stall — is measured
+  over the selection instead. With a visual selection active in a log buffer,
+  the label reads `Δ +2m 30s`: the elapsed time between the **outermost
   timestamped lines** of the selection, so unstamped lines in between (stack
   frames, wrapped messages) are irrelevant. Comparability follows the per-line
   chain — the first stamp's kind wins, a stamp of the other kind (dated vs
@@ -1504,8 +1504,20 @@ emits everything through the Go span seam (#1585); the parsing lives in
   crossing midnight wraps forward. The segment hides outside visual mode, for a
   single-line selection, with fewer than two comparable stamps, and for a
   non-positive span (both ends inside the same second of a second-resolution
-  log). It needs no command of its own and drops with the other cosmetic
-  segments when the bar overflows.
+  log). It needs no command of its own.
+- **Span in the editor** (#1736, `Model.logSpanAnnotate`): the label renders
+  twice — as the `logspan` status-line segment *and* at the right edge of the
+  **cursor row** of the selection, both fed by `LogSpanLabel`, so they can never
+  disagree. The bar alone was too easy to miss: the eye is on the selection, not
+  on the bottom row, and the segment drops with the other cosmetic ones when the
+  bar overflows. Only the cursor row carries the annotation — that is the end
+  the user is moving — styled in `Accent`, bold, so it does not read as one of
+  the faint per-line hints. It wins the one-annotation-per-row rule against both
+  the per-line hint and inline blame, and unlike them it truncates the row's
+  text when the line leaves no spare padding: a hint is optional, whereas a
+  selection is a deliberate question whose answer must not silently vanish.
+  Soft-wrapped rows and collapsed run headers show no annotation, like the
+  hints.
 
 Toggling off shows plain raw source — no styling, escape bytes visible, every
 repeat expanded. The buffer never changes.

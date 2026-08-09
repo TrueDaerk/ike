@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/editor/buffer"
+	"ike/internal/vcs"
 )
 
 // deltaDoc is a service log with a one-second cadence and one stall in the
@@ -215,6 +217,97 @@ func TestLogSpanLabelHidden(t *testing.T) {
 	m.cursor = buffer.Position{Line: 2}
 	if got := m.LogSpanLabel(); got != "" {
 		t.Errorf("one stamped line = %q; want no label", got)
+	}
+}
+
+// TestLogSpanAnnotationRendersOnCursorRow: the span renders inside the editor,
+// on the row the cursor sits on, not only in the status line (#1736).
+func TestLogSpanAnnotationRendersOnCursorRow(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 1}
+	m.cursor = buffer.Position{Line: 3}
+
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if !strings.Contains(rows[3], "Δ +31s") {
+		t.Errorf("the cursor row must carry the span:\n%s", strings.Join(rows, "\n"))
+	}
+	for _, l := range []int{0, 1, 2, 4} {
+		if strings.Contains(rows[l], "Δ") {
+			t.Errorf("row %d must not carry the span — only the cursor row does: %q", l, rows[l])
+		}
+	}
+}
+
+// TestLogSpanAnnotationHidden: the in-editor annotation follows the label's
+// visibility conditions — no visual mode, no span.
+func TestLogSpanAnnotationHidden(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.anchor = buffer.Position{Line: 1}
+	m.cursor = buffer.Position{Line: 3}
+	if got := ansi.Strip(m.View()); strings.Contains(got, "Δ") {
+		t.Errorf("normal mode must render no span:\n%s", got)
+	}
+}
+
+// TestLogSpanAnnotationBeatsDeltaHint: one right-edge annotation per row — the
+// cursor row shows the span, not its own per-line hint.
+func TestLogSpanAnnotationBeatsDeltaHint(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 1}
+	m.cursor = buffer.Position{Line: 3}
+	if got, _, ok := m.logDeltaAt(3); !ok || got != "+30s" {
+		t.Fatalf("precondition: logDeltaAt(3) = %q, %v; want \"+30s\", true", got, ok)
+	}
+
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if strings.Contains(rows[3], "+30s") {
+		t.Errorf("the per-line hint must yield to the span on the cursor row: %q", rows[3])
+	}
+	// Rows outside the cursor line keep theirs.
+	if !strings.Contains(rows[4], "+ 1s") {
+		t.Errorf("row 4 must keep its per-line hint: %q", rows[4])
+	}
+}
+
+// TestLogSpanAnnotationBeatsBlame: inline blame owns the cursor row, but a live
+// selection outranks it.
+func TestLogSpanAnnotationBeatsBlame(t *testing.T) {
+	m := logLoaded(t, deltaDoc)
+	m.ToggleBlame()
+	m, _ = m.Update(vcs.BlameMsg{Path: m.path, Lines: map[int]vcs.BlameLine{
+		3: {Author: "Alice", Time: time.Now().Add(-2 * time.Hour), Summary: "feat: x"},
+	}})
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 1}
+	m.cursor = buffer.Position{Line: 3}
+
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if !strings.Contains(rows[3], "Δ +31s") {
+		t.Errorf("the span must win the cursor row: %q", rows[3])
+	}
+	if strings.Contains(rows[3], "Alice") {
+		t.Errorf("blame must yield to the span: %q", rows[3])
+	}
+}
+
+// TestLogSpanAnnotationTruncatesFullRow: unlike the per-line hint, the span
+// takes its columns even from a row that fills the width — it answers a
+// question the user just asked and must not silently vanish.
+func TestLogSpanAnnotationTruncatesFullRow(t *testing.T) {
+	long := strings.Repeat("x", 200)
+	m := logLoaded(t, "10:11:10 INFO "+long+"\n10:11:12 INFO "+long+"\n")
+	m.mode = VisualLine
+	m.anchor = buffer.Position{Line: 0}
+	m.cursor = buffer.Position{Line: 1}
+
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	if !strings.Contains(rows[1], "Δ +2s") {
+		t.Errorf("a full-width cursor row must still show the span: %q", rows[1])
+	}
+	if strings.Contains(rows[0], "+2s") {
+		t.Errorf("the per-line hint must stay off the full-width row 0: %q", rows[0])
 	}
 }
 

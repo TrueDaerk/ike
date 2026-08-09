@@ -68,8 +68,10 @@ func (m Model) logDeltaAt(line int) (string, bool, bool) {
 	return text, ds[line].Gap, true
 }
 
-// LogSpanLabel is the status-line label for the elapsed time a visual
-// selection covers in a log buffer (#1729) — "Δ +2m30s". The per-line hints
+// LogSpanLabel is the label for the elapsed time a visual selection covers in
+// a log buffer (#1729) — "Δ +2m30s". It feeds both the status-line segment and
+// the in-editor annotation on the cursor row (logSpanAnnotate, #1736), so the
+// two can never disagree. The per-line hints
 // only answer "how long since the previous line"; measuring a whole section —
 // request to response, the first to the last line of a stall — otherwise means
 // reading two timestamps and subtracting by eye.
@@ -105,6 +107,44 @@ func (m Model) LogSpanLabel() string {
 		return ""
 	}
 	return "Δ " + text
+}
+
+// logSpanAnnotate places the selection's span delta at the right edge of the
+// cursor row (#1736). The status-line segment alone is too easy to miss — the
+// eye is on the selection in the buffer, not on the bottom bar, and the segment
+// can be dropped by the status line's width budgeting — so the value renders
+// where it is being read.
+//
+// Only the cursor row carries it: that is the end the user is moving, so the
+// number sits beside the boundary that changes. It wins over the per-line hint
+// and inline blame on that row (one annotation per row, view.go), and unlike
+// them it is worth truncating the line for — a row whose text fills the width
+// still gives up its last columns, because a selection is a deliberate question
+// and the answer must not silently vanish.
+//
+// The second return value reports whether the annotation was placed, so the
+// caller knows to skip the lower-priority ones.
+func (m Model) logSpanAnnotate(row string, line, textWidth int) (string, bool) {
+	if line != m.cursor.Line {
+		return row, false
+	}
+	label := m.LogSpanLabel()
+	if label == "" {
+		return row, false
+	}
+	ann := " " + label
+	annW := ansi.StringWidth(ann)
+	// Without room for the annotation plus a column of text there is nothing
+	// sensible to render.
+	if annW+1 > textWidth {
+		return row, false
+	}
+	style := lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
+	body := ansi.Truncate(row, textWidth-annW, "")
+	if pad := textWidth - annW - ansi.StringWidth(body); pad > 0 {
+		body += strings.Repeat(" ", pad)
+	}
+	return body + style.Render(ann), true
 }
 
 // logDeltaAnnotate places a line's delta hint at the row's right edge. Rows
