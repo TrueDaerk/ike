@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 
+	"charm.land/lipgloss/v2"
+
 	"ike/internal/highlight"
 	"ike/internal/sv"
 	"ike/internal/theme"
@@ -143,6 +145,64 @@ func (m Model) svConcealRanges(line int) []concealRange {
 		out = append(out, concealRange{start: f.End, end: f.End + 1, repl: strings.Repeat(" ", pad)})
 	}
 	return out
+}
+
+// svDisplayCol is the display-cell offset of buffer column col from the start
+// of line through the concealed expansion (#1724): concealed separators count
+// as their alignment padding, a tab as tabWidth cells. It is the sv analogue
+// of a raw rune column — view.Left holds this display measure while the table
+// rendering is active, so every row can shed the same width when the view
+// scrolls horizontally.
+func (m Model) svDisplayCol(line, col int) int {
+	runes := []rune(m.buf.Line(line))
+	conceals := m.lineConcealRanges(line)
+	disp := 0
+	for c := 0; c < col; c++ {
+		if cr, ok := rangeAt(conceals, c); ok {
+			if cr.repl != "" && c == cr.start {
+				disp += lipgloss.Width(cr.repl)
+			}
+			continue
+		}
+		if c < len(runes) && runes[c] == '\t' {
+			disp += m.tabWidth
+		} else {
+			disp++
+		}
+	}
+	return disp
+}
+
+// svDisplaySlice maps the display-cell offset left back into line's concealed
+// expansion (#1724): the buffer column rendering starts at, plus the cells of
+// that column's stand-in already scrolled off — a window edge landing inside
+// alignment padding emits only the padding's tail. A tab straddling the edge
+// snaps to its own start (like the raw path, which never splits a tab).
+// Offsets past the line end map on 1:1, mirroring displayClickCol.
+func (m Model) svDisplaySlice(line, left int) (col, skip int) {
+	runes := []rune(m.buf.Line(line))
+	conceals := m.lineConcealRanges(line)
+	disp := 0
+	for c := 0; c < len(runes); c++ {
+		w := 0
+		if cr, ok := rangeAt(conceals, c); ok {
+			if cr.repl != "" && c == cr.start {
+				w = lipgloss.Width(cr.repl)
+			}
+		} else if runes[c] == '\t' {
+			w = m.tabWidth
+		} else {
+			w = 1
+		}
+		if disp+w > left {
+			if _, ok := rangeAt(conceals, c); ok {
+				return c, left - disp
+			}
+			return c, 0
+		}
+		disp += w
+	}
+	return len(runes) + (left - disp), 0
 }
 
 // svColumnTintFrac is how much of the selection colour survives the mix toward

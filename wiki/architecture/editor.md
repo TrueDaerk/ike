@@ -1293,6 +1293,17 @@ by `editor.csv_rendering` (default on, Settings → Editor):
 - **Mouse and overlays**: the generic conceal mapping in `displayClickCol` /
   `DisplayOffset` handles the padding stand-ins — a click in the padding
   lands on the concealed separator.
+- **Horizontal scroll** (#1724): while the table rendering is active,
+  `view.Left` counts *display cells* of the aligned row, not raw rune
+  columns — slicing raw text would shed a different width per row (the
+  conceal expansion differs) and the shared column edges would drift. Each
+  row maps the offset back into its own expansion (`svDisplaySlice`: the
+  buffer column to start at, plus the tail of a stand-in the window edge
+  landed inside), so every row — the pinned header included — loses the same
+  width. The caret is tracked by its expanded column (`svDisplayCol` in the
+  cursor-follow scroll path), `displayClickCol` / `DisplayOffset` fold the
+  offset through the expansion, and `ScrollXBy` clamps against the expanded
+  row width.
 - **Caret column** (#1659): the field the caret sits in (`sv.IndexAt`) is
   tinted over the whole visible height — `svColumnRange` gives each rendered
   line the rune range it contributes, the field plus the separator closing it

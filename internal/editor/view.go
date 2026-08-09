@@ -351,6 +351,12 @@ func (m Model) displayClickCol(line, from, offset int) int {
 	if col, ok := m.tableClickCol(line, from+offset); ok {
 		return col
 	}
+	if m.svActive() {
+		// sv horizontal scroll is display-space (#1724): from counts cells of
+		// the aligned row, so fold it in and walk from the line start.
+		offset += from
+		from = 0
+	}
 	runes := []rune(m.buf.Line(line))
 	conceals := m.lineConcealRanges(line)
 	col := from
@@ -409,8 +415,15 @@ func (m *Model) ScrollXBy(delta int) {
 		return // no horizontal scroll under soft wrap (#64)
 	}
 	maxLen := 0
+	sv := m.svActive()
 	for i := m.view.Top; i < m.view.Bottom(m.buf.LineCount()); i++ {
-		if n := len([]rune(m.buf.Line(i))); n > maxLen {
+		n := len([]rune(m.buf.Line(i)))
+		if sv {
+			// sv rows scroll in display space (#1724): the reachable width is
+			// the aligned row's expansion, not the raw rune count.
+			n = m.svDisplayCol(i, n)
+		}
+		if n > maxLen {
 			maxLen = n
 		}
 	}
@@ -742,6 +755,15 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// rendered text. lineConcealRanges already dropped the ranges the caret
 	// sits in or a selection crosses — those cells render raw (#1594).
 	conceals := m.lineConcealRanges(line)
+	// Table-rendered sv buffers scroll in display space (#1724): view.Left
+	// counts cells of the aligned (concealed) row, so slicing the expansion —
+	// not the raw text — sheds the same width from every row and the shared
+	// column edges survive the scroll. padSkip is the part of a stand-in
+	// already off screen when the window edge lands inside its padding.
+	padSkip := 0
+	if from > 0 && m.svActive() {
+		left, padSkip = m.svDisplaySlice(line, from)
+	}
 	// Inline color preview (#790): literal cells tint with their own color.
 	swatches := m.lineColorSwatches(line)
 	// Identifier colors (#1626): UUIDs and hex hashes take a foreground from
@@ -848,11 +870,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		return false
 	}
 	startCells := 0
-	for c := 0; c < from && c < len(runes); c++ {
-		if runes[c] == '\t' {
-			startCells += m.tabWidth
-		} else {
-			startCells++
+	if left != from || padSkip > 0 {
+		// sv display slice (#1724): from already is the display width shed.
+		startCells = from
+	} else {
+		for c := 0; c < from && c < len(runes); c++ {
+			if runes[c] == '\t' {
+				startCells += m.tabWidth
+			} else {
+				startCells++
+			}
 		}
 	}
 
@@ -881,7 +908,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// columns close up either way; contentCells still advances
 				// so ruler/guide positions keep tracking buffer cells.
 				if cr.repl != "" && col == cr.start {
-					if w := lipgloss.Width(cr.repl); disp+w <= width {
+					repl := cr.repl
+					if col == left && padSkip > 0 {
+						// The window edge fell inside this stand-in (#1724):
+						// only its tail is on screen.
+						repl = string([]rune(repl)[padSkip:])
+					}
+					if w := lipgloss.Width(repl); disp+w <= width {
 						st, _ := m.styleAt(line, col)
 						switch {
 						case cr.standIn:
@@ -891,7 +924,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 							// keeps the stripe one uninterrupted block (#1659).
 							st = st.Background(svTint)
 						}
-						b.WriteString(st.Render(cr.repl))
+						b.WriteString(st.Render(repl))
 						disp += w
 					}
 				}
@@ -1148,6 +1181,11 @@ func (m Model) DisplayOffset(line, col int) int {
 	// A box-drawn table row (#881) maps through the cell layout (#1599).
 	if d, ok := m.tableDisplayCol(line, col); ok {
 		return d - from
+	}
+	// A table-rendered sv buffer scrolls in display space (#1724): the anchor
+	// sits at its expanded column minus the display window start.
+	if m.svActive() {
+		return m.svDisplayCol(line, col) - from
 	}
 	conceals := m.lineConcealRanges(line)
 	disp := 0

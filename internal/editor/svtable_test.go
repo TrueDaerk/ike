@@ -312,3 +312,93 @@ func TestSVScrollRecomputesWidths(t *testing.T) {
 		t.Fatalf("wide row in view must widen the column:\n%s", view)
 	}
 }
+
+// TestSVAlignmentAtHorizontalOffset (#1724): a horizontally scrolled table
+// keeps its shared column edges — the offset slices the aligned display row,
+// not the raw text, so every row loses the same number of cells.
+func TestSVAlignmentAtHorizontalOffset(t *testing.T) {
+	// widths: 8, 8, 5 — column 2 starts at display cell 10 on every row.
+	for left := 1; left <= 9; left++ {
+		m := csvLoaded(t, "name,quantity,price\napplepie,3,12.50\nx,222,9\n")
+		m.SetSize(20, 5)
+		m.cursor = buffer.Position{Line: 2}
+		m.SetScroll(0, left)
+
+		rows := strings.Split(plainView(m), "\n")
+		cols := make([]int, 3)
+		for i, probe := range []string{"quantity", "3", "222"} {
+			cols[i] = strings.Index(rows[i], probe)
+			if cols[i] < 0 {
+				t.Fatalf("offset %d: row %d misses %q:\n%s", left, i, probe, strings.Join(rows, "\n"))
+			}
+		}
+		if cols[0] != cols[1] || cols[1] != cols[2] {
+			t.Errorf("offset %d: column 2 edges drift: %v\n%s", left, cols, strings.Join(rows, "\n"))
+		}
+		if want := 10 - left; cols[0] != want {
+			t.Errorf("offset %d: column 2 at cell %d, want %d", left, cols[0], want)
+		}
+	}
+}
+
+// TestSVStickyHeaderAlignsAtHorizontalOffset (#1724): the pinned header row
+// slices by the same display offset as the data rows, so the shared column
+// edges hold while both scroll directions are active.
+func TestSVStickyHeaderAlignsAtHorizontalOffset(t *testing.T) {
+	var content strings.Builder
+	content.WriteString("name,quantity,price\n")
+	for i := 0; i < 30; i++ {
+		content.WriteString("applepie,3,12.50\n")
+	}
+	m := csvLoaded(t, content.String())
+	m.SetSize(20, 6)
+	m.cursor = buffer.Position{Line: 20}
+	m.SetScroll(15, 6)
+
+	rows := strings.Split(plainView(m), "\n")
+	head := strings.Index(rows[0], "quantity")
+	data := strings.Index(rows[1], "3")
+	if head < 0 || data < 0 {
+		t.Fatalf("probes missing:\n%s", strings.Join(rows[:2], "\n"))
+	}
+	if head != data {
+		t.Errorf("pinned header drifts from data rows: %d vs %d\n%s", head, data, strings.Join(rows[:2], "\n"))
+	}
+}
+
+// TestSVCursorVisibleAtHorizontalScroll (#1724): the caret is tracked by its
+// expanded display column, so scrolling to a far-right field keeps it inside
+// the window even though padding widened the row.
+func TestSVCursorVisibleAtHorizontalScroll(t *testing.T) {
+	m := csvLoaded(t, "name,quantity,price\napplepie,3,12.50\nx,222,9\n")
+	m.SetSize(14, 5)                             // no gutter change: text narrower than the padded row
+	m.cursor = buffer.Position{Line: 1, Col: 12} // "5" in 12.50
+	m.scroll()
+
+	tw := m.view.TextWidth(m.buf.LineCount())
+	if off := m.DisplayOffset(1, 12); off < 0 || off >= tw {
+		t.Errorf("caret display offset %d outside window [0,%d)", off, tw)
+	}
+	if m.view.Left == 0 {
+		t.Error("window did not scroll although the caret column lies past it")
+	}
+}
+
+// TestSVClickMappingAtHorizontalOffset (#1724): a click on a scrolled row maps
+// through the display slice — the offset counts cells of the aligned row.
+func TestSVClickMappingAtHorizontalOffset(t *testing.T) {
+	m := csvLoaded(t, "name,quantity,price\napplepie,3,12.50\nx,222,9\n")
+	m.SetSize(20, 5)
+	m.cursor = buffer.Position{Line: 2}
+	m.SetScroll(0, 6)
+	// Row 1 "applepie,3,12.50" aligned: cells 0-7 field0, 8-9 pad, 10 "3",
+	// 11-18 pad, 20+ "12.50". Sliced by 6: cell 4 hits "3" (col 9), cell 14
+	// hits "1" of 12.50 (col 11).
+	for _, tc := range []struct{ offset, want int }{
+		{0, 6}, {4, 9}, {14, 11},
+	} {
+		if got := m.displayClickCol(1, 6, tc.offset); got != tc.want {
+			t.Errorf("offset %d → col %d, want %d", tc.offset, got, tc.want)
+		}
+	}
+}
