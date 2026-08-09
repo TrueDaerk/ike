@@ -1,5 +1,17 @@
 # Log
 
+## 2026-08-09 (directory settings get path completion, #1720)
+
+- **`project.directory` moved from `String` to `Path`**, so it opens the path
+  editor with the live suggestion list and tab completion (#541) instead of a
+  plain text input. New `Entry.Dirs` flag runs the completion engine's
+  directories-only flavor (`pathcomplete.Dirs`) and switches the commit check
+  to `resolvableDir`: a file is refused, and a directory that does not exist
+  yet is accepted when its parent does — the setting is created on first use.
+  Sweep of the remaining `String` entries found no other filesystem-valued
+  ones (`project.background_lsp_timeout`, `debug.php.hostname`,
+  `marketplace.catalog_url` are a duration, a host filter and a URL).
+
 ## 2026-08-09 (new-project wizard, #1718)
 
 - **`project.new`** ("New Project…", palette + File menu) opens a three-step

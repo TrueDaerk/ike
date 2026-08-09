@@ -77,7 +77,14 @@ box capped at ~110×32 cells above the workspace, laid out as the
   matching falls back to case-insensitive (`~/dev` finds `~/Development`). A
   Path value without a separator commits when it resolves on `PATH` (#1663:
   `terminal.shell = "fish"` is what the consumer spawns anyway); anything else
-  must exist on disk. The selected entry's
+  must exist on disk. A Path entry with `Dirs` set (#1720:
+  `project.directory`) runs the engine's **directories-only** flavor —
+  files are never offered, because picking one could not produce a valid value
+  — and its commit check accepts a directory that does not exist yet when its
+  parent does, since such a value is a target the consumer creates on first
+  use; a file is refused with `✗ not a directory`. Completion is therefore a
+  property of the `Path` type, not of `String`: a filesystem-valued setting
+  belongs on `Path` so it gets the suggestion list. The selected entry's
   description, key and validation error render in a **footer pinned to the
   bottom of the form column** — not inline under the row — so ↑↓ never shifts
   the other rows (#535); only the enum picker expands inline. The custom pages

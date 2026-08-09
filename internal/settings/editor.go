@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -70,6 +71,7 @@ func newEditor(m *Model, e Entry) Editor {
 		return newListEditor(m, e)
 	case Path:
 		ed := &pathEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
+		ed.suggest.dirs = e.Dirs
 		ed.suggest.refresh(ed.tf.text)
 		return ed
 	default:
@@ -517,9 +519,33 @@ func resolvablePath(path string) bool {
 	return err == nil
 }
 
+// resolvableDir is the Dirs-entry check (#1720). A directory-valued setting
+// names a folder, so a file is never acceptable and the PATH fallback does not
+// apply; a path that does not exist yet passes when its parent directory does,
+// because such a value is a target the consumer creates on first use
+// (project.directory).
+func resolvableDir(path string) bool {
+	real := expandHome(path)
+	if st, err := os.Stat(real); err == nil {
+		return st.IsDir()
+	}
+	parent := filepath.Dir(strings.TrimRight(real, string(os.PathSeparator)))
+	st, err := os.Stat(parent)
+	return err == nil && st.IsDir()
+}
+
 func (p *pathEditor) Value() any      { return strings.TrimSpace(p.tf.text) }
 func (p *pathEditor) Capturing() bool { return true }
 func (p *pathEditor) Dirty() bool     { return p.tf.text != p.m.value(p.e.Key) }
+
+// valid is the entry's commit check: directories only for a Dirs entry, any
+// resolvable path otherwise.
+func (p *pathEditor) valid(path string) bool {
+	if p.e.Dirs {
+		return resolvableDir(path)
+	}
+	return resolvablePath(path)
+}
 
 func (p *pathEditor) Paste(text string) bool {
 	if !p.tf.Paste(text) {
@@ -541,8 +567,11 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case tea.KeyEnter:
 		path := strings.TrimSpace(p.tf.text)
-		if path != "" && !resolvablePath(path) {
+		if path != "" && !p.valid(path) {
 			p.err = "path does not exist"
+			if p.e.Dirs {
+				p.err = "not a directory"
+			}
 			return nil
 		}
 		p.err = ""
