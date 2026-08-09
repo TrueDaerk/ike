@@ -1,0 +1,7 @@
+# Scope the marksman workspace root to wiki/ (#1726). IKE's server spec for
+# Markdown lists ".marksman.toml" before ".git" as root markers, and root
+# detection picks the nearest ancestor holding any marker — so this file makes
+# marksman treat wiki/ (not the repo root) as the workspace. Without it,
+# root-relative links like [Architecture](/architecture/index.md) resolve
+# against the repo root and flag as "non-existent document", and repo-level
+# .gitignore rules would hide targets from the link index.
