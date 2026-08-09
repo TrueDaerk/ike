@@ -470,6 +470,14 @@ func (m Model) View() string {
 	gutterStyle := lipgloss.NewStyle().Faint(true)
 	cursorStyle := m.cursorStyle()
 	textWidth := m.view.TextWidth(lineCount)
+	// Right-aligned annotations (blame, log delta hints) must stop one column
+	// short of the scrollbar: overlayScrollbar claims the pane's rightmost
+	// column, so an annotation padded to the full text width loses its last
+	// cell — "+460ms" reads as "+460m" (#1728).
+	annotWidth := textWidth
+	if _, _, _, _, ok := m.scrollbarGeometry(); ok {
+		annotWidth--
+	}
 
 	selStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 
@@ -596,11 +604,11 @@ func (m Model) View() string {
 		if m.blameOn && i == m.cursor.Line {
 			// Inline blame (0320, #468): the annotation splices into the
 			// cursor line's right padding when it fits.
-			row = m.blameAnnotate(row, i, textWidth)
+			row = m.blameAnnotate(row, i, annotWidth)
 		} else {
 			// A log line's elapsed-time hint (#1651) uses the same padding,
 			// so blame keeps the cursor line to itself.
-			row = m.logDeltaAnnotate(row, i, textWidth)
+			row = m.logDeltaAnnotate(row, i, annotWidth)
 		}
 		out = append(out, gutter+row)
 	}

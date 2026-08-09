@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -95,6 +96,28 @@ func TestLogDeltaTooNarrowRowUnchanged(t *testing.T) {
 	}
 	if got := m.View(); strings.Contains(got, "+2s") {
 		t.Errorf("a full-width row must not be overwritten by the hint:\n%s", got)
+	}
+}
+
+// TestLogDeltaFullTextBesideScrollbar: with the buffer overflowing the
+// viewport the scrollbar owns the rightmost column; the hint must move one
+// column left, not lose its trailing unit — "+460ms" read as "+460m" (#1728).
+func TestLogDeltaFullTextBesideScrollbar(t *testing.T) {
+	var b strings.Builder
+	ms := 0
+	for i := 0; i < 20; i++ { // 20 lines > the 10-row test viewport
+		fmt.Fprintf(&b, "10:11:%02d,%03d INFO tick\n", ms/1000, ms%1000)
+		ms += 460
+	}
+	m := logLoaded(t, b.String())
+	if _, _, _, _, ok := m.scrollbarGeometry(); !ok {
+		t.Fatal("precondition: the scrollbar must be visible")
+	}
+	if got, _, ok := m.logDeltaAt(1); !ok || got != "+460ms" {
+		t.Fatalf("precondition: logDeltaAt(1) = %q, %v; want \"+460ms\", true", got, ok)
+	}
+	if got := m.View(); !strings.Contains(got, "+460ms") {
+		t.Errorf("the hint must keep its full text beside the scrollbar:\n%s", got)
 	}
 }
 
