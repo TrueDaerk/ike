@@ -33,21 +33,23 @@ type logDeltaState struct {
 	version int
 	path    string
 	deltas  []logline.Delta
+	layout  logline.DeltaLayout
 }
 
-// logDeltas returns the deltas of the current document version, recomputing
-// them when the version moved.
-func (m Model) logDeltas() []logline.Delta {
+// logDeltas returns the deltas of the current document version together with
+// the buffer-wide hint layout, recomputing both when the version moved.
+func (m Model) logDeltas() ([]logline.Delta, logline.DeltaLayout) {
 	st := m.logDeltaCache
 	if st == nil {
-		return nil
+		return nil, logline.DeltaLayout{}
 	}
 	if st.valid && st.version == m.docVersion && st.path == m.path {
-		return st.deltas
+		return st.deltas, st.layout
 	}
 	st.valid, st.version, st.path = true, m.docVersion, m.path
 	st.deltas = logline.Deltas(m.buf.Lines())
-	return st.deltas
+	st.layout = logline.LayoutDeltas(st.deltas)
+	return st.deltas, st.layout
 }
 
 // logDeltaAt returns the hint text for a line and whether it marks a stall.
@@ -55,11 +57,11 @@ func (m Model) logDeltaAt(line int) (string, bool, bool) {
 	if !m.logInsight() {
 		return "", false, false
 	}
-	ds := m.logDeltas()
+	ds, layout := m.logDeltas()
 	if line < 0 || line >= len(ds) || !ds[line].OK {
 		return "", false, false
 	}
-	text := logline.FormatDelta(ds[line].D)
+	text := layout.Format(ds[line].D)
 	if text == "" {
 		return "", false, false
 	}
@@ -111,7 +113,9 @@ func (m Model) LogSpanLabel() string {
 // The hint is right-aligned rather than appended to the text: a ragged trail of
 // numbers is exactly as hard to scan as the timestamps it saves reading, while
 // a column of them can be swept by eye. Short rows therefore pad out to the
-// hint's column first.
+// hint's column first. The text itself comes from the buffer-wide
+// logline.DeltaLayout (#1730), so every hint is the same width and its unit
+// fields line up with the rows above and below.
 func (m Model) logDeltaAnnotate(row string, line, textWidth int) string {
 	text, gap, ok := m.logDeltaAt(line)
 	if !ok {

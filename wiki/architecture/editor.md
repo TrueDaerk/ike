@@ -1440,9 +1440,9 @@ emits everything through the Go span seam (#1585); the parsing lives in
   (#1594): while the cursor is anywhere inside the run, every line renders raw
   and the marker disappears; moving out collapses it again.
 - **Inter-line deltas** (#1651, `logline/delta.go`, `logdelta.go`): the elapsed
-  time since the previous line renders as a dimmed `+30s` / `+2.1s` / `+450ms`
-  at the right edge, so a stall reads off the column instead of being computed
-  by eye. `logline.ParseStamp` reuses `Parse` to *locate* the stamp — so every
+  time since the previous line renders as a dimmed `+30s` / `+7s 300ms` /
+  `+450ms` at the right edge, so a stall reads off the column instead of being
+  computed by eye. `logline.ParseStamp` reuses `Parse` to *locate* the stamp — so every
   layout the renderer knows is covered, the `time=` pair values and numeric
   epochs (#1618) included — and decodes only that text; ANSI-styled lines strip
   first. A line whose stamp does not parse (stack-trace frame, wrapped message,
@@ -1462,11 +1462,26 @@ emits everything through the Go span seam (#1585); the parsing lives in
   soft-wrapped rows and collapsed run headers (which carry `×N`) show no hint.
   The chain is whole-buffer, cached per document version and path
   (`logDeltaCache`) and skipped for large files, like the repeat runs.
+- **Aligned hint column** (#1730, `logline.DeltaLayout`): a hint is two unit
+  fields — the coarsest unit that carries signal (`ms`/`s`/`m`/`h`/`d`) plus the
+  next one down, dropped when it is zero (`+2m`, not `+2m 0s`) or below the
+  scale worth reading (`+45s`, never `+45s 123ms`). `LayoutDeltas` measures both
+  field widths over the *whole* buffer — free, since the chain is cached per
+  version anyway — and `DeltaLayout.Format` right-aligns each field in its
+  column, so every hint of a file comes out the same width and adjacent rows
+  line up on their unit boundaries (`+ 7s 300ms`, `+    598ms`, `+12m    8s`)
+  instead of forming the ragged trail that made mixed units unscannable. A field
+  nobody in the file uses costs no columns (an all-sub-second log renders
+  `+450ms`, not `+   450ms`), and the trailing pad of a hint whose fine field is
+  empty is what keeps the coarse field in place — the annotation right-aligns on
+  the string's end. `logline.FormatDelta` stays the unpadded single-value form
+  (`+2m 30s`), used where there is no column to join, e.g. the selection span
+  below.
 - **Selection span** (#1729, `logline.SpanDelta`, `Model.LogSpanLabel`): the
   per-line hints only answer *how long since the previous line*; a whole
   section — request to response, first to last line of a stall — reads off the
   status line instead. With a visual selection active in a log buffer, the
-  `logspan` segment shows `Δ +2m30s`: the elapsed time between the **outermost
+  `logspan` segment shows `Δ +2m 30s`: the elapsed time between the **outermost
   timestamped lines** of the selection, so unstamped lines in between (stack
   frames, wrapped messages) are irrelevant. Comparability follows the per-line
   chain — the first stamp's kind wins, a stamp of the other kind (dated vs

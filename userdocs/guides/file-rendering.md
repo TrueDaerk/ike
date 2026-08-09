@@ -102,8 +102,10 @@ caret onto the collapsed line and the whole run comes back, the same positional
 reveal the escapes use.
 
 At the right edge of each line sits the time elapsed since the previous one —
-`+450ms`, `+2.1s`, `+30s` — so stalls and slow operations are visible without
-comparing timestamps by eye. A gap that is large for *this* file (ten times its
+`+450ms`, `+7s 300ms`, `+30s` — so stalls and slow operations are visible
+without comparing timestamps by eye. The hints of a file share one column
+layout: seconds under seconds, milliseconds under milliseconds, so the column
+can be swept by eye instead of read row by row. A gap that is large for *this* file (ten times its
 usual cadence) is drawn in the warning colour, so a hang stands out. Lines
 without a readable timestamp show no hint and do not break the chain: the next
 timestamped line still measures from the last real one, which is what makes a

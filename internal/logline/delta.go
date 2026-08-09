@@ -253,42 +253,129 @@ func GapThreshold(deltas []time.Duration) time.Duration {
 	return gapFloor
 }
 
-// FormatDelta renders an elapsed time as the hint the editor shows: the
-// coarsest form that still carries a signal — "+450ms", "+2.1s", "+30s",
-// "+2m30s", "+1h5m", "+1d2h". An empty string means there is nothing to show.
-func FormatDelta(d time.Duration) string {
+// deltaParts splits an elapsed time into the two unit fields the hint shows:
+// the coarsest unit that carries a signal plus the next one down, dropped when
+// it is zero or below the scale worth reading ("+45s" says everything; "+45s
+// 123ms" is noise). Both fields are empty for a non-positive duration.
+func deltaParts(d time.Duration) (hi, lo string) {
+	num := func(v time.Duration, unit string) string {
+		return strconv.FormatInt(int64(v), 10) + unit
+	}
+	drop := func(hi string, v time.Duration, unit string) (string, string) {
+		if v == 0 {
+			return hi, ""
+		}
+		return hi, num(v, unit)
+	}
 	switch {
 	case d <= 0:
-		return ""
+		return "", ""
 	case d < time.Second:
-		return "+" + strconv.FormatInt(int64(d/time.Millisecond), 10) + "ms"
+		return "", num(d/time.Millisecond, "ms")
 	case d < 10*time.Second:
-		// One decimal in the range where sub-second precision still reads:
-		// "+2.1s" beats both "+2s" and "+2100ms".
-		whole := d / time.Second
-		tenths := (d % time.Second) / (100 * time.Millisecond)
-		if tenths == 0 {
-			return "+" + strconv.FormatInt(int64(whole), 10) + "s"
-		}
-		return "+" + strconv.FormatInt(int64(whole), 10) + "." +
-			strconv.FormatInt(int64(tenths), 10) + "s"
+		// Sub-second precision still reads at this scale: "+2s 100ms" beats
+		// both "+2s" and "+2100ms".
+		return drop(num(d/time.Second, "s"), (d%time.Second)/time.Millisecond, "ms")
 	case d < time.Minute:
-		return "+" + strconv.FormatInt(int64(d/time.Second), 10) + "s"
+		return num(d/time.Second, "s"), ""
 	case d < time.Hour:
-		return "+" + pair(d/time.Minute, (d%time.Minute)/time.Second, "m", "s")
+		return drop(num(d/time.Minute, "m"), (d%time.Minute)/time.Second, "s")
 	case d < 24*time.Hour:
-		return "+" + pair(d/time.Hour, (d%time.Hour)/time.Minute, "h", "m")
+		return drop(num(d/time.Hour, "h"), (d%time.Hour)/time.Minute, "m")
 	default:
-		return "+" + pair(d/(24*time.Hour), (d%(24*time.Hour))/time.Hour, "d", "h")
+		return drop(num(d/(24*time.Hour), "d"), (d%(24*time.Hour))/time.Hour, "h")
 	}
 }
 
-// pair renders a two-unit duration, dropping a zero remainder ("+2m", not
-// "+2m0s").
-func pair(hi, lo time.Duration, hiUnit, loUnit string) string {
-	s := strconv.FormatInt(int64(hi), 10) + hiUnit
-	if lo == 0 {
+// FormatDelta renders an elapsed time as a standalone hint: the two unit fields
+// separated by a space — "+450ms", "+2s 100ms", "+30s", "+2m 30s", "+1h 5m",
+// "+1d 2h". An empty string means there is nothing to show. Buffer-wide hints
+// go through DeltaLayout instead, which pads the same fields into a column.
+func FormatDelta(d time.Duration) string {
+	hi, lo := deltaParts(d)
+	switch {
+	case hi == "" && lo == "":
+		return ""
+	case hi == "":
+		return "+" + lo
+	case lo == "":
+		return "+" + hi
+	}
+	return "+" + hi + " " + lo
+}
+
+// DeltaLayout is the shared shape of one buffer's delta hints (#1730): the
+// column width of the coarse and the fine unit field, taken over every delta in
+// the file. Formatting through it right-aligns both fields, so adjacent rows
+// line up on their unit boundaries instead of forming a ragged trail — the
+// whole point of putting the hints in a column. The zero layout formats like
+// FormatDelta.
+type DeltaLayout struct {
+	Hi, Lo int
+}
+
+// LayoutDeltas measures the hint column of a whole buffer. Only deltas that
+// actually render count; the chain is cached per document version anyway, so
+// the extra pass is cheap.
+func LayoutDeltas(ds []Delta) DeltaLayout {
+	var l DeltaLayout
+	for _, d := range ds {
+		if !d.OK {
+			continue
+		}
+		hi, lo := deltaParts(d.D)
+		if n := len(hi); n > l.Hi {
+			l.Hi = n
+		}
+		if n := len(lo); n > l.Lo {
+			l.Lo = n
+		}
+	}
+	return l
+}
+
+// Width is the column width every hint of this layout occupies, trailing pad
+// included — what the renderer reserves at the row's right edge.
+func (l DeltaLayout) Width() int {
+	w := 1 + l.Hi + l.Lo // the "+" plus both fields
+	if l.Hi > 0 && l.Lo > 0 {
+		w++ // the separating space
+	}
+	return w
+}
+
+// Format renders one delta padded to the layout. Every hint of a buffer comes
+// out the same width, with the coarse and the fine field right-aligned in their
+// own columns, so "+ 7s 300ms", "+    598ms" and "+12m   8s" stack. An empty
+// string means there is nothing to show.
+func (l DeltaLayout) Format(d time.Duration) string {
+	hi, lo := deltaParts(d)
+	if hi == "" && lo == "" {
+		return ""
+	}
+	if l.Hi == 0 && l.Lo == 0 {
+		return FormatDelta(d)
+	}
+	var b strings.Builder
+	b.Grow(l.Width())
+	b.WriteByte('+')
+	if l.Hi > 0 {
+		b.WriteString(padLeft(hi, l.Hi))
+	}
+	if l.Lo > 0 {
+		if l.Hi > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(padLeft(lo, l.Lo))
+	}
+	return b.String()
+}
+
+// padLeft right-aligns s in a field of width w. The hint text is ASCII digits
+// and unit letters, so byte length is column width.
+func padLeft(s string, w int) string {
+	if len(s) >= w {
 		return s
 	}
-	return s + strconv.FormatInt(int64(lo), 10) + loUnit
+	return strings.Repeat(" ", w-len(s)) + s
 }
