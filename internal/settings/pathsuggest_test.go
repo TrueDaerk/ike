@@ -123,6 +123,85 @@ func TestPanelPathEntryTabCompletes(t *testing.T) {
 	}
 }
 
+// TestPathEntryDirsOnlyCompletes guards #1720: a Dirs entry
+// (project.directory) completes directories only — the sibling file in the
+// fixture must never be offered — and tab descends into the single match.
+func TestPathEntryDirsOnlyCompletes(t *testing.T) {
+	restoreConfig(t)
+	root := suggestTree(t)
+	pages := []Page{{Title: "Test", Entries: []Entry{
+		{Key: "project.directory", Type: Path, Dirs: true, Title: "Project directory", Description: "d", Scope: config.UserScope},
+	}}}
+	m := New(pages, testOpts(t))
+	m.Open()
+	m.SetSize(100, 30)
+	m.focus = formColumn
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*pathEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *pathEditor", m.editor)
+	}
+
+	// Type the whole fixture directory over the configured default: it holds
+	// two directories, plus the python3 file the files+dirs flavor would offer.
+	ed.tf.Set("")
+	for _, r := range root + string(filepath.Separator) {
+		m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	if len(ed.suggest.candidates) != 2 {
+		t.Fatalf("candidates = %v, want the two directories only", ed.suggest.candidates)
+	}
+	for _, c := range ed.suggest.candidates {
+		if !strings.HasSuffix(c, string(filepath.Separator)) {
+			t.Fatalf("candidate %q is not a directory", c)
+		}
+	}
+
+	// Disambiguate and tab: the input extends to the full directory.
+	for _, r := range "Dev" {
+		m.Update(tea.KeyPressMsg{Text: string(r), Code: r})
+	}
+	m.Update(key("tab"))
+	if want := filepath.Join(root, "Development") + string(filepath.Separator); ed.tf.text != want {
+		t.Fatalf("input after tab = %q, want %q", ed.tf.text, want)
+	}
+}
+
+// TestPathEntryDirsOnlyCommit guards the #1720 commit check: a file is refused,
+// a directory commits, and a directory that does not exist yet is accepted when
+// its parent does — project.directory is created on first use.
+func TestPathEntryDirsOnlyCommit(t *testing.T) {
+	restoreConfig(t)
+	root := suggestTree(t)
+	pages := []Page{{Title: "Test", Entries: []Entry{
+		{Key: "project.directory", Type: Path, Dirs: true, Title: "Project directory", Description: "d", Scope: config.UserScope},
+	}}}
+	m := New(pages, testOpts(t))
+	m.Open()
+	m.SetSize(100, 30)
+	m.focus = formColumn
+	m.Update(key("enter"))
+	ed := m.editor.(*pathEditor)
+
+	ed.tf.Set(filepath.Join(root, "python3"))
+	m.Update(key("enter"))
+	if ed.err == "" || m.Dirty() {
+		t.Fatalf("a file must be refused: err=%q dirty=%v", ed.err, m.Dirty())
+	}
+
+	// Not created yet, but the parent exists: the consumer makes it on first use.
+	want := filepath.Join(root, "Development", "projects")
+	ed.tf.Set(want)
+	m.Update(key("enter"))
+	if ed.err != "" {
+		t.Fatalf("a missing directory under an existing parent must commit, got err=%q", ed.err)
+	}
+	apply(t, m.applyChanges())
+	if got := config.Get().Project.Directory; got != want {
+		t.Fatalf("project.directory = %q, want %q", got, want)
+	}
+}
+
 func TestPathSuggestLinesCap(t *testing.T) {
 	s := pathSuggest{}
 	for i := 0; i < maxSuggestLines+3; i++ {

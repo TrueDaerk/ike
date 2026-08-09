@@ -26,7 +26,8 @@ const (
 	String
 	// Enum renders a fixed-choice control (enter cycles Options).
 	Enum
-	// Path renders a text input validated for existence on commit.
+	// Path renders a text input with live filesystem completion, validated for
+	// existence on commit.
 	Path
 	// Chord renders a key-capture control (the next key press is the value).
 	Chord
@@ -50,6 +51,11 @@ type Entry struct {
 	Scope       config.Scope // write target layer (user / project)
 	Options     []string     // Enum: the allowed values, in cycle order
 	Min, Max    int          // Int: inclusive bounds; both zero = unbounded
+	// Dirs narrows a Path entry to directories (#1720: project.directory names
+	// a folder, never a file). The completion offers directories only, and the
+	// commit check accepts a directory that does not exist yet as long as its
+	// parent does — such an entry is a target the consumer creates on first use.
+	Dirs bool
 	// Preview renders an inline, already-styled preview for one enum option
 	// (#1664: the theme list's palette swatches); nil or an empty return
 	// means the option row has no preview.
@@ -261,7 +267,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		}},
 		{Title: "Files & Session", Description: "Opening, watching and restoring files: which project comes back on start, how external changes are handled and when a file counts as too large for language features.", Entries: []Entry{
 			{Key: "project.restore_last", Type: Bool, Title: "Restore last project", Description: "Reopen the previous project's workspace on start", Scope: config.UserScope},
-			{Key: "project.directory", Type: String, Title: "Project directory", Description: "Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use", Scope: config.UserScope},
+			{Key: "project.directory", Type: Path, Dirs: true, Title: "Project directory", Description: "Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use", Scope: config.UserScope},
 			{Key: "project.max_history", Type: Int, Title: "Recent projects kept", Description: "How many entries the recent-projects list keeps; the oldest fall off", Scope: config.UserScope, Min: 0, Max: 200},
 			{Key: "project.max_workspaces", Type: Int, Title: "Background workspaces", Description: "Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3", Scope: config.UserScope, Min: 0, Max: 20},
 			{Key: "project.background_lsp_timeout", Type: String, Title: "Background LSP timeout", Description: "How long a parked background workspace keeps its language servers alive, as a Go duration (\"5m\", \"90s\"); past it they stop and respawn lazily on resume. Empty selects 5m, \"off\" keeps them running", Scope: config.UserScope},

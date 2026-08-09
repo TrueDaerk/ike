@@ -21,17 +21,29 @@ const maxSuggestLines = 8
 // pathSuggest holds the live candidate list for one inline path input.
 type pathSuggest struct {
 	candidates []string
+	// dirs runs the engine's directories-only flavor (#1720): an input whose
+	// value names a folder — project.directory — must not offer files, because
+	// picking one could never produce a valid value.
+	dirs bool
+}
+
+// query runs the engine in this input's flavor.
+func (s *pathSuggest) query(input string) pathcomplete.Result {
+	if s.dirs {
+		return pathcomplete.Dirs(input)
+	}
+	return pathcomplete.Complete(input)
 }
 
 // refresh recomputes the candidates for the current input.
 func (s *pathSuggest) refresh(input string) {
-	s.candidates = pathcomplete.Complete(input).Candidates
+	s.candidates = s.query(input).Candidates
 }
 
 // complete applies a tab press: it returns the input extended to the longest
 // unambiguous prefix and refreshes the candidates for the new input.
 func (s *pathSuggest) complete(input string) string {
-	out := pathcomplete.Complete(input).Completed
+	out := s.query(input).Completed
 	s.refresh(out)
 	return out
 }

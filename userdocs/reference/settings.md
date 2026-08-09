@@ -155,7 +155,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Restore last project | `project.restore_last` | boolean | `false` | user | Reopen the previous project's workspace on start |
-| Project directory | `project.directory` | string | `~/IkeProjects` | user | Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use |
+| Project directory | `project.directory` | path | `~/IkeProjects` | user | Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use |
 | Recent projects kept | `project.max_history` | integer (0–200) | `20` | user | How many entries the recent-projects list keeps; the oldest fall off |
 | Background workspaces | `project.max_workspaces` | integer (0–20) | `0` | user | Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3 |
 | Background LSP timeout | `project.background_lsp_timeout` | string | *(empty)* | user | How long a parked background workspace keeps its language servers alive, as a Go duration ("5m", "90s"); past it they stop and respawn lazily on resume. Empty selects 5m, "off" keeps them running |
