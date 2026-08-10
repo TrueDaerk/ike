@@ -14,9 +14,17 @@ import (
 // motion for j/k, the wrapped mouse-click mapping, and the view-option
 // toggles the palette commands flip.
 
-// wrapSegs returns the wrap segments of line at the current text width.
+// wrapSegs returns the wrap segments of line at the current text width. On a
+// line carrying conceal ranges the rows break on the display cells of the
+// concealed expansion (#1756) — a stand-in budgets its replacement's width,
+// hidden columns nothing — via the same prefix sums the unwrapped path scrolls
+// by (#1752). Lines without ranges wrap on raw rune columns, unchanged.
 func (m Model) wrapSegs(line int) []int {
-	return viewport.WrapSegments([]rune(m.buf.Line(line)), m.view.TextWidth(m.buf.LineCount()), m.tabWidth)
+	tw := m.view.TextWidth(m.buf.LineCount())
+	if prefix := m.concealPrefix(line); prefix != nil {
+		return viewport.WrapSegmentsDisplay(prefix, tw)
+	}
+	return viewport.WrapSegments([]rune(m.buf.Line(line)), tw, m.tabWidth)
 }
 
 // wrapRows reports how many screen rows line occupies under soft wrap: 0 when

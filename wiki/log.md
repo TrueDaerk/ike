@@ -1,5 +1,19 @@
 # Log
 
+## 2026-08-10 (editor: soft wrap breaks on conceal display cells, #1756)
+
+- **Soft wrap now breaks on the display cells of the concealed expansion**
+  (#1756, follow-up to #1752): on a line carrying conceal ranges `wrapSegs`
+  hands the `concealPrefix` sums to the new `viewport.WrapSegmentsDisplay`,
+  which budgets a stand-in's replacement width at its range start and hidden
+  columns nothing. A mask wider than its source no longer overflows the visual
+  row; a narrower one no longer breaks rows early. Zero-width columns never
+  start a row, so a break never lands inside a stand-in.
+- **Consumers unchanged**: segments stay rune-column starts, so `ScrollWrapped`,
+  gj/gk, `wrapRows`, `wrapClickAt`, `DisplayRow` and the per-segment
+  `renderSpan` slicing follow without modification, and lines without conceal
+  ranges wrap exactly as before. Updated [Editor](/architecture/editor.md).
+
 ## 2026-08-10 (http: in-flight progress inline at the request, #1746)
 
 - **A running `.http` request is now marked in the file itself** (#1746): the
