@@ -13,6 +13,7 @@ package lang
 
 import (
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -316,12 +317,21 @@ var templateSuffixes = map[string]bool{
 	"tmpl": true, "tpl": true, "gotmpl": true,
 }
 
+// rotationSuffix matches the trailing extension logrotate (and friends) tack
+// onto a rotated file: a plain sequence number ("1", "2", ...) or a date stamp
+// ("2026-08-01", "20260801"). When every direct lookup fails and the path
+// carries one, ByPath strips it and resolves the remaining name the same way
+// it does for templateSuffixes (#1595) — app.log.2026-08-01 highlights as log,
+// app.log.1 too. A file with no inner extension (backup.1) stays plain text.
+var rotationSuffix = regexp.MustCompile(`^(?:\d+|\d{4}-\d{2}-\d{2}|\d{8})$`)
+
 // ByPath returns the language for a file path: a user-configured association
 // (#1365, explicit intent beats detection) wins, then a sniffed per-path
 // association (#893), then an exact base name match (e.g. "Dockerfile"), then
-// the extension. A path whose extension is a known template suffix (#1595)
-// resolves as the name with that suffix stripped — the inner extension keeps
-// the last word, so a language claiming a template suffix outright still wins.
+// the extension. A path whose extension is a known template suffix (#1595) or
+// a rotation suffix (#1745, e.g. logrotate's ".1" or ".2026-08-01") resolves
+// as the name with that suffix stripped — the inner extension keeps the last
+// word, so a language claiming such a suffix outright still wins.
 func ByPath(path string) (Language, bool) {
 	if l, ok := ByAssociation(path); ok {
 		return l, true
@@ -345,6 +355,12 @@ func ByPath(path string) (Language, bool) {
 	}
 	if templateSuffixes[strings.ToLower(strings.TrimPrefix(ext, "."))] {
 		return ByPath(strings.TrimSuffix(path, ext))
+	}
+	if suffix := strings.TrimPrefix(ext, "."); suffix != "" && rotationSuffix.MatchString(suffix) {
+		stripped := strings.TrimSuffix(path, ext)
+		if filepath.Ext(stripped) != "" {
+			return ByPath(stripped)
+		}
 	}
 	return Language{}, false
 }

@@ -165,3 +165,35 @@ func TestTemplateSuffixFallback(t *testing.T) {
 		t.Errorf("ByPath(y.tsf.tpl) = %+v, %v, want tsfowner", l, ok)
 	}
 }
+
+// TestRotationSuffixFallback: a logrotate-style suffix (#1745) falls back to
+// the inner extension — app.log.2026-08-01 resolves as the .log language —
+// while base names, chained suffixes and suffix-less names behave sensibly.
+func TestRotationSuffixFallback(t *testing.T) {
+	Register(Language{ID: "rsflang", Extensions: []string{"rsf"}})
+	for _, path := range []string{
+		"app.rsf.1", "app.rsf.2", "app.rsf.42",
+		"app.rsf.2026-08-01", "app.rsf.20260801",
+		"a/b.rsf.1.2", // chained suffixes strip one by one
+	} {
+		if l, ok := ByPath(path); !ok || l.ID != "rsflang" {
+			t.Errorf("ByPath(%q) = %+v, %v, want rsflang", path, l, ok)
+		}
+	}
+	// No inner extension: plain text, even though the suffix looks rotated.
+	if _, ok := ByPath("backup.1"); ok {
+		t.Error("ByPath(backup.1) should not resolve")
+	}
+	if _, ok := ByPath("foo.2026-08-01"); ok {
+		t.Error("ByPath(foo.2026-08-01) should not resolve")
+	}
+	// A non-numeric, non-date suffix isn't a rotation suffix.
+	if _, ok := ByPath("x.rsf.bak"); ok {
+		t.Error("ByPath(x.rsf.bak) should not resolve")
+	}
+	// A language claiming a numeric-looking suffix outright keeps the last word.
+	Register(Language{ID: "rsfowner", Extensions: []string{"1"}})
+	if l, ok := ByPath("y.rsf.1"); !ok || l.ID != "rsfowner" {
+		t.Errorf("ByPath(y.rsf.1) = %+v, %v, want rsfowner", l, ok)
+	}
+}
