@@ -605,6 +605,10 @@ func (m Model) View() string {
 			// The span delta of a log selection (#1736) outranks both: it
 			// answers a question the user just asked, on the row they move.
 			row = spanned
+		} else if flight, ok := m.httpFlightAnnotate(row, i, annotWidth); ok {
+			// A request dispatched from this file is still running (#1746):
+			// live state outranks blame, which is not going anywhere.
+			row = flight
 		} else if m.blameOn && i == m.cursor.Line {
 			// Inline blame (0320, #468): the annotation splices into the
 			// cursor line's right padding when it fits.

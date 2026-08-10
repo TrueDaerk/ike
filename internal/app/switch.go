@@ -318,6 +318,10 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 			ed.SetMarkHooks(nil, nil, nil)
 			ed.SetHistories(nil)
 			ed.SetCompletionMRU(nil)
+			// In-flight .http markers (#1746) belong to the model that
+			// dispatched: a parked workspace must not keep a spinner that
+			// nothing refreshes any more.
+			ed.SetHTTPFlight(nil)
 			// Registers deliberately stay: the store is manager-owned and
 			// app-wide (#1540) — the parked editors keep pointing at the same
 			// store the fresh model uses, which is exactly the cross-workspace

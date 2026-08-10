@@ -513,10 +513,14 @@ type Model struct {
 	// vcs refresh, so positions may briefly lag an edit like gitMarks.
 	blameOn bool
 	blame   map[int]vcs.BlameLine
-	comp    *completionState
-	compMRU *mru.Store // recently accepted completions (#854); nil-safe
-	snippet *snippetSession
-	hover   *hoverState
+	// httpFlight are the running .http dispatches of this buffer (#1746),
+	// keyed by 0-based request line and holding the indicator text the app
+	// refreshes on every flight tick; nil while nothing runs.
+	httpFlight map[int]string
+	comp       *completionState
+	compMRU    *mru.Store // recently accepted completions (#854); nil-safe
+	snippet    *snippetSession
+	hover      *hoverState
 	// mouseHover is the pending mouse-idle hover position (#1129): set when
 	// the app fires the idle hover, matched against the LSP reply's position
 	// so a stale answer never opens a popup at a cell the pointer has left.
