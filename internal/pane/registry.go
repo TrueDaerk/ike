@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
@@ -45,6 +46,10 @@ const diffKeyBase = "diff"
 
 // mergeKeyBase is the key of the first merge view; later ones append ":N".
 const mergeKeyBase = "merge"
+
+// archiveKeyBase is the key of the first archive viewer; later ones append
+// ":N" (#1762).
+const archiveKeyBase = "archive"
 
 // VCSKey is the stable key of the singleton VCS tool window (Roadmap 0330).
 const VCSKey = "vcs"
@@ -88,6 +93,7 @@ type Registry struct {
 	images    int      // count of image previews ever allocated, for key minting
 	diffs     int      // count of diff viewers ever allocated, for key minting
 	merges    int      // count of merge views ever allocated, for key minting
+	archives  int      // count of archive viewers ever allocated, for key minting
 }
 
 // NewRegistry returns an empty registry whose new instances are configured
@@ -385,6 +391,38 @@ func (r *Registry) AddImageKey(key, path string) *Instance {
 		}
 	} else if r.images < 1 {
 		r.images = 1
+	}
+	return inst
+}
+
+// AddArchiveView creates an archive viewer instance bound to the file at
+// path, returning the new instance's key ("archive", then "archive:N")
+// (#1762). The listing is read at construction; a failure surfaces as the
+// pane's own error notice.
+func (r *Registry) AddArchiveView(path string) string {
+	r.archives++
+	key := archiveKeyBase
+	if r.archives > 1 {
+		key = archiveKeyBase + ":" + strconv.Itoa(r.archives)
+	}
+	inst := &Instance{key: key, kind: KindArchive, cfg: r.cfg, pal: r.pal}
+	inst.av = archview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddArchiveKey recreates an archive viewer under an exact key, used by layout
+// restore. The minting counter advances past the key.
+func (r *Registry) AddArchiveKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindArchive, cfg: r.cfg, pal: r.pal}
+	inst.av = archview.New(key, path, r.pal)
+	r.put(inst)
+	if len(key) > len(archiveKeyBase)+1 && key[:len(archiveKeyBase)+1] == archiveKeyBase+":" {
+		if v, err := strconv.Atoi(key[len(archiveKeyBase)+1:]); err == nil && v > r.archives {
+			r.archives = v
+		}
+	} else if r.archives < 1 {
+		r.archives = 1
 	}
 	return inst
 }

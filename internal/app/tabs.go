@@ -174,6 +174,11 @@ func (m *Model) rememberClosedTab(ed *editor.Model) {
 	if ed == nil || !ed.HasFile() {
 		return
 	}
+	if ed.ReadOnly() {
+		// A read-only preview's path names no file on disk (an archive entry,
+		// #1762): the ring would only ever fail to reopen it.
+		return
+	}
 	line, col := ed.CursorPos()
 	m.closedTabs = append(m.closedTabs, closedTab{path: ed.Path(), line: line, col: col})
 	if len(m.closedTabs) > closedTabRing {

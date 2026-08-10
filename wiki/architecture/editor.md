@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-10T12:00:00Z
+timestamp: 2026-08-10T13:00:00Z
 ---
 
 # Editor
@@ -989,6 +989,28 @@ mirroring the revert prompt) and on **enter** routes `ConfirmDepEditMsg` back to
 the editor, which unlocks the buffer and replays the stashed edit through
 `Update` so it reparses like any change — **esc** drops it and leaves the file
 untouched and still locked.
+
+## Read-only buffers (#1762)
+
+`ShowReadOnly(path, text)` (`readonly.go`) installs content that can never be
+written back: the full editor — motions, search, highlighting, folds — over a
+buffer whose `path` is a *display* path with no writable home on disk. The
+[archive viewer](./archive-viewer.md) uses it for an extracted archive entry
+under `<archive>!<entry>`, whose tail is the member's own file name so the
+language lookup, the highlighting and the tab title resolve without special
+casing.
+
+It is deliberately not the dependency guard above, which blocks the *first*
+edit and unlocks on confirmation — here there is nothing to unlock into. The
+same mutation entry points (`mutate`, `beginInsertChange`, `startInsertWith`,
+the insert entries in `normalCommand`) refuse outright, leaving
+`E45: buffer is read-only` on the ex line, and `newRecorder()` returns a locked
+recorder as the backstop. `saveAs` — the single funnel under `:w`, `:wq`,
+`:w other`, `SaveTo` and the focus-leave autosave — fails with the same reason,
+so the display path never becomes a file. `Load` and `NewFile` clear the flag:
+reusing the view for a real file unlocks it. Nothing persists: `diskHash` stays
+empty (no persistent undo), the host skips such tabs when saving the layout and
+never puts them in the reopen ring.
 
 ## Git gutter & inline blame (Epic 0320)
 

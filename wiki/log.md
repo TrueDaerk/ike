@@ -1,5 +1,35 @@
 # Log
 
+## 2026-08-10 (viewer: archive pane with read-only entry preview, #1762)
+
+- **Archives open as an entry list, never as a raw text buffer** (#1762): a
+  `.tar`, `.tar.gz`/`.tgz` or `.tar.bz2` opens in the new `KindArchive` pane
+  (`internal/archview`) showing a collapsible tree with per-entry size, mode
+  and mtime — directories grouped and synthesized where the archive never
+  named them. Navigation is the shared list contract (`j`/`k` wrap, page keys
+  clamp, `g`/`G`), plus `enter`/`l` to open or unfold, `space` to fold and `h`
+  to collapse or jump to the parent. Reading is stdlib-only (`archive/tar`,
+  `compress/gzip`, `compress/bzip2`); no dependency was added.
+- **The sniff looks inside compressed streams**: the `archives` file handler
+  claims `.tar`/`.tgz`/`.tbz`/`.tbz2` by extension, and everything else
+  through content — gzip or bzip2 magic decompresses exactly one 512-byte
+  block and tests it for a tar header, so `backup.tar.gz` lands here while
+  `app.log.gz` stays with the gz viewer. A magic-less v7 tar is recognised by
+  its header checksum. Corrupt, truncated, missing or empty archives degrade
+  to a notice in the pane (a partial listing is kept), never a crash.
+- **Enter previews one entry read-only**: the member is extracted into memory
+  behind the large-file thresholds (#149) — binary members are refused rather
+  than rendered as garbage — and installed via the new
+  `editor.ShowReadOnly` under the virtual path `<archive>!<entry>`, whose tail
+  is the member's own file name, so tab title, language lookup and syntax
+  highlighting resolve with no special casing. Read-only is a real editor
+  state: every mutation refuses with `E45: buffer is read-only` and `saveAs`
+  — the single funnel under `:w`, `:wq`, `:w other` and the autosave — fails,
+  so the virtual path can never become a file. `Load`/`NewFile` clear it. The
+  pane title and tab label carry `[RO]`. Session restore reopens the archive
+  pane by path; read-only tabs are session-local like scratch tabs.
+  New [Archive Viewer](/architecture/archive-viewer.md).
+
 ## 2026-08-10 (log: repeat runs fold on durations, pages and counters, #1758)
 
 - **A repeat run no longer needs the timestamp to be the only thing moving**

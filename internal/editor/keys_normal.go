@@ -541,6 +541,11 @@ func insertEntryCmd(s string) bool {
 
 // normalCommand handles non-motion normal-mode keys (edits, mode changes, etc.).
 func (m Model) normalCommand(s string, r rune, count int) (Model, tea.Cmd) {
+	// A read-only buffer refuses every insert entry with a message (#1762).
+	if m.readOnly && insertEntryCmd(s) {
+		m.cmdMsg = roMessage
+		return m, nil
+	}
 	// Entering insert/replace on a locked dependency file blocks and stashes the
 	// whole command, so a confirm replays it (including any structural edit like
 	// o/O's new line or s's delete). See depedit.go (#565).
