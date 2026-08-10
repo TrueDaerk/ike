@@ -12,6 +12,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"ike/internal/datasrc"
 	"ike/internal/theme"
 )
 
@@ -203,6 +204,32 @@ func TestCorruptFileDegradesToNotice(t *testing.T) {
 	}
 	if !strings.Contains(stripANSI(m.View()), "cannot open database") {
 		t.Fatalf("view must explain the failure:\n%s", stripANSI(m.View()))
+	}
+}
+
+// TestMissingToolShowsActionableDialog: a backend whose external engine is
+// not installed (the DuckDB CLI, #1765) is an actionable state — the pane
+// draws a bordered dialog naming the tool and how to install it, not a bare
+// notice line.
+func TestMissingToolShowsActionableDialog(t *testing.T) {
+	m := Model{key: "data", path: "/tmp/app.duckdb", pal: theme.DefaultPalette(), sel: -1}
+	m.err = &datasrc.MissingToolError{
+		Tool:  "duckdb",
+		Why:   "DuckDB databases are read through the duckdb command line tool",
+		Hints: []string{"brew install duckdb"},
+	}
+	m.SetSize(90, 24)
+	view := stripANSI(m.View())
+	for _, want := range []string{"duckdb not found", "app.duckdb", "brew install duckdb", "╭"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("dialog must contain %q:\n%s", want, view)
+		}
+	}
+	// A pane too small for the box still says what is missing, on one line.
+	m.SetSize(20, 3)
+	small := stripANSI(m.View())
+	if strings.Contains(small, "╭") || !strings.Contains(small, "duckdb") {
+		t.Fatalf("small pane must fall back to the notice:\n%s", small)
 	}
 }
 
