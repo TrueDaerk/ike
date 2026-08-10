@@ -241,7 +241,9 @@ func (m *Model) visualIndent(dir int) {
 // unnamed register.
 func (m *Model) visualPaste(reg rune) {
 	e := m.regs.Get(reg)
-	target := m.visualSelection()
+	// The replaced selection is deleted, so it expands over collapsed folds
+	// exactly like a plain visual delete does (#1741).
+	target := m.expandFoldTarget(m.visualSelection())
 	start := target.Range.Start
 	m.mode = Normal
 	if e.Text == "" {

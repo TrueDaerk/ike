@@ -77,6 +77,14 @@ func (m *Model) applyMutate(fn func(rec *history.Recorder) buffer.Position) {
 // runOperator resolves op against target and applies it, recording a dot that
 // re-resolves the target from the cursor when repeated.
 func (m *Model) runOperator(op rune, target operator.Target, reg rune) {
+	// A closed fold is one display row, so yank/delete/change over that row take
+	// the whole fold (#1741) — vim's semantics for a linewise operation on a
+	// closed fold. The reshaping operators (indent, case, reindent, reflow) keep
+	// acting on the literal range: they rewrite what is on screen.
+	switch op {
+	case 'y', 'd', 'c':
+		target = m.expandFoldTarget(target)
+	}
 	switch op {
 	case 'y':
 		cur := operator.Yank(m.buf, m.regs, reg, target)

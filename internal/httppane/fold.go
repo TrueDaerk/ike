@@ -122,6 +122,28 @@ func (m *Model) Foldable(row int) bool {
 	return ok
 }
 
+// expandFolded grows the last row of the range start..end so it covers the
+// hidden body of every collapsed fold headed inside the range (#1741). A
+// collapsed fold is one row on screen, so selecting that row means selecting
+// the fold — the editor's rule (`expandFoldTarget`). Folds nest, so the scan
+// repeats until nothing grows; end only grows and is bounded by the largest
+// fold end, so the loop terminates. A selection that already reaches past a
+// fold is returned unchanged.
+func (m *Model) expandFolded(start, end int) int {
+	for grew := true; grew; {
+		grew = false
+		for h, e := range m.folded {
+			if h >= start && h <= end && e > end {
+				end, grew = e, true
+			}
+		}
+	}
+	if last := len(m.rows) - 1; end > last {
+		end = last
+	}
+	return end
+}
+
 // hiddenRow reports whether row sits inside a collapsed fold's body.
 func (m *Model) hiddenRow(row int) bool {
 	for h, e := range m.folded {

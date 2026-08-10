@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment placeholders, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-08-06T22:00:00Z
+timestamp: 2026-08-10T09:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -277,7 +277,15 @@ config file paths, or disable detection entirely.
   composition rules fall out of the row-coordinate design: a search hit inside
   a collapsed fold **reveals** it (`scrollToMatch` opens every fold hiding the
   match), and copy takes real content — a selection spanning a collapsed fold
-  copies what is inside it, never the placeholder.
+  copies what is inside it, never the placeholder. **A collapsed fold is also
+  one unit for copy** (#1741): a selection whose row range covers a collapsed
+  header — the common case being "fold a huge JSON field, select the one row it
+  became, copy" — grows to that fold's last row before the text is extracted
+  (`expandFolded`, applied in `SelectionText`), so the whole hidden body lands
+  on the clipboard. Nested folds pull in too (the scan repeats), a selection
+  that already reaches past a fold is unchanged, and an open fold's header row
+  stays an ordinary row. This is the editor's `expandFoldTarget` rule (#144,
+  see [editor.md](./editor.md)) in row coordinates.
 - **Scrollbar** (#1367, `internal/httppane/scrollbar.go`): the shared
   track/thumb bar (`internal/scrollbar`, the editor's #1022 / explorer's #1036
   visual language) overlays the pane's rightmost column whenever the composed

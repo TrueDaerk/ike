@@ -20,7 +20,7 @@ func (m Model) exDelete(cmd excmd.Command) Model {
 		return m
 	}
 	reg := exRegister(cmd.Args)
-	target := operator.LineTarget(start, end)
+	target := m.expandFoldTarget(operator.LineTarget(start, end))
 	m.mutate(func(rec *history.Recorder) buffer.Position {
 		return operator.Delete(m.buf, rec, m.regs, reg, target)
 	})
@@ -35,7 +35,7 @@ func (m Model) exYank(cmd excmd.Command) Model {
 		m.cmdMsg = "E: " + err
 		return m
 	}
-	operator.Yank(m.buf, m.regs, exRegister(cmd.Args), operator.LineTarget(start, end))
+	operator.Yank(m.buf, m.regs, exRegister(cmd.Args), m.expandFoldTarget(operator.LineTarget(start, end)))
 	return m
 }
 

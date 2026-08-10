@@ -170,6 +170,12 @@ func (m *Model) SelectionText() string {
 	if end.before(start) {
 		start, end = end, start
 	}
+	// A collapsed fold shows as its header row alone, so a selection covering
+	// that row copies the fold's whole content (#1741) — fold the hidden body
+	// back in by pulling the end down to the fold's last row, in full.
+	if row := m.expandFolded(start.row, end.row); row > end.row {
+		end = pos{row: row, col: len([]rune(m.rows[row].text))}
+	}
 	var b strings.Builder
 	for r := start.row; r <= end.row && r < len(m.rows); r++ {
 		if r < 0 {

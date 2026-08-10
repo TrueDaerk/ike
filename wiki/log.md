@@ -1,5 +1,31 @@
 # Log
 
+## 2026-08-10 (copying a collapsed fold now copies its hidden content, #1741)
+
+- **A closed fold is one unit for yank, delete and change** in the editor
+  (#144): a linewise target covering a collapsed header grows to that fold's
+  end line before the operator sees it (`expandFoldTarget`, applied at the
+  `runOperator` choke point plus the ex `:y`/`:d` and visual-put paths), so
+  `yy`, `V`+`y`, Cmd+C, `dd`, `cc` and Cmd+X act on what the row *stands for*.
+  Vim's rule for a linewise operation on a closed fold; several covered headers
+  expand to the largest end and nested folds pull in on a repeated scan.
+- **Delete and change expand too**, deliberately: half-deleting a collapsed
+  fold would leave hidden remnants no one asked for. The reshaping operators
+  (`>`/`<`, `=`, `gu`/`gU`/`g~`, `gq`, `ys`) and every charwise target keep
+  acting on the literal range — they rewrite what is on screen. The register
+  entry stays linewise, so a paste reproduces the whole block and the copy
+  toast (#252) reports the real line count.
+- **The HTTP response viewer got the same rule** (#1330): a selection whose row
+  range covers a collapsed fold header grows to the fold's last row in
+  `SelectionText` (`expandFolded`), so folding a huge JSON field, selecting the
+  single row it became and copying yields the whole field. Selections spanning
+  past a fold are unchanged — the rows were already in range.
+- **The other collapsed-row features need nothing**: repeat runs (#1650) and
+  PEM blocks (#1652) hide lines inside the contiguous linewise range anyway,
+  and a cursor on their header row already reveals them. See
+  [/architecture/editor.md](/architecture/editor.md) and
+  [/architecture/http-client.md](/architecture/http-client.md).
+
 ## 2026-08-09 (editor: the collapsed-run ×N marker became a badge, #1734)
 
 - **The `×N` marker of a collapsed log repeat run (#1650) now draws in theme

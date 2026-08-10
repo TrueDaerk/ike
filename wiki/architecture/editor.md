@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-08-07T16:00:00Z
+timestamp: 2026-08-10T09:00:00Z
 ---
 
 # Editor
@@ -292,7 +292,25 @@ line runs that test (see /architecture/run-configurations.md).
   the collapsed set against the fresh ranges (version-gated like the spans).
   Keys: `za` toggle, `zc`/`zo` close/open (repeated `zc` closes outward),
   `zM`/`zR` close/open all; the same operations are palette commands
-  (`editor.fold.*`).
+  (`editor.fold.*`). **A closed fold is one unit for yank, delete and change**
+  (#1741, vim's rule for a linewise operation on a closed fold): a linewise
+  target whose lines cover a collapsed header grows to that fold's end line
+  before the operator sees it (`expandFoldTarget` in `fold.go`, applied at the
+  `runOperator` choke point, so `yy`/`dd`/`cc`, `V`+`y`/`d`/`c`, Cmd+C/Cmd+X,
+  `:y`/`:d` and the visual put all inherit it). Several covered headers expand
+  to the largest end, and the scan repeats so nested folds pull in too. The
+  expansion is deliberately narrow: **charwise** targets pass through untouched
+  (a selection inside the visible header line is what it looks like), open folds
+  are ordinary lines, and the reshaping operators (`>`/`<`, `=`, `gu`/`gU`/`g~`,
+  `gq`, `ys`) keep acting on the literal range because they rewrite what is on
+  screen. The register entry stays linewise, so a paste reproduces the whole
+  block and the copy toast (#252) reports the real line count. Folds live on the
+  view, not the buffer, so the expansion happens in the editor package — the
+  `operator` package has no fold knowledge. The other collapsed-row features
+  (repeat runs #1650, PEM blocks #1652) need nothing here: their hidden lines
+  are inside the contiguous linewise range anyway, and a cursor on their header
+  row already reveals them, so what is copied is what is shown. Multi-caret
+  `dd`/`cc`/`yy` also stay literal — expanded per-caret spans could overlap.
 - **search** — `/` `?` with `n`/`N`, literal by default, regex via a `\v`
   prefix; reports per-line match spans and the next match with wrap-around.
   Case handling (#257, #1111): a `\c` query prefix forces case-insensitive
