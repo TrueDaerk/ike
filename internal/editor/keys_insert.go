@@ -107,8 +107,9 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 		if res, ok := m.resolveMotion(key.String(), 0, 1); ok {
 			m.fanMotionSecondaries(key.String(), 0, 1, true)
 			if res.Kind == motion.Linewise {
-				// Vertical motion keeps the remembered column (#1687).
-				m.cursor = m.buf.Clamp(buffer.Position{Line: res.Pos.Line, Col: m.desiredCol})
+				// Vertical motion keeps the remembered column (#1687), or the
+				// remembered table column in a csv/tsv table (#1744).
+				m.cursor = m.buf.Clamp(buffer.Position{Line: res.Pos.Line, Col: m.svVerticalCol(res.Pos.Line)})
 			} else {
 				m.cursor = m.buf.Clamp(res.Pos)
 				m.desiredCol = m.cursor.Col
@@ -165,7 +166,7 @@ func (m *Model) insertMove(dLine, dCol int) {
 	vertical := dLine != 0 && dCol == 0
 	col := m.cursor.Col + dCol
 	if vertical {
-		col = m.desiredCol
+		col = m.svVerticalCol(m.cursor.Line + dLine)
 	}
 	m.cursor = m.buf.Clamp(buffer.Position{Line: m.cursor.Line + dLine, Col: col})
 	if !vertical {

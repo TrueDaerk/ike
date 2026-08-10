@@ -392,6 +392,9 @@ type Model struct {
 	// layout (pointer, shared across the value copies like mdTables).
 	svRender bool
 	svTable  *svState
+	// svWant is the table column vertical motion aims at (#1744) — per-view
+	// cursor state like desiredCol, never shared between panes.
+	svWant svWant
 	// docPathCache caches the caret's JSON/YAML path (#1660, docpath.go) per
 	// document version and caret position (pointer, shared like svTable).
 	docPathCache *docPathState
