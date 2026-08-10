@@ -94,6 +94,9 @@ func tabLabels(inst *pane.Instance) []string {
 				label += " — " + dir
 			}
 		}
+		if ed.ReadOnly() {
+			label += " [RO]" // an archive-entry preview cannot be saved (#1762)
+		}
 		if ed.Dirty() {
 			label += " ●"
 		}

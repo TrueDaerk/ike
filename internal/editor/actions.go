@@ -48,6 +48,11 @@ type dotCommand struct{ run func(m *Model) }
 // edits and return the new cursor, then commits to history (when non-empty),
 // marks the buffer dirty and emits a change event.
 func (m *Model) mutate(fn func(rec *history.Recorder) buffer.Position) {
+	// A read-only buffer (#1762) refuses outright — there is nothing to
+	// confirm, unlike the dependency guard below.
+	if m.refuseRO() {
+		return
+	}
 	// A locked dependency file (#565) blocks the edit and stashes it: the host
 	// prompts, and a confirm replays exactly this mutation via applyMutate.
 	if m.blockDep() {
@@ -185,6 +190,9 @@ func swapCase(r rune) rune {
 // beginInsertChange performs the delete half of a change and enters insert mode
 // with the recorder still open, so the typed text joins the same undo unit.
 func (m *Model) beginInsertChange(reg rune, target operator.Target) {
+	if m.refuseRO() {
+		return
+	}
 	// The change deletes before entering insert, so guard before any mutation
 	// on a locked dependency file (#565); a confirm replays the whole change.
 	if m.blockDep() {
@@ -203,6 +211,10 @@ func (m *Model) beginInsertChange(reg rune, target operator.Target) {
 // startInsert enters insert mode for i/a/o/O with the structural edit (if any)
 // already applied to rec; pre lets "." recreate that structural edit.
 func (m *Model) startInsertWith(rec *history.Recorder, pre func(*Model, *history.Recorder) buffer.Position) {
+	// A read-only buffer never enters insert mode at all (#1762).
+	if m.refuseRO() {
+		return
+	}
 	// Backstop for insert entries that bypass normalCommand (gi, multi-caret): on
 	// a locked dependency file, don't enter insert; stash a replay that opens a
 	// fresh (unlocked) recorder once confirmed (#565). The common i/a/o/… entries
@@ -519,6 +531,12 @@ func (m *Model) save() error { return m.saveAs(m.path) }
 func (m *Model) saveAs(path string) error {
 	if path == "" {
 		return nil
+	}
+	// A read-only buffer (#1762) has no writable home — its path names an
+	// archive member, not a file — so every write entry point fails here
+	// rather than creating a file with a "!" in its name.
+	if m.readOnly {
+		return errReadOnly
 	}
 	lines := m.buf.Lines()
 	if m.trimTrailing {

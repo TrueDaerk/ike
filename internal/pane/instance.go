@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
 	"ike/internal/debugpanel"
@@ -79,6 +80,10 @@ const (
 	// advertises the editor context so the full editor keymap (including the
 	// #1149 merge accepts) drives the result.
 	KindMerge
+	// KindArchive is an archive viewer pane (#1762); any number may exist,
+	// each bound to one archive file, listing its entries and opening one of
+	// them in a read-only editor buffer.
+	KindArchive
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -96,6 +101,7 @@ const (
 	ctxUsages   = "usages"
 	ctxHTTP     = "http"
 	ctxBreak    = "breakpoints"
+	ctxArchive  = "archive"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -121,6 +127,7 @@ type Instance struct {
 	hp   httppane.Model
 	bp   breakpanel.Model
 	mg   merge.Model
+	av   archview.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -231,6 +238,8 @@ func (i *Instance) ContextID() string {
 		return ctxHTTP
 	case KindBreakpoints:
 		return ctxBreak
+	case KindArchive:
+		return ctxArchive
 	}
 	return ctxEditor
 }
@@ -266,6 +275,10 @@ func (i *Instance) Preview() *preview.Model { return &i.md }
 
 // Image returns the wrapped image preview model (image panes only).
 func (i *Instance) Image() *imgview.Model { return &i.iv }
+
+// Archive returns the underlying archive viewer model (#1762). It is only
+// valid for an archive instance; callers gate on Kind first.
+func (i *Instance) Archive() *archview.Model { return &i.av }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -709,6 +722,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.hp.SetSize(w, h)
 	case KindBreakpoints:
 		i.bp.SetSize(w, h)
+	case KindArchive:
+		i.av.SetSize(w, h)
 	}
 }
 
@@ -751,6 +766,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.hp.SetFocused(f)
 	case KindBreakpoints:
 		i.bp.SetFocused(f)
+	case KindArchive:
+		i.av.SetFocused(f)
 	}
 }
 
@@ -806,6 +823,8 @@ func (i *Instance) View() string {
 		return i.hp.View()
 	case KindBreakpoints:
 		return i.bp.View()
+	case KindArchive:
+		return i.av.View()
 	}
 	return ""
 }
@@ -856,6 +875,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.hp.Update(msg)
 	case KindBreakpoints:
 		cmd = i.bp.Update(msg)
+	case KindArchive:
+		cmd = i.av.Update(msg)
 	}
 	return cmd
 }
@@ -984,6 +1005,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.hp.SetPalette(p)
 	case KindBreakpoints:
 		i.bp.SetPalette(p)
+	case KindArchive:
+		i.av.SetPalette(p)
 	}
 }
 

@@ -24,6 +24,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/backup"
+	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
@@ -1213,6 +1214,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below re-reading the source file (#62)
 		} else if ids[key].Kind == "image" {
 			continue // restored below re-decoding the image file (#1479)
+		} else if ids[key].Kind == "archive" {
+			continue // restored below re-listing the archive file (#1762)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -1398,6 +1401,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// An image preview restores by re-decoding the file (#1479); a
 			// vanished file restores as the pane's own decode-error fallback.
 			panes.AddImageKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "archive" {
+			// An archive viewer restores by re-listing the file (#1762); a
+			// vanished file restores as the pane's own error notice.
+			panes.AddArchiveKey(key, id.Path)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -3998,6 +4007,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case OpenImageMsg:
 		m.openImagePreview(msg.Path)
 		return m, nil
+
+	case OpenArchiveMsg:
+		// archives.view (#1762): a tar (plain or compressed) opens as an
+		// entry list, never as a raw text buffer.
+		m.openArchivePane(msg.Path)
+		return m, nil
+
+	case archview.OpenEntryMsg:
+		// Enter on a file row: extract that entry into a read-only buffer.
+		model, cmd, _ := m.handleArchviewMsg(msg)
+		return model, cmd
 
 	case uv.KittyGraphicsEvent:
 		m.handleKittyGraphics(msg)
@@ -8628,6 +8648,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "PREVIEW " + baseName(inst.Preview().Path())
 		case pane.KindImage:
 			title = "IMAGE " + baseName(inst.Image().Path())
+		case pane.KindArchive:
+			title = "ARCHIVE " + baseName(inst.Archive().Path())
 		case pane.KindDiff:
 			l, rr := inst.Diff().Titles()
 			title = "DIFF " + l + " ⇄ " + rr
@@ -8749,6 +8771,15 @@ func (m Model) editorTitle(ed *editor.Model) string {
 		return "EDITOR"
 	}
 	name := baseName(ed.Path())
+	if ed.ReadOnly() {
+		// A read-only preview names what it previews (#1762): an archive
+		// entry shows "main.go (src.tar)", so the pane says where the
+		// unwritable content came from.
+		if t, ok := archiveEntryTitle(ed.Path()); ok {
+			name = t
+		}
+		name += " [RO]"
+	}
 	if ed.Dirty() {
 		name += " *"
 	}

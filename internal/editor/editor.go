@@ -247,6 +247,11 @@ type Model struct {
 	depOK      bool
 	depPending func(*Model)
 	depSignal  bool
+	// readOnly locks the buffer permanently (#1762): a preview of content that
+	// has no writable on-disk home — an archive entry — where the dependency
+	// guard's "confirm and unlock" has nothing to unlock into. Every mutation
+	// and every write is refused outright; see readonly.go.
+	readOnly bool
 	// eol/enc/mixedEOL describe how the open file is stored on disk (#66):
 	// the buffer itself is always LF-joined UTF-8; save re-applies this flavor.
 	// mixedEOL flags a load that saw both CRLF and LF (eol keeps the first
@@ -883,6 +888,7 @@ func (m *Model) Load(path string) error {
 			" — saving normalizes; file.setLineEndings converts explicitly"
 	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
+	m.readOnly = false // a real file replaced any read-only preview (#1762)
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -939,6 +945,7 @@ func (m *Model) NewFile(path string) {
 		m.enc = enc
 	}
 	m.largeFile = false // a template seed is never large
+	m.readOnly = false  // a new file is writable from its first :w (#1762)
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal

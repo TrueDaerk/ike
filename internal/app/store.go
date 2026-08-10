@@ -192,6 +192,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindImage:
 			// Path names the previewed image; restore re-decodes it (#1479).
 			ids[key] = paneIdentity{Kind: "image", Path: inst.Image().Path()}
+		case pane.KindArchive:
+			// Path names the listed archive; restore re-reads it (#1762).
+			ids[key] = paneIdentity{Kind: "archive", Path: inst.Archive().Path()}
 		case pane.KindDiff:
 			// Path/Path2 name the compared files; Rev/Rev2 mark revision-
 			// backed sides so restore re-reads blobs instead of files (#508).
@@ -242,7 +245,7 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 			ids[key] = paneIdentity{Kind: "breakpoints"}
 		case pane.KindEditor:
 			id := paneIdentity{Kind: "editor"}
-			if ed := inst.Editor(); ed != nil {
+			if ed := inst.Editor(); ed != nil && !ed.ReadOnly() {
 				id.Path = ed.Path()
 			}
 			// Terminal tabs (#573) are session-local like scratch tabs: their
@@ -260,6 +263,12 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 				ed := inst.TabEditor(i)
 				if ed == nil || !ed.HasFile() {
 					continue // scratch/terminal tabs restore as nothing
+				}
+				if ed.ReadOnly() {
+					// A read-only preview's path names an archive member, not
+					// a file (#1762): restore could never re-read it, so the
+					// tab is session state like a scratch tab.
+					continue
 				}
 				if i == inst.ActiveTab() {
 					id.Active = len(id.Tabs)

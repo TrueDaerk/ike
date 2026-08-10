@@ -10,12 +10,13 @@ import (
 )
 
 // newRecorder opens a history recorder anchored at the current cursor. On a
-// locked dependency buffer (#565) the recorder is returned locked, so any
-// mutation path that was not caught by an explicit guard applies nothing rather
-// than silently editing a vendored file.
+// locked dependency buffer (#565) or a read-only one (#1762) the recorder is
+// returned locked, so any mutation path that was not caught by an explicit
+// guard applies nothing rather than silently editing a vendored file or a
+// preview that cannot be saved.
 func (m *Model) newRecorder() *history.Recorder {
 	rec := history.NewRecorder(m.buf, m.cursor)
-	if m.blockDep() {
+	if m.blockDep() || m.readOnly {
 		rec.Lock()
 	}
 	return rec
