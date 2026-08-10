@@ -18,8 +18,14 @@ func Open(path string) (Source, error) {
 		return OpenSQLite(path)
 	case IsDuckDB(path, nil):
 		return OpenDuckDB(path)
+	case IsParquet(path, nil):
+		return OpenParquet(path)
 	}
 	switch strings.ToLower(filepath.Ext(path)) {
+	case ".parquet", ".pqt":
+		// Claimed by extension but missing a magic: still handed to the reader
+		// so a truncated file's own error names the problem.
+		return OpenParquet(path)
 	case ".db", ".sqlite", ".sqlite3":
 		// Claimed by extension but the magic is absent: still handed to the
 		// engine so its error names the real problem (encrypted, corrupt,
@@ -31,9 +37,9 @@ func Open(path string) (Source, error) {
 	return nil, fmt.Errorf("unsupported database file: %s", filepath.Base(path))
 }
 
-// IsDatabase reports whether the file at path is a database this package can
-// open, judged by content alone. It is the file handler's sniff, claiming a
-// database that carries no known extension.
+// IsDatabase reports whether the file at path is a database or table file this
+// package can open, judged by content alone. It is the file handler's sniff,
+// claiming a database that carries no known extension.
 func IsDatabase(path string, head []byte) bool {
-	return IsSQLite(path, head) || IsDuckDB(path, head)
+	return IsSQLite(path, head) || IsDuckDB(path, head) || IsParquet(path, head)
 }

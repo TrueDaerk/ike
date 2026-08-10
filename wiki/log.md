@@ -1,5 +1,43 @@
 # Log
 
+## 2026-08-10 (viewer: Parquet backend for the data pane, #1766)
+
+- **Parquet files open in the data pane** (#1766): `.parquet`/`.pqt` by
+  extension plus the `PAR1` magic at **both** ends of the file route into the
+  same `KindData` pane — a `.parquet` never lands in a text buffer again. A
+  Parquet file is one table, so the sidebar's list degenerates to a single
+  entry named after the file; the grid, the paging and the pane are unchanged.
+  The leading magic alone is not enough for a content sniff (any text file may
+  begin with those four bytes), so the check reads the trailing four bytes too.
+- **The library decision: `github.com/parquet-go/parquet-go`, not the DuckDB
+  CLI.** #1765 had just landed a generic DuckDB path that could have served
+  `SELECT * FROM 'x.parquet'` for free. It was rejected because it would make
+  *viewing a file* depend on a binary the user may not have installed — a soft
+  dependency is acceptable for DuckDB databases, whose owner already has
+  DuckDB, but not for a format people receive from elsewhere. parquet-go is
+  pure Go, so the build stays cgo-free and costs nothing at run time.
+- **Never a full load**: `parquet.OpenFile` parses the footer only, so opening
+  a multi-gigabyte file is instant, and one page is `SeekToRow` + `ReadRows`,
+  decoding only the column pages that window touches. Row groups are crossed
+  transparently; nothing resembling `ReadAll` appears in the backend.
+- **Corrupt files degrade to a notice**: the library *panics* rather than
+  returning an error on some malformed schemas, so both `OpenParquet` and
+  `Page` recover and turn it into the pane's error notice.
+- **The schema view is the point of the format**, so `s` shows more than a DDL
+  line: row count, row-group count, column count, compression codecs, the
+  writer that created the file, one line per leaf column (dotted path,
+  physical type, logical type, nullability), and the native `message { … }`
+  block — in `--` comments so the `.sql` virtual buffer still highlights.
+- **Logical types render readably**, and at the *leaf*, so a timestamp buried
+  in a list of structs reads like a top-level one: timestamps and INT96 as ISO
+  8601 (`Z` only when the column is adjusted to UTC — an unzoned column gets no
+  invented offset), decimals through `math/big` with the scale applied (no
+  float round-trip, no exponent), UUIDs canonically, unsigned ints unsigned,
+  untagged byte arrays as text when valid UTF-8 and `<bytes N>` otherwise, and
+  list/map/struct as compact JSON with the `LIST`/`MAP` wrappers unwrapped
+  (`["red","blue"]`, not `{"list":[{"element":…}]}`).
+  Updated [Data Viewer](/architecture/data-viewer.md).
+
 ## 2026-08-10 (viewer: DuckDB backend for the data pane, #1765)
 
 - **DuckDB databases open in the data pane** (#1765): `.duckdb`/`.ddb` by
