@@ -9,20 +9,21 @@ import (
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
+	"ike/internal/dataview"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
 	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/httppane"
+	"ike/internal/imgview"
+	"ike/internal/merge"
 	"ike/internal/preview"
 	"ike/internal/problems"
 	"ike/internal/structpanel"
 	"ike/internal/terminal"
 	"ike/internal/theme"
-	"ike/internal/httppane"
-	"ike/internal/imgview"
-	"ike/internal/merge"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -84,6 +85,10 @@ const (
 	// each bound to one archive file, listing its entries and opening one of
 	// them in a read-only editor buffer.
 	KindArchive
+	// KindData is a data viewer pane (#1764); any number may exist, each
+	// bound to one database file, listing its tables and views next to a
+	// paged read-only grid of the selected one's rows.
+	KindData
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -102,6 +107,7 @@ const (
 	ctxHTTP     = "http"
 	ctxBreak    = "breakpoints"
 	ctxArchive  = "archive"
+	ctxData     = "data"
 )
 
 // Instance is one live pane: a stable key plus the component it drives. An
@@ -128,6 +134,7 @@ type Instance struct {
 	bp   breakpanel.Model
 	mg   merge.Model
 	av   archview.Model
+	dv   dataview.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
 	dfEdit *editor.Model
@@ -140,14 +147,14 @@ type Instance struct {
 	// Editor state: the ordered tab list and the active index. A tab holds a
 	// document editor or an embedded terminal (#573). cfg/pal/size and focus
 	// are remembered so tabs created later match the live pane.
-	tabs    []*Tab
-	active  int
-	useSeq  int // monotonic activation counter stamping tab recency (#742)
-	cfg     host.Config
-	pal     *theme.Palette
+	tabs   []*Tab
+	active int
+	useSeq int // monotonic activation counter stamping tab recency (#742)
+	cfg    host.Config
+	pal    *theme.Palette
 	// regs is the app-wide shared register store threaded into every editor
 	// tab (#1540); nil leaves each editor its private store.
-	regs *register.Store
+	regs    *register.Store
 	w, h    int
 	focused bool
 
@@ -240,6 +247,8 @@ func (i *Instance) ContextID() string {
 		return ctxBreak
 	case KindArchive:
 		return ctxArchive
+	case KindData:
+		return ctxData
 	}
 	return ctxEditor
 }
@@ -279,6 +288,10 @@ func (i *Instance) Image() *imgview.Model { return &i.iv }
 // Archive returns the underlying archive viewer model (#1762). It is only
 // valid for an archive instance; callers gate on Kind first.
 func (i *Instance) Archive() *archview.Model { return &i.av }
+
+// Data returns the underlying data viewer model (#1764). It is only valid
+// for a data instance; callers gate on Kind first.
+func (i *Instance) Data() *dataview.Model { return &i.dv }
 
 // Diff returns the underlying diff viewer model. It is only valid for a diff
 // instance; callers gate on Kind first.
@@ -724,6 +737,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.bp.SetSize(w, h)
 	case KindArchive:
 		i.av.SetSize(w, h)
+	case KindData:
+		i.dv.SetSize(w, h)
 	}
 }
 
@@ -768,6 +783,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.bp.SetFocused(f)
 	case KindArchive:
 		i.av.SetFocused(f)
+	case KindData:
+		i.dv.SetFocused(f)
 	}
 }
 
@@ -825,6 +842,8 @@ func (i *Instance) View() string {
 		return i.bp.View()
 	case KindArchive:
 		return i.av.View()
+	case KindData:
+		return i.dv.View()
 	}
 	return ""
 }
@@ -877,6 +896,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.bp.Update(msg)
 	case KindArchive:
 		cmd = i.av.Update(msg)
+	case KindData:
+		cmd = i.dv.Update(msg)
 	}
 	return cmd
 }
@@ -1007,6 +1028,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.bp.SetPalette(p)
 	case KindArchive:
 		i.av.SetPalette(p)
+	case KindData:
+		i.dv.SetPalette(p)
 	}
 }
 

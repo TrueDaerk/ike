@@ -195,6 +195,9 @@ func saveLayout(root layout.Node, reg *pane.Registry) {
 		case pane.KindArchive:
 			// Path names the listed archive; restore re-reads it (#1762).
 			ids[key] = paneIdentity{Kind: "archive", Path: inst.Archive().Path()}
+		case pane.KindData:
+			// Path names the browsed database; restore re-opens it (#1764).
+			ids[key] = paneIdentity{Kind: "data", Path: inst.Data().Path()}
 		case pane.KindDiff:
 			// Path/Path2 name the compared files; Rev/Rev2 mark revision-
 			// backed sides so restore re-reads blobs instead of files (#508).

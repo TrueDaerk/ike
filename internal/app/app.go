@@ -23,8 +23,8 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
-	"ike/internal/backup"
 	"ike/internal/archview"
+	"ike/internal/backup"
 	"ike/internal/breakpanel"
 	"ike/internal/callhier"
 	"ike/internal/clipboard"
@@ -34,6 +34,7 @@ import (
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/config"
+	"ike/internal/dataview"
 	"ike/internal/debug"
 	"ike/internal/debugpanel"
 	"ike/internal/diff"
@@ -789,8 +790,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	fileUsage := palette.LoadUsage(fileUsageFile()) // most-used file ranking (#1419)
 	winSizes := ui.LoadWinSizes(winSizeFile())      // resizable floats (#774)
 	winSizesAll := ui.LoadWinSizes(globalWinSizeFile())
-	wsMgr := wsManager(mgr, resumed, root, panes)   // hoisted: the palette's recent-projects sources read it (#820)
-	wsMgr.SetRegisters(regs)                        // first start: the manager adopts the store (#1540); a switch hands back its own
+	wsMgr := wsManager(mgr, resumed, root, panes) // hoisted: the palette's recent-projects sources read it (#820)
+	wsMgr.SetRegisters(regs)                      // first start: the manager adopts the store (#1540); a switch hands back its own
 	m := Model{
 		cmdUsage:       cmdUsage,
 		fileUsage:      fileUsage,
@@ -1216,6 +1217,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below re-decoding the image file (#1479)
 		} else if ids[key].Kind == "archive" {
 			continue // restored below re-listing the archive file (#1762)
+		} else if ids[key].Kind == "data" {
+			continue // restored below re-opening the database file (#1764)
 		} else if ids[key].Kind == "diff" {
 			continue // restored below re-reading both files (#60; fix #490)
 		} else if ids[key].Kind == "vcs" {
@@ -1407,6 +1410,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// An archive viewer restores by re-listing the file (#1762); a
 			// vanished file restores as the pane's own error notice.
 			panes.AddArchiveKey(key, id.Path)
+			continue
+		}
+		if id := ids[key]; id.Kind == "data" {
+			// A data viewer restores by re-opening the database (#1764); a
+			// vanished file restores as the pane's own error notice.
+			panes.AddDataKey(key, id.Path)
 			continue
 		}
 		inst := panes.AddEditorKey(key)
@@ -4023,6 +4032,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Enter on a file row: extract that entry into a read-only buffer.
 		model, cmd, _ := m.handleArchviewMsg(msg)
 		return model, cmd
+
+	case OpenDataMsg:
+		// data.view (#1764): a database file opens as a table browser,
+		// never as a raw text buffer.
+		m.openDataPane(msg.Path)
+		return m, nil
+
+	case dataview.ShowSchemaMsg:
+		// Schema key in the data pane: the table's DDL, read-only.
+		return m, m.showTableSchema(msg)
 
 	case uv.KittyGraphicsEvent:
 		m.handleKittyGraphics(msg)
@@ -8661,6 +8680,8 @@ func (m Model) renderPane(key string, r layout.Rect) string {
 			title = "IMAGE " + baseName(inst.Image().Path())
 		case pane.KindArchive:
 			title = "ARCHIVE " + baseName(inst.Archive().Path())
+		case pane.KindData:
+			title = "DATA " + baseName(inst.Data().Path())
 		case pane.KindDiff:
 			l, rr := inst.Diff().Titles()
 			title = "DIFF " + l + " ⇄ " + rr
