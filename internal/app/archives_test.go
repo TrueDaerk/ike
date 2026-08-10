@@ -157,7 +157,11 @@ func TestPlainGzipIsNotClaimed(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := newSized()
-	if _, ok := m.reg.ResolveHandler(p, readHead(p)); ok {
+	h, ok := m.reg.ResolveHandler(p, readHead(p))
+	if !ok {
+		t.Fatal("a plain gzip must be claimed by the gz handler")
+	}
+	if h.Owner == "archives" {
 		t.Fatal("a plain gzip must not be claimed by the archive handler")
 	}
 }
@@ -289,8 +293,8 @@ func TestOpenArchiveEntryReadOnly(t *testing.T) {
 // internal/archive's ErrTooLarge test.
 func TestArchiveLimitIsTheLargeFileThreshold(t *testing.T) {
 	m := newSized()
-	if got := m.archiveLimit(); got != largefile.DefaultMaxKB*1024 {
-		t.Fatalf("archiveLimit = %d, want %d", got, largefile.DefaultMaxKB*1024)
+	if got := m.largeFileLimit(); got != largefile.DefaultMaxKB*1024 {
+		t.Fatalf("largeFileLimit = %d, want %d", got, largefile.DefaultMaxKB*1024)
 	}
 }
 

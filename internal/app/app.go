@@ -4014,6 +4014,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openArchivePane(msg.Path)
 		return m, nil
 
+	case OpenGzipMsg:
+		// gzip.view (#1763): a plain .gz opens transparently decompressed in a
+		// read-only buffer, with the inner file's language and highlighting.
+		return m, m.openGzipFile(msg.Path)
+
 	case archview.OpenEntryMsg:
 		// Enter on a file row: extract that entry into a read-only buffer.
 		model, cmd, _ := m.handleArchviewMsg(msg)
@@ -4550,6 +4555,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.closeEditorsForPath(msg.Path, false)
 				return m, tea.Batch(append(hookCmds, vcsCmd)...)
 			}
+		}
+		if msg.Kind == watch.FileChanged || msg.Kind == watch.FileCreated {
+			// A gz preview's buffer path names content *inside* the archive
+			// (#1763), so the editor's own reload never matches the file that
+			// changed: re-decompress it here.
+			m.refreshGzipBuffers(msg.Path)
 		}
 		return m, tea.Batch(append(hookCmds, m.routeToEditor(msg.Path, msg), vcsCmd)...)
 
