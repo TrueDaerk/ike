@@ -166,6 +166,16 @@ config file paths, or disable detection entirely.
   the caret sits inside a sequence — or a selection crosses it — does that
   spot show the raw encoding, styled as `escape`. Placeholder regions are
   skipped so their own captures survive.
+- **Target prefix segments** (#1740, `spans.go`): the same producer splits an
+  absolute-form target's `scheme://authority` prefix into three subtly
+  distinct segments — the scheme dims to the `comment` colour, `://` takes
+  the `punctuation` colour the query separators already use, and the
+  authority (host and port) keeps the url colour through `string.special`,
+  which falls back to `string` in every built-in theme. Origin-form targets
+  (`/api/users`) have no prefix and stay unchanged; placeholders inside the
+  prefix keep the grammar's captures, and the punycode/homograph stand-ins of
+  `internal/nethint` (#1653) win over the authority span, since the prefix
+  spans are emitted last.
 - **Value conceals** (#1618, #1627, #1684): the same producer collects every
   stretch it already recognises as a *value* — a query string, a folded
   query continuation line, a header value, an inline request body line — and

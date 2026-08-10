@@ -42,8 +42,17 @@ func TestHighlighting(t *testing.T) {
 	if got := ix.CaptureAt(1, 0); got != "function" { // POST
 		t.Errorf("method: got capture %q, want function", got)
 	}
-	if got := ix.CaptureAt(1, 5); got != "string" { // url
-		t.Errorf("url: got capture %q, want string", got)
+	// The target's prefix reads as three segments since #1740: the scheme
+	// dims, "://" is punctuation, the authority keeps the url string colour
+	// through string.special.
+	if got := ix.CaptureAt(1, 5); got != "comment" { // https
+		t.Errorf("scheme: got capture %q, want comment", got)
+	}
+	if got := ix.CaptureAt(1, 10); got != "punctuation" { // ://
+		t.Errorf("separator: got capture %q, want punctuation", got)
+	}
+	if got := ix.CaptureAt(1, 13); got != "string.special" { // api.test
+		t.Errorf("authority: got capture %q, want string.special", got)
 	}
 	if got := ix.CaptureAt(2, 0); got != "constant" { // header name
 		t.Errorf("header name: got capture %q, want constant", got)

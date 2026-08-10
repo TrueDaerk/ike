@@ -78,6 +78,18 @@ func querySpans(lines []string) []lang.Span {
 		if ps, pe := pathBounds(runes, tStart, tEnd, qPos); ps >= 0 {
 			out = appendExcluding(out, li, ps, pe, "label", ph)
 		}
+		// The "scheme://authority" prefix reads as three segments rather than
+		// one blob (#1740), subtly: the scheme dims to the comment colour, the
+		// "://" separator takes the same punctuation colour the query
+		// separators use, and the authority keeps the url string colour
+		// through the string.special sub-capture (which falls back to
+		// "string" in every built-in theme). Emitted last, so the percent,
+		// query and network-literal (#1653) spans keep their columns.
+		if p, ok := targetPrefix(runes, tStart, tEnd, qPos); ok {
+			out = appendExcluding(out, li, p.scheme[0], p.scheme[1], "comment", ph)
+			out = appendExcluding(out, li, p.sep[0], p.sep[1], "punctuation", ph)
+			out = appendExcluding(out, li, p.authority[0], p.authority[1], "string.special", ph)
+		}
 		// Folded query continuation lines (#1269): indented lines starting
 		// with "?" or "&" extend the target until the first header, blank
 		// line or comment break — mirroring httpfile's folding rules.
@@ -238,6 +250,47 @@ func pathBounds(runes []rune, from, to, qPos int) (start, end int) {
 		return from, end
 	}
 	return -1, end
+}
+
+// prefixBounds holds the three parts of an absolute-form request target's
+// "scheme://authority" prefix, each as a [start, end) rune-column range
+// (#1740). An empty authority ("http://" alone) keeps a zero-width range,
+// which emits no span.
+type prefixBounds struct {
+	scheme    [2]int
+	sep       [2]int
+	authority [2]int
+}
+
+// targetPrefix splits the "scheme://authority" prefix of the request target in
+// [from, to), with the query at qPos (-1 for none). ok is false for
+// origin-form targets ("/api/users") and for anything without a "://" before
+// the path — those have no scheme and no authority to differentiate.
+func targetPrefix(runes []rune, from, to, qPos int) (prefixBounds, bool) {
+	end := to
+	if qPos >= 0 && qPos < end {
+		end = qPos
+	}
+	sep := -1
+	for i := from; i+2 < end; i++ {
+		if runes[i] == ':' && runes[i+1] == '/' && runes[i+2] == '/' {
+			sep = i
+			break
+		}
+	}
+	if sep <= from {
+		return prefixBounds{}, false
+	}
+	authStart := sep + 3
+	authEnd := indexFrom(runes, authStart, end, '/')
+	if authEnd < 0 {
+		authEnd = end
+	}
+	return prefixBounds{
+		scheme:    [2]int{from, sep},
+		sep:       [2]int{sep, authStart},
+		authority: [2]int{authStart, authEnd},
+	}, true
 }
 
 // appendExcluding emits capture spans over [from, to), split around the
