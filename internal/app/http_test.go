@@ -12,6 +12,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
 	"ike/internal/httpclient"
@@ -795,5 +796,152 @@ func TestHTTPPaneCancelKeyRoutes(t *testing.T) {
 		if !e.canceled {
 			t.Error("the entry must be marked canceled")
 		}
+	}
+}
+
+// --- inline in-flight markers in the .http file (#1746) ---
+
+// httpFlightFileApp opens a two-request .http file pointing at url, so the
+// inline markers can be told apart per request.
+func httpFlightFileApp(t *testing.T, url string) Model {
+	t.Helper()
+	m := httpApp(t)
+	path := filepath.Join(t.TempDir(), "two.http")
+	src := "### one\nGET " + url + "/slow\n\n### two\nGET " + url + "/slow\n"
+	if err := os.WriteFile(path, []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
+	return out.(Model)
+}
+
+// flightMarkAt reads the editor's inline marker at a 0-based line.
+func flightMarkAt(t *testing.T, m Model, line int) string {
+	t.Helper()
+	ed := m.activeEditor()
+	if ed == nil {
+		t.Fatal("no active editor")
+	}
+	text, _ := ed.HTTPFlightAt(line)
+	return text
+}
+
+// TestHTTPInlineFlightMarker covers #1746: the running request is marked at
+// its own request line, with the elapsed time, and the marker clears when the
+// response lands.
+func TestHTTPInlineFlightMarker(t *testing.T) {
+	release := make(chan struct{})
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, cmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	// "### one" is line 1, the request line is line 2 (0-based 1).
+	mark := flightMarkAt(t, m, 1)
+	if !strings.HasPrefix(mark, "⟳ ") {
+		t.Fatalf("marker at the request line: %q", mark)
+	}
+	if mark == "⟳ " {
+		t.Errorf("the marker must carry an elapsed time: %q", mark)
+	}
+	if other := flightMarkAt(t, m, 0); other != "" {
+		t.Errorf("the separator line must stay unmarked: %q", other)
+	}
+
+	// The tick keeps the marker alive while the dispatch is out.
+	out, tick := m.Update(httpTickMsg{})
+	m = out.(Model)
+	if tick == nil {
+		t.Error("the tick must reschedule while a request runs")
+	}
+	if flightMarkAt(t, m, 1) == "" {
+		t.Error("the marker must survive a flight tick")
+	}
+
+	close(release)
+	out, _ = m.Update(drainHTTPResponse(t, cmd))
+	m = out.(Model)
+	if mark := flightMarkAt(t, m, 1); mark != "" {
+		t.Errorf("the marker must clear on response: %q", mark)
+	}
+}
+
+// TestHTTPInlineFlightMarkerClearsOnCancel: http.cancel removes the inline
+// marker just like a response does (#1746).
+func TestHTTPInlineFlightMarkerClearsOnCancel(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, cmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if flightMarkAt(t, m, 1) == "" {
+		t.Fatal("the dispatch must be marked")
+	}
+	out, _ = m.Update(HTTPCancelMsg{})
+	m = out.(Model)
+	out, _ = m.Update(drainHTTPResponse(t, cmd))
+	m = out.(Model)
+	if mark := flightMarkAt(t, m, 1); mark != "" {
+		t.Errorf("cancel must clear the marker: %q", mark)
+	}
+}
+
+// TestHTTPInlineFlightMarkersAreIndependent: two requests of the same file
+// running at once are marked separately, and one finishing leaves the other's
+// marker in place (#1746).
+func TestHTTPInlineFlightMarkersAreIndependent(t *testing.T) {
+	release := make(chan struct{})
+	srv := slowServer(t, release)
+	m := httpFlightFileApp(t, srv.URL)
+
+	m.activeEditor().SetCursor(1, 0) // request "one"
+	out, firstCmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	m.activeEditor().SetCursor(4, 0) // request "two"
+	out, secondCmd := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	if len(m.httpFlight) != 2 {
+		t.Fatalf("in-flight entries: %d, want 2", len(m.httpFlight))
+	}
+	if flightMarkAt(t, m, 1) == "" || flightMarkAt(t, m, 4) == "" {
+		t.Fatalf("both request lines must be marked: %q / %q",
+			flightMarkAt(t, m, 1), flightMarkAt(t, m, 4))
+	}
+
+	close(release)
+	out, _ = m.Update(drainHTTPResponse(t, firstCmd))
+	m = out.(Model)
+	if mark := flightMarkAt(t, m, 1); mark != "" {
+		t.Errorf("the finished request must lose its marker: %q", mark)
+	}
+	if flightMarkAt(t, m, 4) == "" {
+		t.Error("the still-running request must keep its marker")
+	}
+
+	out, _ = m.Update(drainHTTPResponse(t, secondCmd))
+	m = out.(Model)
+	if mark := flightMarkAt(t, m, 4); mark != "" {
+		t.Errorf("the second marker must clear too: %q", mark)
+	}
+}
+
+// TestHTTPInlineFlightMarkerFollowsEdits: the marker is resolved against the
+// buffer's current text, so an insertion above the request moves it with the
+// request line instead of leaving it behind (#1746).
+func TestHTTPInlineFlightMarkerFollowsEdits(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	srv := slowServer(t, release)
+	m := httpFileApp(t, srv.URL)
+
+	out, _ := m.Update(HTTPRunMsg{})
+	m = out.(Model)
+	m.activeEditor().ApplyTextEdits([]editor.TextEdit{{Text: "# note\n"}})
+	out, _ = m.Update(httpTickMsg{})
+	m = out.(Model)
+	if mark := flightMarkAt(t, m, 2); mark == "" {
+		t.Errorf("the marker must follow the request line, got %q at line 2", mark)
 	}
 }

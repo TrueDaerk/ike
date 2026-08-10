@@ -3277,7 +3277,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case httpTickMsg:
-		// Keep the in-flight indicator moving while dispatches run (#1272).
+		// Keep the in-flight indicator moving while dispatches run (#1272) —
+		// the statusline segment reads the flight set directly, the inline
+		// markers in the .http file are refreshed here (#1746).
+		m.refreshHTTPFlightMarks()
 		if len(m.httpFlight) == 0 {
 			return m, nil
 		}

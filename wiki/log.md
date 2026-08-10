@@ -1,5 +1,20 @@
 # Log
 
+## 2026-08-10 (http: in-flight progress inline at the request, #1746)
+
+- **A running `.http` request is now marked in the file itself** (#1746): the
+  request line carries `⟳ 1.2s` at its right edge, refreshed by the existing
+  250 ms flight tick and cleared on response, error and `http.cancel`. Until
+  now a dispatch was only visible in the statusline segment and the response
+  pane, so looking at the `.http` file — the place the request was started
+  from — told nothing.
+- **App pushes, editor renders**: `refreshHTTPFlightMarks` builds a 0-based
+  line → text map per open editor from `Model.httpFlight` and hands it to
+  `editor.SetHTTPFlight`; the marker lines are resolved by re-parsing the
+  buffer against the running request keys, so several requests of one file are
+  marked independently and an edit above a request moves its marker with it.
+  Updated [HTTP Client](/architecture/http-client.md).
+
 ## 2026-08-10 (copying a collapsed fold now copies its hidden content, #1741)
 
 - **A closed fold is one unit for yank, delete and change** in the editor

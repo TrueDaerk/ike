@@ -398,6 +398,19 @@ dispatch's `context.CancelFunc`:
   pending request in its header (`⟳ running one (1.2s)`) and keeps the
   previous response readable below — it is simply no longer presented as the
   current answer.
+- **Inline marker (#1746)**: the request line in the `.http` file itself
+  carries `⟳ 1.2s` at its right edge, so the file shows which request is out
+  and for how long even with the response pane closed. The app pushes the
+  markers into every open editor (`refreshHTTPFlightMarks` →
+  `editor.SetHTTPFlight`, a 0-based line → text map) on start, finish and on
+  every flight tick; the editor only renders them (`internal/editor/httpflight.go`).
+  Lines are resolved by re-parsing the buffer against the running request
+  keys, so an edit above a request moves its marker with it, and each running
+  request of a file is marked separately. The marker outranks inline blame on
+  the same row and truncates a full-width request line rather than
+  disappearing — it is transient and answers a question the user just asked.
+  Editors of parked workspaces are cleared on detach (`switch.go`), so no
+  spinner outlives the model that refreshes it.
 - **Duplicate guard**: dispatching a request that is already running is
   rejected with a notice naming the cancel action; nothing fires twice in
   parallel behind the user's back.
@@ -407,8 +420,8 @@ dispatch's `context.CancelFunc`:
   ("http: one canceled"), not as a transport error, and no response pane
   opens for it.
 
-Indicator, pane marker and tick all clear on response, error and cancel
-alike.
+Statusline indicator, inline marker, pane marker and tick all clear on
+response, error and cancel alike.
 
 ## Response history (#1251)
 

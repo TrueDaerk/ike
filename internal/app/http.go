@@ -414,6 +414,7 @@ func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
 	first := len(m.httpFlight) == 0
 	m.httpFlight[key] = e
 	m.markHTTPPending()
+	m.refreshHTTPFlightMarks()
 	if !first {
 		return nil // a tick loop is already running
 	}
@@ -429,7 +430,62 @@ func (m *Model) finishHTTPFlight(key string) (canceled bool) {
 	}
 	delete(m.httpFlight, key)
 	m.markHTTPPending()
+	m.refreshHTTPFlightMarks()
 	return e.canceled
+}
+
+// httpFlightMarks builds the inline indicators for one .http buffer (#1746):
+// 0-based request line to "⟳ <elapsed>", for the requests of that file that
+// are running right now. The file's text is re-parsed rather than the dispatch
+// line remembered, so the indicator follows the request when the user edits
+// above it while the dispatch is out.
+func (m Model) httpFlightMarks(path, text string) map[int]string {
+	if path == "" || len(m.httpFlight) == 0 {
+		return nil
+	}
+	running := make(map[string]*httpFlightEntry, len(m.httpFlight))
+	for key, e := range m.httpFlight {
+		if key == httpFlightKey(path, e.request) {
+			running[e.request] = e
+		}
+	}
+	if len(running) == 0 {
+		return nil
+	}
+	var marks map[int]string
+	for _, req := range httpfile.Parse(text).Requests {
+		e, ok := running[req.Key()]
+		if !ok || req.Line <= 0 {
+			continue
+		}
+		if marks == nil {
+			marks = map[int]string{}
+		}
+		marks[req.Line-1] = "⟳ " + elapsed(e.started)
+	}
+	return marks
+}
+
+// refreshHTTPFlightMarks pushes the indicators into every open editor of the
+// active workspace. It runs on every flight tick — that is what keeps the
+// durations moving — and whenever a dispatch starts or finishes, which is what
+// makes the indicator appear and disappear. Editors of other files (and every
+// editor once nothing runs) are cleared, so no marker can outlive its request.
+func (m *Model) refreshHTTPFlightMarks() {
+	idle := len(m.httpFlight) == 0
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if idle || !ed.HasFile() || !isHTTPPath(ed.Path()) {
+				ed.SetHTTPFlight(nil)
+				continue
+			}
+			ed.SetHTTPFlight(m.httpFlightMarks(ed.Path(), ed.Text()))
+		}
+	}
 }
 
 // markHTTPPending mirrors the in-flight state into the response pane, so the
